@@ -150,7 +150,7 @@ async function init(): Promise<void> {
 
   render(
     html`
-      <div class="w-full h-full flex flex-col bg-background text-foreground overflow-hidden">
+      <div class="w-full h-full flex flex-col overflow-hidden" style="background: var(--background); color: var(--foreground);">
         ${chatPanel}
       </div>
     `,
