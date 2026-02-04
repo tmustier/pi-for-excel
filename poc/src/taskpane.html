@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pi for Excel — PoC</title>
+
+  <!-- Office.js (preview for getDirectPrecedents) -->
+  <script src="https://appsforoffice.microsoft.com/lib/beta/hosted/office.js"></script>
+
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      font-size: 13px;
+      color: #1a1a1a;
+      background: #f8f8f8;
+      padding: 12px;
+    }
+    h1 { font-size: 16px; margin-bottom: 8px; }
+    h2 { font-size: 14px; margin: 16px 0 6px; color: #555; }
+    .test-group { margin-bottom: 16px; }
+    button {
+      display: inline-block;
+      padding: 6px 12px;
+      margin: 3px 4px 3px 0;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      background: white;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    button:hover { background: #e8e8e8; }
+    button:active { background: #d0d0d0; }
+    button.pass { background: #d4edda; border-color: #28a745; }
+    button.fail { background: #f8d7da; border-color: #dc3545; }
+    #log {
+      margin-top: 12px;
+      padding: 8px;
+      background: #1e1e1e;
+      color: #d4d4d4;
+      font-family: 'SF Mono', 'Menlo', 'Monaco', monospace;
+      font-size: 11px;
+      border-radius: 6px;
+      max-height: 50vh;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    .log-ok { color: #6abf69; }
+    .log-err { color: #f48771; }
+    .log-info { color: #569cd6; }
+    #status {
+      padding: 6px 10px;
+      border-radius: 6px;
+      margin-bottom: 12px;
+      font-weight: 600;
+    }
+    #status.ready { background: #d4edda; color: #155724; }
+    #status.waiting { background: #fff3cd; color: #856404; }
+    #status.error { background: #f8d7da; color: #721c24; }
+
+    /* Chat container (for pi-web-ui test) */
+    #chat-container {
+      display: none;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      overflow: hidden;
+      margin-top: 12px;
+    }
+    #chat-container.visible {
+      display: block;
+      height: 500px;
+    }
+    /* Force the ChatPanel and its children to fill the fixed-height container */
+    #chat-container pi-chat-panel {
+      display: flex !important;
+      flex-direction: column !important;
+      height: 500px !important;
+    }
+    #chat-container agent-interface {
+      display: flex !important;
+      flex-direction: column !important;
+      height: 100% !important;
+    }
+  </style>
+</head>
+<body>
+  <h1>🧪 Pi for Excel — PoC</h1>
+  <div id="status" class="waiting">Initializing Office.js...</div>
+
+  <div class="test-group">
+    <h2>1. Office.js Basics</h2>
+    <button id="btn-read" onclick="testReadCells()">Read A1:C3</button>
+    <button id="btn-write" onclick="testWriteCells()">Write test data</button>
+    <button id="btn-overview" onclick="testOverview()">Workbook overview</button>
+    <button id="btn-selection" onclick="testSelection()">Get selection</button>
+  </div>
+
+  <div class="test-group">
+    <h2>2. Advanced Office.js</h2>
+    <button id="btn-precedents" onclick="testPrecedents()">getDirectPrecedents()</button>
+    <button id="btn-events" onclick="testEvents()">onChanged event</button>
+    <button id="btn-named" onclick="testNamedRanges()">Named ranges</button>
+    <button id="btn-condfmt" onclick="testConditionalFormat()">Conditional formatting</button>
+  </div>
+
+  <div class="test-group">
+    <h2>3. Webview Capabilities</h2>
+    <button id="btn-indexeddb" onclick="testIndexedDB()">IndexedDB</button>
+    <button id="btn-cors" onclick="testCORS()">CORS (fetch test)</button>
+    <button id="btn-wasm" onclick="testWASM()">WASM basic</button>
+    <button id="btn-pyodide" onclick="testPyodide()">Pyodide (Python)</button>
+  </div>
+
+  <div class="test-group">
+    <h2>4. Pi Integration</h2>
+    <button id="btn-chat" onclick="testChatPanel()">Mount ChatPanel</button>
+    <button id="btn-oauth" onclick="showOAuthMenu()" style="display:none">🔑 Login</button>
+    <button id="btn-settings" onclick="openSettings()" style="display:none">⚙️ Settings</button>
+    <button id="btn-tool" onclick="testExcelTool()">Excel tool → LLM → Write</button>
+  </div>
+
+  <div id="chat-container"></div>
+  <div id="log"></div>
+
+  <script type="module" src="./taskpane.ts"></script>
+</body>
+</html>

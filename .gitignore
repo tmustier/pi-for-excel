@@ -1,0 +1,18 @@
+# Research (local only)
+.research/
+research/
+
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Certs (generated locally)
+poc/*.pem
+
+# Vite
+poc/.vite/
+
+# OS
+.DS_Store
