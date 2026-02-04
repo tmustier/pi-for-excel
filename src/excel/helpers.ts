@@ -54,8 +54,9 @@ export function getRange(context: any, ref: string) {
 export function qualifiedAddress(sheetName: string, address: string): string {
   // Strip sheet prefix if already in the address
   const clean = address.includes("!") ? address.split("!")[1] : address;
-  // Quote sheet name if it contains spaces
-  const quoted = sheetName.includes(" ") ? `'${sheetName}'` : sheetName;
+  const escaped = sheetName.replace(/'/g, "''");
+  const needsQuote = /[\s']/g.test(sheetName);
+  const quoted = needsQuote ? `'${escaped}'` : sheetName;
   return `${quoted}!${clean}`;
 }
 
@@ -85,7 +86,8 @@ export function letterToCol(letters: string): number {
 
 /** Parse cell address "B3" → { col: 1, row: 3 } (col is 0-indexed, row is 1-indexed) */
 export function parseCell(cell: string): { col: number; row: number } {
-  const match = cell.match(/^([A-Z]+)(\d+)$/i);
+  const clean = cell.includes("!") ? cell.split("!")[1] : cell;
+  const match = clean.match(/^\$?([A-Z]+)\$?(\d+)$/i);
   if (!match) throw new Error(`Invalid cell address: ${cell}`);
   return { col: letterToCol(match[1].toUpperCase()), row: parseInt(match[2], 10) };
 }

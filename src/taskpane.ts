@@ -209,6 +209,39 @@ async function init(): Promise<void> {
     }
   });
 
+  // Shift+Tab cycles thinking level
+  const THINKING_LEVELS = ["off", "low", "medium", "high"] as const;
+  document.addEventListener("keydown", (e) => {
+    if (e.shiftKey && e.key === "Tab") {
+      e.preventDefault();
+      const current = agent.state.thinkingLevel;
+      const idx = THINKING_LEVELS.indexOf(current as any);
+      const next = THINKING_LEVELS[(idx + 1) % THINKING_LEVELS.length];
+      agent.setThinkingLevel(next);
+      // Force AgentInterface to re-render with new thinking level
+      const iface = document.querySelector("agent-interface") as any;
+      if (iface) iface.requestUpdate();
+      updateStatusBar(agent);
+    }
+  });
+
+  // Custom status bar — shows context % and thinking level
+  injectStatusBar(agent);
+
+  // Make status bar thinking indicator clickable
+  document.addEventListener("click", (e) => {
+    const target = (e.target as HTMLElement).closest?.(".pi-status-thinking");
+    if (target) {
+      const current = agent.state.thinkingLevel;
+      const idx = THINKING_LEVELS.indexOf(current as any);
+      const next = THINKING_LEVELS[(idx + 1) % THINKING_LEVELS.length];
+      agent.setThinkingLevel(next);
+      const iface = document.querySelector("agent-interface") as any;
+      if (iface) iface.requestUpdate();
+      updateStatusBar(agent);
+    }
+  });
+
   console.log("[pi] ChatPanel mounted");
 }
 
@@ -262,6 +295,70 @@ async function injectContext(context: any): Promise<any> {
   }
 
   return { ...context, messages };
+}
+
+// ============================================================================
+// Status bar — context % + thinking level
+// ============================================================================
+
+function injectStatusBar(agent: Agent): void {
+  // Find the stats area rendered by AgentInterface (below the editor)
+  // We'll replace it with our own content via a MutationObserver
+  const bar = document.createElement("div");
+  bar.id = "pi-status-bar";
+  bar.className = "pi-status-bar";
+
+  // Initial render
+  updateStatusBar(agent, bar);
+
+  // Update on agent events
+  agent.subscribe(() => updateStatusBar(agent, bar));
+
+  // Insert after the message editor area
+  const tryInsert = () => {
+    const editorWrap = document.querySelector("agent-interface .shrink-0 .max-w-3xl");
+    if (editorWrap && !document.getElementById("pi-status-bar")) {
+      editorWrap.appendChild(bar);
+    } else {
+      requestAnimationFrame(tryInsert);
+    }
+  };
+  requestAnimationFrame(tryInsert);
+}
+
+function updateStatusBar(agent: Agent, bar?: HTMLElement): void {
+  const el = bar || document.getElementById("pi-status-bar");
+  if (!el) return;
+
+  const state = agent.state;
+
+  // Compute token usage from messages
+  let totalTokens = 0;
+  for (const msg of state.messages) {
+    const usage = (msg as any).usage;
+    if (usage) {
+      totalTokens += (usage.input || 0) + (usage.output || 0);
+    }
+  }
+
+  const contextWindow = state.model?.contextWindow || 200000;
+  const pct = Math.min(100, Math.round((totalTokens / contextWindow) * 100));
+  const ctxLabel = contextWindow >= 1_000_000
+    ? `${(contextWindow / 1_000_000).toFixed(0)}M`
+    : `${Math.round(contextWindow / 1000)}k`;
+
+  // Thinking level display
+  const thinkingLabels: Record<string, string> = {
+    off: "off", minimal: "min", low: "low", medium: "med", high: "high", xhigh: "max",
+  };
+  const thinkingLevel = thinkingLabels[state.thinkingLevel] || state.thinkingLevel;
+
+  const brainSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 18V5"/><path d="M15 13a4.17 4.17 0 0 1-3-4 4.17 4.17 0 0 1-3 4"/><path d="M17.598 6.5A3 3 0 1 0 12 5a3 3 0 1 0-5.598 1.5"/><path d="M17.997 5.125a4 4 0 0 1 2.526 5.77"/><path d="M18 18a4 4 0 0 0 2-7.464"/><path d="M19.967 17.483A4 4 0 1 1 12 18a4 4 0 1 1-7.967-.517"/><path d="M6 18a4 4 0 0 1-2-7.464"/><path d="M6.003 5.125a4 4 0 0 0-2.526 5.77"/></svg>`;
+
+  el.innerHTML = `
+    <span class="pi-status-ctx">${pct}% / ${ctxLabel}</span>
+    <span class="pi-status-thinking" title="Shift+Tab to cycle">${brainSvg} ${thinkingLevel}</span>
+  `;
 }
 
 // ============================================================================

@@ -46,6 +46,13 @@ export function createTraceDependenciesTool(): AgentTool<typeof schema> {
       params: Params,
     ): Promise<AgentToolResult<undefined>> => {
       try {
+        if (params.cell.includes(":")) {
+          return {
+            content: [{ type: "text", text: "Error: trace_dependencies expects a single cell, not a range." }],
+            details: undefined,
+          };
+        }
+
         const maxDepth = Math.min(params.depth || 2, 5);
 
         const tree = await excelRun(async (context: any) => {

@@ -7,7 +7,7 @@
 
 import { Type, type Static } from "@sinclair/typebox";
 import type { AgentTool, AgentToolResult } from "@mariozechner/pi-agent-core";
-import { excelRun, qualifiedAddress } from "../excel/helpers.js";
+import { excelRun, qualifiedAddress, parseCell, colToLetter } from "../excel/helpers.js";
 
 const schema = Type.Object({
   query: Type.String({
@@ -18,6 +18,16 @@ const schema = Type.Object({
       description:
         "If true, search in formula text instead of values. " +
         'Useful for finding cross-sheet references (e.g. query "Inputs!" to find all cells referencing Inputs sheet).',
+    }),
+  ),
+  use_regex: Type.Optional(
+    Type.Boolean({
+      description: "If true, treat the query as a regular expression (case-insensitive).",
+    }),
+  ),
+  offset: Type.Optional(
+    Type.Number({
+      description: "Skip the first N matches (pagination). Default: 0.",
     }),
   ),
   sheet: Type.Optional(
@@ -55,12 +65,29 @@ export function createSearchWorkbookTool(): AgentTool<typeof schema> {
       params: Params,
     ): Promise<AgentToolResult<undefined>> => {
       try {
-        const maxResults = params.max_results || 20;
+        const maxResults = Math.max(params.max_results || 20, 1);
+        const offset = Math.max(params.offset || 0, 0);
         const searchFormulas = params.search_formulas || false;
-        const query = params.query.toLowerCase();
+        const useRegex = params.use_regex || false;
+        const query = params.query;
+        const queryLower = query.toLowerCase();
 
-        const matches = await excelRun(async (context: any) => {
+        let regex: RegExp | null = null;
+        if (useRegex) {
+          try {
+            regex = new RegExp(query, "i");
+          } catch (e: any) {
+            return {
+              content: [{ type: "text", text: `Invalid regex "${query}": ${e.message}` }],
+              details: undefined,
+            };
+          }
+        }
+
+        const result = await excelRun(async (context: any) => {
           const allMatches: SearchMatch[] = [];
+          let totalMatches = 0;
+          let hasMore = false;
           const sheets = context.workbook.worksheets;
           sheets.load("items/name,items/visibility");
           await context.sync();
@@ -69,7 +96,7 @@ export function createSearchWorkbookTool(): AgentTool<typeof schema> {
             ? sheets.items.filter((s: any) => s.name === params.sheet)
             : sheets.items.filter((s: any) => s.visibility === "Visible");
 
-          for (const sheet of targetSheets) {
+          outer: for (const sheet of targetSheets) {
             const used = sheet.getUsedRangeOrNullObject();
             used.load("values,formulas,address,rowCount,columnCount");
             await context.sync();
@@ -82,40 +109,40 @@ export function createSearchWorkbookTool(): AgentTool<typeof schema> {
             // Parse start address for cell computation
             const addr = used.address;
             const cellPart = addr.includes("!") ? addr.split("!")[1] : addr;
-            const startMatch = cellPart.split(":")[0].match(/^([A-Z]+)(\d+)$/i);
-            if (!startMatch) continue;
-
-            let startCol = 0;
-            for (let i = 0; i < startMatch[1].length; i++) {
-              startCol = startCol * 26 + (startMatch[1].charCodeAt(i) - 64);
+            const startCell = cellPart.split(":")[0];
+            let start;
+            try {
+              start = parseCell(startCell);
+            } catch {
+              continue;
             }
-            startCol--;
-            const startRow = parseInt(startMatch[2], 10);
 
             for (let r = 0; r < values.length; r++) {
               for (let c = 0; c < values[r].length; c++) {
-                if (allMatches.length >= maxResults) break;
-
                 const value = values[r][c];
                 const formula = formulas[r][c];
 
                 let match = false;
                 if (searchFormulas) {
-                  match = typeof formula === "string" && formula.toLowerCase().includes(query);
+                  if (typeof formula !== "string" || formula.length === 0) continue;
+                  const target = formula;
+                  match = useRegex ? regex!.test(target) : target.toLowerCase().includes(queryLower);
                 } else {
-                  match = String(value).toLowerCase().includes(query);
+                  if (value === null || value === undefined || value === "") continue;
+                  const target = String(value);
+                  match = useRegex ? regex!.test(target) : target.toLowerCase().includes(queryLower);
                 }
 
                 if (match) {
-                  // Compute cell address
-                  let col = startCol + c;
-                  let letter = "";
-                  let temp = col;
-                  while (temp >= 0) {
-                    letter = String.fromCharCode((temp % 26) + 65) + letter;
-                    temp = Math.floor(temp / 26) - 1;
+                  totalMatches += 1;
+                  if (totalMatches <= offset) continue;
+
+                  if (allMatches.length >= maxResults) {
+                    hasMore = true;
+                    break outer;
                   }
-                  const cellAddr = `${letter}${startRow + r}`;
+
+                  const cellAddr = `${colToLetter(start.col + c)}${start.row + r}`;
 
                   allMatches.push({
                     sheet: sheet.name,
@@ -125,23 +152,29 @@ export function createSearchWorkbookTool(): AgentTool<typeof schema> {
                   });
                 }
               }
-              if (allMatches.length >= maxResults) break;
             }
           }
-          return allMatches;
+          return { matches: allMatches, hasMore, totalMatches };
         });
+
+        const { matches, hasMore, totalMatches } = result;
 
         if (matches.length === 0) {
           const scope = params.sheet ? `in "${params.sheet}"` : "in any sheet";
           const mode = searchFormulas ? "formulas" : "values";
+          const offsetNote = offset > 0 && totalMatches > 0
+            ? ` after offset ${offset} (total matches: ${totalMatches})`
+            : "";
           return {
-            content: [{ type: "text", text: `No matches for "${params.query}" ${scope} (searched ${mode}).` }],
+            content: [{ type: "text", text: `No matches for "${params.query}" ${scope}${offsetNote} (searched ${mode}).` }],
             details: undefined,
           };
         }
 
         const lines: string[] = [];
-        lines.push(`**${matches.length} match(es)** for "${params.query}"${matches.length >= maxResults ? " (limit reached)" : ""}:`);
+        const limitNote = hasMore ? " (more available)" : "";
+        const offsetNote = offset > 0 ? ` (offset ${offset})` : "";
+        lines.push(`**${matches.length} match(es)** for "${params.query}"${limitNote}${offsetNote}:`);
         lines.push("");
 
         for (const m of matches) {

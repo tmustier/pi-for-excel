@@ -76,7 +76,8 @@ export function createFormatCellsTool(): AgentTool<typeof schema> {
         const result = await excelRun(async (context: any) => {
           const { sheet, range } = getRange(context, params.range);
           sheet.load("name");
-          range.load("address");
+          range.load("address,rowCount,columnCount");
+          await context.sync();
 
           const applied: string[] = [];
 
@@ -114,11 +115,10 @@ export function createFormatCellsTool(): AgentTool<typeof schema> {
 
           // Number format
           if (params.number_format) {
-            range.numberFormat = params.number_format
-              ? [[params.number_format]] // Office.js expects 2D array matching range dimensions
-              : undefined;
-            // Actually, for a range we need to set it differently
-            range.numberFormat = params.number_format as any;
+            const formatMatrix = Array.from({ length: range.rowCount }, () =>
+              Array.from({ length: range.columnCount }, () => params.number_format),
+            );
+            range.numberFormat = formatMatrix as any;
             applied.push(`format "${params.number_format}"`);
           }
 

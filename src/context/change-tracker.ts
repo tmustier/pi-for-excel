@@ -20,6 +20,7 @@ const MAX_CHANGES = 50;
 export class ChangeTracker {
   private changes: CellChange[] = [];
   private registered = false;
+  private sheetIdToName = new Map<string, string>();
 
   /** Start listening for changes on all visible sheets. */
   async start(): Promise<void> {
@@ -28,15 +29,21 @@ export class ChangeTracker {
     try {
       await excelRun(async (context: any) => {
         const sheets = context.workbook.worksheets;
-        sheets.load("items/name,items/visibility");
+        sheets.load("items/id,items/name,items/visibility");
         await context.sync();
+
+        this.sheetIdToName.clear();
+        for (const sheet of sheets.items) {
+          this.sheetIdToName.set(sheet.id, sheet.name);
+        }
 
         for (const sheet of sheets.items) {
           if (sheet.visibility !== "Visible") continue;
 
           sheet.onChanged.add((event: any) => {
+            const sheetName = this.sheetIdToName.get(event.worksheetId) || event.worksheetId || "unknown";
             this.changes.push({
-              sheet: event.worksheetId || "unknown",
+              sheet: sheetName,
               address: event.address || "unknown",
               timestamp: Date.now(),
             });

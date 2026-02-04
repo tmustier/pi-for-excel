@@ -23,7 +23,9 @@ Override styling comprehensively via CSS. Build our own empty state + header.
 - [x] All dialogs: frosted glass treatment
 
 ## Remaining Polish
+- [x] Make hint cards clickable (populate input with suggestion)
+- [x] Polish tuning pass (spacing, opacity, hover/active states)
+- [x] Manifest copied to sideload path
 - [ ] Sideload in Excel and verify glass effect with real spreadsheet behind
-- [ ] Make hint cards clickable (populate input with suggestion)
-- [ ] Further tune glass opacity/blur per user feedback
 - [ ] Consider our own model picker component (intercept onModelSelect)
+- [ ] Awaiting user feedback from live Excel testing

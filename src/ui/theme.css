@@ -242,11 +242,11 @@ message-editor > .bg-card:focus-within {
   box-shadow: 0 2px 8px oklch(0 0 0 / 0.04), 0 0 0 1.5px oklch(0.45 0.12 160 / 0.08), 0 0 0 1px oklch(1 0 0 / 0.5) inset !important;
 }
 
-/* Textarea */
+/* Textarea — auto-grows up to 50% of viewport */
 message-editor textarea {
   padding: 14px 16px !important;
   min-height: 42px !important;
-  max-height: 180px !important;
+  max-height: 50vh !important;
   field-sizing: content;
   font-size: 13.5px !important;
   font-family: var(--font-sans) !important;
@@ -263,39 +263,106 @@ message-editor .px-2.pb-2 {
   gap: 4px;
 }
 
-/* All toolbar buttons — smaller, subtler */
+/* Hide attachment button and thinking selector — not needed in toolbar,
+   thinking is controlled via status bar + shift+tab */
+message-editor .px-2.pb-2 > .flex.gap-2:first-child {
+  display: none !important;
+}
+
+/* Toolbar buttons — compact */
 message-editor .px-2.pb-2 button {
-  height: 28px !important;
-  border-radius: 7px !important;
-  font-size: 11.5px !important;
+  height: 26px !important;
+  border-radius: 6px !important;
+  font-size: 11px !important;
   font-family: var(--font-sans) !important;
   color: var(--muted-foreground) !important;
+  flex-shrink: 0;
 }
 message-editor .px-2.pb-2 button:hover {
   background: var(--pi-green-lighter) !important;
   color: var(--foreground) !important;
 }
 message-editor .px-2.pb-2 button svg {
-  width: 14px !important;
-  height: 14px !important;
+  width: 13px !important;
+  height: 13px !important;
 }
 
-/* Model name in toolbar — sans-serif, truncated */
-message-editor .px-2.pb-2 button span {
+/* Send button — always visible, don't shrink */
+message-editor .px-2.pb-2 > .flex.gap-2:last-child > button:last-child {
+  flex-shrink: 0 !important;
+  width: 26px !important;
+  min-width: 26px !important;
+}
+
+/* Model name button — compact, truncated aggressively */
+message-editor .px-2.pb-2 > .flex.gap-2:last-child > button:first-child {
+  max-width: min(140px, calc(100vw - 180px)) !important;
+  overflow: hidden !important;
+}
+message-editor .px-2.pb-2 > .flex.gap-2:last-child > button:first-child span {
   font-family: var(--font-sans) !important;
-  font-size: 11px !important;
-  max-width: 120px;
+  font-size: 10.5px !important;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  display: inline-block;
+  max-width: 100px;
 }
 
-/* Thinking selector */
+/* Thinking selector — compact */
 message-editor .px-2.pb-2 [data-slot="trigger"] {
-  height: 28px !important;
-  font-size: 11px !important;
-  border-radius: 7px !important;
+  height: 26px !important;
+  font-size: 10.5px !important;
+  border-radius: 6px !important;
   font-family: var(--font-sans) !important;
+  padding: 0 6px !important;
+}
+
+/* Toolbar row — prevent overflow */
+message-editor .px-2.pb-2 {
+  padding: 0 8px 6px !important;
+  overflow: hidden;
+  flex-wrap: nowrap !important;
+}
+message-editor .px-2.pb-2 > .flex.gap-2 {
+  gap: 4px !important;
+  min-width: 0;
+  flex-shrink: 1;
+}
+
+
+/* ═══════════════════════════════════════════════════════════
+   STATUS BAR — context % + thinking level
+   ═══════════════════════════════════════════════════════════ */
+
+.pi-status-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 4px 2px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  color: var(--muted-foreground);
+  opacity: 0.7;
+}
+.pi-status-ctx {
+  font-variant-numeric: tabular-nums;
+}
+.pi-status-thinking {
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 1px 4px;
+  transition: background 0.1s;
+}
+.pi-status-thinking:hover {
+  background: var(--pi-green-lighter);
+  opacity: 1;
+}
+
+/* Hide pi-web-ui's default stats row — we replace it with our own */
+agent-interface .shrink-0 .max-w-3xl > .text-xs.text-muted-foreground {
+  display: none !important;
 }
 
 
