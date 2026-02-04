@@ -71,6 +71,35 @@ function markButton(id: string, pass: boolean) {
 }
 
 // ============================================================================
+// SYSTEM PROMPT
+// ============================================================================
+
+const EXCEL_SYSTEM_PROMPT = `You are Pi, an AI assistant embedded in Microsoft Excel as a sidebar add-in. You help users understand, analyze, and modify their spreadsheets.
+
+## Tools
+You have two tools to interact with the workbook:
+- **read_range**: Read cell values, formulas, and number formats from any range.
+- **write_cells**: Write values and formulas to cells. Formulas start with "=".
+
+## Workflow
+1. When the user asks about their data, ALWAYS use read_range first to see the actual cell contents. Never assume or guess what's in the spreadsheet.
+2. When writing formulas, prefer standard Excel formulas the user can understand and edit.
+3. After writing, the tool automatically verifies results and reports errors. If errors occur, diagnose and fix them.
+
+## Conventions
+- Use A1 notation for ranges (e.g., "A1:D10", "Sheet2!B3").
+- When referencing data, be specific about cell addresses so the user can follow along.
+- Format numbers, dates, and currencies appropriately for the context.
+- When creating tables, include headers in the first row.
+- Keep formulas simple and readable. Prefer SUM, AVERAGE, VLOOKUP, IF over complex nested formulas.
+- If a task requires reading a large range, start with a small sample to understand the structure, then read more as needed.
+
+## Style
+- Be concise and direct.
+- When explaining what you did, reference specific cells (e.g., "I put the total in E15").
+- If something goes wrong, explain what happened and offer to fix it.`;
+
+// ============================================================================
 // OFFICE.JS INITIALIZATION
 // ============================================================================
 
@@ -616,10 +645,13 @@ async function testChatPanel() {
     const storage = new AppStorage(settings, providerKeys, sessions, undefined, backend);
     setAppStorage(storage);
 
-    // Create agent
+    // Import Excel tools
+    const { createReadRangeTool, createWriteCellsTool } = await import("./excel-tools.js");
+
+    // Create agent with Excel system prompt
     const agent = new Agent({
       initialState: {
-        systemPrompt: `You are Pi, an AI assistant embedded in Microsoft Excel. You can read and write spreadsheet data. This is a proof-of-concept test.`,
+        systemPrompt: EXCEL_SYSTEM_PROMPT,
         model: getModel("anthropic", "claude-sonnet-4-5-20250929"),
         thinkingLevel: "off",
         messages: [],
@@ -633,6 +665,9 @@ async function testChatPanel() {
     await chatPanel.setAgent(agent, {
       onApiKeyRequired: async (provider: string) => {
         return await ApiKeyPromptDialog.prompt(provider);
+      },
+      toolsFactory: () => {
+        return [createReadRangeTool(), createWriteCellsTool()];
       },
     });
 
