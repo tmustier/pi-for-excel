@@ -7,11 +7,14 @@
   xsi:type="TaskPaneApp">
 
   <Id>a1b2c3d4-e5f6-7890-abcd-ef1234567890</Id>
-  <Version>0.0.1</Version>
-  <ProviderName>Pi for Excel (PoC)</ProviderName>
+  <Version>1.0.0.0</Version>
+  <ProviderName>Pi for Excel</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
-  <DisplayName DefaultValue="Pi for Excel (PoC)" />
-  <Description DefaultValue="Proof of concept — AI assistant for Excel powered by Pi" />
+  <DisplayName DefaultValue="Pi for Excel (Dev)" />
+  <Description DefaultValue="AI assistant for Excel powered by Pi" />
+  <IconUrl DefaultValue="https://localhost:3000/assets/icon-32.png" />
+  <HighResolutionIconUrl DefaultValue="https://localhost:3000/assets/icon-80.png" />
+  <SupportUrl DefaultValue="https://github.com/tmustier/excel" />
 
   <Hosts>
     <Host Name="Workbook" />
@@ -31,6 +34,11 @@
             <OfficeTab id="TabHome">
               <Group id="PiGroup">
                 <Label resid="GroupLabel" />
+                <Icon>
+                  <bt:Image size="16" resid="Icon16" />
+                  <bt:Image size="32" resid="Icon32" />
+                  <bt:Image size="80" resid="Icon80" />
+                </Icon>
                 <Control xsi:type="Button" id="OpenPiButton">
                   <Label resid="ButtonLabel" />
                   <Supertip>
