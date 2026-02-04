@@ -659,8 +659,8 @@ async function testChatPanel() {
     };
     document.getElementById("btn-oauth")!.style.display = "";
 
-    // Auto-restore OAuth credentials from localStorage
-    await restoreOAuthCredentials(providerKeys);
+    // Auto-restore auth from pi's auth.json (dev) or localStorage (browser OAuth)
+    await restoreAuthCredentials(providerKeys);
 
     log(`ChatPanel mounted via lit render()! Try chatting.`, "ok");
     log(`  Click 🔑 Login to authenticate with your provider subscription (free).`, "info");
@@ -734,9 +734,16 @@ async function testChatPanel() {
 // (these endpoints don't support browser CORS)
 // ============================================================================
 const OAUTH_PROXY_REWRITES: [string, string][] = [
+  // OAuth token endpoints
   ["https://console.anthropic.com/", "/oauth-proxy/anthropic/"],
   ["https://github.com/", "/oauth-proxy/github/"],
+  ["https://auth.openai.com/", "/api-proxy/openai-auth/"],
+  ["https://oauth2.googleapis.com/", "/api-proxy/google-oauth/"],
+  // API endpoints
   ["https://api.anthropic.com/", "/api-proxy/anthropic/"],
+  ["https://api.openai.com/", "/api-proxy/openai/"],
+  ["https://chatgpt.com/", "/api-proxy/chatgpt/"],
+  ["https://generativelanguage.googleapis.com/", "/api-proxy/google/"],
 ];
 
 const _originalFetch = window.fetch.bind(window);
@@ -845,15 +852,90 @@ function showInputModal(title: string, message: string, placeholder?: string): P
   });
 }
 
-/** Restore OAuth credentials from localStorage on page load */
-async function restoreOAuthCredentials(providerKeys: any) {
+/**
+ * Load auth credentials from pi's ~/.pi/agent/auth.json (served by Vite plugin)
+ * and from localStorage (for browser-originated OAuth sessions).
+ * This means any provider already authenticated in pi TUI works automatically.
+ */
+async function restoreAuthCredentials(providerKeys: any) {
   const { getOAuthProvider } = await import("@mariozechner/pi-ai");
 
+  // Map OAuth provider IDs to the API provider names used by pi-ai.
+  // IMPORTANT: openai-codex stays as "openai-codex" — it uses chatgpt.com/backend-api,
+  // NOT api.openai.com. pi-ai has separate models/provider for it.
   const providerMap: Record<string, string> = {
     "anthropic": "anthropic",
+    "openai-codex": "openai-codex",
     "github-copilot": "github-copilot",
+    "gemini-cli": "google",
+    "google-gemini-cli": "google",
+    "antigravity": "google",
+    "google-antigravity": "google",
   };
 
+  // 1. Try loading from pi's auth.json (dev server only)
+  try {
+    const res = await _originalFetch("/__pi-auth");
+    if (res.ok) {
+      const authData = await res.json() as Record<string, any>;
+      log(`  Found pi auth.json with ${Object.keys(authData).length} provider(s)`, "info");
+
+      for (const [providerId, cred] of Object.entries(authData)) {
+        try {
+          if (cred.type === "api_key" && cred.key) {
+            // Direct API key — use as-is
+            const apiProvider = providerMap[providerId] || providerId;
+            await providerKeys.set(apiProvider, cred.key);
+            log(`  ✅ ${providerId}: API key loaded from pi`, "ok");
+
+          } else if (cred.type === "oauth") {
+            const provider = getOAuthProvider(providerId);
+            if (!provider) {
+              log(`  ⚠️ ${providerId}: no OAuth provider registered, skipping`, "info");
+              continue;
+            }
+
+            const apiProvider = providerMap[providerId] || providerId;
+
+            if (Date.now() >= cred.expires) {
+              // Token expired — try to refresh through proxy
+              log(`  ${providerId}: token expired, refreshing...`, "info");
+              try {
+                const refreshed = await provider.refreshToken(cred);
+                const apiKey = provider.getApiKey(refreshed);
+                await providerKeys.set(apiProvider, apiKey);
+                log(`  ✅ ${providerId}: token refreshed`, "ok");
+              } catch (e: any) {
+                log(`  ⚠️ ${providerId}: refresh failed (${e.message})`, "err");
+              }
+            } else {
+              const apiKey = provider.getApiKey(cred);
+              await providerKeys.set(apiProvider, apiKey);
+              const hours = Math.round((cred.expires - Date.now()) / 3600000);
+              log(`  ✅ ${providerId}: OAuth token loaded (expires in ${hours}h)`, "ok");
+            }
+          }
+        } catch (e: any) {
+          log(`  ⚠️ ${providerId}: failed to load (${e.message})`, "err");
+        }
+      }
+      // Clear any stale keys from old provider mappings
+      // (e.g., we previously mapped openai-codex → openai incorrectly)
+      const allStored = await providerKeys.getAll?.() || {};
+      for (const staleProvider of Object.keys(allStored)) {
+        if (!Object.values(providerMap).includes(staleProvider) && !authData[staleProvider]) {
+          log(`  🧹 Clearing stale key for "${staleProvider}"`, "info");
+          await providerKeys.set(staleProvider, "");
+        }
+      }
+
+      return; // pi auth loaded, skip localStorage fallback
+    }
+  } catch {
+    // Not running with Vite dev server — fall through to localStorage
+  }
+
+  // 2. Fallback: restore from localStorage (browser OAuth sessions)
   for (const providerId of BROWSER_OAUTH_PROVIDERS) {
     const stored = localStorage.getItem(`oauth_${providerId}`);
     if (!stored) continue;
@@ -865,26 +947,22 @@ async function restoreOAuthCredentials(providerKeys: any) {
 
       const apiProvider = providerMap[providerId] || providerId;
 
-      // Check if token needs refresh
       if (Date.now() >= credentials.expires) {
         log(`  Refreshing expired ${provider.name} token...`, "info");
         try {
           const refreshed = await provider.refreshToken(credentials);
-          // Save refreshed credentials
           localStorage.setItem(`oauth_${providerId}`, JSON.stringify(refreshed));
-          localStorage.setItem(`oauth_expires_${providerId}`, String(refreshed.expires));
           const apiKey = provider.getApiKey(refreshed);
           await providerKeys.set(apiProvider, apiKey);
           log(`  ✅ ${provider.name} token refreshed`, "ok");
         } catch (e: any) {
-          log(`  ⚠️ ${provider.name} token refresh failed: ${e.message}. Please login again.`, "err");
+          log(`  ⚠️ ${provider.name} refresh failed. Please login again.`, "err");
         }
       } else {
-        // Token still valid — restore it
         const apiKey = provider.getApiKey(credentials);
         await providerKeys.set(apiProvider, apiKey);
         const mins = Math.round((credentials.expires - Date.now()) / 60000);
-        log(`  ✅ ${provider.name} session restored (expires in ${mins}m)`, "ok");
+        log(`  ✅ ${provider.name} session restored (${mins}m remaining)`, "ok");
       }
     } catch (e: any) {
       log(`  ⚠️ Failed to restore ${providerId}: ${e.message}`, "err");
@@ -988,7 +1066,7 @@ async function doOAuthLogin(
     // Map OAuth provider ID to the API provider name
     const providerMap: Record<string, string> = {
       "anthropic": "anthropic",
-      "openai-codex": "openai",
+      "openai-codex": "openai-codex",
       "github-copilot": "github-copilot",
       "gemini-cli": "google",
       "antigravity": "google",
