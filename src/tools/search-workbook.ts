@@ -98,7 +98,7 @@ export function createSearchWorkbookTool(): AgentTool<typeof schema> {
 
           outer: for (const sheet of targetSheets) {
             const used = sheet.getUsedRangeOrNullObject();
-            used.load("values,formulas,address,rowCount,columnCount");
+            used.load("values,formulas,address");
             await context.sync();
 
             if (used.isNullObject) continue;
@@ -137,11 +137,6 @@ export function createSearchWorkbookTool(): AgentTool<typeof schema> {
                   totalMatches += 1;
                   if (totalMatches <= offset) continue;
 
-                  if (allMatches.length >= maxResults) {
-                    hasMore = true;
-                    break outer;
-                  }
-
                   const cellAddr = `${colToLetter(start.col + c)}${start.row + r}`;
 
                   allMatches.push({
@@ -150,6 +145,11 @@ export function createSearchWorkbookTool(): AgentTool<typeof schema> {
                     value,
                     formula: typeof formula === "string" && formula.startsWith("=") ? formula : undefined,
                   });
+
+                  if (allMatches.length >= maxResults) {
+                    hasMore = true;
+                    break outer;
+                  }
                 }
               }
             }
@@ -172,7 +172,7 @@ export function createSearchWorkbookTool(): AgentTool<typeof schema> {
         }
 
         const lines: string[] = [];
-        const limitNote = hasMore ? " (more available)" : "";
+        const limitNote = hasMore ? " (limit reached)" : "";
         const offsetNote = offset > 0 ? ` (offset ${offset})` : "";
         lines.push(`**${matches.length} match(es)** for "${params.query}"${limitNote}${offsetNote}:`);
         lines.push("");

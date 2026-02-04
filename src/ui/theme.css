@@ -91,6 +91,8 @@ body {
     linear-gradient(90deg, oklch(0.45 0.08 160 / 0.04) 1px, transparent 1px);
   background-size: 64px 28px;
   background-position: -1px -1px;
+  /* Left-edge shadow — replaces Excel's native one at narrow widths */
+  box-shadow: inset 3px 0 8px -2px oklch(0 0 0 / 0.06);
 }
 
 /* ── Scrollbar — thin, subtle ────────────────────────────── */

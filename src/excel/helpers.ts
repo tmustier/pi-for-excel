@@ -35,7 +35,10 @@ export async function excelRun<T>(fn: (context: any) => Promise<T>): Promise<T> 
 export function parseRangeRef(ref: string): RangeRef {
   if (ref.includes("!")) {
     const idx = ref.indexOf("!");
-    const sheet = ref.substring(0, idx).replace(/^'|'$/g, ""); // strip quotes
+    const sheet = ref
+      .substring(0, idx)
+      .replace(/^'|'$/g, "")
+      .replace(/''/g, "'"); // strip quotes + unescape
     return { sheet, address: ref.substring(idx + 1) };
   }
   return { address: ref };
@@ -55,7 +58,7 @@ export function qualifiedAddress(sheetName: string, address: string): string {
   // Strip sheet prefix if already in the address
   const clean = address.includes("!") ? address.split("!")[1] : address;
   const escaped = sheetName.replace(/'/g, "''");
-  const needsQuote = /[\s']/g.test(sheetName);
+  const needsQuote = /[\s']/.test(sheetName);
   const quoted = needsQuote ? `'${escaped}'` : sheetName;
   return `${quoted}!${clean}`;
 }

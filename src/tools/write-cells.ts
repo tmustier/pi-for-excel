@@ -13,7 +13,7 @@ import {
   excelRun, getRange, qualifiedAddress, parseCell,
   colToLetter, computeRangeAddress, padValues,
 } from "../excel/helpers.js";
-import { formatAsMarkdownTable, findErrors, countNonEmpty } from "../utils/format.js";
+import { formatAsMarkdownTable, findErrors } from "../utils/format.js";
 
 const schema = Type.Object({
   start_cell: Type.String({
@@ -38,6 +38,12 @@ const schema = Type.Object({
 });
 
 type Params = Static<typeof schema>;
+
+interface InvalidFormula {
+  address: string;
+  formula: string;
+  reason: string;
+}
 
 export function createWriteCellsTool(): AgentTool<typeof schema> {
   return {
@@ -64,29 +70,76 @@ export function createWriteCellsTool(): AgentTool<typeof schema> {
 
         const { padded, rows, cols } = padValues(params.values);
 
+        const startCellRef = params.start_cell.includes("!")
+          ? params.start_cell.split("!")[1]
+          : params.start_cell;
+
+        if (startCellRef.includes(":")) {
+          return {
+            content: [{ type: "text", text: "Error: start_cell must be a single cell (e.g. \"A1\")." }],
+            details: undefined,
+          };
+        }
+
+        let invalidFormulas: InvalidFormula[] = [];
+        try {
+          invalidFormulas = findInvalidFormulas(padded, startCellRef);
+        } catch {
+          return {
+            content: [{ type: "text", text: `Error: invalid start_cell "${params.start_cell}".` }],
+            details: undefined,
+          };
+        }
+
+        if (invalidFormulas.length > 0) {
+          const lines: string[] = [];
+          lines.push("⛔ **Write blocked** — invalid formula syntax detected:");
+          for (const invalid of invalidFormulas) {
+            lines.push(`- ${invalid.address}: ${invalid.formula} (${invalid.reason})`);
+          }
+          lines.push("");
+          lines.push("Fix the formulas and retry.");
+          return { content: [{ type: "text", text: lines.join("\n") }], details: undefined };
+        }
+
         const result = await excelRun(async (context: any) => {
-          const { sheet, range: startRange } = getRange(context, params.start_cell);
+          const { sheet } = getRange(context, params.start_cell);
           sheet.load("name");
 
-          // Parse start cell for address computation
-          const cellRef = params.start_cell.includes("!")
-            ? params.start_cell.split("!")[1]
-            : params.start_cell;
-          const rangeAddr = computeRangeAddress(cellRef, rows, cols);
+          const rangeAddr = computeRangeAddress(startCellRef, rows, cols);
           const targetRange = sheet.getRange(rangeAddr);
 
-          // Overwrite protection: check if target has existing data
+          // Overwrite protection: check if target has existing data or formatting
           if (!params.allow_overwrite) {
-            targetRange.load("values");
+            const conditionalFormats = targetRange.getSpecialCellsOrNullObject(
+              Excel.SpecialCellType.conditionalFormats,
+            );
+            const dataValidations = targetRange.getSpecialCellsOrNullObject(
+              Excel.SpecialCellType.dataValidations,
+            );
+            conditionalFormats.load("address");
+            dataValidations.load("address");
+            targetRange.load("values,formulas,numberFormat");
             await context.sync();
 
-            const existingCount = countNonEmpty(targetRange.values);
-            if (existingCount > 0) {
+            const occupiedCount = countOccupiedCells(targetRange.values, targetRange.formulas);
+            const formattedCount = countFormattedOnly(
+              targetRange.values,
+              targetRange.formulas,
+              targetRange.numberFormat,
+            );
+            const hasConditionalFormats = !conditionalFormats.isNullObject;
+            const hasDataValidations = !dataValidations.isNullObject;
+
+            if (occupiedCount > 0 || formattedCount > 0 || hasConditionalFormats || hasDataValidations) {
               return {
                 blocked: true,
                 sheetName: sheet.name,
                 address: rangeAddr,
-                existingCount,
+                existingCount: occupiedCount,
+                formattedCount,
+                hasConditionalFormats,
+                hasDataValidations,
                 existingValues: targetRange.values,
               };
             }
@@ -94,7 +147,6 @@ export function createWriteCellsTool(): AgentTool<typeof schema> {
 
           // Write
           targetRange.values = padded;
-          targetRange.format.autofitColumns();
           await context.sync();
 
           // Read back to verify
@@ -125,14 +177,113 @@ export function createWriteCellsTool(): AgentTool<typeof schema> {
   };
 }
 
+function findInvalidFormulas(values: any[][], startCell: string): InvalidFormula[] {
+  const start = parseCell(startCell);
+  const invalid: InvalidFormula[] = [];
+
+  for (let r = 0; r < values.length; r++) {
+    for (let c = 0; c < values[r].length; c++) {
+      const value = values[r][c];
+      if (typeof value === "string" && value.startsWith("=")) {
+        const reason = validateFormula(value);
+        if (reason) {
+          invalid.push({
+            address: `${colToLetter(start.col + c)}${start.row + r}`,
+            formula: value,
+            reason,
+          });
+        }
+      }
+    }
+  }
+
+  return invalid;
+}
+
+function validateFormula(formula: string): string | null {
+  if (!formula.startsWith("=")) return null;
+  const body = formula.slice(1);
+
+  if (body.trim().length === 0) return "Empty formula";
+
+  const quoteCount = (body.match(/"/g) || []).length;
+  if (quoteCount % 2 !== 0) return "Unbalanced quotes";
+
+  let depth = 0;
+  let inString = false;
+  for (let i = 0; i < body.length; i++) {
+    const ch = body[i];
+    if (ch === '"') {
+      inString = !inString;
+      continue;
+    }
+    if (inString) continue;
+    if (ch === "(") depth += 1;
+    if (ch === ")") {
+      depth -= 1;
+      if (depth < 0) return "Unbalanced parentheses";
+    }
+  }
+  if (depth !== 0) return "Unbalanced parentheses";
+
+  const trimmed = body.trim();
+  if (/[+\-*/^&,]$/.test(trimmed)) return "Formula ends with an operator";
+
+  return null;
+}
+
+function countOccupiedCells(values: any[][], formulas: any[][]): number {
+  let count = 0;
+  for (let r = 0; r < values.length; r++) {
+    for (let c = 0; c < values[r].length; c++) {
+      const value = values[r][c];
+      const formula = formulas?.[r]?.[c];
+      const hasValue = value !== null && value !== undefined && value !== "";
+      const hasFormula = typeof formula === "string" && formula.startsWith("=");
+      if (hasValue || hasFormula) count += 1;
+    }
+  }
+  return count;
+}
+
+function countFormattedOnly(values: any[][], formulas: any[][], numberFormats: any[][]): number {
+  let count = 0;
+  for (let r = 0; r < values.length; r++) {
+    for (let c = 0; c < values[r].length; c++) {
+      const value = values[r][c];
+      const formula = formulas?.[r]?.[c];
+      const hasValue = value !== null && value !== undefined && value !== "";
+      const hasFormula = typeof formula === "string" && formula.startsWith("=");
+      if (hasValue || hasFormula) continue;
+
+      const format = numberFormats?.[r]?.[c];
+      if (format && format !== "General") count += 1;
+    }
+  }
+  return count;
+}
+
 function formatBlocked(result: any): AgentToolResult<undefined> {
   const fullAddr = qualifiedAddress(result.sheetName, result.address);
   const lines: string[] = [];
-  lines.push(`⛔ **Write blocked** — ${fullAddr} contains ${result.existingCount} non-empty cell(s).`);
+  const parts: string[] = [];
+  if (result.existingCount > 0) parts.push(`${result.existingCount} non-empty cell(s)`);
+  if (result.formattedCount > 0) parts.push(`${result.formattedCount} formatted-only cell(s)`);
+  if (result.hasConditionalFormats) parts.push("conditional formats");
+  if (result.hasDataValidations) parts.push("data validation rules");
+
+  lines.push(`⛔ **Write blocked** — ${fullAddr} contains ${parts.join(", ")}.`);
   lines.push("");
-  lines.push("**Existing data:**");
-  lines.push(formatAsMarkdownTable(result.existingValues));
-  lines.push("");
+
+  if (result.existingCount > 0) {
+    lines.push("**Existing data:**");
+    lines.push(formatAsMarkdownTable(result.existingValues));
+    lines.push("");
+  } else {
+    lines.push("**Existing data:** (empty)");
+    lines.push("");
+  }
+
   lines.push(
     "To overwrite, confirm with the user and retry with `allow_overwrite: true`.",
   );
