@@ -1,0 +1,128 @@
+/**
+ * Pi for Excel — Light theme
+ *
+ * Designed to sit alongside a white Excel sheet.
+ * Warm off-white background with green accent (spreadsheet-native).
+ *
+ * Override pi-web-ui's default theme CSS variables.
+ * This file must be imported AFTER pi-web-ui/app.css.
+ */
+
+/* ── Google Fonts ─────────────────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300..700;1,9..40,300..700&family=JetBrains+Mono:wght@300;400;500&display=swap');
+
+/* ── Light theme palette ──────────────────────────────────── */
+:root {
+  --background: oklch(0.985 0.002 90);       /* warm off-white, slight warmth */
+  --foreground: oklch(0.18 0 0);
+  --card: oklch(0.97 0.002 90);
+  --card-foreground: oklch(0.18 0 0);
+  --popover: oklch(0.99 0 0);
+  --popover-foreground: oklch(0.18 0 0);
+  --primary: oklch(0.50 0.14 155);            /* deep teal-green — spreadsheet accent */
+  --primary-foreground: oklch(0.98 0 0);
+  --secondary: oklch(0.955 0.005 90);
+  --secondary-foreground: oklch(0.25 0 0);
+  --muted: oklch(0.955 0.003 90);
+  --muted-foreground: oklch(0.48 0 0);
+  --accent: oklch(0.96 0.008 90);
+  --accent-foreground: oklch(0.35 0.08 155);
+  --destructive: oklch(0.55 0.22 25);
+  --destructive-foreground: oklch(0.98 0 0);
+  --border: oklch(0.90 0.005 90);
+  --input: oklch(0.94 0.003 90);
+  --ring: oklch(0.55 0.12 155);
+
+  /* Sidebar-specific */
+  --sidebar: oklch(0.975 0.002 90);
+  --sidebar-foreground: oklch(0.18 0 0);
+  --sidebar-border: oklch(0.90 0.005 90);
+
+  /* Typography */
+  --font-sans: 'DM Sans', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --radius: 0.5rem;
+}
+
+/* Force light — override .dark class that pi-web-ui might set */
+.dark {
+  --background: oklch(0.985 0.002 90);
+  --foreground: oklch(0.18 0 0);
+  --card: oklch(0.97 0.002 90);
+  --card-foreground: oklch(0.18 0 0);
+  --popover: oklch(0.99 0 0);
+  --popover-foreground: oklch(0.18 0 0);
+  --primary: oklch(0.50 0.14 155);
+  --primary-foreground: oklch(0.98 0 0);
+  --secondary: oklch(0.955 0.005 90);
+  --secondary-foreground: oklch(0.25 0 0);
+  --muted: oklch(0.955 0.003 90);
+  --muted-foreground: oklch(0.48 0 0);
+  --accent: oklch(0.96 0.008 90);
+  --accent-foreground: oklch(0.35 0.08 155);
+  --destructive: oklch(0.55 0.22 25);
+  --destructive-foreground: oklch(0.98 0 0);
+  --border: oklch(0.90 0.005 90);
+  --input: oklch(0.94 0.003 90);
+  --ring: oklch(0.55 0.12 155);
+  --sidebar: oklch(0.975 0.002 90);
+  --sidebar-foreground: oklch(0.18 0 0);
+  --sidebar-border: oklch(0.90 0.005 90);
+  --font-sans: 'DM Sans', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --radius: 0.5rem;
+}
+
+/* ── Sidebar-specific overrides ──────────────────────────── */
+
+agent-interface {
+  font-family: var(--font-sans) !important;
+  font-size: 13px !important;
+}
+
+/* Input area — more breathing room around the editor card */
+agent-interface .shrink-0 > .mx-auto {
+  padding-left: 10px !important;
+  padding-right: 10px !important;
+  padding-bottom: 6px !important;
+}
+
+/* User message pill — soft green tint */
+.user-message-container {
+  background: linear-gradient(
+    135deg,
+    oklch(0.50 0.14 155 / 0.06),
+    oklch(0.55 0.10 100 / 0.06)
+  ) !important;
+  border-color: oklch(0.50 0.14 155 / 0.15) !important;
+}
+
+/* Code blocks — slightly tighter */
+code-block {
+  font-size: 11.5px !important;
+}
+
+/* Markdown — controlled line height */
+markdown-block {
+  line-height: 1.55;
+}
+
+/* Tool call blocks — compact */
+tool-message {
+  font-size: 12px;
+}
+
+/* ── Scrollbar — thin, subtle ────────────────────────────── */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: oklch(0.82 0 0) transparent;
+}
+*::-webkit-scrollbar { width: 5px; height: 5px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background: oklch(0.82 0 0);
+  border-radius: 3px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: oklch(0.70 0 0);
+}

@@ -5,7 +5,7 @@
  * wires up tools and context injection.
  */
 
-// MUST be first — Lit fix + CSS
+// MUST be first — Lit fix + CSS (theme.css loaded after pi-web-ui/app.css)
 import "./boot.js";
 
 import { html, render } from "lit";
@@ -27,9 +27,13 @@ import { installFetchInterceptor } from "./auth/cors-proxy.js";
 import { restoreCredentials } from "./auth/restore.js";
 import { createAllTools } from "./tools/index.js";
 import { buildSystemPrompt } from "./prompt/system-prompt.js";
-import { getBlueprint, invalidateBlueprint } from "./context/blueprint.js";
+import { getBlueprint } from "./context/blueprint.js";
 import { readSelectionContext } from "./context/selection.js";
 import { ChangeTracker } from "./context/change-tracker.js";
+
+// UI components — extracted for easy swapping
+import { renderHeader, headerStyles } from "./ui/header.js";
+import { renderLoading, renderError, loadingStyles } from "./ui/loading.js";
 
 // ============================================================================
 // Globals
@@ -37,11 +41,24 @@ import { ChangeTracker } from "./context/change-tracker.js";
 
 declare const Office: any;
 
+const headerRoot = document.getElementById("header-root")!;
 const appEl = document.getElementById("app")!;
-const loadingEl = document.getElementById("loading")!;
-const errorEl = document.getElementById("error")!;
+const loadingRoot = document.getElementById("loading-root")!;
+const errorRoot = document.getElementById("error-root")!;
 
 const changeTracker = new ChangeTracker();
+
+// ============================================================================
+// Inject component styles + render initial UI
+// ============================================================================
+
+const styleSheet = document.createElement("style");
+styleSheet.textContent = headerStyles + loadingStyles;
+document.head.appendChild(styleSheet);
+
+// Render header and loading state immediately
+render(renderHeader({ status: "ready" }), headerRoot);
+render(renderLoading(), loadingRoot);
 
 // ============================================================================
 // Bootstrap
@@ -50,11 +67,14 @@ const changeTracker = new ChangeTracker();
 // Install CORS proxy before any fetch calls
 installFetchInterceptor();
 
+let initialized = false;
+
 // Wait for Office.js
 Office.onReady(async (info: { host: any; platform: any }) => {
   console.log(`[pi] Office.js ready: host=${info.host}, platform=${info.platform}`);
 
   try {
+    initialized = true;
     await init();
   } catch (e: any) {
     showError(`Failed to initialize: ${e.message}`);
@@ -64,8 +84,9 @@ Office.onReady(async (info: { host: any; platform: any }) => {
 
 // Fallback if not in Excel (dev/testing)
 setTimeout(() => {
-  if (loadingEl.style.display !== "none") {
+  if (!initialized) {
     console.warn("[pi] Office.js not ready after 3s — initializing without Excel");
+    initialized = true;
     init().catch((e) => {
       showError(`Failed to initialize: ${e.message}`);
       console.error("[pi] Init error:", e);
@@ -145,12 +166,12 @@ async function init(): Promise<void> {
     toolsFactory: () => createAllTools(),
   });
 
-  // 7. Render
-  loadingEl.style.display = "none";
-
+  // 7. Clear loading, render ChatPanel
+  appEl.innerHTML = "";
   render(
     html`
-      <div class="w-full h-full flex flex-col overflow-hidden" style="background: var(--background); color: var(--foreground);">
+      <div class="w-full h-full flex flex-col overflow-hidden"
+           style="background: var(--background); color: var(--foreground);">
         ${chatPanel}
       </div>
     `,
@@ -217,7 +238,5 @@ async function injectContext(context: any): Promise<any> {
 // ============================================================================
 
 function showError(message: string): void {
-  errorEl.style.display = "block";
-  errorEl.textContent = message;
-  loadingEl.style.display = "none";
+  render(renderError(message), errorRoot);
 }

@@ -8,6 +8,7 @@
  */
 
 import "@mariozechner/pi-web-ui/app.css";
+import "./ui/theme.css";
 
 import { ReactiveElement } from "lit";
 
