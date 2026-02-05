@@ -7,6 +7,7 @@
     "dev": "vite --port 3000",
     "build": "vite build",
     "preview": "vite preview",
+    "test:models": "node --test --experimental-strip-types tests/model-ordering.test.ts",
     "validate": "npx office-addin-manifest validate manifest.xml",
     "sideload": "npx office-addin-debugging start manifest.xml desktop --app excel"
   },
