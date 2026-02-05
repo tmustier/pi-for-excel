@@ -286,6 +286,26 @@ async function init(): Promise<void> {
   // Custom status bar — shows context % and thinking level
   injectStatusBar(agent);
 
+  // Auto-resize textarea — override pi-web-ui's inline max-height: 200px
+  const patchTextarea = () => {
+    const ta = document.querySelector("message-editor textarea") as HTMLTextAreaElement | null;
+    if (ta) {
+      ta.style.maxHeight = "50vh";
+      ta.style.height = "auto";
+      // Classic auto-grow: reset height then set to scrollHeight
+      const autoGrow = () => {
+        ta.style.height = "auto";
+        ta.style.height = ta.scrollHeight + "px";
+      };
+      ta.addEventListener("input", autoGrow);
+      // Also observe value changes (e.g. clearing after send)
+      new MutationObserver(autoGrow).observe(ta, { attributes: true, attributeFilter: ["value"] });
+    } else {
+      requestAnimationFrame(patchTextarea);
+    }
+  };
+  requestAnimationFrame(patchTextarea);
+
   // Dynamic placeholder — changes during streaming to hint at steer/follow-up
   agent.subscribe((ev) => {
     if (ev.type === "message_start" || ev.type === "message_end") {
