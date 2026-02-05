@@ -54,11 +54,69 @@ export function setActiveProviders(providers: Set<string>) {
   _activeProviders = providers;
 }
 
+// Featured models shown at top of picker, in order.
+// This is the curated "best current models" list — update when new models drop.
+const FEATURED_MODELS = new Map([
+  ["claude-opus-4-5", 1],
+  ["claude-sonnet-4-20250514", 2],
+  ["claude-opus-4-1", 3],
+  ["gpt-5.2", 4],
+  ["gpt-5.2-codex", 5],
+  ["gpt-5.2-pro", 6],
+  ["gpt-5.1", 7],
+  ["gemini-3-pro-preview", 8],
+  ["gemini-3-flash-preview", 9],
+  ["gemini-2.5-pro-preview-06-05", 10],
+]);
+
+/** Extract a numeric version/date score from model ID for recency sorting. Higher = newer. */
+function modelRecencyScore(id: string): number {
+  // Try YYYYMMDD date in ID (e.g. claude-sonnet-4-20250514)
+  const dateMatch = id.match(/(\d{8})/);
+  if (dateMatch) return parseInt(dateMatch[1]);
+  // Try X.Y version (e.g. gpt-5.2 → 520, gpt-5.1 → 510)
+  const verMatch = id.match(/(\d+)\.(\d+)/);
+  if (verMatch) return parseInt(verMatch[1]) * 100 + parseInt(verMatch[2]) * 10;
+  // Try single major version (e.g. gpt-5 → 500)
+  const majorMatch = id.match(/-(\d+)(?:-|$)/);
+  if (majorMatch) return parseInt(majorMatch[1]) * 100;
+  return 0;
+}
+
 const _origGetFilteredModels = (ModelSelector.prototype as any).getFilteredModels;
 (ModelSelector.prototype as any).getFilteredModels = function () {
   const all: Array<{ provider: string; id: string; model: any }> = _origGetFilteredModels.call(this);
-  if (!_activeProviders || _activeProviders.size === 0) return all;
-  return all.filter((m: any) => _activeProviders!.has(m.provider));
+
+  // Filter to active providers
+  let filtered = all;
+  if (_activeProviders && _activeProviders.size > 0) {
+    filtered = all.filter((m: any) => _activeProviders!.has(m.provider));
+  }
+
+  // Re-sort: current model → featured → recency → alphabetical
+  const currentModel = this.currentModel;
+  filtered.sort((a: any, b: any) => {
+    // Current model always first
+    const aCur = currentModel && a.model.id === currentModel.id && a.model.provider === currentModel.provider;
+    const bCur = currentModel && b.model.id === currentModel.id && b.model.provider === currentModel.provider;
+    if (aCur && !bCur) return -1;
+    if (!aCur && bCur) return 1;
+
+    // Featured models next, in curated order
+    const aFeat = FEATURED_MODELS.get(a.id) ?? Infinity;
+    const bFeat = FEATURED_MODELS.get(b.id) ?? Infinity;
+    if (aFeat !== bFeat) return aFeat - bFeat;
+
+    // Then by recency (higher = newer = first)
+    const aRec = modelRecencyScore(a.id);
+    const bRec = modelRecencyScore(b.id);
+    if (aRec !== bRec) return bRec - aRec;
+
+    // Fallback: alphabetical
+    return a.id.localeCompare(b.id);
+  });
+
+  return filtered;
 };
 
 // ============================================================================
@@ -370,9 +428,11 @@ async function init(): Promise<void> {
       if (e.altKey) {
         // Alt+Enter → follow-up (queued for after agent finishes current turn)
         agent.followUp(msg);
+        flashToast("Follow-up queued");
       } else {
         // Enter → steer (interrupts current turn)
         agent.steer(msg);
+        flashToast("Steering…");
       }
 
       // Clear the textarea
@@ -389,6 +449,7 @@ async function init(): Promise<void> {
       e.stopImmediatePropagation();
       const msg = { role: "user" as const, content: [{ type: "text" as const, text }], timestamp: Date.now() };
       agent.followUp(msg);
+      flashToast("Follow-up queued");
       textarea!.value = "";
       textarea!.dispatchEvent(new Event("input", { bubbles: true }));
       return;
@@ -570,10 +631,7 @@ function updateStatusBar(agent: Agent, bar?: HTMLElement): void {
 // Thinking level flash — visual feedback on change
 // ============================================================================
 
-function flashThinkingLevel(level: string, color: string): void {
-  // Toast with level name
-  const labels: Record<string, string> = { off: "Off", low: "Low", medium: "Medium", high: "High" };
-  const label = labels[level] || level;
+function flashToast(message: string, duration = 1500): void {
   let toast = document.getElementById("pi-toast");
   if (!toast) {
     toast = document.createElement("div");
@@ -581,9 +639,14 @@ function flashThinkingLevel(level: string, color: string): void {
     toast.className = "pi-toast";
     document.body.appendChild(toast);
   }
-  toast.textContent = `Thinking: ${label} (⇧Tab to toggle)`;
+  toast.textContent = message;
   toast.classList.add("visible");
-  setTimeout(() => toast!.classList.remove("visible"), 1500);
+  setTimeout(() => toast!.classList.remove("visible"), duration);
+}
+
+function flashThinkingLevel(level: string, color: string): void {
+  const labels: Record<string, string> = { off: "Off", low: "Low", medium: "Medium", high: "High" };
+  flashToast(`Thinking: ${labels[level] || level} (⇧Tab to toggle)`);
 
   // Flash the status bar thinking indicator
   const el = document.querySelector(".pi-status-thinking") as HTMLElement;
