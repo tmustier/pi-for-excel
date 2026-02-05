@@ -41,7 +41,7 @@ const schema = Type.Object({
     }),
   ),
   wrap_text: Type.Optional(Type.Boolean({ description: "Enable text wrapping." })),
-  column_width: Type.Optional(Type.Number({ description: "Set column width in Excel character-width units (same as Excel UI)." })),
+  column_width: Type.Optional(Type.Number({ description: "Set column width in Excel character-width units (same as Excel UI). Converted to points internally." })),
   row_height: Type.Optional(Type.Number({ description: "Set row height in points." })),
   auto_fit: Type.Optional(
     Type.Boolean({ description: "Auto-fit column widths to content. Default: false." }),
@@ -74,7 +74,7 @@ export function createFormatCellsTool(): AgentTool<typeof schema> {
     description:
       "Apply formatting to a range of cells (supports comma-separated ranges on one sheet). " +
       "Set font properties (bold, italic, color, size), fill color, number format, alignment, borders, " +
-      "column width, and more. Does NOT modify cell values — use write_cells for that.",
+      "column width (Excel character units), and more. Does NOT modify cell values — use write_cells for that.",
     parameters: schema,
     execute: async (
       _toolCallId: string,
@@ -83,7 +83,7 @@ export function createFormatCellsTool(): AgentTool<typeof schema> {
       try {
         const result = await excelRun(async (context: any) => {
           const { sheet, target, isMultiRange } = resolveFormatTarget(context, params.range);
-          sheet.load("name");
+          sheet.load("name,standardWidth");
           target.load("address");
 
           const needsAreas = isMultiRange && (params.number_format || params.merge !== undefined);
@@ -99,6 +99,7 @@ export function createFormatCellsTool(): AgentTool<typeof schema> {
           const warnings: string[] = [];
           const formatTarget = target.format;
           let columnWidthFormat: any | null = null;
+          let columnWidthScale: number | null = null;
 
           // Font properties
           if (params.bold !== undefined) {
@@ -167,7 +168,30 @@ export function createFormatCellsTool(): AgentTool<typeof schema> {
           // Dimensions
           if (params.column_width !== undefined) {
             const columnTarget = target.getEntireColumn();
-            columnTarget.format.columnWidth = params.column_width;
+
+            // Column width in Office.js uses points. Convert from Excel's character width.
+            // Use sheet.standardWidth (chars) and a temporary standard-width measurement (points).
+            if (typeof sheet.standardWidth === "number" && sheet.standardWidth > 0) {
+              columnTarget.format.useStandardWidth = true;
+              columnTarget.format.load("columnWidth");
+              await context.sync();
+
+              const standardPoints = columnTarget.format.columnWidth;
+              if (typeof standardPoints === "number" && standardPoints > 0) {
+                columnWidthScale = standardPoints / sheet.standardWidth;
+              } else {
+                warnings.push("Could not determine standard column width in points; applying raw value.");
+              }
+            } else {
+              warnings.push("Sheet standard width unavailable; applying raw value.");
+            }
+
+            if (columnWidthScale) {
+              columnTarget.format.columnWidth = params.column_width * columnWidthScale;
+            } else {
+              columnTarget.format.columnWidth = params.column_width;
+            }
+
             columnTarget.format.load("columnWidth");
             columnWidthFormat = columnTarget.format;
             applied.push(`col width ${params.column_width}`);
@@ -241,12 +265,13 @@ export function createFormatCellsTool(): AgentTool<typeof schema> {
           await context.sync();
 
           if (columnWidthFormat) {
-            const actual = columnWidthFormat.columnWidth;
-            if (typeof actual === "number") {
-              const delta = Math.abs(actual - params.column_width!);
+            const actualPoints = columnWidthFormat.columnWidth;
+            if (typeof actualPoints === "number") {
+              const actualChars = columnWidthScale ? actualPoints / columnWidthScale : actualPoints;
+              const delta = Math.abs(actualChars - params.column_width!);
               if (delta > 0.1) {
                 warnings.push(
-                  `Requested column width ${params.column_width}, Excel applied ${actual.toFixed(2)}.`
+                  `Requested column width ${params.column_width}, Excel applied ${actualChars.toFixed(2)}.`
                 );
               }
             } else {
