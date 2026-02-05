@@ -43,6 +43,25 @@ import { wireCommandMenu, handleCommandMenuKey, isCommandMenuVisible, hideComman
 import { createExtensionAPI, loadExtension } from "./commands/extension-api.js";
 
 // ============================================================================
+// ============================================================================
+// Patch ModelSelector to only show models from providers with API keys
+// ============================================================================
+
+let _activeProviders: Set<string> | null = null;
+
+/** Update the set of providers that have API keys configured */
+export function setActiveProviders(providers: Set<string>) {
+  _activeProviders = providers;
+}
+
+const _origGetFilteredModels = (ModelSelector.prototype as any).getFilteredModels;
+(ModelSelector.prototype as any).getFilteredModels = function () {
+  const all: Array<{ provider: string; id: string; model: any }> = _origGetFilteredModels.call(this);
+  if (!_activeProviders || _activeProviders.size === 0) return all;
+  return all.filter((m: any) => _activeProviders!.has(m.provider));
+};
+
+// ============================================================================
 // Globals
 // ============================================================================
 
@@ -171,6 +190,7 @@ async function init(): Promise<void> {
   // 5. Create agent — pick default model from a provider the user has
   const systemPrompt = buildSystemPrompt(blueprint);
   const availableProviders = await providerKeys.list();
+  setActiveProviders(new Set(availableProviders));
   const defaultModel = pickDefaultModel(availableProviders);
 
   const agent = _agent = new Agent({
@@ -191,7 +211,11 @@ async function init(): Promise<void> {
 
   await chatPanel.setAgent(agent, {
     onApiKeyRequired: async (provider: string) => {
-      return await ApiKeyPromptDialog.prompt(provider);
+      const result = await ApiKeyPromptDialog.prompt(provider);
+      // Refresh active providers after key added
+      const updated = await providerKeys.list();
+      setActiveProviders(new Set(updated));
+      return result;
     },
     toolsFactory: () => createAllTools(),
   });
@@ -630,6 +654,9 @@ async function showWelcomeLogin(providerKeys: InstanceType<typeof ProviderKeysSt
       row.addEventListener("click", async () => {
         const success = await ApiKeyPromptDialog.prompt(id);
         if (success) {
+          // Refresh active providers after key added
+          const updated = await providerKeys.list();
+          setActiveProviders(new Set(updated));
           overlay.remove();
           resolve();
         }
