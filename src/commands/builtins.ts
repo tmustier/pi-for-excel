@@ -79,6 +79,63 @@ export function registerBuiltins(agent: Agent): void {
       },
     },
     {
+      name: "export",
+      description: "Export session transcript (JSON to clipboard or download)",
+      source: "builtin",
+      execute: (args: string) => {
+        const msgs = agent.state.messages;
+        if (msgs.length === 0) {
+          showToast("No messages to export");
+          return;
+        }
+
+        // Build a readable transcript
+        const transcript = msgs.map((m: any) => {
+          const role = m.role;
+          const content = m.content;
+          const text = typeof content === "string"
+            ? content
+            : Array.isArray(content)
+              ? content.map((b: any) => {
+                  if (b.type === "text") return b.text;
+                  if (b.type === "tool_use") return `[tool_use: ${b.name}(${JSON.stringify(b.input).slice(0, 200)})]`;
+                  if (b.type === "tool_result") return `[tool_result: ${typeof b.content === "string" ? b.content.slice(0, 500) : JSON.stringify(b.content).slice(0, 500)}]`;
+                  return `[${b.type}]`;
+                }).join("\n")
+              : "";
+          return { role, text, ...(m.usage ? { usage: m.usage } : {}), ...(m.stopReason ? { stopReason: m.stopReason } : {}) };
+        });
+
+        const exportData = {
+          exported: new Date().toISOString(),
+          model: agent.state.model ? { id: agent.state.model.id, name: agent.state.model.name, provider: agent.state.model.provider } : null,
+          thinkingLevel: agent.state.thinkingLevel,
+          messageCount: msgs.length,
+          transcript,
+          // Also include raw messages for full fidelity debugging
+          raw: msgs,
+        };
+
+        const json = JSON.stringify(exportData, null, 2);
+
+        if (args.trim() === "clipboard" || !args.trim()) {
+          navigator.clipboard.writeText(json).then(() => {
+            showToast(`Transcript copied (${msgs.length} messages, ${(json.length / 1024).toFixed(0)}KB)`);
+          });
+        } else {
+          // Download as file
+          const blob = new Blob([json], { type: "application/json" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `pi-session-${new Date().toISOString().slice(0, 10)}.json`;
+          a.click();
+          URL.revokeObjectURL(url);
+          showToast(`Downloaded transcript (${msgs.length} messages)`);
+        }
+      },
+    },
+    {
       name: "name",
       description: "Name the current chat session",
       source: "builtin",
