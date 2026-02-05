@@ -10,7 +10,7 @@ import "./boot.js";
 
 import { html, render } from "lit";
 import { Agent } from "@mariozechner/pi-agent-core";
-import { getModel, getProviders, getModels, type KnownProvider } from "@mariozechner/pi-ai";
+import { getModel, getProviders, getModels, supportsXhigh, type KnownProvider } from "@mariozechner/pi-ai";
 import {
   ChatPanel,
   AppStorage,
@@ -344,13 +344,35 @@ async function init(): Promise<void> {
   });
 
   // ── Keyboard shortcuts ──────────────────────────────────────────
-  const THINKING_LEVELS = ["off", "low", "medium", "high"] as const;
   const THINKING_COLORS: Record<string, string> = {
     off: "#a0a0a0",       // grey
+    minimal: "#767676",   // dark grey
     low: "#4488cc",       // blue
     medium: "#22998a",    // teal
     high: "#875f87",      // purple
+    xhigh: "#8b008b",    // dark magenta
   };
+
+  /** Return available thinking levels for the current model */
+  function getThinkingLevels(): string[] {
+    const model = agent.state.model;
+    if (!model || !model.reasoning) return ["off"];
+
+    const provider = model.provider;
+
+    // OpenAI / Codex: supports minimal + potentially xhigh
+    if (provider === "openai" || provider === "openai-codex") {
+      const levels = ["off", "minimal", "low", "medium", "high"];
+      if (supportsXhigh(model)) levels.push("xhigh");
+      return levels;
+    }
+
+    // Anthropic: off → low → medium → high (no minimal, no xhigh)
+    if (provider === "anthropic") return ["off", "low", "medium", "high"];
+
+    // Google / others: off → low → medium → high
+    return ["off", "low", "medium", "high"];
+  }
 
   // We capture on the document to intercept before MessageEditor's handler
   document.addEventListener("keydown", (e) => {
@@ -380,10 +402,11 @@ async function init(): Promise<void> {
     // Shift+Tab — cycle thinking level
     if (e.shiftKey && e.key === "Tab") {
       e.preventDefault();
+      const levels = getThinkingLevels();
       const current = agent.state.thinkingLevel;
-      const idx = THINKING_LEVELS.indexOf(current as any);
-      const next = THINKING_LEVELS[(idx + 1) % THINKING_LEVELS.length];
-      agent.setThinkingLevel(next);
+      const idx = levels.indexOf(current);
+      const next = levels[(idx + 1) % levels.length];
+      agent.setThinkingLevel(next as any);
       const iface = document.querySelector("agent-interface") as any;
       if (iface) iface.requestUpdate();
       updateStatusBar(agent);
@@ -491,10 +514,11 @@ async function init(): Promise<void> {
   document.addEventListener("click", (e) => {
     const target = (e.target as HTMLElement).closest?.(".pi-status-thinking");
     if (target) {
+      const levels = getThinkingLevels();
       const current = agent.state.thinkingLevel;
-      const idx = THINKING_LEVELS.indexOf(current as any);
-      const next = THINKING_LEVELS[(idx + 1) % THINKING_LEVELS.length];
-      agent.setThinkingLevel(next);
+      const idx = levels.indexOf(current);
+      const next = levels[(idx + 1) % levels.length];
+      agent.setThinkingLevel(next as any);
       const iface = document.querySelector("agent-interface") as any;
       if (iface) iface.requestUpdate();
       updateStatusBar(agent);
@@ -736,14 +760,11 @@ async function showWelcomeLogin(providerKeys: InstanceType<typeof ProviderKeysSt
 // ============================================================================
 
 const PREFERRED_MODELS: [string, string][] = [
-  ["anthropic", "claude-sonnet-4-20250514"],
   ["anthropic", "claude-opus-4-5"],
-  ["openai", "gpt-4o"],
-  ["google-gemini", "gemini-2.0-flash"],
-  ["deepseek", "deepseek-chat"],
-  ["mistral", "mistral-large-latest"],
-  ["groq", "llama-3.3-70b-versatile"],
-  ["xai", "grok-3"],
+  ["openai-codex", "gpt-5.2"],
+  ["openai-codex", "gpt-5.2-codex"],
+  ["google", "gemini-3-pro-preview"],
+  ["google", "gemini-3-flash-preview"],
 ];
 
 function pickDefaultModel(availableProviders: string[]) {
