@@ -251,7 +251,10 @@ async function showProviderPicker(agent: Agent): Promise<void> {
     `;
     row.addEventListener("click", async () => {
       const { ApiKeyPromptDialog } = await import("@mariozechner/pi-web-ui");
+      // Hide login overlay while API key dialog is open to prevent backdrop stacking
+      overlay!.style.display = "none";
       const success = await ApiKeyPromptDialog.prompt(id);
+      overlay!.style.display = "flex";
       if (success) {
         // Update the row status
         const status = row.querySelector("span:last-child")!;
