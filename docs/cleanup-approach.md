@@ -40,7 +40,7 @@ Three review lenses:
 ## Current hotspots / refactor candidates (keep a running list)
 
 - `src/taskpane.ts`
-  - Split into smaller modules (model selection, header/pop-out sync, session persistence).
+  - Split into smaller modules (model selection, header/status sync, session persistence).
   - Reduce `any` usage around models; prefer typed model interface.
   - Move model ordering/"featured" rules into a dedicated `src/models/` helper so they’re testable.
   - Consider removing the ModelSelector monkey-patch in favor of an explicit wrapper API (if Pi-web-ui exposes hooks).

@@ -10,9 +10,7 @@ export interface HeaderState {
   status: "ready" | "working" | "error";
   statusText?: string;
   modelAlias?: string;
-  popoutActive?: boolean;
   onModelClick?: () => void;
-  onPopoutClick?: () => void;
 }
 
 const STATUS_CONFIG = {
@@ -21,9 +19,7 @@ const STATUS_CONFIG = {
   error: { color: "oklch(0.60 0.22 25)", label: "Error" },
 } as const;
 
-/**
- * Render the header bar.
- */
+/** Render the header bar. */
 export function renderHeader(state: HeaderState = { status: "ready" }): TemplateResult {
   const cfg = STATUS_CONFIG[state.status];
   const label = state.statusText ?? cfg.label;
@@ -36,18 +32,8 @@ export function renderHeader(state: HeaderState = { status: "ready" }): Template
         <span class="pi-header__model-name">${model}</span>
         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
       </button>
+
       <div class="pi-header__actions">
-        <button
-          class="pi-header__popout ${state.popoutActive ? "is-active" : ""}"
-          @click=${state.onPopoutClick}
-          title="Pop out window"
-          aria-label="Pop out window"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M14 3h7v7" /><path d="M10 14L21 3" />
-            <path d="M21 14v7h-7" /><path d="M3 10V3h7" /><path d="M3 14l7 7" />
-          </svg>
-        </button>
         <div class="pi-header__status">
           <span class="pi-header__dot" style="background: ${cfg.color}; box-shadow: 0 0 6px ${cfg.color};"></span>
           <span class="pi-header__label">${label}</span>
@@ -57,9 +43,7 @@ export function renderHeader(state: HeaderState = { status: "ready" }): Template
   `;
 }
 
-/**
- * CSS for the header. Injected into the document once.
- */
+/** CSS for the header. Injected into the document once. */
 export const headerStyles = `
   .pi-header {
     display: flex;
@@ -136,28 +120,6 @@ export const headerStyles = `
     display: flex;
     align-items: center;
     gap: 10px;
-  }
-
-  .pi-header__popout {
-    border: 1px solid oklch(0 0 0 / 0.08);
-    background: oklch(1 0 0 / 0.6);
-    color: var(--foreground);
-    width: 28px;
-    height: 26px;
-    border-radius: 7px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: background 0.15s, border-color 0.15s;
-  }
-  .pi-header__popout:hover {
-    background: oklch(1 0 0 / 0.9);
-    border-color: oklch(0 0 0 / 0.16);
-  }
-  .pi-header__popout.is-active {
-    background: color-mix(in oklch, var(--primary) 16%, white 84%);
-    border-color: color-mix(in oklch, var(--primary) 50%, oklch(0 0 0 / 0.2));
   }
 
   .pi-header__status {

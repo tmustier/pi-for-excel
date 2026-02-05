@@ -9,7 +9,7 @@
 import "./boot.js";
 
 import { html, render } from "lit";
-import { Agent, type AgentEvent, type AgentState } from "@mariozechner/pi-agent-core";
+import { Agent } from "@mariozechner/pi-agent-core";
 import { getModel, getModels, supportsXhigh } from "@mariozechner/pi-ai";
 import {
   ApiKeyPromptDialog,
@@ -38,7 +38,6 @@ import { registerBuiltins } from "./commands/builtins.js";
 import { commandRegistry } from "./commands/types.js";
 import { wireCommandMenu, handleCommandMenuKey, isCommandMenuVisible, hideCommandMenu } from "./commands/command-menu.js";
 import { createExtensionAPI, loadExtension } from "./commands/extension-api.js";
-
 
 // ============================================================================
 // Patch ModelSelector to only show models from providers with API keys
@@ -326,10 +325,6 @@ const errorRoot = document.getElementById("error-root")!;
 
 const changeTracker = new ChangeTracker();
 
-let popoutDialog: Office.Dialog | null = null;
-let popoutReady = false;
-let popoutOpen = false;
-
 
 // ============================================================================
 // Inject component styles + render initial UI
@@ -354,7 +349,6 @@ function setModelAndSync(agent: Agent, model: any): void {
   agent.setModel(model);
   updateHeader({ modelAlias: getAgentModelAlias(agent) });
   updateStatusBar(agent);
-  sendPopoutState();
   // Ensure sidebar reacts to model capability changes (thinking levels, etc.)
   requestAnimationFrame(() => _sidebar?.requestUpdate());
 }
@@ -364,15 +358,11 @@ function updateHeader(opts: { status?: "ready" | "working" | "error"; modelAlias
   render(renderHeader({
     status: _headerState.status,
     modelAlias: _headerState.modelAlias,
-    popoutActive: popoutOpen,
     onModelClick: () => {
       if (!_agent) return;
       ModelSelector.open(_agent.state.model, (model) => {
         setModelAndSync(_agent!, model);
       });
-    },
-    onPopoutClick: () => {
-      openPopout();
     },
   }), headerRoot);
 }
@@ -383,104 +373,6 @@ function showErrorBanner(message: string): void {
 
 function clearErrorBanner(): void {
   render(html``, errorRoot);
-}
-
-function serializeAgentState(state: AgentState) {
-  return {
-    ...state,
-    pendingToolCalls: Array.from(state.pendingToolCalls),
-    tools: state.tools.map((tool) => ({
-      name: tool.name,
-      label: tool.label,
-      description: tool.description,
-    })),
-  };
-}
-
-function sendPopoutState(event?: AgentEvent): void {
-  if (!popoutDialog || !popoutReady || !_agent) return;
-  const payload = {
-    type: "pi-dialog-state",
-    event: event || null,
-    state: serializeAgentState(_agent.state),
-  };
-  popoutDialog.messageChild(JSON.stringify(payload));
-}
-
-function handlePopoutMessage(arg: any): void {
-  if (!_agent) return;
-  let data: any;
-  try { data = JSON.parse(arg.message); } catch { return; }
-  switch (data.type) {
-    case "pi-dialog-ready":
-      popoutReady = true;
-      sendPopoutState();
-      break;
-    case "pi-dialog-request-state":
-      sendPopoutState();
-      break;
-    case "pi-dialog-prompt":
-      _agent.prompt(data.message).catch((e) => {
-        showErrorBanner(`LLM error: ${e.message}`);
-      });
-      break;
-    case "pi-dialog-set-model":
-      if (data.model) {
-        setModelAndSync(_agent, data.model);
-      }
-      break;
-    case "pi-dialog-set-thinking":
-      if (data.level) {
-        _agent.setThinkingLevel(data.level);
-        updateStatusBar(_agent);
-        sendPopoutState();
-      }
-      break;
-    case "pi-dialog-abort":
-      _agent.abort();
-      break;
-    case "pi-dialog-close":
-      closePopout();
-      break;
-  }
-}
-
-function handlePopoutEvent(): void {
-  popoutDialog = null;
-  popoutReady = false;
-  popoutOpen = false;
-  updateHeader();
-}
-
-function closePopout(): void {
-  if (popoutDialog) popoutDialog.close();
-}
-
-function openPopout(): void {
-  if (!Office?.context?.ui?.displayDialogAsync) {
-    showToast("Pop-out not supported in this host.");
-    return;
-  }
-  if (popoutDialog) { closePopout(); return; }
-  const url = new URL("dialog.html", window.location.href).toString();
-  Office.context.ui.displayDialogAsync(
-    url,
-    { height: 75, width: 45, displayInIframe: false },
-    (result: any) => {
-      if (result.status !== Office.AsyncResultStatus.Succeeded) {
-        showToast(`Pop-out failed: ${result.error?.message || "unknown error"}`);
-        return;
-      }
-      const dialog = result.value as Office.Dialog;
-      popoutDialog = dialog;
-      popoutReady = false;
-      popoutOpen = true;
-      updateHeader();
-      showToast("Pop-out opened. Keep the sidebar open for tool access.");
-      dialog.addEventHandler(Office.EventType.DialogMessageReceived, handlePopoutMessage);
-      dialog.addEventHandler(Office.EventType.DialogEventReceived, handlePopoutEvent);
-    },
-  );
 }
 
 updateHeader();
@@ -639,8 +531,6 @@ async function init(): Promise<void> {
       _userAborted = false;
     }
 
-    // Pop-out sync
-    sendPopoutState(ev);
   });
 
   // ── Session persistence ──
@@ -740,7 +630,6 @@ async function init(): Promise<void> {
         if (sessionData.thinkingLevel) {
           agent.setThinkingLevel(sessionData.thinkingLevel);
           updateStatusBar(agent);
-          sendPopoutState();
         }
         // Force sidebar to re-render with restored messages
         requestAnimationFrame(() => sidebar.requestUpdate());

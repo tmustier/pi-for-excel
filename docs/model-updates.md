@@ -87,7 +87,7 @@ We intentionally avoid pinning exact versioned IDs now. Instead we:
   - `PROVIDER_ORDER` (Anthropic → OpenAI Codex → OpenAI → Google → …)
   - `familyPriority()` (Opus/Sonnet/Haiku, Codex vs non-Codex, etc.)
   - `parseMajorMinor()` + `modelRecencyScore()` (treats `4-6` as `46`, `5.3` as `53`, and keeps `YYYYMMDD` as a separate date suffix)
-  - `setModelAndSync()` to keep the **header/status bar/pop-out** synced whenever the model changes (picker, pop-out, session restore)
+  - `setModelAndSync()` to keep the **header/status bar** synced whenever the model changes (picker, session restore)
 
 - Pick the default model via pattern rules:
   - Anthropic is a small special-case (Opus unless a newer-version Sonnet exists; version compare uses `parseMajorMinor`)

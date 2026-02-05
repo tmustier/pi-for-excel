@@ -73,8 +73,3 @@ pi-web-ui uses Light DOM (`createRenderRoot() { return this; }`), so styles leak
 - Keyboard shortcuts (Enter, Escape, Shift+Tab for thinking) via `document.addEventListener("keydown")`
 - Slash command menu via `wireCommandMenu(sidebar.getTextarea())`
 - Session persistence (auto-save on message_end, auto-restore latest on init)
-- Pop-out dialog sync via Office.js dialog messaging
-
-## Dialog (pop-out)
-
-`dialog.ts` uses pi-web-ui's `ChatPanel` directly (not our components) — the pop-out is a full-width window where the default layout works fine. It communicates with the taskpane via `Office.Dialog.messageChild/messageParent`.

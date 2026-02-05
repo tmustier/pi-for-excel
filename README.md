@@ -22,7 +22,6 @@ Unlike proprietary alternatives (Claude for Excel, Copilot), Pi for Excel:
 - **Persistent sessions** — conversations auto-save to IndexedDB and survive sidebar close/reopen. Resume any previous session with `/resume`
 - **Write verification** — automatically checks formula results after writing
 - **Slash commands** — `/new`, `/resume`, `/name`, `/model`, `/login`, `/shortcuts`, and more
-- **Pop-out window** — open the chat in a floating dialog (task pane stays open)
 - **Pi TUI interop** — sessions use the same `SessionData` format as pi-web-ui — future export/import is free
 
 ## Quick Start
