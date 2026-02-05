@@ -150,6 +150,15 @@ function updateHeader(opts: { status?: "ready" | "working" | "error"; modelAlias
     },
   }), headerRoot);
 }
+
+function showErrorBanner(message: string): void {
+  render(renderError(message), errorRoot);
+}
+
+function clearErrorBanner(): void {
+  render(html``, errorRoot);
+}
+
 updateHeader();
 render(renderLoading(), loadingRoot);
 
@@ -267,6 +276,9 @@ async function init(): Promise<void> {
       // Refresh active providers after key added
       const updated = await providerKeys.list();
       setActiveProviders(new Set(updated));
+      if (!result) {
+        showErrorBanner(`API key required for ${provider}. Open Settings to add one.`);
+      }
       return result;
     },
     toolsFactory: () => createAllTools(),
@@ -315,10 +327,25 @@ async function init(): Promise<void> {
 
   agent.subscribe((ev) => {
     // Header status
-    if (ev.type === "message_start") {
+    if (ev.type === "turn_start") {
       updateHeader({ status: "working", modelAlias: getModelAlias() });
-    } else if (ev.type === "message_end") {
-      updateHeader({ status: "ready", modelAlias: getModelAlias() });
+    } else if (ev.type === "turn_end" || ev.type === "agent_end") {
+      updateHeader({
+        status: agent.state.error ? "error" : "ready",
+        modelAlias: getModelAlias(),
+      });
+    }
+
+    // Error banner
+    if (ev.type === "message_start" && ev.message.role === "user") {
+      clearErrorBanner();
+    }
+    if (ev.type === "agent_end") {
+      if (agent.state.error) {
+        showErrorBanner(`LLM error: ${agent.state.error}`);
+      } else {
+        clearErrorBanner();
+      }
     }
 
     // Empty state
@@ -533,14 +560,26 @@ async function init(): Promise<void> {
 // Context injection — runs before every LLM call
 // ============================================================================
 
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T | null> {
+  let timeoutId: number | undefined;
+  const timeoutPromise = new Promise<null>((resolve) => {
+    timeoutId = window.setTimeout(() => resolve(null), timeoutMs);
+  });
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+  }) as Promise<T | null>;
+}
+
 async function injectContext(context: any): Promise<any> {
   const injections: string[] = [];
 
   // 1. Selection context (what the user is looking at)
   try {
-    const sel = await readSelectionContext();
+    const sel = await withTimeout(readSelectionContext().catch(() => null), 1500);
     if (sel) {
       injections.push(sel.text);
+    } else if (sel === null) {
+      // Timed out or failed — skip
     }
   } catch {
     // Not in Excel or selection read failed — skip
