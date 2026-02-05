@@ -1,73 +1,75 @@
 /**
- * Pi for Excel — Light theme
+ * Pi for Excel — Theme
  *
- * Designed to sit alongside a white Excel sheet in a narrow sidebar.
- * Warm off-white background with teal-green accent.
+ * Clean CSS for the sidebar. Three layers:
+ * 1. CSS variable overrides (colors, fonts) — pi-web-ui consumes these
+ * 2. Our own component styles (pi-sidebar, pi-input, header, etc.)
+ * 3. Light content overrides for pi-web-ui message components
  *
- * Overrides pi-web-ui's CSS variables and refines component styles.
- * Imported AFTER pi-web-ui/app.css in boot.ts.
+ * Loaded AFTER pi-web-ui/app.css in boot.ts.
  */
 
-/* ── Google Fonts ─────────────────────────────────────────── */
+/* ── Google Fonts ─────────────────────────────────────── */
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300..700;1,9..40,300..700&family=JetBrains+Mono:wght@300;400;500&display=swap');
 
-/* ── Light theme palette ──────────────────────────────────── */
+
+/* ═══════════════════════════════════════════════════════
+   1. CSS VARIABLES — consumed by pi-web-ui + our components
+   ═══════════════════════════════════════════════════════ */
+
 :root {
-  --background: oklch(0.985 0.002 90);
-  --foreground: oklch(0.18 0 0);
-  --card: oklch(1 0 0 / 0.75);
-  --card-foreground: oklch(0.18 0 0);
-  --popover: oklch(1 0 0 / 0.85);
-  --popover-foreground: oklch(0.18 0 0);
-  --primary: oklch(0.45 0.12 160);            /* teal-green */
-  --primary-foreground: oklch(0.98 0 0);
-  --secondary: oklch(0.96 0.004 90);
+  /* Base palette — warm off-white with teal accent */
+  --background:           oklch(0.985 0.002 90);
+  --foreground:           oklch(0.18 0 0);
+  --card:                 oklch(1 0 0 / 0.75);
+  --card-foreground:      oklch(0.18 0 0);
+  --popover:              oklch(1 0 0 / 0.85);
+  --popover-foreground:   oklch(0.18 0 0);
+  --primary:              oklch(0.45 0.12 160);
+  --primary-foreground:   oklch(0.98 0 0);
+  --secondary:            oklch(0.96 0.004 90);
   --secondary-foreground: oklch(0.25 0 0);
-  --muted: oklch(0.96 0.003 90);
-  --muted-foreground: oklch(0.50 0 0);
-  --accent: oklch(0.97 0.006 90);
-  --accent-foreground: oklch(0.30 0.08 160);
-  --destructive: oklch(0.55 0.22 25);
+  --muted:                oklch(0.96 0.003 90);
+  --muted-foreground:     oklch(0.50 0 0);
+  --accent:               oklch(0.97 0.006 90);
+  --accent-foreground:    oklch(0.30 0.08 160);
+  --destructive:          oklch(0.55 0.22 25);
   --destructive-foreground: oklch(0.98 0 0);
-  --border: oklch(0.92 0.004 90);
-  --input: oklch(0.95 0.003 90);
-  --ring: oklch(0.50 0.10 160);
+  --border:               oklch(0.92 0.004 90);
+  --input:                oklch(0.95 0.003 90);
+  --ring:                 oklch(0.50 0.10 160);
 
-  --sidebar: oklch(0.98 0.002 90);
-  --sidebar-foreground: oklch(0.18 0 0);
-  --sidebar-border: oklch(0.92 0.004 90);
+  --sidebar:              oklch(0.98 0.002 90);
+  --sidebar-foreground:   oklch(0.18 0 0);
+  --sidebar-border:       oklch(0.92 0.004 90);
 
+  /* Typography */
   --font-sans: 'DM Sans', ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
   --radius: 0.625rem;
 
-  /* Our custom tokens */
-  --pi-green: oklch(0.45 0.12 160);
-  --pi-green-light: oklch(0.45 0.12 160 / 0.08);
+  /* Custom tokens */
+  --pi-green:         oklch(0.45 0.12 160);
+  --pi-green-light:   oklch(0.45 0.12 160 / 0.08);
   --pi-green-lighter: oklch(0.45 0.12 160 / 0.04);
-  --pi-surface: oklch(0.98 0.002 90);
 
-  /* ── Liquid Glass tokens ────────────────────────────── */
-  /* Light blur + brightness/saturate for refraction feel */
-  --glass-blur: blur(3px) saturate(1.6) brightness(1.04);
-  /* Heavier blur for backdrops/overlays where content should be obscured */
+  /* Glass surface tokens */
+  --glass-blur:       blur(3px) saturate(1.6) brightness(1.04);
   --glass-blur-heavy: blur(10px) saturate(1.5) brightness(1.02);
-  /* Surface: semi-transparent white */
-  --glass-bg: oklch(1 0 0 / 0.55);
-  --glass-bg-solid: oklch(1 0 0 / 0.78);
-  /* Specular edge highlight — bright white top/left */
-  --glass-highlight: inset 0 1px 0 0 oklch(1 0 0 / 0.7), inset 1px 0 0 0 oklch(1 0 0 / 0.4);
-  /* Inner depth shadow — bottom/right */
-  --glass-inner-shadow: inset 0 -1px 0 0 oklch(0 0 0 / 0.04), inset -1px 0 0 0 oklch(0 0 0 / 0.02);
-  /* Outer drop shadow */
-  --glass-shadow: 0 2px 8px oklch(0 0 0 / 0.06), 0 0.5px 0 oklch(0 0 0 / 0.04);
-  /* Outer drop shadow — elevated (dialogs, overlays) */
-  --glass-shadow-lg: 0 12px 40px oklch(0 0 0 / 0.10), 0 2px 6px oklch(0 0 0 / 0.06);
-  /* Border: subtle, semi-transparent */
-  --glass-border: 1px solid oklch(1 0 0 / 0.5);
+  --glass-bg:         oklch(1 0 0 / 0.55);
+  --glass-bg-solid:   oklch(1 0 0 / 0.78);
+  --glass-highlight:  inset 0 1px 0 0 oklch(1 0 0 / 0.7),
+                      inset 1px 0 0 0 oklch(1 0 0 / 0.4);
+  --glass-inner:      inset 0 -1px 0 0 oklch(0 0 0 / 0.04),
+                      inset -1px 0 0 0 oklch(0 0 0 / 0.02);
+  --glass-shadow:     0 2px 8px oklch(0 0 0 / 0.06),
+                      0 0.5px 0 oklch(0 0 0 / 0.04);
+  --glass-shadow-lg:  0 12px 40px oklch(0 0 0 / 0.10),
+                      0 2px 6px oklch(0 0 0 / 0.06);
+  --glass-border:     1px solid oklch(1 0 0 / 0.5);
 }
 
-/* Force light mode everywhere */
+/* Force light mode — repeat overrides so .dark class can't flip us */
 .dark {
   --background: oklch(0.985 0.002 90);
   --foreground: oklch(0.18 0 0);
@@ -88,127 +90,199 @@
   --border: oklch(0.92 0.004 90);
   --input: oklch(0.95 0.003 90);
   --ring: oklch(0.50 0.10 160);
-  --sidebar: oklch(0.98 0.002 90);
-  --sidebar-foreground: oklch(0.18 0 0);
-  --sidebar-border: oklch(0.92 0.004 90);
   --font-sans: 'DM Sans', ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
   --radius: 0.625rem;
 }
 
 
-/* ═══════════════════════════════════════════════════════════
-   GLOBAL — frosted glass over spreadsheet grid
-   ═══════════════════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════
+   2. GLOBAL — body, scrollbars, base typography
+   ═══════════════════════════════════════════════════════ */
 
 body {
   font-family: var(--font-sans);
-  /* Spreadsheet grid pattern — faint cells visible under glass */
+  font-size: 13.5px;
+  line-height: 1.5;
   background-color: oklch(0.98 0.002 90);
+  /* Spreadsheet grid — faint cells visible under glass */
   background-image:
     linear-gradient(oklch(0.45 0.08 160 / 0.04) 1px, transparent 1px),
     linear-gradient(90deg, oklch(0.45 0.08 160 / 0.04) 1px, transparent 1px);
   background-size: 64px 28px;
   background-position: -1px -1px;
-  /* Left-edge shadow — softens Excel's thin grey border */
+  /* Inset shadow softens Excel's sidebar edge */
   box-shadow: inset 4px 0 12px -3px oklch(0 0 0 / 0.05);
 }
 
-/* ── Scrollbar — thin, subtle ────────────────────────────── */
-* {
-  scrollbar-width: thin;
-  scrollbar-color: oklch(0.84 0 0) transparent;
-}
+/* Thin scrollbars */
+* { scrollbar-width: thin; scrollbar-color: oklch(0.84 0 0) transparent; }
 *::-webkit-scrollbar { width: 4px; height: 4px; }
 *::-webkit-scrollbar-track { background: transparent; }
-*::-webkit-scrollbar-thumb {
-  background: oklch(0.84 0 0);
-  border-radius: 2px;
-}
-*::-webkit-scrollbar-thumb:hover {
-  background: oklch(0.70 0 0);
-}
+*::-webkit-scrollbar-thumb { background: oklch(0.84 0 0); border-radius: 2px; }
+*::-webkit-scrollbar-thumb:hover { background: oklch(0.70 0 0); }
 
 
-/* ═══════════════════════════════════════════════════════════
-   AGENT INTERFACE — main chat layout
-   ═══════════════════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════
+   3. PI-SIDEBAR — messages area + input area
+   ═══════════════════════════════════════════════════════ */
 
-agent-interface {
-  font-family: var(--font-sans) !important;
-  font-size: 13.5px !important;
-}
-
-/* Make the chat area transparent so grid shows through */
-agent-interface > .bg-background {
-  background: transparent !important;
+/* Messages scroll area */
+.pi-messages {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+  position: relative;
 }
 
-/* Messages area — more horizontal padding in narrow sidebar */
-agent-interface > .flex.flex-col > .flex-1 > .max-w-3xl {
-  padding: 12px 14px 0 !important;
-  max-width: 100% !important;
+.pi-messages__inner {
+  padding: 12px 4px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
-/* Input wrapper — liquid glass + above empty state */
-agent-interface > .flex.flex-col > .shrink-0 {
+/* Input footer — frosted glass bar */
+.pi-input-area {
+  flex-shrink: 0;
+  padding: 6px 10px 6px;
   position: relative;
   z-index: 10;
-  background: var(--glass-bg);
-  backdrop-filter: var(--glass-blur-heavy);
-  -webkit-backdrop-filter: var(--glass-blur-heavy);
-  border-top: 1px solid oklch(1 0 0 / 0.5);
-  box-shadow: var(--glass-highlight), inset 0 1px 12px oklch(1 0 0 / 0.3);
-}
-agent-interface > .flex.flex-col > .shrink-0 > .max-w-3xl {
-  padding: 0 10px 8px !important;
-  max-width: 100% !important;
+  background: oklch(0.98 0.002 90 / 0.85);
+  backdrop-filter: blur(12px) saturate(1.3);
+  -webkit-backdrop-filter: blur(12px) saturate(1.3);
+  border-top: 1px solid oklch(0 0 0 / 0.06);
 }
 
 
-/* ═══════════════════════════════════════════════════════════
-   EMPTY STATE — welcome screen when no messages
-   ═══════════════════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════
+   4. PI-INPUT — textarea card + send button
+   ═══════════════════════════════════════════════════════ */
 
-#empty-state {
+.pi-input-card {
+  position: relative;
+  border-radius: 14px;
+  border: 1px solid oklch(0 0 0 / 0.08);
+  background: oklch(1 0 0 / 0.9);
+  box-shadow: 0 1px 4px oklch(0 0 0 / 0.05),
+              inset 0 1px 0 oklch(1 0 0 / 0.6);
+  overflow: hidden;
+}
+
+/* Specular sheen across the card */
+.pi-input-card__sheen {
+  display: none; /* clean flat look */
+}
+
+.pi-input-card:focus-within {
+  border-color: oklch(0.45 0.12 160 / 0.22);
+  box-shadow: 0 1px 4px oklch(0 0 0 / 0.05),
+              0 0 0 2px oklch(0.45 0.12 160 / 0.08);
+}
+
+.pi-input-textarea {
+  position: relative;
+  z-index: 1;
+  display: block;
+  width: 100%;
+  padding: 11px 44px 11px 14px;
+  min-height: 40px;
+  max-height: 40vh;
+  border: none;
+  background: transparent;
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  line-height: 1.5;
+  resize: none;
+  outline: none;
+  overflow-y: auto;
+  field-sizing: content;
+}
+
+.pi-input-textarea::placeholder {
+  color: oklch(0.65 0 0);
+  font-weight: 400;
+}
+
+/* Send / abort button — floats inside the card */
+.pi-input-btn {
+  position: absolute;
+  bottom: 7px;
+  right: 8px;
+  z-index: 2;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+}
+
+.pi-input-btn--send {
+  background: var(--pi-green);
+  color: white;
+  box-shadow: 0 1px 3px oklch(0 0 0 / 0.12);
+}
+.pi-input-btn--send:hover:not(.is-disabled) {
+  background: oklch(0.40 0.12 160);
+  transform: scale(1.05);
+}
+.pi-input-btn--send.is-disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.pi-input-btn--abort {
+  background: oklch(0.55 0.22 25);
+  color: white;
+  box-shadow: 0 1px 3px oklch(0 0 0 / 0.12);
+}
+.pi-input-btn--abort:hover {
+  background: oklch(0.50 0.22 25);
+  transform: scale(1.05);
+}
+
+
+/* ═══════════════════════════════════════════════════════
+   5. EMPTY STATE — shown when no messages
+   ═══════════════════════════════════════════════════════ */
+
+.pi-empty {
   position: absolute;
   inset: 0;
-  z-index: 5;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 32px 24px 120px;
+  padding: 32px 24px 100px;
   pointer-events: none;
-  opacity: 1;
-  transition: opacity 0.3s ease;
-  background: oklch(0.98 0.002 90 / 0.5);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
-}
-#empty-state.hidden {
-  display: none !important;
 }
 
-.empty-logo {
-  font-size: 52px;
+.pi-empty__logo {
+  font-size: 44px;
   font-weight: 700;
   color: var(--pi-green);
   font-family: var(--font-sans);
-  margin-bottom: 6px;
-  opacity: 0.15;
+  margin-bottom: 4px;
+  opacity: 0.18;
   letter-spacing: -0.03em;
 }
 
-.empty-tagline {
+.pi-empty__tagline {
   font-size: 13.5px;
   color: var(--muted-foreground);
   text-align: center;
   line-height: 1.55;
   max-width: 220px;
+  margin: 0;
 }
 
-.empty-hints {
+.pi-empty__hints {
   margin-top: 24px;
   display: flex;
   flex-direction: column;
@@ -217,144 +291,170 @@ agent-interface > .flex.flex-col > .shrink-0 > .max-w-3xl {
   max-width: 260px;
 }
 
-.empty-hint {
+.pi-empty__hint {
   font-size: 13px;
   font-family: var(--font-sans);
   color: var(--foreground);
   padding: 10px 14px;
-  background: var(--glass-bg);
-  border: var(--glass-border);
-  border-radius: 12px;
+  background: oklch(1 0 0 / 0.7);
+  border: 1px solid oklch(0 0 0 / 0.07);
+  border-radius: 10px;
   line-height: 1.4;
   pointer-events: auto;
   cursor: pointer;
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
-  box-shadow: var(--glass-shadow), var(--glass-highlight), var(--glass-inner-shadow);
+  box-shadow: 0 1px 3px oklch(0 0 0 / 0.04);
   text-align: left;
   width: 100%;
-  transition: background 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
-  position: relative;
-  overflow: hidden;
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
 }
-/* Specular sheen — gradient light across surface */
-.empty-hint::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: linear-gradient(135deg, oklch(1 0 0 / 0.35) 0%, oklch(1 0 0 / 0.05) 40%, transparent 60%);
+
+.pi-empty__hint:hover {
+  background: oklch(1 0 0 / 0.9);
+  border-color: oklch(0 0 0 / 0.10);
+  box-shadow: 0 2px 8px oklch(0 0 0 / 0.06);
+}
+
+.pi-empty__hint:active {
+  background: oklch(0.45 0.12 160 / 0.06);
+}
+
+
+/* ═══════════════════════════════════════════════════════
+   6. STATUS BAR — context % + thinking level
+   ═══════════════════════════════════════════════════════ */
+
+.pi-status-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 4px 2px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.01em;
+  color: var(--muted-foreground);
+  opacity: 0.75;
+}
+
+.pi-status-ctx {
+  font-variant-numeric: tabular-nums;
+}
+
+.pi-status-thinking {
+  cursor: pointer;
+  border-radius: 5px;
+  padding: 2px 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+}
+.pi-status-thinking svg { flex-shrink: 0; }
+.pi-status-thinking:hover {
+  background: var(--pi-green-lighter);
+  color: var(--foreground);
+}
+
+
+/* ═══════════════════════════════════════════════════════
+   7. TOAST — brief notification
+   ═══════════════════════════════════════════════════════ */
+
+.pi-toast {
+  position: fixed;
+  top: 52px;
+  left: 50%;
+  transform: translateX(-50%) translateY(-4px);
+  z-index: 200;
+  padding: 6px 14px;
+  border-radius: 8px;
+  background: oklch(0.18 0 0 / 0.88);
+  color: white;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 4px 12px oklch(0 0 0 / 0.15);
+  opacity: 0;
+  transition: opacity 0.2s, transform 0.2s;
   pointer-events: none;
+  white-space: nowrap;
 }
-.empty-hint:hover {
-  background: oklch(1 0 0 / 0.68);
-  box-shadow: var(--glass-shadow), var(--glass-highlight), var(--glass-inner-shadow), 0 4px 16px oklch(0 0 0 / 0.06);
-  transform: translateY(-0.5px);
-}
-.empty-hint:active {
-  background: oklch(0.45 0.12 160 / 0.08);
+.pi-toast.visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
 }
 
 
-/* ═══════════════════════════════════════════════════════════
-   MESSAGE EDITOR — input card at bottom
-   ═══════════════════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════
+   8. SLASH COMMAND MENU
+   ═══════════════════════════════════════════════════════ */
 
-/* The card itself — liquid glass, relative for absolute send button */
-message-editor > .bg-card {
-  border-radius: 14px !important;
-  border: var(--glass-border) !important;
-  box-shadow: var(--glass-shadow), var(--glass-highlight), var(--glass-inner-shadow) !important;
-  background: var(--glass-bg-solid) !important;
+.pi-cmd-menu {
+  position: fixed;
+  z-index: 150;
+  max-height: 260px;
+  overflow-y: auto;
+  background: var(--glass-bg-solid);
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
-  position: relative;
-  overflow: hidden;
-}
-/* Specular sheen on editor card */
-message-editor > .bg-card::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: linear-gradient(168deg, oklch(1 0 0 / 0.4) 0%, oklch(1 0 0 / 0.08) 30%, transparent 50%);
-  pointer-events: none;
-  z-index: 0;
-}
-message-editor > .bg-card > * {
-  position: relative;
-  z-index: 1;
-}
-message-editor > .bg-card:focus-within {
-  border-color: oklch(0.45 0.12 160 / 0.18) !important;
-  box-shadow: var(--glass-shadow), var(--glass-highlight), var(--glass-inner-shadow), 0 0 0 1.5px oklch(0.45 0.12 160 / 0.08) !important;
+  border-radius: 14px;
+  border: var(--glass-border);
+  box-shadow: var(--glass-shadow-lg), var(--glass-highlight), var(--glass-inner);
+  padding: 4px;
+  display: none;
 }
 
-/* Textarea — auto-grows, right padding for send button */
-message-editor textarea {
-  padding: 14px 48px 14px 16px !important;
-  min-height: 42px !important;
-  max-height: 50vh !important;
-  field-sizing: content;
-  font-size: 13.5px !important;
-  font-family: var(--font-sans) !important;
-  line-height: 1.5 !important;
-}
-message-editor textarea::placeholder {
-  color: oklch(0.65 0 0) !important;
-  font-weight: 400;
-}
-
-/* Toolbar — collapse to zero height, only send button floats out */
-message-editor .px-2.pb-2 {
-  position: static !important;
-  height: 0 !important;
-  padding: 0 !important;
-  overflow: visible !important;
-  margin: 0 !important;
-}
-
-/* Hide everything in the toolbar */
-message-editor .px-2.pb-2 > * {
-  visibility: hidden !important;
-  height: 0 !important;
-  overflow: hidden !important;
-}
-
-/* Send/stop button — pull out of toolbar, float inside textarea card */
-message-editor .px-2.pb-2 > .flex.gap-2:last-child > button:last-child {
-  visibility: visible !important;
-  position: absolute !important;
-  bottom: 10px !important;
-  right: 10px !important;
-  z-index: 5;
-  width: 28px !important;
-  height: 28px !important;
-  min-width: 28px !important;
-  border-radius: 8px !important;
-  background: var(--pi-green) !important;
-  color: white !important;
-  box-shadow: 0 1px 3px oklch(0 0 0 / 0.12);
-  display: flex !important;
+.pi-cmd-item {
+  display: flex;
   align-items: center;
-  justify-content: center;
-  transition: background 0.15s, transform 0.1s;
-  overflow: visible !important;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.1s;
 }
-message-editor .px-2.pb-2 > .flex.gap-2:last-child > button:last-child:hover {
-  background: oklch(0.40 0.12 160) !important;
-  transform: scale(1.05);
+.pi-cmd-item.selected { background: var(--pi-green-light); }
+.pi-cmd-item:hover { background: oklch(0 0 0 / 0.03); }
+.pi-cmd-item.selected:hover { background: var(--pi-green-light); }
+
+.pi-cmd-name {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--foreground);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
-message-editor .px-2.pb-2 > .flex.gap-2:last-child > button:last-child svg {
-  width: 14px !important;
-  height: 14px !important;
-  color: white !important;
+
+.pi-cmd-badge {
+  font-family: var(--font-sans);
+  font-size: 9.5px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: oklch(0.45 0.12 160 / 0.08);
+  color: var(--pi-green);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.pi-cmd-desc {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  color: var(--muted-foreground);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  margin-left: auto;
 }
 
 
-/* ═══════════════════════════════════════════════════════════
-   WELCOME / LOGIN OVERLAY
-   ═══════════════════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════
+   9. WELCOME / LOGIN OVERLAY
+   ═══════════════════════════════════════════════════════ */
 
 .pi-welcome-overlay {
   position: fixed;
@@ -376,12 +476,12 @@ message-editor .px-2.pb-2 > .flex.gap-2:last-child > button:last-child svg {
   border: var(--glass-border);
   padding: 28px 24px;
   width: min(340px, 90vw);
-  box-shadow: var(--glass-shadow-lg), var(--glass-highlight), var(--glass-inner-shadow);
+  box-shadow: var(--glass-shadow-lg), var(--glass-highlight), var(--glass-inner);
   text-align: center;
   position: relative;
   overflow: hidden;
 }
-/* Specular sheen on cards */
+
 .pi-welcome-card::after {
   content: '';
   position: absolute;
@@ -435,13 +535,12 @@ message-editor .px-2.pb-2 > .flex.gap-2:last-child > button:last-child svg {
   color: var(--foreground);
   cursor: pointer;
   transition: background 0.15s, border-color 0.15s, box-shadow 0.15s, transform 0.15s;
-  box-shadow: var(--glass-highlight), var(--glass-inner-shadow), 0 1px 3px oklch(0 0 0 / 0.03);
-  position: relative;
+  box-shadow: var(--glass-highlight), var(--glass-inner), 0 1px 3px oklch(0 0 0 / 0.03);
 }
 .pi-welcome-provider:hover {
   background: oklch(1 0 0 / 0.6);
   border-color: oklch(1 0 0 / 0.7);
-  box-shadow: var(--glass-highlight), var(--glass-inner-shadow), 0 2px 8px oklch(0 0 0 / 0.05);
+  box-shadow: var(--glass-highlight), var(--glass-inner), 0 2px 8px oklch(0 0 0 / 0.05);
   transform: translateY(-0.5px);
 }
 .pi-welcome-provider:active {
@@ -450,239 +549,43 @@ message-editor .px-2.pb-2 > .flex.gap-2:last-child > button:last-child svg {
 }
 
 
-/* ═══════════════════════════════════════════════════════════
-   SLASH COMMAND MENU
-   ═══════════════════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════
+   10. PI-WEB-UI CONTENT OVERRIDES
+   Light, targeted overrides for message components.
+   Only touches things that look wrong at sidebar width.
+   ═══════════════════════════════════════════════════════ */
 
-.pi-cmd-menu {
-  position: fixed;
-  z-index: 150;
-  max-height: 260px;
-  overflow-y: auto;
-  background: var(--glass-bg-solid);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
-  border-radius: 14px;
-  border: var(--glass-border);
-  box-shadow: var(--glass-shadow-lg), var(--glass-highlight), var(--glass-inner-shadow);
-  padding: 4px;
-  display: none;
-}
-
-.pi-cmd-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: background 0.1s;
-}
-.pi-cmd-item.selected {
-  background: var(--pi-green-light);
-}
-.pi-cmd-item:hover {
-  background: oklch(0 0 0 / 0.03);
-}
-.pi-cmd-item.selected:hover {
-  background: var(--pi-green-light);
-}
-
-.pi-cmd-name {
-  font-family: var(--font-mono);
-  font-size: 12.5px;
-  font-weight: 500;
-  color: var(--foreground);
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-.pi-cmd-badge {
-  font-family: var(--font-sans);
-  font-size: 9.5px;
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  padding: 1px 5px;
-  border-radius: 4px;
-  background: oklch(0.45 0.12 160 / 0.08);
-  color: var(--pi-green);
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-.pi-cmd-desc {
-  font-family: var(--font-sans);
-  font-size: 12px;
-  color: var(--muted-foreground);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  min-width: 0;
-  margin-left: auto;
-}
-
-
-/* ═══════════════════════════════════════════════════════════
-   TOAST — brief notification
-   ═══════════════════════════════════════════════════════════ */
-
-.pi-toast {
-  position: fixed;
-  top: 52px;
-  left: 50%;
-  transform: translateX(-50%) translateY(-4px);
-  z-index: 200;
-  padding: 6px 14px;
-  border-radius: 8px;
-  background: oklch(0.18 0 0 / 0.88);
-  color: white;
-  font-family: var(--font-sans);
-  font-size: 12px;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  box-shadow: 0 4px 12px oklch(0 0 0 / 0.15);
-  opacity: 0;
-  transition: opacity 0.2s, transform 0.2s;
-  pointer-events: none;
-  white-space: nowrap;
-}
-.pi-toast.visible {
-  opacity: 1;
-  transform: translateX(-50%) translateY(0);
-}
-
-
-/* ═══════════════════════════════════════════════════════════
-   STEERING — keep textarea editable during streaming
-   ═══════════════════════════════════════════════════════════ */
-
-/* Don't visually dim the editor during streaming — user can steer */
-message-editor textarea {
-  opacity: 1 !important;
-}
-
-/* Placeholder hint changes during streaming */
-message-editor[isstreaming] textarea::placeholder {
-  content: "Steer (Enter) or queue follow-up (Alt+Enter)…";
-}
-
-
-/* ═══════════════════════════════════════════════════════════
-   ABORT MESSAGE — friendlier wording
-   ═══════════════════════════════════════════════════════════ */
-
-/* Replace all abort messages with friendly text */
-aborted-message span,
-assistant-message .text-destructive {
-  font-size: 0 !important;
-  line-height: 0 !important;
-  color: transparent !important;
-}
-aborted-message span::after,
-assistant-message .text-destructive::after {
-  content: "Interrupted — tell Pi what to do differently.";
-  font-size: 12.5px;
-  line-height: 1.4;
-  color: var(--muted-foreground);
-  font-style: italic;
-  font-family: var(--font-sans);
-}
-
-
-/* ═══════════════════════════════════════════════════════════
-   STATUS BAR — context % + thinking level
-   ═══════════════════════════════════════════════════════════ */
-
-.pi-status-bar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 6px 6px 4px;
-  font-family: var(--font-mono);
-  font-size: 11.5px;
-  letter-spacing: 0.01em;
-  color: var(--muted-foreground);
-}
-.pi-status-ctx {
-  font-variant-numeric: tabular-nums;
-}
-.pi-status-thinking {
-  cursor: pointer;
-  border-radius: 5px;
-  padding: 2px 6px;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
-}
-.pi-status-thinking svg {
-  flex-shrink: 0;
-}
-.pi-status-thinking:hover {
-  background: var(--pi-green-lighter);
-  color: var(--foreground);
-}
-
-/* Hide pi-web-ui's default stats row — we replace it with our own */
-agent-interface .shrink-0 .max-w-3xl > .text-xs.text-muted-foreground {
-  display: none !important;
-}
-
-
-/* ═══════════════════════════════════════════════════════════
-   MESSAGES — user and assistant
-   ═══════════════════════════════════════════════════════════ */
-
-/* User message bubble — liquid glass tinted pill */
+/* ── User message — teal glass bubble instead of orange gradient ── */
 .user-message-container {
-  background: oklch(0.45 0.12 160 / 0.05) !important;
-  border: 1px solid oklch(1 0 0 / 0.45) !important;
-  border-radius: 14px !important;
-  padding: 10px 16px !important;
-  max-width: 92% !important;
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
-  box-shadow: var(--glass-shadow), var(--glass-highlight), var(--glass-inner-shadow);
-  position: relative;
-  overflow: hidden;
-}
-.user-message-container::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: linear-gradient(160deg, oklch(1 0 0 / 0.3) 0%, transparent 40%);
-  pointer-events: none;
-}
-.user-message-container p {
-  margin: 0 !important;
-  font-size: 13.5px !important;
-  line-height: 1.5 !important;
+  background: oklch(0.45 0.12 160 / 0.06) !important;
+  border: 1px solid oklch(0.45 0.12 160 / 0.12) !important;
+  box-shadow: 0 1px 4px oklch(0 0 0 / 0.04),
+              inset 0 1px 0 0 oklch(1 0 0 / 0.5);
 }
 
-/* Assistant messages — clean, left-aligned */
-assistant-message .px-4 {
-  padding-left: 2px !important;
-  padding-right: 2px !important;
+/* Sidebar-width adjustments — slightly tighter than desktop defaults */
+user-message .mx-4  { margin-left: 8px !important; margin-right: 8px !important; }
+assistant-message .px-4 { padding-left: 12px !important; padding-right: 12px !important; }
+
+/* Tool cards — clean, light */
+tool-message .border {
+  border: 1px solid var(--border) !important;
+  background: oklch(0.99 0.002 90) !important;
+  border-radius: 10px !important;
+  box-shadow: 0 1px 3px oklch(0 0 0 / 0.04);
 }
 
-/* Markdown content */
-markdown-block {
-  line-height: 1.6;
-}
-markdown-block p {
-  margin: 0 0 8px 0;
-  font-size: 13.5px;
-}
-markdown-block p:last-child {
-  margin-bottom: 0;
-}
+/* Markdown — readable at sidebar width */
+markdown-block { line-height: 1.6; }
+markdown-block p { margin: 0 0 10px; font-size: 13.5px; }
+markdown-block p:last-child { margin-bottom: 0; }
+markdown-block ul, markdown-block ol { margin: 0 0 10px; padding-left: 20px; }
+markdown-block li { margin-bottom: 4px; }
 markdown-block code {
   font-family: var(--font-mono);
   font-size: 12px;
   background: oklch(0.96 0.003 90);
-  padding: 1px 5px;
+  padding: 2px 5px;
   border-radius: 4px;
 }
 markdown-block pre {
@@ -696,178 +599,39 @@ markdown-block pre {
 }
 
 /* Code blocks */
-code-block {
-  font-size: 12px !important;
-  border-radius: 8px !important;
-}
-
-/* Tool call cards — liquid glass */
-tool-message .p-2\.5 {
-  padding: 8px 12px !important;
-  border-radius: 10px !important;
-  border: var(--glass-border) !important;
-  background: var(--glass-bg) !important;
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
-  box-shadow: var(--glass-shadow), var(--glass-highlight), var(--glass-inner-shadow);
-}
+code-block { font-size: 12px !important; border-radius: 8px !important; }
 
 /* Thinking blocks */
-thinking-block {
-  font-size: 12px;
-}
+thinking-block { font-size: 12px; }
 
-/* Usage/cost line */
+/* Usage/cost — subtle, right-aligned feel */
 assistant-message .text-xs.text-muted-foreground {
-  font-size: 11px !important;
-  padding-left: 2px !important;
+  font-size: 10.5px !important;
+  padding-left: 12px !important;
+  opacity: 0.7;
 }
 
-/* Error messages */
-assistant-message .bg-destructive\/10 {
-  border-radius: 10px !important;
-  font-size: 13px !important;
+/* Abort message — friendlier text */
+assistant-message .text-destructive {
+  font-size: 12.5px !important;
+  color: var(--muted-foreground) !important;
+  font-style: italic;
+}
+
+/* Streaming cursor */
+streaming-message-container .animate-pulse {
+  background-color: var(--pi-green) !important;
+  opacity: 0.6;
 }
 
 
-/* ═══════════════════════════════════════════════════════════
-   MODEL SELECTOR dialog
-   ═══════════════════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════
+   11. DIALOGS — ModelSelector, ApiKeyPrompt
+   Glass treatment for pi-web-ui dialog overlays.
+   ═══════════════════════════════════════════════════════ */
 
 /* Backdrop */
-agent-model-selector .fixed.inset-0 {
-  background: oklch(0 0 0 / 0.25) !important;
-  backdrop-filter: var(--glass-blur-heavy) !important;
-  -webkit-backdrop-filter: var(--glass-blur-heavy) !important;
-}
-
-/* Dialog card — liquid glass */
-agent-model-selector .fixed.z-50 {
-  width: min(340px, 92vw) !important;
-  height: min(500px, 78vh) !important;
-  border-radius: 20px !important;
-  box-shadow: var(--glass-shadow-lg), var(--glass-highlight), var(--glass-inner-shadow) !important;
-  border: var(--glass-border) !important;
-  background: var(--glass-bg-solid) !important;
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
-  position: relative;
-  overflow: hidden;
-}
-agent-model-selector .fixed.z-50::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: linear-gradient(155deg, oklch(1 0 0 / 0.45) 0%, oklch(1 0 0 / 0.08) 20%, transparent 45%);
-  pointer-events: none;
-  z-index: 0;
-}
-agent-model-selector .fixed.z-50 > * {
-  position: relative;
-  z-index: 1;
-}
-
-/* Header section */
-agent-model-selector .p-6.pb-4 {
-  padding: 16px 16px 12px !important;
-  gap: 10px !important;
-  border-bottom-color: oklch(0.94 0.003 90) !important;
-}
-
-agent-model-selector .p-6.pb-4 h2 {
-  font-size: 15px !important;
-  font-weight: 600 !important;
-  font-family: var(--font-sans) !important;
-  letter-spacing: -0.01em;
-}
-
-/* Search input */
-agent-model-selector .p-6.pb-4 input {
-  font-size: 13px !important;
-  font-family: var(--font-sans) !important;
-  height: 34px !important;
-  border-radius: 9px !important;
-  padding: 0 12px !important;
-}
-
-/* Filter pills */
-agent-model-selector .p-6.pb-4 .flex.gap-2 button {
-  font-size: 11px !important;
-  height: 26px !important;
-  padding: 0 10px !important;
-  border-radius: 20px !important;
-  font-family: var(--font-sans) !important;
-}
-agent-model-selector .p-6.pb-4 .flex.gap-2 button svg {
-  width: 12px !important;
-  height: 12px !important;
-}
-
-/* Model list items */
-agent-model-selector [data-model-item] {
-  padding: 10px 16px !important;
-  border-bottom: 1px solid oklch(0.94 0.003 90) !important;
-  transition: background 0.1s ease;
-}
-agent-model-selector [data-model-item]:last-child {
-  border-bottom: none !important;
-}
-agent-model-selector [data-model-item]:hover,
-agent-model-selector [data-model-item].bg-accent {
-  background: var(--pi-green-lighter) !important;
-}
-
-/* Model name — sans-serif */
-agent-model-selector [data-model-item] .text-sm.font-medium {
-  font-family: var(--font-sans) !important;
-  font-size: 13px !important;
-  font-weight: 500 !important;
-}
-
-/* Provider badge — compact pill */
-agent-model-selector [data-model-item] span[class*="rounded-md"][class*="border"] {
-  font-size: 10px !important;
-  font-family: var(--font-sans) !important;
-  padding: 1px 7px !important;
-  border-radius: 10px !important;
-  font-weight: 500 !important;
-  max-width: 90px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  line-height: 1.5;
-  background: oklch(0.97 0.003 90) !important;
-  border-color: oklch(0.90 0.004 90) !important;
-  color: oklch(0.42 0 0) !important;
-}
-
-/* Meta row */
-agent-model-selector [data-model-item] .text-xs.text-muted-foreground {
-  font-size: 11px !important;
-  margin-top: 2px !important;
-}
-agent-model-selector [data-model-item] .text-xs.text-muted-foreground svg {
-  width: 12px !important;
-  height: 12px !important;
-}
-
-/* Checkmark */
-agent-model-selector [data-model-item] .text-green-500 {
-  color: var(--pi-green) !important;
-}
-
-/* Close button */
-agent-model-selector button[aria-label="Close"] {
-  top: 14px !important;
-  right: 14px !important;
-}
-
-
-/* ═══════════════════════════════════════════════════════════
-   API KEY / SETTINGS dialogs
-   ═══════════════════════════════════════════════════════════ */
-
-/* API key / settings dialogs — target both old and new element names */
+agent-model-selector .fixed.inset-0,
 api-key-prompt-dialog .fixed.inset-0,
 agent-api-key-dialog .fixed.inset-0,
 agent-settings-dialog .fixed.inset-0 {
@@ -876,69 +640,86 @@ agent-settings-dialog .fixed.inset-0 {
   -webkit-backdrop-filter: var(--glass-blur-heavy) !important;
 }
 
+/* Dialog card */
+agent-model-selector .fixed.z-50,
 api-key-prompt-dialog .fixed.z-50,
 agent-api-key-dialog .fixed.z-50,
 agent-settings-dialog .fixed.z-50 {
   width: min(340px, 92vw) !important;
   border-radius: 20px !important;
-  box-shadow: var(--glass-shadow-lg), var(--glass-highlight), var(--glass-inner-shadow) !important;
+  box-shadow: var(--glass-shadow-lg), var(--glass-highlight), var(--glass-inner) !important;
   border: var(--glass-border) !important;
   background: var(--glass-bg-solid) !important;
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
-  position: relative;
-  overflow: hidden;
-}
-api-key-prompt-dialog .fixed.z-50::after,
-agent-api-key-dialog .fixed.z-50::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: linear-gradient(155deg, oklch(1 0 0 / 0.45) 0%, oklch(1 0 0 / 0.08) 20%, transparent 45%);
-  pointer-events: none;
-  z-index: 0;
-}
-api-key-prompt-dialog .fixed.z-50 > *,
-agent-api-key-dialog .fixed.z-50 > * {
-  position: relative;
-  z-index: 1;
 }
 
-api-key-prompt-dialog h2,
-agent-api-key-dialog h2,
-agent-settings-dialog h2 {
-  font-size: 15px !important;
-  font-weight: 600 !important;
-  font-family: var(--font-sans) !important;
+/* Model selector height */
+agent-model-selector .fixed.z-50 {
+  height: min(500px, 78vh) !important;
 }
 
-api-key-prompt-dialog input,
-agent-api-key-dialog input,
-agent-settings-dialog input {
-  font-size: 13px !important;
-  border-radius: 9px !important;
-  font-family: var(--font-mono) !important;
+/* Model list hover */
+agent-model-selector [data-model-item]:hover,
+agent-model-selector [data-model-item].bg-accent {
+  background: var(--pi-green-lighter) !important;
 }
 
-/* Provider name in the dialog */
-api-key-prompt-dialog .text-sm.font-medium,
-agent-api-key-dialog .text-sm.font-medium {
-  font-family: var(--font-sans) !important;
-  font-size: 13.5px !important;
+/* Model checkmark */
+agent-model-selector [data-model-item] .text-green-500 {
+  color: var(--pi-green) !important;
 }
 
-/* Save button in the dialog */
+/* Save/primary button — teal */
 api-key-prompt-dialog button[class*="bg-primary"],
 agent-api-key-dialog button[class*="bg-primary"] {
   background: var(--pi-green) !important;
   border-radius: 9px !important;
-  font-family: var(--font-sans) !important;
 }
 
-/* Close button */
-api-key-prompt-dialog button[aria-label="Close"],
-agent-api-key-dialog button[aria-label="Close"] {
-  top: 14px !important;
-  right: 14px !important;
+
+/* ═══════════════════════════════════════════════════════
+   12. QUEUE DISPLAY — steer / follow-up messages
+   ═══════════════════════════════════════════════════════ */
+
+.pi-queue {
+  position: fixed;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  padding: 5px 12px;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: oklch(0.97 0.005 100 / 0.92);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-top: 1px solid oklch(0 0 0 / 0.06);
+  box-shadow: 0 -2px 8px oklch(0 0 0 / 0.04);
+}
+
+.pi-queue__item {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  line-height: 1.3;
+}
+
+.pi-queue__label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  flex-shrink: 0;
+}
+.pi-queue__label--steer { color: oklch(0.55 0.15 250); }
+.pi-queue__label--followup { color: oklch(0.55 0.12 170); }
+
+.pi-queue__text {
+  color: var(--muted-foreground);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

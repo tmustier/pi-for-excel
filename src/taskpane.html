@@ -9,9 +9,14 @@
   <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
 
   <style>
-    /* Minimal structural reset — theme is in src/ui/theme.css */
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body { height: 100%; overflow: hidden; }
+    /*
+     * Structural layout only — NO margin/padding reset.
+     * Tailwind v4 uses @layer, so an unlayered reset here would
+     * clobber every utility class in pi-web-ui (py-2, px-4, etc.).
+     * Tailwind's own preflight (inside @layer base) handles resets.
+     */
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body { height: 100%; overflow: hidden; margin: 0; padding: 0; }
     body { display: flex; flex-direction: column; }
 
     #app {

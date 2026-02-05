@@ -146,9 +146,10 @@ export function registerBuiltins(agent: Agent): void {
         // Signal new session (resets ID) then clear messages
         document.dispatchEvent(new CustomEvent("pi:session-new"));
         agent.clearMessages();
-        // Force sidebar to re-render (empty state shows automatically when no messages)
+        // Force sidebar + status bar to re-render
         const sidebar = document.querySelector("pi-sidebar") as any;
         if (sidebar) sidebar.requestUpdate();
+        document.dispatchEvent(new CustomEvent("pi:status-update"));
         showToast("New session started");
       },
     },

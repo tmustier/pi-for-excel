@@ -775,6 +775,7 @@ async function injectContext(messages: any[]): Promise<any[]> {
 
 function injectStatusBar(agent: Agent): void {
   agent.subscribe(() => updateStatusBar(agent));
+  document.addEventListener("pi:status-update", () => updateStatusBar(agent));
   // Initial render after sidebar mounts
   requestAnimationFrame(() => updateStatusBar(agent));
 }

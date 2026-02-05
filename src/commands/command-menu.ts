@@ -75,7 +75,7 @@ export function handleCommandMenuKey(e: KeyboardEvent): boolean {
     if (cmd) {
       hideCommandMenu();
       // Clear the textarea
-      const textarea = document.querySelector("message-editor textarea") as HTMLTextAreaElement;
+      const textarea = document.querySelector("pi-input textarea") as HTMLTextAreaElement;
       if (textarea) {
         textarea.value = "";
         textarea.dispatchEvent(new Event("input", { bubbles: true }));
@@ -94,7 +94,7 @@ export function handleCommandMenuKey(e: KeyboardEvent): boolean {
     e.preventDefault();
     const cmd = filteredCommands[selectedIndex];
     if (cmd) {
-      const textarea = document.querySelector("message-editor textarea") as HTMLTextAreaElement;
+      const textarea = document.querySelector("pi-input textarea") as HTMLTextAreaElement;
       if (textarea) {
         textarea.value = `/${cmd.name} `;
         textarea.dispatchEvent(new Event("input", { bubbles: true }));
@@ -129,7 +129,7 @@ function renderMenu(): void {
       const cmd = filteredCommands[idx];
       if (cmd) {
         hideCommandMenu();
-        const textarea = document.querySelector("message-editor textarea") as HTMLTextAreaElement;
+        const textarea = document.querySelector("pi-input textarea") as HTMLTextAreaElement;
         if (textarea) {
           textarea.value = "";
           textarea.dispatchEvent(new Event("input", { bubbles: true }));
@@ -153,7 +153,7 @@ function renderMenu(): void {
  * Call once after the textarea is available.
  */
 export function wireCommandMenu(textarea: HTMLTextAreaElement): void {
-  const getAnchor = () => textarea.closest(".bg-card") as HTMLElement || textarea;
+  const getAnchor = () => textarea.closest(".pi-input-card") as HTMLElement || textarea.closest(".bg-card") as HTMLElement || textarea;
 
   textarea.addEventListener("input", () => {
     const val = textarea.value;
