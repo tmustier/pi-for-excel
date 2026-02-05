@@ -707,46 +707,36 @@ function flashThinkingLevel(level: string, color: string): void {
 // Welcome / Login screen
 // ============================================================================
 
-const PROVIDER_INFO: Record<string, { label: string; placeholder: string }> = {
-  anthropic:       { label: "Anthropic",       placeholder: "sk-ant-..." },
-  openai:          { label: "OpenAI",          placeholder: "sk-..." },
-  "google-gemini": { label: "Google Gemini",   placeholder: "AIza..." },
-  "amazon-bedrock":{ label: "Amazon Bedrock",  placeholder: "Access key..." },
-  deepseek:        { label: "DeepSeek",        placeholder: "sk-..." },
-  mistral:         { label: "Mistral",         placeholder: "..." },
-  groq:            { label: "Groq",            placeholder: "gsk_..." },
-  xai:             { label: "xAI / Grok",      placeholder: "xai-..." },
-};
-
 async function showWelcomeLogin(providerKeys: InstanceType<typeof ProviderKeysStore>): Promise<void> {
+  const { ALL_PROVIDERS, buildProviderRow } = await import("./ui/provider-login.js");
+
   return new Promise<void>((resolve) => {
     const overlay = document.createElement("div");
     overlay.className = "pi-welcome-overlay";
     overlay.innerHTML = `
-      <div class="pi-welcome-card">
-        <div class="pi-welcome-logo">π</div>
-        <h2 class="pi-welcome-title">Pi for Excel</h2>
-        <p class="pi-welcome-subtitle">Add an API key to get started</p>
-        <div class="pi-welcome-providers"></div>
+      <div class="pi-welcome-card" style="text-align: left;">
+        <div class="pi-welcome-logo" style="text-align: center;">π</div>
+        <h2 class="pi-welcome-title" style="text-align: center;">Pi for Excel</h2>
+        <p class="pi-welcome-subtitle" style="text-align: center;">Connect a provider to get started</p>
+        <div class="pi-welcome-providers" style="display: flex; flex-direction: column; gap: 4px;"></div>
       </div>
     `;
 
     const providerList = overlay.querySelector(".pi-welcome-providers")!;
-    const providers = Object.entries(PROVIDER_INFO);
+    const expandedRef = { current: null as HTMLElement | null };
 
-    for (const [id, info] of providers) {
-      const row = document.createElement("button");
-      row.className = "pi-welcome-provider";
-      row.textContent = info.label;
-      row.addEventListener("click", async () => {
-        const success = await ApiKeyPromptDialog.prompt(id);
-        if (success) {
-          // Refresh active providers after key added
+    for (const provider of ALL_PROVIDERS) {
+      const row = buildProviderRow(provider, {
+        isActive: false,
+        expandedRef,
+        onConnected: async (_row, _id, label) => {
           const updated = await providerKeys.list();
           setActiveProviders(new Set(updated));
+          document.dispatchEvent(new CustomEvent("pi:providers-changed"));
+          flashToast(`${label} connected`);
           overlay.remove();
           resolve();
-        }
+        },
       });
       providerList.appendChild(row);
     }
