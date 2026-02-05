@@ -273,10 +273,14 @@ async function init(): Promise<void> {
   await chatPanel.setAgent(agent, {
     onApiKeyRequired: async (provider: string) => {
       const result = await ApiKeyPromptDialog.prompt(provider);
+
       // Refresh active providers after key added
       const updated = await providerKeys.list();
       setActiveProviders(new Set(updated));
-      if (!result) {
+
+      if (result) {
+        clearErrorBanner();
+      } else {
         showErrorBanner(`API key required for ${provider}. Open Settings to add one.`);
       }
       return result;
@@ -368,6 +372,66 @@ async function init(): Promise<void> {
   document.addEventListener("pi:providers-changed", async () => {
     const updated = await providerKeys.list();
     setActiveProviders(new Set(updated));
+  });
+
+  // ── Queue display ────────────────────────────────────────────────
+  type QueuedItem = { type: "steer" | "follow-up"; text: string };
+  const _queuedMessages: QueuedItem[] = [];
+
+  function addQueuedMessage(type: QueuedItem["type"], text: string) {
+    _queuedMessages.push({ type, text });
+    updateQueueDisplay();
+  }
+
+  function clearQueue() {
+    _queuedMessages.length = 0;
+    updateQueueDisplay();
+  }
+
+  function updateQueueDisplay() {
+    let container = document.getElementById("pi-queue-display");
+    if (_queuedMessages.length === 0) {
+      container?.remove();
+      return;
+    }
+    if (!container) {
+      container = document.createElement("div");
+      container.id = "pi-queue-display";
+      container.style.cssText = `
+        position: absolute; bottom: 100%; left: 0; right: 0;
+        padding: 6px 12px; z-index: 10;
+        font-family: var(--font-sans); font-size: 12px;
+        display: flex; flex-direction: column; gap: 3px;
+        background: oklch(0.97 0.005 100 / 0.85);
+        backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+        border-top: 1px solid oklch(0 0 0 / 0.06);
+      `;
+      // Insert above the message editor
+      const editor = document.querySelector("message-editor");
+      if (editor) {
+        (editor as HTMLElement).style.position = "relative";
+        editor.prepend(container);
+      } else {
+        document.body.appendChild(container);
+      }
+    }
+    container.innerHTML = _queuedMessages.map(({ type, text }) => {
+      const label = type === "steer" ? "Steering" : "Follow-up";
+      const color = type === "steer" ? "oklch(0.55 0.15 250)" : "oklch(0.55 0.12 170)";
+      const truncated = text.length > 60 ? text.slice(0, 57) + "…" : text;
+      return `<div style="display: flex; align-items: baseline; gap: 6px; line-height: 1.3;">
+        <span style="font-size: 10px; font-weight: 600; color: ${color}; text-transform: uppercase; letter-spacing: 0.03em; flex-shrink: 0;">${label}</span>
+        <span style="color: var(--muted-foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${truncated}</span>
+      </div>`;
+    }).join("");
+  }
+
+  // Clear queue when agent finishes a turn
+  agent.subscribe(() => {
+    if (!agent.state.isStreaming && _queuedMessages.length > 0) {
+      // Delay slightly so the queue processes before we clear the display
+      setTimeout(clearQueue, 300);
+    }
   });
 
   // ── Keyboard shortcuts ──────────────────────────────────────────
@@ -472,11 +536,11 @@ async function init(): Promise<void> {
       if (e.altKey) {
         // Alt+Enter → follow-up (queued for after agent finishes current turn)
         agent.followUp(msg);
-        flashToast("Follow-up queued");
+        addQueuedMessage("follow-up", text);
       } else {
         // Enter → steer (interrupts current turn)
         agent.steer(msg);
-        flashToast("Steering…");
+        addQueuedMessage("steer", text);
       }
 
       // Clear the textarea
@@ -493,7 +557,7 @@ async function init(): Promise<void> {
       e.stopImmediatePropagation();
       const msg = { role: "user" as const, content: [{ type: "text" as const, text }], timestamp: Date.now() };
       agent.followUp(msg);
-      flashToast("Follow-up queued");
+      addQueuedMessage("follow-up", text);
       textarea!.value = "";
       textarea!.dispatchEvent(new Event("input", { bubbles: true }));
       return;
@@ -570,7 +634,7 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T | nul
   }) as Promise<T | null>;
 }
 
-async function injectContext(context: any): Promise<any> {
+async function injectContext(messages: any[]): Promise<any[]> {
   const injections: string[] = [];
 
   // 1. Selection context (what the user is looking at)
@@ -591,8 +655,8 @@ async function injectContext(context: any): Promise<any> {
     injections.push(changes);
   }
 
-  // If nothing to inject, return context unchanged
-  if (injections.length === 0) return context;
+  // If nothing to inject, return messages unchanged
+  if (injections.length === 0) return messages;
 
   // Inject as a system message before the last user message
   const injection = injections.join("\n\n");
@@ -602,22 +666,22 @@ async function injectContext(context: any): Promise<any> {
   };
 
   // Find the last user message and insert before it
-  const messages = [...context.messages];
+  const nextMessages = [...messages];
   let lastUserIdx = -1;
-  for (let i = messages.length - 1; i >= 0; i--) {
-    if (messages[i].role === "user") {
+  for (let i = nextMessages.length - 1; i >= 0; i--) {
+    if (nextMessages[i].role === "user") {
       lastUserIdx = i;
       break;
     }
   }
 
   if (lastUserIdx >= 0) {
-    messages.splice(lastUserIdx, 0, injectionMessage);
+    nextMessages.splice(lastUserIdx, 0, injectionMessage);
   } else {
-    messages.push(injectionMessage);
+    nextMessages.push(injectionMessage);
   }
 
-  return { ...context, messages };
+  return nextMessages;
 }
 
 // ============================================================================
