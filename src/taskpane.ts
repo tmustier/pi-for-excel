@@ -437,11 +437,28 @@ async function init(): Promise<void> {
     }).join("");
   }
 
-  // Clear queue when agent finishes a turn
-  agent.subscribe(() => {
-    if (!agent.state.isStreaming && _queuedMessages.length > 0) {
-      // Delay slightly so the queue processes before we clear the display
-      setTimeout(clearQueue, 300);
+  // Clear queue items as the agent picks them up
+  agent.subscribe((ev) => {
+    if (_queuedMessages.length === 0) return;
+
+    // When a user message starts, match it against the queue and remove
+    if (ev.type === "message_start" && ev.message.role === "user") {
+      const content = ev.message.content;
+      const msgText = typeof content === "string"
+        ? content
+        : Array.isArray(content)
+          ? content.filter((b: any) => b.type === "text").map((b: any) => b.text).join("")
+          : "";
+      const idx = _queuedMessages.findIndex((q) => q.text === msgText);
+      if (idx !== -1) {
+        _queuedMessages.splice(idx, 1);
+        updateQueueDisplay();
+      }
+    }
+
+    // Fallback: clear any remaining items when agent fully stops
+    if (ev.type === "agent_end" && _queuedMessages.length > 0) {
+      clearQueue();
     }
   });
 
