@@ -722,19 +722,9 @@ async function init(): Promise<void> {
       return;
     }
 
-    // Alt+Enter when NOT streaming — also queue follow-up for after next response
-    if (isInEditor && e.key === "Enter" && e.altKey && !isStreaming) {
-      const text = textarea!.value.trim();
-      if (!text) return;
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      const msg = { role: "user" as const, content: [{ type: "text" as const, text }], timestamp: Date.now() };
-      agent.followUp(msg);
-      addQueuedMessage("follow-up", text);
-      textarea!.value = "";
-      textarea!.dispatchEvent(new Event("input", { bubbles: true }));
-      return;
-    }
+    // Alt+Enter when NOT streaming — just send normally (mirrors Pi TUI: followUp when idle = submit)
+    // Don't intercept — let it fall through to MessageEditor's normal submit handler
+    // (Shift+Enter is newline, plain Enter is submit — Alt+Enter should also submit when idle)
   }, true); // capture phase — fires before MessageEditor
 
   // Custom status bar — shows context % and thinking level
