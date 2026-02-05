@@ -66,7 +66,10 @@ If an ID doesn’t appear there, **don’t** add it to the add-in yet—either:
 
 ### 5) Update model ordering + default selection logic (avoid hardcoding exact IDs)
 
-File: `src/taskpane.ts`
+Files:
+- `src/taskpane.ts` (ModelSelector patch + default-model rules)
+- `src/models/model-ordering.ts` (provider/family priority + version/recency scoring)
+- `tests/model-ordering.test.ts` (sanity tests; run `npm run test:models`)
 
 We intentionally avoid pinning exact versioned IDs now. Instead we:
 
@@ -84,10 +87,12 @@ We intentionally avoid pinning exact versioned IDs now. Instead we:
   - **Google:** latest `gemini-*-pro*` (regex: `/^gemini-.*-pro/i`)
 
   The ordering logic is driven by:
-  - `PROVIDER_ORDER` (Anthropic → OpenAI Codex → OpenAI → Google → …)
+  - `providerPriority()` (Anthropic → OpenAI Codex → OpenAI → Google → …)
   - `familyPriority()` (Opus/Sonnet/Haiku, Codex vs non-Codex, etc.)
   - `parseMajorMinor()` + `modelRecencyScore()` (treats `4-6` as `46`, `5.3` as `53`, and keeps `YYYYMMDD` as a separate date suffix)
-  - `setModelAndSync()` to keep the **header/status bar** synced whenever the model changes (picker, session restore)
+  - `compareModels()` (provider + family + recency tie-breaks; deterministic sorting)
+
+  UI: the model picker is opened from the footer status bar (click the π model button).
 
 - Pick the default model via pattern rules:
   - Anthropic is a small special-case (Opus unless a newer-version Sonnet exists; version compare uses `parseMajorMinor`)

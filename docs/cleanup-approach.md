@@ -34,6 +34,7 @@ Three review lenses:
 
 ### 5) Verification
 - `npx tsc --noEmit`
+- `npm run test:models`
 - `npx vite build`
 - Manual spot test in Excel add‑in
 
@@ -42,9 +43,9 @@ Three review lenses:
 - `src/taskpane.ts`
   - Split into smaller modules (model selection, header/status sync, session persistence).
   - Reduce `any` usage around models; prefer typed model interface.
-  - Move model ordering/"featured" rules into a dedicated `src/models/` helper so they’re testable.
+  - DONE: extracted model ordering/"featured" helpers to `src/models/model-ordering.ts`.
   - Consider removing the ModelSelector monkey-patch in favor of an explicit wrapper API (if Pi-web-ui exposes hooks).
-  - Add small unit tests for `parseMajorMinor()` / `modelRecencyScore()`.
+  - DONE: added model ordering unit tests in `tests/model-ordering.test.ts` (`npm run test:models`).
 
 ## Output expectations
 
