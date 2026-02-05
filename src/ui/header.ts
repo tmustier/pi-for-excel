@@ -1,8 +1,7 @@
 /**
  * Pi for Excel — Header bar component.
  *
- * Renders the branded header with logo and status indicator.
- * Extracted for easy swapping / versioning.
+ * Renders the header with model alias (clickable to change) and status dot.
  */
 
 import { html, type TemplateResult } from "lit";
@@ -10,6 +9,8 @@ import { html, type TemplateResult } from "lit";
 export interface HeaderState {
   status: "ready" | "working" | "error";
   statusText?: string;
+  modelAlias?: string;
+  onModelClick?: () => void;
 }
 
 const STATUS_CONFIG = {
@@ -24,13 +25,15 @@ const STATUS_CONFIG = {
 export function renderHeader(state: HeaderState = { status: "ready" }): TemplateResult {
   const cfg = STATUS_CONFIG[state.status];
   const label = state.statusText ?? cfg.label;
+  const model = state.modelAlias || "Select model";
 
   return html`
     <div class="pi-header">
-      <div class="pi-header__logo">
+      <button class="pi-header__model" @click=${state.onModelClick} title="Change model">
         <span class="pi-header__mark">π</span>
-        <span class="pi-header__text">for <span class="pi-header__accent">Excel</span></span>
-      </div>
+        <span class="pi-header__model-name">${model}</span>
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
       <div class="pi-header__status">
         <span class="pi-header__dot" style="background: ${cfg.color}; box-shadow: 0 0 6px ${cfg.color};"></span>
         <span class="pi-header__label">${label}</span>
@@ -70,33 +73,48 @@ export const headerStyles = `
     z-index: 1;
   }
 
-  .pi-header__logo {
+  .pi-header__model {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 4px 8px;
+    margin: -4px -8px;
+    border-radius: 6px;
+    transition: background 0.15s;
+    color: var(--foreground);
+    min-width: 0;
+  }
+  .pi-header__model:hover {
+    background: oklch(0 0 0 / 0.04);
   }
 
   .pi-header__mark {
     font-family: 'DM Sans', serif;
-    font-size: 22px;
+    font-size: 18px;
     font-weight: 700;
     color: var(--primary);
     line-height: 1;
     letter-spacing: -0.02em;
+    flex-shrink: 0;
   }
 
-  .pi-header__text {
+  .pi-header__model-name {
     font-family: var(--font-mono);
-    font-size: 11px;
-    font-weight: 400;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--muted-foreground);
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--foreground);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
   }
 
-  .pi-header__accent {
-    color: var(--foreground);
-    font-weight: 500;
+  .pi-header__model svg {
+    flex-shrink: 0;
+    color: var(--muted-foreground);
   }
 
   .pi-header__status {

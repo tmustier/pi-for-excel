@@ -230,7 +230,7 @@ agent-interface > .flex.flex-col > .shrink-0 > .max-w-3xl {
    MESSAGE EDITOR — input card at bottom
    ═══════════════════════════════════════════════════════════ */
 
-/* The card itself — frosted glass card */
+/* The card itself — frosted glass, relative for absolute send button */
 message-editor > .bg-card {
   border-radius: 14px !important;
   border-color: oklch(0.45 0.08 160 / 0.10) !important;
@@ -238,15 +238,16 @@ message-editor > .bg-card {
   background: oklch(1 0 0 / 0.75) !important;
   backdrop-filter: blur(12px) saturate(1.3);
   -webkit-backdrop-filter: blur(12px) saturate(1.3);
+  position: relative;
 }
 message-editor > .bg-card:focus-within {
   border-color: oklch(0.45 0.12 160 / 0.20) !important;
   box-shadow: 0 2px 8px oklch(0 0 0 / 0.04), 0 0 0 1.5px oklch(0.45 0.12 160 / 0.08), 0 0 0 1px oklch(1 0 0 / 0.5) inset !important;
 }
 
-/* Textarea — auto-grows up to 50% of viewport */
+/* Textarea — auto-grows, right padding for send button */
 message-editor textarea {
-  padding: 14px 16px !important;
+  padding: 14px 48px 14px 16px !important;
   min-height: 42px !important;
   max-height: 50vh !important;
   field-sizing: content;
@@ -259,77 +260,50 @@ message-editor textarea::placeholder {
   font-weight: 400;
 }
 
-/* Toolbar row — compact, refined */
+/* Toolbar — collapse to zero height, only send button floats out */
 message-editor .px-2.pb-2 {
-  padding: 0 10px 8px !important;
-  gap: 4px;
+  position: static !important;
+  height: 0 !important;
+  padding: 0 !important;
+  overflow: visible !important;
+  margin: 0 !important;
 }
 
-/* Hide attachment button and thinking selector — not needed in toolbar,
-   thinking is controlled via status bar + shift+tab */
-message-editor .px-2.pb-2 > .flex.gap-2:first-child {
-  display: none !important;
-}
-
-/* Toolbar buttons — compact */
-message-editor .px-2.pb-2 button {
-  height: 26px !important;
-  border-radius: 6px !important;
-  font-size: 11px !important;
-  font-family: var(--font-sans) !important;
-  color: var(--muted-foreground) !important;
-  flex-shrink: 0;
-}
-message-editor .px-2.pb-2 button:hover {
-  background: var(--pi-green-lighter) !important;
-  color: var(--foreground) !important;
-}
-message-editor .px-2.pb-2 button svg {
-  width: 13px !important;
-  height: 13px !important;
-}
-
-/* Send button — always visible, don't shrink */
-message-editor .px-2.pb-2 > .flex.gap-2:last-child > button:last-child {
-  flex-shrink: 0 !important;
-  width: 26px !important;
-  min-width: 26px !important;
-}
-
-/* Model name button — compact, truncated aggressively */
-message-editor .px-2.pb-2 > .flex.gap-2:last-child > button:first-child {
-  max-width: min(140px, calc(100vw - 180px)) !important;
+/* Hide everything in the toolbar */
+message-editor .px-2.pb-2 > * {
+  visibility: hidden !important;
+  height: 0 !important;
   overflow: hidden !important;
 }
-message-editor .px-2.pb-2 > .flex.gap-2:last-child > button:first-child span {
-  font-family: var(--font-sans) !important;
-  font-size: 10.5px !important;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  display: inline-block;
-  max-width: 100px;
-}
 
-/* Thinking selector — compact */
-message-editor .px-2.pb-2 [data-slot="trigger"] {
-  height: 26px !important;
-  font-size: 10.5px !important;
-  border-radius: 6px !important;
-  font-family: var(--font-sans) !important;
-  padding: 0 6px !important;
+/* Send/stop button — pull out of toolbar, float inside textarea card */
+message-editor .px-2.pb-2 > .flex.gap-2:last-child > button:last-child {
+  visibility: visible !important;
+  position: absolute !important;
+  bottom: 10px !important;
+  right: 10px !important;
+  z-index: 5;
+  width: 28px !important;
+  height: 28px !important;
+  min-width: 28px !important;
+  border-radius: 8px !important;
+  background: var(--pi-green) !important;
+  color: white !important;
+  box-shadow: 0 1px 3px oklch(0 0 0 / 0.12);
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, transform 0.1s;
+  overflow: visible !important;
 }
-
-/* Toolbar row — prevent overflow */
-message-editor .px-2.pb-2 {
-  padding: 0 8px 6px !important;
-  overflow: hidden;
-  flex-wrap: nowrap !important;
+message-editor .px-2.pb-2 > .flex.gap-2:last-child > button:last-child:hover {
+  background: oklch(0.40 0.12 160) !important;
+  transform: scale(1.05);
 }
-message-editor .px-2.pb-2 > .flex.gap-2 {
-  gap: 4px !important;
-  min-width: 0;
-  flex-shrink: 1;
+message-editor .px-2.pb-2 > .flex.gap-2:last-child > button:last-child svg {
+  width: 14px !important;
+  height: 14px !important;
+  color: white !important;
 }
 
 
@@ -374,25 +348,30 @@ aborted-message span::after {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 4px 4px 2px;
+  padding: 6px 6px 4px;
   font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.02em;
+  font-size: 11.5px;
+  letter-spacing: 0.01em;
   color: var(--muted-foreground);
-  opacity: 0.7;
 }
 .pi-status-ctx {
   font-variant-numeric: tabular-nums;
 }
 .pi-status-thinking {
   cursor: pointer;
-  border-radius: 4px;
-  padding: 1px 4px;
-  transition: background 0.1s;
+  border-radius: 5px;
+  padding: 2px 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+}
+.pi-status-thinking svg {
+  flex-shrink: 0;
 }
 .pi-status-thinking:hover {
   background: var(--pi-green-lighter);
-  opacity: 1;
+  color: var(--foreground);
 }
 
 /* Hide pi-web-ui's default stats row — we replace it with our own */

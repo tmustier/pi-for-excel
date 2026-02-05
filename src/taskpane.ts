@@ -57,7 +57,18 @@ styleSheet.textContent = headerStyles + loadingStyles;
 document.head.appendChild(styleSheet);
 
 // Render header and loading state immediately
-render(renderHeader({ status: "ready" }), headerRoot);
+function updateHeader(opts: { status?: "ready" | "working" | "error"; modelAlias?: string } = {}) {
+  render(renderHeader({
+    status: opts.status || "ready",
+    modelAlias: opts.modelAlias,
+    onModelClick: () => {
+      // Trigger the model selector by clicking the (now hidden) model button in toolbar
+      const modelBtn = document.querySelector("message-editor .px-2.pb-2 > .flex.gap-2:last-child > button:first-child") as HTMLElement;
+      if (modelBtn) modelBtn.click();
+    },
+  }), headerRoot);
+}
+updateHeader();
 render(renderLoading(), loadingRoot);
 
 // ============================================================================
@@ -199,9 +210,23 @@ async function init(): Promise<void> {
     appEl,
   );
 
-  // Hide empty state when messages appear
+  // Update header with model name + status; hide empty state when messages arrive
   const emptyState = document.getElementById("empty-state");
+  const getModelAlias = () => {
+    const m = agent.state.model;
+    return m ? (m.name || m.id) : undefined;
+  };
+  updateHeader({ modelAlias: getModelAlias() });
+
   agent.subscribe((ev) => {
+    // Header status
+    if (ev.type === "message_start") {
+      updateHeader({ status: "working", modelAlias: getModelAlias() });
+    } else if (ev.type === "message_end") {
+      updateHeader({ status: "ready", modelAlias: getModelAlias() });
+    }
+
+    // Empty state
     if (ev.type === "message_start" || ev.type === "message_end") {
       if (agent.state.messages.length > 0 && emptyState) {
         emptyState.classList.add("hidden");
