@@ -31,7 +31,7 @@ const schema = Type.Object({
     Type.Boolean({
       description:
         "Set to true to overwrite existing data. Default: false. " +
-        "If false and the target range contains data, the write is blocked " +
+        "If false and the target range contains values or formulas, the write is blocked " +
         "and the existing data is returned so you can ask the user.",
     }),
   ),
@@ -109,37 +109,18 @@ export function createWriteCellsTool(): AgentTool<typeof schema> {
           const rangeAddr = computeRangeAddress(startCellRef, rows, cols);
           const targetRange = sheet.getRange(rangeAddr);
 
-          // Overwrite protection: check if target has existing data or formatting
+          // Overwrite protection: check if target has existing data (values or formulas)
           if (!params.allow_overwrite) {
-            const conditionalFormats = targetRange.getSpecialCellsOrNullObject(
-              Excel.SpecialCellType.conditionalFormats,
-            );
-            const dataValidations = targetRange.getSpecialCellsOrNullObject(
-              Excel.SpecialCellType.dataValidations,
-            );
-            conditionalFormats.load("address");
-            dataValidations.load("address");
-            targetRange.load("values,formulas,numberFormat");
+            targetRange.load("values,formulas");
             await context.sync();
 
             const occupiedCount = countOccupiedCells(targetRange.values, targetRange.formulas);
-            const formattedCount = countFormattedOnly(
-              targetRange.values,
-              targetRange.formulas,
-              targetRange.numberFormat,
-            );
-            const hasConditionalFormats = !conditionalFormats.isNullObject;
-            const hasDataValidations = !dataValidations.isNullObject;
-
-            if (occupiedCount > 0 || formattedCount > 0 || hasConditionalFormats || hasDataValidations) {
+            if (occupiedCount > 0) {
               return {
                 blocked: true,
                 sheetName: sheet.name,
                 address: rangeAddr,
                 existingCount: occupiedCount,
-                formattedCount,
-                hasConditionalFormats,
-                hasDataValidations,
                 existingValues: targetRange.values,
               };
             }
@@ -200,7 +181,7 @@ function findInvalidFormulas(values: any[][], startCell: string): InvalidFormula
   return invalid;
 }
 
-function validateFormula(formula: string): string | null {
+export function validateFormula(formula: string): string | null {
   if (!formula.startsWith("=")) return null;
   const body = formula.slice(1);
 
@@ -232,7 +213,7 @@ function validateFormula(formula: string): string | null {
   return null;
 }
 
-function countOccupiedCells(values: any[][], formulas: any[][]): number {
+export function countOccupiedCells(values: any[][], formulas: any[][]): number {
   let count = 0;
   for (let r = 0; r < values.length; r++) {
     for (let c = 0; c < values[r].length; c++) {
@@ -246,33 +227,11 @@ function countOccupiedCells(values: any[][], formulas: any[][]): number {
   return count;
 }
 
-function countFormattedOnly(values: any[][], formulas: any[][], numberFormats: any[][]): number {
-  let count = 0;
-  for (let r = 0; r < values.length; r++) {
-    for (let c = 0; c < values[r].length; c++) {
-      const value = values[r][c];
-      const formula = formulas?.[r]?.[c];
-      const hasValue = value !== null && value !== undefined && value !== "";
-      const hasFormula = typeof formula === "string" && formula.startsWith("=");
-      if (hasValue || hasFormula) continue;
-
-      const format = numberFormats?.[r]?.[c];
-      if (format && format !== "General") count += 1;
-    }
-  }
-  return count;
-}
-
 function formatBlocked(result: any): AgentToolResult<undefined> {
   const fullAddr = qualifiedAddress(result.sheetName, result.address);
   const lines: string[] = [];
-  const parts: string[] = [];
-  if (result.existingCount > 0) parts.push(`${result.existingCount} non-empty cell(s)`);
-  if (result.formattedCount > 0) parts.push(`${result.formattedCount} formatted-only cell(s)`);
-  if (result.hasConditionalFormats) parts.push("conditional formats");
-  if (result.hasDataValidations) parts.push("data validation rules");
 
-  lines.push(`⛔ **Write blocked** — ${fullAddr} contains ${parts.join(", ")}.`);
+  lines.push(`⛔ **Write blocked** — ${fullAddr} contains ${result.existingCount} non-empty cell(s).`);
   lines.push("");
 
   if (result.existingCount > 0) {

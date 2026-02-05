@@ -1,7 +1,7 @@
 /**
  * Pi for Excel — main entry point.
  *
- * Initializes Office.js, mounts the ChatPanel sidebar,
+ * Initializes Office.js, mounts the PiSidebar,
  * wires up tools and context injection.
  */
 
@@ -9,19 +9,13 @@
 import "./boot.js";
 
 import { html, render } from "lit";
-import { Agent } from "@mariozechner/pi-agent-core";
+import { Agent, type AgentEvent, type AgentState } from "@mariozechner/pi-agent-core";
 import { getModel, supportsXhigh } from "@mariozechner/pi-ai";
 import {
-  ChatPanel,
-  AppStorage,
-  IndexedDBStorageBackend,
-  ProviderKeysStore,
-  CustomProvidersStore,
-  SessionsStore,
-  SettingsStore,
-  setAppStorage,
   ApiKeyPromptDialog,
   ModelSelector,
+  type ProviderKeysStore,
+  getAppStorage,
 } from "@mariozechner/pi-web-ui";
 
 import { installFetchInterceptor } from "./auth/cors-proxy.js";
@@ -31,11 +25,13 @@ import { buildSystemPrompt } from "./prompt/system-prompt.js";
 import { getBlueprint } from "./context/blueprint.js";
 import { readSelectionContext } from "./context/selection.js";
 import { ChangeTracker } from "./context/change-tracker.js";
+import { initAppStorage } from "./storage/init-app-storage.js";
 
-// UI components — extracted for easy swapping
+// UI components
 import { renderHeader, headerStyles } from "./ui/header.js";
 import { renderLoading, renderError, loadingStyles } from "./ui/loading.js";
 import { showToast } from "./ui/toast.js";
+import { PiSidebar } from "./ui/pi-sidebar.js";
 
 // Slash commands + extensions
 import { registerBuiltins } from "./commands/builtins.js";
@@ -43,20 +39,17 @@ import { commandRegistry } from "./commands/types.js";
 import { wireCommandMenu, handleCommandMenuKey, isCommandMenuVisible, hideCommandMenu } from "./commands/command-menu.js";
 import { createExtensionAPI, loadExtension } from "./commands/extension-api.js";
 
-// ============================================================================
+
 // ============================================================================
 // Patch ModelSelector to only show models from providers with API keys
 // ============================================================================
 
 let _activeProviders: Set<string> | null = null;
 
-/** Update the set of providers that have API keys configured */
 export function setActiveProviders(providers: Set<string>) {
   _activeProviders = providers;
 }
 
-// Featured models shown at top of picker, in order.
-// This is the curated "best current models" list — update when new models drop.
 const FEATURED_MODELS = new Map([
   ["claude-opus-4-5", 1],
   ["gpt-5.2", 2],
@@ -64,15 +57,11 @@ const FEATURED_MODELS = new Map([
   ["gemini-3-pro-preview", 4],
 ]);
 
-/** Extract a numeric version/date score from model ID for recency sorting. Higher = newer. */
 function modelRecencyScore(id: string): number {
-  // Try YYYYMMDD date in ID (e.g. claude-sonnet-4-20250514)
   const dateMatch = id.match(/(\d{8})/);
   if (dateMatch) return parseInt(dateMatch[1]);
-  // Try X.Y version (e.g. gpt-5.2 → 520, gpt-5.1 → 510)
   const verMatch = id.match(/(\d+)\.(\d+)/);
   if (verMatch) return parseInt(verMatch[1]) * 100 + parseInt(verMatch[2]) * 10;
-  // Try single major version (e.g. gpt-5 → 500)
   const majorMatch = id.match(/-(\d+)(?:-|$)/);
   if (majorMatch) return parseInt(majorMatch[1]) * 100;
   return 0;
@@ -81,38 +70,27 @@ function modelRecencyScore(id: string): number {
 const _origGetFilteredModels = (ModelSelector.prototype as any).getFilteredModels;
 (ModelSelector.prototype as any).getFilteredModels = function () {
   const all: Array<{ provider: string; id: string; model: any }> = _origGetFilteredModels.call(this);
-
-  // Filter to active providers
   let filtered = all;
   if (_activeProviders && _activeProviders.size > 0) {
     filtered = all.filter((m: any) => _activeProviders!.has(m.provider));
   }
-
-  // Re-sort: current model → featured → recency → alphabetical
   const currentModel = this.currentModel;
   filtered.sort((a: any, b: any) => {
-    // Current model always first
     const aCur = currentModel && a.model.id === currentModel.id && a.model.provider === currentModel.provider;
     const bCur = currentModel && b.model.id === currentModel.id && b.model.provider === currentModel.provider;
     if (aCur && !bCur) return -1;
     if (!aCur && bCur) return 1;
-
-    // Featured models next, in curated order
     const aFeat = FEATURED_MODELS.get(a.id) ?? Infinity;
     const bFeat = FEATURED_MODELS.get(b.id) ?? Infinity;
     if (aFeat !== bFeat) return aFeat - bFeat;
-
-    // Then by recency (higher = newer = first)
     const aRec = modelRecencyScore(a.id);
     const bRec = modelRecencyScore(b.id);
     if (aRec !== bRec) return bRec - aRec;
-
-    // Fallback: alphabetical
     return a.id.localeCompare(b.id);
   });
-
   return filtered;
 };
+
 
 // ============================================================================
 // Globals
@@ -127,6 +105,11 @@ const errorRoot = document.getElementById("error-root")!;
 
 const changeTracker = new ChangeTracker();
 
+let popoutDialog: Office.Dialog | null = null;
+let popoutReady = false;
+let popoutOpen = false;
+
+
 // ============================================================================
 // Inject component styles + render initial UI
 // ============================================================================
@@ -135,19 +118,27 @@ const styleSheet = document.createElement("style");
 styleSheet.textContent = headerStyles + loadingStyles;
 document.head.appendChild(styleSheet);
 
-// Render header and loading state immediately
 let _agent: Agent | null = null;
+let _sidebar: PiSidebar | null = null;
+let _headerState: { status: "ready" | "working" | "error"; modelAlias?: string } = {
+  status: "ready",
+};
 
 function updateHeader(opts: { status?: "ready" | "working" | "error"; modelAlias?: string } = {}) {
+  _headerState = { ..._headerState, ...opts };
   render(renderHeader({
-    status: opts.status || "ready",
-    modelAlias: opts.modelAlias,
+    status: _headerState.status,
+    modelAlias: _headerState.modelAlias,
+    popoutActive: popoutOpen,
     onModelClick: () => {
       if (!_agent) return;
       ModelSelector.open(_agent.state.model, (model) => {
         _agent!.setModel(model);
         updateHeader({ modelAlias: model.name || model.id });
       });
+    },
+    onPopoutClick: () => {
+      openPopout();
     },
   }), headerRoot);
 }
@@ -160,22 +151,120 @@ function clearErrorBanner(): void {
   render(html``, errorRoot);
 }
 
+function serializeAgentState(state: AgentState) {
+  return {
+    ...state,
+    pendingToolCalls: Array.from(state.pendingToolCalls),
+    tools: state.tools.map((tool) => ({
+      name: tool.name,
+      label: tool.label,
+      description: tool.description,
+    })),
+  };
+}
+
+function sendPopoutState(event?: AgentEvent): void {
+  if (!popoutDialog || !popoutReady || !_agent) return;
+  const payload = {
+    type: "pi-dialog-state",
+    event: event || null,
+    state: serializeAgentState(_agent.state),
+  };
+  popoutDialog.messageChild(JSON.stringify(payload));
+}
+
+function handlePopoutMessage(arg: any): void {
+  if (!_agent) return;
+  let data: any;
+  try { data = JSON.parse(arg.message); } catch { return; }
+  switch (data.type) {
+    case "pi-dialog-ready":
+      popoutReady = true;
+      sendPopoutState();
+      break;
+    case "pi-dialog-request-state":
+      sendPopoutState();
+      break;
+    case "pi-dialog-prompt":
+      _agent.prompt(data.message).catch((e) => {
+        showErrorBanner(`LLM error: ${e.message}`);
+      });
+      break;
+    case "pi-dialog-set-model":
+      if (data.model) {
+        _agent.setModel(data.model);
+        updateHeader({ modelAlias: data.model.name || data.model.id });
+        sendPopoutState();
+      }
+      break;
+    case "pi-dialog-set-thinking":
+      if (data.level) {
+        _agent.setThinkingLevel(data.level);
+        updateStatusBar(_agent);
+        sendPopoutState();
+      }
+      break;
+    case "pi-dialog-abort":
+      _agent.abort();
+      break;
+    case "pi-dialog-close":
+      closePopout();
+      break;
+  }
+}
+
+function handlePopoutEvent(): void {
+  popoutDialog = null;
+  popoutReady = false;
+  popoutOpen = false;
+  updateHeader();
+}
+
+function closePopout(): void {
+  if (popoutDialog) popoutDialog.close();
+}
+
+function openPopout(): void {
+  if (!Office?.context?.ui?.displayDialogAsync) {
+    showToast("Pop-out not supported in this host.");
+    return;
+  }
+  if (popoutDialog) { closePopout(); return; }
+  const url = new URL("dialog.html", window.location.href).toString();
+  Office.context.ui.displayDialogAsync(
+    url,
+    { height: 75, width: 45, displayInIframe: false },
+    (result: any) => {
+      if (result.status !== Office.AsyncResultStatus.Succeeded) {
+        showToast(`Pop-out failed: ${result.error?.message || "unknown error"}`);
+        return;
+      }
+      const dialog = result.value as Office.Dialog;
+      popoutDialog = dialog;
+      popoutReady = false;
+      popoutOpen = true;
+      updateHeader();
+      showToast("Pop-out opened. Keep the sidebar open for tool access.");
+      dialog.addEventHandler(Office.EventType.DialogMessageReceived, handlePopoutMessage);
+      dialog.addEventHandler(Office.EventType.DialogEventReceived, handlePopoutEvent);
+    },
+  );
+}
+
 updateHeader();
 render(renderLoading(), loadingRoot);
+
 
 // ============================================================================
 // Bootstrap
 // ============================================================================
 
-// Install CORS proxy before any fetch calls
 installFetchInterceptor();
 
 let initialized = false;
 
-// Wait for Office.js
 Office.onReady(async (info: { host: any; platform: any }) => {
   console.log(`[pi] Office.js ready: host=${info.host}, platform=${info.platform}`);
-
   try {
     initialized = true;
     await init();
@@ -185,7 +274,6 @@ Office.onReady(async (info: { host: any; platform: any }) => {
   }
 });
 
-// Fallback if not in Excel (dev/testing)
 setTimeout(() => {
   if (!initialized) {
     console.warn("[pi] Office.js not ready after 3s — initializing without Excel");
@@ -197,47 +285,25 @@ setTimeout(() => {
   }
 }, 3000);
 
+
 // ============================================================================
 // Initialization
 // ============================================================================
 
 async function init(): Promise<void> {
-  // 1. Set up storage
-  const settings = new SettingsStore();
-  const providerKeys = new ProviderKeysStore();
-  const sessions = new SessionsStore();
-  const customProviders = new CustomProvidersStore();
+  // 1. Storage
+  const { providerKeys, sessions } = initAppStorage();
 
-  const backend = new IndexedDBStorageBackend({
-    dbName: "pi-for-excel",
-    version: 1,
-    stores: [
-      settings.getConfig(),
-      providerKeys.getConfig(),
-      sessions.getConfig(),
-      SessionsStore.getMetadataConfig(),
-      customProviders.getConfig(),
-    ],
-  });
-
-  settings.setBackend(backend);
-  providerKeys.setBackend(backend);
-  sessions.setBackend(backend);
-  customProviders.setBackend(backend);
-
-  const storage = new AppStorage(settings, providerKeys, sessions, customProviders, backend);
-  setAppStorage(storage);
-
-  // 2. Restore auth credentials
+  // 2. Restore auth
   await restoreCredentials(providerKeys);
 
-  // 2b. Check if user has any provider keys — show welcome/login if not
+  // 2b. Welcome/login if no providers
   const configuredProviders = await providerKeys.list();
   if (configuredProviders.length === 0) {
     await showWelcomeLogin(providerKeys);
   }
 
-  // 3. Build initial workbook blueprint
+  // 3. Workbook blueprint
   let blueprint: string | undefined;
   try {
     blueprint = await getBlueprint();
@@ -246,10 +312,10 @@ async function init(): Promise<void> {
     console.warn("[pi] Could not build blueprint (not in Excel?)");
   }
 
-  // 4. Start change tracker
+  // 4. Change tracker
   changeTracker.start().catch(() => {});
 
-  // 5. Create agent — pick default model from a provider the user has
+  // 5. Create agent
   const systemPrompt = buildSystemPrompt(blueprint);
   const availableProviders = await providerKeys.list();
   setActiveProviders(new Set(availableProviders));
@@ -261,69 +327,48 @@ async function init(): Promise<void> {
       model: defaultModel,
       thinkingLevel: "off",
       messages: [],
-      tools: [],
+      tools: createAllTools({ changeTracker }),
     },
-    transformContext: async (context) => {
-      return await injectContext(context);
-    },
+    transformContext: async (context) => await injectContext(context),
   });
 
-  // 6. Create and mount ChatPanel
-  const chatPanel = new ChatPanel();
+  // 6. Set up API key resolution
+  agent.getApiKey = async (provider: string) => {
+    const key = await getAppStorage().providerKeys.get(provider);
+    if (key) return key;
 
-  await chatPanel.setAgent(agent, {
-    onApiKeyRequired: async (provider: string) => {
-      const result = await ApiKeyPromptDialog.prompt(provider);
+    // Prompt for key
+    const success = await ApiKeyPromptDialog.prompt(provider);
+    const updated = await providerKeys.list();
+    setActiveProviders(new Set(updated));
+    if (success) {
+      clearErrorBanner();
+      return (await getAppStorage().providerKeys.get(provider)) ?? undefined;
+    } else {
+      showErrorBanner(`API key required for ${provider}.`);
+      return undefined;
+    }
+  };
 
-      // Refresh active providers after key added
-      const updated = await providerKeys.list();
-      setActiveProviders(new Set(updated));
+  // 7. Create and mount PiSidebar
+  const sidebar = _sidebar = new PiSidebar();
+  sidebar.agent = agent;
+  sidebar.emptyHints = ["Summarize this sheet", "Add a VLOOKUP formula", "Format as a table"];
+  sidebar.onSend = (text) => {
+    clearErrorBanner();
+    agent.prompt(text).catch((e) => {
+      showErrorBanner(`LLM error: ${e.message}`);
+    });
+  };
+  sidebar.onAbort = () => {
+    _userAborted = true;
+    agent.abort();
+  };
 
-      if (result) {
-        clearErrorBanner();
-      } else {
-        showErrorBanner(`API key required for ${provider}. Open Settings to add one.`);
-      }
-      return result;
-    },
-    toolsFactory: () => createAllTools(),
-  });
-
-  // 7. Clear loading, mount ChatPanel with empty state
   appEl.innerHTML = "";
-  render(
-    html`
-      <div class="w-full h-full flex flex-col overflow-hidden"
-           style="background: var(--background); color: var(--foreground); position: relative;">
-        <!-- Empty state — shown when no messages -->
-        <div id="empty-state">
-          <div class="empty-logo">π</div>
-          <div class="empty-tagline">
-            Your AI assistant for Excel.<br/>Ask anything about your spreadsheet.
-          </div>
-          <div class="empty-hints">
-            ${["Summarize this sheet", "Add a VLOOKUP formula", "Format as a table"].map(
-              (hint) => html`
-                <button
-                  class="empty-hint"
-                  @click=${() => {
-                    const iface = document.querySelector("agent-interface") as any;
-                    if (iface?.sendMessage) iface.sendMessage(hint);
-                    document.getElementById("empty-state")?.classList.add("hidden");
-                  }}
-                >${hint}</button>
-              `,
-            )}
-          </div>
-        </div>
-        ${chatPanel}
-      </div>
-    `,
-    appEl,
-  );
+  appEl.appendChild(sidebar);
 
-  // Update header with model name + status; hide empty state when messages arrive
-  const emptyState = document.getElementById("empty-state");
+  // 8. Header + status tracking
   const getModelAlias = () => {
     const m = agent.state.model;
     return m ? (m.name || m.id) : undefined;
@@ -362,28 +407,21 @@ async function init(): Promise<void> {
       _userAborted = false;
     }
 
-    // Empty state
-    if (ev.type === "message_start" || ev.type === "message_end") {
-      if (agent.state.messages.length > 0 && emptyState) {
-        emptyState.classList.add("hidden");
-      }
-    }
+    // Pop-out sync
+    sendPopoutState(ev);
   });
 
-  // ── Session persistence (mirrors Pi TUI: save on every message_end) ──
+  // ── Session persistence ──
   let _sessionId: string = crypto.randomUUID();
   let _sessionTitle = "";
   let _sessionCreatedAt = new Date().toISOString();
-  let _firstAssistantSeen = false; // lazy-write like Pi TUI: only persist after first assistant msg
+  let _firstAssistantSeen = false;
 
-  /** Save current session state to IndexedDB */
   async function saveSession() {
-    if (!_firstAssistantSeen) return; // don't persist empty sessions
+    if (!_firstAssistantSeen) return;
     try {
       const now = new Date().toISOString();
       const messages = agent.state.messages;
-
-      // Auto-title from first user message (like Pi TUI)
       if (!_sessionTitle && messages.length > 0) {
         const firstUser = messages.find((m) => m.role === "user");
         if (firstUser) {
@@ -396,8 +434,6 @@ async function init(): Promise<void> {
           _sessionTitle = text.slice(0, 80) || "Untitled";
         }
       }
-
-      // Build preview: first 2KB of user+assistant text
       let preview = "";
       for (const m of messages) {
         if (m.role !== "user" && m.role !== "assistant") continue;
@@ -410,8 +446,6 @@ async function init(): Promise<void> {
         preview += text + "\n";
         if (preview.length > 2048) { preview = preview.slice(0, 2048); break; }
       }
-
-      // Compute usage from messages
       let inputTokens = 0, outputTokens = 0, totalCost = 0;
       for (const m of messages) {
         const u = (m as any).usage;
@@ -421,7 +455,6 @@ async function init(): Promise<void> {
           totalCost += u.totalCost || 0;
         }
       }
-
       await sessions.saveSession(_sessionId, agent.state, {
         id: _sessionId,
         title: _sessionTitle,
@@ -444,7 +477,6 @@ async function init(): Promise<void> {
     }
   }
 
-  /** Start a fresh session (called by /new command) */
   function startNewSession() {
     _sessionId = crypto.randomUUID();
     _sessionTitle = "";
@@ -452,19 +484,14 @@ async function init(): Promise<void> {
     _firstAssistantSeen = false;
   }
 
-  // Persist on every message_end (mirrors Pi TUI's appendMessage on message_end)
   agent.subscribe((ev) => {
     if (ev.type === "message_end") {
-      if (ev.message.role === "assistant") {
-        _firstAssistantSeen = true;
-      }
-      if (_firstAssistantSeen) {
-        saveSession();
-      }
+      if (ev.message.role === "assistant") _firstAssistantSeen = true;
+      if (_firstAssistantSeen) saveSession();
     }
   });
 
-  // Auto-restore latest session on startup
+  // Auto-restore latest session
   try {
     const latestId = await sessions.getLatestSessionId();
     if (latestId) {
@@ -474,20 +501,11 @@ async function init(): Promise<void> {
         _sessionTitle = sessionData.title || "";
         _sessionCreatedAt = sessionData.createdAt;
         _firstAssistantSeen = true;
-
         agent.replaceMessages(sessionData.messages);
         if (sessionData.model) agent.setModel(sessionData.model);
         if (sessionData.thinkingLevel) agent.setThinkingLevel(sessionData.thinkingLevel);
-
-        // Hide empty state since we have messages
-        document.getElementById("empty-state")?.classList.add("hidden");
-
-        // Force AgentInterface to re-render (replaceMessages doesn't emit events)
-        requestAnimationFrame(() => {
-          const iface = document.querySelector("agent-interface") as any;
-          if (iface) iface.requestUpdate();
-        });
-
+        // Force sidebar to re-render with restored messages
+        requestAnimationFrame(() => sidebar.requestUpdate());
         console.log(`[pi] Restored session: ${_sessionTitle || latestId}`);
       }
     }
@@ -495,18 +513,11 @@ async function init(): Promise<void> {
     console.warn("[pi] Session restore failed:", err);
   }
 
-  // Listen for /new command
-  document.addEventListener("pi:session-new", () => {
-    startNewSession();
-  });
-
-  // Expose for /name command
+  document.addEventListener("pi:session-new", () => startNewSession());
   document.addEventListener("pi:session-rename", ((e: CustomEvent) => {
     _sessionTitle = e.detail?.title || _sessionTitle;
-    saveSession(); // persist the rename immediately
+    saveSession();
   }) as EventListener);
-
-  // Handle /resume restoring a session
   document.addEventListener("pi:session-resumed", ((e: CustomEvent) => {
     _sessionId = e.detail?.id || _sessionId;
     _sessionTitle = e.detail?.title || "";
@@ -514,24 +525,21 @@ async function init(): Promise<void> {
     _firstAssistantSeen = true;
   }) as EventListener);
 
-  // ── Register slash commands + load extensions ─────────────────
+  // ── Register slash commands + extensions ──
   registerBuiltins(agent);
-
   const extensionAPI = createExtensionAPI(agent);
-  // Load bundled extensions
   const { activate: activateSnake } = await import("./extensions/snake.js");
   await loadExtension(extensionAPI, activateSnake);
 
-  // ── Listen for provider changes (from /login command) ─────────
   document.addEventListener("pi:providers-changed", async () => {
     const updated = await providerKeys.list();
     setActiveProviders(new Set(updated));
   });
 
-  // ── Abort tracking ──────────────────────────────────────────────
+  // ── Abort tracking ──
   let _userAborted = false;
 
-  // ── Queue display ────────────────────────────────────────────────
+  // ── Queue display ──
   type QueuedItem = { type: "steer" | "follow-up"; text: string };
   const _queuedMessages: QueuedItem[] = [];
 
@@ -554,39 +562,27 @@ async function init(): Promise<void> {
     if (!container) {
       container = document.createElement("div");
       container.id = "pi-queue-display";
-      // Append to body — we'll position it dynamically
+      container.className = "pi-queue";
       document.body.appendChild(container);
     }
-    // Position above the message editor every update
-    const editor = document.querySelector("message-editor") as HTMLElement | null;
-    const editorTop = editor ? editor.getBoundingClientRect().top : window.innerHeight - 80;
-    container.style.cssText = `
-      position: fixed; left: 0; right: 0; z-index: 100;
-      bottom: ${window.innerHeight - editorTop}px;
-      padding: 5px 12px;
-      font-family: var(--font-sans); font-size: 12px;
-      display: flex; flex-direction: column; gap: 2px;
-      background: oklch(0.97 0.005 100 / 0.92);
-      backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
-      border-top: 1px solid oklch(0 0 0 / 0.06);
-      box-shadow: 0 -2px 8px oklch(0 0 0 / 0.04);
-    `;
+    // Position above the input area
+    const inputArea = sidebar.querySelector(".pi-input-area") as HTMLElement | null;
+    const inputTop = inputArea ? inputArea.getBoundingClientRect().top : window.innerHeight - 80;
+    container.style.bottom = `${window.innerHeight - inputTop}px`;
+
     container.innerHTML = _queuedMessages.map(({ type, text }) => {
       const label = type === "steer" ? "Steering" : "Follow-up";
-      const color = type === "steer" ? "oklch(0.55 0.15 250)" : "oklch(0.55 0.12 170)";
+      const cls = type === "steer" ? "pi-queue__label--steer" : "pi-queue__label--followup";
       const truncated = text.length > 50 ? text.slice(0, 47) + "…" : text;
-      return `<div style="display: flex; align-items: baseline; gap: 6px; line-height: 1.3;">
-        <span style="font-size: 10px; font-weight: 600; color: ${color}; text-transform: uppercase; letter-spacing: 0.03em; flex-shrink: 0;">${label}</span>
-        <span style="color: var(--muted-foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${truncated}</span>
+      return `<div class="pi-queue__item">
+        <span class="pi-queue__label ${cls}">${label}</span>
+        <span class="pi-queue__text">${truncated}</span>
       </div>`;
     }).join("");
   }
 
-  // Clear queue items as the agent picks them up
   agent.subscribe((ev) => {
     if (_queuedMessages.length === 0) return;
-
-    // When a user message starts, match it against the queue and remove
     if (ev.type === "message_start" && ev.message.role === "user") {
       const content = ev.message.content;
       const msgText = typeof content === "string"
@@ -600,63 +596,46 @@ async function init(): Promise<void> {
         updateQueueDisplay();
       }
     }
-
-    // Fallback: clear any remaining items when agent fully stops
-    if (ev.type === "agent_end" && _queuedMessages.length > 0) {
-      clearQueue();
-    }
+    if (ev.type === "agent_end" && _queuedMessages.length > 0) clearQueue();
   });
 
-  // ── Keyboard shortcuts ──────────────────────────────────────────
+  // ── Keyboard shortcuts ──
   const THINKING_COLORS: Record<string, string> = {
-    off: "#a0a0a0",       // grey
-    minimal: "#767676",   // dark grey
-    low: "#4488cc",       // blue
-    medium: "#22998a",    // teal
-    high: "#875f87",      // purple
-    xhigh: "#8b008b",    // dark magenta
+    off: "#a0a0a0", minimal: "#767676", low: "#4488cc",
+    medium: "#22998a", high: "#875f87", xhigh: "#8b008b",
   };
 
-  /** Return available thinking levels for the current model */
   function getThinkingLevels(): string[] {
     const model = agent.state.model;
     if (!model || !model.reasoning) return ["off"];
-
     const provider = model.provider;
-
-    // OpenAI / Codex: supports minimal + potentially xhigh
     if (provider === "openai" || provider === "openai-codex") {
       const levels = ["off", "minimal", "low", "medium", "high"];
       if (supportsXhigh(model)) levels.push("xhigh");
       return levels;
     }
-
-    // Anthropic: off → low → medium → high (no minimal, no xhigh)
     if (provider === "anthropic") return ["off", "low", "medium", "high"];
-
-    // Google / others: off → low → medium → high
     return ["off", "low", "medium", "high"];
   }
 
-  // We capture on the document to intercept before MessageEditor's handler
   document.addEventListener("keydown", (e) => {
-    // Command menu takes priority when visible
+    // Command menu takes priority
     if (isCommandMenuVisible()) {
       if (handleCommandMenuKey(e)) return;
     }
 
-    const textarea = document.querySelector("message-editor textarea") as HTMLTextAreaElement | null;
+    const textarea = sidebar.getTextarea();
     const isInEditor = textarea && (e.target === textarea || textarea.contains(e.target as Node));
     const isStreaming = agent.state.isStreaming;
 
-    // ESC — dismiss command menu first, then abort
+    // ESC — dismiss command menu
     if (e.key === "Escape" && isCommandMenuVisible()) {
       e.preventDefault();
       hideCommandMenu();
       return;
     }
 
-    // ESC — abort (MessageEditor already handles this, but we add it globally too)
+    // ESC — abort
     if (e.key === "Escape" && isStreaming) {
       e.preventDefault();
       _userAborted = true;
@@ -672,14 +651,12 @@ async function init(): Promise<void> {
       const idx = levels.indexOf(current);
       const next = levels[(idx + 1) % levels.length];
       agent.setThinkingLevel(next as any);
-      const iface = document.querySelector("agent-interface") as any;
-      if (iface) iface.requestUpdate();
       updateStatusBar(agent);
       flashThinkingLevel(next, THINKING_COLORS[next] || "#a0a0a0");
       return;
     }
 
-    // If user is typing a slash command (starts with /) and hits Enter — execute command
+    // Slash command execution
     if (isInEditor && e.key === "Enter" && !e.shiftKey && textarea!.value.startsWith("/") && !isStreaming) {
       const val = textarea!.value.trim();
       const spaceIdx = val.indexOf(" ");
@@ -690,82 +667,48 @@ async function init(): Promise<void> {
         e.preventDefault();
         e.stopImmediatePropagation();
         hideCommandMenu();
-        textarea!.value = "";
-        textarea!.dispatchEvent(new Event("input", { bubbles: true }));
+        const input = sidebar.getInput();
+        if (input) input.clear();
         cmd.execute(args);
         return;
       }
     }
 
-    // Enter/Alt+Enter in textarea while streaming — steer or follow-up
+    // Enter/Alt+Enter while streaming — steer or follow-up
     if (isInEditor && e.key === "Enter" && !e.shiftKey && isStreaming) {
       const text = textarea!.value.trim();
       if (!text) return;
-
       e.preventDefault();
-      e.stopImmediatePropagation(); // prevent MessageEditor's handler
-
+      e.stopImmediatePropagation();
       const msg = { role: "user" as const, content: [{ type: "text" as const, text }], timestamp: Date.now() };
-
       if (e.altKey) {
-        // Alt+Enter → follow-up (queued for after agent finishes current turn)
         agent.followUp(msg);
         addQueuedMessage("follow-up", text);
       } else {
-        // Enter → steer (interrupts current turn)
         agent.steer(msg);
         addQueuedMessage("steer", text);
       }
-
-      // Clear the textarea
-      textarea!.value = "";
-      textarea!.dispatchEvent(new Event("input", { bubbles: true }));
+      const input = sidebar.getInput();
+      if (input) input.clear();
       return;
     }
+  }, true);
 
-    // Alt+Enter when NOT streaming — just send normally (mirrors Pi TUI: followUp when idle = submit)
-    // Don't intercept — let it fall through to MessageEditor's normal submit handler
-    // (Shift+Enter is newline, plain Enter is submit — Alt+Enter should also submit when idle)
-  }, true); // capture phase — fires before MessageEditor
-
-  // Custom status bar — shows context % and thinking level
+  // ── Status bar ──
   injectStatusBar(agent);
 
-  // Auto-resize textarea + wire command menu
-  const patchTextarea = () => {
-    const ta = document.querySelector("message-editor textarea") as HTMLTextAreaElement | null;
+  // ── Wire command menu to textarea ──
+  const wireTextarea = () => {
+    const ta = sidebar.getTextarea();
     if (ta) {
-      ta.style.maxHeight = "50vh";
-      ta.style.height = "auto";
-      // Classic auto-grow: reset height then set to scrollHeight
-      const autoGrow = () => {
-        ta.style.height = "auto";
-        ta.style.height = ta.scrollHeight + "px";
-      };
-      ta.addEventListener("input", autoGrow);
-      new MutationObserver(autoGrow).observe(ta, { attributes: true, attributeFilter: ["value"] });
-
-      // Wire slash command menu
       wireCommandMenu(ta);
     } else {
-      requestAnimationFrame(patchTextarea);
+      requestAnimationFrame(wireTextarea);
     }
   };
-  requestAnimationFrame(patchTextarea);
+  requestAnimationFrame(wireTextarea);
 
-  // Dynamic placeholder — changes during streaming to hint at steer/follow-up
-  agent.subscribe((ev) => {
-    if (ev.type === "message_start" || ev.type === "message_end") {
-      const textarea = document.querySelector("message-editor textarea") as HTMLTextAreaElement | null;
-      if (textarea) {
-        textarea.placeholder = agent.state.isStreaming
-          ? "Steer (Enter) · Follow-up (⌥Enter)…"
-          : "Type a message…";
-      }
-    }
-  });
-
-  // Make status bar thinking indicator clickable
+  // ── Thinking indicator click ──
   document.addEventListener("click", (e) => {
     const target = (e.target as HTMLElement).closest?.(".pi-status-thinking");
     if (target) {
@@ -774,18 +717,17 @@ async function init(): Promise<void> {
       const idx = levels.indexOf(current);
       const next = levels[(idx + 1) % levels.length];
       agent.setThinkingLevel(next as any);
-      const iface = document.querySelector("agent-interface") as any;
-      if (iface) iface.requestUpdate();
       updateStatusBar(agent);
       flashThinkingLevel(next, THINKING_COLORS[next] || "#a0a0a0");
     }
   });
 
-  console.log("[pi] ChatPanel mounted");
+  console.log("[pi] PiSidebar mounted");
 }
 
+
 // ============================================================================
-// Context injection — runs before every LLM call
+// Context injection
 // ============================================================================
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T | null> {
@@ -800,96 +742,52 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T | nul
 
 async function injectContext(messages: any[]): Promise<any[]> {
   const injections: string[] = [];
-
-  // 1. Selection context (what the user is looking at)
   try {
     const sel = await withTimeout(readSelectionContext().catch(() => null), 1500);
-    if (sel) {
-      injections.push(sel.text);
-    } else if (sel === null) {
-      // Timed out or failed — skip
-    }
-  } catch {
-    // Not in Excel or selection read failed — skip
-  }
-
-  // 2. User changes since last message
+    if (sel) injections.push(sel.text);
+  } catch {}
   const changes = changeTracker.flush();
-  if (changes) {
-    injections.push(changes);
-  }
-
-  // If nothing to inject, return messages unchanged
+  if (changes) injections.push(changes);
   if (injections.length === 0) return messages;
 
-  // Inject as a system message before the last user message
   const injection = injections.join("\n\n");
   const injectionMessage = {
     role: "user" as const,
     content: [{ type: "text" as const, text: `[Auto-context]\n${injection}` }],
   };
-
-  // Find the last user message and insert before it
   const nextMessages = [...messages];
   let lastUserIdx = -1;
   for (let i = nextMessages.length - 1; i >= 0; i--) {
-    if (nextMessages[i].role === "user") {
-      lastUserIdx = i;
-      break;
-    }
+    if (nextMessages[i].role === "user") { lastUserIdx = i; break; }
   }
-
   if (lastUserIdx >= 0) {
     nextMessages.splice(lastUserIdx, 0, injectionMessage);
   } else {
     nextMessages.push(injectionMessage);
   }
-
   return nextMessages;
 }
 
+
 // ============================================================================
-// Status bar — context % + thinking level
+// Status bar
 // ============================================================================
 
 function injectStatusBar(agent: Agent): void {
-  // Find the stats area rendered by AgentInterface (below the editor)
-  // We'll replace it with our own content via a MutationObserver
-  const bar = document.createElement("div");
-  bar.id = "pi-status-bar";
-  bar.className = "pi-status-bar";
-
-  // Initial render
-  updateStatusBar(agent, bar);
-
-  // Update on agent events
-  agent.subscribe(() => updateStatusBar(agent, bar));
-
-  // Insert after the message editor area
-  const tryInsert = () => {
-    const editorWrap = document.querySelector("agent-interface .shrink-0 .max-w-3xl");
-    if (editorWrap && !document.getElementById("pi-status-bar")) {
-      editorWrap.appendChild(bar);
-    } else {
-      requestAnimationFrame(tryInsert);
-    }
-  };
-  requestAnimationFrame(tryInsert);
+  agent.subscribe(() => updateStatusBar(agent));
+  // Initial render after sidebar mounts
+  requestAnimationFrame(() => updateStatusBar(agent));
 }
 
-function updateStatusBar(agent: Agent, bar?: HTMLElement): void {
-  const el = bar || document.getElementById("pi-status-bar");
+function updateStatusBar(agent: Agent): void {
+  const el = document.getElementById("pi-status-bar");
   if (!el) return;
 
   const state = agent.state;
-
-  // Compute token usage from messages
   let totalTokens = 0;
   for (const msg of state.messages) {
     const usage = (msg as any).usage;
-    if (usage) {
-      totalTokens += (usage.input || 0) + (usage.output || 0);
-    }
+    if (usage) totalTokens += (usage.input || 0) + (usage.output || 0);
   }
 
   const contextWindow = state.model?.contextWindow || 200000;
@@ -898,7 +796,6 @@ function updateStatusBar(agent: Agent, bar?: HTMLElement): void {
     ? `${(contextWindow / 1_000_000).toFixed(0)}M`
     : `${Math.round(contextWindow / 1000)}k`;
 
-  // Thinking level display
   const thinkingLabels: Record<string, string> = {
     off: "off", minimal: "min", low: "low", medium: "med", high: "high", xhigh: "max",
   };
@@ -912,40 +809,36 @@ function updateStatusBar(agent: Agent, bar?: HTMLElement): void {
   `;
 }
 
+
 // ============================================================================
-// Thinking level flash — visual feedback on change
+// Thinking level flash
 // ============================================================================
 
 function flashThinkingLevel(level: string, color: string): void {
   const labels: Record<string, string> = { off: "Off", low: "Low", medium: "Medium", high: "High" };
   showToast(`Thinking: ${labels[level] || level} (⇧Tab to toggle)`, 1500);
 
-  // Flash the status bar thinking indicator
   const el = document.querySelector(".pi-status-thinking") as HTMLElement;
   if (!el) return;
 
-  // Apply color + pulse animation
   el.style.color = color;
-  el.style.background = `${color}18`; // 10% opacity fill
+  el.style.background = `${color}18`;
   el.style.boxShadow = `0 0 8px ${color}40`;
   el.style.transition = "none";
 
-  // Also flash a thin bar at the bottom of the input area
   let flashBar = document.getElementById("pi-thinking-flash");
   if (!flashBar) {
     flashBar = document.createElement("div");
     flashBar.id = "pi-thinking-flash";
     flashBar.style.cssText = `
       position: fixed; bottom: 0; left: 0; right: 0; height: 2px;
-      pointer-events: none; z-index: 100;
-      transition: opacity 0.6s ease-out;
+      pointer-events: none; z-index: 100; transition: opacity 0.6s ease-out;
     `;
     document.body.appendChild(flashBar);
   }
   flashBar.style.background = `linear-gradient(90deg, transparent, ${color}, transparent)`;
   flashBar.style.opacity = "1";
 
-  // Fade out
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
       el.style.transition = "color 0.8s ease, background 0.8s ease, box-shadow 0.8s ease";
@@ -957,8 +850,9 @@ function flashThinkingLevel(level: string, color: string): void {
   });
 }
 
+
 // ============================================================================
-// Welcome / Login screen
+// Welcome / Login
 // ============================================================================
 
 async function showWelcomeLogin(providerKeys: InstanceType<typeof ProviderKeysStore>): Promise<void> {
@@ -972,13 +866,11 @@ async function showWelcomeLogin(providerKeys: InstanceType<typeof ProviderKeysSt
         <div class="pi-welcome-logo" style="text-align: center;">π</div>
         <h2 class="pi-welcome-title" style="text-align: center;">Pi for Excel</h2>
         <p class="pi-welcome-subtitle" style="text-align: center;">Connect a provider to get started</p>
-        <div class="pi-welcome-providers" style="display: flex; flex-direction: column; gap: 4px;"></div>
+        <div class="pi-welcome-providers"></div>
       </div>
     `;
-
     const providerList = overlay.querySelector(".pi-welcome-providers")!;
     const expandedRef = { current: null as HTMLElement | null };
-
     for (const provider of ALL_PROVIDERS) {
       const row = buildProviderRow(provider, {
         isActive: false,
@@ -994,10 +886,10 @@ async function showWelcomeLogin(providerKeys: InstanceType<typeof ProviderKeysSt
       });
       providerList.appendChild(row);
     }
-
     document.body.appendChild(overlay);
   });
 }
+
 
 // ============================================================================
 // Default model selection
@@ -1014,14 +906,12 @@ const PREFERRED_MODELS: [string, string][] = [
 function pickDefaultModel(availableProviders: string[]) {
   for (const [provider, modelId] of PREFERRED_MODELS) {
     if (availableProviders.includes(provider)) {
-      try {
-        return (getModel as any)(provider, modelId);
-      } catch { /* model not found */ }
+      try { return (getModel as any)(provider, modelId); } catch {}
     }
   }
-  // Fallback
   return getModel("anthropic", "claude-opus-4-5");
 }
+
 
 // ============================================================================
 // Error display
