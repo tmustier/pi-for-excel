@@ -36,6 +36,11 @@ import { ChangeTracker } from "./context/change-tracker.js";
 import { renderHeader, headerStyles } from "./ui/header.js";
 import { renderLoading, renderError, loadingStyles } from "./ui/loading.js";
 
+// Slash commands
+import { registerBuiltins } from "./commands/builtins.js";
+import { commandRegistry } from "./commands/types.js";
+import { wireCommandMenu, handleCommandMenuKey, isCommandMenuVisible, hideCommandMenu } from "./commands/command-menu.js";
+
 // ============================================================================
 // Globals
 // ============================================================================
@@ -247,6 +252,9 @@ async function init(): Promise<void> {
     }
   });
 
+  // ── Register slash commands ────────────────────────────────────
+  registerBuiltins(agent);
+
   // ── Keyboard shortcuts ──────────────────────────────────────────
   const THINKING_LEVELS = ["off", "low", "medium", "high"] as const;
   const THINKING_COLORS: Record<string, string> = {
@@ -258,9 +266,21 @@ async function init(): Promise<void> {
 
   // We capture on the document to intercept before MessageEditor's handler
   document.addEventListener("keydown", (e) => {
+    // Command menu takes priority when visible
+    if (isCommandMenuVisible()) {
+      if (handleCommandMenuKey(e)) return;
+    }
+
     const textarea = document.querySelector("message-editor textarea") as HTMLTextAreaElement | null;
     const isInEditor = textarea && (e.target === textarea || textarea.contains(e.target as Node));
     const isStreaming = agent.state.isStreaming;
+
+    // ESC — dismiss command menu first, then abort
+    if (e.key === "Escape" && isCommandMenuVisible()) {
+      e.preventDefault();
+      hideCommandMenu();
+      return;
+    }
 
     // ESC — abort (MessageEditor already handles this, but we add it globally too)
     if (e.key === "Escape" && isStreaming) {
@@ -281,6 +301,24 @@ async function init(): Promise<void> {
       updateStatusBar(agent);
       flashThinkingLevel(next, THINKING_COLORS[next] || "#a0a0a0");
       return;
+    }
+
+    // If user is typing a slash command (starts with /) and hits Enter — execute command
+    if (isInEditor && e.key === "Enter" && !e.shiftKey && textarea!.value.startsWith("/") && !isStreaming) {
+      const val = textarea!.value.trim();
+      const spaceIdx = val.indexOf(" ");
+      const cmdName = spaceIdx > 0 ? val.slice(1, spaceIdx) : val.slice(1);
+      const args = spaceIdx > 0 ? val.slice(spaceIdx + 1) : "";
+      const cmd = commandRegistry.get(cmdName);
+      if (cmd) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        hideCommandMenu();
+        textarea!.value = "";
+        textarea!.dispatchEvent(new Event("input", { bubbles: true }));
+        cmd.execute(args);
+        return;
+      }
     }
 
     // Enter/Alt+Enter in textarea while streaming — steer or follow-up
@@ -324,7 +362,7 @@ async function init(): Promise<void> {
   // Custom status bar — shows context % and thinking level
   injectStatusBar(agent);
 
-  // Auto-resize textarea — override pi-web-ui's inline max-height: 200px
+  // Auto-resize textarea + wire command menu
   const patchTextarea = () => {
     const ta = document.querySelector("message-editor textarea") as HTMLTextAreaElement | null;
     if (ta) {
@@ -336,8 +374,10 @@ async function init(): Promise<void> {
         ta.style.height = ta.scrollHeight + "px";
       };
       ta.addEventListener("input", autoGrow);
-      // Also observe value changes (e.g. clearing after send)
       new MutationObserver(autoGrow).observe(ta, { attributes: true, attributeFilter: ["value"] });
+
+      // Wire slash command menu
+      wireCommandMenu(ta);
     } else {
       requestAnimationFrame(patchTextarea);
     }

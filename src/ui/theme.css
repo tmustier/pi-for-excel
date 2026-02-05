@@ -389,6 +389,107 @@ message-editor .px-2.pb-2 > .flex.gap-2:last-child > button:last-child svg {
 
 
 /* ═══════════════════════════════════════════════════════════
+   SLASH COMMAND MENU
+   ═══════════════════════════════════════════════════════════ */
+
+.pi-cmd-menu {
+  position: fixed;
+  z-index: 150;
+  max-height: 260px;
+  overflow-y: auto;
+  background: oklch(1 0 0 / 0.88);
+  backdrop-filter: blur(24px) saturate(1.5);
+  -webkit-backdrop-filter: blur(24px) saturate(1.5);
+  border-radius: 12px;
+  border: 1px solid oklch(0 0 0 / 0.08);
+  box-shadow: 0 8px 24px oklch(0 0 0 / 0.10), inset 0 0 0 1px oklch(1 0 0 / 0.3);
+  padding: 4px;
+  display: none;
+}
+
+.pi-cmd-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.pi-cmd-item.selected {
+  background: var(--pi-green-light);
+}
+.pi-cmd-item:hover {
+  background: oklch(0 0 0 / 0.03);
+}
+.pi-cmd-item.selected:hover {
+  background: var(--pi-green-light);
+}
+
+.pi-cmd-name {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--foreground);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.pi-cmd-badge {
+  font-family: var(--font-sans);
+  font-size: 9.5px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: oklch(0.45 0.12 160 / 0.08);
+  color: var(--pi-green);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.pi-cmd-desc {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  color: var(--muted-foreground);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  margin-left: auto;
+}
+
+
+/* ═══════════════════════════════════════════════════════════
+   TOAST — brief notification
+   ═══════════════════════════════════════════════════════════ */
+
+.pi-toast {
+  position: fixed;
+  bottom: 60px;
+  left: 50%;
+  transform: translateX(-50%) translateY(8px);
+  z-index: 200;
+  padding: 8px 16px;
+  border-radius: 8px;
+  background: oklch(0.2 0 0 / 0.85);
+  color: white;
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  opacity: 0;
+  transition: opacity 0.2s, transform 0.2s;
+  pointer-events: none;
+}
+.pi-toast.visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+
+/* ═══════════════════════════════════════════════════════════
    STEERING — keep textarea editable during streaming
    ═══════════════════════════════════════════════════════════ */
 
