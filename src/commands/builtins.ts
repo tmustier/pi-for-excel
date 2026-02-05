@@ -53,21 +53,12 @@ export function registerBuiltins(agent: Agent): void {
       source: "builtin",
       execute: () => {
         const msgs = agent.state.messages;
-        // Find last assistant message
-        for (let i = msgs.length - 1; i >= 0; i--) {
-          const msg = msgs[i] as any;
-          if (msg.role === "assistant") {
-            const text = msg.content
-              ?.filter((b: any) => b.type === "text")
-              .map((b: any) => b.text)
-              .join("\n") || "";
-            if (text) {
-              navigator.clipboard.writeText(text).then(() => {
-                showToast("Copied to clipboard");
-              });
-            }
-            return;
-          }
+        const text = getLastAssistantText(msgs);
+        if (text) {
+          navigator.clipboard.writeText(text).then(() => {
+            showToast("Copied to clipboard");
+          });
+          return;
         }
         showToast("No agent message to copy");
       },
@@ -85,19 +76,8 @@ export function registerBuiltins(agent: Agent): void {
 
         // Build a readable transcript
         const transcript = msgs.map((m: any) => {
-          const role = m.role;
-          const content = m.content;
-          const text = typeof content === "string"
-            ? content
-            : Array.isArray(content)
-              ? content.map((b: any) => {
-                  if (b.type === "text") return b.text;
-                  if (b.type === "tool_use") return `[tool_use: ${b.name}(${JSON.stringify(b.input).slice(0, 200)})]`;
-                  if (b.type === "tool_result") return `[tool_result: ${typeof b.content === "string" ? b.content.slice(0, 500) : JSON.stringify(b.content).slice(0, 500)}]`;
-                  return `[${b.type}]`;
-                }).join("\n")
-              : "";
-          return { role, text, ...(m.usage ? { usage: m.usage } : {}), ...(m.stopReason ? { stopReason: m.stopReason } : {}) };
+          const text = summarizeContentForTranscript(m.content);
+          return { role: m.role, text, ...(m.usage ? { usage: m.usage } : {}), ...(m.stopReason ? { stopReason: m.stopReason } : {}) };
         });
 
         const exportData = {
@@ -166,8 +146,9 @@ export function registerBuiltins(agent: Agent): void {
         // Signal new session (resets ID) then clear messages
         document.dispatchEvent(new CustomEvent("pi:session-new"));
         agent.clearMessages();
-        // Show empty state again
-        document.getElementById("empty-state")?.classList.remove("hidden");
+        // Force sidebar to re-render (empty state shows automatically when no messages)
+        const sidebar = document.querySelector("pi-sidebar") as any;
+        if (sidebar) sidebar.requestUpdate();
         showToast("New session started");
       },
     },
@@ -193,14 +174,7 @@ export function registerBuiltins(agent: Agent): void {
         try {
           const { completeSimple } = await import("@mariozechner/pi-ai");
           // Serialize conversation for summarization
-          const convo = msgs.map((m: any) => {
-            const role = m.role === "user" ? "User" : "Assistant";
-            const text = m.content
-              ?.filter((b: any) => b.type === "text")
-              .map((b: any) => b.text)
-              .join("\n") || "";
-            return `${role}: ${text}`;
-          }).join("\n\n");
+          const convo = conversationToText(msgs);
 
           const result = await completeSimple(agent.state.model!, {
             systemPrompt: "You are a conversation summarizer. Summarize the following conversation concisely, preserving key decisions, facts, and context. Output ONLY the summary, no preamble.",
@@ -227,7 +201,7 @@ export function registerBuiltins(agent: Agent): void {
             stopReason: "end_turn",
           } as any]);
 
-          const iface = document.querySelector("agent-interface") as any;
+          const iface = document.querySelector("pi-sidebar") as any;
           if (iface) iface.requestUpdate();
           showToast(`Compacted ${msgs.length} messages → summary`);
         } catch (e: any) {
@@ -243,6 +217,60 @@ export function registerBuiltins(agent: Agent): void {
 }
 
 // ── Helpers ────────────────────────────────────────────────
+
+function extractTextBlocks(content: any): string {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content
+    .filter((b: any) => b.type === "text")
+    .map((b: any) => b.text)
+    .join("\n");
+}
+
+function summarizeContentForTranscript(
+  content: any,
+  limits = { toolInput: 200, toolResult: 500 },
+): string {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content
+    .map((b: any) => {
+      if (b.type === "text") return b.text;
+      if (b.type === "tool_use") {
+        const input = JSON.stringify(b.input);
+        const snippet = input.length > limits.toolInput ? input.slice(0, limits.toolInput) : input;
+        return `[tool_use: ${b.name}(${snippet})]`;
+      }
+      if (b.type === "tool_result") {
+        const raw = typeof b.content === "string" ? b.content : JSON.stringify(b.content);
+        const snippet = raw.length > limits.toolResult ? raw.slice(0, limits.toolResult) : raw;
+        return `[tool_result: ${snippet}]`;
+      }
+      return `[${b.type}]`;
+    })
+    .join("\n");
+}
+
+function getLastAssistantText(messages: any[]): string | null {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i] as any;
+    if (msg.role === "assistant") {
+      const text = extractTextBlocks(msg.content).trim();
+      return text || null;
+    }
+  }
+  return null;
+}
+
+function conversationToText(messages: any[]): string {
+  return messages
+    .map((m: any) => {
+      const role = m.role === "user" ? "User" : "Assistant";
+      const text = extractTextBlocks(m.content);
+      return `${role}: ${text}`;
+    })
+    .join("\n\n");
+}
 
 function openModelSelector(agent: Agent): void {
   ModelSelector.open(agent.state.model, (model) => {
@@ -370,10 +398,9 @@ async function showResumeDialog(agent: Agent): Promise<void> {
     }));
 
     // Force UI to re-render + hide empty state
-    const iface = document.querySelector("agent-interface") as any;
+    const iface = document.querySelector("pi-sidebar") as any;
     if (iface) iface.requestUpdate();
     document.dispatchEvent(new CustomEvent("pi:model-changed"));
-    document.getElementById("empty-state")?.classList.add("hidden");
 
     overlay!.remove();
     showToast(`Resumed: ${sessionData.title || "Untitled"}`);
