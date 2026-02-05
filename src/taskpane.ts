@@ -541,6 +541,20 @@ function updateStatusBar(agent: Agent, bar?: HTMLElement): void {
 // ============================================================================
 
 function flashThinkingLevel(level: string, color: string): void {
+  // Toast with level name
+  const labels: Record<string, string> = { off: "Off", low: "Low", medium: "Medium", high: "High" };
+  const label = labels[level] || level;
+  let toast = document.getElementById("pi-toast");
+  if (!toast) {
+    toast = document.createElement("div");
+    toast.id = "pi-toast";
+    toast.className = "pi-toast";
+    document.body.appendChild(toast);
+  }
+  toast.textContent = `Thinking: ${label} (⇧Tab to toggle)`;
+  toast.classList.add("visible");
+  setTimeout(() => toast!.classList.remove("visible"), 1500);
+
   // Flash the status bar thinking indicator
   const el = document.querySelector(".pi-status-thinking") as HTMLElement;
   if (!el) return;
