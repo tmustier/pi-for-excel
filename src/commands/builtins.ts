@@ -5,6 +5,7 @@
 import { commandRegistry, type SlashCommand } from "./types.js";
 import type { Agent } from "@mariozechner/pi-agent-core";
 import { ModelSelector, getAppStorage } from "@mariozechner/pi-web-ui";
+import { showToast } from "../ui/toast.js";
 
 /** Register all built-in commands. Call once after agent is created. */
 export function registerBuiltins(agent: Agent): void {
@@ -14,11 +15,7 @@ export function registerBuiltins(agent: Agent): void {
       description: "Change the AI model",
       source: "builtin",
       execute: () => {
-        ModelSelector.open(agent.state.model, (model) => {
-          agent.setModel(model);
-          // Header update is handled by the agent subscriber in taskpane.ts
-          document.dispatchEvent(new CustomEvent("pi:model-changed"));
-        });
+        openModelSelector(agent);
       },
     },
     {
@@ -28,10 +25,7 @@ export function registerBuiltins(agent: Agent): void {
       execute: () => {
         // TODO: implement scoped models dialog
         // For now, open model selector as a placeholder
-        ModelSelector.open(agent.state.model, (model) => {
-          agent.setModel(model);
-          document.dispatchEvent(new CustomEvent("pi:model-changed"));
-        });
+        openModelSelector(agent);
       },
     },
     {
@@ -50,7 +44,7 @@ export function registerBuiltins(agent: Agent): void {
       description: "Add or change provider API keys",
       source: "builtin",
       execute: async () => {
-        await showProviderPicker(agent);
+        await showProviderPicker();
       },
     },
     {
@@ -250,20 +244,15 @@ export function registerBuiltins(agent: Agent): void {
 
 // ── Helpers ────────────────────────────────────────────────
 
-function showToast(message: string): void {
-  let toast = document.getElementById("pi-toast");
-  if (!toast) {
-    toast = document.createElement("div");
-    toast.id = "pi-toast";
-    toast.className = "pi-toast";
-    document.body.appendChild(toast);
-  }
-  toast.textContent = message;
-  toast.classList.add("visible");
-  setTimeout(() => toast!.classList.remove("visible"), 2000);
+function openModelSelector(agent: Agent): void {
+  ModelSelector.open(agent.state.model, (model) => {
+    agent.setModel(model);
+    // Header update is handled by the agent subscriber in taskpane.ts
+    document.dispatchEvent(new CustomEvent("pi:model-changed"));
+  });
 }
 
-async function showProviderPicker(agent: Agent): Promise<void> {
+async function showProviderPicker(): Promise<void> {
   let overlay = document.getElementById("pi-login-overlay");
   if (overlay) { overlay.remove(); return; }
 

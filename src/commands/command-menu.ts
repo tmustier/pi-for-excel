@@ -17,7 +17,6 @@ const SOURCE_BADGES: Record<string, string> = {
 let menuEl: HTMLElement | null = null;
 let selectedIndex = 0;
 let filteredCommands: SlashCommand[] = [];
-let onDismiss: (() => void) | null = null;
 
 export function showCommandMenu(filter: string, anchor: HTMLElement): void {
   filteredCommands = commandRegistry.list(filter);
@@ -49,7 +48,6 @@ export function hideCommandMenu(): void {
     menuEl.style.display = "none";
   }
   selectedIndex = 0;
-  onDismiss = null;
 }
 
 export function isCommandMenuVisible(): boolean {

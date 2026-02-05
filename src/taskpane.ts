@@ -10,7 +10,7 @@ import "./boot.js";
 
 import { html, render } from "lit";
 import { Agent } from "@mariozechner/pi-agent-core";
-import { getModel, getProviders, getModels, supportsXhigh, type KnownProvider } from "@mariozechner/pi-ai";
+import { getModel, supportsXhigh } from "@mariozechner/pi-ai";
 import {
   ChatPanel,
   AppStorage,
@@ -35,6 +35,7 @@ import { ChangeTracker } from "./context/change-tracker.js";
 // UI components — extracted for easy swapping
 import { renderHeader, headerStyles } from "./ui/header.js";
 import { renderLoading, renderError, loadingStyles } from "./ui/loading.js";
+import { showToast } from "./ui/toast.js";
 
 // Slash commands + extensions
 import { registerBuiltins } from "./commands/builtins.js";
@@ -915,22 +916,9 @@ function updateStatusBar(agent: Agent, bar?: HTMLElement): void {
 // Thinking level flash — visual feedback on change
 // ============================================================================
 
-function flashToast(message: string, duration = 1500): void {
-  let toast = document.getElementById("pi-toast");
-  if (!toast) {
-    toast = document.createElement("div");
-    toast.id = "pi-toast";
-    toast.className = "pi-toast";
-    document.body.appendChild(toast);
-  }
-  toast.textContent = message;
-  toast.classList.add("visible");
-  setTimeout(() => toast!.classList.remove("visible"), duration);
-}
-
 function flashThinkingLevel(level: string, color: string): void {
   const labels: Record<string, string> = { off: "Off", low: "Low", medium: "Medium", high: "High" };
-  flashToast(`Thinking: ${labels[level] || level} (⇧Tab to toggle)`);
+  showToast(`Thinking: ${labels[level] || level} (⇧Tab to toggle)`, 1500);
 
   // Flash the status bar thinking indicator
   const el = document.querySelector(".pi-status-thinking") as HTMLElement;
@@ -999,7 +987,7 @@ async function showWelcomeLogin(providerKeys: InstanceType<typeof ProviderKeysSt
           const updated = await providerKeys.list();
           setActiveProviders(new Set(updated));
           document.dispatchEvent(new CustomEvent("pi:providers-changed"));
-          flashToast(`${label} connected`);
+          showToast(`${label} connected`);
           overlay.remove();
           resolve();
         },

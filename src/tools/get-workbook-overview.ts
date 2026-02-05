@@ -8,7 +8,7 @@
  * This is RICHER than Claude's thin push (just sheet name + dimensions).
  */
 
-import { Type, type Static } from "@sinclair/typebox";
+import { Type } from "@sinclair/typebox";
 import type { AgentTool, AgentToolResult } from "@mariozechner/pi-agent-core";
 import { excelRun } from "../excel/helpers.js";
 

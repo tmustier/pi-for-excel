@@ -189,7 +189,6 @@ export function createModifyStructureTool(): AgentTool<typeof schema> {
               if (params.new_name) {
                 copy.load("name");
                 await context.sync();
-                const oldName = copy.name;
                 copy.name = params.new_name;
                 await context.sync();
                 return `Duplicated "${params.sheet}" as "${params.new_name}".`;
