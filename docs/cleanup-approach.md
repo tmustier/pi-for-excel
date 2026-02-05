@@ -37,6 +37,15 @@ Three review lenses:
 - `npx vite build`
 - Manual spot test in Excel add‑in
 
+## Current hotspots / refactor candidates (keep a running list)
+
+- `src/taskpane.ts`
+  - Split into smaller modules (model selection, header/pop-out sync, session persistence).
+  - Reduce `any` usage around models; prefer typed model interface.
+  - Move model ordering/"featured" rules into a dedicated `src/models/` helper so they’re testable.
+  - Consider removing the ModelSelector monkey-patch in favor of an explicit wrapper API (if Pi-web-ui exposes hooks).
+  - Add small unit tests for `parseMajorMinor()` / `modelRecencyScore()`.
+
 ## Output expectations
 
 - **Small, surgical commits** per cleanup area

@@ -4,6 +4,7 @@ Short, topic-based docs (mirrors Pi's layout). Keep deeper decisions close to th
 
 ## Architecture & Process
 - [Cleanup approach](./cleanup-approach.md)
+- [Model/dependency update playbook](./model-updates.md)
 - [UI architecture](../src/ui/README.md) — layout, styling, the `@layer` gotcha
 
 ## Tools
