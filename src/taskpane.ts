@@ -36,10 +36,11 @@ import { ChangeTracker } from "./context/change-tracker.js";
 import { renderHeader, headerStyles } from "./ui/header.js";
 import { renderLoading, renderError, loadingStyles } from "./ui/loading.js";
 
-// Slash commands
+// Slash commands + extensions
 import { registerBuiltins } from "./commands/builtins.js";
 import { commandRegistry } from "./commands/types.js";
 import { wireCommandMenu, handleCommandMenuKey, isCommandMenuVisible, hideCommandMenu } from "./commands/command-menu.js";
+import { createExtensionAPI, loadExtension } from "./commands/extension-api.js";
 
 // ============================================================================
 // Globals
@@ -252,8 +253,13 @@ async function init(): Promise<void> {
     }
   });
 
-  // ── Register slash commands ────────────────────────────────────
+  // ── Register slash commands + load extensions ─────────────────
   registerBuiltins(agent);
+
+  const extensionAPI = createExtensionAPI(agent);
+  // Load bundled extensions
+  const { activate: activateSnake } = await import("./extensions/snake.js");
+  await loadExtension(extensionAPI, activateSnake);
 
   // ── Keyboard shortcuts ──────────────────────────────────────────
   const THINKING_LEVELS = ["off", "low", "medium", "high"] as const;
