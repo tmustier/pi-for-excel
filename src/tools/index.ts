@@ -3,6 +3,7 @@
  */
 
 import type { AgentTool } from "@mariozechner/pi-agent-core";
+import type { TSchema } from "@sinclair/typebox";
 import { createGetWorkbookOverviewTool } from "./get-workbook-overview.js";
 import { createReadRangeTool } from "./read-range.js";
 import { createWriteCellsTool } from "./write-cells.js";
@@ -18,9 +19,11 @@ import { createGetRangeAsCsvTool } from "./get-range-as-csv.js";
 import { createGetAllObjectsTool } from "./get-all-objects.js";
 import type { ChangeTracker } from "../context/change-tracker.js";
 
+type AnyTool = AgentTool<TSchema, unknown>;
+
 /** Create all Excel tools */
-export function createAllTools(opts?: { changeTracker?: ChangeTracker }): AgentTool<any>[] {
-  const tools: AgentTool<any>[] = [
+export function createAllTools(opts?: { changeTracker?: ChangeTracker }): AnyTool[] {
+  const tools = [
     createGetWorkbookOverviewTool(),
     createReadRangeTool(),
     createReadSelectionTool(),
@@ -33,10 +36,10 @@ export function createAllTools(opts?: { changeTracker?: ChangeTracker }): AgentT
     createFormatCellsTool(),
     createConditionalFormatTool(),
     createTraceDependenciesTool(),
-  ];
+  ] as unknown as AnyTool[];
 
   if (opts?.changeTracker) {
-    tools.push(createGetRecentChangesTool(opts.changeTracker));
+    tools.push(createGetRecentChangesTool(opts.changeTracker) as unknown as AnyTool);
   }
 
   return tools;

@@ -36,8 +36,11 @@ function piAuthPlugin(): Plugin {
 // ============================================================================
 
 /** Common proxy config: strip Origin/Referer so the target sees a server request */
-function stripBrowserHeaders(proxy: any) {
-  proxy.on("proxyReq", (proxyReq: any) => {
+type ProxyReqLike = { removeHeader(name: string): void };
+type ProxyServerLike = { on(event: "proxyReq", handler: (proxyReq: ProxyReqLike) => void): void };
+
+function stripBrowserHeaders(proxy: ProxyServerLike) {
+  proxy.on("proxyReq", (proxyReq) => {
     proxyReq.removeHeader("origin");
     proxyReq.removeHeader("referer");
     proxyReq.removeHeader("sec-fetch-mode");

@@ -43,7 +43,7 @@ export function createGetAllObjectsTool(): AgentTool<typeof schema> {
           pivotTables.load("items/name");
           const pivotCount = pivotTables.getCount();
 
-          let shapes: any | null = null;
+          let shapes: Excel.ShapeCollection | null = null;
           try {
             shapes = sheet.shapes;
             shapes.load("items/name");
@@ -55,10 +55,10 @@ export function createGetAllObjectsTool(): AgentTool<typeof schema> {
 
           return {
             sheetName: sheet.name,
-            charts: charts.items.map((c: any) => c.name),
-            pivotTables: pivotTables.items.map((p: any) => p.name),
+            charts: charts.items.map((c) => c.name),
+            pivotTables: pivotTables.items.map((p) => p.name),
             pivotCount: pivotCount.value,
-            shapes: shapes ? shapes.items.map((s: any) => s.name) : [],
+            shapes: shapes ? shapes.items.map((s) => s.name) : [],
           };
         });
 

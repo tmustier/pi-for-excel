@@ -177,7 +177,7 @@ async function addFormat(params: Params): Promise<AgentToolResult<undefined>> {
     } else {
       const operator = params.operator as CellValueOperator;
       const formula1 = stringifyValue(params.value);
-      const rule: any = { formula1, operator };
+      const rule: Excel.ConditionalCellValueRule = { formula1, operator };
       if (params.value2 !== undefined) {
         rule.formula2 = stringifyValue(params.value2);
       }
@@ -238,7 +238,7 @@ function stringifyValue(value: string | number | undefined): string {
   return typeof value === "number" ? value.toString() : value;
 }
 
-function applyFormat(format: any, params: Params): void {
+function applyFormat(format: Excel.ConditionalRangeFormat, params: Params): void {
   if (params.fill_color) {
     format.fill.color = params.fill_color;
   }

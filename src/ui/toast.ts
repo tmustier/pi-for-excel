@@ -12,5 +12,6 @@ export function showToast(message: string, duration = 2000): void {
   }
   toast.textContent = message;
   toast.classList.add("visible");
-  setTimeout(() => toast!.classList.remove("visible"), duration);
+  const toastEl = toast;
+  setTimeout(() => toastEl.classList.remove("visible"), duration);
 }

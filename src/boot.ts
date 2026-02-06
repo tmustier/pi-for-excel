@@ -26,24 +26,44 @@ import { ReactiveElement } from "lit";
  *
  * See: https://lit.dev/msg/class-field-shadowing
  */
-const _origPerformUpdate = (ReactiveElement.prototype as any).performUpdate;
-(ReactiveElement.prototype as any).performUpdate = function (this: ReactiveElement) {
+
+type PerformUpdateFn = (this: ReactiveElement) => unknown;
+
+const reactiveProto = ReactiveElement.prototype as unknown as {
+  performUpdate: PerformUpdateFn;
+};
+
+const _origPerformUpdate = reactiveProto.performUpdate;
+
+reactiveProto.performUpdate = function (this: ReactiveElement) {
   if (!this.hasUpdated) {
     const proto = Object.getPrototypeOf(this);
+    const self = this as unknown as Record<string, unknown>;
+
     for (const key of Object.getOwnPropertyNames(this)) {
-      if (key.startsWith("__") || key === "renderRoot" || key === "isUpdatePending" || key === "hasUpdated") continue;
+      if (
+        key.startsWith("__") ||
+        key === "renderRoot" ||
+        key === "isUpdatePending" ||
+        key === "hasUpdated"
+      ) {
+        continue;
+      }
+
       const protoDesc = Object.getOwnPropertyDescriptor(proto, key);
       if (protoDesc && (protoDesc.get || protoDesc.set)) {
         const ownDesc = Object.getOwnPropertyDescriptor(this, key);
+        // Own, data-only property shadows a proto accessor.
         if (ownDesc && !ownDesc.get && !ownDesc.set) {
-          const value = (this as any)[key];
-          delete (this as any)[key];
+          const value = self[key];
+          delete self[key];
           if (protoDesc.set) {
-            (this as any)[key] = value;
+            self[key] = value;
           }
         }
       }
     }
   }
+
   return _origPerformUpdate.call(this);
 };

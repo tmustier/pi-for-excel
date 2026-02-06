@@ -46,6 +46,25 @@ interface InvalidFormula {
   reason: string;
 }
 
+type WriteCellsResult =
+  | {
+    blocked: true;
+    sheetName: string;
+    address: string;
+    existingCount: number;
+    existingValues: unknown[][];
+  }
+  | {
+    blocked: false;
+    sheetName: string;
+    address: string;
+    readBackValues: unknown[][];
+    readBackFormulas: unknown[][];
+  };
+
+type BlockedWriteCellsResult = Extract<WriteCellsResult, { blocked: true }>;
+type SuccessWriteCellsResult = Extract<WriteCellsResult, { blocked: false }>;
+
 export function createWriteCellsTool(): AgentTool<typeof schema> {
   return {
     name: "write_cells",
@@ -103,7 +122,7 @@ export function createWriteCellsTool(): AgentTool<typeof schema> {
           return { content: [{ type: "text", text: lines.join("\n") }], details: undefined };
         }
 
-        const result = await excelRun(async (context) => {
+        const result = await excelRun<WriteCellsResult>(async (context) => {
           const { sheet } = getRange(context, params.start_cell);
           sheet.load("name");
 
@@ -228,7 +247,7 @@ export function countOccupiedCells(values: unknown[][], formulas: unknown[][]): 
   return count;
 }
 
-function formatBlocked(result: any): AgentToolResult<undefined> {
+function formatBlocked(result: BlockedWriteCellsResult): AgentToolResult<undefined> {
   const fullAddr = qualifiedAddress(result.sheetName, result.address);
   const lines: string[] = [];
 
@@ -250,7 +269,7 @@ function formatBlocked(result: any): AgentToolResult<undefined> {
   return { content: [{ type: "text", text: lines.join("\n") }], details: undefined };
 }
 
-function formatSuccess(result: any, rows: number, cols: number): AgentToolResult<undefined> {
+function formatSuccess(result: SuccessWriteCellsResult, rows: number, cols: number): AgentToolResult<undefined> {
   const fullAddr = qualifiedAddress(result.sheetName, result.address);
   const cellPart = result.address.includes("!") ? result.address.split("!")[1] : result.address;
   const startCell = cellPart.split(":")[0];
@@ -268,7 +287,10 @@ function formatSuccess(result: any, rows: number, cols: number): AgentToolResult
       const r = errCell.row - start.row;
       const c = errCell.col - start.col;
       if (r >= 0 && c >= 0 && r < result.readBackFormulas.length && c < result.readBackFormulas[r].length) {
-        err.formula = result.readBackFormulas[r][c];
+        const f = result.readBackFormulas[r][c];
+        if (typeof f === "string") {
+          err.formula = f;
+        }
       }
     }
 

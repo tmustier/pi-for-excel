@@ -48,7 +48,7 @@ type Params = Static<typeof schema>;
 interface SearchMatch {
   sheet: string;
   address: string;
-  value: any;
+  value: unknown;
   formula?: string;
 }
 
@@ -73,7 +73,7 @@ export function createSearchWorkbookTool(): AgentTool<typeof schema> {
         const query = params.query;
         const queryLower = query.toLowerCase();
 
-        let regex: RegExp | null = null;
+        let regex: RegExp | undefined;
         if (useRegex) {
           try {
             regex = new RegExp(query, "i");
@@ -94,8 +94,8 @@ export function createSearchWorkbookTool(): AgentTool<typeof schema> {
           await context.sync();
 
           const targetSheets = params.sheet
-            ? sheets.items.filter((s: any) => s.name === params.sheet)
-            : sheets.items.filter((s: any) => s.visibility === "Visible");
+            ? sheets.items.filter((s) => s.name === params.sheet)
+            : sheets.items.filter((s) => s.visibility === "Visible");
 
           outer: for (const sheet of targetSheets) {
             const used = sheet.getUsedRangeOrNullObject();
@@ -127,11 +127,11 @@ export function createSearchWorkbookTool(): AgentTool<typeof schema> {
                 if (searchFormulas) {
                   if (typeof formula !== "string" || formula.length === 0) continue;
                   const target = formula;
-                  match = useRegex ? regex!.test(target) : target.toLowerCase().includes(queryLower);
+                  match = regex ? regex.test(target) : target.toLowerCase().includes(queryLower);
                 } else {
                   if (value === null || value === undefined || value === "") continue;
                   const target = String(value);
-                  match = useRegex ? regex!.test(target) : target.toLowerCase().includes(queryLower);
+                  match = regex ? regex.test(target) : target.toLowerCase().includes(queryLower);
                 }
 
                 if (match) {

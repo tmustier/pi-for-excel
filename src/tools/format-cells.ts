@@ -74,6 +74,17 @@ const schema = Type.Object({
 
 type Params = Static<typeof schema>;
 
+type HorizontalAlignment = "Left" | "Center" | "Right" | "General";
+type VerticalAlignment = "Top" | "Center" | "Bottom";
+
+function isHorizontalAlignment(value: string): value is HorizontalAlignment {
+  return value === "Left" || value === "Center" || value === "Right" || value === "General";
+}
+
+function isVerticalAlignment(value: string): value is VerticalAlignment {
+  return value === "Top" || value === "Center" || value === "Bottom";
+}
+
 export function createFormatCellsTool(): AgentTool<typeof schema> {
   return {
     name: "format_cells",
@@ -89,23 +100,29 @@ export function createFormatCellsTool(): AgentTool<typeof schema> {
     ): Promise<AgentToolResult<undefined>> => {
       try {
         const result = await excelRun(async (context) => {
-          const { sheet, target, isMultiRange } = resolveFormatTarget(context, params.range);
-          sheet.load("name");
-          target.load("address");
+          const resolved = resolveFormatTarget(context, params.range);
+          resolved.sheet.load("name");
+          resolved.target.load("address");
 
-          const needsAreas = isMultiRange && (params.number_format || params.merge !== undefined);
-          if (!isMultiRange) {
-            target.load("rowCount,columnCount");
+          const requestedColumnWidth = params.column_width;
+
+          const needsAreas = resolved.isMultiRange && (params.number_format || params.merge !== undefined);
+          if (!resolved.isMultiRange) {
+            resolved.target.load("rowCount,columnCount");
           } else if (needsAreas) {
-            target.areas.load("items/rowCount,items/columnCount");
+            resolved.target.areas.load("items/rowCount,items/columnCount");
           }
 
           await context.sync();
 
+          const sheet = resolved.sheet;
+          const target = resolved.target;
+          const isMultiRange = resolved.isMultiRange;
+
           const applied: string[] = [];
           const warnings: string[] = [];
           const formatTarget = target.format;
-          let columnWidthFormat: any | null = null;
+          let columnWidthFormat: Excel.RangeFormat | null = null;
 
           // Font properties
           if (params.bold !== undefined) {
@@ -141,28 +158,41 @@ export function createFormatCellsTool(): AgentTool<typeof schema> {
 
           // Number format
           if (params.number_format) {
-            if (!isMultiRange) {
-              const formatMatrix = Array.from({ length: target.rowCount }, () =>
-                Array.from({ length: target.columnCount }, () => params.number_format),
+            const numberFormat = params.number_format;
+            if (!resolved.isMultiRange) {
+              const range = resolved.target;
+              const formatMatrix = Array.from({ length: range.rowCount }, () =>
+                Array.from({ length: range.columnCount }, () => numberFormat),
               );
-              target.numberFormat = formatMatrix as any;
+              range.numberFormat = formatMatrix;
             } else {
-              for (const area of target.areas.items) {
+              const areas = resolved.target;
+              for (const area of areas.areas.items) {
                 const formatMatrix = Array.from({ length: area.rowCount }, () =>
-                  Array.from({ length: area.columnCount }, () => params.number_format),
+                  Array.from({ length: area.columnCount }, () => numberFormat),
                 );
-                area.numberFormat = formatMatrix as any;
+                area.numberFormat = formatMatrix;
               }
             }
-            applied.push(`format "${params.number_format}"`);
+            applied.push(`format "${numberFormat}"`);
           }
 
           // Alignment
           if (params.horizontal_alignment) {
+            if (!isHorizontalAlignment(params.horizontal_alignment)) {
+              throw new Error(
+                `Invalid horizontal_alignment "${params.horizontal_alignment}". Use Left, Center, Right, or General.`,
+              );
+            }
             formatTarget.horizontalAlignment = params.horizontal_alignment;
             applied.push(`align ${params.horizontal_alignment.toLowerCase()}`);
           }
           if (params.vertical_alignment) {
+            if (!isVerticalAlignment(params.vertical_alignment)) {
+              throw new Error(
+                `Invalid vertical_alignment "${params.vertical_alignment}". Use Top, Center, or Bottom.`,
+              );
+            }
             formatTarget.verticalAlignment = params.vertical_alignment;
             applied.push(`v-align ${params.vertical_alignment.toLowerCase()}`);
           }
@@ -204,33 +234,29 @@ export function createFormatCellsTool(): AgentTool<typeof schema> {
 
           // Borders
           if (params.borders) {
-            const borderValue = params.borders.toLowerCase();
-            if (!['none', 'thin', 'medium', 'thick'].includes(borderValue)) {
-              throw new Error(`Invalid borders value "${params.borders}". Use thin, medium, thick, or none.`);
-            }
-            const borderWeight =
-              borderValue === "thin"
-                ? "Thin"
-                : borderValue === "medium"
-                  ? "Medium"
-                  : borderValue === "thick"
-                    ? "Thick"
-                    : null;
+            const borderValue = params.borders;
 
-            const borders = [
+            const borderIndexes = [
               "EdgeTop",
               "EdgeBottom",
               "EdgeLeft",
               "EdgeRight",
               "InsideHorizontal",
               "InsideVertical",
-            ];
-            for (const border of borders) {
+            ] as const;
+
+            for (const border of borderIndexes) {
               const borderItem = formatTarget.borders.getItem(border);
               if (borderValue === "none") {
                 borderItem.style = "None";
               } else {
                 borderItem.style = "Continuous";
+                const borderWeight: "Thin" | "Medium" | "Thick" =
+                  borderValue === "thin"
+                    ? "Thin"
+                    : borderValue === "medium"
+                      ? "Medium"
+                      : "Thick";
                 borderItem.weight = borderWeight;
               }
             }
@@ -239,8 +265,9 @@ export function createFormatCellsTool(): AgentTool<typeof schema> {
 
           // Merge
           if (params.merge !== undefined) {
-            if (isMultiRange) {
-              for (const area of target.areas.items) {
+            if (resolved.isMultiRange) {
+              const areas = resolved.target;
+              for (const area of areas.areas.items) {
                 if (params.merge) {
                   area.merge();
                 } else {
@@ -249,24 +276,26 @@ export function createFormatCellsTool(): AgentTool<typeof schema> {
               }
               applied.push(params.merge ? "merged" : "unmerged");
             } else if (params.merge) {
-              target.merge();
+              const range = resolved.target;
+              range.merge();
               applied.push("merged");
             } else {
-              target.unmerge();
+              const range = resolved.target;
+              range.unmerge();
               applied.push("unmerged");
             }
           }
 
           await context.sync();
 
-          if (columnWidthFormat) {
+          if (columnWidthFormat && typeof requestedColumnWidth === "number") {
             const actualPoints = columnWidthFormat.columnWidth;
             if (typeof actualPoints === "number") {
               const actualChars = actualPoints / POINTS_PER_CHAR_ARIAL_10;
-              const delta = Math.abs(actualChars - params.column_width!);
+              const delta = Math.abs(actualChars - requestedColumnWidth);
               if (delta > 0.1) {
                 warnings.push(
-                  `Requested column width ${params.column_width}, Excel applied ${actualChars.toFixed(2)}.`
+                  `Requested column width ${requestedColumnWidth}, Excel applied ${actualChars.toFixed(2)}.`
                 );
               }
             } else {
@@ -309,11 +338,11 @@ function splitRangeList(range: string): string[] {
     .filter(Boolean);
 }
 
-function resolveFormatTarget(context: Excel.RequestContext, ref: string): {
-  sheet: any;
-  target: any;
-  isMultiRange: boolean;
-} {
+type FormatResolution =
+  | { sheet: Excel.Worksheet; target: Excel.Range; isMultiRange: false }
+  | { sheet: Excel.Worksheet; target: Excel.RangeAreas; isMultiRange: true };
+
+function resolveFormatTarget(context: Excel.RequestContext, ref: string): FormatResolution {
   const parts = splitRangeList(ref);
   if (parts.length <= 1) {
     const { sheet, range } = getRange(context, ref);

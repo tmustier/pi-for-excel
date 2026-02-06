@@ -98,7 +98,10 @@ export function buildProviderRow(
     </div>
   `;
 
-  const headerBtn = row.querySelector(".pi-welcome-provider")!;
+  const headerBtn = row.querySelector<HTMLButtonElement>(".pi-welcome-provider");
+  if (!headerBtn) {
+    throw new Error("Provider row header button not found");
+  }
   const detail = row.querySelector(".pi-login-detail") as HTMLElement;
   const keyInput = row.querySelector(".pi-login-key") as HTMLInputElement;
   const saveBtn = row.querySelector(".pi-login-save") as HTMLButtonElement;
@@ -126,7 +129,10 @@ export function buildProviderRow(
       oauthBtn.style.opacity = "0.7";
       try {
         const { getOAuthProvider } = await import("@mariozechner/pi-ai");
-        const oauthProvider = getOAuthProvider(oauth as any);
+        if (!oauth) {
+          throw new Error("OAuth provider id missing");
+        }
+        const oauthProvider = getOAuthProvider(oauth);
         if (oauthProvider) {
           const cred = await oauthProvider.login({
             onAuth: (info) => { window.open(info.url, "_blank"); },

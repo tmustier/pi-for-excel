@@ -53,7 +53,10 @@ test("compareModels sorts by provider, family, then recency", () => {
 
   // Provider priority: anthropic first, then openai, then google.
   assert.equal(models[0].provider, "anthropic");
-  assert.equal(models.at(-1)!.provider, "google");
+
+  const last = models.at(-1);
+  assert.ok(last);
+  assert.equal(last.provider, "google");
 
   // Within anthropic: opus family first; within opus: 4-6 before 4-5.
   const anthropic = models.filter((m) => m.provider === "anthropic");

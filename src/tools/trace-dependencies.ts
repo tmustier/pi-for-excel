@@ -28,7 +28,7 @@ type Params = Static<typeof schema>;
 
 interface DepNode {
   address: string;
-  value: any;
+  value: unknown;
   formula?: string;
   precedents: DepNode[];
 }

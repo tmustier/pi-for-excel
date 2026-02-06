@@ -80,7 +80,7 @@ export async function buildOverview(): Promise<string> {
       const pivotTables = sheet.pivotTables;
       const pivotCount = pivotTables.getCount();
 
-      let shapes: any | null = null;
+      let shapes: Excel.ShapeCollection | null = null;
       try {
         shapes = sheet.shapes;
         shapes.load("items");
@@ -98,7 +98,7 @@ export async function buildOverview(): Promise<string> {
 
       const headers = headerRange.isNullObject
         ? []
-        : headerRange.values[0].filter((v: any) => v !== null && v !== undefined && v !== "");
+        : headerRange.values[0].filter((v) => v !== null && v !== undefined && v !== "");
 
       lines.push(
         `${sheet.position + 1}. **${sheet.name}**${visibility} — ${dims}`,
@@ -131,7 +131,7 @@ export async function buildOverview(): Promise<string> {
     }
 
     // Named ranges
-    const visibleNames = names.items.filter((n: any) => n.visible);
+    const visibleNames = names.items.filter((n) => n.visible);
     if (visibleNames.length > 0) {
       lines.push("");
       lines.push(`### Named Ranges (${visibleNames.length})`);

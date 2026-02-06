@@ -6,7 +6,7 @@
  * components (message-list, streaming-message-container) for rendering.
  */
 
-import { html, LitElement } from "lit";
+import { html, LitElement, type PropertyValues } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
 import type { Agent, AgentEvent } from "@mariozechner/pi-agent-core";
 import type { ToolResultMessage } from "@mariozechner/pi-ai";
@@ -71,7 +71,7 @@ export class PiSidebar extends LitElement {
     this._resizeObserver?.disconnect();
   }
 
-  override willUpdate(changed: Map<string, any>) {
+  override willUpdate(changed: PropertyValues<this>) {
     if (changed.has("agent")) this._setupSubscription();
   }
 
@@ -82,23 +82,24 @@ export class PiSidebar extends LitElement {
 
   private _setupSubscription() {
     this._unsubscribe?.();
-    if (!this.agent) return;
+    const agent = this.agent;
+    if (!agent) return;
 
-    this._hasMessages = this.agent.state.messages.length > 0;
-    this._isStreaming = this.agent.state.isStreaming;
+    this._hasMessages = agent.state.messages.length > 0;
+    this._isStreaming = agent.state.isStreaming;
 
-    this._unsubscribe = this.agent.subscribe((ev: AgentEvent) => {
+    this._unsubscribe = agent.subscribe((ev: AgentEvent) => {
       switch (ev.type) {
         case "message_start":
         case "message_end":
-          this._hasMessages = this.agent!.state.messages.length > 0;
-          this._isStreaming = this.agent!.state.isStreaming;
+          this._hasMessages = agent.state.messages.length > 0;
+          this._isStreaming = agent.state.isStreaming;
           this.requestUpdate();
           break;
         case "turn_start":
         case "turn_end":
         case "agent_start":
-          this._isStreaming = this.agent!.state.isStreaming;
+          this._isStreaming = agent.state.isStreaming;
           this.requestUpdate();
           break;
         case "agent_end":
@@ -111,7 +112,7 @@ export class PiSidebar extends LitElement {
           break;
         case "message_update":
           if (this._streamingContainer) {
-            const streaming = this.agent!.state.isStreaming;
+            const streaming = agent.state.isStreaming;
             this._streamingContainer.isStreaming = streaming;
             this._streamingContainer.setMessage(ev.message, !streaming);
           }
@@ -149,8 +150,8 @@ export class PiSidebar extends LitElement {
 
   private _onAbort = () => { this.onAbort?.(); };
 
-  private _buildToolResultsMap(): Map<string, ToolResultMessage<any>> {
-    const map = new Map<string, ToolResultMessage<any>>();
+  private _buildToolResultsMap(): Map<string, ToolResultMessage<unknown>> {
+    const map = new Map<string, ToolResultMessage<unknown>>();
     if (!this.agent) return map;
     for (const msg of this.agent.state.messages) {
       if (msg.role === "toolResult") map.set(msg.toolCallId, msg);

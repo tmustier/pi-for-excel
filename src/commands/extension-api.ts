@@ -24,7 +24,7 @@
  */
 
 import { commandRegistry, type CommandSource } from "./types.js";
-import type { Agent } from "@mariozechner/pi-agent-core";
+import type { Agent, AgentEvent } from "@mariozechner/pi-agent-core";
 
 export interface ExtensionCommand {
   description: string;
@@ -57,7 +57,7 @@ export interface ExcelExtensionAPI {
   /** Show a toast notification */
   toast(message: string): void;
   /** Subscribe to agent events */
-  onAgentEvent(handler: (ev: any) => void): () => void;
+  onAgentEvent(handler: (ev: AgentEvent) => void): () => void;
 }
 
 /** Create the extension API for a given agent instance */
@@ -117,7 +117,12 @@ export function createExtensionAPI(agent: Agent): ExcelExtensionAPI {
             slot = document.createElement("div");
             slot.id = "pi-widget-slot";
             slot.className = "pi-widget-slot";
-            inputArea.parentElement!.insertBefore(slot, inputArea);
+            const parent = inputArea.parentElement;
+            if (!parent) {
+              console.warn("[pi] No widget slot parent found");
+              return;
+            }
+            parent.insertBefore(slot, inputArea);
           } else {
             console.warn("[pi] No widget slot or input area found");
             return;
@@ -147,10 +152,11 @@ export function createExtensionAPI(agent: Agent): ExcelExtensionAPI {
       }
       toast.textContent = message;
       toast.classList.add("visible");
-      setTimeout(() => toast!.classList.remove("visible"), 2000);
+      const toastEl = toast;
+      setTimeout(() => toastEl.classList.remove("visible"), 2000);
     },
 
-    onAgentEvent(handler: (ev: any) => void) {
+    onAgentEvent(handler: (ev: AgentEvent) => void) {
       return agent.subscribe(handler);
     },
   };

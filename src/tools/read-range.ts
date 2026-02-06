@@ -29,6 +29,16 @@ const schema = Type.Object({
 
 type Params = Static<typeof schema>;
 
+interface ReadRangeResult {
+  sheetName: string;
+  address: string;
+  rows: number;
+  cols: number;
+  values: unknown[][];
+  formulas: unknown[][];
+  numberFormats: unknown[][];
+}
+
 export function createReadRangeTool(): AgentTool<typeof schema> {
   return {
     name: "read_range",
@@ -43,7 +53,7 @@ export function createReadRangeTool(): AgentTool<typeof schema> {
       params: Params,
     ): Promise<AgentToolResult<undefined>> => {
       try {
-        const result = await excelRun(async (context) => {
+        const result = await excelRun<ReadRangeResult>(async (context) => {
           const { sheet, range } = getRange(context, params.range);
           range.load("values,formulas,numberFormat,address,rowCount,columnCount");
           sheet.load("name");
@@ -83,7 +93,7 @@ export function createReadRangeTool(): AgentTool<typeof schema> {
 
 function formatCompact(
   address: string,
-  result: any,
+  result: ReadRangeResult,
   startCell: string,
 ): AgentToolResult<undefined> {
   const lines: string[] = [];
@@ -110,7 +120,7 @@ function formatCompact(
 
 function formatDetailed(
   address: string,
-  result: any,
+  result: ReadRangeResult,
   startCell: string,
 ): AgentToolResult<undefined> {
   const lines: string[] = [];
@@ -137,7 +147,7 @@ function formatDetailed(
   for (let r = 0; r < result.numberFormats.length; r++) {
     for (let c = 0; c < result.numberFormats[r].length; c++) {
       const fmt = result.numberFormats[r][c];
-      if (fmt && fmt !== "General") {
+      if (typeof fmt === "string" && fmt !== "" && fmt !== "General") {
         const addr = `${colToLetter(start.col + c)}${start.row + r}`;
         const existing = formatMap.get(fmt) || [];
         existing.push(addr);

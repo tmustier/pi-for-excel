@@ -38,8 +38,12 @@ export function activate(api: ExcelExtensionAPI) {
       canvas.style.cssText = `border-radius: 6px; border: 1px solid oklch(0 0 0 / 0.06); display: block; width: ${logicalW}px; height: ${logicalH}px;`;
       el.appendChild(canvas);
 
-      const ctx = canvas.getContext("2d")!;
-      ctx.scale(dpr, dpr);
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        throw new Error("Canvas 2D context not supported");
+      }
+      const ctx2d = ctx;
+      ctx2d.scale(dpr, dpr);
       let snake: Pt[] = [{ x: 11, y: 6 }, { x: 10, y: 6 }, { x: 9, y: 6 }];
       let food = spawnFood(snake);
       let dir: Dir = "right";
@@ -55,38 +59,38 @@ export function activate(api: ExcelExtensionAPI) {
       }
 
       function draw() {
-        ctx.fillStyle = "#f8f8f6";
-        ctx.fillRect(0, 0, logicalW, logicalH);
+        ctx2d.fillStyle = "#f8f8f6";
+        ctx2d.fillRect(0, 0, logicalW, logicalH);
 
         // Grid (subtle)
-        ctx.strokeStyle = "rgba(0,0,0,0.03)";
-        for (let x = 0; x <= COLS; x++) { ctx.beginPath(); ctx.moveTo(x * CELL, 0); ctx.lineTo(x * CELL, ROWS * CELL); ctx.stroke(); }
-        for (let y = 0; y <= ROWS; y++) { ctx.beginPath(); ctx.moveTo(0, y * CELL); ctx.lineTo(COLS * CELL, y * CELL); ctx.stroke(); }
+        ctx2d.strokeStyle = "rgba(0,0,0,0.03)";
+        for (let x = 0; x <= COLS; x++) { ctx2d.beginPath(); ctx2d.moveTo(x * CELL, 0); ctx2d.lineTo(x * CELL, ROWS * CELL); ctx2d.stroke(); }
+        for (let y = 0; y <= ROWS; y++) { ctx2d.beginPath(); ctx2d.moveTo(0, y * CELL); ctx2d.lineTo(COLS * CELL, y * CELL); ctx2d.stroke(); }
 
         // Food
-        ctx.fillStyle = "#d44";
-        ctx.beginPath();
-        ctx.arc(food.x * CELL + CELL / 2, food.y * CELL + CELL / 2, CELL / 2.5, 0, Math.PI * 2);
-        ctx.fill();
+        ctx2d.fillStyle = "#d44";
+        ctx2d.beginPath();
+        ctx2d.arc(food.x * CELL + CELL / 2, food.y * CELL + CELL / 2, CELL / 2.5, 0, Math.PI * 2);
+        ctx2d.fill();
 
         // Snake
         snake.forEach((p, i) => {
           const r = i === 0 ? 3 : 2;
-          ctx.fillStyle = i === 0 ? "oklch(0.40 0.12 160)" : "oklch(0.50 0.10 160)";
-          ctx.beginPath();
-          ctx.roundRect(p.x * CELL + 1, p.y * CELL + 1, CELL - 2, CELL - 2, r);
-          ctx.fill();
+          ctx2d.fillStyle = i === 0 ? "oklch(0.40 0.12 160)" : "oklch(0.50 0.10 160)";
+          ctx2d.beginPath();
+          ctx2d.roundRect(p.x * CELL + 1, p.y * CELL + 1, CELL - 2, CELL - 2, r);
+          ctx2d.fill();
         });
 
         if (gameOver) {
-          ctx.fillStyle = "rgba(0,0,0,0.5)";
-          ctx.fillRect(0, 0, logicalW, logicalH);
-          ctx.fillStyle = "white";
-          ctx.font = "bold 16px sans-serif";
-          ctx.textAlign = "center";
-          ctx.fillText("GAME OVER", logicalW / 2, logicalH / 2 - 8);
-          ctx.font = "12px sans-serif";
-          ctx.fillText(`Score: ${score} · R restart · ESC quit`, logicalW / 2, logicalH / 2 + 12);
+          ctx2d.fillStyle = "rgba(0,0,0,0.5)";
+          ctx2d.fillRect(0, 0, logicalW, logicalH);
+          ctx2d.fillStyle = "white";
+          ctx2d.font = "bold 16px sans-serif";
+          ctx2d.textAlign = "center";
+          ctx2d.fillText("GAME OVER", logicalW / 2, logicalH / 2 - 8);
+          ctx2d.font = "12px sans-serif";
+          ctx2d.fillText(`Score: ${score} · R restart · ESC quit`, logicalW / 2, logicalH / 2 + 12);
         }
       }
 

@@ -113,7 +113,7 @@ export function installFetchInterceptor(): void {
 
     // Relative URLs: never rewrite
     if (!/^https?:\/\//i.test(url)) {
-      return originalFetch(input as any, init);
+      return originalFetch(input, init);
     }
 
     // Dev: Vite reverse proxies
@@ -126,7 +126,7 @@ export function installFetchInterceptor(): void {
         }
       }
 
-      if (!rewritten) return originalFetch(input as any, init);
+      if (!rewritten) return originalFetch(input, init);
 
       const newInit = stripAnthropicBrowserHeader(init);
 
@@ -138,7 +138,7 @@ export function installFetchInterceptor(): void {
         input = rewritten;
       }
 
-      return originalFetch(input as any, newInit);
+      return originalFetch(input, newInit);
     }
 
     // Production: proxy OAuth/token endpoints through user-configured CORS proxy.
@@ -146,10 +146,10 @@ export function installFetchInterceptor(): void {
       const proxyUrl = await getEnabledProxyUrl();
       if (proxyUrl) {
         const proxied = `${proxyUrl}/?url=${encodeURIComponent(url)}`;
-        return originalFetch(proxied as any, stripAnthropicBrowserHeader(init));
+        return originalFetch(proxied, stripAnthropicBrowserHeader(init));
       }
     }
 
-    return originalFetch(input as any, init);
+    return originalFetch(input, init);
   };
 }
