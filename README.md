@@ -40,7 +40,7 @@ Existing AI add-ins for Excel are closed-source, locked to a single model, and c
 - **Extensions** — modular extension system with slash commands and inline widget UI (e.g., `/snake`)
 - **Keyboard shortcuts** — `Escape` to interrupt, `Shift+Tab` to focus input, `Ctrl+O` to collapse thinking/tool blocks
 - **Working indicator** — rotating whimsical messages and feature discovery hints while the model is streaming
-- **Pi TUI interop** — sessions use the same `SessionData` format as pi-web-ui — future export/import is free
+- **Pi-compatible messages** — conversations use the same `AgentMessage` format as Pi TUI. Session storage differs (IndexedDB vs JSONL), but the message layer is shared — future import/export is straightforward.
 
 ## Quick Start
 
@@ -171,6 +171,25 @@ The Vite dev server proxies API calls to LLM providers, stripping browser header
 
 ## Roadmap
 
+### Shipped in v0.1.0
+- [x] 13 Excel tools (read, write, search, format, trace, structure)
+- [x] Auto-context injection (workbook blueprint, selection auto-read, change tracking)
+- [x] Multi-provider auth (OAuth + API keys for Anthropic, OpenAI, Google, GitHub Copilot, Antigravity)
+- [x] Persistent sessions with auto-save and `/resume`
+- [x] Write verification (auto-reads back, checks for errors)
+- [x] Custom sidebar UI (Lit components, light theme, frosted glass)
+- [x] Slash command system with fuzzy search
+- [x] Extension system with widget API
+- [x] Keyboard shortcuts (Escape, Shift+Tab, Ctrl+O)
+
+### Up next
+- [ ] Agent interface redesign (#14) — tool tiers, progressive disclosure, dynamic conventions
+- [ ] Header bar UX (#12) — session switcher, workbook indicator
+- [ ] Welcome copy and example prompts (#11)
+- [ ] Extension API build-out (#13) — dynamic loading, tool registration, sandboxing
+- [ ] Semantic navigation — `find_by_label` (#7), `get_sheet_summary` (#8)
+
+### Future
 - [ ] Python code execution via Pyodide
 - [ ] SpreadsheetBench evaluation (target >43%)
 - [ ] Production CORS solution (service worker or hosted relay)
@@ -178,9 +197,7 @@ The Vite dev server proxies API calls to LLM providers, stripping browser header
 - [ ] Chart creation and modification
 - [ ] Named range awareness in formulas
 - [ ] Data validation
-- [ ] Pi TUI ↔ Excel session teleport
-- [ ] Extension API build-out (#13) — dynamic loading, tool registration, sandboxing
-- [ ] Header bar UX (#12) — session switcher, workbook indicator
+- [ ] Pi TUI ↔ Excel session import/export
 
 ## Prior Art
 
