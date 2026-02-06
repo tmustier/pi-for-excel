@@ -128,10 +128,10 @@ async function clearFormats(params: Params): Promise<AgentToolResult<undefined>>
     sheet.load("name");
     range.load("address");
     const formats = range.conditionalFormats;
-    formats.load("count");
+    const countResult = formats.getCount();
     await context.sync();
 
-    const existing = formats.count;
+    const existing = countResult.value;
     formats.clearAll();
     await context.sync();
 

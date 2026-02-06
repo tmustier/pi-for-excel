@@ -4,10 +4,11 @@
  */
 
 // ============================================================================
-// Types (Office.js is loaded via CDN, not importable)
+// Types
 // ============================================================================
 
-declare const Excel: any;
+// Office.js is loaded at runtime by Excel, but its types are available via
+// `@types/office-js` (global `Excel` namespace/value).
 
 /** Result of parsing a range reference like "Sheet1!A1:B5" */
 export interface RangeRef {
@@ -23,7 +24,7 @@ export interface RangeRef {
  * Run an Office.js Excel operation with error handling.
  * Wraps Excel.run() and provides typed context.
  */
-export async function excelRun<T>(fn: (context: any) => Promise<T>): Promise<T> {
+export async function excelRun<T>(fn: (context: Excel.RequestContext) => Promise<T>): Promise<T> {
   return Excel.run(fn);
 }
 
@@ -45,7 +46,7 @@ export function parseRangeRef(ref: string): RangeRef {
 }
 
 /** Get a Range object from a context, resolving sheet name if present */
-export function getRange(context: any, ref: string) {
+export function getRange(context: Excel.RequestContext, ref: string): { sheet: Excel.Worksheet; range: Excel.Range } {
   const parsed = parseRangeRef(ref);
   const sheet = parsed.sheet
     ? context.workbook.worksheets.getItem(parsed.sheet)
@@ -127,21 +128,24 @@ export function cellAtOffset(rangeStart: string, rowOffset: number, colOffset: n
  * (fails on empty cells, preview API).
  */
 export async function getDirectPrecedentsSafe(
-  context: any,
-  range: any,
+  context: Excel.RequestContext,
+  range: Excel.Range,
 ): Promise<string[][] | null> {
   try {
     const precedents = range.getDirectPrecedents();
     precedents.load("addresses");
     await context.sync();
-    return precedents.addresses;
+    // WorkbookRangeAreas.addresses is string[]; each entry may itself contain
+    // a comma-separated list of address blocks.
+    return precedents.addresses
+      .map((s) => s.split(",").map((x) => x.trim()).filter(Boolean));
   } catch {
     return null;
   }
 }
 
 /** Pad a 2D array so all rows have the same length */
-export function padValues(values: any[][]): { padded: any[][]; rows: number; cols: number } {
+export function padValues(values: unknown[][]): { padded: unknown[][]; rows: number; cols: number } {
   const rows = values.length;
   const cols = Math.max(...values.map((r) => r.length));
   const padded = values.map((row) => {

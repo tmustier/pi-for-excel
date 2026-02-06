@@ -28,6 +28,24 @@ const schema = Type.Object({
 
 type Params = Static<typeof schema>;
 
+type FillFormulaResult =
+  | {
+    blocked: true;
+    sheetName: string;
+    address: string;
+    existingCount: number;
+    existingValues: any[][];
+  }
+  | {
+    blocked: false;
+    sheetName: string;
+    address: string;
+    rowCount: number;
+    columnCount: number;
+    readBackValues: any[][];
+    readBackFormulas: any[][];
+  };
+
 export function createFillFormulaTool(): AgentTool<typeof schema> {
   return {
     name: "fill_formula",
@@ -60,7 +78,7 @@ export function createFillFormulaTool(): AgentTool<typeof schema> {
           };
         }
 
-        const result = await excelRun(async (context: any) => {
+        const result = await excelRun<FillFormulaResult>(async (context) => {
           const { sheet, range } = getRange(context, params.range);
           sheet.load("name");
           range.load("address,rowCount,columnCount");
