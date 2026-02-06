@@ -75,6 +75,7 @@ const server = https.createServer(
       if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
         res.statusCode = 404;
         res.setHeader("content-type", "text/plain; charset=utf-8");
+        console.log(`[serve-dist-https] ${req.method || "GET"} ${reqPath} -> 404`);
         res.end("not found");
         return;
       }
@@ -82,6 +83,7 @@ const server = https.createServer(
       const ext = path.extname(filePath).toLowerCase();
       res.statusCode = 200;
       res.setHeader("content-type", MIME[ext] || "application/octet-stream");
+      console.log(`[serve-dist-https] ${req.method || "GET"} ${reqPath} -> 200`);
 
       // Cache hashed assets aggressively, keep HTML uncached
       if (reqPath.startsWith("/assets/") && /-[A-Za-z0-9]{8,}\./.test(reqPath)) {
@@ -94,12 +96,15 @@ const server = https.createServer(
     } catch (e) {
       res.statusCode = 500;
       res.setHeader("content-type", "text/plain; charset=utf-8");
+      console.log(`[serve-dist-https] ${req.method || "GET"} ${req.url || "/"} -> 500`);
       res.end(`server error: ${e instanceof Error ? e.message : String(e)}`);
     }
   },
 );
 
-server.listen(PORT, HOST, () => {
+// Bind to all interfaces so both IPv4 (127.0.0.1) and IPv6 (::1) localhost
+// resolutions work in different Office webviews.
+server.listen(PORT, () => {
   console.log(`[serve-dist-https] Serving ${distDir}`);
   console.log(`[serve-dist-https] https://${HOST}:${PORT}/src/taskpane.html`);
 });
