@@ -47,6 +47,7 @@ import {
   installModelSelectorPatch,
   setActiveProviders,
 } from "./taskpane/model-selector-patch.js";
+import { setupSessionPersistence } from "./taskpane/sessions.js";
 
 // ============================================================================
 // ModelSelector patch
@@ -283,136 +284,7 @@ async function init(): Promise<void> {
   });
 
   // ── Session persistence ──
-  let _sessionId: string = crypto.randomUUID();
-  let _sessionTitle = "";
-  let _sessionCreatedAt = new Date().toISOString();
-  let _firstAssistantSeen = false;
-
-  async function saveSession() {
-    if (!_firstAssistantSeen) return;
-    try {
-      const now = new Date().toISOString();
-      const messages = agent.state.messages;
-      if (!_sessionTitle && messages.length > 0) {
-        const firstUser = messages.find((m) => m.role === "user");
-        if (firstUser) {
-          const text = extractTextFromContent(firstUser.content);
-          _sessionTitle = text.slice(0, 80) || "Untitled";
-        }
-      }
-      let preview = "";
-      for (const m of messages) {
-        if (m.role !== "user" && m.role !== "assistant") continue;
-        const text = extractTextFromContent(m.content);
-        preview += text + "\n";
-        if (preview.length > 2048) { preview = preview.slice(0, 2048); break; }
-      }
-      let inputTokens = 0;
-      let outputTokens = 0;
-      let cacheReadTokens = 0;
-      let cacheWriteTokens = 0;
-      let totalTokens = 0;
-
-      let costInput = 0;
-      let costOutput = 0;
-      let costCacheRead = 0;
-      let costCacheWrite = 0;
-      let costTotal = 0;
-
-      for (const m of messages) {
-        if (m.role !== "assistant") continue;
-        const u = m.usage;
-        inputTokens += u.input;
-        outputTokens += u.output;
-        cacheReadTokens += u.cacheRead;
-        cacheWriteTokens += u.cacheWrite;
-        totalTokens += u.totalTokens;
-
-        costInput += u.cost.input;
-        costOutput += u.cost.output;
-        costCacheRead += u.cost.cacheRead;
-        costCacheWrite += u.cost.cacheWrite;
-        costTotal += u.cost.total;
-      }
-      await sessions.saveSession(_sessionId, agent.state, {
-        id: _sessionId,
-        title: _sessionTitle,
-        createdAt: _sessionCreatedAt,
-        lastModified: now,
-        messageCount: messages.length,
-        usage: {
-          input: inputTokens,
-          output: outputTokens,
-          cacheRead: cacheReadTokens,
-          cacheWrite: cacheWriteTokens,
-          totalTokens,
-          cost: {
-            input: costInput,
-            output: costOutput,
-            cacheRead: costCacheRead,
-            cacheWrite: costCacheWrite,
-            total: costTotal,
-          },
-        },
-        thinkingLevel: agent.state.thinkingLevel || "off",
-        preview,
-      }, _sessionTitle);
-    } catch (err) {
-      console.warn("[pi] Session save failed:", err);
-    }
-  }
-
-  function startNewSession() {
-    _sessionId = crypto.randomUUID();
-    _sessionTitle = "";
-    _sessionCreatedAt = new Date().toISOString();
-    _firstAssistantSeen = false;
-  }
-
-  agent.subscribe((ev) => {
-    if (ev.type === "message_end") {
-      if (ev.message.role === "assistant") _firstAssistantSeen = true;
-      if (_firstAssistantSeen) saveSession();
-    }
-  });
-
-  // Auto-restore latest session
-  try {
-    const latestId = await sessions.getLatestSessionId();
-    if (latestId) {
-      const sessionData = await sessions.loadSession(latestId);
-      if (sessionData && sessionData.messages.length > 0) {
-        _sessionId = sessionData.id;
-        _sessionTitle = sessionData.title || "";
-        _sessionCreatedAt = sessionData.createdAt;
-        _firstAssistantSeen = true;
-        agent.replaceMessages(sessionData.messages);
-        if (sessionData.model) {
-          agent.setModel(sessionData.model);
-        }
-        if (sessionData.thinkingLevel) {
-          agent.setThinkingLevel(sessionData.thinkingLevel);
-        }
-        // Force sidebar to pick up restored messages
-        sidebar.syncFromAgent();
-        console.log(`[pi] Restored session: ${_sessionTitle || latestId}`);
-      }
-    }
-  } catch (err) {
-    console.warn("[pi] Session restore failed:", err);
-  }
-
-  document.addEventListener("pi:session-new", () => startNewSession());
-  document.addEventListener("pi:session-rename", ((e: CustomEvent) => {
-    _sessionTitle = e.detail?.title || _sessionTitle;
-    saveSession();
-  }) as EventListener);
-  document.addEventListener("pi:session-resumed", ((e: CustomEvent) => {
-    _sessionId = e.detail?.id || _sessionId;
-    _sessionTitle = e.detail?.title || "";
-    _sessionCreatedAt = e.detail?.createdAt || new Date().toISOString();
-    _firstAssistantSeen = true;
-  }) as EventListener);
+  await setupSessionPersistence({ agent, sidebar, sessions });
 
   // ── Register slash commands + extensions ──
   registerBuiltins(agent);
