@@ -144,6 +144,11 @@ const server = http.createServer(async (req, res) => {
       const lower = key.toLowerCase();
       if (lower === "set-cookie") return;
       if (HOP_BY_HOP_HEADERS.has(lower)) return;
+      // Node fetch transparently decompresses responses but keeps the original
+      // Content-Encoding header (e.g. "gzip"). Forwarding that header would
+      // make the browser try to decompress *again* and fail while reading.
+      if (lower === "content-encoding") return;
+
       // Content-Length can be wrong after decompression; let Node set it.
       if (lower === "content-length") return;
       res.setHeader(key, value);
