@@ -48,6 +48,7 @@ import {
   setActiveProviders,
 } from "./taskpane/model-selector-patch.js";
 import { setupSessionPersistence } from "./taskpane/sessions.js";
+import { createQueueDisplay } from "./taskpane/queue-display.js";
 
 // ============================================================================
 // ModelSelector patch
@@ -298,61 +299,7 @@ async function init(): Promise<void> {
   });
 
   // ── Queue display ──
-  type QueuedItem = { type: "steer" | "follow-up"; text: string };
-  const _queuedMessages: QueuedItem[] = [];
-
-  function addQueuedMessage(type: QueuedItem["type"], text: string) {
-    _queuedMessages.push({ type, text });
-    updateQueueDisplay();
-  }
-
-  function clearQueue() {
-    _queuedMessages.length = 0;
-    updateQueueDisplay();
-  }
-
-  function updateQueueDisplay() {
-    let container = document.getElementById("pi-queue-display");
-    if (_queuedMessages.length === 0) {
-      container?.remove();
-      return;
-    }
-    if (!container) {
-      container = document.createElement("div");
-      container.id = "pi-queue-display";
-      container.className = "pi-queue";
-      document.body.appendChild(container);
-    }
-    // Position above the working indicator (or input area if indicator hidden)
-    const workingEl = sidebar.querySelector("pi-working-indicator") as HTMLElement | null;
-    const inputArea = sidebar.querySelector(".pi-input-area") as HTMLElement | null;
-    const anchorEl = workingEl && workingEl.offsetHeight > 0 ? workingEl : inputArea;
-    const anchorTop = anchorEl ? anchorEl.getBoundingClientRect().top : window.innerHeight - 80;
-    container.style.bottom = `${window.innerHeight - anchorTop}px`;
-
-    container.innerHTML = _queuedMessages.map(({ type, text }) => {
-      const label = type === "steer" ? "Steering" : "Follow-up";
-      const cls = type === "steer" ? "pi-queue__label--steer" : "pi-queue__label--followup";
-      const truncated = text.length > 50 ? text.slice(0, 47) + "…" : text;
-      return `<div class="pi-queue__item">
-        <span class="pi-queue__label ${cls}">${label}</span>
-        <span class="pi-queue__text">${truncated}</span>
-      </div>`;
-    }).join("");
-  }
-
-  agent.subscribe((ev) => {
-    if (_queuedMessages.length === 0) return;
-    if (ev.type === "message_start" && ev.message.role === "user") {
-      const msgText = extractTextFromContent(ev.message.content);
-      const idx = _queuedMessages.findIndex((q) => q.text === msgText);
-      if (idx !== -1) {
-        _queuedMessages.splice(idx, 1);
-        updateQueueDisplay();
-      }
-    }
-    if (ev.type === "agent_end" && _queuedMessages.length > 0) clearQueue();
-  });
+  const queueDisplay = createQueueDisplay({ agent, sidebar });
 
   // ── Keyboard shortcuts ──
   const THINKING_COLORS: Record<ThinkingLevel, string> = {
@@ -457,10 +404,10 @@ async function init(): Promise<void> {
       const msg = { role: "user" as const, content: [{ type: "text" as const, text }], timestamp: Date.now() };
       if (e.altKey) {
         agent.followUp(msg);
-        addQueuedMessage("follow-up", text);
+        queueDisplay.add("follow-up", text);
       } else {
         agent.steer(msg);
-        addQueuedMessage("steer", text);
+        queueDisplay.add("steer", text);
       }
       const input = sidebar.getInput();
       if (input) input.clear();
