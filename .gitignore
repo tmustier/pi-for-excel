@@ -3,6 +3,12 @@
 research/*
 !research/POC-LEARNINGS.md
 
+# Proof of concept (archived locally)
+poc/
+
+# Dev loop state (pi ralph)
+.ralph/
+
 # Dependencies
 node_modules/
 
@@ -11,16 +17,15 @@ dist/
 
 # Certs (generated locally)
 *.pem
-poc/*.pem
 
 # Vite
 .vite/
-poc/.vite/
 
 # OS
 .DS_Store
 
 # Lock files (noisy in diffs)
 package-lock.json
-*.html
+
+# Session exports
 pi-session-*
