@@ -8,6 +8,8 @@
 // MUST be first — Lit fix + CSS (theme.css loaded after pi-web-ui/app.css)
 import "./boot.js";
 
+// Custom tool renderers (Excel tools return markdown)
+import "./ui/tool-renderers.js";
 
 import { html, render } from "lit";
 import { Agent } from "@mariozechner/pi-agent-core";
