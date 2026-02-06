@@ -87,7 +87,7 @@ export function createFormatCellsTool(): AgentTool<typeof schema> {
       params: Params,
     ): Promise<AgentToolResult<undefined>> => {
       try {
-        const result = await excelRun(async (context: any) => {
+        const result = await excelRun(async (context) => {
           const { sheet, target, isMultiRange } = resolveFormatTarget(context, params.range);
           sheet.load("name");
           target.load("address");

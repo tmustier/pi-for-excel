@@ -42,7 +42,7 @@ export function createReadRangeTool(): AgentTool<typeof schema> {
       params: Params,
     ): Promise<AgentToolResult<undefined>> => {
       try {
-        const result = await excelRun(async (context: any) => {
+        const result = await excelRun(async (context) => {
           const { sheet, range } = getRange(context, params.range);
           range.load("values,formulas,numberFormat,address,rowCount,columnCount");
           sheet.load("name");

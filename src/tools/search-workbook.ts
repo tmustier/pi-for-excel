@@ -84,7 +84,7 @@ export function createSearchWorkbookTool(): AgentTool<typeof schema> {
           }
         }
 
-        const result = await excelRun(async (context: any) => {
+        const result = await excelRun(async (context) => {
           const allMatches: SearchMatch[] = [];
           let totalMatches = 0;
           let hasMore = false;

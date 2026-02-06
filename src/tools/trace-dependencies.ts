@@ -55,7 +55,7 @@ export function createTraceDependenciesTool(): AgentTool<typeof schema> {
 
         const maxDepth = Math.min(params.depth || 2, 5);
 
-        const tree = await excelRun(async (context: any) => {
+        const tree = await excelRun(async (context) => {
           return await traceCell(context, params.cell, maxDepth, 0, new Set());
         });
 

@@ -76,7 +76,7 @@ export function createModifyStructureTool(): AgentTool<typeof schema> {
       params: Params,
     ): Promise<AgentToolResult<undefined>> => {
       try {
-        const result = await excelRun(async (context: any) => {
+        const result = await excelRun(async (context) => {
           const action = params.action;
           const count = params.count || 1;
 

@@ -43,7 +43,7 @@ export function createGetWorkbookOverviewTool(): AgentTool<typeof schema> {
 
 /** Build the full workbook overview. Also used by context injection. */
 export async function buildOverview(): Promise<string> {
-  return excelRun(async (context: any) => {
+  return excelRun(async (context) => {
     const wb = context.workbook;
     wb.load("name");
 

@@ -102,7 +102,7 @@ export function createWriteCellsTool(): AgentTool<typeof schema> {
           return { content: [{ type: "text", text: lines.join("\n") }], details: undefined };
         }
 
-        const result = await excelRun(async (context: any) => {
+        const result = await excelRun(async (context) => {
           const { sheet } = getRange(context, params.start_cell);
           sheet.load("name");
 

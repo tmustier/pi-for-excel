@@ -123,7 +123,7 @@ export function createConditionalFormatTool(): AgentTool<typeof schema> {
 }
 
 async function clearFormats(params: Params): Promise<AgentToolResult<undefined>> {
-  const result = await excelRun(async (context: any) => {
+  const result = await excelRun(async (context) => {
     const { sheet, range } = getRange(context, params.range);
     sheet.load("name");
     range.load("address");
@@ -153,7 +153,7 @@ async function clearFormats(params: Params): Promise<AgentToolResult<undefined>>
 async function addFormat(params: Params): Promise<AgentToolResult<undefined>> {
   validateAddParams(params);
 
-  const result = await excelRun(async (context: any) => {
+  const result = await excelRun(async (context) => {
     const { sheet, range } = getRange(context, params.range);
     sheet.load("name");
     range.load("address");

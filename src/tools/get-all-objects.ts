@@ -28,7 +28,7 @@ export function createGetAllObjectsTool(): AgentTool<typeof schema> {
       params: Params,
     ): Promise<AgentToolResult<undefined>> => {
       try {
-        const result = await excelRun(async (context: any) => {
+        const result = await excelRun(async (context) => {
           const sheet = params.sheet
             ? context.workbook.worksheets.getItem(params.sheet)
             : context.workbook.worksheets.getActiveWorksheet();

@@ -30,7 +30,7 @@ export interface SelectionContext {
  */
 export async function readSelectionContext(): Promise<SelectionContext | null> {
   try {
-    return await excelRun(async (context: any) => {
+    return await excelRun(async (context) => {
       const sel = context.workbook.getSelectedRange();
       sel.load("address,values,formulas,rowIndex,columnIndex,rowCount,columnCount,worksheet/name");
       await context.sync();

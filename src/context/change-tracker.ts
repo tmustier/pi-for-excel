@@ -27,7 +27,7 @@ export class ChangeTracker {
     if (this.registered) return;
 
     try {
-      await excelRun(async (context: any) => {
+      await excelRun(async (context) => {
         const sheets = context.workbook.worksheets;
         sheets.load("items/id,items/name,items/visibility");
         await context.sync();
@@ -40,7 +40,7 @@ export class ChangeTracker {
         for (const sheet of sheets.items) {
           if (sheet.visibility !== "Visible") continue;
 
-          sheet.onChanged.add((event: any) => {
+          sheet.onChanged.add(async (event) => {
             const sheetName = this.sheetIdToName.get(event.worksheetId) || event.worksheetId || "unknown";
             this.changes.push({
               sheet: sheetName,
