@@ -7,7 +7,7 @@
  * - API key input + Save button
  */
 
-import { getAppStorage } from "@mariozechner/pi-web-ui";
+import { getAppStorage, isCorsError } from "@mariozechner/pi-web-ui";
 import { getErrorMessage } from "../utils/errors.js";
 
 export interface ProviderDef {
@@ -142,7 +142,11 @@ export function buildProviderRow(
           expandedRef.current = null;
         }
       } catch (err: unknown) {
-        errorEl.textContent = getErrorMessage(err) || "Login failed";
+        if (isCorsError(err)) {
+          errorEl.textContent = "Login was blocked by browser CORS. Start the local proxy (npm run proxy) and enable it in /settings → Proxy.";
+        } else {
+          errorEl.textContent = getErrorMessage(err) || "Login failed";
+        }
         errorEl.style.display = "block";
       } finally {
         oauthBtn.textContent = `Login with ${label}`;

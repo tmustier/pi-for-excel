@@ -4,7 +4,7 @@
 
 import { commandRegistry, type SlashCommand } from "./types.js";
 import type { Agent } from "@mariozechner/pi-agent-core";
-import { ModelSelector, getAppStorage } from "@mariozechner/pi-web-ui";
+import { ApiKeysTab, ModelSelector, ProxyTab, SettingsDialog, getAppStorage } from "@mariozechner/pi-web-ui";
 import { showToast } from "../ui/toast.js";
 import { getErrorMessage } from "../utils/errors.js";
 
@@ -31,13 +31,10 @@ export function registerBuiltins(agent: Agent): void {
     },
     {
       name: "settings",
-      description: "Manage API key for current provider",
+      description: "Settings (API keys + CORS proxy)",
       source: "builtin",
       execute: () => {
-        import("@mariozechner/pi-web-ui").then(({ ApiKeyPromptDialog }) => {
-          const provider = agent.state.model?.provider || "anthropic";
-          ApiKeyPromptDialog.prompt(provider);
-        });
+        SettingsDialog.open([new ApiKeysTab(), new ProxyTab()]);
       },
     },
     {

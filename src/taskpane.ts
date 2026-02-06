@@ -14,6 +14,7 @@ import { getModel, getModels, supportsXhigh } from "@mariozechner/pi-ai";
 import {
   ApiKeyPromptDialog,
   ModelSelector,
+  createStreamFn,
   type ProviderKeysStore,
   getAppStorage,
 } from "@mariozechner/pi-web-ui";
@@ -262,6 +263,11 @@ function clearErrorBanner(): void {
   render(html``, errorRoot);
 }
 
+function isLikelyCorsErrorMessage(msg: string): boolean {
+  const m = msg.toLowerCase();
+  return m.includes("failed to fetch") || m.includes("cors") || m.includes("cross-origin") || m.includes("networkerror");
+}
+
 render(renderLoading(), loadingRoot);
 
 
@@ -331,6 +337,18 @@ async function init(): Promise<void> {
   setActiveProviders(new Set(availableProviders));
   const defaultModel = pickDefaultModel(availableProviders);
 
+  const streamFn = createStreamFn(async () => {
+    try {
+      const storage = getAppStorage();
+      const enabled = await storage.settings.get("proxy.enabled");
+      if (!enabled) return undefined;
+      const url = await storage.settings.get("proxy.url");
+      return typeof url === "string" && url.trim().length > 0 ? url.trim().replace(/\/+$/, "") : undefined;
+    } catch {
+      return undefined;
+    }
+  });
+
   const agent = _agent = new Agent({
     initialState: {
       systemPrompt,
@@ -340,6 +358,7 @@ async function init(): Promise<void> {
       tools: createAllTools({ changeTracker }),
     },
     transformContext: async (context) => await injectContext(context),
+    streamFn,
   });
 
   // 6. Set up API key resolution
@@ -369,8 +388,13 @@ async function init(): Promise<void> {
   sidebar.emptyHints = ["Summarize this sheet", "Add a VLOOKUP formula", "Format as a table"];
   sidebar.onSend = (text) => {
     clearErrorBanner();
-    agent.prompt(text).catch((e) => {
-      showErrorBanner(`LLM error: ${e.message}`);
+    agent.prompt(text).catch((e: unknown) => {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (isLikelyCorsErrorMessage(msg)) {
+        showErrorBanner("Network error (likely CORS). Start the local proxy (npm run proxy) and enable it in /settings → Proxy.");
+      } else {
+        showErrorBanner(`LLM error: ${msg}`);
+      }
     });
   };
   sidebar.onAbort = () => {
@@ -392,7 +416,12 @@ async function init(): Promise<void> {
           /abort/i.test(agent.state.error) ||
           /cancel/i.test(agent.state.error);
         if (!isAbort) {
-          showErrorBanner(`LLM error: ${agent.state.error}`);
+          const err = agent.state.error;
+          if (isLikelyCorsErrorMessage(err)) {
+            showErrorBanner("Network error (likely CORS). Start the local proxy (npm run proxy) and enable it in /settings → Proxy.");
+          } else {
+            showErrorBanner(`LLM error: ${err}`);
+          }
         }
       } else {
         clearErrorBanner();

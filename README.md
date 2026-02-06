@@ -165,9 +165,20 @@ npx vite build
 npx office-addin-manifest validate manifest.xml
 ```
 
-### CORS in development
+### CORS / proxy
 
-The Vite dev server proxies API calls to LLM providers, stripping browser headers that would trigger CORS failures (notably Anthropic rejects requests with `Origin` headers). This is dev-only — production deployment will need a different solution.
+**Dev:** the Vite dev server proxies API + OAuth calls to providers (`/api-proxy/*`, `/oauth-proxy/*`).
+
+**Production:** some OAuth/token endpoints are blocked by browser CORS in Office webviews. Pi for Excel supports a **user-configurable CORS proxy**:
+
+1. Start the local proxy (recommended):
+   ```bash
+   npm run proxy
+   ```
+   (defaults to `http://localhost:3001`)
+2. In Excel, run `/settings` → **Proxy** tab → enable **Use CORS Proxy** → set Proxy URL.
+
+API-key based providers often work without a proxy; OAuth-based logins typically require one.
 
 ## Roadmap
 

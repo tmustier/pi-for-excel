@@ -1,11 +1,18 @@
 /**
- * Fetch interceptor — rewrites external API URLs to local Vite proxy paths
- * and strips browser-identifying headers that trigger CORS rejections.
+ * Fetch interceptor for dev + production.
  *
- * Install once at boot time. All subsequent fetch() calls are intercepted.
+ * Dev:
+ * - rewrites external URLs to Vite's local reverse proxies (/api-proxy/*, /oauth-proxy/*)
+ *
+ * Production:
+ * - does NOT assume any local reverse proxy exists
+ * - optionally routes *OAuth/token* endpoints through a user-configured CORS proxy
+ *   (<proxy>/?url=<target>) so browser OAuth flows work in Office webviews.
  */
 
-const PROXY_REWRITES: [string, string][] = [
+import { getAppStorage } from "@mariozechner/pi-web-ui";
+
+const DEV_REWRITES: [string, string][] = [
   // OAuth token endpoints
   ["https://console.anthropic.com/", "/oauth-proxy/anthropic/"],
   ["https://github.com/", "/oauth-proxy/github/"],
@@ -21,45 +28,128 @@ const PROXY_REWRITES: [string, string][] = [
 /** The original, un-patched fetch — use for requests that should bypass the proxy */
 export let originalFetch: typeof window.fetch;
 
+type ProxySettingsCache = {
+  checkedAt: number;
+  enabled: boolean;
+  url?: string;
+};
+
+const proxyCache: ProxySettingsCache = {
+  checkedAt: 0,
+  enabled: false,
+  url: undefined,
+};
+
+async function getEnabledProxyUrl(): Promise<string | undefined> {
+  // OAuth flows are infrequent, but fetch() is frequent; cache for a short time.
+  const now = Date.now();
+  if (now - proxyCache.checkedAt < 3000) {
+    return proxyCache.enabled ? proxyCache.url : undefined;
+  }
+
+  proxyCache.checkedAt = now;
+
+  try {
+    const storage = getAppStorage();
+    const enabled = await storage.settings.get("proxy.enabled");
+    const url = await storage.settings.get("proxy.url");
+    proxyCache.enabled = Boolean(enabled);
+    proxyCache.url = typeof url === "string" && url.trim().length > 0 ? url.trim().replace(/\/+$/, "") : undefined;
+  } catch {
+    proxyCache.enabled = false;
+    proxyCache.url = undefined;
+  }
+
+  return proxyCache.enabled ? proxyCache.url : undefined;
+}
+
+function looksLikeOAuthOrTokenEndpoint(url: string): boolean {
+  // Proxy only endpoints that are known to be blocked by CORS in browsers.
+  // Keep this conservative so normal fetch() calls aren't routed unexpectedly.
+  try {
+    const u = new URL(url);
+
+    // Anthropic OAuth token exchange / refresh
+    if (u.hostname === "console.anthropic.com" && u.pathname.startsWith("/v1/oauth/token")) return true;
+
+    // GitHub device flow + token exchange (supports enterprise domains too)
+    if (u.pathname === "/login/device/code") return true;
+    if (u.pathname === "/login/oauth/access_token") return true;
+
+    // GitHub Copilot token endpoint (github.com or GHE)
+    if (u.pathname.includes("/copilot_internal/")) return true;
+
+    // OpenAI auth endpoints (not all are browser-friendly)
+    if (u.hostname === "auth.openai.com" && u.pathname.startsWith("/oauth/")) return true;
+
+    // Google OAuth token endpoint
+    if (u.hostname === "oauth2.googleapis.com") return true;
+
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+function stripAnthropicBrowserHeader(init?: RequestInit): RequestInit | undefined {
+  if (!init?.headers) return init;
+  const headers = new Headers(init.headers);
+  headers.delete("anthropic-dangerous-direct-browser-access");
+  return { ...init, headers };
+}
+
 /**
  * Install the fetch interceptor. Call once at boot.
- * Rewrites matching URLs to local proxy paths and strips
- * the anthropic-dangerous-direct-browser-access header.
  */
 export function installFetchInterceptor(): void {
   originalFetch = window.fetch.bind(window);
 
   window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-    let url = typeof input === "string"
+    const url = typeof input === "string"
       ? input
       : input instanceof URL
         ? input.toString()
         : input.url;
 
-    let proxied = false;
-    for (const [prefix, proxy] of PROXY_REWRITES) {
-      if (url.startsWith(prefix)) {
-        url = url.replace(prefix, proxy);
-        proxied = true;
-        break;
-      }
+    // Relative URLs: never rewrite
+    if (!/^https?:\/\//i.test(url)) {
+      return originalFetch(input as any, init);
     }
 
-    if (proxied) {
-      const headers = new Headers(init?.headers);
-      headers.delete("anthropic-dangerous-direct-browser-access");
-      const newInit = { ...init, headers };
+    // Dev: Vite reverse proxies
+    if (import.meta.env.DEV) {
+      let rewritten: string | null = null;
+      for (const [prefix, proxy] of DEV_REWRITES) {
+        if (url.startsWith(prefix)) {
+          rewritten = url.replace(prefix, proxy);
+          break;
+        }
+      }
+
+      if (!rewritten) return originalFetch(input as any, init);
+
+      const newInit = stripAnthropicBrowserHeader(init);
 
       if (typeof input !== "string" && !(input instanceof URL) && input instanceof Request) {
         const newHeaders = new Headers(input.headers);
         newHeaders.delete("anthropic-dangerous-direct-browser-access");
-        input = new Request(url, { ...input, headers: newHeaders });
+        input = new Request(rewritten, { ...input, headers: newHeaders });
       } else {
-        input = url;
+        input = rewritten;
       }
-      return originalFetch(input, newInit);
+
+      return originalFetch(input as any, newInit);
     }
 
-    return originalFetch(input, init);
+    // Production: proxy OAuth/token endpoints through user-configured CORS proxy.
+    if (looksLikeOAuthOrTokenEndpoint(url)) {
+      const proxyUrl = await getEnabledProxyUrl();
+      if (proxyUrl) {
+        const proxied = `${proxyUrl}/?url=${encodeURIComponent(url)}`;
+        return originalFetch(proxied as any, stripAnthropicBrowserHeader(init));
+      }
+    }
+
+    return originalFetch(input as any, init);
   };
 }

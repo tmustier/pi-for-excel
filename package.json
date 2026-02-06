@@ -7,6 +7,7 @@
     "dev": "vite --port 3000",
     "build": "vite build",
     "preview": "vite preview",
+    "proxy": "node scripts/cors-proxy-server.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "eslint \"*.ts\" \"src/**/*.ts\" \"tests/**/*.ts\"",
     "lint:fix": "eslint \"*.ts\" \"src/**/*.ts\" \"tests/**/*.ts\" --fix",
