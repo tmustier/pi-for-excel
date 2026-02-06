@@ -183,6 +183,10 @@ npx office-addin-manifest validate manifest.xml
    ```
 2. In Excel, run `/settings` → **Proxy** tab → enable **Use CORS Proxy** → set Proxy URL (e.g. `https://localhost:3003`).
 
+**macOS note:** the taskpane runs on **HTTPS**. WKWebView often blocks calling an **HTTP** proxy from an HTTPS add-in (mixed content). Use `npm run proxy:https` and a proxy URL like `https://localhost:<port>`.
+
+Also: our mkcert cert is for `localhost` by default — `https://127.0.0.1:<port>` will fail unless you generate a cert that includes `127.0.0.1`.
+
 API-key based providers often work without a proxy; OAuth-based logins typically require one.
 
 ## Roadmap

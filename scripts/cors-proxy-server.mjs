@@ -6,13 +6,17 @@
  * Why this exists:
  * - Some provider OAuth/token endpoints (and some LLM APIs) block browser requests via CORS.
  * - In dev we rely on Vite's proxy. In production, you can run this locally and point
- *   Pi for Excel's proxy setting at it (default: http://localhost:3001).
+ *   Pi for Excel's proxy setting at it (default: https://localhost:3001).
+ *
+ * Usage:
+ *   npm run proxy:https   # HTTPS (recommended for Office webviews)
+ *   npm run proxy         # HTTP  (may be blocked as mixed content)
  *
  * Proxy format:
- *   http://localhost:3001/?url=<target-url>
+ *   https://localhost:3001/?url=<target-url>
  *
  * Example:
- *   curl 'http://localhost:3001/?url=https%3A%2F%2Fexample.com' 
+ *   curl 'https://localhost:3001/?url=https%3A%2F%2Fexample.com'
  */
 
 import http from "node:http";
