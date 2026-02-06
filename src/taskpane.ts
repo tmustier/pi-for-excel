@@ -26,6 +26,7 @@ import { getBlueprint } from "./context/blueprint.js";
 import { readSelectionContext } from "./context/selection.js";
 import { ChangeTracker } from "./context/change-tracker.js";
 import { initAppStorage } from "./storage/init-app-storage.js";
+import { getErrorMessage } from "./utils/errors.js";
 
 // UI components
 import { headerStyles } from "./ui/header.js";
@@ -277,8 +278,8 @@ Office.onReady(async (info: { host: any; platform: any }) => {
   try {
     initialized = true;
     await init();
-  } catch (e: any) {
-    showError(`Failed to initialize: ${e.message}`);
+  } catch (e: unknown) {
+    showError(`Failed to initialize: ${getErrorMessage(e)}`);
     console.error("[pi] Init error:", e);
   }
 });
@@ -287,8 +288,8 @@ setTimeout(() => {
   if (!initialized) {
     console.warn("[pi] Office.js not ready after 3s — initializing without Excel");
     initialized = true;
-    init().catch((e) => {
-      showError(`Failed to initialize: ${e.message}`);
+    init().catch((e: unknown) => {
+      showError(`Failed to initialize: ${getErrorMessage(e)}`);
       console.error("[pi] Init error:", e);
     });
   }

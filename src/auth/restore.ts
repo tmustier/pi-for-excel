@@ -57,8 +57,8 @@ async function restoreFromPiAuth(
               const refreshed = await provider.refreshToken(cred);
               await providerKeys.set(apiProvider, provider.getApiKey(refreshed));
               console.log(`[auth] ${providerId}: token refreshed`);
-            } catch (e: any) {
-              console.warn(`[auth] ${providerId}: refresh failed (${e.message})`);
+            } catch (e: unknown) {
+              console.warn(`[auth] ${providerId}: refresh failed (${getErrorMessage(e)})`);
             }
           } else {
             await providerKeys.set(apiProvider, provider.getApiKey(cred));
@@ -66,8 +66,8 @@ async function restoreFromPiAuth(
             console.log(`[auth] ${providerId}: OAuth token loaded (expires in ${hours}h)`);
           }
         }
-      } catch (e: any) {
-        console.warn(`[auth] ${providerId}: failed (${e.message})`);
+      } catch (e: unknown) {
+        console.warn(`[auth] ${providerId}: failed (${getErrorMessage(e)})`);
       }
     }
     return true;
@@ -97,15 +97,15 @@ async function restoreFromLocalStorage(
           localStorage.setItem(`oauth_${providerId}`, JSON.stringify(refreshed));
           await providerKeys.set(apiProvider, provider.getApiKey(refreshed));
           console.log(`[auth] ${provider.name}: token refreshed from localStorage`);
-        } catch (e: any) {
-          console.warn(`[auth] ${provider.name}: refresh failed, please login again`);
+        } catch (e: unknown) {
+          console.warn(`[auth] ${provider.name}: refresh failed (${getErrorMessage(e)}), please login again`);
         }
       } else {
         await providerKeys.set(apiProvider, provider.getApiKey(credentials));
         console.log(`[auth] ${provider.name}: session restored from localStorage`);
       }
-    } catch (e: any) {
-      console.warn(`[auth] ${providerId}: failed to restore (${e.message})`);
+    } catch (e: unknown) {
+      console.warn(`[auth] ${providerId}: failed to restore (${getErrorMessage(e)})`);
     }
   }
 }

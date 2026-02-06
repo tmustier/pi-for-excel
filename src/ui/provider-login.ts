@@ -8,6 +8,7 @@
  */
 
 import { getAppStorage } from "@mariozechner/pi-web-ui";
+import { getErrorMessage } from "../utils/errors.js";
 
 export interface ProviderDef {
   id: string;
@@ -140,8 +141,8 @@ export function buildProviderRow(
           detail.style.display = "none";
           expandedRef.current = null;
         }
-      } catch (err: any) {
-        errorEl.textContent = err.message || "Login failed";
+      } catch (err: unknown) {
+        errorEl.textContent = getErrorMessage(err) || "Login failed";
         errorEl.style.display = "block";
       } finally {
         oauthBtn.textContent = `Login with ${label}`;
@@ -163,8 +164,9 @@ export function buildProviderRow(
       onConnected(row, id, label);
       detail.style.display = "none";
       expandedRef.current = null;
-    } catch (err: any) {
-      errorEl.textContent = "Failed to save key";
+    } catch (err: unknown) {
+      const msg = getErrorMessage(err);
+      errorEl.textContent = msg ? `Failed to save key: ${msg}` : "Failed to save key";
       errorEl.style.display = "block";
     } finally {
       saveBtn.textContent = "Save";
