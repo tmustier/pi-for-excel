@@ -13,6 +13,21 @@ Unlike proprietary alternatives, Pi for Excel:
 - **Keeps your data local** — the agent runs entirely in the browser; your spreadsheet data never leaves your machine (only the context you send to your chosen LLM provider)
 - **Is free and open source** — no subscription, no per-seat pricing
 
+## Why Pi for Excel?
+
+Existing AI add-ins for Excel are closed-source, locked to a single model, and charge $20+/month. They also leave real capabilities on the table:
+
+| | Proprietary add-ins | Pi for Excel |
+|---|---|---|
+| **Context awareness** | Thin metadata push (sheet names + dimensions). Agent has to make tool calls just to see what you're looking at. | **Rich workbook blueprint** (headers, named ranges, tables, formula density) + **auto-read of your selection** — the agent already knows what you're looking at before you ask. |
+| **Formula tracing** | Manual cell-by-cell tracing. Deep dependency trees take dozens of tool calls. | **`trace_dependencies`** — full formula tree in a single call via Office.js `getDirectPrecedents()`. |
+| **Sessions** | Total amnesia. Close the sidebar, lose everything. | **Persistent sessions** saved to IndexedDB. Resume any conversation, even after restarting Excel. |
+| **Change tracking** | No awareness of what you edited between messages. | **Automatic change tracking** — the agent sees your edits and adapts. |
+| **Models** | Locked to one provider and model. | **Any model** — swap between Opus, Sonnet, GPT, Gemini, Codex, or local models mid-conversation. |
+| **Cost** | $20+/month per seat. | **Free.** Bring your own API key. |
+| **Tool overhead** | Separate tools for compact vs. detailed reads — the model often picks the wrong one. | **Single `read_range` tool** with a `mode` parameter. Less overhead, fewer wasted calls. |
+| **Writes** | Overwrite protection, but no verification. | **Auto-verification** — reads back written cells to check for `#REF!`, `#VALUE!`, and other errors. |
+
 ## Features
 
 - **13 Excel tools** — `get_workbook_overview`, `read_range`, `get_range_as_csv`, `read_selection`, `get_all_objects`, `write_cells`, `fill_formula`, `search_workbook`, `modify_structure`, `format_cells`, `conditional_format`, `trace_dependencies`, `get_recent_changes`
