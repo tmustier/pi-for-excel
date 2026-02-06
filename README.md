@@ -38,7 +38,7 @@ Existing AI add-ins for Excel are closed-source, locked to a single model, and c
 - **Write verification** — automatically checks formula results after writing
 - **Slash commands** — type `/` to browse all available commands with fuzzy search
 - **Extensions** — modular extension system with slash commands and inline widget UI (e.g., `/snake`)
-- **Keyboard shortcuts** — `Escape` to interrupt, `Shift+Tab` to focus input, `Ctrl+O` to collapse thinking/tool blocks
+- **Keyboard shortcuts** — `Escape` to interrupt, `Shift+Tab` to cycle thinking depth (incl. **max** on supported models like Opus 4.6), `Ctrl+O` to hide/show thinking + tool details
 - **Working indicator** — rotating whimsical messages and feature discovery hints while the model is streaming
 - **Pi-compatible messages** — conversations use the same `AgentMessage` format as Pi TUI. Session storage differs (IndexedDB vs JSONL), but the message layer is shared — future import/export is straightforward.
 
@@ -117,7 +117,7 @@ Type `/` in the message input to see all commands:
 | Shortcut | Action |
 |----------|--------|
 | `Escape` | Interrupt the current response |
-| `Shift+Tab` | Focus the input field |
+| `Shift+Tab` | Cycle thinking depth (off → low → … → max on supported models) |
 | `Ctrl+O` | Toggle collapse of thinking blocks and tool messages |
 | `/` | Open the slash command menu |
 
