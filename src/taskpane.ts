@@ -8,15 +8,10 @@
 // MUST be first — Lit fix + CSS (theme.css loaded after pi-web-ui/app.css)
 import "./boot.js";
 
+
 import { html, render } from "lit";
-import { Agent, type AgentMessage, type ThinkingLevel } from "@mariozechner/pi-agent-core";
-import { supportsXhigh } from "@mariozechner/pi-ai";
-import {
-  ApiKeyPromptDialog,
-  ModelSelector,
-  type ProviderKeysStore,
-  getAppStorage,
-} from "@mariozechner/pi-web-ui";
+import { Agent } from "@mariozechner/pi-agent-core";
+import { ApiKeyPromptDialog, ModelSelector, getAppStorage } from "@mariozechner/pi-web-ui";
 
 import { installFetchInterceptor } from "./auth/cors-proxy.js";
 import { createOfficeStreamFn } from "./auth/stream-proxy.js";
@@ -27,31 +22,25 @@ import { getBlueprint } from "./context/blueprint.js";
 import { ChangeTracker } from "./context/change-tracker.js";
 import { initAppStorage } from "./storage/init-app-storage.js";
 import { getErrorMessage } from "./utils/errors.js";
-import { extractTextFromContent } from "./utils/content.js";
 
 // UI components
 import { headerStyles } from "./ui/header.js";
 import { renderLoading, renderError, loadingStyles } from "./ui/loading.js";
-import { showToast } from "./ui/toast.js";
 import { PiSidebar } from "./ui/pi-sidebar.js";
 
 // Slash commands + extensions
 import { registerBuiltins } from "./commands/builtins.js";
-import { commandRegistry } from "./commands/types.js";
-import { wireCommandMenu, handleCommandMenuKey, isCommandMenuVisible, hideCommandMenu } from "./commands/command-menu.js";
+import { wireCommandMenu } from "./commands/command-menu.js";
 import { createExtensionAPI, loadExtension } from "./commands/extension-api.js";
 
 import {
   installModelSelectorPatch,
   setActiveProviders,
-} from "./taskpane/model-selector-patch.js";
+} from "./compat/model-selector-patch.js";
 import { setupSessionPersistence } from "./taskpane/sessions.js";
 import { createQueueDisplay } from "./taskpane/queue-display.js";
-import {
-  flashThinkingLevel,
-  injectStatusBar,
-  updateStatusBar,
-} from "./taskpane/status-bar.js";
+import { cycleThinkingLevel, installKeyboardShortcuts } from "./taskpane/keyboard-shortcuts.js";
+import { injectStatusBar, updateStatusBar } from "./taskpane/status-bar.js";
 import { showWelcomeLogin } from "./taskpane/welcome-login.js";
 import { pickDefaultModel } from "./taskpane/default-model.js";
 import { createContextInjector } from "./taskpane/context-injection.js";
@@ -308,118 +297,14 @@ async function init(): Promise<void> {
   const queueDisplay = createQueueDisplay({ agent, sidebar });
 
   // ── Keyboard shortcuts ──
-  const THINKING_COLORS: Record<ThinkingLevel, string> = {
-    off: "#a0a0a0",
-    minimal: "#767676",
-    low: "#4488cc",
-    medium: "#22998a",
-    high: "#875f87",
-    xhigh: "#8b008b",
-  };
-
-  function getThinkingLevels(): ThinkingLevel[] {
-    const model = agent.state.model;
-    if (!model || !model.reasoning) return ["off"];
-
-    const provider = model.provider;
-    if (provider === "openai" || provider === "openai-codex") {
-      const levels: ThinkingLevel[] = ["off", "minimal", "low", "medium", "high"];
-      if (supportsXhigh(model)) levels.push("xhigh");
-      return levels;
-    }
-
-    if (provider === "anthropic") {
-      const levels: ThinkingLevel[] = ["off", "low", "medium", "high"];
-      if (supportsXhigh(model)) levels.push("xhigh");
-      return levels;
-    }
-
-    return ["off", "low", "medium", "high"];
-  }
-
-  document.addEventListener("keydown", (e) => {
-    // Command menu takes priority
-    if (isCommandMenuVisible()) {
-      if (handleCommandMenuKey(e)) return;
-    }
-
-    const textarea = sidebar.getTextarea();
-    const isInEditor = Boolean(textarea && (e.target === textarea || textarea.contains(e.target as Node)));
-    const isStreaming = agent.state.isStreaming;
-
-    // ESC — dismiss command menu
-    if (e.key === "Escape" && isCommandMenuVisible()) {
-      e.preventDefault();
-      hideCommandMenu();
-      return;
-    }
-
-    // ESC — abort
-    if (e.key === "Escape" && isStreaming) {
-      e.preventDefault();
+  installKeyboardShortcuts({
+    agent,
+    sidebar,
+    queueDisplay,
+    markUserAborted: () => {
       _userAborted = true;
-      agent.abort();
-      return;
-    }
-
-    // Shift+Tab — cycle thinking level
-    if (e.shiftKey && e.key === "Tab") {
-      e.preventDefault();
-      const levels = getThinkingLevels();
-      const current = agent.state.thinkingLevel;
-      const idx = levels.indexOf(current);
-      const next = levels[(idx >= 0 ? idx + 1 : 0) % levels.length];
-      agent.setThinkingLevel(next);
-      updateStatusBar(agent);
-      flashThinkingLevel(next, THINKING_COLORS[next] || "#a0a0a0");
-      return;
-    }
-
-    // Ctrl+O — toggle thinking/tool visibility
-    if ((e.ctrlKey || e.metaKey) && e.key === "o") {
-      e.preventDefault();
-      const collapsed = document.body.classList.toggle("pi-hide-internals");
-      showToast(collapsed ? "Details hidden (⌃O)" : "Details shown (⌃O)", 1500);
-      return;
-    }
-
-    // Slash command execution
-    if (isInEditor && textarea && e.key === "Enter" && !e.shiftKey && textarea.value.startsWith("/") && !isStreaming) {
-      const val = textarea.value.trim();
-      const spaceIdx = val.indexOf(" ");
-      const cmdName = spaceIdx > 0 ? val.slice(1, spaceIdx) : val.slice(1);
-      const args = spaceIdx > 0 ? val.slice(spaceIdx + 1) : "";
-      const cmd = commandRegistry.get(cmdName);
-      if (cmd) {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        hideCommandMenu();
-        const input = sidebar.getInput();
-        if (input) input.clear();
-        cmd.execute(args);
-        return;
-      }
-    }
-
-    // Enter/Alt+Enter while streaming — steer or follow-up
-    if (isInEditor && textarea && e.key === "Enter" && !e.shiftKey && isStreaming) {
-      const text = textarea.value.trim();
-      if (!text) return;
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      const msg = { role: "user" as const, content: [{ type: "text" as const, text }], timestamp: Date.now() };
-      if (e.altKey) {
-        agent.followUp(msg);
-        queueDisplay.add("follow-up", text);
-      } else {
-        agent.steer(msg);
-        queueDisplay.add("steer", text);
-      }
-      const input = sidebar.getInput();
-      if (input) input.clear();
-      return;
-    }
-  }, true);
+    },
+  });
 
   // ── Status bar ──
   injectStatusBar(agent);
@@ -447,13 +332,7 @@ async function init(): Promise<void> {
 
     // Thinking level toggle
     if (el.closest?.(".pi-status-thinking")) {
-      const levels = getThinkingLevels();
-      const current = agent.state.thinkingLevel;
-      const idx = levels.indexOf(current);
-      const next = levels[(idx >= 0 ? idx + 1 : 0) % levels.length];
-      agent.setThinkingLevel(next);
-      updateStatusBar(agent);
-      flashThinkingLevel(next, THINKING_COLORS[next] || "#a0a0a0");
+      cycleThinkingLevel(agent);
     }
   });
 

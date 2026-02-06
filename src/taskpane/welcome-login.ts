@@ -5,7 +5,7 @@
 import type { ProviderKeysStore } from "@mariozechner/pi-web-ui";
 
 import { showToast } from "../ui/toast.js";
-import { setActiveProviders } from "./model-selector-patch.js";
+import { setActiveProviders } from "../compat/model-selector-patch.js";
 
 export async function showWelcomeLogin(providerKeys: ProviderKeysStore): Promise<void> {
   const { ALL_PROVIDERS, buildProviderRow } = await import("../ui/provider-login.js");
