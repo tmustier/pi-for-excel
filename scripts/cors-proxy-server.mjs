@@ -16,10 +16,26 @@
  */
 
 import http from "node:http";
+import https from "node:https";
+import fs from "node:fs";
+import path from "node:path";
 import { Readable } from "node:stream";
 
-const HOST = process.env.HOST || "127.0.0.1";
+const args = new Set(process.argv.slice(2));
+const useHttps = args.has("--https") || process.env.HTTPS === "1" || process.env.HTTPS === "true";
+const useHttp = args.has("--http");
+
+if (useHttps && useHttp) {
+  console.error("[pi-for-excel] Invalid args: can't use both --https and --http");
+  process.exit(1);
+}
+
+const HOST = process.env.HOST || (useHttps ? "localhost" : "127.0.0.1");
 const PORT = Number.parseInt(process.env.PORT || "3001", 10);
+
+const rootDir = path.resolve(process.cwd());
+const keyPath = path.join(rootDir, "key.pem");
+const certPath = path.join(rootDir, "cert.pem");
 
 const HOP_BY_HOP_HEADERS = new Set([
   "connection",
@@ -73,6 +89,10 @@ function buildOutboundHeaders(inHeaders) {
     if (lower === "referer") continue;
     if (lower.startsWith("sec-fetch-")) continue;
 
+    // Anthropic uses this header to explicitly enable direct browser access.
+    // When proxying we want the upstream to behave like a server-to-server call.
+    if (lower === "anthropic-dangerous-direct-browser-access") continue;
+
     // Never forward cookies through a generic proxy
     if (lower === "cookie") continue;
 
@@ -87,7 +107,7 @@ function buildOutboundHeaders(inHeaders) {
   return out;
 }
 
-const server = http.createServer(async (req, res) => {
+const handler = async (req, res) => {
   setCorsHeaders(req, res);
 
   if (req.method === "OPTIONS") {
@@ -179,9 +199,30 @@ const server = http.createServer(async (req, res) => {
     res.setHeader("Content-Type", "text/plain; charset=utf-8");
     res.end(`Proxy error: ${err instanceof Error ? err.message : String(err)}`);
   }
-});
+};
+
+const server = (() => {
+  if (!useHttps) {
+    return http.createServer(handler);
+  }
+
+  if (!fs.existsSync(keyPath) || !fs.existsSync(certPath)) {
+    console.error("[pi-for-excel] HTTPS requested but key.pem/cert.pem not found in repo root.");
+    console.error("Generate them with mkcert (see README). Example: mkcert localhost");
+    process.exit(1);
+  }
+
+  return https.createServer(
+    {
+      key: fs.readFileSync(keyPath),
+      cert: fs.readFileSync(certPath),
+    },
+    handler,
+  );
+})();
 
 server.listen(PORT, HOST, () => {
-  console.log(`[pi-for-excel] CORS proxy listening on http://${HOST}:${PORT}`);
-  console.log(`[pi-for-excel] Format: http://${HOST}:${PORT}/?url=<target-url>`);
+  const scheme = useHttps ? "https" : "http";
+  console.log(`[pi-for-excel] CORS proxy listening on ${scheme}://${HOST}:${PORT}`);
+  console.log(`[pi-for-excel] Format: ${scheme}://${HOST}:${PORT}/?url=<target-url>`);
 });

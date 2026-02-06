@@ -8,6 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "proxy": "node scripts/cors-proxy-server.mjs",
+    "proxy:https": "node scripts/cors-proxy-server.mjs --https",
     "serve:dist": "node scripts/serve-dist-https.mjs",
     "typecheck": "tsc --noEmit",
     "check": "npm run lint && npm run typecheck",

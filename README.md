@@ -171,12 +171,17 @@ npx office-addin-manifest validate manifest.xml
 
 **Production:** some OAuth/token endpoints are blocked by browser CORS in Office webviews. Pi for Excel supports a **user-configurable CORS proxy**:
 
-1. Start the local proxy (recommended):
+1. Start the local proxy (**recommended: HTTPS**):
    ```bash
-   npm run proxy
+   npm run proxy:https
    ```
-   (defaults to `http://localhost:3001`)
-2. In Excel, run `/settings` → **Proxy** tab → enable **Use CORS Proxy** → set Proxy URL.
+   (defaults to `https://localhost:3001`)
+
+   If port 3001 is taken, pick another port:
+   ```bash
+   PORT=3003 npm run proxy:https
+   ```
+2. In Excel, run `/settings` → **Proxy** tab → enable **Use CORS Proxy** → set Proxy URL (e.g. `https://localhost:3003`).
 
 API-key based providers often work without a proxy; OAuth-based logins typically require one.
 
