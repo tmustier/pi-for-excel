@@ -42,5 +42,8 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/tmustier/pi-for-excel.git"
+  },
+  "engines": {
+    "node": ">=20.0.0"
   }
 }

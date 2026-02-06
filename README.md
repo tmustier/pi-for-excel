@@ -45,7 +45,7 @@ Existing AI add-ins for Excel are closed-source, locked to a single model, and c
 ## Quick Start
 
 ### Prerequisites
-- Node.js 18+
+- Node.js 20+
 - Microsoft Excel (desktop, macOS or Windows)
 - [mkcert](https://github.com/FiloSottile/mkcert) for local HTTPS
 
