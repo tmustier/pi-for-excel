@@ -8,7 +8,7 @@ An open-source, multi-model AI sidebar add-in for Microsoft Excel — powered by
 
 Pi for Excel puts an AI assistant directly in your Excel sidebar. It can read your spreadsheet, write formulas, format cells, search data, and trace dependencies — all through natural conversation.
 
-Unlike proprietary alternatives (Claude for Excel, Copilot), Pi for Excel:
+Unlike proprietary alternatives, Pi for Excel:
 - **Works with any LLM** — Anthropic, OpenAI, Google, local models via Ollama/vLLM
 - **Keeps your data local** — the agent runs entirely in the browser; your spreadsheet data never leaves your machine (only the context you send to your chosen LLM provider)
 - **Is free and open source** — no subscription, no per-seat pricing
@@ -169,7 +169,6 @@ The Vite dev server proxies API calls to LLM providers, stripping browser header
 
 ## Prior Art
 
-- [Claude for Excel](https://workspace.anthropic.com) — Opus 4.5, $20+/mo, 14 tools, ~43% SpreadsheetBench
 - [Microsoft Copilot Agent Mode](https://techcommunity.microsoft.com/) — JS code gen + reflection, 57.2% SpreadsheetBench
 - [Univer](https://univer.ai) — Canvas-based spreadsheet runtime, 68.86% SpreadsheetBench (different architecture)
 

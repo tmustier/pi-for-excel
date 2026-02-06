@@ -1,7 +1,7 @@
 /**
  * modify_structure — Insert/delete rows, columns, and sheets.
  *
- * Combines Claude's modify_sheet_structure + modify_workbook_structure
+ * Single tool for all structural changes (sheets, rows, columns).
  * into a single tool.
  */
 

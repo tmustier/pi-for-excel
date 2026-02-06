@@ -4,7 +4,7 @@
  * When the user sends a message, this reads the active cell/range
  * plus surrounding context (±5 rows, full column extent of the data region).
  *
- * This is something Claude does NOT do — it knows the selection address
+ * Most add-ins only push the selection address — we auto-read the content
  * but doesn't auto-read the content. Our agent can answer "what's wrong
  * with this formula?" without needing a tool call first.
  */

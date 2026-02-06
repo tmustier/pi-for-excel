@@ -5,7 +5,7 @@
  * named ranges, and table inventory. This is injected at session start
  * and available on-demand.
  *
- * This is RICHER than Claude's thin push (just sheet name + dimensions).
+ * Pushes rich structural metadata (headers, named ranges, tables) — not just sheet names + dimensions.
  */
 
 import { Type } from "@sinclair/typebox";

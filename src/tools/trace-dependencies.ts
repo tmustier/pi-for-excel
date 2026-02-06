@@ -1,7 +1,7 @@
 /**
  * trace_dependencies — Return the formula dependency tree for a cell.
  *
- * This is Claude's biggest gap: it traces formulas manually, one cell at a time,
+ * Traces formulas in bulk using Office.js `getDirectPrecedents()` — one tool call
  * requiring dozens of tool calls for deep trees. We use getDirectPrecedents()
  * to walk the tree in a single tool call.
  *

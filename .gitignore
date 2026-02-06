@@ -1,7 +1,6 @@
-# Research (local only, except POC-LEARNINGS.md)
+# Research (local only)
 .research/
-research/*
-!research/POC-LEARNINGS.md
+research/
 
 # Proof of concept (archived locally)
 poc/
