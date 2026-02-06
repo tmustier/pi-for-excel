@@ -23,8 +23,5 @@ dist/
 # OS
 .DS_Store
 
-# Lock files (noisy in diffs)
-package-lock.json
-
 # Session exports
 pi-session-*

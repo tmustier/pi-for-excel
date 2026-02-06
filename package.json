@@ -10,6 +10,7 @@
     "proxy": "node scripts/cors-proxy-server.mjs",
     "serve:dist": "node scripts/serve-dist-https.mjs",
     "typecheck": "tsc --noEmit",
+    "check": "npm run lint && npm run typecheck",
     "lint": "eslint \"*.ts\" \"src/**/*.ts\" \"tests/**/*.ts\"",
     "lint:fix": "eslint \"*.ts\" \"src/**/*.ts\" \"tests/**/*.ts\" --fix",
     "test:models": "node --test --experimental-strip-types tests/model-ordering.test.ts",
