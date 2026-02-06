@@ -13,6 +13,7 @@ import type { ToolResultMessage } from "@mariozechner/pi-ai";
 import type { StreamingMessageContainer } from "@mariozechner/pi-web-ui";
 import "@mariozechner/pi-web-ui";
 import "./pi-input.js";
+import "./working-indicator.js";
 import type { PiInput } from "./pi-input.js";
 
 @customElement("pi-sidebar")
@@ -36,6 +37,14 @@ export class PiSidebar extends LitElement {
 
   getInput(): PiInput | undefined { return this._input ?? undefined; }
   getTextarea(): HTMLTextAreaElement | undefined { return this._input?.getTextarea(); }
+
+  /** Force re-sync from agent state (e.g. after replaceMessages). */
+  syncFromAgent(): void {
+    if (!this.agent) return;
+    this._hasMessages = this.agent.state.messages.length > 0;
+    this._isStreaming = this.agent.state.isStreaming;
+    this.requestUpdate();
+  }
 
   sendMessage(text: string): void {
     if (this.onSend) {
@@ -155,10 +164,14 @@ export class PiSidebar extends LitElement {
     const state = agent.state;
     const toolResultsById = this._buildToolResultsMap();
 
+    // Derive from agent state directly — _hasMessages may lag behind after
+    // batch operations like replaceMessages() that don't fire per-message events.
+    const hasMessages = this._hasMessages || state.messages.length > 0;
+
     return html`
       <div class="pi-messages">
         <div class="pi-messages__inner">
-          ${this._hasMessages ? html`
+          ${hasMessages ? html`
             <message-list
               .messages=${state.messages}
               .tools=${state.tools}
@@ -174,18 +187,13 @@ export class PiSidebar extends LitElement {
             ></streaming-message-container>
           ` : ""}
         </div>
-        ${!this._hasMessages ? this._renderEmptyState() : ""}
+        ${!hasMessages ? this._renderEmptyState() : ""}
       </div>
-      ${this._isStreaming ? html`
-        <div class="pi-working">
-          <span class="pi-working__text">Working…</span>
-          <span class="pi-working__hint">escape to interrupt</span>
-        </div>
-      ` : ""}
+      <pi-working-indicator .active=${this._isStreaming}></pi-working-indicator>
+      <div id="pi-widget-slot" class="pi-widget-slot" style="display:none"></div>
       <div class="pi-input-area">
         <pi-input
           .isStreaming=${this._isStreaming}
-          placeholder="Ask about your spreadsheet…"
           @pi-send=${this._onSend}
           @pi-abort=${this._onAbort}
         ></pi-input>

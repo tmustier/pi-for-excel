@@ -12,13 +12,22 @@
 import { html, LitElement } from "lit";
 import { customElement, property, state, query } from "lit/decorators.js";
 
+const PLACEHOLDER_HINTS = [
+  "Ask about your spreadsheet…",
+  "Type / for commands…",
+  "Ask about your spreadsheet…",
+  "Ask about your spreadsheet…",
+];
+
 @customElement("pi-input")
 export class PiInput extends LitElement {
   @property({ type: Boolean }) isStreaming = false;
-  @property() placeholder = "Type a message…";
 
   @state() private _value = "";
+  @state() private _placeholderIndex = 0;
   @query("textarea") private _textarea!: HTMLTextAreaElement;
+
+  private _placeholderTimer?: ReturnType<typeof setInterval>;
 
   get value(): string { return this._value; }
   set value(v: string) {
@@ -77,6 +86,20 @@ export class PiInput extends LitElement {
     ta.style.height = Math.min(ta.scrollHeight, window.innerHeight * 0.4) + "px";
   }
 
+  override connectedCallback() {
+    super.connectedCallback();
+    // Rotate placeholder hints every 8s (mostly default, occasionally slash hint)
+    this._placeholderTimer = setInterval(() => {
+      if (this.isStreaming || this._value) return; // don't rotate while typing or streaming
+      this._placeholderIndex = (this._placeholderIndex + 1) % PLACEHOLDER_HINTS.length;
+    }, 8000);
+  }
+
+  override disconnectedCallback() {
+    super.disconnectedCallback();
+    if (this._placeholderTimer) { clearInterval(this._placeholderTimer); this._placeholderTimer = undefined; }
+  }
+
   override firstUpdated() { this._textarea?.focus(); }
 
   override render() {
@@ -86,7 +109,7 @@ export class PiInput extends LitElement {
         <textarea
           class="pi-input-textarea"
           .value=${this._value}
-          placeholder=${this.isStreaming ? "Steer (Enter) · Follow-up (⌥Enter)…" : this.placeholder}
+          placeholder=${this.isStreaming ? "Steer (Enter) · Follow-up (⌥Enter)…" : PLACEHOLDER_HINTS[this._placeholderIndex]}
           rows="1"
           @input=${this._onInput}
           @keydown=${this._onKeydown}

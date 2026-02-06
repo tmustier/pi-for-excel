@@ -315,34 +315,49 @@ body {
    6. WORKING INDICATOR
    ═══════════════════════════════════════════════════════ */
 
-.pi-working {
+pi-working-indicator {
   flex-shrink: 0;
+}
+
+.pi-working {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 8px;
-  padding: 6px 12px;
-  animation: pi-working-pulse 2.4s ease-in-out infinite;
+  padding: 6px 14px;
 }
 
 .pi-working__text {
   font-family: var(--font-sans);
-  font-size: 12.5px;
+  font-size: 13.5px;
   font-weight: 500;
-  color: var(--muted-foreground);
+  color: var(--primary);
+  transition: opacity 0.25s ease;
 }
 
 .pi-working__hint {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 11.5px;
   color: var(--muted-foreground);
-  opacity: 0.5;
+  opacity: 0.7;
   letter-spacing: 0.02em;
+  transition: opacity 0.25s ease;
 }
 
-@keyframes pi-working-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
+/* Crossfade: fade out, swap text, fade in */
+.pi-working--fading {
+  opacity: 0 !important;
+}
+
+
+/* ═══════════════════════════════════════════════════════
+   6b. WIDGET SLOT — inline extension widgets above input
+   ═══════════════════════════════════════════════════════ */
+
+.pi-widget-slot {
+  flex-shrink: 0;
+  padding: 6px 10px;
+  border-top: 1px solid oklch(0 0 0 / 0.06);
 }
 
 
@@ -431,7 +446,7 @@ body {
 
 .pi-toast {
   position: fixed;
-  top: 52px;
+  top: 12px;
   left: 50%;
   transform: translateX(-50%) translateY(-4px);
   z-index: 200;
@@ -656,18 +671,37 @@ code-block { font-size: 12px !important; border-radius: 8px !important; }
 /* Thinking blocks */
 thinking-block { font-size: 12px; }
 
-/* Usage/cost — subtle */
-assistant-message .text-xs.text-muted-foreground {
-  font-size: 10.5px !important;
-  padding-left: 12px !important;
-  opacity: 0.7;
+/* Ctrl+O toggle — collapse thinking + tool internals */
+
+/* Thinking: keep "> Thinking…" header, hide expanded content */
+.pi-hide-internals thinking-block markdown-block {
+  display: none !important;
+}
+/* Force chevron to collapsed rotation */
+.pi-hide-internals thinking-block .thinking-header .rotate-90 {
+  transform: none !important;
 }
 
-/* Abort message */
+/* Tool messages: collapse card to a slim single-line summary */
+.pi-hide-internals tool-message > div {
+  max-height: 24px;
+  overflow: hidden;
+  padding: 4px 10px !important;
+  opacity: 0.5;
+  font-size: 11px;
+}
+
+/* Usage/cost — hidden (context % in status bar is enough) */
+assistant-message .text-xs.text-muted-foreground {
+  display: none !important;
+}
+
+/* Abort message — indent to align with content */
 assistant-message .text-destructive {
   font-size: 12.5px !important;
   color: var(--muted-foreground) !important;
   font-style: italic;
+  padding-left: 12px !important;
 }
 
 /* Streaming cursor */
@@ -681,7 +715,8 @@ streaming-message-container .animate-pulse {
    12. DIALOGS — ModelSelector, ApiKeyPrompt
    ═══════════════════════════════════════════════════════ */
 
-/* Backdrop */
+/* ── Shared backdrop + card ── */
+
 agent-model-selector .fixed.inset-0,
 api-key-prompt-dialog .fixed.inset-0,
 agent-api-key-dialog .fixed.inset-0,
@@ -691,7 +726,6 @@ agent-settings-dialog .fixed.inset-0 {
   -webkit-backdrop-filter: var(--glass-blur-heavy) !important;
 }
 
-/* Dialog card */
 agent-model-selector .fixed.z-50,
 api-key-prompt-dialog .fixed.z-50,
 agent-api-key-dialog .fixed.z-50,
@@ -703,21 +737,100 @@ agent-settings-dialog .fixed.z-50 {
   background: var(--glass-bg-solid) !important;
 }
 
-agent-model-selector .fixed.z-50 {
-  height: min(500px, 78vh) !important;
-}
-
-/* Model list hover */
-agent-model-selector [data-model-item]:hover,
-agent-model-selector [data-model-item].bg-accent {
-  background: var(--pi-green-lighter) !important;
-}
-
 /* Save/primary button — teal */
 api-key-prompt-dialog button[class*="bg-primary"],
 agent-api-key-dialog button[class*="bg-primary"] {
   background: var(--pi-green) !important;
   border-radius: 9px !important;
+}
+
+/* ── ModelSelector specifics ── */
+
+agent-model-selector .fixed.z-50 {
+  height: min(500px, 78vh) !important;
+}
+
+/* Font consistency — DM Sans everywhere */
+agent-model-selector {
+  font-family: var(--font-sans) !important;
+}
+
+/* Title — smaller, match our weight */
+agent-model-selector h2 {
+  font-family: var(--font-sans) !important;
+  font-size: 15px !important;
+  font-weight: 600 !important;
+}
+
+/* Header section — tighter padding for sidebar width */
+agent-model-selector .border-b.flex-shrink-0 {
+  padding: 16px 16px 12px !important;
+  gap: 12px !important;
+}
+
+/* Search input — softer focus ring, match our input card style */
+agent-model-selector input {
+  font-family: var(--font-sans) !important;
+  font-size: 13px !important;
+  border-radius: 10px !important;
+}
+agent-model-selector input:focus-visible {
+  border-color: oklch(0.45 0.12 160 / 0.22) !important;
+  box-shadow: 0 0 0 2px oklch(0.45 0.12 160 / 0.08) !important;
+}
+
+/* Hide filter pills (Thinking / Vision) — we don't need them */
+agent-model-selector .border-b.flex-shrink-0 > .flex.gap-2 {
+  display: none !important;
+}
+
+/* Close button — softer */
+agent-model-selector .absolute.top-4.right-4 {
+  top: 16px !important;
+  right: 16px !important;
+}
+
+/* Model items — tighter, softer dividers */
+agent-model-selector [data-model-item] {
+  padding: 10px 16px !important;
+  border-color: oklch(0 0 0 / 0.04) !important;
+}
+agent-model-selector [data-model-item]:hover,
+agent-model-selector [data-model-item].bg-accent {
+  background: var(--pi-green-lighter) !important;
+}
+
+/* Model ID — our mono font */
+agent-model-selector [data-model-item] .text-sm.font-medium {
+  font-family: var(--font-mono) !important;
+  font-size: 12.5px !important;
+  font-weight: 500 !important;
+}
+
+/* Provider badge — subtle tinted pill instead of stark outline */
+agent-model-selector [data-model-item] .rounded-md.border {
+  font-family: var(--font-mono) !important;
+  font-size: 10px !important;
+  border-color: oklch(0 0 0 / 0.06) !important;
+  background: oklch(0 0 0 / 0.03) !important;
+  border-radius: 6px !important;
+  letter-spacing: 0.01em;
+}
+
+/* Hide capability icons (brain/vision) in model detail row */
+agent-model-selector [data-model-item] .text-xs .gap-2 > span:has(svg) {
+  display: none !important;
+}
+
+/* Hide cost column */
+agent-model-selector [data-model-item] .text-xs.text-muted-foreground > span:last-child {
+  display: none !important;
+}
+
+/* Context info — our mono font, smaller */
+agent-model-selector [data-model-item] .text-xs {
+  font-family: var(--font-mono) !important;
+  font-size: 10.5px !important;
 }
 
 
