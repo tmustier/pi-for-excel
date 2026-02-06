@@ -158,7 +158,7 @@ export function createWriteCellsTool(): AgentTool<typeof schema> {
   };
 }
 
-function findInvalidFormulas(values: any[][], startCell: string): InvalidFormula[] {
+function findInvalidFormulas(values: unknown[][], startCell: string): InvalidFormula[] {
   const start = parseCell(startCell);
   const invalid: InvalidFormula[] = [];
 
@@ -213,7 +213,7 @@ export function validateFormula(formula: string): string | null {
   return null;
 }
 
-export function countOccupiedCells(values: any[][], formulas: any[][]): number {
+export function countOccupiedCells(values: unknown[][], formulas: unknown[][]): number {
   let count = 0;
   for (let r = 0; r < values.length; r++) {
     for (let c = 0; c < values[r].length; c++) {
