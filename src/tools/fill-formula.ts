@@ -34,7 +34,7 @@ type FillFormulaResult =
     sheetName: string;
     address: string;
     existingCount: number;
-    existingValues: any[][];
+    existingValues: unknown[][];
   }
   | {
     blocked: false;
@@ -42,8 +42,8 @@ type FillFormulaResult =
     address: string;
     rowCount: number;
     columnCount: number;
-    readBackValues: any[][];
-    readBackFormulas: any[][];
+    readBackValues: unknown[][];
+    readBackFormulas: unknown[][];
   };
 
 export function createFillFormulaTool(): AgentTool<typeof schema> {
