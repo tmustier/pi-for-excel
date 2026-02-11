@@ -33,7 +33,7 @@
   },
   "devDependencies": {
     "@types/office-js": "^1.0.571",
-    "eslint": "^9.39.2",
+    "eslint": "^10.0.0",
     "office-addin-debugging": "^6.0.6",
     "office-addin-manifest": "^2.1.2",
     "typescript": "^5.7.0",
