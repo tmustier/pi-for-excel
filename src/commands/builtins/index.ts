@@ -12,8 +12,10 @@ import { createClipboardCommands } from "./clipboard.js";
 import { createExportCommands, createCompactCommands } from "./export.js";
 import { createSessionIdentityCommands, createSessionLifecycleCommands, type SessionCommandActions } from "./session.js";
 import { createHelpCommands } from "./help.js";
+import { createExtensionsCommands, type ExtensionsCommandActions } from "./extensions.js";
 
-export interface BuiltinsContext extends SessionCommandActions, SettingsCommandActions {
+export interface BuiltinsContext
+  extends SessionCommandActions, SettingsCommandActions, ExtensionsCommandActions {
   getActiveAgent: ActiveAgentProvider;
 }
 
@@ -29,6 +31,7 @@ export function registerBuiltins(context: BuiltinsContext): void {
     ...createExportCommands(context.getActiveAgent),
     ...createSessionIdentityCommands(context),
     ...createHelpCommands(),
+    ...createExtensionsCommands(context),
     ...createSessionLifecycleCommands(context),
     ...createCompactCommands(context.getActiveAgent),
   ];

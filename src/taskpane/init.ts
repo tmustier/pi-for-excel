@@ -25,10 +25,11 @@ import { convertToLlm } from "../messages/convert-to-llm.js";
 import { createAllTools } from "../tools/index.js";
 import { applyExperimentalToolGates } from "../tools/experimental-tool-gates.js";
 import { withWorkbookCoordinator } from "../tools/with-workbook-coordinator.js";
-import { loadExtension, createExtensionAPI } from "../commands/extension-api.js";
 import { registerBuiltins } from "../commands/builtins.js";
+import { showExtensionsDialog } from "../commands/builtins/extensions-overlay.js";
 import type { ResumeDialogTarget } from "../commands/builtins/resume-target.js";
 import { showInstructionsDialog, showResumeDialog } from "../commands/builtins/overlays.js";
+import { ExtensionRuntimeManager } from "../extensions/runtime-manager.js";
 import { wireCommandMenu } from "../commands/command-menu.js";
 import { commandRegistry } from "../commands/types.js";
 import {
@@ -71,7 +72,7 @@ import {
 } from "./session-runtime-manager.js";
 import { isRecord } from "../utils/type-guards.js";
 
-const BUSY_ALLOWED_COMMANDS = new Set(["compact", "new", "instructions", "resume", "reopen"]);
+const BUSY_ALLOWED_COMMANDS = new Set(["compact", "new", "instructions", "resume", "reopen", "extensions"]);
 
 function showErrorBanner(errorRoot: HTMLElement, message: string): void {
   render(renderError(message), errorRoot);
@@ -340,6 +341,14 @@ export async function initTaskpane(opts: {
     document.dispatchEvent(new CustomEvent("pi:status-update"));
   };
 
+  const reservedToolNames = new Set(createAllTools().map((tool) => tool.name));
+  const extensionManager = new ExtensionRuntimeManager({
+    settings,
+    getActiveAgent,
+    refreshRuntimeTools: refreshToolsForAllRuntimes,
+    reservedToolNames,
+  });
+
   const refreshWorkbookState = async () => {
     const workbookContext = await resolveWorkbookContext();
     sidebar.workbookLabel = formatWorkbookLabel(workbookContext);
@@ -384,7 +393,11 @@ export async function initTaskpane(opts: {
     let runtimeAgent: Agent | null = null;
 
     const buildRuntimeTools = async () => {
-      const gatedTools = await applyExperimentalToolGates(createAllTools());
+      const allTools = [
+        ...createAllTools(),
+        ...extensionManager.getRegisteredTools(),
+      ];
+      const gatedTools = await applyExperimentalToolGates(allTools);
 
       return withWorkbookCoordinator(
         gatedTools,
@@ -718,6 +731,9 @@ export async function initTaskpane(opts: {
         },
       });
     },
+    openExtensionsManager: () => {
+      showExtensionsDialog(extensionManager);
+    },
   });
 
   // Slash commands chosen from the popup menu dispatch this event.
@@ -782,16 +798,15 @@ export async function initTaskpane(opts: {
 
   // Bootstrap from persisted tab layout; fallback to legacy single-runtime restore.
   const restoredRuntime = await restorePersistedTabLayout();
-  const initialRuntime = restoredRuntime
-    ?? await createRuntime({ activate: true, autoRestoreLatest: true });
+  if (!restoredRuntime) {
+    await createRuntime({ activate: true, autoRestoreLatest: true });
+  }
 
   tabLayoutPersistenceEnabled = true;
   maybePersistTabLayout();
 
   // ── Register extensions ──
-  const extensionAPI = createExtensionAPI(initialRuntime.agent);
-  const { activate: activateSnake } = await import("../extensions/snake.js");
-  await loadExtension(extensionAPI, activateSnake);
+  await extensionManager.initialize();
 
   document.addEventListener("pi:providers-changed", () => {
     void (async () => {

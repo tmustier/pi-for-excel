@@ -3,16 +3,18 @@
  *
  * Keep this intentionally small:
  * - local module specifiers are allowed by default
+ * - blob: module URLs are allowed (used for paste-code extensions)
  * - remote http(s) URLs are blocked by default
  * - an explicit localStorage opt-in can temporarily re-enable remote URLs
  */
 
 const LOCAL_SPECIFIER_PREFIXES = ["./", "../", "/"];
 const REMOTE_PROTOCOLS = new Set(["http:", "https:"]);
+const BLOB_PROTOCOL = "blob:";
 
 export const ALLOW_REMOTE_EXTENSION_URLS_STORAGE_KEY = "pi.allowRemoteExtensionUrls";
 
-export type ExtensionSourceKind = "local-module" | "remote-url" | "unsupported";
+export type ExtensionSourceKind = "local-module" | "blob-url" | "remote-url" | "unsupported";
 
 /**
  * Classify a string extension source into local/remote/unsupported.
@@ -33,6 +35,10 @@ export function classifyExtensionSource(source: string): ExtensionSourceKind {
     parsed = new URL(specifier);
   } catch {
     return "unsupported";
+  }
+
+  if (parsed.protocol === BLOB_PROTOCOL) {
+    return "blob-url";
   }
 
   return REMOTE_PROTOCOLS.has(parsed.protocol) ? "remote-url" : "unsupported";
