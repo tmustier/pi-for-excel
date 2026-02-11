@@ -129,6 +129,48 @@ function defaultToast(message: string): void {
   setTimeout(() => toastEl.classList.remove("visible"), 2000);
 }
 
+const BUNDLED_LOCAL_EXTENSION_IMPORTERS = import.meta.glob("../extensions/*.{ts,js}");
+
+function getLocalExtensionImportCandidates(specifier: string): string[] {
+  const normalized = specifier.trim();
+  const candidates = new Set<string>([normalized]);
+
+  if (normalized.endsWith(".js")) {
+    candidates.add(`${normalized.slice(0, -3)}.ts`);
+  } else if (normalized.endsWith(".ts")) {
+    candidates.add(`${normalized.slice(0, -3)}.js`);
+  } else {
+    candidates.add(`${normalized}.ts`);
+    candidates.add(`${normalized}.js`);
+  }
+
+  return Array.from(candidates);
+}
+
+async function importExtensionModule(specifier: string, sourceKind: ReturnType<typeof classifyExtensionSource>): Promise<unknown> {
+  if (sourceKind === "local-module") {
+    for (const candidate of getLocalExtensionImportCandidates(specifier)) {
+      const importer = BUNDLED_LOCAL_EXTENSION_IMPORTERS[candidate];
+      if (!importer) {
+        continue;
+      }
+
+      return importer();
+    }
+
+    if (import.meta.env.DEV) {
+      return import(/* @vite-ignore */ specifier);
+    }
+
+    throw new Error(
+      `Local extension module "${specifier}" was not bundled. `
+      + "Use a bundled module under src/extensions, paste code, or a remote URL (with explicit opt-in).",
+    );
+  }
+
+  return import(/* @vite-ignore */ specifier);
+}
+
 /** Create the extension API for a given host context. */
 export function createExtensionAPI(options: CreateExtensionAPIOptions): ExcelExtensionAPI {
   const registerCommand = options.registerCommand ?? defaultRegisterCommand;
@@ -404,7 +446,7 @@ export async function loadExtension(
     console.warn(`[pi] WARNING: loading remote extension URL due to explicit opt-in: ${specifier}`);
   }
 
-  const importedModule: unknown = await import(/* @vite-ignore */ specifier);
+  const importedModule = await importExtensionModule(specifier, sourceKind);
   const activate = getExtensionActivator(importedModule);
   if (!activate) {
     throw new Error(`Extension module "${specifier}" must export an activate(api) function`);
