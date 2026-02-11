@@ -19,6 +19,7 @@ Short, topic-based docs (mirrors Pi's layout). Keep deeper decisions close to th
 - [Upcoming (open issues digest)](./upcoming.md)
 - [Model/dependency update playbook](./model-updates.md)
 - [UI architecture](../src/ui/README.md) — layout, styling, the `@layer` gotcha
+- [Extensions authoring guide (MVP)](./extensions.md)
 
 ## Tools
 - [Tool behavior decisions](../src/tools/DECISIONS.md)

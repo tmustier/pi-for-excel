@@ -113,6 +113,7 @@ Type `/` in the message input to see all commands:
 | `/login` | Add/change/disconnect API keys and OAuth providers |
 | `/settings` | Open settings dialog |
 | `/experimental` | Manage experimental feature flags |
+| `/extensions` | Open the extensions manager |
 | `/shortcuts` | Show keyboard shortcuts |
 | `/compact` | Summarize conversation to free context |
 | `/copy` | Copy last response to clipboard |
@@ -282,10 +283,11 @@ See full request/response contract: [`docs/tmux-bridge-contract.md`](./docs/tmux
 
 ### Extension loading safety
 
-`loadExtension()` now blocks remote `http(s)` module URLs by default.
+`loadExtension()` blocks remote `http(s)` module URLs by default.
 
-- Allowed by default: local module specifiers (`./`, `../`, `/`) and inline function activators
+- Allowed by default: local module specifiers (`./`, `../`, `/`) and blob URLs (used by pasted-code installs)
 - Blocked by default: remote extension URLs
+- Local specifiers must resolve to bundled extension modules (currently `src/extensions/*.{ts,js}`)
 - Temporary unsafe opt-in for local experiments:
 
 ```bash
@@ -293,6 +295,8 @@ See full request/response contract: [`docs/tmux-bridge-contract.md`](./docs/tmux
 ```
 
   (Equivalent low-level toggle: `localStorage.setItem("pi.allowRemoteExtensionUrls", "1")`)
+
+See also: [`docs/extensions.md`](./docs/extensions.md).
 
 ## Roadmap
 
@@ -340,7 +344,7 @@ See full request/response contract: [`docs/tmux-bridge-contract.md`](./docs/tmux
 - [ ] Auto-compaction ([#20](https://github.com/tmustier/pi-for-excel/issues/20)) — context window budget management for long conversations
 - [ ] Change approval UI ([#6](https://github.com/tmustier/pi-for-excel/issues/6)) — structured approval flow for overwrites
 - [ ] Header bar UX ([#12](https://github.com/tmustier/pi-for-excel/issues/12)) — session switcher, workbook indicator
-- [ ] Extension API build-out ([#13](https://github.com/tmustier/pi-for-excel/issues/13)) — dynamic loading, tool registration, sandboxing
+- [ ] Extension platform follow-ups ([#13](https://github.com/tmustier/pi-for-excel/issues/13)) — sandbox/permissions, widget API evolution, docs polish
 
 ### Future
 - [ ] Production CORS solution ([#4](https://github.com/tmustier/pi-for-excel/issues/4)) — service worker or hosted relay

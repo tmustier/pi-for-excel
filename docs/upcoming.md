@@ -204,9 +204,14 @@ https://github.com/tmustier/pi-for-excel/issues/19
 ### #13 — Extensions API: design & build-out
 https://github.com/tmustier/pi-for-excel/issues/13
 
-**What it’s asking:** extension manager UI + dynamic loading + (critically) allow extensions to register tools.
+**Status note:** MVP is now shipped (extension manager UI, dynamic loading, persisted registry, extension tool registration, lifecycle cleanup).
 
-**Implication:** this is a strong argument for:
+**Remaining tracked follow-ups:**
+- #79 — sandbox + permissions model
+- #80 — widget API evolution
+- #81 — extension authoring docs
+
+**Implication:** keep extension architecture additive while we harden:
 - a centralized tool registry that can be extended dynamically
 - a clear permission model + lifecycle hooks
 
