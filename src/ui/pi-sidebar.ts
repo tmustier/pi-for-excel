@@ -81,6 +81,10 @@ export class PiSidebar extends LitElement {
   @property({ attribute: false }) onCreateTab?: () => void;
   @property({ attribute: false }) onSelectTab?: (runtimeId: string) => void;
   @property({ attribute: false }) onCloseTab?: (runtimeId: string) => void;
+  @property({ attribute: false }) onOpenInstructions?: () => void;
+  @property({ attribute: false }) onOpenSettings?: () => void;
+  @property({ attribute: false }) onOpenResumePicker?: () => void;
+  @property({ attribute: false }) onOpenShortcuts?: () => void;
   @property({ attribute: false }) lockNotice: string | null = null;
   @property({ type: String }) workbookLabel: string | null = null;
 
@@ -91,6 +95,7 @@ export class PiSidebar extends LitElement {
   @state() private _payloadStats: PayloadStats | null = null;
   @state() private _payloadSnapshots: PayloadSnapshot[] = [];
   @state() private _contextPillExpanded = false;
+  @state() private _utilitiesMenuOpen = false;
 
   @query(".pi-messages") private _scrollContainer?: HTMLElement;
   @query("streaming-message-container") private _streamingContainer?: StreamingMessageContainer;
@@ -398,8 +403,57 @@ export class PiSidebar extends LitElement {
                 : nothing}
             </div>
           `)}
+          <button class="pi-session-tabs__new" @click=${() => this.onCreateTab?.()} aria-label="New tab">+</button>
         </div>
-        <button class="pi-session-tabs__new" @click=${() => this.onCreateTab?.()} aria-label="New tab">+</button>
+        <div class="pi-utilities-anchor">
+          <button
+            class="pi-utilities-btn"
+            @click=${() => this._toggleUtilitiesMenu()}
+            aria-label="Menu"
+            title="Menu"
+          >⋯</button>
+          ${this._utilitiesMenuOpen ? this._renderUtilitiesMenu() : nothing}
+        </div>
+      </div>
+    `;
+  }
+
+  private _toggleUtilitiesMenu() {
+    this._utilitiesMenuOpen = !this._utilitiesMenuOpen;
+    if (this._utilitiesMenuOpen) {
+      requestAnimationFrame(() => {
+        const handler = (e: MouseEvent) => {
+          const anchor = this.querySelector(".pi-utilities-anchor");
+          if (anchor && !anchor.contains(e.target as Node)) {
+            this._utilitiesMenuOpen = false;
+            document.removeEventListener("click", handler, true);
+          }
+        };
+        document.addEventListener("click", handler, true);
+      });
+    }
+  }
+
+  private _closeUtilitiesMenu() {
+    this._utilitiesMenuOpen = false;
+  }
+
+  private _renderUtilitiesMenu() {
+    return html`
+      <div class="pi-utilities-menu">
+        <button class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenInstructions?.(); }}>
+          Instructions…
+        </button>
+        <button class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenSettings?.(); }}>
+          Settings…
+        </button>
+        <div class="pi-utilities-menu__divider"></div>
+        <button class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenResumePicker?.(); }}>
+          Resume session…
+        </button>
+        <button class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenShortcuts?.(); }}>
+          Keyboard shortcuts
+        </button>
       </div>
     `;
   }

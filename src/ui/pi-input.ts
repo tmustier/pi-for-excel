@@ -13,10 +13,10 @@ import { html, LitElement } from "lit";
 import { customElement, property, state, query } from "lit/decorators.js";
 
 const PLACEHOLDER_HINTS = [
-  "Ask about your spreadsheet…",
+  "Tell Pi what to build…",
   "Type / for commands…",
-  "Ask about your spreadsheet…",
-  "Ask about your spreadsheet…",
+  "Tell Pi what to build…",
+  "Tell Pi what to build…",
 ];
 
 @customElement("pi-input")

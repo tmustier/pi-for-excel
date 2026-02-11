@@ -28,7 +28,7 @@ import { withWorkbookCoordinator } from "../tools/with-workbook-coordinator.js";
 import { registerBuiltins } from "../commands/builtins.js";
 import { showExtensionsDialog } from "../commands/builtins/extensions-overlay.js";
 import type { ResumeDialogTarget } from "../commands/builtins/resume-target.js";
-import { showInstructionsDialog, showResumeDialog } from "../commands/builtins/overlays.js";
+import { showInstructionsDialog, showProviderPicker, showResumeDialog, showShortcutsDialog } from "../commands/builtins/overlays.js";
 import { ExtensionRuntimeManager } from "../extensions/runtime-manager.js";
 import { wireCommandMenu } from "../commands/command-menu.js";
 import { commandRegistry } from "../commands/types.js";
@@ -794,6 +794,26 @@ export async function initTaskpane(opts: {
 
   sidebar.onCloseTab = (runtimeId: string) => {
     void closeRuntimeWithRecovery(runtimeId);
+  };
+  sidebar.onOpenInstructions = () => {
+    void showInstructionsDialog({ onSaved: () => {} });
+  };
+  sidebar.onOpenSettings = () => {
+    void showProviderPicker();
+  };
+  sidebar.onOpenResumePicker = () => {
+    void showResumeDialog({
+      defaultTarget: "new_tab",
+      onOpenInNewTab: async (sessionData: SessionData) => {
+        await openSessionInNewTab(sessionData);
+      },
+      onReplaceCurrent: async (sessionData: SessionData) => {
+        await replaceActiveRuntimeSession(sessionData);
+      },
+    });
+  };
+  sidebar.onOpenShortcuts = () => {
+    showShortcutsDialog();
   };
 
   // Bootstrap from persisted tab layout; fallback to legacy single-runtime restore.
