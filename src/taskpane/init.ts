@@ -59,6 +59,11 @@ import { PiSidebar } from "../ui/pi-sidebar.js";
 import { setActiveProviders } from "../compat/model-selector-patch.js";
 import { createWorkbookCoordinator } from "../workbook/coordinator.js";
 import { formatWorkbookLabel, getWorkbookContext } from "../workbook/context.js";
+import {
+  PI_WORKBOOK_SNAPSHOT_CREATED_EVENT,
+  type WorkbookSnapshotCreatedDetail,
+} from "../workbook/recovery-events.js";
+import { getWorkbookRecoveryLog } from "../workbook/recovery-log.js";
 
 import { createContextInjector } from "./context-injection.js";
 import { pickDefaultModel } from "./default-model.js";
@@ -136,6 +141,34 @@ function getActiveLockNotice(tabs: RuntimeTabSnapshot[]): string | null {
   }
 
   return null;
+}
+
+function parseWorkbookSnapshotCreatedDetail(value: unknown): WorkbookSnapshotCreatedDetail | null {
+  if (!isRecord(value)) return null;
+
+  const snapshotId = typeof value.snapshotId === "string" ? value.snapshotId : null;
+  const rawToolName = typeof value.toolName === "string" ? value.toolName : null;
+  const address = typeof value.address === "string" ? value.address : null;
+  const changedCount = typeof value.changedCount === "number" ? value.changedCount : null;
+
+  const toolName =
+    rawToolName === "write_cells" ||
+    rawToolName === "fill_formula" ||
+    rawToolName === "python_transform_range" ||
+    rawToolName === "restore_snapshot"
+      ? rawToolName
+      : null;
+
+  if (!snapshotId || !toolName || !address || changedCount === null) {
+    return null;
+  }
+
+  return {
+    snapshotId,
+    toolName,
+    address,
+    changedCount,
+  };
 }
 
 export async function initTaskpane(opts: {
@@ -302,6 +335,30 @@ export async function initTaskpane(opts: {
   const getActiveQueueDisplay = () => getActiveRuntime()?.queueDisplay ?? null;
   const getActiveActionQueue = () => getActiveRuntime()?.actionQueue ?? null;
   const getActiveLockState = () => getActiveRuntime()?.lockState ?? "idle";
+
+  const workbookRecoveryLog = getWorkbookRecoveryLog();
+
+  const restoreCheckpointById = async (snapshotId: string): Promise<void> => {
+    const activeRuntime = getActiveRuntime();
+    const sessionId = activeRuntime?.persistence.getSessionId() ?? crypto.randomUUID();
+
+    const workbookId = await resolveWorkbookId();
+    const coordinatorWorkbookId = workbookId ?? "workbook:unknown";
+
+    const restored = await workbookCoordinator.runWrite(
+      {
+        workbookId: coordinatorWorkbookId,
+        sessionId,
+        opId: crypto.randomUUID(),
+        toolName: "workbook_history",
+      },
+      () => workbookRecoveryLog.restore(snapshotId),
+    );
+
+    const address = restored.result.address;
+    showToast(`Reverted ${address}`);
+  };
+
   const getActiveSkillTitles = (): string[] => {
     const runtime = getActiveRuntime();
     if (!runtime) return [];
@@ -432,6 +489,31 @@ export async function initTaskpane(opts: {
 
   document.addEventListener(PI_SKILLS_CHANGED_EVENT, () => {
     void refreshCapabilitiesForAllRuntimes();
+  });
+
+  document.addEventListener(PI_WORKBOOK_SNAPSHOT_CREATED_EVENT, (event) => {
+    if (!(event instanceof CustomEvent)) return;
+
+    const detail = parseWorkbookSnapshotCreatedDetail(event.detail);
+    if (!detail) return;
+    if (detail.toolName === "restore_snapshot") return;
+
+    const changedLabel = detail.changedCount > 0
+      ? `${detail.changedCount.toLocaleString()} cell${detail.changedCount === 1 ? "" : "s"}`
+      : "range";
+
+    showActionToast({
+      message: `Checkpoint saved for ${detail.address} (${changedLabel})`,
+      actionLabel: "Revert",
+      duration: 10_000,
+      onAction: () => {
+        void restoreCheckpointById(detail.snapshotId)
+          .catch((error: unknown) => {
+            const message = error instanceof Error ? error.message : "Unknown error";
+            showToast(`Revert failed: ${message}`);
+          });
+      },
+    });
   });
 
   const createRuntime = async (optsForRuntime: {

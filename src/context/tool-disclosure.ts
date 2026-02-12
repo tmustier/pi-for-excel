@@ -18,6 +18,7 @@ const TOOL_BUNDLES = {
     "fill_formula",
     "instructions",
     "conventions",
+    "workbook_history",
   ],
   analysis: [
     "get_workbook_overview",
@@ -28,6 +29,7 @@ const TOOL_BUNDLES = {
     "trace_dependencies",
     "instructions",
     "conventions",
+    "workbook_history",
   ],
   formatting: [
     "get_workbook_overview",
@@ -40,6 +42,7 @@ const TOOL_BUNDLES = {
     "view_settings",
     "instructions",
     "conventions",
+    "workbook_history",
   ],
   structure: [
     "get_workbook_overview",
@@ -51,6 +54,7 @@ const TOOL_BUNDLES = {
     "view_settings",
     "instructions",
     "conventions",
+    "workbook_history",
   ],
   comments: [
     "get_workbook_overview",
@@ -61,6 +65,7 @@ const TOOL_BUNDLES = {
     "comments",
     "instructions",
     "conventions",
+    "workbook_history",
   ],
   full: CORE_TOOL_NAMES,
 } as const satisfies Record<ActiveToolBundleId, readonly CoreToolName[]>;

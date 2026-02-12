@@ -153,6 +153,7 @@ void test("content-impact mutation tools do not trigger structure invalidation",
     },
     { toolName: "view_settings", params: { action: "hide_gridlines" } },
     { toolName: "view_settings", params: { action: "activate", sheet: "Sheet1" } },
+    { toolName: "workbook_history", params: { action: "restore", snapshot_id: "checkpoint-1" } },
   ];
 
   for (const item of cases) {
@@ -210,6 +211,7 @@ void test("read-only tool paths never emit mutation events", async (t) => {
     { toolName: "read_range", params: { range: "Sheet1!A1:B2" } },
     { toolName: "comments", params: { action: "read", range: "Sheet1!A1" } },
     { toolName: "view_settings", params: { action: "get" } },
+    { toolName: "workbook_history", params: { action: "list" } },
     { toolName: "tmux", params: { action: "list_sessions" } },
     { toolName: "python_run", params: { code: "print(1)" } },
     { toolName: "libreoffice_convert", params: { input_path: "/tmp/a.xlsx", target_format: "csv" } },

@@ -8,6 +8,7 @@ Short, topic-based docs (mirrors Pi's layout). Keep deeper decisions close to th
 - [Draft: session resume + tab recovery UX](./design-session-resume-ux.md)
 - [Draft: sidebar header chrome](./design-sidebar-header.md)
 - [Draft: extension sandbox + permissions model](./design-extension-sandbox-permissions.md) — [#79](https://github.com/tmustier/pi-for-excel/issues/79)
+- [Draft: YOLO workflow + workbook recovery](./design-yolo-recovery.md) — [#27](https://github.com/tmustier/pi-for-excel/issues/27)
 
 ## Architecture & Process
 - [Install (non-technical)](./install.md)

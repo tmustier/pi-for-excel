@@ -56,6 +56,11 @@ function classifyComments(params: unknown): ToolExecutionMode {
   return action === "read" ? "read" : "mutate";
 }
 
+function classifyWorkbookHistory(params: unknown): ToolExecutionMode {
+  const action = getActionParam(params);
+  return action === "restore" ? "mutate" : "read";
+}
+
 function isViewSettingsStructureAction(params: unknown): boolean {
   const action = getActionParam(params);
   return action === "hide_sheet" || action === "show_sheet" || action === "very_hide_sheet";
@@ -76,6 +81,10 @@ export function getToolExecutionMode(toolName: string, params: unknown): ToolExe
 
   if (toolName === "comments") {
     return classifyComments(params);
+  }
+
+  if (toolName === "workbook_history") {
+    return classifyWorkbookHistory(params);
   }
 
   return "mutate";

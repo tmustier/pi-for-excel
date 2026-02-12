@@ -187,3 +187,11 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 - **UI rendering:** tool cards include a dedicated **Changes** section with clickable cell addresses.
 - **Persistence:** successful/blocked mutations in the scoped tools are appended to local `workbook.change-audit.v1` for future export/history UX.
 - **Rationale:** improve user trust with concrete, navigable deltas while keeping implementation incremental and low-risk.
+
+## Workbook recovery checkpoints (`workbook_history`)
+- **Goal:** prefer low-friction workflows over pre-execution approval selectors by making rollback easy and reliable.
+- **Automatic checkpoints:** successful `write_cells`, `fill_formula`, and `python_transform_range` writes store pre-write range snapshots in local `workbook.recovery-snapshots.v1`.
+- **Safety limits:** checkpoint capture is skipped for very large writes (> `MAX_RECOVERY_CELLS`) to avoid oversized local state.
+- **Restore UX:** `workbook_history` can list/restore/delete/clear checkpoints; restores also create an inverse checkpoint (`restore_snapshot`) so users can undo a mistaken restore.
+- **Quick affordance:** after a checkpointed write, UI shows an action toast with **Revert**.
+- **Rationale:** addresses #27 by shifting from cumbersome up-front approvals to versioned recovery with explicit user-controlled rollback.
