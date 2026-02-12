@@ -304,17 +304,6 @@ export class PiSidebar extends LitElement {
     return map;
   }
 
-  private _renderWorkbookLabel() {
-    if (!this.workbookLabel) return nothing;
-
-    return html`
-      <div class="pi-workbook-label" title=${this.workbookLabel}>
-        <span class="pi-workbook-label__hint">Workbook</span>
-        <span class="pi-workbook-label__name">${this.workbookLabel}</span>
-      </div>
-    `;
-  }
-
   override render() {
     const agent = this.agent;
     if (!agent) return html``;
@@ -330,7 +319,6 @@ export class PiSidebar extends LitElement {
       ${this.lockNotice
         ? html`<div class="pi-lock-notice">${this.lockNotice}</div>`
         : nothing}
-      ${this._renderWorkbookLabel()}
       <div class="pi-messages">
         <div class="pi-messages__inner">
           ${hasMessages ? html`
@@ -434,7 +422,10 @@ export class PiSidebar extends LitElement {
     }
 
     this._utilitiesMenuOpen = true;
-    requestAnimationFrame(() => this._attachUtilitiesMenuDocumentListener());
+    requestAnimationFrame(() => {
+      if (!this.isConnected || !this._utilitiesMenuOpen) return;
+      this._attachUtilitiesMenuDocumentListener();
+    });
   }
 
   private _attachUtilitiesMenuDocumentListener() {

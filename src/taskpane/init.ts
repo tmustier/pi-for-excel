@@ -9,6 +9,7 @@ import { html, render } from "lit";
 import { Agent } from "@mariozechner/pi-agent-core";
 import { ApiKeyPromptDialog } from "@mariozechner/pi-web-ui/dist/dialogs/ApiKeyPromptDialog.js";
 import { ModelSelector } from "@mariozechner/pi-web-ui/dist/dialogs/ModelSelector.js";
+import { ApiKeysTab, ProxyTab, SettingsDialog } from "@mariozechner/pi-web-ui/dist/dialogs/SettingsDialog.js";
 import { getAppStorage } from "@mariozechner/pi-web-ui/dist/storage/app-storage.js";
 import type { SessionData } from "@mariozechner/pi-web-ui/dist/storage/types.js";
 
@@ -28,7 +29,7 @@ import { withWorkbookCoordinator } from "../tools/with-workbook-coordinator.js";
 import { registerBuiltins } from "../commands/builtins.js";
 import { showExtensionsDialog } from "../commands/builtins/extensions-overlay.js";
 import type { ResumeDialogTarget } from "../commands/builtins/resume-target.js";
-import { showInstructionsDialog, showProviderPicker, showResumeDialog, showShortcutsDialog } from "../commands/builtins/overlays.js";
+import { showInstructionsDialog, showResumeDialog, showShortcutsDialog } from "../commands/builtins/overlays.js";
 import { ExtensionRuntimeManager } from "../extensions/runtime-manager.js";
 import { wireCommandMenu } from "../commands/command-menu.js";
 import { commandRegistry } from "../commands/types.js";
@@ -44,7 +45,7 @@ import { showActionToast, showToast } from "../ui/toast.js";
 import { PiSidebar } from "../ui/pi-sidebar.js";
 import { setActiveProviders } from "../compat/model-selector-patch.js";
 import { createWorkbookCoordinator } from "../workbook/coordinator.js";
-import { formatWorkbookLabel, getWorkbookContext } from "../workbook/context.js";
+import { getWorkbookContext } from "../workbook/context.js";
 
 import { createContextInjector } from "./context-injection.js";
 import { pickDefaultModel } from "./default-model.js";
@@ -351,9 +352,6 @@ export async function initTaskpane(opts: {
 
   const refreshWorkbookState = async () => {
     const workbookContext = await resolveWorkbookContext();
-    sidebar.workbookLabel = formatWorkbookLabel(workbookContext);
-    sidebar.requestUpdate();
-
     await refreshSystemPromptForAllRuntimes(workbookContext.workbookId);
     maybePersistTabLayout();
   };
@@ -796,10 +794,14 @@ export async function initTaskpane(opts: {
     void closeRuntimeWithRecovery(runtimeId);
   };
   sidebar.onOpenInstructions = () => {
-    void showInstructionsDialog({ onSaved: () => {} });
+    void showInstructionsDialog({
+      onSaved: async () => {
+        await refreshWorkbookState();
+      },
+    });
   };
   sidebar.onOpenSettings = () => {
-    void showProviderPicker();
+    void SettingsDialog.open([new ApiKeysTab(), new ProxyTab()]);
   };
   sidebar.onOpenResumePicker = () => {
     void showResumeDialog({
