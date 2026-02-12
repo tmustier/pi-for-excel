@@ -95,6 +95,10 @@ export function deriveStoredExtensionTrust(entryId: string, source: ExtensionSou
     return "remote-url";
   }
 
+  if (sourceKind === "blob-url") {
+    return "inline-code";
+  }
+
   if (entryId === "builtin.snake" || entryId.startsWith("builtin.")) {
     return "builtin";
   }
