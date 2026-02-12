@@ -75,6 +75,7 @@ void test("builtins registry wires /experimental and /extensions command registr
   assert.match(extensionsOverlaySource, /manager\.setExtensionCapability\(/);
   assert.match(extensionsOverlaySource, /toggle\.type = "checkbox"/);
   assert.match(extensionsOverlaySource, /Updated permissions for/);
+  assert.match(extensionsOverlaySource, /reload failed \(see Last error\)/);
 
   const extensionsDocsSource = await readFile(new URL("../docs/extensions.md", import.meta.url), "utf8");
   assert.match(extensionsDocsSource, /## Permission review\/revoke/);

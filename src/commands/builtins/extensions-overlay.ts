@@ -467,11 +467,28 @@ export function showExtensionsDialog(manager: ExtensionRuntimeManager): void {
         void runAction(async () => {
           await manager.setExtensionCapability(status.id, capability, nextAllowed);
 
-          if (status.enabled) {
-            showToast(`Updated permissions for ${status.name}; extension reloaded.`);
-          } else {
+          const updated = manager.list().find((entry) => entry.id === status.id);
+          if (!updated) {
             showToast(`Updated permissions for ${status.name}.`);
+            return;
           }
+
+          if (!updated.enabled) {
+            showToast(`Updated permissions for ${status.name}.`);
+            return;
+          }
+
+          if (updated.lastError) {
+            showToast(`Updated permissions for ${status.name}; reload failed (see Last error).`);
+            return;
+          }
+
+          if (updated.loaded) {
+            showToast(`Updated permissions for ${status.name}; extension reloaded.`);
+            return;
+          }
+
+          showToast(`Updated permissions for ${status.name}.`);
         });
       });
     }
