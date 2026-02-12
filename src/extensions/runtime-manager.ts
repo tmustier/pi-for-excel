@@ -23,6 +23,7 @@ import {
   deriveStoredExtensionTrust,
   getDefaultPermissionsForTrust,
   isExtensionCapabilityAllowed,
+  listAllExtensionCapabilities,
   listGrantedExtensionCapabilities,
   type ExtensionCapability,
   type StoredExtensionPermissions,
@@ -61,6 +62,8 @@ export interface ExtensionRuntimeStatus {
   trustLabel: string;
   permissions: StoredExtensionPermissions;
   grantedCapabilities: ExtensionCapability[];
+  effectiveCapabilities: ExtensionCapability[];
+  permissionsEnforced: boolean;
   commandNames: string[];
   toolNames: string[];
   lastError: string | null;
@@ -150,8 +153,15 @@ export class ExtensionRuntimeManager {
   }
 
   list(): ExtensionRuntimeStatus[] {
+    const permissionsEnforced = isExperimentalFeatureEnabled("extension_permission_gates");
+
     return this.entries.map((entry) => {
       const state = this.activeStates.get(entry.id);
+      const grantedCapabilities = listGrantedExtensionCapabilities(entry.permissions);
+      const effectiveCapabilities = permissionsEnforced
+        ? grantedCapabilities
+        : listAllExtensionCapabilities();
+
       return {
         id: entry.id,
         name: entry.name,
@@ -162,7 +172,9 @@ export class ExtensionRuntimeManager {
         trust: entry.trust,
         trustLabel: describeStoredExtensionTrust(entry.trust),
         permissions: entry.permissions,
-        grantedCapabilities: listGrantedExtensionCapabilities(entry.permissions),
+        grantedCapabilities,
+        effectiveCapabilities,
+        permissionsEnforced,
         commandNames: state ? Array.from(state.commandNames).sort() : [],
         toolNames: state ? Array.from(state.toolNames).sort() : [],
         lastError: this.lastErrors.get(entry.id) ?? null,

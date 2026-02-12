@@ -23,14 +23,17 @@ export interface StoredExtensionPermissions {
   uiToast: boolean;
 }
 
-export type ExtensionCapability =
-  | "commands.register"
-  | "tools.register"
-  | "agent.read"
-  | "agent.events.read"
-  | "ui.overlay"
-  | "ui.widget"
-  | "ui.toast";
+export const ALL_EXTENSION_CAPABILITIES = [
+  "commands.register",
+  "tools.register",
+  "agent.read",
+  "agent.events.read",
+  "ui.overlay",
+  "ui.widget",
+  "ui.toast",
+] as const;
+
+export type ExtensionCapability = (typeof ALL_EXTENSION_CAPABILITIES)[number];
 
 const TRUSTED_PERMISSIONS: StoredExtensionPermissions = {
   commandsRegister: true,
@@ -163,6 +166,10 @@ export function describeStoredExtensionTrust(trust: StoredExtensionTrust): strin
 
 export function describeExtensionCapability(capability: ExtensionCapability): string {
   return CAPABILITY_LABELS[capability];
+}
+
+export function listAllExtensionCapabilities(): ExtensionCapability[] {
+  return [...ALL_EXTENSION_CAPABILITIES];
 }
 
 export function listGrantedExtensionCapabilities(

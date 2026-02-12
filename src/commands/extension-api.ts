@@ -230,6 +230,8 @@ export function createExtensionAPI(options: CreateExtensionAPIOptions): ExcelExt
 
     get agent() {
       assertCapability("agent.read");
+      // Raw Agent includes event subscription; require both until a narrowed agent facade exists.
+      assertCapability("agent.events.read");
       return options.getAgent();
     },
 

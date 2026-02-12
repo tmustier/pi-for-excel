@@ -356,8 +356,12 @@ export function showExtensionsDialog(manager: ExtensionRuntimeManager): void {
     badges.appendChild(createBadge(status.trustLabel, trustBadgeColor));
 
     badges.appendChild(
-      createBadge(`${status.grantedCapabilities.length} permission${status.grantedCapabilities.length === 1 ? "" : "s"}`, "muted"),
+      createBadge(`${status.effectiveCapabilities.length} permission${status.effectiveCapabilities.length === 1 ? "" : "s"}`, "muted"),
     );
+
+    if (!status.permissionsEnforced) {
+      badges.appendChild(createBadge("gates off", "warn"));
+    }
 
     if (status.toolNames.length > 0) {
       badges.appendChild(createBadge(`${status.toolNames.length} tool${status.toolNames.length === 1 ? "" : "s"}`, "muted"));
@@ -387,9 +391,20 @@ export function showExtensionsDialog(manager: ExtensionRuntimeManager): void {
     }
 
     const permissions = document.createElement("div");
-    permissions.textContent = `Permissions: ${formatCapabilityList(status.grantedCapabilities)}`;
+    if (status.permissionsEnforced) {
+      permissions.textContent = `Permissions: ${formatCapabilityList(status.effectiveCapabilities)}`;
+    } else {
+      permissions.textContent = "Permissions: all capabilities active (extension-permissions experiment is off)";
+    }
     permissions.style.cssText = "font-size: 11px; color: var(--muted-foreground);";
     details.appendChild(permissions);
+
+    if (!status.permissionsEnforced) {
+      const configuredPermissions = document.createElement("div");
+      configuredPermissions.textContent = `Configured (inactive): ${formatCapabilityList(status.grantedCapabilities)}`;
+      configuredPermissions.style.cssText = "font-size: 11px; color: var(--muted-foreground);";
+      details.appendChild(configuredPermissions);
+    }
 
     if (status.lastError) {
       const errorLine = document.createElement("div");

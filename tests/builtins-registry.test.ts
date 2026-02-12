@@ -51,6 +51,14 @@ void test("builtins registry wires /experimental and /extensions command registr
   assert.match(extensionApiSource, /commands\.register/);
   assert.match(extensionApiSource, /tools\.register/);
   assert.match(extensionApiSource, /agent\.events\.read/);
+  assert.match(
+    extensionApiSource,
+    /get agent\(\)\s*\{[\s\S]*assertCapability\("agent\.read"\);[\s\S]*assertCapability\("agent\.events\.read"\);/,
+  );
+
+  const runtimeManagerSource = await readFile(new URL("../src/extensions/runtime-manager.ts", import.meta.url), "utf8");
+  assert.match(runtimeManagerSource, /effectiveCapabilities/);
+  assert.match(runtimeManagerSource, /permissionsEnforced/);
 
   const experimentalFlagsSource = await readFile(new URL("../src/experiments/flags.ts", import.meta.url), "utf8");
   assert.match(experimentalFlagsSource, /extension_permission_gates/);
