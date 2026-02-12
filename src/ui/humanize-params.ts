@@ -745,6 +745,44 @@ function humanizeMcp(p: Record<string, unknown>): ParamItem[] {
   return items;
 }
 
+function humanizeFiles(p: Record<string, unknown>): ParamItem[] {
+  const items: ParamItem[] = [];
+  const action = str(p.action);
+
+  if (action) {
+    items.push({ label: "Action", value: action });
+  }
+
+  if (p.path) {
+    items.push({ label: "Path", value: str(p.path) });
+  }
+
+  if (p.mode) {
+    items.push({ label: "Read mode", value: str(p.mode) });
+  }
+
+  if (p.encoding) {
+    items.push({ label: "Encoding", value: str(p.encoding) });
+  }
+
+  if (p.mime_type) {
+    items.push({ label: "MIME", value: str(p.mime_type) });
+  }
+
+  const maxChars = num(p.max_chars);
+  if (maxChars !== undefined) {
+    items.push({ label: "Max chars", value: String(maxChars) });
+  }
+
+  if (p.content !== undefined) {
+    const content = str(p.content);
+    const compact = content.length > 120 ? `${content.slice(0, 117)}…` : content;
+    items.push({ label: "Content", value: compact });
+  }
+
+  return items;
+}
+
 /* ── Shared helpers ─────────────────────────────────────────── */
 
 /** Join an array of mixed text/TemplateResult with comma separators. */
@@ -773,7 +811,7 @@ function humanizeOperator(op: string): string {
 
 type HumanizerFn = (p: Record<string, unknown>) => ParamItem[];
 
-const HUMANIZERS: Record<string, HumanizerFn> = {
+const CORE_HUMANIZERS = {
   format_cells: humanizeFormatCells,
   write_cells: humanizeWriteCells,
   read_range: humanizeReadRange,
@@ -788,6 +826,17 @@ const HUMANIZERS: Record<string, HumanizerFn> = {
   instructions: humanizeInstructions,
   conventions: humanizeConventions,
 } satisfies Record<CoreToolName, HumanizerFn>;
+
+const EXTRA_HUMANIZERS: Record<string, HumanizerFn> = {
+  web_search: humanizeWebSearch,
+  mcp: humanizeMcp,
+  files: humanizeFiles,
+};
+
+const HUMANIZERS: Record<string, HumanizerFn> = {
+  ...CORE_HUMANIZERS,
+  ...EXTRA_HUMANIZERS,
+};
 
 /* ── Public API ─────────────────────────────────────────────── */
 

@@ -30,7 +30,7 @@ Existing AI add-ins for Excel are closed-source, locked to a single model, and c
 
 ## Features
 
-- **11 Excel tools** — `get_workbook_overview`, `read_range`, `write_cells`, `fill_formula`, `search_workbook`, `modify_structure`, `format_cells`, `conditional_format`, `comments`, `trace_dependencies`, `view_settings`
+- **13 core Excel tools** — `get_workbook_overview`, `read_range`, `write_cells`, `fill_formula`, `search_workbook`, `modify_structure`, `format_cells`, `conditional_format`, `comments`, `trace_dependencies`, `view_settings`, `instructions`, `conventions`
 - **Composable cell styles** — named format presets (`"currency"`, `"percent"`, `"integer"`) and structural styles (`"header"`, `"total-row"`, `"input"`) that compose like CSS classes: `style: ["currency", "total-row"]`
 - **Auto-context injection** — automatically reads around your selection and tracks changes between messages
 - **Workbook blueprint** — sends a structural overview of your workbook to the LLM at session start (auto-invalidates after structural changes)
@@ -41,6 +41,7 @@ Existing AI add-ins for Excel are closed-source, locked to a single model, and c
 - **Markdown tool cards** — tool outputs render as formatted markdown (tables, lists, headers) instead of raw text
 - **Slash commands** — type `/` to browse all available commands with fuzzy search
 - **Extensions** — modular extension system with slash commands and inline widget UI (e.g., `/snake`)
+- **Skills manager** — opt-in skill bundles (session/workbook scope) that can inject instructions and add external tools (`web_search`, `mcp`)
 - **Keyboard shortcuts** — `Escape` to interrupt, `Shift+Tab` to cycle thinking depth (incl. **max** / `xhigh` effort on Opus 4.6+), `Ctrl+O` to hide/show thinking + tool details
 - **Working indicator** — rotating whimsical messages and feature discovery hints while the model is streaming
 - **Pi-compatible messages** — conversations use the same `AgentMessage` format as Pi TUI. Session storage differs (IndexedDB vs JSONL), but the message layer is shared — future import/export is straightforward.
@@ -112,6 +113,7 @@ Type `/` in the message input to see all commands:
 | `/default-models` | Default model presets (currently opens the model selector) |
 | `/login` | Add/change/disconnect API keys and OAuth providers |
 | `/settings` | Open settings dialog |
+| `/skills` | Manage skills + external tools (web search, MCP servers) |
 | `/experimental` | Manage experimental feature flags |
 | `/extensions` | Open extensions manager (install/enable/disable/reload/uninstall) |
 | `/shortcuts` | Show keyboard shortcuts |
@@ -133,6 +135,12 @@ Experimental examples:
 - `/experimental python-bridge-token <token>`
 - `/experimental python-bridge-url clear`
 - `/experimental python-bridge-token clear`
+
+Skills/external tools quick start:
+- `/skills` → enable **Web Search** and/or **MCP Gateway**
+- Toggle **Allow external tools** (global gate, default-off)
+- Add Brave API key for `web_search`
+- Add MCP servers (URL + optional token) and use **Test** before enabling skill
 
 ## Keyboard Shortcuts
 

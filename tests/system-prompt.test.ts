@@ -46,3 +46,9 @@ void test("system prompt lists the conventions tool", () => {
   const prompt = buildSystemPrompt();
   assert.match(prompt, /\*\*conventions\*\*/);
 });
+
+void test("system prompt mentions optional files workspace capability", () => {
+  const prompt = buildSystemPrompt();
+  assert.match(prompt, /\*\*files\*\*/);
+  assert.match(prompt, /workspace artifacts/i);
+});

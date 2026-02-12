@@ -13,9 +13,10 @@ import { createExportCommands, createCompactCommands } from "./export.js";
 import { createSessionIdentityCommands, createSessionLifecycleCommands, type SessionCommandActions } from "./session.js";
 import { createHelpCommands } from "./help.js";
 import { createExtensionsCommands, type ExtensionsCommandActions } from "./extensions.js";
+import { createSkillsCommands, type SkillsCommandActions } from "./skills.js";
 
 export interface BuiltinsContext
-  extends SessionCommandActions, SettingsCommandActions, ExtensionsCommandActions {
+  extends SessionCommandActions, SettingsCommandActions, ExtensionsCommandActions, SkillsCommandActions {
   getActiveAgent: ActiveAgentProvider;
 }
 
@@ -25,6 +26,7 @@ export function registerBuiltins(context: BuiltinsContext): void {
   const builtins: SlashCommand[] = [
     ...createModelCommands(context.getActiveAgent),
     ...createSettingsCommands(context),
+    ...createSkillsCommands(context),
     ...createExperimentalCommands(),
     ...createDebugCommands(),
     ...createClipboardCommands(context.getActiveAgent),

@@ -40,7 +40,7 @@ void test("classifies instructions as non-workbook read traffic", () => {
   assert.equal(getToolContextImpact("instructions", { action: "append", level: "user" }), "none");
 });
 
-void test("classifies bridge tools as read-only non-workbook traffic", () => {
+void test("classifies bridge and external tools as read-only non-workbook traffic", () => {
   assert.equal(getToolExecutionMode("tmux", { action: "list_sessions" }), "read");
   assert.equal(getToolContextImpact("tmux", { action: "list_sessions" }), "none");
 
@@ -55,6 +55,15 @@ void test("classifies bridge tools as read-only non-workbook traffic", () => {
     getToolContextImpact("libreoffice_convert", { input_path: "/tmp/a.xlsx", target_format: "csv" }),
     "none",
   );
+
+  assert.equal(getToolExecutionMode("web_search", { query: "latest CPI" }), "read");
+  assert.equal(getToolContextImpact("web_search", { query: "latest CPI" }), "none");
+
+  assert.equal(getToolExecutionMode("mcp", { server: "local" }), "read");
+  assert.equal(getToolContextImpact("mcp", { server: "local" }), "none");
+
+  assert.equal(getToolExecutionMode("files", { action: "list" }), "read");
+  assert.equal(getToolContextImpact("files", { action: "list" }), "none");
 });
 
 void test("classifies python_transform_range as workbook content mutation", () => {

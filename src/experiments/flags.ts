@@ -65,7 +65,7 @@ const EXPERIMENTAL_FEATURES = [
     aliases: ["files", "workspace-files", "artifacts"],
     title: "Files workspace",
     description: "Allow experimental file workspace and artifact tooling.",
-    wiring: "flag-only",
+    wiring: "wired",
     storageKey: "pi.experimental.filesWorkspace",
   },
   {

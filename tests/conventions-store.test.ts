@@ -18,7 +18,10 @@ function createFakeStore(): { get: (k: string) => Promise<unknown>; set: (k: str
   return {
     data,
     get: (key: string) => Promise.resolve(data.get(key)),
-    set: (key: string, value: unknown) => { data.set(key, value); return Promise.resolve(); },
+    set: (key: string, value: unknown) => {
+      data.set(key, value);
+      return Promise.resolve();
+    },
   };
 }
 

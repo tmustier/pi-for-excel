@@ -3,6 +3,7 @@
  *
  * Adds (when available):
  * - workbook structure context (blueprint), only on first send and when invalidated
+ * - workspace files summary (when files-workspace experiment is enabled)
  * - selection context (read around current selection)
  * - change tracker summary (cells edited since last message)
  */
@@ -12,6 +13,8 @@ import type { AgentMessage } from "@mariozechner/pi-agent-core";
 import type { ChangeTracker } from "../context/change-tracker.js";
 import { getBlueprint, getBlueprintRevision } from "../context/blueprint.js";
 import { readSelectionContext } from "../context/selection.js";
+import { isExperimentalFeatureEnabled } from "../experiments/flags.js";
+import { getFilesWorkspace } from "../files/workspace.js";
 import { extractTextFromContent } from "../utils/content.js";
 import { getWorkbookContext } from "../workbook/context.js";
 
@@ -22,6 +25,7 @@ import {
 
 const AUTO_CONTEXT_PREFIX = "[Auto-context]";
 const WORKBOOK_CONTEXT_REFRESH_PREFIX = "[Workbook context refresh:";
+const WORKSPACE_FILES_REFRESH_PREFIX = "[Workspace files refresh:";
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T | null> {
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
@@ -63,9 +67,31 @@ function historyHasWorkbookContextRefresh(messages: readonly AgentMessage[]): bo
   return false;
 }
 
+function historyHasWorkspaceFilesRefresh(messages: readonly AgentMessage[]): boolean {
+  for (const message of messages) {
+    if (!(message.role === "user" || message.role === "user-with-attachments")) {
+      continue;
+    }
+
+    const text = extractTextFromContent(message.content);
+    if (!text.includes(AUTO_CONTEXT_PREFIX)) continue;
+    if (text.includes(WORKSPACE_FILES_REFRESH_PREFIX)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function buildWorkspaceFilesSection(summary: string, reason: "initial" | "files_changed"): string {
+  const reasonText = reason === "files_changed" ? "files changed" : "initial";
+  return [`[Workspace files refresh: ${reasonText}]`, summary].join("\n\n");
+}
+
 export function createContextInjector(changeTracker: ChangeTracker) {
   let lastInjectedWorkbookId: string | null | undefined;
   let lastInjectedBlueprintRevision = -1;
+  let lastInjectedWorkspaceSignature: string | undefined;
 
   return async (messages: AgentMessage[], _signal?: AbortSignal): Promise<AgentMessage[]> => {
     const injections: string[] = [];
@@ -97,6 +123,47 @@ export function createContextInjector(changeTracker: ChangeTracker) {
           lastInjectedWorkbookId = workbookId;
           lastInjectedBlueprintRevision = getBlueprintRevision(workbookId);
         }
+      }
+    } catch {
+      // ignore
+    }
+
+    try {
+      if (isExperimentalFeatureEnabled("files_workspace")) {
+        const workspace = getFilesWorkspace();
+        const snapshot = await withTimeout(workspace.getSnapshot().catch(() => null), 1200);
+
+        if (snapshot) {
+          const signature = `${snapshot.backend.kind}|${snapshot.signature}`;
+          const hasWorkspaceMessage = historyHasWorkspaceFilesRefresh(messages);
+
+          if (lastInjectedWorkspaceSignature === undefined && hasWorkspaceMessage) {
+            lastInjectedWorkspaceSignature = signature;
+          }
+
+          const shouldInjectInitial =
+            lastInjectedWorkspaceSignature === undefined &&
+            !hasWorkspaceMessage &&
+            snapshot.files.length > 0;
+          const shouldInjectChanged =
+            lastInjectedWorkspaceSignature !== undefined &&
+            signature !== lastInjectedWorkspaceSignature;
+
+          if (shouldInjectInitial || shouldInjectChanged) {
+            const summary = await workspace.getContextSummary(20);
+            const section = summary
+              ? buildWorkspaceFilesSection(summary, shouldInjectChanged ? "files_changed" : "initial")
+              : buildWorkspaceFilesSection(
+                "### Workspace Files\n- _No files currently available._",
+                "files_changed",
+              );
+            injections.push(section);
+          }
+
+          lastInjectedWorkspaceSignature = signature;
+        }
+      } else {
+        lastInjectedWorkspaceSignature = undefined;
       }
     } catch {
       // ignore

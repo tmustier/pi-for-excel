@@ -1,11 +1,11 @@
 /**
  * Experimental tool gatekeeper.
  *
- * Security posture for local-bridge capabilities (tmux, python, libreoffice):
+ * Security posture for experimental capabilities (local bridges + files workspace):
  * - capability must be explicitly enabled via /experimental
- * - local bridge URL must be configured
- * - bridge must be reachable at execution time
- * - tool remains registered (stable tool list / prompt caching)
+ * - local bridge URL must be configured (for bridge-backed tools)
+ * - bridge must be reachable at execution time (for bridge-backed tools)
+ * - tools remain registered (stable tool list / prompt caching)
  * - execution performs a hard gate check (defense in depth)
  */
 
@@ -15,6 +15,7 @@ import { validateOfficeProxyUrl } from "../auth/proxy-validation.js";
 import { isExperimentalFeatureEnabled } from "../experiments/flags.js";
 
 const TMUX_TOOL_NAME = "tmux";
+const FILES_TOOL_NAME = "files";
 const PYTHON_TOOL_NAMES = new Set<string>([
   "python_run",
   "libreoffice_convert",
@@ -66,6 +67,17 @@ export interface PythonBridgeGateDependencies {
   probePythonBridge?: (bridgeUrl: string) => Promise<boolean>;
 }
 
+export type FilesWorkspaceGateReason = "files_experiment_disabled";
+
+export interface FilesWorkspaceGateResult {
+  allowed: boolean;
+  reason?: FilesWorkspaceGateReason;
+}
+
+export interface FilesWorkspaceGateDependencies {
+  isFilesWorkspaceExperimentEnabled?: () => boolean;
+}
+
 export interface PythonBridgeApprovalRequest {
   toolName: string;
   bridgeUrl: string;
@@ -74,7 +86,8 @@ export interface PythonBridgeApprovalRequest {
 
 export interface ExperimentalToolGateDependencies extends
   TmuxBridgeGateDependencies,
-  PythonBridgeGateDependencies {
+  PythonBridgeGateDependencies,
+  FilesWorkspaceGateDependencies {
   requestPythonBridgeApproval?: (request: PythonBridgeApprovalRequest) => Promise<boolean>;
   getApprovedPythonBridgeUrl?: () => Promise<string | undefined>;
   setApprovedPythonBridgeUrl?: (bridgeUrl: string) => Promise<void>;
@@ -86,6 +99,10 @@ function defaultIsTmuxExperimentEnabled(): boolean {
 
 function defaultIsPythonExperimentEnabled(): boolean {
   return isExperimentalFeatureEnabled("python_bridge");
+}
+
+function defaultIsFilesWorkspaceExperimentEnabled(): boolean {
+  return isExperimentalFeatureEnabled("files_workspace");
 }
 
 async function defaultGetBridgeUrl(settingKey: string): Promise<string | undefined> {
@@ -246,6 +263,23 @@ export async function evaluatePythonBridgeGate(
   };
 }
 
+export function evaluateFilesWorkspaceGate(
+  dependencies: FilesWorkspaceGateDependencies = {},
+): FilesWorkspaceGateResult {
+  const isEnabled =
+    dependencies.isFilesWorkspaceExperimentEnabled
+    ?? defaultIsFilesWorkspaceExperimentEnabled;
+
+  if (!isEnabled()) {
+    return {
+      allowed: false,
+      reason: "files_experiment_disabled",
+    };
+  }
+
+  return { allowed: true };
+}
+
 export function buildTmuxBridgeGateErrorMessage(reason: TmuxBridgeGateReason): string {
   switch (reason) {
     case "tmux_experiment_disabled":
@@ -269,6 +303,13 @@ export function buildPythonBridgeGateErrorMessage(reason: PythonBridgeGateReason
       return "Python bridge URL is invalid. Use a full URL like https://localhost:3340.";
     case "bridge_unreachable":
       return "Python bridge is not reachable at the configured URL.";
+  }
+}
+
+export function buildFilesWorkspaceGateErrorMessage(reason: FilesWorkspaceGateReason): string {
+  switch (reason) {
+    case "files_experiment_disabled":
+      return "Files workspace is disabled. Enable it with /experimental on files-workspace.";
   }
 }
 
@@ -341,6 +382,24 @@ function wrapTmuxToolWithHardGate(
   };
 }
 
+function wrapFilesToolWithHardGate(
+  tool: AgentTool,
+  dependencies: ExperimentalToolGateDependencies,
+): AgentTool {
+  return {
+    ...tool,
+    execute: async (toolCallId, params, signal, onUpdate) => {
+      const gate = evaluateFilesWorkspaceGate(dependencies);
+      if (!gate.allowed) {
+        const reason = gate.reason ?? "files_experiment_disabled";
+        throw new Error(buildFilesWorkspaceGateErrorMessage(reason));
+      }
+
+      return tool.execute(toolCallId, params, signal, onUpdate);
+    },
+  };
+}
+
 function wrapPythonBridgeToolWithHardGate(
   tool: AgentTool,
   dependencies: ExperimentalToolGateDependencies,
@@ -390,10 +449,9 @@ function wrapPythonBridgeToolWithHardGate(
  * Apply experimental gates to tool execution.
  *
  * Current rules:
- * - `tmux`, `python_run`, `libreoffice_convert`, and `python_transform_range`
+ * - `tmux`, `files`, `python_run`, `libreoffice_convert`, and `python_transform_range`
  *   stay registered to keep the tool list stable.
- * - each bridge-backed tool execution re-checks experiment flag, URL,
- *   and bridge health.
+ * - each gated tool execution re-checks experiment flags (and bridge health where relevant).
  * - python/libreoffice bridge tools require user confirmation once per configured bridge URL.
  */
 export function applyExperimentalToolGates(
@@ -405,6 +463,11 @@ export function applyExperimentalToolGates(
   for (const tool of tools) {
     if (tool.name === TMUX_TOOL_NAME) {
       gatedTools.push(wrapTmuxToolWithHardGate(tool, dependencies));
+      continue;
+    }
+
+    if (tool.name === FILES_TOOL_NAME) {
+      gatedTools.push(wrapFilesToolWithHardGate(tool, dependencies));
       continue;
     }
 

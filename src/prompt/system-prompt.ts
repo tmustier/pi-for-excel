@@ -124,7 +124,10 @@ Core workbook tools:
 - **trace_dependencies** — show the formula dependency tree for a cell
 - **view_settings** — control gridlines, headings, freeze panes, tab color, sheet visibility, sheet activation, and standard width
 - **instructions** — update persistent user/workbook instructions (append or replace)
-- **conventions** — read/update formatting defaults (currency, negatives, zeros, decimal places)`;
+- **conventions** — read/update formatting defaults (currency, negatives, zeros, decimal places)
+
+Other tools may be available depending on enabled experiments/skills.
+If **files** is available, use it for workspace artifacts (list/read/write/delete files).`;
 
 const WORKFLOW = `## Workflow
 

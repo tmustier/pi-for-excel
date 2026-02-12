@@ -222,9 +222,17 @@ https://github.com/tmustier/pi-for-excel/issues/13
 ### #24 — Tools: enable web search + MCP integration
 https://github.com/tmustier/pi-for-excel/issues/24
 
-**What it’s asking:** web search + MCP client support + a “skills” concept (bundled instructions + tools + optional UI).
+**Status:** closed (2026-02-12).
 
-**Implication:** “skills” and “extensions” are converging concepts; we should avoid building two separate plugin systems.
+Delivered:
+- `web_search` tool (Brave provider) with explicit request attribution
+- `mcp` gateway tool (status/connect/search/describe/call)
+- Skills manager UI (`/skills`) with per-session/per-workbook scope
+- MCP server config UI (add/remove/test URL + optional token)
+- global external-tools gate (`external.tools.enabled`, default-off)
+- active skills visibility in the status bar
+
+**Note:** we implemented skills as first-class bundles while keeping extensions as the generalized plugin runtime.
 
 ---
 

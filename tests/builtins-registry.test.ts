@@ -40,11 +40,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-void test("builtins registry wires /experimental and /extensions command registration", async () => {
+void test("builtins registry wires /experimental, /extensions, and /skills command registration", async () => {
   const source = await readFile(new URL("../src/commands/builtins/index.ts", import.meta.url), "utf8");
 
   assert.match(source, /createExperimentalCommands/);
   assert.match(source, /\.\.\.createExperimentalCommands\(\)/);
+
+  assert.match(source, /createSkillsCommands/);
+  assert.match(source, /\.\.\.createSkillsCommands\(context\)/);
 
   assert.match(source, /createExtensionsCommands/);
   assert.match(source, /\.\.\.createExtensionsCommands\(context\)/);

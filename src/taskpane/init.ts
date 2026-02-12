@@ -6,7 +6,7 @@
  */
 
 import { html, render } from "lit";
-import { Agent } from "@mariozechner/pi-agent-core";
+import { Agent, type AgentTool } from "@mariozechner/pi-agent-core";
 import { ApiKeyPromptDialog } from "@mariozechner/pi-web-ui/dist/dialogs/ApiKeyPromptDialog.js";
 import { ModelSelector } from "@mariozechner/pi-web-ui/dist/dialogs/ModelSelector.js";
 import { ApiKeysTab, ProxyTab, SettingsDialog } from "@mariozechner/pi-web-ui/dist/dialogs/SettingsDialog.js";
@@ -28,6 +28,7 @@ import { applyExperimentalToolGates } from "../tools/experimental-tool-gates.js"
 import { withWorkbookCoordinator } from "../tools/with-workbook-coordinator.js";
 import { registerBuiltins } from "../commands/builtins.js";
 import { showExtensionsDialog } from "../commands/builtins/extensions-overlay.js";
+import { showSkillsDialog } from "../commands/builtins/skills-overlay.js";
 import { ExtensionRuntimeManager } from "../extensions/runtime-manager.js";
 import type { ResumeDialogTarget } from "../commands/builtins/resume-target.js";
 import { showInstructionsDialog, showResumeDialog, showShortcutsDialog } from "../commands/builtins/overlays.js";
@@ -39,6 +40,14 @@ import {
   hasAnyInstructions,
 } from "../instructions/store.js";
 import { getResolvedConventions } from "../conventions/store.js";
+import {
+  buildSkillPromptEntries,
+  createToolsForSkills,
+  getSkillToolNames,
+  SKILL_IDS,
+} from "../skills/catalog.js";
+import { PI_SKILLS_CHANGED_EVENT } from "../skills/events.js";
+import { getExternalToolsEnabled, resolveConfiguredSkillIds } from "../skills/store.js";
 import { buildSystemPrompt } from "../prompt/system-prompt.js";
 import { initAppStorage } from "../storage/init-app-storage.js";
 import { renderError } from "../ui/loading.js";
@@ -46,7 +55,7 @@ import { showActionToast, showToast } from "../ui/toast.js";
 import { PiSidebar } from "../ui/pi-sidebar.js";
 import { setActiveProviders } from "../compat/model-selector-patch.js";
 import { createWorkbookCoordinator } from "../workbook/coordinator.js";
-import { getWorkbookContext } from "../workbook/context.js";
+import { formatWorkbookLabel, getWorkbookContext } from "../workbook/context.js";
 
 import { createContextInjector } from "./context-injection.js";
 import { pickDefaultModel } from "./default-model.js";
@@ -82,6 +91,16 @@ function showErrorBanner(errorRoot: HTMLElement, message: string): void {
 
 function clearErrorBanner(errorRoot: HTMLElement): void {
   render(html``, errorRoot);
+}
+
+function isRuntimeAgentTool(value: unknown): value is AgentTool {
+  if (!isRecord(value)) return false;
+
+  return typeof value.name === "string"
+    && typeof value.label === "string"
+    && typeof value.description === "string"
+    && "parameters" in value
+    && typeof value.execute === "function";
 }
 
 function isLikelyCorsErrorMessage(msg: string): boolean {
@@ -233,13 +252,32 @@ export async function initTaskpane(opts: {
     return workbookContext.workbookId;
   };
 
-  const buildRuntimeSystemPrompt = async (workbookId: string | null): Promise<string> => {
+  const resolveRuntimeSkillIds = async (args: {
+    sessionId: string;
+    workbookId: string | null;
+  }): Promise<string[]> => {
+    const configuredSkillIds = await resolveConfiguredSkillIds({
+      settings,
+      sessionId: args.sessionId,
+      workbookId: args.workbookId,
+      knownSkillIds: SKILL_IDS,
+    });
+
+    const externalToolsEnabled = await getExternalToolsEnabled(settings);
+    return externalToolsEnabled ? configuredSkillIds : [];
+  };
+
+  const buildRuntimeSystemPrompt = async (args: {
+    workbookId: string | null;
+    activeSkillIds: readonly string[];
+  }): Promise<string> => {
     try {
       const userInstructions = await getUserInstructions(settings);
-      const workbookInstructions = await getWorkbookInstructions(settings, workbookId);
+      const workbookInstructions = await getWorkbookInstructions(settings, args.workbookId);
       setInstructionsActive(hasAnyInstructions({ userInstructions, workbookInstructions }));
       const conventions = await getResolvedConventions(settings);
-      return buildSystemPrompt({ userInstructions, workbookInstructions, conventions });
+      const activeSkills = buildSkillPromptEntries(args.activeSkillIds);
+      return buildSystemPrompt({ userInstructions, workbookInstructions, activeSkills, conventions });
     } catch {
       setInstructionsActive(false);
       return buildSystemPrompt();
@@ -248,7 +286,8 @@ export async function initTaskpane(opts: {
 
   const runtimeManager = new SessionRuntimeManager(sidebar);
   const abortedAgents = new WeakSet<Agent>();
-  const runtimeToolRefreshers = new Map<string, () => Promise<void>>();
+  const runtimeCapabilityRefreshers = new Map<string, () => Promise<void>>();
+  const runtimeActiveSkillIds = new Map<string, string[]>();
   const recentlyClosed = new RecentlyClosedStack(10);
 
   const getActiveRuntime = () => runtimeManager.getActiveRuntime();
@@ -256,6 +295,13 @@ export async function initTaskpane(opts: {
   const getActiveQueueDisplay = () => getActiveRuntime()?.queueDisplay ?? null;
   const getActiveActionQueue = () => getActiveRuntime()?.actionQueue ?? null;
   const getActiveLockState = () => getActiveRuntime()?.lockState ?? "idle";
+  const getActiveSkillTitles = (): string[] => {
+    const runtime = getActiveRuntime();
+    if (!runtime) return [];
+
+    const skillIds = runtimeActiveSkillIds.get(runtime.runtimeId) ?? [];
+    return buildSkillPromptEntries(skillIds).map((entry) => entry.title);
+  };
 
   const formatSessionTitle = (title: string): string => {
     const trimmed = title.trim();
@@ -317,46 +363,39 @@ export async function initTaskpane(opts: {
     document.dispatchEvent(new CustomEvent("pi:status-update"));
   });
 
-  const refreshSystemPromptForAllRuntimes = async (workbookId: string | null) => {
-    const prompt = await buildRuntimeSystemPrompt(workbookId);
-
-    for (const runtime of runtimeManager.listRuntimes()) {
-      runtime.agent.setSystemPrompt(prompt);
-    }
-
-    document.dispatchEvent(new CustomEvent("pi:status-update"));
-  };
-
-  const refreshToolsForAllRuntimes = async () => {
+  const refreshCapabilitiesForAllRuntimes = async () => {
     const runtimes = runtimeManager.listRuntimes();
 
     for (const runtime of runtimes) {
-      const refresh = runtimeToolRefreshers.get(runtime.runtimeId);
+      const refresh = runtimeCapabilityRefreshers.get(runtime.runtimeId);
       if (!refresh) continue;
 
       try {
         await refresh();
       } catch (error: unknown) {
-        console.warn("[pi] Failed to refresh runtime tools:", error);
+        console.warn("[pi] Failed to refresh runtime capabilities:", error);
       }
     }
 
     document.dispatchEvent(new CustomEvent("pi:status-update"));
   };
 
-  const reservedToolNames = new Set(createAllTools().map((tool) => tool.name));
+  const reservedToolNames = new Set([
+    ...createAllTools().map((tool) => tool.name),
+    ...getSkillToolNames(),
+  ]);
   const extensionManager = new ExtensionRuntimeManager({
     settings,
     getActiveAgent,
-    refreshRuntimeTools: refreshToolsForAllRuntimes,
+    refreshRuntimeTools: refreshCapabilitiesForAllRuntimes,
     reservedToolNames,
   });
 
   const refreshWorkbookState = async () => {
-    const workbookContext = await resolveWorkbookContext();
+    await resolveWorkbookContext();
     sidebar.requestUpdate();
 
-    await refreshSystemPromptForAllRuntimes(workbookContext.workbookId);
+    await refreshCapabilitiesForAllRuntimes();
     maybePersistTabLayout();
   };
 
@@ -377,11 +416,15 @@ export async function initTaskpane(opts: {
   });
 
   document.addEventListener(PI_EXPERIMENTAL_FEATURE_CHANGED_EVENT, () => {
-    void refreshToolsForAllRuntimes();
+    void refreshCapabilitiesForAllRuntimes();
   });
 
   document.addEventListener(PI_EXPERIMENTAL_TOOL_CONFIG_CHANGED_EVENT, () => {
-    void refreshToolsForAllRuntimes();
+    void refreshCapabilitiesForAllRuntimes();
+  });
+
+  document.addEventListener(PI_SKILLS_CHANGED_EVENT, () => {
+    void refreshCapabilitiesForAllRuntimes();
   });
 
   const createRuntime = async (optsForRuntime: {
@@ -389,24 +432,36 @@ export async function initTaskpane(opts: {
     autoRestoreLatest: boolean;
   }) => {
     const runtimeId = crypto.randomUUID();
-    const workbookId = await resolveWorkbookId();
-    const runtimeSystemPrompt = await buildRuntimeSystemPrompt(workbookId);
+    let runtimeSessionId: string = crypto.randomUUID();
 
     let runtimeAgent: Agent | null = null;
 
-    const buildRuntimeTools = async () => {
+    const buildRuntimeCapabilities = async (sessionId: string): Promise<{
+      tools: ReturnType<typeof withWorkbookCoordinator>;
+      systemPrompt: string;
+    }> => {
+      const workbookId = await resolveWorkbookId();
+      const activeSkillIds = await resolveRuntimeSkillIds({
+        sessionId,
+        workbookId,
+      });
+
+      runtimeActiveSkillIds.set(runtimeId, activeSkillIds);
+
+      const coreTools = createAllTools().filter(isRuntimeAgentTool);
+      const gatedCoreTools = await applyExperimentalToolGates(coreTools);
       const allTools = [
-        ...createAllTools(),
+        ...gatedCoreTools,
+        ...createToolsForSkills(activeSkillIds),
         ...extensionManager.getRegisteredTools(),
       ];
-      const gatedTools = await applyExperimentalToolGates(allTools);
 
-      return withWorkbookCoordinator(
-        gatedTools,
+      const tools = withWorkbookCoordinator(
+        allTools,
         workbookCoordinator,
         {
           getWorkbookId: resolveWorkbookId,
-          getSessionId: () => runtimeAgent?.sessionId ?? runtimeId,
+          getSessionId: () => runtimeAgent?.sessionId ?? runtimeSessionId,
         },
         {
           onWriteCommitted: (event) => {
@@ -415,17 +470,27 @@ export async function initTaskpane(opts: {
           },
         },
       );
+
+      const systemPrompt = await buildRuntimeSystemPrompt({
+        workbookId,
+        activeSkillIds,
+      });
+
+      return {
+        tools,
+        systemPrompt,
+      };
     };
 
-    const tools = await buildRuntimeTools();
+    const initialCapabilities = await buildRuntimeCapabilities(runtimeSessionId);
 
     const agent = new Agent({
       initialState: {
-        systemPrompt: runtimeSystemPrompt,
+        systemPrompt: initialCapabilities.systemPrompt,
         model: defaultModel,
         thinkingLevel: defaultModel.reasoning ? "high" : "off",
         messages: [],
-        tools,
+        tools: initialCapabilities.tools,
       },
       convertToLlm,
       transformContext: createContextInjector(changeTracker),
@@ -434,12 +499,16 @@ export async function initTaskpane(opts: {
 
     runtimeAgent = agent;
 
-    const refreshRuntimeTools = async () => {
-      const nextTools = await buildRuntimeTools();
-      agent.setTools(nextTools);
+    const refreshRuntimeCapabilities = async () => {
+      const nextSessionId = runtimeAgent?.sessionId ?? runtimeSessionId;
+      runtimeSessionId = nextSessionId;
+
+      const next = await buildRuntimeCapabilities(nextSessionId);
+      agent.setTools(next.tools);
+      agent.setSystemPrompt(next.systemPrompt);
     };
 
-    runtimeToolRefreshers.set(runtimeId, refreshRuntimeTools);
+    runtimeCapabilityRefreshers.set(runtimeId, refreshRuntimeCapabilities);
 
     // API key resolution
     agent.getApiKey = async (provider: string) => {
@@ -470,7 +539,21 @@ export async function initTaskpane(opts: {
       agent,
       sessions,
       settings,
+      initialSessionId: runtimeSessionId,
       autoRestoreLatest: optsForRuntime.autoRestoreLatest,
+    });
+
+    runtimeSessionId = persistence.getSessionId();
+    await refreshRuntimeCapabilities();
+
+    let observedSessionId = runtimeSessionId;
+    const unsubscribeSessionCapabilitySync = persistence.subscribe(() => {
+      const nextSessionId = persistence.getSessionId();
+      if (nextSessionId === observedSessionId) return;
+
+      observedSessionId = nextSessionId;
+      runtimeSessionId = nextSessionId;
+      void refreshRuntimeCapabilities();
     });
 
     const unsubscribeErrorTracking = agent.subscribe((ev) => {
@@ -514,7 +597,9 @@ export async function initTaskpane(opts: {
         persistence,
         lockState: "idle",
         dispose: () => {
-          runtimeToolRefreshers.delete(runtimeId);
+          runtimeCapabilityRefreshers.delete(runtimeId);
+          runtimeActiveSkillIds.delete(runtimeId);
+          unsubscribeSessionCapabilitySync();
           unsubscribeErrorTracking();
           actionQueue.shutdown();
           agent.abort();
@@ -700,6 +785,19 @@ export async function initTaskpane(opts: {
     }
   });
 
+  const openSkillsManager = () => {
+    showSkillsDialog({
+      getActiveSessionId: () => getActiveRuntime()?.persistence.getSessionId() ?? null,
+      resolveWorkbookContext: async () => {
+        const workbookContext = await resolveWorkbookContext();
+        return {
+          workbookId: workbookContext.workbookId,
+          workbookLabel: formatWorkbookLabel(workbookContext),
+        };
+      },
+    });
+  };
+
   registerBuiltins({
     getActiveAgent,
     renameActiveSession: async (title: string) => {
@@ -736,6 +834,7 @@ export async function initTaskpane(opts: {
     openExtensionsManager: () => {
       showExtensionsDialog(extensionManager);
     },
+    openSkillsManager,
   });
 
   // Slash commands chosen from the popup menu dispatch this event.
@@ -804,6 +903,9 @@ export async function initTaskpane(opts: {
       },
     });
   };
+  sidebar.onOpenSkills = () => {
+    openSkillsManager();
+  };
   sidebar.onOpenSettings = () => {
     void SettingsDialog.open([new ApiKeysTab(), new ProxyTab()]);
   };
@@ -861,6 +963,7 @@ export async function initTaskpane(opts: {
     getActiveAgent,
     getLockState: getActiveLockState,
     getInstructionsActive: () => instructionsActive,
+    getActiveSkills: getActiveSkillTitles,
   });
 
   // ── Wire command menu to textarea ──
@@ -961,6 +1064,13 @@ export async function initTaskpane(opts: {
           await refreshWorkbookState();
         },
       });
+      return;
+    }
+
+    // Skills manager
+    if (el.closest(".pi-status-skills")) {
+      closeStatusPopover();
+      openSkillsManager();
       return;
     }
 

@@ -6,8 +6,10 @@ import { Type } from "@sinclair/typebox";
 
 import {
   applyExperimentalToolGates,
+  buildFilesWorkspaceGateErrorMessage,
   buildPythonBridgeGateErrorMessage,
   buildTmuxBridgeGateErrorMessage,
+  evaluateFilesWorkspaceGate,
   evaluatePythonBridgeGate,
   evaluateTmuxBridgeGate,
 } from "../src/tools/experimental-tool-gates.ts";
@@ -117,6 +119,37 @@ void test("evaluateTmuxBridgeGate reports explicit reason codes", async () => {
   assert.equal(unreachable.allowed, false);
   assert.equal(unreachable.reason, "bridge_unreachable");
   assert.match(buildTmuxBridgeGateErrorMessage(unreachable.reason), /not reachable/i);
+});
+
+void test("files tool stays registered and hard-gated", async () => {
+  let executeCount = 0;
+
+  const [filesTool] = await applyExperimentalToolGates([
+    createTestTool("files", () => {
+      executeCount += 1;
+    }),
+  ], {
+    isFilesWorkspaceExperimentEnabled: () => false,
+  });
+
+  await assert.rejects(
+    () => filesTool.execute("call-files", { action: "list" }),
+    /\/experimental on files-workspace/i,
+  );
+
+  assert.equal(executeCount, 0);
+
+  const enabledGate = evaluateFilesWorkspaceGate({
+    isFilesWorkspaceExperimentEnabled: () => true,
+  });
+  assert.equal(enabledGate.allowed, true);
+
+  const disabledGate = evaluateFilesWorkspaceGate({
+    isFilesWorkspaceExperimentEnabled: () => false,
+  });
+  assert.equal(disabledGate.allowed, false);
+  assert.equal(disabledGate.reason, "files_experiment_disabled");
+  assert.match(buildFilesWorkspaceGateErrorMessage("files_experiment_disabled"), /files-workspace/i);
 });
 
 void test("python bridge tools stay registered and hard-gated", async () => {

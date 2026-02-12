@@ -103,6 +103,7 @@ export async function setupSessionPersistence(opts: {
   agent: Agent;
   sessions: SessionsStore;
   settings: SettingsStore;
+  initialSessionId?: string;
   autoRestoreLatest?: boolean;
 }): Promise<SessionPersistenceController> {
   const { agent, sessions, settings } = opts;
@@ -117,7 +118,10 @@ export async function setupSessionPersistence(opts: {
   }
 
   const listeners = new Set<() => void>();
-  let sessionId: SessionId = crypto.randomUUID();
+  const initialSessionId = normalizeSessionId(opts.initialSessionId ?? null);
+  let sessionId: SessionId = initialSessionId && isSessionId(initialSessionId)
+    ? initialSessionId
+    : crypto.randomUUID();
   let sessionTitle = "";
   let sessionCreatedAt = new Date().toISOString();
   let firstAssistantSeen = false;

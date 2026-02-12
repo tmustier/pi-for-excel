@@ -10,6 +10,7 @@ import { createTmuxTool } from "./tmux.js";
 import { createPythonRunTool } from "./python-run.js";
 import { createLibreOfficeConvertTool } from "./libreoffice-convert.js";
 import { createPythonTransformRangeTool } from "./python-transform-range.js";
+import { createFilesTool } from "./files.js";
 
 export function createAllTools() {
   return [
@@ -18,5 +19,6 @@ export function createAllTools() {
     createPythonRunTool(),
     createLibreOfficeConvertTool(),
     createPythonTransformRangeTool(),
+    createFilesTool(),
   ];
 }

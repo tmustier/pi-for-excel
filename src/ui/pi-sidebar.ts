@@ -82,7 +82,9 @@ export class PiSidebar extends LitElement {
   @property({ attribute: false }) onSelectTab?: (runtimeId: string) => void;
   @property({ attribute: false }) onCloseTab?: (runtimeId: string) => void;
   @property({ attribute: false }) onOpenInstructions?: () => void;
+  @property({ attribute: false }) onOpenSkills?: () => void;
   @property({ attribute: false }) onOpenSettings?: () => void;
+  @property({ attribute: false }) onOpenFiles?: () => void;
   @property({ attribute: false }) onOpenResumePicker?: () => void;
   @property({ attribute: false }) onOpenShortcuts?: () => void;
   @property({ attribute: false }) lockNotice: string | null = null;
@@ -458,8 +460,14 @@ export class PiSidebar extends LitElement {
         <button class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenInstructions?.(); }}>
           Instructions…
         </button>
+        <button class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenSkills?.(); }}>
+          Skills…
+        </button>
         <button class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenSettings?.(); }}>
           Settings…
+        </button>
+        <button class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenFiles?.(); }}>
+          Files workspace…
         </button>
         <div class="pi-utilities-menu__divider"></div>
         <button class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenResumePicker?.(); }}>

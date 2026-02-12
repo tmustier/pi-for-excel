@@ -33,7 +33,7 @@ import { renderDepTree } from "./render-dep-tree.js";
 import "@mariozechner/mini-lit/dist/MarkdownBlock.js";
 
 type ToolState = "inprogress" | "complete" | "error";
-type ExtraToolName = "web_search" | "mcp";
+type ExtraToolName = "web_search" | "mcp" | "files";
 type SupportedToolName = CoreToolName | ExtraToolName;
 
 /* ── Helpers ────────────────────────────────────────────────── */
@@ -484,6 +484,16 @@ function describeToolCall(
       }
       return { action: "MCP", detail: "status" };
     }
+    case "files": {
+      const action = p.action as string | undefined;
+      const path = p.path as string | undefined;
+
+      if (action === "list") return { action: "Files", detail: "list" };
+      if (action === "read") return { action: "Read file", detail: path ?? "path" };
+      if (action === "write") return { action: "Write file", detail: path ?? "path" };
+      if (action === "delete") return { action: "Delete file", detail: path ?? "path" };
+      return { action: "Files", detail: action ?? "action" };
+    }
     default: {
       if (resultText) { const s = resultSummary(resultText); if (s) return splitFirstWord(s); }
       return { action: toolName.replace(/_/g, " "), detail: "" };
@@ -636,6 +646,7 @@ const CUSTOM_RENDERED_TOOL_NAMES: SupportedToolName[] = [
   ...CORE_TOOL_NAMES,
   "web_search",
   "mcp",
+  "files",
 ];
 
 for (const name of CUSTOM_RENDERED_TOOL_NAMES) {

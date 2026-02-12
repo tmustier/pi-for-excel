@@ -162,3 +162,11 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
   - `POST /v1/libreoffice-convert` — convert files across `csv|pdf|xlsx`
 - **Security posture:** local opt-in only; bridge URL validated via `validateOfficeProxyUrl`; tool execution re-checks gate before every call; bridge enforces loopback+origin checks and optional bearer token (`PYTHON_BRIDGE_TOKEN` / setting `python.bridge.token`, managed via `/experimental python-bridge-token ...`).
 - **Rationale:** unblock heavier offline analysis/conversion workflows for issue #25 while keeping workbook writes explicit/auditable and adding an approval checkpoint for local execution.
+
+## External tools skills (`web_search`, `mcp`)
+- **Packaging:** exposed as opt-in **skills** instead of always-on core tools.
+- **Scopes:** skills can be enabled per-**session** and/or per-**workbook**; effective skills are the union (ordered by catalog).
+- **Global gate:** `external.tools.enabled` defaults to **off** and blocks all external skill tools until explicitly enabled.
+- **Web search provider:** Brave Search (`web_search`) with optional proxy routing and explicit "Sent" attribution in results.
+- **MCP integration:** configurable server registry (`mcp.servers.v1`), UI add/remove/test, and a single `mcp` gateway tool for list/search/describe/call flows.
+- **Rationale:** satisfy issue #24 with explicit consent, clear attribution, and minimal overlap with the extension system.
