@@ -22,7 +22,7 @@ import {
 import { buildWorkbookCellChangeSummary } from "../audit/cell-diff.js";
 import { getWorkbookChangeAuditLog } from "../audit/workbook-change-audit.js";
 import { dispatchWorkbookSnapshotCreated } from "../workbook/recovery-events.js";
-import { getWorkbookRecoveryLog } from "../workbook/recovery-log.js";
+import { getWorkbookRecoveryLog, MAX_RECOVERY_CELLS } from "../workbook/recovery-log.js";
 import { getErrorMessage } from "../utils/errors.js";
 import { findErrors } from "../utils/format.js";
 import { isRecord } from "../utils/type-guards.js";
@@ -219,13 +219,25 @@ async function defaultWriteOutputValues(request: WriteOutputRequest): Promise<Wr
 
     const targetRange = sheet.getRange(outputAddressLocal);
 
-    targetRange.load("values,formulas");
-    await context.sync();
+    const outputCellCount = rows * cols;
+    const shouldLoadBeforeState = !request.allowOverwrite || outputCellCount <= MAX_RECOVERY_CELLS;
 
-    const beforeValues = targetRange.values;
-    const beforeFormulas = targetRange.formulas;
+    let beforeValues: unknown[][] | undefined;
+    let beforeFormulas: unknown[][] | undefined;
+
+    if (shouldLoadBeforeState) {
+      targetRange.load("values,formulas");
+      await context.sync();
+
+      beforeValues = targetRange.values;
+      beforeFormulas = targetRange.formulas;
+    }
 
     if (!request.allowOverwrite) {
+      if (!beforeValues || !beforeFormulas) {
+        throw new Error("Failed to read destination range for overwrite protection.");
+      }
+
       const existingCount = countOccupiedCells(beforeValues, beforeFormulas);
       if (existingCount > 0) {
         return {

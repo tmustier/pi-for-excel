@@ -319,12 +319,8 @@ function clampLimit(limit: number): number {
   return rounded;
 }
 
-function matchesWorkbook(snapshot: WorkbookRecoverySnapshot, workbookId: string | null): boolean {
-  if (workbookId) {
-    return snapshot.workbookId === workbookId;
-  }
-
-  return !snapshot.workbookId;
+function matchesWorkbook(snapshot: WorkbookRecoverySnapshot, workbookId: string): boolean {
+  return snapshot.workbookId === workbookId;
 }
 
 export class WorkbookRecoveryLog {
@@ -393,12 +389,14 @@ export class WorkbookRecoveryLog {
 
     try {
       const workbookContext = workbookContextOverride ?? await this.dependencies.getWorkbookContext();
-      if (workbookContext.workbookId) {
-        workbookId = workbookContext.workbookId;
-        workbookLabel = formatWorkbookLabel(workbookContext);
+      if (!workbookContext.workbookId) {
+        return null;
       }
+
+      workbookId = workbookContext.workbookId;
+      workbookLabel = formatWorkbookLabel(workbookContext);
     } catch {
-      // ignore workbook context failures
+      return null;
     }
 
     const snapshot: WorkbookRecoverySnapshot = {
@@ -431,23 +429,39 @@ export class WorkbookRecoveryLog {
     await this.ensureLoaded();
 
     const limit = clampLimit(opts.limit ?? 20);
-    const filtered = opts.workbookId === undefined
-      ? this.snapshots
-      : this.snapshots.filter((snapshot) => matchesWorkbook(snapshot, opts.workbookId ?? null));
+    const workbookId = opts.workbookId;
 
+    if (workbookId === undefined) {
+      return this.snapshots.slice(0, limit);
+    }
+
+    if (!workbookId) {
+      return [];
+    }
+
+    const filtered = this.snapshots.filter((snapshot) => matchesWorkbook(snapshot, workbookId));
     return filtered.slice(0, limit);
   }
 
   async listForCurrentWorkbook(limit = 20): Promise<WorkbookRecoverySnapshot[]> {
     const workbookContext = await this.dependencies.getWorkbookContext();
-    return this.list({ limit, workbookId: workbookContext.workbookId });
+    const workbookId = workbookContext.workbookId;
+    if (!workbookId) return [];
+
+    return this.list({ limit, workbookId });
   }
 
   async delete(snapshotId: string): Promise<boolean> {
     await this.ensureLoaded();
 
+    const workbookContext = await this.dependencies.getWorkbookContext();
+    const workbookId = workbookContext.workbookId;
+    if (!workbookId) return false;
+
     const previousLength = this.snapshots.length;
-    this.snapshots = this.snapshots.filter((snapshot) => snapshot.id !== snapshotId);
+    this.snapshots = this.snapshots.filter(
+      (snapshot) => !(snapshot.id === snapshotId && matchesWorkbook(snapshot, workbookId)),
+    );
 
     if (this.snapshots.length === previousLength) {
       return false;
@@ -461,8 +475,11 @@ export class WorkbookRecoveryLog {
     await this.ensureLoaded();
 
     const workbookContext = await this.dependencies.getWorkbookContext();
+    const workbookId = workbookContext.workbookId;
+    if (!workbookId) return 0;
+
     const previousLength = this.snapshots.length;
-    this.snapshots = this.snapshots.filter((snapshot) => !matchesWorkbook(snapshot, workbookContext.workbookId));
+    this.snapshots = this.snapshots.filter((snapshot) => !matchesWorkbook(snapshot, workbookId));
 
     const removed = previousLength - this.snapshots.length;
     if (removed > 0) {
@@ -481,11 +498,15 @@ export class WorkbookRecoveryLog {
     }
 
     const workbookContext = await this.dependencies.getWorkbookContext();
-    if (snapshot.workbookId && !workbookContext.workbookId) {
+    if (!snapshot.workbookId) {
+      throw new Error("Snapshot is missing workbook identity and cannot be restored safely.");
+    }
+
+    if (!workbookContext.workbookId) {
       throw new Error("Current workbook identity is unavailable; cannot safely restore this snapshot.");
     }
 
-    if (snapshot.workbookId && workbookContext.workbookId && snapshot.workbookId !== workbookContext.workbookId) {
+    if (snapshot.workbookId !== workbookContext.workbookId) {
       throw new Error("Snapshot belongs to a different workbook.");
     }
 

@@ -161,6 +161,7 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
   - `POST /v1/python-run` — execute Python snippet with optional `input_json`, return stdout/stderr/result JSON
   - `POST /v1/libreoffice-convert` — convert files across `csv|pdf|xlsx`
 - **Security posture:** local opt-in only; bridge URL validated via `validateOfficeProxyUrl`; tool execution re-checks gate before every call; bridge enforces loopback+origin checks and optional bearer token (`PYTHON_BRIDGE_TOKEN` / setting `python.bridge.token`, managed via `/experimental python-bridge-token ...`).
+- **Overwrite perf guard (`python_transform_range`):** pre-write `values/formulas` reads are skipped for large `allow_overwrite: true` outputs (> `MAX_RECOVERY_CELLS`) since those snapshots would be dropped anyway.
 - **Rationale:** unblock heavier offline analysis/conversion workflows for issue #25 while keeping workbook writes explicit/auditable and adding an approval checkpoint for local execution.
 
 ## External tools skills (`web_search`, `mcp`)
@@ -196,6 +197,7 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 - **Goal:** prefer low-friction workflows over pre-execution approval selectors by making rollback easy and reliable.
 - **Automatic checkpoints:** successful `write_cells`, `fill_formula`, and `python_transform_range` writes store pre-write range snapshots in local `workbook.recovery-snapshots.v1`.
 - **Safety limits:** checkpoint capture is skipped for very large writes (> `MAX_RECOVERY_CELLS`) to avoid oversized local state.
+- **Workbook identity guardrails:** append/list/delete/clear/restore paths are scoped to the active workbook identity; restore rejects identity-less or cross-workbook checkpoints.
 - **Restore UX:** `workbook_history` can list/restore/delete/clear checkpoints; restores also create an inverse checkpoint (`restore_snapshot`) so users can undo a mistaken restore.
 - **Quick affordance:** after a checkpointed write, UI shows an action toast with **Revert**.
 - **Rationale:** addresses #27 by shifting from cumbersome up-front approvals to versioned recovery with explicit user-controlled rollback.
