@@ -546,6 +546,55 @@ assistant-message > div > div.px-4 > markdown-block {
   white-space: normal;
 }
 
+/* Cell-level diff summary for mutation tools */
+.pi-tool-card__diff {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.pi-tool-card__diff-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  line-height: 1.35;
+}
+
+.pi-tool-card__diff-table th,
+.pi-tool-card__diff-table td {
+  border: 1px solid var(--alpha-8);
+  padding: 4px 6px;
+  vertical-align: top;
+}
+
+.pi-tool-card__diff-table th {
+  background: var(--alpha-2);
+  text-align: left;
+  font-weight: 600;
+}
+
+.pi-tool-card__diff-cell {
+  white-space: nowrap;
+}
+
+.pi-tool-card__diff-value {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.pi-tool-card__diff-formula {
+  margin-top: 3px;
+  color: var(--muted-foreground);
+  font-size: var(--text-xs);
+}
+
+.pi-tool-card__diff-note {
+  margin-top: 6px;
+  color: var(--muted-foreground);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+}
+
 /* Flex overflow fix for tool cards */
 tool-message {
   min-width: 0;

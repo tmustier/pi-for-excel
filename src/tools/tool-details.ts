@@ -5,6 +5,7 @@
  * small stable `details` payload so the UI doesn't need to parse strings.
  */
 
+import type { WorkbookCellChangeSummary } from "../audit/cell-diff.js";
 import { isRecord } from "../utils/type-guards.js";
 
 export interface WriteCellsDetails {
@@ -14,6 +15,7 @@ export interface WriteCellsDetails {
   address?: string;
   existingCount?: number;
   formulaErrorCount?: number;
+  changes?: WorkbookCellChangeSummary;
 }
 
 export interface FillFormulaDetails {
@@ -23,6 +25,7 @@ export interface FillFormulaDetails {
   address?: string;
   existingCount?: number;
   formulaErrorCount?: number;
+  changes?: WorkbookCellChangeSummary;
 }
 
 export interface FormatCellsDetails {
@@ -105,6 +108,7 @@ export interface PythonTransformRangeDetails {
   rowsWritten?: number;
   colsWritten?: number;
   formulaErrorCount?: number;
+  changes?: WorkbookCellChangeSummary;
   error?: string;
 }
 
@@ -223,6 +227,36 @@ function isOptionalStringArray(value: unknown): value is string[] | undefined {
   return value === undefined || (Array.isArray(value) && value.every((item) => typeof item === "string"));
 }
 
+function isWorkbookCellChange(value: unknown): value is WorkbookCellChangeSummary["sample"][number] {
+  if (!isRecord(value)) return false;
+
+  const beforeFormula = value.beforeFormula;
+  const afterFormula = value.afterFormula;
+
+  return (
+    typeof value.address === "string" &&
+    typeof value.beforeValue === "string" &&
+    typeof value.afterValue === "string" &&
+    (beforeFormula === undefined || typeof beforeFormula === "string") &&
+    (afterFormula === undefined || typeof afterFormula === "string")
+  );
+}
+
+function isWorkbookCellChangeSummary(value: unknown): value is WorkbookCellChangeSummary {
+  if (!isRecord(value)) return false;
+
+  return (
+    typeof value.changedCount === "number" &&
+    typeof value.truncated === "boolean" &&
+    Array.isArray(value.sample) &&
+    value.sample.every((item) => isWorkbookCellChange(item))
+  );
+}
+
+function isOptionalWorkbookCellChangeSummary(value: unknown): value is WorkbookCellChangeSummary | undefined {
+  return value === undefined || isWorkbookCellChangeSummary(value);
+}
+
 function isFilesWorkspaceBackendKind(value: unknown): value is FilesWorkspaceBackendKind {
   return value === "native-directory" || value === "opfs" || value === "memory";
 }
@@ -263,7 +297,8 @@ export function isWriteCellsDetails(value: unknown): value is WriteCellsDetails 
   return (
     isOptionalString(value.address) &&
     isOptionalNumber(value.existingCount) &&
-    isOptionalNumber(value.formulaErrorCount)
+    isOptionalNumber(value.formulaErrorCount) &&
+    isOptionalWorkbookCellChangeSummary(value.changes)
   );
 }
 
@@ -276,7 +311,8 @@ export function isFillFormulaDetails(value: unknown): value is FillFormulaDetail
   return (
     isOptionalString(value.address) &&
     isOptionalNumber(value.existingCount) &&
-    isOptionalNumber(value.formulaErrorCount)
+    isOptionalNumber(value.formulaErrorCount) &&
+    isOptionalWorkbookCellChangeSummary(value.changes)
   );
 }
 
@@ -374,6 +410,7 @@ export function isPythonTransformRangeDetails(value: unknown): value is PythonTr
     isOptionalNumber(value.rowsWritten) &&
     isOptionalNumber(value.colsWritten) &&
     isOptionalNumber(value.formulaErrorCount) &&
+    isOptionalWorkbookCellChangeSummary(value.changes) &&
     isOptionalString(value.error)
   );
 }

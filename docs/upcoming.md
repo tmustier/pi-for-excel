@@ -79,9 +79,12 @@ https://github.com/tmustier/pi-for-excel/issues/28
 
 **What it’s asking:** record before/after for mutating operations, render diffs in tool cards, export audit log.
 
-**Implication:**
-- implies a centralized “tool execution wrapper” to capture diffs consistently
-- implies a shared diff model that can be rendered in UI and exported
+**Status note:** first slice is now in place for `write_cells`, `fill_formula`, and `python_transform_range`:
+- tools compute structured cell-level before/after summaries (`details.changes`)
+- tool cards render a compact **Changes** diff table with clickable cell links
+- local audit entries are persisted to `workbook.change-audit.v1`
+
+**Remaining follow-up:** broaden coverage to other mutating tools + add export/history UX on top of the persisted audit log.
 
 ---
 

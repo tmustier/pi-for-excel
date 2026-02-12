@@ -180,3 +180,10 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 - **Filter UX:** Files dialog includes workbook-tag filtering (`all`, `current workbook`, `untagged`, and per-tag options) without changing underlying shared storage.
 - **Input drop UX:** dropping files onto the chat input imports them directly into workspace (and auto-enables `files-workspace` if needed).
 - **Rationale:** keep one shared artifact space while preserving workbook context and transparency on who accessed/changed files.
+
+## Workbook mutation change previews + audit log (slice)
+- **Scope in this slice:** `write_cells`, `fill_formula`, and `python_transform_range` now compute before/after cell diffs.
+- **Structured details:** each tool returns `changes` metadata (`changedCount` + sampled cell-level before/after, including formula deltas) for tool-card rendering.
+- **UI rendering:** tool cards include a dedicated **Changes** section with clickable cell addresses.
+- **Persistence:** successful/blocked mutations in the scoped tools are appended to local `workbook.change-audit.v1` for future export/history UX.
+- **Rationale:** improve user trust with concrete, navigable deltas while keeping implementation incremental and low-risk.

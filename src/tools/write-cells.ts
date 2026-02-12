@@ -14,6 +14,8 @@ import {
   excelRun, getRange, qualifiedAddress, parseCell,
   colToLetter, computeRangeAddress, padValues,
 } from "../excel/helpers.js";
+import { buildWorkbookCellChangeSummary } from "../audit/cell-diff.js";
+import { getWorkbookChangeAuditLog } from "../audit/workbook-change-audit.js";
 import { formatAsMarkdownTable, findErrors } from "../utils/format.js";
 import { getErrorMessage } from "../utils/errors.js";
 
@@ -59,6 +61,8 @@ type WriteCellsResult =
     blocked: false;
     sheetName: string;
     address: string;
+    beforeValues: unknown[][];
+    beforeFormulas: unknown[][];
     readBackValues: unknown[][];
     readBackFormulas: unknown[][];
   };
@@ -78,7 +82,7 @@ export function createWriteCellsTool(): AgentTool<typeof schema, WriteCellsDetai
       "After writing, automatically verifies results and reports any formula errors.",
     parameters: schema,
     execute: async (
-      _toolCallId: string,
+      toolCallId: string,
       params: Params,
     ): Promise<AgentToolResult<WriteCellsDetails>> => {
       try {
@@ -132,20 +136,22 @@ export function createWriteCellsTool(): AgentTool<typeof schema, WriteCellsDetai
 
           const rangeAddr = computeRangeAddress(startCellRef, rows, cols);
           const targetRange = sheet.getRange(rangeAddr);
+          targetRange.load("values,formulas");
+          await context.sync();
+
+          const beforeValues = targetRange.values;
+          const beforeFormulas = targetRange.formulas;
 
           // Overwrite protection: check if target has existing data (values or formulas)
           if (!params.allow_overwrite) {
-            targetRange.load("values,formulas");
-            await context.sync();
-
-            const occupiedCount = countOccupiedCells(targetRange.values, targetRange.formulas);
+            const occupiedCount = countOccupiedCells(beforeValues, beforeFormulas);
             if (occupiedCount > 0) {
               return {
                 blocked: true,
                 sheetName: sheet.name,
                 address: rangeAddr,
                 existingCount: occupiedCount,
-                existingValues: targetRange.values,
+                existingValues: beforeValues,
               };
             }
           }
@@ -163,15 +169,40 @@ export function createWriteCellsTool(): AgentTool<typeof schema, WriteCellsDetai
             blocked: false,
             sheetName: sheet.name,
             address: verify.address,
+            beforeValues,
+            beforeFormulas,
             readBackValues: verify.values,
             readBackFormulas: verify.formulas,
           };
         });
 
         if (result.blocked) {
-          return formatBlocked(result);
+          const blockedResult = formatBlocked(result);
+
+          await getWorkbookChangeAuditLog().append({
+            toolName: "write_cells",
+            toolCallId,
+            blocked: true,
+            outputAddress: blockedResult.details.address,
+            changedCount: 0,
+            changes: [],
+          });
+
+          return blockedResult;
         }
-        return formatSuccess(result, rows, cols);
+
+        const successResult = formatSuccess(result, rows, cols);
+
+        await getWorkbookChangeAuditLog().append({
+          toolName: "write_cells",
+          toolCallId,
+          blocked: false,
+          outputAddress: successResult.details.address,
+          changedCount: successResult.details.changes?.changedCount ?? 0,
+          changes: successResult.details.changes?.sample ?? [],
+        });
+
+        return successResult;
       } catch (e: unknown) {
         return {
           content: [{ type: "text", text: `Error writing cells: ${getErrorMessage(e)}` }],
@@ -319,11 +350,26 @@ function formatSuccess(result: SuccessWriteCellsResult, rows: number, cols: numb
     lines.push(formatAsMarkdownTable(result.readBackValues));
   }
 
+  const changes = buildWorkbookCellChangeSummary({
+    sheetName: result.sheetName,
+    startCell,
+    beforeValues: result.beforeValues,
+    beforeFormulas: result.beforeFormulas,
+    afterValues: result.readBackValues,
+    afterFormulas: result.readBackFormulas,
+  });
+
+  if (changes.changedCount > 0) {
+    lines.push("");
+    lines.push(`Changed cell(s): ${changes.changedCount}.`);
+  }
+
   const details: WriteCellsDetails = {
     kind: "write_cells",
     blocked: false,
     address: fullAddr,
     formulaErrorCount: errors.length,
+    changes,
   };
 
   return { content: [{ type: "text", text: lines.join("\n") }], details };

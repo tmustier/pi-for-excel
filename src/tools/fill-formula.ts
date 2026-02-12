@@ -8,6 +8,8 @@ import { Type, type Static } from "@sinclair/typebox";
 import type { AgentTool, AgentToolResult } from "@mariozechner/pi-agent-core";
 import type { FillFormulaDetails } from "./tool-details.js";
 import { excelRun, getRange, qualifiedAddress } from "../excel/helpers.js";
+import { buildWorkbookCellChangeSummary } from "../audit/cell-diff.js";
+import { getWorkbookChangeAuditLog } from "../audit/workbook-change-audit.js";
 import { countOccupiedCells, validateFormula } from "./write-cells.js";
 import { findErrors } from "../utils/format.js";
 import { getErrorMessage } from "../utils/errors.js";
@@ -44,6 +46,8 @@ type FillFormulaResult =
     address: string;
     rowCount: number;
     columnCount: number;
+    beforeValues: unknown[][];
+    beforeFormulas: unknown[][];
     readBackValues: unknown[][];
     readBackFormulas: unknown[][];
   };
@@ -56,7 +60,7 @@ export function createFillFormulaTool(): AgentTool<typeof schema, FillFormulaDet
       "Fill a single formula across a range using Excel's AutoFill. " +
       "Relative references adjust automatically. Use this instead of building large formula arrays.",
     parameters: schema,
-    execute: async (_toolCallId: string, params: Params): Promise<AgentToolResult<FillFormulaDetails>> => {
+    execute: async (toolCallId: string, params: Params): Promise<AgentToolResult<FillFormulaDetails>> => {
       try {
         if (!params.formula.startsWith("=")) {
           return {
@@ -83,23 +87,21 @@ export function createFillFormulaTool(): AgentTool<typeof schema, FillFormulaDet
         const result = await excelRun<FillFormulaResult>(async (context) => {
           const { sheet, range } = getRange(context, params.range);
           sheet.load("name");
-          range.load("address,rowCount,columnCount");
-
-          if (!params.allow_overwrite) {
-            range.load("values,formulas");
-          }
-
+          range.load("address,rowCount,columnCount,values,formulas");
           await context.sync();
 
+          const beforeValues = range.values;
+          const beforeFormulas = range.formulas;
+
           if (!params.allow_overwrite) {
-            const occupiedCount = countOccupiedCells(range.values, range.formulas);
+            const occupiedCount = countOccupiedCells(beforeValues, beforeFormulas);
             if (occupiedCount > 0) {
               return {
                 blocked: true,
                 sheetName: sheet.name,
                 address: range.address,
                 existingCount: occupiedCount,
-                existingValues: range.values,
+                existingValues: beforeValues,
               };
             }
           }
@@ -117,6 +119,8 @@ export function createFillFormulaTool(): AgentTool<typeof schema, FillFormulaDet
             address: range.address,
             rowCount: range.rowCount,
             columnCount: range.columnCount,
+            beforeValues,
+            beforeFormulas,
             readBackValues: range.values,
             readBackFormulas: range.formulas,
           };
@@ -124,7 +128,7 @@ export function createFillFormulaTool(): AgentTool<typeof schema, FillFormulaDet
 
         if (result.blocked) {
           const fullAddr = qualifiedAddress(result.sheetName, result.address);
-          return {
+          const blockedResult: AgentToolResult<FillFormulaDetails> = {
             content: [
               {
                 type: "text",
@@ -140,6 +144,17 @@ export function createFillFormulaTool(): AgentTool<typeof schema, FillFormulaDet
               existingCount: result.existingCount,
             },
           };
+
+          await getWorkbookChangeAuditLog().append({
+            toolName: "fill_formula",
+            toolCallId,
+            blocked: true,
+            outputAddress: fullAddr,
+            changedCount: 0,
+            changes: [],
+          });
+
+          return blockedResult;
         }
 
         const fullAddr = qualifiedAddress(result.sheetName, result.address);
@@ -166,12 +181,36 @@ export function createFillFormulaTool(): AgentTool<typeof schema, FillFormulaDet
           }
         }
 
+        const changes = buildWorkbookCellChangeSummary({
+          sheetName: result.sheetName,
+          startCell,
+          beforeValues: result.beforeValues,
+          beforeFormulas: result.beforeFormulas,
+          afterValues: result.readBackValues,
+          afterFormulas: result.readBackFormulas,
+        });
+
+        if (changes.changedCount > 0) {
+          lines.push("");
+          lines.push(`Changed cell(s): ${changes.changedCount}.`);
+        }
+
         const details: FillFormulaDetails = {
           kind: "fill_formula",
           blocked: false,
           address: fullAddr,
           formulaErrorCount: errors.length,
+          changes,
         };
+
+        await getWorkbookChangeAuditLog().append({
+          toolName: "fill_formula",
+          toolCallId,
+          blocked: false,
+          outputAddress: fullAddr,
+          changedCount: changes.changedCount,
+          changes: changes.sample,
+        });
 
         return { content: [{ type: "text", text: lines.join("\n") }], details };
       } catch (e: unknown) {

@@ -15,16 +15,18 @@ import type { ToolRenderer, ToolRenderResult } from "@mariozechner/pi-web-ui/dis
 import { html, type TemplateResult } from "lit";
 import { createRef, ref } from "lit/directives/ref.js";
 import { Code } from "lucide";
-import { cellRefs } from "./cell-link.js";
+import { cellRef, cellRefs } from "./cell-link.js";
 import { humanizeToolInput } from "./humanize-params.js";
 import { humanizeColorsInText } from "./color-names.js";
 import { CORE_TOOL_NAMES, type CoreToolName } from "../tools/registry.js";
 import {
   isFillFormulaDetails,
   isFormatCellsDetails,
+  isPythonTransformRangeDetails,
   isReadRangeCsvDetails,
   isTraceDependenciesDetails,
   isWriteCellsDetails,
+  type WriteCellsDetails,
 } from "../tools/tool-details.js";
 import { renderCsvTable } from "./render-csv-table.js";
 import { renderDepTree } from "./render-dep-tree.js";
@@ -203,6 +205,70 @@ function renderImages(images: ImageContent[]): TemplateResult {
           </div>
         `;
       })}
+    </div>
+  `;
+}
+
+function getWorkbookCellChanges(details: unknown): WriteCellsDetails["changes"] | undefined {
+  if (isWriteCellsDetails(details)) {
+    return details.changes;
+  }
+
+  if (isFillFormulaDetails(details)) {
+    return details.changes;
+  }
+
+  if (isPythonTransformRangeDetails(details)) {
+    return details.changes;
+  }
+
+  return undefined;
+}
+
+function formatDiffValue(value: string): string {
+  return value.length > 0 ? value : "∅";
+}
+
+function renderWorkbookCellDiff(details: unknown): TemplateResult {
+  const changes = getWorkbookCellChanges(details);
+  if (!changes || changes.changedCount <= 0) return html``;
+
+  return html`
+    <div class="pi-tool-card__section">
+      <div class="pi-tool-card__section-label">Changes (${changes.changedCount})</div>
+      <div class="pi-tool-card__diff">
+        <table class="pi-tool-card__diff-table">
+          <thead>
+            <tr>
+              <th>Cell</th>
+              <th>Before</th>
+              <th>After</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${changes.sample.map((change) => html`
+              <tr>
+                <td class="pi-tool-card__diff-cell">${cellRef(change.address)}</td>
+                <td>
+                  <div class="pi-tool-card__diff-value">${formatDiffValue(change.beforeValue)}</div>
+                  ${change.beforeFormula || change.afterFormula
+                    ? html`<div class="pi-tool-card__diff-formula">ƒ ${change.beforeFormula ?? "—"}</div>`
+                    : html``}
+                </td>
+                <td>
+                  <div class="pi-tool-card__diff-value">${formatDiffValue(change.afterValue)}</div>
+                  ${change.beforeFormula || change.afterFormula
+                    ? html`<div class="pi-tool-card__diff-formula">ƒ ${change.afterFormula ?? "—"}</div>`
+                    : html``}
+                </td>
+              </tr>
+            `)}
+          </tbody>
+        </table>
+        ${changes.truncated
+          ? html`<div class="pi-tool-card__diff-note">Showing first ${changes.sample.length} changed cell(s).</div>`
+          : html``}
+      </div>
     </div>
   `;
 }
@@ -592,6 +658,7 @@ function createExcelMarkdownRenderer(toolName: SupportedToolName): ToolRenderer<
                           : html`<div class="pi-tool-card__plain-text">${humanizedText || "(no output)"}</div>`}
                     ${renderImages(images)}
                   </div>
+                  ${renderWorkbookCellDiff(result.details)}
                 </div>
               </div>
             </div>

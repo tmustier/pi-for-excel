@@ -16,8 +16,11 @@ import {
   excelRun,
   getRange,
   padValues,
+  parseRangeRef,
   qualifiedAddress,
 } from "../excel/helpers.js";
+import { buildWorkbookCellChangeSummary } from "../audit/cell-diff.js";
+import { getWorkbookChangeAuditLog } from "../audit/workbook-change-audit.js";
 import { getErrorMessage } from "../utils/errors.js";
 import { findErrors } from "../utils/format.js";
 import { isRecord } from "../utils/type-guards.js";
@@ -87,6 +90,12 @@ type WriteOutputResult =
     rowsWritten: number;
     colsWritten: number;
     formulaErrorCount: number;
+    beforeValues?: unknown[][];
+    beforeFormulas?: unknown[][];
+    readBackValues?: unknown[][];
+    readBackFormulas?: unknown[][];
+    outputStartCell?: string;
+    outputSheetName?: string;
   };
 
 export interface PythonTransformRangeToolDependencies {
@@ -207,12 +216,14 @@ async function defaultWriteOutputValues(request: WriteOutputRequest): Promise<Wr
     const outputAddress = qualifiedAddress(sheet.name, outputAddressLocal);
 
     const targetRange = sheet.getRange(outputAddressLocal);
+    targetRange.load("values,formulas");
+    await context.sync();
+
+    const beforeValues = targetRange.values;
+    const beforeFormulas = targetRange.formulas;
 
     if (!request.allowOverwrite) {
-      targetRange.load("values,formulas");
-      await context.sync();
-
-      const existingCount = countOccupiedCells(targetRange.values, targetRange.formulas);
+      const existingCount = countOccupiedCells(beforeValues, beforeFormulas);
       if (existingCount > 0) {
         return {
           blocked: true,
@@ -237,6 +248,12 @@ async function defaultWriteOutputValues(request: WriteOutputRequest): Promise<Wr
       rowsWritten: rows,
       colsWritten: cols,
       formulaErrorCount: formulaErrors.length,
+      beforeValues,
+      beforeFormulas,
+      readBackValues: verify.values,
+      readBackFormulas: verify.formulas,
+      outputStartCell: startCell,
+      outputSheetName: sheet.name,
     };
   });
 }
@@ -353,7 +370,7 @@ export function createPythonTransformRangeTool(
       "and write the result grid back to Excel.",
     parameters: schema,
     execute: async (
-      _toolCallId: string,
+      toolCallId: string,
       rawParams: unknown,
       signal: AbortSignal | undefined,
     ): Promise<AgentToolResult<PythonTransformRangeDetails>> => {
@@ -409,7 +426,7 @@ export function createPythonTransformRangeTool(
         });
 
         if (writeResult.blocked) {
-          return {
+          const blockedResult: AgentToolResult<PythonTransformRangeDetails> = {
             content: [{
               type: "text",
               text: formatBlockedMessage(sourceAddress, writeResult.outputAddress, writeResult.existingCount),
@@ -423,12 +440,48 @@ export function createPythonTransformRangeTool(
               existingCount: writeResult.existingCount,
             },
           };
+
+          await getWorkbookChangeAuditLog().append({
+            toolName: "python_transform_range",
+            toolCallId,
+            blocked: true,
+            inputAddress: sourceAddress,
+            outputAddress: writeResult.outputAddress,
+            changedCount: 0,
+            changes: [],
+          });
+
+          return blockedResult;
         }
 
-        return {
+        const parsedOutput = parseRangeRef(writeResult.outputAddress);
+        const outputDiffStartCell = writeResult.outputStartCell ?? topLeftCellFromAddress(parsedOutput.address);
+        const outputSheetName = writeResult.outputSheetName ?? parsedOutput.sheet ?? input.sheetName;
+
+        const changes =
+          writeResult.beforeValues &&
+          writeResult.beforeFormulas &&
+          writeResult.readBackValues &&
+          writeResult.readBackFormulas
+            ? buildWorkbookCellChangeSummary({
+              sheetName: outputSheetName,
+              startCell: outputDiffStartCell,
+              beforeValues: writeResult.beforeValues,
+              beforeFormulas: writeResult.beforeFormulas,
+              afterValues: writeResult.readBackValues,
+              afterFormulas: writeResult.readBackFormulas,
+            })
+            : undefined;
+
+        const successText =
+          changes && changes.changedCount > 0
+            ? `${formatSuccessMessage(sourceAddress, writeResult)}\n\nChanged cell(s): ${changes.changedCount}.`
+            : formatSuccessMessage(sourceAddress, writeResult);
+
+        const successResult: AgentToolResult<PythonTransformRangeDetails> = {
           content: [{
             type: "text",
-            text: formatSuccessMessage(sourceAddress, writeResult),
+            text: successText,
           }],
           details: {
             kind: "python_transform_range",
@@ -439,8 +492,21 @@ export function createPythonTransformRangeTool(
             rowsWritten: writeResult.rowsWritten,
             colsWritten: writeResult.colsWritten,
             formulaErrorCount: writeResult.formulaErrorCount,
+            changes,
           },
         };
+
+        await getWorkbookChangeAuditLog().append({
+          toolName: "python_transform_range",
+          toolCallId,
+          blocked: false,
+          inputAddress: sourceAddress,
+          outputAddress: writeResult.outputAddress,
+          changedCount: changes?.changedCount ?? writeResult.rowsWritten * writeResult.colsWritten,
+          changes: changes?.sample ?? [],
+        });
+
+        return successResult;
       } catch (error: unknown) {
         const message = getErrorMessage(error);
         return {
