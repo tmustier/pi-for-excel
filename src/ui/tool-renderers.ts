@@ -390,6 +390,7 @@ function badge(
 
   if (toolName === "python_transform_range" && isPythonTransformRangeDetails(details)) {
     if (details.blocked) return " — blocked";
+    if (typeof details.error === "string" && details.error.length > 0) return " — error";
     return mutationBadge(details.changes?.changedCount, details.formulaErrorCount);
   }
 
@@ -473,7 +474,8 @@ function describeToolCall(
       if (isPythonTransformRangeDetails(details)) {
         const address = details.outputAddress ?? details.inputAddress;
         if (address) {
-          const action = details.blocked ? "Transform" : "Transformed";
+          const hasError = typeof details.error === "string" && details.error.length > 0;
+          const action = details.blocked || hasError ? "Transform" : "Transformed";
           return { action, detail: address + b, address };
         }
       }
