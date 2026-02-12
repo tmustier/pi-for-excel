@@ -807,6 +807,18 @@ export async function initTaskpane(opts: {
     await reopenRecentlyClosedItem(item);
   };
 
+  const revertLatestCheckpoint = async (): Promise<void> => {
+    const latest = await workbookRecoveryLog.listForCurrentWorkbook(1);
+    const checkpoint = latest[0];
+
+    if (!checkpoint) {
+      showToast("No recovery checkpoints for this workbook yet");
+      return;
+    }
+
+    await restoreCheckpointById(checkpoint.id);
+  };
+
   const closeRuntimeWithRecovery = async (runtimeId: string): Promise<void> => {
     if (runtimeManager.listRuntimes().length <= 1) {
       showToast("Can't close the last tab");
@@ -916,6 +928,14 @@ export async function initTaskpane(opts: {
       });
     },
     reopenLastClosed,
+    revertLatestCheckpoint: async () => {
+      try {
+        await revertLatestCheckpoint();
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : "Unknown error";
+        showToast(`Revert failed: ${message}`);
+      }
+    },
     openInstructionsEditor: async () => {
       await showInstructionsDialog({
         onSaved: async () => {

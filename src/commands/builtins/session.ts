@@ -11,6 +11,7 @@ export interface SessionCommandActions {
   createRuntime: () => Promise<void>;
   openResumeDialog: (defaultTarget?: ResumeDialogTarget) => Promise<void>;
   reopenLastClosed: () => Promise<void>;
+  revertLatestCheckpoint: () => Promise<void>;
 }
 
 export function createSessionIdentityCommands(actions: SessionCommandActions): SlashCommand[] {
@@ -73,6 +74,14 @@ export function createSessionLifecycleCommands(actions: SessionCommandActions): 
       source: "builtin",
       execute: async () => {
         await actions.reopenLastClosed();
+      },
+    },
+    {
+      name: "revert",
+      description: "Revert the latest workbook checkpoint",
+      source: "builtin",
+      execute: async () => {
+        await actions.revertLatestCheckpoint();
       },
     },
   ];
