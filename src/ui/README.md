@@ -4,7 +4,7 @@
 
 The sidebar UI has two layers:
 
-1. **Our components** (`pi-sidebar.ts`, `pi-input.ts`, `header.ts`) — own the layout shell (scroll area, input footer, header bar). Purpose-built for ~350px.
+1. **Our components** (`pi-sidebar.ts`, `pi-input.ts`) — own the layout shell (scroll area + input footer). Purpose-built for ~350px.
 2. **pi-web-ui content components** — render message internals (markdown, code blocks, tool cards, thinking blocks). Registered via `src/ui/register-components.ts` (deep imports from `@mariozechner/pi-web-ui/dist/*`).
 
 ```
@@ -70,7 +70,6 @@ pi-web-ui uses Light DOM (`createRenderRoot() { return this; }`), so styles leak
 |---|---|---|
 | `pi-sidebar.ts` | ChatPanel + AgentInterface | Owns layout, subscribes to Agent, renders message-list + streaming container + working indicator |
 | `pi-input.ts` | MessageEditor | Auto-growing textarea, send/abort button, fires `pi-send` / `pi-abort` events |
-| `header.ts` | — | Stub (header removed; model picker + status live in footer status bar) |
 | `toast.ts` | — | `showToast(msg, duration)` — positions a fixed notification |
 | `loading.ts` | — | Splash screen shown during init |
 | `provider-login.ts` | — | API key entry rows for the welcome overlay |
