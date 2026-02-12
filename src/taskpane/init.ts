@@ -55,7 +55,6 @@ import { initAppStorage } from "../storage/init-app-storage.js";
 import { renderError } from "../ui/loading.js";
 import { showFilesWorkspaceDialog } from "../ui/files-dialog.js";
 import { showActionToast, showToast } from "../ui/toast.js";
-import { showFilesWorkspaceDialog } from "../ui/files-dialog.js";
 import { PiSidebar } from "../ui/pi-sidebar.js";
 import { setActiveProviders } from "../compat/model-selector-patch.js";
 import { createWorkbookCoordinator } from "../workbook/coordinator.js";
