@@ -686,6 +686,24 @@ function humanizeConventions(p: Record<string, unknown>): ParamItem[] {
   return items;
 }
 
+function humanizeWorkbookHistory(p: Record<string, unknown>): ParamItem[] {
+  const items: ParamItem[] = [];
+  const action = str(p.action || "list");
+
+  items.push({ label: "Action", value: action });
+
+  if (p.snapshot_id) {
+    items.push({ label: "Checkpoint", value: str(p.snapshot_id) });
+  }
+
+  const limit = num(p.limit);
+  if (limit !== undefined) {
+    items.push({ label: "Limit", value: String(limit) });
+  }
+
+  return items;
+}
+
 function humanizeWebSearch(p: Record<string, unknown>): ParamItem[] {
   const items: ParamItem[] = [];
 
@@ -825,6 +843,7 @@ const CORE_HUMANIZERS = {
   comments: humanizeComments,
   instructions: humanizeInstructions,
   conventions: humanizeConventions,
+  workbook_history: humanizeWorkbookHistory,
 } satisfies Record<CoreToolName, HumanizerFn>;
 
 const EXTRA_HUMANIZERS: Record<string, HumanizerFn> = {

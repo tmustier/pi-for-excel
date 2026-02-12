@@ -112,6 +112,29 @@ export interface PythonTransformRangeDetails {
   error?: string;
 }
 
+export interface WorkbookHistorySnapshotSummary {
+  id: string;
+  at: number;
+  toolName: string;
+  address: string;
+  changedCount: number;
+  cellCount: number;
+}
+
+export interface WorkbookHistoryDetails {
+  kind: "workbook_history";
+  action: "list" | "restore" | "delete" | "clear";
+  count?: number;
+  snapshots?: WorkbookHistorySnapshotSummary[];
+  snapshotId?: string;
+  restoredSnapshotId?: string;
+  inverseSnapshotId?: string;
+  address?: string;
+  changedCount?: number;
+  deletedCount?: number;
+  error?: string;
+}
+
 export interface WebSearchDetails {
   kind: "web_search";
   ok: boolean;
@@ -207,6 +230,7 @@ export type ExcelToolDetails =
   | PythonBridgeDetails
   | LibreOfficeBridgeDetails
   | PythonTransformRangeDetails
+  | WorkbookHistoryDetails
   | WebSearchDetails
   | McpGatewayDetails
   | FilesToolDetails;
@@ -255,6 +279,25 @@ function isWorkbookCellChangeSummary(value: unknown): value is WorkbookCellChang
 
 function isOptionalWorkbookCellChangeSummary(value: unknown): value is WorkbookCellChangeSummary | undefined {
   return value === undefined || isWorkbookCellChangeSummary(value);
+}
+
+function isWorkbookHistorySnapshotSummary(value: unknown): value is WorkbookHistorySnapshotSummary {
+  if (!isRecord(value)) return false;
+
+  return (
+    typeof value.id === "string" &&
+    typeof value.at === "number" &&
+    typeof value.toolName === "string" &&
+    typeof value.address === "string" &&
+    typeof value.changedCount === "number" &&
+    typeof value.cellCount === "number"
+  );
+}
+
+function isOptionalWorkbookHistorySnapshotSummaryArray(
+  value: unknown,
+): value is WorkbookHistorySnapshotSummary[] | undefined {
+  return value === undefined || (Array.isArray(value) && value.every((item) => isWorkbookHistorySnapshotSummary(item)));
 }
 
 function isFilesWorkspaceBackendKind(value: unknown): value is FilesWorkspaceBackendKind {
@@ -411,6 +454,27 @@ export function isPythonTransformRangeDetails(value: unknown): value is PythonTr
     isOptionalNumber(value.colsWritten) &&
     isOptionalNumber(value.formulaErrorCount) &&
     isOptionalWorkbookCellChangeSummary(value.changes) &&
+    isOptionalString(value.error)
+  );
+}
+
+export function isWorkbookHistoryDetails(value: unknown): value is WorkbookHistoryDetails {
+  if (!isRecord(value)) return false;
+  if (value.kind !== "workbook_history") return false;
+
+  const action = value.action;
+  const validAction = action === "list" || action === "restore" || action === "delete" || action === "clear";
+  if (!validAction) return false;
+
+  return (
+    isOptionalNumber(value.count) &&
+    isOptionalWorkbookHistorySnapshotSummaryArray(value.snapshots) &&
+    isOptionalString(value.snapshotId) &&
+    isOptionalString(value.restoredSnapshotId) &&
+    isOptionalString(value.inverseSnapshotId) &&
+    isOptionalString(value.address) &&
+    isOptionalNumber(value.changedCount) &&
+    isOptionalNumber(value.deletedCount) &&
     isOptionalString(value.error)
   );
 }

@@ -524,6 +524,26 @@ function describeToolCall(
       if (action === "reset") return { action: "Reset", detail: "conventions" };
       return { action: "Update", detail: "conventions" };
     }
+    case "workbook_history": {
+      const action = p.action as string | undefined;
+      const snapshotId = p.snapshot_id as string | undefined;
+      if (action === "restore") {
+        return {
+          action: "Restore",
+          detail: snapshotId ? `checkpoint ${snapshotId}` : "latest checkpoint",
+        };
+      }
+      if (action === "delete") {
+        return {
+          action: "Delete",
+          detail: snapshotId ? `checkpoint ${snapshotId}` : "latest checkpoint",
+        };
+      }
+      if (action === "clear") {
+        return { action: "Clear", detail: "checkpoints" };
+      }
+      return { action: "List", detail: "checkpoints" };
+    }
     case "web_search": {
       const query = p.query as string | undefined;
       return { action: "Web search", detail: query ? `\"${query}\"` : "query" };

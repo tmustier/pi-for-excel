@@ -16,6 +16,8 @@ import {
 } from "../excel/helpers.js";
 import { buildWorkbookCellChangeSummary } from "../audit/cell-diff.js";
 import { getWorkbookChangeAuditLog } from "../audit/workbook-change-audit.js";
+import { dispatchWorkbookSnapshotCreated } from "../workbook/recovery-events.js";
+import { getWorkbookRecoveryLog } from "../workbook/recovery-log.js";
 import { formatAsMarkdownTable, findErrors } from "../utils/format.js";
 import { getErrorMessage } from "../utils/errors.js";
 
@@ -201,6 +203,24 @@ export function createWriteCellsTool(): AgentTool<typeof schema, WriteCellsDetai
           changedCount: successResult.details.changes?.changedCount ?? 0,
           changes: successResult.details.changes?.sample ?? [],
         });
+
+        const checkpoint = await getWorkbookRecoveryLog().append({
+          toolName: "write_cells",
+          toolCallId,
+          address: successResult.details.address ?? qualifiedAddress(result.sheetName, result.address),
+          changedCount: successResult.details.changes?.changedCount ?? 0,
+          beforeValues: result.beforeValues,
+          beforeFormulas: result.beforeFormulas,
+        });
+
+        if (checkpoint) {
+          dispatchWorkbookSnapshotCreated({
+            snapshotId: checkpoint.id,
+            toolName: checkpoint.toolName,
+            address: checkpoint.address,
+            changedCount: checkpoint.changedCount,
+          });
+        }
 
         return successResult;
       } catch (e: unknown) {

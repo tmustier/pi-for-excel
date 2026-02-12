@@ -21,6 +21,8 @@ import {
 } from "../excel/helpers.js";
 import { buildWorkbookCellChangeSummary } from "../audit/cell-diff.js";
 import { getWorkbookChangeAuditLog } from "../audit/workbook-change-audit.js";
+import { dispatchWorkbookSnapshotCreated } from "../workbook/recovery-events.js";
+import { getWorkbookRecoveryLog } from "../workbook/recovery-log.js";
 import { getErrorMessage } from "../utils/errors.js";
 import { findErrors } from "../utils/format.js";
 import { isRecord } from "../utils/type-guards.js";
@@ -217,18 +219,13 @@ async function defaultWriteOutputValues(request: WriteOutputRequest): Promise<Wr
 
     const targetRange = sheet.getRange(outputAddressLocal);
 
-    let beforeValues: unknown[][] | undefined;
-    let beforeFormulas: unknown[][] | undefined;
+    targetRange.load("values,formulas");
+    await context.sync();
+
+    const beforeValues = targetRange.values;
+    const beforeFormulas = targetRange.formulas;
 
     if (!request.allowOverwrite) {
-      // Skip pre-write snapshot reads when overwrite is explicitly allowed
-      // to avoid an extra full-range workbook round-trip on large outputs.
-      targetRange.load("values,formulas");
-      await context.sync();
-
-      beforeValues = targetRange.values;
-      beforeFormulas = targetRange.formulas;
-
       const existingCount = countOccupiedCells(beforeValues, beforeFormulas);
       if (existingCount > 0) {
         return {
@@ -511,6 +508,26 @@ export function createPythonTransformRangeTool(
           changedCount: changes?.changedCount ?? writeResult.rowsWritten * writeResult.colsWritten,
           changes: changes?.sample ?? [],
         });
+
+        if (writeResult.beforeValues && writeResult.beforeFormulas) {
+          const checkpoint = await getWorkbookRecoveryLog().append({
+            toolName: "python_transform_range",
+            toolCallId,
+            address: writeResult.outputAddress,
+            changedCount: changes?.changedCount ?? writeResult.rowsWritten * writeResult.colsWritten,
+            beforeValues: writeResult.beforeValues,
+            beforeFormulas: writeResult.beforeFormulas,
+          });
+
+          if (checkpoint) {
+            dispatchWorkbookSnapshotCreated({
+              snapshotId: checkpoint.id,
+              toolName: checkpoint.toolName,
+              address: checkpoint.address,
+              changedCount: checkpoint.changedCount,
+            });
+          }
+        }
 
         return successResult;
       } catch (error: unknown) {

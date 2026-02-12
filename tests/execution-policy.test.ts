@@ -40,6 +40,17 @@ void test("classifies instructions as non-workbook read traffic", () => {
   assert.equal(getToolContextImpact("instructions", { action: "append", level: "user" }), "none");
 });
 
+void test("classifies workbook_history list/delete as read and restore as mutate", () => {
+  assert.equal(getToolExecutionMode("workbook_history", { action: "list" }), "read");
+  assert.equal(getToolContextImpact("workbook_history", { action: "list" }), "none");
+
+  assert.equal(getToolExecutionMode("workbook_history", { action: "delete", snapshot_id: "abc" }), "read");
+  assert.equal(getToolContextImpact("workbook_history", { action: "delete", snapshot_id: "abc" }), "none");
+
+  assert.equal(getToolExecutionMode("workbook_history", { action: "restore", snapshot_id: "abc" }), "mutate");
+  assert.equal(getToolContextImpact("workbook_history", { action: "restore", snapshot_id: "abc" }), "content");
+});
+
 void test("classifies bridge and external tools as read-only non-workbook traffic", () => {
   assert.equal(getToolExecutionMode("tmux", { action: "list_sessions" }), "read");
   assert.equal(getToolContextImpact("tmux", { action: "list_sessions" }), "none");

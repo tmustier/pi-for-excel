@@ -47,6 +47,12 @@ void test("system prompt lists the conventions tool", () => {
   assert.match(prompt, /\*\*conventions\*\*/);
 });
 
+void test("system prompt includes workbook history recovery tool", () => {
+  const prompt = buildSystemPrompt();
+  assert.match(prompt, /\*\*workbook_history\*\*/);
+  assert.match(prompt, /recovery checkpoints/i);
+});
+
 void test("system prompt mentions optional files workspace capability", () => {
   const prompt = buildSystemPrompt();
   assert.match(prompt, /\*\*files\*\*/);

@@ -1,0 +1,204 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+
+import {
+  WorkbookRecoveryLog,
+  type WorkbookRecoverySnapshot,
+} from "../src/workbook/recovery-log.ts";
+import type { WorkbookContext } from "../src/workbook/context.ts";
+
+interface InMemorySettingsStore {
+  get<T>(key: string): Promise<T | null>;
+  set(key: string, value: unknown): Promise<void>;
+}
+
+function createInMemorySettingsStore(): InMemorySettingsStore {
+  const values = new Map<string, unknown>();
+
+  return {
+    get: <T>(key: string): Promise<T | null> => {
+      const value = values.get(key);
+      return Promise.resolve(value === undefined ? null : value as T);
+    },
+    set: (key: string, value: unknown): Promise<void> => {
+      values.set(key, value);
+      return Promise.resolve();
+    },
+  };
+}
+
+function findSnapshotById(snapshots: WorkbookRecoverySnapshot[], id: string): WorkbookRecoverySnapshot | null {
+  for (const snapshot of snapshots) {
+    if (snapshot.id === id) {
+      return snapshot;
+    }
+  }
+
+  return null;
+}
+
+void test("recovery log appends and reloads workbook-scoped snapshots", async () => {
+  const settingsStore = createInMemorySettingsStore();
+
+  const getWorkbookContext = (): Promise<WorkbookContext> => Promise.resolve({
+    workbookId: "url_sha256:workbook-a",
+    workbookName: "Ops.xlsx",
+    source: "document.url",
+  });
+
+  let idCounter = 0;
+  const createId = (): string => {
+    idCounter += 1;
+    return `snap-${idCounter}`;
+  };
+
+  const logA = new WorkbookRecoveryLog({
+    getSettingsStore: () => Promise.resolve(settingsStore),
+    getWorkbookContext,
+    now: () => 1700000000000,
+    createId,
+    applySnapshot: () => Promise.resolve({ values: [["old"]], formulas: [["old"]] }),
+  });
+
+  const appended = await logA.append({
+    toolName: "write_cells",
+    toolCallId: "call-1",
+    address: "Sheet1!A1",
+    changedCount: 1,
+    beforeValues: [["before"]],
+    beforeFormulas: [["before"]],
+  });
+
+  assert.ok(appended);
+  assert.equal(appended?.id, "snap-1");
+
+  const entriesA = await logA.listForCurrentWorkbook();
+  assert.equal(entriesA.length, 1);
+  assert.equal(entriesA[0]?.workbookId, "url_sha256:workbook-a");
+
+  const logB = new WorkbookRecoveryLog({
+    getSettingsStore: () => Promise.resolve(settingsStore),
+    getWorkbookContext,
+    applySnapshot: () => Promise.resolve({ values: [["old"]], formulas: [["old"]] }),
+  });
+
+  const entriesB = await logB.listForCurrentWorkbook();
+  assert.equal(entriesB.length, 1);
+  assert.equal(entriesB[0]?.toolCallId, "call-1");
+});
+
+void test("restore applies checkpoint values and creates inverse checkpoint", async () => {
+  const settingsStore = createInMemorySettingsStore();
+
+  const workbookContext: WorkbookContext = {
+    workbookId: "url_sha256:workbook-b",
+    workbookName: "Model.xlsx",
+    source: "document.url",
+  };
+
+  let idCounter = 0;
+  const createId = (): string => {
+    idCounter += 1;
+    return `snap-${idCounter}`;
+  };
+
+  let appliedAddress = "";
+  let appliedValues: unknown[][] = [];
+
+  const log = new WorkbookRecoveryLog({
+    getSettingsStore: () => Promise.resolve(settingsStore),
+    getWorkbookContext: () => Promise.resolve(workbookContext),
+    now: () => 1700000001000,
+    createId,
+    applySnapshot: (address: string, values: unknown[][]) => {
+      appliedAddress = address;
+      appliedValues = values;
+      return Promise.resolve({
+        values: [[42]],
+        formulas: [[42]],
+      });
+    },
+  });
+
+  const appended = await log.append({
+    toolName: "fill_formula",
+    toolCallId: "call-2",
+    address: "Sheet2!B4",
+    changedCount: 1,
+    beforeValues: [[10]],
+    beforeFormulas: [["=A1+A2"]],
+  });
+
+  assert.ok(appended);
+
+  const restored = await log.restore(appended?.id ?? "");
+
+  assert.equal(restored.address, "Sheet2!B4");
+  assert.equal(restored.restoredSnapshotId, appended?.id);
+  assert.equal(appliedAddress, "Sheet2!B4");
+  assert.deepEqual(appliedValues, [["=A1+A2"]]);
+
+  const snapshots = await log.listForCurrentWorkbook(10);
+  assert.equal(snapshots.length, 2);
+
+  const inverse = restored.inverseSnapshotId
+    ? findSnapshotById(snapshots, restored.inverseSnapshotId)
+    : null;
+
+  assert.ok(inverse);
+  assert.equal(inverse?.toolName, "restore_snapshot");
+  assert.equal(inverse?.restoredFromSnapshotId, appended?.id);
+});
+
+void test("clearForCurrentWorkbook removes only matching workbook checkpoints", async () => {
+  const settingsStore = createInMemorySettingsStore();
+
+  let currentWorkbookId: string | null = "url_sha256:workbook-c";
+  const getWorkbookContext = (): Promise<WorkbookContext> => Promise.resolve({
+    workbookId: currentWorkbookId,
+    workbookName: "Workbook",
+    source: currentWorkbookId ? "document.url" : "unknown",
+  });
+
+  let idCounter = 0;
+  const createId = (): string => {
+    idCounter += 1;
+    return `snap-${idCounter}`;
+  };
+
+  const log = new WorkbookRecoveryLog({
+    getSettingsStore: () => Promise.resolve(settingsStore),
+    getWorkbookContext,
+    createId,
+    applySnapshot: () => Promise.resolve({ values: [[1]], formulas: [[1]] }),
+  });
+
+  await log.append({
+    toolName: "write_cells",
+    toolCallId: "call-3",
+    address: "Sheet1!A1",
+    beforeValues: [["a"]],
+    beforeFormulas: [["a"]],
+  });
+
+  currentWorkbookId = "url_sha256:workbook-d";
+
+  await log.append({
+    toolName: "write_cells",
+    toolCallId: "call-4",
+    address: "Sheet1!A2",
+    beforeValues: [["b"]],
+    beforeFormulas: [["b"]],
+  });
+
+  currentWorkbookId = "url_sha256:workbook-c";
+  const removed = await log.clearForCurrentWorkbook();
+  assert.equal(removed, 1);
+
+  const remainingCurrent = await log.listForCurrentWorkbook(10);
+  assert.equal(remainingCurrent.length, 0);
+
+  const remainingAll = await log.list({ limit: 10 });
+  assert.equal(remainingAll.length, 1);
+  assert.equal(remainingAll[0]?.toolCallId, "call-4");
+});
