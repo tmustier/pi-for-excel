@@ -3,6 +3,18 @@ import { test } from "node:test";
 
 import { getFilesWorkspace } from "../src/files/workspace.ts";
 
+interface CollisionSeedBackend {
+  writeBytes(path: string, bytes: Uint8Array, mimeTypeHint?: string): Promise<void>;
+}
+
+function isCollisionSeedBackend(value: unknown): value is CollisionSeedBackend {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  return typeof Reflect.get(value, "writeBytes") === "function";
+}
+
 function getOfficeGlobal(): unknown {
   return Reflect.get(globalThis, "Office");
 }
@@ -127,4 +139,39 @@ void test("files workspace exposes built-in docs as read-only entries", async ()
     () => workspace.deleteFile("assistant-docs/docs/extensions.md"),
     /built-in doc/i,
   );
+});
+
+void test("legacy workspace collisions on assistant-docs paths stay reachable", async () => {
+  await resetWorkspace();
+  const workspace = getFilesWorkspace();
+
+  await workspace.listFiles();
+  const backend: unknown = Reflect.get(workspace, "backend");
+  assert.ok(isCollisionSeedBackend(backend));
+  if (!isCollisionSeedBackend(backend)) return;
+
+  await backend.writeBytes(
+    "assistant-docs/docs/extensions.md",
+    new TextEncoder().encode("legacy collision payload"),
+    "text/plain",
+  );
+
+  const listWithCollision = await workspace.listFiles();
+  const collisionEntry = listWithCollision.find((entry) => entry.path === "assistant-docs/docs/extensions.md");
+
+  assert.ok(collisionEntry);
+  assert.equal(collisionEntry.sourceKind, "workspace");
+
+  const readCollision = await workspace.readFile("assistant-docs/docs/extensions.md", {
+    mode: "text",
+  });
+  assert.match(readCollision.text ?? "", /legacy collision payload/);
+
+  await workspace.deleteFile("assistant-docs/docs/extensions.md");
+
+  const readBuiltinAfterDelete = await workspace.readFile("assistant-docs/docs/extensions.md", {
+    mode: "text",
+  });
+  assert.equal(readBuiltinAfterDelete.sourceKind, "builtin-doc");
+  assert.match(readBuiltinAfterDelete.text ?? "", /Extensions \(MVP authoring guide\)/i);
 });
