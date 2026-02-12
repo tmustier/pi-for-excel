@@ -89,6 +89,9 @@ void test("classifies bridge and external tools as read-only non-workbook traffi
 
   assert.equal(getToolExecutionMode("files", { action: "list" }), "read");
   assert.equal(getToolContextImpact("files", { action: "list" }), "none");
+
+  assert.equal(getToolExecutionMode("extensions_manager", { action: "list" }), "read");
+  assert.equal(getToolContextImpact("extensions_manager", { action: "list" }), "none");
 });
 
 void test("classifies python_transform_range as workbook content mutation", () => {

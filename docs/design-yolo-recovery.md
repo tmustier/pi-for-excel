@@ -35,10 +35,12 @@ Replace cumbersome up-front approval selectors with a low-friction workflow:
 
 ## Implemented slice
 
-- Automatic checkpoints for successful:
+- Automatic checkpoints for successful mutations:
   - `write_cells`
   - `fill_formula`
   - `python_transform_range`
+  - `conditional_format`
+  - `comments` (mutating actions)
 - New tool: `workbook_history`
   - `list`
   - `restore`
@@ -64,7 +66,7 @@ Replace cumbersome up-front approval selectors with a low-friction workflow:
 
 ## Follow-ups
 
-1. Extend checkpointing beyond contiguous cell writes (format/structure/comment mutations).
+1. Extend checkpointing to remaining non-covered mutations (`format_cells`, `modify_structure`) and broaden rule-type coverage for conditional formatting.
 2. Enrich checkpoint history UX (search/filter/export, retention controls).
 3. Evaluate host-specific full-file snapshot feasibility for coarse-grained restore points.
 4. Potentially expose “YOLO mode” toggle once we have both lightweight and strict workflows fully defined.

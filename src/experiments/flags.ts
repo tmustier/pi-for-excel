@@ -14,7 +14,8 @@ export type ExperimentalFeatureId =
   | "mcp_tools"
   | "files_workspace"
   | "remote_extension_urls"
-  | "extension_permission_gates";
+  | "extension_permission_gates"
+  | "extension_sandbox_runtime";
 
 export type ExperimentalFeatureWiring = "wired" | "flag-only";
 
@@ -86,6 +87,16 @@ const EXPERIMENTAL_FEATURES = [
     description: "Enforce per-extension capability permissions when extensions activate.",
     wiring: "wired",
     storageKey: "pi.experimental.extensionPermissionGates",
+  },
+  {
+    id: "extension_sandbox_runtime",
+    slug: "extension-sandbox",
+    aliases: ["extensions-sandbox", "sandboxed-extensions"],
+    title: "Extension sandbox runtime",
+    description: "Run inline/remote extensions in a sandboxed iframe runtime.",
+    warning: "Experimental: sandbox UI bridge is currently text-only for widget/overlay rendering.",
+    wiring: "wired",
+    storageKey: "pi.experimental.extensionSandboxRuntime",
   },
 ] as const satisfies readonly ExperimentalFeatureDefinition[];
 

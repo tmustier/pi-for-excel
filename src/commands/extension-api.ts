@@ -132,7 +132,38 @@ function defaultToast(message: string): void {
   setTimeout(() => toastEl.classList.remove("visible"), 2000);
 }
 
-const BUNDLED_LOCAL_EXTENSION_IMPORTERS = import.meta.glob("../extensions/*.{ts,js}");
+type ExtensionModuleImporter = () => Promise<unknown>;
+
+function isExtensionModuleImporter(value: unknown): value is ExtensionModuleImporter {
+  return typeof value === "function";
+}
+
+function resolveBundledLocalExtensionImporters(): Record<string, ExtensionModuleImporter> {
+  try {
+    const rawImporters = (import.meta as ImportMeta & {
+      glob: (pattern: string) => unknown;
+    }).glob("../extensions/*.{ts,js}");
+
+    if (!isRecord(rawImporters)) {
+      return {};
+    }
+
+    const importers: Record<string, ExtensionModuleImporter> = {};
+    for (const [path, importer] of Object.entries(rawImporters)) {
+      if (!isExtensionModuleImporter(importer)) {
+        continue;
+      }
+
+      importers[path] = importer;
+    }
+
+    return importers;
+  } catch {
+    return {};
+  }
+}
+
+const BUNDLED_LOCAL_EXTENSION_IMPORTERS = resolveBundledLocalExtensionImporters();
 
 function getLocalExtensionImportCandidates(specifier: string): string[] {
   const normalized = specifier.trim();

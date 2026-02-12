@@ -38,6 +38,8 @@ export type RecoveryCheckpointToolName =
   | "write_cells"
   | "fill_formula"
   | "python_transform_range"
+  | "conditional_format"
+  | "comments"
   | "restore_snapshot";
 
 export interface RecoveryCheckpointSummary {
@@ -57,6 +59,10 @@ function formatRecoveryToolLabel(toolName: RecoveryCheckpointToolName): string {
       return "Fill formula";
     case "python_transform_range":
       return "Python transform";
+    case "conditional_format":
+      return "Conditional format";
+    case "comments":
+      return "Comments";
     case "restore_snapshot":
       return "Restore";
     default:
@@ -475,7 +481,7 @@ export async function showRecoveryDialog(opts: {
   let busy = false;
 
   const formatChangedLabel = (changedCount: number): string =>
-    `${changedCount.toLocaleString()} cell${changedCount === 1 ? "" : "s"}`;
+    `${changedCount.toLocaleString()} change${changedCount === 1 ? "" : "s"}`;
 
   const shortId = (id: string): string => (id.length > 12 ? id.slice(0, 12) : id);
 
@@ -521,7 +527,7 @@ export async function showRecoveryDialog(opts: {
 
       const meta = document.createElement("div");
       meta.className = "pi-recovery-item__meta";
-      meta.textContent = `${formatChangedLabel(checkpoint.changedCount)} changed · #${shortId(checkpoint.id)}`;
+      meta.textContent = `${formatChangedLabel(checkpoint.changedCount)} · #${shortId(checkpoint.id)}`;
 
       const actions = document.createElement("div");
       actions.className = "pi-recovery-item__actions";

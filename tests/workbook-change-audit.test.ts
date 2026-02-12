@@ -272,6 +272,30 @@ void test("comments tool appends audit entries for mutating actions", async () =
       summary: "updated comment at Sheet1!A1",
     }),
     appendAuditEntry: auditCapture.appendAuditEntry,
+    captureCommentThread: () => Promise.resolve({
+      exists: true,
+      content: "Before",
+      resolved: false,
+      replies: [],
+    }),
+    appendRecoverySnapshot: () => Promise.resolve({
+      id: "checkpoint-1",
+      at: 1700000000000,
+      toolName: "comments",
+      toolCallId: "tool-call-comments-success",
+      address: "Sheet1!A1",
+      changedCount: 1,
+      cellCount: 1,
+      beforeValues: [],
+      beforeFormulas: [],
+      snapshotKind: "comment_thread",
+      commentThreadState: {
+        exists: true,
+        content: "Before",
+        resolved: false,
+        replies: [],
+      },
+    }),
   });
 
   const result = await tool.execute("tool-call-comments-success", {
@@ -281,6 +305,17 @@ void test("comments tool appends audit entries for mutating actions", async () =
   });
 
   assert.match(firstText(result), /Updated comment/u);
+  if (isRecord(result.details)) {
+    assert.equal(result.details.kind, "comments");
+    if (isRecord(result.details.recovery)) {
+      assert.equal(result.details.recovery.status, "checkpoint_created");
+    } else {
+      throw new Error("Expected recovery metadata for comments mutation");
+    }
+  } else {
+    throw new Error("Expected comments details in tool result");
+  }
+
   assert.equal(auditCapture.entries.length, 1);
   assert.equal(auditCapture.entries[0]?.toolName, "comments");
   assert.equal(auditCapture.entries[0]?.blocked, false);

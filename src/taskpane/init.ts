@@ -166,6 +166,8 @@ function parseWorkbookSnapshotCreatedDetail(value: unknown): WorkbookSnapshotCre
     rawToolName === "write_cells" ||
     rawToolName === "fill_formula" ||
     rawToolName === "python_transform_range" ||
+    rawToolName === "conditional_format" ||
+    rawToolName === "comments" ||
     rawToolName === "restore_snapshot"
       ? rawToolName
       : null;
@@ -554,7 +556,7 @@ export async function initTaskpane(opts: {
     if (detail.toolName === "restore_snapshot") return;
 
     const changedLabel = detail.changedCount > 0
-      ? `${detail.changedCount.toLocaleString()} cell${detail.changedCount === 1 ? "" : "s"}`
+      ? `${detail.changedCount.toLocaleString()} change${detail.changedCount === 1 ? "" : "s"}`
       : "range";
 
     showActionToast({
@@ -592,7 +594,9 @@ export async function initTaskpane(opts: {
 
       runtimeActiveSkillIds.set(runtimeId, activeSkillIds);
 
-      const coreTools = createAllTools().filter(isRuntimeAgentTool);
+      const coreTools = createAllTools({
+        getExtensionManager: () => extensionManager,
+      }).filter(isRuntimeAgentTool);
       const gatedCoreTools = await applyExperimentalToolGates(coreTools);
       const allTools = [
         ...gatedCoreTools,

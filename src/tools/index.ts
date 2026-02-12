@@ -11,8 +11,18 @@ import { createPythonRunTool } from "./python-run.js";
 import { createLibreOfficeConvertTool } from "./libreoffice-convert.js";
 import { createPythonTransformRangeTool } from "./python-transform-range.js";
 import { createFilesTool } from "./files.js";
+import {
+  createExtensionsManagerTool,
+  type ExtensionsManagerToolRuntime,
+} from "./extensions-manager.js";
 
-export function createAllTools() {
+export interface CreateAllToolsOptions {
+  getExtensionManager?: () => ExtensionsManagerToolRuntime | null;
+}
+
+export function createAllTools(options: CreateAllToolsOptions = {}) {
+  const getExtensionManager = options.getExtensionManager ?? (() => null);
+
   return [
     ...createCoreTools(),
     createTmuxTool(),
@@ -20,5 +30,6 @@ export function createAllTools() {
     createLibreOfficeConvertTool(),
     createPythonTransformRangeTool(),
     createFilesTool(),
+    createExtensionsManagerTool({ getManager: getExtensionManager }),
   ];
 }

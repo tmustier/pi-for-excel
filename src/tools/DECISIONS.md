@@ -174,6 +174,20 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 - **MCP integration:** configurable server registry (`mcp.servers.v1`), UI add/remove/test, and a single `mcp` gateway tool for list/search/describe/call flows.
 - **Rationale:** satisfy issue #24 with explicit consent, clear attribution, and minimal overlap with the extension system.
 
+## Extension manager tool (`extensions_manager`)
+- **Availability:** always registered via `createAllTools()`.
+- **Purpose:** lets the agent manage extension lifecycle from chat (`list`, `install_code`, `set_enabled`, `reload`, `uninstall`).
+- **Default install policy:** `install_code` replaces existing extensions with the same name unless `replace_existing=false` is provided.
+- **Execution policy:** treated as `read/none` for workbook coordination (mutates local extension registry/runtime only, not workbook cells/structure).
+- **Rationale:** supports non-engineer extension authoring by allowing users to ask Pi to generate + install an extension directly.
+
+## Experimental extension sandbox UI bridge (`extension-sandbox`)
+- **Activation:** opt-in only via `/experimental on extension-sandbox`; default remains host runtime.
+- **Surface:** inline-code + remote-url extensions route to iframe runtime when enabled; built-in/local modules remain host-side.
+- **UI model:** sandbox may only send a structured UI tree (allowed tag set, sanitized class names/action ids), never raw HTML.
+- **Interactivity:** host supports explicit action callbacks via `data-pi-action` markers mapped to click dispatch inside the sandbox.
+- **Rationale:** incremental security hardening—adds practical UI capability without reopening HTML injection risk.
+
 ## Experimental files workspace tool (`files`)
 - **Availability:** non-core experimental tool, always registered; execution hard-gated by `files-workspace` flag.
 - **Backend strategy:** native folder handle (when permitted) → OPFS → in-memory fallback.
@@ -199,10 +213,10 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 
 ## Workbook recovery checkpoints (`workbook_history`)
 - **Goal:** prefer low-friction workflows over pre-execution approval selectors by making rollback easy and reliable.
-- **Automatic checkpoints:** successful `write_cells`, `fill_formula`, and `python_transform_range` writes store pre-write range snapshots in local `workbook.recovery-snapshots.v1`.
+- **Automatic checkpoints:** successful `write_cells`, `fill_formula`, `python_transform_range`, `conditional_format`, and mutating `comments` actions store pre-mutation snapshots in local `workbook.recovery-snapshots.v1`.
 - **Safety limits:** checkpoint capture is skipped for very large writes (> `MAX_RECOVERY_CELLS`) to avoid oversized local state.
 - **Workbook identity guardrails:** append/list/delete/clear/restore paths are scoped to the active workbook identity; restore rejects identity-less or cross-workbook checkpoints.
 - **Restore UX:** `workbook_history` can list/restore/delete/clear checkpoints; restores also create an inverse checkpoint (`restore_snapshot`) so users can undo a mistaken restore.
-- **Coverage signaling:** non-checkpointed mutation tools (`format_cells`, `conditional_format`, `modify_structure`, mutating `comments` actions, and mutating `view_settings` actions) explicitly report that no recovery checkpoint was created.
+- **Coverage signaling:** non-checkpointed mutation tools (`format_cells`, `modify_structure`, and mutating `view_settings` actions) explicitly report when no recovery checkpoint was created.
 - **Quick affordance:** after a checkpointed write, UI shows an action toast with **Revert**.
 - **Rationale:** addresses #27 by shifting from cumbersome up-front approvals to versioned recovery with explicit user-controlled rollback.

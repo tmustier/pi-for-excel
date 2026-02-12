@@ -24,6 +24,8 @@ const ALWAYS_READ_TOOLS = new Set<string>([
   "mcp",
   // Workspace file operations do not mutate the workbook.
   "files",
+  // Extension registry operations mutate local settings/runtime, not workbook content.
+  "extensions_manager",
 ]);
 
 const ALWAYS_MUTATE_TOOLS = new Set<string>([

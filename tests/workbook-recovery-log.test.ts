@@ -7,6 +7,7 @@ import {
   type WorkbookRecoverySnapshot,
 } from "../src/workbook/recovery-log.ts";
 import type { WorkbookContext } from "../src/workbook/context.ts";
+import { firstCellAddress } from "../src/workbook/recovery-states.ts";
 
 const RECOVERY_SETTING_KEY = "workbook.recovery-snapshots.v1";
 
@@ -39,6 +40,12 @@ function findSnapshotById(snapshots: WorkbookRecoverySnapshot[], id: string): Wo
 
   return null;
 }
+
+void test("firstCellAddress handles quoted sheet names that include !", () => {
+  assert.equal(firstCellAddress("'Q1!Ops'!A1"), "A1");
+  assert.equal(firstCellAddress("'Q1!Ops'!$B$2:$D$9"), "$B$2");
+  assert.equal(firstCellAddress("Sheet1!C5:D7"), "C5");
+});
 
 void test("recovery log appends and reloads workbook-scoped snapshots", async () => {
   const settingsStore = createInMemorySettingsStore();
@@ -311,6 +318,201 @@ void test("restore applies checkpoint values and creates inverse checkpoint", as
 
   assert.ok(inverse);
   assert.equal(inverse?.toolName, "restore_snapshot");
+  assert.equal(inverse?.restoredFromSnapshotId, appended?.id);
+});
+
+void test("restore applies conditional-format checkpoints and creates inverse checkpoint", async () => {
+  const settingsStore = createInMemorySettingsStore();
+
+  const workbookContext: WorkbookContext = {
+    workbookId: "url_sha256:workbook-cf",
+    workbookName: "Formatting.xlsx",
+    source: "document.url",
+  };
+
+  let idCounter = 0;
+  const createId = (): string => {
+    idCounter += 1;
+    return `snap-cf-${idCounter}`;
+  };
+
+  let appliedAddress = "";
+  const appliedRules: unknown[] = [];
+
+  const log = new WorkbookRecoveryLog({
+    getSettingsStore: () => Promise.resolve(settingsStore),
+    getWorkbookContext: () => Promise.resolve(workbookContext),
+    now: () => 1700000002000,
+    createId,
+    applySnapshot: () => Promise.resolve({ values: [[1]], formulas: [[1]] }),
+    applyConditionalFormatSnapshot: (address, rules) => {
+      appliedAddress = address;
+      appliedRules.push(...rules);
+      return Promise.resolve({
+        supported: true,
+        rules: [{
+          type: "custom",
+          formula: "=A1>0",
+          fillColor: "#00FF00",
+          appliesToAddress: "Sheet1!A1:A2",
+        }],
+      });
+    },
+  });
+
+  const appended = await log.appendConditionalFormat({
+    toolName: "conditional_format",
+    toolCallId: "call-cf",
+    address: "Sheet1!A1:B2",
+    changedCount: 4,
+    cellCount: 4,
+    conditionalFormatRules: [
+      {
+        type: "custom",
+        formula: "=A1>10",
+        fillColor: "#FF0000",
+        appliesToAddress: "Sheet1!A1:A2",
+      },
+      {
+        type: "custom",
+        formula: "=B1>10",
+        fillColor: "#0000FF",
+        appliesToAddress: "Sheet1!B1:B2",
+      },
+    ],
+  });
+
+  assert.ok(appended);
+
+  const restored = await log.restore(appended?.id ?? "");
+
+  assert.equal(restored.address, "Sheet1!A1:B2");
+  assert.equal(restored.restoredSnapshotId, appended?.id);
+  assert.equal(appliedAddress, "Sheet1!A1:B2");
+  assert.equal(appliedRules.length, 2);
+  assert.deepEqual(
+    appliedRules.map((rule) =>
+      typeof rule === "object" && rule !== null
+        ? {
+            type: "type" in rule ? rule.type : undefined,
+            formula: "formula" in rule ? rule.formula : undefined,
+            fillColor: "fillColor" in rule ? rule.fillColor : undefined,
+            appliesToAddress: "appliesToAddress" in rule ? rule.appliesToAddress : undefined,
+          }
+        : null
+    ),
+    [
+      {
+        type: "custom",
+        formula: "=A1>10",
+        fillColor: "#FF0000",
+        appliesToAddress: "Sheet1!A1:A2",
+      },
+      {
+        type: "custom",
+        formula: "=B1>10",
+        fillColor: "#0000FF",
+        appliesToAddress: "Sheet1!B1:B2",
+      },
+    ],
+  );
+
+  const snapshots = await log.listForCurrentWorkbook(10);
+  const inverse = restored.inverseSnapshotId
+    ? findSnapshotById(snapshots, restored.inverseSnapshotId)
+    : null;
+
+  assert.ok(inverse);
+  assert.equal(inverse?.toolName, "restore_snapshot");
+  assert.equal(inverse?.snapshotKind, "conditional_format_rules");
+  assert.equal(inverse?.restoredFromSnapshotId, appended?.id);
+  assert.deepEqual(
+    (inverse?.conditionalFormatRules ?? []).map((rule) => ({
+      type: rule.type,
+      formula: rule.formula,
+      fillColor: rule.fillColor,
+      appliesToAddress: rule.appliesToAddress,
+    })),
+    [{
+      type: "custom",
+      formula: "=A1>0",
+      fillColor: "#00FF00",
+      appliesToAddress: "Sheet1!A1:A2",
+    }],
+  );
+});
+
+void test("restore applies comment-thread checkpoints and creates inverse checkpoint", async () => {
+  const settingsStore = createInMemorySettingsStore();
+
+  const workbookContext: WorkbookContext = {
+    workbookId: "url_sha256:workbook-comments",
+    workbookName: "Comments.xlsx",
+    source: "document.url",
+  };
+
+  let idCounter = 0;
+  const createId = (): string => {
+    idCounter += 1;
+    return `snap-comment-${idCounter}`;
+  };
+
+  let appliedAddress = "";
+  let appliedState: unknown = null;
+
+  const log = new WorkbookRecoveryLog({
+    getSettingsStore: () => Promise.resolve(settingsStore),
+    getWorkbookContext: () => Promise.resolve(workbookContext),
+    now: () => 1700000003000,
+    createId,
+    applySnapshot: () => Promise.resolve({ values: [[1]], formulas: [[1]] }),
+    applyCommentThreadSnapshot: (address, state) => {
+      appliedAddress = address;
+      appliedState = state;
+      return Promise.resolve({
+        exists: true,
+        content: "Current comment",
+        resolved: false,
+        replies: ["Current reply"],
+      });
+    },
+  });
+
+  const appended = await log.appendCommentThread({
+    toolName: "comments",
+    toolCallId: "call-comment",
+    address: "Sheet1!C3",
+    changedCount: 1,
+    commentThreadState: {
+      exists: true,
+      content: "Original comment",
+      resolved: true,
+      replies: ["Original reply"],
+    },
+  });
+
+  assert.ok(appended);
+
+  const restored = await log.restore(appended?.id ?? "");
+
+  assert.equal(restored.address, "Sheet1!C3");
+  assert.equal(restored.restoredSnapshotId, appended?.id);
+  assert.equal(appliedAddress, "Sheet1!C3");
+  assert.deepEqual(appliedState, {
+    exists: true,
+    content: "Original comment",
+    resolved: true,
+    replies: ["Original reply"],
+  });
+
+  const snapshots = await log.listForCurrentWorkbook(10);
+  const inverse = restored.inverseSnapshotId
+    ? findSnapshotById(snapshots, restored.inverseSnapshotId)
+    : null;
+
+  assert.ok(inverse);
+  assert.equal(inverse?.toolName, "restore_snapshot");
+  assert.equal(inverse?.snapshotKind, "comment_thread");
   assert.equal(inverse?.restoredFromSnapshotId, appended?.id);
 });
 

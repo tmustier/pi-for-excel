@@ -53,7 +53,7 @@ void test("builtins registry wires /experimental, /extensions, and /skills comma
   assert.match(source, /\.\.\.createExtensionsCommands\(context\)/);
 
   const extensionApiSource = await readFile(new URL("../src/commands/extension-api.ts", import.meta.url), "utf8");
-  assert.match(extensionApiSource, /import\.meta\.glob\("\.\.\/extensions\/\*\.\{ts,js\}"\)/);
+  assert.match(extensionApiSource, /\.glob\("\.\.\/extensions\/\*\.\{ts,js\}"\)/);
   assert.match(extensionApiSource, /Local extension module/);
   assert.match(extensionApiSource, /isCapabilityEnabled/);
   assert.match(extensionApiSource, /commands\.register/);
@@ -70,6 +70,8 @@ void test("builtins registry wires /experimental, /extensions, and /skills comma
   assert.match(runtimeManagerSource, /async setExtensionCapability\(/);
   assert.match(runtimeManagerSource, /setExtensionCapabilityAllowed\(/);
   assert.match(runtimeManagerSource, /await this\.reloadExtension\(entry\.id\);/);
+  assert.match(runtimeManagerSource, /activateExtensionInSandbox/);
+  assert.match(runtimeManagerSource, /extension_sandbox_runtime/);
 
   const extensionsOverlaySource = await readFile(
     new URL("../src/commands/builtins/extensions-overlay.ts", import.meta.url),
@@ -79,6 +81,10 @@ void test("builtins registry wires /experimental, /extensions, and /skills comma
   assert.match(extensionsOverlaySource, /toggle\.type = "checkbox"/);
   assert.match(extensionsOverlaySource, /confirmExtensionInstall\(/);
   assert.match(extensionsOverlaySource, /confirmExtensionEnable\(/);
+  assert.match(extensionsOverlaySource, /Sandbox runtime \(experimental\)/);
+  assert.match(extensionsOverlaySource, /setExperimentalFeatureEnabled\("extension_sandbox_runtime", true\)/);
+  assert.match(extensionsOverlaySource, /setExperimentalFeatureEnabled\("extension_sandbox_runtime", false\)/);
+  assert.match(extensionsOverlaySource, /Sandbox runtime is off: this untrusted extension runs in host runtime/);
   assert.match(extensionsOverlaySource, /higher-risk permissions/);
   assert.match(extensionsOverlaySource, /Updated permissions for/);
   assert.match(extensionsOverlaySource, /reload failed \(see Last error\)/);
@@ -91,6 +97,8 @@ void test("builtins registry wires /experimental, /extensions, and /skills comma
   const experimentalFlagsSource = await readFile(new URL("../src/experiments/flags.ts", import.meta.url), "utf8");
   assert.match(experimentalFlagsSource, /extension_permission_gates/);
   assert.match(experimentalFlagsSource, /extension-permissions/);
+  assert.match(experimentalFlagsSource, /extension_sandbox_runtime/);
+  assert.match(experimentalFlagsSource, /extension-sandbox/);
 });
 
 void test("taskpane init keeps getSkillToolNames imported when used", async () => {

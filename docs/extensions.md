@@ -2,7 +2,7 @@
 
 Pi for Excel supports runtime extensions that can register slash commands, register tools, and render small UI elements in the sidebar.
 
-> Status: MVP. Extensions currently run in the same taskpane context (no sandbox/permission boundary yet).
+> Status: MVP+ (in progress). Host runtime remains default; optional sandbox runtime is available via `/experimental on extension-sandbox` for inline/remote extensions.
 
 ## Quick start
 
@@ -13,6 +13,23 @@ Pi for Excel supports runtime extensions that can register slash commands, regis
    - **URL module** (requires explicit unsafe opt-in)
 3. Enable/disable/reload/uninstall from the same manager.
 4. Review and edit capability permissions per extension (changes auto-reload enabled extensions).
+
+## Create extensions directly from chat
+
+You can ask Pi to build and install an extension without leaving the conversation.
+
+Example prompt:
+
+```txt
+Create an extension named "Quick KPI" that adds /kpi-summary.
+The command should read the active sheet, find numeric columns, and show a small widget with totals.
+Then install it.
+```
+
+Pi can use the `extensions_manager` tool to:
+- list installed extensions
+- install an extension from generated code
+- enable/disable, reload, and uninstall extensions
 
 ## Install source types
 
@@ -58,6 +75,7 @@ Registers an agent-callable tool.
 
 Notes:
 - `parameters` should be a JSON-schema/TypeBox-compatible object.
+- In sandbox runtime, plain JSON schema objects are accepted and wrapped safely by the host bridge.
 - Tool names must not conflict with core built-in tools.
 - Tool names must be unique across enabled extensions.
 
@@ -137,6 +155,26 @@ High-risk capabilities include:
 - `agent.read`
 - `agent.events.read`
 
+## Experimental sandbox runtime
+
+Enable sandboxed runtime execution for untrusted extension sources:
+
+```txt
+/experimental on extension-sandbox
+```
+
+You can also toggle this directly in `/extensions` via the **Sandbox runtime (experimental)** card.
+
+When enabled:
+- inline-code and remote-URL extensions run in an iframe sandbox runtime
+- built-in/local-module extensions stay on host runtime
+- `/extensions` shows runtime mode per extension
+
+Current sandbox bridge limitations (intentional for this slice):
+- `api.agent` is not available in sandbox runtime
+- widget/overlay rendering uses a **structured, sanitized UI tree** (no raw HTML / no `innerHTML`)
+- interactive callbacks are limited to explicit action markers (`data-pi-action`), which dispatch click events back inside sandbox runtime
+
 ## Local module authoring (repo contributors)
 
 Local module specifiers are used for built-ins (for example the seeded Snake extension).
@@ -167,5 +205,6 @@ If a local specifier is not bundled, loading fails with a clear error.
 
 - Extensions can read/write workbook data through registered tools and host APIs.
 - Remote URL loading is intentionally off by default.
-- There is no hard sandbox boundary in MVP; only run trusted extension code.
+- Host runtime remains the default; only run trusted extension code unless you explicitly enable sandbox mode.
 - Experimental capability gates can be enabled with `/experimental on extension-permissions`.
+- Experimental sandbox runtime can be enabled with `/experimental on extension-sandbox`.

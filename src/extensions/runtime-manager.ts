@@ -16,6 +16,12 @@ import {
   type ExtensionCommand,
   type LoadedExtensionHandle,
 } from "../commands/extension-api.js";
+import { activateExtensionInSandbox } from "./sandbox-runtime.js";
+import {
+  describeExtensionRuntimeMode,
+  resolveExtensionRuntimeMode,
+  type ExtensionRuntimeMode,
+} from "./runtime-mode.js";
 import { commandRegistry } from "../commands/types.js";
 import {
   describeExtensionCapability,
@@ -38,6 +44,7 @@ import {
   type StoredExtensionSource,
 } from "./store.js";
 import { isExperimentalFeatureEnabled } from "../experiments/flags.js";
+import { showToast } from "../ui/toast.js";
 
 type AnyAgentTool = AgentTool;
 
@@ -45,6 +52,7 @@ type ManagerListener = () => void;
 
 interface LoadedExtensionState {
   entryId: string;
+  runtimeMode: ExtensionRuntimeMode;
   commandNames: Set<string>;
   toolNames: Set<string>;
   eventUnsubscribers: Set<() => void>;
@@ -61,6 +69,8 @@ export interface ExtensionRuntimeStatus {
   sourceLabel: string;
   trust: StoredExtensionTrust;
   trustLabel: string;
+  runtimeMode: ExtensionRuntimeMode;
+  runtimeLabel: string;
   permissions: StoredExtensionPermissions;
   grantedCapabilities: ExtensionCapability[];
   effectiveCapabilities: ExtensionCapability[];
@@ -75,6 +85,9 @@ export interface ExtensionRuntimeManagerOptions {
   getActiveAgent: () => Agent | null;
   refreshRuntimeTools: () => Promise<void>;
   reservedToolNames: ReadonlySet<string>;
+  loadExtensionFromSource?: typeof loadExtension;
+  activateInSandbox?: typeof activateExtensionInSandbox;
+  showToastMessage?: typeof showToast;
 }
 
 function getErrorMessage(error: unknown): string {
@@ -128,6 +141,9 @@ export class ExtensionRuntimeManager {
   private readonly getActiveAgent: () => Agent | null;
   private readonly refreshRuntimeTools: () => Promise<void>;
   private readonly reservedToolNames: ReadonlySet<string>;
+  private readonly loadExtensionFromSource: typeof loadExtension;
+  private readonly activateInSandbox: typeof activateExtensionInSandbox;
+  private readonly showToastMessage: typeof showToast;
 
   private readonly listeners = new Set<ManagerListener>();
   private readonly activeStates = new Map<string, LoadedExtensionState>();
@@ -144,6 +160,9 @@ export class ExtensionRuntimeManager {
     this.getActiveAgent = options.getActiveAgent;
     this.refreshRuntimeTools = options.refreshRuntimeTools;
     this.reservedToolNames = options.reservedToolNames;
+    this.loadExtensionFromSource = options.loadExtensionFromSource ?? loadExtension;
+    this.activateInSandbox = options.activateInSandbox ?? activateExtensionInSandbox;
+    this.showToastMessage = options.showToastMessage ?? showToast;
   }
 
   subscribe(listener: ManagerListener): () => void {
@@ -155,6 +174,7 @@ export class ExtensionRuntimeManager {
 
   list(): ExtensionRuntimeStatus[] {
     const permissionsEnforced = isExperimentalFeatureEnabled("extension_permission_gates");
+    const sandboxRuntimeEnabled = isExperimentalFeatureEnabled("extension_sandbox_runtime");
 
     return this.entries.map((entry) => {
       const state = this.activeStates.get(entry.id);
@@ -162,6 +182,9 @@ export class ExtensionRuntimeManager {
       const effectiveCapabilities = permissionsEnforced
         ? grantedCapabilities
         : listAllExtensionCapabilities();
+      const runtimeMode = state
+        ? state.runtimeMode
+        : resolveExtensionRuntimeMode(entry.trust, sandboxRuntimeEnabled);
 
       return {
         id: entry.id,
@@ -172,6 +195,8 @@ export class ExtensionRuntimeManager {
         sourceLabel: describeExtensionSource(entry.source),
         trust: entry.trust,
         trustLabel: describeStoredExtensionTrust(entry.trust),
+        runtimeMode,
+        runtimeLabel: describeExtensionRuntimeMode(runtimeMode),
         permissions: entry.permissions,
         grantedCapabilities,
         effectiveCapabilities,
@@ -347,6 +372,13 @@ export class ExtensionRuntimeManager {
     return activeAgent;
   }
 
+  private resolveRuntimeMode(entry: StoredExtensionEntry): ExtensionRuntimeMode {
+    return resolveExtensionRuntimeMode(
+      entry.trust,
+      isExperimentalFeatureEnabled("extension_sandbox_runtime"),
+    );
+  }
+
   private async installEntry(input: {
     name: string;
     source: StoredExtensionSource;
@@ -390,6 +422,7 @@ export class ExtensionRuntimeManager {
 
     const state: LoadedExtensionState = {
       entryId: entry.id,
+      runtimeMode: this.resolveRuntimeMode(entry),
       commandNames: new Set<string>(),
       toolNames: new Set<string>(),
       eventUnsubscribers: new Set<() => void>(),
@@ -465,26 +498,51 @@ export class ExtensionRuntimeManager {
       );
     };
 
-    const api = createExtensionAPI({
-      getAgent: () => this.getRequiredActiveAgent(),
-      registerCommand,
-      registerTool,
-      subscribeAgentEvents,
-      isCapabilityEnabled,
-      formatCapabilityError,
-    });
-
-    let loadSource: string;
-    if (entry.source.kind === "inline") {
-      const blob = new Blob([entry.source.code], { type: "text/javascript" });
-      state.inlineBlobUrl = URL.createObjectURL(blob);
-      loadSource = state.inlineBlobUrl;
-    } else {
-      loadSource = entry.source.specifier;
-    }
-
     try {
-      state.handle = await loadExtension(api, loadSource);
+      if (state.runtimeMode === "sandbox-iframe") {
+        const source = entry.source.kind === "inline"
+          ? {
+            kind: "inline" as const,
+            code: entry.source.code,
+          }
+          : {
+            kind: "module" as const,
+            specifier: entry.source.specifier,
+          };
+
+        state.handle = await this.activateInSandbox({
+          instanceId: `${entry.id}.${crypto.randomUUID()}`,
+          extensionName: entry.name,
+          source,
+          registerCommand,
+          registerTool,
+          subscribeAgentEvents,
+          isCapabilityEnabled,
+          formatCapabilityError,
+          toast: this.showToastMessage,
+        });
+      } else {
+        const api = createExtensionAPI({
+          getAgent: () => this.getRequiredActiveAgent(),
+          registerCommand,
+          registerTool,
+          subscribeAgentEvents,
+          isCapabilityEnabled,
+          formatCapabilityError,
+        });
+
+        let loadSource: string;
+        if (entry.source.kind === "inline") {
+          const blob = new Blob([entry.source.code], { type: "text/javascript" });
+          state.inlineBlobUrl = URL.createObjectURL(blob);
+          loadSource = state.inlineBlobUrl;
+        } else {
+          loadSource = entry.source.specifier;
+        }
+
+        state.handle = await this.loadExtensionFromSource(api, loadSource);
+      }
+
       this.activeStates.set(entry.id, state);
 
       if (toolsChanged) {

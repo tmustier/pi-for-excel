@@ -190,7 +190,7 @@ export function createWorkbookHistoryTool(
           const restored = await log.restore(snapshotId);
           const lines: string[] = [];
           lines.push(`✅ Restored checkpoint \`${shortId(restored.restoredSnapshotId)}\` at **${restored.address}**.`);
-          lines.push(`Changed cell(s): ${restored.changedCount.toLocaleString()}.`);
+          lines.push(`Changed item(s): ${restored.changedCount.toLocaleString()}.`);
 
           if (restored.inverseSnapshotId) {
             lines.push(`Rollback checkpoint created: \`${shortId(restored.inverseSnapshotId)}\`.`);

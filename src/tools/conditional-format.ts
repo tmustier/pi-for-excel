@@ -10,23 +10,17 @@ import { Type, type Static } from "@sinclair/typebox";
 import type { AgentTool, AgentToolResult } from "@mariozechner/pi-agent-core";
 import { excelRun, getRange, qualifiedAddress } from "../excel/helpers.js";
 import { getWorkbookChangeAuditLog } from "../audit/workbook-change-audit.js";
+import { dispatchWorkbookSnapshotCreated } from "../workbook/recovery-events.js";
+import { captureConditionalFormatState } from "../workbook/recovery-states.js";
+import { getWorkbookRecoveryLog } from "../workbook/recovery-log.js";
 import { getErrorMessage } from "../utils/errors.js";
 import type { ConditionalFormatDetails } from "./tool-details.js";
 import {
-  NON_CHECKPOINTED_MUTATION_NOTE,
-  NON_CHECKPOINTED_MUTATION_REASON,
+  CHECKPOINT_SKIPPED_NOTE,
+  CHECKPOINT_SKIPPED_REASON,
+  recoveryCheckpointCreated,
   recoveryCheckpointUnavailable,
 } from "./recovery-metadata.js";
-
-type CellValueOperator =
-  | "Between"
-  | "NotBetween"
-  | "EqualTo"
-  | "NotEqualTo"
-  | "GreaterThan"
-  | "LessThan"
-  | "GreaterThanOrEqual"
-  | "LessThanOrEqual";
 
 const schema = Type.Object({
   action: Type.Union([Type.Literal("add"), Type.Literal("clear")], {
@@ -164,6 +158,8 @@ async function clearFormats(
   toolCallId: string,
   params: Params,
 ): Promise<AgentToolResult<ConditionalFormatDetails>> {
+  const checkpointState = await captureConditionalFormatState(params.range);
+
   const result = await excelRun(async (context) => {
     const { sheet, range } = getRange(context, params.range);
     sheet.load("name");
@@ -192,20 +188,50 @@ async function clearFormats(
     summary: `cleared ${result.existing} rule(s) across ${result.cellCount} cell(s)`,
   });
 
-  return {
+  const output: AgentToolResult<ConditionalFormatDetails> = {
     content: [
       {
         type: "text",
-        text: `Cleared ${result.existing} conditional format(s) from **${fullAddr}**.\n\n${NON_CHECKPOINTED_MUTATION_NOTE}`,
+        text: `Cleared ${result.existing} conditional format(s) from **${fullAddr}**.`,
       },
     ],
     details: {
       kind: "conditional_format",
       action: "clear",
       address: fullAddr,
-      recovery: recoveryCheckpointUnavailable(NON_CHECKPOINTED_MUTATION_REASON),
     },
   };
+
+  if (!checkpointState.supported) {
+    output.details.recovery = recoveryCheckpointUnavailable(checkpointState.reason ?? CHECKPOINT_SKIPPED_REASON);
+    appendResultNote(output, CHECKPOINT_SKIPPED_NOTE);
+    return output;
+  }
+
+  const checkpoint = await getWorkbookRecoveryLog().appendConditionalFormat({
+    toolName: "conditional_format",
+    toolCallId,
+    address: fullAddr,
+    changedCount: result.cellCount,
+    cellCount: result.cellCount,
+    conditionalFormatRules: checkpointState.rules,
+  });
+
+  if (!checkpoint) {
+    output.details.recovery = recoveryCheckpointUnavailable(CHECKPOINT_SKIPPED_REASON);
+    appendResultNote(output, CHECKPOINT_SKIPPED_NOTE);
+    return output;
+  }
+
+  output.details.recovery = recoveryCheckpointCreated(checkpoint.id);
+  dispatchWorkbookSnapshotCreated({
+    snapshotId: checkpoint.id,
+    toolName: checkpoint.toolName,
+    address: checkpoint.address,
+    changedCount: checkpoint.changedCount,
+  });
+
+  return output;
 }
 
 async function addFormat(
@@ -213,6 +239,8 @@ async function addFormat(
   params: Params,
 ): Promise<AgentToolResult<ConditionalFormatDetails>> {
   validateAddParams(params);
+
+  const checkpointState = await captureConditionalFormatState(params.range);
 
   const result = await excelRun(async (context) => {
     const { sheet, range } = getRange(context, params.range);
@@ -232,15 +260,27 @@ async function addFormat(
     }
 
     if (params.type === "formula") {
-      cf.custom.rule.formula = params.formula as string;
+      if (typeof params.formula !== "string") {
+        throw new Error("formula is required for type=\"formula\".");
+      }
+
+      cf.custom.rule.formula = params.formula;
       applyFormat(cf.custom.format, params);
     } else {
-      const operator = params.operator as CellValueOperator;
+      if (typeof params.operator !== "string") {
+        throw new Error("operator is required for type=\"cell_value\".");
+      }
+
       const formula1 = stringifyValue(params.value);
-      const rule: Excel.ConditionalCellValueRule = { formula1, operator };
+      const rule: Excel.ConditionalCellValueRule = {
+        formula1,
+        operator: params.operator,
+      };
+
       if (params.value2 !== undefined) {
         rule.formula2 = stringifyValue(params.value2);
       }
+
       cf.cellValue.rule = rule;
       applyFormat(cf.cellValue.format, params);
     }
@@ -272,20 +312,50 @@ async function addFormat(
     summary: `added ${params.type ?? "rule"} across ${result.cellCount} cell(s)`,
   });
 
-  return {
+  const output: AgentToolResult<ConditionalFormatDetails> = {
     content: [
       {
         type: "text",
-        text: `Added conditional format to **${fullAddr}** — ${details}.\n\n${NON_CHECKPOINTED_MUTATION_NOTE}`,
+        text: `Added conditional format to **${fullAddr}** — ${details}.`,
       },
     ],
     details: {
       kind: "conditional_format",
       action: "add",
       address: fullAddr,
-      recovery: recoveryCheckpointUnavailable(NON_CHECKPOINTED_MUTATION_REASON),
     },
   };
+
+  if (!checkpointState.supported) {
+    output.details.recovery = recoveryCheckpointUnavailable(checkpointState.reason ?? CHECKPOINT_SKIPPED_REASON);
+    appendResultNote(output, CHECKPOINT_SKIPPED_NOTE);
+    return output;
+  }
+
+  const checkpoint = await getWorkbookRecoveryLog().appendConditionalFormat({
+    toolName: "conditional_format",
+    toolCallId,
+    address: fullAddr,
+    changedCount: result.cellCount,
+    cellCount: result.cellCount,
+    conditionalFormatRules: checkpointState.rules,
+  });
+
+  if (!checkpoint) {
+    output.details.recovery = recoveryCheckpointUnavailable(CHECKPOINT_SKIPPED_REASON);
+    appendResultNote(output, CHECKPOINT_SKIPPED_NOTE);
+    return output;
+  }
+
+  output.details.recovery = recoveryCheckpointCreated(checkpoint.id);
+  dispatchWorkbookSnapshotCreated({
+    snapshotId: checkpoint.id,
+    toolName: checkpoint.toolName,
+    address: checkpoint.address,
+    changedCount: checkpoint.changedCount,
+  });
+
+  return output;
 }
 
 function validateAddParams(params: Params): void {
@@ -333,4 +403,11 @@ function applyFormat(format: Excel.ConditionalRangeFormat, params: Params): void
   if (params.underline !== undefined) {
     format.font.underline = params.underline ? "Single" : "None";
   }
+}
+
+function appendResultNote(result: AgentToolResult<ConditionalFormatDetails>, note: string): void {
+  const first = result.content[0];
+  if (!first || first.type !== "text") return;
+
+  first.text = `${first.text}\n\n${note}`;
 }

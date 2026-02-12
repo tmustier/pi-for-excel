@@ -12,11 +12,19 @@ import {
   getWorkbookChangeAuditLog,
   type AppendWorkbookChangeAuditEntryArgs,
 } from "../audit/workbook-change-audit.js";
+import { dispatchWorkbookSnapshotCreated } from "../workbook/recovery-events.js";
+import { captureCommentThreadState, type RecoveryCommentThreadState } from "../workbook/recovery-states.js";
+import {
+  getWorkbookRecoveryLog,
+  type AppendCommentThreadRecoverySnapshotArgs,
+  type WorkbookRecoverySnapshot,
+} from "../workbook/recovery-log.js";
 import { getErrorMessage } from "../utils/errors.js";
 import type { CommentsDetails } from "./tool-details.js";
 import {
-  NON_CHECKPOINTED_MUTATION_NOTE,
-  NON_CHECKPOINTED_MUTATION_REASON,
+  CHECKPOINT_SKIPPED_NOTE,
+  CHECKPOINT_SKIPPED_REASON,
+  recoveryCheckpointCreated,
   recoveryCheckpointUnavailable,
 } from "./recovery-metadata.js";
 
@@ -108,15 +116,36 @@ interface CommentsDispatchResult {
 interface CommentsToolDependencies {
   dispatchAction: (params: Params) => Promise<CommentsDispatchResult>;
   appendAuditEntry: (entry: AppendWorkbookChangeAuditEntryArgs) => Promise<void>;
+  captureCommentThread: (address: string) => Promise<RecoveryCommentThreadState>;
+  appendRecoverySnapshot: (
+    args: AppendCommentThreadRecoverySnapshotArgs,
+  ) => Promise<WorkbookRecoverySnapshot | null>;
+  dispatchSnapshotCreated: (snapshot: WorkbookRecoverySnapshot) => void;
 }
 
 function isMutatingCommentsAction(action: CommentAction): boolean {
   return action !== "read";
 }
 
+function validateMutatingCommentsParams(params: Params): void {
+  if (params.action === "add" || params.action === "update" || params.action === "reply") {
+    requireContent(params.content, params.action);
+  }
+}
+
 const defaultDependencies: CommentsToolDependencies = {
   dispatchAction,
   appendAuditEntry: (entry) => getWorkbookChangeAuditLog().append(entry),
+  captureCommentThread: (address) => captureCommentThreadState(address),
+  appendRecoverySnapshot: (args) => getWorkbookRecoveryLog().appendCommentThread(args),
+  dispatchSnapshotCreated: (snapshot) => {
+    dispatchWorkbookSnapshotCreated({
+      snapshotId: snapshot.id,
+      toolName: snapshot.toolName,
+      address: snapshot.address,
+      changedCount: snapshot.changedCount,
+    });
+  },
 };
 
 // ── Tool ─────────────────────────────────────────────────────────────
@@ -127,6 +156,9 @@ export function createCommentsTool(
   const resolvedDependencies: CommentsToolDependencies = {
     dispatchAction: dependencies.dispatchAction ?? defaultDependencies.dispatchAction,
     appendAuditEntry: dependencies.appendAuditEntry ?? defaultDependencies.appendAuditEntry,
+    captureCommentThread: dependencies.captureCommentThread ?? defaultDependencies.captureCommentThread,
+    appendRecoverySnapshot: dependencies.appendRecoverySnapshot ?? defaultDependencies.appendRecoverySnapshot,
+    dispatchSnapshotCreated: dependencies.dispatchSnapshotCreated ?? defaultDependencies.dispatchSnapshotCreated,
   };
 
   return {
@@ -144,6 +176,12 @@ export function createCommentsTool(
       const isMutation = isMutatingCommentsAction(params.action);
 
       try {
+        let beforeThreadState: RecoveryCommentThreadState | null = null;
+        if (isMutation) {
+          validateMutatingCommentsParams(params);
+          beforeThreadState = await resolvedDependencies.captureCommentThread(params.range);
+        }
+
         const result = await resolvedDependencies.dispatchAction(params);
 
         if (isMutation) {
@@ -158,20 +196,40 @@ export function createCommentsTool(
           });
         }
 
-        return {
+        const output: AgentToolResult<CommentsDetails> = {
           content: [{
             type: "text",
-            text: isMutation ? `${result.text}\n\n${NON_CHECKPOINTED_MUTATION_NOTE}` : result.text,
+            text: result.text,
           }],
           details: {
             kind: "comments",
             action: params.action,
             address: params.range,
-            recovery: isMutation
-              ? recoveryCheckpointUnavailable(NON_CHECKPOINTED_MUTATION_REASON)
-              : undefined,
           },
         };
+
+        if (!isMutation || !beforeThreadState) {
+          return output;
+        }
+
+        const checkpoint = await resolvedDependencies.appendRecoverySnapshot({
+          toolName: "comments",
+          toolCallId,
+          address: result.outputAddress ?? params.range,
+          changedCount: result.changedCount ?? 1,
+          commentThreadState: beforeThreadState,
+        });
+
+        if (!checkpoint) {
+          output.details.recovery = recoveryCheckpointUnavailable(CHECKPOINT_SKIPPED_REASON);
+          appendResultNote(output, CHECKPOINT_SKIPPED_NOTE);
+          return output;
+        }
+
+        output.details.recovery = recoveryCheckpointCreated(checkpoint.id);
+        resolvedDependencies.dispatchSnapshotCreated(checkpoint);
+
+        return output;
       } catch (e: unknown) {
         const message = getErrorMessage(e);
 
@@ -412,4 +470,11 @@ async function executeSetResolved(ref: string, resolved: boolean): Promise<Comme
     changedCount: 1,
     summary: `${verb.toLowerCase()} comment thread at ${fullAddr}`,
   };
+}
+
+function appendResultNote(result: AgentToolResult<CommentsDetails>, note: string): void {
+  const first = result.content[0];
+  if (!first || first.type !== "text") return;
+
+  first.text = `${first.text}\n\n${note}`;
 }

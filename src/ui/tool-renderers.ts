@@ -502,6 +502,12 @@ function compactRange(range: string): string {
   return range;
 }
 
+function qualifyRangeAddress(range: string | undefined, sheet: string | undefined): string | undefined {
+  if (!range) return undefined;
+  if (range.includes("!")) return range;
+  return sheet ? `${sheet}!${range}` : range;
+}
+
 /**
  * Compact sheet-qualified ranges inside bold markdown markers.
  *   "Formatted **Sheet1!A1,Sheet1!B2**: ..." → "Formatted **Sheet1!A1, B2**: ..."
@@ -814,8 +820,11 @@ function describeToolCall(
     }
     case "view_settings": {
       const op = p.action as string | undefined;
-      const targetSheet = (p.sheet as string | undefined) ?? "active sheet";
-      const targetRange = (p.range as string | undefined) ?? targetSheet;
+      const targetSheet = p.sheet as string | undefined;
+      const targetSheetLabel = targetSheet ?? "active sheet";
+      const targetRange = p.range as string | undefined;
+      const detailsAddress = isViewSettingsDetails(details) ? details.address : undefined;
+      const qualifiedRange = detailsAddress ?? qualifyRangeAddress(targetRange, targetSheet);
       const recovery = recoveryBadgeForDetails(details);
 
       if (!op || op === "get") {
@@ -823,22 +832,26 @@ function describeToolCall(
       }
 
       if (op === "activate") {
-        return { action: "Activate", detail: `${targetSheet}${recovery}` };
+        return { action: "Activate", detail: `${targetSheetLabel}${recovery}` };
       }
 
       if (op === "freeze_at") {
+        const freezeTarget = qualifiedRange ?? targetSheetLabel;
         return {
           action: "Freeze",
-          detail: `${compactRange(targetRange)}${recovery}`,
-          address: p.range as string | undefined,
+          detail: `${compactRange(freezeTarget)}${recovery}`,
+          address: qualifiedRange,
         };
       }
 
       if (op.startsWith("hide_") || op.startsWith("show_")) {
-        return { action: op.startsWith("hide_") ? "Hide" : "Show", detail: `${op.replace(/^(hide_|show_)/u, "").replace(/_/gu, " ")} (${targetSheet})${recovery}` };
+        return {
+          action: op.startsWith("hide_") ? "Hide" : "Show",
+          detail: `${op.replace(/^(hide_|show_)/u, "").replace(/_/gu, " ")} (${targetSheetLabel})${recovery}`,
+        };
       }
 
-      return { action: "Set", detail: `${op.replace(/_/gu, " ")} (${targetSheet})${recovery}` };
+      return { action: "Set", detail: `${op.replace(/_/gu, " ")} (${targetSheetLabel})${recovery}` };
     }
     case "instructions": {
       const level = p.level as string | undefined;
