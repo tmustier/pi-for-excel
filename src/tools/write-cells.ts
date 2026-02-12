@@ -302,6 +302,48 @@ export function countOccupiedCells(values: unknown[][], formulas: unknown[][]): 
   return count;
 }
 
+const VERIFIED_VALUES_PREVIEW_ROWS = 8;
+const VERIFIED_VALUES_PREVIEW_COLS = 6;
+
+interface VerifiedValuesPreview {
+  values: unknown[][];
+  totalRows: number;
+  totalCols: number;
+  shownRows: number;
+  shownCols: number;
+  omittedRows: number;
+  omittedCols: number;
+  truncated: boolean;
+}
+
+function buildVerifiedValuesPreview(values: unknown[][]): VerifiedValuesPreview {
+  const totalRows = values.length;
+  const totalCols = values.reduce((max, row) => Math.max(max, row.length), 0);
+
+  const shownRows = Math.min(totalRows, VERIFIED_VALUES_PREVIEW_ROWS);
+  const shownCols = Math.min(totalCols, VERIFIED_VALUES_PREVIEW_COLS);
+
+  const previewValues: unknown[][] = [];
+  for (let r = 0; r < shownRows; r += 1) {
+    previewValues.push(values[r].slice(0, shownCols));
+  }
+
+  const omittedRows = Math.max(totalRows - shownRows, 0);
+  const omittedCols = Math.max(totalCols - shownCols, 0);
+  const truncated = omittedRows > 0 || omittedCols > 0;
+
+  return {
+    values: previewValues,
+    totalRows,
+    totalCols,
+    shownRows,
+    shownCols,
+    omittedRows,
+    omittedCols,
+    truncated,
+  };
+}
+
 function formatBlocked(result: BlockedWriteCellsResult): AgentToolResult<WriteCellsDetails> {
   const fullAddr = qualifiedAddress(result.sheetName, result.address);
   const lines: string[] = [];
@@ -365,9 +407,31 @@ function formatSuccess(result: SuccessWriteCellsResult, rows: number, cols: numb
     lines.push("");
     lines.push("Review and fix with another write_cells call.");
   } else {
+    const preview = buildVerifiedValuesPreview(result.readBackValues);
+
     lines.push("");
-    lines.push("**Verified values:**");
-    lines.push(formatAsMarkdownTable(result.readBackValues));
+    if (preview.truncated) {
+      lines.push(
+        `**Verified values (preview ${preview.shownRows}×${preview.shownCols} of ${preview.totalRows}×${preview.totalCols}):**`,
+      );
+    } else {
+      lines.push("**Verified values:**");
+    }
+    lines.push(formatAsMarkdownTable(preview.values));
+
+    if (preview.truncated) {
+      const omissions: string[] = [];
+      if (preview.omittedRows > 0) {
+        omissions.push(`${preview.omittedRows} more row${preview.omittedRows === 1 ? "" : "s"}`);
+      }
+      if (preview.omittedCols > 0) {
+        omissions.push(`${preview.omittedCols} more column${preview.omittedCols === 1 ? "" : "s"}`);
+      }
+
+      lines.push("");
+      lines.push(`_Showing preview only (${omissions.join(" and ")})._`);
+      lines.push("_Use `read_range` for full verification if needed._");
+    }
   }
 
   const changes = buildWorkbookCellChangeSummary({

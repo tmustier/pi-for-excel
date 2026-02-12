@@ -801,6 +801,41 @@ function humanizeFiles(p: Record<string, unknown>): ParamItem[] {
   return items;
 }
 
+function humanizePythonTransformRange(p: Record<string, unknown>): ParamItem[] {
+  const items: ParamItem[] = [];
+
+  if (p.range) {
+    items.push({ label: "Input range", value: cellRefs(str(p.range), Infinity) });
+  }
+
+  if (p.output_start_cell) {
+    items.push({ label: "Output start", value: cellRefs(str(p.output_start_cell), Infinity) });
+  }
+
+  const allowOverwrite = p.allow_overwrite;
+  if (typeof allowOverwrite === "boolean") {
+    items.push({ label: "Allow overwrite", value: allowOverwrite ? "Yes" : "No" });
+  }
+
+  const timeoutMs = num(p.timeout_ms);
+  if (timeoutMs !== undefined) {
+    items.push({ label: "Timeout", value: `${timeoutMs} ms` });
+  }
+
+  if (p.code) {
+    const source = str(p.code);
+    const lines = source.split(/\r?\n/u).length;
+    const oneLine = source.replace(/\s+/gu, " ").trim();
+    const compact = oneLine.length > 140 ? `${oneLine.slice(0, 137)}…` : oneLine;
+    items.push({ label: "Python", value: compact.length > 0 ? compact : "(empty)" });
+    if (lines > 1) {
+      items.push({ label: "Code lines", value: String(lines) });
+    }
+  }
+
+  return items;
+}
+
 /* ── Shared helpers ─────────────────────────────────────────── */
 
 /** Join an array of mixed text/TemplateResult with comma separators. */
@@ -850,6 +885,7 @@ const EXTRA_HUMANIZERS: Record<string, HumanizerFn> = {
   web_search: humanizeWebSearch,
   mcp: humanizeMcp,
   files: humanizeFiles,
+  python_transform_range: humanizePythonTransformRange,
 };
 
 const HUMANIZERS: Record<string, HumanizerFn> = {
