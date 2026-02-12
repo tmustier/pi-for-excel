@@ -207,9 +207,11 @@ https://github.com/tmustier/pi-for-excel/issues/13
 **Status note:** MVP is now shipped (extension manager UI, dynamic loading, persisted registry, extension tool registration, lifecycle cleanup).
 
 **Remaining tracked follow-ups:**
-- #79 — sandbox + permissions model
+- #79 — sandbox + permissions model (design draft: `docs/design-extension-sandbox-permissions.md`)
 - #80 — widget API evolution
-- #81 — extension authoring docs
+
+**Recently closed:**
+- #81 — extension authoring docs (merged in #82)
 
 **Implication:** keep extension architecture additive while we harden:
 - a centralized tool registry that can be extended dynamically
