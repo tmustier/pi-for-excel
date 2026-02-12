@@ -38,6 +38,7 @@ import {
   isRemoteExtensionOptIn,
 } from "./extension-source-policy.js";
 import { commandRegistry } from "./types.js";
+import type { ExtensionCapability } from "../extensions/permissions.js";
 import { isRecord } from "../utils/type-guards.js";
 
 export interface ExtensionCommand {
@@ -95,6 +96,8 @@ export interface CreateExtensionAPIOptions {
   registerTool?: (tool: AgentTool) => void;
   subscribeAgentEvents?: (handler: (ev: AgentEvent) => void) => () => void;
   toast?: (message: string) => void;
+  isCapabilityEnabled?: (capability: ExtensionCapability) => boolean;
+  formatCapabilityError?: (capability: ExtensionCapability) => string;
 }
 
 function normalizeIdentifier(kind: "command" | "tool", value: string): string {
@@ -174,6 +177,10 @@ async function importExtensionModule(
   return import(/* @vite-ignore */ specifier);
 }
 
+function getDefaultCapabilityErrorMessage(capability: ExtensionCapability): string {
+  return `Extension is not allowed to use capability "${capability}".`;
+}
+
 /** Create the extension API for a given host context. */
 export function createExtensionAPI(options: CreateExtensionAPIOptions): ExcelExtensionAPI {
   const registerCommand = options.registerCommand ?? defaultRegisterCommand;
@@ -181,13 +188,28 @@ export function createExtensionAPI(options: CreateExtensionAPIOptions): ExcelExt
   const subscribeAgentEvents = options.subscribeAgentEvents
     ?? ((handler: (ev: AgentEvent) => void) => options.getAgent().subscribe(handler));
   const toast = options.toast ?? defaultToast;
+  const isCapabilityEnabled = options.isCapabilityEnabled;
+  const formatCapabilityError = options.formatCapabilityError ?? getDefaultCapabilityErrorMessage;
+
+  const assertCapability = (capability: ExtensionCapability): void => {
+    if (!isCapabilityEnabled) {
+      return;
+    }
+
+    if (!isCapabilityEnabled(capability)) {
+      throw new Error(formatCapabilityError(capability));
+    }
+  };
 
   return {
     registerCommand(name: string, cmd: ExtensionCommand) {
+      assertCapability("commands.register");
       registerCommand(normalizeIdentifier("command", name), cmd);
     },
 
     registerTool(name: string, tool: ExtensionToolDefinition) {
+      assertCapability("tools.register");
+
       if (!registerTool) {
         throw new Error("Extension host does not support registerTool()");
       }
@@ -207,11 +229,14 @@ export function createExtensionAPI(options: CreateExtensionAPIOptions): ExcelExt
     },
 
     get agent() {
+      assertCapability("agent.read");
       return options.getAgent();
     },
 
     overlay: {
       show(el: HTMLElement) {
+        assertCapability("ui.overlay");
+
         let container = document.getElementById("pi-ext-overlay");
         if (!container) {
           container = document.createElement("div");
@@ -245,6 +270,8 @@ export function createExtensionAPI(options: CreateExtensionAPIOptions): ExcelExt
 
     widget: {
       show(el: HTMLElement) {
+        assertCapability("ui.widget");
+
         let slot = document.getElementById("pi-widget-slot");
         if (!slot) {
           // Fallback: insert before .pi-input-area inside the sidebar
@@ -279,10 +306,12 @@ export function createExtensionAPI(options: CreateExtensionAPIOptions): ExcelExt
     },
 
     toast(message: string) {
+      assertCapability("ui.toast");
       toast(message);
     },
 
     onAgentEvent(handler: (ev: AgentEvent) => void) {
+      assertCapability("agent.events.read");
       return subscribeAgentEvents(handler);
     },
   };

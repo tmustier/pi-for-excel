@@ -1,13 +1,21 @@
 /**
  * Persisted extension registry (SettingsStore-backed).
  *
- * We keep this as a versioned document so future migrations stay explicit.
+ * We keep this as a versioned document so migrations remain explicit.
  */
 
 import { isRecord } from "../utils/type-guards.js";
+import {
+  deriveStoredExtensionTrust,
+  getDefaultPermissionsForTrust,
+  normalizeStoredExtensionPermissions,
+  type StoredExtensionPermissions,
+  type StoredExtensionTrust,
+} from "./permissions.js";
 
-export const EXTENSIONS_REGISTRY_STORAGE_KEY = "extensions.registry.v1";
-const EXTENSIONS_REGISTRY_VERSION = 1;
+export const EXTENSIONS_REGISTRY_STORAGE_KEY = "extensions.registry.v2";
+export const LEGACY_EXTENSIONS_REGISTRY_STORAGE_KEY = "extensions.registry.v1";
+const EXTENSIONS_REGISTRY_VERSION = 2;
 
 export interface ExtensionSettingsStore {
   get(key: string): Promise<unknown>;
@@ -27,6 +35,8 @@ export interface StoredExtensionEntry {
   name: string;
   enabled: boolean;
   source: StoredExtensionSource;
+  trust: StoredExtensionTrust;
+  permissions: StoredExtensionPermissions;
   createdAt: string;
   updatedAt: string;
 }
@@ -34,6 +44,15 @@ export interface StoredExtensionEntry {
 interface StoredExtensionRegistryDocument {
   version: number;
   items: StoredExtensionEntry[];
+}
+
+interface LegacyStoredExtensionEntry {
+  id: string;
+  name: string;
+  enabled: boolean;
+  source: StoredExtensionSource;
+  createdAt: string;
+  updatedAt: string;
 }
 
 function isValidIsoTimestamp(value: string): boolean {
@@ -65,7 +84,14 @@ function normalizeSource(raw: unknown): StoredExtensionSource | null {
   return null;
 }
 
-function normalizeEntry(raw: unknown): StoredExtensionEntry | null {
+function normalizeBaseEntry(raw: unknown): {
+  id: string;
+  name: string;
+  enabled: boolean;
+  source: StoredExtensionSource;
+  createdAt: string;
+  updatedAt: string;
+} | null {
   if (!isRecord(raw)) return null;
 
   const id = normalizeNonEmptyString(raw.id);
@@ -92,6 +118,48 @@ function normalizeEntry(raw: unknown): StoredExtensionEntry | null {
   };
 }
 
+function normalizeTrust(raw: unknown): StoredExtensionTrust | null {
+  switch (raw) {
+    case "builtin":
+    case "local-module":
+    case "inline-code":
+    case "remote-url":
+      return raw;
+    default:
+      return null;
+  }
+}
+
+function normalizeEntry(raw: unknown): StoredExtensionEntry | null {
+  const base = normalizeBaseEntry(raw);
+  if (!base) {
+    return null;
+  }
+
+  const trust = isRecord(raw)
+    ? (normalizeTrust(raw.trust) ?? deriveStoredExtensionTrust(base.id, base.source))
+    : deriveStoredExtensionTrust(base.id, base.source);
+
+  const permissions = isRecord(raw)
+    ? normalizeStoredExtensionPermissions(raw.permissions, trust)
+    : getDefaultPermissionsForTrust(trust);
+
+  return {
+    ...base,
+    trust,
+    permissions,
+  };
+}
+
+function normalizeLegacyEntry(raw: unknown): LegacyStoredExtensionEntry | null {
+  const base = normalizeBaseEntry(raw);
+  if (!base) {
+    return null;
+  }
+
+  return base;
+}
+
 function normalizeItems(raw: unknown): StoredExtensionEntry[] | null {
   if (!Array.isArray(raw)) return null;
 
@@ -110,19 +178,66 @@ function normalizeItems(raw: unknown): StoredExtensionEntry[] | null {
   return Array.from(byId.values());
 }
 
+function normalizeLegacyItems(raw: unknown): LegacyStoredExtensionEntry[] | null {
+  if (!Array.isArray(raw)) return null;
+
+  const byId = new Map<string, LegacyStoredExtensionEntry>();
+  for (const item of raw) {
+    const normalized = normalizeLegacyEntry(item);
+    if (!normalized) {
+      continue;
+    }
+
+    if (!byId.has(normalized.id)) {
+      byId.set(normalized.id, normalized);
+    }
+  }
+
+  return Array.from(byId.values());
+}
+
+function migrateLegacyEntry(entry: LegacyStoredExtensionEntry): StoredExtensionEntry {
+  const trust = deriveStoredExtensionTrust(entry.id, entry.source);
+  return {
+    ...entry,
+    trust,
+    permissions: getDefaultPermissionsForTrust(trust),
+  };
+}
+
 function normalizeDocument(raw: unknown): StoredExtensionRegistryDocument | null {
   if (!isRecord(raw)) return null;
 
   const version = raw.version;
-  const items = normalizeItems(raw.items);
-  if (typeof version !== "number" || !items) {
+  if (typeof version !== "number") {
     return null;
   }
 
-  return {
-    version,
-    items,
-  };
+  if (version >= EXTENSIONS_REGISTRY_VERSION) {
+    const items = normalizeItems(raw.items);
+    if (!items) {
+      return null;
+    }
+
+    return {
+      version,
+      items,
+    };
+  }
+
+  if (version === 1) {
+    const legacyItems = normalizeLegacyItems(raw.items);
+    if (!legacyItems) {
+      return null;
+    }
+
+    return {
+      version,
+      items: legacyItems.map(migrateLegacyEntry),
+    };
+  }
+
+  return null;
 }
 
 function createRegistryDocument(items: StoredExtensionEntry[]): StoredExtensionRegistryDocument {
@@ -135,15 +250,21 @@ function createRegistryDocument(items: StoredExtensionEntry[]): StoredExtensionR
 export function createDefaultExtensionEntries(
   timestamp: string = new Date().toISOString(),
 ): StoredExtensionEntry[] {
+  const source: StoredExtensionSource = {
+    kind: "module",
+    specifier: BUILTIN_SNAKE_SPECIFIER,
+  };
+
+  const trust = deriveStoredExtensionTrust(BUILTIN_SNAKE_EXTENSION_ID, source);
+
   return [
     {
       id: BUILTIN_SNAKE_EXTENSION_ID,
       name: BUILTIN_SNAKE_EXTENSION_NAME,
       enabled: true,
-      source: {
-        kind: "module",
-        specifier: BUILTIN_SNAKE_SPECIFIER,
-      },
+      source,
+      trust,
+      permissions: getDefaultPermissionsForTrust(trust),
       createdAt: timestamp,
       updatedAt: timestamp,
     },
@@ -161,13 +282,21 @@ export async function saveStoredExtensions(
  * Load stored extensions from SettingsStore.
  *
  * If nothing is stored (or stored data is invalid), we seed defaults (Snake).
+ * Legacy `extensions.registry.v1` data is migrated to `extensions.registry.v2`.
  */
 export async function loadStoredExtensions(settings: ExtensionSettingsStore): Promise<StoredExtensionEntry[]> {
-  const raw = await settings.get(EXTENSIONS_REGISTRY_STORAGE_KEY);
-  const normalized = normalizeDocument(raw);
+  const rawCurrent = await settings.get(EXTENSIONS_REGISTRY_STORAGE_KEY);
+  const normalizedCurrent = normalizeDocument(rawCurrent);
 
-  if (normalized) {
-    return normalized.items;
+  if (normalizedCurrent && normalizedCurrent.version >= EXTENSIONS_REGISTRY_VERSION) {
+    return normalizedCurrent.items;
+  }
+
+  const rawLegacy = await settings.get(LEGACY_EXTENSIONS_REGISTRY_STORAGE_KEY);
+  const normalizedLegacy = normalizeDocument(rawLegacy);
+  if (normalizedLegacy) {
+    await saveStoredExtensions(settings, normalizedLegacy.items);
+    return normalizedLegacy.items;
   }
 
   const defaults = createDefaultExtensionEntries();

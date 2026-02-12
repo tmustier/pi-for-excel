@@ -18,12 +18,24 @@ import {
 } from "../commands/extension-api.js";
 import { commandRegistry } from "../commands/types.js";
 import {
+  describeExtensionCapability,
+  describeStoredExtensionTrust,
+  deriveStoredExtensionTrust,
+  getDefaultPermissionsForTrust,
+  isExtensionCapabilityAllowed,
+  listGrantedExtensionCapabilities,
+  type ExtensionCapability,
+  type StoredExtensionPermissions,
+  type StoredExtensionTrust,
+} from "./permissions.js";
+import {
   loadStoredExtensions,
   saveStoredExtensions,
   type ExtensionSettingsStore,
   type StoredExtensionEntry,
   type StoredExtensionSource,
 } from "./store.js";
+import { isExperimentalFeatureEnabled } from "../experiments/flags.js";
 
 type AnyAgentTool = AgentTool;
 
@@ -45,6 +57,10 @@ export interface ExtensionRuntimeStatus {
   loaded: boolean;
   source: StoredExtensionSource;
   sourceLabel: string;
+  trust: StoredExtensionTrust;
+  trustLabel: string;
+  permissions: StoredExtensionPermissions;
+  grantedCapabilities: ExtensionCapability[];
   commandNames: string[];
   toolNames: string[];
   lastError: string | null;
@@ -143,6 +159,10 @@ export class ExtensionRuntimeManager {
         loaded: Boolean(state),
         source: entry.source,
         sourceLabel: describeExtensionSource(entry.source),
+        trust: entry.trust,
+        trustLabel: describeStoredExtensionTrust(entry.trust),
+        permissions: entry.permissions,
+        grantedCapabilities: listGrantedExtensionCapabilities(entry.permissions),
         commandNames: state ? Array.from(state.commandNames).sort() : [],
         toolNames: state ? Array.from(state.toolNames).sort() : [],
         lastError: this.lastErrors.get(entry.id) ?? null,
@@ -294,11 +314,14 @@ export class ExtensionRuntimeManager {
     const now = new Date().toISOString();
     const id = `ext.${crypto.randomUUID()}`;
 
+    const trust = deriveStoredExtensionTrust(id, input.source);
     const entry: StoredExtensionEntry = {
       id,
       name: input.name,
       enabled: true,
       source: input.source,
+      trust,
+      permissions: getDefaultPermissionsForTrust(trust),
       createdAt: now,
       updatedAt: now,
     };
@@ -386,11 +409,29 @@ export class ExtensionRuntimeManager {
       };
     };
 
+    const isCapabilityEnabled = (capability: ExtensionCapability): boolean => {
+      if (!isExperimentalFeatureEnabled("extension_permission_gates")) {
+        return true;
+      }
+
+      return isExtensionCapabilityAllowed(entry.permissions, capability);
+    };
+
+    const formatCapabilityError = (capability: ExtensionCapability): string => {
+      const capabilityLabel = describeExtensionCapability(capability);
+      return (
+        `Permission denied for extension "${entry.name}": cannot ${capabilityLabel}. `
+        + "Disable /experimental extension-permissions or adjust extension permissions."
+      );
+    };
+
     const api = createExtensionAPI({
       getAgent: () => this.getRequiredActiveAgent(),
       registerCommand,
       registerTool,
       subscribeAgentEvents,
+      isCapabilityEnabled,
+      formatCapabilityError,
     });
 
     let loadSource: string;

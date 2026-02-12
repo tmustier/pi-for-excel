@@ -29,6 +29,10 @@ function getErrorMessage(error: unknown): string {
   return String(error);
 }
 
+function formatCapabilityList(capabilities: readonly string[]): string {
+  return capabilities.length > 0 ? capabilities.join(", ") : "(none)";
+}
+
 function createSectionTitle(text: string): HTMLHeadingElement {
   const title = document.createElement("h3");
   title.textContent = text;
@@ -346,6 +350,15 @@ export function showExtensionsDialog(manager: ExtensionRuntimeManager): void {
       badges.appendChild(createBadge("pending", "muted"));
     }
 
+    const trustBadgeColor = status.trust === "remote-url" || status.trust === "inline-code"
+      ? "warn"
+      : "muted";
+    badges.appendChild(createBadge(status.trustLabel, trustBadgeColor));
+
+    badges.appendChild(
+      createBadge(`${status.grantedCapabilities.length} permission${status.grantedCapabilities.length === 1 ? "" : "s"}`, "muted"),
+    );
+
     if (status.toolNames.length > 0) {
       badges.appendChild(createBadge(`${status.toolNames.length} tool${status.toolNames.length === 1 ? "" : "s"}`, "muted"));
     }
@@ -372,6 +385,11 @@ export function showExtensionsDialog(manager: ExtensionRuntimeManager): void {
       tools.style.cssText = "font-size: 11px; color: var(--muted-foreground);";
       details.appendChild(tools);
     }
+
+    const permissions = document.createElement("div");
+    permissions.textContent = `Permissions: ${formatCapabilityList(status.grantedCapabilities)}`;
+    permissions.style.cssText = "font-size: 11px; color: var(--muted-foreground);";
+    details.appendChild(permissions);
 
     if (status.lastError) {
       const errorLine = document.createElement("div");

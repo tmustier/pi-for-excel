@@ -152,3 +152,4 @@ If a local specifier is not bundled, loading fails with a clear error.
 - Extensions can read/write workbook data through registered tools and host APIs.
 - Remote URL loading is intentionally off by default.
 - There is no hard sandbox boundary in MVP; only run trusted extension code.
+- Experimental capability gates can be enabled with `/experimental on extension-permissions`.

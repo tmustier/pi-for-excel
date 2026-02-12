@@ -13,7 +13,8 @@ export type ExperimentalFeatureId =
   | "python_bridge"
   | "mcp_tools"
   | "files_workspace"
-  | "remote_extension_urls";
+  | "remote_extension_urls"
+  | "extension_permission_gates";
 
 export type ExperimentalFeatureWiring = "wired" | "flag-only";
 
@@ -76,6 +77,15 @@ const EXPERIMENTAL_FEATURES = [
     warning: "Unsafe: remote extension code can read workbook data and credentials.",
     wiring: "wired",
     storageKey: ALLOW_REMOTE_EXTENSION_URLS_STORAGE_KEY,
+  },
+  {
+    id: "extension_permission_gates",
+    slug: "extension-permissions",
+    aliases: ["extensions-permissions", "extension-capability-gates"],
+    title: "Extension permission gates",
+    description: "Enforce per-extension capability permissions when extensions activate.",
+    wiring: "wired",
+    storageKey: "pi.experimental.extensionPermissionGates",
   },
 ] as const satisfies readonly ExperimentalFeatureDefinition[];
 
