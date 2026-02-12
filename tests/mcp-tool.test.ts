@@ -111,3 +111,72 @@ void test("mcp tool call includes attribution and arguments", async () => {
   const toolCall = calls.find((call) => call.method === "tools/call");
   assert.ok(toolCall);
 });
+
+void test("mcp tool call requires server when tool name is ambiguous", async () => {
+  const serverA = {
+    id: "srv.a",
+    name: "alpha",
+    url: "https://alpha.example/mcp",
+    enabled: true,
+  } as const;
+
+  const serverB = {
+    id: "srv.b",
+    name: "beta",
+    url: "https://beta.example/mcp",
+    enabled: true,
+  } as const;
+
+  let callInvoked = false;
+
+  const tool = createMcpTool({
+    getRuntimeConfig: () => Promise.resolve({
+      servers: [serverA, serverB],
+      proxyBaseUrl: undefined,
+    }),
+    callJsonRpc: ({ server, method }) => {
+      if (method === "initialize") {
+        return Promise.resolve({
+          result: { result: { protocolVersion: "2025-03-26" } },
+          proxied: false,
+        });
+      }
+
+      if (method === "notifications/initialized") {
+        return Promise.resolve({
+          result: null,
+          proxied: false,
+        });
+      }
+
+      if (method === "tools/list") {
+        return Promise.resolve({
+          result: {
+            result: {
+              tools: [
+                {
+                  name: "echo",
+                  description: `Echo from ${server.name}`,
+                  inputSchema: { type: "object" },
+                },
+              ],
+            },
+          },
+          proxied: false,
+        });
+      }
+
+      if (method === "tools/call") {
+        callInvoked = true;
+      }
+
+      throw new Error(`Unexpected method: ${method}`);
+    },
+  });
+
+  const result = await tool.execute("call-3", { tool: "echo" });
+  const text = result.content[0]?.type === "text" ? result.content[0].text : "";
+
+  assert.match(text, /available on multiple servers.*specify the server parameter/i);
+  assert.equal(callInvoked, false);
+});

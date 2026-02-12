@@ -590,6 +590,16 @@ export function createMcpTool(
             throw new Error(`MCP tool not found: ${params.tool}`);
           }
 
+          if (!params.server) {
+            const matchedServerIds = new Set(matched.map((tool) => tool.serverId));
+            if (matchedServerIds.size > 1) {
+              const serverNames = Array.from(new Set(matched.map((tool) => tool.serverName))).sort();
+              throw new Error(
+                `MCP tool "${params.tool}" is available on multiple servers (${serverNames.join(", ")}). Specify the server parameter.`,
+              );
+            }
+          }
+
           const targetTool = matched[0];
           const targetServer = resolveSingleServer(targetTool.serverId);
           const parsedArgs = parseCallArgs(params.args);

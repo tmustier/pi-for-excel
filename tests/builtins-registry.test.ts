@@ -105,6 +105,19 @@ void test("taskpane init keeps getSkillToolNames imported when used", async () =
   );
 });
 
+void test("taskpane init wires Files workspace opener when sidebar callback is present", async () => {
+  const initSource = await readFile(new URL("../src/taskpane/init.ts", import.meta.url), "utf8");
+  if (!/sidebar\.onOpenFiles\s*=/.test(initSource)) {
+    return;
+  }
+
+  assert.match(initSource, /showFilesWorkspaceDialog/);
+  assert.match(
+    initSource,
+    /sidebar\.onOpenFiles\s*=\s*\(\)\s*=>\s*\{\s*void showFilesWorkspaceDialog\(\);\s*\};/,
+  );
+});
+
 void test("permission helper updates one capability without mutating others", () => {
   const permissions: StoredExtensionPermissions = {
     commandsRegister: true,
