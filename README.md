@@ -113,6 +113,7 @@ Type `/` in the message input to see all commands:
 | `/login` | Add/change/disconnect API keys and OAuth providers |
 | `/settings` | Open settings dialog |
 | `/experimental` | Manage experimental feature flags |
+| `/extensions` | Open extensions manager (install/enable/disable/reload/uninstall) |
 | `/shortcuts` | Show keyboard shortcuts |
 | `/compact` | Summarize conversation to free context |
 | `/copy` | Copy last response to clipboard |
@@ -127,6 +128,11 @@ Experimental examples:
 - `/experimental tmux-status`
 - `/experimental tmux-bridge-url clear`
 - `/experimental tmux-bridge-token clear`
+- `/experimental on python-bridge`
+- `/experimental python-bridge-url https://localhost:3340`
+- `/experimental python-bridge-token <token>`
+- `/experimental python-bridge-url clear`
+- `/experimental python-bridge-token clear`
 
 ## Keyboard Shortcuts
 
@@ -280,12 +286,50 @@ Bridge endpoints:
 
 See full request/response contract: [`docs/tmux-bridge-contract.md`](./docs/tmux-bridge-contract.md)
 
+### Experimental Python / LibreOffice bridge (local helper)
+
+Start the local bridge:
+
+```bash
+# Stub mode (safe default; deterministic fake responses)
+npm run python:bridge:https
+
+# Real local execution mode (runs local python/libreoffice binaries)
+PYTHON_BRIDGE_MODE=real npm run python:bridge:https
+```
+
+Then enable and configure in the add-in:
+
+```bash
+/experimental on python-bridge
+/experimental python-bridge-url https://localhost:3340
+# optional, if bridge requires bearer auth
+/experimental python-bridge-token <token>
+```
+
+You can also do this in **/extensions → Local Python / LibreOffice bridge** with one click (`Enable + save URL`).
+
+Bridge endpoints:
+- `GET /health`
+- `POST /v1/python-run`
+- `POST /v1/libreoffice-convert`
+
+Bridge-backed tools:
+- `python_run`
+- `libreoffice_convert`
+- `python_transform_range` (read range → run Python → write output)
+
+For safety, the first Python/LibreOffice bridge execution for a given bridge URL requires user confirmation.
+
+See full request/response contract: [`docs/python-bridge-contract.md`](./docs/python-bridge-contract.md)
+
 ### Extension loading safety
 
-`loadExtension()` now blocks remote `http(s)` module URLs by default.
+`loadExtension()` blocks remote `http(s)` module URLs by default.
 
-- Allowed by default: local module specifiers (`./`, `../`, `/`) and inline function activators
+- Allowed by default: local module specifiers (`./`, `../`, `/`), blob URLs (used by pasted-code installs), and inline function activators
 - Blocked by default: remote extension URLs
+- Local specifiers must resolve to bundled extension modules (currently `src/extensions/*.{ts,js}`)
 - Temporary unsafe opt-in for local experiments:
 
 ```bash
@@ -293,6 +337,8 @@ See full request/response contract: [`docs/tmux-bridge-contract.md`](./docs/tmux
 ```
 
   (Equivalent low-level toggle: `localStorage.setItem("pi.allowRemoteExtensionUrls", "1")`)
+
+See also: [`docs/extensions.md`](./docs/extensions.md).
 
 ## Roadmap
 
@@ -331,6 +377,7 @@ See full request/response contract: [`docs/tmux-bridge-contract.md`](./docs/tmux
 - [x] Blueprint invalidation after structural changes
 - [x] UI polish: queue layout, thinking/tool card styling, case-insensitive model search
 - [x] Experimental tmux bridge: `/experimental` feature flags + local helper + gated `tmux` tool ([#3](https://github.com/tmustier/pi-for-excel/issues/3))
+- [x] Experimental Python / LibreOffice bridge: gated `python_run` + `libreoffice_convert` + `python_transform_range`, local helper, first-run approval per bridge URL, and `/experimental python-bridge-*` config ([#25](https://github.com/tmustier/pi-for-excel/issues/25))
 
 ### Up next
 - [ ] New tools: charts, tables, data validation ([#18](https://github.com/tmustier/pi-for-excel/issues/18))
@@ -340,7 +387,7 @@ See full request/response contract: [`docs/tmux-bridge-contract.md`](./docs/tmux
 - [ ] Auto-compaction ([#20](https://github.com/tmustier/pi-for-excel/issues/20)) — context window budget management for long conversations
 - [ ] Change approval UI ([#6](https://github.com/tmustier/pi-for-excel/issues/6)) — structured approval flow for overwrites
 - [ ] Header bar UX ([#12](https://github.com/tmustier/pi-for-excel/issues/12)) — session switcher, workbook indicator
-- [ ] Extension API build-out ([#13](https://github.com/tmustier/pi-for-excel/issues/13)) — dynamic loading, tool registration, sandboxing
+- [ ] Extension platform follow-ups ([#13](https://github.com/tmustier/pi-for-excel/issues/13)) — sandbox/permissions, widget API evolution, docs polish
 
 ### Future
 - [ ] Production CORS solution ([#4](https://github.com/tmustier/pi-for-excel/issues/4)) — service worker or hosted relay

@@ -130,3 +130,18 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 - **Security posture:** local opt-in only; bridge URL validated via `validateOfficeProxyUrl`; tool execution re-checks gate before every call; bridge enforces loopback+origin checks and optional bearer token (`TMUX_BRIDGE_TOKEN` / setting `tmux.bridge.token`, managed via `/experimental tmux-bridge-token ...`).
 - **Diagnostics UX:** `/experimental tmux-status` reports feature flag, URL/token config, gate result, and bridge health details for quick troubleshooting.
 - **Rationale:** stable local adapter contract now (issue #3) with safe stub-first rollout and incremental hardening.
+
+## Experimental Python / LibreOffice bridge tools (`python_run`, `libreoffice_convert`, `python_transform_range`)
+- **Availability:** non-core experimental tools, always registered via `createAllTools()`; execution is gated by `applyExperimentalToolGates()`.
+- **Gate model:** requires `python-bridge` experiment enabled, configured `python.bridge.url`, successful bridge `/health` probe, and user confirmation once per configured bridge URL.
+- **Execution policy:**
+  - `python_run` + `libreoffice_convert` → `read/none` (no direct workbook mutation)
+  - `python_transform_range` → `mutate/content` (writes transformed values into workbook)
+- **Bridge implementation:** local helper script `scripts/python-bridge-server.mjs`.
+  - default mode: `stub` (deterministic simulated responses)
+  - real mode: `PYTHON_BRIDGE_MODE=real` (local subprocess execution)
+- **Bridge contract:**
+  - `POST /v1/python-run` — execute Python snippet with optional `input_json`, return stdout/stderr/result JSON
+  - `POST /v1/libreoffice-convert` — convert files across `csv|pdf|xlsx`
+- **Security posture:** local opt-in only; bridge URL validated via `validateOfficeProxyUrl`; tool execution re-checks gate before every call; bridge enforces loopback+origin checks and optional bearer token (`PYTHON_BRIDGE_TOKEN` / setting `python.bridge.token`, managed via `/experimental python-bridge-token ...`).
+- **Rationale:** unblock heavier offline analysis/conversion workflows for issue #25 while keeping workbook writes explicit/auditable and adding an approval checkpoint for local execution.

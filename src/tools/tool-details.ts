@@ -69,13 +69,55 @@ export interface TmuxBridgeDetails {
   error?: string;
 }
 
+export interface PythonBridgeDetails {
+  kind: "python_bridge";
+  ok: boolean;
+  action: string;
+  bridgeUrl?: string;
+  exitCode?: number;
+  stdoutPreview?: string;
+  stderrPreview?: string;
+  resultPreview?: string;
+  truncated?: boolean;
+  error?: string;
+}
+
+export interface LibreOfficeBridgeDetails {
+  kind: "libreoffice_bridge";
+  ok: boolean;
+  action: string;
+  bridgeUrl?: string;
+  inputPath?: string;
+  targetFormat?: string;
+  outputPath?: string;
+  bytes?: number;
+  converter?: string;
+  error?: string;
+}
+
+export interface PythonTransformRangeDetails {
+  kind: "python_transform_range";
+  blocked: boolean;
+  inputAddress?: string;
+  outputAddress?: string;
+  bridgeUrl?: string;
+  existingCount?: number;
+  rowsWritten?: number;
+  colsWritten?: number;
+  formulaErrorCount?: number;
+  error?: string;
+}
+
 export type ExcelToolDetails =
   | WriteCellsDetails
   | FillFormulaDetails
   | FormatCellsDetails
   | TraceDependenciesDetails
   | ReadRangeCsvDetails
-  | TmuxBridgeDetails;
+  | TmuxBridgeDetails
+  | PythonBridgeDetails
+  | LibreOfficeBridgeDetails
+  | PythonTransformRangeDetails;
 
 function isOptionalString(value: unknown): value is string | undefined {
   return value === undefined || typeof value === "string";
@@ -152,6 +194,59 @@ export function isTmuxBridgeDetails(value: unknown): value is TmuxBridgeDetails 
     isOptionalString(value.session) &&
     isOptionalNumber(value.sessionsCount) &&
     isOptionalString(value.outputPreview) &&
+    isOptionalString(value.error)
+  );
+}
+
+export function isPythonBridgeDetails(value: unknown): value is PythonBridgeDetails {
+  if (!isRecord(value)) return false;
+  if (value.kind !== "python_bridge") return false;
+
+  const truncated = value.truncated;
+
+  return (
+    typeof value.ok === "boolean" &&
+    typeof value.action === "string" &&
+    isOptionalString(value.bridgeUrl) &&
+    isOptionalNumber(value.exitCode) &&
+    isOptionalString(value.stdoutPreview) &&
+    isOptionalString(value.stderrPreview) &&
+    isOptionalString(value.resultPreview) &&
+    (truncated === undefined || typeof truncated === "boolean") &&
+    isOptionalString(value.error)
+  );
+}
+
+export function isLibreOfficeBridgeDetails(value: unknown): value is LibreOfficeBridgeDetails {
+  if (!isRecord(value)) return false;
+  if (value.kind !== "libreoffice_bridge") return false;
+
+  return (
+    typeof value.ok === "boolean" &&
+    typeof value.action === "string" &&
+    isOptionalString(value.bridgeUrl) &&
+    isOptionalString(value.inputPath) &&
+    isOptionalString(value.targetFormat) &&
+    isOptionalString(value.outputPath) &&
+    isOptionalNumber(value.bytes) &&
+    isOptionalString(value.converter) &&
+    isOptionalString(value.error)
+  );
+}
+
+export function isPythonTransformRangeDetails(value: unknown): value is PythonTransformRangeDetails {
+  if (!isRecord(value)) return false;
+  if (value.kind !== "python_transform_range") return false;
+
+  return (
+    typeof value.blocked === "boolean" &&
+    isOptionalString(value.inputAddress) &&
+    isOptionalString(value.outputAddress) &&
+    isOptionalString(value.bridgeUrl) &&
+    isOptionalNumber(value.existingCount) &&
+    isOptionalNumber(value.rowsWritten) &&
+    isOptionalNumber(value.colsWritten) &&
+    isOptionalNumber(value.formulaErrorCount) &&
     isOptionalString(value.error)
   );
 }

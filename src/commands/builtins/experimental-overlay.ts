@@ -128,7 +128,7 @@ export function showExperimentalDialog(): void {
   const footer = document.createElement("p");
   footer.style.cssText = "font-size: 11px; color: var(--muted-foreground); margin: 12px 0 0; font-family: var(--font-sans);";
   footer.textContent =
-    "Tip: use /experimental on <feature>, /experimental off <feature>, /experimental toggle <feature>, /experimental tmux-bridge-url <url>, /experimental tmux-bridge-token <token>, or /experimental tmux-status.";
+    "Tip: use /experimental on <feature>, /experimental off <feature>, /experimental toggle <feature>, /experimental tmux-bridge-url <url>, /experimental tmux-bridge-token <token>, /experimental tmux-status, /experimental python-bridge-url <url>, or /experimental python-bridge-token <token>.";
 
   const closeBtn = document.createElement("button");
   closeBtn.type = "button";

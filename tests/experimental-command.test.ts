@@ -57,6 +57,8 @@ void test("/experimental help shows usage and feature list", async () => {
   assert.match(toasts[0], /tmux-bridge-url/u);
   assert.match(toasts[0], /tmux-bridge-token/u);
   assert.match(toasts[0], /tmux-status/u);
+  assert.match(toasts[0], /python-bridge-url/u);
+  assert.match(toasts[0], /python-bridge-token/u);
 });
 
 void test("/experimental on <feature> enables feature and reports flag-only suffix", async () => {
@@ -443,4 +445,169 @@ void test("/experimental tmux-status with extra args shows usage", async () => {
 
   assert.equal(toasts.length, 1);
   assert.equal(toasts[0], "Usage: /experimental tmux-status");
+});
+
+void test("/experimental python-bridge-url shows configured value", async () => {
+  const toasts: string[] = [];
+
+  const command = getExperimentalCommand({
+    showExperimentalDialog: () => {},
+    showToast: (message) => {
+      toasts.push(message);
+    },
+    getPythonBridgeUrl: () => Promise.resolve("https://localhost:3340"),
+  });
+
+  await command.execute("python-bridge-url");
+
+  assert.equal(toasts.length, 1);
+  assert.equal(toasts[0], "Python bridge URL: https://localhost:3340");
+});
+
+void test("/experimental python-bridge-url <url> validates, stores URL, and triggers tool refresh notice", async () => {
+  const toasts: string[] = [];
+  const stored: string[] = [];
+  const changedConfigKeys: string[] = [];
+
+  const command = getExperimentalCommand({
+    showExperimentalDialog: () => {},
+    showToast: (message) => {
+      toasts.push(message);
+    },
+    validatePythonBridgeUrl: (url) => url.trim().replace(/\/+$/u, ""),
+    setPythonBridgeUrl: (url) => {
+      stored.push(url);
+      return Promise.resolve();
+    },
+    notifyToolConfigChanged: (configKey) => {
+      changedConfigKeys.push(configKey);
+    },
+  });
+
+  await command.execute("python-bridge-url https://localhost:3340/");
+
+  assert.deepEqual(stored, ["https://localhost:3340"]);
+  assert.deepEqual(changedConfigKeys, ["python.bridge.url"]);
+  assert.equal(toasts.length, 1);
+  assert.equal(toasts[0], "Python bridge URL set to https://localhost:3340");
+});
+
+void test("/experimental python-bridge-url clear removes stored URL and triggers tool refresh notice", async () => {
+  const toasts: string[] = [];
+  const changedConfigKeys: string[] = [];
+  let clearCount = 0;
+
+  const command = getExperimentalCommand({
+    showExperimentalDialog: () => {},
+    showToast: (message) => {
+      toasts.push(message);
+    },
+    clearPythonBridgeUrl: () => {
+      clearCount += 1;
+      return Promise.resolve();
+    },
+    notifyToolConfigChanged: (configKey) => {
+      changedConfigKeys.push(configKey);
+    },
+  });
+
+  await command.execute("python-bridge-url clear");
+
+  assert.equal(clearCount, 1);
+  assert.deepEqual(changedConfigKeys, ["python.bridge.url"]);
+  assert.equal(toasts.length, 1);
+  assert.equal(toasts[0], "Python bridge URL cleared.");
+});
+
+void test("/experimental python-bridge-token shows masked configured value", async () => {
+  const toasts: string[] = [];
+
+  const command = getExperimentalCommand({
+    showExperimentalDialog: () => {},
+    showToast: (message) => {
+      toasts.push(message);
+    },
+    getPythonBridgeToken: () => Promise.resolve("anothersecrettoken"),
+  });
+
+  await command.execute("python-bridge-token");
+
+  assert.equal(toasts.length, 1);
+  assert.equal(toasts[0], "Python bridge token: anot************en (length 18)");
+  assert.ok(!toasts[0].includes("anothersecrettoken"));
+});
+
+void test("/experimental python-bridge-token <token> stores token and triggers tool refresh notice", async () => {
+  const toasts: string[] = [];
+  const stored: string[] = [];
+  const changedConfigKeys: string[] = [];
+
+  const command = getExperimentalCommand({
+    showExperimentalDialog: () => {},
+    showToast: (message) => {
+      toasts.push(message);
+    },
+    validatePythonBridgeToken: (token) => token.trim(),
+    setPythonBridgeToken: (token) => {
+      stored.push(token);
+      return Promise.resolve();
+    },
+    notifyToolConfigChanged: (configKey) => {
+      changedConfigKeys.push(configKey);
+    },
+  });
+
+  await command.execute("python-bridge-token anothersecrettoken");
+
+  assert.deepEqual(stored, ["anothersecrettoken"]);
+  assert.deepEqual(changedConfigKeys, ["python.bridge.token"]);
+  assert.equal(toasts.length, 1);
+  assert.equal(toasts[0], "Python bridge token set (anot************en).");
+  assert.ok(!toasts[0].includes("anothersecrettoken"));
+});
+
+void test("/experimental python-bridge-token clear removes token and triggers tool refresh notice", async () => {
+  const toasts: string[] = [];
+  const changedConfigKeys: string[] = [];
+  let clearCount = 0;
+
+  const command = getExperimentalCommand({
+    showExperimentalDialog: () => {},
+    showToast: (message) => {
+      toasts.push(message);
+    },
+    clearPythonBridgeToken: () => {
+      clearCount += 1;
+      return Promise.resolve();
+    },
+    notifyToolConfigChanged: (configKey) => {
+      changedConfigKeys.push(configKey);
+    },
+  });
+
+  await command.execute("python-bridge-token clear");
+
+  assert.equal(clearCount, 1);
+  assert.deepEqual(changedConfigKeys, ["python.bridge.token"]);
+  assert.equal(toasts.length, 1);
+  assert.equal(toasts[0], "Python bridge token cleared.");
+});
+
+void test("/experimental python-bridge-token invalid token surfaces validation error", async () => {
+  const toasts: string[] = [];
+
+  const command = getExperimentalCommand({
+    showExperimentalDialog: () => {},
+    showToast: (message) => {
+      toasts.push(message);
+    },
+    validatePythonBridgeToken: () => {
+      throw new Error("Python bridge token must not contain whitespace.");
+    },
+  });
+
+  await command.execute("python-bridge-token has spaces");
+
+  assert.equal(toasts.length, 1);
+  assert.equal(toasts[0], "Python bridge token must not contain whitespace.");
 });

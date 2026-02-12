@@ -37,7 +37,7 @@ const EXPERIMENTAL_FEATURES = [
     aliases: ["tmux", "tmux-local-bridge"],
     title: "Tmux local bridge",
     description: "Allow local tmux bridge integration for interactive shell sessions.",
-    wiring: "flag-only",
+    wiring: "wired",
     storageKey: "pi.experimental.tmuxBridge",
   },
   {
@@ -46,7 +46,7 @@ const EXPERIMENTAL_FEATURES = [
     aliases: ["python", "libreoffice-bridge"],
     title: "Python / LibreOffice bridge",
     description: "Allow local Python and LibreOffice bridge integrations.",
-    wiring: "flag-only",
+    wiring: "wired",
     storageKey: "pi.experimental.pythonBridge",
   },
   {

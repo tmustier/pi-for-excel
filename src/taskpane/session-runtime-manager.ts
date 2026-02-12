@@ -176,7 +176,10 @@ export class SessionRuntimeManager {
 
   snapshotTabs(): RuntimeTabSnapshot[] {
     return this.listRuntimes().map((runtime, index) => {
-      const title = runtime.persistence.getSessionTitle().trim();
+      const hasExplicit = runtime.persistence.hasExplicitTitle();
+      const title = hasExplicit
+        ? runtime.persistence.getSessionTitle().trim()
+        : "";
       return {
         runtimeId: runtime.runtimeId,
         title: title.length > 0 ? title : `Chat ${index + 1}`,

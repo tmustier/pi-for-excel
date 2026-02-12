@@ -20,7 +20,7 @@ Target user outcomes:
 - One `Agent` instance per taskpane (`src/taskpane/init.ts`)
 - One ordered action queue (`src/taskpane/action-queue.ts`)
 - Session persistence and workbook association already exist (`src/taskpane/sessions.ts`, `src/workbook/context.ts`, `src/workbook/session-association.ts`)
-- Extensions currently support commands/widgets/events but **not custom tool registration** (`src/commands/extension-api.ts`)
+- Extensions support commands, widgets/overlays, agent event subscriptions, and custom tool registration (`src/commands/extension-api.ts`)
 - All Excel tool calls execute directly via `excelRun()` / `Excel.run()` with no cross-session coordinator (`src/excel/helpers.ts`)
 
 Implication: we need a first-class runtime architecture for multi-session concurrency; this cannot be solved with UI-only changes.

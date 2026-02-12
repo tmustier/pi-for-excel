@@ -1,7 +1,7 @@
 /**
  * Experimental tool gatekeeper.
  *
- * Security posture for local-bridge capabilities (tmux, future execution tools):
+ * Security posture for local-bridge capabilities (tmux, python, libreoffice):
  * - capability must be explicitly enabled via /experimental
  * - local bridge URL must be configured
  * - bridge must be reachable at execution time
@@ -15,10 +15,18 @@ import { validateOfficeProxyUrl } from "../auth/proxy-validation.js";
 import { isExperimentalFeatureEnabled } from "../experiments/flags.js";
 
 const TMUX_TOOL_NAME = "tmux";
-const TMUX_BRIDGE_HEALTH_PATH = "/health";
-const TMUX_BRIDGE_HEALTH_TIMEOUT_MS = 900;
+const PYTHON_TOOL_NAMES = new Set<string>([
+  "python_run",
+  "libreoffice_convert",
+  "python_transform_range",
+]);
+
+const BRIDGE_HEALTH_PATH = "/health";
+const BRIDGE_HEALTH_TIMEOUT_MS = 900;
 
 export const TMUX_BRIDGE_URL_SETTING_KEY = "tmux.bridge.url";
+export const PYTHON_BRIDGE_URL_SETTING_KEY = "python.bridge.url";
+export const PYTHON_BRIDGE_APPROVED_URL_SETTING_KEY = "python.bridge.approved.url";
 
 export type TmuxBridgeGateReason =
   | "tmux_experiment_disabled"
@@ -39,15 +47,52 @@ export interface TmuxBridgeGateDependencies {
   probeTmuxBridge?: (bridgeUrl: string) => Promise<boolean>;
 }
 
+export type PythonBridgeGateReason =
+  | "python_experiment_disabled"
+  | "missing_bridge_url"
+  | "invalid_bridge_url"
+  | "bridge_unreachable";
+
+export interface PythonBridgeGateResult {
+  allowed: boolean;
+  bridgeUrl?: string;
+  reason?: PythonBridgeGateReason;
+}
+
+export interface PythonBridgeGateDependencies {
+  isPythonExperimentEnabled?: () => boolean;
+  getPythonBridgeUrl?: () => Promise<string | undefined>;
+  validatePythonBridgeUrl?: (url: string) => string | null;
+  probePythonBridge?: (bridgeUrl: string) => Promise<boolean>;
+}
+
+export interface PythonBridgeApprovalRequest {
+  toolName: string;
+  bridgeUrl: string;
+  params: unknown;
+}
+
+export interface ExperimentalToolGateDependencies extends
+  TmuxBridgeGateDependencies,
+  PythonBridgeGateDependencies {
+  requestPythonBridgeApproval?: (request: PythonBridgeApprovalRequest) => Promise<boolean>;
+  getApprovedPythonBridgeUrl?: () => Promise<string | undefined>;
+  setApprovedPythonBridgeUrl?: (bridgeUrl: string) => Promise<void>;
+}
+
 function defaultIsTmuxExperimentEnabled(): boolean {
   return isExperimentalFeatureEnabled("tmux_bridge");
 }
 
-async function defaultGetTmuxBridgeUrl(): Promise<string | undefined> {
+function defaultIsPythonExperimentEnabled(): boolean {
+  return isExperimentalFeatureEnabled("python_bridge");
+}
+
+async function defaultGetBridgeUrl(settingKey: string): Promise<string | undefined> {
   try {
     const storageModule = await import("@mariozechner/pi-web-ui/dist/storage/app-storage.js");
     const storage = storageModule.getAppStorage();
-    const value = await storage.settings.get<string>(TMUX_BRIDGE_URL_SETTING_KEY);
+    const value = await storage.settings.get<string>(settingKey);
     if (typeof value !== "string") return undefined;
 
     const trimmed = value.trim();
@@ -55,6 +100,32 @@ async function defaultGetTmuxBridgeUrl(): Promise<string | undefined> {
   } catch {
     return undefined;
   }
+}
+
+async function defaultGetTmuxBridgeUrl(): Promise<string | undefined> {
+  return defaultGetBridgeUrl(TMUX_BRIDGE_URL_SETTING_KEY);
+}
+
+async function defaultGetPythonBridgeUrl(): Promise<string | undefined> {
+  return defaultGetBridgeUrl(PYTHON_BRIDGE_URL_SETTING_KEY);
+}
+
+async function defaultSetBridgeSetting(settingKey: string, value: string): Promise<void> {
+  try {
+    const storageModule = await import("@mariozechner/pi-web-ui/dist/storage/app-storage.js");
+    const storage = storageModule.getAppStorage();
+    await storage.settings.set(settingKey, value);
+  } catch {
+    // ignore (approval prompt will continue to appear if persistence is unavailable)
+  }
+}
+
+async function defaultGetApprovedPythonBridgeUrl(): Promise<string | undefined> {
+  return defaultGetBridgeUrl(PYTHON_BRIDGE_APPROVED_URL_SETTING_KEY);
+}
+
+async function defaultSetApprovedPythonBridgeUrl(bridgeUrl: string): Promise<void> {
+  await defaultSetBridgeSetting(PYTHON_BRIDGE_APPROVED_URL_SETTING_KEY, bridgeUrl);
 }
 
 function defaultValidateBridgeUrl(url: string): string | null {
@@ -65,14 +136,14 @@ function defaultValidateBridgeUrl(url: string): string | null {
   }
 }
 
-async function defaultProbeTmuxBridge(bridgeUrl: string): Promise<boolean> {
+async function defaultProbeBridge(bridgeUrl: string): Promise<boolean> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => {
     controller.abort();
-  }, TMUX_BRIDGE_HEALTH_TIMEOUT_MS);
+  }, BRIDGE_HEALTH_TIMEOUT_MS);
 
   try {
-    const target = `${bridgeUrl.replace(/\/+$/, "")}${TMUX_BRIDGE_HEALTH_PATH}`;
+    const target = `${bridgeUrl.replace(/\/+$/, "")}${BRIDGE_HEALTH_PATH}`;
     const response = await fetch(target, {
       method: "GET",
       signal: controller.signal,
@@ -114,8 +185,53 @@ export async function evaluateTmuxBridgeGate(
     };
   }
 
-  const probeTmuxBridge = dependencies.probeTmuxBridge ?? defaultProbeTmuxBridge;
+  const probeTmuxBridge = dependencies.probeTmuxBridge ?? defaultProbeBridge;
   const reachable = await probeTmuxBridge(bridgeUrl);
+  if (!reachable) {
+    return {
+      allowed: false,
+      reason: "bridge_unreachable",
+      bridgeUrl,
+    };
+  }
+
+  return {
+    allowed: true,
+    bridgeUrl,
+  };
+}
+
+export async function evaluatePythonBridgeGate(
+  dependencies: PythonBridgeGateDependencies = {},
+): Promise<PythonBridgeGateResult> {
+  const isEnabled = dependencies.isPythonExperimentEnabled ?? defaultIsPythonExperimentEnabled;
+  if (!isEnabled()) {
+    return {
+      allowed: false,
+      reason: "python_experiment_disabled",
+    };
+  }
+
+  const getBridgeUrl = dependencies.getPythonBridgeUrl ?? defaultGetPythonBridgeUrl;
+  const rawBridgeUrl = await getBridgeUrl();
+  if (!rawBridgeUrl) {
+    return {
+      allowed: false,
+      reason: "missing_bridge_url",
+    };
+  }
+
+  const validateBridgeUrl = dependencies.validatePythonBridgeUrl ?? defaultValidateBridgeUrl;
+  const bridgeUrl = validateBridgeUrl(rawBridgeUrl);
+  if (!bridgeUrl) {
+    return {
+      allowed: false,
+      reason: "invalid_bridge_url",
+    };
+  }
+
+  const probePythonBridge = dependencies.probePythonBridge ?? defaultProbeBridge;
+  const reachable = await probePythonBridge(bridgeUrl);
   if (!reachable) {
     return {
       allowed: false,
@@ -143,9 +259,73 @@ export function buildTmuxBridgeGateErrorMessage(reason: TmuxBridgeGateReason): s
   }
 }
 
+export function buildPythonBridgeGateErrorMessage(reason: PythonBridgeGateReason): string {
+  switch (reason) {
+    case "python_experiment_disabled":
+      return "Python bridge is disabled. Enable it with /experimental on python-bridge.";
+    case "missing_bridge_url":
+      return `Python bridge URL is not configured. Run /experimental python-bridge-url https://localhost:<port> (setting: ${PYTHON_BRIDGE_URL_SETTING_KEY}).`;
+    case "invalid_bridge_url":
+      return "Python bridge URL is invalid. Use a full URL like https://localhost:3340.";
+    case "bridge_unreachable":
+      return "Python bridge is not reachable at the configured URL.";
+  }
+}
+
+function isRecordObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function getRecordValue(record: Record<string, unknown>, key: string): string | undefined {
+  const value = record[key];
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+function getPythonApprovalMessage(
+  toolName: string,
+  bridgeUrl: string,
+  params: unknown,
+): string {
+  const title = "Allow local Python / LibreOffice execution?";
+
+  if (isRecordObject(params)) {
+    if (toolName === "python_run") {
+      const code = getRecordValue(params, "code") ?? "(no code)";
+      const previewLine = code.split("\n")[0] ?? code;
+      return `${title}\n\nTool: python_run\nBridge: ${bridgeUrl}\nCode preview: ${previewLine}`;
+    }
+
+    if (toolName === "libreoffice_convert") {
+      const inputPath = getRecordValue(params, "input_path") ?? "(unknown input)";
+      const targetFormat = getRecordValue(params, "target_format") ?? "(unknown format)";
+      return `${title}\n\nTool: libreoffice_convert\nBridge: ${bridgeUrl}\nInput: ${inputPath}\nTarget: ${targetFormat.toUpperCase()}`;
+    }
+
+    if (toolName === "python_transform_range") {
+      const range = getRecordValue(params, "range") ?? "(unknown range)";
+      const output = getRecordValue(params, "output_start_cell") ?? "(source top-left)";
+      return `${title}\n\nTool: python_transform_range\nBridge: ${bridgeUrl}\nRange: ${range}\nOutput start: ${output}`;
+    }
+  }
+
+  return `${title}\n\nTool: ${toolName}\nBridge: ${bridgeUrl}`;
+}
+
+function defaultRequestPythonBridgeApproval(
+  request: PythonBridgeApprovalRequest,
+): Promise<boolean> {
+  if (typeof window === "undefined" || typeof window.confirm !== "function") {
+    return Promise.resolve(true);
+  }
+
+  return Promise.resolve(
+    window.confirm(getPythonApprovalMessage(request.toolName, request.bridgeUrl, request.params)),
+  );
+}
+
 function wrapTmuxToolWithHardGate(
   tool: AgentTool,
-  dependencies: TmuxBridgeGateDependencies,
+  dependencies: ExperimentalToolGateDependencies,
 ): AgentTool {
   return {
     ...tool,
@@ -161,26 +341,79 @@ function wrapTmuxToolWithHardGate(
   };
 }
 
+function wrapPythonBridgeToolWithHardGate(
+  tool: AgentTool,
+  dependencies: ExperimentalToolGateDependencies,
+): AgentTool {
+  const requestApproval = dependencies.requestPythonBridgeApproval ?? defaultRequestPythonBridgeApproval;
+  const getApprovedBridgeUrl =
+    dependencies.getApprovedPythonBridgeUrl
+    ?? defaultGetApprovedPythonBridgeUrl;
+  const setApprovedBridgeUrl =
+    dependencies.setApprovedPythonBridgeUrl
+    ?? defaultSetApprovedPythonBridgeUrl;
+
+  return {
+    ...tool,
+    execute: async (toolCallId, params, signal, onUpdate) => {
+      const gate = await evaluatePythonBridgeGate(dependencies);
+      if (!gate.allowed) {
+        const reason = gate.reason ?? "bridge_unreachable";
+        throw new Error(buildPythonBridgeGateErrorMessage(reason));
+      }
+
+      const bridgeUrl = gate.bridgeUrl;
+      if (!bridgeUrl) {
+        throw new Error("Python bridge gate did not return a bridge URL.");
+      }
+
+      const cachedApprovalUrl = await getApprovedBridgeUrl();
+      if (cachedApprovalUrl !== bridgeUrl) {
+        const approved = await requestApproval({
+          toolName: tool.name,
+          bridgeUrl,
+          params,
+        });
+        if (!approved) {
+          throw new Error("Python/LibreOffice execution cancelled by user.");
+        }
+
+        await setApprovedBridgeUrl(bridgeUrl);
+      }
+
+      return tool.execute(toolCallId, params, signal, onUpdate);
+    },
+  };
+}
+
 /**
  * Apply experimental gates to tool execution.
  *
- * Current rule:
- * - `tmux` stays registered to keep the tool list stable
- * - `tmux` execution always re-checks experiment flag, URL, and bridge health
+ * Current rules:
+ * - `tmux`, `python_run`, `libreoffice_convert`, and `python_transform_range`
+ *   stay registered to keep the tool list stable.
+ * - each bridge-backed tool execution re-checks experiment flag, URL,
+ *   and bridge health.
+ * - python/libreoffice bridge tools require user confirmation once per configured bridge URL.
  */
 export function applyExperimentalToolGates(
   tools: AgentTool[],
-  dependencies: TmuxBridgeGateDependencies = {},
+  dependencies: ExperimentalToolGateDependencies = {},
 ): Promise<AgentTool[]> {
   const gatedTools: AgentTool[] = [];
 
   for (const tool of tools) {
-    if (tool.name !== TMUX_TOOL_NAME) {
-      gatedTools.push(tool);
+    if (tool.name === TMUX_TOOL_NAME) {
+      gatedTools.push(wrapTmuxToolWithHardGate(tool, dependencies));
       continue;
     }
 
-    gatedTools.push(wrapTmuxToolWithHardGate(tool, dependencies));
+    if (PYTHON_TOOL_NAMES.has(tool.name)) {
+      gatedTools.push(wrapPythonBridgeToolWithHardGate(tool, dependencies));
+      continue;
+    }
+
+    gatedTools.push(tool);
   }
 
   return Promise.resolve(gatedTools);

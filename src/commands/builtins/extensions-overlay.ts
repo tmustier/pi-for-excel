@@ -3,6 +3,10 @@
  */
 
 import type { ExtensionRuntimeManager, ExtensionRuntimeStatus } from "../../extensions/runtime-manager.js";
+import { validateOfficeProxyUrl } from "../../auth/proxy-validation.js";
+import { dispatchExperimentalToolConfigChanged } from "../../experiments/events.js";
+import { isExperimentalFeatureEnabled, setExperimentalFeatureEnabled } from "../../experiments/flags.js";
+import { PYTHON_BRIDGE_URL_SETTING_KEY } from "../../tools/experimental-tool-gates.js";
 import { showToast } from "../../ui/toast.js";
 
 const OVERLAY_ID = "pi-extensions-overlay";
@@ -78,6 +82,34 @@ function createReadOnlyCodeBlock(text: string): HTMLTextAreaElement {
   return area;
 }
 
+async function getSettingsStore() {
+  const storageModule = await import("@mariozechner/pi-web-ui/dist/storage/app-storage.js");
+  return storageModule.getAppStorage().settings;
+}
+
+async function readSettingValue(settingKey: string): Promise<string | undefined> {
+  try {
+    const settings = await getSettingsStore();
+    const value = await settings.get<string>(settingKey);
+    if (typeof value !== "string") return undefined;
+
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+async function writeSettingValue(settingKey: string, value: string): Promise<void> {
+  const settings = await getSettingsStore();
+  await settings.set(settingKey, value);
+}
+
+async function deleteSettingValue(settingKey: string): Promise<void> {
+  const settings = await getSettingsStore();
+  await settings.delete(settingKey);
+}
+
 export function showExtensionsDialog(manager: ExtensionRuntimeManager): void {
   const existing = document.getElementById(OVERLAY_ID);
   if (existing) {
@@ -139,6 +171,49 @@ export function showExtensionsDialog(manager: ExtensionRuntimeManager): void {
   installedList.style.cssText = "display: flex; flex-direction: column; gap: 8px;";
   installedSection.appendChild(installedList);
 
+  const localBridgeSection = document.createElement("section");
+  localBridgeSection.style.cssText = "display: flex; flex-direction: column; gap: 8px;";
+  localBridgeSection.appendChild(createSectionTitle("Local Python / LibreOffice bridge (experimental)"));
+
+  const localBridgeCard = document.createElement("div");
+  localBridgeCard.style.cssText =
+    "display: flex; flex-direction: column; gap: 8px; border: 1px solid oklch(0 0 0 / 0.08); "
+    + "background: oklch(0 0 0 / 0.015); border-radius: 10px; padding: 9px;";
+
+  const localBridgeStatusRow = document.createElement("div");
+  localBridgeStatusRow.style.cssText = "display: flex; justify-content: space-between; align-items: center; gap: 10px;";
+
+  const localBridgeStatusText = document.createElement("div");
+  localBridgeStatusText.style.cssText = "font-size: 12px; color: var(--muted-foreground);";
+
+  const localBridgeStatusBadgeSlot = document.createElement("div");
+  localBridgeStatusBadgeSlot.style.cssText = "display: flex; align-items: center;";
+
+  localBridgeStatusRow.append(localBridgeStatusText, localBridgeStatusBadgeSlot);
+
+  const localBridgeUrlRow = document.createElement("div");
+  localBridgeUrlRow.style.cssText = "display: grid; grid-template-columns: 1fr auto auto auto; gap: 8px; align-items: center;";
+
+  const localBridgeUrlInput = createInput("https://localhost:3340");
+  const localBridgeEnableButton = createButton("Enable + save URL");
+  const localBridgeSaveUrlButton = createButton("Save URL");
+  const localBridgeDisableButton = createButton("Disable");
+
+  localBridgeUrlRow.append(
+    localBridgeUrlInput,
+    localBridgeEnableButton,
+    localBridgeSaveUrlButton,
+    localBridgeDisableButton,
+  );
+
+  const localBridgeHint = document.createElement("p");
+  localBridgeHint.textContent =
+    "One-step setup from this menu: enable python-bridge + save URL (same as two /experimental commands).";
+  localBridgeHint.style.cssText = "margin: 0; font-size: 11px; color: var(--muted-foreground);";
+
+  localBridgeCard.append(localBridgeStatusRow, localBridgeUrlRow, localBridgeHint);
+  localBridgeSection.appendChild(localBridgeCard);
+
   const installUrlSection = document.createElement("section");
   installUrlSection.style.cssText = "display: flex; flex-direction: column; gap: 8px;";
   installUrlSection.appendChild(createSectionTitle("Install from URL"));
@@ -189,7 +264,7 @@ export function showExtensionsDialog(manager: ExtensionRuntimeManager): void {
 
   templateSection.append(templateCode, templateActions);
 
-  body.append(installedSection, installUrlSection, installCodeSection, templateSection);
+  body.append(installedSection, localBridgeSection, installUrlSection, installCodeSection, templateSection);
 
   card.append(header, body);
   overlay.appendChild(card);
@@ -198,9 +273,30 @@ export function showExtensionsDialog(manager: ExtensionRuntimeManager): void {
     installUrlButton.disabled = busy;
     installCodeButton.disabled = busy;
     copyTemplateButton.disabled = busy;
+    localBridgeUrlInput.disabled = busy;
+    localBridgeEnableButton.disabled = busy;
+    localBridgeSaveUrlButton.disabled = busy;
+    localBridgeDisableButton.disabled = busy;
   };
 
-  const runAction = async (action: () => Promise<void>): Promise<void> => {
+  const renderLocalBridgeState = async (): Promise<void> => {
+    const enabled = isExperimentalFeatureEnabled("python_bridge");
+    const configuredUrl = await readSettingValue(PYTHON_BRIDGE_URL_SETTING_KEY);
+
+    if (configuredUrl && localBridgeUrlInput.value.trim().length === 0) {
+      localBridgeUrlInput.value = configuredUrl;
+    }
+
+    localBridgeStatusText.textContent = configuredUrl
+      ? `Bridge URL: ${configuredUrl}`
+      : "Bridge URL not set";
+
+    localBridgeStatusBadgeSlot.replaceChildren(
+      createBadge(enabled ? "enabled" : "disabled", enabled ? "ok" : "muted"),
+    );
+  };
+
+  const runAction = async (action: () => Promise<void> | void): Promise<void> => {
     setBusy(true);
     try {
       await action();
@@ -209,6 +305,7 @@ export function showExtensionsDialog(manager: ExtensionRuntimeManager): void {
     } finally {
       setBusy(false);
       renderInstalledList();
+      void renderLocalBridgeState();
     }
   };
 
@@ -335,6 +432,49 @@ export function showExtensionsDialog(manager: ExtensionRuntimeManager): void {
     }
   };
 
+  localBridgeEnableButton.addEventListener("click", () => {
+    void runAction(async () => {
+      const candidateUrl = localBridgeUrlInput.value.trim();
+      if (candidateUrl.length === 0) {
+        throw new Error("Provide a Python bridge URL (example: https://localhost:3340)");
+      }
+
+      const normalizedUrl = validateOfficeProxyUrl(candidateUrl);
+      await writeSettingValue(PYTHON_BRIDGE_URL_SETTING_KEY, normalizedUrl);
+      dispatchExperimentalToolConfigChanged({ configKey: PYTHON_BRIDGE_URL_SETTING_KEY });
+      setExperimentalFeatureEnabled("python_bridge", true);
+
+      localBridgeUrlInput.value = normalizedUrl;
+      showToast(`Python bridge enabled at ${normalizedUrl}`);
+    });
+  });
+
+  localBridgeSaveUrlButton.addEventListener("click", () => {
+    void runAction(async () => {
+      const candidateUrl = localBridgeUrlInput.value.trim();
+      if (candidateUrl.length === 0) {
+        await deleteSettingValue(PYTHON_BRIDGE_URL_SETTING_KEY);
+        dispatchExperimentalToolConfigChanged({ configKey: PYTHON_BRIDGE_URL_SETTING_KEY });
+        showToast("Python bridge URL cleared.");
+        return;
+      }
+
+      const normalizedUrl = validateOfficeProxyUrl(candidateUrl);
+      await writeSettingValue(PYTHON_BRIDGE_URL_SETTING_KEY, normalizedUrl);
+      dispatchExperimentalToolConfigChanged({ configKey: PYTHON_BRIDGE_URL_SETTING_KEY });
+
+      localBridgeUrlInput.value = normalizedUrl;
+      showToast(`Python bridge URL saved: ${normalizedUrl}`);
+    });
+  });
+
+  localBridgeDisableButton.addEventListener("click", () => {
+    void runAction(() => {
+      setExperimentalFeatureEnabled("python_bridge", false);
+      showToast("Python bridge disabled.");
+    });
+  });
+
   installUrlButton.addEventListener("click", () => {
     void runAction(async () => {
       const name = installUrlName.value.trim();
@@ -376,6 +516,7 @@ export function showExtensionsDialog(manager: ExtensionRuntimeManager): void {
 
   const unsubscribe = manager.subscribe(() => {
     renderInstalledList();
+    void renderLocalBridgeState();
   });
 
   let closed = false;
@@ -404,4 +545,5 @@ export function showExtensionsDialog(manager: ExtensionRuntimeManager): void {
 
   document.body.appendChild(overlay);
   renderInstalledList();
+  void renderLocalBridgeState();
 }

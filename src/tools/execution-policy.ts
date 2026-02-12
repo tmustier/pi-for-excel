@@ -15,8 +15,10 @@ const ALWAYS_READ_TOOLS = new Set<string>([
   "trace_dependencies",
   // Instructions mutate local prompt state, not workbook cells/structure.
   "instructions",
-  // External shell bridge traffic does not mutate workbook state.
+  // External bridge traffic does not mutate workbook state directly.
   "tmux",
+  "python_run",
+  "libreoffice_convert",
 ]);
 
 const ALWAYS_MUTATE_TOOLS = new Set<string>([
@@ -25,6 +27,8 @@ const ALWAYS_MUTATE_TOOLS = new Set<string>([
   "modify_structure",
   "format_cells",
   "conditional_format",
+  // Bridge-assisted transform writes values back into the workbook.
+  "python_transform_range",
 ]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {

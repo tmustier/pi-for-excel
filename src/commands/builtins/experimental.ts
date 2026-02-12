@@ -16,10 +16,12 @@ import { validateOfficeProxyUrl } from "../../auth/proxy-validation.js";
 import { dispatchExperimentalToolConfigChanged } from "../../experiments/events.js";
 import {
   buildTmuxBridgeGateErrorMessage,
+  PYTHON_BRIDGE_URL_SETTING_KEY,
   TMUX_BRIDGE_URL_SETTING_KEY,
   type TmuxBridgeGateReason,
   type TmuxBridgeGateResult,
 } from "../../tools/experimental-tool-gates.js";
+import { PYTHON_BRIDGE_TOKEN_SETTING_KEY } from "../../tools/python-run.js";
 import { TMUX_BRIDGE_TOKEN_SETTING_KEY } from "../../tools/tmux.js";
 import { isRecord } from "../../utils/type-guards.js";
 import { showToast } from "../../ui/toast.js";
@@ -29,12 +31,18 @@ const ENABLE_ACTIONS = new Set(["enable", "on"]);
 const DISABLE_ACTIONS = new Set(["disable", "off"]);
 const TOGGLE_ACTIONS = new Set(["toggle"]);
 const OPEN_ACTIONS = new Set(["open", "ui", "list", "status"]);
+
 const TMUX_BRIDGE_URL_ACTIONS = new Set(["tmux-bridge-url", "tmux-url", "bridge-url"]);
-const TMUX_BRIDGE_URL_CLEAR_ACTIONS = new Set(["clear", "unset", "none"]);
-const TMUX_BRIDGE_URL_SHOW_ACTIONS = new Set(["show", "status", "get"]);
+const PYTHON_BRIDGE_URL_ACTIONS = new Set(["python-bridge-url", "python-url", "libreoffice-bridge-url"]);
+
+const URL_CLEAR_ACTIONS = new Set(["clear", "unset", "none"]);
+const URL_SHOW_ACTIONS = new Set(["show", "status", "get"]);
+
 const TMUX_BRIDGE_TOKEN_ACTIONS = new Set(["tmux-bridge-token", "tmux-token", "bridge-token"]);
-const TMUX_BRIDGE_TOKEN_CLEAR_ACTIONS = new Set(["clear", "unset", "none"]);
-const TMUX_BRIDGE_TOKEN_SHOW_ACTIONS = new Set(["show", "status", "get"]);
+const PYTHON_BRIDGE_TOKEN_ACTIONS = new Set(["python-bridge-token", "python-token", "libreoffice-bridge-token"]);
+
+const TOKEN_CLEAR_ACTIONS = new Set(["clear", "unset", "none"]);
+const TOKEN_SHOW_ACTIONS = new Set(["show", "status", "get"]);
 const TMUX_STATUS_ACTIONS = new Set(["tmux-status", "tmux-bridge-status", "bridge-status"]);
 const TMUX_BRIDGE_HEALTH_TIMEOUT_MS = 1500;
 
@@ -56,16 +64,29 @@ export interface ExperimentalCommandDependencies {
   resolveFeature?: FeatureResolver;
   setFeatureEnabled?: (featureId: ExperimentalFeatureId, enabled: boolean) => void;
   toggleFeature?: (featureId: ExperimentalFeatureId) => boolean;
+
   getTmuxBridgeUrl?: () => Promise<string | undefined>;
   setTmuxBridgeUrl?: (url: string) => Promise<void>;
   clearTmuxBridgeUrl?: () => Promise<void>;
   validateTmuxBridgeUrl?: (url: string) => string;
+
   getTmuxBridgeToken?: () => Promise<string | undefined>;
   setTmuxBridgeToken?: (token: string) => Promise<void>;
   clearTmuxBridgeToken?: () => Promise<void>;
   validateTmuxBridgeToken?: (token: string) => string;
   isTmuxBridgeEnabled?: () => boolean;
   probeTmuxBridgeHealth?: (bridgeUrl: string) => Promise<TmuxBridgeHealthStatus>;
+
+  getPythonBridgeUrl?: () => Promise<string | undefined>;
+  setPythonBridgeUrl?: (url: string) => Promise<void>;
+  clearPythonBridgeUrl?: () => Promise<void>;
+  validatePythonBridgeUrl?: (url: string) => string;
+
+  getPythonBridgeToken?: () => Promise<string | undefined>;
+  setPythonBridgeToken?: (token: string) => Promise<void>;
+  clearPythonBridgeToken?: () => Promise<void>;
+  validatePythonBridgeToken?: (token: string) => string;
+
   notifyToolConfigChanged?: (configKey: string) => void;
 }
 
@@ -76,17 +97,55 @@ interface ResolvedExperimentalCommandDependencies {
   resolveFeature: FeatureResolver;
   setFeatureEnabled: (featureId: ExperimentalFeatureId, enabled: boolean) => void;
   toggleFeature: (featureId: ExperimentalFeatureId) => boolean;
+
   getTmuxBridgeUrl: () => Promise<string | undefined>;
   setTmuxBridgeUrl: (url: string) => Promise<void>;
   clearTmuxBridgeUrl: () => Promise<void>;
   validateTmuxBridgeUrl: (url: string) => string;
+
   getTmuxBridgeToken: () => Promise<string | undefined>;
   setTmuxBridgeToken: (token: string) => Promise<void>;
   clearTmuxBridgeToken: () => Promise<void>;
   validateTmuxBridgeToken: (token: string) => string;
   isTmuxBridgeEnabled: () => boolean;
   probeTmuxBridgeHealth: (bridgeUrl: string) => Promise<TmuxBridgeHealthStatus>;
+
+  getPythonBridgeUrl: () => Promise<string | undefined>;
+  setPythonBridgeUrl: (url: string) => Promise<void>;
+  clearPythonBridgeUrl: () => Promise<void>;
+  validatePythonBridgeUrl: (url: string) => string;
+
+  getPythonBridgeToken: () => Promise<string | undefined>;
+  setPythonBridgeToken: (token: string) => Promise<void>;
+  clearPythonBridgeToken: () => Promise<void>;
+  validatePythonBridgeToken: (token: string) => string;
+
   notifyToolConfigChanged: (configKey: string) => void;
+}
+
+interface BridgeUrlCommandConfig {
+  bridgeLabel: string;
+  commandLabel: string;
+  exampleUrl: string;
+  configKey: string;
+  getValue: () => Promise<string | undefined>;
+  setValue: (url: string) => Promise<void>;
+  clearValue: () => Promise<void>;
+  validate: (url: string) => string;
+  showToast: (message: string) => void;
+  notifyConfigChanged: (configKey: string) => void;
+}
+
+interface BridgeTokenCommandConfig {
+  bridgeLabel: string;
+  commandLabel: string;
+  configKey: string;
+  getValue: () => Promise<string | undefined>;
+  setValue: (token: string) => Promise<void>;
+  clearValue: () => Promise<void>;
+  validate: (token: string) => string;
+  showToast: (message: string) => void;
+  notifyConfigChanged: (configKey: string) => void;
 }
 
 function tokenize(args: string): string[] {
@@ -101,7 +160,9 @@ function usageText(): string {
     "Usage: /experimental [list|on|off|toggle] <feature> " +
     "| /experimental tmux-bridge-url [<url>|show|clear] " +
     "| /experimental tmux-bridge-token [<token>|show|clear] " +
-    "| /experimental tmux-status"
+    "| /experimental tmux-status " +
+    "| /experimental python-bridge-url [<url>|show|clear] " +
+    "| /experimental python-bridge-token [<token>|show|clear]"
   );
 }
 
@@ -115,10 +176,10 @@ async function getSettingsStore() {
   return storageModule.getAppStorage().settings;
 }
 
-async function defaultGetTmuxBridgeUrl(): Promise<string | undefined> {
+async function defaultGetBridgeUrl(settingKey: string): Promise<string | undefined> {
   try {
     const settings = await getSettingsStore();
-    const value = await settings.get<string>(TMUX_BRIDGE_URL_SETTING_KEY);
+    const value = await settings.get<string>(settingKey);
     if (typeof value !== "string") return undefined;
 
     const trimmed = value.trim();
@@ -128,54 +189,39 @@ async function defaultGetTmuxBridgeUrl(): Promise<string | undefined> {
   }
 }
 
-async function defaultSetTmuxBridgeUrl(url: string): Promise<void> {
+async function defaultSetSettingValue(settingKey: string, value: string): Promise<void> {
   const settings = await getSettingsStore();
-  await settings.set(TMUX_BRIDGE_URL_SETTING_KEY, url);
+  await settings.set(settingKey, value);
 }
 
-async function defaultClearTmuxBridgeUrl(): Promise<void> {
+async function defaultClearSettingValue(settingKey: string): Promise<void> {
   const settings = await getSettingsStore();
-  await settings.delete(TMUX_BRIDGE_URL_SETTING_KEY);
+  await settings.delete(settingKey);
 }
 
-async function defaultGetTmuxBridgeToken(): Promise<string | undefined> {
-  try {
-    const settings = await getSettingsStore();
-    const value = await settings.get<string>(TMUX_BRIDGE_TOKEN_SETTING_KEY);
-    if (typeof value !== "string") return undefined;
-
-    const trimmed = value.trim();
-    return trimmed.length > 0 ? trimmed : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-async function defaultSetTmuxBridgeToken(token: string): Promise<void> {
-  const settings = await getSettingsStore();
-  await settings.set(TMUX_BRIDGE_TOKEN_SETTING_KEY, token);
-}
-
-async function defaultClearTmuxBridgeToken(): Promise<void> {
-  const settings = await getSettingsStore();
-  await settings.delete(TMUX_BRIDGE_TOKEN_SETTING_KEY);
-}
-
-function defaultValidateTmuxBridgeToken(token: string): string {
+function defaultValidateBridgeToken(label: string, token: string): string {
   const normalized = token.trim();
   if (normalized.length === 0) {
-    throw new Error("Tmux bridge token cannot be empty.");
+    throw new Error(`${label} cannot be empty.`);
   }
 
   if (/\s/u.test(normalized)) {
-    throw new Error("Tmux bridge token must not contain whitespace.");
+    throw new Error(`${label} must not contain whitespace.`);
   }
 
   if (normalized.length > 512) {
-    throw new Error("Tmux bridge token is too long (max 512 characters).");
+    throw new Error(`${label} is too long (max 512 characters).`);
   }
 
   return normalized;
+}
+
+function defaultValidateTmuxBridgeToken(token: string): string {
+  return defaultValidateBridgeToken("Tmux bridge token", token);
+}
+
+function defaultValidatePythonBridgeToken(token: string): string {
+  return defaultValidateBridgeToken("Python bridge token", token);
 }
 
 function maskToken(token: string): string {
@@ -230,16 +276,53 @@ function resolveDependencies(
     resolveFeature: dependencies.resolveFeature ?? resolveExperimentalFeature,
     setFeatureEnabled: dependencies.setFeatureEnabled ?? setExperimentalFeatureEnabled,
     toggleFeature: dependencies.toggleFeature ?? toggleExperimentalFeature,
-    getTmuxBridgeUrl: dependencies.getTmuxBridgeUrl ?? defaultGetTmuxBridgeUrl,
-    setTmuxBridgeUrl: dependencies.setTmuxBridgeUrl ?? defaultSetTmuxBridgeUrl,
-    clearTmuxBridgeUrl: dependencies.clearTmuxBridgeUrl ?? defaultClearTmuxBridgeUrl,
+
+    getTmuxBridgeUrl:
+      dependencies.getTmuxBridgeUrl
+      ?? (() => defaultGetBridgeUrl(TMUX_BRIDGE_URL_SETTING_KEY)),
+    setTmuxBridgeUrl:
+      dependencies.setTmuxBridgeUrl
+      ?? ((url: string) => defaultSetSettingValue(TMUX_BRIDGE_URL_SETTING_KEY, url)),
+    clearTmuxBridgeUrl:
+      dependencies.clearTmuxBridgeUrl
+      ?? (() => defaultClearSettingValue(TMUX_BRIDGE_URL_SETTING_KEY)),
     validateTmuxBridgeUrl: dependencies.validateTmuxBridgeUrl ?? validateOfficeProxyUrl,
-    getTmuxBridgeToken: dependencies.getTmuxBridgeToken ?? defaultGetTmuxBridgeToken,
-    setTmuxBridgeToken: dependencies.setTmuxBridgeToken ?? defaultSetTmuxBridgeToken,
-    clearTmuxBridgeToken: dependencies.clearTmuxBridgeToken ?? defaultClearTmuxBridgeToken,
+
+    getTmuxBridgeToken:
+      dependencies.getTmuxBridgeToken
+      ?? (() => defaultGetBridgeUrl(TMUX_BRIDGE_TOKEN_SETTING_KEY)),
+    setTmuxBridgeToken:
+      dependencies.setTmuxBridgeToken
+      ?? ((token: string) => defaultSetSettingValue(TMUX_BRIDGE_TOKEN_SETTING_KEY, token)),
+    clearTmuxBridgeToken:
+      dependencies.clearTmuxBridgeToken
+      ?? (() => defaultClearSettingValue(TMUX_BRIDGE_TOKEN_SETTING_KEY)),
     validateTmuxBridgeToken: dependencies.validateTmuxBridgeToken ?? defaultValidateTmuxBridgeToken,
     isTmuxBridgeEnabled: dependencies.isTmuxBridgeEnabled ?? defaultIsTmuxBridgeEnabled,
     probeTmuxBridgeHealth: dependencies.probeTmuxBridgeHealth ?? defaultProbeTmuxBridgeHealth,
+
+    getPythonBridgeUrl:
+      dependencies.getPythonBridgeUrl
+      ?? (() => defaultGetBridgeUrl(PYTHON_BRIDGE_URL_SETTING_KEY)),
+    setPythonBridgeUrl:
+      dependencies.setPythonBridgeUrl
+      ?? ((url: string) => defaultSetSettingValue(PYTHON_BRIDGE_URL_SETTING_KEY, url)),
+    clearPythonBridgeUrl:
+      dependencies.clearPythonBridgeUrl
+      ?? (() => defaultClearSettingValue(PYTHON_BRIDGE_URL_SETTING_KEY)),
+    validatePythonBridgeUrl: dependencies.validatePythonBridgeUrl ?? validateOfficeProxyUrl,
+
+    getPythonBridgeToken:
+      dependencies.getPythonBridgeToken
+      ?? (() => defaultGetBridgeUrl(PYTHON_BRIDGE_TOKEN_SETTING_KEY)),
+    setPythonBridgeToken:
+      dependencies.setPythonBridgeToken
+      ?? ((token: string) => defaultSetSettingValue(PYTHON_BRIDGE_TOKEN_SETTING_KEY, token)),
+    clearPythonBridgeToken:
+      dependencies.clearPythonBridgeToken
+      ?? (() => defaultClearSettingValue(PYTHON_BRIDGE_TOKEN_SETTING_KEY)),
+    validatePythonBridgeToken: dependencies.validatePythonBridgeToken ?? defaultValidatePythonBridgeToken,
+
     notifyToolConfigChanged: dependencies.notifyToolConfigChanged ?? ((configKey: string) => {
       dispatchExperimentalToolConfigChanged({ configKey });
     }),
@@ -302,94 +385,111 @@ async function defaultProbeTmuxBridgeHealth(bridgeUrl: string): Promise<TmuxBrid
   }
 }
 
-async function handleTmuxBridgeUrlCommand(
+async function handleBridgeUrlCommand(
   valueTokens: string[],
-  dependencies: ResolvedExperimentalCommandDependencies,
+  config: BridgeUrlCommandConfig,
 ): Promise<void> {
+  const {
+    bridgeLabel,
+    commandLabel,
+    exampleUrl,
+    configKey,
+    getValue,
+    setValue,
+    clearValue,
+    validate,
+    showToast,
+    notifyConfigChanged,
+  } = config;
+
   if (valueTokens.length === 0) {
-    const existing = await dependencies.getTmuxBridgeUrl();
+    const existing = await getValue();
     if (!existing) {
-      dependencies.showToast(
-        "Tmux bridge URL is not set. Example: /experimental tmux-bridge-url https://localhost:3337",
-      );
+      showToast(`${bridgeLabel} URL is not set. Example: /experimental ${commandLabel} ${exampleUrl}`);
       return;
     }
 
-    dependencies.showToast(`Tmux bridge URL: ${existing}`);
+    showToast(`${bridgeLabel} URL: ${existing}`);
     return;
   }
 
   const firstToken = valueTokens[0].toLowerCase();
-  if (TMUX_BRIDGE_URL_SHOW_ACTIONS.has(firstToken)) {
-    const existing = await dependencies.getTmuxBridgeUrl();
+  if (URL_SHOW_ACTIONS.has(firstToken)) {
+    const existing = await getValue();
     if (!existing) {
-      dependencies.showToast(
-        "Tmux bridge URL is not set. Example: /experimental tmux-bridge-url https://localhost:3337",
-      );
+      showToast(`${bridgeLabel} URL is not set. Example: /experimental ${commandLabel} ${exampleUrl}`);
       return;
     }
 
-    dependencies.showToast(`Tmux bridge URL: ${existing}`);
+    showToast(`${bridgeLabel} URL: ${existing}`);
     return;
   }
 
-  if (valueTokens.length === 1 && TMUX_BRIDGE_URL_CLEAR_ACTIONS.has(firstToken)) {
-    await dependencies.clearTmuxBridgeUrl();
-    dependencies.notifyToolConfigChanged(TMUX_BRIDGE_URL_SETTING_KEY);
-    dependencies.showToast("Tmux bridge URL cleared.");
+  if (valueTokens.length === 1 && URL_CLEAR_ACTIONS.has(firstToken)) {
+    await clearValue();
+    notifyConfigChanged(configKey);
+    showToast(`${bridgeLabel} URL cleared.`);
     return;
   }
 
   const candidateUrl = valueTokens.join(" ");
-  const normalized = dependencies.validateTmuxBridgeUrl(candidateUrl);
-  await dependencies.setTmuxBridgeUrl(normalized);
-  dependencies.notifyToolConfigChanged(TMUX_BRIDGE_URL_SETTING_KEY);
-  dependencies.showToast(`Tmux bridge URL set to ${normalized}`);
+  const normalized = validate(candidateUrl);
+  await setValue(normalized);
+  notifyConfigChanged(configKey);
+  showToast(`${bridgeLabel} URL set to ${normalized}`);
 }
 
-async function handleTmuxBridgeTokenCommand(
+async function handleBridgeTokenCommand(
   valueTokens: string[],
-  dependencies: ResolvedExperimentalCommandDependencies,
+  config: BridgeTokenCommandConfig,
 ): Promise<void> {
+  const {
+    bridgeLabel,
+    commandLabel,
+    configKey,
+    getValue,
+    setValue,
+    clearValue,
+    validate,
+    showToast,
+    notifyConfigChanged,
+  } = config;
+
   if (valueTokens.length === 0) {
-    const existing = await dependencies.getTmuxBridgeToken();
+    const existing = await getValue();
     if (!existing) {
-      dependencies.showToast(
-        "Tmux bridge token is not set. Example: /experimental tmux-bridge-token <token>",
-      );
+      showToast(`${bridgeLabel} token is not set. Example: /experimental ${commandLabel} <token>`);
       return;
     }
 
-    dependencies.showToast(`Tmux bridge token: ${maskToken(existing)} (length ${existing.length})`);
+    showToast(`${bridgeLabel} token: ${maskToken(existing)} (length ${existing.length})`);
     return;
   }
 
   const firstToken = valueTokens[0].toLowerCase();
-  if (TMUX_BRIDGE_TOKEN_SHOW_ACTIONS.has(firstToken)) {
-    const existing = await dependencies.getTmuxBridgeToken();
+  if (TOKEN_SHOW_ACTIONS.has(firstToken)) {
+    const existing = await getValue();
     if (!existing) {
-      dependencies.showToast(
-        "Tmux bridge token is not set. Example: /experimental tmux-bridge-token <token>",
-      );
+      showToast(`${bridgeLabel} token is not set. Example: /experimental ${commandLabel} <token>`);
       return;
     }
 
-    dependencies.showToast(`Tmux bridge token: ${maskToken(existing)} (length ${existing.length})`);
+    showToast(`${bridgeLabel} token: ${maskToken(existing)} (length ${existing.length})`);
     return;
   }
 
-  if (valueTokens.length === 1 && TMUX_BRIDGE_TOKEN_CLEAR_ACTIONS.has(firstToken)) {
-    await dependencies.clearTmuxBridgeToken();
-    dependencies.notifyToolConfigChanged(TMUX_BRIDGE_TOKEN_SETTING_KEY);
-    dependencies.showToast("Tmux bridge token cleared.");
+  if (valueTokens.length === 1 && TOKEN_CLEAR_ACTIONS.has(firstToken)) {
+    await clearValue();
+    notifyConfigChanged(configKey);
+    showToast(`${bridgeLabel} token cleared.`);
     return;
   }
 
   const candidateToken = valueTokens.join(" ");
-  const normalized = dependencies.validateTmuxBridgeToken(candidateToken);
-  await dependencies.setTmuxBridgeToken(normalized);
-  dependencies.notifyToolConfigChanged(TMUX_BRIDGE_TOKEN_SETTING_KEY);
-  dependencies.showToast(`Tmux bridge token set (${maskToken(normalized)}).`);
+  const normalized = validate(candidateToken);
+  await setValue(normalized);
+  notifyConfigChanged(configKey);
+  showToast(`${bridgeLabel} token set (${maskToken(normalized)}).`);
 }
 
 async function handleTmuxStatusCommand(
@@ -515,12 +615,33 @@ export function createExperimentalCommands(
           }
 
           if (TMUX_BRIDGE_URL_ACTIONS.has(action)) {
-            await handleTmuxBridgeUrlCommand(tokens.slice(1), resolved);
+            await handleBridgeUrlCommand(tokens.slice(1), {
+              bridgeLabel: "Tmux bridge",
+              commandLabel: "tmux-bridge-url",
+              exampleUrl: "https://localhost:3337",
+              configKey: TMUX_BRIDGE_URL_SETTING_KEY,
+              getValue: resolved.getTmuxBridgeUrl,
+              setValue: resolved.setTmuxBridgeUrl,
+              clearValue: resolved.clearTmuxBridgeUrl,
+              validate: resolved.validateTmuxBridgeUrl,
+              showToast: resolved.showToast,
+              notifyConfigChanged: resolved.notifyToolConfigChanged,
+            });
             return;
           }
 
           if (TMUX_BRIDGE_TOKEN_ACTIONS.has(action)) {
-            await handleTmuxBridgeTokenCommand(tokens.slice(1), resolved);
+            await handleBridgeTokenCommand(tokens.slice(1), {
+              bridgeLabel: "Tmux bridge",
+              commandLabel: "tmux-bridge-token",
+              configKey: TMUX_BRIDGE_TOKEN_SETTING_KEY,
+              getValue: resolved.getTmuxBridgeToken,
+              setValue: resolved.setTmuxBridgeToken,
+              clearValue: resolved.clearTmuxBridgeToken,
+              validate: resolved.validateTmuxBridgeToken,
+              showToast: resolved.showToast,
+              notifyConfigChanged: resolved.notifyToolConfigChanged,
+            });
             return;
           }
 
@@ -534,10 +655,41 @@ export function createExperimentalCommands(
             return;
           }
 
+          if (PYTHON_BRIDGE_URL_ACTIONS.has(action)) {
+            await handleBridgeUrlCommand(tokens.slice(1), {
+              bridgeLabel: "Python bridge",
+              commandLabel: "python-bridge-url",
+              exampleUrl: "https://localhost:3340",
+              configKey: PYTHON_BRIDGE_URL_SETTING_KEY,
+              getValue: resolved.getPythonBridgeUrl,
+              setValue: resolved.setPythonBridgeUrl,
+              clearValue: resolved.clearPythonBridgeUrl,
+              validate: resolved.validatePythonBridgeUrl,
+              showToast: resolved.showToast,
+              notifyConfigChanged: resolved.notifyToolConfigChanged,
+            });
+            return;
+          }
+
+          if (PYTHON_BRIDGE_TOKEN_ACTIONS.has(action)) {
+            await handleBridgeTokenCommand(tokens.slice(1), {
+              bridgeLabel: "Python bridge",
+              commandLabel: "python-bridge-token",
+              configKey: PYTHON_BRIDGE_TOKEN_SETTING_KEY,
+              getValue: resolved.getPythonBridgeToken,
+              setValue: resolved.setPythonBridgeToken,
+              clearValue: resolved.clearPythonBridgeToken,
+              validate: resolved.validatePythonBridgeToken,
+              showToast: resolved.showToast,
+              notifyConfigChanged: resolved.notifyToolConfigChanged,
+            });
+            return;
+          }
+
           const isToggleAction =
-            ENABLE_ACTIONS.has(action) ||
-            DISABLE_ACTIONS.has(action) ||
-            TOGGLE_ACTIONS.has(action);
+            ENABLE_ACTIONS.has(action)
+            || DISABLE_ACTIONS.has(action)
+            || TOGGLE_ACTIONS.has(action);
 
           if (!isToggleAction) {
             resolved.showToast(usageText());

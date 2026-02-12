@@ -147,6 +147,10 @@ void test("content-impact mutation tools do not trigger structure invalidation",
     { toolName: "write_cells", params: { range: "Sheet1!A1", values: [[1]] } },
     { toolName: "format_cells", params: { range: "Sheet1!A1", format: { bold: true } } },
     { toolName: "comments", params: { action: "delete", range: "Sheet1!A1" } },
+    {
+      toolName: "python_transform_range",
+      params: { range: "Sheet1!A1:B3", code: "result = input_data['values']" },
+    },
     { toolName: "view_settings", params: { action: "hide_gridlines" } },
     { toolName: "view_settings", params: { action: "activate", sheet: "Sheet1" } },
   ];
@@ -207,6 +211,8 @@ void test("read-only tool paths never emit mutation events", async (t) => {
     { toolName: "comments", params: { action: "read", range: "Sheet1!A1" } },
     { toolName: "view_settings", params: { action: "get" } },
     { toolName: "tmux", params: { action: "list_sessions" } },
+    { toolName: "python_run", params: { code: "print(1)" } },
+    { toolName: "libreoffice_convert", params: { input_path: "/tmp/a.xlsx", target_format: "csv" } },
   ];
 
   for (const item of cases) {

@@ -204,9 +204,16 @@ https://github.com/tmustier/pi-for-excel/issues/19
 ### #13 — Extensions API: design & build-out
 https://github.com/tmustier/pi-for-excel/issues/13
 
-**What it’s asking:** extension manager UI + dynamic loading + (critically) allow extensions to register tools.
+**Status note:** MVP is now shipped (extension manager UI, dynamic loading, persisted registry, extension tool registration, lifecycle cleanup).
 
-**Implication:** this is a strong argument for:
+**Remaining tracked follow-ups:**
+- #79 — sandbox + permissions model (design draft: `docs/design-extension-sandbox-permissions.md`)
+- #80 — widget API evolution
+
+**Recently closed:**
+- #81 — extension authoring docs (merged in #82)
+
+**Implication:** keep extension architecture additive while we harden:
 - a centralized tool registry that can be extended dynamically
 - a clear permission model + lifecycle hooks
 
@@ -224,9 +231,13 @@ https://github.com/tmustier/pi-for-excel/issues/24
 ### #25 — Tools: Python runner + LibreOffice bridge
 https://github.com/tmustier/pi-for-excel/issues/25
 
-**What it’s asking:** add a Python/LibreOffice execution capability via a local bridge or remote service.
+**Status note:** initial local-bridge slice is now implemented behind `python-bridge` experiment:
+- gated tools: `python_run`, `libreoffice_convert`, `python_transform_range`
+- local helper: `scripts/python-bridge-server.mjs` (`stub` + `real` modes)
+- config: `/experimental python-bridge-url` + `/experimental python-bridge-token`
+- first-run approval prompt per bridge URL for Python/LibreOffice executions
 
-**Implication:** strongly coupled to #26 security + #32 artifacts (Python output likely becomes artifacts/files).
+**Remaining follow-up:** richer sandboxing controls, artifact-first workflows, and safer patch/apply patterns for structural workbook edits.
 
 ---
 

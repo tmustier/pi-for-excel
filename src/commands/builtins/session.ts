@@ -49,7 +49,6 @@ export function createSessionLifecycleCommands(actions: SessionCommandActions): 
       source: "builtin",
       execute: async () => {
         await actions.createRuntime();
-        showToast("New session tab started");
       },
     },
     {

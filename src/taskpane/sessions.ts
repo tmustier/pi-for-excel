@@ -24,6 +24,8 @@ export interface SessionPersistenceController {
   getSessionId: () => string;
   getSessionTitle: () => string;
   getSessionCreatedAt: () => string;
+  /** True when the user explicitly named the session via `/name`. */
+  hasExplicitTitle: () => boolean;
   startNewSession: () => void;
   renameSession: (title: string) => Promise<void>;
   applyLoadedSession: (sessionData: SessionData) => Promise<void>;
@@ -119,6 +121,7 @@ export async function setupSessionPersistence(opts: {
   let sessionTitle = "";
   let sessionCreatedAt = new Date().toISOString();
   let firstAssistantSeen = false;
+  let explicitTitle = false;
 
   agent.sessionId = sessionId;
 
@@ -246,12 +249,14 @@ export async function setupSessionPersistence(opts: {
     sessionTitle = "";
     sessionCreatedAt = new Date().toISOString();
     firstAssistantSeen = false;
+    explicitTitle = false;
     agent.sessionId = sessionId;
     emitChange();
   }
 
   async function renameSession(title: string): Promise<void> {
     sessionTitle = title.trim();
+    explicitTitle = sessionTitle.length > 0;
     emitChange();
     await saveSession();
   }
@@ -264,6 +269,7 @@ export async function setupSessionPersistence(opts: {
     }
 
     sessionTitle = sessionData.title || "";
+    explicitTitle = false;
     sessionCreatedAt = sessionData.createdAt;
     firstAssistantSeen = hasAssistantMessage(sessionData.messages);
 
@@ -330,6 +336,7 @@ export async function setupSessionPersistence(opts: {
     getSessionId: () => sessionId,
     getSessionTitle: () => sessionTitle,
     getSessionCreatedAt: () => sessionCreatedAt,
+    hasExplicitTitle: () => explicitTitle,
     startNewSession,
     renameSession,
     applyLoadedSession,

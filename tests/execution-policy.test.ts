@@ -40,9 +40,39 @@ void test("classifies instructions as non-workbook read traffic", () => {
   assert.equal(getToolContextImpact("instructions", { action: "append", level: "user" }), "none");
 });
 
-void test("classifies tmux bridge as read-only non-workbook traffic", () => {
+void test("classifies bridge tools as read-only non-workbook traffic", () => {
   assert.equal(getToolExecutionMode("tmux", { action: "list_sessions" }), "read");
   assert.equal(getToolContextImpact("tmux", { action: "list_sessions" }), "none");
+
+  assert.equal(getToolExecutionMode("python_run", { code: "print(1)" }), "read");
+  assert.equal(getToolContextImpact("python_run", { code: "print(1)" }), "none");
+
+  assert.equal(
+    getToolExecutionMode("libreoffice_convert", { input_path: "/tmp/a.xlsx", target_format: "csv" }),
+    "read",
+  );
+  assert.equal(
+    getToolContextImpact("libreoffice_convert", { input_path: "/tmp/a.xlsx", target_format: "csv" }),
+    "none",
+  );
+});
+
+void test("classifies python_transform_range as workbook content mutation", () => {
+  assert.equal(
+    getToolExecutionMode("python_transform_range", {
+      range: "Sheet1!A1:B10",
+      code: "result = input_data['values']",
+    }),
+    "mutate",
+  );
+
+  assert.equal(
+    getToolContextImpact("python_transform_range", {
+      range: "Sheet1!A1:B10",
+      code: "result = input_data['values']",
+    }),
+    "content",
+  );
 });
 
 void test("unknown tools default to mutate with content impact", () => {

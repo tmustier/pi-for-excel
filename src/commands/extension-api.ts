@@ -147,7 +147,10 @@ function getLocalExtensionImportCandidates(specifier: string): string[] {
   return Array.from(candidates);
 }
 
-async function importExtensionModule(specifier: string, sourceKind: ReturnType<typeof classifyExtensionSource>): Promise<unknown> {
+async function importExtensionModule(
+  specifier: string,
+  sourceKind: ReturnType<typeof classifyExtensionSource>,
+): Promise<unknown> {
   if (sourceKind === "local-module") {
     for (const candidate of getLocalExtensionImportCandidates(specifier)) {
       const importer = BUNDLED_LOCAL_EXTENSION_IMPORTERS[candidate];

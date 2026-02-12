@@ -58,4 +58,3 @@ void test("extension registry preserves explicit empty saved entries", async () 
   const entries = await loadStoredExtensions(settings);
   assert.deepEqual(entries, []);
 });
-

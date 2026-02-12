@@ -7,10 +7,16 @@
 
 import { createCoreTools } from "./registry.js";
 import { createTmuxTool } from "./tmux.js";
+import { createPythonRunTool } from "./python-run.js";
+import { createLibreOfficeConvertTool } from "./libreoffice-convert.js";
+import { createPythonTransformRangeTool } from "./python-transform-range.js";
 
 export function createAllTools() {
   return [
     ...createCoreTools(),
     createTmuxTool(),
+    createPythonRunTool(),
+    createLibreOfficeConvertTool(),
+    createPythonTransformRangeTool(),
   ];
 }
