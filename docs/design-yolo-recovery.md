@@ -52,6 +52,8 @@ Replace cumbersome up-front approval selectors with a low-friction workflow:
   - `workbook.recovery-snapshots.v1`
 - Safety cap:
   - snapshots are skipped above `MAX_RECOVERY_CELLS` to avoid oversized local state
+- Identity guard:
+  - checkpoints are only persisted when workbook identity is available; restores reject legacy identity-less checkpoints
 
 ## Why this is better than approval selectors for now
 
