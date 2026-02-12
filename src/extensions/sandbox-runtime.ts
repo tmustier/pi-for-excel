@@ -302,17 +302,13 @@ interface SandboxWidgetUpsertOptions {
 }
 
 function upsertSandboxWidgetNode(options: SandboxWidgetUpsertOptions): Set<string> {
-  const card = document.createElement("div");
-  card.className = "pi-overlay-surface";
-
   const body = document.createElement("div");
   renderSandboxUiTree(body, options.node, options.onAction);
-  card.appendChild(body);
 
   upsertExtensionWidget({
     ownerId: options.ownerId,
     id: options.widgetId,
-    element: card,
+    element: body,
     title: options.title,
     placement: options.placement,
     order: options.order,

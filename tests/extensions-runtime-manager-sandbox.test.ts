@@ -289,6 +289,7 @@ void test("sandbox runtime source enforces capability gates and rejects unknown 
   assert.match(source, /case "overlay_show": \{[\s\S]*this\.assertCapability\("ui\.overlay"\)/);
   assert.match(source, /case "widget_show": \{[\s\S]*this\.assertCapability\("ui\.widget"\)/);
   assert.match(source, /case "widget_upsert": \{[\s\S]*Widget API v2 is disabled/);
+  assert.match(source, /upsertSandboxWidgetNode\([\s\S]*element:\s*body/);
   assert.match(source, /case "widget_clear": \{/);
   assert.match(source, /if \(method === "ui_action"\)/);
   assert.match(source, /Unknown sandbox UI action id:/);
