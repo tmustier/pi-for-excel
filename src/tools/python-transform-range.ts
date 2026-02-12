@@ -216,13 +216,19 @@ async function defaultWriteOutputValues(request: WriteOutputRequest): Promise<Wr
     const outputAddress = qualifiedAddress(sheet.name, outputAddressLocal);
 
     const targetRange = sheet.getRange(outputAddressLocal);
-    targetRange.load("values,formulas");
-    await context.sync();
 
-    const beforeValues = targetRange.values;
-    const beforeFormulas = targetRange.formulas;
+    let beforeValues: unknown[][] | undefined;
+    let beforeFormulas: unknown[][] | undefined;
 
     if (!request.allowOverwrite) {
+      // Skip pre-write snapshot reads when overwrite is explicitly allowed
+      // to avoid an extra full-range workbook round-trip on large outputs.
+      targetRange.load("values,formulas");
+      await context.sync();
+
+      beforeValues = targetRange.values;
+      beforeFormulas = targetRange.formulas;
+
       const existingCount = countOccupiedCells(beforeValues, beforeFormulas);
       if (existingCount > 0) {
         return {
