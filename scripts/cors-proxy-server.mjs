@@ -135,6 +135,8 @@ const allowedTargetHosts = (() => {
   return new Set(DEFAULT_ALLOWED_TARGET_HOSTS);
 })();
 
+const EMPTY_ALLOWED_TARGET_HOSTS = new Set();
+
 const TARGET_POLICY_MESSAGES = {
   blocked_target_invalid_host: "Invalid target host",
   blocked_target_not_allowlisted:
@@ -143,6 +145,33 @@ const TARGET_POLICY_MESSAGES = {
   blocked_target_private_ip: "Private/local target URLs are blocked by default. Set ALLOW_PRIVATE_TARGETS=1 to override.",
   blocked_target_resolution_failed: "Target hostname could not be resolved (STRICT_TARGET_RESOLUTION=1)",
 };
+
+function isGitHubEnterpriseOAuthPathname(pathname) {
+  return pathname === "/login/device/code" || pathname === "/login/oauth/access_token";
+}
+
+function isGitHubEnterpriseCopilotPathname(pathname) {
+  return pathname.startsWith("/copilot_internal/");
+}
+
+function shouldBypassHostAllowlistForGitHubEnterprise(targetUrl) {
+  const hostname = normalizeHost(targetUrl.hostname);
+  if (!hostname || isIpLiteral(hostname)) return false;
+
+  if (isGitHubEnterpriseOAuthPathname(targetUrl.pathname)) {
+    return hostname !== "github.com";
+  }
+
+  if (isGitHubEnterpriseCopilotPathname(targetUrl.pathname)) {
+    if (hostname === "api.github.com" || hostname === "api.individual.githubcopilot.com") {
+      return false;
+    }
+
+    return hostname.startsWith("api.");
+  }
+
+  return false;
+}
 
 function setCorsHeaders(req, res) {
   const origin = req.headers.origin;
@@ -287,12 +316,21 @@ const handler = async (req, res) => {
     }
   }
 
+  const bypassHostAllowlistForGitHubEnterprise =
+    !allowAllTargetHosts
+    && configuredAllowedTargetHosts.size === 0
+    && shouldBypassHostAllowlistForGitHubEnterprise(targetUrl);
+
+  const effectiveAllowedTargetHosts = bypassHostAllowlistForGitHubEnterprise
+    ? EMPTY_ALLOWED_TARGET_HOSTS
+    : allowedTargetHosts;
+
   const targetPolicy = evaluateTargetHostPolicy({
     hostname: targetHost,
     resolvedIps,
     allowLoopbackTargets,
     allowPrivateTargets,
-    allowedHosts: allowedTargetHosts,
+    allowedHosts: effectiveAllowedTargetHosts,
   });
 
   if (!targetPolicy.allowed) {
@@ -300,6 +338,10 @@ const handler = async (req, res) => {
     rejectWithReason(res, reason);
     console.warn(`[proxy] blocked target (${reason}): ${safeTarget}`);
     return;
+  }
+
+  if (bypassHostAllowlistForGitHubEnterprise) {
+    console.log(`[proxy] allowing GitHub enterprise endpoint outside default host allowlist: ${safeTarget}`);
   }
 
   try {
@@ -391,6 +433,10 @@ server.listen(PORT, HOST, () => {
   } else {
     const source = configuredAllowedTargetHosts.size > 0 ? "ALLOWED_TARGET_HOSTS" : "default";
     console.log(`[pi-for-excel] Allowed target hosts (${source}): ${Array.from(allowedTargetHosts).join(", ")}`);
+
+    if (configuredAllowedTargetHosts.size === 0) {
+      console.log("[pi-for-excel] GitHub enterprise OAuth/Copilot endpoints on custom domains are allowed by path.");
+    }
   }
 
   if (hasConfiguredAllowedTargetHosts && configuredAllowedTargetHosts.size === 0) {

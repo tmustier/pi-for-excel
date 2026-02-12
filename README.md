@@ -219,10 +219,11 @@ npx office-addin-manifest validate manifest.xml
    ALLOWED_ORIGINS="https://my-addin.example.com" npm run proxy:https
    ```
 
-   By default, the proxy applies three SSRF guardrails:
+   By default, the proxy applies SSRF guardrails:
    - blocks **loopback** target URLs: `localhost`, `127.0.0.1`, `::1`
    - blocks **private/link-local** target URLs: `10/8`, `172.16/12`, `192.168/16`, `169.254/16`, `fc00::/7`, `fe80::/10`
    - allows outbound hosts only from a built-in allowlist (Anthropic/OpenAI/GitHub/Google/Z-AI endpoints used by Pi for Excel)
+   - allows GitHub Enterprise OAuth/Copilot endpoint paths on custom domains for compatibility (`/login/device/code`, `/login/oauth/access_token`, `/copilot_internal/*`)
 
    Override knobs:
    ```bash
@@ -232,7 +233,8 @@ npx office-addin-manifest validate manifest.xml
    # Allow private/local targets broadly
    ALLOW_PRIVATE_TARGETS=1 npm run proxy:https
 
-   # Replace default host allowlist (exact host match, comma-separated)
+   # Replace default host allowlist (exact host match, comma-separated).
+   # When set, only these hosts are allowed (including any GitHub Enterprise hosts).
    ALLOWED_TARGET_HOSTS="api.openai.com,oauth2.googleapis.com" npm run proxy:https
 
    # Disable host allowlist entirely (not recommended)

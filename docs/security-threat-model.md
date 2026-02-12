@@ -59,7 +59,7 @@ Hosted taskpane is protected with CSP in `vercel.json` (scripts/styles/fonts/con
 ### 3) Local proxy abuse (CORS/SSRF)
 - Loopback client requirement
 - Allowed-origin CORS allowlist
-- Default outbound host allowlist for known provider endpoints
+- Default outbound host allowlist for known provider endpoints (plus path-scoped GitHub Enterprise OAuth/Copilot compatibility)
 - Loopback/private target blocking by default (+ DNS-aware checks)
 - Explicit opt-in overrides for advanced/local setups
 

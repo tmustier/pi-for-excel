@@ -150,6 +150,41 @@ test("proxy blocks non-allowlisted hosts by default", async (t) => {
   assert.match(text, /blocked_target_not_allowlisted/);
 });
 
+test("proxy allows GitHub enterprise OAuth-style endpoints on custom domains by default", async (t) => {
+  const proxy = await startProxy();
+  t.after(async () => {
+    await proxy.stop();
+  });
+
+  const target = encodeURIComponent("https://ghe.example.invalid/login/device/code");
+  const response = await fetch(`http://127.0.0.1:${proxy.port}/?url=${target}`, {
+    headers: { Origin: ORIGIN },
+  });
+
+  assert.equal(response.status, 502);
+  const text = await response.text();
+  assert.match(text, /Proxy error/);
+  assert.doesNotMatch(text, /blocked_target_not_allowlisted/);
+});
+
+test("explicit ALLOWED_TARGET_HOSTS keeps enterprise-path host checks strict", async (t) => {
+  const proxy = await startProxy({
+    ALLOWED_TARGET_HOSTS: "api.openai.com",
+  });
+  t.after(async () => {
+    await proxy.stop();
+  });
+
+  const target = encodeURIComponent("https://ghe.example.invalid/login/device/code");
+  const response = await fetch(`http://127.0.0.1:${proxy.port}/?url=${target}`, {
+    headers: { Origin: ORIGIN },
+  });
+
+  assert.equal(response.status, 403);
+  const text = await response.text();
+  assert.match(text, /blocked_target_not_allowlisted/);
+});
+
 test("proxy can allow local targets with explicit overrides", async (t) => {
   const target = await startMockTarget("hello-from-local");
   t.after(async () => {
