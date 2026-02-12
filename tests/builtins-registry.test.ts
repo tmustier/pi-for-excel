@@ -77,11 +77,15 @@ void test("builtins registry wires /experimental, /extensions, and /skills comma
   );
   assert.match(extensionsOverlaySource, /manager\.setExtensionCapability\(/);
   assert.match(extensionsOverlaySource, /toggle\.type = "checkbox"/);
+  assert.match(extensionsOverlaySource, /confirmExtensionInstall\(/);
+  assert.match(extensionsOverlaySource, /confirmExtensionEnable\(/);
+  assert.match(extensionsOverlaySource, /higher-risk permissions/);
   assert.match(extensionsOverlaySource, /Updated permissions for/);
   assert.match(extensionsOverlaySource, /reload failed \(see Last error\)/);
 
   const extensionsDocsSource = await readFile(new URL("../docs/extensions.md", import.meta.url), "utf8");
   assert.match(extensionsDocsSource, /## Permission review\/revoke/);
+  assert.match(extensionsDocsSource, /Install from URL\/code asks for confirmation/);
   assert.match(extensionsDocsSource, /extensions\.registry\.v2/);
 
   const experimentalFlagsSource = await readFile(new URL("../src/experiments/flags.ts", import.meta.url), "utf8");

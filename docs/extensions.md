@@ -126,6 +126,8 @@ export function activate(api) {
 
 The `/extensions` manager shows capability toggles per installed extension.
 
+- Install from URL/code asks for confirmation and shows the default granted permissions.
+- Enabling an extension with higher-risk grants prompts for confirmation.
 - Toggling a permission updates stored grants in `extensions.registry.v2`.
 - If the extension is enabled, Pi reloads it immediately so revokes/grants take effect right away.
 - If `/experimental on extension-permissions` is off, configured grants are still saved but not enforced until you enable the flag.

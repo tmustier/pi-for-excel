@@ -5,8 +5,10 @@
 import type { ExtensionRuntimeManager, ExtensionRuntimeStatus } from "../../extensions/runtime-manager.js";
 import {
   describeExtensionCapability,
+  getDefaultPermissionsForTrust,
   isExtensionCapabilityAllowed,
   listAllExtensionCapabilities,
+  listGrantedExtensionCapabilities,
   type ExtensionCapability,
 } from "../../extensions/permissions.js";
 import { validateOfficeProxyUrl } from "../../auth/proxy-validation.js";
@@ -52,6 +54,77 @@ function getCapabilityRiskLabel(capability: ExtensionCapability): string | null 
   }
 
   return "higher risk";
+}
+
+function getHighRiskGrantedCapabilities(status: ExtensionRuntimeStatus): ExtensionCapability[] {
+  const capabilities: ExtensionCapability[] = [];
+
+  for (const capability of listAllExtensionCapabilities()) {
+    if (!HIGH_RISK_CAPABILITIES.has(capability)) {
+      continue;
+    }
+
+    if (isExtensionCapabilityAllowed(status.permissions, capability)) {
+      capabilities.push(capability);
+    }
+  }
+
+  return capabilities;
+}
+
+function confirmExtensionEnable(status: ExtensionRuntimeStatus): boolean {
+  if (status.trust === "builtin") {
+    return true;
+  }
+
+  const highRiskCapabilities = getHighRiskGrantedCapabilities(status);
+  if (highRiskCapabilities.length === 0) {
+    return true;
+  }
+
+  const lines = [
+    `Enable extension "${status.name}" with higher-risk permissions?`,
+    "",
+    "Granted higher-risk permissions:",
+    ...highRiskCapabilities.map((capability) => `- ${describeExtensionCapability(capability)}`),
+    "",
+    `Source: ${status.trustLabel}`,
+    "",
+    "You can edit permissions later in /extensions.",
+  ];
+
+  return window.confirm(lines.join("\n"));
+}
+
+function confirmExtensionInstall(args: {
+  name: string;
+  sourceLabel: string;
+  capabilities: readonly ExtensionCapability[];
+}): boolean {
+  const highRiskCapabilities = args.capabilities.filter((capability) => HIGH_RISK_CAPABILITIES.has(capability));
+
+  const lines = [
+    `Install extension "${args.name}" from ${args.sourceLabel}?`,
+    "",
+    "Default granted permissions:",
+    ...(args.capabilities.length > 0
+      ? args.capabilities.map((capability) => `- ${describeExtensionCapability(capability)}`)
+      : ["- (none)"]),
+  ];
+
+  if (highRiskCapabilities.length > 0) {
+    lines.push(
+      "",
+      "Higher-risk default permissions:",
+      ...highRiskCapabilities.map((capability) => `- ${describeExtensionCapability(capability)}`),
+    );
+  } else {
+    lines.push("", "No higher-risk permissions are granted by default.");
+  }
+
+  lines.push("", "You can review/edit permissions later in /extensions.");
+
+  return window.confirm(lines.join("\n"));
 }
 
 function createSectionTitle(text: string): HTMLHeadingElement {
@@ -507,8 +580,14 @@ export function showExtensionsDialog(manager: ExtensionRuntimeManager): void {
 
     const toggleButton = createButton(status.enabled ? "Disable" : "Enable");
     toggleButton.addEventListener("click", () => {
+      const nextEnabled = !status.enabled;
+
+      if (nextEnabled && !confirmExtensionEnable(status)) {
+        return;
+      }
+
       void runAction(async () => {
-        await manager.setExtensionEnabled(status.id, !status.enabled);
+        await manager.setExtensionEnabled(status.id, nextEnabled);
       });
     });
 
@@ -598,13 +677,25 @@ export function showExtensionsDialog(manager: ExtensionRuntimeManager): void {
   });
 
   installUrlButton.addEventListener("click", () => {
-    void runAction(async () => {
-      const name = installUrlName.value.trim();
-      const url = installUrlInput.value.trim();
-      if (name.length === 0 || url.length === 0) {
-        throw new Error("Provide both name and URL");
-      }
+    const name = installUrlName.value.trim();
+    const url = installUrlInput.value.trim();
+    if (name.length === 0 || url.length === 0) {
+      showToast("Extensions: Provide both name and URL");
+      return;
+    }
 
+    const defaultPermissions = getDefaultPermissionsForTrust("remote-url");
+    const defaultCapabilities = listGrantedExtensionCapabilities(defaultPermissions);
+    const confirmed = confirmExtensionInstall({
+      name,
+      sourceLabel: `remote URL (${url})`,
+      capabilities: defaultCapabilities,
+    });
+    if (!confirmed) {
+      return;
+    }
+
+    void runAction(async () => {
       await manager.installFromUrl(name, url);
       installUrlInput.value = "";
       showToast(`Installed extension: ${name}`);
@@ -612,13 +703,25 @@ export function showExtensionsDialog(manager: ExtensionRuntimeManager): void {
   });
 
   installCodeButton.addEventListener("click", () => {
-    void runAction(async () => {
-      const name = installCodeName.value.trim();
-      const code = installCodeText.value;
-      if (name.length === 0) {
-        throw new Error("Provide an extension name");
-      }
+    const name = installCodeName.value.trim();
+    const code = installCodeText.value;
+    if (name.length === 0) {
+      showToast("Extensions: Provide an extension name");
+      return;
+    }
 
+    const defaultPermissions = getDefaultPermissionsForTrust("inline-code");
+    const defaultCapabilities = listGrantedExtensionCapabilities(defaultPermissions);
+    const confirmed = confirmExtensionInstall({
+      name,
+      sourceLabel: "pasted code",
+      capabilities: defaultCapabilities,
+    });
+    if (!confirmed) {
+      return;
+    }
+
+    void runAction(async () => {
       await manager.installFromCode(name, code);
       installCodeText.value = "";
       showToast(`Installed extension: ${name}`);
