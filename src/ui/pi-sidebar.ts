@@ -88,6 +88,7 @@ export class PiSidebar extends LitElement {
   @property({ attribute: false }) onOpenFiles?: () => void;
   @property({ attribute: false }) onFilesDrop?: (files: File[]) => void;
   @property({ attribute: false }) onOpenResumePicker?: () => void;
+  @property({ attribute: false }) onOpenRecovery?: () => void;
   @property({ attribute: false }) onOpenShortcuts?: () => void;
   @property({ attribute: false }) lockNotice: string | null = null;
 
@@ -482,6 +483,9 @@ export class PiSidebar extends LitElement {
         <div class="pi-utilities-menu__divider"></div>
         <button class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenResumePicker?.(); }}>
           Resume session…
+        </button>
+        <button class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenRecovery?.(); }}>
+          Recovery checkpoints…
         </button>
         <button class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenShortcuts?.(); }}>
           Keyboard shortcuts

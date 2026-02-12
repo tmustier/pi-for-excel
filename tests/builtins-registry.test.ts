@@ -118,6 +118,22 @@ void test("taskpane init wires Files workspace opener when sidebar callback is p
   );
 });
 
+void test("session builtins include recovery history command", async () => {
+  const sessionSource = await readFile(new URL("../src/commands/builtins/session.ts", import.meta.url), "utf8");
+
+  assert.match(sessionSource, /name:\s*"history"/);
+  assert.match(sessionSource, /openRecoveryDialog/);
+  assert.match(sessionSource, /name:\s*"revert"/);
+});
+
+void test("taskpane init wires recovery overlay opener", async () => {
+  const initSource = await readFile(new URL("../src/taskpane/init.ts", import.meta.url), "utf8");
+
+  assert.match(initSource, /showRecoveryDialog/);
+  assert.match(initSource, /const openRecoveryDialog = async \(\): Promise<void> =>/);
+  assert.match(initSource, /sidebar\.onOpenRecovery\s*=\s*\(\)\s*=>\s*\{\s*void openRecoveryDialog\(\);\s*\};/);
+});
+
 void test("permission helper updates one capability without mutating others", () => {
   const permissions: StoredExtensionPermissions = {
     commandsRegister: true,

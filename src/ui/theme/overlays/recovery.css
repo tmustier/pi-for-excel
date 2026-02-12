@@ -1,0 +1,72 @@
+/* Recovery checkpoints overlay */
+
+.pi-recovery-dialog {
+  width: min(560px, 92vw);
+  max-height: 82vh;
+  overflow: hidden;
+}
+
+.pi-recovery-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+}
+
+.pi-recovery-status {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--muted-foreground);
+}
+
+.pi-recovery-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+}
+
+.pi-recovery-item {
+  gap: 8px;
+}
+
+.pi-recovery-item__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.pi-recovery-item__title {
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.pi-recovery-item__time {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--muted-foreground);
+  white-space: nowrap;
+}
+
+.pi-recovery-item__meta {
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  color: var(--muted-foreground);
+}
+
+.pi-recovery-item__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.pi-recovery-item__restored {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--muted-foreground);
+  opacity: 0.75;
+}

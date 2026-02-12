@@ -10,6 +10,7 @@ export interface SessionCommandActions {
   renameActiveSession: (title: string) => Promise<void>;
   createRuntime: () => Promise<void>;
   openResumeDialog: (defaultTarget?: ResumeDialogTarget) => Promise<void>;
+  openRecoveryDialog: () => Promise<void>;
   reopenLastClosed: () => Promise<void>;
   revertLatestCheckpoint: () => Promise<void>;
 }
@@ -66,6 +67,14 @@ export function createSessionLifecycleCommands(actions: SessionCommandActions): 
       source: "builtin",
       execute: async () => {
         await actions.openResumeDialog("replace_current");
+      },
+    },
+    {
+      name: "history",
+      description: "Browse workbook recovery checkpoints",
+      source: "builtin",
+      execute: async () => {
+        await actions.openRecoveryDialog();
       },
     },
     {

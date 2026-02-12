@@ -33,6 +33,36 @@ function formatRelativeDate(iso: string): string {
   return d.toLocaleDateString();
 }
 
+export type RecoveryCheckpointToolName =
+  | "write_cells"
+  | "fill_formula"
+  | "python_transform_range"
+  | "restore_snapshot";
+
+export interface RecoveryCheckpointSummary {
+  id: string;
+  at: number;
+  toolName: RecoveryCheckpointToolName;
+  address: string;
+  changedCount: number;
+  restoredFromSnapshotId?: string;
+}
+
+function formatRecoveryToolLabel(toolName: RecoveryCheckpointToolName): string {
+  switch (toolName) {
+    case "write_cells":
+      return "Write";
+    case "fill_formula":
+      return "Fill formula";
+    case "python_transform_range":
+      return "Python transform";
+    case "restore_snapshot":
+      return "Restore";
+    default:
+      return toolName;
+  }
+}
+
 export async function showProviderPicker(): Promise<void> {
   const existing = document.getElementById("pi-login-overlay");
   if (existing) {
@@ -365,6 +395,292 @@ export async function showResumeDialog(opts: {
   });
 
   document.body.appendChild(overlay);
+}
+
+export async function showRecoveryDialog(opts: {
+  workbookLabel: string;
+  loadCheckpoints: () => Promise<RecoveryCheckpointSummary[]>;
+  onRestore: (snapshotId: string) => Promise<void>;
+  onDelete: (snapshotId: string) => Promise<boolean>;
+  onClear: () => Promise<number>;
+}): Promise<void> {
+  const existing = document.getElementById("pi-recovery-overlay");
+  if (existing) {
+    const closeExisting = overlayClosers.get(existing);
+    if (closeExisting) {
+      closeExisting();
+    } else {
+      existing.remove();
+    }
+
+    return;
+  }
+
+  const overlay = document.createElement("div");
+  overlay.id = "pi-recovery-overlay";
+  overlay.className = "pi-welcome-overlay";
+
+  const card = document.createElement("div");
+  card.className = "pi-welcome-card pi-overlay-card pi-recovery-dialog";
+
+  const title = document.createElement("h2");
+  title.className = "pi-overlay-title";
+  title.textContent = "Recovery Checkpoints";
+
+  const subtitle = document.createElement("p");
+  subtitle.className = "pi-overlay-subtitle";
+  subtitle.textContent = "Revert worksheet edits with one click. Restores also create rollback checkpoints.";
+
+  const workbookTag = document.createElement("p");
+  workbookTag.className = "pi-overlay-workbook-tag";
+  workbookTag.textContent = opts.workbookLabel;
+
+  const toolbar = document.createElement("div");
+  toolbar.className = "pi-recovery-toolbar";
+
+  const refreshButton = document.createElement("button");
+  refreshButton.type = "button";
+  refreshButton.className = "pi-overlay-btn pi-overlay-btn--ghost";
+  refreshButton.textContent = "Refresh";
+
+  const clearButton = document.createElement("button");
+  clearButton.type = "button";
+  clearButton.className = "pi-overlay-btn pi-overlay-btn--ghost";
+  clearButton.textContent = "Clear all";
+
+  const statusText = document.createElement("span");
+  statusText.className = "pi-recovery-status";
+
+  toolbar.append(refreshButton, clearButton, statusText);
+
+  const list = document.createElement("div");
+  list.className = "pi-recovery-list";
+
+  const footer = document.createElement("div");
+  footer.className = "pi-overlay-actions";
+
+  const closeButton = document.createElement("button");
+  closeButton.type = "button";
+  closeButton.className = "pi-overlay-btn pi-overlay-btn--ghost";
+  closeButton.textContent = "Close";
+
+  footer.append(closeButton);
+  card.append(title, subtitle, workbookTag, toolbar, list, footer);
+  overlay.appendChild(card);
+
+  let checkpoints: RecoveryCheckpointSummary[] = [];
+  let busy = false;
+
+  const formatChangedLabel = (changedCount: number): string =>
+    `${changedCount.toLocaleString()} cell${changedCount === 1 ? "" : "s"}`;
+
+  const shortId = (id: string): string => (id.length > 12 ? id.slice(0, 12) : id);
+
+  const setBusy = (next: boolean): void => {
+    busy = next;
+    refreshButton.disabled = next;
+    clearButton.disabled = next || checkpoints.length === 0;
+
+    for (const button of list.querySelectorAll<HTMLButtonElement>("button")) {
+      button.disabled = next;
+    }
+  };
+
+  const renderList = (): void => {
+    list.replaceChildren();
+
+    if (checkpoints.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "pi-overlay-empty";
+      empty.textContent = "No checkpoints for this workbook yet.";
+      list.appendChild(empty);
+      statusText.textContent = "No checkpoints";
+      clearButton.disabled = true;
+      return;
+    }
+
+    for (const checkpoint of checkpoints) {
+      const item = document.createElement("div");
+      item.className = "pi-overlay-surface pi-recovery-item";
+
+      const header = document.createElement("div");
+      header.className = "pi-recovery-item__header";
+
+      const titleEl = document.createElement("span");
+      titleEl.className = "pi-recovery-item__title";
+      titleEl.textContent = `${formatRecoveryToolLabel(checkpoint.toolName)} · ${checkpoint.address}`;
+
+      const timeEl = document.createElement("span");
+      timeEl.className = "pi-recovery-item__time";
+      timeEl.textContent = formatRelativeDate(new Date(checkpoint.at).toISOString());
+
+      header.append(titleEl, timeEl);
+
+      const meta = document.createElement("div");
+      meta.className = "pi-recovery-item__meta";
+      meta.textContent = `${formatChangedLabel(checkpoint.changedCount)} changed · #${shortId(checkpoint.id)}`;
+
+      const actions = document.createElement("div");
+      actions.className = "pi-recovery-item__actions";
+
+      const restoreButton = document.createElement("button");
+      restoreButton.type = "button";
+      restoreButton.className = "pi-overlay-btn pi-overlay-btn--primary";
+      restoreButton.textContent = "Restore";
+
+      const deleteButton = document.createElement("button");
+      deleteButton.type = "button";
+      deleteButton.className = "pi-overlay-btn pi-overlay-btn--ghost";
+      deleteButton.textContent = "Delete";
+
+      restoreButton.addEventListener("click", () => {
+        if (busy) return;
+
+        void (async () => {
+          setBusy(true);
+          statusText.textContent = "Restoring…";
+
+          try {
+            await opts.onRestore(checkpoint.id);
+            checkpoints = await opts.loadCheckpoints();
+            renderList();
+          } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : "Unknown error";
+            showToast(`Restore failed: ${message}`);
+            statusText.textContent = "Restore failed";
+          } finally {
+            setBusy(false);
+          }
+        })();
+      });
+
+      deleteButton.addEventListener("click", () => {
+        if (busy) return;
+
+        const proceed = window.confirm("Delete this checkpoint?");
+        if (!proceed) return;
+
+        void (async () => {
+          setBusy(true);
+          statusText.textContent = "Deleting…";
+
+          try {
+            const deleted = await opts.onDelete(checkpoint.id);
+            if (!deleted) {
+              showToast("Checkpoint not found");
+            }
+
+            checkpoints = await opts.loadCheckpoints();
+            renderList();
+          } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : "Unknown error";
+            showToast(`Delete failed: ${message}`);
+            statusText.textContent = "Delete failed";
+          } finally {
+            setBusy(false);
+          }
+        })();
+      });
+
+      actions.append(restoreButton, deleteButton);
+      item.append(header, meta, actions);
+
+      if (checkpoint.restoredFromSnapshotId) {
+        const restoredMeta = document.createElement("div");
+        restoredMeta.className = "pi-recovery-item__restored";
+        restoredMeta.textContent = `Restored from #${shortId(checkpoint.restoredFromSnapshotId)}`;
+        item.appendChild(restoredMeta);
+      }
+
+      list.appendChild(item);
+    }
+
+    statusText.textContent = `${checkpoints.length} checkpoint${checkpoints.length === 1 ? "" : "s"}`;
+    clearButton.disabled = busy || checkpoints.length === 0;
+  };
+
+  const reload = async (): Promise<void> => {
+    checkpoints = await opts.loadCheckpoints();
+    renderList();
+  };
+
+  refreshButton.addEventListener("click", () => {
+    if (busy) return;
+
+    void (async () => {
+      setBusy(true);
+      statusText.textContent = "Refreshing…";
+      try {
+        await reload();
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : "Unknown error";
+        showToast(`Refresh failed: ${message}`);
+        statusText.textContent = "Refresh failed";
+      } finally {
+        setBusy(false);
+      }
+    })();
+  });
+
+  clearButton.addEventListener("click", () => {
+    if (busy || checkpoints.length === 0) return;
+
+    const proceed = window.confirm(`Delete all ${checkpoints.length} checkpoints for this workbook?`);
+    if (!proceed) return;
+
+    void (async () => {
+      setBusy(true);
+      statusText.textContent = "Clearing…";
+      try {
+        const removed = await opts.onClear();
+        showToast(`Cleared ${removed} checkpoint${removed === 1 ? "" : "s"}`);
+        await reload();
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : "Unknown error";
+        showToast(`Clear failed: ${message}`);
+        statusText.textContent = "Clear failed";
+      } finally {
+        setBusy(false);
+      }
+    })();
+  });
+
+  let closed = false;
+  const closeOverlay = () => {
+    if (closed) {
+      return;
+    }
+
+    closed = true;
+    overlayClosers.delete(overlay);
+    cleanupEscape();
+    overlay.remove();
+  };
+
+  const cleanupEscape = installOverlayEscapeClose(overlay, closeOverlay);
+  overlayClosers.set(overlay, closeOverlay);
+
+  closeButton.addEventListener("click", closeOverlay);
+
+  overlay.addEventListener("click", (event) => {
+    if (event.target === overlay) {
+      closeOverlay();
+    }
+  });
+
+  document.body.appendChild(overlay);
+
+  setBusy(true);
+  statusText.textContent = "Loading…";
+  try {
+    await reload();
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    showToast(`Failed to load checkpoints: ${message}`);
+    statusText.textContent = "Load failed";
+  } finally {
+    setBusy(false);
+  }
 }
 
 export function showShortcutsDialog(): void {

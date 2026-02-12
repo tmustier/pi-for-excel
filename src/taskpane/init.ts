@@ -33,7 +33,13 @@ import { showExtensionsDialog } from "../commands/builtins/extensions-overlay.js
 import { showSkillsDialog } from "../commands/builtins/skills-overlay.js";
 import { ExtensionRuntimeManager } from "../extensions/runtime-manager.js";
 import type { ResumeDialogTarget } from "../commands/builtins/resume-target.js";
-import { showInstructionsDialog, showResumeDialog, showShortcutsDialog } from "../commands/builtins/overlays.js";
+import {
+  showInstructionsDialog,
+  showRecoveryDialog,
+  showResumeDialog,
+  showShortcutsDialog,
+  type RecoveryCheckpointSummary,
+} from "../commands/builtins/overlays.js";
 import { wireCommandMenu } from "../commands/command-menu.js";
 import { commandRegistry } from "../commands/types.js";
 import {
@@ -63,7 +69,7 @@ import {
   PI_WORKBOOK_SNAPSHOT_CREATED_EVENT,
   type WorkbookSnapshotCreatedDetail,
 } from "../workbook/recovery-events.js";
-import { getWorkbookRecoveryLog } from "../workbook/recovery-log.js";
+import { getWorkbookRecoveryLog, type WorkbookRecoverySnapshot } from "../workbook/recovery-log.js";
 
 import { createContextInjector } from "./context-injection.js";
 import { pickDefaultModel } from "./default-model.js";
@@ -91,7 +97,7 @@ import {
 } from "./session-runtime-manager.js";
 import { isRecord } from "../utils/type-guards.js";
 
-const BUSY_ALLOWED_COMMANDS = new Set(["compact", "new", "instructions", "resume", "reopen", "extensions"]);
+const BUSY_ALLOWED_COMMANDS = new Set(["compact", "new", "instructions", "resume", "history", "reopen", "extensions"]);
 
 function showErrorBanner(errorRoot: HTMLElement, message: string): void {
   render(renderError(message), errorRoot);
@@ -358,6 +364,17 @@ export async function initTaskpane(opts: {
     const address = restored.result.address;
     showToast(`Reverted ${address}`);
   };
+
+  const toRecoveryCheckpointSummary = (
+    snapshot: WorkbookRecoverySnapshot,
+  ): RecoveryCheckpointSummary => ({
+    id: snapshot.id,
+    at: snapshot.at,
+    toolName: snapshot.toolName,
+    address: snapshot.address,
+    changedCount: snapshot.changedCount,
+    restoredFromSnapshotId: snapshot.restoredFromSnapshotId,
+  });
 
   const getActiveSkillTitles = (): string[] => {
     const runtime = getActiveRuntime();
@@ -902,6 +919,27 @@ export async function initTaskpane(opts: {
     });
   };
 
+  const openRecoveryDialog = async (): Promise<void> => {
+    const workbookContext = await resolveWorkbookContext();
+
+    await showRecoveryDialog({
+      workbookLabel: formatWorkbookLabel(workbookContext),
+      loadCheckpoints: async () => {
+        const checkpoints = await workbookRecoveryLog.listForCurrentWorkbook(40);
+        return checkpoints.map((checkpoint) => toRecoveryCheckpointSummary(checkpoint));
+      },
+      onRestore: async (snapshotId: string) => {
+        await restoreCheckpointById(snapshotId);
+      },
+      onDelete: async (snapshotId: string) => {
+        return workbookRecoveryLog.delete(snapshotId);
+      },
+      onClear: async () => {
+        return workbookRecoveryLog.clearForCurrentWorkbook();
+      },
+    });
+  };
+
   registerBuiltins({
     getActiveAgent,
     renameActiveSession: async (title: string) => {
@@ -927,6 +965,7 @@ export async function initTaskpane(opts: {
         },
       });
     },
+    openRecoveryDialog,
     reopenLastClosed,
     revertLatestCheckpoint: async () => {
       try {
@@ -1058,6 +1097,9 @@ export async function initTaskpane(opts: {
         await replaceActiveRuntimeSession(sessionData);
       },
     });
+  };
+  sidebar.onOpenRecovery = () => {
+    void openRecoveryDialog();
   };
   sidebar.onOpenShortcuts = () => {
     showShortcutsDialog();
