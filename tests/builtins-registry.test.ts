@@ -9,6 +9,11 @@ import {
   loadStoredExtensions,
   saveStoredExtensions,
 } from "../src/extensions/store.ts";
+import {
+  isExtensionCapabilityAllowed,
+  setExtensionCapabilityAllowed,
+  type StoredExtensionPermissions,
+} from "../src/extensions/permissions.ts";
 
 class MemorySettingsStore {
   private readonly values = new Map<string, unknown>();
@@ -59,10 +64,58 @@ void test("builtins registry wires /experimental and /extensions command registr
   const runtimeManagerSource = await readFile(new URL("../src/extensions/runtime-manager.ts", import.meta.url), "utf8");
   assert.match(runtimeManagerSource, /effectiveCapabilities/);
   assert.match(runtimeManagerSource, /permissionsEnforced/);
+  assert.match(runtimeManagerSource, /async setExtensionCapability\(/);
+  assert.match(runtimeManagerSource, /setExtensionCapabilityAllowed\(/);
+  assert.match(runtimeManagerSource, /await this\.reloadExtension\(entry\.id\);/);
+
+  const extensionsOverlaySource = await readFile(
+    new URL("../src/commands/builtins/extensions-overlay.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(extensionsOverlaySource, /manager\.setExtensionCapability\(/);
+  assert.match(extensionsOverlaySource, /toggle\.type = "checkbox"/);
+  assert.match(extensionsOverlaySource, /Updated permissions for/);
+
+  const extensionsDocsSource = await readFile(new URL("../docs/extensions.md", import.meta.url), "utf8");
+  assert.match(extensionsDocsSource, /## Permission review\/revoke/);
+  assert.match(extensionsDocsSource, /extensions\.registry\.v2/);
 
   const experimentalFlagsSource = await readFile(new URL("../src/experiments/flags.ts", import.meta.url), "utf8");
   assert.match(experimentalFlagsSource, /extension_permission_gates/);
   assert.match(experimentalFlagsSource, /extension-permissions/);
+});
+
+void test("taskpane init keeps getSkillToolNames imported when used", async () => {
+  const initSource = await readFile(new URL("../src/taskpane/init.ts", import.meta.url), "utf8");
+  if (!/getSkillToolNames\(\)/.test(initSource)) {
+    return;
+  }
+
+  assert.match(
+    initSource,
+    /import\s*\{[\s\S]*getSkillToolNames[\s\S]*\}\s*from "\.\.\/skills\/catalog\.js";/,
+  );
+});
+
+void test("permission helper updates one capability without mutating others", () => {
+  const permissions: StoredExtensionPermissions = {
+    commandsRegister: true,
+    toolsRegister: false,
+    agentRead: false,
+    agentEventsRead: false,
+    uiOverlay: true,
+    uiWidget: true,
+    uiToast: true,
+  };
+
+  const updated = setExtensionCapabilityAllowed(permissions, "tools.register", true);
+
+  assert.equal(isExtensionCapabilityAllowed(updated, "tools.register"), true);
+  assert.equal(isExtensionCapabilityAllowed(updated, "commands.register"), true);
+  assert.equal(isExtensionCapabilityAllowed(updated, "agent.read"), false);
+
+  // original object remains unchanged
+  assert.equal(isExtensionCapabilityAllowed(permissions, "tools.register"), false);
 });
 
 void test("extension registry seeds default snake extension when storage is empty", async () => {

@@ -12,6 +12,7 @@ Pi for Excel supports runtime extensions that can register slash commands, regis
    - **Pasted code** (recommended for quick prototypes)
    - **URL module** (requires explicit unsafe opt-in)
 3. Enable/disable/reload/uninstall from the same manager.
+4. Review and edit capability permissions per extension (changes auto-reload enabled extensions).
 
 ## Install source types
 
@@ -120,6 +121,19 @@ export function activate(api) {
   };
 }
 ```
+
+## Permission review/revoke
+
+The `/extensions` manager shows capability toggles per installed extension.
+
+- Toggling a permission updates stored grants in `extensions.registry.v2`.
+- If the extension is enabled, Pi reloads it immediately so revokes/grants take effect right away.
+- If `/experimental on extension-permissions` is off, configured grants are still saved but not enforced until you enable the flag.
+
+High-risk capabilities include:
+- `tools.register`
+- `agent.read`
+- `agent.events.read`
 
 ## Local module authoring (repo contributors)
 

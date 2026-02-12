@@ -160,6 +160,50 @@ export function isExtensionCapabilityAllowed(
   }
 }
 
+export function setExtensionCapabilityAllowed(
+  permissions: StoredExtensionPermissions,
+  capability: ExtensionCapability,
+  allowed: boolean,
+): StoredExtensionPermissions {
+  switch (capability) {
+    case "commands.register":
+      return {
+        ...permissions,
+        commandsRegister: allowed,
+      };
+    case "tools.register":
+      return {
+        ...permissions,
+        toolsRegister: allowed,
+      };
+    case "agent.read":
+      return {
+        ...permissions,
+        agentRead: allowed,
+      };
+    case "agent.events.read":
+      return {
+        ...permissions,
+        agentEventsRead: allowed,
+      };
+    case "ui.overlay":
+      return {
+        ...permissions,
+        uiOverlay: allowed,
+      };
+    case "ui.widget":
+      return {
+        ...permissions,
+        uiWidget: allowed,
+      };
+    case "ui.toast":
+      return {
+        ...permissions,
+        uiToast: allowed,
+      };
+  }
+}
+
 export function describeStoredExtensionTrust(trust: StoredExtensionTrust): string {
   return TRUST_LABELS[trust];
 }

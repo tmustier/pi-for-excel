@@ -3,6 +3,12 @@
  */
 
 import type { ExtensionRuntimeManager, ExtensionRuntimeStatus } from "../../extensions/runtime-manager.js";
+import {
+  describeExtensionCapability,
+  isExtensionCapabilityAllowed,
+  listAllExtensionCapabilities,
+  type ExtensionCapability,
+} from "../../extensions/permissions.js";
 import { validateOfficeProxyUrl } from "../../auth/proxy-validation.js";
 import { dispatchExperimentalToolConfigChanged } from "../../experiments/events.js";
 import { isExperimentalFeatureEnabled, setExperimentalFeatureEnabled } from "../../experiments/flags.js";
@@ -23,6 +29,12 @@ const EXTENSION_PROMPT_TEMPLATE = [
   "- Include concise comments",
 ].join("\n");
 
+const HIGH_RISK_CAPABILITIES = new Set<ExtensionCapability>([
+  "tools.register",
+  "agent.read",
+  "agent.events.read",
+]);
+
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message.trim().length > 0) {
     return error.message;
@@ -32,6 +44,14 @@ function getErrorMessage(error: unknown): string {
 
 function formatCapabilityList(capabilities: readonly string[]): string {
   return capabilities.length > 0 ? capabilities.join(", ") : "(none)";
+}
+
+function getCapabilityRiskLabel(capability: ExtensionCapability): string | null {
+  if (!HIGH_RISK_CAPABILITIES.has(capability)) {
+    return null;
+  }
+
+  return "higher risk";
 }
 
 function createSectionTitle(text: string): HTMLHeadingElement {
@@ -320,6 +340,9 @@ export function showExtensionsDialog(manager: ExtensionRuntimeManager): void {
       "display: flex; flex-direction: column; gap: 8px; border: 1px solid oklch(0 0 0 / 0.08); "
       + "background: oklch(0 0 0 / 0.015); border-radius: 10px; padding: 9px;";
 
+    const allCapabilities = listAllExtensionCapabilities();
+    const grantedCapabilities = new Set(status.grantedCapabilities);
+
     const top = document.createElement("div");
     top.style.cssText = "display: flex; justify-content: space-between; gap: 10px; align-items: flex-start;";
 
@@ -406,6 +429,54 @@ export function showExtensionsDialog(manager: ExtensionRuntimeManager): void {
       configuredPermissions.style.cssText = "font-size: 11px; color: var(--muted-foreground);";
       details.appendChild(configuredPermissions);
     }
+
+    const permissionsEditor = document.createElement("div");
+    permissionsEditor.style.cssText =
+      "display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); "
+      + "gap: 5px 10px; margin-top: 4px;";
+
+    for (const capability of allCapabilities) {
+      const toggleLabel = document.createElement("label");
+      toggleLabel.style.cssText =
+        "display: inline-flex; align-items: center; gap: 6px; font-size: 11px; "
+        + "color: var(--muted-foreground); user-select: none;";
+
+      const toggle = document.createElement("input");
+      toggle.type = "checkbox";
+      toggle.checked = grantedCapabilities.has(capability)
+        || isExtensionCapabilityAllowed(status.permissions, capability);
+
+      const toggleText = document.createElement("span");
+      toggleText.textContent = describeExtensionCapability(capability);
+
+      const riskLabel = getCapabilityRiskLabel(capability);
+      if (riskLabel) {
+        const risk = document.createElement("span");
+        risk.textContent = `(${riskLabel})`;
+        risk.style.cssText = "font-size: 10px; color: oklch(0.52 0.13 35);";
+        toggleText.append(" ", risk);
+      }
+
+      toggleLabel.append(toggle, toggleText);
+      permissionsEditor.appendChild(toggleLabel);
+
+      toggle.addEventListener("change", () => {
+        const nextAllowed = toggle.checked;
+        toggle.disabled = true;
+
+        void runAction(async () => {
+          await manager.setExtensionCapability(status.id, capability, nextAllowed);
+
+          if (status.enabled) {
+            showToast(`Updated permissions for ${status.name}; extension reloaded.`);
+          } else {
+            showToast(`Updated permissions for ${status.name}.`);
+          }
+        });
+      });
+    }
+
+    details.appendChild(permissionsEditor);
 
     if (status.lastError) {
       const errorLine = document.createElement("div");

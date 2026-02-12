@@ -25,6 +25,7 @@ import {
   isExtensionCapabilityAllowed,
   listAllExtensionCapabilities,
   listGrantedExtensionCapabilities,
+  setExtensionCapabilityAllowed,
   type ExtensionCapability,
   type StoredExtensionPermissions,
   type StoredExtensionTrust,
@@ -238,6 +239,33 @@ export class ExtensionRuntimeManager {
       await this.tryActivateEntry(entry);
     } else {
       await this.deactivateEntry(entry.id);
+    }
+
+    this.notify();
+  }
+
+  async setExtensionCapability(
+    entryId: string,
+    capability: ExtensionCapability,
+    allowed: boolean,
+  ): Promise<void> {
+    const entry = this.getEntryById(entryId);
+    if (!entry) {
+      throw new Error("Extension not found");
+    }
+
+    const existing = isExtensionCapabilityAllowed(entry.permissions, capability);
+    if (existing === allowed) {
+      return;
+    }
+
+    entry.permissions = setExtensionCapabilityAllowed(entry.permissions, capability, allowed);
+    entry.updatedAt = new Date().toISOString();
+    await this.persistEntries();
+
+    if (entry.enabled) {
+      await this.reloadExtension(entry.id);
+      return;
     }
 
     this.notify();
