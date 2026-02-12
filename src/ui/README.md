@@ -38,6 +38,7 @@ Tailwind v4 puts all utilities inside `@layer utilities`. Unlayered CSS always b
 ### Theme guardrails
 
 - `npm run check:css-theme` verifies every `var(--token)` used in local theme CSS resolves to a defined custom property (or has an explicit fallback).
+- `npm run check:theme-utility-overrides` blocks Tailwind utility-class selectors in theme modules (except `theme/unstable-overrides.css`).
 - `npm run check:builtins-inline-style` blocks inline `style.*` usage in `src/commands/builtins/**` so overlay styling stays class-based.
 
 ### theme.css structure
