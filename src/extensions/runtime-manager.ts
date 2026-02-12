@@ -44,6 +44,7 @@ import {
   type StoredExtensionSource,
 } from "./store.js";
 import { isExperimentalFeatureEnabled } from "../experiments/flags.js";
+import { clearExtensionWidgets } from "./internal/widget-surface.js";
 import { showToast } from "../ui/toast.js";
 
 type AnyAgentTool = AgentTool;
@@ -498,6 +499,8 @@ export class ExtensionRuntimeManager {
       );
     };
 
+    const widgetApiV2Enabled = isExperimentalFeatureEnabled("extension_widget_v2");
+
     try {
       if (state.runtimeMode === "sandbox-iframe") {
         const source = entry.source.kind === "inline"
@@ -520,6 +523,8 @@ export class ExtensionRuntimeManager {
           isCapabilityEnabled,
           formatCapabilityError,
           toast: this.showToastMessage,
+          widgetOwnerId: entry.id,
+          widgetApiV2Enabled,
         });
       } else {
         const api = createExtensionAPI({
@@ -529,6 +534,8 @@ export class ExtensionRuntimeManager {
           subscribeAgentEvents,
           isCapabilityEnabled,
           formatCapabilityError,
+          extensionOwnerId: entry.id,
+          widgetApiV2Enabled,
         });
 
         let loadSource: string;
@@ -580,6 +587,12 @@ export class ExtensionRuntimeManager {
       } catch (error: unknown) {
         failures.push(getErrorMessage(error));
       }
+    }
+
+    try {
+      clearExtensionWidgets(state.entryId);
+    } catch (error: unknown) {
+      failures.push(getErrorMessage(error));
     }
 
     for (const unsubscribe of state.eventUnsubscribers) {

@@ -195,6 +195,14 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 - **Interactivity:** host supports explicit action callbacks via `data-pi-action` markers mapped to click dispatch inside the sandbox.
 - **Rationale:** incremental security hardening—default isolation for untrusted code without reopening HTML injection risk.
 
+## Experimental extension widget API v2 (`extension-widget-v2`)
+- **Activation:** opt-in via `/experimental on extension-widget-v2`; default behavior stays on legacy `widget.show/dismiss` semantics.
+- **API:** additive `widget.upsert/remove/clear` methods with stable widget ids.
+- **Placement/order:** widgets sort deterministically by `(order asc, createdAt asc, id asc)` within `above-input` / `below-input` buckets.
+- **Ownership model:** widgets are extension-owned (`ownerId`) and auto-cleared on extension teardown/reload/uninstall.
+- **Compatibility:** legacy `widget.show/dismiss` remains supported and maps to a reserved legacy widget id when v2 is enabled.
+- **Rationale:** establish predictable multi-widget lifecycle semantics before richer layout controls.
+
 ## Experimental files workspace tool (`files`)
 - **Availability:** non-core experimental tool, always registered; execution hard-gated by `files-workspace` flag.
 - **Backend strategy:** native folder handle (when permitted) → OPFS → in-memory fallback.

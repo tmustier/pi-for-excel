@@ -38,7 +38,14 @@ import {
   isRemoteExtensionOptIn,
 } from "./extension-source-policy.js";
 import { commandRegistry } from "./types.js";
+import { isExperimentalFeatureEnabled } from "../experiments/flags.js";
 import type { ExtensionCapability } from "../extensions/permissions.js";
+import {
+  clearExtensionWidgets,
+  removeExtensionWidget,
+  upsertExtensionWidget,
+  type ExtensionWidgetPlacement,
+} from "../extensions/internal/widget-surface.js";
 import { isRecord } from "../utils/type-guards.js";
 
 export interface ExtensionCommand {
@@ -66,11 +73,31 @@ export interface OverlayAPI {
   dismiss(): void;
 }
 
+export type WidgetPlacement = ExtensionWidgetPlacement;
+
+export interface WidgetUpsertSpec {
+  id: string;
+  el: HTMLElement;
+  title?: string;
+  placement?: WidgetPlacement;
+  order?: number;
+  collapsible?: boolean;
+  collapsed?: boolean;
+  minHeightPx?: number;
+  maxHeightPx?: number;
+}
+
 export interface WidgetAPI {
   /** Show an HTML element as an inline widget above the input area */
   show(el: HTMLElement): void;
-  /** Remove the widget */
+  /** Remove the legacy widget */
   dismiss(): void;
+  /** Add or update a named widget (Widget API v2; gated by experiment). */
+  upsert(spec: WidgetUpsertSpec): void;
+  /** Remove a specific named widget (Widget API v2; gated by experiment). */
+  remove(id: string): void;
+  /** Remove all widgets owned by the extension (Widget API v2; gated by experiment). */
+  clear(): void;
 }
 
 export interface ExcelExtensionAPI {
@@ -98,6 +125,8 @@ export interface CreateExtensionAPIOptions {
   toast?: (message: string) => void;
   isCapabilityEnabled?: (capability: ExtensionCapability) => boolean;
   formatCapabilityError?: (capability: ExtensionCapability) => string;
+  extensionOwnerId?: string;
+  widgetApiV2Enabled?: boolean;
 }
 
 function normalizeIdentifier(kind: "command" | "tool", value: string): string {
@@ -212,6 +241,68 @@ function getDefaultCapabilityErrorMessage(capability: ExtensionCapability): stri
   return `Extension is not allowed to use capability "${capability}".`;
 }
 
+const LEGACY_WIDGET_ID = "__legacy__";
+const WIDGET_V2_DISABLED_ERROR = "Widget API v2 is disabled. Enable /experimental on extension-widget-v2.";
+
+function getWidgetOwnerId(options: CreateExtensionAPIOptions): string {
+  if (typeof options.extensionOwnerId !== "string") {
+    return "extension.unknown";
+  }
+
+  const normalized = options.extensionOwnerId.trim();
+  return normalized.length > 0 ? normalized : "extension.unknown";
+}
+
+function resolveWidgetApiV2Enabled(options: CreateExtensionAPIOptions): boolean {
+  if (typeof options.widgetApiV2Enabled === "boolean") {
+    return options.widgetApiV2Enabled;
+  }
+
+  return isExperimentalFeatureEnabled("extension_widget_v2");
+}
+
+function showLegacyWidget(el: HTMLElement): void {
+  let slot = document.getElementById("pi-widget-slot");
+  if (!slot) {
+    // Fallback: insert before .pi-input-area inside the sidebar
+    const inputArea = document.querySelector(".pi-input-area");
+    if (inputArea) {
+      slot = document.createElement("div");
+      slot.id = "pi-widget-slot";
+      slot.className = "pi-widget-slot";
+      const parent = inputArea.parentElement;
+      if (!parent) {
+        console.warn("[pi] No widget slot parent found");
+        return;
+      }
+      parent.insertBefore(slot, inputArea);
+    } else {
+      console.warn("[pi] No widget slot or input area found");
+      return;
+    }
+  }
+
+  slot.replaceChildren(el);
+  slot.style.display = "block";
+}
+
+function dismissLegacyWidget(): void {
+  const slot = document.getElementById("pi-widget-slot");
+  if (slot) {
+    slot.style.display = "none";
+    slot.replaceChildren();
+  }
+}
+
+function normalizeWidgetId(id: string): string {
+  const normalized = id.trim();
+  if (normalized.length === 0) {
+    throw new Error("Widget id cannot be empty.");
+  }
+
+  return normalized;
+}
+
 /** Create the extension API for a given host context. */
 export function createExtensionAPI(options: CreateExtensionAPIOptions): ExcelExtensionAPI {
   const registerCommand = options.registerCommand ?? defaultRegisterCommand;
@@ -221,6 +312,8 @@ export function createExtensionAPI(options: CreateExtensionAPIOptions): ExcelExt
   const toast = options.toast ?? defaultToast;
   const isCapabilityEnabled = options.isCapabilityEnabled;
   const formatCapabilityError = options.formatCapabilityError ?? getDefaultCapabilityErrorMessage;
+  const widgetOwnerId = getWidgetOwnerId(options);
+  const widgetApiV2Enabled = resolveWidgetApiV2Enabled(options);
 
   const assertCapability = (capability: ExtensionCapability): void => {
     if (!isCapabilityEnabled) {
@@ -305,36 +398,67 @@ export function createExtensionAPI(options: CreateExtensionAPIOptions): ExcelExt
       show(el: HTMLElement) {
         assertCapability("ui.widget");
 
-        let slot = document.getElementById("pi-widget-slot");
-        if (!slot) {
-          // Fallback: insert before .pi-input-area inside the sidebar
-          const inputArea = document.querySelector(".pi-input-area");
-          if (inputArea) {
-            slot = document.createElement("div");
-            slot.id = "pi-widget-slot";
-            slot.className = "pi-widget-slot";
-            const parent = inputArea.parentElement;
-            if (!parent) {
-              console.warn("[pi] No widget slot parent found");
-              return;
-            }
-            parent.insertBefore(slot, inputArea);
-          } else {
-            console.warn("[pi] No widget slot or input area found");
-            return;
-          }
+        if (!widgetApiV2Enabled) {
+          showLegacyWidget(el);
+          return;
         }
 
-        slot.replaceChildren(el);
-        slot.style.display = "block";
+        upsertExtensionWidget({
+          ownerId: widgetOwnerId,
+          id: LEGACY_WIDGET_ID,
+          element: el,
+          placement: "above-input",
+          order: 0,
+        });
       },
 
       dismiss() {
-        const slot = document.getElementById("pi-widget-slot");
-        if (slot) {
-          slot.style.display = "none";
-          slot.replaceChildren();
+        if (!widgetApiV2Enabled) {
+          dismissLegacyWidget();
+          return;
         }
+
+        removeExtensionWidget(widgetOwnerId, LEGACY_WIDGET_ID);
+      },
+
+      upsert(spec: WidgetUpsertSpec) {
+        assertCapability("ui.widget");
+        if (!widgetApiV2Enabled) {
+          throw new Error(WIDGET_V2_DISABLED_ERROR);
+        }
+
+        const widgetId = normalizeWidgetId(spec.id);
+        upsertExtensionWidget({
+          ownerId: widgetOwnerId,
+          id: widgetId,
+          element: spec.el,
+          title: spec.title,
+          placement: spec.placement,
+          order: spec.order,
+          collapsible: spec.collapsible,
+          collapsed: spec.collapsed,
+          minHeightPx: spec.minHeightPx,
+          maxHeightPx: spec.maxHeightPx,
+        });
+      },
+
+      remove(id: string) {
+        assertCapability("ui.widget");
+        if (!widgetApiV2Enabled) {
+          throw new Error(WIDGET_V2_DISABLED_ERROR);
+        }
+
+        const widgetId = normalizeWidgetId(id);
+        removeExtensionWidget(widgetOwnerId, widgetId);
+      },
+
+      clear() {
+        assertCapability("ui.widget");
+        if (!widgetApiV2Enabled) {
+          throw new Error(WIDGET_V2_DISABLED_ERROR);
+        }
+
+        clearExtensionWidgets(widgetOwnerId);
       },
     },
 

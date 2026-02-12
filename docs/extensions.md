@@ -2,7 +2,7 @@
 
 Pi for Excel supports runtime extensions that can register slash commands, register tools, and render small UI elements in the sidebar.
 
-> Status: MVP+ (in progress). Inline-code and remote-URL extensions now run in sandbox runtime by default; built-in/local-module extensions stay on host runtime.
+> Status: MVP+ (in progress). Inline-code and remote-URL extensions now run in sandbox runtime by default; built-in/local-module extensions stay on host runtime. Additive Widget API v2 is behind `/experimental on extension-widget-v2`.
 
 ## Quick start
 
@@ -89,7 +89,21 @@ Subscribe to runtime events (returns unsubscribe function).
 Show or dismiss a full-screen overlay.
 
 ### `widget.show(el)` / `widget.dismiss()`
-Show or dismiss an inline widget slot above the input area.
+Show or dismiss the legacy inline widget slot above the input area.
+
+### `widget.upsert(spec)` / `widget.remove(id)` / `widget.clear()` (Widget API v2)
+Additive widget lifecycle API (experimental):
+- `upsert` creates/updates by stable `spec.id`
+- `remove` unmounts one widget by id
+- `clear` unmounts all widgets owned by the extension
+
+Enable with:
+
+```txt
+/experimental on extension-widget-v2
+```
+
+`upsert(spec)` supports optional metadata: `title`, `placement` (`above-input` | `below-input`), `order`, `collapsible`, `collapsed`, `minHeightPx`, `maxHeightPx`.
 
 ### `toast(message)`
 Show a short toast notification.
@@ -177,6 +191,7 @@ Current sandbox bridge limitations (intentional for this slice):
 - `api.agent` is not available in sandbox runtime
 - widget/overlay rendering uses a **structured, sanitized UI tree** (no raw HTML / no `innerHTML`)
 - interactive callbacks are limited to explicit action markers (`data-pi-action`), which dispatch click events back inside sandbox runtime
+- Widget API v2 (`widget.upsert/remove/clear`) is available only when `extension-widget-v2` is enabled
 
 ## Local module authoring (repo contributors)
 

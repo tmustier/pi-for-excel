@@ -13,8 +13,17 @@ import type {
 } from "@mariozechner/pi-agent-core";
 import { Kind, Type, type TSchema } from "@sinclair/typebox";
 
-import type { LoadedExtensionHandle, ExtensionCommand } from "../commands/extension-api.js";
+import type {
+  LoadedExtensionHandle,
+  ExtensionCommand,
+  WidgetPlacement,
+} from "../commands/extension-api.js";
 import type { ExtensionCapability } from "./permissions.js";
+import {
+  clearExtensionWidgets,
+  removeExtensionWidget,
+  upsertExtensionWidget,
+} from "./internal/widget-surface.js";
 import {
   collectSandboxUiActionIds,
   normalizeSandboxUiNode,
@@ -27,6 +36,7 @@ const SANDBOX_CHANNEL = "pi.extension.sandbox.rpc.v1";
 const REQUEST_TIMEOUT_MS = 15_000;
 const SANDBOX_OVERLAY_ID = "pi-ext-overlay";
 const SANDBOX_WIDGET_SLOT_ID = "pi-widget-slot";
+const LEGACY_WIDGET_ID = "__legacy__";
 
 type SandboxDirection = "sandbox_to_host" | "host_to_sandbox";
 
@@ -84,6 +94,8 @@ export interface SandboxActivationOptions {
   isCapabilityEnabled: (capability: ExtensionCapability) => boolean;
   formatCapabilityError: (capability: ExtensionCapability) => string;
   toast: (message: string) => void;
+  widgetOwnerId?: string;
+  widgetApiV2Enabled?: boolean;
 }
 
 interface SandboxPendingRequest {
@@ -122,6 +134,18 @@ function asRecord(value: unknown, field: string): Record<string, unknown> {
   }
 
   return value;
+}
+
+function asFiniteNumberOrNull(value: unknown): number | null {
+  if (typeof value !== "number" || Number.isNaN(value) || !Number.isFinite(value)) {
+    return null;
+  }
+
+  return value;
+}
+
+function asWidgetPlacementOrDefault(value: unknown): WidgetPlacement {
+  return value === "below-input" ? "below-input" : "above-input";
 }
 
 function isSandboxEnvelope(value: unknown): value is SandboxEnvelope {
@@ -263,6 +287,44 @@ function dismissWidget(): void {
   slot.replaceChildren();
 }
 
+interface SandboxWidgetUpsertOptions {
+  ownerId: string;
+  widgetId: string;
+  node: SandboxUiNode;
+  onAction: (actionId: string) => void;
+  title?: string;
+  placement?: WidgetPlacement;
+  order?: number;
+  collapsible?: boolean;
+  collapsed?: boolean;
+  minHeightPx?: number;
+  maxHeightPx?: number;
+}
+
+function upsertSandboxWidgetNode(options: SandboxWidgetUpsertOptions): Set<string> {
+  const card = document.createElement("div");
+  card.className = "pi-overlay-surface";
+
+  const body = document.createElement("div");
+  renderSandboxUiTree(body, options.node, options.onAction);
+  card.appendChild(body);
+
+  upsertExtensionWidget({
+    ownerId: options.ownerId,
+    id: options.widgetId,
+    element: card,
+    title: options.title,
+    placement: options.placement,
+    order: options.order,
+    collapsible: options.collapsible,
+    collapsed: options.collapsed,
+    minHeightPx: options.minHeightPx,
+    maxHeightPx: options.maxHeightPx,
+  });
+
+  return new Set(collectSandboxUiActionIds(options.node));
+}
+
 function isTypeBoxSchema(value: unknown): value is TSchema {
   return isRecord(value) && Kind in value;
 }
@@ -330,7 +392,7 @@ class SandboxRuntimeHost {
   private readonly pendingRequests = new Map<string, SandboxPendingRequest>();
   private readonly eventSubscriptions = new Map<string, () => void>();
   private readonly overlayActionIds = new Set<string>();
-  private readonly widgetActionIds = new Set<string>();
+  private readonly widgetActionIdsByWidgetId = new Map<string, Set<string>>();
 
   private readonly onWindowMessage = (event: MessageEvent<unknown>) => {
     this.handleWindowMessage(event);
@@ -342,9 +404,15 @@ class SandboxRuntimeHost {
 
   private nextRequestId = 1;
   private disposed = false;
+  private readonly widgetOwnerId: string;
+  private readonly widgetApiV2Enabled: boolean;
 
   constructor(options: SandboxActivationOptions) {
     this.options = options;
+    this.widgetOwnerId = typeof options.widgetOwnerId === "string" && options.widgetOwnerId.trim().length > 0
+      ? options.widgetOwnerId.trim()
+      : options.instanceId;
+    this.widgetApiV2Enabled = options.widgetApiV2Enabled === true;
 
     this.readyPromise = new Promise<void>((resolve, reject) => {
       this.resolveReady = resolve;
@@ -408,10 +476,14 @@ class SandboxRuntimeHost {
     this.pendingRequests.clear();
 
     this.overlayActionIds.clear();
-    this.widgetActionIds.clear();
+    this.widgetActionIdsByWidgetId.clear();
 
     dismissOverlay();
-    dismissWidget();
+    if (this.widgetApiV2Enabled) {
+      clearExtensionWidgets(this.widgetOwnerId);
+    } else {
+      dismissWidget();
+    }
 
     window.removeEventListener("message", this.onWindowMessage);
     this.iframe.remove();
@@ -427,6 +499,7 @@ class SandboxRuntimeHost {
       instanceId: this.options.instanceId,
       extensionName: this.options.extensionName,
       source: sourceConfig,
+      widgetApiV2Enabled: this.widgetApiV2Enabled,
     };
 
     const serializedConfig = serializeForInlineScript(config);
@@ -447,6 +520,8 @@ class SandboxRuntimeHost {
       const uiActionHandlers = new Map();
       const overlayActionIds = new Set();
       const widgetActionIds = new Set();
+      const widgetActionIdsByWidgetId = new Map();
+      const LEGACY_WIDGET_ID = "__legacy__";
       const ALLOWED_UI_TAGS = new Set([
         "div",
         "span",
@@ -565,6 +640,37 @@ class SandboxRuntimeHost {
         surfaceActions.clear();
       }
 
+      function clearWidgetActions(widgetId) {
+        const actionIds = widgetActionIdsByWidgetId.get(widgetId);
+        if (!actionIds) {
+          return;
+        }
+
+        clearSurfaceActions(actionIds);
+        widgetActionIdsByWidgetId.delete(widgetId);
+      }
+
+      function clearAllWidgetActions() {
+        for (const widgetId of widgetActionIdsByWidgetId.keys()) {
+          clearWidgetActions(widgetId);
+        }
+      }
+
+      function getWidgetSurfaceActions(widgetId) {
+        if (!config.widgetApiV2Enabled) {
+          return widgetActionIds;
+        }
+
+        const existing = widgetActionIdsByWidgetId.get(widgetId);
+        if (existing) {
+          clearSurfaceActions(existing);
+        }
+
+        const next = new Set();
+        widgetActionIdsByWidgetId.set(widgetId, next);
+        return next;
+      }
+
       function sanitizeActionToken(value) {
         if (typeof value !== "string") {
           return "";
@@ -668,10 +774,10 @@ class SandboxRuntimeHost {
         return projection;
       }
 
-      function projectSurfaceUi(surface, element) {
+      function projectSurfaceUi(surface, element, widgetId) {
         const surfaceActions = surface === "overlay"
           ? overlayActionIds
-          : widgetActionIds;
+          : getWidgetSurfaceActions(widgetId || LEGACY_WIDGET_ID);
 
         clearSurfaceActions(surfaceActions);
 
@@ -718,6 +824,7 @@ class SandboxRuntimeHost {
         agentEventHandlers.clear();
         clearSurfaceActions(overlayActionIds);
         clearSurfaceActions(widgetActionIds);
+        clearAllWidgetActions();
 
         if (failures.length > 0) {
           throw new Error('Extension cleanup failed:\n- ' + failures.join('\n- '));
@@ -928,12 +1035,83 @@ class SandboxRuntimeHost {
 
           widget: {
             show(el) {
-              const tree = projectSurfaceUi("widget", el);
+              if (config.widgetApiV2Enabled) {
+                const tree = projectSurfaceUi("widget", el, LEGACY_WIDGET_ID);
+                queueActivationOp(requestHost("widget_upsert", {
+                  widgetId: LEGACY_WIDGET_ID,
+                  tree,
+                  placement: "above-input",
+                  order: 0,
+                }));
+                return;
+              }
+
+              const tree = projectSurfaceUi("widget", el, LEGACY_WIDGET_ID);
               queueActivationOp(requestHost("widget_show", { tree }));
             },
             dismiss() {
+              if (config.widgetApiV2Enabled) {
+                clearWidgetActions(LEGACY_WIDGET_ID);
+                queueActivationOp(requestHost("widget_remove", { widgetId: LEGACY_WIDGET_ID }));
+                return;
+              }
+
               clearSurfaceActions(widgetActionIds);
               queueActivationOp(requestHost("widget_dismiss", {}));
+            },
+            upsert(spec) {
+              if (!config.widgetApiV2Enabled) {
+                throw new Error('Widget API v2 is disabled. Enable /experimental on extension-widget-v2.');
+              }
+
+              const payload = spec && typeof spec === "object" ? spec : null;
+              if (!payload) {
+                throw new Error("widget.upsert requires a widget spec object");
+              }
+
+              const widgetId = typeof payload.id === "string" ? payload.id.trim() : "";
+              if (!widgetId) {
+                throw new Error("widget.upsert requires a non-empty id");
+              }
+
+              if (!(payload.el instanceof HTMLElement)) {
+                throw new Error("widget.upsert requires an HTMLElement in spec.el");
+              }
+
+              const tree = projectSurfaceUi("widget", payload.el, widgetId);
+
+              queueActivationOp(requestHost("widget_upsert", {
+                widgetId,
+                tree,
+                title: typeof payload.title === "string" ? payload.title : undefined,
+                placement: payload.placement === "below-input" ? "below-input" : "above-input",
+                order: typeof payload.order === "number" ? payload.order : undefined,
+                collapsible: payload.collapsible === true,
+                collapsed: payload.collapsed === true,
+                minHeightPx: typeof payload.minHeightPx === "number" ? payload.minHeightPx : undefined,
+                maxHeightPx: typeof payload.maxHeightPx === "number" ? payload.maxHeightPx : undefined,
+              }));
+            },
+            remove(id) {
+              if (!config.widgetApiV2Enabled) {
+                throw new Error('Widget API v2 is disabled. Enable /experimental on extension-widget-v2.');
+              }
+
+              const widgetId = typeof id === "string" ? id.trim() : "";
+              if (!widgetId) {
+                throw new Error("widget.remove requires a non-empty id");
+              }
+
+              clearWidgetActions(widgetId);
+              queueActivationOp(requestHost("widget_remove", { widgetId }));
+            },
+            clear() {
+              if (!config.widgetApiV2Enabled) {
+                throw new Error('Widget API v2 is disabled. Enable /experimental on extension-widget-v2.');
+              }
+
+              clearAllWidgetActions();
+              queueActivationOp(requestHost("widget_clear", {}));
             },
           },
 
@@ -1109,6 +1287,18 @@ class SandboxRuntimeHost {
     for (const actionId of next) {
       target.add(actionId);
     }
+  }
+
+  private replaceWidgetActionIds(widgetId: string, next: Set<string>): void {
+    this.widgetActionIdsByWidgetId.set(widgetId, new Set(next));
+  }
+
+  private clearWidgetActionIds(widgetId: string): void {
+    this.widgetActionIdsByWidgetId.delete(widgetId);
+  }
+
+  private clearAllWidgetActionIds(): void {
+    this.widgetActionIdsByWidgetId.clear();
   }
 
   private dispatchSandboxUiAction(actionId: string): void {
@@ -1307,15 +1497,37 @@ class SandboxRuntimeHost {
 
           const payload = asRecord(params, "widget_show params");
           const tree = normalizeSandboxUiNode(payload.tree);
-          const actionIds = showWidgetNode(tree, (actionId) => {
-            if (!this.widgetActionIds.has(actionId)) {
-              return;
-            }
 
-            this.dispatchSandboxUiAction(actionId);
-          });
+          if (this.widgetApiV2Enabled) {
+            const actionIds = upsertSandboxWidgetNode({
+              ownerId: this.widgetOwnerId,
+              widgetId: LEGACY_WIDGET_ID,
+              node: tree,
+              onAction: (actionId) => {
+                const knownActionIds = this.widgetActionIdsByWidgetId.get(LEGACY_WIDGET_ID);
+                if (!knownActionIds || !knownActionIds.has(actionId)) {
+                  return;
+                }
 
-          this.replaceActionIds(this.widgetActionIds, actionIds);
+                this.dispatchSandboxUiAction(actionId);
+              },
+              placement: "above-input",
+              order: 0,
+            });
+
+            this.replaceWidgetActionIds(LEGACY_WIDGET_ID, actionIds);
+          } else {
+            const actionIds = showWidgetNode(tree, (actionId) => {
+              const knownActionIds = this.widgetActionIdsByWidgetId.get(LEGACY_WIDGET_ID);
+              if (!knownActionIds || !knownActionIds.has(actionId)) {
+                return;
+              }
+
+              this.dispatchSandboxUiAction(actionId);
+            });
+
+            this.replaceWidgetActionIds(LEGACY_WIDGET_ID, actionIds);
+          }
 
           this.sendResponse(requestId, true, null);
           return;
@@ -1326,11 +1538,27 @@ class SandboxRuntimeHost {
 
           const payload = asRecord(params, "widget_show_text params");
           const fallbackNode = createTextOnlyUiNode(sanitizeText(payload.text));
-          const actionIds = showWidgetNode(fallbackNode, () => {
-            // legacy text-only path has no actions
-          });
 
-          this.replaceActionIds(this.widgetActionIds, actionIds);
+          if (this.widgetApiV2Enabled) {
+            const actionIds = upsertSandboxWidgetNode({
+              ownerId: this.widgetOwnerId,
+              widgetId: LEGACY_WIDGET_ID,
+              node: fallbackNode,
+              onAction: () => {
+                // legacy text-only path has no actions
+              },
+              placement: "above-input",
+              order: 0,
+            });
+
+            this.replaceWidgetActionIds(LEGACY_WIDGET_ID, actionIds);
+          } else {
+            const actionIds = showWidgetNode(fallbackNode, () => {
+              // legacy text-only path has no actions
+            });
+
+            this.replaceWidgetActionIds(LEGACY_WIDGET_ID, actionIds);
+          }
 
           this.sendResponse(requestId, true, null);
           return;
@@ -1338,8 +1566,84 @@ class SandboxRuntimeHost {
 
         case "widget_dismiss": {
           this.assertCapability("ui.widget");
-          this.widgetActionIds.clear();
-          dismissWidget();
+          this.clearWidgetActionIds(LEGACY_WIDGET_ID);
+
+          if (this.widgetApiV2Enabled) {
+            removeExtensionWidget(this.widgetOwnerId, LEGACY_WIDGET_ID);
+          } else {
+            dismissWidget();
+          }
+
+          this.sendResponse(requestId, true, null);
+          return;
+        }
+
+        case "widget_upsert": {
+          this.assertCapability("ui.widget");
+          if (!this.widgetApiV2Enabled) {
+            throw new Error("Widget API v2 is disabled. Enable /experimental on extension-widget-v2.");
+          }
+
+          const payload = asRecord(params, "widget_upsert params");
+          const widgetId = asNonEmptyString(payload.widgetId, "widgetId");
+          const tree = normalizeSandboxUiNode(payload.tree);
+          const title = typeof payload.title === "string" ? payload.title : undefined;
+          const placement = asWidgetPlacementOrDefault(payload.placement);
+          const order = asFiniteNumberOrNull(payload.order);
+          const minHeightPx = asFiniteNumberOrNull(payload.minHeightPx);
+          const maxHeightPx = asFiniteNumberOrNull(payload.maxHeightPx);
+          const collapsible = payload.collapsible === true;
+          const collapsed = payload.collapsed === true;
+
+          const actionIds = upsertSandboxWidgetNode({
+            ownerId: this.widgetOwnerId,
+            widgetId,
+            node: tree,
+            onAction: (actionId) => {
+              const knownActionIds = this.widgetActionIdsByWidgetId.get(widgetId);
+              if (!knownActionIds || !knownActionIds.has(actionId)) {
+                return;
+              }
+
+              this.dispatchSandboxUiAction(actionId);
+            },
+            title,
+            placement,
+            order: order ?? undefined,
+            collapsible,
+            collapsed,
+            minHeightPx: minHeightPx ?? undefined,
+            maxHeightPx: maxHeightPx ?? undefined,
+          });
+
+          this.replaceWidgetActionIds(widgetId, actionIds);
+          this.sendResponse(requestId, true, null);
+          return;
+        }
+
+        case "widget_remove": {
+          this.assertCapability("ui.widget");
+          if (!this.widgetApiV2Enabled) {
+            throw new Error("Widget API v2 is disabled. Enable /experimental on extension-widget-v2.");
+          }
+
+          const payload = asRecord(params, "widget_remove params");
+          const widgetId = asNonEmptyString(payload.widgetId, "widgetId");
+          this.clearWidgetActionIds(widgetId);
+          removeExtensionWidget(this.widgetOwnerId, widgetId);
+
+          this.sendResponse(requestId, true, null);
+          return;
+        }
+
+        case "widget_clear": {
+          this.assertCapability("ui.widget");
+          if (!this.widgetApiV2Enabled) {
+            throw new Error("Widget API v2 is disabled. Enable /experimental on extension-widget-v2.");
+          }
+
+          this.clearAllWidgetActionIds();
+          clearExtensionWidgets(this.widgetOwnerId);
           this.sendResponse(requestId, true, null);
           return;
         }

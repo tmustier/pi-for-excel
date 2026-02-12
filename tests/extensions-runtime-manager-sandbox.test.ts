@@ -109,10 +109,13 @@ void test("runtime manager source wires sandbox runtime selection through rollba
 
   assert.match(source, /resolveExtensionRuntimeMode\(/);
   assert.match(source, /extension_sandbox_runtime/);
+  assert.match(source, /extension_widget_v2/);
   assert.match(source, /runtimeMode/);
   assert.match(source, /runtimeLabel/);
   assert.match(source, /activateExtensionInSandbox/);
   assert.match(source, /activateInSandbox/);
+  assert.match(source, /widgetOwnerId/);
+  assert.match(source, /widgetApiV2Enabled/);
 });
 
 void test("extensions overlay source renders runtime label in installed rows", async () => {
@@ -285,6 +288,8 @@ void test("sandbox runtime source enforces capability gates and rejects unknown 
   assert.match(source, /Type\.Unsafe/);
   assert.match(source, /case "overlay_show": \{[\s\S]*this\.assertCapability\("ui\.overlay"\)/);
   assert.match(source, /case "widget_show": \{[\s\S]*this\.assertCapability\("ui\.widget"\)/);
+  assert.match(source, /case "widget_upsert": \{[\s\S]*Widget API v2 is disabled/);
+  assert.match(source, /case "widget_clear": \{/);
   assert.match(source, /if \(method === "ui_action"\)/);
   assert.match(source, /Unknown sandbox UI action id:/);
   assert.match(source, /allowWhenDisposed:\s*true/);

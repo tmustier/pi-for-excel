@@ -93,6 +93,7 @@ void test("builtins registry wires /experimental, /extensions, and /skills comma
   assert.match(extensionsDocsSource, /## Permission review\/revoke/);
   assert.match(extensionsDocsSource, /Install from URL\/code asks for confirmation/);
   assert.match(extensionsDocsSource, /extensions\.registry\.v2/);
+  assert.match(extensionsDocsSource, /extension-widget-v2/);
 
   const experimentalFlagsSource = await readFile(new URL("../src/experiments/flags.ts", import.meta.url), "utf8");
   assert.match(experimentalFlagsSource, /extension_permission_gates/);
@@ -100,6 +101,8 @@ void test("builtins registry wires /experimental, /extensions, and /skills comma
   assert.match(experimentalFlagsSource, /extension_sandbox_runtime/);
   assert.match(experimentalFlagsSource, /extension-sandbox/);
   assert.match(experimentalFlagsSource, /defaultEnabled:\s*true/);
+  assert.match(experimentalFlagsSource, /extension_widget_v2/);
+  assert.match(experimentalFlagsSource, /extension-widget-v2/);
 });
 
 void test("taskpane init keeps getSkillToolNames imported when used", async () => {

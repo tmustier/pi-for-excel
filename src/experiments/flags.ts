@@ -15,7 +15,8 @@ export type ExperimentalFeatureId =
   | "files_workspace"
   | "remote_extension_urls"
   | "extension_permission_gates"
-  | "extension_sandbox_runtime";
+  | "extension_sandbox_runtime"
+  | "extension_widget_v2";
 
 export type ExperimentalFeatureWiring = "wired" | "flag-only";
 
@@ -102,6 +103,15 @@ const EXPERIMENTAL_FEATURES = [
     wiring: "wired",
     storageKey: "pi.experimental.extensionSandboxRuntime",
     defaultEnabled: true,
+  },
+  {
+    id: "extension_widget_v2",
+    slug: "extension-widget-v2",
+    aliases: ["extensions-widget-v2", "widget-v2", "extension-widgets"],
+    title: "Extension widget API v2",
+    description: "Enable additive multi-widget lifecycle APIs (upsert/remove/clear) with deterministic placement.",
+    wiring: "wired",
+    storageKey: "pi.experimental.extensionWidgetV2",
   },
 ] as const satisfies readonly ExperimentalFeatureDefinition[];
 
