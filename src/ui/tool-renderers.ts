@@ -24,6 +24,7 @@ import {
   isPythonTransformRangeDetails,
   isReadRangeCsvDetails,
   isTraceDependenciesDetails,
+  isViewSettingsDetails,
   isWorkbookHistoryDetails,
   isWriteCellsDetails,
   type RecoveryCheckpointDetails,
@@ -599,6 +600,10 @@ function recoveryBadgeForDetails(details: unknown): string {
     return withRecoveryBadge("", details.recovery);
   }
 
+  if (isViewSettingsDetails(details)) {
+    return withRecoveryBadge("", details.recovery);
+  }
+
   return "";
 }
 
@@ -807,6 +812,34 @@ function describeToolCall(
           return { action: "Comment", detail: `${addr}${recovery}`, address: range };
       }
     }
+    case "view_settings": {
+      const op = p.action as string | undefined;
+      const targetSheet = (p.sheet as string | undefined) ?? "active sheet";
+      const targetRange = (p.range as string | undefined) ?? targetSheet;
+      const recovery = recoveryBadgeForDetails(details);
+
+      if (!op || op === "get") {
+        return { action: "View", detail: "settings" };
+      }
+
+      if (op === "activate") {
+        return { action: "Activate", detail: `${targetSheet}${recovery}` };
+      }
+
+      if (op === "freeze_at") {
+        return {
+          action: "Freeze",
+          detail: `${compactRange(targetRange)}${recovery}`,
+          address: p.range as string | undefined,
+        };
+      }
+
+      if (op.startsWith("hide_") || op.startsWith("show_")) {
+        return { action: op.startsWith("hide_") ? "Hide" : "Show", detail: `${op.replace(/^(hide_|show_)/u, "").replace(/_/gu, " ")} (${targetSheet})${recovery}` };
+      }
+
+      return { action: "Set", detail: `${op.replace(/_/gu, " ")} (${targetSheet})${recovery}` };
+    }
     case "instructions": {
       const level = p.level as string | undefined;
       const action = p.action as string | undefined;
@@ -879,7 +912,7 @@ function describeToolCall(
     }
     default: {
       if (resultText) { const s = resultSummary(resultText); if (s) return splitFirstWord(s); }
-      return { action: toolName.replace(/_/g, " "), detail: "" };
+      return { action: "Tool", detail: "" };
     }
   }
 }

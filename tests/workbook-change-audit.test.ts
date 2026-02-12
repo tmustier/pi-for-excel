@@ -71,6 +71,19 @@ function firstText(result: unknown): string {
   return first.text;
 }
 
+function viewSettingsDetails(result: unknown): Record<string, unknown> {
+  if (!isRecord(result)) {
+    throw new Error("Expected tool result object");
+  }
+
+  const details = result.details;
+  if (!isRecord(details)) {
+    throw new Error("Expected tool result details object");
+  }
+
+  return details;
+}
+
 function createAuditCapture(): {
   entries: AppendWorkbookChangeAuditEntryArgs[];
   appendAuditEntry: (entry: AppendWorkbookChangeAuditEntryArgs) => Promise<void>;
@@ -313,10 +326,20 @@ void test("view_settings tool appends audit entries for mutate success and failu
   });
 
   assert.match(firstText(successResult), /Activated sheet/u);
+  assert.match(firstText(successResult), /Recovery checkpoint not created/u);
   assert.equal(successAuditCapture.entries.length, 1);
   assert.equal(successAuditCapture.entries[0]?.toolName, "view_settings");
   assert.equal(successAuditCapture.entries[0]?.blocked, false);
   assert.equal(successAuditCapture.entries[0]?.outputAddress, "Sheet2");
+
+  const successDetails = viewSettingsDetails(successResult);
+  assert.equal(successDetails.kind, "view_settings");
+  assert.equal(successDetails.action, "activate");
+  assert.equal(successDetails.address, "Sheet2");
+  assert.equal(
+    isRecord(successDetails.recovery) ? successDetails.recovery.status : undefined,
+    "not_available",
+  );
 
   const errorAuditCapture = createAuditCapture();
   const errorTool = createViewSettingsTool({
@@ -329,10 +352,20 @@ void test("view_settings tool appends audit entries for mutate success and failu
   });
 
   assert.match(firstText(errorResult), /sheet is required for activate/u);
+  assert.match(firstText(errorResult), /Recovery checkpoint not created/u);
   assert.equal(errorAuditCapture.entries.length, 1);
   assert.equal(errorAuditCapture.entries[0]?.toolName, "view_settings");
   assert.equal(errorAuditCapture.entries[0]?.blocked, true);
   assert.equal(errorAuditCapture.entries[0]?.changedCount, 0);
+
+  const errorDetails = viewSettingsDetails(errorResult);
+  assert.equal(errorDetails.kind, "view_settings");
+  assert.equal(errorDetails.action, "activate");
+  assert.equal(errorDetails.address, undefined);
+  assert.equal(
+    isRecord(errorDetails.recovery) ? errorDetails.recovery.status : undefined,
+    "not_available",
+  );
 });
 
 void test("workbook_history restore appends audit entries for success and missing snapshot", async () => {

@@ -203,6 +203,6 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 - **Safety limits:** checkpoint capture is skipped for very large writes (> `MAX_RECOVERY_CELLS`) to avoid oversized local state.
 - **Workbook identity guardrails:** append/list/delete/clear/restore paths are scoped to the active workbook identity; restore rejects identity-less or cross-workbook checkpoints.
 - **Restore UX:** `workbook_history` can list/restore/delete/clear checkpoints; restores also create an inverse checkpoint (`restore_snapshot`) so users can undo a mistaken restore.
-- **Coverage signaling:** non-checkpointed mutation tools (`format_cells`, `conditional_format`, `modify_structure`, mutating `comments` actions) explicitly report that no recovery checkpoint was created.
+- **Coverage signaling:** non-checkpointed mutation tools (`format_cells`, `conditional_format`, `modify_structure`, mutating `comments` actions, and mutating `view_settings` actions) explicitly report that no recovery checkpoint was created.
 - **Quick affordance:** after a checkpointed write, UI shows an action toast with **Revert**.
 - **Rationale:** addresses #27 by shifting from cumbersome up-front approvals to versioned recovery with explicit user-controlled rollback.

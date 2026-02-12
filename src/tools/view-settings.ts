@@ -12,6 +12,12 @@ import {
   type AppendWorkbookChangeAuditEntryArgs,
 } from "../audit/workbook-change-audit.js";
 import { getErrorMessage } from "../utils/errors.js";
+import {
+  NON_CHECKPOINTED_MUTATION_NOTE,
+  NON_CHECKPOINTED_MUTATION_REASON,
+  recoveryCheckpointUnavailable,
+} from "./recovery-metadata.js";
+import type { ViewSettingsDetails } from "./tool-details.js";
 
 function StringEnum<T extends string[]>(values: [...T], opts?: { description?: string }) {
   return Type.Union(
@@ -100,6 +106,18 @@ function isMutatingViewSettingsAction(action: ViewSettingsAction): boolean {
   return action !== "get";
 }
 
+function buildMutationDetails(args: {
+  action: ViewSettingsAction;
+  address?: string;
+}): ViewSettingsDetails {
+  return {
+    kind: "view_settings",
+    action: args.action,
+    address: args.address,
+    recovery: recoveryCheckpointUnavailable(NON_CHECKPOINTED_MUTATION_REASON),
+  };
+}
+
 const defaultDependencies: ViewSettingsToolDependencies = {
   executeAction: executeViewSettingsAction,
   appendAuditEntry: (entry) => getWorkbookChangeAuditLog().append(entry),
@@ -124,46 +142,70 @@ export function createViewSettingsTool(
     execute: async (
       toolCallId: string,
       params: Params,
-    ): Promise<AgentToolResult<undefined>> => {
+    ): Promise<AgentToolResult<ViewSettingsDetails | undefined>> => {
       const isMutation = isMutatingViewSettingsAction(params.action);
 
       try {
         const result = await resolvedDependencies.executeAction(params);
+        const outputAddress = result.outputAddress ?? params.range ?? params.sheet;
 
         if (isMutation) {
           await resolvedDependencies.appendAuditEntry({
             toolName: "view_settings",
             toolCallId,
             blocked: false,
-            outputAddress: result.outputAddress ?? params.range ?? params.sheet,
+            outputAddress,
             changedCount: result.changedCount ?? 1,
             changes: [],
             summary: result.summary ?? `${params.action} view setting`,
           });
         }
 
+        const details = isMutation
+          ? buildMutationDetails({
+              action: params.action,
+              address: outputAddress,
+            })
+          : undefined;
+
+        const note = isMutation
+          ? `${result.text}\n\n${NON_CHECKPOINTED_MUTATION_NOTE}`
+          : result.text;
+
         return {
-          content: [{ type: "text", text: result.text }],
-          details: undefined,
+          content: [{ type: "text", text: note }],
+          details,
         };
       } catch (e: unknown) {
         const message = getErrorMessage(e);
+        const outputAddress = params.range ?? params.sheet;
 
         if (isMutation) {
           await resolvedDependencies.appendAuditEntry({
             toolName: "view_settings",
             toolCallId,
             blocked: true,
-            outputAddress: params.range ?? params.sheet,
+            outputAddress,
             changedCount: 0,
             changes: [],
             summary: `error: ${message}`,
           });
         }
 
+        const details = isMutation
+          ? buildMutationDetails({
+              action: params.action,
+              address: outputAddress,
+            })
+          : undefined;
+
+        const errorText = isMutation
+          ? `Error: ${message}\n\n${NON_CHECKPOINTED_MUTATION_NOTE}`
+          : `Error: ${message}`;
+
         return {
-          content: [{ type: "text", text: `Error: ${message}` }],
-          details: undefined,
+          content: [{ type: "text", text: errorText }],
+          details,
         };
       }
     },

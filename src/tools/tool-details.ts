@@ -64,6 +64,13 @@ export interface CommentsDetails {
   recovery?: RecoveryCheckpointDetails;
 }
 
+export interface ViewSettingsDetails {
+  kind: "view_settings";
+  action?: string;
+  address?: string;
+  recovery?: RecoveryCheckpointDetails;
+}
+
 export type TraceDependenciesMode = "precedents" | "dependents";
 export type TraceDependencySource = "api" | "formula_scan" | "mixed" | "none";
 
@@ -267,6 +274,7 @@ export type ExcelToolDetails =
   | ConditionalFormatDetails
   | ModifyStructureDetails
   | CommentsDetails
+  | ViewSettingsDetails
   | TraceDependenciesDetails
   | ReadRangeCsvDetails
   | TmuxBridgeDetails
@@ -467,6 +475,17 @@ export function isModifyStructureDetails(value: unknown): value is ModifyStructu
 export function isCommentsDetails(value: unknown): value is CommentsDetails {
   if (!isRecord(value)) return false;
   if (value.kind !== "comments") return false;
+
+  return (
+    isOptionalString(value.action) &&
+    isOptionalString(value.address) &&
+    isOptionalRecoveryCheckpointDetails(value.recovery)
+  );
+}
+
+export function isViewSettingsDetails(value: unknown): value is ViewSettingsDetails {
+  if (!isRecord(value)) return false;
+  if (value.kind !== "view_settings") return false;
 
   return (
     isOptionalString(value.action) &&
