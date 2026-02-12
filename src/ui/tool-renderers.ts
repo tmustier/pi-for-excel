@@ -31,7 +31,7 @@ import { renderDepTree } from "./render-dep-tree.js";
 import "@mariozechner/mini-lit/dist/MarkdownBlock.js";
 
 type ToolState = "inprogress" | "complete" | "error";
-type ExtraToolName = "web_search" | "mcp" | "files";
+type ExtraToolName = "web_search" | "mcp" | "files" | "python_transform_range";
 type SupportedToolName = CoreToolName | ExtraToolName;
 
 /* ── Helpers ────────────────────────────────────────────────── */
@@ -358,6 +358,20 @@ function resultSummary(text: string): string | null {
   return line ? stripDimensions(line) : null;
 }
 
+function mutationBadge(changedCount: number | undefined, errorCount: number | undefined): string {
+  const parts: string[] = [];
+
+  if (typeof changedCount === "number" && changedCount > 0) {
+    parts.push(`${changedCount} changed`);
+  }
+
+  if (typeof errorCount === "number" && errorCount > 0) {
+    parts.push(`${errorCount} error${errorCount !== 1 ? "s" : ""}`);
+  }
+
+  return parts.length > 0 ? ` — ${parts.join(", ")}` : "";
+}
+
 /** Append error / blocked badge to the detail string. */
 function badge(
   toolName: SupportedToolName,
@@ -366,16 +380,17 @@ function badge(
 ): string {
   if (toolName === "write_cells" && isWriteCellsDetails(details)) {
     if (details.blocked) return " — blocked";
-    const n = details.formulaErrorCount ?? 0;
-    if (n > 0) return ` — ${n} error${n !== 1 ? "s" : ""}`;
-    return "";
+    return mutationBadge(details.changes?.changedCount, details.formulaErrorCount);
   }
 
   if (toolName === "fill_formula" && isFillFormulaDetails(details)) {
     if (details.blocked) return " — blocked";
-    const n = details.formulaErrorCount ?? 0;
-    if (n > 0) return ` — ${n} error${n !== 1 ? "s" : ""}`;
-    return "";
+    return mutationBadge(details.changes?.changedCount, details.formulaErrorCount);
+  }
+
+  if (toolName === "python_transform_range" && isPythonTransformRangeDetails(details)) {
+    if (details.blocked) return " — blocked";
+    return mutationBadge(details.changes?.changedCount, details.formulaErrorCount);
   }
 
   if (!resultText) return "";
@@ -451,6 +466,25 @@ function describeToolCall(
       return addr
         ? { action: "Filled", detail: addr + b, address: addr }
         : { action: "Fill", detail: (range ? compactRange(range) : "formula") + b, address: range };
+    }
+    case "python_transform_range": {
+      const b = badge(toolName, resultText, details);
+
+      if (isPythonTransformRangeDetails(details)) {
+        const address = details.outputAddress ?? details.inputAddress;
+        if (address) {
+          const action = details.blocked ? "Transform" : "Transformed";
+          return { action, detail: address + b, address };
+        }
+      }
+
+      const outputStart = p.output_start_cell as string | undefined;
+      const fallbackAddress = outputStart ?? range;
+      return {
+        action: "Transform",
+        detail: (fallbackAddress ?? "range") + b,
+        address: fallbackAddress,
+      };
     }
 
     // ── Format tools ──
@@ -710,6 +744,7 @@ const CUSTOM_RENDERED_TOOL_NAMES: SupportedToolName[] = [
   "web_search",
   "mcp",
   "files",
+  "python_transform_range",
 ];
 
 for (const name of CUSTOM_RENDERED_TOOL_NAMES) {

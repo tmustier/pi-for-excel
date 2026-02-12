@@ -4,7 +4,7 @@
 
 import { cellAddress, parseCell, qualifiedAddress } from "../excel/helpers.js";
 
-const DEFAULT_SAMPLE_LIMIT = 20;
+const DEFAULT_SAMPLE_LIMIT = 12;
 const DEFAULT_PREVIEW_CHARS = 80;
 
 export interface WorkbookCellChange {

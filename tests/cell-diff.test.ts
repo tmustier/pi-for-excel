@@ -45,3 +45,21 @@ void test("buildWorkbookCellChangeSummary truncates sample to limit", () => {
   assert.equal(summary.truncated, true);
   assert.equal(summary.sample.length, 2);
 });
+
+void test("buildWorkbookCellChangeSummary uses bounded default sample size", () => {
+  const beforeRow = Array.from({ length: 20 }, (_, index) => index + 1);
+  const afterRow = Array.from({ length: 20 }, (_, index) => index + 100);
+
+  const summary = buildWorkbookCellChangeSummary({
+    sheetName: "Sheet1",
+    startCell: "A1",
+    beforeValues: [beforeRow],
+    beforeFormulas: [beforeRow.map(() => "")],
+    afterValues: [afterRow],
+    afterFormulas: [afterRow.map(() => "")],
+  });
+
+  assert.equal(summary.changedCount, 20);
+  assert.equal(summary.truncated, true);
+  assert.equal(summary.sample.length, 12);
+});
