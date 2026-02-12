@@ -112,6 +112,75 @@ Widget API v2 host behavior:
 - If both bounds are set and `maxHeightPx < minHeightPx`, host coerces `maxHeightPx` up to `minHeightPx`.
 - Pass `null` for `minHeightPx` / `maxHeightPx` to clear a previously set bound while keeping other widget metadata unchanged.
 
+#### Widget API v2 migration (from legacy `widget.show/dismiss`)
+
+If you previously used one legacy widget:
+
+```ts
+// before
+api.widget.show(el);
+api.widget.dismiss();
+
+// after (v2)
+api.widget.upsert({ id: "main", el });
+api.widget.remove("main");
+```
+
+Notes:
+- Use a stable, extension-local `id` per widget surface (`"main"`, `"summary"`, `"warnings"`, etc.).
+- On extension disable/reload/uninstall, host still auto-clears extension-owned widgets.
+- Use `api.widget.clear()` for explicit in-session teardown (for example when switching extension modes).
+
+#### Widget API v2 best practices
+
+- Keep widget ids stable and semantic; avoid random ids each render.
+- Use content-only refreshes (`upsert({ id, el })`) when layout metadata is unchanged.
+- Put long content in bounded cards (`maxHeightPx`) so chat/input layout stays predictable.
+- Prefer host collapse controls (`collapsible`) over custom hide/show chrome where possible.
+- Use `placement: "below-input"` sparingly (for low-priority/persistent helper widgets).
+
+#### Widget API v2 multi-widget example
+
+```ts
+export function activate(api) {
+  const renderSummary = () => {
+    const el = document.createElement("div");
+    el.textContent = "Summary: 4 checks passed";
+    api.widget.upsert({
+      id: "summary",
+      el,
+      title: "Sheet summary",
+      order: 0,
+      collapsible: true,
+      collapsed: false,
+      minHeightPx: 96,
+      maxHeightPx: 220,
+    });
+  };
+
+  const renderWarnings = () => {
+    const el = document.createElement("div");
+    el.textContent = "Warnings: 2 outliers detected";
+    api.widget.upsert({
+      id: "warnings",
+      el,
+      title: "Warnings",
+      placement: "below-input",
+      order: 10,
+      collapsible: true,
+      collapsed: true,
+    });
+  };
+
+  renderSummary();
+  renderWarnings();
+
+  return () => {
+    api.widget.clear();
+  };
+}
+```
+
 ### `toast(message)`
 Show a short toast notification.
 
