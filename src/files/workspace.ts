@@ -11,6 +11,7 @@ import { formatWorkbookLabel, getWorkbookContext } from "../workbook/context.js"
 import { isRecord } from "../utils/type-guards.js";
 import { base64ToBytes, bytesToBase64, encodeTextUtf8, truncateBase64, truncateText } from "./encoding.js";
 import { MemoryBackend, NativeDirectoryBackend, OpfsBackend, type WorkspaceBackend } from "./backend.js";
+import { getBuiltinWorkspaceDoc, isBuiltinWorkspacePath, listBuiltinWorkspaceDocs } from "./builtin-docs.js";
 import { formatBytes, inferMimeType, isTextMimeType } from "./mime.js";
 import { getWorkspaceBaseName, normalizeWorkspacePath } from "./path.js";
 import {
@@ -644,11 +645,15 @@ export class FilesWorkspace {
 
   async listFiles(options: WorkspaceListOptions = {}): Promise<WorkspaceFileEntry[]> {
     const backend = await this.getBackend();
-    const files = await backend.listFiles();
-    const taggedFiles = await this.withWorkbookTags(files);
+    const workspaceFiles = await backend.listFiles();
+    const taggedWorkspaceFiles = await this.withWorkbookTags(workspaceFiles);
+    const builtinDocs = listBuiltinWorkspaceDocs();
 
-    const currentPaths = new Set(taggedFiles.map((file) => file.path));
+    const currentPaths = new Set(taggedWorkspaceFiles.map((file) => file.path));
     await this.pruneStaleWorkbookTags(currentPaths);
+
+    const mergedFiles = [...taggedWorkspaceFiles, ...builtinDocs]
+      .sort((left, right) => left.path.localeCompare(right.path));
 
     if (options.audit) {
       await this.appendAuditEntry({
@@ -659,7 +664,7 @@ export class FilesWorkspace {
       dispatchWorkspaceChanged({ reason: "audit" });
     }
 
-    return taggedFiles;
+    return mergedFiles;
   }
 
   async getSnapshot(): Promise<WorkspaceSnapshot> {
@@ -685,9 +690,12 @@ export class FilesWorkspace {
   async readFile(path: string, opts: WorkspaceReadOptions = {}): Promise<WorkspaceFileReadResult> {
     const normalizedPath = normalizeWorkspacePath(path);
     const backend = await this.getBackend();
-    const rawResult = await backend.readFile(normalizedPath);
+    const builtinResult = getBuiltinWorkspaceDoc(normalizedPath);
+    const rawResult = builtinResult ?? await backend.readFile(normalizedPath);
 
-    const tagged = await this.withWorkbookTags([rawResult]);
+    const tagged = rawResult.sourceKind === "workspace"
+      ? await this.withWorkbookTags([rawResult])
+      : [rawResult];
     const taggedResult = tagged[0];
     const result: WorkspaceFileReadResult = taggedResult
       ? {
@@ -765,6 +773,10 @@ export class FilesWorkspace {
     options: WorkspaceMutationOptions = {},
   ): Promise<void> {
     const normalizedPath = normalizeWorkspacePath(path);
+    if (isBuiltinWorkspacePath(normalizedPath)) {
+      throw new Error(`'${normalizedPath}' is a built-in doc and cannot be modified.`);
+    }
+
     const bytes = encodeTextUtf8(text);
     const backend = await this.getBackend();
 
@@ -794,6 +806,10 @@ export class FilesWorkspace {
     options: WorkspaceMutationOptions = {},
   ): Promise<void> {
     const normalizedPath = normalizeWorkspacePath(path);
+    if (isBuiltinWorkspacePath(normalizedPath)) {
+      throw new Error(`'${normalizedPath}' is a built-in doc and cannot be modified.`);
+    }
+
     const bytes = base64ToBytes(base64);
     const backend = await this.getBackend();
 
@@ -818,6 +834,10 @@ export class FilesWorkspace {
 
   async deleteFile(path: string, options: WorkspaceMutationOptions = {}): Promise<void> {
     const normalizedPath = normalizeWorkspacePath(path);
+    if (isBuiltinWorkspacePath(normalizedPath)) {
+      throw new Error(`'${normalizedPath}' is a built-in doc and cannot be deleted.`);
+    }
+
     const backend = await this.getBackend();
 
     await backend.deleteFile(normalizedPath);
@@ -840,6 +860,15 @@ export class FilesWorkspace {
   ): Promise<void> {
     const normalizedOldPath = normalizeWorkspacePath(oldPath);
     const normalizedNewPath = normalizeWorkspacePath(newPath);
+
+    if (isBuiltinWorkspacePath(normalizedOldPath)) {
+      throw new Error(`'${normalizedOldPath}' is a built-in doc and cannot be renamed.`);
+    }
+
+    if (isBuiltinWorkspacePath(normalizedNewPath)) {
+      throw new Error(`'${normalizedNewPath}' is reserved for a built-in doc.`);
+    }
+
     const backend = await this.getBackend();
 
     await backend.renameFile(normalizedOldPath, normalizedNewPath);
@@ -867,6 +896,10 @@ export class FilesWorkspace {
         : file.name;
 
       const normalizedPath = normalizeWorkspacePath(preferredPath);
+      if (isBuiltinWorkspacePath(normalizedPath)) {
+        throw new Error(`'${normalizedPath}' is reserved for a built-in doc.`);
+      }
+
       const bytes = new Uint8Array(await file.arrayBuffer());
       await backend.writeBytes(
         normalizedPath,
@@ -914,7 +947,8 @@ export class FilesWorkspace {
     }
 
     const normalizedPath = normalizeWorkspacePath(path);
-    const result = await (await this.getBackend()).readFile(normalizedPath);
+    const builtinResult = getBuiltinWorkspaceDoc(normalizedPath);
+    const result = builtinResult ?? await (await this.getBackend()).readFile(normalizedPath);
 
     const bytes = result.base64
       ? base64ToBytes(result.base64)

@@ -74,10 +74,11 @@ void test("system prompt lists explain_formula tool", () => {
   assert.match(prompt, /plain language/i);
 });
 
-void test("system prompt mentions optional files workspace capability", () => {
+void test("system prompt mentions files workspace and built-in docs prefix", () => {
   const prompt = buildSystemPrompt();
   assert.match(prompt, /\*\*files\*\*/);
   assert.match(prompt, /workspace artifacts/i);
+  assert.match(prompt, /assistant-docs\//i);
 });
 
 void test("system prompt mentions extension manager tool for chat-driven authoring", () => {

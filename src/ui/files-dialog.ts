@@ -84,7 +84,7 @@ function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   return out;
 }
 
-type FilesDialogFilterValue = "all" | "current" | "untagged" | `tag:${string}`;
+type FilesDialogFilterValue = "all" | "current" | "untagged" | "builtin" | `tag:${string}`;
 
 interface FilesDialogFilterOption {
   value: FilesDialogFilterValue;
@@ -125,7 +125,7 @@ function buildWorkbookTagFilterOptions(files: WorkspaceFileEntry[]): FilesDialog
 }
 
 function parseFilterValue(value: string): FilesDialogFilterValue {
-  if (value === "all" || value === "current" || value === "untagged") {
+  if (value === "all" || value === "current" || value === "untagged" || value === "builtin") {
     return value;
   }
 
@@ -151,6 +151,10 @@ function fileMatchesFilter(args: {
   if (args.filter === "current") {
     if (!args.currentWorkbookId) return false;
     return args.file.workbookTag?.workbookId === args.currentWorkbookId;
+  }
+
+  if (args.filter === "builtin") {
+    return args.file.sourceKind === "builtin-doc";
   }
 
   const tagPrefix = "tag:";
@@ -194,7 +198,7 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
   const controls = document.createElement("div");
   controls.className = "pi-files-dialog__controls";
 
-  const enableButton = makeButton("Enable assistant access", "pi-files-dialog__btn");
+  const enableButton = makeButton("Enable workspace write access", "pi-files-dialog__btn");
   const uploadButton = makeButton("Upload", "pi-files-dialog__btn");
   const newFileButton = makeButton("New text file", "pi-files-dialog__btn");
   const nativeButton = makeButton("Select folder", "pi-files-dialog__btn");
@@ -303,6 +307,7 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
   overlay.appendChild(card);
 
   let activeViewerPath: string | null = null;
+  let activeViewerReadOnly = false;
   let viewerTruncated = false;
   let activeObjectUrl: string | null = null;
   let selectedFilter: FilesDialogFilterValue = "all";
@@ -343,6 +348,7 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
 
   const clearViewer = () => {
     activeViewerPath = null;
+    activeViewerReadOnly = false;
     viewerTruncated = false;
     revokeObjectUrl();
 
@@ -366,13 +372,18 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
     });
 
     activeViewerPath = entry.path;
+    activeViewerReadOnly = entry.readOnly;
     viewerTruncated = result.truncated === true;
 
     viewerTitle.textContent = entry.path;
     viewerTextarea.value = result.text ?? "";
-    viewerTextarea.disabled = viewerTruncated;
+    viewerTextarea.disabled = viewerTruncated || entry.readOnly;
 
-    if (viewerTruncated) {
+    if (entry.readOnly) {
+      viewerNote.textContent = "Built-in documentation file (read-only).";
+      saveButton.hidden = true;
+      saveButton.disabled = true;
+    } else if (viewerTruncated) {
       viewerNote.textContent = "This file is too large to edit inline safely (preview truncated to 1,000,000 chars).";
       saveButton.hidden = false;
       saveButton.disabled = true;
@@ -467,6 +478,7 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
     try {
       revokeObjectUrl();
       activeViewerPath = null;
+      activeViewerReadOnly = false;
       viewerTruncated = false;
       viewerPreview.replaceChildren();
 
@@ -488,6 +500,7 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
       openBinaryPlaceholder(entry);
     } catch (error: unknown) {
       activeViewerPath = null;
+      activeViewerReadOnly = false;
       viewerTruncated = false;
       viewerTitle.textContent = entry.path;
       viewerNote.textContent = `Preview unavailable: ${getErrorMessage(error)}`;
@@ -556,6 +569,8 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
       ? formatWorkbookLabel(workbookContext)
       : null;
 
+    const builtinDocsCount = files.filter((file) => file.sourceKind === "builtin-doc").length;
+
     const filterOptions: FilesDialogFilterOption[] = [
       { value: "all", label: "All files" },
       {
@@ -565,6 +580,7 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
           : "Current workbook (unavailable)",
         disabled: currentWorkbookId === null,
       },
+      { value: "builtin", label: `Built-in docs (${builtinDocsCount})` },
       { value: "untagged", label: "Untagged files" },
       ...buildWorkbookTagFilterOptions(files),
     ];
@@ -595,6 +611,8 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
       ?? "All files";
 
     const filesExperimentEnabled = isExperimentalFeatureEnabled("files_workspace");
+    const workspaceFilesCount = files.length - builtinDocsCount;
+
     enableButton.hidden = filesExperimentEnabled;
     uploadButton.disabled = !filesExperimentEnabled;
     newFileButton.disabled = !filesExperimentEnabled;
@@ -603,7 +621,9 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
     disconnectNativeButton.hidden = backend.kind !== "native-directory";
 
     if (!filesExperimentEnabled) {
-      setStatus("Assistant access is disabled. Enable files-workspace to expose the tool.");
+      setStatus(
+        `Built-in docs stay available (${builtinDocsCount}). Enable files-workspace for assistant write/delete on workspace files (${workspaceFilesCount}).`,
+      );
     } else if (selectedFilter === "all") {
       setStatus(`${files.length} file${files.length === 1 ? "" : "s"} available to the assistant.`);
     } else {
@@ -639,6 +659,13 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
 
         nameRow.appendChild(name);
 
+        if (file.sourceKind === "builtin-doc") {
+          const sourceBadge = document.createElement("span");
+          sourceBadge.className = "pi-files-dialog__source-badge";
+          sourceBadge.textContent = "Built-in";
+          nameRow.appendChild(sourceBadge);
+        }
+
         if (file.workbookTag) {
           const workbookTag = document.createElement("span");
           workbookTag.className = "pi-files-dialog__workbook-tag";
@@ -668,6 +695,10 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
         });
 
         const renameButton = makeButton("Rename", "pi-files-dialog__row-btn");
+        renameButton.disabled = file.readOnly;
+        if (file.readOnly) {
+          renameButton.title = "Built-in docs are read-only.";
+        }
         renameButton.addEventListener("click", () => {
           const nextName = window.prompt("Rename file", file.path);
           if (!nextName) return;
@@ -680,6 +711,10 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
         });
 
         const deleteButton = makeButton("Delete", "pi-files-dialog__row-btn pi-files-dialog__row-btn--danger");
+        deleteButton.disabled = file.readOnly;
+        if (file.readOnly) {
+          deleteButton.title = "Built-in docs are read-only.";
+        }
         deleteButton.addEventListener("click", () => {
           const ok = window.confirm(`Delete '${file.path}'?`);
           if (!ok) return;
@@ -711,7 +746,7 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
   enableButton.addEventListener("click", () => {
     setExperimentalFeatureEnabled("files_workspace", true);
     void renderList();
-    showToast("Enabled experimental files workspace.");
+    showToast("Enabled files workspace write/delete access.");
   });
 
   uploadButton.addEventListener("click", () => {
@@ -781,7 +816,7 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
   });
 
   saveButton.addEventListener("click", () => {
-    if (!activeViewerPath || viewerTruncated) return;
+    if (!activeViewerPath || viewerTruncated || activeViewerReadOnly) return;
 
     const path = activeViewerPath;
     const nextContent = viewerTextarea.value;

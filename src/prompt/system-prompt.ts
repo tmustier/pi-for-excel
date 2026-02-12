@@ -184,7 +184,8 @@ Core workbook tools:
 - **execute_office_js** — run direct Office.js against the active workbook when structured tools cannot express the operation (experimental; explanation + user approval required)
 
 Other tools may be available depending on enabled experiments/integrations.
-If **files** is available, use it for workspace artifacts (list/read/write/delete files).
+Use **files** for workspace artifacts (list/read/write/delete files).
+Built-in assistant docs are always available under \`assistant-docs/\` (for example \`assistant-docs/docs/extensions.md\`).
 If **execute_office_js** is available, keep code minimal, call \`context.sync()\` after \`load()\`, and return JSON-serializable results.`;
 
 const WORKFLOW = `## Workflow

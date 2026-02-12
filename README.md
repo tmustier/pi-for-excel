@@ -52,7 +52,7 @@ Pi for Excel gives you a conversational AI assistant that can read, write, and f
 **Experimental features** (opt-in via `/experimental`):
 - Tmux bridge — remote terminal control from the sidebar
 - Python / LibreOffice bridge — run Python scripts and convert files locally
-- Files workspace — shared artifact storage across sessions
+- Files workspace — shared artifact storage across sessions (assistant built-in docs under `assistant-docs/` are always available read-only)
 
 ## Install
 

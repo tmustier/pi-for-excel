@@ -6,6 +6,8 @@ export type WorkspaceBackendKind = "native-directory" | "opfs" | "memory";
 
 export type WorkspaceFileKind = "text" | "binary";
 
+export type WorkspaceFileSourceKind = "workspace" | "builtin-doc";
+
 export interface WorkspaceFileWorkbookTag {
   workbookId: string;
   workbookLabel: string;
@@ -19,6 +21,8 @@ export interface WorkspaceFileEntry {
   modifiedAt: number;
   mimeType: string;
   kind: WorkspaceFileKind;
+  sourceKind: WorkspaceFileSourceKind;
+  readOnly: boolean;
   workbookTag?: WorkspaceFileWorkbookTag;
 }
 

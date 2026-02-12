@@ -70,7 +70,7 @@ const EXPERIMENTAL_FEATURES = [
     slug: "files-workspace",
     aliases: ["files", "workspace-files", "artifacts"],
     title: "Files workspace",
-    description: "Allow experimental file workspace and artifact tooling.",
+    description: "Allow assistant write/delete in files workspace (list/read + built-in docs stay available).",
     wiring: "wired",
     storageKey: "pi.experimental.filesWorkspace",
   },

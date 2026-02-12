@@ -123,7 +123,7 @@ void test("evaluateTmuxBridgeGate reports explicit reason codes", async () => {
   assert.match(buildTmuxBridgeGateErrorMessage(unreachable.reason), /not reachable/i);
 });
 
-void test("files tool stays registered and hard-gated", async () => {
+void test("files tool allows list/read while write/delete stay gated", async () => {
   let executeCount = 0;
 
   const [filesTool] = await applyExperimentalToolGates([
@@ -134,12 +134,27 @@ void test("files tool stays registered and hard-gated", async () => {
     isFilesWorkspaceExperimentEnabled: () => false,
   });
 
+  await filesTool.execute("call-files-list", { action: "list" });
+  await filesTool.execute("call-files-read", { action: "read", path: "assistant-docs/docs/extensions.md" });
+
   await assert.rejects(
-    () => filesTool.execute("call-files", { action: "list" }),
-    /\/experimental on files-workspace/i,
+    () => filesTool.execute("call-files-write", {
+      action: "write",
+      path: "notes.md",
+      content: "hello",
+    }),
+    /files-workspace/i,
   );
 
-  assert.equal(executeCount, 0);
+  await assert.rejects(
+    () => filesTool.execute("call-files-delete", {
+      action: "delete",
+      path: "notes.md",
+    }),
+    /files-workspace/i,
+  );
+
+  assert.equal(executeCount, 2);
 
   const enabledGate = evaluateFilesWorkspaceGate({
     isFilesWorkspaceExperimentEnabled: () => true,

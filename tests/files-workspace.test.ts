@@ -42,6 +42,10 @@ async function resetWorkspace(): Promise<void> {
   const files = await workspace.listFiles();
 
   for (const file of files) {
+    if (file.sourceKind !== "workspace") {
+      continue;
+    }
+
     await workspace.deleteFile(file.path);
   }
 
@@ -98,4 +102,29 @@ void test("files workspace records read/write actions in audit trail", async () 
 
   assert.equal(hasWrite, true);
   assert.equal(hasRead, true);
+});
+
+void test("files workspace exposes built-in docs as read-only entries", async () => {
+  await resetWorkspace();
+  const workspace = getFilesWorkspace();
+
+  const files = await workspace.listFiles();
+  const builtin = files.find((entry) => entry.path === "assistant-docs/docs/extensions.md");
+
+  assert.ok(builtin);
+  assert.equal(builtin.sourceKind, "builtin-doc");
+  assert.equal(builtin.readOnly, true);
+
+  const read = await workspace.readFile("assistant-docs/docs/extensions.md", {
+    mode: "text",
+  });
+
+  assert.equal(read.sourceKind, "builtin-doc");
+  assert.equal(read.readOnly, true);
+  assert.match(read.text ?? "", /Extensions \(MVP authoring guide\)/i);
+
+  await assert.rejects(
+    () => workspace.deleteFile("assistant-docs/docs/extensions.md"),
+    /built-in doc/i,
+  );
 });

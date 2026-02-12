@@ -81,6 +81,8 @@ function renderListMarkdown(args: {
     size: number;
     kind: string;
     mimeType: string;
+    sourceKind: "workspace" | "builtin-doc";
+    readOnly: boolean;
     workbookLabel?: string;
   }>;
 }): string {
@@ -91,7 +93,9 @@ function renderListMarkdown(args: {
   const lines = [`Workspace files (${args.backendLabel}):`, ""];
   for (const file of args.files) {
     const workbookSuffix = file.workbookLabel ? `, workbook: ${file.workbookLabel}` : "";
-    lines.push(`- ${file.path} (${formatBytes(file.size)}, ${file.kind}, ${file.mimeType}${workbookSuffix})`);
+    const sourceSuffix = file.sourceKind === "builtin-doc" ? ", built-in doc" : "";
+    const readOnlySuffix = file.readOnly ? ", read-only" : "";
+    lines.push(`- ${file.path} (${formatBytes(file.size)}, ${file.kind}, ${file.mimeType}${sourceSuffix}${readOnlySuffix}${workbookSuffix})`);
   }
 
   return lines.join("\n");
@@ -104,11 +108,15 @@ function renderReadMarkdown(args: {
   mode: "text" | "base64";
   content: string;
   truncated: boolean;
+  sourceKind: "workspace" | "builtin-doc";
+  readOnly: boolean;
   workbookLabel?: string;
 }): string {
   const lines: string[] = [];
   const workbookSuffix = args.workbookLabel ? `, workbook: ${args.workbookLabel}` : "";
-  lines.push(`Read **${args.path}** (${formatBytes(args.size)}, ${args.mimeType}${workbookSuffix})`);
+  const sourceSuffix = args.sourceKind === "builtin-doc" ? ", built-in doc" : "";
+  const readOnlySuffix = args.readOnly ? ", read-only" : "";
+  lines.push(`Read **${args.path}** (${formatBytes(args.size)}, ${args.mimeType}${sourceSuffix}${readOnlySuffix}${workbookSuffix})`);
   lines.push("");
   lines.push("```");
   lines.push(args.content);
@@ -170,6 +178,8 @@ export function createFilesTool(): AgentTool<typeof schema, FilesToolDetails> {
             mimeType: file.mimeType,
             fileKind: file.kind,
             modifiedAt: file.modifiedAt,
+            sourceKind: file.sourceKind,
+            readOnly: file.readOnly,
             workbookTag: mapWorkbookTag(file.workbookTag),
           })),
         };
@@ -184,6 +194,8 @@ export function createFilesTool(): AgentTool<typeof schema, FilesToolDetails> {
                 size: file.size,
                 kind: file.kind,
                 mimeType: file.mimeType,
+                sourceKind: file.sourceKind,
+                readOnly: file.readOnly,
                 workbookLabel: file.workbookTag?.workbookLabel,
               })),
             }),
@@ -213,6 +225,8 @@ export function createFilesTool(): AgentTool<typeof schema, FilesToolDetails> {
           size: readResult.size,
           mimeType: readResult.mimeType,
           fileKind: readResult.kind,
+          sourceKind: readResult.sourceKind,
+          readOnly: readResult.readOnly,
           truncated: readResult.truncated === true,
           workbookTag: mapWorkbookTag(readResult.workbookTag),
         };
@@ -227,6 +241,8 @@ export function createFilesTool(): AgentTool<typeof schema, FilesToolDetails> {
               mode: outputMode,
               content: output,
               truncated: readResult.truncated === true,
+              sourceKind: readResult.sourceKind,
+              readOnly: readResult.readOnly,
               workbookLabel: readResult.workbookTag?.workbookLabel,
             }),
           }],

@@ -38,6 +38,8 @@ function mapFileToEntry(path: string, file: File): WorkspaceFileEntry {
     modifiedAt: file.lastModified,
     mimeType,
     kind: inferFileKind(file.name, mimeType),
+    sourceKind: "workspace",
+    readOnly: false,
   };
 }
 
@@ -322,6 +324,8 @@ export class MemoryBackend implements WorkspaceBackend {
         modifiedAt: record.modifiedAt,
         mimeType: record.mimeType,
         kind: inferFileKind(name, record.mimeType),
+        sourceKind: "workspace",
+        readOnly: false,
       });
     }
 
@@ -346,6 +350,8 @@ export class MemoryBackend implements WorkspaceBackend {
         modifiedAt: record.modifiedAt,
         mimeType: record.mimeType,
         kind,
+        sourceKind: "workspace",
+        readOnly: false,
         text: decodeTextUtf8(record.bytes),
       });
     }
@@ -357,6 +363,8 @@ export class MemoryBackend implements WorkspaceBackend {
       modifiedAt: record.modifiedAt,
       mimeType: record.mimeType,
       kind,
+      sourceKind: "workspace",
+      readOnly: false,
       base64: bytesToBase64(record.bytes),
     });
   }

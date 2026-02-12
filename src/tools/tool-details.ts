@@ -272,12 +272,16 @@ export interface FilesWorkbookTagDetails {
   taggedAt: number;
 }
 
+export type FilesSourceKind = "workspace" | "builtin-doc";
+
 export interface FilesListItemDetails {
   path: string;
   size: number;
   mimeType: string;
   fileKind: "text" | "binary";
   modifiedAt: number;
+  sourceKind?: FilesSourceKind;
+  readOnly?: boolean;
   workbookTag?: FilesWorkbookTagDetails;
 }
 
@@ -296,6 +300,8 @@ export interface FilesReadDetails {
   size: number;
   mimeType: string;
   fileKind: "text" | "binary";
+  sourceKind?: FilesSourceKind;
+  readOnly?: boolean;
   truncated: boolean;
   workbookTag?: FilesWorkbookTagDetails;
 }
@@ -454,6 +460,14 @@ function isFilesWorkspaceBackendKind(value: unknown): value is FilesWorkspaceBac
   return value === "native-directory" || value === "opfs" || value === "memory";
 }
 
+function isFilesSourceKind(value: unknown): value is FilesSourceKind {
+  return value === "workspace" || value === "builtin-doc";
+}
+
+function isOptionalFilesSourceKind(value: unknown): value is FilesSourceKind | undefined {
+  return value === undefined || isFilesSourceKind(value);
+}
+
 function isFilesWorkbookTagDetails(value: unknown): value is FilesWorkbookTagDetails {
   if (!isRecord(value)) return false;
 
@@ -477,6 +491,8 @@ function isFilesListItemDetails(value: unknown): value is FilesListItemDetails {
     typeof value.mimeType === "string" &&
     (value.fileKind === "text" || value.fileKind === "binary") &&
     typeof value.modifiedAt === "number" &&
+    isOptionalFilesSourceKind(value.sourceKind) &&
+    isOptionalBoolean(value.readOnly) &&
     isOptionalFilesWorkbookTagDetails(value.workbookTag)
   );
 }
@@ -814,6 +830,8 @@ export function isFilesReadDetails(value: unknown): value is FilesReadDetails {
     typeof value.size === "number" &&
     typeof value.mimeType === "string" &&
     (value.fileKind === "text" || value.fileKind === "binary") &&
+    isOptionalFilesSourceKind(value.sourceKind) &&
+    isOptionalBoolean(value.readOnly) &&
     typeof value.truncated === "boolean" &&
     isOptionalFilesWorkbookTagDetails(value.workbookTag)
   );

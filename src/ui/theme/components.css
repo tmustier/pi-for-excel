@@ -1545,6 +1545,16 @@ pi-working-indicator {
   background: var(--pi-green-light);
 }
 
+.pi-files-dialog__source-badge {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  color: var(--pi-blue, oklch(0.57 0.14 246));
+  background: color-mix(in oklch, var(--pi-blue, oklch(0.57 0.14 246)) 14%, white);
+}
+
 .pi-files-dialog__meta {
   font-family: var(--font-sans);
   font-size: var(--text-xs);
@@ -1570,6 +1580,11 @@ pi-working-indicator {
 
 .pi-files-dialog__row-btn:hover {
   background: var(--white-alpha-80);
+}
+
+.pi-files-dialog__row-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .pi-files-dialog__row-btn--danger {

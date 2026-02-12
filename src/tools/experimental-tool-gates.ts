@@ -2,7 +2,7 @@
  * Experimental tool gatekeeper.
  *
  * Security posture for experimental capabilities (local bridges + files + direct Office.js):
- * - capability must be explicitly enabled via /experimental
+ * - experimental capability mutations must be explicitly enabled via /experimental
  * - local bridge URL must be configured (for bridge-backed tools)
  * - bridge must be reachable at execution time (for bridge-backed tools)
  * - tools remain registered (stable tool list / prompt caching)
@@ -349,7 +349,7 @@ export function buildPythonBridgeGateErrorMessage(reason: PythonBridgeGateReason
 export function buildFilesWorkspaceGateErrorMessage(reason: FilesWorkspaceGateReason): string {
   switch (reason) {
     case "files_experiment_disabled":
-      return "Files workspace is disabled. Enable it with /experimental on files-workspace.";
+      return "Files workspace write/delete actions are disabled. Enable them with /experimental on files-workspace.";
   }
 }
 
@@ -367,6 +367,22 @@ function isRecordObject(value: unknown): value is Record<string, unknown> {
 function getRecordValue(record: Record<string, unknown>, key: string): string | undefined {
   const value = record[key];
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+function getFilesAction(params: unknown): "list" | "read" | "write" | "delete" | null {
+  if (!isRecordObject(params)) return null;
+
+  const action = params.action;
+  if (action === "list" || action === "read" || action === "write" || action === "delete") {
+    return action;
+  }
+
+  return null;
+}
+
+function allowsFilesActionWhenExperimentDisabled(params: unknown): boolean {
+  const action = getFilesAction(params);
+  return action === "list" || action === "read";
 }
 
 function getPythonApprovalMessage(
@@ -490,7 +506,7 @@ function wrapFilesToolWithHardGate(
     ...tool,
     execute: async (toolCallId, params, signal, onUpdate) => {
       const gate = evaluateFilesWorkspaceGate(dependencies);
-      if (!gate.allowed) {
+      if (!gate.allowed && !allowsFilesActionWhenExperimentDisabled(params)) {
         const reason = gate.reason ?? "files_experiment_disabled";
         throw new Error(buildFilesWorkspaceGateErrorMessage(reason));
       }
@@ -579,6 +595,7 @@ function wrapPythonBridgeToolWithHardGate(
  * - `tmux`, `files`, `execute_office_js`, `python_run`, `libreoffice_convert`, and
  *   `python_transform_range` stay registered to keep the tool list stable.
  * - each gated tool execution re-checks experiment flags (and bridge health where relevant).
+ * - `files` keeps list/read available when disabled, but still gates write/delete.
  * - python/libreoffice bridge tools require user confirmation once per configured bridge URL.
  * - execute_office_js requires explicit user confirmation on every execution.
  */

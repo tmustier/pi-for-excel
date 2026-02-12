@@ -43,13 +43,17 @@ async function clearWorkspace(): Promise<void> {
   const files = await workspace.listFiles();
 
   for (const file of files) {
+    if (file.sourceKind !== "workspace") {
+      continue;
+    }
+
     await workspace.deleteFile(file.path);
   }
 
   await workspace.clearAuditTrail();
 }
 
-void test("files tool lists an empty workspace", async () => {
+void test("files tool lists built-in docs even without user workspace files", async () => {
   await clearWorkspace();
   const tool = createFilesTool();
 
@@ -57,8 +61,52 @@ void test("files tool lists an empty workspace", async () => {
   const details = result.details;
 
   assert.ok(details && details.kind === "files_list");
-  assert.equal(details.count, 0);
-  assert.match(result.content[0]?.type === "text" ? result.content[0].text : "", /No files yet/i);
+  assert.ok(details.count > 0);
+
+  const builtinDoc = details.files.find((file) => file.path === "assistant-docs/docs/extensions.md");
+  assert.ok(builtinDoc);
+  assert.equal(builtinDoc.sourceKind, "builtin-doc");
+  assert.equal(builtinDoc.readOnly, true);
+
+  const listText = result.content[0]?.type === "text" ? result.content[0].text : "";
+  assert.match(listText, /built-in doc/i);
+});
+
+void test("files tool reads built-in docs as read-only", async () => {
+  await clearWorkspace();
+  const tool = createFilesTool();
+
+  const readResult = await tool.execute("call-read-builtin", {
+    action: "read",
+    path: "assistant-docs/docs/extensions.md",
+    mode: "text",
+  });
+
+  const details = readResult.details;
+  assert.ok(details && details.kind === "files_read");
+  assert.equal(details.sourceKind, "builtin-doc");
+  assert.equal(details.readOnly, true);
+
+  const text = readResult.content[0]?.type === "text" ? readResult.content[0].text : "";
+  assert.match(text, /Extensions \(MVP authoring guide\)/i);
+
+  await assert.rejects(
+    () => tool.execute("call-write-builtin", {
+      action: "write",
+      path: "assistant-docs/docs/extensions.md",
+      content: "nope",
+      encoding: "text",
+    }),
+    /built-in doc/i,
+  );
+
+  await assert.rejects(
+    () => tool.execute("call-delete-builtin", {
+      action: "delete",
+      path: "assistant-docs/docs/extensions.md",
+    }),
+    /built-in doc/i,
+  );
 });
 
 void test("files tool write/read/delete round-trip for text", async () => {
@@ -93,7 +141,9 @@ void test("files tool write/read/delete round-trip for text", async () => {
   const listed = await tool.execute("call-list-post-delete", { action: "list" });
   const listDetails = listed.details;
   assert.ok(listDetails && listDetails.kind === "files_list");
-  assert.equal(listDetails.count, 0);
+
+  const workspaceEntries = listDetails.files.filter((file) => file.sourceKind !== "builtin-doc");
+  assert.equal(workspaceEntries.length, 0);
 });
 
 void test("files tool includes workbook tag metadata in list details", async () => {

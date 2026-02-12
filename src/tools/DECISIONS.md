@@ -217,14 +217,15 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 - **Rationale:** establish predictable multi-widget lifecycle semantics before richer layout controls.
 
 ## Experimental files workspace tool (`files`)
-- **Availability:** non-core experimental tool, always registered; execution hard-gated by `files-workspace` flag.
+- **Availability:** non-core tool, always registered. `list`/`read` stay available even when `files-workspace` is off; `write`/`delete` remain gated by `files-workspace`.
+- **Built-in assistant docs:** a read-only `assistant-docs/` namespace ships with the app (README + key docs) and is always visible to both UI and tool.
 - **Backend strategy:** native folder handle (when permitted) → OPFS → in-memory fallback.
-- **Workbook tagging:** files are **not segregated** by workbook; each file stores an optional workbook tag (`workbookId` + label) based on the active workbook when last written/imported.
+- **Workbook tagging:** workspace files are **not segregated** by workbook; each file stores an optional workbook tag (`workbookId` + label) based on the active workbook when last written/imported.
 - **Audit trail:** workspace keeps a local activity log (list/read/write/delete/rename/import/backend switches) including actor (`assistant`/`user`), source, timestamp, and workbook label when known.
-- **Preview UX:** Files dialog supports inline text editing plus image/PDF preview; other binaries fall back to metadata + download.
+- **Preview UX:** Files dialog supports inline text editing plus image/PDF preview; other binaries fall back to metadata + download. Built-in docs are marked read-only in the UI.
 - **Filter UX:** Files dialog includes workbook-tag filtering (`all`, `current workbook`, `untagged`, and per-tag options) without changing underlying shared storage.
 - **Input drop UX:** dropping files onto the chat input imports them directly into workspace (and auto-enables `files-workspace` if needed).
-- **Rationale:** keep one shared artifact space while preserving workbook context and transparency on who accessed/changed files.
+- **Rationale:** keep one shared artifact space while preserving workbook context/transparency, while making core assistant docs available without extra setup.
 
 ## Workbook mutation change previews + audit log (slice)
 - **Cell-diff scope:** `write_cells`, `fill_formula`, and `python_transform_range` compute before/after cell diffs.
