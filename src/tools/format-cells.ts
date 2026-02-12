@@ -12,6 +12,8 @@ import { excelRun, getRange, parseRangeRef, qualifiedAddress } from "../excel/he
 import { getErrorMessage } from "../utils/errors.js";
 import { resolveStyles } from "../conventions/index.js";
 import type { BorderWeight } from "../conventions/index.js";
+import { getResolvedConventions } from "../conventions/store.js";
+import { getAppStorage } from "@mariozechner/pi-web-ui/dist/storage/app-storage.js";
 
 const DEFAULT_FONT_NAME = "Arial";
 const DEFAULT_FONT_SIZE = 10;
@@ -142,6 +144,10 @@ export function createFormatCellsTool(): AgentTool<typeof schema, FormatCellsDet
       params: Params,
     ): Promise<AgentToolResult<FormatCellsDetails>> => {
       try {
+        // ── Load stored conventions ──────────────────────────────────
+        const storage = getAppStorage();
+        const conventionConfig = await getResolvedConventions(storage.settings);
+
         // ── Resolve styles + overrides into flat properties ──────────
         const styleResult = resolveStyles(params.style, {
           numberFormat: params.number_format,
@@ -161,7 +167,7 @@ export function createFormatCellsTool(): AgentTool<typeof schema, FormatCellsDet
           borderBottom: params.border_bottom as BorderWeight | undefined,
           borderLeft: params.border_left as BorderWeight | undefined,
           borderRight: params.border_right as BorderWeight | undefined,
-        });
+        }, conventionConfig);
         const props = styleResult.properties;
 
         const result = await excelRun(async (context) => {

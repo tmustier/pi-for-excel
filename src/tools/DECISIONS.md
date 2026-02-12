@@ -78,6 +78,23 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 - **Excluded (print/page layout):** zoom, margins, orientation, print area, and other `pageLayout` concerns.
 - **Rationale:** keep `view_settings` focused on what the user sees/navigates in-sheet. Print concerns belong in a separate future `page_layout` tool.
 
+## Conventions tool (`conventions`)
+- **Actions:** `get` (view current), `set` (partial update), `reset` (restore defaults).
+- **Storage:** `SettingsStore` key `conventions.v1` (user-level only for now).
+- **Schema:** `StoredConventions` — all fields optional. Omitted = hardcoded default.
+- **Configurable fields:**
+  - `currency_symbol` — default `$`
+  - `negative_style` — `parens` (default) or `minus`
+  - `zero_style` — `dash` (default), `zero`, or `blank`
+  - `thousands_separator` — `true` (default)
+  - `accounting_padding` — `true` (default)
+  - `number_dp`, `currency_dp`, `percent_dp`, `ratio_dp` — default dp per preset
+- **Resolution:** stored overrides merge over `DEFAULT_CONVENTIONS` / `DEFAULT_CURRENCY_SYMBOL` / `PRESET_DEFAULT_DP`. `format_cells` loads resolved config each call.
+- **System prompt:** non-default values injected as "Active convention overrides" section.
+- **Execution policy:** classified as read/none (mutates local config, not workbook).
+- **Validation:** stored values are validated on read (invalid values silently dropped). dp constrained to integer 0–10.
+- **Rationale:** users shouldn't have to repeat "I use pounds" or "no parentheses" every session. Structured config is cleaner than free-text instructions for this.
+
 ## Instructions tool (`instructions`)
 - **Scopes:** `user` (global, local machine) and `workbook` (scoped by workbook identity hash).
 - **Actions:** `append` and `replace`.

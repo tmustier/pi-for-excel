@@ -33,6 +33,8 @@ import { renderDepTree } from "./render-dep-tree.js";
 import "@mariozechner/mini-lit/dist/MarkdownBlock.js";
 
 type ToolState = "inprogress" | "complete" | "error";
+type ExtraToolName = "web_search" | "mcp";
+type SupportedToolName = CoreToolName | ExtraToolName;
 
 /* ── Helpers ────────────────────────────────────────────────── */
 
@@ -296,7 +298,7 @@ function resultSummary(text: string): string | null {
 
 /** Append error / blocked badge to the detail string. */
 function badge(
-  toolName: CoreToolName,
+  toolName: SupportedToolName,
   resultText: string | undefined,
   details: unknown,
 ): string {
@@ -340,7 +342,7 @@ function splitFirstWord(text: string): ToolDesc {
 
 /** Structured description: bold action + normal-weight detail. */
 function describeToolCall(
-  toolName: CoreToolName,
+  toolName: SupportedToolName,
   params: unknown,
   resultText: string | undefined,
   details: unknown,
@@ -454,6 +456,34 @@ function describeToolCall(
       }
       return { action: "Update", detail: scope };
     }
+    case "conventions": {
+      const action = p.action as string | undefined;
+      if (action === "get") return { action: "View", detail: "conventions" };
+      if (action === "reset") return { action: "Reset", detail: "conventions" };
+      return { action: "Update", detail: "conventions" };
+    }
+    case "web_search": {
+      const query = p.query as string | undefined;
+      return { action: "Web search", detail: query ? `\"${query}\"` : "query" };
+    }
+    case "mcp": {
+      if (typeof p.tool === "string") {
+        return { action: "MCP call", detail: p.tool };
+      }
+      if (typeof p.connect === "string") {
+        return { action: "MCP connect", detail: p.connect };
+      }
+      if (typeof p.describe === "string") {
+        return { action: "MCP describe", detail: p.describe };
+      }
+      if (typeof p.search === "string") {
+        return { action: "MCP search", detail: `\"${p.search}\"` };
+      }
+      if (typeof p.server === "string") {
+        return { action: "MCP list", detail: p.server };
+      }
+      return { action: "MCP", detail: "status" };
+    }
     default: {
       if (resultText) { const s = resultSummary(resultText); if (s) return splitFirstWord(s); }
       return { action: toolName.replace(/_/g, " "), detail: "" };
@@ -463,7 +493,7 @@ function describeToolCall(
 
 /* ── Renderer ───────────────────────────────────────────────── */
 
-function createExcelMarkdownRenderer(toolName: CoreToolName): ToolRenderer<unknown, unknown> {
+function createExcelMarkdownRenderer(toolName: SupportedToolName): ToolRenderer<unknown, unknown> {
   return {
     render(
       params: unknown,
@@ -602,6 +632,12 @@ function createExcelMarkdownRenderer(toolName: CoreToolName): ToolRenderer<unkno
   };
 }
 
-for (const name of CORE_TOOL_NAMES) {
+const CUSTOM_RENDERED_TOOL_NAMES: SupportedToolName[] = [
+  ...CORE_TOOL_NAMES,
+  "web_search",
+  "mcp",
+];
+
+for (const name of CUSTOM_RENDERED_TOOL_NAMES) {
   registerToolRenderer(name, createExcelMarkdownRenderer(name));
 }

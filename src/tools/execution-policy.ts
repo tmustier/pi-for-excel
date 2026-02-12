@@ -13,12 +13,17 @@ const ALWAYS_READ_TOOLS = new Set<string>([
   "read_range",
   "search_workbook",
   "trace_dependencies",
-  // Instructions mutate local prompt state, not workbook cells/structure.
+  // Instructions and conventions mutate local prompt/config state, not workbook cells/structure.
   "instructions",
+  "conventions",
   // External bridge traffic does not mutate workbook state directly.
   "tmux",
   "python_run",
   "libreoffice_convert",
+  "web_search",
+  "mcp",
+  // Workspace file operations do not mutate the workbook.
+  "files",
 ]);
 
 const ALWAYS_MUTATE_TOOLS = new Set<string>([

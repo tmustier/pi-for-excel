@@ -651,6 +651,100 @@ function humanizeInstructions(p: Record<string, unknown>): ParamItem[] {
   return items;
 }
 
+function humanizeConventions(p: Record<string, unknown>): ParamItem[] {
+  const items: ParamItem[] = [];
+  const action = str(p.action);
+
+  if (action) {
+    items.push({ label: "Action", value: action });
+  }
+
+  if (action === "set") {
+    const fields: Array<{ key: string; label: string }> = [
+      { key: "currency_symbol", label: "Currency" },
+      { key: "negative_style", label: "Negatives" },
+      { key: "zero_style", label: "Zeros" },
+      { key: "thousands_separator", label: "Thousands sep" },
+      { key: "accounting_padding", label: "Accounting padding" },
+      { key: "number_dp", label: "Number dp" },
+      { key: "currency_dp", label: "Currency dp" },
+      { key: "percent_dp", label: "Percent dp" },
+      { key: "ratio_dp", label: "Ratio dp" },
+    ];
+
+    for (const { key, label } of fields) {
+      const val = p[key];
+      if (val !== undefined && val !== null) {
+        const display = typeof val === "string" || typeof val === "number" || typeof val === "boolean"
+          ? String(val)
+          : JSON.stringify(val);
+        items.push({ label, value: display });
+      }
+    }
+  }
+
+  return items;
+}
+
+function humanizeWebSearch(p: Record<string, unknown>): ParamItem[] {
+  const items: ParamItem[] = [];
+
+  if (p.query) {
+    items.push({ label: "Query", value: `\"${str(p.query)}\"` });
+  }
+
+  if (p.recency) {
+    items.push({ label: "Recency", value: str(p.recency) });
+  }
+
+  if (p.site) {
+    if (Array.isArray(p.site)) {
+      const sites = p.site.map((site) => str(site)).filter((site) => site.length > 0);
+      items.push({ label: "Sites", value: sites.join(", ") });
+    } else {
+      items.push({ label: "Site", value: str(p.site) });
+    }
+  }
+
+  const maxResults = num(p.max_results);
+  if (maxResults !== undefined) {
+    items.push({ label: "Limit", value: `${maxResults} results` });
+  }
+
+  return items;
+}
+
+function humanizeMcp(p: Record<string, unknown>): ParamItem[] {
+  const items: ParamItem[] = [];
+
+  if (p.tool) {
+    items.push({ label: "Mode", value: "Call tool" });
+    items.push({ label: "Tool", value: str(p.tool) });
+  } else if (p.connect) {
+    items.push({ label: "Mode", value: "Connect" });
+    items.push({ label: "Server", value: str(p.connect) });
+  } else if (p.describe) {
+    items.push({ label: "Mode", value: "Describe tool" });
+    items.push({ label: "Tool", value: str(p.describe) });
+  } else if (p.search) {
+    items.push({ label: "Mode", value: "Search tools" });
+    items.push({ label: "Query", value: str(p.search) });
+  } else if (p.server) {
+    items.push({ label: "Mode", value: "List server tools" });
+    items.push({ label: "Server", value: str(p.server) });
+  } else {
+    items.push({ label: "Mode", value: "Status" });
+  }
+
+  if (p.args) {
+    const argsText = str(p.args);
+    const compact = argsText.length > 120 ? `${argsText.slice(0, 117)}…` : argsText;
+    items.push({ label: "Args", value: compact });
+  }
+
+  return items;
+}
+
 /* ── Shared helpers ─────────────────────────────────────────── */
 
 /** Join an array of mixed text/TemplateResult with comma separators. */
@@ -692,6 +786,7 @@ const HUMANIZERS: Record<string, HumanizerFn> = {
   get_workbook_overview: humanizeGetWorkbookOverview,
   comments: humanizeComments,
   instructions: humanizeInstructions,
+  conventions: humanizeConventions,
 } satisfies Record<CoreToolName, HumanizerFn>;
 
 /* ── Public API ─────────────────────────────────────────────── */

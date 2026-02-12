@@ -5,9 +5,22 @@
  * The workbook blueprint is injected separately via transformContext.
  */
 
+import type { ResolvedConventions } from "../conventions/types.js";
+import { diffFromDefaults } from "../conventions/store.js";
+
+export interface ActiveSkillPromptEntry {
+  id: string;
+  title: string;
+  instructions: string;
+  warning?: string;
+}
+
 export interface SystemPromptOptions {
   userInstructions?: string | null;
   workbookInstructions?: string | null;
+  activeSkills?: ActiveSkillPromptEntry[];
+  /** Resolved conventions (defaults merged with stored). Omit to skip convention diff section. */
+  conventions?: ResolvedConventions | null;
 }
 
 function renderInstructionValue(value: string | null | undefined, fallback: string): string {
@@ -39,6 +52,25 @@ ${userValue}
 ${workbookValue}`;
 }
 
+function buildActiveSkillsSection(activeSkills: ActiveSkillPromptEntry[] | undefined): string | null {
+  if (!activeSkills || activeSkills.length === 0) {
+    return null;
+  }
+
+  const lines: string[] = ["## Active Skills"];
+
+  for (const skill of activeSkills) {
+    lines.push(`### ${skill.title}`);
+    lines.push(skill.instructions.trim());
+    if (skill.warning) {
+      lines.push(`- Warning: ${skill.warning}`);
+    }
+    lines.push("");
+  }
+
+  return lines.join("\n").trimEnd();
+}
+
 /**
  * Build the system prompt.
  */
@@ -47,11 +79,32 @@ export function buildSystemPrompt(opts: SystemPromptOptions = {}): string {
 
   sections.push(IDENTITY);
   sections.push(buildInstructionsSection(opts));
+
+  const skillsSection = buildActiveSkillsSection(opts.activeSkills);
+  if (skillsSection) {
+    sections.push(skillsSection);
+  }
+
   sections.push(TOOLS);
   sections.push(WORKFLOW);
   sections.push(CONVENTIONS);
 
+  const conventionOverrides = buildConventionOverridesSection(opts.conventions);
+  if (conventionOverrides) {
+    sections.push(conventionOverrides);
+  }
+
   return sections.join("\n\n");
+}
+
+function buildConventionOverridesSection(
+  conventions: ResolvedConventions | null | undefined,
+): string | null {
+  if (!conventions) return null;
+  const diffs = diffFromDefaults(conventions);
+  if (diffs.length === 0) return null;
+  const lines = diffs.map((d) => `- ${d.label}: ${d.value}`);
+  return `### Active convention overrides\n${lines.join("\n")}\nUse these defaults when formatting. The user can change them via the conventions tool.`;
 }
 
 const IDENTITY = `You are Pi, an AI assistant embedded in Microsoft Excel as a sidebar add-in. You help users understand, analyze, and modify their spreadsheets.`;
@@ -70,7 +123,8 @@ Core workbook tools:
 - **comments** — read, add, update, reply, delete, resolve/reopen cell comments
 - **trace_dependencies** — show the formula dependency tree for a cell
 - **view_settings** — control gridlines, headings, freeze panes, tab color, sheet visibility, sheet activation, and standard width
-- **instructions** — update persistent user/workbook instructions (append or replace)`;
+- **instructions** — update persistent user/workbook instructions (append or replace)
+- **conventions** — read/update formatting defaults (currency, negatives, zeros, decimal places)`;
 
 const WORKFLOW = `## Workflow
 

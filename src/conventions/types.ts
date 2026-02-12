@@ -67,6 +67,34 @@ export interface NamedStyle {
   builtIn: true;
 }
 
+// ── Stored conventions (user-configurable) ───────────────────────────
+
+/**
+ * User-configurable convention overrides persisted in SettingsStore.
+ * All fields optional — omitted fields fall back to hardcoded defaults.
+ */
+export interface StoredConventions {
+  currencySymbol?: string;
+  negativeStyle?: "parens" | "minus";
+  zeroStyle?: "dash" | "zero" | "blank";
+  thousandsSeparator?: boolean;
+  accountingPadding?: boolean;
+  /** Override default decimal places per preset. */
+  presetDp?: Partial<Record<NumberPreset, number>>;
+}
+
+// ── Resolved conventions (defaults + stored merged) ──────────────────
+
+/** Fully resolved conventions — hardcoded defaults merged with stored overrides. */
+export interface ResolvedConventions {
+  /** Number format conventions (negative style, zero style, etc.). */
+  conventions: NumberFormatConventions;
+  /** Default currency symbol for the "currency" preset. */
+  currencySymbol: string;
+  /** Default decimal places per preset (all presets filled). */
+  presetDp: Record<NumberPreset, number | null>;
+}
+
 // ── Resolved output ──────────────────────────────────────────────────
 
 /** The fully-resolved result of composing styles + overrides. */

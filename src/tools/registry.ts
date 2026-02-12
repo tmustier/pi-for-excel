@@ -22,6 +22,7 @@ import { createTraceDependenciesTool } from "./trace-dependencies.js";
 import { createViewSettingsTool } from "./view-settings.js";
 import { createCommentsTool } from "./comments.js";
 import { createInstructionsTool } from "./instructions.js";
+import { createConventionsTool } from "./conventions.js";
 
 /** Canonical list of core tool names (single source of truth). */
 export const CORE_TOOL_NAMES = [
@@ -37,6 +38,7 @@ export const CORE_TOOL_NAMES = [
   "view_settings",
   "comments",
   "instructions",
+  "conventions",
 ] as const;
 
 export type CoreToolName = (typeof CORE_TOOL_NAMES)[number];
@@ -60,5 +62,6 @@ export function createCoreTools(): AnyCoreTool[] {
     createViewSettingsTool(),
     createCommentsTool(),
     createInstructionsTool(),
+    createConventionsTool(),
   ] as unknown as AnyCoreTool[];
 }

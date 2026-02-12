@@ -7,23 +7,22 @@
  *   3. Build the final Excel format string from preset + dp + symbol.
  */
 
-import type { CellStyle, ResolvedCellStyle, NumberFormatConventions } from "./types.js";
-import { BUILTIN_STYLES } from "./defaults.js";
+import type { CellStyle, ResolvedCellStyle, ResolvedConventions } from "./types.js";
+import { BUILTIN_STYLES, DEFAULT_CONVENTION_CONFIG } from "./defaults.js";
 import { buildFormatString, isPresetName } from "./format-builder.js";
-import { DEFAULT_CONVENTIONS } from "./defaults.js";
 
 /**
  * Resolve an array of style names + individual overrides into a flat CellStyle
  * with a ready-to-use Excel format string.
  *
- * @param styles       - Style name or array of style names (left-to-right composition).
- * @param overrides    - Individual param overrides (always win).
- * @param conventions  - House-style conventions for format building.
+ * @param styles    - Style name or array of style names (left-to-right composition).
+ * @param overrides - Individual param overrides (always win).
+ * @param config    - Resolved conventions (defaults merged with stored overrides).
  */
 export function resolveStyles(
   styles: string | string[] | undefined,
   overrides?: Partial<CellStyle>,
-  conventions: NumberFormatConventions = DEFAULT_CONVENTIONS,
+  config: ResolvedConventions = DEFAULT_CONVENTION_CONFIG,
 ): ResolvedCellStyle {
   const warnings: string[] = [];
   const merged: CellStyle = {};
@@ -51,12 +50,16 @@ export function resolveStyles(
 
   if (merged.numberFormat) {
     if (isPresetName(merged.numberFormat)) {
-      // It's a preset name — build the Excel format string
+      // It's a preset name — build the Excel format string.
+      // Resolve default dp + currency from config before calling builder.
+      const effectiveDp = merged.numberFormatDp ?? config.presetDp[merged.numberFormat] ?? null;
+      const effectiveSymbol = merged.currencySymbol ??
+        (merged.numberFormat === "currency" ? config.currencySymbol : undefined);
       const result = buildFormatString(
         merged.numberFormat,
-        merged.numberFormatDp,
-        merged.currencySymbol,
-        conventions,
+        effectiveDp,
+        effectiveSymbol,
+        config.conventions,
       );
       excelNumberFormat = result.format;
       warnings.push(...result.warnings);

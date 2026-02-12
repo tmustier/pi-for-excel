@@ -17,6 +17,7 @@ const TOOL_BUNDLES = {
     "write_cells",
     "fill_formula",
     "instructions",
+    "conventions",
   ],
   analysis: [
     "get_workbook_overview",
@@ -26,6 +27,7 @@ const TOOL_BUNDLES = {
     "fill_formula",
     "trace_dependencies",
     "instructions",
+    "conventions",
   ],
   formatting: [
     "get_workbook_overview",
@@ -37,6 +39,7 @@ const TOOL_BUNDLES = {
     "conditional_format",
     "view_settings",
     "instructions",
+    "conventions",
   ],
   structure: [
     "get_workbook_overview",
@@ -47,6 +50,7 @@ const TOOL_BUNDLES = {
     "modify_structure",
     "view_settings",
     "instructions",
+    "conventions",
   ],
   comments: [
     "get_workbook_overview",
@@ -56,6 +60,7 @@ const TOOL_BUNDLES = {
     "fill_formula",
     "comments",
     "instructions",
+    "conventions",
   ],
   full: CORE_TOOL_NAMES,
 } as const satisfies Record<ActiveToolBundleId, readonly CoreToolName[]>;

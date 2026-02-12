@@ -4,7 +4,7 @@
  * This is the single source of truth. Tools, prompt, and read-back all import from here.
  */
 
-import type { NamedStyle, NumberFormatConventions, NumberPreset } from "./types.js";
+import type { NamedStyle, NumberFormatConventions, NumberPreset, ResolvedConventions } from "./types.js";
 
 // ── Default conventions ──────────────────────────────────────────────
 
@@ -26,6 +26,13 @@ export const PRESET_DEFAULT_DP: Record<NumberPreset, number | null> = {
   ratio: 1,
   text: null,
   // date intentionally absent — dropped from presets
+};
+
+/** Default resolved conventions (all hardcoded defaults, no overrides). */
+export const DEFAULT_CONVENTION_CONFIG: ResolvedConventions = {
+  conventions: DEFAULT_CONVENTIONS,
+  currencySymbol: DEFAULT_CURRENCY_SYMBOL,
+  presetDp: { ...PRESET_DEFAULT_DP },
 };
 
 // ── Format styles (number format only — no visual properties) ────────
