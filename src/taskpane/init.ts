@@ -915,9 +915,6 @@ export async function initTaskpane(opts: {
   sidebar.onOpenSettings = () => {
     void SettingsDialog.open([new ApiKeysTab(), new ProxyTab()]);
   };
-  sidebar.onOpenFiles = () => {
-    void showFilesWorkspaceDialog();
-  };
   sidebar.onFilesDrop = (files: File[]) => {
     const workspace = getFilesWorkspace();
 
