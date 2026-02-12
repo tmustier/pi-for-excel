@@ -112,9 +112,10 @@ class HttpError extends Error {
    * @param {string} message
    */
   constructor(status, message) {
-    super(message);
+    super("HttpError");
     this.name = "HttpError";
     this.status = status;
+    this.clientMessage = message;
   }
 }
 
@@ -887,12 +888,23 @@ const handler = async (req, res) => {
 
     throw new HttpError(404, "Not found.");
   } catch (error) {
-    const status = error instanceof HttpError ? error.status : 500;
-    const message = error instanceof Error ? error.message : String(error);
+    if (error instanceof HttpError) {
+      respondJson(res, error.status, {
+        ok: false,
+        error: error.clientMessage,
+      });
+      return;
+    }
 
-    respondJson(res, status, {
+    const detail = error instanceof Error
+      ? (typeof error.stack === "string" && error.stack.length > 0 ? error.stack : error.message)
+      : String(error);
+
+    console.error(`[pi-for-excel] tmux bridge internal error: ${detail}`);
+
+    respondJson(res, 500, {
       ok: false,
-      error: message,
+      error: "Internal server error.",
     });
   }
 };

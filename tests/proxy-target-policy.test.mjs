@@ -99,6 +99,27 @@ test("evaluateTargetHostPolicy supports overrides", () => {
   });
 });
 
+test("loopback/private checks run before host allowlist", () => {
+  const strictAllowlist = parseAllowedTargetHosts("api.openai.com");
+
+  const blockedLoopback = evaluateTargetHostPolicy({
+    hostname: "127.0.0.1",
+    allowedHosts: strictAllowlist,
+  });
+  assert.deepEqual(blockedLoopback, {
+    allowed: false,
+    reason: "blocked_target_loopback",
+  });
+
+  const allowedLocalWithOverrides = evaluateTargetHostPolicy({
+    hostname: "127.0.0.1",
+    allowLoopbackTargets: true,
+    allowPrivateTargets: true,
+    allowedHosts: strictAllowlist,
+  });
+  assert.deepEqual(allowedLocalWithOverrides, { allowed: true });
+});
+
 test("isBlockedTargetByHostname reflects default deny policy", () => {
   assert.equal(isBlockedTargetByHostname("localhost"), true);
   assert.equal(isBlockedTargetByHostname("10.0.0.8"), true);

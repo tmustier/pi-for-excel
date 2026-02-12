@@ -144,10 +144,6 @@ export function getBlockedTargetReasonForHostname(hostname, opts = {}) {
     allowedHosts = new Set(),
   } = opts;
 
-  if (!isAllowedTargetHost(hostname, allowedHosts)) {
-    return "blocked_target_not_allowlisted";
-  }
-
   const host = normalizeHost(hostname);
   if (!host) return "blocked_target_invalid_host";
 
@@ -157,13 +153,24 @@ export function getBlockedTargetReasonForHostname(hostname, opts = {}) {
   }
 
   // Preserve legacy semantics: if loopback is explicitly allowed, do not
-  // re-block it under private/local checks.
+  // re-block it under private/local checks or host allowlists.
   if (loopback && allowLoopbackTargets) {
     return null;
   }
 
-  if (!allowPrivateTargets && isIpLiteral(host) && isPrivateOrLocalIp(host)) {
+  const privateOrLocalLiteral = isIpLiteral(host) && isPrivateOrLocalIp(host);
+  if (!allowPrivateTargets && privateOrLocalLiteral) {
     return "blocked_target_private_ip";
+  }
+
+  // Preserve legacy semantics: if private/local literal targets are explicitly
+  // allowed, do not re-block them under host allowlists.
+  if (allowPrivateTargets && privateOrLocalLiteral) {
+    return null;
+  }
+
+  if (!isAllowedTargetHost(host, allowedHosts)) {
+    return "blocked_target_not_allowlisted";
   }
 
   return null;

@@ -134,6 +134,22 @@ test("proxy blocks loopback targets by default", async (t) => {
   assert.match(text, /blocked_target_loopback/);
 });
 
+test("proxy blocks non-allowlisted hosts by default", async (t) => {
+  const proxy = await startProxy();
+  t.after(async () => {
+    await proxy.stop();
+  });
+
+  const target = encodeURIComponent("https://example.com/");
+  const response = await fetch(`http://127.0.0.1:${proxy.port}/?url=${target}`, {
+    headers: { Origin: ORIGIN },
+  });
+
+  assert.equal(response.status, 403);
+  const text = await response.text();
+  assert.match(text, /blocked_target_not_allowlisted/);
+});
+
 test("proxy can allow local targets with explicit overrides", async (t) => {
   const target = await startMockTarget("hello-from-local");
   t.after(async () => {

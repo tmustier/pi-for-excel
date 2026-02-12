@@ -97,14 +97,48 @@ function envFlag(name) {
   return raw === "1" || raw === "true";
 }
 
+const DEFAULT_ALLOWED_TARGET_HOSTS = new Set([
+  "api.anthropic.com",
+  "console.anthropic.com",
+  "github.com",
+  "api.github.com",
+  "auth.openai.com",
+  "api.openai.com",
+  "chatgpt.com",
+  "oauth2.googleapis.com",
+  "generativelanguage.googleapis.com",
+  "api.z.ai",
+]);
+
+const allowAllTargetHosts = envFlag("ALLOW_ALL_TARGET_HOSTS");
 const allowLoopbackTargets = envFlag("ALLOW_LOOPBACK_TARGETS");
 const allowPrivateTargets = envFlag("ALLOW_PRIVATE_TARGETS");
 const strictTargetResolution = envFlag("STRICT_TARGET_RESOLUTION");
-const allowedTargetHosts = parseAllowedTargetHosts(process.env.ALLOWED_TARGET_HOSTS);
+
+const hasConfiguredAllowedTargetHosts =
+  typeof process.env.ALLOWED_TARGET_HOSTS === "string"
+  && process.env.ALLOWED_TARGET_HOSTS.trim().length > 0;
+
+const configuredAllowedTargetHosts = hasConfiguredAllowedTargetHosts
+  ? parseAllowedTargetHosts(process.env.ALLOWED_TARGET_HOSTS)
+  : new Set();
+
+const allowedTargetHosts = (() => {
+  if (allowAllTargetHosts) {
+    return new Set();
+  }
+
+  if (configuredAllowedTargetHosts.size > 0) {
+    return configuredAllowedTargetHosts;
+  }
+
+  return new Set(DEFAULT_ALLOWED_TARGET_HOSTS);
+})();
 
 const TARGET_POLICY_MESSAGES = {
   blocked_target_invalid_host: "Invalid target host",
-  blocked_target_not_allowlisted: "Target host is not in ALLOWED_TARGET_HOSTS",
+  blocked_target_not_allowlisted:
+    "Target host is not allowlisted. Configure ALLOWED_TARGET_HOSTS or set ALLOW_ALL_TARGET_HOSTS=1 to disable host allowlisting.",
   blocked_target_loopback: "Loopback target URLs are blocked by default. Set ALLOW_LOOPBACK_TARGETS=1 to override.",
   blocked_target_private_ip: "Private/local target URLs are blocked by default. Set ALLOW_PRIVATE_TARGETS=1 to override.",
   blocked_target_resolution_failed: "Target hostname could not be resolved (STRICT_TARGET_RESOLUTION=1)",
@@ -352,8 +386,15 @@ server.listen(PORT, HOST, () => {
   console.log(`[pi-for-excel] Format: ${scheme}://${HOST}:${PORT}/?url=<target-url>`);
   console.log(`[pi-for-excel] Allowed origins: ${Array.from(allowedOrigins).join(", ")}`);
 
-  if (allowedTargetHosts.size > 0) {
-    console.log(`[pi-for-excel] Allowed target hosts: ${Array.from(allowedTargetHosts).join(", ")}`);
+  if (allowAllTargetHosts) {
+    console.log("[pi-for-excel] WARNING: target host allowlisting disabled (ALLOW_ALL_TARGET_HOSTS=1)");
+  } else {
+    const source = configuredAllowedTargetHosts.size > 0 ? "ALLOWED_TARGET_HOSTS" : "default";
+    console.log(`[pi-for-excel] Allowed target hosts (${source}): ${Array.from(allowedTargetHosts).join(", ")}`);
+  }
+
+  if (hasConfiguredAllowedTargetHosts && configuredAllowedTargetHosts.size === 0) {
+    console.warn("[pi-for-excel] WARNING: ALLOWED_TARGET_HOSTS had no valid entries; using default allowlist.");
   }
 
   if (allowLoopbackTargets) {

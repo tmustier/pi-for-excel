@@ -219,9 +219,10 @@ npx office-addin-manifest validate manifest.xml
    ALLOWED_ORIGINS="https://my-addin.example.com" npm run proxy:https
    ```
 
-   By default, the proxy also blocks **loopback + private/local target URLs** to reduce SSRF impact:
-   - loopback: `localhost`, `127.0.0.1`, `::1`
-   - private/link-local: `10/8`, `172.16/12`, `192.168/16`, `169.254/16`, `fc00::/7`, `fe80::/10`
+   By default, the proxy applies three SSRF guardrails:
+   - blocks **loopback** target URLs: `localhost`, `127.0.0.1`, `::1`
+   - blocks **private/link-local** target URLs: `10/8`, `172.16/12`, `192.168/16`, `169.254/16`, `fc00::/7`, `fe80::/10`
+   - allows outbound hosts only from a built-in allowlist (Anthropic/OpenAI/GitHub/Google/Z-AI endpoints used by Pi for Excel)
 
    Override knobs:
    ```bash
@@ -231,8 +232,11 @@ npx office-addin-manifest validate manifest.xml
    # Allow private/local targets broadly
    ALLOW_PRIVATE_TARGETS=1 npm run proxy:https
 
-   # Allow only explicit hosts (exact host match, comma-separated)
+   # Replace default host allowlist (exact host match, comma-separated)
    ALLOWED_TARGET_HOSTS="api.openai.com,oauth2.googleapis.com" npm run proxy:https
+
+   # Disable host allowlist entirely (not recommended)
+   ALLOW_ALL_TARGET_HOSTS=1 npm run proxy:https
 
    # Fail closed when DNS lookup fails
    STRICT_TARGET_RESOLUTION=1 npm run proxy:https

@@ -196,11 +196,17 @@ function stripBrowserHeaders(proxy: ProxyServerLike) {
   });
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
+}
+
 function proxyEntry(target: string, proxyPath: string) {
+  const escapedProxyPath = escapeRegExp(proxyPath);
+
   return {
     target,
     changeOrigin: true,
-    rewrite: (p: string) => p.replace(new RegExp(`^${proxyPath.replace(/\//g, "\\/")}`), ""),
+    rewrite: (p: string) => p.replace(new RegExp(`^${escapedProxyPath}`), ""),
     secure: true,
     configure: stripBrowserHeaders,
   };
