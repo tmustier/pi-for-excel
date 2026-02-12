@@ -2,14 +2,24 @@
  * Files workspace dialog.
  */
 
-import { isExperimentalFeatureEnabled, setExperimentalFeatureEnabled } from "../experiments/flags.js";
+import { base64ToBytes } from "../files/encoding.js";
 import { formatBytes } from "../files/mime.js";
-import { FILES_WORKSPACE_CHANGED_EVENT, type WorkspaceFileEntry } from "../files/types.js";
-import { getFilesWorkspace } from "../files/workspace.js";
+import {
+  FILES_WORKSPACE_CHANGED_EVENT,
+  type FilesWorkspaceAuditEntry,
+  type WorkspaceFileEntry,
+} from "../files/types.js";
+import { type FilesWorkspaceAuditContext, getFilesWorkspace } from "../files/workspace.js";
+import { isExperimentalFeatureEnabled, setExperimentalFeatureEnabled } from "../experiments/flags.js";
 import { getErrorMessage } from "../utils/errors.js";
 import { showToast } from "./toast.js";
 
 const OVERLAY_ID = "pi-files-workspace-overlay";
+
+const DIALOG_AUDIT_CONTEXT: FilesWorkspaceAuditContext = {
+  actor: "user",
+  source: "files-dialog",
+};
 
 function formatRelativeDate(timestamp: number): string {
   const now = Date.now();
@@ -28,6 +38,46 @@ function makeButton(label: string, className: string): HTMLButtonElement {
   button.className = className;
   button.textContent = label;
   return button;
+}
+
+function describeAuditEntry(entry: FilesWorkspaceAuditEntry): string {
+  switch (entry.action) {
+    case "list":
+      return "Listed workspace files";
+    case "read":
+      return entry.path ? `Read ${entry.path}` : "Read file";
+    case "write":
+      return entry.path ? `Wrote ${entry.path}` : "Wrote file";
+    case "delete":
+      return entry.path ? `Deleted ${entry.path}` : "Deleted file";
+    case "rename":
+      if (entry.fromPath && entry.toPath) {
+        return `Renamed ${entry.fromPath} → ${entry.toPath}`;
+      }
+      return "Renamed file";
+    case "import":
+      return "Imported files";
+    case "connect_native":
+      return "Connected local folder";
+    case "disconnect_native":
+      return "Switched to sandbox workspace";
+    case "clear_audit":
+      return "Cleared audit trail";
+  }
+}
+
+function isImageMimeType(mimeType: string): boolean {
+  return mimeType.toLowerCase().startsWith("image/");
+}
+
+function isPdfMimeType(mimeType: string): boolean {
+  return mimeType.trim().toLowerCase() === "application/pdf";
+}
+
+function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  const out = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(out).set(bytes);
+  return out;
 }
 
 export async function showFilesWorkspaceDialog(): Promise<void> {
@@ -73,32 +123,56 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
   const list = document.createElement("div");
   list.className = "pi-files-dialog__list";
 
-  const editor = document.createElement("div");
-  editor.className = "pi-files-dialog__editor";
-  editor.hidden = true;
+  const viewer = document.createElement("div");
+  viewer.className = "pi-files-dialog__viewer";
+  viewer.hidden = true;
 
-  const editorHeader = document.createElement("div");
-  editorHeader.className = "pi-files-dialog__editor-header";
+  const viewerHeader = document.createElement("div");
+  viewerHeader.className = "pi-files-dialog__viewer-header";
 
-  const editorTitle = document.createElement("div");
-  editorTitle.className = "pi-files-dialog__editor-title";
+  const viewerTitle = document.createElement("div");
+  viewerTitle.className = "pi-files-dialog__viewer-title";
 
-  const editorActions = document.createElement("div");
-  editorActions.className = "pi-files-dialog__editor-actions";
+  const viewerActions = document.createElement("div");
+  viewerActions.className = "pi-files-dialog__viewer-actions";
 
   const saveButton = makeButton("Save", "pi-files-dialog__btn pi-files-dialog__btn--primary");
-  const closeEditorButton = makeButton("Close", "pi-files-dialog__btn");
+  const closeViewerButton = makeButton("Close", "pi-files-dialog__btn");
 
-  const editorNote = document.createElement("div");
-  editorNote.className = "pi-files-dialog__editor-note";
+  viewerActions.append(saveButton, closeViewerButton);
+  viewerHeader.append(viewerTitle, viewerActions);
 
-  const editorTextarea = document.createElement("textarea");
-  editorTextarea.className = "pi-files-dialog__textarea";
-  editorTextarea.spellcheck = false;
+  const viewerNote = document.createElement("div");
+  viewerNote.className = "pi-files-dialog__viewer-note";
 
-  editorActions.append(saveButton, closeEditorButton);
-  editorHeader.append(editorTitle, editorActions);
-  editor.append(editorHeader, editorNote, editorTextarea);
+  const viewerTextarea = document.createElement("textarea");
+  viewerTextarea.className = "pi-files-dialog__textarea";
+  viewerTextarea.spellcheck = false;
+
+  const viewerPreview = document.createElement("div");
+  viewerPreview.className = "pi-files-dialog__preview";
+  viewerPreview.hidden = true;
+
+  viewer.append(viewerHeader, viewerNote, viewerTextarea, viewerPreview);
+
+  const audit = document.createElement("div");
+  audit.className = "pi-files-dialog__audit";
+
+  const auditHeader = document.createElement("div");
+  auditHeader.className = "pi-files-dialog__audit-header";
+
+  const auditTitle = document.createElement("div");
+  auditTitle.className = "pi-files-dialog__audit-title";
+  auditTitle.textContent = "Recent activity";
+
+  const clearAuditButton = makeButton("Clear", "pi-files-dialog__row-btn");
+
+  auditHeader.append(auditTitle, clearAuditButton);
+
+  const auditList = document.createElement("div");
+  auditList.className = "pi-files-dialog__audit-list";
+
+  audit.append(auditHeader, auditList);
 
   const footer = document.createElement("div");
   footer.className = "pi-files-dialog__footer";
@@ -120,17 +194,26 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
     hiddenInput,
     statusLine,
     list,
-    editor,
+    viewer,
+    audit,
     footer,
   );
 
   overlay.appendChild(card);
 
-  let activeEditorPath: string | null = null;
-  let editorTruncated = false;
+  let activeViewerPath: string | null = null;
+  let viewerTruncated = false;
+  let activeObjectUrl: string | null = null;
+
+  const revokeObjectUrl = () => {
+    if (!activeObjectUrl) return;
+    URL.revokeObjectURL(activeObjectUrl);
+    activeObjectUrl = null;
+  };
 
   const closeOverlay = () => {
     cleanup();
+    revokeObjectUrl();
     overlay.remove();
   };
 
@@ -138,50 +221,217 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
     statusLine.textContent = message;
   };
 
-  const clearEditor = () => {
-    activeEditorPath = null;
-    editorTruncated = false;
-    editor.hidden = true;
-    editorTitle.textContent = "";
-    editorNote.textContent = "";
-    editorTextarea.value = "";
-    editorTextarea.disabled = false;
-    saveButton.disabled = false;
+  const setViewerMode = (mode: "hidden" | "text" | "preview") => {
+    viewer.hidden = mode === "hidden";
+    viewerTextarea.hidden = mode !== "text";
+    viewerPreview.hidden = mode !== "preview";
   };
 
-  const openEditor = async (entry: WorkspaceFileEntry) => {
-    try {
-      const result = await workspace.readFile(entry.path, {
-        mode: "text",
-        maxChars: 1_000_000,
-      });
+  const clearViewer = () => {
+    activeViewerPath = null;
+    viewerTruncated = false;
+    revokeObjectUrl();
 
-      editor.hidden = false;
-      activeEditorPath = entry.path;
-      editorTruncated = result.truncated === true;
-      editorTitle.textContent = entry.path;
-      editorTextarea.value = result.text ?? "";
-      editorTextarea.disabled = editorTruncated;
-      saveButton.disabled = editorTruncated;
-      editorNote.textContent = editorTruncated
-        ? "This file is too large to edit inline safely (preview truncated to 1,000,000 chars)."
-        : "Editable text file.";
-    } catch (error: unknown) {
-      editor.hidden = false;
-      activeEditorPath = null;
-      editorTruncated = false;
-      editorTitle.textContent = entry.path;
-      editorTextarea.value = "";
-      editorTextarea.disabled = true;
+    viewerTitle.textContent = "";
+    viewerNote.textContent = "";
+    viewerTextarea.value = "";
+    viewerTextarea.disabled = false;
+    viewerPreview.replaceChildren();
+
+    saveButton.hidden = true;
+    saveButton.disabled = true;
+
+    setViewerMode("hidden");
+  };
+
+  const openTextViewer = async (entry: WorkspaceFileEntry) => {
+    const result = await workspace.readFile(entry.path, {
+      mode: "text",
+      maxChars: 1_000_000,
+      audit: DIALOG_AUDIT_CONTEXT,
+    });
+
+    activeViewerPath = entry.path;
+    viewerTruncated = result.truncated === true;
+
+    viewerTitle.textContent = entry.path;
+    viewerTextarea.value = result.text ?? "";
+    viewerTextarea.disabled = viewerTruncated;
+
+    if (viewerTruncated) {
+      viewerNote.textContent = "This file is too large to edit inline safely (preview truncated to 1,000,000 chars).";
+      saveButton.hidden = false;
       saveButton.disabled = true;
-      editorNote.textContent = `Preview unavailable: ${getErrorMessage(error)}`;
+    } else {
+      viewerNote.textContent = "Editable text file.";
+      saveButton.hidden = false;
+      saveButton.disabled = false;
+    }
+
+    setViewerMode("text");
+  };
+
+  const openImagePreview = async (entry: WorkspaceFileEntry) => {
+    const result = await workspace.readFile(entry.path, {
+      mode: "base64",
+      maxChars: 8_000_000,
+      audit: DIALOG_AUDIT_CONTEXT,
+    });
+
+    viewerTitle.textContent = entry.path;
+    saveButton.hidden = true;
+    saveButton.disabled = true;
+
+    if (!result.base64 || result.truncated) {
+      viewerNote.textContent = "Preview unavailable: image is too large for inline preview.";
+      viewerPreview.replaceChildren();
+      setViewerMode("preview");
+      return;
+    }
+
+    const bytes = base64ToBytes(result.base64);
+    const blob = new Blob([toArrayBuffer(bytes)], { type: entry.mimeType });
+    activeObjectUrl = URL.createObjectURL(blob);
+
+    const image = document.createElement("img");
+    image.className = "pi-files-dialog__preview-image";
+    image.src = activeObjectUrl;
+    image.alt = entry.path;
+
+    viewerNote.textContent = `Image preview (${formatBytes(entry.size)}).`;
+    viewerPreview.replaceChildren(image);
+    setViewerMode("preview");
+  };
+
+  const openPdfPreview = async (entry: WorkspaceFileEntry) => {
+    const result = await workspace.readFile(entry.path, {
+      mode: "base64",
+      maxChars: 16_000_000,
+      audit: DIALOG_AUDIT_CONTEXT,
+    });
+
+    viewerTitle.textContent = entry.path;
+    saveButton.hidden = true;
+    saveButton.disabled = true;
+
+    if (!result.base64 || result.truncated) {
+      viewerNote.textContent = "Preview unavailable: PDF is too large for inline preview.";
+      viewerPreview.replaceChildren();
+      setViewerMode("preview");
+      return;
+    }
+
+    const bytes = base64ToBytes(result.base64);
+    const blob = new Blob([toArrayBuffer(bytes)], { type: "application/pdf" });
+    activeObjectUrl = URL.createObjectURL(blob);
+
+    const frame = document.createElement("iframe");
+    frame.className = "pi-files-dialog__preview-frame";
+    frame.src = activeObjectUrl;
+    frame.title = entry.path;
+
+    viewerNote.textContent = `PDF preview (${formatBytes(entry.size)}).`;
+    viewerPreview.replaceChildren(frame);
+    setViewerMode("preview");
+  };
+
+  const openBinaryPlaceholder = (entry: WorkspaceFileEntry) => {
+    viewerTitle.textContent = entry.path;
+    viewerNote.textContent = "Preview not available for this binary file. Use Download to inspect it locally.";
+
+    const message = document.createElement("div");
+    message.className = "pi-files-dialog__preview-empty";
+    message.textContent = `${entry.mimeType} · ${formatBytes(entry.size)}`;
+
+    viewerPreview.replaceChildren(message);
+    saveButton.hidden = true;
+    saveButton.disabled = true;
+    setViewerMode("preview");
+  };
+
+  const openViewer = async (entry: WorkspaceFileEntry) => {
+    try {
+      revokeObjectUrl();
+      activeViewerPath = null;
+      viewerTruncated = false;
+      viewerPreview.replaceChildren();
+
+      if (entry.kind === "text") {
+        await openTextViewer(entry);
+        return;
+      }
+
+      if (isImageMimeType(entry.mimeType)) {
+        await openImagePreview(entry);
+        return;
+      }
+
+      if (isPdfMimeType(entry.mimeType)) {
+        await openPdfPreview(entry);
+        return;
+      }
+
+      openBinaryPlaceholder(entry);
+    } catch (error: unknown) {
+      activeViewerPath = null;
+      viewerTruncated = false;
+      viewerTitle.textContent = entry.path;
+      viewerNote.textContent = `Preview unavailable: ${getErrorMessage(error)}`;
+      viewerTextarea.value = "";
+      viewerTextarea.disabled = true;
+      saveButton.hidden = true;
+      saveButton.disabled = true;
+
+      const message = document.createElement("div");
+      message.className = "pi-files-dialog__preview-empty";
+      message.textContent = "Try downloading the file and opening it locally.";
+      viewerPreview.replaceChildren(message);
+      setViewerMode("preview");
+    }
+  };
+
+  const renderAuditTrail = (entries: FilesWorkspaceAuditEntry[]) => {
+    auditList.replaceChildren();
+
+    if (entries.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "pi-files-dialog__empty";
+      empty.textContent = "No activity yet.";
+      auditList.appendChild(empty);
+      return;
+    }
+
+    for (const entry of entries.slice(0, 40)) {
+      const row = document.createElement("div");
+      row.className = "pi-files-dialog__audit-row";
+
+      const meta = document.createElement("div");
+      meta.className = "pi-files-dialog__audit-meta";
+
+      const actorLabel = entry.actor === "assistant"
+        ? "assistant"
+        : entry.actor === "system"
+          ? "system"
+          : "user";
+
+      meta.textContent = `${formatRelativeDate(entry.at)} · ${actorLabel} · ${entry.source}`;
+
+      const body = document.createElement("div");
+      body.className = "pi-files-dialog__audit-body";
+
+      const workbookSuffix = entry.workbookLabel ? ` · ${entry.workbookLabel}` : "";
+      body.textContent = `${describeAuditEntry(entry)}${workbookSuffix}`;
+
+      row.append(meta, body);
+      auditList.appendChild(row);
     }
   };
 
   const renderList = async () => {
-    const [backend, files] = await Promise.all([
+    const [backend, files, auditEntries] = await Promise.all([
       workspace.getBackendStatus(),
       workspace.listFiles(),
+      workspace.listAuditEntries(80),
     ]);
 
     subtitle.textContent = `Storage: ${backend.label}${backend.nativeDirectoryName ? ` (${backend.nativeDirectoryName})` : ""}`;
@@ -207,65 +457,82 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
       empty.className = "pi-files-dialog__empty";
       empty.textContent = "No files yet. Upload documents or create a text file.";
       list.appendChild(empty);
-      return;
+    } else {
+      for (const file of files) {
+        const row = document.createElement("div");
+        row.className = "pi-files-dialog__row";
+
+        const info = document.createElement("div");
+        info.className = "pi-files-dialog__info";
+
+        const nameRow = document.createElement("div");
+        nameRow.className = "pi-files-dialog__name-row";
+
+        const name = document.createElement("div");
+        name.className = "pi-files-dialog__name";
+        name.textContent = file.path;
+
+        nameRow.appendChild(name);
+
+        if (file.workbookTag) {
+          const workbookTag = document.createElement("span");
+          workbookTag.className = "pi-files-dialog__workbook-tag";
+          workbookTag.textContent = file.workbookTag.workbookLabel;
+          nameRow.appendChild(workbookTag);
+        }
+
+        const meta = document.createElement("div");
+        meta.className = "pi-files-dialog__meta";
+        meta.textContent = `${formatBytes(file.size)} · ${file.kind} · ${formatRelativeDate(file.modifiedAt)}`;
+
+        info.append(nameRow, meta);
+
+        const actions = document.createElement("div");
+        actions.className = "pi-files-dialog__actions";
+
+        const openButton = makeButton("Open", "pi-files-dialog__row-btn");
+        openButton.addEventListener("click", () => {
+          void openViewer(file);
+        });
+
+        const downloadButton = makeButton("Download", "pi-files-dialog__row-btn");
+        downloadButton.addEventListener("click", () => {
+          void workspace.downloadFile(file.path).catch((error: unknown) => {
+            showToast(`Download failed: ${getErrorMessage(error)}`);
+          });
+        });
+
+        const renameButton = makeButton("Rename", "pi-files-dialog__row-btn");
+        renameButton.addEventListener("click", () => {
+          const nextName = window.prompt("Rename file", file.path);
+          if (!nextName) return;
+
+          void workspace.renameFile(file.path, nextName, {
+            audit: DIALOG_AUDIT_CONTEXT,
+          }).catch((error: unknown) => {
+            showToast(`Rename failed: ${getErrorMessage(error)}`);
+          });
+        });
+
+        const deleteButton = makeButton("Delete", "pi-files-dialog__row-btn pi-files-dialog__row-btn--danger");
+        deleteButton.addEventListener("click", () => {
+          const ok = window.confirm(`Delete '${file.path}'?`);
+          if (!ok) return;
+
+          void workspace.deleteFile(file.path, {
+            audit: DIALOG_AUDIT_CONTEXT,
+          }).catch((error: unknown) => {
+            showToast(`Delete failed: ${getErrorMessage(error)}`);
+          });
+        });
+
+        actions.append(openButton, downloadButton, renameButton, deleteButton);
+        row.append(info, actions);
+        list.appendChild(row);
+      }
     }
 
-    for (const file of files) {
-      const row = document.createElement("div");
-      row.className = "pi-files-dialog__row";
-
-      const info = document.createElement("div");
-      info.className = "pi-files-dialog__info";
-
-      const name = document.createElement("div");
-      name.className = "pi-files-dialog__name";
-      name.textContent = file.path;
-
-      const meta = document.createElement("div");
-      meta.className = "pi-files-dialog__meta";
-      meta.textContent = `${formatBytes(file.size)} · ${file.kind} · ${formatRelativeDate(file.modifiedAt)}`;
-
-      info.append(name, meta);
-
-      const actions = document.createElement("div");
-      actions.className = "pi-files-dialog__actions";
-
-      const editButton = makeButton("Open", "pi-files-dialog__row-btn");
-      editButton.addEventListener("click", () => {
-        void openEditor(file);
-      });
-
-      const downloadButton = makeButton("Download", "pi-files-dialog__row-btn");
-      downloadButton.addEventListener("click", () => {
-        void workspace.downloadFile(file.path).catch((error: unknown) => {
-          showToast(`Download failed: ${getErrorMessage(error)}`);
-        });
-      });
-
-      const renameButton = makeButton("Rename", "pi-files-dialog__row-btn");
-      renameButton.addEventListener("click", () => {
-        const nextName = window.prompt("Rename file", file.path);
-        if (!nextName) return;
-
-        void workspace.renameFile(file.path, nextName).catch((error: unknown) => {
-          showToast(`Rename failed: ${getErrorMessage(error)}`);
-        });
-      });
-
-      const deleteButton = makeButton("Delete", "pi-files-dialog__row-btn pi-files-dialog__row-btn--danger");
-      deleteButton.addEventListener("click", () => {
-        const ok = window.confirm(`Delete '${file.path}'?`);
-        if (!ok) return;
-
-        void workspace.deleteFile(file.path).catch((error: unknown) => {
-          showToast(`Delete failed: ${getErrorMessage(error)}`);
-        });
-      });
-
-      actions.append(editButton, downloadButton, renameButton, deleteButton);
-      row.append(info, actions);
-      list.appendChild(row);
-    }
+    renderAuditTrail(auditEntries);
   };
 
   const onWorkspaceChanged: EventListener = () => {
@@ -304,7 +571,9 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
     const selectedFiles = Array.from(files);
     hiddenInput.value = "";
 
-    void workspace.importFiles(selectedFiles)
+    void workspace.importFiles(selectedFiles, {
+      audit: DIALOG_AUDIT_CONTEXT,
+    })
       .then((count) => {
         showToast(`Imported ${count} file${count === 1 ? "" : "s"}.`);
       })
@@ -317,7 +586,9 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
     const path = window.prompt("New text file path", "notes.md");
     if (!path) return;
 
-    void workspace.writeTextFile(path, "")
+    void workspace.writeTextFile(path, "", undefined, {
+      audit: DIALOG_AUDIT_CONTEXT,
+    })
       .then(() => {
         showToast(`Created ${path}.`);
       })
@@ -327,7 +598,9 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
   });
 
   nativeButton.addEventListener("click", () => {
-    void workspace.connectNativeDirectory()
+    void workspace.connectNativeDirectory({
+      audit: DIALOG_AUDIT_CONTEXT,
+    })
       .then(() => {
         showToast("Connected local folder.");
       })
@@ -337,7 +610,9 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
   });
 
   disconnectNativeButton.addEventListener("click", () => {
-    void workspace.disconnectNativeDirectory()
+    void workspace.disconnectNativeDirectory({
+      audit: DIALOG_AUDIT_CONTEXT,
+    })
       .then(() => {
         showToast("Switched to sandboxed workspace.");
       })
@@ -347,11 +622,13 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
   });
 
   saveButton.addEventListener("click", () => {
-    if (!activeEditorPath || editorTruncated) return;
+    if (!activeViewerPath || viewerTruncated) return;
 
-    const path = activeEditorPath;
-    const nextContent = editorTextarea.value;
-    void workspace.writeTextFile(path, nextContent)
+    const path = activeViewerPath;
+    const nextContent = viewerTextarea.value;
+    void workspace.writeTextFile(path, nextContent, undefined, {
+      audit: DIALOG_AUDIT_CONTEXT,
+    })
       .then(() => {
         showToast(`Saved ${path}.`);
       })
@@ -360,8 +637,23 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
       });
   });
 
-  closeEditorButton.addEventListener("click", () => {
-    clearEditor();
+  closeViewerButton.addEventListener("click", () => {
+    clearViewer();
+  });
+
+  clearAuditButton.addEventListener("click", () => {
+    const ok = window.confirm("Clear files activity log?");
+    if (!ok) return;
+
+    void workspace.clearAuditTrail({
+      audit: DIALOG_AUDIT_CONTEXT,
+    })
+      .then(() => {
+        showToast("Cleared files activity log.");
+      })
+      .catch((error: unknown) => {
+        showToast(`Could not clear activity log: ${getErrorMessage(error)}`);
+      });
   });
 
   closeButton.addEventListener("click", closeOverlay);

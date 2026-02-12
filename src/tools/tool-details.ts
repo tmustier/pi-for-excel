@@ -137,12 +137,19 @@ export interface McpGatewayDetails {
 
 export type FilesWorkspaceBackendKind = "native-directory" | "opfs" | "memory";
 
+export interface FilesWorkbookTagDetails {
+  workbookId: string;
+  workbookLabel: string;
+  taggedAt: number;
+}
+
 export interface FilesListItemDetails {
   path: string;
   size: number;
   mimeType: string;
   fileKind: "text" | "binary";
   modifiedAt: number;
+  workbookTag?: FilesWorkbookTagDetails;
 }
 
 export interface FilesListDetails {
@@ -161,6 +168,7 @@ export interface FilesReadDetails {
   mimeType: string;
   fileKind: "text" | "binary";
   truncated: boolean;
+  workbookTag?: FilesWorkbookTagDetails;
 }
 
 export interface FilesWriteDetails {
@@ -169,12 +177,14 @@ export interface FilesWriteDetails {
   path: string;
   encoding: "text" | "base64";
   chars: number;
+  workbookTag?: FilesWorkbookTagDetails;
 }
 
 export interface FilesDeleteDetails {
   kind: "files_delete";
   backend: FilesWorkspaceBackendKind;
   path: string;
+  workbookTag?: FilesWorkbookTagDetails;
 }
 
 export type FilesToolDetails =
@@ -217,6 +227,20 @@ function isFilesWorkspaceBackendKind(value: unknown): value is FilesWorkspaceBac
   return value === "native-directory" || value === "opfs" || value === "memory";
 }
 
+function isFilesWorkbookTagDetails(value: unknown): value is FilesWorkbookTagDetails {
+  if (!isRecord(value)) return false;
+
+  return (
+    typeof value.workbookId === "string" &&
+    typeof value.workbookLabel === "string" &&
+    typeof value.taggedAt === "number"
+  );
+}
+
+function isOptionalFilesWorkbookTagDetails(value: unknown): value is FilesWorkbookTagDetails | undefined {
+  return value === undefined || isFilesWorkbookTagDetails(value);
+}
+
 function isFilesListItemDetails(value: unknown): value is FilesListItemDetails {
   if (!isRecord(value)) return false;
 
@@ -225,7 +249,8 @@ function isFilesListItemDetails(value: unknown): value is FilesListItemDetails {
     typeof value.size === "number" &&
     typeof value.mimeType === "string" &&
     (value.fileKind === "text" || value.fileKind === "binary") &&
-    typeof value.modifiedAt === "number"
+    typeof value.modifiedAt === "number" &&
+    isOptionalFilesWorkbookTagDetails(value.workbookTag)
   );
 }
 
@@ -411,7 +436,8 @@ export function isFilesReadDetails(value: unknown): value is FilesReadDetails {
     typeof value.size === "number" &&
     typeof value.mimeType === "string" &&
     (value.fileKind === "text" || value.fileKind === "binary") &&
-    typeof value.truncated === "boolean"
+    typeof value.truncated === "boolean" &&
+    isOptionalFilesWorkbookTagDetails(value.workbookTag)
   );
 }
 
@@ -423,7 +449,8 @@ export function isFilesWriteDetails(value: unknown): value is FilesWriteDetails 
     isFilesWorkspaceBackendKind(value.backend) &&
     typeof value.path === "string" &&
     (value.encoding === "text" || value.encoding === "base64") &&
-    typeof value.chars === "number"
+    typeof value.chars === "number" &&
+    isOptionalFilesWorkbookTagDetails(value.workbookTag)
   );
 }
 
@@ -433,6 +460,7 @@ export function isFilesDeleteDetails(value: unknown): value is FilesDeleteDetail
 
   return (
     isFilesWorkspaceBackendKind(value.backend) &&
-    typeof value.path === "string"
+    typeof value.path === "string" &&
+    isOptionalFilesWorkbookTagDetails(value.workbookTag)
   );
 }

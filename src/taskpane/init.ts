@@ -22,7 +22,9 @@ import {
   PI_EXPERIMENTAL_FEATURE_CHANGED_EVENT,
   PI_EXPERIMENTAL_TOOL_CONFIG_CHANGED_EVENT,
 } from "../experiments/events.js";
+import { isExperimentalFeatureEnabled, setExperimentalFeatureEnabled } from "../experiments/flags.js";
 import { convertToLlm } from "../messages/convert-to-llm.js";
+import { getFilesWorkspace } from "../files/workspace.js";
 import { createAllTools } from "../tools/index.js";
 import { applyExperimentalToolGates } from "../tools/experimental-tool-gates.js";
 import { withWorkbookCoordinator } from "../tools/with-workbook-coordinator.js";
@@ -51,6 +53,7 @@ import { getExternalToolsEnabled, resolveConfiguredSkillIds } from "../skills/st
 import { buildSystemPrompt } from "../prompt/system-prompt.js";
 import { initAppStorage } from "../storage/init-app-storage.js";
 import { renderError } from "../ui/loading.js";
+import { showFilesWorkspaceDialog } from "../ui/files-dialog.js";
 import { showActionToast, showToast } from "../ui/toast.js";
 import { PiSidebar } from "../ui/pi-sidebar.js";
 import { setActiveProviders } from "../compat/model-selector-patch.js";
@@ -908,6 +911,33 @@ export async function initTaskpane(opts: {
   };
   sidebar.onOpenSettings = () => {
     void SettingsDialog.open([new ApiKeysTab(), new ProxyTab()]);
+  };
+  sidebar.onOpenFiles = () => {
+    void showFilesWorkspaceDialog();
+  };
+  sidebar.onFilesDrop = (files: File[]) => {
+    const workspace = getFilesWorkspace();
+
+    void workspace.importFiles(files, {
+      audit: { actor: "user", source: "input-drop" },
+    })
+      .then((count) => {
+        if (count <= 0) {
+          showToast("No files were imported.");
+          return;
+        }
+
+        if (!isExperimentalFeatureEnabled("files_workspace")) {
+          setExperimentalFeatureEnabled("files_workspace", true);
+          showToast(`Imported ${count} file${count === 1 ? "" : "s"} and enabled files-workspace.`);
+          return;
+        }
+
+        showToast(`Imported ${count} file${count === 1 ? "" : "s"}.`);
+      })
+      .catch((error: unknown) => {
+        showToast(`Import failed: ${error instanceof Error ? error.message : "Unknown error"}`);
+      });
   };
   sidebar.onOpenResumePicker = () => {
     void showResumeDialog({

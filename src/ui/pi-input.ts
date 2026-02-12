@@ -27,6 +27,7 @@ export class PiInput extends LitElement {
 
   @state() private _value = "";
   @state() private _placeholderIndex = 0;
+  @state() private _isDragOver = false;
   @query("textarea") private _textarea!: HTMLTextAreaElement;
 
   private _placeholderTimer?: ReturnType<typeof setInterval>;
@@ -76,6 +77,42 @@ export class PiInput extends LitElement {
     }
   };
 
+  private _onDragEnter = (event: DragEvent) => {
+    if (!event.dataTransfer || event.dataTransfer.files.length === 0) return;
+    event.preventDefault();
+    this._isDragOver = true;
+  };
+
+  private _onDragOver = (event: DragEvent) => {
+    if (!event.dataTransfer) return;
+    if (event.dataTransfer.files.length === 0) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+    this._isDragOver = true;
+  };
+
+  private _onDragLeave = (event: DragEvent) => {
+    const related = event.relatedTarget;
+    if (related instanceof Node && this.contains(related)) return;
+    this._isDragOver = false;
+  };
+
+  private _onDrop = (event: DragEvent) => {
+    event.preventDefault();
+    this._isDragOver = false;
+
+    const transfer = event.dataTransfer;
+    if (!transfer || transfer.files.length === 0) return;
+
+    const files = Array.from(transfer.files);
+    if (files.length === 0) return;
+
+    this.dispatchEvent(new CustomEvent<{ files: File[] }>("pi-files-drop", {
+      bubbles: true,
+      detail: { files },
+    }));
+  };
+
   private _send() {
     const text = this._value.trim();
     if (!text) return;
@@ -108,7 +145,13 @@ export class PiInput extends LitElement {
   override render() {
     const hasContent = this._value.trim().length > 0;
     return html`
-      <div class="pi-input-card">
+      <div
+        class="pi-input-card ${this._isDragOver ? "is-drag-over" : ""}"
+        @dragenter=${this._onDragEnter}
+        @dragover=${this._onDragOver}
+        @dragleave=${this._onDragLeave}
+        @drop=${this._onDrop}
+      >
         <textarea
           class="pi-input-textarea"
           .value=${this._value}
@@ -117,6 +160,9 @@ export class PiInput extends LitElement {
           @input=${this._onInput}
           @keydown=${this._onKeydown}
         ></textarea>
+        ${this._isDragOver
+          ? html`<div class="pi-input-drop-hint">Drop files to add them to workspace</div>`
+          : null}
         ${this.isStreaming
           ? html`
             <button class="pi-input-btn pi-input-btn--abort" @click=${() => this.dispatchEvent(new CustomEvent("pi-abort", { bubbles: true }))} aria-label="Stop">

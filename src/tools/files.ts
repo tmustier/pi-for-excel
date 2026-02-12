@@ -6,7 +6,12 @@ import type { AgentTool, AgentToolResult } from "@mariozechner/pi-agent-core";
 import { Type, type Static } from "@sinclair/typebox";
 
 import { formatBytes } from "../files/mime.js";
-import { getFilesWorkspace, type WorkspaceReadMode } from "../files/workspace.js";
+import { normalizeWorkspacePath } from "../files/path.js";
+import {
+  getFilesWorkspace,
+  type FilesWorkspaceAuditContext,
+  type WorkspaceReadMode,
+} from "../files/workspace.js";
 import type {
   FilesDeleteDetails,
   FilesListDetails,
@@ -55,6 +60,11 @@ const schema = Type.Object({
 
 type Params = Static<typeof schema>;
 
+const TOOL_AUDIT_CONTEXT: FilesWorkspaceAuditContext = {
+  actor: "assistant",
+  source: "tool:files",
+};
+
 function requirePath(path: string | undefined, action: Params["action"]): string {
   const trimmed = path?.trim();
   if (!trimmed) {
@@ -71,6 +81,7 @@ function renderListMarkdown(args: {
     size: number;
     kind: string;
     mimeType: string;
+    workbookLabel?: string;
   }>;
 }): string {
   if (args.files.length === 0) {
@@ -79,7 +90,8 @@ function renderListMarkdown(args: {
 
   const lines = [`Workspace files (${args.backendLabel}):`, ""];
   for (const file of args.files) {
-    lines.push(`- ${file.path} (${formatBytes(file.size)}, ${file.kind}, ${file.mimeType})`);
+    const workbookSuffix = file.workbookLabel ? `, workbook: ${file.workbookLabel}` : "";
+    lines.push(`- ${file.path} (${formatBytes(file.size)}, ${file.kind}, ${file.mimeType}${workbookSuffix})`);
   }
 
   return lines.join("\n");
@@ -92,9 +104,11 @@ function renderReadMarkdown(args: {
   mode: "text" | "base64";
   content: string;
   truncated: boolean;
+  workbookLabel?: string;
 }): string {
   const lines: string[] = [];
-  lines.push(`Read **${args.path}** (${formatBytes(args.size)}, ${args.mimeType})`);
+  const workbookSuffix = args.workbookLabel ? `, workbook: ${args.workbookLabel}` : "";
+  lines.push(`Read **${args.path}** (${formatBytes(args.size)}, ${args.mimeType}${workbookSuffix})`);
   lines.push("");
   lines.push("```");
   lines.push(args.content);
@@ -113,6 +127,23 @@ function renderReadMarkdown(args: {
   return lines.join("\n");
 }
 
+function mapWorkbookTag(tag: {
+  workbookId: string;
+  workbookLabel: string;
+  taggedAt: number;
+} | undefined): {
+  workbookId: string;
+  workbookLabel: string;
+  taggedAt: number;
+} | undefined {
+  if (!tag) return undefined;
+  return {
+    workbookId: tag.workbookId,
+    workbookLabel: tag.workbookLabel,
+    taggedAt: tag.taggedAt,
+  };
+}
+
 export function createFilesTool(): AgentTool<typeof schema, FilesToolDetails> {
   return {
     name: "files",
@@ -126,7 +157,9 @@ export function createFilesTool(): AgentTool<typeof schema, FilesToolDetails> {
       const backend = await workspace.getBackendStatus();
 
       if (params.action === "list") {
-        const files = await workspace.listFiles();
+        const files = await workspace.listFiles({
+          audit: TOOL_AUDIT_CONTEXT,
+        });
         const details: FilesListDetails = {
           kind: "files_list",
           backend: backend.kind,
@@ -137,6 +170,7 @@ export function createFilesTool(): AgentTool<typeof schema, FilesToolDetails> {
             mimeType: file.mimeType,
             fileKind: file.kind,
             modifiedAt: file.modifiedAt,
+            workbookTag: mapWorkbookTag(file.workbookTag),
           })),
         };
 
@@ -150,6 +184,7 @@ export function createFilesTool(): AgentTool<typeof schema, FilesToolDetails> {
                 size: file.size,
                 kind: file.kind,
                 mimeType: file.mimeType,
+                workbookLabel: file.workbookTag?.workbookLabel,
               })),
             }),
           }],
@@ -165,6 +200,7 @@ export function createFilesTool(): AgentTool<typeof schema, FilesToolDetails> {
         const readResult = await workspace.readFile(path, {
           mode,
           maxChars,
+          audit: TOOL_AUDIT_CONTEXT,
         });
 
         const outputMode: "text" | "base64" = readResult.text !== undefined ? "text" : "base64";
@@ -178,6 +214,7 @@ export function createFilesTool(): AgentTool<typeof schema, FilesToolDetails> {
           mimeType: readResult.mimeType,
           fileKind: readResult.kind,
           truncated: readResult.truncated === true,
+          workbookTag: mapWorkbookTag(readResult.workbookTag),
         };
 
         return {
@@ -190,6 +227,7 @@ export function createFilesTool(): AgentTool<typeof schema, FilesToolDetails> {
               mode: outputMode,
               content: output,
               truncated: readResult.truncated === true,
+              workbookLabel: readResult.workbookTag?.workbookLabel,
             }),
           }],
           details,
@@ -198,43 +236,59 @@ export function createFilesTool(): AgentTool<typeof schema, FilesToolDetails> {
 
       if (params.action === "write") {
         const path = requirePath(params.path, "write");
+        const normalizedPath = normalizeWorkspacePath(path);
         const content = params.content ?? "";
         const encoding = params.encoding ?? "text";
 
         if (encoding === "base64") {
-          await workspace.writeBase64File(path, content, params.mime_type);
+          await workspace.writeBase64File(path, content, params.mime_type, {
+            audit: TOOL_AUDIT_CONTEXT,
+          });
         } else {
-          await workspace.writeTextFile(path, content, params.mime_type);
+          await workspace.writeTextFile(path, content, params.mime_type, {
+            audit: TOOL_AUDIT_CONTEXT,
+          });
         }
+
+        const filesAfterWrite = await workspace.listFiles();
+        const writtenFile = filesAfterWrite.find((file) => file.path === normalizedPath);
 
         const details: FilesWriteDetails = {
           kind: "files_write",
           backend: backend.kind,
-          path,
+          path: normalizedPath,
           encoding,
           chars: content.length,
+          workbookTag: mapWorkbookTag(writtenFile?.workbookTag),
         };
 
         return {
           content: [{
             type: "text",
-            text: `Wrote **${path}** (${content.length.toLocaleString()} chars, ${encoding}).`,
+            text: `Wrote **${normalizedPath}** (${content.length.toLocaleString()} chars, ${encoding}).`,
           }],
           details,
         };
       }
 
       const path = requirePath(params.path, "delete");
-      await workspace.deleteFile(path);
+      const normalizedPath = normalizeWorkspacePath(path);
+      const filesBeforeDelete = await workspace.listFiles();
+      const deletedFile = filesBeforeDelete.find((file) => file.path === normalizedPath);
+
+      await workspace.deleteFile(normalizedPath, {
+        audit: TOOL_AUDIT_CONTEXT,
+      });
 
       const details: FilesDeleteDetails = {
         kind: "files_delete",
         backend: backend.kind,
-        path,
+        path: normalizedPath,
+        workbookTag: mapWorkbookTag(deletedFile?.workbookTag),
       };
 
       return {
-        content: [{ type: "text", text: `Deleted **${path}**.` }],
+        content: [{ type: "text", text: `Deleted **${normalizedPath}**.` }],
         details,
       };
     },

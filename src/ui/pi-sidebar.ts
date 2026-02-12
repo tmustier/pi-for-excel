@@ -85,6 +85,7 @@ export class PiSidebar extends LitElement {
   @property({ attribute: false }) onOpenSkills?: () => void;
   @property({ attribute: false }) onOpenSettings?: () => void;
   @property({ attribute: false }) onOpenFiles?: () => void;
+  @property({ attribute: false }) onFilesDrop?: (files: File[]) => void;
   @property({ attribute: false }) onOpenResumePicker?: () => void;
   @property({ attribute: false }) onOpenShortcuts?: () => void;
   @property({ attribute: false }) lockNotice: string | null = null;
@@ -297,6 +298,10 @@ export class PiSidebar extends LitElement {
 
   private _onAbort = () => { this.onAbort?.(); };
 
+  private _onFilesDrop = (event: CustomEvent<{ files: File[] }>) => {
+    this.onFilesDrop?.(event.detail.files);
+  };
+
   private _buildToolResultsMap(): Map<string, ToolResultMessage<unknown>> {
     const map = new Map<string, ToolResultMessage<unknown>>();
     if (!this.agent) return map;
@@ -353,6 +358,7 @@ export class PiSidebar extends LitElement {
           .isStreaming=${this._isStreaming}
           @pi-send=${this._onSend}
           @pi-abort=${this._onAbort}
+          @pi-files-drop=${this._onFilesDrop}
         ></pi-input>
         <div id="pi-status-bar" class="pi-status-bar"></div>
       </div>

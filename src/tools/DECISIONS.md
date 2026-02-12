@@ -170,3 +170,12 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 - **Web search provider:** Brave Search (`web_search`) with optional proxy routing and explicit "Sent" attribution in results.
 - **MCP integration:** configurable server registry (`mcp.servers.v1`), UI add/remove/test, and a single `mcp` gateway tool for list/search/describe/call flows.
 - **Rationale:** satisfy issue #24 with explicit consent, clear attribution, and minimal overlap with the extension system.
+
+## Experimental files workspace tool (`files`)
+- **Availability:** non-core experimental tool, always registered; execution hard-gated by `files-workspace` flag.
+- **Backend strategy:** native folder handle (when permitted) → OPFS → in-memory fallback.
+- **Workbook tagging:** files are **not segregated** by workbook; each file stores an optional workbook tag (`workbookId` + label) based on the active workbook when last written/imported.
+- **Audit trail:** workspace keeps a local activity log (list/read/write/delete/rename/import/backend switches) including actor (`assistant`/`user`), source, timestamp, and workbook label when known.
+- **Preview UX:** Files dialog supports inline text editing plus image/PDF preview; other binaries fall back to metadata + download.
+- **Input drop UX:** dropping files onto the chat input imports them directly into workspace (and auto-enables `files-workspace` if needed).
+- **Rationale:** keep one shared artifact space while preserving workbook context and transparency on who accessed/changed files.

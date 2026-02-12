@@ -4,6 +4,40 @@ import { test } from "node:test";
 import { getFilesWorkspace } from "../src/files/workspace.ts";
 import { createFilesTool } from "../src/tools/files.ts";
 
+function getOfficeGlobal(): unknown {
+  return Reflect.get(globalThis, "Office");
+}
+
+function setOfficeGlobal(value: unknown): void {
+  Reflect.set(globalThis, "Office", value);
+}
+
+function deleteOfficeGlobal(): void {
+  Reflect.deleteProperty(globalThis, "Office");
+}
+
+async function withOfficeDocumentUrl(url: string, run: () => Promise<void>): Promise<void> {
+  const previousOffice = getOfficeGlobal();
+
+  setOfficeGlobal({
+    context: {
+      document: {
+        url,
+      },
+    },
+  });
+
+  try {
+    await run();
+  } finally {
+    if (previousOffice === undefined) {
+      deleteOfficeGlobal();
+    } else {
+      setOfficeGlobal(previousOffice);
+    }
+  }
+}
+
 async function clearWorkspace(): Promise<void> {
   const workspace = getFilesWorkspace();
   const files = await workspace.listFiles();
@@ -11,6 +45,8 @@ async function clearWorkspace(): Promise<void> {
   for (const file of files) {
     await workspace.deleteFile(file.path);
   }
+
+  await workspace.clearAuditTrail();
 }
 
 void test("files tool lists an empty workspace", async () => {
@@ -58,6 +94,31 @@ void test("files tool write/read/delete round-trip for text", async () => {
   const listDetails = listed.details;
   assert.ok(listDetails && listDetails.kind === "files_list");
   assert.equal(listDetails.count, 0);
+});
+
+void test("files tool includes workbook tag metadata in list details", async () => {
+  await clearWorkspace();
+  const tool = createFilesTool();
+
+  await withOfficeDocumentUrl("https://contoso.example/workbooks/Sales.xlsx", async () => {
+    await tool.execute("call-write-tagged", {
+      action: "write",
+      path: "tagged.md",
+      content: "hello",
+      encoding: "text",
+    });
+  });
+
+  const listResult = await tool.execute("call-list-tagged", {
+    action: "list",
+  });
+
+  const details = listResult.details;
+  assert.ok(details && details.kind === "files_list");
+
+  const tagged = details.files.find((file) => file.path === "tagged.md");
+  assert.ok(tagged);
+  assert.equal(tagged.workbookTag?.workbookLabel, "Sales.xlsx");
 });
 
 void test("files tool rejects text-mode reads of binary files", async () => {
