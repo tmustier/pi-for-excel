@@ -91,15 +91,16 @@ https://github.com/tmustier/pi-for-excel/issues/28
 ### #27 — Design: YOLO mode + workbook recovery/versioning strategy
 https://github.com/tmustier/pi-for-excel/issues/27
 
-**Status note:** first rollback slice is now in place:
+**Status note:** rollback UX is now in place:
 - automatic pre-write checkpoints for `write_cells`, `fill_formula`, and `python_transform_range`
 - new `workbook_history` tool (list / restore / delete / clear)
 - post-write action toast with one-click **Revert**
+- dedicated checkpoint browser overlay (menu + `/history`) with restore/delete/clear controls
 - restore creates an inverse checkpoint so rollbacks are themselves reversible
 
 **Remaining follow-up:**
 - broader tool coverage (format/structure/comment mutations)
-- explicit snapshot history panel + export UX
+- richer history UX (search/filter/export, retention controls)
 - feasibility deep-dive for full-file snapshots vs range snapshots in Office.js
 
 ---
