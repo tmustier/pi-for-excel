@@ -4,9 +4,9 @@
 
 .pi-queue {
   flex-shrink: 0;
-  padding: 5px 12px;
+  padding: 4px 12px;
   font-family: var(--font-sans);
-  font-size: 12px;
+  font-size: var(--text-sm);
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -24,7 +24,7 @@
 }
 
 .pi-queue__label {
-  font-size: 10px;
+  font-size: var(--text-xs);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.03em;

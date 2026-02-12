@@ -2,7 +2,6 @@
  * Taskpane bootstrap.
  *
  * Runs immediately when the add-in loads:
- * - injects shared styles
  * - renders loading UI
  * - installs global fetch + UI monkey patches
  * - waits for Office.onReady (with fallback) and then initializes the app
@@ -12,8 +11,7 @@ import { render } from "lit";
 
 import { installFetchInterceptor } from "../auth/cors-proxy.js";
 import { installModelSelectorPatch } from "../compat/model-selector-patch.js";
-import { headerStyles } from "../ui/header.js";
-import { renderLoading, renderError, loadingStyles } from "../ui/loading.js";
+import { renderLoading, renderError } from "../ui/loading.js";
 import { getErrorMessage } from "../utils/errors.js";
 
 import { initTaskpane } from "./init.js";
@@ -34,11 +32,6 @@ export function bootstrapTaskpane(): void {
   const appEl = getRequiredElement<HTMLElement>("app");
   const loadingRoot = getRequiredElement<HTMLElement>("loading-root");
   const errorRoot = getRequiredElement<HTMLElement>("error-root");
-
-  // Styles for header + loading UI
-  const styleSheet = document.createElement("style");
-  styleSheet.textContent = headerStyles + loadingStyles;
-  document.head.appendChild(styleSheet);
 
   // Initial loading UI
   render(renderLoading(), loadingRoot);

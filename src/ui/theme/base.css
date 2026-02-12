@@ -4,7 +4,7 @@
 
 body {
   font-family: var(--font-sans);
-  font-size: 13.5px;
+  font-size: var(--text-base);
   line-height: 1.5;
   background-color: var(--pi-surface);
   /* Spreadsheet grid — faint cells visible under glass */
@@ -13,7 +13,7 @@ body {
     linear-gradient(90deg, oklch(0.45 0.08 160 / 0.04) 1px, transparent 1px);
   background-size: 80px 21px;
   background-position: -1px -1px;
-  box-shadow: inset 4px 0 12px -3px oklch(0 0 0 / 0.05);
+  box-shadow: inset 4px 0 12px -3px var(--alpha-5);
 }
 
 
@@ -21,7 +21,7 @@ body {
 * { scrollbar-width: thin; scrollbar-color: oklch(0.84 0 0) transparent; }
 *::-webkit-scrollbar { width: 4px; height: 4px; }
 *::-webkit-scrollbar-track { background: transparent; }
-*::-webkit-scrollbar-thumb { background: oklch(0.84 0 0); border-radius: 2px; }
+*::-webkit-scrollbar-thumb { background: oklch(0.84 0 0); border-radius: var(--radius-xs); }
 *::-webkit-scrollbar-thumb:hover { background: oklch(0.70 0 0); }
 
 

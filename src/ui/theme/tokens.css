@@ -36,28 +36,78 @@
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
   --radius: 0.625rem;
 
+  /* ── Scale tokens ───────────────────────────────────── */
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-full: 999px;
+
+  --text-xs: 10px;
+  --text-sm: 11.5px;
+  --text-base: 13px;
+  --text-md: 15px;
+  --text-lg: 18px;
+  --text-xl: 40px;
+
+  --duration-fast: 0.12s;
+  --duration-normal: 0.2s;
+
+  /* ── Alpha palette tokens ───────────────────────────── */
+  --alpha-2: oklch(0 0 0 / 0.02);
+  --alpha-3: oklch(0 0 0 / 0.03);
+  --alpha-4: oklch(0 0 0 / 0.04);
+  --alpha-5: oklch(0 0 0 / 0.05);
+  --alpha-6: oklch(0 0 0 / 0.06);
+  --alpha-8: oklch(0 0 0 / 0.08);
+  --alpha-10: oklch(0 0 0 / 0.10);
+  --alpha-12: oklch(0 0 0 / 0.12);
+  --alpha-14: oklch(0 0 0 / 0.14);
+  --alpha-15: oklch(0 0 0 / 0.15);
+  --alpha-20: oklch(0 0 0 / 0.20);
+  --alpha-25: oklch(0 0 0 / 0.25);
+
+  --white-alpha-20: oklch(1 0 0 / 0.20);
+  --white-alpha-25: oklch(1 0 0 / 0.25);
+  --white-alpha-40: oklch(1 0 0 / 0.40);
+  --white-alpha-45: oklch(1 0 0 / 0.45);
+  --white-alpha-50: oklch(1 0 0 / 0.50);
+  --white-alpha-60: oklch(1 0 0 / 0.60);
+  --white-alpha-65: oklch(1 0 0 / 0.65);
+  --white-alpha-70: oklch(1 0 0 / 0.70);
+  --white-alpha-90: oklch(1 0 0 / 0.90);
+
+  --green-alpha-6: oklch(0.45 0.12 160 / 0.06);
+  --green-alpha-12: oklch(0.45 0.12 160 / 0.12);
+  --green-alpha-14: oklch(0.45 0.12 160 / 0.14);
+  --green-alpha-20: oklch(0.45 0.12 160 / 0.20);
+  --green-alpha-25: oklch(0.45 0.12 160 / 0.25);
+  --green-alpha-30: oklch(0.45 0.12 160 / 0.30);
+
   /* ── Our custom tokens ───────────────────────────────── */
   --pi-green: var(--primary);
+  --pi-green-strong: oklch(0.40 0.12 160);
   --pi-green-light: oklch(0.45 0.12 160 / 0.08);
   --pi-green-lighter: oklch(0.45 0.12 160 / 0.04);
   --pi-surface: var(--sidebar);
 
   --pi-surface-translucent: oklch(0.98 0.002 90 / 0.85);
-  --pi-divider: 1px solid oklch(0 0 0 / 0.06);
+  --pi-divider: 1px solid var(--alpha-6);
   --pi-inner-bg: oklch(0.99 0.002 90);
 
   /* ── Pill tokens — shared across all card-like components ── */
-  --pill-radius: 14px;
+  --pill-radius: var(--radius-lg);
   --pill-border-width: 1px;
-  --pill-border: var(--pill-border-width) solid oklch(0 0 0 / 0.08);
+  --pill-border: var(--pill-border-width) solid var(--alpha-8);
   --pill-bg: oklch(1 0 0 / 0.85);
-  --pill-shadow: 0 1px 4px oklch(0 0 0 / 0.04), inset 0 1px 0 0 oklch(1 0 0 / 0.5);
-  --pill-hover-border: oklch(0 0 0 / 0.12);
+  --pill-shadow: 0 1px 4px var(--alpha-4), inset 0 1px 0 0 var(--white-alpha-50);
+  --pill-hover-border: var(--alpha-12);
   /* Layout — asymmetric inset for user vs assistant alignment */
   --pill-inset: 15%;
   /* Header sizing */
   --pill-padding-x: 12px;
-  --pill-padding-y: 9px;
+  --pill-padding-y: 8px;
   /* Prose indent — aligns assistant text with pill header text */
   --pill-text-indent: calc(var(--pill-border-width) + var(--pill-padding-x));
   /* Green tint — complete tools, tool groups, thinking */
@@ -72,19 +122,20 @@
   /* ── Liquid Glass tokens ────────────────────────────── */
   /* Light blur + brightness/saturate for refraction feel */
   --glass-blur: blur(3px) saturate(1.6) brightness(1.04);
+  --glass-blur-dropdown: blur(16px) saturate(1.5) brightness(1.03);
   /* Heavier blur for backdrops/overlays where content should be obscured */
   --glass-blur-heavy: blur(10px) saturate(1.5) brightness(1.02);
   /* Surface: semi-transparent white */
   --glass-bg: oklch(1 0 0 / 0.55);
   --glass-bg-solid: oklch(1 0 0 / 0.78);
   /* Specular edge highlight — bright white top/left */
-  --glass-highlight: inset 0 1px 0 0 oklch(1 0 0 / 0.7), inset 1px 0 0 0 oklch(1 0 0 / 0.4);
+  --glass-highlight: inset 0 1px 0 0 var(--white-alpha-70), inset 1px 0 0 0 var(--white-alpha-40);
   /* Inner depth shadow — bottom/right */
-  --glass-inner-shadow: inset 0 -1px 0 0 oklch(0 0 0 / 0.04), inset -1px 0 0 0 oklch(0 0 0 / 0.02);
+  --glass-inner-shadow: inset 0 -1px 0 0 var(--alpha-4), inset -1px 0 0 0 var(--alpha-2);
   /* Outer drop shadow */
-  --glass-shadow: 0 2px 8px oklch(0 0 0 / 0.06), 0 0.5px 0 oklch(0 0 0 / 0.04);
+  --glass-shadow: 0 2px 8px var(--alpha-6), 0 0.5px 0 var(--alpha-4);
   /* Outer drop shadow — elevated (dialogs, overlays) */
-  --glass-shadow-lg: 0 12px 40px oklch(0 0 0 / 0.10), 0 2px 6px oklch(0 0 0 / 0.06);
+  --glass-shadow-lg: 0 12px 40px var(--alpha-10), 0 2px 6px var(--alpha-6);
   /* Border: subtle, semi-transparent */
-  --glass-border: 1px solid oklch(1 0 0 / 0.5);
+  --glass-border: 1px solid var(--white-alpha-50);
 }

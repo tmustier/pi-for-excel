@@ -124,19 +124,16 @@ function promptForText(opts: {
     const overlay = document.createElement("div");
     overlay.id = "pi-prompt-overlay";
     overlay.className = "pi-welcome-overlay";
+    overlay.dataset.claimsEscape = "true";
     overlay.innerHTML = `
-      <div class="pi-welcome-card" style="text-align: left; max-width: 420px;">
-        <h2 class="pi-prompt-title" style="font-size: 16px; font-weight: 600; margin: 0 0 6px; font-family: var(--font-sans);"></h2>
-        <p class="pi-prompt-message" style="font-size: 12px; color: var(--muted-foreground); margin: 0 0 10px; font-family: var(--font-sans);"></p>
-        <p class="pi-prompt-helper" style="display:none; font-size: 11px; color: var(--muted-foreground); margin: 0 0 10px; font-family: var(--font-sans);"></p>
-        <input class="pi-prompt-input" type="text"
-          style="width: 100%; padding: 8px 10px; border: 1px solid oklch(0 0 0 / 0.10);
-          border-radius: 8px; font-family: var(--font-mono); font-size: 12px;
-          background: oklch(1 0 0 / 0.6); outline: none;"
-        />
-        <div style="display:flex; gap: 8px; margin-top: 12px;">
-          <button class="pi-prompt-cancel" style="flex:1; padding: 8px; border-radius: 8px; border: 1px solid oklch(0 0 0 / 0.08); background: oklch(0 0 0 / 0.03); cursor: pointer; font-family: var(--font-sans); font-size: 13px;">Cancel</button>
-          <button class="pi-prompt-ok" style="flex:1; padding: 8px; border-radius: 8px; border: none; background: var(--pi-green); color: white; cursor: pointer; font-family: var(--font-sans); font-size: 13px; font-weight: 600;">Continue</button>
+      <div class="pi-welcome-card pi-prompt-card">
+        <h2 class="pi-prompt-title"></h2>
+        <p class="pi-prompt-message"></p>
+        <p class="pi-prompt-helper" hidden></p>
+        <input class="pi-prompt-input" type="text" />
+        <div class="pi-prompt-actions">
+          <button class="pi-prompt-cancel">Cancel</button>
+          <button class="pi-prompt-ok">Continue</button>
         </div>
       </div>
     `;
@@ -158,7 +155,7 @@ function promptForText(opts: {
     msgEl.textContent = opts.message;
     if (opts.helperText) {
       helperEl.textContent = opts.helperText;
-      helperEl.style.display = "block";
+      helperEl.hidden = false;
     }
     if (opts.placeholder) input.placeholder = opts.placeholder;
     if (opts.submitLabel) okBtn.textContent = opts.submitLabel;
@@ -225,52 +222,30 @@ export function buildProviderRow(
   const row = document.createElement("div");
   row.className = "pi-login-row";
   row.innerHTML = `
-    <button class="pi-welcome-provider" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
-      <span style="display: flex; flex-direction: column; align-items: flex-start; gap: 1px;">
-        <span style="font-size: 13px;">${label}</span>
-        ${desc ? `<span style="font-size: 10px; color: var(--muted-foreground); font-family: var(--font-sans);">${desc}</span>` : ""}
+    <button class="pi-welcome-provider pi-login-trigger">
+      <span class="pi-login-meta">
+        <span class="pi-login-label">${label}</span>
+        ${desc ? `<span class="pi-login-desc">${desc}</span>` : ""}
       </span>
-      <span class="pi-login-status" style="font-size: 11px; color: ${isActive ? "var(--pi-green)" : "var(--muted-foreground)"}; font-family: var(--font-mono);">
+      <span class="pi-login-status ${isActive ? "is-connected" : ""}">
         ${isActive ? "✓ connected" : "set up →"}
       </span>
     </button>
-    <div class="pi-login-detail" style="display: none; padding: 8px 14px 12px; border: 1px solid oklch(0 0 0 / 0.05); border-top: none; border-radius: 0 0 10px 10px; margin-top: -1px; background: oklch(1 0 0 / 0.3);">
-      <button class="pi-login-disconnect" type="button" style="
-        width: 100%; padding: 8px 12px; margin-bottom: 8px;
-        background: oklch(0 0 0 / 0.03); color: var(--foreground);
-        border: 1px solid oklch(0 0 0 / 0.12);
-        border-radius: 9px; font-family: var(--font-sans);
-        font-size: 12px; font-weight: 500; cursor: pointer;
-        display: ${isActive ? "block" : "none"};
-      ">Disconnect ${label}</button>
+    <div class="pi-login-detail" hidden>
+      <button class="pi-login-disconnect" type="button" ${isActive ? "" : "hidden"}>Disconnect ${label}</button>
       ${oauth ? `
-        <button class="pi-login-oauth" style="
-          width: 100%; padding: 9px 14px; margin-bottom: 8px;
-          background: var(--pi-green); color: white; border: none;
-          border-radius: 9px; font-family: var(--font-sans);
-          font-size: 13px; font-weight: 500; cursor: pointer;
-          transition: background 0.15s;
-        ">Login with ${label}</button>
-        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
-          <div style="flex: 1; height: 1px; background: oklch(0 0 0 / 0.08);"></div>
-          <span style="font-size: 11px; color: var(--muted-foreground); font-family: var(--font-sans);">or enter API key</span>
-          <div style="flex: 1; height: 1px; background: oklch(0 0 0 / 0.08);"></div>
+        <button class="pi-login-oauth">Login with ${label}</button>
+        <div class="pi-login-divider">
+          <div class="pi-login-divider__line"></div>
+          <span class="pi-login-divider__text">or enter API key</span>
+          <div class="pi-login-divider__line"></div>
         </div>
       ` : ""}
-      <div style="display: flex; gap: 6px;">
-        <input class="pi-login-key" type="password" placeholder="${keyPlaceholder}"
-          style="flex: 1; padding: 7px 10px; border: 1px solid oklch(0 0 0 / 0.10);
-          border-radius: 8px; font-family: var(--font-mono); font-size: 12px;
-          background: oklch(1 0 0 / 0.6); outline: none;"
-        />
-        <button class="pi-login-save" style="
-          padding: 7px 12px; background: var(--pi-green); color: white;
-          border: none; border-radius: 8px; font-family: var(--font-sans);
-          font-size: 12px; font-weight: 500; cursor: pointer;
-          transition: background 0.15s; white-space: nowrap;
-        ">Save</button>
+      <div class="pi-login-key-row">
+        <input class="pi-login-key" type="password" placeholder="${keyPlaceholder}" />
+        <button class="pi-login-save">Save</button>
       </div>
-      <p class="pi-login-error" style="display: none; font-size: 11px; color: oklch(0.55 0.22 25); margin: 6px 0 0; font-family: var(--font-sans);"></p>
+      <p class="pi-login-error" hidden></p>
     </div>
   `;
 
@@ -289,11 +264,11 @@ export function buildProviderRow(
   const setConnectedState = (connected: boolean): void => {
     if (statusEl) {
       statusEl.textContent = connected ? "✓ connected" : "set up →";
-      statusEl.style.color = connected ? "var(--pi-green)" : "var(--muted-foreground)";
+      statusEl.classList.toggle("is-connected", connected);
     }
 
     if (disconnectBtn) {
-      disconnectBtn.style.display = connected ? "block" : "none";
+      disconnectBtn.hidden = !connected;
     }
   };
 
@@ -302,11 +277,11 @@ export function buildProviderRow(
   // Toggle expand
   headerBtn.addEventListener("click", () => {
     if (expandedRef.current === detail) {
-      detail.style.display = "none";
+      detail.hidden = true;
       expandedRef.current = null;
     } else {
-      if (expandedRef.current) expandedRef.current.style.display = "none";
-      detail.style.display = "block";
+      if (expandedRef.current) expandedRef.current.hidden = true;
+      detail.hidden = false;
       expandedRef.current = detail;
       keyInput.focus();
     }
@@ -319,7 +294,7 @@ export function buildProviderRow(
       oauthBtn.textContent = "Opening login…";
       oauthBtn.style.opacity = "0.7";
       void (async () => {
-        errorEl.style.display = "none";
+        errorEl.hidden = true;
         try {
           if (!oauth) {
             throw new Error("OAuth provider id missing");
@@ -363,7 +338,7 @@ export function buildProviderRow(
           await saveOAuthCredentials(storage.settings, id, cred);
           setConnectedState(true);
           onConnected(row, id, label);
-          detail.style.display = "none";
+          detail.hidden = true;
           expandedRef.current = null;
         } catch (err: unknown) {
           if (err instanceof PromptCancelledError) {
@@ -381,7 +356,7 @@ export function buildProviderRow(
           } else {
             errorEl.textContent = msg || "Login failed";
           }
-          errorEl.style.display = "block";
+          errorEl.hidden = false;
         } finally {
           oauthBtn.textContent = `Login with ${label}`;
           oauthBtn.style.opacity = "1";
@@ -398,7 +373,7 @@ export function buildProviderRow(
         disconnectBtn.textContent = "Disconnecting…";
         disconnectBtn.disabled = true;
         disconnectBtn.style.opacity = "0.7";
-        errorEl.style.display = "none";
+        errorEl.hidden = true;
 
         try {
           await storage.providerKeys.delete(id);
@@ -410,7 +385,7 @@ export function buildProviderRow(
         } catch (err: unknown) {
           const msg = getErrorMessage(err);
           errorEl.textContent = msg ? `Failed to disconnect: ${msg}` : "Failed to disconnect";
-          errorEl.style.display = "block";
+          errorEl.hidden = false;
         } finally {
           disconnectBtn.textContent = `Disconnect ${label}`;
           disconnectBtn.disabled = false;
@@ -428,24 +403,24 @@ export function buildProviderRow(
     const normalized = normalizeApiKeyForProvider(id, rawKey);
     if (!normalized.ok) {
       errorEl.textContent = normalized.error;
-      errorEl.style.display = "block";
+      errorEl.hidden = false;
       return;
     }
 
     const key = normalized.key;
     saveBtn.textContent = "Testing…";
     saveBtn.style.opacity = "0.7";
-    errorEl.style.display = "none";
+    errorEl.hidden = true;
     try {
       await storage.providerKeys.set(id, key);
       setConnectedState(true);
       onConnected(row, id, label);
-      detail.style.display = "none";
+      detail.hidden = true;
       expandedRef.current = null;
     } catch (err: unknown) {
       const msg = getErrorMessage(err);
       errorEl.textContent = msg ? `Failed to save key: ${msg}` : "Failed to save key";
-      errorEl.style.display = "block";
+      errorEl.hidden = false;
     } finally {
       saveBtn.textContent = "Save";
       saveBtn.style.opacity = "1";

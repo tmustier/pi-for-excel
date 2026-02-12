@@ -41,7 +41,7 @@ assistant-message > div > div.px-4 > markdown-block {
   box-shadow: var(--pill-shadow);
   overflow: hidden;
   min-width: 0;
-  transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+  transition: border-color var(--duration-normal), box-shadow var(--duration-normal), background var(--duration-normal);
 }
 .pi-tool-card:hover {
   border-color: var(--pill-hover-border);
@@ -88,7 +88,7 @@ assistant-message > div > div.px-4 > markdown-block {
 .pi-tool-card__header > button {
   padding: var(--pill-padding-y) var(--pill-padding-x);
   gap: 7px;
-  font-size: 13px;
+  font-size: var(--text-base);
   min-width: 0;
   overflow: hidden;
 }
@@ -105,14 +105,14 @@ assistant-message > div > div.px-4 > markdown-block {
 /* Title — match thinking block: same font, muted → foreground on hover */
 .pi-tool-card__title {
   font-family: var(--font-sans);
-  font-size: 13.5px;
+  font-size: var(--text-base);
   font-weight: 400;
   color: var(--muted-foreground);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   min-width: 0;
-  transition: color 0.15s;
+  transition: color var(--duration-fast);
 }
 .pi-tool-card__header > button:hover .pi-tool-card__title {
   color: var(--foreground);
@@ -121,7 +121,7 @@ assistant-message > div > div.px-4 > markdown-block {
   font-weight: 400;
 }
 .pi-tool-card__detail-text {
-  font-size: 12px;
+  font-size: var(--text-sm);
   opacity: 0.7;
 }
 .pi-tool-card[data-state="complete"] .pi-tool-card__title {
@@ -147,7 +147,7 @@ assistant-message > div > div.px-4 > markdown-block {
   padding: 10px 14px 14px;
   margin: 0 8px 8px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   background: var(--pi-inner-bg);
 }
 
@@ -157,7 +157,7 @@ assistant-message > div > div.px-4 > markdown-block {
 }
 .pi-tool-card__tool-id {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--text-xs);
   color: var(--muted-foreground);
   opacity: 0.55;
   letter-spacing: 0.02em;
@@ -169,7 +169,7 @@ assistant-message > div > div.px-4 > markdown-block {
 }
 .pi-tool-card__section-label {
   font-family: var(--font-sans);
-  font-size: 10px;
+  font-size: var(--text-xs);
   font-weight: 600;
   color: var(--muted-foreground);
   text-transform: uppercase;
@@ -183,7 +183,7 @@ assistant-message > div > div.px-4 > markdown-block {
   display: grid;
   grid-template-columns: auto 1fr;
   gap: 1px 10px;
-  font-size: 12.5px;
+  font-size: var(--text-sm);
   line-height: 1.55;
   padding: 2px 0;
 }
@@ -194,7 +194,7 @@ assistant-message > div > div.px-4 > markdown-block {
 
 .pi-params__label {
   color: var(--muted-foreground);
-  font-size: 11.5px;
+  font-size: var(--text-sm);
   white-space: nowrap;
   padding-top: 1px;
 }
@@ -208,15 +208,15 @@ assistant-message > div > div.px-4 > markdown-block {
 
 .pi-params__more {
   color: var(--muted-foreground);
-  font-size: 11px;
+  font-size: var(--text-sm);
 }
 
 .pi-params__code {
   font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-size: var(--text-sm);
   background: var(--muted);
   padding: 1px 5px;
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
 }
 
 /* Color chip — small inline circle swatch */
@@ -225,7 +225,7 @@ assistant-message > div > div.px-4 > markdown-block {
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  border: 1px solid oklch(0 0 0 / 0.15);
+  border: 1px solid var(--alpha-15);
   vertical-align: middle;
   margin-right: 4px;
   flex-shrink: 0;
@@ -243,7 +243,7 @@ assistant-message > div > div.px-4 > markdown-block {
   text-decoration-color: oklch(0.45 0.12 160 / 0.35);
   text-underline-offset: 2px;
   text-decoration-thickness: 1px;
-  transition: text-decoration-color 0.15s, color 0.15s;
+  transition: text-decoration-color var(--duration-fast), color var(--duration-fast);
 }
 .pi-cell-ref:hover {
   color: var(--pi-green);
@@ -253,7 +253,7 @@ assistant-message > div > div.px-4 > markdown-block {
 /* Data preview — mini table for write_cells values */
 .pi-data-preview {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--text-sm);
   border-collapse: collapse;
   margin-top: 3px;
   line-height: 1.4;
@@ -270,7 +270,7 @@ assistant-message > div > div.px-4 > markdown-block {
 .pi-data-preview__fade {
   color: var(--muted-foreground);
   font-style: italic;
-  font-size: 10.5px;
+  font-size: var(--text-xs);
 }
 
 /* ── CSV table (read_range mode=csv) ───────────────── */
@@ -288,24 +288,24 @@ assistant-message > div > div.px-4 > markdown-block {
 
 .pi-csv-table__copy {
   font-family: var(--font-sans);
-  font-size: 10.5px;
+  font-size: var(--text-xs);
   font-weight: 500;
   color: var(--muted-foreground);
   background: var(--muted);
   border: 1px solid var(--border);
-  border-radius: 5px;
+  border-radius: var(--radius-xs);
   padding: 2px 8px;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  transition: background var(--duration-fast), color var(--duration-fast), border-color var(--duration-fast);
 }
 .pi-csv-table__copy:hover {
-  background: var(--pi-green-lighter, oklch(0.45 0.12 160 / 0.08));
+  background: var(--pi-green-lighter);
   color: var(--foreground);
-  border-color: oklch(0.45 0.12 160 / 0.2);
+  border-color: var(--green-alpha-20);
 }
 .pi-csv-table__copy--done {
   color: var(--pi-green);
-  border-color: oklch(0.45 0.12 160 / 0.3);
+  border-color: var(--green-alpha-30);
 }
 
 /* Scrollable wrapper for wide tables */
@@ -317,7 +317,7 @@ assistant-message > div > div.px-4 > markdown-block {
 /* The data grid */
 .pi-csv-table__grid {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--text-sm);
   line-height: 1.35;
   border-collapse: collapse;
   white-space: nowrap;
@@ -328,7 +328,7 @@ assistant-message > div > div.px-4 > markdown-block {
 /* Column headers (A, B, C…) */
 .pi-csv-table__col-hdr {
   font-family: var(--font-sans);
-  font-size: 10px;
+  font-size: var(--text-xs);
   font-weight: 600;
   color: var(--muted-foreground);
   text-align: center;
@@ -342,7 +342,7 @@ assistant-message > div > div.px-4 > markdown-block {
 /* Row headers (1, 2, 3…) */
 .pi-csv-table__row-hdr {
   font-family: var(--font-sans);
-  font-size: 10px;
+  font-size: var(--text-xs);
   font-weight: 600;
   color: var(--muted-foreground);
   text-align: right;
@@ -387,7 +387,7 @@ assistant-message > div > div.px-4 > markdown-block {
 
 /* Subtle row hover */
 .pi-csv-table__grid tbody tr:hover td {
-  background: oklch(0 0 0 / 0.02);
+  background: var(--alpha-2);
 }
 
 /* Alternating row stripes — very subtle */
@@ -401,7 +401,7 @@ assistant-message > div > div.px-4 > markdown-block {
 /* ── Dependency tree (trace_dependencies) ──────────── */
 
 .pi-dep-tree {
-  font-size: 12.5px;
+  font-size: var(--text-sm);
   line-height: 1.5;
 }
 
@@ -424,7 +424,7 @@ assistant-message > div > div.px-4 > markdown-block {
 /* Value — primary element, prominent through position + mono */
 .pi-dep-node__val {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--foreground);
   white-space: nowrap;
   flex-shrink: 0;
@@ -437,11 +437,11 @@ assistant-message > div > div.px-4 > markdown-block {
 
 /* Cell address — secondary, small, muted */
 .pi-dep-node__addr {
-  font-size: 10px;
+  font-size: var(--text-xs);
   opacity: 0.45;
 }
 .pi-dep-node__addr .pi-cell-ref {
-  font-size: 10px;
+  font-size: var(--text-xs);
   color: var(--muted-foreground);
 }
 
@@ -449,14 +449,14 @@ assistant-message > div > div.px-4 > markdown-block {
 .pi-dep-node__formula {
   display: block;
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--text-xs);
   line-height: 1.35;
   color: var(--muted-foreground);
   opacity: 0.5;
   margin: 1px 0 2px 0;
   padding: 1px 5px;
-  background: oklch(0 0 0 / 0.02);
-  border-radius: 3px;
+  background: var(--alpha-2);
+  border-radius: var(--radius-xs);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -470,7 +470,7 @@ assistant-message > div > div.px-4 > markdown-block {
 .pi-dep-node__children {
   margin-left: 6px;
   padding-left: 16px;
-  border-left: 1.5px solid oklch(0 0 0 / 0.12);
+  border-left: 1.5px solid var(--alpha-12);
   margin-top: 2px;
 }
 
@@ -484,7 +484,7 @@ assistant-message > div > div.px-4 > markdown-block {
   left: -16px;
   top: 11px;
   width: 12px;
-  border-top: 1.5px solid oklch(0 0 0 / 0.12);
+  border-top: 1.5px solid var(--alpha-12);
 }
 
 /* Last child — mask the vertical line below its connector */
@@ -512,17 +512,17 @@ assistant-message > div > div.px-4 > markdown-block {
 }
 
 /* Tighter typography inside tool result cards */
-.pi-tool-card__markdown markdown-block { font-size: 12.5px; line-height: 1.5; }
-.pi-tool-card__markdown markdown-block p { font-size: 12.5px; margin: 0 0 6px; }
+.pi-tool-card__markdown markdown-block { font-size: var(--text-sm); line-height: 1.5; }
+.pi-tool-card__markdown markdown-block p { font-size: var(--text-sm); margin: 0 0 6px; }
 
 /* Tables: compact sizing for sidebar width */
 .pi-tool-card__markdown table {
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-family: var(--font-mono);
   line-height: 1.35;
 }
 .pi-tool-card__markdown th {
-  font-size: 11px;
+  font-size: var(--text-sm);
   padding: 4px 8px;
   white-space: nowrap;
 }
@@ -533,7 +533,7 @@ assistant-message > div > div.px-4 > markdown-block {
 /* Plain text fallback (no markdown syntax detected) */
 .pi-tool-card__plain-text {
   font-family: var(--font-sans);
-  font-size: 12.5px;
+  font-size: var(--text-sm);
   line-height: 1.55;
   color: var(--foreground);
   white-space: pre-wrap;
@@ -575,41 +575,41 @@ tool-message {
 tool-message > div.border {
   border: 1px solid var(--border);
   background: var(--pi-inner-bg);
-  border-radius: 10px;
-  box-shadow: 0 1px 3px oklch(0 0 0 / 0.04);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 1px 3px var(--alpha-4);
 }
 
 /* Markdown — readable at sidebar width */
 markdown-block { line-height: 1.6; }
-markdown-block p { margin: 0 0 10px; font-size: 13.5px; }
+markdown-block p { margin: 0 0 10px; font-size: var(--text-base); }
 markdown-block p:last-child { margin-bottom: 0; }
 markdown-block ul, markdown-block ol { margin: 0 0 10px; padding-left: 20px; }
 markdown-block li { margin-bottom: 4px; }
 markdown-block code {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--text-sm);
   background: var(--muted);
   padding: 2px 5px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
 }
 markdown-block pre {
   background: oklch(0.97 0.002 90) !important;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   padding: 12px;
   overflow-x: auto;
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.5;
 }
 
 /* Code blocks */
 code-block > div {
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
 }
 
 /* Thinking blocks — green card matching tool cards, left-aligned */
 thinking-block {
-  font-size: 13.5px;
+  font-size: var(--text-base);
   font-family: var(--font-sans);
 }
 thinking-block .thinking-block {
@@ -619,7 +619,7 @@ thinking-block .thinking-block {
   overflow: hidden;
 }
 thinking-block .thinking-header {
-  font-size: 13.5px;
+  font-size: var(--text-base);
   width: 100%;
   padding: var(--pill-padding-y) var(--pill-padding-x);
   justify-content: space-between;
@@ -635,9 +635,9 @@ thinking-block markdown-block {
   padding: 10px 14px 14px;
   margin: 0 8px 8px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   background: var(--pi-inner-bg);
-  font-size: 12.5px;
+  font-size: var(--text-sm);
   color: var(--muted-foreground);
   max-height: 300px;
   overflow-y: auto;
@@ -701,7 +701,7 @@ assistant-message > div > div.px-4.mt-2.text-xs.text-muted-foreground {
 
 /* Abort message — indent to align with content */
 assistant-message > div > span.text-destructive {
-  font-size: 12.5px;
+  font-size: var(--text-sm);
   color: var(--muted-foreground);
   font-style: italic;
   padding-left: 12px;
