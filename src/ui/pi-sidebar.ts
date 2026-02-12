@@ -109,6 +109,12 @@ export class PiSidebar extends LitElement {
   private _scrollContainerEl?: HTMLElement;
   private _scrollListener?: () => void;
   private _groupingRoot?: HTMLElement;
+  private _utilitiesMenuClickHandler?: (event: MouseEvent) => void;
+  private _onEscapeKey = (event: KeyboardEvent) => {
+    if (event.key === "Escape" && this._utilitiesMenuOpen) {
+      this._closeUtilitiesMenu();
+    }
+  };
   private _onPayloadUpdate = () => {
     if (isDebugEnabled()) {
       const s = getPayloadStats();
@@ -159,6 +165,7 @@ export class PiSidebar extends LitElement {
     this.style.position = "relative";
     document.addEventListener("pi:status-update", this._onPayloadUpdate);
     document.addEventListener("pi:debug-changed", this._onPayloadUpdate);
+    document.addEventListener("keydown", this._onEscapeKey);
     this._onPayloadUpdate();
   }
 
@@ -180,6 +187,8 @@ export class PiSidebar extends LitElement {
 
     document.removeEventListener("pi:status-update", this._onPayloadUpdate);
     document.removeEventListener("pi:debug-changed", this._onPayloadUpdate);
+    document.removeEventListener("keydown", this._onEscapeKey);
+    this._detachUtilitiesMenuDocumentListener();
   }
 
   override willUpdate(changed: PropertyValues<this>) {
@@ -419,23 +428,37 @@ export class PiSidebar extends LitElement {
   }
 
   private _toggleUtilitiesMenu() {
-    this._utilitiesMenuOpen = !this._utilitiesMenuOpen;
     if (this._utilitiesMenuOpen) {
-      requestAnimationFrame(() => {
-        const handler = (e: MouseEvent) => {
-          const anchor = this.querySelector(".pi-utilities-anchor");
-          if (anchor && !anchor.contains(e.target as Node)) {
-            this._utilitiesMenuOpen = false;
-            document.removeEventListener("click", handler, true);
-          }
-        };
-        document.addEventListener("click", handler, true);
-      });
+      this._closeUtilitiesMenu();
+      return;
     }
+
+    this._utilitiesMenuOpen = true;
+    requestAnimationFrame(() => this._attachUtilitiesMenuDocumentListener());
+  }
+
+  private _attachUtilitiesMenuDocumentListener() {
+    if (this._utilitiesMenuClickHandler) return;
+
+    this._utilitiesMenuClickHandler = (event: MouseEvent) => {
+      const anchor = this.querySelector(".pi-utilities-anchor");
+      if (anchor && !anchor.contains(event.target as Node)) {
+        this._closeUtilitiesMenu();
+      }
+    };
+
+    document.addEventListener("click", this._utilitiesMenuClickHandler, true);
+  }
+
+  private _detachUtilitiesMenuDocumentListener() {
+    if (!this._utilitiesMenuClickHandler) return;
+    document.removeEventListener("click", this._utilitiesMenuClickHandler, true);
+    this._utilitiesMenuClickHandler = undefined;
   }
 
   private _closeUtilitiesMenu() {
     this._utilitiesMenuOpen = false;
+    this._detachUtilitiesMenuDocumentListener();
   }
 
   private _renderUtilitiesMenu() {
