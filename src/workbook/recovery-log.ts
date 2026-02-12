@@ -5,6 +5,8 @@
  * can revert mistakes without pre-execution approval prompts.
  */
 
+import { getAppStorage } from "@mariozechner/pi-web-ui/dist/storage/app-storage.js";
+
 import { excelRun, getRange } from "../excel/helpers.js";
 import { formatWorkbookLabel, getWorkbookContext, type WorkbookContext } from "./context.js";
 import { isRecord } from "../utils/type-guards.js";
@@ -100,14 +102,13 @@ function isSettingsStoreLike(value: unknown): value is SettingsStoreLike {
   );
 }
 
-async function defaultGetSettingsStore(): Promise<SettingsStoreLike | null> {
+function defaultGetSettingsStore(): Promise<SettingsStoreLike | null> {
   try {
-    const storageModule = await import("@mariozechner/pi-web-ui/dist/storage/app-storage.js");
-    const appStorage = storageModule.getAppStorage();
+    const appStorage = getAppStorage();
     const settings = isRecord(appStorage) ? appStorage.settings : null;
-    return isSettingsStoreLike(settings) ? settings : null;
+    return Promise.resolve(isSettingsStoreLike(settings) ? settings : null);
   } catch {
-    return null;
+    return Promise.resolve(null);
   }
 }
 
