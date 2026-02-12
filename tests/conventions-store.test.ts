@@ -17,8 +17,8 @@ function createFakeStore(): { get: (k: string) => Promise<unknown>; set: (k: str
   const data = new Map<string, unknown>();
   return {
     data,
-    get: async (key: string) => data.get(key),
-    set: async (key: string, value: unknown) => { data.set(key, value); },
+    get: (key: string) => Promise.resolve(data.get(key)),
+    set: (key: string, value: unknown) => { data.set(key, value); return Promise.resolve(); },
   };
 }
 
