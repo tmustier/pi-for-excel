@@ -12,6 +12,7 @@ import {
 import { type FilesWorkspaceAuditContext, getFilesWorkspace } from "../files/workspace.js";
 import { isExperimentalFeatureEnabled, setExperimentalFeatureEnabled } from "../experiments/flags.js";
 import { getErrorMessage } from "../utils/errors.js";
+import { formatWorkbookLabel, getWorkbookContext } from "../workbook/context.js";
 import { showToast } from "./toast.js";
 
 const OVERLAY_ID = "pi-files-workspace-overlay";
@@ -80,6 +81,84 @@ function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   return out;
 }
 
+type FilesDialogFilterValue = "all" | "current" | "untagged" | `tag:${string}`;
+
+interface FilesDialogFilterOption {
+  value: FilesDialogFilterValue;
+  label: string;
+  disabled?: boolean;
+}
+
+function makeTagFilterValue(workbookId: string): `tag:${string}` {
+  return `tag:${workbookId}`;
+}
+
+function buildWorkbookTagFilterOptions(files: WorkspaceFileEntry[]): FilesDialogFilterOption[] {
+  const byWorkbook = new Map<string, { label: string; count: number }>();
+
+  for (const file of files) {
+    const tag = file.workbookTag;
+    if (!tag) continue;
+
+    const existing = byWorkbook.get(tag.workbookId);
+    if (existing) {
+      existing.count += 1;
+      continue;
+    }
+
+    byWorkbook.set(tag.workbookId, {
+      label: tag.workbookLabel,
+      count: 1,
+    });
+  }
+
+  const entries = [...byWorkbook.entries()]
+    .sort((a, b) => a[1].label.localeCompare(b[1].label));
+
+  return entries.map(([workbookId, info]) => ({
+    value: makeTagFilterValue(workbookId),
+    label: `${info.label} (${info.count})`,
+  }));
+}
+
+function parseFilterValue(value: string): FilesDialogFilterValue {
+  if (value === "all" || value === "current" || value === "untagged") {
+    return value;
+  }
+
+  const tagPrefix = "tag:";
+  if (value.startsWith(tagPrefix) && value.length > tagPrefix.length) {
+    return makeTagFilterValue(value.slice(tagPrefix.length));
+  }
+
+  return "all";
+}
+
+function fileMatchesFilter(args: {
+  file: WorkspaceFileEntry;
+  filter: FilesDialogFilterValue;
+  currentWorkbookId: string | null;
+}): boolean {
+  if (args.filter === "all") return true;
+
+  if (args.filter === "untagged") {
+    return args.file.workbookTag === undefined;
+  }
+
+  if (args.filter === "current") {
+    if (!args.currentWorkbookId) return false;
+    return args.file.workbookTag?.workbookId === args.currentWorkbookId;
+  }
+
+  const tagPrefix = "tag:";
+  if (args.filter.startsWith(tagPrefix)) {
+    const workbookId = args.filter.slice(tagPrefix.length);
+    return args.file.workbookTag?.workbookId === workbookId;
+  }
+
+  return true;
+}
+
 export async function showFilesWorkspaceDialog(): Promise<void> {
   const existing = document.getElementById(OVERLAY_ID);
   if (existing) {
@@ -119,6 +198,18 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
 
   const statusLine = document.createElement("div");
   statusLine.className = "pi-files-dialog__status";
+
+  const filters = document.createElement("div");
+  filters.className = "pi-files-dialog__filters";
+
+  const filterLabel = document.createElement("label");
+  filterLabel.className = "pi-files-dialog__filter-label";
+  filterLabel.textContent = "Filter";
+
+  const filterSelect = document.createElement("select");
+  filterSelect.className = "pi-files-dialog__filter-select";
+  filterLabel.appendChild(filterSelect);
+  filters.appendChild(filterLabel);
 
   const list = document.createElement("div");
   list.className = "pi-files-dialog__list";
@@ -193,6 +284,7 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
     controls,
     hiddenInput,
     statusLine,
+    filters,
     list,
     viewer,
     audit,
@@ -204,6 +296,9 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
   let activeViewerPath: string | null = null;
   let viewerTruncated = false;
   let activeObjectUrl: string | null = null;
+  let selectedFilter: FilesDialogFilterValue = "all";
+  let currentWorkbookId: string | null = null;
+  let currentWorkbookLabel: string | null = null;
 
   const revokeObjectUrl = () => {
     if (!activeObjectUrl) return;
@@ -428,13 +523,57 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
   };
 
   const renderList = async () => {
-    const [backend, files, auditEntries] = await Promise.all([
+    const [backend, files, auditEntries, workbookContext] = await Promise.all([
       workspace.getBackendStatus(),
       workspace.listFiles(),
       workspace.listAuditEntries(80),
+      getWorkbookContext().catch(() => null),
     ]);
 
     subtitle.textContent = `Storage: ${backend.label}${backend.nativeDirectoryName ? ` (${backend.nativeDirectoryName})` : ""}`;
+
+    currentWorkbookId = workbookContext?.workbookId ?? null;
+    currentWorkbookLabel = workbookContext && workbookContext.workbookId
+      ? formatWorkbookLabel(workbookContext)
+      : null;
+
+    const filterOptions: FilesDialogFilterOption[] = [
+      { value: "all", label: "All files" },
+      {
+        value: "current",
+        label: currentWorkbookLabel
+          ? `Current workbook: ${currentWorkbookLabel}`
+          : "Current workbook (unavailable)",
+        disabled: currentWorkbookId === null,
+      },
+      { value: "untagged", label: "Untagged files" },
+      ...buildWorkbookTagFilterOptions(files),
+    ];
+
+    if (!filterOptions.some((option) => option.value === selectedFilter)) {
+      selectedFilter = "all";
+    }
+
+    filterSelect.replaceChildren();
+    for (const option of filterOptions) {
+      const optionElement = document.createElement("option");
+      optionElement.value = option.value;
+      optionElement.textContent = option.label;
+      optionElement.disabled = option.disabled === true;
+      optionElement.selected = option.value === selectedFilter;
+      filterSelect.appendChild(optionElement);
+    }
+    filterSelect.disabled = files.length === 0;
+
+    const filteredFiles = files.filter((file) => fileMatchesFilter({
+      file,
+      filter: selectedFilter,
+      currentWorkbookId,
+    }));
+
+    const activeFilterLabel =
+      filterOptions.find((option) => option.value === selectedFilter)?.label
+      ?? "All files";
 
     const filesExperimentEnabled = isExperimentalFeatureEnabled("files_workspace");
     enableButton.hidden = filesExperimentEnabled;
@@ -446,8 +585,10 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
 
     if (!filesExperimentEnabled) {
       setStatus("Assistant access is disabled. Enable files-workspace to expose the tool.");
-    } else {
+    } else if (selectedFilter === "all") {
       setStatus(`${files.length} file${files.length === 1 ? "" : "s"} available to the assistant.`);
+    } else {
+      setStatus(`${filteredFiles.length} of ${files.length} file${files.length === 1 ? "" : "s"} shown · ${activeFilterLabel}.`);
     }
 
     list.replaceChildren();
@@ -457,8 +598,13 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
       empty.className = "pi-files-dialog__empty";
       empty.textContent = "No files yet. Upload documents or create a text file.";
       list.appendChild(empty);
+    } else if (filteredFiles.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "pi-files-dialog__empty";
+      empty.textContent = "No files match the selected filter.";
+      list.appendChild(empty);
     } else {
-      for (const file of files) {
+      for (const file of filteredFiles) {
         const row = document.createElement("div");
         row.className = "pi-files-dialog__row";
 
@@ -580,6 +726,11 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
       .catch((error: unknown) => {
         showToast(`Upload failed: ${getErrorMessage(error)}`);
       });
+  });
+
+  filterSelect.addEventListener("change", () => {
+    selectedFilter = parseFilterValue(filterSelect.value);
+    void renderList();
   });
 
   newFileButton.addEventListener("click", () => {
