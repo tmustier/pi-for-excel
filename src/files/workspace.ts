@@ -113,6 +113,18 @@ function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   return out;
 }
 
+/** MIME types that can execute script when opened as a blob URL at the app origin. */
+function isActiveContentMimeType(mimeType: string): boolean {
+  const lower = mimeType.toLowerCase();
+  return (
+    lower === "text/html" ||
+    lower === "application/xhtml+xml" ||
+    lower === "image/svg+xml" ||
+    lower === "text/javascript" ||
+    lower === "application/javascript"
+  );
+}
+
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
@@ -1035,15 +1047,32 @@ export class FilesWorkspace {
       ? result.mimeType
       : inferMimeType(result.name, result.mimeType);
 
-    const blob = new Blob([toArrayBuffer(bytes)], { type: mimeType });
+    // Sanitize script-capable MIME types (HTML, SVG, JS) to prevent
+    // active-content execution at the app origin when opened via blob URL.
+    const safeMimeType = isActiveContentMimeType(mimeType)
+      ? "application/octet-stream"
+      : mimeType;
+
+    const blob = new Blob([toArrayBuffer(bytes)], { type: safeMimeType });
     const url = URL.createObjectURL(blob);
 
     // Office Add-in WebView (WKWebView on macOS) silently ignores programmatic
-    // <a download> clicks for binary content types.  Use window.open() which
-    // reliably opens the blob in a new tab/viewer across all WebView hosts.
-    // Schedule URL revocation with a generous delay so the opened window can
-    // finish loading the blob.
-    window.open(url, "_blank");
+    // <a download> clicks for binary content types.  Try window.open() first
+    // for WebView compatibility; fall back to <a download> if the popup is
+    // blocked (e.g. lost user activation in standard browsers).
+    const opened = window.open(url, "_blank");
+    if (!opened) {
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = result.name;
+      anchor.rel = "noopener";
+      anchor.style.display = "none";
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+    }
+
+    // Delay revocation so the opened window can finish loading the blob.
     setTimeout(() => URL.revokeObjectURL(url), 60_000);
   }
 

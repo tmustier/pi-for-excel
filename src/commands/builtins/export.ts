@@ -72,12 +72,24 @@ function parseExportDestination(raw: string, fallback: ExportDestination): Expor
   return fallback;
 }
 
-function triggerJsonDownload(_fileName: string, content: string): void {
+function triggerJsonDownload(fileName: string, content: string): void {
   const blob = new Blob([content], { type: "application/json" });
   const url = URL.createObjectURL(blob);
-  // Office Add-in WebView (WKWebView on macOS) silently ignores programmatic
-  // <a download> clicks.  Use window.open() for reliable cross-WebView support.
-  window.open(url, "_blank");
+
+  // Try window.open() first for Office WebView (WKWebView) compatibility.
+  // Fall back to <a download> if popup is blocked (lost user activation).
+  const opened = window.open(url, "_blank");
+  if (!opened) {
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = fileName;
+    anchor.rel = "noopener";
+    anchor.hidden = true;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+  }
+
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
