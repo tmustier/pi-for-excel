@@ -9,11 +9,11 @@ body {
   background-color: var(--pi-surface);
   /* Spreadsheet grid — faint cells visible under glass */
   background-image:
-    linear-gradient(oklch(0.45 0.08 160 / 0.04) 1px, transparent 1px),
-    linear-gradient(90deg, oklch(0.45 0.08 160 / 0.04) 1px, transparent 1px);
+    linear-gradient(var(--pi-grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--pi-grid-line) 1px, transparent 1px);
   background-size: 80px 21px;
   background-position: -1px -1px;
-  box-shadow: inset 4px 0 12px -3px var(--alpha-5);
+  box-shadow: var(--pi-surface-inset-shadow);
 }
 
 

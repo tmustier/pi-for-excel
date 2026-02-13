@@ -968,23 +968,26 @@ export async function initTaskpane(opts: {
     await restoreCheckpointById(checkpoint.id);
   };
 
-  const closeRuntimeWithRecovery = async (runtimeId: string): Promise<void> => {
+  const closeRuntimeWithRecovery = async (
+    runtimeId: string,
+    optsForClose?: { showUndoToast?: boolean },
+  ): Promise<boolean> => {
     if (runtimeManager.listRuntimes().length <= 1) {
       showToast("Can't close the last tab");
-      return;
+      return false;
     }
 
     const runtime = runtimeManager.getRuntime(runtimeId);
-    if (!runtime) return;
+    if (!runtime) return false;
 
     if (runtime.lockState === "holding_lock") {
       showToast("Wait for workbook changes to finish before closing this tab");
-      return;
+      return false;
     }
 
     if (runtime.agent.state.isStreaming) {
       const proceed = window.confirm("Pi is still responding in this tab. Stop and close it?");
-      if (!proceed) return;
+      if (!proceed) return false;
 
       abortedAgents.add(runtime.agent);
       runtime.agent.abort();
@@ -1005,16 +1008,135 @@ export async function initTaskpane(opts: {
     runtimeManager.closeRuntime(runtimeId);
     recentlyClosed.push(closedItem);
 
-    showActionToast({
-      message: `Closed ${closedItem.title}`,
-      actionLabel: "Undo",
-      duration: 9000,
-      onAction: () => {
-        const itemToRestore = recentlyClosed.removeBySessionId(closedItem.sessionId);
-        if (!itemToRestore) return;
-        void reopenRecentlyClosedItem(itemToRestore);
-      },
+    const showUndoToast = optsForClose?.showUndoToast !== false;
+    if (showUndoToast) {
+      showActionToast({
+        message: `Closed ${closedItem.title}`,
+        actionLabel: "Undo",
+        duration: 9000,
+        onAction: () => {
+          const itemToRestore = recentlyClosed.removeBySessionId(closedItem.sessionId);
+          if (!itemToRestore) return;
+          void reopenRecentlyClosedItem(itemToRestore);
+        },
+      });
+    }
+
+    return true;
+  };
+
+  const renameRuntimeTab = async (runtimeId: string): Promise<void> => {
+    const runtime = runtimeManager.getRuntime(runtimeId);
+    if (!runtime) {
+      showToast("Session not found");
+      return;
+    }
+
+    if (runtime.agent.state.isStreaming || runtime.actionQueue.isBusy()) {
+      showToast("Wait for this tab to finish before renaming");
+      return;
+    }
+
+    const currentTitle = runtimeManager.snapshotTabs().find((tab) => tab.runtimeId === runtimeId)?.title
+      ?? formatSessionTitle(runtime.persistence.getSessionTitle());
+    const defaultTitle = runtime.persistence.hasExplicitTitle()
+      ? runtime.persistence.getSessionTitle().trim()
+      : currentTitle;
+
+    const nextTitleRaw = window.prompt("Rename tab", defaultTitle);
+    if (nextTitleRaw === null) {
+      return;
+    }
+
+    const nextTitle = nextTitleRaw.trim();
+    await runtime.persistence.renameSession(nextTitle);
+    sidebar.requestUpdate();
+    document.dispatchEvent(new CustomEvent("pi:status-update"));
+
+    if (nextTitle.length === 0) {
+      showToast("Tab name reset");
+      return;
+    }
+
+    showToast(`Renamed to ${nextTitle}`);
+  };
+
+  const duplicateRuntimeTab = async (runtimeId: string): Promise<void> => {
+    const sourceRuntime = runtimeManager.getRuntime(runtimeId);
+    if (!sourceRuntime) {
+      showToast("Session not found");
+      return;
+    }
+
+    if (sourceRuntime.agent.state.isStreaming || sourceRuntime.actionQueue.isBusy()) {
+      showToast("Wait for this tab to finish before duplicating");
+      return;
+    }
+
+    const duplicateRuntime = await createRuntime({
+      activate: true,
+      autoRestoreLatest: false,
     });
+
+    duplicateRuntime.agent.replaceMessages(sourceRuntime.agent.state.messages);
+
+    const sourceModel = sourceRuntime.agent.state.model;
+    if (sourceModel) {
+      duplicateRuntime.agent.setModel(sourceModel);
+    }
+
+    duplicateRuntime.agent.setThinkingLevel(sourceRuntime.agent.state.thinkingLevel);
+
+    const sourceTitle = runtimeManager.snapshotTabs().find((tab) => tab.runtimeId === runtimeId)?.title
+      ?? formatSessionTitle(sourceRuntime.persistence.getSessionTitle());
+    const duplicateTitle = `${sourceTitle} copy`;
+
+    await duplicateRuntime.persistence.renameSession(duplicateTitle);
+    duplicateRuntime.queueDisplay.clear();
+    duplicateRuntime.queueDisplay.setActionQueue([]);
+    sidebar.syncFromAgent();
+    sidebar.requestUpdate();
+    document.dispatchEvent(new CustomEvent("pi:model-changed"));
+    document.dispatchEvent(new CustomEvent("pi:status-update"));
+    await duplicateRuntime.persistence.saveSession({ force: true });
+
+    showToast(`Duplicated ${sourceTitle}`);
+  };
+
+  const closeOtherRuntimes = async (runtimeId: string): Promise<void> => {
+    const tabsToClose = runtimeManager.snapshotTabs()
+      .filter((tab) => tab.runtimeId !== runtimeId)
+      .map((tab) => tab.runtimeId);
+
+    if (tabsToClose.length === 0) {
+      showToast("No other tabs");
+      return;
+    }
+
+    let closedCount = 0;
+    for (const tabId of tabsToClose) {
+      const closed = await closeRuntimeWithRecovery(tabId, { showUndoToast: false });
+      if (closed) {
+        closedCount += 1;
+      }
+    }
+
+    runtimeManager.switchRuntime(runtimeId);
+
+    if (closedCount === 0) {
+      showToast("No tabs were closed");
+      return;
+    }
+
+    showToast(`Closed ${closedCount} other tab${closedCount === 1 ? "" : "s"}`);
+  };
+
+  const moveRuntimeTab = (runtimeId: string, direction: -1 | 1): void => {
+    const moved = runtimeManager.moveRuntime(runtimeId, direction);
+    if (!moved) return;
+
+    const directionLabel = direction < 0 ? "left" : "right";
+    showToast(`Moved tab ${directionLabel}`, 1200);
   };
 
   workbookCoordinator.subscribe((event) => {
@@ -1184,6 +1306,21 @@ export async function initTaskpane(opts: {
 
   sidebar.onCloseTab = (runtimeId: string) => {
     void closeRuntimeWithRecovery(runtimeId);
+  };
+  sidebar.onRenameTab = (runtimeId: string) => {
+    void renameRuntimeTab(runtimeId);
+  };
+  sidebar.onDuplicateTab = (runtimeId: string) => {
+    void duplicateRuntimeTab(runtimeId);
+  };
+  sidebar.onMoveTabLeft = (runtimeId: string) => {
+    moveRuntimeTab(runtimeId, -1);
+  };
+  sidebar.onMoveTabRight = (runtimeId: string) => {
+    moveRuntimeTab(runtimeId, 1);
+  };
+  sidebar.onCloseOtherTabs = (runtimeId: string) => {
+    void closeOtherRuntimes(runtimeId);
   };
   sidebar.onOpenRules = () => {
     void showRulesDialog({

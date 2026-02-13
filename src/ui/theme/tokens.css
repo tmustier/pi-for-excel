@@ -4,10 +4,8 @@
 
 /*
  * Light theme palette.
- * Apply the same token set to `.dark` to force light mode everywhere.
  */
-:root,
-.dark {
+:root {
   --background: oklch(0.985 0.002 90);
   --foreground: oklch(0.18 0 0);
   --card: oklch(1 0 0 / 0.75);
@@ -99,6 +97,8 @@
   --pi-surface-translucent: oklch(0.98 0.002 90 / 0.85);
   --pi-divider: 1px solid var(--alpha-6);
   --pi-inner-bg: oklch(0.99 0.002 90);
+  --pi-grid-line: oklch(0.45 0.08 160 / 0.04);
+  --pi-surface-inset-shadow: inset 4px 0 12px -3px var(--alpha-5);
 
   /* ── Pill tokens — shared across all card-like components ── */
   --pill-radius: var(--radius-lg);
@@ -142,4 +142,65 @@
   --glass-shadow-lg: 0 12px 40px var(--alpha-10), 0 2px 6px var(--alpha-6);
   /* Border: subtle, semi-transparent */
   --glass-border: 1px solid var(--white-alpha-50);
+}
+
+.dark {
+  --background: oklch(0.19 0.01 260);
+  --foreground: oklch(0.94 0.005 260);
+  --card: oklch(0.24 0.015 260 / 0.88);
+  --card-foreground: oklch(0.94 0.005 260);
+  --popover: oklch(0.22 0.014 260 / 0.92);
+  --popover-foreground: oklch(0.94 0.005 260);
+  --primary: oklch(0.66 0.11 160);
+  --primary-foreground: oklch(0.14 0.02 260);
+  --secondary: oklch(0.28 0.01 260);
+  --secondary-foreground: oklch(0.9 0.004 260);
+  --muted: oklch(0.27 0.01 260);
+  --muted-foreground: oklch(0.72 0.01 260);
+  --accent: oklch(0.31 0.02 260);
+  --accent-foreground: oklch(0.92 0.01 260);
+  --destructive: oklch(0.63 0.22 25);
+  --destructive-foreground: oklch(0.98 0 0);
+  --border: oklch(0.33 0.01 260);
+  --input: oklch(0.29 0.01 260);
+  --ring: oklch(0.64 0.11 160);
+
+  --sidebar: oklch(0.2 0.012 260);
+  --sidebar-foreground: oklch(0.94 0.005 260);
+  --sidebar-border: oklch(0.31 0.01 260);
+
+  --alpha-2: oklch(1 0 0 / 0.02);
+  --alpha-3: oklch(1 0 0 / 0.03);
+  --alpha-4: oklch(1 0 0 / 0.04);
+  --alpha-5: oklch(1 0 0 / 0.05);
+  --alpha-6: oklch(1 0 0 / 0.06);
+  --alpha-8: oklch(1 0 0 / 0.08);
+  --alpha-10: oklch(1 0 0 / 0.10);
+  --alpha-12: oklch(1 0 0 / 0.12);
+  --alpha-14: oklch(1 0 0 / 0.14);
+  --alpha-15: oklch(1 0 0 / 0.15);
+  --alpha-20: oklch(1 0 0 / 0.20);
+  --alpha-25: oklch(1 0 0 / 0.25);
+
+  --pi-green-strong: oklch(0.58 0.13 160);
+  --pi-green-light: oklch(0.66 0.12 160 / 0.18);
+  --pi-green-lighter: oklch(0.66 0.12 160 / 0.10);
+  --pi-yellow: oklch(0.79 0.14 84);
+  --pi-surface-translucent: oklch(0.2 0.012 260 / 0.88);
+  --pi-inner-bg: oklch(0.24 0.012 260);
+  --pi-grid-line: oklch(0.8 0.05 160 / 0.08);
+  --pi-surface-inset-shadow: inset 4px 0 14px -3px oklch(0 0 0 / 0.45);
+
+  --pill-border: var(--pill-border-width) solid var(--alpha-12);
+  --pill-bg: oklch(0.25 0.015 260 / 0.88);
+  --pill-shadow: 0 1px 6px oklch(0 0 0 / 0.35), inset 0 1px 0 0 oklch(1 0 0 / 0.06);
+  --pill-hover-border: var(--alpha-20);
+
+  --glass-bg: oklch(0.24 0.014 260 / 0.7);
+  --glass-bg-solid: oklch(0.22 0.014 260 / 0.86);
+  --glass-highlight: inset 0 1px 0 0 oklch(1 0 0 / 0.15), inset 1px 0 0 0 oklch(1 0 0 / 0.05);
+  --glass-inner-shadow: inset 0 -1px 0 0 oklch(0 0 0 / 0.35), inset -1px 0 0 0 oklch(0 0 0 / 0.25);
+  --glass-shadow: 0 3px 10px oklch(0 0 0 / 0.35), 0 1px 0 oklch(0 0 0 / 0.2);
+  --glass-shadow-lg: 0 16px 44px oklch(0 0 0 / 0.45), 0 4px 10px oklch(0 0 0 / 0.3);
+  --glass-border: 1px solid oklch(1 0 0 / 0.14);
 }

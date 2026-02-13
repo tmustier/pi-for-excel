@@ -103,6 +103,11 @@ export class PiSidebar extends LitElement {
   @property({ attribute: false }) onCreateTab?: () => void;
   @property({ attribute: false }) onSelectTab?: (runtimeId: string) => void;
   @property({ attribute: false }) onCloseTab?: (runtimeId: string) => void;
+  @property({ attribute: false }) onRenameTab?: (runtimeId: string) => void;
+  @property({ attribute: false }) onDuplicateTab?: (runtimeId: string) => void;
+  @property({ attribute: false }) onMoveTabLeft?: (runtimeId: string) => void;
+  @property({ attribute: false }) onMoveTabRight?: (runtimeId: string) => void;
+  @property({ attribute: false }) onCloseOtherTabs?: (runtimeId: string) => void;
   @property({ attribute: false }) onOpenRules?: () => void;
   @property({ attribute: false }) onOpenIntegrations?: () => void;
   @property({ attribute: false }) onOpenSettings?: () => void;
@@ -122,10 +127,14 @@ export class PiSidebar extends LitElement {
   @state() private _payloadSnapshots: PayloadSnapshot[] = [];
   @state() private _contextPillExpanded = false;
   @state() private _utilitiesMenuOpen = false;
+  @state() private _tabCanScrollLeft = false;
+  @state() private _tabCanScrollRight = false;
+  @state() private _tabContextMenuRuntimeId: string | null = null;
 
   @query(".pi-messages") private _scrollContainer?: HTMLElement;
   @query("streaming-message-container") private _streamingContainer?: StreamingMessageContainer;
   @query("pi-input") private _input?: PiInput;
+  @query(".pi-session-tabs__scroller") private _tabsScroller?: HTMLElement;
 
   private _unsubscribe?: () => void;
   private _cleanupGrouping?: () => void;
@@ -136,11 +145,25 @@ export class PiSidebar extends LitElement {
   private _scrollListener?: () => void;
   private _groupingRoot?: HTMLElement;
   private _utilitiesMenuClickHandler?: (event: MouseEvent) => void;
+  private _tabContextMenuClickHandler?: (event: MouseEvent) => void;
   private readonly _utilitiesMenuId = "pi-utilities-menu";
+  private readonly _tabContextMenuId = "pi-tab-context-menu";
   private _onEscapeKey = (event: KeyboardEvent) => {
-    if (event.key === "Escape" && this._utilitiesMenuOpen) {
+    if (event.key !== "Escape") {
+      return;
+    }
+
+    if (this._tabContextMenuRuntimeId) {
+      this._closeTabContextMenu();
+      return;
+    }
+
+    if (this._utilitiesMenuOpen) {
       this._closeUtilitiesMenu();
     }
+  };
+  private _onWindowResize = () => {
+    this._updateSessionTabOverflow();
   };
   private _onPayloadUpdate = () => {
     if (isDebugEnabled()) {
@@ -215,6 +238,7 @@ export class PiSidebar extends LitElement {
     document.addEventListener("pi:status-update", this._onPayloadUpdate);
     document.addEventListener("pi:debug-changed", this._onPayloadUpdate);
     document.addEventListener("keydown", this._onEscapeKey);
+    window.addEventListener("resize", this._onWindowResize);
     this._onPayloadUpdate();
   }
 
@@ -237,7 +261,9 @@ export class PiSidebar extends LitElement {
     document.removeEventListener("pi:status-update", this._onPayloadUpdate);
     document.removeEventListener("pi:debug-changed", this._onPayloadUpdate);
     document.removeEventListener("keydown", this._onEscapeKey);
+    window.removeEventListener("resize", this._onWindowResize);
     this._detachUtilitiesMenuDocumentListener();
+    this._detachTabContextMenuDocumentListener();
   }
 
   override willUpdate(changed: PropertyValues<this>) {
@@ -250,6 +276,7 @@ export class PiSidebar extends LitElement {
 
   override updated(_changed: PropertyValues<this>) {
     this._ensureMessageEnhancements();
+    this._updateSessionTabOverflow();
   }
 
   private _setupSubscription() {
@@ -374,6 +401,7 @@ export class PiSidebar extends LitElement {
       return;
     }
 
+    this._closeTabContextMenu();
     this.onSelectTab?.(nextTab.runtimeId);
 
     requestAnimationFrame(() => {
@@ -384,6 +412,86 @@ export class PiSidebar extends LitElement {
   private _onFilesDrop = (event: CustomEvent<{ files: File[] }>) => {
     this.onFilesDrop?.(event.detail.files);
   };
+
+  private _updateSessionTabOverflow() {
+    const scroller = this._tabsScroller;
+    if (!scroller) {
+      if (this._tabCanScrollLeft) this._tabCanScrollLeft = false;
+      if (this._tabCanScrollRight) this._tabCanScrollRight = false;
+      return;
+    }
+
+    const maxScrollLeft = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
+    const canScrollLeft = maxScrollLeft > 1 && scroller.scrollLeft > 1;
+    const canScrollRight = maxScrollLeft > 1 && scroller.scrollLeft < maxScrollLeft - 1;
+
+    if (canScrollLeft !== this._tabCanScrollLeft) {
+      this._tabCanScrollLeft = canScrollLeft;
+    }
+
+    if (canScrollRight !== this._tabCanScrollRight) {
+      this._tabCanScrollRight = canScrollRight;
+    }
+  }
+
+  private _scrollTabs(direction: -1 | 1): void {
+    const scroller = this._tabsScroller;
+    if (!scroller) return;
+
+    scroller.scrollBy({
+      left: 140 * direction,
+      behavior: "smooth",
+    });
+
+    requestAnimationFrame(() => {
+      this._updateSessionTabOverflow();
+    });
+  }
+
+  private _openTabContextMenu(runtimeId: string, event: MouseEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (this._utilitiesMenuOpen) {
+      this._closeUtilitiesMenu();
+    }
+
+    this._tabContextMenuRuntimeId = runtimeId;
+    this._attachTabContextMenuDocumentListener();
+  }
+
+  private _attachTabContextMenuDocumentListener(): void {
+    if (this._tabContextMenuClickHandler) return;
+
+    this._tabContextMenuClickHandler = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) {
+        this._closeTabContextMenu();
+        return;
+      }
+
+      const menu = this.querySelector(".pi-session-tab-context-menu");
+      if (menu && menu.contains(target)) {
+        return;
+      }
+
+      this._closeTabContextMenu();
+    };
+
+    document.addEventListener("click", this._tabContextMenuClickHandler, true);
+  }
+
+  private _detachTabContextMenuDocumentListener(): void {
+    if (!this._tabContextMenuClickHandler) return;
+
+    document.removeEventListener("click", this._tabContextMenuClickHandler, true);
+    this._tabContextMenuClickHandler = undefined;
+  }
+
+  private _closeTabContextMenu(): void {
+    this._tabContextMenuRuntimeId = null;
+    this._detachTabContextMenuDocumentListener();
+  }
 
   private _renderQuickActionButton(args: {
     label: string;
@@ -524,44 +632,82 @@ export class PiSidebar extends LitElement {
 
     return html`
       <div class="pi-session-tabs">
-        <div class="pi-session-tabs__scroller">
-          ${this.sessionTabs.map((tab) => html`
-            <div class="pi-session-tab ${tab.isActive ? "is-active" : ""}">
-              <button
-                class="pi-session-tab__main"
-                @click=${() => this.onSelectTab?.(tab.runtimeId)}
-                @keydown=${(event: KeyboardEvent) => this._onSessionTabKeyDown(tab.runtimeId, event)}
-                title=${tab.title}
-              >
-                <span class="pi-session-tab__title">${tab.title}</span>
-                ${tab.lockState === "waiting_for_lock"
-                  ? html`<span class="pi-session-tab__lock">lock…</span>`
-                  : nothing}
-                ${tab.isBusy
-                  ? html`<span class="pi-session-tab__busy" aria-hidden="true"></span>`
-                  : nothing}
-              </button>
-              ${canCloseTabs
-                ? html`
+        <div class="pi-session-tabs__scroller-wrap">
+          <button
+            class="pi-session-tabs__scroll pi-session-tabs__scroll--left"
+            type="button"
+            ?hidden=${!this._tabCanScrollLeft}
+            @click=${() => this._scrollTabs(-1)}
+            aria-label="Scroll tabs left"
+          >
+            ‹
+          </button>
+          <div class="pi-session-tabs__scroller" @scroll=${() => this._updateSessionTabOverflow()}>
+            ${this.sessionTabs.map((tab) => {
+              const isContextOpen = this._tabContextMenuRuntimeId === tab.runtimeId;
+              const canCloseThisTab = canCloseTabs && tab.lockState !== "holding_lock";
+
+              return html`
+                <div
+                  class="pi-session-tab ${tab.isActive ? "is-active" : ""} ${isContextOpen ? "is-menu-open" : ""}"
+                  @contextmenu=${(event: MouseEvent) => this._openTabContextMenu(tab.runtimeId, event)}
+                >
                   <button
-                    class="pi-session-tab__close"
-                    @click=${(event: Event) => {
-                      event.stopPropagation();
-                      this.onCloseTab?.(tab.runtimeId);
+                    class="pi-session-tab__main"
+                    @click=${() => {
+                      this._closeTabContextMenu();
+                      this.onSelectTab?.(tab.runtimeId);
                     }}
-                    ?disabled=${tab.lockState === "holding_lock"}
-                    title=${tab.lockState === "holding_lock"
-                      ? "Wait for workbook changes to finish"
-                      : "Close tab"}
-                    aria-label="Close tab"
+                    @dblclick=${() => {
+                      this._closeTabContextMenu();
+                      this.onRenameTab?.(tab.runtimeId);
+                    }}
+                    @keydown=${(event: KeyboardEvent) => this._onSessionTabKeyDown(tab.runtimeId, event)}
+                    title=${tab.title}
+                    aria-label=${`Open tab ${tab.title}`}
                   >
-                    ×
+                    <span class="pi-session-tab__title">${tab.title}</span>
+                    ${tab.lockState === "waiting_for_lock"
+                      ? html`<span class="pi-session-tab__lock">lock…</span>`
+                      : nothing}
+                    ${tab.isBusy
+                      ? html`<span class="pi-session-tab__busy" aria-hidden="true"></span>`
+                      : nothing}
                   </button>
-                `
-                : nothing}
-            </div>
-          `)}
-          <button class="pi-session-tabs__new" @click=${() => this.onCreateTab?.()} aria-label="New tab">+</button>
+                  ${canCloseTabs
+                    ? html`
+                      <button
+                        class="pi-session-tab__close"
+                        @click=${(event: Event) => {
+                          event.stopPropagation();
+                          this._closeTabContextMenu();
+                          this.onCloseTab?.(tab.runtimeId);
+                        }}
+                        ?disabled=${!canCloseThisTab}
+                        title=${tab.lockState === "holding_lock"
+                          ? "Wait for workbook changes to finish"
+                          : "Close tab"}
+                        aria-label="Close tab"
+                      >
+                        ×
+                      </button>
+                    `
+                    : nothing}
+                  ${isContextOpen ? this._renderTabContextMenu(tab, canCloseTabs) : nothing}
+                </div>
+              `;
+            })}
+            <button class="pi-session-tabs__new" @click=${() => this.onCreateTab?.()} aria-label="New tab">+</button>
+          </div>
+          <button
+            class="pi-session-tabs__scroll pi-session-tabs__scroll--right"
+            type="button"
+            ?hidden=${!this._tabCanScrollRight}
+            @click=${() => this._scrollTabs(1)}
+            aria-label="Scroll tabs right"
+          >
+            ›
+          </button>
         </div>
         <div class="pi-utilities-anchor">
           <button
@@ -579,12 +725,104 @@ export class PiSidebar extends LitElement {
     `;
   }
 
+  private _renderTabContextMenu(tab: SessionTabView, canCloseTabs: boolean) {
+    const closeDisabled = !canCloseTabs || tab.lockState === "holding_lock";
+    const closeOthersDisabled = this.sessionTabs.length <= 1 || !this.onCloseOtherTabs;
+    const tabIndex = this.sessionTabs.findIndex((entry) => entry.runtimeId === tab.runtimeId);
+    const moveLeftDisabled = tabIndex <= 0 || !this.onMoveTabLeft;
+    const moveRightDisabled = tabIndex < 0 || tabIndex >= this.sessionTabs.length - 1 || !this.onMoveTabRight;
+
+    return html`
+      <div
+        class="pi-session-tab-context-menu"
+        id=${this._tabContextMenuId}
+        role="menu"
+        aria-label=${`Tab actions for ${tab.title}`}
+      >
+        <button
+          role="menuitem"
+          type="button"
+          class="pi-session-tab-context-menu__item"
+          ?disabled=${!this.onRenameTab}
+          @click=${() => {
+            this._closeTabContextMenu();
+            this.onRenameTab?.(tab.runtimeId);
+          }}
+        >
+          Rename tab…
+        </button>
+        <button
+          role="menuitem"
+          type="button"
+          class="pi-session-tab-context-menu__item"
+          ?disabled=${!this.onDuplicateTab}
+          @click=${() => {
+            this._closeTabContextMenu();
+            this.onDuplicateTab?.(tab.runtimeId);
+          }}
+        >
+          Duplicate tab
+        </button>
+        <button
+          role="menuitem"
+          type="button"
+          class="pi-session-tab-context-menu__item"
+          ?disabled=${moveLeftDisabled}
+          @click=${() => {
+            this._closeTabContextMenu();
+            this.onMoveTabLeft?.(tab.runtimeId);
+          }}
+        >
+          Move left
+        </button>
+        <button
+          role="menuitem"
+          type="button"
+          class="pi-session-tab-context-menu__item"
+          ?disabled=${moveRightDisabled}
+          @click=${() => {
+            this._closeTabContextMenu();
+            this.onMoveTabRight?.(tab.runtimeId);
+          }}
+        >
+          Move right
+        </button>
+        <button
+          role="menuitem"
+          type="button"
+          class="pi-session-tab-context-menu__item"
+          ?disabled=${closeOthersDisabled}
+          @click=${() => {
+            this._closeTabContextMenu();
+            this.onCloseOtherTabs?.(tab.runtimeId);
+          }}
+        >
+          Close other tabs
+        </button>
+        <div class="pi-session-tab-context-menu__divider" role="separator"></div>
+        <button
+          role="menuitem"
+          type="button"
+          class="pi-session-tab-context-menu__item pi-session-tab-context-menu__item--danger"
+          ?disabled=${closeDisabled}
+          @click=${() => {
+            this._closeTabContextMenu();
+            this.onCloseTab?.(tab.runtimeId);
+          }}
+        >
+          Close tab
+        </button>
+      </div>
+    `;
+  }
+
   private _toggleUtilitiesMenu() {
     if (this._utilitiesMenuOpen) {
       this._closeUtilitiesMenu();
       return;
     }
 
+    this._closeTabContextMenu();
     this._utilitiesMenuOpen = true;
     requestAnimationFrame(() => {
       if (!this.isConnected || !this._utilitiesMenuOpen) return;

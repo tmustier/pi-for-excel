@@ -35,19 +35,55 @@
   pointer-events: none;
 }
 
+.pi-session-tabs__scroller-wrap {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+
 .pi-session-tabs__scroller {
   display: flex;
   align-items: center;
   gap: 4px;
   overflow-x: auto;
+  overflow-y: visible;
   scrollbar-width: thin;
   min-width: 0;
   flex: 1;
 }
 
+.pi-session-tabs__scroll {
+  border: 1px solid var(--alpha-10);
+  background: var(--white-alpha-45);
+  color: var(--muted-foreground);
+  border-radius: var(--radius-xs);
+  width: 20px;
+  height: 22px;
+  flex-shrink: 0;
+  cursor: pointer;
+  font-size: var(--text-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--duration-fast), border-color var(--duration-fast), color var(--duration-fast), opacity var(--duration-fast);
+}
+
+.pi-session-tabs__scroll:hover {
+  background: var(--white-alpha-65);
+  border-color: var(--alpha-14);
+  color: var(--foreground);
+}
+
+.pi-session-tabs__scroll[hidden] {
+  display: none;
+}
+
 .pi-session-tab {
   display: flex;
   align-items: center;
+  position: relative;
   border: 1px solid var(--alpha-10);
   border-radius: var(--radius-sm);
   background: var(--white-alpha-25);
@@ -68,6 +104,11 @@
   background: oklch(0.45 0.12 160 / 0.18);
   border-color: var(--green-alpha-25);
   color: var(--foreground);
+}
+
+.pi-session-tab.is-menu-open {
+  border-color: var(--green-alpha-30);
+  box-shadow: 0 0 0 2px var(--green-alpha-12);
 }
 
 .pi-session-tab:focus-within {
@@ -135,8 +176,8 @@
   color: var(--muted-foreground);
   font-size: var(--text-base);
   line-height: 1;
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   margin-right: 3px;
   border-radius: 999px;
   cursor: pointer;
@@ -207,6 +248,59 @@
   background: oklch(1 0 0 / 0.58);
   border-color: var(--green-alpha-20);
   color: oklch(0.43 0.02 160);
+}
+
+.pi-session-tab-context-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 220;
+  min-width: 170px;
+  padding: 4px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--alpha-12);
+  background: var(--glass-bg-solid);
+  backdrop-filter: var(--glass-blur-dropdown);
+  -webkit-backdrop-filter: var(--glass-blur-dropdown);
+  box-shadow: var(--glass-shadow-lg), var(--glass-highlight), var(--glass-inner-shadow);
+}
+
+.pi-session-tab-context-menu__item {
+  width: 100%;
+  border: none;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  text-align: left;
+  padding: 6px 8px;
+  cursor: pointer;
+  transition: background var(--duration-fast), color var(--duration-fast), opacity var(--duration-fast);
+}
+
+.pi-session-tab-context-menu__item:hover:not(:disabled) {
+  background: var(--white-alpha-45);
+}
+
+.pi-session-tab-context-menu__item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pi-session-tab-context-menu__item--danger {
+  color: oklch(0.58 0.2 27);
+}
+
+.pi-session-tab-context-menu__divider {
+  height: 1px;
+  margin: 4px 6px;
+  background: linear-gradient(
+    90deg,
+    var(--white-alpha-40),
+    var(--alpha-6),
+    var(--white-alpha-40)
+  );
 }
 
 /* ── Utilities menu (⋯ in tab strip) ── */

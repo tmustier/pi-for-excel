@@ -15,8 +15,10 @@ import { installLitClassFieldShadowingPatch } from "./compat/lit-class-field-sha
 import { installMarkedSafetyPatch } from "./compat/marked-safety.js";
 import { installThinkingDurationPatch } from "./compat/thinking-duration.js";
 import { installDialogStyleHooks } from "./ui/dialog-style-hooks.js";
+import { installThemeModeSync } from "./ui/theme-mode.js";
 
 installLitClassFieldShadowingPatch();
 installMarkedSafetyPatch();
 installThinkingDurationPatch();
 installDialogStyleHooks();
+installThemeModeSync();

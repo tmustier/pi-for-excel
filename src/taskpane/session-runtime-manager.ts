@@ -138,6 +138,21 @@ export class SessionRuntimeManager {
     return this.getActiveRuntime();
   }
 
+  moveRuntime(runtimeId: string, direction: -1 | 1): boolean {
+    const index = this.runtimeOrder.indexOf(runtimeId);
+    if (index < 0) return false;
+
+    const targetIndex = index + direction;
+    if (targetIndex < 0 || targetIndex >= this.runtimeOrder.length) {
+      return false;
+    }
+
+    this.runtimeOrder.splice(index, 1);
+    this.runtimeOrder.splice(targetIndex, 0, runtimeId);
+    this.emit();
+    return true;
+  }
+
   setRuntimeLockState(runtimeId: string, lockState: RuntimeLockState): void {
     const runtime = this.runtimes.get(runtimeId);
     if (!runtime || runtime.lockState === lockState) return;
