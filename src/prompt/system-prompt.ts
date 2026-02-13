@@ -139,6 +139,7 @@ export function buildSystemPrompt(opts: SystemPromptOptions = {}): string {
   }
 
   sections.push(TOOLS);
+  sections.push(WORKSPACE);
   sections.push(WORKFLOW);
   sections.push(CONVENTIONS);
 
@@ -172,9 +173,27 @@ ${CORE_TOOL_PROMPT_LINES}
 - **execute_office_js** — run direct Office.js against the active workbook when structured tools cannot express the operation (explanation + user approval required)
 
 Other tools may be available depending on enabled experiments/integrations.
-Use **files** for workspace artifacts (list/read/write/delete files).
+Use **files** for workspace artifacts (list/read/write/delete files). Pass \`path\` on \`list\` to scope to a folder.
 Built-in assistant docs are always available under \`assistant-docs/\` (for example \`assistant-docs/docs/extensions.md\`).
 If **execute_office_js** is available, keep code minimal, call \`context.sync()\` after \`load()\`, and return JSON-serializable results.`;
+
+const WORKSPACE = `## Workspace
+
+You have a persistent file workspace that survives across sessions and workbooks. Use it to save notes, analysis artifacts, and working files.
+
+### Folder conventions
+- \`notes/\` — Your persistent memory. Write things you learn here so you can recall them in future sessions. Keep a brief \`notes/index.md\` listing what each note covers.
+- \`workbooks/<name>/\` — Artifacts tied to a specific workbook (CSVs, analysis, charts). Use a short slug derived from the workbook name.
+- \`scratch/\` — Temporary working files. May be auto-cleaned.
+- \`imports/\` — Files uploaded by the user.
+- \`assistant-docs/\` — Built-in read-only documentation.
+
+You may create other folders as needed — these are conventions, not constraints.
+
+### Tips
+- When you learn something useful about a workbook or domain, save it to \`notes/\`. Future sessions can read \`notes/index.md\` to pick up where you left off.
+- Use \`files list notes/\` or \`files list workbooks/\` to scope listings to a folder instead of listing everything.
+- Prefer text formats (Markdown, CSV, JSON) for workspace files.`;
 
 const WORKFLOW = `## Workflow
 

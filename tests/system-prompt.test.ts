@@ -81,6 +81,17 @@ void test("system prompt mentions files workspace and built-in docs prefix", () 
   assert.match(prompt, /assistant-docs\//i);
 });
 
+void test("system prompt includes workspace folder conventions", () => {
+  const prompt = buildSystemPrompt();
+  assert.match(prompt, /## Workspace/);
+  assert.match(prompt, /notes\//);
+  assert.match(prompt, /workbooks\//);
+  assert.match(prompt, /scratch\//);
+  assert.match(prompt, /imports\//);
+  assert.match(prompt, /notes\/index\.md/);
+  assert.match(prompt, /persistent memory/i);
+});
+
 void test("system prompt mentions extension manager tool for chat-driven authoring", () => {
   const prompt = buildSystemPrompt();
   assert.match(prompt, /\*\*extensions_manager\*\*/);

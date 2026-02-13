@@ -193,6 +193,55 @@ void test("files tool rejects text-mode reads of binary files", async () => {
   );
 });
 
+void test("files tool list filters by folder prefix", async () => {
+  await clearWorkspace();
+  const tool = createFilesTool();
+
+  await tool.execute("w1", { action: "write", path: "notes/index.md", content: "# Index", encoding: "text" });
+  await tool.execute("w2", { action: "write", path: "notes/budget.md", content: "Budget notes", encoding: "text" });
+  await tool.execute("w3", { action: "write", path: "scratch/temp.txt", content: "temp", encoding: "text" });
+  await tool.execute("w4", { action: "write", path: "top-level.md", content: "root", encoding: "text" });
+
+  // Filter to notes/
+  const notesResult = await tool.execute("list-notes", { action: "list", path: "notes/" });
+  const notesDetails = notesResult.details;
+  assert.ok(notesDetails && notesDetails.kind === "files_list");
+  assert.equal(notesDetails.count, 2);
+  assert.ok(notesDetails.files.every((f) => f.path.startsWith("notes/")));
+
+  // Filter to scratch/
+  const scratchResult = await tool.execute("list-scratch", { action: "list", path: "scratch" });
+  const scratchDetails = scratchResult.details;
+  assert.ok(scratchDetails && scratchDetails.kind === "files_list");
+  assert.equal(scratchDetails.count, 1);
+  assert.equal(scratchDetails.files[0].path, "scratch/temp.txt");
+
+  // No filter returns all (workspace + built-in docs)
+  const allResult = await tool.execute("list-all", { action: "list" });
+  const allDetails = allResult.details;
+  assert.ok(allDetails && allDetails.kind === "files_list");
+  assert.ok(allDetails.count >= 4); // at least 4 workspace files + built-in docs
+
+  // Filter to nonexistent folder returns empty
+  const emptyResult = await tool.execute("list-empty", { action: "list", path: "nonexistent/" });
+  const emptyDetails = emptyResult.details;
+  assert.ok(emptyDetails && emptyDetails.kind === "files_list");
+  assert.equal(emptyDetails.count, 0);
+});
+
+void test("files tool list folder filter output includes count context", async () => {
+  await clearWorkspace();
+  const tool = createFilesTool();
+
+  await tool.execute("w1", { action: "write", path: "notes/a.md", content: "a", encoding: "text" });
+  await tool.execute("w2", { action: "write", path: "other/b.md", content: "b", encoding: "text" });
+
+  const result = await tool.execute("list-notes", { action: "list", path: "notes/" });
+  const text = result.content[0]?.type === "text" ? result.content[0].text : "";
+  assert.match(text, /folder: notes\//);
+  assert.match(text, /1 of/); // "1 of N total"
+});
+
 void test("files tool blocks path traversal", async () => {
   await clearWorkspace();
   const tool = createFilesTool();

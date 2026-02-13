@@ -30,7 +30,7 @@ const schema = Type.Object({
     description: "Workspace action: list, read, write, or delete.",
   }),
   path: Type.Optional(Type.String({
-    description: "Workspace-relative file path (required for read/write/delete).",
+    description: "Workspace-relative file path (required for read/write/delete). For list, optional folder prefix to filter results (e.g. \"notes/\").",
   })),
   content: Type.Optional(Type.String({
     description: "Content for write. Use plain text by default, or base64 when encoding=base64.",
@@ -65,6 +65,22 @@ const TOOL_AUDIT_CONTEXT: FilesWorkspaceAuditContext = {
   source: "tool:files",
 };
 
+function normalizeFolderPrefix(rawPath: string): string {
+  const normalized = normalizeWorkspacePath(rawPath + "/placeholder").replace(/\/placeholder$/, "/");
+  return normalized;
+}
+
+function filterByFolder<T extends { path: string }>(
+  files: T[],
+  rawFolder: string | undefined,
+): T[] {
+  const trimmed = rawFolder?.trim();
+  if (!trimmed) return files;
+
+  const prefix = normalizeFolderPrefix(trimmed);
+  return files.filter((file) => file.path.startsWith(prefix));
+}
+
 function requirePath(path: string | undefined, action: Params["action"]): string {
   const trimmed = path?.trim();
   if (!trimmed) {
@@ -76,6 +92,8 @@ function requirePath(path: string | undefined, action: Params["action"]): string
 
 function renderListMarkdown(args: {
   backendLabel: string;
+  folderFilter?: string;
+  totalCount: number;
   files: Array<{
     path: string;
     size: number;
@@ -86,11 +104,18 @@ function renderListMarkdown(args: {
     workbookLabel?: string;
   }>;
 }): string {
+  const filterSuffix = args.folderFilter ? `, folder: ${args.folderFilter}` : "";
   if (args.files.length === 0) {
-    return `Workspace files (${args.backendLabel}):\n\n_No files yet._`;
+    const noFilesMsg = args.folderFilter
+      ? `_No files in ${args.folderFilter}._`
+      : "_No files yet._";
+    return `Workspace files (${args.backendLabel}${filterSuffix}):\n\n${noFilesMsg}`;
   }
 
-  const lines = [`Workspace files (${args.backendLabel}):`, ""];
+  const countNote = args.folderFilter && args.totalCount !== args.files.length
+    ? ` (${args.files.length} of ${args.totalCount} total)`
+    : "";
+  const lines = [`Workspace files (${args.backendLabel}${filterSuffix})${countNote}:`, ""];
   for (const file of args.files) {
     const workbookSuffix = file.workbookLabel ? `, workbook: ${file.workbookLabel}` : "";
     const sourceSuffix = file.sourceKind === "builtin-doc" ? ", built-in doc" : "";
@@ -165,9 +190,12 @@ export function createFilesTool(): AgentTool<typeof schema, FilesToolDetails> {
       const backend = await workspace.getBackendStatus();
 
       if (params.action === "list") {
-        const files = await workspace.listFiles({
+        const allFiles = await workspace.listFiles({
           audit: TOOL_AUDIT_CONTEXT,
         });
+
+        const files = filterByFolder(allFiles, params.path);
+
         const details: FilesListDetails = {
           kind: "files_list",
           backend: backend.kind,
@@ -189,6 +217,8 @@ export function createFilesTool(): AgentTool<typeof schema, FilesToolDetails> {
             type: "text",
             text: renderListMarkdown({
               backendLabel: backend.label,
+              folderFilter: params.path?.trim(),
+              totalCount: allFiles.length,
               files: files.map((file) => ({
                 path: file.path,
                 size: file.size,
