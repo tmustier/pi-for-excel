@@ -1787,59 +1787,6 @@ pi-working-indicator {
   color: var(--muted-foreground);
 }
 
-.pi-files-dialog__audit {
-  border: var(--pi-divider);
-  border-radius: var(--radius-md);
-  background: var(--white-alpha-35);
-  padding: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.pi-files-dialog__audit-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px;
-}
-
-.pi-files-dialog__audit-title {
-  font-family: var(--font-sans);
-  font-size: var(--text-sm);
-  font-weight: 600;
-  color: var(--foreground);
-}
-
-.pi-files-dialog__audit-list {
-  max-height: 150px;
-  overflow: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-
-.pi-files-dialog__audit-row {
-  border-radius: var(--radius-xs);
-  background: var(--white-alpha-45);
-  padding: 6px 7px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.pi-files-dialog__audit-meta {
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  color: var(--muted-foreground);
-}
-
-.pi-files-dialog__audit-body {
-  font-family: var(--font-sans);
-  font-size: var(--text-sm);
-  color: var(--foreground);
-}
-
 .pi-files-dialog__empty {
   font-family: var(--font-sans);
   font-size: var(--text-sm);

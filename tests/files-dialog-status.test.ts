@@ -15,7 +15,7 @@ void test("status message explains built-in docs when write/delete is gated", ()
   });
 
   assert.match(message, /Built-in docs stay available/i);
-  assert.match(message, /Enable files-workspace/i);
+  assert.match(message, /Enable write access/i);
 });
 
 void test("status message reports active filtered count when enabled", () => {

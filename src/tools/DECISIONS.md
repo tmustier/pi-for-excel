@@ -215,15 +215,17 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 - **Compatibility:** legacy `widget.show/dismiss` remains supported and maps to a reserved legacy widget id when v2 is enabled.
 - **Rationale:** establish predictable multi-widget lifecycle semantics before richer layout controls.
 
-## Feature-flagged files workspace tool (`files`)
+## Feature-flagged files tool (`files`)
 - **Availability:** non-core tool, always registered. `list`/`read` stay available even when `files-workspace` is off; `write`/`delete` remain gated by `files-workspace`.
 - **Built-in assistant docs:** a read-only `assistant-docs/` namespace ships with the app (README + key docs) and is always visible to both UI and tool.
 - **Backend strategy:** native folder handle (when permitted) → OPFS → in-memory fallback.
-- **Workbook tagging:** workspace files are **not segregated** by workbook; each file stores an optional workbook tag (`workbookId` + label) based on the active workbook when last written/imported.
-- **Audit trail:** workspace keeps a local activity log (list/read/write/delete/rename/import/backend switches) including actor (`assistant`/`user`), source, timestamp, and workbook label when known.
+- **Workbook tagging:** files are **not segregated** by workbook; each file stores an optional workbook tag (`workbookId` + label) based on the active workbook when last written/imported.
+- **Audit trail:** persisted locally (list/read/write/delete/rename/import/backend switches) including actor, source, timestamp, and workbook label. Not shown in the Files dialog UI — available via `/export audit` for debugging.
+- **Download fix:** uses `window.open(blobUrl)` instead of `<a download>` + `anchor.click()` for reliable binary file downloads in Office Add-in WebView (WKWebView on macOS silently ignores programmatic anchor clicks).
 - **Preview UX:** Files dialog supports inline text editing plus image/PDF preview; other binaries fall back to metadata + download. Built-in docs are marked read-only in the UI.
 - **Filter UX:** Files dialog includes workbook-tag filtering (`all`, `current workbook`, `untagged`, and per-tag options) without changing underlying shared storage.
 - **Input drop UX:** dropping files onto the chat input imports them directly into workspace (and auto-enables `files-workspace` if needed).
+- **Naming:** user-facing UI uses "Files" (not "Files workspace"). Internal flag id remains `files_workspace`; slug `files-workspace` and alias `files` are both accepted.
 - **Rationale:** keep one shared artifact space while preserving workbook context/transparency, while making core assistant docs available without extra setup.
 
 ## Workbook mutation change previews + audit log (slice)

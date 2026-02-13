@@ -6,7 +6,6 @@ import { base64ToBytes } from "../files/encoding.js";
 import { formatBytes } from "../files/mime.js";
 import {
   FILES_WORKSPACE_CHANGED_EVENT,
-  type FilesWorkspaceAuditEntry,
   type WorkspaceFileEntry,
 } from "../files/types.js";
 import { type FilesWorkspaceAuditContext, getFilesWorkspace } from "../files/workspace.js";
@@ -53,32 +52,6 @@ function makeButton(label: string, className: string): HTMLButtonElement {
   return button;
 }
 
-function describeAuditEntry(entry: FilesWorkspaceAuditEntry): string {
-  switch (entry.action) {
-    case "list":
-      return "Listed workspace files";
-    case "read":
-      return entry.path ? `Read ${entry.path}` : "Read file";
-    case "write":
-      return entry.path ? `Wrote ${entry.path}` : "Wrote file";
-    case "delete":
-      return entry.path ? `Deleted ${entry.path}` : "Deleted file";
-    case "rename":
-      if (entry.fromPath && entry.toPath) {
-        return `Renamed ${entry.fromPath} → ${entry.toPath}`;
-      }
-      return "Renamed file";
-    case "import":
-      return "Imported files";
-    case "connect_native":
-      return "Connected local folder";
-    case "disconnect_native":
-      return "Switched to sandbox workspace";
-    case "clear_audit":
-      return "Cleared audit trail";
-  }
-}
-
 function isImageMimeType(mimeType: string): boolean {
   return mimeType.toLowerCase().startsWith("image/");
 }
@@ -107,7 +80,7 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
 
   const title = document.createElement("h2");
   title.className = "pi-files-dialog__title";
-  title.textContent = "Files workspace";
+  title.textContent = "Files";
 
   const subtitle = document.createElement("p");
   subtitle.className = "pi-files-dialog__subtitle";
@@ -131,7 +104,7 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
 
   const helperLine = document.createElement("div");
   helperLine.className = "pi-files-dialog__helper";
-  helperLine.textContent = "Built-in docs are always available. Enable files-workspace for assistant write/delete.";
+  helperLine.textContent = "Built-in docs are always available. Enable write access for assistant file management.";
 
   const filters = document.createElement("div");
   filters.className = "pi-files-dialog__filters";
@@ -193,25 +166,6 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
 
   viewer.append(viewerHeader, viewerNote, viewerTextarea, viewerPreview);
 
-  const audit = document.createElement("div");
-  audit.className = "pi-files-dialog__audit";
-
-  const auditHeader = document.createElement("div");
-  auditHeader.className = "pi-files-dialog__audit-header";
-
-  const auditTitle = document.createElement("div");
-  auditTitle.className = "pi-files-dialog__audit-title";
-  auditTitle.textContent = "Recent activity";
-
-  const clearAuditButton = makeButton("Clear", "pi-files-dialog__row-btn");
-
-  auditHeader.append(auditTitle, clearAuditButton);
-
-  const auditList = document.createElement("div");
-  auditList.className = "pi-files-dialog__audit-list";
-
-  audit.append(auditHeader, auditList);
-
   const footer = document.createElement("div");
   footer.className = "pi-files-dialog__footer";
   const closeButton = makeButton("Close", "pi-files-dialog__btn");
@@ -235,7 +189,6 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
     filters,
     list,
     viewer,
-    audit,
     footer,
   );
 
@@ -457,48 +410,10 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
     }
   };
 
-  const renderAuditTrail = (entries: FilesWorkspaceAuditEntry[]) => {
-    auditList.replaceChildren();
-
-    if (entries.length === 0) {
-      const empty = document.createElement("div");
-      empty.className = "pi-files-dialog__empty";
-      empty.textContent = "No activity yet.";
-      auditList.appendChild(empty);
-      return;
-    }
-
-    for (const entry of entries.slice(0, 40)) {
-      const row = document.createElement("div");
-      row.className = "pi-files-dialog__audit-row";
-
-      const meta = document.createElement("div");
-      meta.className = "pi-files-dialog__audit-meta";
-
-      const actorLabel = entry.actor === "assistant"
-        ? "assistant"
-        : entry.actor === "system"
-          ? "system"
-          : "user";
-
-      meta.textContent = `${formatRelativeDate(entry.at)} · ${actorLabel} · ${entry.source}`;
-
-      const body = document.createElement("div");
-      body.className = "pi-files-dialog__audit-body";
-
-      const workbookSuffix = entry.workbookLabel ? ` · ${entry.workbookLabel}` : "";
-      body.textContent = `${describeAuditEntry(entry)}${workbookSuffix}`;
-
-      row.append(meta, body);
-      auditList.appendChild(row);
-    }
-  };
-
   const renderList = async () => {
-    const [backend, files, auditEntries, workbookContext] = await Promise.all([
+    const [backend, files, workbookContext] = await Promise.all([
       workspace.getBackendStatus(),
       workspace.listFiles(),
-      workspace.listAuditEntries(80),
       getWorkbookContext().catch(() => null),
     ]);
 
@@ -672,7 +587,6 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
       }
     }
 
-    renderAuditTrail(auditEntries);
   };
 
   const onWorkspaceChanged: EventListener = () => {
@@ -689,7 +603,7 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
   enableButton.addEventListener("click", () => {
     setExperimentalFeatureEnabled("files_workspace", true);
     void renderList();
-    showToast("Enabled files workspace write/delete access.");
+    showToast("Enabled file write/delete access.");
   });
 
   uploadButton.addEventListener("click", () => {
@@ -784,21 +698,6 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
 
   closeViewerButton.addEventListener("click", () => {
     clearViewer();
-  });
-
-  clearAuditButton.addEventListener("click", () => {
-    const ok = window.confirm("Clear files activity log?");
-    if (!ok) return;
-
-    void workspace.clearAuditTrail({
-      audit: DIALOG_AUDIT_CONTEXT,
-    })
-      .then(() => {
-        showToast("Cleared files activity log.");
-      })
-      .catch((error: unknown) => {
-        showToast(`Could not clear activity log: ${getErrorMessage(error)}`);
-      });
   });
 
   closeButton.addEventListener("click", closeOverlay);

@@ -12,8 +12,8 @@ export function buildFilesDialogStatusMessage(args: {
   if (!args.filesExperimentEnabled) {
     return (
       `Built-in docs stay available (${args.builtinDocsCount}). `
-      + "Enable files-workspace for assistant write/delete "
-      + `on workspace files (${args.workspaceFilesCount}).`
+      + "Enable write access for assistant file management "
+      + `(${args.workspaceFilesCount} file${args.workspaceFilesCount === 1 ? "" : "s"}).`
     );
   }
 

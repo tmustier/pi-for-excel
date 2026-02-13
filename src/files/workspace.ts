@@ -1038,16 +1038,13 @@ export class FilesWorkspace {
     const blob = new Blob([toArrayBuffer(bytes)], { type: mimeType });
     const url = URL.createObjectURL(blob);
 
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = result.name;
-    anchor.rel = "noopener";
-    anchor.style.display = "none";
-
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-    URL.revokeObjectURL(url);
+    // Office Add-in WebView (WKWebView on macOS) silently ignores programmatic
+    // <a download> clicks for binary content types.  Use window.open() which
+    // reliably opens the blob in a new tab/viewer across all WebView hosts.
+    // Schedule URL revocation with a generous delay so the opened window can
+    // finish loading the blob.
+    window.open(url, "_blank");
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
   }
 
   async getContextSummary(maxFiles = 20): Promise<string | null> {
