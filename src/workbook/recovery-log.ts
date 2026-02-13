@@ -36,9 +36,9 @@ import {
   type RecoveryModifyStructureState,
 } from "./recovery-states.js";
 import { estimateModifyStructureCellCount } from "./recovery/structure-state.js";
+import { MAX_RECOVERY_CELLS, MAX_RECOVERY_ENTRIES } from "./recovery/constants.js";
 
-const MAX_RECOVERY_ENTRIES = 120;
-export const MAX_RECOVERY_CELLS = 20_000;
+export { MAX_RECOVERY_CELLS };
 
 export type WorkbookRecoveryToolName =
   | "write_cells"

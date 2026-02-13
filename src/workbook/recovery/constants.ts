@@ -1,0 +1,2 @@
+export const MAX_RECOVERY_ENTRIES = 120;
+export const MAX_RECOVERY_CELLS = 20_000;

@@ -1,14 +1,76 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { WorkbookRecoveryLog } from "../src/workbook/recovery-log.ts";
+import { MAX_RECOVERY_CELLS, WorkbookRecoveryLog } from "../src/workbook/recovery-log.ts";
 import type { WorkbookContext } from "../src/workbook/context.ts";
+import { captureValueDataRange } from "../src/workbook/recovery/structure-state.ts";
 import { type RecoveryModifyStructureState } from "../src/workbook/recovery-states.ts";
 import {
   createInMemorySettingsStore,
   findSnapshotById,
   withoutUndefined,
 } from "./recovery-log-test-helpers.test.ts";
+
+void test("captureValueDataRange short-circuits oversized captures before loading cell grids", async () => {
+  const loadCalls: Array<string | string[]> = [];
+
+  const usedRange = {
+    isNullObject: false,
+    address: "Sheet1!A1:CV201",
+    rowCount: 201,
+    columnCount: 100,
+    values: [] as unknown[][],
+    formulas: [] as unknown[][],
+    load: (propertyNames: string | string[]): void => {
+      loadCalls.push(propertyNames);
+    },
+  };
+
+  const targetRange = {
+    getUsedRangeOrNullObject: (_valuesOnly?: boolean): typeof usedRange => usedRange,
+  };
+
+  const context = {
+    sync: (): Promise<unknown> => Promise.resolve(),
+  };
+
+  const capture = await captureValueDataRange(context, targetRange, MAX_RECOVERY_CELLS);
+
+  assert.equal(capture.status, "too_large");
+  assert.ok(capture.cellCount > MAX_RECOVERY_CELLS);
+  assert.deepEqual(loadCalls, [["isNullObject", "address", "rowCount", "columnCount"]]);
+});
+
+void test("captureValueDataRange captures in-range value/formula payloads", async () => {
+  const usedRange = {
+    isNullObject: false,
+    address: "Sheet1!B2:C3",
+    rowCount: 2,
+    columnCount: 2,
+    values: [[1, 2], [3, 4]],
+    formulas: [["", ""], ["", ""]],
+    load: (_propertyNames: string | string[]): void => {},
+  };
+
+  const targetRange = {
+    getUsedRangeOrNullObject: (_valuesOnly?: boolean): typeof usedRange => usedRange,
+  };
+
+  const context = {
+    sync: (): Promise<unknown> => Promise.resolve(),
+  };
+
+  const capture = await captureValueDataRange(context, targetRange, MAX_RECOVERY_CELLS);
+
+  assert.equal(capture.status, "captured");
+  assert.deepEqual(capture.dataRange, {
+    address: "B2:C3",
+    rowCount: 2,
+    columnCount: 2,
+    values: [[1, 2], [3, 4]],
+    formulas: [["", ""], ["", ""]],
+  });
+});
 
 void test("persisted modify-structure checkpoints retain extended state kinds", async () => {
   const settingsStore = createInMemorySettingsStore();

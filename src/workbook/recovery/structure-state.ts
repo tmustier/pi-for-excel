@@ -3,6 +3,7 @@
 import { excelRun } from "../../excel/helpers.js";
 import { localAddressPart } from "./address.js";
 import { cloneRecoveryModifyStructureState } from "./clone.js";
+import { MAX_RECOVERY_CELLS } from "./constants.js";
 import type {
   RecoveryModifyStructureState,
   RecoverySheetVisibility,
@@ -44,6 +45,19 @@ export type CaptureModifyStructureStateArgs =
     sheetRef: string;
     position: number;
     count: number;
+  };
+
+export type StructureValueDataCaptureResult =
+  | {
+    status: "empty";
+  }
+  | {
+    status: "captured";
+    dataRange: RecoveryStructureValueRangeState;
+  }
+  | {
+    status: "too_large";
+    cellCount: number;
   };
 
 function normalizePositiveInteger(value: number): number | null {
@@ -180,16 +194,25 @@ export function estimateModifyStructureCellCount(state: RecoveryModifyStructureS
 async function captureUsedRangeSnapshot(
   context: SyncContext,
   source: UsedRangeSource,
-): Promise<RecoveryStructureValueRangeState | undefined> {
+  maxCellCount: number,
+): Promise<StructureValueDataCaptureResult> {
   const usedRange = source.getUsedRangeOrNullObject(true);
-  usedRange.load("isNullObject");
+  usedRange.load(["isNullObject", "address", "rowCount", "columnCount"]);
   await context.sync();
 
   if (usedRange.isNullObject) {
-    return undefined;
+    return { status: "empty" };
   }
 
-  usedRange.load(["address", "rowCount", "columnCount", "values", "formulas"]);
+  const cellCount = usedRange.rowCount * usedRange.columnCount;
+  if (cellCount > maxCellCount) {
+    return {
+      status: "too_large",
+      cellCount,
+    };
+  }
+
+  usedRange.load(["values", "formulas"]);
   await context.sync();
 
   const values = cloneUnknownGrid(usedRange.values);
@@ -202,21 +225,30 @@ async function captureUsedRangeSnapshot(
     formulas,
   };
 
-  return isStructureValueRangeStateShapeValid(dataRange) ? dataRange : undefined;
+  if (!isStructureValueRangeStateShapeValid(dataRange)) {
+    return { status: "empty" };
+  }
+
+  return {
+    status: "captured",
+    dataRange,
+  };
 }
 
 export async function captureValueDataRange(
   context: SyncContext,
   targetRange: UsedRangeSource,
-): Promise<RecoveryStructureValueRangeState | undefined> {
-  return captureUsedRangeSnapshot(context, targetRange);
+  maxCellCount = MAX_RECOVERY_CELLS,
+): Promise<StructureValueDataCaptureResult> {
+  return captureUsedRangeSnapshot(context, targetRange, maxCellCount);
 }
 
 export async function captureSheetValueDataRange(
   context: SyncContext,
   sheet: UsedRangeSource,
-): Promise<RecoveryStructureValueRangeState | undefined> {
-  return captureUsedRangeSnapshot(context, sheet);
+  maxCellCount = MAX_RECOVERY_CELLS,
+): Promise<StructureValueDataCaptureResult> {
+  return captureUsedRangeSnapshot(context, sheet, maxCellCount);
 }
 
 export async function hasValueDataInSheet(
@@ -402,7 +434,9 @@ export async function applyModifyStructureState(
     }
 
     if (targetState.kind === "sheet_absent") {
-      const sheet = await loadSheetByIdOrName(context, targetState.sheetId, targetState.sheetName);
+      const sheet = targetState.allowDataDelete
+        ? await loadSheetById(context, targetState.sheetId)
+        : await loadSheetByIdOrName(context, targetState.sheetId, targetState.sheetName);
       if (!sheet) {
         return cloneRecoveryModifyStructureState(targetState);
       }
@@ -419,12 +453,18 @@ export async function applyModifyStructureState(
         );
       }
 
-      const currentDataRange = hasValueData
-        ? await captureSheetValueDataRange(context, sheet)
-        : undefined;
+      let currentDataRange: RecoveryStructureValueRangeState | undefined;
+      if (hasValueData) {
+        const currentDataCapture = await captureSheetValueDataRange(context, sheet);
+        if (currentDataCapture.status === "too_large") {
+          throw new Error("Structure checkpoint restore failed: target sheet data exceeds recovery size limits.");
+        }
 
-      if (hasValueData && !currentDataRange) {
-        throw new Error("Structure checkpoint restore failed: could not capture current sheet data before delete.");
+        if (currentDataCapture.status !== "captured") {
+          throw new Error("Structure checkpoint restore failed: could not capture current sheet data before delete.");
+        }
+
+        currentDataRange = currentDataCapture.dataRange;
       }
 
       const currentState: RecoveryModifyStructureState = {
@@ -433,7 +473,7 @@ export async function applyModifyStructureState(
         sheetName: sheet.name,
         position: sheet.position,
         visibility: currentVisibility,
-        dataRange: currentDataRange,
+        ...(currentDataRange ? { dataRange: currentDataRange } : {}),
       };
 
       sheet.delete();
@@ -445,21 +485,22 @@ export async function applyModifyStructureState(
       const existing = await loadSheetByIdOrName(context, targetState.sheetId, targetState.sheetName);
 
       if (!existing) {
-        const currentState: RecoveryModifyStructureState = {
-          kind: "sheet_absent",
-          sheetId: targetState.sheetId,
-          sheetName: targetState.sheetName,
-          allowDataDelete: targetState.dataRange ? true : undefined,
-        };
-
         const created = context.workbook.worksheets.add(targetState.sheetName);
         created.position = targetState.position;
         created.visibility = targetState.visibility;
+        created.load(["id", "name"]);
         await context.sync();
 
         if (targetState.dataRange) {
           await restoreStructureValueRange(context, created, targetState.dataRange);
         }
+
+        const currentState: RecoveryModifyStructureState = {
+          kind: "sheet_absent",
+          sheetId: created.id,
+          sheetName: created.name,
+          ...(targetState.dataRange ? { allowDataDelete: true } : {}),
+        };
 
         return currentState;
       }
@@ -513,12 +554,18 @@ export async function applyModifyStructureState(
           );
         }
 
-        const currentDataRange = hasValueData
-          ? await captureValueDataRange(context, range)
-          : undefined;
+        let currentDataRange: RecoveryStructureValueRangeState | undefined;
+        if (hasValueData) {
+          const currentDataCapture = await captureValueDataRange(context, range);
+          if (currentDataCapture.status === "too_large") {
+            throw new Error("Structure checkpoint restore failed: target row data exceeds recovery size limits.");
+          }
 
-        if (hasValueData && !currentDataRange) {
-          throw new Error("Structure checkpoint restore failed: could not capture current row data before delete.");
+          if (currentDataCapture.status !== "captured") {
+            throw new Error("Structure checkpoint restore failed: could not capture current row data before delete.");
+          }
+
+          currentDataRange = currentDataCapture.dataRange;
         }
 
         const currentState: RecoveryModifyStructureState = {
@@ -527,7 +574,7 @@ export async function applyModifyStructureState(
           sheetName: sheet.name,
           position,
           count,
-          dataRange: currentDataRange,
+          ...(currentDataRange ? { dataRange: currentDataRange } : {}),
         };
 
         range.delete("Up");
@@ -541,7 +588,7 @@ export async function applyModifyStructureState(
         sheetName: sheet.name,
         position,
         count,
-        allowDataDelete: targetState.dataRange ? true : undefined,
+        ...(targetState.dataRange ? { allowDataDelete: true } : {}),
       };
 
       range.insert("Down");
@@ -578,12 +625,18 @@ export async function applyModifyStructureState(
         );
       }
 
-      const currentDataRange = hasValueData
-        ? await captureValueDataRange(context, range)
-        : undefined;
+      let currentDataRange: RecoveryStructureValueRangeState | undefined;
+      if (hasValueData) {
+        const currentDataCapture = await captureValueDataRange(context, range);
+        if (currentDataCapture.status === "too_large") {
+          throw new Error("Structure checkpoint restore failed: target column data exceeds recovery size limits.");
+        }
 
-      if (hasValueData && !currentDataRange) {
-        throw new Error("Structure checkpoint restore failed: could not capture current column data before delete.");
+        if (currentDataCapture.status !== "captured") {
+          throw new Error("Structure checkpoint restore failed: could not capture current column data before delete.");
+        }
+
+        currentDataRange = currentDataCapture.dataRange;
       }
 
       const currentState: RecoveryModifyStructureState = {
@@ -592,7 +645,7 @@ export async function applyModifyStructureState(
         sheetName: sheet.name,
         position,
         count,
-        dataRange: currentDataRange,
+        ...(currentDataRange ? { dataRange: currentDataRange } : {}),
       };
 
       range.delete("Left");
@@ -606,7 +659,7 @@ export async function applyModifyStructureState(
       sheetName: sheet.name,
       position,
       count,
-      allowDataDelete: targetState.dataRange ? true : undefined,
+      ...(targetState.dataRange ? { allowDataDelete: true } : {}),
     };
 
     const range = sheet.getRange(`${startLetter}:${startLetter}`);

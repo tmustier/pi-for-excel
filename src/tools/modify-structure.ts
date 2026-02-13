@@ -9,7 +9,7 @@ import type { AgentTool, AgentToolResult } from "@mariozechner/pi-agent-core";
 import { excelRun } from "../excel/helpers.js";
 import { getWorkbookChangeAuditLog } from "../audit/workbook-change-audit.js";
 import { dispatchWorkbookSnapshotCreated } from "../workbook/recovery-events.js";
-import { getWorkbookRecoveryLog } from "../workbook/recovery-log.js";
+import { MAX_RECOVERY_CELLS, getWorkbookRecoveryLog } from "../workbook/recovery-log.js";
 import {
   captureModifyStructureState,
   captureSheetValueDataRange,
@@ -225,9 +225,19 @@ export function createModifyStructureTool(): AgentTool<typeof schema, ModifyStru
               await context.sync();
 
               const range = sheet.getRange(`${startRow}:${endRow}`);
-              const dataRange = await captureValueDataRange(context, range);
+              const dataRangeCapture = await captureValueDataRange(context, range, MAX_RECOVERY_CELLS);
               range.delete("Up");
               await context.sync();
+
+              if (dataRangeCapture.status === "too_large") {
+                return {
+                  message: `Deleted ${count} row(s) starting at row ${startRow} in "${sheet.name}".`,
+                  changedCount: count,
+                  outputAddress: `${sheet.name}!${startRow}:${endRow}`,
+                  summary: `deleted ${count} row(s)`,
+                  checkpointUnavailableReason: "Checkpoint capture was skipped for `delete_rows` because deleted row data exceeds recovery size limits.",
+                };
+              }
 
               return {
                 message: `Deleted ${count} row(s) starting at row ${startRow} in "${sheet.name}".`,
@@ -240,7 +250,7 @@ export function createModifyStructureTool(): AgentTool<typeof schema, ModifyStru
                   sheetName: sheet.name,
                   position: startRow,
                   count,
-                  dataRange,
+                  ...(dataRangeCapture.status === "captured" ? { dataRange: dataRangeCapture.dataRange } : {}),
                 },
               };
             }
@@ -283,9 +293,19 @@ export function createModifyStructureTool(): AgentTool<typeof schema, ModifyStru
               await context.sync();
 
               const range = sheet.getRange(`${startLetter}:${endLetter}`);
-              const dataRange = await captureValueDataRange(context, range);
+              const dataRangeCapture = await captureValueDataRange(context, range, MAX_RECOVERY_CELLS);
               range.delete("Left");
               await context.sync();
+
+              if (dataRangeCapture.status === "too_large") {
+                return {
+                  message: `Deleted ${count} column(s) starting at column ${params.position} (${startLetter}) in "${sheet.name}".`,
+                  changedCount: count,
+                  outputAddress: `${sheet.name}!${startLetter}:${endLetter}`,
+                  summary: `deleted ${count} column(s)`,
+                  checkpointUnavailableReason: "Checkpoint capture was skipped for `delete_columns` because deleted column data exceeds recovery size limits.",
+                };
+              }
 
               return {
                 message: `Deleted ${count} column(s) starting at column ${params.position} (${startLetter}) in "${sheet.name}".`,
@@ -298,7 +318,7 @@ export function createModifyStructureTool(): AgentTool<typeof schema, ModifyStru
                   sheetName: sheet.name,
                   position: params.position,
                   count,
-                  dataRange,
+                  ...(dataRangeCapture.status === "captured" ? { dataRange: dataRangeCapture.dataRange } : {}),
                 },
               };
             }
@@ -336,15 +356,20 @@ export function createModifyStructureTool(): AgentTool<typeof schema, ModifyStru
               let checkpointUnavailableReason: string | undefined;
 
               if (isRecoverySheetVisibility(visibility)) {
-                const sheetVisibility: RecoverySheetVisibility = visibility;
-                checkpointState = {
-                  kind: "sheet_present",
-                  sheetId: sheet.id,
-                  sheetName: sheet.name,
-                  position: sheet.position,
-                  visibility: sheetVisibility,
-                  dataRange: await captureSheetValueDataRange(context, sheet),
-                };
+                const dataRangeCapture = await captureSheetValueDataRange(context, sheet, MAX_RECOVERY_CELLS);
+                if (dataRangeCapture.status === "too_large") {
+                  checkpointUnavailableReason = "Checkpoint capture was skipped for `delete_sheet` because deleted sheet data exceeds recovery size limits.";
+                } else {
+                  const sheetVisibility: RecoverySheetVisibility = visibility;
+                  checkpointState = {
+                    kind: "sheet_present",
+                    sheetId: sheet.id,
+                    sheetName: sheet.name,
+                    position: sheet.position,
+                    visibility: sheetVisibility,
+                    ...(dataRangeCapture.status === "captured" ? { dataRange: dataRangeCapture.dataRange } : {}),
+                  };
+                }
               } else {
                 checkpointUnavailableReason = "Checkpoint capture was skipped for `delete_sheet` (sheet visibility unsupported).";
               }
