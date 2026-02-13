@@ -20,8 +20,12 @@ Replace cumbersome up-front approval selectors with a low-friction workflow:
 ### 2) Full-file snapshots / Save As each step
 - **Pros:** strongest recovery semantics
 - **Cons:** expensive; potentially heavy/slow; awkward lifecycle (storage, naming, cleanup)
-- **Feasibility note:** Office.js can expose document/file APIs depending on host/runtime, but “checkpoint every tool call as full workbook copy” is not practical as a first slice
-- **Decision:** keep as future exploration, not first implementation
+- **Feasibility findings (2026-02):**
+  - `getFileAsync(Compressed)` is not uniformly available across hosts (Excel on web is PDF-only for this API surface)
+  - Office.js does not expose a simple atomic in-place "replace current workbook from snapshot" API
+  - per-mutation full-file capture would be operationally heavy (slice IO + storage overhead)
+- **Decision:** do not use per-mutation full-file snapshots as baseline; if needed later, consider optional/manual desktop-oriented export + open-new-workbook flow
+- **Research notes:** see `.research/full-file-snapshot-feasibility.md` for API-level analysis and constraints.
 
 ### 3) Range-level pre-write checkpoints (selected)
 - **Pros:** cheap, deterministic, aligns with tool-level mutations
@@ -74,5 +78,5 @@ Replace cumbersome up-front approval selectors with a low-friction workflow:
 
 1. Decide whether to support value-preserving destructive restore (capture/deep-restore deleted row/column/sheet data) vs intentionally keep destructive checkpoints limited to value-empty targets.
 2. Enrich checkpoint history UX (search/filter/export, retention controls).
-3. Evaluate host-specific full-file snapshot feasibility for coarse-grained restore points.
+3. If needed, design an optional/manual desktop-oriented full-backup flow (not per-mutation).
 4. Potentially expose “YOLO mode” toggle once we have both lightweight and strict workflows fully defined.

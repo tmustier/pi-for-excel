@@ -98,8 +98,7 @@ https://github.com/tmustier/pi-for-excel/issues/27
 **Status note:** rollback UX is now in place:
 - automatic backups for `write_cells`, `fill_formula`, `python_transform_range`, `format_cells` (with scoped limits), `conditional_format`, mutating `comments` actions, and all `modify_structure` actions (destructive deletes checkpoint only when target has no value data)
 - new `workbook_history` tool (list / restore / delete / clear)
-- backup browser overlay (menu + `/history`) plus `/revert` for latest-backup rollback
-- dedicated backup browser overlay (menu + `/history`) with restore/delete/clear controls
+- backup browser overlay (menu + `/history`) with restore/delete/clear controls, plus `/revert` for latest-backup rollback
 - restore creates an inverse backup so rollbacks are themselves reversible
 - unsupported mutation tools/actions (and conditionally unsafe `modify_structure` deletes) explicitly report when no backup is created
 - structure-absence restores (`sheet_absent`, `rows_absent`, `columns_absent`) are blocked when target data exists to avoid irreversible deletes
@@ -108,7 +107,7 @@ https://github.com/tmustier/pi-for-excel/issues/27
 **Remaining follow-up:**
 - decide whether to support value-preserving destructive restore (deleted row/column/sheet data) or intentionally keep delete checkpoints limited to value-empty targets
 - richer history UX (search/filter/export, retention controls)
-- feasibility deep-dive for full-file snapshots vs range snapshots in Office.js
+- optional/manual desktop-oriented full-backup flow design (if needed), now that full per-mutation snapshot feasibility has been documented
 
 ---
 
