@@ -24,7 +24,7 @@ const EXTENSION_PROMPT_TEMPLATE = [
   "Requirements:",
   "- Export activate(api)",
   "- No external imports",
-  "- Use only the ExcelExtensionAPI surface (registerCommand, registerTool, overlay/widget/toast/onAgentEvent)",
+  "- Use only the ExcelExtensionAPI surface (commands/tools, llm/http/storage/clipboard, agent steering/context, skills, download, overlay/widget/toast/onAgentEvent)",
   "- Keep it self-contained in one file",
   "- Include concise comments",
 ].join("\n");
@@ -33,6 +33,12 @@ const HIGH_RISK_CAPABILITIES = new Set<ExtensionCapability>([
   "tools.register",
   "agent.read",
   "agent.events.read",
+  "llm.complete",
+  "http.fetch",
+  "agent.context.write",
+  "agent.steer",
+  "agent.followup",
+  "skills.write",
 ]);
 
 function getErrorMessage(error: unknown): string {

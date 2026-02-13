@@ -9,11 +9,23 @@
  */
 
 import type { Agent, AgentEvent, AgentTool } from "@mariozechner/pi-agent-core";
+import type {
+  Api,
+  AssistantMessage,
+  Message,
+  Model,
+  Usage,
+} from "@mariozechner/pi-ai";
+import { getModels, getProviders } from "@mariozechner/pi-ai";
 
 import {
   createExtensionAPI,
   loadExtension,
   type ExtensionCommand,
+  type HttpRequestOptions,
+  type HttpResponse,
+  type LlmCompletionRequest,
+  type LlmCompletionResult,
   type LoadedExtensionHandle,
 } from "../commands/extension-api.js";
 import { activateExtensionInSandbox } from "./sandbox-runtime.js";
@@ -46,6 +58,21 @@ import {
 import { isExperimentalFeatureEnabled } from "../experiments/flags.js";
 import { clearExtensionWidgets } from "./internal/widget-surface.js";
 import { showToast } from "../ui/toast.js";
+import { getEnabledProxyBaseUrl, resolveOutboundRequestUrl } from "../tools/external-fetch.js";
+import { isRecord } from "../utils/type-guards.js";
+import {
+  clearExtensionStorage,
+  deleteExtensionStorageValue,
+  getExtensionStorageValue,
+  listExtensionStorageKeys,
+  setExtensionStorageValue,
+} from "./storage-store.js";
+import {
+  installExternalExtensionSkill,
+  listExtensionSkillSummaries,
+  readExtensionSkill,
+  uninstallExternalExtensionSkill,
+} from "./skills-store.js";
 
 type AnyAgentTool = AgentTool;
 
@@ -96,6 +123,271 @@ function getErrorMessage(error: unknown): string {
     return error.message;
   }
   return String(error);
+}
+
+const DEFAULT_EXTENSION_HTTP_TIMEOUT_MS = 15_000;
+const MAX_EXTENSION_HTTP_TIMEOUT_MS = 30_000;
+const MAX_EXTENSION_HTTP_BODY_BYTES = 1_000_000;
+
+function isApiModel(model: unknown): model is Model<Api> {
+  if (!isRecord(model)) {
+    return false;
+  }
+
+  return (
+    typeof model.id === "string"
+    && typeof model.provider === "string"
+    && typeof model.api === "string"
+    && typeof model.name === "string"
+  );
+}
+
+function createZeroUsage(): Usage {
+  return {
+    input: 0,
+    output: 0,
+    cacheRead: 0,
+    cacheWrite: 0,
+    totalTokens: 0,
+    cost: {
+      input: 0,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+      total: 0,
+    },
+  };
+}
+
+function resolveModelForCompletion(args: {
+  fallbackModel: Model<Api>;
+  requestedModel?: string;
+}): Model<Api> {
+  const { fallbackModel, requestedModel } = args;
+
+  if (!requestedModel) {
+    return fallbackModel;
+  }
+
+  const trimmed = requestedModel.trim();
+  if (trimmed.length === 0) {
+    return fallbackModel;
+  }
+
+  const findModelByProviderAndId = (providerName: string, modelId: string): Model<Api> | null => {
+    for (const provider of getProviders()) {
+      if (provider !== providerName) {
+        continue;
+      }
+
+      const match = getModels(provider).find((model) => model.id === modelId);
+      if (match) {
+        return match;
+      }
+    }
+
+    return null;
+  };
+
+  const slashIndex = trimmed.indexOf("/");
+  if (slashIndex > 0 && slashIndex < trimmed.length - 1) {
+    const requestedProvider = trimmed.slice(0, slashIndex);
+    const requestedId = trimmed.slice(slashIndex + 1);
+    const match = findModelByProviderAndId(requestedProvider, requestedId);
+
+    if (!match) {
+      throw new Error(`Unknown model: ${trimmed}`);
+    }
+
+    return match;
+  }
+
+  const providerMatch = findModelByProviderAndId(fallbackModel.provider, trimmed);
+  if (providerMatch) {
+    return providerMatch;
+  }
+
+  for (const provider of getProviders()) {
+    const match = getModels(provider).find((model) => model.id === trimmed);
+    if (match) {
+      return match;
+    }
+  }
+
+  throw new Error(`Unknown model: ${trimmed}`);
+}
+
+function parseLlmMessages(messages: readonly { role: "user" | "assistant"; content: string }[], model: Model<Api>): Message[] {
+  const parsed: Message[] = [];
+  let timestamp = Date.now();
+
+  for (const message of messages) {
+    const content = typeof message.content === "string" ? message.content : String(message.content);
+
+    if (message.role === "user") {
+      parsed.push({
+        role: "user",
+        content: [{ type: "text", text: content }],
+        timestamp,
+      });
+      timestamp += 1;
+      continue;
+    }
+
+    const assistantMessage: AssistantMessage = {
+      role: "assistant",
+      content: [{ type: "text", text: content }],
+      api: model.api,
+      provider: model.provider,
+      model: model.id,
+      usage: createZeroUsage(),
+      stopReason: "stop",
+      timestamp,
+    };
+
+    parsed.push(assistantMessage);
+    timestamp += 1;
+  }
+
+  return parsed;
+}
+
+function extractAssistantText(message: AssistantMessage): string {
+  return message.content
+    .flatMap((item) => {
+      if (item.type !== "text") {
+        return [];
+      }
+
+      return [item.text];
+    })
+    .join("");
+}
+
+function normalizeCompletionMessageContent(content: string, label: string): string {
+  const normalized = content.trim();
+  if (normalized.length === 0) {
+    throw new Error(`${label} cannot be empty.`);
+  }
+
+  return normalized;
+}
+
+function normalizeDownloadFilename(filename: string): string {
+  const trimmed = filename.trim();
+  if (trimmed.length === 0) {
+    throw new Error("Download filename cannot be empty.");
+  }
+
+  return trimmed;
+}
+
+function createExtensionAgentMessage(extensionName: string, label: string, content: string): Message {
+  const normalizedContent = normalizeCompletionMessageContent(content, label);
+
+  return {
+    role: "user",
+    content: [{
+      type: "text",
+      text: `[Extension ${extensionName}]\n${normalizedContent}`,
+    }],
+    timestamp: Date.now(),
+  };
+}
+
+function isBlockedExtensionHostname(hostname: string): boolean {
+  const normalized = hostname.trim().toLowerCase();
+  if (normalized.length === 0) {
+    return true;
+  }
+
+  if (normalized === "localhost" || normalized.endsWith(".localhost") || normalized.endsWith(".local")) {
+    return true;
+  }
+
+  if (normalized === "0.0.0.0" || normalized === "127.0.0.1") {
+    return true;
+  }
+
+  if (normalized === "::1") {
+    return true;
+  }
+
+  const ipv4Match = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/u.exec(normalized);
+  if (ipv4Match) {
+    const octets = ipv4Match.slice(1).map((part) => Number(part));
+    if (octets.some((octet) => Number.isNaN(octet) || octet < 0 || octet > 255)) {
+      return true;
+    }
+
+    const [a, b] = octets;
+    if (a === 10 || a === 127 || a === 0) {
+      return true;
+    }
+
+    if (a === 169 && b === 254) {
+      return true;
+    }
+
+    if (a === 192 && b === 168) {
+      return true;
+    }
+
+    if (a === 172 && b >= 16 && b <= 31) {
+      return true;
+    }
+
+    return false;
+  }
+
+  if (normalized.includes(":")) {
+    if (normalized.startsWith("fd") || normalized.startsWith("fc") || normalized.startsWith("fe80:")) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function normalizeHttpOptions(options: HttpRequestOptions | undefined): {
+  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "HEAD";
+  headers: Record<string, string>;
+  body: string | undefined;
+  timeoutMs: number;
+} {
+  const candidateMethod = options?.method ?? "GET";
+  const method = candidateMethod === "GET"
+    || candidateMethod === "POST"
+    || candidateMethod === "PUT"
+    || candidateMethod === "PATCH"
+    || candidateMethod === "DELETE"
+    || candidateMethod === "HEAD"
+    ? candidateMethod
+    : "GET";
+  const headers = options?.headers ?? {};
+  const body = options?.body;
+  const timeout = options?.timeoutMs ?? DEFAULT_EXTENSION_HTTP_TIMEOUT_MS;
+  const boundedTimeout = Math.max(1, Math.min(MAX_EXTENSION_HTTP_TIMEOUT_MS, timeout));
+
+  return {
+    method,
+    headers,
+    body,
+    timeoutMs: boundedTimeout,
+  };
+}
+
+async function readLimitedResponseBody(response: Response): Promise<string> {
+  const bodyText = await response.text();
+  const byteLength = new TextEncoder().encode(bodyText).length;
+
+  if (byteLength > MAX_EXTENSION_HTTP_BODY_BYTES) {
+    throw new Error(
+      `HTTP response body too large (${byteLength} bytes). Limit is ${MAX_EXTENSION_HTTP_BODY_BYTES} bytes.`,
+    );
+  }
+
+  return bodyText;
 }
 
 function normalizeExtensionName(name: string): string {
@@ -304,6 +596,7 @@ export class ExtensionRuntimeManager {
     }
 
     await this.deactivateEntry(entryId);
+    await clearExtensionStorage(this.settings, entryId);
     this.entries.splice(entryIndex, 1);
     this.lastErrors.delete(entryId);
 
@@ -373,6 +666,145 @@ export class ExtensionRuntimeManager {
     return activeAgent;
   }
 
+  private async runExtensionLlmCompletion(
+    entry: StoredExtensionEntry,
+    request: LlmCompletionRequest,
+  ): Promise<LlmCompletionResult> {
+    const agent = this.getRequiredActiveAgent();
+
+    if (!isApiModel(agent.state.model)) {
+      throw new Error("Active model is unavailable for extension LLM completion.");
+    }
+
+    const model = resolveModelForCompletion({
+      fallbackModel: agent.state.model,
+      requestedModel: request.model,
+    });
+
+    const apiKey = agent.getApiKey ? await agent.getApiKey(model.provider) : undefined;
+    if (!apiKey) {
+      throw new Error(`No API key available for provider "${model.provider}".`);
+    }
+
+    if (!Array.isArray(request.messages)) {
+      throw new Error("llm.complete requires a messages array.");
+    }
+
+    const stream = await agent.streamFn(
+      model,
+      {
+        systemPrompt: request.systemPrompt,
+        messages: parseLlmMessages(request.messages, model),
+      },
+      {
+        apiKey,
+        sessionId: agent.sessionId,
+        maxTokens: request.maxTokens,
+      },
+    );
+
+    const result = await stream.result();
+    if (result.stopReason === "error" || result.stopReason === "aborted") {
+      throw new Error(result.errorMessage ?? "LLM completion failed.");
+    }
+
+    return {
+      content: extractAssistantText(result),
+      model: `${result.provider}/${result.model}`,
+      usage: {
+        inputTokens: result.usage.input,
+        outputTokens: result.usage.output,
+      },
+    };
+  }
+
+  private async runExtensionHttpFetch(url: string, options?: HttpRequestOptions): Promise<HttpResponse> {
+    let parsedUrl: URL;
+
+    try {
+      parsedUrl = new URL(url);
+    } catch {
+      throw new Error("Invalid URL.");
+    }
+
+    if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
+      throw new Error("Only http:// and https:// URLs are supported.");
+    }
+
+    if (isBlockedExtensionHostname(parsedUrl.hostname)) {
+      throw new Error("Blocked target host: local and private-network addresses are not allowed.");
+    }
+
+    const normalizedOptions = normalizeHttpOptions(options);
+    const proxyBaseUrl = await getEnabledProxyBaseUrl(this.settings);
+    const resolved = resolveOutboundRequestUrl({
+      targetUrl: parsedUrl.toString(),
+      proxyBaseUrl,
+    });
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), normalizedOptions.timeoutMs);
+
+    try {
+      const response = await fetch(resolved.requestUrl, {
+        method: normalizedOptions.method,
+        headers: normalizedOptions.headers,
+        body: normalizedOptions.body,
+        signal: controller.signal,
+      });
+
+      const responseBody = await readLimitedResponseBody(response);
+      const headers: Record<string, string> = {};
+      response.headers.forEach((value, key) => {
+        headers[key] = value;
+      });
+
+      return {
+        status: response.status,
+        statusText: response.statusText,
+        headers,
+        body: responseBody,
+      };
+    } catch (error: unknown) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        throw new Error(`HTTP request timed out after ${normalizedOptions.timeoutMs}ms.`);
+      }
+
+      throw error;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+
+  private async writeExtensionClipboard(text: string): Promise<void> {
+    if (typeof navigator === "undefined" || !navigator.clipboard) {
+      throw new Error("Clipboard API is unavailable.");
+    }
+
+    await navigator.clipboard.writeText(text);
+  }
+
+  private triggerExtensionDownload(filename: string, content: string, mimeType?: string): void {
+    const normalizedFilename = normalizeDownloadFilename(filename);
+    const blob = new Blob([content], {
+      type: mimeType && mimeType.trim().length > 0 ? mimeType : "text/plain;charset=utf-8",
+    });
+
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = normalizedFilename;
+    anchor.style.display = "none";
+
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+
+    setTimeout(() => {
+      URL.revokeObjectURL(url);
+    }, 0);
+  }
+
   private resolveRuntimeMode(entry: StoredExtensionEntry): ExtensionRuntimeMode {
     return resolveExtensionRuntimeMode(
       entry.trust,
@@ -431,7 +863,14 @@ export class ExtensionRuntimeManager {
       inlineBlobUrl: null,
     };
 
-    let toolsChanged = false;
+    let activationPhase = true;
+    let toolsChangedDuringActivation = false;
+
+    const refreshToolsForDynamicChange = (): void => {
+      void this.refreshRuntimeTools().catch((error: unknown) => {
+        console.warn(`[pi] Failed to refresh tools after extension tool update: ${getErrorMessage(error)}`);
+      });
+    };
 
     const registerCommand = (name: string, cmd: ExtensionCommand) => {
       const existing = commandRegistry.get(name);
@@ -467,7 +906,36 @@ export class ExtensionRuntimeManager {
       this.toolOwners.set(tool.name, entry.id);
       this.extensionTools.set(tool.name, tool);
       state.toolNames.add(tool.name);
-      toolsChanged = true;
+
+      if (activationPhase) {
+        toolsChangedDuringActivation = true;
+      } else {
+        refreshToolsForDynamicChange();
+      }
+    };
+
+    const unregisterTool = (toolName: string): void => {
+      const normalizedName = toolName.trim();
+      if (normalizedName.length === 0) {
+        throw new Error("Tool name cannot be empty");
+      }
+
+      if (!state.toolNames.has(normalizedName)) {
+        throw new Error(`Tool name "${normalizedName}" is not registered by this extension`);
+      }
+
+      const owner = this.toolOwners.get(normalizedName);
+      if (owner !== entry.id) {
+        throw new Error(`Tool name "${normalizedName}" is not owned by this extension`);
+      }
+
+      state.toolNames.delete(normalizedName);
+      this.toolOwners.delete(normalizedName);
+      this.extensionTools.delete(normalizedName);
+
+      if (!activationPhase) {
+        refreshToolsForDynamicChange();
+      }
     };
 
     const subscribeAgentEvents = (handler: (ev: AgentEvent) => void): (() => void) => {
@@ -519,7 +987,32 @@ export class ExtensionRuntimeManager {
           source,
           registerCommand,
           registerTool,
+          unregisterTool,
           subscribeAgentEvents,
+          llmComplete: (request) => this.runExtensionLlmCompletion(entry, request),
+          httpFetch: (url, options) => this.runExtensionHttpFetch(url, options),
+          storageGet: (key) => getExtensionStorageValue(this.settings, entry.id, key),
+          storageSet: (key, value) => setExtensionStorageValue(this.settings, entry.id, key, value),
+          storageDelete: (key) => deleteExtensionStorageValue(this.settings, entry.id, key),
+          storageKeys: () => listExtensionStorageKeys(this.settings, entry.id),
+          clipboardWriteText: (text) => this.writeExtensionClipboard(text),
+          injectAgentContext: (content) => {
+            const agent = this.getRequiredActiveAgent();
+            agent.appendMessage(createExtensionAgentMessage(entry.name, "agent.injectContext content", content));
+          },
+          steerAgent: (content) => {
+            const agent = this.getRequiredActiveAgent();
+            agent.steer(createExtensionAgentMessage(entry.name, "agent.steer content", content));
+          },
+          followUpAgent: (content) => {
+            const agent = this.getRequiredActiveAgent();
+            agent.followUp(createExtensionAgentMessage(entry.name, "agent.followUp content", content));
+          },
+          listSkills: () => listExtensionSkillSummaries(this.settings),
+          readSkill: (name) => readExtensionSkill(this.settings, name),
+          installSkill: (name, markdown) => installExternalExtensionSkill(this.settings, name, markdown),
+          uninstallSkill: (name) => uninstallExternalExtensionSkill(this.settings, name),
+          downloadFile: (filename, content, mimeType) => this.triggerExtensionDownload(filename, content, mimeType),
           isCapabilityEnabled,
           formatCapabilityError,
           toast: this.showToastMessage,
@@ -531,7 +1024,32 @@ export class ExtensionRuntimeManager {
           getAgent: () => this.getRequiredActiveAgent(),
           registerCommand,
           registerTool,
+          unregisterTool,
           subscribeAgentEvents,
+          llmComplete: (request) => this.runExtensionLlmCompletion(entry, request),
+          httpFetch: (url, options) => this.runExtensionHttpFetch(url, options),
+          storageGet: (key) => getExtensionStorageValue(this.settings, entry.id, key),
+          storageSet: (key, value) => setExtensionStorageValue(this.settings, entry.id, key, value),
+          storageDelete: (key) => deleteExtensionStorageValue(this.settings, entry.id, key),
+          storageKeys: () => listExtensionStorageKeys(this.settings, entry.id),
+          clipboardWriteText: (text) => this.writeExtensionClipboard(text),
+          injectAgentContext: (content) => {
+            const agent = this.getRequiredActiveAgent();
+            agent.appendMessage(createExtensionAgentMessage(entry.name, "agent.injectContext content", content));
+          },
+          steerAgent: (content) => {
+            const agent = this.getRequiredActiveAgent();
+            agent.steer(createExtensionAgentMessage(entry.name, "agent.steer content", content));
+          },
+          followUpAgent: (content) => {
+            const agent = this.getRequiredActiveAgent();
+            agent.followUp(createExtensionAgentMessage(entry.name, "agent.followUp content", content));
+          },
+          listSkills: () => listExtensionSkillSummaries(this.settings),
+          readSkill: (name) => readExtensionSkill(this.settings, name),
+          installSkill: (name, markdown) => installExternalExtensionSkill(this.settings, name, markdown),
+          uninstallSkill: (name) => uninstallExternalExtensionSkill(this.settings, name),
+          downloadFile: (filename, content, mimeType) => this.triggerExtensionDownload(filename, content, mimeType),
           isCapabilityEnabled,
           formatCapabilityError,
           extensionOwnerId: entry.id,
@@ -550,9 +1068,10 @@ export class ExtensionRuntimeManager {
         state.handle = await this.loadExtensionFromSource(api, loadSource);
       }
 
+      activationPhase = false;
       this.activeStates.set(entry.id, state);
 
-      if (toolsChanged) {
+      if (toolsChangedDuringActivation) {
         await this.refreshRuntimeTools();
       }
     } catch (error: unknown) {

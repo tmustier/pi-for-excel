@@ -5,10 +5,10 @@
  * They run in the same webview sandbox — no Node.js APIs.
  *
  * Extensions can:
- * - Register slash commands
- * - Register custom tools
- * - Show overlay UIs (via the overlay API)
- * - Subscribe to agent events
+ * - Register slash commands + tools (including runtime unregister)
+ * - Call host-mediated LLM/HTTP/storage/clipboard/skills/download APIs
+ * - Steer/inject/follow-up the active agent via capability-gated bridges
+ * - Show overlay/widget UIs and subscribe to agent events
  *
  * Example extension:
  * ```ts
@@ -102,13 +102,105 @@ export interface WidgetAPI {
   clear(): void;
 }
 
+export interface LlmCompletionMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface LlmCompletionRequest {
+  model?: string;
+  systemPrompt?: string;
+  messages: LlmCompletionMessage[];
+  maxTokens?: number;
+}
+
+export interface LlmCompletionResult {
+  content: string;
+  model: string;
+  usage?: {
+    inputTokens: number;
+    outputTokens: number;
+  };
+}
+
+export interface LlmAPI {
+  complete(request: LlmCompletionRequest): Promise<LlmCompletionResult>;
+}
+
+export interface HttpRequestOptions {
+  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "HEAD";
+  headers?: Record<string, string>;
+  body?: string;
+  timeoutMs?: number;
+}
+
+export interface HttpResponse {
+  status: number;
+  statusText: string;
+  headers: Record<string, string>;
+  body: string;
+}
+
+export interface HttpAPI {
+  fetch(url: string, options?: HttpRequestOptions): Promise<HttpResponse>;
+}
+
+export interface StorageAPI {
+  get(key: string): Promise<unknown>;
+  set(key: string, value: unknown): Promise<void>;
+  delete(key: string): Promise<void>;
+  keys(): Promise<string[]>;
+}
+
+export interface ClipboardAPI {
+  writeText(text: string): Promise<void>;
+}
+
+export interface ExtensionAgentAPI {
+  readonly raw: Agent;
+  injectContext(content: string): void;
+  steer(content: string): void;
+  followUp(content: string): void;
+}
+
+export interface SkillSummary {
+  name: string;
+  description: string;
+  sourceKind: string;
+}
+
+export interface SkillsAPI {
+  list(): Promise<SkillSummary[]>;
+  read(name: string): Promise<string>;
+  install(name: string, markdown: string): Promise<void>;
+  uninstall(name: string): Promise<void>;
+}
+
+export interface DownloadAPI {
+  download(filename: string, content: string, mimeType?: string): void;
+}
+
 export interface ExcelExtensionAPI {
   /** Register a slash command */
   registerCommand(name: string, cmd: ExtensionCommand): void;
   /** Register a custom tool callable by the agent */
   registerTool(name: string, tool: ExtensionToolDefinition): void;
-  /** Access the active agent */
-  readonly agent: Agent;
+  /** Remove a previously registered custom tool */
+  unregisterTool(name: string): void;
+  /** Agent access and steering APIs */
+  readonly agent: ExtensionAgentAPI;
+  /** LLM completion API via host mediation */
+  llm: LlmAPI;
+  /** HTTP fetch API via host mediation */
+  http: HttpAPI;
+  /** Persistent extension-scoped key/value storage */
+  storage: StorageAPI;
+  /** Clipboard operations */
+  clipboard: ClipboardAPI;
+  /** Skill catalog read/write helpers */
+  skills: SkillsAPI;
+  /** Trigger browser downloads */
+  download: DownloadAPI;
   /** Show/dismiss full-screen overlay UI */
   overlay: OverlayAPI;
   /** Show/dismiss inline widget above input (messages still visible above) */
@@ -123,7 +215,23 @@ export interface CreateExtensionAPIOptions {
   getAgent: () => Agent;
   registerCommand?: (name: string, cmd: ExtensionCommand) => void;
   registerTool?: (tool: AgentTool) => void;
+  unregisterTool?: (name: string) => void;
   subscribeAgentEvents?: (handler: (ev: AgentEvent) => void) => () => void;
+  llmComplete?: (request: LlmCompletionRequest) => Promise<LlmCompletionResult>;
+  httpFetch?: (url: string, options?: HttpRequestOptions) => Promise<HttpResponse>;
+  storageGet?: (key: string) => Promise<unknown>;
+  storageSet?: (key: string, value: unknown) => Promise<void>;
+  storageDelete?: (key: string) => Promise<void>;
+  storageKeys?: () => Promise<string[]>;
+  clipboardWriteText?: (text: string) => Promise<void>;
+  injectAgentContext?: (content: string) => void;
+  steerAgent?: (content: string) => void;
+  followUpAgent?: (content: string) => void;
+  listSkills?: () => Promise<SkillSummary[]>;
+  readSkill?: (name: string) => Promise<string>;
+  installSkill?: (name: string, markdown: string) => Promise<void>;
+  uninstallSkill?: (name: string) => Promise<void>;
+  downloadFile?: (filename: string, content: string, mimeType?: string) => void;
   toast?: (message: string) => void;
   isCapabilityEnabled?: (capability: ExtensionCapability) => boolean;
   formatCapabilityError?: (capability: ExtensionCapability) => string;
@@ -309,8 +417,24 @@ function normalizeWidgetId(id: string): string {
 export function createExtensionAPI(options: CreateExtensionAPIOptions): ExcelExtensionAPI {
   const registerCommand = options.registerCommand ?? defaultRegisterCommand;
   const registerTool = options.registerTool;
+  const unregisterTool = options.unregisterTool;
   const subscribeAgentEvents = options.subscribeAgentEvents
     ?? ((handler: (ev: AgentEvent) => void) => options.getAgent().subscribe(handler));
+  const llmComplete = options.llmComplete;
+  const httpFetch = options.httpFetch;
+  const storageGet = options.storageGet;
+  const storageSet = options.storageSet;
+  const storageDelete = options.storageDelete;
+  const storageKeys = options.storageKeys;
+  const clipboardWriteText = options.clipboardWriteText;
+  const injectAgentContext = options.injectAgentContext;
+  const steerAgent = options.steerAgent;
+  const followUpAgent = options.followUpAgent;
+  const listSkills = options.listSkills;
+  const readSkill = options.readSkill;
+  const installSkill = options.installSkill;
+  const uninstallSkill = options.uninstallSkill;
+  const downloadFile = options.downloadFile;
   const toast = options.toast ?? defaultToast;
   const isCapabilityEnabled = options.isCapabilityEnabled;
   const formatCapabilityError = options.formatCapabilityError ?? getDefaultCapabilityErrorMessage;
@@ -360,11 +484,174 @@ export function createExtensionAPI(options: CreateExtensionAPIOptions): ExcelExt
       registerTool(wrappedTool);
     },
 
-    get agent() {
-      assertCapability("agent.read");
-      // Raw Agent includes event subscription; require both until a narrowed agent facade exists.
-      assertCapability("agent.events.read");
-      return options.getAgent();
+    unregisterTool(name: string) {
+      assertCapability("tools.register");
+
+      if (!unregisterTool) {
+        throw new Error("Extension host does not support unregisterTool()");
+      }
+
+      unregisterTool(normalizeIdentifier("tool", name));
+    },
+
+    agent: {
+      get raw() {
+        assertCapability("agent.read");
+        assertCapability("agent.events.read");
+        return options.getAgent();
+      },
+
+      injectContext(content: string) {
+        assertCapability("agent.context.write");
+
+        if (!injectAgentContext) {
+          throw new Error("Extension host does not support agent.injectContext()");
+        }
+
+        injectAgentContext(content);
+      },
+
+      steer(content: string) {
+        assertCapability("agent.steer");
+
+        if (!steerAgent) {
+          throw new Error("Extension host does not support agent.steer()");
+        }
+
+        steerAgent(content);
+      },
+
+      followUp(content: string) {
+        assertCapability("agent.followup");
+
+        if (!followUpAgent) {
+          throw new Error("Extension host does not support agent.followUp()");
+        }
+
+        followUpAgent(content);
+      },
+    },
+
+    llm: {
+      async complete(request: LlmCompletionRequest): Promise<LlmCompletionResult> {
+        assertCapability("llm.complete");
+
+        if (!llmComplete) {
+          throw new Error("Extension host does not support llm.complete()");
+        }
+
+        return llmComplete(request);
+      },
+    },
+
+    http: {
+      async fetch(url: string, requestOptions?: HttpRequestOptions): Promise<HttpResponse> {
+        assertCapability("http.fetch");
+
+        if (!httpFetch) {
+          throw new Error("Extension host does not support http.fetch()");
+        }
+
+        return httpFetch(url, requestOptions);
+      },
+    },
+
+    storage: {
+      async get(key: string): Promise<unknown> {
+        assertCapability("storage.readwrite");
+        if (!storageGet) {
+          throw new Error("Extension host does not support storage.get()");
+        }
+
+        return storageGet(key);
+      },
+
+      async set(key: string, value: unknown): Promise<void> {
+        assertCapability("storage.readwrite");
+        if (!storageSet) {
+          throw new Error("Extension host does not support storage.set()");
+        }
+
+        await storageSet(key, value);
+      },
+
+      async delete(key: string): Promise<void> {
+        assertCapability("storage.readwrite");
+        if (!storageDelete) {
+          throw new Error("Extension host does not support storage.delete()");
+        }
+
+        await storageDelete(key);
+      },
+
+      async keys(): Promise<string[]> {
+        assertCapability("storage.readwrite");
+        if (!storageKeys) {
+          throw new Error("Extension host does not support storage.keys()");
+        }
+
+        return storageKeys();
+      },
+    },
+
+    clipboard: {
+      async writeText(text: string): Promise<void> {
+        assertCapability("clipboard.write");
+        if (!clipboardWriteText) {
+          throw new Error("Extension host does not support clipboard.writeText()");
+        }
+
+        await clipboardWriteText(text);
+      },
+    },
+
+    skills: {
+      async list(): Promise<SkillSummary[]> {
+        assertCapability("skills.read");
+        if (!listSkills) {
+          throw new Error("Extension host does not support skills.list()");
+        }
+
+        return listSkills();
+      },
+
+      async read(name: string): Promise<string> {
+        assertCapability("skills.read");
+        if (!readSkill) {
+          throw new Error("Extension host does not support skills.read()");
+        }
+
+        return readSkill(name);
+      },
+
+      async install(name: string, markdown: string): Promise<void> {
+        assertCapability("skills.write");
+        if (!installSkill) {
+          throw new Error("Extension host does not support skills.install()");
+        }
+
+        await installSkill(name, markdown);
+      },
+
+      async uninstall(name: string): Promise<void> {
+        assertCapability("skills.write");
+        if (!uninstallSkill) {
+          throw new Error("Extension host does not support skills.uninstall()");
+        }
+
+        await uninstallSkill(name);
+      },
+    },
+
+    download: {
+      download(filename: string, content: string, mimeType?: string): void {
+        assertCapability("download.file");
+        if (!downloadFile) {
+          throw new Error("Extension host does not support download.download()");
+        }
+
+        downloadFile(filename, content, mimeType);
+      },
     },
 
     overlay: {

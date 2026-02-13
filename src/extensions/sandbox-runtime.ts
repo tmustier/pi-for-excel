@@ -14,8 +14,13 @@ import type {
 import { Kind, Type, type TSchema } from "@sinclair/typebox";
 
 import type {
-  LoadedExtensionHandle,
   ExtensionCommand,
+  HttpRequestOptions,
+  HttpResponse,
+  LlmCompletionRequest,
+  LlmCompletionResult,
+  LoadedExtensionHandle,
+  SkillSummary,
   WidgetPlacement,
 } from "../commands/extension-api.js";
 import type { ExtensionCapability } from "./permissions.js";
@@ -91,7 +96,23 @@ export interface SandboxActivationOptions {
   source: SandboxExtensionSource;
   registerCommand: (name: string, cmd: ExtensionCommand) => void;
   registerTool: (tool: AgentTool<TSchema, unknown>) => void;
+  unregisterTool: (name: string) => void;
   subscribeAgentEvents: (handler: (event: AgentEvent) => void) => () => void;
+  llmComplete: (request: LlmCompletionRequest) => Promise<LlmCompletionResult>;
+  httpFetch: (url: string, options?: HttpRequestOptions) => Promise<HttpResponse>;
+  storageGet: (key: string) => Promise<unknown>;
+  storageSet: (key: string, value: unknown) => Promise<void>;
+  storageDelete: (key: string) => Promise<void>;
+  storageKeys: () => Promise<string[]>;
+  clipboardWriteText: (text: string) => Promise<void>;
+  injectAgentContext: (content: string) => void;
+  steerAgent: (content: string) => void;
+  followUpAgent: (content: string) => void;
+  listSkills: () => Promise<SkillSummary[]>;
+  readSkill: (name: string) => Promise<string>;
+  installSkill: (name: string, markdown: string) => Promise<void>;
+  uninstallSkill: (name: string) => Promise<void>;
+  downloadFile: (filename: string, content: string, mimeType?: string) => void;
   isCapabilityEnabled: (capability: ExtensionCapability) => boolean;
   formatCapabilityError: (capability: ExtensionCapability) => string;
   toast: (message: string) => void;
@@ -1025,8 +1046,104 @@ class SandboxRuntimeHost {
             }));
           },
 
-          get agent() {
-            throw new Error('api.agent is not available in sandbox runtime. Use onAgentEvent() and explicit APIs.');
+          unregisterTool(name) {
+            const normalizedName = typeof name === "string" ? name.trim() : "";
+            if (!normalizedName) {
+              throw new Error('Extension tool name cannot be empty');
+            }
+
+            queueActivationOp(requestHost("unregister_tool", {
+              name: normalizedName,
+            }));
+          },
+
+          agent: {
+            get raw() {
+              throw new Error('api.agent is not available in sandbox runtime. Use onAgentEvent() and explicit APIs.');
+            },
+
+            injectContext(content) {
+              queueActivationOp(requestHost("agent_inject_context", {
+                content: typeof content === "string" ? content : String(content),
+              }));
+            },
+
+            steer(content) {
+              queueActivationOp(requestHost("agent_steer", {
+                content: typeof content === "string" ? content : String(content),
+              }));
+            },
+
+            followUp(content) {
+              queueActivationOp(requestHost("agent_follow_up", {
+                content: typeof content === "string" ? content : String(content),
+              }));
+            },
+          },
+
+          llm: {
+            complete(request) {
+              return requestHost("llm_complete", {
+                request,
+              });
+            },
+          },
+
+          http: {
+            fetch(url, options) {
+              return requestHost("http_fetch", {
+                url,
+                options,
+              });
+            },
+          },
+
+          storage: {
+            get(key) {
+              return requestHost("storage_get", { key });
+            },
+            set(key, value) {
+              return requestHost("storage_set", { key, value });
+            },
+            delete(key) {
+              return requestHost("storage_delete", { key });
+            },
+            keys() {
+              return requestHost("storage_keys", {});
+            },
+          },
+
+          clipboard: {
+            writeText(text) {
+              return requestHost("clipboard_write_text", {
+                text: typeof text === "string" ? text : String(text),
+              });
+            },
+          },
+
+          skills: {
+            list() {
+              return requestHost("skills_list", {});
+            },
+            read(name) {
+              return requestHost("skills_read", { name });
+            },
+            install(name, markdown) {
+              return requestHost("skills_install", { name, markdown });
+            },
+            uninstall(name) {
+              return requestHost("skills_uninstall", { name });
+            },
+          },
+
+          download: {
+            download(filename, content, mimeType) {
+              queueActivationOp(requestHost("download_file", {
+                filename,
+                content,
+                mimeType,
+              }));
+            },
           },
 
           overlay: {
@@ -1383,7 +1500,7 @@ class SandboxRuntimeHost {
       return;
     }
 
-    this.handleSandboxRequest(envelope);
+    void this.handleSandboxRequest(envelope);
   }
 
   private assertCapability(capability: ExtensionCapability): void {
@@ -1394,7 +1511,7 @@ class SandboxRuntimeHost {
     throw new Error(this.options.formatCapabilityError(capability));
   }
 
-  private handleSandboxRequest(envelope: SandboxRequestEnvelope): void {
+  private async handleSandboxRequest(envelope: SandboxRequestEnvelope): Promise<void> {
     const { method, requestId, params } = envelope;
 
     try {
@@ -1453,6 +1570,234 @@ class SandboxRuntimeHost {
           };
 
           this.options.registerTool(tool);
+          this.sendResponse(requestId, true, null);
+          return;
+        }
+
+        case "unregister_tool": {
+          this.assertCapability("tools.register");
+
+          const payload = asRecord(params, "unregister_tool params");
+          const name = asNonEmptyString(payload.name, "name");
+          this.options.unregisterTool(name);
+
+          this.sendResponse(requestId, true, null);
+          return;
+        }
+
+        case "llm_complete": {
+          this.assertCapability("llm.complete");
+
+          const payload = asRecord(params, "llm_complete params");
+          const request = payload.request;
+
+          if (!isRecord(request)) {
+            throw new Error("llm_complete request must be an object.");
+          }
+
+          const messagesRaw = request.messages;
+          if (!Array.isArray(messagesRaw)) {
+            throw new Error("llm_complete request.messages must be an array.");
+          }
+
+          const messages: LlmCompletionRequest["messages"] = [];
+          for (const value of messagesRaw) {
+            if (!isRecord(value)) {
+              throw new Error("llm_complete messages entries must be objects.");
+            }
+
+            const role = value.role;
+            const content = value.content;
+            if ((role !== "user" && role !== "assistant") || typeof content !== "string") {
+              throw new Error("llm_complete messages entries must contain role + string content.");
+            }
+
+            messages.push({ role, content });
+          }
+
+          const completionRequest: LlmCompletionRequest = {
+            model: typeof request.model === "string" ? request.model : undefined,
+            systemPrompt: typeof request.systemPrompt === "string" ? request.systemPrompt : undefined,
+            messages,
+            maxTokens: typeof request.maxTokens === "number" ? request.maxTokens : undefined,
+          };
+
+          const result = await this.options.llmComplete(completionRequest);
+          this.sendResponse(requestId, true, result);
+          return;
+        }
+
+        case "http_fetch": {
+          this.assertCapability("http.fetch");
+
+          const payload = asRecord(params, "http_fetch params");
+          const url = asNonEmptyString(payload.url, "url");
+          const optionsRaw = payload.options;
+          let options: HttpRequestOptions | undefined;
+
+          if (isRecord(optionsRaw)) {
+            const methodRaw = optionsRaw.method;
+            const method = methodRaw === "GET"
+              || methodRaw === "POST"
+              || methodRaw === "PUT"
+              || methodRaw === "PATCH"
+              || methodRaw === "DELETE"
+              || methodRaw === "HEAD"
+              ? methodRaw
+              : undefined;
+
+            const headersRaw = optionsRaw.headers;
+            let headers: Record<string, string> | undefined;
+            if (isRecord(headersRaw)) {
+              headers = {};
+              for (const [key, value] of Object.entries(headersRaw)) {
+                if (typeof value === "string") {
+                  headers[key] = value;
+                }
+              }
+            }
+
+            options = {
+              method,
+              headers,
+              body: typeof optionsRaw.body === "string" ? optionsRaw.body : undefined,
+              timeoutMs: typeof optionsRaw.timeoutMs === "number" ? optionsRaw.timeoutMs : undefined,
+            };
+          }
+
+          const response = await this.options.httpFetch(url, options);
+          this.sendResponse(requestId, true, response);
+          return;
+        }
+
+        case "storage_get": {
+          this.assertCapability("storage.readwrite");
+
+          const payload = asRecord(params, "storage_get params");
+          const key = asNonEmptyString(payload.key, "key");
+          const value = await this.options.storageGet(key);
+          this.sendResponse(requestId, true, value);
+          return;
+        }
+
+        case "storage_set": {
+          this.assertCapability("storage.readwrite");
+
+          const payload = asRecord(params, "storage_set params");
+          const key = asNonEmptyString(payload.key, "key");
+          await this.options.storageSet(key, payload.value);
+          this.sendResponse(requestId, true, null);
+          return;
+        }
+
+        case "storage_delete": {
+          this.assertCapability("storage.readwrite");
+
+          const payload = asRecord(params, "storage_delete params");
+          const key = asNonEmptyString(payload.key, "key");
+          await this.options.storageDelete(key);
+          this.sendResponse(requestId, true, null);
+          return;
+        }
+
+        case "storage_keys": {
+          this.assertCapability("storage.readwrite");
+          const keys = await this.options.storageKeys();
+          this.sendResponse(requestId, true, keys);
+          return;
+        }
+
+        case "clipboard_write_text": {
+          this.assertCapability("clipboard.write");
+
+          const payload = asRecord(params, "clipboard_write_text params");
+          const text = sanitizeText(payload.text);
+          await this.options.clipboardWriteText(text);
+          this.sendResponse(requestId, true, null);
+          return;
+        }
+
+        case "agent_inject_context": {
+          this.assertCapability("agent.context.write");
+
+          const payload = asRecord(params, "agent_inject_context params");
+          const content = asNonEmptyString(payload.content, "content");
+          this.options.injectAgentContext(content);
+          this.sendResponse(requestId, true, null);
+          return;
+        }
+
+        case "agent_steer": {
+          this.assertCapability("agent.steer");
+
+          const payload = asRecord(params, "agent_steer params");
+          const content = asNonEmptyString(payload.content, "content");
+          this.options.steerAgent(content);
+          this.sendResponse(requestId, true, null);
+          return;
+        }
+
+        case "agent_follow_up": {
+          this.assertCapability("agent.followup");
+
+          const payload = asRecord(params, "agent_follow_up params");
+          const content = asNonEmptyString(payload.content, "content");
+          this.options.followUpAgent(content);
+          this.sendResponse(requestId, true, null);
+          return;
+        }
+
+        case "skills_list": {
+          this.assertCapability("skills.read");
+          const skills = await this.options.listSkills();
+          this.sendResponse(requestId, true, skills);
+          return;
+        }
+
+        case "skills_read": {
+          this.assertCapability("skills.read");
+
+          const payload = asRecord(params, "skills_read params");
+          const name = asNonEmptyString(payload.name, "name");
+          const markdown = await this.options.readSkill(name);
+          this.sendResponse(requestId, true, markdown);
+          return;
+        }
+
+        case "skills_install": {
+          this.assertCapability("skills.write");
+
+          const payload = asRecord(params, "skills_install params");
+          const name = asNonEmptyString(payload.name, "name");
+          const markdown = asNonEmptyString(payload.markdown, "markdown");
+          await this.options.installSkill(name, markdown);
+          this.sendResponse(requestId, true, null);
+          return;
+        }
+
+        case "skills_uninstall": {
+          this.assertCapability("skills.write");
+
+          const payload = asRecord(params, "skills_uninstall params");
+          const name = asNonEmptyString(payload.name, "name");
+          await this.options.uninstallSkill(name);
+          this.sendResponse(requestId, true, null);
+          return;
+        }
+
+        case "download_file": {
+          this.assertCapability("download.file");
+
+          const payload = asRecord(params, "download_file params");
+          const filename = asNonEmptyString(payload.filename, "filename");
+          if (typeof payload.content !== "string") {
+            throw new Error("download_file content must be a string.");
+          }
+
+          const content = payload.content;
+          const mimeType = typeof payload.mimeType === "string" ? payload.mimeType : undefined;
+
+          this.options.downloadFile(filename, content, mimeType);
           this.sendResponse(requestId, true, null);
           return;
         }

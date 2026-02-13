@@ -1,6 +1,6 @@
 # Extensions (MVP authoring guide)
 
-Pi for Excel supports runtime extensions that can register slash commands, register tools, and render small UI elements in the sidebar.
+Pi for Excel supports runtime extensions that can register commands/tools, render UI in the sidebar, and use mediated host capabilities (LLM, HTTP, storage, clipboard, agent steering/context, skills, downloads).
 
 > Status: shipped with feature flags for advanced controls. Inline-code and remote-URL extensions run in sandbox runtime by default; built-in/local-module extensions stay on host runtime. Roll back untrusted sources to host runtime only via `/experimental on extension-sandbox-rollback`. Additive Widget API v2 is feature-flagged via `/experimental on extension-widget-v2`.
 
@@ -70,8 +70,8 @@ On disable/reload/uninstall, Pi runs cleanup functions (reverse order), then `de
 ### `registerCommand(name, { description, handler })`
 Registers a slash command.
 
-### `registerTool(name, toolDef)`
-Registers an agent-callable tool.
+### `registerTool(name, toolDef)` / `unregisterTool(name)`
+Registers or removes an agent-callable tool.
 
 Notes:
 - `parameters` should be a JSON-schema/TypeBox-compatible object.
@@ -80,7 +80,29 @@ Notes:
 - Tool names must be unique across enabled extensions.
 
 ### `agent`
-Access the active `Agent` instance.
+Agent API surface:
+- `agent.raw` (host runtime only; capability-gated)
+- `agent.injectContext(content)`
+- `agent.steer(content)`
+- `agent.followUp(content)`
+
+### `llm.complete(request)`
+Host-mediated LLM completion. Supports optional model override (`provider/modelId` or model id), optional `systemPrompt`, and `messages` (`user`/`assistant`).
+
+### `http.fetch(url, options?)`
+Host-mediated outbound HTTP fetch with security policy enforcement.
+
+### `storage.get/set/delete/keys`
+Persistent extension-scoped key/value storage.
+
+### `clipboard.writeText(text)`
+Writes plain text to clipboard via host bridge.
+
+### `skills.list/read/install/uninstall`
+Read bundled+external skills, and install/uninstall external skills.
+
+### `download.download(filename, content, mimeType?)`
+Triggers a browser download.
 
 ### `onAgentEvent(handler)`
 Subscribe to runtime events (returns unsubscribe function).
@@ -223,6 +245,12 @@ High-risk capabilities include:
 - `tools.register`
 - `agent.read`
 - `agent.events.read`
+- `llm.complete`
+- `http.fetch`
+- `agent.context.write`
+- `agent.steer`
+- `agent.followup`
+- `skills.write`
 
 ## Sandbox runtime default + rollback kill switch
 
@@ -246,7 +274,7 @@ Disable rollback and return to default sandbox routing:
 You can also toggle this in `/extensions` via the **Sandbox runtime (default for untrusted sources)** card.
 
 Current sandbox bridge limitations (intentional for this slice):
-- `api.agent` is not available in sandbox runtime
+- `api.agent.raw` is not available in sandbox runtime (use bridged `injectContext/steer/followUp`)
 - widget/overlay rendering uses a **structured, sanitized UI tree** (no raw HTML / no `innerHTML`)
 - interactive callbacks are limited to explicit action markers (`data-pi-action`), which dispatch click events back inside sandbox runtime
 - Widget API v2 (`widget.upsert/remove/clear`) is available only when `extension-widget-v2` is enabled

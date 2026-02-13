@@ -204,6 +204,14 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 - **Interactivity:** host supports explicit action callbacks via `data-pi-action` markers mapped to click dispatch inside the sandbox.
 - **Rationale:** graduate sandbox hardening into default behavior while preserving a guarded rollback path.
 
+## Extension host capability bridge expansion (`ExcelExtensionAPI`)
+- **New mediated APIs:** `llm.complete`, `http.fetch`, `storage`, `clipboard`, `agent.injectContext/steer/followUp`, `skills`, and `download`.
+- **Permission model:** capability gates now include `llm.complete`, `http.fetch`, `storage.readwrite`, `clipboard.write`, `agent.context.write`, `agent.steer`, `agent.followup`, `skills.read`, `skills.write`, and `download.file`.
+- **Dynamic tools:** extensions can now remove tools at runtime via `unregisterTool(name)`; runtime refreshes toolset after dynamic add/remove.
+- **Storage lifecycle:** extension-scoped storage is persisted under `extensions.storage.v1` and cleared on extension uninstall.
+- **HTTP safety:** outbound extension HTTP calls enforce local/private-network host blocking, timeout caps, and response-size limits.
+- **Rationale:** unlock practical extension workflows (sub-agents, external APIs, persistence, skill install) while keeping sandbox mediation and permission controls.
+
 ## Feature-flagged extension widget API v2 (`extension-widget-v2`)
 - **Activation:** opt-in via `/experimental on extension-widget-v2`; default behavior stays on legacy `widget.show/dismiss` semantics.
 - **API:** additive `widget.upsert/remove/clear` methods with stable widget ids.

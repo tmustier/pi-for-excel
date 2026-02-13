@@ -61,7 +61,7 @@ void test("builtins registry wires /experimental, /extensions, and /integrations
   assert.match(extensionApiSource, /agent\.events\.read/);
   assert.match(
     extensionApiSource,
-    /get agent\(\)\s*\{[\s\S]*assertCapability\("agent\.read"\);[\s\S]*assertCapability\("agent\.events\.read"\);/,
+    /get raw\(\)\s*\{[\s\S]*assertCapability\("agent\.read"\);[\s\S]*assertCapability\("agent\.events\.read"\);/,
   );
 
   const runtimeManagerSource = await readFile(new URL("../src/extensions/runtime-manager.ts", import.meta.url), "utf8");
@@ -161,6 +161,16 @@ void test("permission helper updates one capability without mutating others", ()
     uiOverlay: true,
     uiWidget: true,
     uiToast: true,
+    llmComplete: false,
+    httpFetch: false,
+    storageReadWrite: true,
+    clipboardWrite: true,
+    agentContextWrite: false,
+    agentSteer: false,
+    agentFollowUp: false,
+    skillsRead: true,
+    skillsWrite: false,
+    downloadFile: true,
   };
 
   const updated = setExtensionCapabilityAllowed(permissions, "tools.register", true);
