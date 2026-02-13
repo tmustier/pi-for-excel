@@ -301,19 +301,23 @@ function isBlockedExtensionHostname(hostname: string): boolean {
     return true;
   }
 
-  if (normalized === "localhost" || normalized.endsWith(".localhost") || normalized.endsWith(".local")) {
+  const unwrapped = normalized.startsWith("[") && normalized.endsWith("]")
+    ? normalized.slice(1, -1)
+    : normalized;
+
+  if (unwrapped === "localhost" || unwrapped.endsWith(".localhost") || unwrapped.endsWith(".local")) {
     return true;
   }
 
-  if (normalized === "0.0.0.0" || normalized === "127.0.0.1") {
+  if (unwrapped === "0.0.0.0" || unwrapped === "127.0.0.1") {
     return true;
   }
 
-  if (normalized === "::1") {
+  if (unwrapped === "::1") {
     return true;
   }
 
-  const ipv4Match = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/u.exec(normalized);
+  const ipv4Match = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/u.exec(unwrapped);
   if (ipv4Match) {
     const octets = ipv4Match.slice(1).map((part) => Number(part));
     if (octets.some((octet) => Number.isNaN(octet) || octet < 0 || octet > 255)) {
@@ -340,8 +344,8 @@ function isBlockedExtensionHostname(hostname: string): boolean {
     return false;
   }
 
-  if (normalized.includes(":")) {
-    if (normalized.startsWith("fd") || normalized.startsWith("fc") || normalized.startsWith("fe80:")) {
+  if (unwrapped.includes(":")) {
+    if (unwrapped.startsWith("fd") || unwrapped.startsWith("fc") || unwrapped.startsWith("fe80:")) {
       return true;
     }
   }
