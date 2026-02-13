@@ -126,9 +126,10 @@ The dev manifest points to `https://localhost:3000`. The production manifest (`m
 
 Some OAuth token endpoints are blocked by CORS inside Office webviews. If OAuth login fails:
 
-1. Run `npm run proxy:https` (defaults to `https://localhost:3003`)
-2. In Pi → `/settings` → **Proxy** → enable and set the URL
-3. Retry login
+1. User setup command: `npx pi-for-excel-proxy` (or `curl -fsSL https://piforexcel.com/proxy | sh` if Node is missing)
+2. Dev/source setup command: `npm run proxy:https` (defaults to `https://localhost:3003`)
+3. In Pi → `/settings` → **Proxy** → enable and set the URL
+4. Retry login
 
 API-key auth generally works without the proxy.
 
@@ -177,6 +178,7 @@ src/
 └── utils/             # Shared helpers (HTML escape, type guards, errors)
 
 scripts/               # Dev helpers — CORS proxy, tmux/python bridges, manifest gen
+pkg/proxy/             # Publishable npm CLI package: `pi-for-excel-proxy`
 tests/                 # Unit + security tests (~50 test files)
 docs/                  # Current docs (install/deploy/features/policy) + archive/ for historical plans
 skills/                # Bundled Agent Skill definitions (web-search, mcp-gateway)

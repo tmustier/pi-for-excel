@@ -1,0 +1,22 @@
+{
+  "name": "pi-for-excel-proxy",
+  "version": "0.1.0",
+  "description": "One-command local HTTPS proxy helper for Pi for Excel OAuth logins.",
+  "type": "module",
+  "bin": {
+    "pi-for-excel-proxy": "./cli.mjs"
+  },
+  "files": [
+    "cli.mjs",
+    "scripts/*.mjs",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "prepack": "node ../../scripts/sync-proxy-package.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT"
+}

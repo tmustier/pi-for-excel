@@ -826,7 +826,7 @@
       </p>
 
       <p style="margin-top: 12px;">
-        <strong>One-time setup</strong> — open Terminal and run these, or just ask your agent to set it up:
+        <strong>If you already have Node.js</strong>:
       </p>
 
       <div class="terminal">
@@ -834,19 +834,11 @@
           <div class="terminal-dots"><span></span><span></span><span></span></div>
           <button class="terminal-copy" onclick="copyCmd(this)">Copy</button>
         </div>
-        <pre><span class="comment"># Install mkcert (creates local HTTPS certificates)</span>
-<span class="prompt">$ </span>brew install mkcert
-
-<span class="comment"># Download Pi for Excel and set up the login helper</span>
-<span class="prompt">$ </span>git clone https://github.com/tmustier/pi-for-excel.git ~/.pi-for-excel
-<span class="prompt">$ </span>cd ~/.pi-for-excel
-<span class="prompt">$ </span>npm install
-<span class="prompt">$ </span>mkcert -install && mkcert localhost
-<span class="prompt">$ </span>mv localhost-key.pem key.pem && mv localhost.pem cert.pem</pre>
+        <pre><span class="prompt">$ </span>npx pi-for-excel-proxy</pre>
       </div>
 
       <p style="margin-top: 16px;">
-        <strong>Then, whenever you use Pi</strong>, start the helper:
+        <strong>If you don't have Node.js (or aren't sure)</strong>:
       </p>
 
       <div class="terminal">
@@ -854,11 +846,15 @@
           <div class="terminal-dots"><span></span><span></span><span></span></div>
           <button class="terminal-copy" onclick="copyCmd(this)">Copy</button>
         </div>
-        <pre><span class="prompt">$ </span>cd ~/.pi-for-excel && npm run proxy:https</pre>
+        <pre><span class="prompt">$ </span>curl -fsSL https://piforexcel.com/proxy | sh</pre>
       </div>
 
+      <p style="margin-top: 12px; font-size: 13px; color: var(--faint);">
+        First run sets up local HTTPS certs automatically. Keep the helper running while you use Pi.
+      </p>
+
       <p style="margin-top: 12px; font-size: 14px; color: var(--muted);">
-        Keep it running while you use Pi. In the sidebar: <span class="path">/settings</span> → Proxy → enable, set URL to <code>https://localhost:3003</code>. Then <span class="path">/login</span> and sign in.
+        In the sidebar: <span class="path">/settings</span> → Proxy → enable, set URL to <code>https://localhost:3003</code>. Then <span class="path">/login</span> and sign in.
       </p>
 
       <div class="callout">

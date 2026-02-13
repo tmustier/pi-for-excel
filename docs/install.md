@@ -102,8 +102,16 @@ Typical symptoms:
 
 1. Run a local HTTPS proxy helper on the same machine as Excel (defaults to `https://localhost:3003`):
 
+If you already have Node.js:
+
 ```bash
-npm run proxy:https
+npx pi-for-excel-proxy
+```
+
+If you do not have Node.js (or are unsure):
+
+```bash
+curl -fsSL https://piforexcel.com/proxy | sh
 ```
 
 If the user is non-technical, a teammate/admin can run this step for them on their machine.
@@ -120,7 +128,7 @@ Notes:
 - If port `3003` is busy, run with another port and use that same URL in settings:
 
 ```bash
-PORT=3005 npm run proxy:https
+PORT=3005 npx pi-for-excel-proxy
 ```
 
 ---
