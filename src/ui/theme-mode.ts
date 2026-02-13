@@ -104,19 +104,71 @@ export function installThemeModeSync(): () => void {
 
   apply();
 
+  let disposed = false;
+  let officeReadyHooked = false;
+  let officeRetryTimer: number | null = null;
+  let officeRetryStopTimer: number | null = null;
+
+  const registerOfficeReadyHook = (): void => {
+    if (officeReadyHooked || typeof Office === "undefined") {
+      return;
+    }
+
+    officeReadyHooked = true;
+    void Office.onReady(() => {
+      if (disposed) return;
+      apply();
+    });
+  };
+
+  registerOfficeReadyHook();
+
+  if (!officeReadyHooked) {
+    officeRetryTimer = window.setInterval(() => {
+      registerOfficeReadyHook();
+      if (officeReadyHooked && officeRetryTimer !== null) {
+        clearInterval(officeRetryTimer);
+        officeRetryTimer = null;
+      }
+    }, 500);
+
+    officeRetryStopTimer = window.setTimeout(() => {
+      if (officeRetryTimer !== null) {
+        clearInterval(officeRetryTimer);
+        officeRetryTimer = null;
+      }
+      officeRetryStopTimer = null;
+    }, 15_000);
+  }
+
   const onMediaChange = () => {
     apply();
   };
 
   if (typeof media.addEventListener === "function") {
     media.addEventListener("change", onMediaChange);
+
     return () => {
+      disposed = true;
       media.removeEventListener("change", onMediaChange);
+      if (officeRetryTimer !== null) {
+        clearInterval(officeRetryTimer);
+      }
+      if (officeRetryStopTimer !== null) {
+        clearTimeout(officeRetryStopTimer);
+      }
     };
   }
 
   media.addListener(onMediaChange);
   return () => {
+    disposed = true;
     media.removeListener(onMediaChange);
+    if (officeRetryTimer !== null) {
+      clearInterval(officeRetryTimer);
+    }
+    if (officeRetryStopTimer !== null) {
+      clearTimeout(officeRetryStopTimer);
+    }
   };
 }

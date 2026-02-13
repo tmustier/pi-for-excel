@@ -130,6 +130,7 @@ export class PiSidebar extends LitElement {
   @state() private _tabCanScrollLeft = false;
   @state() private _tabCanScrollRight = false;
   @state() private _tabContextMenuRuntimeId: string | null = null;
+  @state() private _tabContextMenuPosition: { x: number; y: number } | null = null;
 
   @query(".pi-messages") private _scrollContainer?: HTMLElement;
   @query("streaming-message-container") private _streamingContainer?: StreamingMessageContainer;
@@ -448,6 +449,24 @@ export class PiSidebar extends LitElement {
     });
   }
 
+  private _resolveTabContextMenuPosition(event: MouseEvent): { x: number; y: number } {
+    const offset = 6;
+    const estimatedMenuWidth = 190;
+    const estimatedMenuHeight = 220;
+    const margin = 8;
+
+    const x = Math.min(
+      event.clientX + offset,
+      Math.max(margin, window.innerWidth - estimatedMenuWidth - margin),
+    );
+    const y = Math.min(
+      event.clientY + offset,
+      Math.max(margin, window.innerHeight - estimatedMenuHeight - margin),
+    );
+
+    return { x, y };
+  }
+
   private _openTabContextMenu(runtimeId: string, event: MouseEvent): void {
     event.preventDefault();
     event.stopPropagation();
@@ -457,6 +476,7 @@ export class PiSidebar extends LitElement {
     }
 
     this._tabContextMenuRuntimeId = runtimeId;
+    this._tabContextMenuPosition = this._resolveTabContextMenuPosition(event);
     this._attachTabContextMenuDocumentListener();
   }
 
@@ -490,6 +510,7 @@ export class PiSidebar extends LitElement {
 
   private _closeTabContextMenu(): void {
     this._tabContextMenuRuntimeId = null;
+    this._tabContextMenuPosition = null;
     this._detachTabContextMenuDocumentListener();
   }
 
@@ -585,6 +606,7 @@ export class PiSidebar extends LitElement {
 
     return html`
       ${this._renderSessionTabs()}
+      ${this._renderTabContextMenuOverlay()}
       <div class="pi-messages">
         <div class="pi-messages__inner">
           ${hasMessages ? html`
@@ -693,7 +715,6 @@ export class PiSidebar extends LitElement {
                       </button>
                     `
                     : nothing}
-                  ${isContextOpen ? this._renderTabContextMenu(tab, canCloseTabs) : nothing}
                 </div>
               `;
             })}
@@ -725,7 +746,8 @@ export class PiSidebar extends LitElement {
     `;
   }
 
-  private _renderTabContextMenu(tab: SessionTabView, canCloseTabs: boolean) {
+  private _renderTabContextMenu(tab: SessionTabView) {
+    const canCloseTabs = this.sessionTabs.length > 1;
     const closeDisabled = !canCloseTabs || tab.lockState === "holding_lock";
     const closeOthersDisabled = this.sessionTabs.length <= 1 || !this.onCloseOtherTabs;
     const tabIndex = this.sessionTabs.findIndex((entry) => entry.runtimeId === tab.runtimeId);
@@ -734,10 +756,13 @@ export class PiSidebar extends LitElement {
 
     return html`
       <div
-        class="pi-session-tab-context-menu"
+        class="pi-session-tab-context-menu pi-session-tab-context-menu--floating"
         id=${this._tabContextMenuId}
         role="menu"
         aria-label=${`Tab actions for ${tab.title}`}
+        style=${this._tabContextMenuPosition
+          ? `left:${this._tabContextMenuPosition.x}px;top:${this._tabContextMenuPosition.y}px;`
+          : ""}
       >
         <button
           role="menuitem"
@@ -814,6 +839,19 @@ export class PiSidebar extends LitElement {
         </button>
       </div>
     `;
+  }
+
+  private _renderTabContextMenuOverlay() {
+    if (!this._tabContextMenuRuntimeId) {
+      return nothing;
+    }
+
+    const tab = this.sessionTabs.find((entry) => entry.runtimeId === this._tabContextMenuRuntimeId);
+    if (!tab) {
+      return nothing;
+    }
+
+    return this._renderTabContextMenu(tab);
   }
 
   private _toggleUtilitiesMenu() {

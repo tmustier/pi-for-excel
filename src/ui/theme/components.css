@@ -251,10 +251,6 @@
 }
 
 .pi-session-tab-context-menu {
-  position: absolute;
-  top: calc(100% + 4px);
-  right: 0;
-  z-index: 220;
   min-width: 170px;
   padding: 4px;
   border-radius: var(--radius-sm);
@@ -263,6 +259,11 @@
   backdrop-filter: var(--glass-blur-dropdown);
   -webkit-backdrop-filter: var(--glass-blur-dropdown);
   box-shadow: var(--glass-shadow-lg), var(--glass-highlight), var(--glass-inner-shadow);
+}
+
+.pi-session-tab-context-menu--floating {
+  position: fixed;
+  z-index: 260;
 }
 
 .pi-session-tab-context-menu__item {
