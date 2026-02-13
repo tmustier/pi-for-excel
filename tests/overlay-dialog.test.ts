@@ -19,6 +19,22 @@ void test("closeOverlayById returns false when overlay does not exist", () => {
   }
 });
 
+void test("overlay dialog exposes dialog semantics", () => {
+  const { restore } = installFakeDom();
+
+  try {
+    const dialog = createOverlayDialog({
+      overlayId: "overlay-dialog-a11y",
+      cardClassName: "overlay-card",
+    });
+
+    assert.equal(dialog.overlay.getAttribute("role"), "dialog");
+    assert.equal(dialog.overlay.getAttribute("aria-modal"), "true");
+  } finally {
+    restore();
+  }
+});
+
 void test("closeOverlayById closes mounted overlay and restores input focus", () => {
   const { document, restore } = installFakeDom();
 

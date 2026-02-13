@@ -136,6 +136,7 @@ export class PiSidebar extends LitElement {
   private _scrollListener?: () => void;
   private _groupingRoot?: HTMLElement;
   private _utilitiesMenuClickHandler?: (event: MouseEvent) => void;
+  private readonly _utilitiesMenuId = "pi-utilities-menu";
   private _onEscapeKey = (event: KeyboardEvent) => {
     if (event.key === "Escape" && this._utilitiesMenuOpen) {
       this._closeUtilitiesMenu();
@@ -568,6 +569,9 @@ export class PiSidebar extends LitElement {
             @click=${() => this._toggleUtilitiesMenu()}
             aria-label="Menu"
             title="Menu"
+            aria-haspopup="menu"
+            aria-controls=${this._utilitiesMenuId}
+            aria-expanded=${this._utilitiesMenuOpen ? "true" : "false"}
           >⋯</button>
           ${this._utilitiesMenuOpen ? this._renderUtilitiesMenu() : nothing}
         </div>
@@ -614,39 +618,39 @@ export class PiSidebar extends LitElement {
 
   private _renderUtilitiesMenu() {
     return html`
-      <div class="pi-utilities-menu">
-        <button class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenRules?.(); }}>
+      <div class="pi-utilities-menu" id=${this._utilitiesMenuId} role="menu" aria-label="Utilities menu">
+        <button role="menuitem" class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenRules?.(); }}>
           Rules & conventions…
         </button>
-        <button class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenIntegrations?.(); }}>
+        <button role="menuitem" class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenIntegrations?.(); }}>
           ${INTEGRATIONS_LABEL}…
         </button>
-        <button class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenSettings?.(); }}>
+        <button role="menuitem" class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenSettings?.(); }}>
           Settings…
         </button>
 
-        <div class="pi-utilities-menu__divider"></div>
+        <div class="pi-utilities-menu__divider" role="separator"></div>
 
-        <button class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenResumePicker?.(); }}>
+        <button role="menuitem" class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenResumePicker?.(); }}>
           Resume session…
         </button>
         ${this.onReopenLastClosed
           ? html`
-            <button class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onReopenLastClosed?.(); }}>
+            <button role="menuitem" class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onReopenLastClosed?.(); }}>
               Reopen last closed
             </button>
           `
           : nothing}
-        <button class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenShortcuts?.(); }}>
+        <button role="menuitem" class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenShortcuts?.(); }}>
           Keyboard shortcuts…
         </button>
 
-        <div class="pi-utilities-menu__divider"></div>
+        <div class="pi-utilities-menu__divider" role="separator"></div>
 
-        <button class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenRecovery?.(); }}>
+        <button role="menuitem" class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenRecovery?.(); }}>
           Backups…
         </button>
-        <button class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenFiles?.(); }}>
+        <button role="menuitem" class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenFiles?.(); }}>
           Files workspace (Beta)…
         </button>
       </div>
@@ -798,6 +802,30 @@ export class PiSidebar extends LitElement {
     `;
   }
 
+  private _summarizeHintPrompt(prompt: string): string {
+    const collapsed = prompt.replace(/\s+/gu, " ").trim();
+    if (collapsed.length <= 120) {
+      return collapsed;
+    }
+
+    return `${collapsed.slice(0, 117)}…`;
+  }
+
+  private _applyHintPrompt(prompt: string): void {
+    const input = this._input;
+    if (!input) {
+      this.sendMessage(prompt);
+      return;
+    }
+
+    input.value = prompt;
+
+    const textarea = input.getTextarea();
+    textarea.focus();
+    const cursor = textarea.value.length;
+    textarea.setSelectionRange(cursor, cursor);
+  }
+
   private _renderEmptyState() {
     return html`
       <div class="pi-empty">
@@ -806,9 +834,14 @@ export class PiSidebar extends LitElement {
           Reads your workbook, writes formulas, formats cells, and builds models.
         </p>
         <div class="pi-empty__hints">
-          ${this.emptyHints.map(hint => html`
-            <button class="pi-empty__hint" @click=${() => this.sendMessage(hint.prompt)}>
-              ${hint.label}
+          ${this.emptyHints.map((hint) => html`
+            <button
+              class="pi-empty__hint"
+              title="Insert prompt into the input so you can edit it before sending"
+              @click=${() => this._applyHintPrompt(hint.prompt)}
+            >
+              <span class="pi-empty__hint-label">${hint.label}</span>
+              <span class="pi-empty__hint-preview">${this._summarizeHintPrompt(hint.prompt)}</span>
             </button>
           `)}
         </div>

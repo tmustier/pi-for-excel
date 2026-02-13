@@ -55,6 +55,8 @@ export function createOverlayDialog(options: OverlayDialogOptions): OverlayDialo
   const overlay = document.createElement("div");
   overlay.id = options.overlayId;
   overlay.className = "pi-welcome-overlay";
+  overlay.setAttribute("role", "dialog");
+  overlay.setAttribute("aria-modal", "true");
   if (options.zIndex !== undefined) {
     overlay.style.zIndex = String(options.zIndex);
   }

@@ -83,7 +83,7 @@ pi-web-ui uses Light DOM (`createRenderRoot() { return this; }`), so styles leak
 | `pi-input.ts` | MessageEditor | Auto-growing textarea, send/abort button, fires `pi-send` / `pi-abort` events |
 | `message-style-hooks.ts` | — | Stamps semantic classes on pi-web-ui message internals (`pi-assistant-body`, `pi-tool-card-fallback`, etc.) to avoid brittle utility selectors |
 | `dialog-style-hooks.ts` | — | Stamps semantic classes on dialog internals (`pi-dialog-card`, `pi-model-selector-item-*`) so dialog CSS avoids utility selectors |
-| `toast.ts` | — | `showToast(msg, duration)` — positions a fixed notification |
+| `toast.ts` | — | `showToast(msg, duration \| { duration, variant })` + `showActionToast(...)` — fixed notifications with destructive styling for errors |
 | `loading.ts` | — | Splash screen shown during init |
 | `provider-login.ts` | — | API key entry rows for the welcome overlay |
 | `overlay-dialog.ts` | — | Shared overlay lifecycle helper (single-instance toggle, Escape/backdrop close, focus restore) |

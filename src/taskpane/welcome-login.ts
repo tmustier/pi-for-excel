@@ -14,6 +14,17 @@ import {
   PROXY_HELPER_DOCS_URL,
 } from "../auth/proxy-validation.js";
 
+function createElement<K extends keyof HTMLElementTagNameMap>(
+  tagName: K,
+  className?: string,
+): HTMLElementTagNameMap[K] {
+  const element = document.createElement(tagName);
+  if (className) {
+    element.className = className;
+  }
+  return element;
+}
+
 async function testLocalHttpsProxy(proxyUrl: string): Promise<boolean> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 1200);
@@ -75,45 +86,109 @@ export async function showWelcomeLogin(providerKeys: ProviderKeysStore): Promise
 
     const closeOverlay = dialog.close;
 
-    dialog.card.style.textAlign = "left";
-    dialog.card.innerHTML = `
-      <div class="pi-welcome-logo" style="text-align: center;">π</div>
-      <h2 class="pi-welcome-title" style="text-align: center;">Pi for Excel</h2>
-      <p class="pi-welcome-subtitle" style="text-align: center;">Connect a provider to get started</p>
+    const titleId = `${WELCOME_LOGIN_OVERLAY_ID}-title`;
+    const subtitleId = `${WELCOME_LOGIN_OVERLAY_ID}-subtitle`;
 
-      <div class="pi-welcome-proxy">
-        <div class="pi-welcome-proxy__row">
-          <div class="pi-welcome-proxy__title">Local HTTPS proxy</div>
-          <label class="pi-welcome-proxy__toggle">
-            <input type="checkbox" class="pi-welcome-proxy__enabled" />
-            <span>Enabled</span>
-          </label>
-        </div>
-        <div class="pi-welcome-proxy__row" style="gap: 8px;">
-          <input class="pi-welcome-proxy__url" type="text" spellcheck="false" />
-          <button class="pi-welcome-proxy__save" type="button">Save</button>
-        </div>
-        <div class="pi-welcome-proxy__hint">
-          Needed only when OAuth login is blocked by CORS.
-          Keep this URL at <code>${DEFAULT_LOCAL_PROXY_URL}</code>, run a local HTTPS proxy helper, then enable this toggle.
-          <a href="${PROXY_HELPER_DOCS_URL}" target="_blank" rel="noopener noreferrer">Step-by-step guide</a>.
-        </div>
-      </div>
+    const logo = createElement("div", "pi-welcome-logo");
+    logo.textContent = "π";
 
-      <div class="pi-welcome-providers"></div>
-    `;
+    const title = createElement("h2", "pi-welcome-title");
+    title.id = titleId;
+    title.textContent = "Pi for Excel";
 
-    const providerList = dialog.card.querySelector<HTMLDivElement>(".pi-welcome-providers");
-    if (!providerList) {
-      throw new Error("Welcome provider list not found");
-    }
+    const subtitle = createElement("p", "pi-welcome-subtitle");
+    subtitle.id = subtitleId;
+    subtitle.textContent = "Connect an AI provider to get started";
 
-    const proxyEnabledEl = dialog.card.querySelector<HTMLInputElement>(".pi-welcome-proxy__enabled");
-    const proxyUrlEl = dialog.card.querySelector<HTMLInputElement>(".pi-welcome-proxy__url");
-    const proxySaveEl = dialog.card.querySelector<HTMLButtonElement>(".pi-welcome-proxy__save");
+    const intro = createElement("p", "pi-welcome-intro");
+    intro.textContent = "Pi reads your workbook, explains formulas, and makes edits directly in Excel.";
+
+    const providerSectionTitle = createElement("p", "pi-welcome-section-title");
+    providerSectionTitle.textContent = "Choose a provider";
+
+    const providerList = createElement("div", "pi-welcome-providers");
+
+    const proxyToggle = createElement("button", "pi-welcome-proxy-toggle");
+    proxyToggle.type = "button";
+    proxyToggle.textContent = "Having login trouble? Configure local proxy";
+    proxyToggle.setAttribute("aria-expanded", "false");
+
+    const proxyPanel = createElement("section", "pi-welcome-proxy");
+    proxyPanel.hidden = true;
+
+    const proxyTopRow = createElement("div", "pi-welcome-proxy__row");
+
+    const proxyTitle = createElement("div", "pi-welcome-proxy__title");
+    proxyTitle.textContent = "Local HTTPS proxy";
+
+    const proxyToggleLabel = createElement("label", "pi-welcome-proxy__toggle");
+    const proxyEnabledEl = createElement("input", "pi-welcome-proxy__enabled");
+    proxyEnabledEl.type = "checkbox";
+    const proxyToggleText = createElement("span");
+    proxyToggleText.textContent = "Enabled";
+    proxyToggleLabel.append(proxyEnabledEl, proxyToggleText);
+
+    proxyTopRow.append(proxyTitle, proxyToggleLabel);
+
+    const proxyUrlRow = createElement("div", "pi-welcome-proxy__row pi-welcome-proxy__row--compact");
+    const proxyUrlEl = createElement("input", "pi-welcome-proxy__url");
+    proxyUrlEl.type = "text";
+    proxyUrlEl.spellcheck = false;
+
+    const proxySaveEl = createElement("button", "pi-welcome-proxy__save");
+    proxySaveEl.type = "button";
+    proxySaveEl.textContent = "Save";
+
+    proxyUrlRow.append(proxyUrlEl, proxySaveEl);
+
+    const proxyHint = createElement("p", "pi-welcome-proxy__hint");
+    const proxyCode = createElement("code");
+    proxyCode.textContent = DEFAULT_LOCAL_PROXY_URL;
+
+    const proxyGuideLink = createElement("a");
+    proxyGuideLink.href = PROXY_HELPER_DOCS_URL;
+    proxyGuideLink.target = "_blank";
+    proxyGuideLink.rel = "noopener noreferrer";
+    proxyGuideLink.textContent = "Step-by-step guide";
+
+    proxyHint.append(
+      "Needed only when OAuth login is blocked by CORS. Keep this URL at ",
+      proxyCode,
+      ", run a local HTTPS proxy helper, then enable this toggle. ",
+      proxyGuideLink,
+      ".",
+    );
+
+    proxyPanel.append(proxyTopRow, proxyUrlRow, proxyHint);
+
+    dialog.card.replaceChildren(
+      logo,
+      title,
+      subtitle,
+      intro,
+      providerSectionTitle,
+      providerList,
+      proxyToggle,
+      proxyPanel,
+    );
+
+    dialog.overlay.setAttribute("aria-labelledby", titleId);
+    dialog.overlay.setAttribute("aria-describedby", subtitleId);
+
+    proxyToggle.addEventListener("click", () => {
+      const willOpen = proxyPanel.hidden;
+      proxyPanel.hidden = !willOpen;
+      proxyToggle.setAttribute("aria-expanded", willOpen ? "true" : "false");
+      proxyToggle.textContent = willOpen
+        ? "Hide local proxy settings"
+        : "Having login trouble? Configure local proxy";
+
+      if (willOpen) {
+        proxyUrlEl.focus();
+      }
+    });
 
     const hydrateProxyUi = async () => {
-      if (!proxyEnabledEl || !proxyUrlEl || !proxySaveEl) return;
       try {
         const storage = getAppStorage();
         const enabled = await storage.settings.get("proxy.enabled");
@@ -127,7 +202,6 @@ export async function showWelcomeLogin(providerKeys: ProviderKeysStore): Promise
     };
 
     const saveProxyUi = async () => {
-      if (!proxyEnabledEl || !proxyUrlEl || !proxySaveEl) return;
       try {
         const storage = getAppStorage();
         await storage.settings.set("proxy.enabled", proxyEnabledEl.checked);
@@ -138,12 +212,16 @@ export async function showWelcomeLogin(providerKeys: ProviderKeysStore): Promise
       }
     };
 
-    proxyEnabledEl?.addEventListener("change", () => void saveProxyUi());
-    proxySaveEl?.addEventListener("click", () => void saveProxyUi());
+    proxyEnabledEl.addEventListener("change", () => {
+      void saveProxyUi();
+    });
+    proxySaveEl.addEventListener("click", () => {
+      void saveProxyUi();
+    });
 
-    hydrateProxyUi().catch(() => {});
+    void hydrateProxyUi();
 
-    const expandedRef = { current: null as HTMLElement | null };
+    const expandedRef: { current: HTMLElement | null } = { current: null };
 
     for (const provider of ALL_PROVIDERS) {
       const row = buildProviderRow(provider, {
@@ -154,7 +232,7 @@ export async function showWelcomeLogin(providerKeys: ProviderKeysStore): Promise
             const updated = await providerKeys.list();
             setActiveProviders(new Set(updated));
             document.dispatchEvent(new CustomEvent("pi:providers-changed"));
-            showToast(`${label} connected`);
+            showToast(`${label} connected — try “Explain this workbook”.`, 3200);
             closeOverlay();
           })();
         },
