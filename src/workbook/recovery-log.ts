@@ -35,6 +35,7 @@ import {
   type RecoveryFormatRangeState,
   type RecoveryModifyStructureState,
 } from "./recovery-states.js";
+import { estimateModifyStructureCellCount } from "./recovery/structure-state.js";
 
 const MAX_RECOVERY_ENTRIES = 120;
 export const MAX_RECOVERY_CELLS = 20_000;
@@ -495,13 +496,16 @@ export class WorkbookRecoveryLog {
     workbookContextOverride?: WorkbookContext,
   ): Promise<WorkbookRecoverySnapshot | null> {
     const modifyStructureState = cloneRecoveryModifyStructureState(args.modifyStructureState);
+    const cellCount = estimateModifyStructureCellCount(modifyStructureState);
+    if (cellCount <= 0) return null;
+    if (cellCount > MAX_RECOVERY_CELLS) return null;
 
     const workbookIdentity = await this.resolveWorkbookIdentity(workbookContextOverride);
     if (!workbookIdentity) return null;
 
     const changedCount = typeof args.changedCount === "number"
       ? Math.max(0, Math.floor(args.changedCount))
-      : 1;
+      : cellCount;
 
     return this.appendSnapshot({
       id: this.dependencies.createId(),
@@ -510,7 +514,7 @@ export class WorkbookRecoveryLog {
       toolCallId: args.toolCallId,
       address: args.address,
       changedCount,
-      cellCount: 1,
+      cellCount,
       beforeValues: [],
       beforeFormulas: [],
       snapshotKind: "modify_structure_state",

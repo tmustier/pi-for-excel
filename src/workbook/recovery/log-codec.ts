@@ -14,7 +14,9 @@ import {
   type RecoveryFormatBorderState,
   type RecoveryFormatRangeState,
   type RecoveryModifyStructureState,
+  type RecoveryStructureValueRangeState,
 } from "../recovery-states.js";
+import { estimateModifyStructureCellCount } from "./structure-state.js";
 import type {
   WorkbookRecoverySnapshot,
   WorkbookRecoverySnapshotKind,
@@ -223,6 +225,27 @@ function isPositiveInteger(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value) && value > 0;
 }
 
+function isRecoveryStructureValueRangeState(value: unknown): value is RecoveryStructureValueRangeState {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  if (typeof value.address !== "string") {
+    return false;
+  }
+
+  if (!isPositiveInteger(value.rowCount) || !isPositiveInteger(value.columnCount)) {
+    return false;
+  }
+
+  if (!isGrid(value.values) || !isGrid(value.formulas)) {
+    return false;
+  }
+
+  const stats = gridStats(value.values, value.formulas);
+  return stats.rows === value.rowCount && stats.cols === value.columnCount;
+}
+
 function isRecoveryModifyStructureState(value: unknown): value is RecoveryModifyStructureState {
   if (!isRecord(value)) return false;
 
@@ -235,7 +258,11 @@ function isRecoveryModifyStructureState(value: unknown): value is RecoveryModify
   }
 
   if (value.kind === "sheet_absent") {
-    return typeof value.sheetId === "string" && typeof value.sheetName === "string";
+    return (
+      typeof value.sheetId === "string" &&
+      typeof value.sheetName === "string" &&
+      (value.allowDataDelete === undefined || typeof value.allowDataDelete === "boolean")
+    );
   }
 
   if (value.kind === "sheet_present") {
@@ -245,25 +272,48 @@ function isRecoveryModifyStructureState(value: unknown): value is RecoveryModify
       typeof value.position === "number" &&
       Number.isInteger(value.position) &&
       value.position >= 0 &&
-      isRecoverySheetVisibility(value.visibility)
+      isRecoverySheetVisibility(value.visibility) &&
+      (value.dataRange === undefined || isRecoveryStructureValueRangeState(value.dataRange))
     );
   }
 
-  if (value.kind === "rows_absent" || value.kind === "rows_present") {
+  if (value.kind === "rows_absent") {
     return (
       typeof value.sheetId === "string" &&
       typeof value.sheetName === "string" &&
       isPositiveInteger(value.position) &&
-      isPositiveInteger(value.count)
+      isPositiveInteger(value.count) &&
+      (value.allowDataDelete === undefined || typeof value.allowDataDelete === "boolean")
     );
   }
 
-  if (value.kind === "columns_absent" || value.kind === "columns_present") {
+  if (value.kind === "rows_present") {
     return (
       typeof value.sheetId === "string" &&
       typeof value.sheetName === "string" &&
       isPositiveInteger(value.position) &&
-      isPositiveInteger(value.count)
+      isPositiveInteger(value.count) &&
+      (value.dataRange === undefined || isRecoveryStructureValueRangeState(value.dataRange))
+    );
+  }
+
+  if (value.kind === "columns_absent") {
+    return (
+      typeof value.sheetId === "string" &&
+      typeof value.sheetName === "string" &&
+      isPositiveInteger(value.position) &&
+      isPositiveInteger(value.count) &&
+      (value.allowDataDelete === undefined || typeof value.allowDataDelete === "boolean")
+    );
+  }
+
+  if (value.kind === "columns_present") {
+    return (
+      typeof value.sheetId === "string" &&
+      typeof value.sheetName === "string" &&
+      isPositiveInteger(value.position) &&
+      isPositiveInteger(value.count) &&
+      (value.dataRange === undefined || isRecoveryStructureValueRangeState(value.dataRange))
     );
   }
 
@@ -349,7 +399,7 @@ function parseWorkbookRecoverySnapshot(value: unknown): WorkbookRecoverySnapshot
     : snapshotKind === "format_cells_state"
       ? (formatRangeState?.cellCount ?? 0)
       : snapshotKind === "modify_structure_state"
-        ? 1
+        ? (modifyStructureState ? estimateModifyStructureCellCount(modifyStructureState) : 1)
         : snapshotKind === "conditional_format_rules"
           ? conditionalFormatRules.length
           : 1;

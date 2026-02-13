@@ -232,10 +232,19 @@ export interface RecoverySheetVisibilityState {
   visibility: RecoverySheetVisibility;
 }
 
+export interface RecoveryStructureValueRangeState {
+  address: string;
+  rowCount: number;
+  columnCount: number;
+  values: unknown[][];
+  formulas: unknown[][];
+}
+
 export interface RecoverySheetAbsentState {
   kind: "sheet_absent";
   sheetId: string;
   sheetName: string;
+  allowDataDelete?: boolean;
 }
 
 export interface RecoverySheetPresentState {
@@ -244,6 +253,7 @@ export interface RecoverySheetPresentState {
   sheetName: string;
   position: number;
   visibility: RecoverySheetVisibility;
+  dataRange?: RecoveryStructureValueRangeState;
 }
 
 export interface RecoveryRowsAbsentState {
@@ -252,6 +262,7 @@ export interface RecoveryRowsAbsentState {
   sheetName: string;
   position: number;
   count: number;
+  allowDataDelete?: boolean;
 }
 
 export interface RecoveryRowsPresentState {
@@ -260,6 +271,7 @@ export interface RecoveryRowsPresentState {
   sheetName: string;
   position: number;
   count: number;
+  dataRange?: RecoveryStructureValueRangeState;
 }
 
 export interface RecoveryColumnsAbsentState {
@@ -268,6 +280,7 @@ export interface RecoveryColumnsAbsentState {
   sheetName: string;
   position: number;
   count: number;
+  allowDataDelete?: boolean;
 }
 
 export interface RecoveryColumnsPresentState {
@@ -276,6 +289,7 @@ export interface RecoveryColumnsPresentState {
   sheetName: string;
   position: number;
   count: number;
+  dataRange?: RecoveryStructureValueRangeState;
 }
 
 export type RecoveryModifyStructureState =

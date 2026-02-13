@@ -263,3 +263,76 @@ void test("append skips oversized checkpoints", async () => {
   const entries = await log.listForCurrentWorkbook(10);
   assert.equal(entries.length, 0);
 });
+
+void test("appendModifyStructure stores cell counts from preserved data ranges", async () => {
+  const settingsStore = createInMemorySettingsStore();
+
+  const log = new WorkbookRecoveryLog({
+    getSettingsStore: () => Promise.resolve(settingsStore),
+    getWorkbookContext: () => Promise.resolve({
+      workbookId: "url_sha256:structure-data-count",
+      workbookName: "Structure.xlsx",
+      source: "document.url",
+    }),
+    applySnapshot: () => Promise.resolve({ values: [[1]], formulas: [[1]] }),
+  });
+
+  const snapshot = await log.appendModifyStructure({
+    toolName: "modify_structure",
+    toolCallId: "call-structure-count",
+    address: "Data!3:4",
+    modifyStructureState: {
+      kind: "rows_present",
+      sheetId: "sheet-data",
+      sheetName: "Data",
+      position: 3,
+      count: 2,
+      dataRange: {
+        address: "B3:C4",
+        rowCount: 2,
+        columnCount: 2,
+        values: [[1, 2], [3, 4]],
+        formulas: [["", ""], ["", ""]],
+      },
+    },
+  });
+
+  assert.ok(snapshot);
+  assert.equal(snapshot?.cellCount, 4);
+});
+
+void test("appendModifyStructure skips oversized preserved data ranges", async () => {
+  const settingsStore = createInMemorySettingsStore();
+
+  const log = new WorkbookRecoveryLog({
+    getSettingsStore: () => Promise.resolve(settingsStore),
+    getWorkbookContext: () => Promise.resolve({
+      workbookId: "url_sha256:structure-data-big",
+      workbookName: "StructureBig.xlsx",
+      source: "document.url",
+    }),
+    applySnapshot: () => Promise.resolve({ values: [[1]], formulas: [[1]] }),
+  });
+
+  const snapshot = await log.appendModifyStructure({
+    toolName: "modify_structure",
+    toolCallId: "call-structure-big",
+    address: "Data!A1:CU200",
+    modifyStructureState: {
+      kind: "rows_present",
+      sheetId: "sheet-data",
+      sheetName: "Data",
+      position: 1,
+      count: 201,
+      dataRange: {
+        address: "A1:CV201",
+        rowCount: 201,
+        columnCount: 100,
+        values: Array.from({ length: 201 }, () => Array.from({ length: 100 }, () => "x")),
+        formulas: Array.from({ length: 201 }, () => Array.from({ length: 100 }, () => "")),
+      },
+    },
+  });
+
+  assert.equal(snapshot, null);
+});

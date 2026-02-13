@@ -45,4 +45,5 @@ export type {
   RecoverySheetPresentState,
   RecoverySheetVisibility,
   RecoverySheetVisibilityState,
+  RecoveryStructureValueRangeState,
 } from "../recovery-states.js";

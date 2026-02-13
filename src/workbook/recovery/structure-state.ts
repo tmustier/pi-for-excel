@@ -1,17 +1,40 @@
 /** Structure-state capture/apply for workbook recovery snapshots. */
 
 import { excelRun } from "../../excel/helpers.js";
+import { localAddressPart } from "./address.js";
 import { cloneRecoveryModifyStructureState } from "./clone.js";
 import type {
   RecoveryModifyStructureState,
   RecoverySheetVisibility,
+  RecoveryStructureValueRangeState,
 } from "./types.js";
 
-function isRecoverySheetVisibility(value: unknown): value is RecoverySheetVisibility {
+interface SyncContext {
+  sync(): Promise<unknown>;
+}
+
+interface LoadableNullObject {
+  isNullObject: boolean;
+  load(propertyNames: string | string[]): void;
+}
+
+interface UsedRangeSnapshot extends LoadableNullObject {
+  address: string;
+  rowCount: number;
+  columnCount: number;
+  values: unknown[][];
+  formulas: unknown[][];
+}
+
+interface UsedRangeSource {
+  getUsedRangeOrNullObject(valuesOnly?: boolean): UsedRangeSnapshot;
+}
+
+export function isRecoverySheetVisibility(value: unknown): value is RecoverySheetVisibility {
   return value === "Visible" || value === "Hidden" || value === "VeryHidden";
 }
 
-type CaptureModifyStructureStateArgs =
+export type CaptureModifyStructureStateArgs =
   | {
     kind: "sheet_name" | "sheet_visibility" | "sheet_absent";
     sheetRef: string;
@@ -36,7 +59,7 @@ function normalizePositiveInteger(value: number): number | null {
   return normalized;
 }
 
-function columnNumberToLetter(position: number): string {
+export function columnNumberToLetter(position: number): string {
   let col = position - 1;
   let letter = "";
 
@@ -46,6 +69,175 @@ function columnNumberToLetter(position: number): string {
   }
 
   return letter;
+}
+
+function cloneUnknownGrid(grid: unknown[][]): unknown[][] {
+  return grid.map((row) => {
+    if (!Array.isArray(row)) {
+      return [];
+    }
+
+    return [...row];
+  });
+}
+
+function rowLength(grid: unknown[][], row: number): number {
+  const rowValues = grid[row];
+  return Array.isArray(rowValues) ? rowValues.length : 0;
+}
+
+function gridStats(values: unknown[][], formulas: unknown[][]): {
+  rows: number;
+  cols: number;
+} {
+  const rows = Math.max(values.length, formulas.length);
+  let cols = 0;
+
+  for (let row = 0; row < rows; row += 1) {
+    cols = Math.max(cols, rowLength(values, row), rowLength(formulas, row));
+  }
+
+  return {
+    rows,
+    cols,
+  };
+}
+
+function valueAt(grid: unknown[][], row: number, col: number): unknown {
+  const rowValues = grid[row];
+  if (!Array.isArray(rowValues)) {
+    return "";
+  }
+
+  return col < rowValues.length ? rowValues[col] : "";
+}
+
+function normalizeFormula(raw: unknown): string | undefined {
+  if (typeof raw !== "string") {
+    return undefined;
+  }
+
+  const trimmed = raw.trim();
+  if (!trimmed.startsWith("=")) {
+    return undefined;
+  }
+
+  return trimmed;
+}
+
+function toRestoreValues(values: unknown[][], formulas: unknown[][]): unknown[][] {
+  const { rows, cols } = gridStats(values, formulas);
+  const restored: unknown[][] = [];
+
+  for (let row = 0; row < rows; row += 1) {
+    const outRow: unknown[] = [];
+
+    for (let col = 0; col < cols; col += 1) {
+      const formula = normalizeFormula(valueAt(formulas, row, col));
+      outRow.push(formula ?? valueAt(values, row, col));
+    }
+
+    restored.push(outRow);
+  }
+
+  return restored;
+}
+
+function isStructureValueRangeStateShapeValid(dataRange: RecoveryStructureValueRangeState): boolean {
+  if (typeof dataRange.address !== "string") {
+    return false;
+  }
+
+  if (!Number.isInteger(dataRange.rowCount) || dataRange.rowCount <= 0) {
+    return false;
+  }
+
+  if (!Number.isInteger(dataRange.columnCount) || dataRange.columnCount <= 0) {
+    return false;
+  }
+
+  const stats = gridStats(dataRange.values, dataRange.formulas);
+  return stats.rows === dataRange.rowCount && stats.cols === dataRange.columnCount;
+}
+
+export function estimateModifyStructureCellCount(state: RecoveryModifyStructureState): number {
+  const dataRange = state.kind === "sheet_present" || state.kind === "rows_present" || state.kind === "columns_present"
+    ? state.dataRange
+    : undefined;
+
+  if (!dataRange) {
+    return 1;
+  }
+
+  const estimated = dataRange.rowCount * dataRange.columnCount;
+  if (!Number.isFinite(estimated) || estimated <= 0) {
+    return 1;
+  }
+
+  return estimated;
+}
+
+async function captureUsedRangeSnapshot(
+  context: SyncContext,
+  source: UsedRangeSource,
+): Promise<RecoveryStructureValueRangeState | undefined> {
+  const usedRange = source.getUsedRangeOrNullObject(true);
+  usedRange.load("isNullObject");
+  await context.sync();
+
+  if (usedRange.isNullObject) {
+    return undefined;
+  }
+
+  usedRange.load(["address", "rowCount", "columnCount", "values", "formulas"]);
+  await context.sync();
+
+  const values = cloneUnknownGrid(usedRange.values);
+  const formulas = cloneUnknownGrid(usedRange.formulas);
+  const dataRange: RecoveryStructureValueRangeState = {
+    address: localAddressPart(usedRange.address),
+    rowCount: usedRange.rowCount,
+    columnCount: usedRange.columnCount,
+    values,
+    formulas,
+  };
+
+  return isStructureValueRangeStateShapeValid(dataRange) ? dataRange : undefined;
+}
+
+export async function captureValueDataRange(
+  context: SyncContext,
+  targetRange: UsedRangeSource,
+): Promise<RecoveryStructureValueRangeState | undefined> {
+  return captureUsedRangeSnapshot(context, targetRange);
+}
+
+export async function captureSheetValueDataRange(
+  context: SyncContext,
+  sheet: UsedRangeSource,
+): Promise<RecoveryStructureValueRangeState | undefined> {
+  return captureUsedRangeSnapshot(context, sheet);
+}
+
+export async function hasValueDataInSheet(
+  context: SyncContext,
+  sheet: UsedRangeSource,
+): Promise<boolean> {
+  const usedRange = sheet.getUsedRangeOrNullObject(true);
+  usedRange.load("isNullObject");
+  await context.sync();
+  return !usedRange.isNullObject;
+}
+
+export async function hasValueDataInRange(
+  context: SyncContext,
+  targetRange: UsedRangeSource,
+): Promise<boolean> {
+  const usedRange = targetRange.getUsedRangeOrNullObject(true);
+  usedRange.load("isNullObject");
+  await context.sync();
+
+  return !usedRange.isNullObject;
 }
 
 async function loadSheetById(
@@ -84,34 +276,25 @@ async function loadSheetByIdOrName(
   return byName;
 }
 
-async function sheetHasValueData(
+async function restoreStructureValueRange(
   context: Excel.RequestContext,
   sheet: Excel.Worksheet,
-): Promise<boolean> {
-  const usedRange = sheet.getUsedRangeOrNullObject(true);
-  usedRange.load("isNullObject");
-  await context.sync();
-  return !usedRange.isNullObject;
-}
-
-async function rangeHasValueData(
-  context: Excel.RequestContext,
-  sheet: Excel.Worksheet,
-  targetRange: Excel.Range,
-): Promise<boolean> {
-  const usedRange = sheet.getUsedRangeOrNullObject(true);
-  usedRange.load("isNullObject");
-  await context.sync();
-
-  if (usedRange.isNullObject) {
-    return false;
+  dataRange: RecoveryStructureValueRangeState,
+): Promise<void> {
+  if (!isStructureValueRangeStateShapeValid(dataRange)) {
+    throw new Error("Structure checkpoint is invalid: captured data range is inconsistent.");
   }
 
-  const overlap = usedRange.getIntersectionOrNullObject(targetRange);
-  overlap.load("isNullObject");
+  const range = sheet.getRange(dataRange.address);
+  range.load(["rowCount", "columnCount"]);
   await context.sync();
 
-  return !overlap.isNullObject;
+  if (range.rowCount !== dataRange.rowCount || range.columnCount !== dataRange.columnCount) {
+    throw new Error("Structure checkpoint is invalid: captured data range shape does not match target range.");
+  }
+
+  range.values = toRestoreValues(dataRange.values, dataRange.formulas);
+  await context.sync();
 }
 
 export async function captureModifyStructureState(
@@ -229,10 +412,19 @@ export async function applyModifyStructureState(
         throw new Error("Sheet visibility is unsupported for structure checkpoint restore.");
       }
 
-      if (await sheetHasValueData(context, sheet)) {
+      const hasValueData = await hasValueDataInSheet(context, sheet);
+      if (hasValueData && !targetState.allowDataDelete) {
         throw new Error(
           "Structure checkpoint restore is blocked: target sheet contains data and cannot be deleted safely.",
         );
+      }
+
+      const currentDataRange = hasValueData
+        ? await captureSheetValueDataRange(context, sheet)
+        : undefined;
+
+      if (hasValueData && !currentDataRange) {
+        throw new Error("Structure checkpoint restore failed: could not capture current sheet data before delete.");
       }
 
       const currentState: RecoveryModifyStructureState = {
@@ -241,6 +433,7 @@ export async function applyModifyStructureState(
         sheetName: sheet.name,
         position: sheet.position,
         visibility: currentVisibility,
+        dataRange: currentDataRange,
       };
 
       sheet.delete();
@@ -256,13 +449,25 @@ export async function applyModifyStructureState(
           kind: "sheet_absent",
           sheetId: targetState.sheetId,
           sheetName: targetState.sheetName,
+          allowDataDelete: targetState.dataRange ? true : undefined,
         };
 
         const created = context.workbook.worksheets.add(targetState.sheetName);
         created.position = targetState.position;
         created.visibility = targetState.visibility;
         await context.sync();
+
+        if (targetState.dataRange) {
+          await restoreStructureValueRange(context, created, targetState.dataRange);
+        }
+
         return currentState;
+      }
+
+      if (targetState.dataRange) {
+        throw new Error(
+          "Structure checkpoint restore is blocked: target sheet already exists and cannot be overwritten safely.",
+        );
       }
 
       const currentVisibility = existing.visibility;
@@ -301,10 +506,19 @@ export async function applyModifyStructureState(
       const range = sheet.getRange(`${position}:${endRow}`);
 
       if (targetState.kind === "rows_absent") {
-        if (await rangeHasValueData(context, sheet, range)) {
+        const hasValueData = await hasValueDataInRange(context, range);
+        if (hasValueData && !targetState.allowDataDelete) {
           throw new Error(
             "Structure checkpoint restore is blocked: target rows contain data and cannot be deleted safely.",
           );
+        }
+
+        const currentDataRange = hasValueData
+          ? await captureValueDataRange(context, range)
+          : undefined;
+
+        if (hasValueData && !currentDataRange) {
+          throw new Error("Structure checkpoint restore failed: could not capture current row data before delete.");
         }
 
         const currentState: RecoveryModifyStructureState = {
@@ -313,6 +527,7 @@ export async function applyModifyStructureState(
           sheetName: sheet.name,
           position,
           count,
+          dataRange: currentDataRange,
         };
 
         range.delete("Up");
@@ -326,10 +541,16 @@ export async function applyModifyStructureState(
         sheetName: sheet.name,
         position,
         count,
+        allowDataDelete: targetState.dataRange ? true : undefined,
       };
 
       range.insert("Down");
       await context.sync();
+
+      if (targetState.dataRange) {
+        await restoreStructureValueRange(context, sheet, targetState.dataRange);
+      }
+
       return currentState;
     }
 
@@ -349,10 +570,20 @@ export async function applyModifyStructureState(
 
     if (targetState.kind === "columns_absent") {
       const range = sheet.getRange(`${startLetter}:${endLetter}`);
-      if (await rangeHasValueData(context, sheet, range)) {
+      const hasValueData = await hasValueDataInRange(context, range);
+
+      if (hasValueData && !targetState.allowDataDelete) {
         throw new Error(
           "Structure checkpoint restore is blocked: target columns contain data and cannot be deleted safely.",
         );
+      }
+
+      const currentDataRange = hasValueData
+        ? await captureValueDataRange(context, range)
+        : undefined;
+
+      if (hasValueData && !currentDataRange) {
+        throw new Error("Structure checkpoint restore failed: could not capture current column data before delete.");
       }
 
       const currentState: RecoveryModifyStructureState = {
@@ -361,6 +592,7 @@ export async function applyModifyStructureState(
         sheetName: sheet.name,
         position,
         count,
+        dataRange: currentDataRange,
       };
 
       range.delete("Left");
@@ -374,6 +606,7 @@ export async function applyModifyStructureState(
       sheetName: sheet.name,
       position,
       count,
+      allowDataDelete: targetState.dataRange ? true : undefined,
     };
 
     const range = sheet.getRange(`${startLetter}:${startLetter}`);
@@ -382,6 +615,11 @@ export async function applyModifyStructureState(
     }
 
     await context.sync();
+
+    if (targetState.dataRange) {
+      await restoreStructureValueRange(context, sheet, targetState.dataRange);
+    }
+
     return currentState;
   });
 }

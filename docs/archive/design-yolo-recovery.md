@@ -45,7 +45,7 @@ Replace cumbersome up-front approval selectors with a low-friction workflow:
   - `format_cells`
   - `conditional_format`
   - `comments` (mutating actions)
-  - `modify_structure` (all actions; destructive deletes checkpoint only when target has no value data)
+  - `modify_structure` (all actions, including value-preserving checkpoints for destructive deletes)
 - New tool: `workbook_history`
   - `list`
   - `restore`
@@ -64,8 +64,8 @@ Replace cumbersome up-front approval selectors with a low-friction workflow:
   - unsupported mutation tools/actions explicitly state when no checkpoint is created
   - `format_cells` checkpoint coverage now includes merge/unmerge state
   - `conditional_format` checkpoint coverage includes `custom`, `cell_value`, `contains_text`, `top_bottom`, and `preset_criteria` rules
-  - `modify_structure` now checkpoints all actions, with destructive deletes (`delete_rows`, `delete_columns`, `delete_sheet`) guarded to create checkpoints only for value-empty targets
-  - structure-absence restores (`sheet_absent`, `rows_absent`, `columns_absent`) are safety-gated and blocked if target data is present
+  - `modify_structure` now checkpoints all actions, including destructive deletes (`delete_rows`, `delete_columns`, `delete_sheet`) with captured value/formula payloads when within recovery-size limits
+  - structure-absence restores (`sheet_absent`, `rows_absent`, `columns_absent`) are safety-gated and blocked if target data is present, except restore-generated inverse checkpoints that explicitly allow safe value-preserving deletes
 
 ## Why this is better than approval selectors for now
 
@@ -75,7 +75,6 @@ Replace cumbersome up-front approval selectors with a low-friction workflow:
 
 ## Follow-ups
 
-1. Decide whether to support value-preserving destructive restore (capture/deep-restore deleted row/column/sheet data) vs intentionally keep destructive checkpoints limited to value-empty targets.
-2. Enrich checkpoint history UX (search/filter/export, retention controls).
-3. If needed, design an optional/manual desktop-oriented full-backup flow (not per-mutation).
-4. Potentially expose “YOLO mode” toggle once we have both lightweight and strict workflows fully defined.
+1. Enrich checkpoint history UX (search/filter/export, retention controls).
+2. If needed, design an optional/manual desktop-oriented full-backup flow (not per-mutation).
+3. Potentially expose “YOLO mode” toggle once we have both lightweight and strict workflows fully defined.

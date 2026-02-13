@@ -15,6 +15,7 @@ import type {
   RecoveryFormatRangeState,
   RecoveryFormatSelection,
   RecoveryModifyStructureState,
+  RecoveryStructureValueRangeState,
 } from "./types.js";
 
 function cloneRecoveryConditionalDataBarRule(rule: RecoveryConditionalDataBarRule): RecoveryConditionalDataBarRule {
@@ -129,6 +130,22 @@ export function cloneRecoveryCommentThreadState(state: RecoveryCommentThreadStat
   };
 }
 
+function cloneUnknownGrid(grid: readonly unknown[][]): unknown[][] {
+  return grid.map((row) => [...row]);
+}
+
+function cloneRecoveryStructureValueRangeState(
+  dataRange: RecoveryStructureValueRangeState,
+): RecoveryStructureValueRangeState {
+  return {
+    address: dataRange.address,
+    rowCount: dataRange.rowCount,
+    columnCount: dataRange.columnCount,
+    values: cloneUnknownGrid(dataRange.values),
+    formulas: cloneUnknownGrid(dataRange.formulas),
+  };
+}
+
 export function cloneRecoveryModifyStructureState(state: RecoveryModifyStructureState): RecoveryModifyStructureState {
   switch (state.kind) {
     case "sheet_name":
@@ -148,6 +165,7 @@ export function cloneRecoveryModifyStructureState(state: RecoveryModifyStructure
         kind: "sheet_absent",
         sheetId: state.sheetId,
         sheetName: state.sheetName,
+        ...(state.allowDataDelete === undefined ? {} : { allowDataDelete: state.allowDataDelete }),
       };
     case "sheet_present":
       return {
@@ -156,6 +174,7 @@ export function cloneRecoveryModifyStructureState(state: RecoveryModifyStructure
         sheetName: state.sheetName,
         position: state.position,
         visibility: state.visibility,
+        ...(state.dataRange ? { dataRange: cloneRecoveryStructureValueRangeState(state.dataRange) } : {}),
       };
     case "rows_absent":
       return {
@@ -164,6 +183,7 @@ export function cloneRecoveryModifyStructureState(state: RecoveryModifyStructure
         sheetName: state.sheetName,
         position: state.position,
         count: state.count,
+        ...(state.allowDataDelete === undefined ? {} : { allowDataDelete: state.allowDataDelete }),
       };
     case "rows_present":
       return {
@@ -172,6 +192,7 @@ export function cloneRecoveryModifyStructureState(state: RecoveryModifyStructure
         sheetName: state.sheetName,
         position: state.position,
         count: state.count,
+        ...(state.dataRange ? { dataRange: cloneRecoveryStructureValueRangeState(state.dataRange) } : {}),
       };
     case "columns_absent":
       return {
@@ -180,6 +201,7 @@ export function cloneRecoveryModifyStructureState(state: RecoveryModifyStructure
         sheetName: state.sheetName,
         position: state.position,
         count: state.count,
+        ...(state.allowDataDelete === undefined ? {} : { allowDataDelete: state.allowDataDelete }),
       };
     case "columns_present":
       return {
@@ -188,6 +210,7 @@ export function cloneRecoveryModifyStructureState(state: RecoveryModifyStructure
         sheetName: state.sheetName,
         position: state.position,
         count: state.count,
+        ...(state.dataRange ? { dataRange: cloneRecoveryStructureValueRangeState(state.dataRange) } : {}),
       };
   }
 }
