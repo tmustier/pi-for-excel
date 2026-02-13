@@ -12,6 +12,13 @@ Biggest opportunities:
 4. **Modularize UI tool cards/humanizers** (`src/ui/tool-renderers.ts`, `src/ui/humanize-params.ts`) into per-tool registries.
 5. **Consolidate bridge/server duplication** across `tmux`/`python`/`libreoffice` tools and scripts.
 
+> Post-close update (2026-02-13): CLOSE1 split `tests/workbook-recovery-log.test.ts` into:
+> - `tests/recovery-log-persistence.test.ts`
+> - `tests/recovery-log-restore.test.ts`
+> - `tests/recovery-log-format.test.ts`
+> - `tests/recovery-log-structure.test.ts`
+> Any references to the old monolithic test file below are historical context from the original review timestamp.
+
 ---
 
 ## Method used for this review
@@ -57,7 +64,11 @@ Concentration is strongest in: **workbook recovery**, **runtime/bootstrap**, **t
 **Files:**
 - `src/workbook/recovery-states.ts` (3428 LOC)
 - `src/workbook/recovery-log.ts` (1240 LOC)
-- `tests/workbook-recovery-log.test.ts` (1403 LOC)
+- `tests/recovery-log-persistence.test.ts`
+- `tests/recovery-log-restore.test.ts`
+- `tests/recovery-log-format.test.ts`
+- `tests/recovery-log-structure.test.ts`
+  *(historically one file, `tests/workbook-recovery-log.test.ts` at 1403 LOC during this review)*
 
 **Why this matters**
 - `recovery-states.ts` mixes several domains in one file: format-state capture/apply, structure-state capture/apply, conditional-format handlers, comment state, cloning/guards/utilities.
@@ -296,7 +307,11 @@ Split into layers:
    - `commands/builtins/experimental.ts`
    - `tools/experimental-tool-gates/evaluation.ts`
 4. Consolidate shared mutation note helper (`appendResultNote`) into one place.
-5. Split `tests/workbook-recovery-log.test.ts` by snapshot kind to reduce single-file blast radius.
+5. ✅ Completed (CLOSE1): split recovery-log tests by snapshot kind into:
+   - `tests/recovery-log-persistence.test.ts`
+   - `tests/recovery-log-restore.test.ts`
+   - `tests/recovery-log-format.test.ts`
+   - `tests/recovery-log-structure.test.ts`
 
 ---
 
