@@ -152,7 +152,7 @@ function renderToast(opts: ResolvedToastOptions): void {
 
 export function showToast(message: string, duration?: number): void;
 export function showToast(message: string, options?: ToastOptions): void;
-export function showToast(message: string, durationOrOptions: number | ToastOptions = DEFAULT_INFO_DURATION_MS): void {
+export function showToast(message: string, durationOrOptions?: number | ToastOptions): void {
   const normalized = normalizeToastOptions(message, durationOrOptions);
 
   renderToast({
