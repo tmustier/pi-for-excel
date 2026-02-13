@@ -5,8 +5,12 @@ if ! command -v node >/dev/null 2>&1; then
   echo "Node.js not found."
 
   if command -v brew >/dev/null 2>&1; then
-    printf "Install Node.js via Homebrew now? [Y/n] "
-    read -r answer
+    answer="Y"
+    if [ -r /dev/tty ]; then
+      printf "Install Node.js via Homebrew now? [Y/n] " > /dev/tty
+      read -r answer < /dev/tty || answer="Y"
+    fi
+
     case "${answer:-Y}" in
       y|Y|yes|YES)
         brew install node

@@ -109,6 +109,7 @@ function resolveProxyConfig() {
 }
 
 function startProxy(proxyArgs) {
+  fs.mkdirSync(certDir, { recursive: true });
   console.log(`[pi-for-excel-proxy] Using certificate directory: ${certDir}`);
 
   const child = spawn(process.execPath, [proxyScriptPath, ...proxyArgs], {
