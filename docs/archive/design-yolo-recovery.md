@@ -25,7 +25,6 @@ Replace cumbersome up-front approval selectors with a low-friction workflow:
   - Office.js does not expose a simple atomic in-place "replace current workbook from snapshot" API
   - per-mutation full-file capture would be operationally heavy (slice IO + storage overhead)
 - **Decision:** do not use per-mutation full-file snapshots as baseline; if needed later, consider optional/manual desktop-oriented export + open-new-workbook flow
-- **Research notes:** see `.research/full-file-snapshot-feasibility.md` for API-level analysis and constraints.
 
 ### 3) Range-level pre-write checkpoints (selected)
 - **Pros:** cheap, deterministic, aligns with tool-level mutations
