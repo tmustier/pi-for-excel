@@ -346,7 +346,7 @@ export class ManualFullWorkbookBackupStore {
 
   private async listForWorkbookId(
     workbookId: string,
-    limit: number,
+    limit?: number,
   ): Promise<ManualFullWorkbookBackup[]> {
     const workspace = this.dependencies.getWorkspace();
     const files = await workspace.listFiles();
@@ -356,6 +356,10 @@ export class ManualFullWorkbookBackupStore {
       .map((file) => toBackupEntry(file))
       .filter((entry): entry is ManualFullWorkbookBackup => entry !== null)
       .sort((left, right) => right.createdAt - left.createdAt);
+
+    if (limit === undefined) {
+      return matching;
+    }
 
     return matching.slice(0, Math.max(0, limit));
   }
@@ -421,7 +425,7 @@ export class ManualFullWorkbookBackupStore {
       return null;
     }
 
-    const backups = await this.listForWorkbookId(scoped.workbookId, 500);
+    const backups = await this.listForWorkbookId(scoped.workbookId);
     const match = backups.find((backup) => backup.id === trimmedBackupId);
 
     if (!match) {
@@ -437,7 +441,7 @@ export class ManualFullWorkbookBackupStore {
     const workbookContext = await this.dependencies.getWorkbookContext();
     const scoped = assertWorkbookIdentity(workbookContext);
 
-    const backups = await this.listForWorkbookId(scoped.workbookId, 500);
+    const backups = await this.listForWorkbookId(scoped.workbookId);
     if (backups.length === 0) {
       return 0;
     }
