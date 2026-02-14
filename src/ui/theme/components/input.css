@@ -1,0 +1,125 @@
+/* ═══════════════════════════════════════════════════════
+   4. PI-INPUT — textarea card + send button
+   ═══════════════════════════════════════════════════════ */
+
+.pi-input-card {
+  position: relative;
+  border-radius: var(--pill-radius);
+  border: var(--pill-border);
+  background: var(--pill-bg);
+  box-shadow: var(--pill-shadow);
+}
+
+.pi-input-card:focus-within {
+  border-color: oklch(0.45 0.12 160 / 0.22);
+  box-shadow: 0 1px 4px var(--alpha-5),
+              0 0 0 2px var(--pi-green-light);
+}
+
+.pi-input-card.is-drag-over {
+  border-color: oklch(0.47 0.15 157 / 0.55);
+  box-shadow: 0 0 0 2px oklch(0.47 0.15 157 / 0.2), var(--pill-shadow);
+}
+
+.pi-input-drop-hint {
+  position: absolute;
+  inset: 4px 36px 4px 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed var(--green-alpha-25);
+  border-radius: var(--radius-sm);
+  background: oklch(0.98 0.02 160 / 0.88);
+  color: var(--pi-green);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  pointer-events: none;
+}
+
+.pi-input-file {
+  display: none;
+}
+
+.pi-input-textarea {
+  display: block;
+  width: 100%;
+  padding: 11px 44px 11px 40px;
+  min-height: 40px;
+  max-height: 40vh;
+  border: none;
+  background: transparent;
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: 1.5;
+  resize: none;
+  outline: none;
+  overflow-y: auto;
+  field-sizing: content;
+}
+
+.pi-input-textarea::placeholder {
+  color: oklch(0.65 0 0);
+  font-weight: 400;
+}
+
+.pi-input-btn {
+  position: absolute;
+  bottom: 7px;
+  right: 8px;
+  z-index: 2;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: var(--radius-xs);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background var(--duration-fast), transform var(--duration-fast);
+}
+
+.pi-input-btn--attach {
+  left: 8px;
+  right: auto;
+  border: 1px solid var(--alpha-10);
+  background: var(--white-alpha-55);
+  color: var(--muted-foreground);
+}
+
+.pi-input-btn--attach:hover {
+  background: var(--white-alpha-70);
+  color: var(--foreground);
+}
+
+.pi-input-btn--attach svg,
+.pi-input-btn--attach svg * {
+  pointer-events: none;
+}
+
+.pi-input-btn--send {
+  background: var(--pi-green);
+  color: white;
+  box-shadow: 0 1px 3px var(--alpha-12);
+}
+.pi-input-btn--send:hover:not(.is-disabled) {
+  background: var(--pi-green-strong);
+  transform: scale(1.05);
+}
+.pi-input-btn--send.is-disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.pi-input-btn--abort {
+  background: oklch(0.55 0.22 25);
+  color: white;
+  box-shadow: 0 1px 3px var(--alpha-12);
+}
+.pi-input-btn--abort:hover {
+  background: oklch(0.50 0.22 25);
+  transform: scale(1.05);
+}
+
+

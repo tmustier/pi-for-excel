@@ -1,0 +1,80 @@
+/* ═══════════════════════════════════════════════════════
+   8. TOAST
+   ═══════════════════════════════════════════════════════ */
+
+.pi-toast {
+  position: fixed;
+  top: 56px;
+  left: 50%;
+  transform: translateX(-50%) translateY(-4px);
+  z-index: 200;
+  padding: 6px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  background: oklch(0.18 0 0 / 0.88);
+  color: white;
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  backdrop-filter: var(--glass-blur-dropdown);
+  -webkit-backdrop-filter: var(--glass-blur-dropdown);
+  box-shadow: 0 4px 12px var(--alpha-15);
+  opacity: 0;
+  transition: opacity var(--duration-normal), transform var(--duration-normal), background var(--duration-fast), border-color var(--duration-fast);
+  pointer-events: none;
+  max-width: calc(100vw - 24px);
+}
+
+.pi-toast.visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.pi-toast--error {
+  background: oklch(0.34 0.17 25 / 0.95);
+  border-color: oklch(0.68 0.14 25 / 0.38);
+  box-shadow: 0 6px 16px oklch(0.20 0.10 25 / 0.38);
+}
+
+.pi-toast--action {
+  pointer-events: auto;
+}
+
+.pi-toast__content {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  max-width: min(560px, calc(100vw - 48px));
+  text-align: left;
+}
+
+.pi-toast__message {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.pi-toast__action {
+  border: 1px solid oklch(1 0 0 / 0.35);
+  /* Intentional pill shape for floating action toast. */
+  border-radius: var(--radius-full);
+  padding: 2px 9px;
+  background: oklch(1 0 0 / 0.12);
+  color: white;
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.pi-toast__action:hover {
+  background: var(--white-alpha-20);
+}
+
+.pi-toast--error .pi-toast__action {
+  border-color: oklch(1 0 0 / 0.55);
+  background: oklch(1 0 0 / 0.16);
+}
+
+

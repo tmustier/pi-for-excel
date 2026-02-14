@@ -1,0 +1,67 @@
+/* ═══════════════════════════════════════════════════════
+   9. SLASH COMMAND MENU
+   ═══════════════════════════════════════════════════════ */
+
+.pi-cmd-menu {
+  position: fixed;
+  z-index: 150;
+  max-height: 260px;
+  overflow-y: auto;
+  background: var(--glass-bg-solid);
+  backdrop-filter: var(--glass-blur-dropdown);
+  -webkit-backdrop-filter: var(--glass-blur-dropdown);
+  border-radius: var(--radius-lg);
+  border: var(--glass-border);
+  box-shadow: var(--glass-shadow-lg), var(--glass-highlight), var(--glass-inner-shadow);
+  padding: 4px;
+  display: none;
+}
+
+.pi-cmd-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background var(--duration-fast);
+}
+.pi-cmd-item.selected { background: var(--pi-green-light); }
+.pi-cmd-item:hover { background: var(--alpha-3); }
+.pi-cmd-item.selected:hover { background: var(--pi-green-light); }
+
+.pi-cmd-name {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--foreground);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.pi-cmd-badge {
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 1px 5px;
+  border-radius: var(--radius-xs);
+  background: var(--pi-green-light);
+  color: var(--pi-green);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.pi-cmd-desc {
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  color: var(--muted-foreground);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  margin-left: auto;
+}
+
+

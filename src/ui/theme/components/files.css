@@ -1,0 +1,337 @@
+/* Files workspace dialog */
+.pi-files-dialog {
+  width: min(520px, 96vw);
+  max-height: min(760px, 90vh);
+  gap: 10px;
+}
+
+.pi-files-dialog__title {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--text-lg);
+  font-weight: 700;
+  color: var(--foreground);
+}
+
+.pi-files-dialog__subtitle {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  color: var(--muted-foreground);
+}
+
+.pi-files-dialog__controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.pi-files-dialog__btn {
+  border: 1px solid var(--alpha-10);
+  border-radius: var(--radius-sm);
+  background: var(--white-alpha-55);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  padding: 7px 10px;
+  cursor: pointer;
+}
+
+.pi-files-dialog__btn:hover:not(:disabled) {
+  background: var(--white-alpha-70);
+}
+
+.pi-files-dialog__btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.pi-files-dialog__btn--primary {
+  border-color: var(--green-alpha-25);
+  background: var(--pi-green);
+  color: white;
+}
+
+.pi-files-dialog__hidden-input {
+  display: none;
+}
+
+.pi-files-dialog__status {
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  color: var(--muted-foreground);
+}
+
+.pi-files-dialog__helper {
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  color: var(--muted-foreground);
+}
+
+.pi-files-dialog__filters {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pi-files-dialog__filter-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  color: var(--muted-foreground);
+}
+
+.pi-files-dialog__filter-select {
+  min-width: 240px;
+  max-width: min(100%, 320px);
+  border: 1px solid var(--alpha-10);
+  border-radius: var(--radius-sm);
+  background: var(--white-alpha-65);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  padding: 5px 8px;
+}
+
+.pi-files-dialog__filter-select:disabled {
+  opacity: 0.6;
+}
+
+.pi-files-dialog__quick-filters {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.pi-files-dialog__quick-filter {
+  border: 1px solid var(--alpha-10);
+  border-radius: var(--radius-xs);
+  background: var(--white-alpha-60);
+  color: var(--muted-foreground);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  padding: 4px 8px;
+  cursor: pointer;
+}
+
+.pi-files-dialog__quick-filter:hover:not(:disabled) {
+  background: var(--white-alpha-70);
+  color: var(--foreground);
+}
+
+.pi-files-dialog__quick-filter.is-active {
+  border-color: var(--green-alpha-25);
+  background: var(--green-alpha-12);
+  color: var(--foreground);
+}
+
+.pi-files-dialog__quick-filter:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pi-files-dialog__list {
+  border: var(--pi-divider);
+  border-radius: var(--radius-md);
+  background: var(--white-alpha-35);
+  max-height: 210px;
+  overflow: auto;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pi-files-dialog__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px;
+  border-radius: var(--radius-sm);
+  background: var(--white-alpha-45);
+}
+
+.pi-files-dialog__info {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.pi-files-dialog__name-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.pi-files-dialog__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--foreground);
+}
+
+.pi-files-dialog__workbook-tag {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  color: var(--pi-green);
+  background: var(--pi-green-light);
+}
+
+.pi-files-dialog__source-badge {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  color: var(--pi-blue, oklch(0.57 0.14 246));
+  background: color-mix(in oklch, var(--pi-blue, oklch(0.57 0.14 246)) 14%, white);
+}
+
+.pi-files-dialog__meta {
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  color: var(--muted-foreground);
+}
+
+.pi-files-dialog__actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.pi-files-dialog__row-btn {
+  border: 1px solid var(--alpha-10);
+  border-radius: var(--radius-xs);
+  background: var(--white-alpha-65);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  padding: 4px 7px;
+  cursor: pointer;
+}
+
+.pi-files-dialog__row-btn:hover {
+  background: var(--white-alpha-80);
+}
+
+.pi-files-dialog__row-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.pi-files-dialog__row-btn--danger {
+  color: oklch(0.56 0.2 24);
+}
+
+.pi-files-dialog__viewer {
+  border: var(--pi-divider);
+  border-radius: var(--radius-md);
+  background: var(--white-alpha-35);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pi-files-dialog__viewer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.pi-files-dialog__viewer-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--foreground);
+}
+
+.pi-files-dialog__viewer-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.pi-files-dialog__viewer-note {
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  color: var(--muted-foreground);
+}
+
+.pi-files-dialog__textarea {
+  width: 100%;
+  min-height: 130px;
+  max-height: 260px;
+  resize: vertical;
+  border: 1px solid var(--alpha-10);
+  border-radius: var(--radius-sm);
+  background: var(--white-alpha-65);
+  padding: 8px;
+  color: var(--foreground);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+}
+
+.pi-files-dialog__preview {
+  border: 1px solid var(--alpha-10);
+  border-radius: var(--radius-sm);
+  background: var(--white-alpha-65);
+  min-height: 120px;
+  max-height: 320px;
+  overflow: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+}
+
+.pi-files-dialog__preview-image {
+  max-width: 100%;
+  max-height: 300px;
+  display: block;
+}
+
+.pi-files-dialog__preview-frame {
+  width: 100%;
+  height: 300px;
+  border: none;
+  border-radius: var(--radius-xs);
+}
+
+.pi-files-dialog__preview-empty {
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  color: var(--muted-foreground);
+}
+
+.pi-files-dialog__empty {
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  color: var(--muted-foreground);
+  padding: 8px;
+}
+
+.pi-files-dialog__footer {
+  display: flex;
+  justify-content: flex-end;
+}

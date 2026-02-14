@@ -1,0 +1,80 @@
+/* ═══════════════════════════════════════════════════════
+   6b. WIDGET SLOT — inline extension widgets around input
+   ═══════════════════════════════════════════════════════ */
+
+.pi-widget-slot {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  backdrop-filter: var(--glass-blur-dropdown);
+  -webkit-backdrop-filter: var(--glass-blur-dropdown);
+}
+
+.pi-ext-widget-card {
+  padding: 10px;
+}
+
+.pi-ext-widget-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.pi-ext-widget-card.is-collapsed .pi-ext-widget-header {
+  margin-bottom: 0;
+}
+
+.pi-ext-widget-header--toggle {
+  width: 100%;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  padding: 2px;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.pi-ext-widget-header--toggle:hover {
+  background: var(--green-alpha-12);
+}
+
+.pi-ext-widget-header--toggle:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--pi-green-lighter);
+}
+
+.pi-ext-widget-title {
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.pi-ext-widget-header__state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted-foreground);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.pi-ext-widget-header__icon {
+  font-size: var(--text-base);
+  line-height: 1;
+}
+
+.pi-ext-widget-body {
+  min-height: 0;
+}
+
+.pi-ext-widget-body--scrollable {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+

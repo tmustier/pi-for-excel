@@ -1,0 +1,30 @@
+/* ═══════════════════════════════════════════════════════
+   10. WELCOME / LOGIN OVERLAY
+   ═══════════════════════════════════════════════════════ */
+
+.pi-welcome-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--alpha-25);
+  backdrop-filter: var(--glass-blur-heavy);
+  -webkit-backdrop-filter: var(--glass-blur-heavy);
+}
+
+.pi-welcome-card {
+  background: var(--glass-bg-solid);
+  border-radius: var(--radius-xl);
+  border: var(--glass-border);
+  padding: 28px 24px;
+  width: min(340px, 90vw);
+  max-height: min(680px, 86vh);
+  box-shadow: var(--glass-shadow-lg);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+

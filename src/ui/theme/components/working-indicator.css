@@ -1,0 +1,82 @@
+/* ═══════════════════════════════════════════════════════
+   6. WORKING INDICATOR
+   ═══════════════════════════════════════════════════════ */
+
+pi-working-indicator {
+  flex-shrink: 0;
+}
+
+.pi-working {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 6px 14px;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.pi-working__text {
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  font-weight: 500;
+  color: var(--primary);
+  transition: opacity var(--duration-normal) ease;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.pi-working__hint {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--muted-foreground);
+  opacity: 0.7;
+  letter-spacing: 0.02em;
+  transition: opacity var(--duration-normal) ease;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+/* Crossfade: fade out, swap text, fade in */
+.pi-working--fading {
+  opacity: 0;
+}
+
+/* Fixed (non-streaming) busy indicator — rendered as a pill + spinner */
+.pi-working--fixed {
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+.pi-working__pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: var(--radius-xs);
+  padding: 2px 8px;
+  background: var(--pi-green-lighter);
+  color: var(--primary);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.pi-working__spinner {
+  width: 12px;
+  height: 12px;
+  border-radius: var(--radius-full);
+  border: 2px solid oklch(0.55 0.1 160 / 0.25);
+  border-top-color: oklch(0.55 0.12 160);
+  animation: pi-spin 0.85s linear infinite;
+}
+
+@keyframes pi-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+
