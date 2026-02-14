@@ -18,7 +18,7 @@ export type ActionQueue = {
   isBusy: () => boolean;
 };
 
-const BUSY_ALLOWED_COMMANDS = new Set(["compact", "new", "resume", "reopen"]);
+const BUSY_ALLOWED_COMMANDS = new Set(["compact", "new", "resume", "reopen", "yolo"]);
 
 export function handleSlashCommandExecution(args: {
   event: KeyboardEvent;
