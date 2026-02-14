@@ -4,11 +4,51 @@
 
 import { ApiKeysTab, ProxyTab, SettingsDialog } from "@mariozechner/pi-web-ui/dist/dialogs/SettingsDialog.js";
 
+import type { ExecutionMode } from "../../execution/mode.js";
+import { formatExecutionModeLabel, toggleExecutionMode } from "../../execution/mode.js";
+import { showToast } from "../../ui/toast.js";
 import type { SlashCommand } from "../types.js";
 import { showProviderPicker } from "./overlays.js";
 
 export interface SettingsCommandActions {
   openInstructionsEditor: () => Promise<void>;
+  getExecutionMode: () => Promise<ExecutionMode>;
+  setExecutionMode: (mode: ExecutionMode) => Promise<void>;
+}
+
+function modeUsageText(): string {
+  return "Usage: /yolo [on|off|toggle|status]";
+}
+
+function modeDescription(mode: ExecutionMode): string {
+  if (mode === "yolo") {
+    return `${formatExecutionModeLabel(mode)} mode active — workbook mutations run without pre-execution confirmations.`;
+  }
+
+  return `${formatExecutionModeLabel(mode)} mode active — workbook mutations require pre-execution confirmation.`;
+}
+
+function parseExecutionModeArg(input: string): "status" | "toggle" | ExecutionMode | null {
+  const normalized = input.trim().toLowerCase();
+  if (normalized.length === 0) return "status";
+
+  if (normalized === "status" || normalized === "show" || normalized === "get") {
+    return "status";
+  }
+
+  if (normalized === "toggle") {
+    return "toggle";
+  }
+
+  if (normalized === "on" || normalized === "yolo" || normalized === "fast") {
+    return "yolo";
+  }
+
+  if (normalized === "off" || normalized === "safe" || normalized === "cautious") {
+    return "safe";
+  }
+
+  return null;
 }
 
 export function createSettingsCommands(actions: SettingsCommandActions): SlashCommand[] {
@@ -27,6 +67,36 @@ export function createSettingsCommands(actions: SettingsCommandActions): SlashCo
       source: "builtin",
       execute: async () => {
         await showProviderPicker();
+      },
+    },
+    {
+      name: "yolo",
+      description: "Toggle execution mode (YOLO vs Safe)",
+      source: "builtin",
+      execute: async (args: string) => {
+        const command = parseExecutionModeArg(args);
+        if (!command) {
+          showToast(modeUsageText());
+          return;
+        }
+
+        const currentMode = await actions.getExecutionMode();
+        if (command === "status") {
+          showToast(modeDescription(currentMode));
+          return;
+        }
+
+        const nextMode = command === "toggle"
+          ? toggleExecutionMode(currentMode)
+          : command;
+
+        if (nextMode === currentMode) {
+          showToast(modeDescription(currentMode));
+          return;
+        }
+
+        await actions.setExecutionMode(nextMode);
+        showToast(modeDescription(nextMode));
       },
     },
     {

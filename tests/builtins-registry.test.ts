@@ -144,6 +144,14 @@ void test("session builtins include recovery history command", async () => {
   assert.match(sessionSource, /name:\s*"revert"/);
 });
 
+void test("settings builtins include yolo execution-mode command", async () => {
+  const settingsSource = await readFile(new URL("../src/commands/builtins/settings.ts", import.meta.url), "utf8");
+
+  assert.match(settingsSource, /name:\s*"yolo"/);
+  assert.match(settingsSource, /Toggle execution mode \(YOLO vs Safe\)/);
+  assert.match(settingsSource, /Usage:\s*\/yolo/);
+});
+
 void test("taskpane init wires recovery overlay opener", async () => {
   const initSource = await readFile(new URL("../src/taskpane/init.ts", import.meta.url), "utf8");
 

@@ -10,6 +10,7 @@ import {
   WorkbookChangeAuditLog,
   type AppendWorkbookChangeAuditEntryArgs,
 } from "../src/audit/workbook-change-audit.ts";
+import { EXECUTION_MODE_SETTING_KEY } from "../src/execution/mode.ts";
 import { createCommentsTool } from "../src/tools/comments.ts";
 import { createViewSettingsTool } from "../src/tools/view-settings.ts";
 import { createWorkbookHistoryTool } from "../src/tools/workbook-history.ts";
@@ -156,6 +157,35 @@ void test("workbook change audit log appends and reloads entries", async () => {
   const entriesB = await logB.list();
   assert.equal(entriesB.length, 1);
   assert.equal(entriesB[0]?.toolCallId, "call-1");
+});
+
+void test("workbook change audit log records execution mode metadata", async () => {
+  const settingsStore = createInMemorySettingsStore();
+  await settingsStore.set(EXECUTION_MODE_SETTING_KEY, "safe");
+
+  const log = new WorkbookChangeAuditLog({
+    getSettingsStore: () => Promise.resolve(settingsStore),
+    getWorkbookContext: (): Promise<WorkbookContext> => Promise.resolve({
+      workbookId: "url_sha256:mode123",
+      workbookName: "Mode.xlsx",
+      source: "document.url",
+    }),
+    now: () => 1700000000025,
+    createId: () => "entry-mode",
+  });
+
+  await log.append({
+    toolName: "write_cells",
+    toolCallId: "call-mode",
+    blocked: false,
+    outputAddress: "Sheet1!A1",
+    changedCount: 1,
+    changes: [],
+  });
+
+  const entries = await log.list();
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0]?.executionMode, "safe");
 });
 
 void test("workbook change audit log clear removes persisted entries", async () => {

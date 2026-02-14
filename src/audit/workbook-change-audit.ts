@@ -3,6 +3,11 @@
  */
 
 import { formatWorkbookLabel, type WorkbookContext, getWorkbookContext } from "../workbook/context.js";
+import {
+  EXECUTION_MODE_SETTING_KEY,
+  normalizeExecutionMode,
+  type ExecutionMode,
+} from "../execution/mode.js";
 import { isRecord } from "../utils/type-guards.js";
 import type { WorkbookCellChange } from "./cell-diff.js";
 
@@ -32,6 +37,7 @@ export interface WorkbookChangeAuditEntry {
   changedCount: number;
   changes: WorkbookCellChange[];
   summary?: string;
+  executionMode?: ExecutionMode;
   workbookId?: string;
   workbookLabel?: string;
 }
@@ -45,6 +51,7 @@ export interface AppendWorkbookChangeAuditEntryArgs {
   changedCount: number;
   changes: WorkbookCellChange[];
   summary?: string;
+  executionMode?: ExecutionMode;
 }
 
 interface SettingsStoreLike {
@@ -145,6 +152,8 @@ function parseAuditEntry(value: unknown): WorkbookChangeAuditEntry | null {
   const id = typeof value.id === "string" ? value.id : defaultCreateId();
   const at = typeof value.at === "number" ? value.at : Date.now();
 
+  const rawExecutionMode = value.executionMode;
+
   return {
     id,
     at,
@@ -156,6 +165,7 @@ function parseAuditEntry(value: unknown): WorkbookChangeAuditEntry | null {
     changedCount: value.changedCount,
     changes: value.changes,
     summary: typeof value.summary === "string" ? value.summary : undefined,
+    executionMode: typeof rawExecutionMode === "string" ? normalizeExecutionMode(rawExecutionMode) : undefined,
     workbookId: typeof value.workbookId === "string" ? value.workbookId : undefined,
     workbookLabel: typeof value.workbookLabel === "string" ? value.workbookLabel : undefined,
   };
@@ -249,6 +259,19 @@ export class WorkbookChangeAuditLog {
       // ignore workbook context failures
     }
 
+    let executionMode: ExecutionMode | undefined = args.executionMode;
+    if (!executionMode) {
+      try {
+        const settings = await this.dependencies.getSettingsStore();
+        if (settings) {
+          const stored = await settings.get<unknown>(EXECUTION_MODE_SETTING_KEY);
+          executionMode = normalizeExecutionMode(stored);
+        }
+      } catch {
+        // ignore execution-mode lookup failures
+      }
+    }
+
     const entry: WorkbookChangeAuditEntry = {
       id: this.dependencies.createId(),
       at: this.dependencies.now(),
@@ -260,6 +283,7 @@ export class WorkbookChangeAuditLog {
       changedCount: args.changedCount,
       changes: args.changes,
       summary: args.summary,
+      executionMode: executionMode ?? "yolo",
       workbookId,
       workbookLabel,
     };

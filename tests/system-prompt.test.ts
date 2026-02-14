@@ -13,6 +13,22 @@ void test("system prompt includes default placeholders when instructions are abs
   assert.match(prompt, /\(No rules set\.\)/);
 });
 
+void test("system prompt defaults to YOLO execution mode guidance", () => {
+  const prompt = buildSystemPrompt();
+
+  assert.match(prompt, /## Execution mode/);
+  assert.match(prompt, /Current mode:\s*\*\*YOLO\*\*/);
+  assert.match(prompt, /low-friction execution/i);
+});
+
+void test("system prompt renders Safe execution mode guidance", () => {
+  const prompt = buildSystemPrompt({ executionMode: "safe" });
+
+  assert.match(prompt, /Current mode:\s*\*\*Safe\*\*/);
+  assert.match(prompt, /explicit user confirmation before mutating workbook tools/i);
+  assert.match(prompt, /destructive structure operations as high-risk/i);
+});
+
 void test("system prompt embeds provided user and workbook instructions", () => {
   const prompt = buildSystemPrompt({
     userInstructions: "Always use EUR",

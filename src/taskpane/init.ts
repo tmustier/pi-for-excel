@@ -52,6 +52,15 @@ import {
   getWorkbookRules,
   hasAnyRules,
 } from "../rules/store.js";
+import {
+  dispatchExecutionModeChanged,
+  formatExecutionModeLabel,
+  getStoredExecutionMode,
+  setStoredExecutionMode,
+  toggleExecutionMode,
+  PI_EXECUTION_MODE_CHANGED_EVENT,
+  type ExecutionMode,
+} from "../execution/mode.js";
 import { getResolvedConventions } from "../conventions/store.js";
 import {
   buildIntegrationPromptEntries,
@@ -121,6 +130,7 @@ const BUSY_ALLOWED_COMMANDS = new Set([
   "resume",
   "history",
   "reopen",
+  "yolo",
   "extensions",
   INTEGRATIONS_COMMAND_NAME,
 ]);
@@ -342,6 +352,29 @@ export async function initTaskpane(opts: {
     document.dispatchEvent(new CustomEvent("pi:status-update"));
   };
 
+  let executionMode: ExecutionMode = await getStoredExecutionMode(settings);
+
+  const getExecutionMode = (): ExecutionMode => executionMode;
+
+  const applyExecutionMode = async (mode: ExecutionMode): Promise<void> => {
+    if (executionMode === mode) {
+      return;
+    }
+
+    executionMode = await setStoredExecutionMode(settings, mode);
+    dispatchExecutionModeChanged(executionMode);
+  };
+
+  const setExecutionMode = async (mode: ExecutionMode): Promise<void> => {
+    await applyExecutionMode(mode);
+  };
+
+  const toggleExecutionModeFromUi = async (): Promise<void> => {
+    const nextMode = toggleExecutionMode(executionMode);
+    await applyExecutionMode(nextMode);
+    showToast(`${formatExecutionModeLabel(nextMode)} mode active.`);
+  };
+
   const resolveWorkbookContext = async (): Promise<Awaited<ReturnType<typeof getWorkbookContext>>> => {
     try {
       return await getWorkbookContext();
@@ -408,11 +441,12 @@ export async function initTaskpane(opts: {
         workbookInstructions: workbookRules,
         activeIntegrations,
         availableSkills,
+        executionMode,
         conventions,
       });
     } catch {
       setRulesActive(false);
-      return buildSystemPrompt({ availableSkills });
+      return buildSystemPrompt({ availableSkills, executionMode });
     }
   };
 
@@ -647,6 +681,10 @@ export async function initTaskpane(opts: {
     void refreshCapabilitiesForAllRuntimes();
   });
 
+  document.addEventListener(PI_EXECUTION_MODE_CHANGED_EVENT, () => {
+    void refreshCapabilitiesForAllRuntimes();
+  });
+
   const createRuntime = async (optsForRuntime: {
     activate: boolean;
     autoRestoreLatest: boolean;
@@ -693,6 +731,9 @@ export async function initTaskpane(opts: {
             if (event.impact !== "structure") return;
             invalidateBlueprint(event.workbookId);
           },
+        },
+        {
+          getExecutionMode: () => Promise.resolve(executionMode),
         },
       );
 
@@ -1242,6 +1283,8 @@ export async function initTaskpane(opts: {
         },
       });
     },
+    getExecutionMode: () => Promise.resolve(getExecutionMode()),
+    setExecutionMode,
     openExtensionsManager: () => {
       showExtensionsDialog(extensionManager);
     },
@@ -1454,6 +1497,7 @@ export async function initTaskpane(opts: {
     getActiveAgent,
     getLockState: getActiveLockState,
     getRulesActive: () => rulesActive,
+    getExecutionMode,
     getActiveIntegrations: getActiveIntegrationTitles,
   });
 
@@ -1555,6 +1599,13 @@ export async function initTaskpane(opts: {
           await refreshWorkbookState();
         },
       });
+      return;
+    }
+
+    // Execution mode toggle
+    if (el.closest(".pi-status-mode")) {
+      closeStatusPopover();
+      void toggleExecutionModeFromUi();
       return;
     }
 

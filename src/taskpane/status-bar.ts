@@ -12,17 +12,20 @@ import {
   ACTIVE_INTEGRATIONS_TOOLTIP_PREFIX,
   formatIntegrationCountLabel,
 } from "../integrations/naming.js";
+import type { ExecutionMode } from "../execution/mode.js";
 import type { RuntimeLockState } from "./session-runtime-manager.js";
 
 export type ActiveAgentProvider = () => Agent | null;
 export type ActiveLockStateProvider = () => RuntimeLockState;
 export type ActiveRulesProvider = () => boolean;
+export type ActiveExecutionModeProvider = () => ExecutionMode;
 export type ActiveIntegrationsProvider = () => string[];
 
 function renderStatusBar(
   agent: Agent | null,
   lockState: RuntimeLockState,
   rulesActive: boolean,
+  executionMode: ExecutionMode,
   activeIntegrations: string[],
 ): void {
   const el = document.getElementById("pi-status-bar");
@@ -111,6 +114,14 @@ function renderStatusBar(
     : "Click to edit rules &amp; number format preferences.";
   const rulesBadge = `<button type="button" class="pi-status-rules pi-status-clickable${rulesActiveClass}" data-tooltip="${rulesTooltip}">${rulesSvg}<span>rules</span><span class="pi-status-affordance" aria-hidden="true">${affordanceChevronSvg}</span></button>`;
 
+  const modeIsYolo = executionMode === "yolo";
+  const modeBadgeClass = modeIsYolo ? " pi-status-mode--yolo" : " pi-status-mode--safe";
+  const modeLabel = modeIsYolo ? "yolo" : "safe";
+  const modeTooltip = modeIsYolo
+    ? "YOLO mode: mutating tool calls run without pre-execution confirmation. Click to switch to Safe mode."
+    : "Safe mode: mutating tool calls require pre-execution confirmation. Click to switch to YOLO mode.";
+  const modeBadge = `<button type="button" class="pi-status-mode pi-status-clickable${modeBadgeClass}" data-tooltip="${modeTooltip}"><span>${modeLabel}</span><span class="pi-status-affordance" aria-hidden="true">${affordanceChevronSvg}</span></button>`;
+
   const integrationsBadge = activeIntegrations.length > 0
     ? `<button type="button" class="pi-status-integrations pi-status-clickable" data-tooltip="${ACTIVE_INTEGRATIONS_TOOLTIP_PREFIX}: ${escapeAttr(activeIntegrations.join(", "))}. Click to manage.">${integrationsSvg}<span>${formatIntegrationCountLabel(activeIntegrations.length)}</span><span class="pi-status-affordance" aria-hidden="true">${affordanceChevronSvg}</span></button>`
     : "";
@@ -123,6 +134,7 @@ function renderStatusBar(
     <button type="button" class="pi-status-ctx pi-status-ctx--trigger pi-status-clickable has-tooltip" data-status-popover="${ctxPopoverText}" aria-label="Context usage ${pct}% of ${ctxLabel}"><span class="${ctxColor}">${pct}%</span> / ${ctxLabel}${usageDebug}<span class="pi-status-affordance" aria-hidden="true">${affordanceChevronSvg}</span><span class="pi-tooltip pi-tooltip--left">${ctxBaseTooltip}${ctxWarning}</span></button>
     ${lockBadge}
     ${rulesBadge}
+    ${modeBadge}
     ${integrationsBadge}
     <button type="button" class="pi-status-model pi-status-clickable" data-tooltip="Switch the AI model powering this session">
       <span class="pi-status-model__mark">π</span>
@@ -137,31 +149,35 @@ export function updateStatusBarForAgent(
   agent: Agent,
   lockState: RuntimeLockState = "idle",
   rulesActive = false,
+  executionMode: ExecutionMode = "yolo",
   activeIntegrations: string[] = [],
 ): void {
-  renderStatusBar(agent, lockState, rulesActive, activeIntegrations);
+  renderStatusBar(agent, lockState, rulesActive, executionMode, activeIntegrations);
 }
 
 export function updateStatusBar(
   getActiveAgent: ActiveAgentProvider,
   getLockState?: ActiveLockStateProvider,
   getRulesActive?: ActiveRulesProvider,
+  getExecutionMode?: ActiveExecutionModeProvider,
   getActiveIntegrations?: ActiveIntegrationsProvider,
 ): void {
   const activeAgent = getActiveAgent();
   const lockState = getLockState ? getLockState() : "idle";
   const rulesActive = getRulesActive ? getRulesActive() : false;
+  const executionMode = getExecutionMode ? getExecutionMode() : "yolo";
   const activeIntegrations = getActiveIntegrations ? getActiveIntegrations() : [];
-  renderStatusBar(activeAgent, lockState, rulesActive, activeIntegrations);
+  renderStatusBar(activeAgent, lockState, rulesActive, executionMode, activeIntegrations);
 }
 
 export function injectStatusBar(opts: {
   getActiveAgent: ActiveAgentProvider;
   getLockState?: ActiveLockStateProvider;
   getRulesActive?: ActiveRulesProvider;
+  getExecutionMode?: ActiveExecutionModeProvider;
   getActiveIntegrations?: ActiveIntegrationsProvider;
 }): () => void {
-  const { getActiveAgent, getLockState, getRulesActive, getActiveIntegrations } = opts;
+  const { getActiveAgent, getLockState, getRulesActive, getExecutionMode, getActiveIntegrations } = opts;
 
   let unsubscribeActiveAgent: (() => void) | undefined;
 
@@ -171,16 +187,16 @@ export function injectStatusBar(opts: {
     const activeAgent = getActiveAgent();
     if (activeAgent) {
       unsubscribeActiveAgent = activeAgent.subscribe(
-        () => updateStatusBar(getActiveAgent, getLockState, getRulesActive, getActiveIntegrations),
+        () => updateStatusBar(getActiveAgent, getLockState, getRulesActive, getExecutionMode, getActiveIntegrations),
       );
     } else {
       unsubscribeActiveAgent = undefined;
     }
 
-    updateStatusBar(getActiveAgent, getLockState, getRulesActive, getActiveIntegrations);
+    updateStatusBar(getActiveAgent, getLockState, getRulesActive, getExecutionMode, getActiveIntegrations);
   };
 
-  const onStatusUpdate = () => updateStatusBar(getActiveAgent, getLockState, getRulesActive, getActiveIntegrations);
+  const onStatusUpdate = () => updateStatusBar(getActiveAgent, getLockState, getRulesActive, getExecutionMode, getActiveIntegrations);
 
   document.addEventListener("pi:status-update", onStatusUpdate);
   document.addEventListener("pi:active-runtime-changed", bindActiveAgent);
