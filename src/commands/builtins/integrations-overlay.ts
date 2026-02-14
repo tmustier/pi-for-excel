@@ -47,8 +47,12 @@ import {
 } from "../../tools/mcp-config.js";
 import {
   closeOverlayById,
+  createOverlayBadge,
+  createOverlayButton,
   createOverlayDialog,
   createOverlayHeader,
+  createOverlayInput,
+  createOverlaySectionTitle,
 } from "../../ui/overlay-dialog.js";
 import { INTEGRATIONS_OVERLAY_ID } from "../../ui/overlay-ids.js";
 import { showToast } from "../../ui/toast.js";
@@ -91,36 +95,6 @@ function normalizeWebSearchProvider(value: string): WebSearchProvider {
     return value;
   }
   return "serper";
-}
-
-function createButton(text: string): HTMLButtonElement {
-  const button = document.createElement("button");
-  button.type = "button";
-  button.textContent = text;
-  button.className = "pi-overlay-btn pi-overlay-btn--ghost";
-  return button;
-}
-
-function createInput(placeholder: string, type: "text" | "password" = "text"): HTMLInputElement {
-  const input = document.createElement("input");
-  input.type = type;
-  input.placeholder = placeholder;
-  input.className = "pi-overlay-input";
-  return input;
-}
-
-function createSectionTitle(text: string): HTMLHeadingElement {
-  const title = document.createElement("h3");
-  title.textContent = text;
-  title.className = "pi-overlay-section-title";
-  return title;
-}
-
-function createBadge(text: string, tone: "ok" | "warn" | "muted"): HTMLSpanElement {
-  const badge = document.createElement("span");
-  badge.textContent = text;
-  badge.className = `pi-overlay-badge pi-overlay-badge--${tone}`;
-  return badge;
 }
 
 function isEnabledInList(integrationIds: readonly string[], integrationId: string): boolean {
@@ -338,11 +312,11 @@ function createIntegrationCard(args: {
   badges.className = "pi-overlay-badges";
 
   if (isEnabledInList(snapshot.activeIntegrationIds, integration.id) && snapshot.externalToolsEnabled) {
-    badges.appendChild(createBadge("active", "ok"));
+    badges.appendChild(createOverlayBadge("active", "ok"));
   } else if (isEnabledInList(snapshot.activeIntegrationIds, integration.id) && !snapshot.externalToolsEnabled) {
-    badges.appendChild(createBadge("configured (blocked)", "warn"));
+    badges.appendChild(createOverlayBadge("configured (blocked)", "warn"));
   } else {
-    badges.appendChild(createBadge("inactive", "muted"));
+    badges.appendChild(createOverlayBadge("inactive", "muted"));
   }
 
   top.append(textWrap, badges);
@@ -413,7 +387,7 @@ export function showIntegrationsDialog(dependencies: IntegrationsDialogDependenc
 
   const externalSection = document.createElement("section");
   externalSection.className = "pi-overlay-section";
-  externalSection.appendChild(createSectionTitle("External tools gate"));
+  externalSection.appendChild(createOverlaySectionTitle("External tools gate"));
 
   const externalCard = document.createElement("div");
   externalCard.className = "pi-overlay-surface";
@@ -437,7 +411,7 @@ export function showIntegrationsDialog(dependencies: IntegrationsDialogDependenc
 
   const integrationsSection = document.createElement("section");
   integrationsSection.className = "pi-overlay-section";
-  integrationsSection.appendChild(createSectionTitle(`${INTEGRATIONS_LABEL} bundles`));
+  integrationsSection.appendChild(createOverlaySectionTitle(`${INTEGRATIONS_LABEL} bundles`));
 
   const integrationsList = document.createElement("div");
   integrationsList.className = "pi-overlay-list";
@@ -445,7 +419,7 @@ export function showIntegrationsDialog(dependencies: IntegrationsDialogDependenc
 
   const webSearchSection = document.createElement("section");
   webSearchSection.className = "pi-overlay-section";
-  webSearchSection.appendChild(createSectionTitle("Web search config"));
+  webSearchSection.appendChild(createOverlaySectionTitle("Web search config"));
 
   const webSearchCard = document.createElement("div");
   webSearchCard.className = "pi-overlay-surface";
@@ -476,10 +450,10 @@ export function showIntegrationsDialog(dependencies: IntegrationsDialogDependenc
   const webSearchInputRow = document.createElement("div");
   webSearchInputRow.className = "pi-integrations-web-search-row";
 
-  const webSearchApiKeyInput = createInput("API key", "password");
-  const webSearchSaveButton = createButton("Save key");
-  const webSearchValidateButton = createButton("Validate");
-  const webSearchClearButton = createButton("Clear");
+  const webSearchApiKeyInput = createOverlayInput({ placeholder: "API key", type: "password" });
+  const webSearchSaveButton = createOverlayButton({ text: "Save key" });
+  const webSearchValidateButton = createOverlayButton({ text: "Validate" });
+  const webSearchClearButton = createOverlayButton({ text: "Clear" });
 
   webSearchInputRow.append(
     webSearchApiKeyInput,
@@ -505,7 +479,7 @@ export function showIntegrationsDialog(dependencies: IntegrationsDialogDependenc
 
   const mcpSection = document.createElement("section");
   mcpSection.className = "pi-overlay-section";
-  mcpSection.appendChild(createSectionTitle("MCP servers"));
+  mcpSection.appendChild(createOverlaySectionTitle("MCP servers"));
 
   const mcpList = document.createElement("div");
   mcpList.className = "pi-overlay-list";
@@ -520,9 +494,9 @@ export function showIntegrationsDialog(dependencies: IntegrationsDialogDependenc
   const mcpAddRow = document.createElement("div");
   mcpAddRow.className = "pi-integrations-mcp-add-row";
 
-  const mcpNameInput = createInput("Name");
-  const mcpUrlInput = createInput("https://example.com/mcp");
-  const mcpTokenInput = createInput("Bearer token (optional)", "password");
+  const mcpNameInput = createOverlayInput({ placeholder: "Name" });
+  const mcpUrlInput = createOverlayInput({ placeholder: "https://example.com/mcp" });
+  const mcpTokenInput = createOverlayInput({ placeholder: "Bearer token (optional)", type: "password" });
 
   const mcpEnabledLabel = document.createElement("label");
   mcpEnabledLabel.className = "pi-integrations-toggle-label";
@@ -531,7 +505,7 @@ export function showIntegrationsDialog(dependencies: IntegrationsDialogDependenc
   mcpEnabledInput.checked = true;
   mcpEnabledLabel.append(mcpEnabledInput, document.createTextNode("Enabled"));
 
-  const mcpAddButton = createButton("Add");
+  const mcpAddButton = createOverlayButton({ text: "Add" });
 
   mcpAddRow.append(mcpNameInput, mcpUrlInput, mcpTokenInput, mcpEnabledLabel, mcpAddButton);
 
@@ -615,9 +589,9 @@ export function showIntegrationsDialog(dependencies: IntegrationsDialogDependenc
 
     const badges = document.createElement("div");
     badges.className = "pi-overlay-badges";
-    badges.appendChild(createBadge(server.enabled ? "enabled" : "disabled", server.enabled ? "ok" : "muted"));
+    badges.appendChild(createOverlayBadge(server.enabled ? "enabled" : "disabled", server.enabled ? "ok" : "muted"));
     if (server.token) {
-      badges.appendChild(createBadge("token set", "muted"));
+      badges.appendChild(createOverlayBadge("token set", "muted"));
     }
 
     top.append(info, badges);
@@ -625,8 +599,8 @@ export function showIntegrationsDialog(dependencies: IntegrationsDialogDependenc
     const actions = document.createElement("div");
     actions.className = "pi-overlay-actions pi-overlay-actions--wrap";
 
-    const testButton = createButton("Test");
-    const removeButton = createButton("Remove");
+    const testButton = createOverlayButton({ text: "Test" });
+    const removeButton = createOverlayButton({ text: "Remove" });
 
     testButton.addEventListener("click", () => {
       void runAction(async () => {

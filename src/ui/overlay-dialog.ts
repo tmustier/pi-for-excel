@@ -94,6 +94,54 @@ function mergeClassName(baseClassName: string, className?: string): string {
     : baseClassName;
 }
 
+export interface OverlayButtonOptions {
+  text: string;
+  className?: string;
+  type?: "button" | "submit" | "reset";
+}
+
+export function createOverlayButton(options: OverlayButtonOptions): HTMLButtonElement {
+  const button = document.createElement("button");
+
+  button.type = options.type ?? "button";
+  button.textContent = options.text;
+  button.className = mergeClassName("pi-overlay-btn pi-overlay-btn--ghost", options.className);
+
+  return button;
+}
+
+export interface OverlayInputOptions {
+  placeholder: string;
+  type?: "text" | "password";
+  className?: string;
+}
+
+export function createOverlayInput(options: OverlayInputOptions): HTMLInputElement {
+  const input = document.createElement("input");
+
+  input.type = options.type ?? "text";
+  input.placeholder = options.placeholder;
+  input.className = mergeClassName("pi-overlay-input", options.className);
+
+  return input;
+}
+
+export function createOverlaySectionTitle(text: string): HTMLHeadingElement {
+  const title = document.createElement("h3");
+  title.className = "pi-overlay-section-title";
+  title.textContent = text;
+  return title;
+}
+
+export type OverlayBadgeTone = "ok" | "warn" | "muted";
+
+export function createOverlayBadge(text: string, tone: OverlayBadgeTone): HTMLSpanElement {
+  const badge = document.createElement("span");
+  badge.className = `pi-overlay-badge pi-overlay-badge--${tone}`;
+  badge.textContent = text;
+  return badge;
+}
+
 export function createOverlayHeader(options: OverlayHeaderOptions): OverlayHeaderElements {
   const header = document.createElement("div");
   header.className = "pi-overlay-header";

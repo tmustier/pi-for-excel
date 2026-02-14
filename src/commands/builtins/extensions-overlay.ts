@@ -17,8 +17,12 @@ import { isExperimentalFeatureEnabled, setExperimentalFeatureEnabled } from "../
 import { PYTHON_BRIDGE_URL_SETTING_KEY } from "../../tools/experimental-tool-gates.js";
 import {
   closeOverlayById,
+  createOverlayBadge,
+  createOverlayButton,
   createOverlayDialog,
   createOverlayHeader,
+  createOverlayInput,
+  createOverlaySectionTitle,
 } from "../../ui/overlay-dialog.js";
 import { EXTENSIONS_OVERLAY_ID } from "../../ui/overlay-ids.js";
 import { showToast } from "../../ui/toast.js";
@@ -135,36 +139,6 @@ function confirmExtensionInstall(args: {
   return window.confirm(lines.join("\n"));
 }
 
-function createSectionTitle(text: string): HTMLHeadingElement {
-  const title = document.createElement("h3");
-  title.textContent = text;
-  title.className = "pi-overlay-section-title";
-  return title;
-}
-
-function createButton(text: string): HTMLButtonElement {
-  const button = document.createElement("button");
-  button.type = "button";
-  button.textContent = text;
-  button.className = "pi-overlay-btn pi-overlay-btn--ghost";
-  return button;
-}
-
-function createInput(placeholder: string): HTMLInputElement {
-  const input = document.createElement("input");
-  input.type = "text";
-  input.placeholder = placeholder;
-  input.className = "pi-overlay-input";
-  return input;
-}
-
-function createBadge(text: string, color: "ok" | "warn" | "muted"): HTMLSpanElement {
-  const badge = document.createElement("span");
-  badge.textContent = text;
-  badge.className = `pi-overlay-badge pi-overlay-badge--${color}`;
-  return badge;
-}
-
 function createReadOnlyCodeBlock(text: string): HTMLTextAreaElement {
   const area = document.createElement("textarea");
   area.readOnly = true;
@@ -225,7 +199,7 @@ export function showExtensionsDialog(manager: ExtensionRuntimeManager): void {
 
   const installedSection = document.createElement("section");
   installedSection.className = "pi-overlay-section";
-  installedSection.appendChild(createSectionTitle("Installed"));
+  installedSection.appendChild(createOverlaySectionTitle("Installed"));
 
   const installedList = document.createElement("div");
   installedList.className = "pi-overlay-list";
@@ -233,7 +207,7 @@ export function showExtensionsDialog(manager: ExtensionRuntimeManager): void {
 
   const sandboxSection = document.createElement("section");
   sandboxSection.className = "pi-overlay-section";
-  sandboxSection.appendChild(createSectionTitle("Sandbox runtime (default for untrusted sources)"));
+  sandboxSection.appendChild(createOverlaySectionTitle("Sandbox runtime (default for untrusted sources)"));
 
   const sandboxCard = document.createElement("div");
   sandboxCard.className = "pi-overlay-surface pi-ext-local-bridge-card";
@@ -252,8 +226,8 @@ export function showExtensionsDialog(manager: ExtensionRuntimeManager): void {
   const sandboxActions = document.createElement("div");
   sandboxActions.className = "pi-overlay-actions";
 
-  const sandboxEnableButton = createButton("Enable host-runtime fallback");
-  const sandboxDisableButton = createButton("Disable host-runtime fallback");
+  const sandboxEnableButton = createOverlayButton({ text: "Enable host-runtime fallback" });
+  const sandboxDisableButton = createOverlayButton({ text: "Disable host-runtime fallback" });
 
   sandboxActions.append(sandboxEnableButton, sandboxDisableButton);
 
@@ -267,7 +241,7 @@ export function showExtensionsDialog(manager: ExtensionRuntimeManager): void {
 
   const localBridgeSection = document.createElement("section");
   localBridgeSection.className = "pi-overlay-section";
-  localBridgeSection.appendChild(createSectionTitle("Local Python / LibreOffice bridge (experimental)"));
+  localBridgeSection.appendChild(createOverlaySectionTitle("Local Python / LibreOffice bridge (experimental)"));
 
   const localBridgeCard = document.createElement("div");
   localBridgeCard.className = "pi-overlay-surface pi-ext-local-bridge-card";
@@ -286,10 +260,10 @@ export function showExtensionsDialog(manager: ExtensionRuntimeManager): void {
   const localBridgeUrlRow = document.createElement("div");
   localBridgeUrlRow.className = "pi-ext-local-bridge-url-row";
 
-  const localBridgeUrlInput = createInput("https://localhost:3340");
-  const localBridgeEnableButton = createButton("Enable + save URL");
-  const localBridgeSaveUrlButton = createButton("Save URL");
-  const localBridgeDisableButton = createButton("Disable");
+  const localBridgeUrlInput = createOverlayInput({ placeholder: "https://localhost:3340" });
+  const localBridgeEnableButton = createOverlayButton({ text: "Enable + save URL" });
+  const localBridgeSaveUrlButton = createOverlayButton({ text: "Save URL" });
+  const localBridgeDisableButton = createOverlayButton({ text: "Disable" });
 
   localBridgeUrlRow.append(
     localBridgeUrlInput,
@@ -308,14 +282,14 @@ export function showExtensionsDialog(manager: ExtensionRuntimeManager): void {
 
   const installUrlSection = document.createElement("section");
   installUrlSection.className = "pi-overlay-section";
-  installUrlSection.appendChild(createSectionTitle("Install from URL"));
+  installUrlSection.appendChild(createOverlaySectionTitle("Install from URL"));
 
   const installUrlRow = document.createElement("div");
   installUrlRow.className = "pi-ext-install-url-row";
 
-  const installUrlName = createInput("Name");
-  const installUrlInput = createInput("https://example.com/pi-extension.js");
-  const installUrlButton = createButton("Install");
+  const installUrlName = createOverlayInput({ placeholder: "Name" });
+  const installUrlInput = createOverlayInput({ placeholder: "https://example.com/pi-extension.js" });
+  const installUrlButton = createOverlayButton({ text: "Install" });
 
   installUrlRow.append(installUrlName, installUrlInput, installUrlButton);
 
@@ -327,28 +301,28 @@ export function showExtensionsDialog(manager: ExtensionRuntimeManager): void {
 
   const installCodeSection = document.createElement("section");
   installCodeSection.className = "pi-overlay-section";
-  installCodeSection.appendChild(createSectionTitle("Install from pasted code"));
+  installCodeSection.appendChild(createOverlaySectionTitle("Install from pasted code"));
 
-  const installCodeName = createInput("Name");
+  const installCodeName = createOverlayInput({ placeholder: "Name" });
   const installCodeText = document.createElement("textarea");
   installCodeText.placeholder = "export function activate(api) { ... }";
   installCodeText.className = "pi-ext-install-code";
 
   const installCodeActions = document.createElement("div");
   installCodeActions.className = "pi-overlay-actions";
-  const installCodeButton = createButton("Install code");
+  const installCodeButton = createOverlayButton({ text: "Install code" });
   installCodeActions.appendChild(installCodeButton);
 
   installCodeSection.append(installCodeName, installCodeText, installCodeActions);
 
   const templateSection = document.createElement("section");
   templateSection.className = "pi-overlay-section";
-  templateSection.appendChild(createSectionTitle("LLM prompt template"));
+  templateSection.appendChild(createOverlaySectionTitle("LLM prompt template"));
 
   const templateCode = createReadOnlyCodeBlock(EXTENSION_PROMPT_TEMPLATE);
   const templateActions = document.createElement("div");
   templateActions.className = "pi-overlay-actions";
-  const copyTemplateButton = createButton("Copy template");
+  const copyTemplateButton = createOverlayButton({ text: "Copy template" });
   templateActions.appendChild(copyTemplateButton);
 
   templateSection.append(templateCode, templateActions);
@@ -397,7 +371,7 @@ export function showExtensionsDialog(manager: ExtensionRuntimeManager): void {
     }
 
     sandboxStatusBadgeSlot.replaceChildren(
-      createBadge(rollbackEnabled ? "rollback" : "default-on", rollbackEnabled ? "warn" : "ok"),
+      createOverlayBadge(rollbackEnabled ? "rollback" : "default-on", rollbackEnabled ? "warn" : "ok"),
     );
 
     sandboxEnableButton.disabled = rollbackEnabled;
@@ -417,7 +391,7 @@ export function showExtensionsDialog(manager: ExtensionRuntimeManager): void {
       : "Bridge URL not set";
 
     localBridgeStatusBadgeSlot.replaceChildren(
-      createBadge(enabled ? "enabled" : "disabled", enabled ? "ok" : "muted"),
+      createOverlayBadge(enabled ? "enabled" : "disabled", enabled ? "ok" : "muted"),
     );
   };
 
@@ -462,40 +436,40 @@ export function showExtensionsDialog(manager: ExtensionRuntimeManager): void {
     badges.className = "pi-overlay-badges";
 
     if (!status.enabled) {
-      badges.appendChild(createBadge("disabled", "muted"));
+      badges.appendChild(createOverlayBadge("disabled", "muted"));
     } else if (status.lastError) {
-      badges.appendChild(createBadge("error", "warn"));
+      badges.appendChild(createOverlayBadge("error", "warn"));
     } else if (status.loaded) {
-      badges.appendChild(createBadge("loaded", "ok"));
+      badges.appendChild(createOverlayBadge("loaded", "ok"));
     } else {
-      badges.appendChild(createBadge("pending", "muted"));
+      badges.appendChild(createOverlayBadge("pending", "muted"));
     }
 
     const trustIsUntrusted = status.trust === "remote-url" || status.trust === "inline-code";
     const trustBadgeColor = trustIsUntrusted ? "warn" : "muted";
-    badges.appendChild(createBadge(status.trustLabel, trustBadgeColor));
+    badges.appendChild(createOverlayBadge(status.trustLabel, trustBadgeColor));
 
     const runtimeBadgeColor = status.runtimeMode === "sandbox-iframe"
       ? "ok"
       : trustIsUntrusted
         ? "warn"
         : "muted";
-    badges.appendChild(createBadge(status.runtimeLabel, runtimeBadgeColor));
+    badges.appendChild(createOverlayBadge(status.runtimeLabel, runtimeBadgeColor));
 
     badges.appendChild(
-      createBadge(`${status.effectiveCapabilities.length} permission${status.effectiveCapabilities.length === 1 ? "" : "s"}`, "muted"),
+      createOverlayBadge(`${status.effectiveCapabilities.length} permission${status.effectiveCapabilities.length === 1 ? "" : "s"}`, "muted"),
     );
 
     if (!status.permissionsEnforced) {
-      badges.appendChild(createBadge("gates off", "warn"));
+      badges.appendChild(createOverlayBadge("gates off", "warn"));
     }
 
     if (status.toolNames.length > 0) {
-      badges.appendChild(createBadge(`${status.toolNames.length} tool${status.toolNames.length === 1 ? "" : "s"}`, "muted"));
+      badges.appendChild(createOverlayBadge(`${status.toolNames.length} tool${status.toolNames.length === 1 ? "" : "s"}`, "muted"));
     }
 
     if (status.commandNames.length > 0) {
-      badges.appendChild(createBadge(`${status.commandNames.length} command${status.commandNames.length === 1 ? "" : "s"}`, "muted"));
+      badges.appendChild(createOverlayBadge(`${status.commandNames.length} command${status.commandNames.length === 1 ? "" : "s"}`, "muted"));
     }
 
     top.append(info, badges);
@@ -617,7 +591,7 @@ export function showExtensionsDialog(manager: ExtensionRuntimeManager): void {
     const actions = document.createElement("div");
     actions.className = "pi-overlay-actions pi-overlay-actions--wrap";
 
-    const toggleButton = createButton(status.enabled ? "Disable" : "Enable");
+    const toggleButton = createOverlayButton({ text: status.enabled ? "Disable" : "Enable" });
     toggleButton.addEventListener("click", () => {
       const nextEnabled = !status.enabled;
 
@@ -630,7 +604,7 @@ export function showExtensionsDialog(manager: ExtensionRuntimeManager): void {
       });
     });
 
-    const reloadButton = createButton("Reload");
+    const reloadButton = createOverlayButton({ text: "Reload" });
     reloadButton.disabled = !status.enabled;
     reloadButton.addEventListener("click", () => {
       void runAction(async () => {
@@ -638,7 +612,7 @@ export function showExtensionsDialog(manager: ExtensionRuntimeManager): void {
       });
     });
 
-    const uninstallButton = createButton("Uninstall");
+    const uninstallButton = createOverlayButton({ text: "Uninstall" });
     uninstallButton.addEventListener("click", () => {
       const confirmed = window.confirm(`Uninstall extension "${status.name}"?`);
       if (!confirmed) {

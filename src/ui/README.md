@@ -87,7 +87,7 @@ pi-web-ui uses Light DOM (`createRenderRoot() { return this; }`), so styles leak
 | `theme-mode.ts` | — | Applies/removes `.dark` based on Office theme background (fallback: `prefers-color-scheme`) |
 | `loading.ts` | — | Splash screen shown during init |
 | `provider-login.ts` | — | API key entry rows for the welcome overlay |
-| `overlay-dialog.ts` | — | Shared overlay lifecycle helper (single-instance toggle, Escape/backdrop close, focus restore) + shared overlay chrome builders (`createOverlayCloseButton`, `createOverlayHeader`) |
+| `overlay-dialog.ts` | — | Shared overlay lifecycle helper (single-instance toggle, Escape/backdrop close, focus restore) + shared overlay chrome/DOM builders (`createOverlayCloseButton`, `createOverlayHeader`, `createOverlayButton`, `createOverlayInput`, `createOverlaySectionTitle`, `createOverlayBadge`) |
 | `overlay-ids.ts` | — | Shared overlay id constants used across builtins/extensions/taskpane |
 
 ## Wiring (taskpane.ts)
