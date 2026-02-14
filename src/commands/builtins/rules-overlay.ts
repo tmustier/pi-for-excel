@@ -814,6 +814,7 @@ export async function showRulesDialog(opts?: {
     onClose: closeOverlay,
     closeLabel: "Close rules",
     title: "Rules",
+    subtitle: "Set guidance for all files, this workbook, and formatting conventions.",
   });
 
   const tabs = document.createElement("div");

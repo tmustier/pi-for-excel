@@ -87,7 +87,7 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
     onClose: closeOverlay,
     closeLabel: "Close files",
     title: "Files",
-    subtitle: "",
+    subtitle: "Storage: loading…",
   });
 
   if (!subtitle) {

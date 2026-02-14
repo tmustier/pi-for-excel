@@ -114,7 +114,7 @@ export async function showResumeDialog(opts: {
     onClose: closeOverlay,
     closeLabel: "Close resume sessions",
     title: "Resume Session",
-    titleClassName: "pi-resume-dialog__title",
+    subtitle: "Pick a previous session and choose whether to open it in a new tab or replace the current tab.",
   });
 
   const targetControls = document.createElement("div");

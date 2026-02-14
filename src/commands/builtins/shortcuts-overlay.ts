@@ -104,6 +104,7 @@ export function showShortcutsDialog(): void {
     onClose: dialog.close,
     closeLabel: "Close keyboard shortcuts",
     title: "Keyboard Shortcuts",
+    subtitle: "Quick reference for chat, tabs, navigation, and system shortcuts.",
   });
 
   const list = document.createElement("div");

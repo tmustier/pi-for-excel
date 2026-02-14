@@ -14,11 +14,6 @@
   overflow: hidden;
 }
 
-.pi-resume-dialog__title {
-  margin-bottom: 12px;
-  flex-shrink: 0;
-}
-
 .pi-resume-target-controls {
   display: flex;
   gap: 6px;
