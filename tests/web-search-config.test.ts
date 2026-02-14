@@ -1,0 +1,64 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+
+import {
+  clearWebSearchApiKey,
+  getApiKeyForProvider,
+  loadWebSearchProviderConfig,
+  saveWebSearchApiKey,
+  saveWebSearchProvider,
+  type WebSearchConfigStore,
+} from "../src/tools/web-search-config.ts";
+
+class MemorySettingsStore implements WebSearchConfigStore {
+  private readonly values = new Map<string, unknown>();
+
+  get(key: string): Promise<unknown> {
+    return Promise.resolve(this.values.has(key) ? this.values.get(key) ?? null : null);
+  }
+
+  set(key: string, value: unknown): Promise<void> {
+    this.values.set(key, value);
+    return Promise.resolve();
+  }
+
+  delete(key: string): Promise<void> {
+    this.values.delete(key);
+    return Promise.resolve();
+  }
+}
+
+void test("web search config defaults to serper provider", async () => {
+  const settings = new MemorySettingsStore();
+  const config = await loadWebSearchProviderConfig(settings);
+
+  assert.equal(config.provider, "serper");
+  assert.equal(getApiKeyForProvider(config), undefined);
+});
+
+void test("web search config stores provider-specific api keys", async () => {
+  const settings = new MemorySettingsStore();
+
+  await saveWebSearchProvider(settings, "tavily");
+  await saveWebSearchApiKey(settings, "tavily", "tv-123");
+  await saveWebSearchApiKey(settings, "brave", "br-123");
+
+  const config = await loadWebSearchProviderConfig(settings);
+
+  assert.equal(config.provider, "tavily");
+  assert.equal(getApiKeyForProvider(config), "tv-123");
+  assert.equal(getApiKeyForProvider(config, "brave"), "br-123");
+});
+
+void test("web search config clears only the selected provider key", async () => {
+  const settings = new MemorySettingsStore();
+
+  await saveWebSearchApiKey(settings, "serper", "sp-123");
+  await saveWebSearchApiKey(settings, "brave", "br-123");
+  await clearWebSearchApiKey(settings, "serper");
+
+  const config = await loadWebSearchProviderConfig(settings);
+
+  assert.equal(getApiKeyForProvider(config, "serper"), undefined);
+  assert.equal(getApiKeyForProvider(config, "brave"), "br-123");
+});

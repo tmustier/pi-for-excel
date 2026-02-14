@@ -46,7 +46,7 @@ Pi for Excel gives you a conversational AI assistant that can read, write, and f
 **Extensions** — install sidebar extensions (mini-apps) from chat. The AI can generate and install extension code directly via the `extensions_manager` tool. Extensions run in an iframe sandbox by default.
 
 **Integrations** — opt-in external tool integrations:
-- **Web Search** (Brave Search) — look up external facts without leaving Excel
+- **Web Search** (Serper/Tavily/Brave) + `fetch_page` — find and read external sources without leaving Excel
 - **MCP Gateway** — connect to user-configured MCP servers for custom tool access
 
 **Feature-flagged capabilities** (managed via `/experimental`):

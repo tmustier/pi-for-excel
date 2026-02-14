@@ -3,22 +3,24 @@ import { test } from "node:test";
 
 import { createWebSearchTool } from "../src/tools/web-search.ts";
 
-void test("web_search reports missing API key", async () => {
+void test("web_search reports missing API key for selected provider", async () => {
   const tool = createWebSearchTool({
-    getConfig: () => Promise.resolve({ apiKey: undefined }),
+    getConfig: () => Promise.resolve({ provider: "serper", apiKey: undefined }),
   });
 
   const result = await tool.execute("call-1", { query: "latest inflation data" });
   const text = result.content[0]?.type === "text" ? result.content[0].text : "";
 
   assert.match(text, /API key is missing/i);
+  assert.match(text, /Serper API key/i);
   assert.ok(result.details);
   assert.equal((result.details as { ok?: boolean }).ok, false);
+  assert.equal((result.details as { provider?: string }).provider, "serper");
 });
 
-void test("web_search renders compact cited results", async () => {
+void test("web_search renders compact cited results for serper", async () => {
   const tool = createWebSearchTool({
-    getConfig: () => Promise.resolve({ apiKey: "token" }),
+    getConfig: () => Promise.resolve({ provider: "serper", apiKey: "token" }),
     executeSearch: () => {
       return Promise.resolve({
         sentQuery: "latest cpi (site:bls.gov)",
@@ -47,13 +49,39 @@ void test("web_search renders compact cited results", async () => {
 
   const text = result.content[0]?.type === "text" ? result.content[0].text : "";
 
-  assert.match(text, /Web search via Brave Search/);
+  assert.match(text, /Web search via Serper\.dev/);
   assert.match(text, /\[1\] \[Consumer Price Index Summary\]/);
   assert.match(text, /\[2\] \[Inflation data explorer\]/);
   assert.ok(result.details);
 
-  const details = result.details as { ok?: boolean; resultCount?: number; maxResults?: number };
+  const details = result.details as { ok?: boolean; resultCount?: number; maxResults?: number; provider?: string };
   assert.equal(details.ok, true);
+  assert.equal(details.provider, "serper");
   assert.equal(details.resultCount, 2);
   assert.equal(details.maxResults, 2);
+});
+
+void test("web_search keeps provider metadata for brave responses", async () => {
+  const tool = createWebSearchTool({
+    getConfig: () => Promise.resolve({ provider: "brave", apiKey: "token", proxyBaseUrl: "https://localhost:3003" }),
+    executeSearch: () => Promise.resolve({
+      sentQuery: "excel shortcuts",
+      proxied: true,
+      proxyBaseUrl: "https://localhost:3003",
+      hits: [
+        {
+          title: "Excel keyboard shortcuts",
+          url: "https://support.microsoft.com/shortcuts",
+          snippet: "Official shortcut list.",
+        },
+      ],
+    }),
+  });
+
+  const result = await tool.execute("call-3", { query: "excel shortcuts", max_results: 1 });
+  const details = result.details as { provider?: string; proxied?: boolean; proxyBaseUrl?: string };
+
+  assert.equal(details.provider, "brave");
+  assert.equal(details.proxied, true);
+  assert.equal(details.proxyBaseUrl, "https://localhost:3003");
 });

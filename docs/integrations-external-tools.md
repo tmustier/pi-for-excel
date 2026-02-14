@@ -15,10 +15,10 @@ Issue: [#24](https://github.com/tmustier/pi-for-excel/issues/24)
   - default: **off**
   - blocks all external integration tools until user enables it
 - **Web Search integration**
-  - tool: `web_search`
-  - provider: Brave Search
-  - configurable Brave API key in `/integrations`
-  - result output includes explicit `Sent:` attribution
+  - tools: `web_search`, `fetch_page`
+  - providers: Serper.dev (default), Tavily, Brave Search
+  - configurable provider + provider-specific API key in `/integrations`
+  - result output includes explicit `Sent:` attribution and provider/transport metadata
 - **MCP integration**
   - tool: `mcp`
   - server registry (`mcp.servers.v1`) configurable in `/integrations`
@@ -35,11 +35,11 @@ Integrations are resolved as:
 
 Active integrations contribute both:
 
-- **tools** (`web_search`, `mcp`)
+- **tools** (`web_search`, `fetch_page`, `mcp`)
 - **system prompt guidance** (`## Active Integrations` section)
 
 ## Notes
 
 - External requests may be sent directly or routed via the existing proxy settings (`proxy.enabled`, `proxy.url`).
 - MCP transport uses HTTP JSON-RPC requests against the configured server URL.
-- Tool execution policy classifies `web_search` and `mcp` as read-only/non-workbook operations.
+- Tool execution policy classifies `web_search`, `fetch_page`, and `mcp` as read-only/non-workbook operations.

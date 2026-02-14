@@ -89,6 +89,9 @@ void test("classifies bridge and external tools as read-only non-workbook traffi
   assert.equal(getToolExecutionMode("web_search", { query: "latest CPI" }), "read");
   assert.equal(getToolContextImpact("web_search", { query: "latest CPI" }), "none");
 
+  assert.equal(getToolExecutionMode("fetch_page", { url: "https://example.com" }), "read");
+  assert.equal(getToolContextImpact("fetch_page", { url: "https://example.com" }), "none");
+
   assert.equal(getToolExecutionMode("mcp", { server: "local" }), "read");
   assert.equal(getToolContextImpact("mcp", { server: "local" }), "none");
 

@@ -26,11 +26,18 @@ import {
 import { getEnabledProxyBaseUrl, resolveOutboundRequestUrl } from "../../tools/external-fetch.js";
 import {
   clearWebSearchApiKey,
+  getApiKeyForProvider,
   loadWebSearchProviderConfig,
   maskSecret,
   saveWebSearchApiKey,
+  saveWebSearchProvider,
+  WEB_SEARCH_PROVIDERS,
+  WEB_SEARCH_PROVIDER_INFO,
   type WebSearchConfigStore,
+  type WebSearchProvider,
+  type WebSearchProviderConfig,
 } from "../../tools/web-search-config.js";
+import { validateWebSearchApiKey } from "../../tools/web-search.js";
 import {
   createMcpServerConfig,
   loadMcpServers,
@@ -64,7 +71,7 @@ interface IntegrationsSnapshot {
   sessionIntegrationIds: string[];
   workbookIntegrationIds: string[];
   activeIntegrationIds: string[];
-  webSearchApiKey?: string;
+  webSearchConfig: WebSearchProviderConfig;
   mcpServers: McpServerConfig[];
 }
 
@@ -73,6 +80,13 @@ function getErrorMessage(error: unknown): string {
     return error.message;
   }
   return String(error);
+}
+
+function normalizeWebSearchProvider(value: string): WebSearchProvider {
+  if (value === "serper" || value === "tavily" || value === "brave") {
+    return value;
+  }
+  return "serper";
 }
 
 function createButton(text: string): HTMLButtonElement {
@@ -157,7 +171,7 @@ async function buildSnapshot(
     sessionIntegrationIds,
     workbookIntegrationIds,
     activeIntegrationIds,
-    webSearchApiKey: webSearchConfig.apiKey,
+    webSearchConfig,
     mcpServers,
   };
 }
@@ -446,20 +460,54 @@ export function showIntegrationsDialog(dependencies: IntegrationsDialogDependenc
   const webSearchStatus = document.createElement("div");
   webSearchStatus.className = "pi-integrations-web-search-status";
 
+  const webSearchProviderRow = document.createElement("div");
+  webSearchProviderRow.className = "pi-integrations-web-search-provider-row";
+
+  const webSearchProviderSelect = document.createElement("select");
+  webSearchProviderSelect.className = "pi-overlay-input";
+
+  for (const providerId of WEB_SEARCH_PROVIDERS) {
+    const option = document.createElement("option");
+    option.value = providerId;
+    option.textContent = WEB_SEARCH_PROVIDER_INFO[providerId].title;
+    webSearchProviderSelect.appendChild(option);
+  }
+
+  const webSearchProviderSignupLink = document.createElement("a");
+  webSearchProviderSignupLink.className = "pi-overlay-link";
+  webSearchProviderSignupLink.target = "_blank";
+  webSearchProviderSignupLink.rel = "noopener noreferrer";
+
+  webSearchProviderRow.append(webSearchProviderSelect, webSearchProviderSignupLink);
+
   const webSearchInputRow = document.createElement("div");
   webSearchInputRow.className = "pi-integrations-web-search-row";
 
-  const webSearchApiKeyInput = createInput("Brave API key", "password");
+  const webSearchApiKeyInput = createInput("API key", "password");
   const webSearchSaveButton = createButton("Save key");
+  const webSearchValidateButton = createButton("Validate");
   const webSearchClearButton = createButton("Clear");
 
-  webSearchInputRow.append(webSearchApiKeyInput, webSearchSaveButton, webSearchClearButton);
+  webSearchInputRow.append(
+    webSearchApiKeyInput,
+    webSearchSaveButton,
+    webSearchValidateButton,
+    webSearchClearButton,
+  );
 
   const webSearchHint = document.createElement("p");
   webSearchHint.className = "pi-overlay-hint";
-  webSearchHint.textContent = "Used by the web_search tool. Queries may be routed through your configured proxy.";
 
-  webSearchCard.append(webSearchStatus, webSearchInputRow, webSearchHint);
+  const webSearchValidationStatus = document.createElement("p");
+  webSearchValidationStatus.className = "pi-overlay-hint";
+
+  webSearchCard.append(
+    webSearchStatus,
+    webSearchProviderRow,
+    webSearchInputRow,
+    webSearchHint,
+    webSearchValidationStatus,
+  );
   webSearchSection.appendChild(webSearchCard);
 
   const mcpSection = document.createElement("section");
@@ -515,8 +563,10 @@ export function showIntegrationsDialog(dependencies: IntegrationsDialogDependenc
   const setBusy = (next: boolean): void => {
     busy = next;
     externalToggle.disabled = next;
+    webSearchProviderSelect.disabled = next;
     webSearchApiKeyInput.disabled = next;
     webSearchSaveButton.disabled = next;
+    webSearchValidateButton.disabled = next;
     webSearchClearButton.disabled = next;
     mcpNameInput.disabled = next;
     mcpUrlInput.disabled = next;
@@ -665,11 +715,23 @@ export function showIntegrationsDialog(dependencies: IntegrationsDialogDependenc
       }));
     }
 
-    if (currentSnapshot.webSearchApiKey) {
-      webSearchStatus.textContent = `Brave API key: ${maskSecret(currentSnapshot.webSearchApiKey)} (length ${currentSnapshot.webSearchApiKey.length})`;
+    const selectedProvider = currentSnapshot.webSearchConfig.provider;
+    const selectedProviderInfo = WEB_SEARCH_PROVIDER_INFO[selectedProvider];
+    const selectedProviderKey = getApiKeyForProvider(currentSnapshot.webSearchConfig, selectedProvider);
+
+    webSearchProviderSelect.value = selectedProvider;
+    webSearchProviderSignupLink.href = selectedProviderInfo.signupUrl;
+    webSearchProviderSignupLink.textContent = `Get key (${selectedProviderInfo.title})`;
+    webSearchApiKeyInput.placeholder = selectedProviderInfo.apiKeyLabel;
+
+    if (selectedProviderKey) {
+      webSearchStatus.textContent = `${selectedProviderInfo.apiKeyLabel}: ${maskSecret(selectedProviderKey)} (length ${selectedProviderKey.length})`;
     } else {
-      webSearchStatus.textContent = "Brave API key not set.";
+      webSearchStatus.textContent = `${selectedProviderInfo.apiKeyLabel} not set.`;
     }
+
+    webSearchHint.textContent = `${selectedProviderInfo.shortDescription} ${selectedProviderInfo.apiKeyHelp} Used by web_search and fetch_page.`;
+    webSearchValidationStatus.textContent = "";
 
     mcpList.replaceChildren();
     if (currentSnapshot.mcpServers.length === 0) {
@@ -689,6 +751,10 @@ export function showIntegrationsDialog(dependencies: IntegrationsDialogDependenc
     render();
   };
 
+  const getSelectedWebSearchProvider = (): WebSearchProvider => {
+    return normalizeWebSearchProvider(webSearchProviderSelect.value);
+  };
+
   externalToggle.addEventListener("change", () => {
     const next = externalToggle.checked;
     void runAction(async () => {
@@ -697,25 +763,75 @@ export function showIntegrationsDialog(dependencies: IntegrationsDialogDependenc
     }, "external-toggle", `External tools: ${next ? "enabled" : "disabled"}`);
   });
 
+  webSearchProviderSelect.addEventListener("change", () => {
+    const provider = getSelectedWebSearchProvider();
+    void runAction(async () => {
+      const settings = await getSettingsStore();
+      await saveWebSearchProvider(settings, provider);
+      webSearchValidationStatus.textContent = "";
+    }, "config", `Web search provider set to ${WEB_SEARCH_PROVIDER_INFO[provider].title}.`);
+  });
+
   webSearchSaveButton.addEventListener("click", () => {
     void runAction(async () => {
       const key = webSearchApiKeyInput.value.trim();
+      const provider = getSelectedWebSearchProvider();
       if (key.length === 0) {
-        throw new Error("Provide a Brave API key.");
+        throw new Error(`Provide a ${WEB_SEARCH_PROVIDER_INFO[provider].apiKeyLabel}.`);
       }
 
       const settings = await getSettingsStore();
-      await saveWebSearchApiKey(settings, key);
+      await saveWebSearchApiKey(settings, provider, key);
       webSearchApiKeyInput.value = "";
-    }, "config", "Saved Brave API key.");
+      webSearchValidationStatus.textContent = "";
+    }, "config", `Saved ${WEB_SEARCH_PROVIDER_INFO[getSelectedWebSearchProvider()].apiKeyLabel}.`);
   });
 
   webSearchClearButton.addEventListener("click", () => {
     void runAction(async () => {
+      const provider = getSelectedWebSearchProvider();
       const settings = await getSettingsStore();
-      await clearWebSearchApiKey(settings);
+      await clearWebSearchApiKey(settings, provider);
       webSearchApiKeyInput.value = "";
-    }, "config", "Cleared Brave API key.");
+      webSearchValidationStatus.textContent = "";
+    }, "config", `Cleared ${WEB_SEARCH_PROVIDER_INFO[getSelectedWebSearchProvider()].apiKeyLabel}.`);
+  });
+
+  webSearchValidateButton.addEventListener("click", () => {
+    if (busy) return;
+
+    const provider = getSelectedWebSearchProvider();
+    const enteredKey = webSearchApiKeyInput.value.trim();
+
+    void (async () => {
+      setBusy(true);
+      try {
+        const settings = await getSettingsStore();
+        const providerConfig = await loadWebSearchProviderConfig(settings);
+        const apiKey = enteredKey.length > 0
+          ? enteredKey
+          : (getApiKeyForProvider(providerConfig, provider) ?? "");
+
+        if (apiKey.length === 0) {
+          throw new Error(`No ${WEB_SEARCH_PROVIDER_INFO[provider].apiKeyLabel} available to validate.`);
+        }
+
+        const proxyBaseUrl = await getEnabledProxyBaseUrl(settings);
+        const validation = await validateWebSearchApiKey({
+          provider,
+          apiKey,
+          proxyBaseUrl,
+        });
+
+        webSearchValidationStatus.textContent = validation.ok
+          ? `✓ ${validation.message}`
+          : `✗ ${validation.message}`;
+      } catch (error: unknown) {
+        webSearchValidationStatus.textContent = `✗ ${getErrorMessage(error)}`;
+      } finally {
+        setBusy(false);
+      }
+    })();
   });
 
   mcpAddButton.addEventListener("click", () => {

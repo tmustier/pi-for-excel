@@ -69,9 +69,19 @@
   flex-wrap: wrap;
 }
 
+.pi-integrations-web-search-provider-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.pi-integrations-web-search-provider-row .pi-overlay-input {
+  flex: 1;
+}
+
 .pi-integrations-web-search-row {
   display: grid;
-  grid-template-columns: 1fr auto auto;
+  grid-template-columns: 1fr auto auto auto;
   gap: 8px;
   align-items: center;
 }
@@ -103,4 +113,15 @@
   text-overflow: ellipsis;
   display: block;
   max-width: 430px;
+}
+
+@media (max-width: 740px) {
+  .pi-integrations-web-search-provider-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .pi-integrations-web-search-row {
+    grid-template-columns: 1fr;
+  }
 }

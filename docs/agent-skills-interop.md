@@ -18,7 +18,7 @@ In this repo, standards artifacts live in:
 Integrations are built-in, opt-in capability bundles in the Excel add-in runtime.
 They control:
 
-- tool injection (`web_search`, `mcp`)
+- tool injection (`web_search`, `fetch_page`, `mcp`)
 - prompt guidance (`## Active Integrations`)
 - scope (session/workbook)
 - global external-tools safety gate
@@ -49,7 +49,7 @@ The system prompt also includes `<available_skills>` entries so the model can ch
 
 | Agent Skill | Integration ID | Tool name |
 |---|---|---|
-| `web-search` | `web_search` | `web_search` |
+| `web-search` | `web_search` | `web_search`, `fetch_page` |
 | `mcp-gateway` | `mcp_tools` | `mcp` |
 
 ## Why this split exists

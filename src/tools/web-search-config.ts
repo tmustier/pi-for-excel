@@ -2,9 +2,57 @@
  * Web-search configuration shared by tool + settings UI.
  */
 
+export const WEB_SEARCH_PROVIDER_SETTING_KEY = "web.search.provider";
 export const WEB_SEARCH_BRAVE_API_KEY_SETTING_KEY = "web.search.brave.apiKey";
+export const WEB_SEARCH_SERPER_API_KEY_SETTING_KEY = "web.search.serper.apiKey";
+export const WEB_SEARCH_TAVILY_API_KEY_SETTING_KEY = "web.search.tavily.apiKey";
 
-export type WebSearchProvider = "brave";
+export const WEB_SEARCH_PROVIDERS = ["serper", "tavily", "brave"] as const;
+export type WebSearchProvider = (typeof WEB_SEARCH_PROVIDERS)[number];
+
+export const DEFAULT_WEB_SEARCH_PROVIDER: WebSearchProvider = "serper";
+
+export interface WebSearchProviderInfo {
+  id: WebSearchProvider;
+  title: string;
+  shortDescription: string;
+  signupUrl: string;
+  apiKeyLabel: string;
+  apiKeyHelp: string;
+}
+
+export const WEB_SEARCH_PROVIDER_INFO: Record<WebSearchProvider, WebSearchProviderInfo> = {
+  serper: {
+    id: "serper",
+    title: "Serper.dev (default)",
+    shortDescription: "Google SERP API, easy onboarding (free tier, no credit card).",
+    signupUrl: "https://serper.dev",
+    apiKeyLabel: "Serper API key",
+    apiKeyHelp: "Free tier available with email signup.",
+  },
+  tavily: {
+    id: "tavily",
+    title: "Tavily",
+    shortDescription: "AI-native web search with relevance-ranked results.",
+    signupUrl: "https://tavily.com",
+    apiKeyLabel: "Tavily API key",
+    apiKeyHelp: "Free monthly credits, no credit card required.",
+  },
+  brave: {
+    id: "brave",
+    title: "Brave Search",
+    shortDescription: "Direct Brave Search API support (existing users).",
+    signupUrl: "https://api.search.brave.com",
+    apiKeyLabel: "Brave API key",
+    apiKeyHelp: "Brave Search API subscription token.",
+  },
+};
+
+const WEB_SEARCH_API_KEY_BY_PROVIDER_SETTING_KEY: Record<WebSearchProvider, string> = {
+  serper: WEB_SEARCH_SERPER_API_KEY_SETTING_KEY,
+  tavily: WEB_SEARCH_TAVILY_API_KEY_SETTING_KEY,
+  brave: WEB_SEARCH_BRAVE_API_KEY_SETTING_KEY,
+};
 
 export interface WebSearchConfigReader {
   get(key: string): Promise<unknown>;
@@ -17,7 +65,7 @@ export interface WebSearchConfigStore extends WebSearchConfigReader {
 
 export interface WebSearchProviderConfig {
   provider: WebSearchProvider;
-  apiKey?: string;
+  apiKeys: Partial<Record<WebSearchProvider, string>>;
 }
 
 function normalizeOptionalString(value: unknown): string | undefined {
@@ -26,19 +74,43 @@ function normalizeOptionalString(value: unknown): string | undefined {
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
+function normalizeProvider(value: unknown): WebSearchProvider {
+  if (value === "serper" || value === "tavily" || value === "brave") {
+    return value;
+  }
+  return DEFAULT_WEB_SEARCH_PROVIDER;
+}
+
 export async function loadWebSearchProviderConfig(
   settings: WebSearchConfigReader,
 ): Promise<WebSearchProviderConfig> {
-  const apiKeyRaw = await settings.get(WEB_SEARCH_BRAVE_API_KEY_SETTING_KEY);
+  const [providerRaw, serperApiKeyRaw, tavilyApiKeyRaw, braveApiKeyRaw] = await Promise.all([
+    settings.get(WEB_SEARCH_PROVIDER_SETTING_KEY),
+    settings.get(WEB_SEARCH_SERPER_API_KEY_SETTING_KEY),
+    settings.get(WEB_SEARCH_TAVILY_API_KEY_SETTING_KEY),
+    settings.get(WEB_SEARCH_BRAVE_API_KEY_SETTING_KEY),
+  ]);
 
   return {
-    provider: "brave",
-    apiKey: normalizeOptionalString(apiKeyRaw),
+    provider: normalizeProvider(providerRaw),
+    apiKeys: {
+      serper: normalizeOptionalString(serperApiKeyRaw),
+      tavily: normalizeOptionalString(tavilyApiKeyRaw),
+      brave: normalizeOptionalString(braveApiKeyRaw),
+    },
   };
+}
+
+export async function saveWebSearchProvider(
+  settings: WebSearchConfigStore,
+  provider: WebSearchProvider,
+): Promise<void> {
+  await settings.set(WEB_SEARCH_PROVIDER_SETTING_KEY, provider);
 }
 
 export async function saveWebSearchApiKey(
   settings: WebSearchConfigStore,
+  provider: WebSearchProvider,
   apiKey: string,
 ): Promise<void> {
   const normalized = apiKey.trim();
@@ -46,16 +118,27 @@ export async function saveWebSearchApiKey(
     throw new Error("API key cannot be empty.");
   }
 
-  await settings.set(WEB_SEARCH_BRAVE_API_KEY_SETTING_KEY, normalized);
+  await settings.set(WEB_SEARCH_API_KEY_BY_PROVIDER_SETTING_KEY[provider], normalized);
 }
 
-export async function clearWebSearchApiKey(settings: WebSearchConfigStore): Promise<void> {
+export async function clearWebSearchApiKey(
+  settings: WebSearchConfigStore,
+  provider: WebSearchProvider,
+): Promise<void> {
+  const key = WEB_SEARCH_API_KEY_BY_PROVIDER_SETTING_KEY[provider];
   if (typeof settings.delete === "function") {
-    await settings.delete(WEB_SEARCH_BRAVE_API_KEY_SETTING_KEY);
+    await settings.delete(key);
     return;
   }
 
-  await settings.set(WEB_SEARCH_BRAVE_API_KEY_SETTING_KEY, "");
+  await settings.set(key, "");
+}
+
+export function getApiKeyForProvider(
+  config: WebSearchProviderConfig,
+  provider: WebSearchProvider = config.provider,
+): string | undefined {
+  return normalizeOptionalString(config.apiKeys[provider]);
 }
 
 export function maskSecret(secret: string): string {

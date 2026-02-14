@@ -964,6 +964,10 @@ function describeToolCall(
       const query = p.query as string | undefined;
       return { action: "Web search", detail: query ? `\"${query}\"` : "query" };
     }
+    case "fetch_page": {
+      const url = p.url as string | undefined;
+      return { action: "Fetch page", detail: url ?? "url" };
+    }
     case "mcp": {
       if (typeof p.tool === "string") {
         return { action: "MCP call", detail: p.tool };

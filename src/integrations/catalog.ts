@@ -9,6 +9,7 @@
 import type { AgentTool } from "@mariozechner/pi-agent-core";
 
 import { createMcpTool } from "../tools/mcp.js";
+import { createFetchPageTool } from "../tools/fetch-page.js";
 import { createWebSearchTool } from "../tools/web-search.js";
 
 export const INTEGRATION_IDS = ["web_search", "mcp_tools"] as const;
@@ -38,14 +39,15 @@ const INTEGRATION_DEFINITIONS: Record<IntegrationId, IntegrationDefinition> = {
   web_search: {
     id: "web_search",
     title: "Web Search",
-    description: "Search external web content (Brave Search) for up-to-date facts.",
+    description: "Search external web content (Serper/Tavily/Brave) and fetch readable page content.",
     agentSkillName: "web-search",
-    warning: "External network access: query text is sent to the search provider.",
-    toolNames: ["web_search"],
+    warning: "External network access: queries and fetched URLs are sent to the configured provider/target host.",
+    toolNames: ["web_search", "fetch_page"],
     instructions:
       "Use web_search when workbook context is insufficient and fresh external facts are needed. "
+      + "After finding promising URLs, use fetch_page to read page content before synthesizing. "
       + "Cite sources from tool results as [1], [2], etc. Avoid web search when the answer is already in the workbook.",
-    createTools: () => [createWebSearchTool()],
+    createTools: () => [createWebSearchTool(), createFetchPageTool()],
   },
   mcp_tools: {
     id: "mcp_tools",

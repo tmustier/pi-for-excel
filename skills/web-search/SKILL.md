@@ -1,7 +1,7 @@
 ---
 name: web-search
-description: Search the public web for up-to-date facts using Brave Search. Use when workbook context is insufficient and fresh external references are needed.
-compatibility: Requires Pi for Excel integration "web_search" to be enabled and a Brave API key configured.
+description: Search the public web for up-to-date facts using Serper.dev (default), Tavily, or Brave Search. Use when workbook context is insufficient and fresh external references are needed.
+compatibility: Requires Pi for Excel integration "web_search" to be enabled and a search-provider API key configured (Serper/Tavily/Brave).
 metadata:
   integration-id: web_search
   tool-name: web_search
@@ -28,5 +28,5 @@ This repository exposes web search as a built-in **integration** in the Excel ad
 
 1. Open `/integrations`.
 2. Enable external tools.
-3. Set Brave API key.
+3. Choose provider (Serper/Tavily/Brave) and set its API key.
 4. Enable **Web Search** for session and/or workbook scope.

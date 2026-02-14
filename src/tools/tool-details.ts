@@ -252,6 +252,19 @@ export interface WebSearchDetails {
   error?: string;
 }
 
+export interface FetchPageDetails {
+  kind: "fetch_page";
+  ok: boolean;
+  url: string;
+  title?: string;
+  chars?: number;
+  truncated?: boolean;
+  proxied?: boolean;
+  proxyBaseUrl?: string;
+  contentType?: string;
+  error?: string;
+}
+
 export interface McpGatewayDetails {
   kind: "mcp_gateway";
   ok: boolean;
@@ -346,6 +359,7 @@ export type ExcelToolDetails =
   | WorkbookHistoryDetails
   | SkillsToolDetails
   | WebSearchDetails
+  | FetchPageDetails
   | McpGatewayDetails
   | FilesToolDetails;
 
@@ -787,6 +801,23 @@ export function isWebSearchDetails(value: unknown): value is WebSearchDetails {
     isOptionalNumber(value.resultCount) &&
     isOptionalBoolean(value.proxied) &&
     isOptionalString(value.proxyBaseUrl) &&
+    isOptionalString(value.error)
+  );
+}
+
+export function isFetchPageDetails(value: unknown): value is FetchPageDetails {
+  if (!isRecord(value)) return false;
+  if (value.kind !== "fetch_page") return false;
+
+  return (
+    typeof value.ok === "boolean" &&
+    typeof value.url === "string" &&
+    isOptionalString(value.title) &&
+    isOptionalNumber(value.chars) &&
+    isOptionalBoolean(value.truncated) &&
+    isOptionalBoolean(value.proxied) &&
+    isOptionalString(value.proxyBaseUrl) &&
+    isOptionalString(value.contentType) &&
     isOptionalString(value.error)
   );
 }

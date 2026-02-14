@@ -776,6 +776,21 @@ function humanizeWebSearch(p: Record<string, unknown>): ParamItem[] {
   return items;
 }
 
+function humanizeFetchPage(p: Record<string, unknown>): ParamItem[] {
+  const items: ParamItem[] = [];
+
+  if (p.url) {
+    items.push({ label: "URL", value: str(p.url) });
+  }
+
+  const maxChars = num(p.max_chars);
+  if (maxChars !== undefined) {
+    items.push({ label: "Max chars", value: String(maxChars) });
+  }
+
+  return items;
+}
+
 function humanizeMcp(p: Record<string, unknown>): ParamItem[] {
   const items: ParamItem[] = [];
 
@@ -950,6 +965,7 @@ const CORE_HUMANIZERS = {
 
 const EXTRA_HUMANIZERS = {
   web_search: humanizeWebSearch,
+  fetch_page: humanizeFetchPage,
   mcp: humanizeMcp,
   files: humanizeFiles,
   python_transform_range: humanizePythonTransformRange,

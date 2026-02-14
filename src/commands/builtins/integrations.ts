@@ -13,7 +13,7 @@ export function createIntegrationsCommands(actions: IntegrationsCommandActions):
   return [
     {
       name: INTEGRATIONS_COMMAND_NAME,
-      description: `Manage ${INTEGRATIONS_LABEL_LOWER} (web search, MCP)`,
+      description: `Manage ${INTEGRATIONS_LABEL_LOWER} (web search, page fetch, MCP)`,
       source: "builtin",
       execute: () => {
         void actions.openIntegrationsManager();
