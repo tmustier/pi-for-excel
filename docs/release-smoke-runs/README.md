@@ -18,3 +18,15 @@ Examples:
 - pass/fail/blocked with short rationale and evidence pointers
 
 Keep each run append-only; create a new file for each run instead of rewriting older runs.
+
+## Templates
+
+- macOS host run: `docs/release-smoke-runs/templates/macos-host-smoke-template.md`
+- Windows host run: `docs/release-smoke-runs/templates/windows-host-smoke-template.md`
+
+Recommended workflow:
+
+1. Copy the matching template into a dated file in this folder.
+2. Fill each covered checklist row with `Pass` / `Fail` / `Blocked`.
+3. Link screenshots/logs directly in the evidence column.
+4. Leave unresolved failures with an owner and next action.

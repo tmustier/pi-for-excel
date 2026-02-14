@@ -16,6 +16,7 @@ This checklist maps directly to issue [#179](https://github.com/tmustier/pi-for-
 ## Run logs
 
 - Store run evidence in `docs/release-smoke-runs/`.
+- Host run templates live in `docs/release-smoke-runs/templates/`.
 - Latest preflight run: `docs/release-smoke-runs/2026-02-14-macos-preflight.md`.
 - Latest CLI validation run: `docs/release-smoke-runs/2026-02-14-cli-validation.md`.
 
