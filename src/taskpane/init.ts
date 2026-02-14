@@ -52,12 +52,8 @@ import {
   getWorkbookRules,
   hasAnyRules,
 } from "../rules/store.js";
+import { createExecutionModeController } from "../execution/controller.js";
 import {
-  dispatchExecutionModeChanged,
-  formatExecutionModeLabel,
-  getStoredExecutionMode,
-  setStoredExecutionMode,
-  toggleExecutionMode,
   PI_EXECUTION_MODE_CHANGED_EVENT,
   type ExecutionMode,
 } from "../execution/mode.js";
@@ -352,27 +348,19 @@ export async function initTaskpane(opts: {
     document.dispatchEvent(new CustomEvent("pi:status-update"));
   };
 
-  let executionMode: ExecutionMode = await getStoredExecutionMode(settings);
+  const executionModeController = await createExecutionModeController({
+    settings,
+    showToast,
+  });
 
-  const getExecutionMode = (): ExecutionMode => executionMode;
-
-  const applyExecutionMode = async (mode: ExecutionMode): Promise<void> => {
-    if (executionMode === mode) {
-      return;
-    }
-
-    executionMode = await setStoredExecutionMode(settings, mode);
-    dispatchExecutionModeChanged(executionMode);
-  };
+  const getExecutionMode = (): ExecutionMode => executionModeController.getMode();
 
   const setExecutionMode = async (mode: ExecutionMode): Promise<void> => {
-    await applyExecutionMode(mode);
+    await executionModeController.setMode(mode);
   };
 
   const toggleExecutionModeFromUi = async (): Promise<void> => {
-    const nextMode = toggleExecutionMode(executionMode);
-    await applyExecutionMode(nextMode);
-    showToast(`${formatExecutionModeLabel(nextMode)} mode active.`);
+    await executionModeController.toggleFromUi();
   };
 
   const resolveWorkbookContext = async (): Promise<Awaited<ReturnType<typeof getWorkbookContext>>> => {
@@ -441,12 +429,12 @@ export async function initTaskpane(opts: {
         workbookInstructions: workbookRules,
         activeIntegrations,
         availableSkills,
-        executionMode,
+        executionMode: getExecutionMode(),
         conventions,
       });
     } catch {
       setRulesActive(false);
-      return buildSystemPrompt({ availableSkills, executionMode });
+      return buildSystemPrompt({ availableSkills, executionMode: getExecutionMode() });
     }
   };
 
@@ -733,7 +721,7 @@ export async function initTaskpane(opts: {
           },
         },
         {
-          getExecutionMode: () => Promise.resolve(executionMode),
+          getExecutionMode: () => Promise.resolve(getExecutionMode()),
         },
       );
 
