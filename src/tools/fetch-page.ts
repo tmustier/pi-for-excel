@@ -124,8 +124,8 @@ function normalizeText(text: string): string {
 function stripHtmlTags(html: string): string {
   return normalizeText(
     html
-      .replace(/<script[\s\S]*?<\/script>/giu, " ")
-      .replace(/<style[\s\S]*?<\/style>/giu, " ")
+      .replace(/<script[\s\S]*?<\/script\s*>/giu, " ")
+      .replace(/<style[\s\S]*?<\/style\s*>/giu, " ")
       .replace(/<[^>]+>/gu, " "),
   );
 }
