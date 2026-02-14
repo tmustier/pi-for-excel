@@ -171,30 +171,6 @@
   flex-shrink: 0;
 }
 
-.pi-files-dialog__row-btn {
-  border: 1px solid var(--alpha-10);
-  border-radius: var(--radius-xs);
-  background: var(--white-alpha-65);
-  color: var(--foreground);
-  font-family: var(--font-sans);
-  font-size: var(--text-xs);
-  padding: 4px 7px;
-  cursor: pointer;
-}
-
-.pi-files-dialog__row-btn:hover {
-  background: var(--white-alpha-80);
-}
-
-.pi-files-dialog__row-btn:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-
-.pi-files-dialog__row-btn--danger {
-  color: oklch(0.56 0.2 24);
-}
-
 .pi-files-dialog__viewer {
   border: var(--pi-divider);
   border-radius: var(--radius-md);

@@ -172,6 +172,23 @@
   background: var(--alpha-4);
 }
 
+.pi-overlay-btn--compact {
+  border-radius: var(--radius-xs);
+  font-size: var(--text-xs);
+  padding: 4px 7px;
+}
+
+.pi-overlay-btn--danger {
+  color: var(--destructive);
+  border-color: color-mix(in oklch, var(--destructive) 22%, var(--alpha-12));
+  background: color-mix(in oklch, var(--destructive) 7%, transparent);
+}
+
+.pi-overlay-btn--danger:hover {
+  border-color: color-mix(in oklch, var(--destructive) 30%, var(--alpha-12));
+  background: color-mix(in oklch, var(--destructive) 12%, transparent);
+}
+
 .pi-overlay-btn--full {
   width: 100%;
 }

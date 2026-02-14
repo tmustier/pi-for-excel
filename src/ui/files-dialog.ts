@@ -531,19 +531,21 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
         const actions = document.createElement("div");
         actions.className = "pi-files-dialog__actions";
 
-        const openButton = makeButton("Open", "pi-files-dialog__row-btn");
+        const rowActionClassName = "pi-overlay-btn pi-overlay-btn--ghost pi-overlay-btn--compact";
+
+        const openButton = makeButton("Open", rowActionClassName);
         openButton.addEventListener("click", () => {
           void openViewer(file);
         });
 
-        const downloadButton = makeButton("Download", "pi-files-dialog__row-btn");
+        const downloadButton = makeButton("Download", rowActionClassName);
         downloadButton.addEventListener("click", () => {
           void workspace.downloadFile(file.path).catch((error: unknown) => {
             showToast(`Download failed: ${getErrorMessage(error)}`);
           });
         });
 
-        const renameButton = makeButton("Rename", "pi-files-dialog__row-btn");
+        const renameButton = makeButton("Rename", rowActionClassName);
         renameButton.disabled = file.readOnly;
         if (file.readOnly) {
           renameButton.title = "Built-in docs are read-only.";
@@ -559,7 +561,10 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
           });
         });
 
-        const deleteButton = makeButton("Delete", "pi-files-dialog__row-btn pi-files-dialog__row-btn--danger");
+        const deleteButton = makeButton(
+          "Delete",
+          `${rowActionClassName} pi-overlay-btn--danger`,
+        );
         deleteButton.disabled = file.readOnly;
         if (file.readOnly) {
           deleteButton.title = "Built-in docs are read-only.";
