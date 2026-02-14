@@ -165,6 +165,20 @@
   color: var(--muted-foreground);
 }
 
+.pi-overlay-inline-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pi-overlay-inline-row--compact {
+  gap: 6px;
+}
+
+.pi-overlay-inline-row--wrap {
+  flex-wrap: wrap;
+}
+
 .pi-overlay-btn {
   border-radius: var(--radius-sm);
   padding: 7px 12px;

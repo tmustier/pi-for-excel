@@ -6,13 +6,6 @@
 
 /* Search + filter row */
 
-.pi-recovery-search-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
 .pi-recovery-search {
   flex: 1;
   min-width: 120px;
@@ -31,9 +24,6 @@
 /* Retention row */
 
 .pi-recovery-retention {
-  display: flex;
-  align-items: center;
-  gap: 6px;
   font-family: var(--font-sans);
   font-size: var(--text-sm);
   color: var(--muted-foreground);

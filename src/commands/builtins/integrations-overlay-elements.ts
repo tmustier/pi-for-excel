@@ -80,7 +80,7 @@ export function createIntegrationsDialogElements(): IntegrationsDialogElements {
   webSearchStatus.className = "pi-integrations-web-search-status";
 
   const webSearchProviderRow = document.createElement("div");
-  webSearchProviderRow.className = "pi-integrations-web-search-provider-row";
+  webSearchProviderRow.className = "pi-integrations-web-search-provider-row pi-overlay-inline-row";
 
   const webSearchProviderSelect = document.createElement("select");
   webSearchProviderSelect.className = "pi-overlay-input";

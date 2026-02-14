@@ -170,7 +170,7 @@ export async function showRecoveryDialog(opts: {
   // -- Search + filters --
 
   const searchRow = document.createElement("div");
-  searchRow.className = "pi-recovery-search-row";
+  searchRow.className = "pi-recovery-search-row pi-overlay-inline-row pi-overlay-inline-row--compact pi-overlay-inline-row--wrap";
 
   const searchInput = document.createElement("input");
   searchInput.type = "text";
@@ -226,7 +226,7 @@ export async function showRecoveryDialog(opts: {
   // -- Retention --
 
   const retentionRow = document.createElement("div");
-  retentionRow.className = "pi-recovery-retention";
+  retentionRow.className = "pi-recovery-retention pi-overlay-inline-row pi-overlay-inline-row--compact";
 
   const retentionLabel = document.createElement("label");
   retentionLabel.className = "pi-recovery-retention__label";

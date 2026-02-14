@@ -67,12 +67,6 @@
   flex-wrap: wrap;
 }
 
-.pi-integrations-web-search-provider-row {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-
 .pi-integrations-web-search-provider-row .pi-overlay-input {
   flex: 1;
 }
