@@ -282,6 +282,7 @@ void test("trusted local-module extensions stay on host runtime even when sandbo
 
 void test("sandbox runtime source enforces capability gates and rejects unknown ui actions", async () => {
   const source = await readFile(new URL("../src/extensions/sandbox-runtime.ts", import.meta.url), "utf8");
+  const srcdocSource = await readFile(new URL("../src/extensions/sandbox/srcdoc.ts", import.meta.url), "utf8");
   const surfacesSource = await readFile(new URL("../src/extensions/sandbox/surfaces.ts", import.meta.url), "utf8");
   const protocolSource = await readFile(new URL("../src/extensions/sandbox/protocol.ts", import.meta.url), "utf8");
 
@@ -291,16 +292,19 @@ void test("sandbox runtime source enforces capability gates and rejects unknown 
   assert.match(source, /case "overlay_show": \{[\s\S]*this\.assertCapability\("ui\.overlay"\)/);
   assert.match(source, /case "widget_show": \{[\s\S]*this\.assertCapability\("ui\.widget"\)/);
   assert.match(source, /case "widget_upsert": \{[\s\S]*Widget API v2 is disabled/);
-  assert.match(source, /placement: payload\.placement === "above-input" \|\| payload\.placement === "below-input"/);
-  assert.match(source, /collapsible: typeof payload\.collapsible === "boolean" \? payload\.collapsible : undefined/);
   assert.match(source, /asWidgetPlacementOrUndefined\(payload\.placement\)/);
   assert.match(source, /asBooleanOrUndefined\(payload\.collapsible\)/);
   assert.match(source, /asFiniteNumberOrNullOrUndefined\(payload\.minHeightPx\)/);
-  assert.match(source, /payload\.minHeightPx === null/);
   assert.match(source, /case "widget_clear": \{/);
-  assert.match(source, /if \(method === "ui_action"\)/);
-  assert.match(source, /Unknown sandbox UI action id:/);
   assert.match(source, /allowWhenDisposed:\s*true/);
+  assert.match(source, /buildSandboxSrcdoc\(\{/);
+
+  assert.match(srcdocSource, /if \(method === "ui_action"\)/);
+  assert.match(srcdocSource, /Unknown sandbox UI action id:/);
+  assert.match(srcdocSource, /placement: payload\.placement === "above-input" \|\| payload\.placement === "below-input"/);
+  assert.match(srcdocSource, /collapsible: typeof payload\.collapsible === "boolean" \? payload\.collapsible : undefined/);
+  assert.match(srcdocSource, /payload\.minHeightPx === null/);
+  assert.match(srcdocSource, /api\.agent is not available in sandbox runtime/);
 
   assert.match(surfacesSource, /upsertExtensionWidget\([\s\S]*element:\s*body/);
   assert.match(protocolSource, /export const SANDBOX_CHANNEL =/);
@@ -310,7 +314,6 @@ void test("sandbox runtime source enforces capability gates and rejects unknown 
   assert.match(source, /setAttribute\("sandbox", "allow-scripts"\)/);
   assert.match(source, /if \(event\.source !== this\.iframe\.contentWindow\)/);
   assert.match(source, /if \(envelope\.direction !== "sandbox_to_host"\)/);
-  assert.match(source, /api\.agent is not available in sandbox runtime/);
 });
 
 void test("sandbox activation failures are isolated per extension during initialize", async () => {
