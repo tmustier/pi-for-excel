@@ -395,6 +395,15 @@ void test("sandbox protocol helpers validate envelope shapes and escape inline s
   assert.equal(serialized.includes("\\u003cdiv>safe\\u003c/div>"), true);
 });
 
+void test("sandbox runtime host source retains isolation boundary guards", async () => {
+  const hostSource = await readFile(new URL("../src/extensions/sandbox-runtime.ts", import.meta.url), "utf8");
+
+  assert.match(hostSource, /setAttribute\("sandbox", "allow-scripts"\)/);
+  assert.match(hostSource, /if \(event\.source !== this\.iframe\.contentWindow\)/);
+  assert.match(hostSource, /if \(envelope\.direction !== "sandbox_to_host"\)/);
+  assert.match(hostSource, /if \(!isSandboxEnvelope\(envelope\)\)/);
+});
+
 void test("sandbox activation failures are isolated per extension during initialize", async () => {
   const restoreLocalStorage = installLocalStorageStub();
 
