@@ -35,6 +35,14 @@ import {
   type RecoveryFormatRangeState,
   type RecoveryModifyStructureState,
 } from "./recovery-states.js";
+import {
+  cloneGrid,
+  gridStats,
+  normalizeFormula,
+  rowLength,
+  toRestoreValues,
+  valueAt,
+} from "./recovery/grid.js";
 import { estimateModifyStructureCellCount } from "./recovery/structure-state.js";
 import { MAX_RECOVERY_CELLS, MAX_RECOVERY_ENTRIES } from "./recovery/constants.js";
 
@@ -222,70 +230,6 @@ async function defaultApplyCommentThreadSnapshot(
   state: RecoveryCommentThreadState,
 ): Promise<RecoveryCommentThreadState> {
   return applyCommentThreadState(address, state);
-}
-
-function rowLength(grid: unknown[][], row: number): number {
-  const rowValues = grid[row];
-  return Array.isArray(rowValues) ? rowValues.length : 0;
-}
-
-function valueAt(grid: unknown[][], row: number, col: number): unknown {
-  const rowValues = grid[row];
-  if (!Array.isArray(rowValues)) return "";
-  return col < rowValues.length ? rowValues[col] : "";
-}
-
-function cloneGrid(grid: unknown[][]): unknown[][] {
-  return grid.map((row) => {
-    if (!Array.isArray(row)) {
-      return [];
-    }
-
-    return [...row];
-  });
-}
-
-function gridStats(values: unknown[][], formulas: unknown[][]): {
-  rows: number;
-  cols: number;
-  cellCount: number;
-} {
-  const rows = Math.max(values.length, formulas.length);
-  let cols = 0;
-
-  for (let row = 0; row < rows; row += 1) {
-    cols = Math.max(cols, rowLength(values, row), rowLength(formulas, row));
-  }
-
-  return {
-    rows,
-    cols,
-    cellCount: rows * cols,
-  };
-}
-
-function normalizeFormula(raw: unknown): string | undefined {
-  if (typeof raw !== "string") return undefined;
-
-  const trimmed = raw.trim();
-  if (!trimmed.startsWith("=")) return undefined;
-  return trimmed;
-}
-
-function toRestoreValues(values: unknown[][], formulas: unknown[][]): unknown[][] {
-  const { rows, cols } = gridStats(values, formulas);
-  const restored: unknown[][] = [];
-
-  for (let row = 0; row < rows; row += 1) {
-    const outRow: unknown[] = [];
-    for (let col = 0; col < cols; col += 1) {
-      const formula = normalizeFormula(valueAt(formulas, row, col));
-      outRow.push(formula ?? valueAt(values, row, col));
-    }
-    restored.push(outRow);
-  }
-
-  return restored;
 }
 
 function serializeComparable(raw: unknown): string {

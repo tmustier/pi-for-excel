@@ -4,6 +4,7 @@ import { excelRun } from "../../excel/helpers.js";
 import { localAddressPart } from "./address.js";
 import { cloneRecoveryModifyStructureState } from "./clone.js";
 import { MAX_RECOVERY_CELLS } from "./constants.js";
+import { cloneGrid, gridStats, toRestoreValues } from "./grid.js";
 import type {
   RecoveryModifyStructureState,
   RecoverySheetVisibility,
@@ -85,78 +86,6 @@ export function columnNumberToLetter(position: number): string {
   return letter;
 }
 
-function cloneUnknownGrid(grid: unknown[][]): unknown[][] {
-  return grid.map((row) => {
-    if (!Array.isArray(row)) {
-      return [];
-    }
-
-    return [...row];
-  });
-}
-
-function rowLength(grid: unknown[][], row: number): number {
-  const rowValues = grid[row];
-  return Array.isArray(rowValues) ? rowValues.length : 0;
-}
-
-function gridStats(values: unknown[][], formulas: unknown[][]): {
-  rows: number;
-  cols: number;
-} {
-  const rows = Math.max(values.length, formulas.length);
-  let cols = 0;
-
-  for (let row = 0; row < rows; row += 1) {
-    cols = Math.max(cols, rowLength(values, row), rowLength(formulas, row));
-  }
-
-  return {
-    rows,
-    cols,
-  };
-}
-
-function valueAt(grid: unknown[][], row: number, col: number): unknown {
-  const rowValues = grid[row];
-  if (!Array.isArray(rowValues)) {
-    return "";
-  }
-
-  return col < rowValues.length ? rowValues[col] : "";
-}
-
-function normalizeFormula(raw: unknown): string | undefined {
-  if (typeof raw !== "string") {
-    return undefined;
-  }
-
-  const trimmed = raw.trim();
-  if (!trimmed.startsWith("=")) {
-    return undefined;
-  }
-
-  return trimmed;
-}
-
-function toRestoreValues(values: unknown[][], formulas: unknown[][]): unknown[][] {
-  const { rows, cols } = gridStats(values, formulas);
-  const restored: unknown[][] = [];
-
-  for (let row = 0; row < rows; row += 1) {
-    const outRow: unknown[] = [];
-
-    for (let col = 0; col < cols; col += 1) {
-      const formula = normalizeFormula(valueAt(formulas, row, col));
-      outRow.push(formula ?? valueAt(values, row, col));
-    }
-
-    restored.push(outRow);
-  }
-
-  return restored;
-}
-
 function isStructureValueRangeStateShapeValid(dataRange: RecoveryStructureValueRangeState): boolean {
   if (typeof dataRange.address !== "string") {
     return false;
@@ -215,8 +144,8 @@ async function captureUsedRangeSnapshot(
   usedRange.load(["values", "formulas"]);
   await context.sync();
 
-  const values = cloneUnknownGrid(usedRange.values);
-  const formulas = cloneUnknownGrid(usedRange.formulas);
+  const values = cloneGrid(usedRange.values);
+  const formulas = cloneGrid(usedRange.formulas);
   const dataRange: RecoveryStructureValueRangeState = {
     address: localAddressPart(usedRange.address),
     rowCount: usedRange.rowCount,

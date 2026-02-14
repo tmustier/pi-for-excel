@@ -16,6 +16,7 @@ import {
   type RecoveryModifyStructureState,
   type RecoveryStructureValueRangeState,
 } from "../recovery-states.js";
+import { cloneGrid, gridStats } from "./grid.js";
 import { estimateModifyStructureCellCount } from "./structure-state.js";
 import type {
   WorkbookRecoverySnapshot,
@@ -60,40 +61,6 @@ function isWorkbookRecoveryToolName(value: unknown): value is WorkbookRecoveryTo
 
 function isGrid(value: unknown): value is unknown[][] {
   return Array.isArray(value) && value.every((row) => Array.isArray(row));
-}
-
-function rowLength(grid: unknown[][], row: number): number {
-  const rowValues = grid[row];
-  return Array.isArray(rowValues) ? rowValues.length : 0;
-}
-
-function cloneGrid(grid: unknown[][]): unknown[][] {
-  return grid.map((row) => {
-    if (!Array.isArray(row)) {
-      return [];
-    }
-
-    return [...row];
-  });
-}
-
-function gridStats(values: unknown[][], formulas: unknown[][]): {
-  rows: number;
-  cols: number;
-  cellCount: number;
-} {
-  const rows = Math.max(values.length, formulas.length);
-  let cols = 0;
-
-  for (let row = 0; row < rows; row += 1) {
-    cols = Math.max(cols, rowLength(values, row), rowLength(formulas, row));
-  }
-
-  return {
-    rows,
-    cols,
-    cellCount: rows * cols,
-  };
 }
 
 function parseWorkbookRecoverySnapshotKind(value: unknown): WorkbookRecoverySnapshotKind {
