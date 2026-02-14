@@ -13,6 +13,7 @@ This folder contains **current** docs that should match shipped behavior.
 - [Integrations + External Tools](./integrations-external-tools.md)
 - [Agent Skills interop (skills vs integrations)](./agent-skills-interop.md)
 - [Compaction (`/compact`)](./compaction.md)
+- [Manual full-workbook backups (`/backup`)](./manual-full-backups.md)
 
 ## Architecture & policy
 - [Context management policy (cache-safe)](./context-management-policy.md)

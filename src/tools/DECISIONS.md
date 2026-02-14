@@ -256,6 +256,7 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
   - `YOLO` (default): mutate tools run without extra pre-execution confirmations.
   - `Safe`: mutate tools require pre-execution confirmation via runtime gate.
 - **Automatic backups:** successful `write_cells`, `fill_formula`, `python_transform_range`, `format_cells`, `conditional_format`, mutating `comments` actions, and supported `modify_structure` actions (`rename_sheet`, `hide_sheet`, `unhide_sheet`, `insert_rows`, `insert_columns`, `add_sheet`, and `duplicate_sheet` when the duplicate has no value data) store pre-mutation snapshots in local `workbook.recovery-snapshots.v1`.
+- **Manual full-workbook fallback (`/backup`):** explicit user-triggered full-file captures are stored in Files workspace under `manual-backups/full-workbook/v1/...` and downloaded for restore. This remains separate from automatic per-mutation checkpoints.
 - **Safety limits:** backup capture is skipped for very large writes (> `MAX_RECOVERY_CELLS`) to avoid oversized local state.
 - **Workbook identity guardrails:** append/list/delete/clear/restore paths are scoped to the active workbook identity; restore rejects identity-less or cross-workbook backups.
 - **Save boundary behavior:** backups are intended as "in between saves" recovery points and are cleared after the workbook transitions from dirty → saved.

@@ -87,6 +87,10 @@ import { PiSidebar } from "../ui/pi-sidebar.js";
 import { setActiveProviders } from "../compat/model-selector-patch.js";
 import { createWorkbookCoordinator } from "../workbook/coordinator.js";
 import { formatWorkbookLabel, getWorkbookContext } from "../workbook/context.js";
+import {
+  getManualFullWorkbookBackupStore,
+  type ManualFullWorkbookBackup,
+} from "../workbook/manual-full-backup.js";
 import { getWorkbookRecoveryLog, type WorkbookRecoverySnapshot } from "../workbook/recovery-log.js";
 import { readRetentionLimit, writeRetentionLimit } from "../workbook/recovery/log-store.js";
 import {
@@ -452,6 +456,14 @@ export async function initTaskpane(opts: {
   const getActiveLockState = () => getActiveRuntime()?.lockState ?? "idle";
 
   const workbookRecoveryLog = getWorkbookRecoveryLog();
+  const manualFullBackupStore = getManualFullWorkbookBackupStore();
+
+  const toManualFullBackupSummary = (backup: ManualFullWorkbookBackup) => ({
+    id: backup.id,
+    createdAt: backup.createdAt,
+    sizeBytes: backup.sizeBytes,
+  });
+
   const saveBoundaryMonitor = new WorkbookSaveBoundaryMonitor({
     clearBackupsForCurrentWorkbook: () => workbookRecoveryLog.clearForCurrentWorkbook(),
   });
@@ -998,6 +1010,44 @@ export async function initTaskpane(opts: {
     await restoreCheckpointById(checkpoint.id);
   };
 
+  const createManualFullBackup = async (): Promise<{
+    id: string;
+    createdAt: number;
+    sizeBytes: number;
+  }> => {
+    const backup = await manualFullBackupStore.create();
+    await getFilesWorkspace().downloadFile(backup.path);
+    return toManualFullBackupSummary(backup);
+  };
+
+  const listManualFullBackups = async (limit = 5): Promise<Array<{
+    id: string;
+    createdAt: number;
+    sizeBytes: number;
+  }>> => {
+    const safeLimit = Math.max(1, Math.min(20, Math.floor(limit)));
+    const backups = await manualFullBackupStore.listForCurrentWorkbook(safeLimit);
+    return backups.map((backup) => toManualFullBackupSummary(backup));
+  };
+
+  const restoreManualFullBackup = async (
+    backupId?: string,
+  ): Promise<{
+    id: string;
+    createdAt: number;
+    sizeBytes: number;
+  } | null> => {
+    const resolved = backupId?.trim()
+      ? await manualFullBackupStore.downloadByIdForCurrentWorkbook(backupId)
+      : await manualFullBackupStore.downloadLatestForCurrentWorkbook();
+
+    return resolved ? toManualFullBackupSummary(resolved) : null;
+  };
+
+  const clearManualFullBackups = async (): Promise<number> => {
+    return manualFullBackupStore.clearForCurrentWorkbook();
+  };
+
   const closeRuntimeWithRecovery = async (
     runtimeId: string,
     optsForClose?: { showUndoToast?: boolean },
@@ -1271,6 +1321,18 @@ export async function initTaskpane(opts: {
         const message = error instanceof Error ? error.message : "Unknown error";
         showToast(`Revert failed: ${message}`);
       }
+    },
+    createManualFullBackup: async () => {
+      return createManualFullBackup();
+    },
+    listManualFullBackups: async (limit?: number) => {
+      return listManualFullBackups(limit);
+    },
+    restoreManualFullBackup: async (backupId?: string) => {
+      return restoreManualFullBackup(backupId);
+    },
+    clearManualFullBackups: async () => {
+      return clearManualFullBackups();
     },
     openInstructionsEditor: async () => {
       await showRulesDialog({

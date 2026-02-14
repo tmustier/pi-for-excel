@@ -136,12 +136,15 @@ void test("taskpane init wires Files workspace opener when sidebar callback is p
   );
 });
 
-void test("session builtins include recovery history command", async () => {
+void test("session builtins include recovery and manual-backup commands", async () => {
   const sessionSource = await readFile(new URL("../src/commands/builtins/session.ts", import.meta.url), "utf8");
 
   assert.match(sessionSource, /name:\s*"history"/);
   assert.match(sessionSource, /openRecoveryDialog/);
   assert.match(sessionSource, /name:\s*"revert"/);
+  assert.match(sessionSource, /name:\s*"backup"/);
+  assert.match(sessionSource, /createManualFullBackup/);
+  assert.match(sessionSource, /restoreManualFullBackup/);
 });
 
 void test("settings builtins include yolo execution-mode command", async () => {
