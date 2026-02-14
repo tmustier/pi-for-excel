@@ -500,6 +500,18 @@
       color: var(--muted);
       line-height: 1.65;
     }
+    .connect-step-intro { margin-top: 12px; }
+    .connect-step-followup { margin-top: 16px; }
+    .connect-helper-note {
+      margin-top: 12px;
+      font-size: 13px;
+      color: var(--faint);
+    }
+    .connect-sidebar-note {
+      margin-top: 12px;
+      font-size: 14px;
+      color: var(--muted);
+    }
     .badge {
       display: inline-block;
       font-family: var(--font);
@@ -837,7 +849,7 @@
         If you already pay for Claude, Copilot, or another provider, you can log in directly — no API key needed. You just need to run a small local helper first.
       </p>
 
-      <p style="margin-top: 12px;">
+      <p class="connect-step-intro">
         <strong>If you already have Node.js</strong>:
       </p>
 
@@ -849,7 +861,7 @@
         <pre><span class="prompt">$ </span>npx pi-for-excel-proxy</pre>
       </div>
 
-      <p style="margin-top: 16px;">
+      <p class="connect-step-followup">
         <strong>If you don't have Node.js (or aren't sure)</strong>:
       </p>
 
@@ -861,11 +873,11 @@
         <pre><span class="prompt">$ </span>curl -fsSL https://piforexcel.com/proxy | sh</pre>
       </div>
 
-      <p style="margin-top: 12px; font-size: 13px; color: var(--faint);">
+      <p class="connect-helper-note">
         First run sets up local HTTPS certs automatically. Keep the helper running while you use Pi.
       </p>
 
-      <p style="margin-top: 12px; font-size: 14px; color: var(--muted);">
+      <p class="connect-sidebar-note">
         In the sidebar: <span class="path">/settings</span> → Proxy → enable, set URL to <code>https://localhost:3003</code>. Then <span class="path">/login</span> and sign in.
       </p>
 
