@@ -282,6 +282,8 @@ void test("trusted local-module extensions stay on host runtime even when sandbo
 
 void test("sandbox runtime source enforces capability gates and rejects unknown ui actions", async () => {
   const source = await readFile(new URL("../src/extensions/sandbox-runtime.ts", import.meta.url), "utf8");
+  const surfacesSource = await readFile(new URL("../src/extensions/sandbox/surfaces.ts", import.meta.url), "utf8");
+  const protocolSource = await readFile(new URL("../src/extensions/sandbox/protocol.ts", import.meta.url), "utf8");
 
   assert.match(source, /case "register_tool": \{[\s\S]*this\.assertCapability\("tools\.register"\)/);
   assert.match(source, /normalizeSandboxToolParameters/);
@@ -289,7 +291,6 @@ void test("sandbox runtime source enforces capability gates and rejects unknown 
   assert.match(source, /case "overlay_show": \{[\s\S]*this\.assertCapability\("ui\.overlay"\)/);
   assert.match(source, /case "widget_show": \{[\s\S]*this\.assertCapability\("ui\.widget"\)/);
   assert.match(source, /case "widget_upsert": \{[\s\S]*Widget API v2 is disabled/);
-  assert.match(source, /upsertSandboxWidgetNode\([\s\S]*element:\s*body/);
   assert.match(source, /placement: payload\.placement === "above-input" \|\| payload\.placement === "below-input"/);
   assert.match(source, /collapsible: typeof payload\.collapsible === "boolean" \? payload\.collapsible : undefined/);
   assert.match(source, /asWidgetPlacementOrUndefined\(payload\.placement\)/);
@@ -300,6 +301,10 @@ void test("sandbox runtime source enforces capability gates and rejects unknown 
   assert.match(source, /if \(method === "ui_action"\)/);
   assert.match(source, /Unknown sandbox UI action id:/);
   assert.match(source, /allowWhenDisposed:\s*true/);
+
+  assert.match(surfacesSource, /upsertExtensionWidget\([\s\S]*element:\s*body/);
+  assert.match(protocolSource, /export const SANDBOX_CHANNEL =/);
+  assert.match(protocolSource, /export function isSandboxEnvelope/);
 
   // Isolation boundary checks: strict iframe sandboxing + host-side message source/direction checks.
   assert.match(source, /setAttribute\("sandbox", "allow-scripts"\)/);

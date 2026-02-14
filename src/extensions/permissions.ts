@@ -122,6 +122,26 @@ const CAPABILITY_LABELS: Record<ExtensionCapability, string> = {
   "download.file": "trigger file downloads",
 };
 
+const CAPABILITY_TO_PERMISSION_KEY = {
+  "commands.register": "commandsRegister",
+  "tools.register": "toolsRegister",
+  "agent.read": "agentRead",
+  "agent.events.read": "agentEventsRead",
+  "ui.overlay": "uiOverlay",
+  "ui.widget": "uiWidget",
+  "ui.toast": "uiToast",
+  "llm.complete": "llmComplete",
+  "http.fetch": "httpFetch",
+  "storage.readwrite": "storageReadWrite",
+  "clipboard.write": "clipboardWrite",
+  "agent.context.write": "agentContextWrite",
+  "agent.steer": "agentSteer",
+  "agent.followup": "agentFollowUp",
+  "skills.read": "skillsRead",
+  "skills.write": "skillsWrite",
+  "download.file": "downloadFile",
+} as const satisfies Record<ExtensionCapability, keyof StoredExtensionPermissions>;
+
 function clonePermissions(source: StoredExtensionPermissions): StoredExtensionPermissions {
   return {
     commandsRegister: source.commandsRegister,
@@ -212,42 +232,8 @@ export function isExtensionCapabilityAllowed(
   permissions: StoredExtensionPermissions,
   capability: ExtensionCapability,
 ): boolean {
-  switch (capability) {
-    case "commands.register":
-      return permissions.commandsRegister;
-    case "tools.register":
-      return permissions.toolsRegister;
-    case "agent.read":
-      return permissions.agentRead;
-    case "agent.events.read":
-      return permissions.agentEventsRead;
-    case "ui.overlay":
-      return permissions.uiOverlay;
-    case "ui.widget":
-      return permissions.uiWidget;
-    case "ui.toast":
-      return permissions.uiToast;
-    case "llm.complete":
-      return permissions.llmComplete;
-    case "http.fetch":
-      return permissions.httpFetch;
-    case "storage.readwrite":
-      return permissions.storageReadWrite;
-    case "clipboard.write":
-      return permissions.clipboardWrite;
-    case "agent.context.write":
-      return permissions.agentContextWrite;
-    case "agent.steer":
-      return permissions.agentSteer;
-    case "agent.followup":
-      return permissions.agentFollowUp;
-    case "skills.read":
-      return permissions.skillsRead;
-    case "skills.write":
-      return permissions.skillsWrite;
-    case "download.file":
-      return permissions.downloadFile;
-  }
+  const permissionKey = CAPABILITY_TO_PERMISSION_KEY[capability];
+  return permissions[permissionKey];
 }
 
 export function setExtensionCapabilityAllowed(
@@ -255,93 +241,11 @@ export function setExtensionCapabilityAllowed(
   capability: ExtensionCapability,
   allowed: boolean,
 ): StoredExtensionPermissions {
-  switch (capability) {
-    case "commands.register":
-      return {
-        ...permissions,
-        commandsRegister: allowed,
-      };
-    case "tools.register":
-      return {
-        ...permissions,
-        toolsRegister: allowed,
-      };
-    case "agent.read":
-      return {
-        ...permissions,
-        agentRead: allowed,
-      };
-    case "agent.events.read":
-      return {
-        ...permissions,
-        agentEventsRead: allowed,
-      };
-    case "ui.overlay":
-      return {
-        ...permissions,
-        uiOverlay: allowed,
-      };
-    case "ui.widget":
-      return {
-        ...permissions,
-        uiWidget: allowed,
-      };
-    case "ui.toast":
-      return {
-        ...permissions,
-        uiToast: allowed,
-      };
-    case "llm.complete":
-      return {
-        ...permissions,
-        llmComplete: allowed,
-      };
-    case "http.fetch":
-      return {
-        ...permissions,
-        httpFetch: allowed,
-      };
-    case "storage.readwrite":
-      return {
-        ...permissions,
-        storageReadWrite: allowed,
-      };
-    case "clipboard.write":
-      return {
-        ...permissions,
-        clipboardWrite: allowed,
-      };
-    case "agent.context.write":
-      return {
-        ...permissions,
-        agentContextWrite: allowed,
-      };
-    case "agent.steer":
-      return {
-        ...permissions,
-        agentSteer: allowed,
-      };
-    case "agent.followup":
-      return {
-        ...permissions,
-        agentFollowUp: allowed,
-      };
-    case "skills.read":
-      return {
-        ...permissions,
-        skillsRead: allowed,
-      };
-    case "skills.write":
-      return {
-        ...permissions,
-        skillsWrite: allowed,
-      };
-    case "download.file":
-      return {
-        ...permissions,
-        downloadFile: allowed,
-      };
-  }
+  const permissionKey = CAPABILITY_TO_PERMISSION_KEY[capability];
+  return {
+    ...permissions,
+    [permissionKey]: allowed,
+  };
 }
 
 export function describeStoredExtensionTrust(trust: StoredExtensionTrust): string {
@@ -359,25 +263,8 @@ export function listAllExtensionCapabilities(): ExtensionCapability[] {
 export function listGrantedExtensionCapabilities(
   permissions: StoredExtensionPermissions,
 ): ExtensionCapability[] {
-  const capabilities: ExtensionCapability[] = [];
-
-  if (permissions.commandsRegister) capabilities.push("commands.register");
-  if (permissions.toolsRegister) capabilities.push("tools.register");
-  if (permissions.agentRead) capabilities.push("agent.read");
-  if (permissions.agentEventsRead) capabilities.push("agent.events.read");
-  if (permissions.uiOverlay) capabilities.push("ui.overlay");
-  if (permissions.uiWidget) capabilities.push("ui.widget");
-  if (permissions.uiToast) capabilities.push("ui.toast");
-  if (permissions.llmComplete) capabilities.push("llm.complete");
-  if (permissions.httpFetch) capabilities.push("http.fetch");
-  if (permissions.storageReadWrite) capabilities.push("storage.readwrite");
-  if (permissions.clipboardWrite) capabilities.push("clipboard.write");
-  if (permissions.agentContextWrite) capabilities.push("agent.context.write");
-  if (permissions.agentSteer) capabilities.push("agent.steer");
-  if (permissions.agentFollowUp) capabilities.push("agent.followup");
-  if (permissions.skillsRead) capabilities.push("skills.read");
-  if (permissions.skillsWrite) capabilities.push("skills.write");
-  if (permissions.downloadFile) capabilities.push("download.file");
-
-  return capabilities;
+  return ALL_EXTENSION_CAPABILITIES.filter((capability) => {
+    const permissionKey = CAPABILITY_TO_PERMISSION_KEY[capability];
+    return permissions[permissionKey];
+  });
 }

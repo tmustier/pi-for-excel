@@ -27,56 +27,28 @@ import type { ExtensionCapability } from "./permissions.js";
 import {
   clearExtensionWidgets,
   removeExtensionWidget,
-  upsertExtensionWidget,
 } from "./internal/widget-surface.js";
+import { normalizeSandboxUiNode } from "./sandbox-ui.js";
 import {
-  collectSandboxUiActionIds,
-  normalizeSandboxUiNode,
-  renderSandboxUiTree,
-  type SandboxUiNode,
-} from "./sandbox-ui.js";
-import { EXTENSION_OVERLAY_ID } from "../ui/overlay-ids.js";
-import { createOverlayDialogManager } from "../ui/overlay-dialog.js";
+  SANDBOX_CHANNEL,
+  SANDBOX_REQUEST_TIMEOUT_MS,
+  isSandboxEnvelope,
+  serializeForSandboxInlineScript,
+  type SandboxRequestEnvelope,
+  type SandboxResponseEnvelope,
+  type SandboxEventEnvelope,
+} from "./sandbox/protocol.js";
+import {
+  createTextOnlyUiNode,
+  dismissOverlay,
+  dismissWidget,
+  showOverlayNode,
+  showWidgetNode,
+  upsertSandboxWidgetNode,
+} from "./sandbox/surfaces.js";
 import { isRecord } from "../utils/type-guards.js";
 
-const SANDBOX_CHANNEL = "pi.extension.sandbox.rpc.v1";
-const REQUEST_TIMEOUT_MS = 15_000;
-const SANDBOX_WIDGET_SLOT_ID = "pi-widget-slot";
 const LEGACY_WIDGET_ID = "__legacy__";
-
-type SandboxDirection = "sandbox_to_host" | "host_to_sandbox";
-
-type SandboxEnvelopeKind = "request" | "response" | "event";
-
-interface SandboxEnvelopeBase {
-  channel: string;
-  instanceId: string;
-  direction: SandboxDirection;
-  kind: SandboxEnvelopeKind;
-}
-
-interface SandboxRequestEnvelope extends SandboxEnvelopeBase {
-  kind: "request";
-  requestId: string;
-  method: string;
-  params?: unknown;
-}
-
-interface SandboxResponseEnvelope extends SandboxEnvelopeBase {
-  kind: "response";
-  requestId: string;
-  ok: boolean;
-  result?: unknown;
-  error?: string;
-}
-
-interface SandboxEventEnvelope extends SandboxEnvelopeBase {
-  kind: "event";
-  event: string;
-  data?: unknown;
-}
-
-type SandboxEnvelope = SandboxRequestEnvelope | SandboxResponseEnvelope | SandboxEventEnvelope;
 
 interface SandboxInlineSource {
   kind: "inline";
@@ -194,165 +166,6 @@ function asBooleanOrUndefined(value: unknown): boolean | undefined {
   return typeof value === "boolean" ? value : undefined;
 }
 
-function isSandboxEnvelope(value: unknown): value is SandboxEnvelope {
-  if (!isRecord(value)) return false;
-
-  const channel = value.channel;
-  const instanceId = value.instanceId;
-  const direction = value.direction;
-  const kind = value.kind;
-
-  if (channel !== SANDBOX_CHANNEL) return false;
-  if (typeof instanceId !== "string") return false;
-  if (direction !== "sandbox_to_host" && direction !== "host_to_sandbox") return false;
-  if (kind !== "request" && kind !== "response" && kind !== "event") return false;
-
-  if (kind === "request") {
-    return typeof value.requestId === "string" && typeof value.method === "string";
-  }
-
-  if (kind === "response") {
-    return typeof value.requestId === "string" && typeof value.ok === "boolean";
-  }
-
-  return typeof value.event === "string";
-}
-
-function serializeForInlineScript(value: unknown): string {
-  return JSON.stringify(value).replace(/</g, "\\u003c");
-}
-
-const sandboxOverlayDialogManager = createOverlayDialogManager({
-  overlayId: EXTENSION_OVERLAY_ID,
-  cardClassName: "pi-welcome-card pi-overlay-card",
-  zIndex: 260,
-});
-
-function createTextOnlyUiNode(text: string): SandboxUiNode {
-  return {
-    kind: "element",
-    tag: "pre",
-    className: "pi-overlay-code",
-    children: [
-      {
-        kind: "text",
-        text,
-      },
-    ],
-  };
-}
-
-function showOverlayNode(
-  node: SandboxUiNode,
-  onAction: (actionId: string) => void,
-): Set<string> {
-  const dialog = sandboxOverlayDialogManager.ensure();
-
-  const body = document.createElement("div");
-  renderSandboxUiTree(body, node, onAction);
-
-  dialog.card.replaceChildren(body);
-
-  if (!dialog.overlay.isConnected) {
-    dialog.mount();
-  }
-
-  return new Set(collectSandboxUiActionIds(node));
-}
-
-function dismissOverlay(): void {
-  sandboxOverlayDialogManager.dismiss();
-}
-
-function ensureWidgetSlot(): HTMLElement | null {
-  let slot = document.getElementById(SANDBOX_WIDGET_SLOT_ID);
-  if (slot) {
-    return slot;
-  }
-
-  const inputArea = document.querySelector<HTMLElement>(".pi-input-area");
-  if (!inputArea) {
-    return null;
-  }
-
-  const parent = inputArea.parentElement;
-  if (!parent) {
-    return null;
-  }
-
-  slot = document.createElement("div");
-  slot.id = SANDBOX_WIDGET_SLOT_ID;
-  slot.className = "pi-widget-slot";
-  parent.insertBefore(slot, inputArea);
-  return slot;
-}
-
-function showWidgetNode(
-  node: SandboxUiNode,
-  onAction: (actionId: string) => void,
-): Set<string> {
-  const slot = ensureWidgetSlot();
-  if (!slot) {
-    return new Set<string>();
-  }
-
-  const card = document.createElement("div");
-  card.className = "pi-overlay-surface";
-
-  const body = document.createElement("div");
-  renderSandboxUiTree(body, node, onAction);
-
-  card.appendChild(body);
-  slot.replaceChildren(card);
-  slot.style.display = "flex";
-
-  return new Set(collectSandboxUiActionIds(node));
-}
-
-function dismissWidget(): void {
-  const slot = document.getElementById(SANDBOX_WIDGET_SLOT_ID);
-  if (!slot) {
-    return;
-  }
-
-  slot.style.display = "none";
-  slot.replaceChildren();
-}
-
-interface SandboxWidgetUpsertOptions {
-  ownerId: string;
-  widgetId: string;
-  node: SandboxUiNode;
-  onAction: (actionId: string) => void;
-  title?: string;
-  placement?: WidgetPlacement;
-  order?: number;
-  collapsible?: boolean;
-  collapsed?: boolean;
-  minHeightPx?: number | null;
-  maxHeightPx?: number | null;
-}
-
-function upsertSandboxWidgetNode(options: SandboxWidgetUpsertOptions): Set<string> {
-  const body = document.createElement("div");
-  renderSandboxUiTree(body, options.node, options.onAction);
-
-  upsertExtensionWidget({
-    ownerId: options.ownerId,
-    id: options.widgetId,
-    element: body,
-    title: options.title,
-    placement: options.placement,
-    order: options.order,
-    collapsible: options.collapsible,
-    collapsed: options.collapsed,
-    minHeightPx: options.minHeightPx,
-    maxHeightPx: options.maxHeightPx,
-  });
-
-  return new Set(collectSandboxUiActionIds(options.node));
-}
-
 function isTypeBoxSchema(value: unknown): value is TSchema {
   return isRecord(value) && Kind in value;
 }
@@ -465,7 +278,7 @@ class SandboxRuntimeHost {
         this.resolveReady = null;
         this.rejectReady = null;
       }
-    }, REQUEST_TIMEOUT_MS);
+    }, SANDBOX_REQUEST_TIMEOUT_MS);
 
     try {
       await this.readyPromise;
@@ -530,7 +343,7 @@ class SandboxRuntimeHost {
       widgetApiV2Enabled: this.widgetApiV2Enabled,
     };
 
-    const serializedConfig = serializeForInlineScript(config);
+    const serializedConfig = serializeForSandboxInlineScript(config);
 
     return `<!doctype html>
 <html>
@@ -1348,7 +1161,7 @@ class SandboxRuntimeHost {
       const timeoutId = setTimeout(() => {
         this.pendingRequests.delete(requestId);
         reject(new Error(`Sandbox request timed out: ${method}`));
-      }, REQUEST_TIMEOUT_MS);
+      }, SANDBOX_REQUEST_TIMEOUT_MS);
 
       this.pendingRequests.set(requestId, {
         resolve,
