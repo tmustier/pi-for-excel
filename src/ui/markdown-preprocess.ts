@@ -2,6 +2,25 @@
  * Markdown preprocessing helpers for UI rendering.
  */
 
+const COMMON_FRONTMATTER_KEYS = new Set([
+  "title",
+  "date",
+  "description",
+  "name",
+  "author",
+  "authors",
+  "slug",
+  "tags",
+  "category",
+  "categories",
+  "layout",
+  "draft",
+  "published",
+  "updated",
+  "summary",
+  "excerpt",
+]);
+
 function isLikelyYamlFrontmatterBlock(block: string): boolean {
   let sawMapping = false;
 
@@ -11,9 +30,17 @@ function isLikelyYamlFrontmatterBlock(block: string): boolean {
     if (line.startsWith("#")) continue;
 
     // YAML mapping entry (supports dashed keys and optional value).
-    if (/^[a-z_][a-z0-9_-]*\s*:\s*(?:.*)?$/.test(line)) {
-      sawMapping = true;
-      continue;
+    const mappingMatch = line.match(/^([A-Za-z_][A-Za-z0-9_-]*)\s*:\s*(?:.*)?$/);
+    if (mappingMatch) {
+      const key = mappingMatch[1];
+      const normalizedKey = key.toLowerCase();
+      // Keep prose guard: allow arbitrary lowercase keys, but only allow
+      // title-case/uppercase keys for canonical frontmatter fields.
+      if (key === normalizedKey || COMMON_FRONTMATTER_KEYS.has(normalizedKey)) {
+        sawMapping = true;
+        continue;
+      }
+      return false;
     }
 
     // YAML list item (e.g., under a mapping key).

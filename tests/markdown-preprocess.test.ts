@@ -67,3 +67,15 @@ Note: this section is prose, not metadata
   const output = stripYamlFrontmatter(input);
   assert.equal(output, input);
 });
+
+void test("stripYamlFrontmatter supports canonical title-cased frontmatter keys", () => {
+  const input = `---
+Title: Spreadsheet Skill
+Date: 2026-02-14
+---
+# Heading
+`;
+
+  const output = stripYamlFrontmatter(input);
+  assert.equal(output, "# Heading\n");
+});
