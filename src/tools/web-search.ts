@@ -5,9 +5,13 @@
 import type { AgentTool, AgentToolResult } from "@mariozechner/pi-agent-core";
 import { Type, type Static, type TSchema } from "@sinclair/typebox";
 
-import { getErrorMessage } from "../utils/errors.js";
-import { isRecord } from "../utils/type-guards.js";
 import { integrationsCommandHint } from "../integrations/naming.js";
+import { getErrorMessage } from "../utils/errors.js";
+import {
+  getHttpErrorReason,
+  runWithTimeoutAbort,
+} from "../utils/network.js";
+import { isRecord } from "../utils/type-guards.js";
 import {
   getEnabledProxyBaseUrl,
   resolveOutboundRequestUrl,
@@ -430,18 +434,6 @@ function buildResultMarkdown(args: {
   return lines.join("\n");
 }
 
-function isAbortError(error: unknown): boolean {
-  if (error instanceof DOMException) {
-    return error.name === "AbortError";
-  }
-
-  if (error instanceof Error) {
-    return error.name === "AbortError";
-  }
-
-  return false;
-}
-
 async function defaultGetConfig(): Promise<WebSearchToolConfig> {
   const storageModule = await import("@mariozechner/pi-web-ui/dist/storage/app-storage.js");
   const settings: ProxyAwareSettingsStore = storageModule.getAppStorage().settings;
@@ -476,68 +468,42 @@ async function defaultExecuteSearch(
     proxyBaseUrl: config.proxyBaseUrl,
   });
 
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => {
-    controller.abort();
-  }, WEB_SEARCH_TIMEOUT_MS);
+  return runWithTimeoutAbort({
+    signal,
+    timeoutMs: WEB_SEARCH_TIMEOUT_MS,
+    timeoutErrorMessage: `web_search timed out after ${WEB_SEARCH_TIMEOUT_MS}ms.`,
+    run: async (requestSignal) => {
+      const response = await fetch(resolved.requestUrl, {
+        method: request.requestInit.method,
+        headers: request.requestInit.headers,
+        body: request.requestInit.body,
+        signal: requestSignal,
+      });
 
-  const abortFromCaller = () => {
-    controller.abort();
-  };
+      const text = await response.text();
 
-  if (signal) {
-    if (signal.aborted) {
-      controller.abort();
-    } else {
-      signal.addEventListener("abort", abortFromCaller, { once: true });
-    }
-  }
-
-  try {
-    const response = await fetch(resolved.requestUrl, {
-      method: request.requestInit.method,
-      headers: request.requestInit.headers,
-      body: request.requestInit.body,
-      signal: controller.signal,
-    });
-
-    const text = await response.text();
-
-    if (!response.ok) {
-      const reason = text.trim().length > 0 ? text.trim() : `HTTP ${response.status}`;
-      throw new Error(`${providerInfo(config.provider).title} search request failed (${response.status}): ${reason}`);
-    }
-
-    let payload: unknown = null;
-    try {
-      payload = JSON.parse(text);
-    } catch {
-      payload = null;
-    }
-
-    const hits = parseSearchHits(config.provider, payload);
-
-    return {
-      hits,
-      sentQuery: request.sentQuery,
-      proxied: resolved.proxied,
-      proxyBaseUrl: resolved.proxyBaseUrl,
-    };
-  } catch (error: unknown) {
-    if (isAbortError(error)) {
-      if (signal?.aborted) {
-        throw new Error("Aborted");
+      if (!response.ok) {
+        const reason = getHttpErrorReason(response.status, text);
+        throw new Error(`${providerInfo(config.provider).title} search request failed (${response.status}): ${reason}`);
       }
-      throw new Error(`web_search timed out after ${WEB_SEARCH_TIMEOUT_MS}ms.`);
-    }
 
-    throw error;
-  } finally {
-    clearTimeout(timeoutId);
-    if (signal) {
-      signal.removeEventListener("abort", abortFromCaller);
-    }
-  }
+      let payload: unknown = null;
+      try {
+        payload = JSON.parse(text);
+      } catch {
+        payload = null;
+      }
+
+      const hits = parseSearchHits(config.provider, payload);
+
+      return {
+        hits,
+        sentQuery: request.sentQuery,
+        proxied: resolved.proxied,
+        proxyBaseUrl: resolved.proxyBaseUrl,
+      };
+    },
+  });
 }
 
 export async function validateWebSearchApiKey(args: {

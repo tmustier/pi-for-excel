@@ -6,6 +6,7 @@ import type { AgentTool, AgentToolResult } from "@mariozechner/pi-agent-core";
 import { Type, type Static, type TSchema } from "@sinclair/typebox";
 
 import { getErrorMessage } from "../utils/errors.js";
+import { runWithTimeoutAbort } from "../utils/network.js";
 import {
   getEnabledProxyBaseUrl,
   resolveOutboundRequestUrl,
@@ -320,18 +321,6 @@ function buildResultMarkdown(args: {
   return lines.join("\n");
 }
 
-function isAbortError(error: unknown): boolean {
-  if (error instanceof DOMException) {
-    return error.name === "AbortError";
-  }
-
-  if (error instanceof Error) {
-    return error.name === "AbortError";
-  }
-
-  return false;
-}
-
 export function createFetchPageTool(
   dependencies: FetchPageToolDependencies = {},
 ): AgentTool<TSchema, FetchPageToolDetails> {
@@ -364,76 +353,48 @@ export function createFetchPageTool(
           proxyBaseUrl: config.proxyBaseUrl,
         });
 
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => {
-          controller.abort();
-        }, FETCH_PAGE_TIMEOUT_MS);
+        const response = await runWithTimeoutAbort({
+          signal,
+          timeoutMs: FETCH_PAGE_TIMEOUT_MS,
+          timeoutErrorMessage: `fetch_page timed out after ${FETCH_PAGE_TIMEOUT_MS}ms.`,
+          run: (requestSignal) => executeFetch(resolved.requestUrl, requestSignal),
+        });
 
-        const abortFromCaller = () => {
-          controller.abort();
-        };
-
-        if (signal) {
-          if (signal.aborted) {
-            controller.abort();
-          } else {
-            signal.addEventListener("abort", abortFromCaller, { once: true });
-          }
+        if (!response.ok) {
+          const reason = normalizeOptionalString(response.body) ?? `HTTP ${response.status}`;
+          throw new Error(`fetch_page request failed (${response.status}): ${reason}`);
         }
 
-        try {
-          const response = await executeFetch(resolved.requestUrl, controller.signal);
+        const extracted = extractReadableMarkdown({
+          body: response.body,
+          contentType: response.contentType,
+          maxChars: params.max_chars ?? DEFAULT_MAX_CHARS,
+        });
 
-          if (!response.ok) {
-            const reason = normalizeOptionalString(response.body) ?? `HTTP ${response.status}`;
-            throw new Error(`fetch_page request failed (${response.status}): ${reason}`);
-          }
-
-          const extracted = extractReadableMarkdown({
-            body: response.body,
-            contentType: response.contentType,
-            maxChars: params.max_chars ?? DEFAULT_MAX_CHARS,
-          });
-
-          return {
-            content: [{
-              type: "text",
-              text: buildResultMarkdown({
-                url: targetUrl,
-                title: extracted.title,
-                markdown: extracted.markdown,
-                truncated: extracted.truncated,
-                proxied: resolved.proxied,
-                proxyBaseUrl: resolved.proxyBaseUrl,
-              }),
-            }],
-            details: {
-              kind: "fetch_page",
-              ok: true,
+        return {
+          content: [{
+            type: "text",
+            text: buildResultMarkdown({
               url: targetUrl,
               title: extracted.title,
-              chars: extracted.markdown.length,
+              markdown: extracted.markdown,
               truncated: extracted.truncated,
               proxied: resolved.proxied,
               proxyBaseUrl: resolved.proxyBaseUrl,
-              contentType: response.contentType,
-            },
-          };
-        } catch (error: unknown) {
-          if (isAbortError(error)) {
-            if (signal?.aborted) {
-              throw new Error("Aborted");
-            }
-            throw new Error(`fetch_page timed out after ${FETCH_PAGE_TIMEOUT_MS}ms.`);
-          }
-
-          throw error;
-        } finally {
-          clearTimeout(timeoutId);
-          if (signal) {
-            signal.removeEventListener("abort", abortFromCaller);
-          }
-        }
+            }),
+          }],
+          details: {
+            kind: "fetch_page",
+            ok: true,
+            url: targetUrl,
+            title: extracted.title,
+            chars: extracted.markdown.length,
+            truncated: extracted.truncated,
+            proxied: resolved.proxied,
+            proxyBaseUrl: resolved.proxyBaseUrl,
+            contentType: response.contentType,
+          },
+        };
       } catch (error: unknown) {
         const message = getErrorMessage(error);
         return {

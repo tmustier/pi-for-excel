@@ -4,6 +4,7 @@
 
 import { getAppStorage } from "@mariozechner/pi-web-ui/dist/storage/app-storage.js";
 
+import { APP_NAME, APP_VERSION } from "../../app/metadata.js";
 import {
   INTEGRATION_IDS,
   listIntegrationDefinitions,
@@ -56,6 +57,10 @@ import {
 } from "../../ui/overlay-dialog.js";
 import { INTEGRATIONS_OVERLAY_ID } from "../../ui/overlay-ids.js";
 import { showToast } from "../../ui/toast.js";
+import {
+  getHttpErrorReason,
+  runWithTimeoutAbort,
+} from "../../utils/network.js";
 import { isRecord } from "../../utils/type-guards.js";
 
 const MCP_PROBE_TIMEOUT_MS = 8_000;
@@ -198,44 +203,42 @@ async function postJsonRpc(args: {
     headers.Authorization = `Bearer ${server.token}`;
   }
 
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => {
-    controller.abort();
-  }, MCP_PROBE_TIMEOUT_MS);
+  return runWithTimeoutAbort({
+    signal: undefined,
+    timeoutMs: MCP_PROBE_TIMEOUT_MS,
+    timeoutErrorMessage: `MCP request timed out after ${MCP_PROBE_TIMEOUT_MS}ms.`,
+    run: async (requestSignal) => {
+      const response = await fetch(resolved.requestUrl, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body),
+        signal: requestSignal,
+      });
 
-  try {
-    const response = await fetch(resolved.requestUrl, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    });
+      if (!response.ok) {
+        const text = await response.text();
+        const reason = getHttpErrorReason(response.status, text);
+        throw new Error(`MCP request failed (${response.status}): ${reason}`);
+      }
 
-    if (!response.ok) {
+      if (!expectResponse) {
+        return {
+          response: null,
+          proxied: resolved.proxied,
+          proxyBaseUrl: resolved.proxyBaseUrl,
+        };
+      }
+
       const text = await response.text();
-      const reason = text.trim().length > 0 ? text.trim() : `HTTP ${response.status}`;
-      throw new Error(`MCP request failed (${response.status}): ${reason}`);
-    }
+      const payload: unknown = text.trim().length > 0 ? JSON.parse(text) : null;
 
-    if (!expectResponse) {
       return {
-        response: null,
+        response: payload,
         proxied: resolved.proxied,
         proxyBaseUrl: resolved.proxyBaseUrl,
       };
-    }
-
-    const text = await response.text();
-    const payload: unknown = text.trim().length > 0 ? JSON.parse(text) : null;
-
-    return {
-      response: payload,
-      proxied: resolved.proxied,
-      proxyBaseUrl: resolved.proxyBaseUrl,
-    };
-  } finally {
-    clearTimeout(timeoutId);
-  }
+    },
+  });
 }
 
 async function probeMcpServer(
@@ -249,8 +252,8 @@ async function probeMcpServer(
       protocolVersion: "2025-03-26",
       capabilities: {},
       clientInfo: {
-        name: "pi-for-excel",
-        version: "0.3.0-pre",
+        name: APP_NAME,
+        version: APP_VERSION,
       },
     },
     settings,

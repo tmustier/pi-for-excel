@@ -5,9 +5,14 @@
 import type { AgentTool, AgentToolResult } from "@mariozechner/pi-agent-core";
 import { Type, type Static, type TSchema } from "@sinclair/typebox";
 
-import { getErrorMessage } from "../utils/errors.js";
-import { isRecord } from "../utils/type-guards.js";
+import { APP_NAME, APP_VERSION } from "../app/metadata.js";
 import { integrationsCommandHint } from "../integrations/naming.js";
+import { getErrorMessage } from "../utils/errors.js";
+import {
+  getHttpErrorReason,
+  runWithTimeoutAbort,
+} from "../utils/network.js";
+import { isRecord } from "../utils/type-guards.js";
 import type { ProxyAwareSettingsStore } from "./external-fetch.js";
 import { getEnabledProxyBaseUrl, resolveOutboundRequestUrl } from "./external-fetch.js";
 import {
@@ -16,8 +21,8 @@ import {
   type McpConfigStore,
 } from "./mcp-config.js";
 
-const MCP_CLIENT_NAME = "pi-for-excel";
-const MCP_CLIENT_VERSION = "0.3.0-pre";
+const MCP_CLIENT_NAME = APP_NAME;
+const MCP_CLIENT_VERSION = APP_VERSION;
 const MCP_PROTOCOL_VERSION = "2025-03-26";
 const MCP_TIMEOUT_MS = 15_000;
 
@@ -297,18 +302,6 @@ async function defaultGetRuntimeConfig(): Promise<McpRuntimeConfig> {
   };
 }
 
-function isAbortError(error: unknown): boolean {
-  if (error instanceof DOMException) {
-    return error.name === "AbortError";
-  }
-
-  if (error instanceof Error) {
-    return error.name === "AbortError";
-  }
-
-  return false;
-}
-
 async function defaultCallJsonRpc(args: {
   server: McpServerConfig;
   method: string;
@@ -346,77 +339,51 @@ async function defaultCallJsonRpc(args: {
     requestBody.params = params;
   }
 
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => {
-    controller.abort();
-  }, MCP_TIMEOUT_MS);
+  return runWithTimeoutAbort({
+    signal,
+    timeoutMs: MCP_TIMEOUT_MS,
+    timeoutErrorMessage: `MCP request timed out after ${MCP_TIMEOUT_MS}ms.`,
+    run: async (requestSignal) => {
+      const response = await fetch(resolved.requestUrl, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(requestBody),
+        signal: requestSignal,
+      });
 
-  const abortFromCaller = () => {
-    controller.abort();
-  };
+      if (!response.ok) {
+        const body = await response.text();
+        const reason = getHttpErrorReason(response.status, body);
+        throw new Error(`MCP request failed (${response.status}): ${reason}`);
+      }
 
-  if (signal) {
-    if (signal.aborted) {
-      controller.abort();
-    } else {
-      signal.addEventListener("abort", abortFromCaller, { once: true });
-    }
-  }
+      if (!expectResponse) {
+        return {
+          result: null,
+          proxied: resolved.proxied,
+          proxyBaseUrl: resolved.proxyBaseUrl,
+        };
+      }
 
-  try {
-    const response = await fetch(resolved.requestUrl, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(requestBody),
-      signal: controller.signal,
-    });
-
-    if (!response.ok) {
       const body = await response.text();
-      const reason = body.trim().length > 0 ? body.trim() : `HTTP ${response.status}`;
-      throw new Error(`MCP request failed (${response.status}): ${reason}`);
-    }
+      const payload: unknown = body.trim().length > 0 ? JSON.parse(body) : null;
 
-    if (!expectResponse) {
+      const rpcError = parseJsonRpcError(payload);
+      if (rpcError) {
+        throw new Error(rpcError);
+      }
+
+      if (!isRecord(payload)) {
+        throw new Error("Invalid MCP JSON-RPC response.");
+      }
+
       return {
-        result: null,
+        result: payload,
         proxied: resolved.proxied,
         proxyBaseUrl: resolved.proxyBaseUrl,
       };
-    }
-
-    const body = await response.text();
-    const payload: unknown = body.trim().length > 0 ? JSON.parse(body) : null;
-
-    const rpcError = parseJsonRpcError(payload);
-    if (rpcError) {
-      throw new Error(rpcError);
-    }
-
-    if (!isRecord(payload)) {
-      throw new Error("Invalid MCP JSON-RPC response.");
-    }
-
-    return {
-      result: payload,
-      proxied: resolved.proxied,
-      proxyBaseUrl: resolved.proxyBaseUrl,
-    };
-  } catch (error: unknown) {
-    if (isAbortError(error)) {
-      if (signal?.aborted) {
-        throw new Error("Aborted");
-      }
-      throw new Error(`MCP request timed out after ${MCP_TIMEOUT_MS}ms.`);
-    }
-
-    throw error;
-  } finally {
-    clearTimeout(timeoutId);
-    if (signal) {
-      signal.removeEventListener("abort", abortFromCaller);
-    }
-  }
+    },
+  });
 }
 
 export function createMcpTool(
