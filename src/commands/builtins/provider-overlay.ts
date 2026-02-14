@@ -24,7 +24,7 @@ export async function showProviderPicker(): Promise<void> {
 
   const dialog = createOverlayDialog({
     overlayId: PROVIDER_PICKER_OVERLAY_ID,
-    cardClassName: "pi-welcome-card pi-overlay-card pi-provider-picker-card",
+    cardClassName: "pi-welcome-card pi-overlay-card pi-overlay-card--s pi-provider-picker-card",
   });
 
   const { header } = createOverlayHeader({

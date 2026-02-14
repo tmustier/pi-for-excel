@@ -122,7 +122,7 @@ export async function showRecoveryDialog(opts: {
 
   const dialog = createOverlayDialog({
     overlayId: RECOVERY_OVERLAY_ID,
-    cardClassName: "pi-welcome-card pi-overlay-card pi-recovery-dialog",
+    cardClassName: "pi-welcome-card pi-overlay-card pi-overlay-card--m pi-recovery-dialog",
   });
 
   const { header } = createOverlayHeader({

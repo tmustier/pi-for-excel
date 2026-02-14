@@ -373,7 +373,7 @@ export function showIntegrationsDialog(dependencies: IntegrationsDialogDependenc
 
   const dialog = createOverlayDialog({
     overlayId: INTEGRATIONS_OVERLAY_ID,
-    cardClassName: "pi-welcome-card pi-overlay-card pi-integrations-dialog",
+    cardClassName: "pi-welcome-card pi-overlay-card pi-overlay-card--l pi-integrations-dialog",
   });
 
   const closeOverlay = dialog.close;

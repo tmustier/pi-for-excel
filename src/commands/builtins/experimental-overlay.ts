@@ -138,7 +138,7 @@ export function showExperimentalDialog(): void {
 
   const dialog = createOverlayDialog({
     overlayId: EXPERIMENTAL_OVERLAY_ID,
-    cardClassName: "pi-welcome-card pi-overlay-card pi-experimental-card",
+    cardClassName: "pi-welcome-card pi-overlay-card pi-overlay-card--m pi-experimental-card",
   });
 
   const { header } = createOverlayHeader({

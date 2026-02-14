@@ -7,6 +7,18 @@
   gap: 10px;
 }
 
+.pi-overlay-card--s {
+  width: min(380px, 92vw);
+}
+
+.pi-overlay-card--m {
+  width: min(520px, 92vw);
+}
+
+.pi-overlay-card--l {
+  width: min(720px, 92vw);
+}
+
 .pi-overlay-title {
   margin: 0;
   font-family: var(--font-sans);

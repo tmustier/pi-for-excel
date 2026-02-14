@@ -78,7 +78,7 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
 
   const dialog = createOverlayDialog({
     overlayId: OVERLAY_ID,
-    cardClassName: "pi-welcome-card pi-overlay-card pi-files-dialog",
+    cardClassName: "pi-welcome-card pi-overlay-card pi-overlay-card--m pi-files-dialog",
   });
 
   const closeOverlay = dialog.close;

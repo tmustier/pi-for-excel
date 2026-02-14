@@ -1,9 +1,5 @@
 /* Provider / Resume / Shortcuts overlays */
 
-.pi-provider-picker-card {
-  width: min(380px, 92vw);
-}
-
 .pi-provider-picker-list {
   display: flex;
   flex: 1 1 auto;
@@ -88,10 +84,6 @@
   font-family: var(--font-sans);
   font-size: var(--text-sm);
   color: var(--muted-foreground);
-}
-
-.pi-shortcuts-dialog {
-  width: min(520px, 92vw);
 }
 
 .pi-shortcuts-list {

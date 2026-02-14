@@ -1,8 +1,6 @@
 /* Extensions manager */
 
 .pi-ext-card {
-  width: min(720px, 92vw);
-  max-height: min(80vh, 720px);
   overflow: hidden;
   gap: 12px;
 }

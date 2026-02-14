@@ -97,7 +97,7 @@ export function showShortcutsDialog(): void {
   const mac = isMacPlatform();
   const dialog = createOverlayDialog({
     overlayId: SHORTCUTS_OVERLAY_ID,
-    cardClassName: "pi-welcome-card pi-overlay-card pi-shortcuts-dialog",
+    cardClassName: "pi-welcome-card pi-overlay-card pi-overlay-card--m pi-shortcuts-dialog",
   });
 
   const { header } = createOverlayHeader({

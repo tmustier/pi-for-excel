@@ -105,7 +105,7 @@ export async function showResumeDialog(opts: {
 
   const dialog = createOverlayDialog({
     overlayId: RESUME_OVERLAY_ID,
-    cardClassName: "pi-welcome-card pi-overlay-card pi-resume-dialog",
+    cardClassName: "pi-welcome-card pi-overlay-card pi-overlay-card--m pi-resume-dialog",
   });
 
   const closeOverlay = dialog.close;

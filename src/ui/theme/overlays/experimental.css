@@ -1,9 +1,5 @@
 /* Experimental feature manager */
 
-.pi-experimental-card {
-  width: min(520px, 92vw);
-}
-
 .pi-experimental-list {
   display: flex;
   flex-direction: column;

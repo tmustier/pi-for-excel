@@ -1,7 +1,5 @@
 /* Files workspace dialog */
 .pi-files-dialog {
-  width: min(520px, 92vw);
-  max-height: min(80vh, 720px);
   gap: 10px;
 }
 

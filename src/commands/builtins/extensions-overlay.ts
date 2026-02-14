@@ -182,7 +182,7 @@ export function showExtensionsDialog(manager: ExtensionRuntimeManager): void {
 
   const dialog = createOverlayDialog({
     overlayId: EXTENSIONS_OVERLAY_ID,
-    cardClassName: "pi-welcome-card pi-overlay-card pi-ext-card",
+    cardClassName: "pi-welcome-card pi-overlay-card pi-overlay-card--l pi-ext-card",
   });
 
   const closeOverlay = dialog.close;

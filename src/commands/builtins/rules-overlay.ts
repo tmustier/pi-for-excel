@@ -805,7 +805,7 @@ export async function showRulesDialog(opts?: {
 
   const dialog = createOverlayDialog({
     overlayId: RULES_OVERLAY_ID,
-    cardClassName: "pi-welcome-card pi-overlay-card",
+    cardClassName: "pi-welcome-card pi-overlay-card pi-overlay-card--m",
   });
 
   const closeOverlay = dialog.close;
