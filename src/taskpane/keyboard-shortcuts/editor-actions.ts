@@ -6,8 +6,9 @@ import type { Agent, AgentMessage } from "@mariozechner/pi-agent-core";
 
 import type { PiSidebar } from "../../ui/pi-sidebar.js";
 import { showToast } from "../../ui/toast.js";
-import { commandRegistry } from "../../commands/types.js";
 import { hideCommandMenu } from "../../commands/command-menu.js";
+import { isBusyAllowedCommand } from "../../commands/busy-command-policy.js";
+import { commandRegistry } from "../../commands/types.js";
 
 export type QueueDisplay = {
   add: (type: "steer" | "follow-up", text: string) => void;
@@ -17,8 +18,6 @@ export type ActionQueue = {
   enqueueCommand: (name: string, args: string) => void;
   isBusy: () => boolean;
 };
-
-const BUSY_ALLOWED_COMMANDS = new Set(["compact", "new", "resume", "reopen", "yolo"]);
 
 export function handleSlashCommandExecution(args: {
   event: KeyboardEvent;
@@ -57,7 +56,7 @@ export function handleSlashCommandExecution(args: {
   const actionQueue = getActiveActionQueue();
   const busy = isStreaming || actionQueue?.isBusy() === true;
 
-  if (busy && !BUSY_ALLOWED_COMMANDS.has(cmdName)) {
+  if (busy && !isBusyAllowedCommand(cmdName)) {
     event.preventDefault();
     event.stopImmediatePropagation();
     showToast(`Can't run /${cmdName} while Pi is busy`);

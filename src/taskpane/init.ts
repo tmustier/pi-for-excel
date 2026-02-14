@@ -46,6 +46,7 @@ import {
   type RecoveryCheckpointSummary,
 } from "../commands/builtins/overlays.js";
 import { wireCommandMenu } from "../commands/command-menu.js";
+import { isBusyAllowedCommand } from "../commands/busy-command-policy.js";
 import { commandRegistry } from "../commands/types.js";
 import {
   getUserRules,
@@ -65,7 +66,6 @@ import {
   INTEGRATION_IDS,
 } from "../integrations/catalog.js";
 import { PI_INTEGRATIONS_CHANGED_EVENT } from "../integrations/events.js";
-import { INTEGRATIONS_COMMAND_NAME } from "../integrations/naming.js";
 import { getExternalToolsEnabled, resolveConfiguredIntegrationIds } from "../integrations/store.js";
 import { buildSystemPrompt } from "../prompt/system-prompt.js";
 import {
@@ -123,18 +123,6 @@ import {
 } from "./session-runtime-manager.js";
 import { doesOverlayClaimEscape } from "../utils/escape-guard.js";
 import { isRecord } from "../utils/type-guards.js";
-
-const BUSY_ALLOWED_COMMANDS = new Set([
-  "compact",
-  "new",
-  "rules",
-  "resume",
-  "history",
-  "reopen",
-  "yolo",
-  "extensions",
-  INTEGRATIONS_COMMAND_NAME,
-]);
 
 function showErrorBanner(errorRoot: HTMLElement, message: string): void {
   render(renderError(message), errorRoot);
@@ -1368,7 +1356,7 @@ export async function initTaskpane(opts: {
     }
 
     const busy = activeRuntime.agent.state.isStreaming || activeRuntime.actionQueue.isBusy();
-    if (busy && !BUSY_ALLOWED_COMMANDS.has(name)) {
+    if (busy && !isBusyAllowedCommand(name)) {
       showToast(`Can't run /${name} while Pi is busy`);
       return;
     }

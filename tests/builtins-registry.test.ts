@@ -157,14 +157,20 @@ void test("settings builtins include yolo execution-mode command", async () => {
   assert.match(settingsSource, /Usage:\s*\/yolo/);
 });
 
-void test("keyboard slash-command busy allowlist includes /yolo", async () => {
+void test("slash-command busy policy is centralized and includes /yolo", async () => {
   const keyboardActionsSource = await readFile(
     new URL("../src/taskpane/keyboard-shortcuts/editor-actions.ts", import.meta.url),
     "utf8",
   );
+  const initSource = await readFile(new URL("../src/taskpane/init.ts", import.meta.url), "utf8");
+  const busyPolicySource = await readFile(new URL("../src/commands/busy-command-policy.ts", import.meta.url), "utf8");
 
-  assert.match(keyboardActionsSource, /BUSY_ALLOWED_COMMANDS/);
-  assert.match(keyboardActionsSource, /"yolo"/);
+  assert.match(keyboardActionsSource, /isBusyAllowedCommand/);
+  assert.match(initSource, /isBusyAllowedCommand/);
+
+  assert.match(busyPolicySource, /"yolo"/);
+  assert.match(busyPolicySource, /"rules"/);
+  assert.match(busyPolicySource, /INTEGRATIONS_COMMAND_NAME/);
 });
 
 void test("taskpane init wires recovery overlay opener", async () => {
