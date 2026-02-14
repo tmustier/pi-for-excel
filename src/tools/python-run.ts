@@ -85,6 +85,13 @@ export interface PythonRunToolDependencies {
     config: PythonBridgeConfig,
     signal: AbortSignal | undefined,
   ) => Promise<PythonBridgeResponse>;
+  /** Override Pyodide availability check (for testing). */
+  isPyodideAvailable?: () => boolean;
+  /** Override Pyodide runtime call (for testing). */
+  callPyodide?: (
+    request: PythonBridgeRequest,
+    signal: AbortSignal | undefined,
+  ) => Promise<PythonBridgeResponse>;
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -388,11 +395,29 @@ function buildOutputPreview(output: string | undefined): string | undefined {
   return firstLine.length > 180 ? `${firstLine.slice(0, 177)}…` : firstLine;
 }
 
-function buildMissingBridgeConfigurationMessage(): string {
+function buildNoPythonAvailableMessage(): string {
   return (
-    "Python bridge URL is not configured. " +
-    "Run /experimental python-bridge-url https://localhost:3340 to set it up."
+    "No Python runtime available. " +
+    "Configure a native bridge with /experimental python-bridge-url https://localhost:3340, " +
+    "or use a browser that supports WebAssembly (for in-browser Pyodide)."
   );
+}
+
+async function getDefaultPyodideAvailable(): Promise<boolean> {
+  try {
+    const { isPyodideAvailable: check } = await import("../python/pyodide-runtime.js");
+    return check();
+  } catch {
+    return false;
+  }
+}
+
+async function getDefaultCallPyodide(
+  request: PythonBridgeRequest,
+  signal: AbortSignal | undefined,
+): Promise<PythonBridgeResponse> {
+  const { callPyodideRuntime } = await import("../python/pyodide-runtime.js");
+  return callPyodideRuntime(request, signal ?? undefined);
 }
 
 export function createPythonRunTool(
@@ -400,12 +425,15 @@ export function createPythonRunTool(
 ): AgentTool<TSchema, PythonRunToolDetails> {
   const getBridgeConfig = dependencies.getBridgeConfig ?? getDefaultPythonBridgeConfig;
   const callBridge = dependencies.callBridge ?? callDefaultPythonBridge;
+  const checkPyodide = dependencies.isPyodideAvailable;
+  const pyodideCall = dependencies.callPyodide;
 
   return {
     name: "python_run",
     label: "Python Run",
     description:
-      "Run Python code through a local bridge. " +
+      "Run Python code. Uses a local bridge if configured, otherwise " +
+      "falls back to in-browser Pyodide (WebAssembly). " +
       "Pass optional input_json, inspect stdout/stderr, and chain results into write_cells.",
     parameters: schema,
     execute: async (
@@ -420,23 +448,54 @@ export function createPythonRunTool(
         validateParams(params);
 
         const bridgeConfig = await getBridgeConfig();
-        if (!bridgeConfig) {
+        const request = toBridgeRequest(params);
+
+        // Prefer native bridge when configured
+        if (bridgeConfig) {
+          const response = await callBridge(request, bridgeConfig, signal);
+
+          if (!response.ok) {
+            throw new Error(response.error ?? "Python bridge rejected the request.");
+          }
+
           return {
-            content: [{ type: "text", text: buildMissingBridgeConfigurationMessage() }],
+            content: [{ type: "text", text: formatBridgeSuccessText(response) }],
             details: {
               kind: "python_bridge",
-              ok: false,
+              ok: true,
               action: "run_python",
-              error: "missing_bridge_url",
+              bridgeUrl: bridgeConfig.url,
+              exitCode: response.exit_code,
+              stdoutPreview: buildOutputPreview(response.stdout),
+              stderrPreview: buildOutputPreview(response.stderr),
+              resultPreview: buildOutputPreview(response.result_json),
+              truncated: response.truncated,
             },
           };
         }
 
-        const request = toBridgeRequest(params);
-        const response = await callBridge(request, bridgeConfig, signal);
+        // Fall back to in-browser Pyodide
+        const pyodideAvailable = checkPyodide
+          ? checkPyodide()
+          : await getDefaultPyodideAvailable();
+
+        if (!pyodideAvailable) {
+          return {
+            content: [{ type: "text", text: buildNoPythonAvailableMessage() }],
+            details: {
+              kind: "python_bridge",
+              ok: false,
+              action: "run_python",
+              error: "no_python_runtime",
+            },
+          };
+        }
+
+        const callPyodideFn = pyodideCall ?? getDefaultCallPyodide;
+        const response = await callPyodideFn(request, signal);
 
         if (!response.ok) {
-          throw new Error(response.error ?? "Python bridge rejected the request.");
+          throw new Error(response.error ?? "Pyodide execution failed.");
         }
 
         return {
@@ -445,7 +504,6 @@ export function createPythonRunTool(
             kind: "python_bridge",
             ok: true,
             action: "run_python",
-            bridgeUrl: bridgeConfig.url,
             exitCode: response.exit_code,
             stdoutPreview: buildOutputPreview(response.stdout),
             stderrPreview: buildOutputPreview(response.stderr),

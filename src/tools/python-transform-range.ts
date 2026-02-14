@@ -116,6 +116,13 @@ export interface PythonTransformRangeToolDependencies {
   ) => Promise<PythonBridgeResponse>;
   readInputRange?: (rangeRef: string) => Promise<InputRangeSnapshot>;
   writeOutputValues?: (request: WriteOutputRequest) => Promise<WriteOutputResult>;
+  /** Override Pyodide availability check (for testing). */
+  isPyodideAvailable?: () => boolean;
+  /** Override Pyodide runtime call (for testing). */
+  callPyodide?: (
+    request: PythonBridgeRequest,
+    signal: AbortSignal | undefined,
+  ) => Promise<PythonBridgeResponse>;
 }
 
 const mutationFinalizeDependencies: MutationFinalizeDependencies = {
@@ -387,6 +394,8 @@ export function createPythonTransformRangeTool(
   const callBridge = dependencies.callBridge ?? callDefaultPythonBridge;
   const readInputRange = dependencies.readInputRange ?? defaultReadInputRange;
   const writeOutputValues = dependencies.writeOutputValues ?? defaultWriteOutputValues;
+  const checkPyodide = dependencies.isPyodideAvailable;
+  const pyodideCall = dependencies.callPyodide;
 
   return {
     name: "python_transform_range",
@@ -412,22 +421,6 @@ export function createPythonTransformRangeTool(
           : defaultOutputStartCell(input);
 
         const bridgeConfig = await getBridgeConfig();
-        if (!bridgeConfig) {
-          return {
-            content: [{
-              type: "text",
-              text:
-                "Python bridge URL is not configured. " +
-                "Run /experimental python-bridge-url https://localhost:3340 to set it up.",
-            }],
-            details: {
-              kind: "python_transform_range",
-              blocked: false,
-              inputAddress: sourceAddress,
-              error: "missing_bridge_url",
-            },
-          };
-        }
 
         const bridgeRequest: PythonBridgeRequest = {
           code: params.code,
@@ -438,9 +431,48 @@ export function createPythonTransformRangeTool(
           timeout_ms: params.timeout_ms,
         };
 
-        const bridgeResponse = await callBridge(bridgeRequest, bridgeConfig, signal);
+        let bridgeResponse: PythonBridgeResponse;
+
+        if (bridgeConfig) {
+          bridgeResponse = await callBridge(bridgeRequest, bridgeConfig, signal);
+        } else {
+          // Fall back to Pyodide
+          let pyodideAvailable: boolean;
+          if (checkPyodide) {
+            pyodideAvailable = checkPyodide();
+          } else {
+            const mod = await import("../python/pyodide-runtime.js");
+            pyodideAvailable = mod.isPyodideAvailable();
+          }
+
+          if (!pyodideAvailable) {
+            return {
+              content: [{
+                type: "text",
+                text:
+                  "No Python runtime available. " +
+                  "Configure a native bridge with /experimental python-bridge-url https://localhost:3340, " +
+                  "or use a browser that supports WebAssembly (for in-browser Pyodide).",
+              }],
+              details: {
+                kind: "python_transform_range",
+                blocked: false,
+                inputAddress: sourceAddress,
+                error: "no_python_runtime",
+              },
+            };
+          }
+
+          if (pyodideCall) {
+            bridgeResponse = await pyodideCall(bridgeRequest, signal);
+          } else {
+            const mod = await import("../python/pyodide-runtime.js");
+            bridgeResponse = await mod.callPyodideRuntime(bridgeRequest, signal ?? undefined);
+          }
+        }
+
         if (!bridgeResponse.ok) {
-          throw new Error(bridgeResponse.error ?? "Python bridge rejected the request.");
+          throw new Error(bridgeResponse.error ?? "Python execution failed.");
         }
 
         const transformedValues = parseBridgeResultJson(bridgeResponse.result_json);
@@ -462,7 +494,7 @@ export function createPythonTransformRangeTool(
               blocked: true,
               inputAddress: sourceAddress,
               outputAddress: writeResult.outputAddress,
-              bridgeUrl: bridgeConfig.url,
+              bridgeUrl: bridgeConfig?.url,
               existingCount: writeResult.existingCount,
             },
           };
@@ -516,7 +548,7 @@ export function createPythonTransformRangeTool(
             blocked: false,
             inputAddress: sourceAddress,
             outputAddress: writeResult.outputAddress,
-            bridgeUrl: bridgeConfig.url,
+            bridgeUrl: bridgeConfig?.url,
             rowsWritten: writeResult.rowsWritten,
             colsWritten: writeResult.colsWritten,
             formulaErrorCount: writeResult.formulaErrorCount,

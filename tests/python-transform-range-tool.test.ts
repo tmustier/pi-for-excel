@@ -31,6 +31,7 @@ void test("python_transform_range returns bridge setup guidance when URL is miss
       values: [[1, 2], [3, 4]],
     }),
     getBridgeConfig: () => Promise.resolve(null),
+    isPyodideAvailable: () => false,
   });
 
   const result = await tool.execute("tc-missing", {
@@ -38,10 +39,10 @@ void test("python_transform_range returns bridge setup guidance when URL is miss
     code: "result = input_data['values']",
   });
 
-  assert.match(firstText(result), /python-bridge-url/u);
+  assert.match(firstText(result), /No Python runtime available/u);
   assert.equal(result.details?.kind, "python_transform_range");
   assert.equal(result.details?.blocked, false);
-  assert.equal(result.details?.error, "missing_bridge_url");
+  assert.equal(result.details?.error, "no_python_runtime");
 });
 
 void test("python_transform_range reads source, runs python, and writes transformed output", async () => {

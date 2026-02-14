@@ -381,8 +381,8 @@ function formatBridgeSuccessText(response: LibreOfficeConvertResponse): string {
 
 function buildMissingBridgeConfigurationMessage(): string {
   return (
-    "Python/LibreOffice bridge URL is not configured. " +
-    "Run /experimental python-bridge-url https://localhost:3340 to set it up."
+    "LibreOffice conversion requires a native Python bridge (cannot run in-browser). " +
+    "Run /experimental python-bridge-url https://localhost:3340 to configure the bridge."
   );
 }
 

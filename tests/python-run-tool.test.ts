@@ -19,17 +19,18 @@ function firstText(result: AgentToolResult<PythonRunToolDetails>): string {
   return first.text;
 }
 
-void test("python_run returns guidance when bridge URL is not configured", async () => {
+void test("python_run returns guidance when no backend is available", async () => {
   const tool = createPythonRunTool({
     getBridgeConfig: () => Promise.resolve(null),
+    isPyodideAvailable: () => false,
   });
 
   const result = await tool.execute("tc-missing", { code: "print('hello')" });
 
-  assert.match(firstText(result), /python-bridge-url/u);
+  assert.match(firstText(result), /No Python runtime available/u);
   assert.equal(result.details?.kind, "python_bridge");
   assert.equal(result.details?.ok, false);
-  assert.equal(result.details?.error, "missing_bridge_url");
+  assert.equal(result.details?.error, "no_python_runtime");
 });
 
 void test("python_run validates input_json before bridge call", async () => {

@@ -29,7 +29,7 @@ void test("libreoffice_convert returns guidance when bridge URL is missing", asy
     target_format: "csv",
   });
 
-  assert.match(firstText(result), /python-bridge-url/u);
+  assert.match(firstText(result), /native Python bridge/u);
   assert.equal(result.details?.kind, "libreoffice_bridge");
   assert.equal(result.details?.ok, false);
   assert.equal(result.details?.error, "missing_bridge_url");
