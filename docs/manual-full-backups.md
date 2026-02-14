@@ -6,7 +6,7 @@ They are intentionally separate from automatic per-mutation range checkpoints (`
 
 ## UI entry point
 
-- Open **Backups (Beta)** (`/history` or Backups quick action/menu).
+- Open **Backups (Beta)** (`/history` or Backups input action/menu).
 - Click **Full backup** to capture and download the current workbook as `.xlsx`.
 
 ## Commands
