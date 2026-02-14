@@ -13,8 +13,8 @@ import {
 import { formatRelativeDate } from "./overlay-relative-date.js";
 import {
   closeOverlayById,
-  createOverlayCloseButton,
   createOverlayDialog,
+  createOverlayHeader,
 } from "../../ui/overlay-dialog.js";
 import { RESUME_OVERLAY_ID } from "../../ui/overlay-ids.js";
 import { showToast } from "../../ui/toast.js";
@@ -110,23 +110,12 @@ export async function showResumeDialog(opts: {
 
   const closeOverlay = dialog.close;
 
-  const header = document.createElement("div");
-  header.className = "pi-overlay-header";
-
-  const titleWrap = document.createElement("div");
-  titleWrap.className = "pi-overlay-title-wrap";
-
-  const title = document.createElement("h2");
-  title.className = "pi-overlay-title pi-resume-dialog__title";
-  title.textContent = "Resume Session";
-
-  const closeButton = createOverlayCloseButton({
+  const { header } = createOverlayHeader({
     onClose: closeOverlay,
-    label: "Close resume sessions",
+    closeLabel: "Close resume sessions",
+    title: "Resume Session",
+    titleClassName: "pi-resume-dialog__title",
   });
-
-  titleWrap.append(title);
-  header.append(titleWrap, closeButton);
 
   const targetControls = document.createElement("div");
   targetControls.className = "pi-resume-target-controls";

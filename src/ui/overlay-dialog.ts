@@ -71,6 +71,66 @@ export function createOverlayCloseButton(opts: {
   return button;
 }
 
+export interface OverlayHeaderOptions {
+  title: string;
+  subtitle?: string;
+  onClose: () => void;
+  closeLabel?: string;
+  titleClassName?: string;
+  subtitleClassName?: string;
+}
+
+export interface OverlayHeaderElements {
+  header: HTMLDivElement;
+  titleWrap: HTMLDivElement;
+  title: HTMLHeadingElement;
+  subtitle: HTMLParagraphElement | null;
+  closeButton: HTMLButtonElement;
+}
+
+function mergeClassName(baseClassName: string, className?: string): string {
+  return className && className.trim().length > 0
+    ? `${baseClassName} ${className}`
+    : baseClassName;
+}
+
+export function createOverlayHeader(options: OverlayHeaderOptions): OverlayHeaderElements {
+  const header = document.createElement("div");
+  header.className = "pi-overlay-header";
+
+  const titleWrap = document.createElement("div");
+  titleWrap.className = "pi-overlay-title-wrap";
+
+  const title = document.createElement("h2");
+  title.className = mergeClassName("pi-overlay-title", options.titleClassName);
+  title.textContent = options.title;
+
+  titleWrap.appendChild(title);
+
+  let subtitle: HTMLParagraphElement | null = null;
+  if (options.subtitle !== undefined) {
+    subtitle = document.createElement("p");
+    subtitle.className = mergeClassName("pi-overlay-subtitle", options.subtitleClassName);
+    subtitle.textContent = options.subtitle;
+    titleWrap.appendChild(subtitle);
+  }
+
+  const closeButton = createOverlayCloseButton({
+    onClose: options.onClose,
+    label: options.closeLabel,
+  });
+
+  header.append(titleWrap, closeButton);
+
+  return {
+    header,
+    titleWrap,
+    title,
+    subtitle,
+    closeButton,
+  };
+}
+
 export function createOverlayDialog(options: OverlayDialogOptions): OverlayDialogController {
   const overlay = document.createElement("div");
   overlay.id = options.overlayId;

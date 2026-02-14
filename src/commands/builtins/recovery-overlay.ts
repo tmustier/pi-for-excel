@@ -5,8 +5,8 @@
 import { formatRelativeDate } from "./overlay-relative-date.js";
 import {
   closeOverlayById,
-  createOverlayCloseButton,
   createOverlayDialog,
+  createOverlayHeader,
 } from "../../ui/overlay-dialog.js";
 import { RECOVERY_OVERLAY_ID } from "../../ui/overlay-ids.js";
 import { showToast } from "../../ui/toast.js";
@@ -69,29 +69,12 @@ export async function showRecoveryDialog(opts: {
     cardClassName: "pi-welcome-card pi-overlay-card pi-recovery-dialog",
   });
 
-  const closeOverlay = dialog.close;
-
-  const header = document.createElement("div");
-  header.className = "pi-overlay-header";
-
-  const titleWrap = document.createElement("div");
-  titleWrap.className = "pi-overlay-title-wrap";
-
-  const title = document.createElement("h2");
-  title.className = "pi-overlay-title";
-  title.textContent = "Backups (Beta)";
-
-  const subtitle = document.createElement("p");
-  subtitle.className = "pi-overlay-subtitle";
-  subtitle.textContent = "Saved before Pi edits, in between saves. Entries are sheet-specific in this workbook.";
-
-  const closeButton = createOverlayCloseButton({
-    onClose: closeOverlay,
-    label: "Close backups",
+  const { header } = createOverlayHeader({
+    onClose: dialog.close,
+    closeLabel: "Close backups",
+    title: "Backups (Beta)",
+    subtitle: "Saved before Pi edits, in between saves. Entries are sheet-specific in this workbook.",
   });
-
-  titleWrap.append(title, subtitle);
-  header.append(titleWrap, closeButton);
 
   const workbookTag = document.createElement("p");
   workbookTag.className = "pi-overlay-workbook-tag";

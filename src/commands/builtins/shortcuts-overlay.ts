@@ -7,8 +7,8 @@
 
 import {
   closeOverlayById,
-  createOverlayCloseButton,
   createOverlayDialog,
+  createOverlayHeader,
 } from "../../ui/overlay-dialog.js";
 import { SHORTCUTS_OVERLAY_ID } from "../../ui/overlay-ids.js";
 
@@ -100,25 +100,11 @@ export function showShortcutsDialog(): void {
     cardClassName: "pi-welcome-card pi-overlay-card pi-shortcuts-dialog",
   });
 
-  const closeOverlay = dialog.close;
-
-  const header = document.createElement("div");
-  header.className = "pi-overlay-header";
-
-  const titleWrap = document.createElement("div");
-  titleWrap.className = "pi-overlay-title-wrap";
-
-  const title = document.createElement("h2");
-  title.className = "pi-overlay-title";
-  title.textContent = "Keyboard Shortcuts";
-
-  const closeButton = createOverlayCloseButton({
-    onClose: closeOverlay,
-    label: "Close keyboard shortcuts",
+  const { header } = createOverlayHeader({
+    onClose: dialog.close,
+    closeLabel: "Close keyboard shortcuts",
+    title: "Keyboard Shortcuts",
   });
-
-  titleWrap.append(title);
-  header.append(titleWrap, closeButton);
 
   const list = document.createElement("div");
   list.className = "pi-shortcuts-list";

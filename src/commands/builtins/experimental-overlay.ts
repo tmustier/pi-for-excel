@@ -10,8 +10,8 @@ import {
 } from "../../experiments/flags.js";
 import {
   closeOverlayById,
-  createOverlayCloseButton,
   createOverlayDialog,
+  createOverlayHeader,
 } from "../../ui/overlay-dialog.js";
 import { EXPERIMENTAL_OVERLAY_ID } from "../../ui/overlay-ids.js";
 import { showToast } from "../../ui/toast.js";
@@ -141,31 +141,14 @@ export function showExperimentalDialog(): void {
     cardClassName: "pi-welcome-card pi-overlay-card pi-experimental-card",
   });
 
-  const closeOverlay = dialog.close;
-
-  const header = document.createElement("div");
-  header.className = "pi-overlay-header";
-
-  const titleWrap = document.createElement("div");
-  titleWrap.className = "pi-overlay-title-wrap";
-
-  const title = document.createElement("h2");
-  title.className = "pi-overlay-title";
-  title.textContent = "Experimental Features";
-
-  const subtitle = document.createElement("p");
-  subtitle.className = "pi-overlay-subtitle";
-  subtitle.textContent =
-    "These toggles are local to this browser profile. Use carefully — some are security-sensitive. "
-    + "Web Search and MCP are managed in /integrations.";
-
-  const closeButton = createOverlayCloseButton({
-    onClose: closeOverlay,
-    label: "Close experimental features",
+  const { header } = createOverlayHeader({
+    onClose: dialog.close,
+    closeLabel: "Close experimental features",
+    title: "Experimental Features",
+    subtitle:
+      "These toggles are local to this browser profile. Use carefully — some are security-sensitive. "
+      + "Web Search and MCP are managed in /integrations.",
   });
-
-  titleWrap.append(title, subtitle);
-  header.append(titleWrap, closeButton);
 
   const snapshots = getExperimentalFeatureSnapshots();
   const experimentalFeatures: ExperimentalFeatureSnapshot[] = [];

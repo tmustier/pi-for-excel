@@ -40,8 +40,8 @@ import {
 } from "../../tools/mcp-config.js";
 import {
   closeOverlayById,
-  createOverlayCloseButton,
   createOverlayDialog,
+  createOverlayHeader,
 } from "../../ui/overlay-dialog.js";
 import { INTEGRATIONS_OVERLAY_ID } from "../../ui/overlay-ids.js";
 import { showToast } from "../../ui/toast.js";
@@ -385,30 +385,14 @@ export function showIntegrationsDialog(dependencies: IntegrationsDialogDependenc
     cardClassName: "pi-welcome-card pi-overlay-card pi-integrations-dialog",
   });
 
-  const header = document.createElement("div");
-  header.className = "pi-overlay-header";
-
-  const titleWrap = document.createElement("div");
-  titleWrap.className = "pi-overlay-title-wrap";
-
-  const title = document.createElement("h2");
-  title.textContent = INTEGRATIONS_LABEL;
-  title.className = "pi-overlay-title";
-
-  const subtitle = document.createElement("p");
-  subtitle.textContent = "Add capabilities like web search and external integrations. External tools are off by default.";
-  subtitle.className = "pi-overlay-subtitle";
-
-  titleWrap.append(title, subtitle);
-
   const closeOverlay = dialog.close;
 
-  const closeButton = createOverlayCloseButton({
+  const { header } = createOverlayHeader({
     onClose: closeOverlay,
-    label: "Close integrations",
+    closeLabel: "Close integrations",
+    title: INTEGRATIONS_LABEL,
+    subtitle: "Add capabilities like web search and external integrations. External tools are off by default.",
   });
-
-  header.append(titleWrap, closeButton);
 
   const body = document.createElement("div");
   body.className = "pi-overlay-body";

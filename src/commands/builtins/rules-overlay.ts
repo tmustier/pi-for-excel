@@ -22,8 +22,8 @@ import { DEFAULT_CURRENCY_SYMBOL, PRESET_DEFAULT_DP } from "../../conventions/de
 import type { StoredConventions, NumberPreset } from "../../conventions/types.js";
 import {
   closeOverlayById,
-  createOverlayCloseButton,
   createOverlayDialog,
+  createOverlayHeader,
 } from "../../ui/overlay-dialog.js";
 import { RULES_OVERLAY_ID } from "../../ui/overlay-ids.js";
 import { showToast } from "../../ui/toast.js";
@@ -315,23 +315,11 @@ export async function showRulesDialog(opts?: {
 
   const closeOverlay = dialog.close;
 
-  const header = document.createElement("div");
-  header.className = "pi-overlay-header";
-
-  const titleWrap = document.createElement("div");
-  titleWrap.className = "pi-overlay-title-wrap";
-
-  const title = document.createElement("h2");
-  title.className = "pi-overlay-title";
-  title.textContent = "Rules";
-
-  const closeButton = createOverlayCloseButton({
+  const { header } = createOverlayHeader({
     onClose: closeOverlay,
-    label: "Close rules",
+    closeLabel: "Close rules",
+    title: "Rules",
   });
-
-  titleWrap.append(title);
-  header.append(titleWrap, closeButton);
 
   const tabs = document.createElement("div");
   tabs.className = "pi-overlay-tabs";

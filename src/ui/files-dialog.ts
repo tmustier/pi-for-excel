@@ -14,8 +14,8 @@ import { getErrorMessage } from "../utils/errors.js";
 import { formatWorkbookLabel, getWorkbookContext } from "../workbook/context.js";
 import {
   closeOverlayById,
-  createOverlayCloseButton,
   createOverlayDialog,
+  createOverlayHeader,
 } from "./overlay-dialog.js";
 import { FILES_WORKSPACE_OVERLAY_ID } from "./overlay-ids.js";
 import {
@@ -84,26 +84,16 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
 
   const closeOverlay = dialog.close;
 
-  const header = document.createElement("div");
-  header.className = "pi-overlay-header";
-
-  const titleWrap = document.createElement("div");
-  titleWrap.className = "pi-overlay-title-wrap";
-
-  const title = document.createElement("h2");
-  title.className = "pi-overlay-title";
-  title.textContent = "Files";
-
-  const subtitle = document.createElement("p");
-  subtitle.className = "pi-overlay-subtitle";
-
-  const closeButton = createOverlayCloseButton({
+  const { header, subtitle } = createOverlayHeader({
     onClose: closeOverlay,
-    label: "Close files",
+    closeLabel: "Close files",
+    title: "Files",
+    subtitle: "",
   });
 
-  titleWrap.append(title, subtitle);
-  header.append(titleWrap, closeButton);
+  if (!subtitle) {
+    throw new Error("Files overlay subtitle is required.");
+  }
 
   const controls = document.createElement("div");
   controls.className = "pi-files-dialog__controls";

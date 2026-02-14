@@ -17,8 +17,8 @@ import { isExperimentalFeatureEnabled, setExperimentalFeatureEnabled } from "../
 import { PYTHON_BRIDGE_URL_SETTING_KEY } from "../../tools/experimental-tool-gates.js";
 import {
   closeOverlayById,
-  createOverlayCloseButton,
   createOverlayDialog,
+  createOverlayHeader,
 } from "../../ui/overlay-dialog.js";
 import { EXTENSIONS_OVERLAY_ID } from "../../ui/overlay-ids.js";
 import { showToast } from "../../ui/toast.js";
@@ -211,30 +211,14 @@ export function showExtensionsDialog(manager: ExtensionRuntimeManager): void {
     cardClassName: "pi-welcome-card pi-overlay-card pi-ext-card",
   });
 
-  const header = document.createElement("div");
-  header.className = "pi-overlay-header";
-
-  const titleWrap = document.createElement("div");
-  titleWrap.className = "pi-overlay-title-wrap";
-
-  const title = document.createElement("h2");
-  title.textContent = "Extensions Manager";
-  title.className = "pi-overlay-title";
-
-  const subtitle = document.createElement("p");
-  subtitle.textContent = "Extensions can read/write workbook data. Only enable code you trust.";
-  subtitle.className = "pi-overlay-subtitle";
-
-  titleWrap.append(title, subtitle);
-
   const closeOverlay = dialog.close;
 
-  const closeButton = createOverlayCloseButton({
+  const { header } = createOverlayHeader({
     onClose: closeOverlay,
-    label: "Close extensions manager",
+    closeLabel: "Close extensions manager",
+    title: "Extensions Manager",
+    subtitle: "Extensions can read/write workbook data. Only enable code you trust.",
   });
-
-  header.append(titleWrap, closeButton);
 
   const body = document.createElement("div");
   body.className = "pi-overlay-body";
