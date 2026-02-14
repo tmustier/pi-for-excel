@@ -12,7 +12,7 @@ import { isRecord } from "../utils/type-guards.js";
 import { base64ToBytes, bytesToBase64, encodeTextUtf8, truncateBase64, truncateText } from "./encoding.js";
 import { MemoryBackend, NativeDirectoryBackend, OpfsBackend, type WorkspaceBackend } from "./backend.js";
 import { getBuiltinWorkspaceDoc, isBuiltinWorkspacePath, listBuiltinWorkspaceDocs } from "./builtin-docs.js";
-import { formatBytes, inferMimeType, isTextMimeType } from "./mime.js";
+import { inferMimeType, isTextMimeType } from "./mime.js";
 import { getWorkspaceBaseName, normalizeWorkspacePath } from "./path.js";
 import {
   FILES_WORKSPACE_CHANGED_EVENT,
@@ -375,6 +375,122 @@ function backendLabel(kind: WorkspaceBackendStatus["kind"]): string {
     case "memory":
       return "Session memory";
   }
+}
+
+const NOTES_PREFIX = "notes/";
+const NOTES_INDEX_PATH = "notes/index.md";
+const IMPORTS_PREFIX = "imports/";
+const SCRATCH_PREFIX = "scratch/";
+const ASSISTANT_DOCS_PREFIX = "assistant-docs/";
+const DEFAULT_CONTEXT_PREVIEW_LIMIT = 3;
+
+export interface WorkspaceContextSummary {
+  summary: string;
+  hasRelevantFiles: boolean;
+  relevantSignature: string;
+}
+
+interface WorkspaceContextSummaryArgs {
+  snapshot: WorkspaceSnapshot;
+  currentWorkbookId: string | null;
+  previewLimit?: number;
+}
+
+function buildContextFileSignature(file: WorkspaceFileEntry): string {
+  const workbookId = file.workbookTag?.workbookId ?? "";
+  return `${file.path}:${file.size}:${file.modifiedAt}:${workbookId}`;
+}
+
+function sortFilesByPath(files: readonly WorkspaceFileEntry[]): WorkspaceFileEntry[] {
+  return [...files].sort((left, right) => left.path.localeCompare(right.path));
+}
+
+function formatPathPreview(files: readonly WorkspaceFileEntry[], limit: number): string {
+  const safeLimit = Math.max(1, limit);
+  const visible = files.slice(0, safeLimit).map((file) => file.path);
+  if (visible.length === 0) {
+    return "";
+  }
+
+  const suffix = files.length > visible.length ? ", …" : "";
+  return ` (${visible.join(", ")}${suffix})`;
+}
+
+function isWorkspaceSourceFile(file: WorkspaceFileEntry): boolean {
+  return file.sourceKind === "workspace";
+}
+
+export function buildWorkspaceContextSummary(args: WorkspaceContextSummaryArgs): WorkspaceContextSummary {
+  const previewLimit = args.previewLimit ?? DEFAULT_CONTEXT_PREVIEW_LIMIT;
+  const workspaceFiles = args.snapshot.files.filter(isWorkspaceSourceFile);
+
+  const notesFiles = sortFilesByPath(workspaceFiles.filter((file) => file.path.startsWith(NOTES_PREFIX)));
+  const notesIndexFile = notesFiles.find((file) => file.path === NOTES_INDEX_PATH) ?? null;
+
+  const importFiles = sortFilesByPath(workspaceFiles.filter((file) => file.path.startsWith(IMPORTS_PREFIX)));
+
+  const currentWorkbookFiles = args.currentWorkbookId
+    ? sortFilesByPath(workspaceFiles.filter((file) => {
+      if (file.workbookTag?.workbookId !== args.currentWorkbookId) {
+        return false;
+      }
+
+      if (file.path.startsWith(NOTES_PREFIX)) return false;
+      if (file.path.startsWith(IMPORTS_PREFIX)) return false;
+      if (file.path.startsWith(SCRATCH_PREFIX)) return false;
+      if (file.path.startsWith(ASSISTANT_DOCS_PREFIX)) return false;
+      return true;
+    }))
+    : [];
+
+  const hasRelevantFiles =
+    notesFiles.length > 0 ||
+    importFiles.length > 0 ||
+    currentWorkbookFiles.length > 0;
+
+  const signatureParts = [
+    `backend:${args.snapshot.backend.kind}`,
+    `workbook:${args.currentWorkbookId ?? "none"}`,
+    `notes-count:${notesFiles.length}`,
+    `notes-index:${notesIndexFile ? buildContextFileSignature(notesIndexFile) : "none"}`,
+    `imports:${importFiles.map((file) => buildContextFileSignature(file)).join(",")}`,
+    `workbook-files:${currentWorkbookFiles.map((file) => buildContextFileSignature(file)).join(",")}`,
+  ];
+
+  const lines: string[] = ["### Workspace"];
+
+  if (notesFiles.length > 0) {
+    const noteNoun = notesFiles.length === 1 ? "file" : "files";
+    if (notesIndexFile) {
+      lines.push(`- notes/: ${notesFiles.length} ${noteNoun}. Read notes/index.md first.`);
+    } else {
+      lines.push(`- notes/: ${notesFiles.length} ${noteNoun}. No notes/index.md yet.`);
+    }
+  }
+
+  if (currentWorkbookFiles.length > 0) {
+    const noun = currentWorkbookFiles.length === 1 ? "file" : "files";
+    lines.push(
+      `- Current workbook artifacts: ${currentWorkbookFiles.length} ${noun}${formatPathPreview(currentWorkbookFiles, previewLimit)}.`,
+    );
+  }
+
+  if (importFiles.length > 0) {
+    const noun = importFiles.length === 1 ? "file" : "files";
+    lines.push(`- imports/: ${importFiles.length} ${noun}${formatPathPreview(importFiles, previewLimit)}.`);
+  }
+
+  if (!hasRelevantFiles) {
+    lines.push("- No relevant workspace files for this workbook.");
+  }
+
+  lines.push("- Auto-context omits scratch/ and assistant-docs/. Use files list for full details.");
+
+  return {
+    summary: lines.join("\n"),
+    hasRelevantFiles,
+    relevantSignature: signatureParts.join("|"),
+  };
 }
 
 export interface FilesWorkspaceOptions {
@@ -1076,28 +1192,12 @@ export class FilesWorkspace {
     setTimeout(() => URL.revokeObjectURL(url), 60_000);
   }
 
-  async getContextSummary(maxFiles = 20): Promise<string | null> {
+  async getContextSummary(currentWorkbookId: string | null): Promise<WorkspaceContextSummary> {
     const snapshot = await this.getSnapshot();
-
-    if (snapshot.files.length === 0) return null;
-
-    const lines: string[] = [];
-    lines.push(`### Workspace Files (${snapshot.backend.label})`);
-
-    const visible = snapshot.files.slice(0, maxFiles);
-    for (const file of visible) {
-      const workbookSuffix = file.workbookTag
-        ? `, workbook: ${file.workbookTag.workbookLabel}`
-        : "";
-      lines.push(`- ${file.path} (${formatBytes(file.size)}, ${file.kind}${workbookSuffix})`);
-    }
-
-    const remaining = snapshot.files.length - visible.length;
-    if (remaining > 0) {
-      lines.push(`- … and ${remaining} more`);
-    }
-
-    return lines.join("\n");
+    return buildWorkspaceContextSummary({
+      snapshot,
+      currentWorkbookId,
+    });
   }
 }
 

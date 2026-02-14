@@ -94,11 +94,13 @@ export function createContextInjector(changeTracker: ChangeTracker) {
 
   return async (messages: AgentMessage[], _signal?: AbortSignal): Promise<AgentMessage[]> => {
     const injections: string[] = [];
+    let currentWorkbookId: string | null = null;
 
     // Workbook structure context: inject only when needed.
     try {
       const workbookCtx = await withTimeout(getWorkbookContext().catch(() => null), 1200);
       const workbookId = workbookCtx?.workbookId ?? null;
+      currentWorkbookId = workbookId;
       const currentRevision = getBlueprintRevision(workbookId);
       const hasWorkbookContextMessage = historyHasWorkbookContextRefresh(messages);
 
@@ -129,10 +131,13 @@ export function createContextInjector(changeTracker: ChangeTracker) {
 
     try {
       const workspace = getFilesWorkspace();
-      const snapshot = await withTimeout(workspace.getSnapshot().catch(() => null), 1200);
+      const contextSummary = await withTimeout(
+        workspace.getContextSummary(currentWorkbookId).catch(() => null),
+        1200,
+      );
 
-      if (snapshot) {
-        const signature = `${snapshot.backend.kind}|${snapshot.signature}`;
+      if (contextSummary) {
+        const signature = contextSummary.relevantSignature;
         const hasWorkspaceMessage = historyHasWorkspaceFilesRefresh(messages);
 
         if (lastInjectedWorkspaceSignature === undefined && hasWorkspaceMessage) {
@@ -142,19 +147,16 @@ export function createContextInjector(changeTracker: ChangeTracker) {
         const shouldInjectInitial =
           lastInjectedWorkspaceSignature === undefined &&
           !hasWorkspaceMessage &&
-          snapshot.files.length > 0;
+          contextSummary.hasRelevantFiles;
         const shouldInjectChanged =
           lastInjectedWorkspaceSignature !== undefined &&
           signature !== lastInjectedWorkspaceSignature;
 
         if (shouldInjectInitial || shouldInjectChanged) {
-          const summary = await workspace.getContextSummary(20);
-          const section = summary
-            ? buildWorkspaceFilesSection(summary, shouldInjectChanged ? "files_changed" : "initial")
-            : buildWorkspaceFilesSection(
-              "### Workspace Files\n- _No files currently available._",
-              "files_changed",
-            );
+          const section = buildWorkspaceFilesSection(
+            contextSummary.summary,
+            shouldInjectChanged ? "files_changed" : "initial",
+          );
           injections.push(section);
         }
 

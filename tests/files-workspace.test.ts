@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { MemoryBackend } from "../src/files/backend.ts";
-import { FilesWorkspace, getFilesWorkspace } from "../src/files/workspace.ts";
+import {
+  buildWorkspaceContextSummary,
+  FilesWorkspace,
+  getFilesWorkspace,
+} from "../src/files/workspace.ts";
+import type { WorkspaceSnapshot } from "../src/files/types.ts";
 
 function getOfficeGlobal(): unknown {
   return Reflect.get(globalThis, "Office");
@@ -51,6 +56,37 @@ async function resetWorkspace(): Promise<void> {
   }
 
   await workspace.clearAuditTrail();
+}
+
+function createWorkspaceSnapshot(paths: Array<{ path: string; workbookId?: string }>): WorkspaceSnapshot {
+  const files = paths.map((entry, index) => ({
+    path: entry.path,
+    name: entry.path.split("/").pop() ?? entry.path,
+    size: 10 + index,
+    modifiedAt: 1_000 + index,
+    mimeType: "text/plain",
+    kind: "text",
+    sourceKind: "workspace",
+    readOnly: false,
+    workbookTag: entry.workbookId
+      ? {
+        workbookId: entry.workbookId,
+        workbookLabel: `${entry.workbookId}.xlsx`,
+        taggedAt: 1_000 + index,
+      }
+      : undefined,
+  }));
+
+  return {
+    backend: {
+      kind: "memory",
+      label: "Session memory",
+      nativeSupported: false,
+      nativeConnected: false,
+    },
+    files,
+    signature: "test",
+  };
 }
 
 void test("files workspace tags files with active workbook metadata", async () => {
@@ -160,4 +196,70 @@ void test("legacy workspace collisions on assistant-docs paths stay reachable", 
   });
   assert.equal(readBuiltinAfterDelete.sourceKind, "builtin-doc");
   assert.match(readBuiltinAfterDelete.text ?? "", /Extensions \(MVP authoring guide\)/i);
+});
+
+void test("workspace context summary includes only relevant folders and current workbook artifacts", () => {
+  const snapshot = createWorkspaceSnapshot([
+    { path: "notes/index.md", workbookId: "wb-a" },
+    { path: "notes/budget.md", workbookId: "wb-a" },
+    { path: "imports/source.csv", workbookId: "wb-a" },
+    { path: "workbooks/budget-2026/extract.csv", workbookId: "wb-a" },
+    { path: "workbooks/forecast-q3/data.csv", workbookId: "wb-b" },
+    { path: "scratch/temp.txt", workbookId: "wb-a" },
+    { path: "assistant-docs/docs/README.md" },
+  ]);
+
+  const summary = buildWorkspaceContextSummary({
+    snapshot,
+    currentWorkbookId: "wb-a",
+  });
+
+  assert.equal(summary.hasRelevantFiles, true);
+  assert.match(summary.summary, /^### Workspace/m);
+  assert.match(summary.summary, /notes\/: 2 files\. Read notes\/index\.md first\./);
+  assert.match(summary.summary, /Current workbook artifacts: 1 file \(workbooks\/budget-2026\/extract\.csv\)\./);
+  assert.match(summary.summary, /imports\/: 1 file \(imports\/source\.csv\)\./);
+  assert.doesNotMatch(summary.summary, /scratch\/temp\.txt/);
+  assert.doesNotMatch(summary.summary, /forecast-q3/);
+});
+
+void test("workspace context relevance signature ignores scratch-only changes", () => {
+  const baseSnapshot = createWorkspaceSnapshot([
+    { path: "notes/index.md", workbookId: "wb-a" },
+    { path: "imports/source.csv", workbookId: "wb-a" },
+    { path: "workbooks/budget-2026/extract.csv", workbookId: "wb-a" },
+    { path: "scratch/temp-a.txt", workbookId: "wb-a" },
+  ]);
+
+  const scratchChangedSnapshot = createWorkspaceSnapshot([
+    { path: "notes/index.md", workbookId: "wb-a" },
+    { path: "imports/source.csv", workbookId: "wb-a" },
+    { path: "workbooks/budget-2026/extract.csv", workbookId: "wb-a" },
+    { path: "scratch/temp-b.txt", workbookId: "wb-a" },
+  ]);
+
+  const importChangedSnapshot = createWorkspaceSnapshot([
+    { path: "notes/index.md", workbookId: "wb-a" },
+    { path: "imports/new-source.csv", workbookId: "wb-a" },
+    { path: "workbooks/budget-2026/extract.csv", workbookId: "wb-a" },
+    { path: "scratch/temp-a.txt", workbookId: "wb-a" },
+  ]);
+
+  const base = buildWorkspaceContextSummary({
+    snapshot: baseSnapshot,
+    currentWorkbookId: "wb-a",
+  });
+
+  const scratchChanged = buildWorkspaceContextSummary({
+    snapshot: scratchChangedSnapshot,
+    currentWorkbookId: "wb-a",
+  });
+
+  const importChanged = buildWorkspaceContextSummary({
+    snapshot: importChangedSnapshot,
+    currentWorkbookId: "wb-a",
+  });
+
+  assert.equal(scratchChanged.relevantSignature, base.relevantSignature);
+  assert.notEqual(importChanged.relevantSignature, base.relevantSignature);
 });
