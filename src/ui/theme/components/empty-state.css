@@ -5,12 +5,17 @@
 .pi-empty {
   position: absolute;
   inset: 0;
+  overflow-y: auto;
+  padding: 16px 24px 22px;
+  pointer-events: auto;
+}
+
+.pi-empty__content {
+  min-height: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 32px 24px 100px;
-  pointer-events: none;
 }
 
 .pi-empty__logo {

@@ -1066,21 +1066,23 @@ export class PiSidebar extends LitElement {
   private _renderEmptyState() {
     return html`
       <div class="pi-empty">
-        <div class="pi-empty__logo">π</div>
-        <p class="pi-empty__tagline">
-          Reads your workbook, writes formulas, formats cells, and builds models.
-        </p>
-        <div class="pi-empty__hints">
-          ${this.emptyHints.map((hint) => html`
-            <button
-              class="pi-empty__hint"
-              title="Insert prompt into the input so you can edit it before sending"
-              @click=${() => this._applyHintPrompt(hint.prompt)}
-            >
-              <span class="pi-empty__hint-label">${hint.label}</span>
-              <span class="pi-empty__hint-preview">${this._summarizeHintPrompt(hint.prompt)}</span>
-            </button>
-          `)}
+        <div class="pi-empty__content">
+          <div class="pi-empty__logo">π</div>
+          <p class="pi-empty__tagline">
+            Reads your workbook, writes formulas, formats cells, and builds models.
+          </p>
+          <div class="pi-empty__hints">
+            ${this.emptyHints.map((hint) => html`
+              <button
+                class="pi-empty__hint"
+                title="Insert prompt into the input so you can edit it before sending"
+                @click=${() => this._applyHintPrompt(hint.prompt)}
+              >
+                <span class="pi-empty__hint-label">${hint.label}</span>
+                <span class="pi-empty__hint-preview">${this._summarizeHintPrompt(hint.prompt)}</span>
+              </button>
+            `)}
+          </div>
         </div>
       </div>
     `;
