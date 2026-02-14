@@ -20,7 +20,11 @@ import {
 } from "../../conventions/store.js";
 import { DEFAULT_CURRENCY_SYMBOL, PRESET_DEFAULT_DP } from "../../conventions/defaults.js";
 import type { StoredConventions, NumberPreset } from "../../conventions/types.js";
-import { closeOverlayById, createOverlayDialog } from "../../ui/overlay-dialog.js";
+import {
+  closeOverlayById,
+  createOverlayCloseButton,
+  createOverlayDialog,
+} from "../../ui/overlay-dialog.js";
 import { RULES_OVERLAY_ID } from "../../ui/overlay-ids.js";
 import { showToast } from "../../ui/toast.js";
 import { formatWorkbookLabel, getWorkbookContext } from "../../workbook/context.js";
@@ -309,9 +313,25 @@ export async function showRulesDialog(opts?: {
     cardClassName: "pi-welcome-card pi-overlay-card",
   });
 
+  const closeOverlay = dialog.close;
+
+  const header = document.createElement("div");
+  header.className = "pi-overlay-header";
+
+  const titleWrap = document.createElement("div");
+  titleWrap.className = "pi-overlay-title-wrap";
+
   const title = document.createElement("h2");
   title.className = "pi-overlay-title";
   title.textContent = "Rules";
+
+  const closeButton = createOverlayCloseButton({
+    onClose: closeOverlay,
+    label: "Close rules",
+  });
+
+  titleWrap.append(title);
+  header.append(titleWrap, closeButton);
 
   const tabs = document.createElement("div");
   tabs.className = "pi-overlay-tabs";
@@ -352,7 +372,7 @@ export async function showRulesDialog(opts?: {
 
   const body = document.createElement("div");
   body.className = "pi-overlay-body";
-  body.append(title, tabs, workbookTag, hint, textarea, conventionsContainer);
+  body.append(header, tabs, workbookTag, hint, textarea, conventionsContainer);
 
   const footer = document.createElement("div");
   footer.className = "pi-overlay-footer";
@@ -376,8 +396,6 @@ export async function showRulesDialog(opts?: {
   actions.append(cancelBtn, saveBtn);
   footer.append(counter, actions);
   dialog.card.append(body, footer);
-
-  const closeOverlay = dialog.close;
 
   const tabButtons: Record<RulesTab, HTMLButtonElement> = {
     user: userTab,

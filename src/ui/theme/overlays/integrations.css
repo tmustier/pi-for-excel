@@ -1,8 +1,8 @@
 /* Integrations manager */
 
 .pi-integrations-dialog {
-  width: min(760px, 92vw);
-  max-height: 88vh;
+  width: min(720px, 92vw);
+  max-height: min(80vh, 720px);
   overflow: hidden;
   gap: 12px;
 }

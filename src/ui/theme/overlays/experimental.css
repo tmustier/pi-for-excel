@@ -1,8 +1,7 @@
 /* Experimental feature manager */
 
 .pi-experimental-card {
-  width: min(560px, 94vw);
-  max-height: 84vh;
+  width: min(520px, 92vw);
 }
 
 .pi-experimental-list {

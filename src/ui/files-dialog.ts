@@ -12,7 +12,11 @@ import { type FilesWorkspaceAuditContext, getFilesWorkspace } from "../files/wor
 import { isExperimentalFeatureEnabled, setExperimentalFeatureEnabled } from "../experiments/flags.js";
 import { getErrorMessage } from "../utils/errors.js";
 import { formatWorkbookLabel, getWorkbookContext } from "../workbook/context.js";
-import { closeOverlayById, createOverlayDialog } from "./overlay-dialog.js";
+import {
+  closeOverlayById,
+  createOverlayCloseButton,
+  createOverlayDialog,
+} from "./overlay-dialog.js";
 import { FILES_WORKSPACE_OVERLAY_ID } from "./overlay-ids.js";
 import {
   buildFilesDialogFilterOptions,
@@ -75,24 +79,40 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
 
   const dialog = createOverlayDialog({
     overlayId: OVERLAY_ID,
-    cardClassName: "pi-welcome-card pi-files-dialog",
+    cardClassName: "pi-welcome-card pi-overlay-card pi-files-dialog",
   });
 
+  const closeOverlay = dialog.close;
+
+  const header = document.createElement("div");
+  header.className = "pi-overlay-header";
+
+  const titleWrap = document.createElement("div");
+  titleWrap.className = "pi-overlay-title-wrap";
+
   const title = document.createElement("h2");
-  title.className = "pi-files-dialog__title";
+  title.className = "pi-overlay-title";
   title.textContent = "Files";
 
   const subtitle = document.createElement("p");
-  subtitle.className = "pi-files-dialog__subtitle";
+  subtitle.className = "pi-overlay-subtitle";
+
+  const closeButton = createOverlayCloseButton({
+    onClose: closeOverlay,
+    label: "Close files",
+  });
+
+  titleWrap.append(title, subtitle);
+  header.append(titleWrap, closeButton);
 
   const controls = document.createElement("div");
   controls.className = "pi-files-dialog__controls";
 
-  const enableButton = makeButton("Enable workspace write access", "pi-files-dialog__btn");
-  const uploadButton = makeButton("Upload", "pi-files-dialog__btn");
-  const newFileButton = makeButton("New text file", "pi-files-dialog__btn");
-  const nativeButton = makeButton("Select folder", "pi-files-dialog__btn");
-  const disconnectNativeButton = makeButton("Use sandbox workspace", "pi-files-dialog__btn");
+  const enableButton = makeButton("Enable workspace write access", "pi-overlay-btn pi-overlay-btn--ghost");
+  const uploadButton = makeButton("Upload", "pi-overlay-btn pi-overlay-btn--ghost");
+  const newFileButton = makeButton("New text file", "pi-overlay-btn pi-overlay-btn--ghost");
+  const nativeButton = makeButton("Select folder", "pi-overlay-btn pi-overlay-btn--ghost");
+  const disconnectNativeButton = makeButton("Use sandbox workspace", "pi-overlay-btn pi-overlay-btn--ghost");
 
   const hiddenInput = document.createElement("input");
   hiddenInput.type = "file";
@@ -147,8 +167,8 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
   const viewerActions = document.createElement("div");
   viewerActions.className = "pi-files-dialog__viewer-actions";
 
-  const saveButton = makeButton("Save", "pi-files-dialog__btn pi-files-dialog__btn--primary");
-  const closeViewerButton = makeButton("Close", "pi-files-dialog__btn");
+  const saveButton = makeButton("Save", "pi-overlay-btn pi-overlay-btn--primary");
+  const closeViewerButton = makeButton("Close", "pi-overlay-btn pi-overlay-btn--ghost");
 
   viewerActions.append(saveButton, closeViewerButton);
   viewerHeader.append(viewerTitle, viewerActions);
@@ -166,11 +186,6 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
 
   viewer.append(viewerHeader, viewerNote, viewerTextarea, viewerPreview);
 
-  const footer = document.createElement("div");
-  footer.className = "pi-files-dialog__footer";
-  const closeButton = makeButton("Close", "pi-files-dialog__btn");
-  footer.appendChild(closeButton);
-
   controls.append(
     enableButton,
     uploadButton,
@@ -180,8 +195,7 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
   );
 
   dialog.card.append(
-    title,
-    subtitle,
+    header,
     controls,
     hiddenInput,
     statusLine,
@@ -189,7 +203,6 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
     filters,
     list,
     viewer,
-    footer,
   );
 
   let activeViewerPath: string | null = null;
@@ -214,8 +227,6 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
     URL.revokeObjectURL(activeObjectUrl);
     activeObjectUrl = null;
   };
-
-  const closeOverlay = dialog.close;
 
   const setStatus = (message: string) => {
     statusLine.textContent = message;
@@ -699,8 +710,6 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
   closeViewerButton.addEventListener("click", () => {
     clearViewer();
   });
-
-  closeButton.addEventListener("click", closeOverlay);
 
   document.addEventListener(FILES_WORKSPACE_CHANGED_EVENT, onWorkspaceChanged);
 

@@ -3,7 +3,7 @@
 .pi-overlay-card {
   text-align: left;
   width: min(520px, 92vw);
-  max-height: 82vh;
+  max-height: min(80vh, 720px);
   gap: 10px;
 }
 
@@ -131,6 +131,15 @@
   background: var(--alpha-6);
 }
 
+.pi-overlay-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.pi-overlay-btn:disabled:hover {
+  background: var(--alpha-4);
+}
+
 .pi-overlay-btn--primary {
   border: none;
   background: var(--pi-green);
@@ -140,6 +149,10 @@
 
 .pi-overlay-btn--primary:hover {
   background: var(--pi-green-strong);
+}
+
+.pi-overlay-btn--primary:disabled:hover {
+  background: var(--pi-green);
 }
 
 .pi-overlay-btn--ghost {
@@ -170,6 +183,37 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
+  min-width: 0;
+}
+
+.pi-overlay-close {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border: 1px solid var(--alpha-10);
+  border-radius: var(--radius-sm);
+  background: var(--white-alpha-55);
+  color: var(--muted-foreground);
+  font-family: var(--font-sans);
+  font-size: var(--text-lg);
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background var(--duration-fast), border-color var(--duration-fast), color var(--duration-fast);
+}
+
+.pi-overlay-close:hover {
+  background: var(--white-alpha-70);
+  border-color: var(--alpha-14);
+  color: var(--foreground);
+}
+
+.pi-overlay-close:focus,
+.pi-overlay-close:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--green-alpha-12);
 }
 
 .pi-overlay-body {

@@ -51,6 +51,26 @@ export interface OverlayDialogManager {
   getCurrent: () => OverlayDialogController | null;
 }
 
+export function createOverlayCloseButton(opts: {
+  onClose: () => void;
+  label?: string;
+}): HTMLButtonElement {
+  const button = document.createElement("button");
+  const label = opts.label ?? "Close dialog";
+
+  button.type = "button";
+  button.className = "pi-overlay-close";
+  button.textContent = "×";
+  button.setAttribute("aria-label", label);
+  button.title = label;
+
+  button.addEventListener("click", () => {
+    opts.onClose();
+  });
+
+  return button;
+}
+
 export function createOverlayDialog(options: OverlayDialogOptions): OverlayDialogController {
   const overlay = document.createElement("div");
   overlay.id = options.overlayId;

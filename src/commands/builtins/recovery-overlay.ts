@@ -3,7 +3,11 @@
  */
 
 import { formatRelativeDate } from "./overlay-relative-date.js";
-import { closeOverlayById, createOverlayDialog } from "../../ui/overlay-dialog.js";
+import {
+  closeOverlayById,
+  createOverlayCloseButton,
+  createOverlayDialog,
+} from "../../ui/overlay-dialog.js";
 import { RECOVERY_OVERLAY_ID } from "../../ui/overlay-ids.js";
 import { showToast } from "../../ui/toast.js";
 
@@ -65,6 +69,14 @@ export async function showRecoveryDialog(opts: {
     cardClassName: "pi-welcome-card pi-overlay-card pi-recovery-dialog",
   });
 
+  const closeOverlay = dialog.close;
+
+  const header = document.createElement("div");
+  header.className = "pi-overlay-header";
+
+  const titleWrap = document.createElement("div");
+  titleWrap.className = "pi-overlay-title-wrap";
+
   const title = document.createElement("h2");
   title.className = "pi-overlay-title";
   title.textContent = "Backups (Beta)";
@@ -72,6 +84,14 @@ export async function showRecoveryDialog(opts: {
   const subtitle = document.createElement("p");
   subtitle.className = "pi-overlay-subtitle";
   subtitle.textContent = "Saved before Pi edits, in between saves. Entries are sheet-specific in this workbook.";
+
+  const closeButton = createOverlayCloseButton({
+    onClose: closeOverlay,
+    label: "Close backups",
+  });
+
+  titleWrap.append(title, subtitle);
+  header.append(titleWrap, closeButton);
 
   const workbookTag = document.createElement("p");
   workbookTag.className = "pi-overlay-workbook-tag";
@@ -102,16 +122,7 @@ export async function showRecoveryDialog(opts: {
   const list = document.createElement("div");
   list.className = "pi-recovery-list";
 
-  const footer = document.createElement("div");
-  footer.className = "pi-overlay-actions";
-
-  const closeButton = document.createElement("button");
-  closeButton.type = "button";
-  closeButton.className = "pi-overlay-btn pi-overlay-btn--ghost";
-  closeButton.textContent = "Close";
-
-  footer.append(closeButton);
-  dialog.card.append(title, subtitle, workbookTag, saveBoundaryHint, toolbar, list, footer);
+  dialog.card.append(header, workbookTag, saveBoundaryHint, toolbar, list);
 
   let checkpoints: RecoveryCheckpointSummary[] = [];
   let busy = false;
@@ -289,8 +300,6 @@ export async function showRecoveryDialog(opts: {
       }
     })();
   });
-
-  closeButton.addEventListener("click", dialog.close);
 
   dialog.mount();
 

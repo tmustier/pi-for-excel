@@ -8,7 +8,11 @@ import {
   setExperimentalFeatureEnabled,
   type ExperimentalFeatureSnapshot,
 } from "../../experiments/flags.js";
-import { closeOverlayById, createOverlayDialog } from "../../ui/overlay-dialog.js";
+import {
+  closeOverlayById,
+  createOverlayCloseButton,
+  createOverlayDialog,
+} from "../../ui/overlay-dialog.js";
 import { EXPERIMENTAL_OVERLAY_ID } from "../../ui/overlay-ids.js";
 import { showToast } from "../../ui/toast.js";
 
@@ -137,6 +141,14 @@ export function showExperimentalDialog(): void {
     cardClassName: "pi-welcome-card pi-overlay-card pi-experimental-card",
   });
 
+  const closeOverlay = dialog.close;
+
+  const header = document.createElement("div");
+  header.className = "pi-overlay-header";
+
+  const titleWrap = document.createElement("div");
+  titleWrap.className = "pi-overlay-title-wrap";
+
   const title = document.createElement("h2");
   title.className = "pi-overlay-title";
   title.textContent = "Experimental Features";
@@ -146,6 +158,14 @@ export function showExperimentalDialog(): void {
   subtitle.textContent =
     "These toggles are local to this browser profile. Use carefully — some are security-sensitive. "
     + "Web Search and MCP are managed in /integrations.";
+
+  const closeButton = createOverlayCloseButton({
+    onClose: closeOverlay,
+    label: "Close experimental features",
+  });
+
+  titleWrap.append(title, subtitle);
+  header.append(titleWrap, closeButton);
 
   const snapshots = getExperimentalFeatureSnapshots();
   const experimentalFeatures: ExperimentalFeatureSnapshot[] = [];
@@ -167,7 +187,7 @@ export function showExperimentalDialog(): void {
 
   const body = document.createElement("div");
   body.className = "pi-overlay-body";
-  body.append(title, subtitle);
+  body.append(header);
 
   if (experimentalFeatures.length > 0) {
     body.appendChild(buildFeatureSection({
@@ -194,12 +214,6 @@ export function showExperimentalDialog(): void {
 
   body.appendChild(footer);
 
-  const closeBtn = document.createElement("button");
-  closeBtn.type = "button";
-  closeBtn.className = "pi-overlay-btn pi-overlay-btn--ghost pi-overlay-btn--full";
-  closeBtn.textContent = "Close";
-  closeBtn.addEventListener("click", dialog.close);
-
-  dialog.card.append(body, closeBtn);
+  dialog.card.append(body);
   dialog.mount();
 }

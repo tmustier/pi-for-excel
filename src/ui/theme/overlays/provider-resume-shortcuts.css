@@ -1,8 +1,7 @@
 /* Provider / Resume / Shortcuts overlays */
 
 .pi-provider-picker-card {
-  width: min(340px, 92vw);
-  max-height: 82vh;
+  width: min(380px, 92vw);
 }
 
 .pi-provider-picker-list {
@@ -92,8 +91,7 @@
 }
 
 .pi-shortcuts-dialog {
-  width: min(420px, 92vw);
-  max-height: min(680px, 86vh);
+  width: min(520px, 92vw);
 }
 
 .pi-shortcuts-list {

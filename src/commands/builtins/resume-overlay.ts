@@ -11,7 +11,11 @@ import {
   type ResumeDialogTarget,
 } from "./resume-target.js";
 import { formatRelativeDate } from "./overlay-relative-date.js";
-import { closeOverlayById, createOverlayDialog } from "../../ui/overlay-dialog.js";
+import {
+  closeOverlayById,
+  createOverlayCloseButton,
+  createOverlayDialog,
+} from "../../ui/overlay-dialog.js";
 import { RESUME_OVERLAY_ID } from "../../ui/overlay-ids.js";
 import { showToast } from "../../ui/toast.js";
 import { formatWorkbookLabel, getWorkbookContext } from "../../workbook/context.js";
@@ -104,9 +108,25 @@ export async function showResumeDialog(opts: {
     cardClassName: "pi-welcome-card pi-overlay-card pi-resume-dialog",
   });
 
+  const closeOverlay = dialog.close;
+
+  const header = document.createElement("div");
+  header.className = "pi-overlay-header";
+
+  const titleWrap = document.createElement("div");
+  titleWrap.className = "pi-overlay-title-wrap";
+
   const title = document.createElement("h2");
   title.className = "pi-overlay-title pi-resume-dialog__title";
   title.textContent = "Resume Session";
+
+  const closeButton = createOverlayCloseButton({
+    onClose: closeOverlay,
+    label: "Close resume sessions",
+  });
+
+  titleWrap.append(title);
+  header.append(titleWrap, closeButton);
 
   const targetControls = document.createElement("div");
   targetControls.className = "pi-resume-target-controls";
@@ -150,7 +170,7 @@ export async function showResumeDialog(opts: {
   const list = document.createElement("div");
   list.className = "pi-resume-list";
 
-  dialog.card.append(title, targetControls, targetHint);
+  dialog.card.append(header, targetControls, targetHint);
   syncTargetButtons();
 
   if (workbookId) {
@@ -200,8 +220,6 @@ export async function showResumeDialog(opts: {
   };
 
   renderList();
-
-  const closeOverlay = dialog.close;
 
   dialog.overlay.addEventListener("click", (event) => {
     const target = event.target;

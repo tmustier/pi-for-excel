@@ -1,55 +1,14 @@
 /* Files workspace dialog */
 .pi-files-dialog {
-  width: min(520px, 96vw);
-  max-height: min(760px, 90vh);
+  width: min(520px, 92vw);
+  max-height: min(80vh, 720px);
   gap: 10px;
-}
-
-.pi-files-dialog__title {
-  margin: 0;
-  font-family: var(--font-sans);
-  font-size: var(--text-lg);
-  font-weight: 700;
-  color: var(--foreground);
-}
-
-.pi-files-dialog__subtitle {
-  margin: 0;
-  font-family: var(--font-sans);
-  font-size: var(--text-sm);
-  color: var(--muted-foreground);
 }
 
 .pi-files-dialog__controls {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-}
-
-.pi-files-dialog__btn {
-  border: 1px solid var(--alpha-10);
-  border-radius: var(--radius-sm);
-  background: var(--white-alpha-55);
-  color: var(--foreground);
-  font-family: var(--font-sans);
-  font-size: var(--text-sm);
-  padding: 7px 10px;
-  cursor: pointer;
-}
-
-.pi-files-dialog__btn:hover:not(:disabled) {
-  background: var(--white-alpha-70);
-}
-
-.pi-files-dialog__btn:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-
-.pi-files-dialog__btn--primary {
-  border-color: var(--green-alpha-25);
-  background: var(--pi-green);
-  color: white;
 }
 
 .pi-files-dialog__hidden-input {
@@ -331,7 +290,3 @@
   padding: 8px;
 }
 
-.pi-files-dialog__footer {
-  display: flex;
-  justify-content: flex-end;
-}

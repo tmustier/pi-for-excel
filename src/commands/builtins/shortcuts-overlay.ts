@@ -5,7 +5,11 @@
  * to the current platform (macOS symbols vs Windows/Linux labels).
  */
 
-import { closeOverlayById, createOverlayDialog } from "../../ui/overlay-dialog.js";
+import {
+  closeOverlayById,
+  createOverlayCloseButton,
+  createOverlayDialog,
+} from "../../ui/overlay-dialog.js";
 import { SHORTCUTS_OVERLAY_ID } from "../../ui/overlay-ids.js";
 
 // ---------------------------------------------------------------------------
@@ -96,9 +100,25 @@ export function showShortcutsDialog(): void {
     cardClassName: "pi-welcome-card pi-overlay-card pi-shortcuts-dialog",
   });
 
+  const closeOverlay = dialog.close;
+
+  const header = document.createElement("div");
+  header.className = "pi-overlay-header";
+
+  const titleWrap = document.createElement("div");
+  titleWrap.className = "pi-overlay-title-wrap";
+
   const title = document.createElement("h2");
   title.className = "pi-overlay-title";
   title.textContent = "Keyboard Shortcuts";
+
+  const closeButton = createOverlayCloseButton({
+    onClose: closeOverlay,
+    label: "Close keyboard shortcuts",
+  });
+
+  titleWrap.append(title);
+  header.append(titleWrap, closeButton);
 
   const list = document.createElement("div");
   list.className = "pi-shortcuts-list";
@@ -131,13 +151,6 @@ export function showShortcutsDialog(): void {
     list.appendChild(section);
   }
 
-  const closeButton = document.createElement("button");
-  closeButton.type = "button";
-  closeButton.className = "pi-overlay-btn pi-overlay-btn--ghost pi-overlay-btn--full";
-  closeButton.textContent = "Close";
-
-  dialog.card.append(title, list, closeButton);
-  closeButton.addEventListener("click", dialog.close);
-
+  dialog.card.append(header, list);
   dialog.mount();
 }

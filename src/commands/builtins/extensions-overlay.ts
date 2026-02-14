@@ -15,7 +15,11 @@ import { validateOfficeProxyUrl } from "../../auth/proxy-validation.js";
 import { dispatchExperimentalToolConfigChanged } from "../../experiments/events.js";
 import { isExperimentalFeatureEnabled, setExperimentalFeatureEnabled } from "../../experiments/flags.js";
 import { PYTHON_BRIDGE_URL_SETTING_KEY } from "../../tools/experimental-tool-gates.js";
-import { closeOverlayById, createOverlayDialog } from "../../ui/overlay-dialog.js";
+import {
+  closeOverlayById,
+  createOverlayCloseButton,
+  createOverlayDialog,
+} from "../../ui/overlay-dialog.js";
 import { EXTENSIONS_OVERLAY_ID } from "../../ui/overlay-ids.js";
 import { showToast } from "../../ui/toast.js";
 
@@ -225,9 +229,9 @@ export function showExtensionsDialog(manager: ExtensionRuntimeManager): void {
 
   const closeOverlay = dialog.close;
 
-  const closeButton = createButton("Close");
-  closeButton.addEventListener("click", () => {
-    closeOverlay();
+  const closeButton = createOverlayCloseButton({
+    onClose: closeOverlay,
+    label: "Close extensions manager",
   });
 
   header.append(titleWrap, closeButton);

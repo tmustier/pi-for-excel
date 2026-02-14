@@ -1,8 +1,7 @@
 /* Backups overlay */
 
 .pi-recovery-dialog {
-  width: min(560px, 92vw);
-  max-height: 82vh;
+  width: min(520px, 92vw);
   overflow: hidden;
 }
 

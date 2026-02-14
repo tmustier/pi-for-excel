@@ -38,7 +38,11 @@ import {
   type McpConfigStore,
   type McpServerConfig,
 } from "../../tools/mcp-config.js";
-import { closeOverlayById, createOverlayDialog } from "../../ui/overlay-dialog.js";
+import {
+  closeOverlayById,
+  createOverlayCloseButton,
+  createOverlayDialog,
+} from "../../ui/overlay-dialog.js";
 import { INTEGRATIONS_OVERLAY_ID } from "../../ui/overlay-ids.js";
 import { showToast } from "../../ui/toast.js";
 import { isRecord } from "../../utils/type-guards.js";
@@ -397,7 +401,12 @@ export function showIntegrationsDialog(dependencies: IntegrationsDialogDependenc
 
   titleWrap.append(title, subtitle);
 
-  const closeButton = createButton("Close");
+  const closeOverlay = dialog.close;
+
+  const closeButton = createOverlayCloseButton({
+    onClose: closeOverlay,
+    label: "Close integrations",
+  });
 
   header.append(titleWrap, closeButton);
 
@@ -504,10 +513,6 @@ export function showIntegrationsDialog(dependencies: IntegrationsDialogDependenc
 
   body.append(externalSection, integrationsSection, webSearchSection, mcpSection);
   dialog.card.append(header, body);
-
-  const closeOverlay = dialog.close;
-
-  closeButton.addEventListener("click", closeOverlay);
 
   let busy = false;
   let snapshot: IntegrationsSnapshot | null = null;
