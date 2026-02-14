@@ -12,12 +12,12 @@ import { customElement, property, query, state } from "lit/decorators.js";
 import type { Agent, AgentEvent } from "@mariozechner/pi-agent-core";
 import type { ToolResultMessage } from "@mariozechner/pi-ai";
 import type { StreamingMessageContainer } from "@mariozechner/pi-web-ui/dist/components/StreamingMessageContainer.js";
-import { ArchiveRestore, ChevronRight, History, type IconNode } from "lucide";
+import { ChevronRight } from "lucide";
 import "./pi-input.js";
 import "./working-indicator.js";
 import { initToolGrouping } from "./tool-grouping.js";
 import { applyMessageStyleHooks } from "./message-style-hooks.js";
-import type { PiInput } from "./pi-input.js";
+import type { PiInput, PiInputAction } from "./pi-input.js";
 import { isDebugEnabled, formatK } from "../debug/debug.js";
 import { INTEGRATIONS_LABEL } from "../integrations/naming.js";
 import {
@@ -414,6 +414,29 @@ export class PiSidebar extends LitElement {
     this.onFilesDrop?.(event.detail.files);
   };
 
+  private _onInputAction = (event: CustomEvent<{ action: PiInputAction }>) => {
+    const { action } = event.detail;
+
+    if (action === "open-files") {
+      this.onOpenFiles?.();
+      return;
+    }
+
+    if (action === "open-rules") {
+      this.onOpenRules?.();
+      return;
+    }
+
+    if (action === "open-resume") {
+      this.onOpenResumePicker?.();
+      return;
+    }
+
+    if (action === "open-backups") {
+      this.onOpenRecovery?.();
+    }
+  };
+
   private _updateSessionTabOverflow() {
     const scroller = this._tabsScroller;
     if (!scroller) {
@@ -514,68 +537,6 @@ export class PiSidebar extends LitElement {
     this._detachTabContextMenuDocumentListener();
   }
 
-  private _renderQuickActionButton(args: {
-    label: string;
-    title: string;
-    iconNode: IconNode;
-    onClick?: () => void;
-    disabled?: boolean;
-  }) {
-    const disabled = args.disabled ?? false;
-
-    return html`
-      <button
-        type="button"
-        class="pi-quick-actions__btn"
-        title=${args.title}
-        ?disabled=${disabled}
-        @click=${() => {
-          if (disabled) return;
-          args.onClick?.();
-        }}
-      >
-        <span class="pi-quick-actions__icon" aria-hidden="true">${icon(args.iconNode, "sm")}</span>
-        <span class="pi-quick-actions__label">${args.label}</span>
-      </button>
-    `;
-  }
-
-  private _renderQuickActions() {
-    const showResume = Boolean(this.onOpenResumePicker);
-    const showBackups = Boolean(this.onOpenRecovery);
-
-    if (!showResume && !showBackups) {
-      return nothing;
-    }
-
-    const backupsDisabled = showBackups && !this.hasRecoveryCheckpoints;
-    const backupsTitle = backupsDisabled
-      ? "No backups yet — run a workbook change to create the first checkpoint"
-      : "Browse and restore backups";
-
-    return html`
-      <div class="pi-quick-actions">
-        ${showResume
-          ? this._renderQuickActionButton({
-            label: "Resume",
-            title: "Resume a previous session",
-            iconNode: History,
-            onClick: this.onOpenResumePicker,
-          })
-          : nothing}
-        ${showBackups
-          ? this._renderQuickActionButton({
-            label: "Backups",
-            title: backupsTitle,
-            iconNode: ArchiveRestore,
-            onClick: this.onOpenRecovery,
-            disabled: backupsDisabled,
-          })
-          : nothing}
-      </div>
-    `;
-  }
-
   private _buildToolResultsMap(): Map<string, ToolResultMessage<unknown>> {
     const map = new Map<string, ToolResultMessage<unknown>>();
     if (!this.agent) return map;
@@ -626,12 +587,13 @@ export class PiSidebar extends LitElement {
       ></pi-working-indicator>
       <div id="pi-widget-slot" class="pi-widget-slot" style="display:none"></div>
       <div class="pi-input-area">
-        ${this._renderQuickActions()}
         <pi-input
           .isStreaming=${this._isStreaming}
+          .hasRecoveryCheckpoints=${this.hasRecoveryCheckpoints}
           @pi-send=${this._onSend}
           @pi-abort=${this._onAbort}
           @pi-files-drop=${this._onFilesDrop}
+          @pi-input-action=${this._onInputAction}
         ></pi-input>
         <div id="pi-status-bar" class="pi-status-bar"></div>
       </div>

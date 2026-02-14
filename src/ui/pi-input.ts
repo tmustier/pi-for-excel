@@ -5,9 +5,10 @@
  * Purpose-built for a narrow sidebar. Replaces pi-web-ui's MessageEditor.
  *
  * Events:
- *   'pi-send'       → detail: { text: string }
- *   'pi-abort'      → (no detail)
- *   'pi-files-drop' → detail: { files: File[] }
+ *   'pi-send'        → detail: { text: string }
+ *   'pi-abort'       → (no detail)
+ *   'pi-files-drop'  → detail: { files: File[] }
+ *   'pi-input-action' → detail: { action: PiInputAction }
  */
 
 import { html, LitElement } from "lit";
@@ -22,17 +23,22 @@ const PLACEHOLDER_HINTS = [
   "Tell Pi what to change…",
 ];
 
+export type PiInputAction = "open-files" | "open-rules" | "open-resume" | "open-backups";
+
 @customElement("pi-input")
 export class PiInput extends LitElement {
   @property({ type: Boolean }) isStreaming = false;
+  @property({ type: Boolean }) hasRecoveryCheckpoints = false;
 
   @state() private _value = "";
   @state() private _placeholderIndex = 0;
   @state() private _isDragOver = false;
+  @state() private _actionsMenuOpen = false;
   @query("textarea") private _textarea!: HTMLTextAreaElement;
   @query(".pi-input-file") private _fileInput?: HTMLInputElement;
 
   private _placeholderTimer?: ReturnType<typeof setInterval>;
+  private _actionsMenuDocumentClickHandler?: (event: MouseEvent) => void;
 
   get value(): string { return this._value; }
   set value(v: string) {
@@ -72,6 +78,13 @@ export class PiInput extends LitElement {
       this._send();
       return;
     }
+
+    if (e.key === "Escape" && this._actionsMenuOpen) {
+      e.preventDefault();
+      this._closeActionsMenu();
+      return;
+    }
+
     if (e.key === "Escape" && this.isStreaming) {
       if (doesOverlayClaimEscape(e.target)) return;
       e.preventDefault();
@@ -132,6 +145,69 @@ export class PiInput extends LitElement {
     target.value = "";
   };
 
+  private _dispatchInputAction(action: PiInputAction): void {
+    this.dispatchEvent(new CustomEvent<{ action: PiInputAction }>("pi-input-action", {
+      bubbles: true,
+      detail: { action },
+    }));
+  }
+
+  private _attachActionsMenuDocumentListener(): void {
+    if (this._actionsMenuDocumentClickHandler) return;
+
+    this._actionsMenuDocumentClickHandler = (event: MouseEvent) => {
+      const anchor = this.querySelector(".pi-input-actions-anchor");
+      const target = event.target;
+      if (anchor && target instanceof Node && anchor.contains(target)) {
+        return;
+      }
+
+      this._closeActionsMenu();
+    };
+
+    document.addEventListener("click", this._actionsMenuDocumentClickHandler, true);
+  }
+
+  private _detachActionsMenuDocumentListener(): void {
+    if (!this._actionsMenuDocumentClickHandler) return;
+
+    document.removeEventListener("click", this._actionsMenuDocumentClickHandler, true);
+    this._actionsMenuDocumentClickHandler = undefined;
+  }
+
+  private _openActionsMenu(): void {
+    if (this._actionsMenuOpen) return;
+
+    this._actionsMenuOpen = true;
+    this._attachActionsMenuDocumentListener();
+  }
+
+  private _closeActionsMenu(): void {
+    if (!this._actionsMenuOpen) return;
+
+    this._actionsMenuOpen = false;
+    this._detachActionsMenuDocumentListener();
+  }
+
+  private _toggleActionsMenu(): void {
+    if (this._actionsMenuOpen) {
+      this._closeActionsMenu();
+      return;
+    }
+
+    this._openActionsMenu();
+  }
+
+  private _onActionImportFiles = () => {
+    this._closeActionsMenu();
+    this._openFilePicker();
+  };
+
+  private _onActionClick(action: PiInputAction) {
+    this._closeActionsMenu();
+    this._dispatchInputAction(action);
+  }
+
   private _send() {
     const text = this._value.trim();
     if (!text) return;
@@ -157,12 +233,15 @@ export class PiInput extends LitElement {
   override disconnectedCallback() {
     super.disconnectedCallback();
     if (this._placeholderTimer) { clearInterval(this._placeholderTimer); this._placeholderTimer = undefined; }
+    this._closeActionsMenu();
   }
 
   override firstUpdated() { this._textarea?.focus(); }
 
   override render() {
     const hasContent = this._value.trim().length > 0;
+    const backupsDisabled = !this.hasRecoveryCheckpoints;
+
     return html`
       <div
         class="pi-input-card ${this._isDragOver ? "is-drag-over" : ""}"
@@ -185,6 +264,73 @@ export class PiInput extends LitElement {
           @input=${this._onInput}
           @keydown=${this._onKeydown}
         ></textarea>
+
+        <div class="pi-input-actions-anchor">
+          <button
+            class="pi-input-btn pi-input-btn--actions"
+            type="button"
+            @click=${this._toggleActionsMenu}
+            aria-label="Input actions"
+            title="Input actions"
+            aria-haspopup="menu"
+            aria-expanded=${this._actionsMenuOpen ? "true" : "false"}
+          >
+            +
+          </button>
+
+          ${this._actionsMenuOpen
+            ? html`
+              <div class="pi-input-actions-menu" role="menu" aria-label="Input actions">
+                <button
+                  type="button"
+                  role="menuitem"
+                  class="pi-input-actions-menu__item"
+                  @click=${this._onActionImportFiles}
+                >
+                  Import files…
+                </button>
+                <div class="pi-input-actions-menu__divider" role="separator"></div>
+                <button
+                  type="button"
+                  role="menuitem"
+                  class="pi-input-actions-menu__item"
+                  @click=${() => this._onActionClick("open-files")}
+                >
+                  Files…
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  class="pi-input-actions-menu__item"
+                  @click=${() => this._onActionClick("open-rules")}
+                >
+                  Rules…
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  class="pi-input-actions-menu__item"
+                  @click=${() => this._onActionClick("open-resume")}
+                >
+                  Resume session…
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  class="pi-input-actions-menu__item"
+                  ?disabled=${backupsDisabled}
+                  @click=${() => this._onActionClick("open-backups")}
+                  title=${backupsDisabled
+                    ? "No backups yet — run a workbook change to create the first checkpoint"
+                    : "Browse and restore backups"}
+                >
+                  Backups…
+                </button>
+              </div>
+            `
+            : null}
+        </div>
+
         <button
           class="pi-input-btn pi-input-btn--attach"
           type="button"

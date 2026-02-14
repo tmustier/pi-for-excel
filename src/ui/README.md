@@ -80,7 +80,7 @@ pi-web-ui uses Light DOM (`createRenderRoot() { return this; }`), so styles leak
 | File | Replaces | Notes |
 |---|---|---|
 | `pi-sidebar.ts` | ChatPanel + AgentInterface | Owns layout, subscribes to Agent, renders message-list + streaming container + working indicator |
-| `pi-input.ts` | MessageEditor | Auto-growing textarea, send/abort button, fires `pi-send` / `pi-abort` events |
+| `pi-input.ts` | MessageEditor | Auto-growing textarea, send/abort buttons, `+` input actions menu, file import affordances; fires `pi-send` / `pi-abort` / `pi-files-drop` / `pi-input-action` events |
 | `message-style-hooks.ts` | — | Stamps semantic classes on pi-web-ui message internals (`pi-assistant-body`, `pi-tool-card-fallback`, etc.) to avoid brittle utility selectors |
 | `dialog-style-hooks.ts` | — | Stamps semantic classes on dialog internals (`pi-dialog-card`, `pi-model-selector-item-*`) so dialog CSS avoids utility selectors |
 | `toast.ts` | — | `showToast(msg, duration \| { duration, variant })` + `showActionToast(...)` — fixed notifications with destructive styling for errors |

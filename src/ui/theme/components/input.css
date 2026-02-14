@@ -23,7 +23,7 @@
 
 .pi-input-drop-hint {
   position: absolute;
-  inset: 4px 36px 4px 36px;
+  inset: 4px 36px 4px 64px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -44,7 +44,7 @@
 .pi-input-textarea {
   display: block;
   width: 100%;
-  padding: 11px 44px 11px 40px;
+  padding: 11px 44px 11px 72px;
   min-height: 40px;
   max-height: 40vh;
   border: none;
@@ -77,11 +77,101 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: background var(--duration-fast), transform var(--duration-fast);
+  transition: background var(--duration-fast), transform var(--duration-fast), color var(--duration-fast), border-color var(--duration-fast);
+}
+
+.pi-input-actions-anchor {
+  position: absolute;
+  left: 8px;
+  bottom: 7px;
+  z-index: 6;
+}
+
+.pi-input-btn--actions {
+  position: relative;
+  right: auto;
+  bottom: auto;
+  border: 1px solid var(--alpha-10);
+  background: var(--white-alpha-55);
+  color: var(--muted-foreground);
+  font-family: var(--font-sans);
+  font-size: var(--text-lg);
+  font-weight: 500;
+  line-height: 1;
+}
+
+.pi-input-btn--actions:hover {
+  background: var(--white-alpha-70);
+  color: var(--foreground);
+}
+
+.pi-input-actions-menu {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 6px);
+  z-index: 220;
+  min-width: 190px;
+  padding: 4px;
+  border-radius: var(--radius-lg);
+  border: var(--glass-border);
+  background:
+    linear-gradient(
+      180deg,
+      oklch(1 0 0 / 0.14) 0%,
+      oklch(1 0 0 / 0) 40%,
+      var(--alpha-2) 100%
+    ),
+    var(--glass-bg-solid);
+  backdrop-filter: var(--glass-blur-dropdown);
+  -webkit-backdrop-filter: var(--glass-blur-dropdown);
+  box-shadow: var(--glass-shadow-lg), var(--glass-highlight), var(--glass-inner-shadow);
+}
+
+.pi-input-actions-menu__item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--duration-fast), box-shadow var(--duration-fast), opacity var(--duration-fast);
+}
+
+.pi-input-actions-menu__item:hover:not(:disabled) {
+  background:
+    linear-gradient(
+      180deg,
+      oklch(1 0 0 / 0.18) 0%,
+      oklch(1 0 0 / 0) 100%
+    ),
+    var(--white-alpha-45);
+  box-shadow: var(--glass-highlight), var(--glass-inner-shadow);
+}
+
+.pi-input-actions-menu__item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pi-input-actions-menu__divider {
+  height: 1px;
+  margin: 4px 6px;
+  background: linear-gradient(
+    90deg,
+    var(--white-alpha-40),
+    var(--alpha-6),
+    var(--white-alpha-40)
+  );
 }
 
 .pi-input-btn--attach {
-  left: 8px;
+  left: 38px;
   right: auto;
   border: 1px solid var(--alpha-10);
   background: var(--white-alpha-55);
