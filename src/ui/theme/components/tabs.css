@@ -334,66 +334,6 @@
   box-shadow: var(--glass-highlight), var(--glass-inner-shadow);
 }
 
-.pi-utilities-menu {
-  position: absolute;
-  top: 100%;
-  right: 0;
-  z-index: 210;
-  min-width: 220px;
-  margin-top: 6px;
-  padding: 4px;
-  border-radius: var(--radius-lg);
-  border: var(--glass-border);
-  background:
-    linear-gradient(
-      180deg,
-      oklch(1 0 0 / 0.14) 0%,
-      oklch(1 0 0 / 0.0) 40%,
-      var(--alpha-2) 100%
-    ),
-    var(--glass-bg-solid);
-  backdrop-filter: var(--glass-blur-dropdown);
-  -webkit-backdrop-filter: var(--glass-blur-dropdown);
-  box-shadow: var(--glass-shadow-lg), var(--glass-highlight), var(--glass-inner-shadow);
-}
-
-.pi-utilities-menu__item {
-  display: flex;
-  align-items: center;
-  width: 100%;
-  padding: 7px 10px;
-  border: none;
-  background: transparent;
-  border-radius: var(--radius-sm);
-  color: var(--foreground);
-  font-family: var(--font-sans);
-  font-size: var(--text-sm);
-  cursor: pointer;
-  text-align: left;
-  transition: background var(--duration-fast), box-shadow var(--duration-fast);
-}
-
-.pi-utilities-menu__item:hover {
-  background:
-    linear-gradient(
-      180deg,
-      oklch(1 0 0 / 0.18) 0%,
-      oklch(1 0 0 / 0.0) 100%
-    ),
-    var(--white-alpha-45);
-  box-shadow: var(--glass-highlight), var(--glass-inner-shadow);
-}
-
-.pi-utilities-menu__divider {
-  height: 1px;
-  margin: 4px 6px;
-  background: linear-gradient(
-    90deg,
-    var(--white-alpha-40),
-    var(--alpha-6),
-    var(--white-alpha-40)
-  );
-}
 
 .pi-messages {
   flex: 1;

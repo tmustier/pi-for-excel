@@ -1,34 +1,94 @@
 /* ═══════════════════════════════════════════════════════
-   9. SLASH COMMAND MENU
+   9. MENUS — slash command + utilities
    ═══════════════════════════════════════════════════════ */
 
+/* Shared menu surfaces */
+:is(.pi-cmd-menu, .pi-utilities-menu) {
+  border-radius: var(--radius-lg);
+  border: var(--glass-border);
+  background:
+    linear-gradient(
+      180deg,
+      oklch(1 0 0 / 0.14) 0%,
+      oklch(1 0 0 / 0) 40%,
+      var(--alpha-2) 100%
+    ),
+    var(--glass-bg-solid);
+  backdrop-filter: var(--glass-blur-dropdown);
+  -webkit-backdrop-filter: var(--glass-blur-dropdown);
+  box-shadow: var(--glass-shadow-lg), var(--glass-highlight), var(--glass-inner-shadow);
+  padding: 4px;
+}
+
+/* Shared menu items */
+:is(.pi-cmd-item, .pi-utilities-menu__item) {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: 8px;
+  padding: 8px 10px;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  text-align: left;
+  transition: background var(--duration-fast), box-shadow var(--duration-fast);
+}
+
+:is(.pi-cmd-item, .pi-utilities-menu__item):hover {
+  background:
+    linear-gradient(
+      180deg,
+      oklch(1 0 0 / 0.18) 0%,
+      oklch(1 0 0 / 0) 100%
+    ),
+    var(--white-alpha-45);
+  box-shadow: var(--glass-highlight), var(--glass-inner-shadow);
+}
+
+.pi-utilities-menu__item {
+  cursor: pointer;
+}
+
+.pi-utilities-menu__item:focus,
+.pi-utilities-menu__item:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--green-alpha-12), var(--glass-highlight), var(--glass-inner-shadow);
+}
+
+.pi-utilities-menu__divider {
+  height: 1px;
+  margin: 4px 6px;
+  background: linear-gradient(
+    90deg,
+    var(--white-alpha-40),
+    var(--alpha-6),
+    var(--white-alpha-40)
+  );
+}
+
+/* Slash command menu */
 .pi-cmd-menu {
   position: fixed;
   z-index: 150;
-  max-height: 260px;
+  max-height: min(260px, 44vh);
   overflow-y: auto;
-  background: var(--glass-bg-solid);
-  backdrop-filter: var(--glass-blur-dropdown);
-  -webkit-backdrop-filter: var(--glass-blur-dropdown);
-  border-radius: var(--radius-lg);
-  border: var(--glass-border);
-  box-shadow: var(--glass-shadow-lg), var(--glass-highlight), var(--glass-inner-shadow);
-  padding: 4px;
   display: none;
 }
 
 .pi-cmd-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: background var(--duration-fast);
 }
-.pi-cmd-item.selected { background: var(--pi-green-light); }
-.pi-cmd-item:hover { background: var(--alpha-3); }
-.pi-cmd-item.selected:hover { background: var(--pi-green-light); }
+
+.pi-cmd-item.selected {
+  background: var(--pi-green-light);
+}
+
+.pi-cmd-item.selected:hover {
+  background: var(--pi-green-light);
+}
 
 .pi-cmd-name {
   font-family: var(--font-mono);
@@ -64,4 +124,14 @@
   margin-left: auto;
 }
 
-
+/* Utilities menu */
+.pi-utilities-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 210;
+  min-width: 220px;
+  max-height: min(320px, 60vh);
+  margin-top: 6px;
+  overflow-y: auto;
+}
