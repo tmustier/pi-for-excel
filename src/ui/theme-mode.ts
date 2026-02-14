@@ -1,8 +1,21 @@
 /**
  * Dark/light mode synchronization.
  *
- * Prefers the Office theme background when available, with a media-query fallback.
+ * Dark mode is gated behind /experimental dark-mode.
+ * When disabled, UI remains in light mode.
  */
+
+import {
+  PI_EXPERIMENTAL_FEATURE_CHANGED_EVENT,
+  type ExperimentalFeatureChangedDetail,
+} from "../experiments/events.js";
+import {
+  isExperimentalFeatureEnabled,
+  type ExperimentalFeatureId,
+} from "../experiments/flags.js";
+import { isRecord } from "../utils/type-guards.js";
+
+const DARK_MODE_EXPERIMENT_ID: ExperimentalFeatureId = "ui_dark_mode";
 
 interface RgbColor {
   r: number;
@@ -61,19 +74,12 @@ function isDarkColor(rgb: RgbColor): boolean {
   return relativeLuminance(rgb) < 0.35;
 }
 
-function resolveOfficeThemeDark(): boolean | null {
-  if (typeof Office === "undefined") {
+function resolveThemeDarkFromColor(input: unknown): boolean | null {
+  if (typeof input !== "string") {
     return null;
   }
 
-  const officeTheme = Office.context?.officeTheme;
-  const backgroundColor = officeTheme?.bodyBackgroundColor;
-
-  if (typeof backgroundColor !== "string") {
-    return null;
-  }
-
-  const parsed = parseHexColor(backgroundColor);
+  const parsed = parseHexColor(input);
   if (!parsed) {
     return null;
   }
@@ -81,13 +87,78 @@ function resolveOfficeThemeDark(): boolean | null {
   return isDarkColor(parsed);
 }
 
+function resolveOfficeThemeDark(): boolean | null {
+  if (typeof Office === "undefined") {
+    return null;
+  }
+
+  const officeTheme = Office.context?.officeTheme;
+  if (!officeTheme) {
+    return null;
+  }
+
+  if (typeof officeTheme.isDarkTheme === "boolean") {
+    return officeTheme.isDarkTheme;
+  }
+
+  const backgroundCandidates = [
+    officeTheme.bodyBackgroundColor,
+    officeTheme.controlBackgroundColor,
+  ];
+
+  for (const color of backgroundCandidates) {
+    const isDark = resolveThemeDarkFromColor(color);
+    if (isDark !== null) {
+      return isDark;
+    }
+  }
+
+  const foregroundCandidates = [
+    officeTheme.bodyForegroundColor,
+    officeTheme.controlForegroundColor,
+  ];
+
+  for (const color of foregroundCandidates) {
+    const isDark = resolveThemeDarkFromColor(color);
+    if (isDark !== null) {
+      return !isDark;
+    }
+  }
+
+  return null;
+}
+
+function isDarkModeExperimentEnabled(): boolean {
+  return isExperimentalFeatureEnabled(DARK_MODE_EXPERIMENT_ID);
+}
+
 function resolvePreferredDark(mediaMatches: boolean): boolean {
+  if (!isDarkModeExperimentEnabled()) {
+    return false;
+  }
+
   const officeDark = resolveOfficeThemeDark();
   if (officeDark !== null) {
     return officeDark;
   }
 
   return mediaMatches;
+}
+
+function isExperimentalFeatureChangedEvent(
+  event: Event,
+): event is CustomEvent<ExperimentalFeatureChangedDetail> {
+  if (!(event instanceof CustomEvent)) {
+    return false;
+  }
+
+  const detail: unknown = event.detail;
+  if (!isRecord(detail)) {
+    return false;
+  }
+
+  return typeof detail.featureId === "string"
+    && typeof detail.enabled === "boolean";
 }
 
 export function installThemeModeSync(): () => void {
@@ -145,11 +216,32 @@ export function installThemeModeSync(): () => void {
     apply();
   };
 
+  const onExperimentalFeatureChange = (event: Event) => {
+    if (!isExperimentalFeatureChangedEvent(event)) {
+      return;
+    }
+
+    if (event.detail.featureId !== DARK_MODE_EXPERIMENT_ID) {
+      return;
+    }
+
+    apply();
+  };
+
+  document.addEventListener(
+    PI_EXPERIMENTAL_FEATURE_CHANGED_EVENT,
+    onExperimentalFeatureChange,
+  );
+
   if (typeof media.addEventListener === "function") {
     media.addEventListener("change", onMediaChange);
 
     return () => {
       disposed = true;
+      document.removeEventListener(
+        PI_EXPERIMENTAL_FEATURE_CHANGED_EVENT,
+        onExperimentalFeatureChange,
+      );
       media.removeEventListener("change", onMediaChange);
       if (officeRetryTimer !== null) {
         clearInterval(officeRetryTimer);
@@ -163,6 +255,10 @@ export function installThemeModeSync(): () => void {
   media.addListener(onMediaChange);
   return () => {
     disposed = true;
+    document.removeEventListener(
+      PI_EXPERIMENTAL_FEATURE_CHANGED_EVENT,
+      onExperimentalFeatureChange,
+    );
     media.removeListener(onMediaChange);
     if (officeRetryTimer !== null) {
       clearInterval(officeRetryTimer);

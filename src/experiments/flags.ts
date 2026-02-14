@@ -11,6 +11,7 @@ import { dispatchExperimentalFeatureChanged } from "./events.js";
 export type ExperimentalFeatureId =
   | "tmux_bridge"
   | "external_skills_discovery"
+  | "ui_dark_mode"
   | "remote_extension_urls"
   | "extension_permission_gates"
   | "extension_sandbox_runtime"
@@ -52,6 +53,15 @@ const EXPERIMENTAL_FEATURES = [
     warning: "Security: external skills can contain untrusted instructions and executable references.",
     wiring: "wired",
     storageKey: "pi.experimental.externalSkillsDiscovery",
+  },
+  {
+    id: "ui_dark_mode",
+    slug: "dark-mode",
+    aliases: ["theme-dark", "ui-dark-mode"],
+    title: "Dark mode",
+    description: "Enable Office/theme-driven dark mode for the task pane UI.",
+    wiring: "wired",
+    storageKey: "pi.experimental.uiDarkMode",
   },
   {
     id: "remote_extension_urls",

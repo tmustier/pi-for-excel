@@ -84,7 +84,7 @@ pi-web-ui uses Light DOM (`createRenderRoot() { return this; }`), so styles leak
 | `message-style-hooks.ts` | — | Stamps semantic classes on pi-web-ui message internals (`pi-assistant-body`, `pi-tool-card-fallback`, etc.) to avoid brittle utility selectors |
 | `dialog-style-hooks.ts` | — | Stamps semantic classes on dialog internals (`pi-dialog-card`, `pi-model-selector-item-*`) so dialog CSS avoids utility selectors |
 | `toast.ts` | — | `showToast(msg, duration \| { duration, variant })` + `showActionToast(...)` — fixed notifications with destructive styling for errors |
-| `theme-mode.ts` | — | Applies/removes `.dark` based on Office theme background (fallback: `prefers-color-scheme`) |
+| `theme-mode.ts` | — | Keeps light mode by default; `/experimental on dark-mode` enables Office/theme-driven `.dark` (fallback: `prefers-color-scheme`) |
 | `loading.ts` | — | Splash screen shown during init |
 | `provider-login.ts` | — | API key entry rows for the welcome overlay |
 | `overlay-dialog.ts` | — | Shared overlay lifecycle helper (single-instance toggle, Escape/backdrop close, focus restore) + shared overlay chrome/DOM builders (`createOverlayCloseButton`, `createOverlayHeader`, `createOverlayButton`, `createOverlayInput`, `createOverlaySectionTitle`, `createOverlayBadge`) |

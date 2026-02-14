@@ -104,6 +104,8 @@ void test("builtins registry wires /experimental, /extensions, and /integrations
   assert.match(experimentalFlagsSource, /extension-widget-v2/);
   assert.match(experimentalFlagsSource, /external_skills_discovery/);
   assert.match(experimentalFlagsSource, /external-skills-discovery/);
+  assert.match(experimentalFlagsSource, /ui_dark_mode/);
+  assert.match(experimentalFlagsSource, /dark-mode/);
   assert.match(
     experimentalFlagsSource,
     /id:\s*"external_skills_discovery"[\s\S]*?wiring:\s*"wired"/,
