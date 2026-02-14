@@ -74,11 +74,11 @@ function normalizeOptionalString(value: unknown): string | undefined {
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
-function normalizeProvider(value: unknown): WebSearchProvider {
+function parseProvider(value: unknown): WebSearchProvider | undefined {
   if (value === "serper" || value === "tavily" || value === "brave") {
     return value;
   }
-  return DEFAULT_WEB_SEARCH_PROVIDER;
+  return undefined;
 }
 
 export async function loadWebSearchProviderConfig(
@@ -91,12 +91,19 @@ export async function loadWebSearchProviderConfig(
     settings.get(WEB_SEARCH_BRAVE_API_KEY_SETTING_KEY),
   ]);
 
+  const serperApiKey = normalizeOptionalString(serperApiKeyRaw);
+  const tavilyApiKey = normalizeOptionalString(tavilyApiKeyRaw);
+  const braveApiKey = normalizeOptionalString(braveApiKeyRaw);
+
+  const provider = parseProvider(providerRaw)
+    ?? (braveApiKey ? "brave" : DEFAULT_WEB_SEARCH_PROVIDER);
+
   return {
-    provider: normalizeProvider(providerRaw),
+    provider,
     apiKeys: {
-      serper: normalizeOptionalString(serperApiKeyRaw),
-      tavily: normalizeOptionalString(tavilyApiKeyRaw),
-      brave: normalizeOptionalString(braveApiKeyRaw),
+      serper: serperApiKey,
+      tavily: tavilyApiKey,
+      brave: braveApiKey,
     },
   };
 }

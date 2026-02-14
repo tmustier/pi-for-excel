@@ -36,6 +36,16 @@ void test("web search config defaults to serper provider", async () => {
   assert.equal(getApiKeyForProvider(config), undefined);
 });
 
+void test("web search config falls back to brave when only legacy brave key is present", async () => {
+  const settings = new MemorySettingsStore();
+  await saveWebSearchApiKey(settings, "brave", "br-legacy");
+
+  const config = await loadWebSearchProviderConfig(settings);
+
+  assert.equal(config.provider, "brave");
+  assert.equal(getApiKeyForProvider(config), "br-legacy");
+});
+
 void test("web search config stores provider-specific api keys", async () => {
   const settings = new MemorySettingsStore();
 
