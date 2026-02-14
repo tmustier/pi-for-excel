@@ -266,5 +266,5 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 - **Restore safety gate for structure absence states:** restoring `sheet_absent` / `rows_absent` / `columns_absent` checkpoints remains blocked when target data exists, unless the checkpoint was explicitly generated with data-delete intent during a prior restore inversion (`allowDataDelete`).
 - **Current `format_cells` backup scope:** captures/restores core range-format properties (font/fill/number format/alignment/wrap/borders), row/column dimensions (`column_width`, `row_height`, `auto_fit`), and merge state (`merge`/`unmerge`).
 - **Current `conditional_format` backup scope:** captures/restores all current rule families (`custom`, `cell_value`, `contains_text`, `top_bottom`, `preset_criteria`, `data_bar`, `color_scale`, `icon_set`) including per-rule applies-to ranges.
-- **Quick affordance:** users can restore via `/history` (Backups overlay) or `/revert` (latest backup).
+- **Quick affordance:** users can restore via `/history` (Backups overlay) or `/revert` (latest backup). The Backups overlay also exposes a **Full backup** button for explicit manual full-workbook capture.
 - **Rationale:** addresses #27 by shifting from cumbersome up-front approvals to versioned recovery with explicit user-controlled rollback.

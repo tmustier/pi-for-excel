@@ -4,6 +4,11 @@ Manual full-workbook backups are an **explicit user action** fallback for high-r
 
 They are intentionally separate from automatic per-mutation range checkpoints (`workbook_history`).
 
+## UI entry point
+
+- Open **Backups (Beta)** (`/history` or Backups quick action/menu).
+- Click **Full backup** to capture and download the current workbook as `.xlsx`.
+
 ## Commands
 
 - `/backup` or `/backup create`

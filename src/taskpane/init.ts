@@ -1277,6 +1277,9 @@ export async function initTaskpane(opts: {
         await refreshRecoveryQuickActionState();
         return removed;
       },
+      onCreateManualFullBackup: async () => {
+        return createManualFullBackup();
+      },
       getRetentionConfig: async () => {
         const maxSnapshots = await readRetentionLimit();
         return { maxSnapshots };

@@ -263,7 +263,9 @@ export class PiInput extends LitElement {
 
   override render() {
     const hasContent = this._value.trim().length > 0;
-    const backupsDisabled = !this.hasRecoveryCheckpoints;
+    const backupsTitle = this.hasRecoveryCheckpoints
+      ? "Browse and restore backups"
+      : "Browse backups and create a manual full-workbook backup";
 
     return html`
       <div
@@ -341,11 +343,8 @@ export class PiInput extends LitElement {
                   type="button"
                   role="menuitem"
                   class="pi-input-actions-menu__item"
-                  ?disabled=${backupsDisabled}
                   @click=${() => this._onActionClick("open-backups")}
-                  title=${backupsDisabled
-                    ? "No backups yet — run a workbook change to create the first checkpoint"
-                    : "Browse and restore backups"}
+                  title=${backupsTitle}
                 >
                   Backups…
                 </button>

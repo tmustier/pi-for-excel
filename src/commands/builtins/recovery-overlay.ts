@@ -61,6 +61,27 @@ function formatRecoveryToolLabel(toolName: RecoveryCheckpointToolName): string {
   }
 }
 
+function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes < 0) {
+    return "0 B";
+  }
+
+  if (bytes < 1024) {
+    return `${Math.floor(bytes)} B`;
+  }
+
+  const units = ["KB", "MB", "GB"];
+  let value = bytes / 1024;
+  let unitIndex = 0;
+
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+
+  return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[unitIndex]}`;
+}
+
 // ---------------------------------------------------------------------------
 // Export
 // ---------------------------------------------------------------------------
@@ -103,6 +124,11 @@ export interface RetentionConfig {
   maxSnapshots: number;
 }
 
+export interface ManualFullBackupSummary {
+  id: string;
+  sizeBytes: number;
+}
+
 // ---------------------------------------------------------------------------
 // Overlay
 // ---------------------------------------------------------------------------
@@ -113,6 +139,7 @@ export async function showRecoveryDialog(opts: {
   onRestore: (snapshotId: string) => Promise<void>;
   onDelete: (snapshotId: string) => Promise<boolean>;
   onClear: () => Promise<number>;
+  onCreateManualFullBackup?: () => Promise<ManualFullBackupSummary>;
   getRetentionConfig?: () => Promise<RetentionConfig>;
   setRetentionConfig?: (config: RetentionConfig) => Promise<void>;
 }): Promise<void> {
@@ -165,6 +192,12 @@ export async function showRecoveryDialog(opts: {
   const toolbar = document.createElement("div");
   toolbar.className = "pi-recovery-toolbar";
 
+  const fullBackupButton = document.createElement("button");
+  fullBackupButton.type = "button";
+  fullBackupButton.className = "pi-overlay-btn pi-overlay-btn--ghost";
+  fullBackupButton.textContent = "Full backup";
+  fullBackupButton.hidden = opts.onCreateManualFullBackup === undefined;
+
   const refreshButton = document.createElement("button");
   refreshButton.type = "button";
   refreshButton.className = "pi-overlay-btn pi-overlay-btn--ghost";
@@ -183,7 +216,7 @@ export async function showRecoveryDialog(opts: {
   const statusText = document.createElement("span");
   statusText.className = "pi-recovery-status";
 
-  toolbar.append(refreshButton, exportButton, clearButton, statusText);
+  toolbar.append(fullBackupButton, refreshButton, exportButton, clearButton, statusText);
 
   // -- Retention --
 
@@ -239,6 +272,7 @@ export async function showRecoveryDialog(opts: {
 
   const setBusy = (next: boolean): void => {
     busy = next;
+    fullBackupButton.disabled = next || opts.onCreateManualFullBackup === undefined;
     refreshButton.disabled = next;
     exportButton.disabled = next || allCheckpoints.length === 0;
     clearButton.disabled = next || allCheckpoints.length === 0;
@@ -424,6 +458,31 @@ export async function showRecoveryDialog(opts: {
     const next: RecoverySortOrder = filterState.sortOrder === "newest" ? "oldest" : "newest";
     filterState.sortOrder = next;
     renderList();
+  });
+
+  fullBackupButton.addEventListener("click", () => {
+    if (busy) return;
+
+    const createManualFullBackup = opts.onCreateManualFullBackup;
+    if (!createManualFullBackup) return;
+
+    void (async () => {
+      setBusy(true);
+      statusText.textContent = "Capturing full backup…";
+      try {
+        const backup = await createManualFullBackup();
+        showToast(
+          `Full backup downloaded: #${shortId(backup.id)} (${formatBytes(backup.sizeBytes)}). Open it in Excel to restore.`,
+        );
+        renderList();
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : "Unknown error";
+        showToast(`Full backup failed: ${message}`);
+        statusText.textContent = "Full backup failed";
+      } finally {
+        setBusy(false);
+      }
+    })();
   });
 
   exportButton.addEventListener("click", () => {

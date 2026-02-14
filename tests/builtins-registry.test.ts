@@ -171,6 +171,15 @@ void test("taskpane init wires recovery overlay opener", async () => {
   assert.match(initSource, /showRecoveryDialog/);
   assert.match(initSource, /const openRecoveryDialog = async \(\): Promise<void> =>/);
   assert.match(initSource, /sidebar\.onOpenRecovery\s*=\s*\(\)\s*=>\s*\{\s*void openRecoveryDialog\(\);\s*\};/);
+  assert.match(initSource, /onCreateManualFullBackup:\s*async \(\)\s*=>\s*\{\s*return createManualFullBackup\(\);\s*\}/);
+});
+
+void test("recovery overlay includes manual full-backup action", async () => {
+  const overlaySource = await readFile(new URL("../src/commands/builtins/recovery-overlay.ts", import.meta.url), "utf8");
+
+  assert.match(overlaySource, /onCreateManualFullBackup\?: \(\) => Promise<ManualFullBackupSummary>/);
+  assert.match(overlaySource, /fullBackupButton\.textContent = "Full backup"/);
+  assert.match(overlaySource, /Full backup downloaded:/);
 });
 
 void test("permission helper updates one capability without mutating others", () => {
