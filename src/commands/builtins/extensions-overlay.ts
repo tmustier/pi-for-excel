@@ -608,7 +608,10 @@ export function showExtensionsDialog(manager: ExtensionRuntimeManager): void {
       });
     });
 
-    const uninstallButton = createOverlayButton({ text: "Uninstall" });
+    const uninstallButton = createOverlayButton({
+      text: "Uninstall",
+      className: "pi-overlay-btn--danger",
+    });
     uninstallButton.addEventListener("click", () => {
       const confirmed = window.confirm(`Uninstall extension "${status.name}"?`);
       if (!confirmed) {

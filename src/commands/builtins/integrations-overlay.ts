@@ -184,7 +184,10 @@ export function showIntegrationsDialog(dependencies: IntegrationsDialogDependenc
     actions.className = "pi-overlay-actions pi-overlay-actions--wrap";
 
     const testButton = createOverlayButton({ text: "Test" });
-    const removeButton = createOverlayButton({ text: "Remove" });
+    const removeButton = createOverlayButton({
+      text: "Remove",
+      className: "pi-overlay-btn--danger",
+    });
 
     testButton.addEventListener("click", () => {
       void runAction(async () => {

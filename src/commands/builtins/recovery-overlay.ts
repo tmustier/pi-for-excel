@@ -210,7 +210,7 @@ export async function showRecoveryDialog(opts: {
 
   const clearButton = document.createElement("button");
   clearButton.type = "button";
-  clearButton.className = "pi-overlay-btn pi-overlay-btn--ghost";
+  clearButton.className = "pi-overlay-btn pi-overlay-btn--ghost pi-overlay-btn--danger";
   clearButton.textContent = "Clear all";
 
   const statusText = document.createElement("span");
@@ -357,7 +357,7 @@ export async function showRecoveryDialog(opts: {
 
       const deleteButton = document.createElement("button");
       deleteButton.type = "button";
-      deleteButton.className = "pi-overlay-btn pi-overlay-btn--ghost";
+      deleteButton.className = "pi-overlay-btn pi-overlay-btn--ghost pi-overlay-btn--danger";
       deleteButton.textContent = "Delete";
 
       restoreButton.addEventListener("click", () => {
