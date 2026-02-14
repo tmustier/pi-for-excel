@@ -1,5 +1,6 @@
 {
   "buildCommand": "npm run build",
+  "ignoreCommand": "if [ \"$VERCEL_GIT_COMMIT_REF\" = \"main\" ]; then exit 1; fi; if [ -n \"$VERCEL_GIT_PULL_REQUEST_ID\" ]; then exit 1; fi; if [ -z \"$VERCEL_GIT_COMMIT_REF\" ]; then exit 1; fi; echo \"Skipping non-PR branch deploy for $VERCEL_GIT_COMMIT_REF\"; exit 0",
   "outputDirectory": "dist",
   "rewrites": [
     {

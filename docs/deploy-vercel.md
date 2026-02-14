@@ -15,6 +15,7 @@ Vercel is a good default host because it’s free for OSS/hobby usage and handle
 
 This repo includes `vercel.json` with:
 - `outputDirectory: dist`
+- an `ignoreCommand` that skips non-PR branch deployments (builds still run for `main` and pull requests)
 - `/proxy` rewrite to `/proxy.sh` (bootstrap script for `npx pi-for-excel-proxy`)
 - a header rule to disable caching for `/src/taskpane.html` to make updates propagate reliably
 - an enforced `Content-Security-Policy` on `/src/taskpane.html` (Office.js + provider/auth endpoints + localhost proxy).
