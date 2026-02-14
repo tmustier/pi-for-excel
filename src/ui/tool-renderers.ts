@@ -14,6 +14,7 @@ import { renderCollapsibleToolCardHeader, renderToolCardHeader } from "./tool-ca
 import { cellRef, cellRefDisplay, cellRefs } from "./cell-link.js";
 import { humanizeToolInput } from "./humanize-params.js";
 import { humanizeColorsInText } from "./color-names.js";
+import { stripYamlFrontmatter } from "./markdown-preprocess.js";
 import { TOOL_NAMES_WITH_RENDERER, type UiToolName } from "../tools/capabilities.js";
 import {
   isCommentsDetails,
@@ -102,16 +103,6 @@ function tryFormatJsonOutput(text: string): { isJson: boolean; formatted: string
   } catch {
     return { isJson: false, formatted: text };
   }
-}
-
-/**
- * Strip YAML frontmatter (`---` delimited block at the start of the text).
- * Without this, marked.js treats the closing `---` as a setext heading
- * marker, causing frontmatter fields to render as giant headings.
- */
-function stripYamlFrontmatter(text: string): string {
-  // Match opening --- on its own line, content, then closing --- on its own line.
-  return text.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, "");
 }
 
 /**
