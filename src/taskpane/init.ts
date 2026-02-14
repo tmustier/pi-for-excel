@@ -1242,6 +1242,10 @@ export async function initTaskpane(opts: {
     });
   };
 
+  const openExtensionsManager = () => {
+    showExtensionsDialog(extensionManager);
+  };
+
   const openRecoveryDialog = async (): Promise<void> => {
     const workbookContext = await resolveWorkbookContext();
 
@@ -1334,9 +1338,7 @@ export async function initTaskpane(opts: {
     },
     getExecutionMode: () => Promise.resolve(getExecutionMode()),
     setExecutionMode,
-    openExtensionsManager: () => {
-      showExtensionsDialog(extensionManager);
-    },
+    openExtensionsManager,
     openIntegrationsManager,
   });
 
@@ -1423,6 +1425,9 @@ export async function initTaskpane(opts: {
   };
   sidebar.onOpenIntegrations = () => {
     openIntegrationsManager();
+  };
+  sidebar.onOpenExtensions = () => {
+    openExtensionsManager();
   };
   sidebar.onOpenFiles = () => {
     void showFilesWorkspaceDialog();

@@ -138,6 +138,22 @@ void test("taskpane init wires Files workspace opener when sidebar callback is p
   );
 });
 
+void test("taskpane init wires extensions menu opener", async () => {
+  const initSource = await readFile(new URL("../src/taskpane/init.ts", import.meta.url), "utf8");
+
+  assert.match(initSource, /const openExtensionsManager = \(\) =>/);
+  assert.match(initSource, /sidebar\.onOpenExtensions\s*=\s*\(\)\s*=>\s*\{\s*openExtensionsManager\(\);\s*\};/);
+});
+
+void test("sidebar utilities menu includes extensions and files labels", async () => {
+  const sidebarSource = await readFile(new URL("../src/ui/pi-sidebar.ts", import.meta.url), "utf8");
+
+  assert.match(sidebarSource, /aria-label="Settings and tools"/);
+  assert.match(sidebarSource, /Extensions…/);
+  assert.match(sidebarSource, /Files…/);
+  assert.doesNotMatch(sidebarSource, /Files workspace \(Beta\)…/);
+});
+
 void test("session builtins include recovery and manual-backup commands", async () => {
   const sessionSource = await readFile(new URL("../src/commands/builtins/session.ts", import.meta.url), "utf8");
 

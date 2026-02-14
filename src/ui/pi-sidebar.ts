@@ -110,6 +110,7 @@ export class PiSidebar extends LitElement {
   @property({ attribute: false }) onCloseOtherTabs?: (runtimeId: string) => void;
   @property({ attribute: false }) onOpenRules?: () => void;
   @property({ attribute: false }) onOpenIntegrations?: () => void;
+  @property({ attribute: false }) onOpenExtensions?: () => void;
   @property({ attribute: false }) onOpenSettings?: () => void;
   @property({ attribute: false }) onOpenFiles?: () => void;
   @property({ attribute: false }) onFilesDrop?: (files: File[]) => void;
@@ -687,12 +688,12 @@ export class PiSidebar extends LitElement {
           <button
             class="pi-utilities-btn"
             @click=${() => this._toggleUtilitiesMenu()}
-            aria-label="Menu"
-            title="Menu"
+            aria-label="Settings and tools"
+            title="Settings and tools"
             aria-haspopup="menu"
             aria-controls=${this._utilitiesMenuId}
             aria-expanded=${this._utilitiesMenuOpen ? "true" : "false"}
-          >⋯</button>
+          >⚙</button>
           ${this._utilitiesMenuOpen ? this._renderUtilitiesMenu() : nothing}
         </div>
       </div>
@@ -847,15 +848,25 @@ export class PiSidebar extends LitElement {
 
   private _renderUtilitiesMenu() {
     return html`
-      <div class="pi-utilities-menu" id=${this._utilitiesMenuId} role="menu" aria-label="Utilities menu">
+      <div class="pi-utilities-menu" id=${this._utilitiesMenuId} role="menu" aria-label="Settings and tools">
+        <button role="menuitem" class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenSettings?.(); }}>
+          Settings…
+        </button>
         <button role="menuitem" class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenRules?.(); }}>
           Rules & conventions…
         </button>
         <button role="menuitem" class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenIntegrations?.(); }}>
           ${INTEGRATIONS_LABEL}…
         </button>
-        <button role="menuitem" class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenSettings?.(); }}>
-          Settings…
+        ${this.onOpenExtensions
+          ? html`
+            <button role="menuitem" class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenExtensions?.(); }}>
+              Extensions…
+            </button>
+          `
+          : nothing}
+        <button role="menuitem" class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenFiles?.(); }}>
+          Files…
         </button>
 
         <div class="pi-utilities-menu__divider" role="separator"></div>
@@ -870,17 +881,14 @@ export class PiSidebar extends LitElement {
             </button>
           `
           : nothing}
-        <button role="menuitem" class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenShortcuts?.(); }}>
-          Keyboard shortcuts…
+        <button role="menuitem" class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenRecovery?.(); }}>
+          Backups…
         </button>
 
         <div class="pi-utilities-menu__divider" role="separator"></div>
 
-        <button role="menuitem" class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenRecovery?.(); }}>
-          Backups…
-        </button>
-        <button role="menuitem" class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenFiles?.(); }}>
-          Files workspace (Beta)…
+        <button role="menuitem" class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenShortcuts?.(); }}>
+          Keyboard shortcuts…
         </button>
       </div>
     `;

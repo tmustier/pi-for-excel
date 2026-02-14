@@ -304,7 +304,7 @@
   );
 }
 
-/* ── Utilities menu (⋯ in tab strip) ── */
+/* ── Utilities menu trigger (gear in tab strip) ── */
 
 .pi-utilities-anchor {
   position: relative;
@@ -312,26 +312,33 @@
 }
 
 .pi-utilities-btn {
-  border: none;
-  background: transparent;
-  color: var(--muted-foreground);
-  font-size: var(--text-md);
-  width: 20px;
-  height: 20px;
-  border-radius: var(--radius-xs);
+  border: 1px solid var(--alpha-10);
+  background: var(--white-alpha-35);
+  color: var(--foreground);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  letter-spacing: 1px;
+  line-height: 1;
   flex-shrink: 0;
-  transition: background var(--duration-fast), color var(--duration-fast), box-shadow var(--duration-fast);
+  box-shadow: var(--glass-highlight), var(--glass-inner-shadow);
+  transition: background var(--duration-fast), color var(--duration-fast), box-shadow var(--duration-fast), border-color var(--duration-fast);
 }
 
 .pi-utilities-btn:hover {
-  background: var(--white-alpha-45);
+  background: var(--white-alpha-55);
   color: var(--foreground);
-  box-shadow: var(--glass-highlight), var(--glass-inner-shadow);
+  box-shadow: var(--glass-shadow), var(--glass-highlight), var(--glass-inner-shadow);
+}
+
+.pi-utilities-btn[aria-expanded="true"] {
+  background: var(--white-alpha-55);
+  border-color: var(--green-alpha-25);
 }
 
 
