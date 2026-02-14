@@ -34,6 +34,8 @@
   font-family: var(--font-sans);
   font-size: var(--text-sm);
   text-align: left;
+  -webkit-appearance: none;
+  appearance: none;
   transition: background var(--duration-fast), box-shadow var(--duration-fast);
 }
 
@@ -48,12 +50,12 @@
   box-shadow: var(--glass-highlight), var(--glass-inner-shadow);
 }
 
-.pi-utilities-menu__item {
+:is(.pi-cmd-item, .pi-utilities-menu__item) {
   cursor: pointer;
 }
 
-.pi-utilities-menu__item:focus,
-.pi-utilities-menu__item:focus-visible {
+:is(.pi-cmd-item, .pi-utilities-menu__item):focus,
+:is(.pi-cmd-item, .pi-utilities-menu__item):focus-visible {
   outline: none;
   box-shadow: 0 0 0 2px var(--green-alpha-12), var(--glass-highlight), var(--glass-inner-shadow);
 }
