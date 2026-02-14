@@ -202,48 +202,94 @@ void test("execute_office_js fails closed when confirmation UI is unavailable", 
   assert.equal(executeCount, 0);
 });
 
-void test("python bridge tools require URL + probe but no experiment flag", async () => {
+void test("python fallback tools execute even when bridge gate fails", async () => {
   let executeCount = 0;
+  let approvalCalls = 0;
 
   const tools = [
     createTestTool("python_run", () => { executeCount += 1; }),
-    createTestTool("libreoffice_convert", () => { executeCount += 1; }),
     createTestTool("python_transform_range", () => { executeCount += 1; }),
-    createTestTool("read_range"),
   ];
 
-  // No bridge URL → gate fails with missing_bridge_url
   const gatedTools = await applyExperimentalToolGates(tools, {
     getPythonBridgeUrl: () => Promise.resolve(undefined),
+    requestPythonBridgeApproval: () => {
+      approvalCalls += 1;
+      return Promise.resolve(true);
+    },
   });
 
-  assert.deepEqual(gatedTools.map((tool) => tool.name), [
-    "python_run",
-    "libreoffice_convert",
-    "python_transform_range",
-    "read_range",
-  ]);
+  const pythonRun = gatedTools.find((tool) => tool.name === "python_run");
+  const pythonTransform = gatedTools.find((tool) => tool.name === "python_transform_range");
 
-  const pythonTool = gatedTools.find((tool) => tool.name === "python_run");
-  assert.ok(pythonTool);
+  assert.ok(pythonRun);
+  assert.ok(pythonTransform);
 
-  await assert.rejects(
-    () => pythonTool.execute("call-python", { code: "print('hi')" }),
-    /not configured/i,
-  );
+  await pythonRun.execute("call-python-run", { code: "print('hi')" });
+  await pythonTransform.execute("call-python-transform", {
+    range: "Sheet1!A1:A2",
+    code: "result = [[1], [2]]",
+  });
 
-  // Bridge unreachable → gate fails
-  const gatedTools2 = await applyExperimentalToolGates(tools, {
+  assert.equal(executeCount, 2);
+  assert.equal(approvalCalls, 0);
+});
+
+void test("python fallback tools still block when configured bridge is unreachable", async () => {
+  let executeCount = 0;
+
+  const [pythonTool] = await applyExperimentalToolGates([
+    createTestTool("python_run", () => {
+      executeCount += 1;
+    }),
+  ], {
     getPythonBridgeUrl: () => Promise.resolve("https://localhost:3340"),
     validatePythonBridgeUrl: () => "https://localhost:3340",
     probePythonBridge: () => Promise.resolve(false),
   });
 
-  const pythonTool2 = gatedTools2.find((tool) => tool.name === "python_run");
-  assert.ok(pythonTool2);
+  await assert.rejects(
+    () => pythonTool.execute("call-python-unreachable", { code: "print('hi')" }),
+    /not reachable/i,
+  );
+
+  assert.equal(executeCount, 0);
+});
+
+void test("libreoffice_convert still requires configured + reachable bridge", async () => {
+  let executeCount = 0;
+
+  const [toolWhenMissing] = await applyExperimentalToolGates([
+    createTestTool("libreoffice_convert", () => {
+      executeCount += 1;
+    }),
+  ], {
+    getPythonBridgeUrl: () => Promise.resolve(undefined),
+  });
 
   await assert.rejects(
-    () => pythonTool2.execute("call-python", { code: "print('hi')" }),
+    () => toolWhenMissing.execute("call-libreoffice-missing", {
+      input_path: "/tmp/source.xlsx",
+      target_format: "csv",
+    }),
+    /not configured/i,
+  );
+
+  const [toolWhenUnreachable] = await applyExperimentalToolGates([
+    createTestTool("libreoffice_convert", () => {
+      executeCount += 1;
+    }),
+  ], {
+    getPythonBridgeUrl: () => Promise.resolve("https://localhost:3340"),
+    validatePythonBridgeUrl: () => "https://localhost:3340",
+    probePythonBridge: () => Promise.resolve(false),
+  });
+
+  await assert.rejects(
+    () => toolWhenUnreachable.execute("call-libreoffice-unreachable", {
+      input_path: "/tmp/source.xlsx",
+      target_format: "csv",
+    }),
     /not reachable/i,
   );
 

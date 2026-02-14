@@ -1,9 +1,15 @@
 export const TMUX_TOOL_NAME = "tmux";
 export const EXECUTE_OFFICE_JS_TOOL_NAME = "execute_office_js";
-export const PYTHON_TOOL_NAMES = new Set<string>([
+
+/** Python tools that can run without a native bridge (via Pyodide fallback). */
+export const PYTHON_FALLBACK_TOOL_NAMES = new Set<string>([
   "python_run",
-  "libreoffice_convert",
   "python_transform_range",
+]);
+
+/** Python tools that strictly require the native bridge. */
+export const PYTHON_BRIDGE_ONLY_TOOL_NAMES = new Set<string>([
+  "libreoffice_convert",
 ]);
 
 export const TMUX_BRIDGE_URL_SETTING_KEY = "tmux.bridge.url";

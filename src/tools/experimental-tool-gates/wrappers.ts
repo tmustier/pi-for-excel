@@ -10,7 +10,8 @@ import {
 } from "./evaluation.js";
 import {
   EXECUTE_OFFICE_JS_TOOL_NAME,
-  PYTHON_TOOL_NAMES,
+  PYTHON_BRIDGE_ONLY_TOOL_NAMES,
+  PYTHON_FALLBACK_TOOL_NAMES,
   TMUX_TOOL_NAME,
   type ExperimentalToolGateDependencies,
   type OfficeJsExecuteApprovalRequest,
@@ -160,16 +161,9 @@ function wrapExecuteOfficeJsToolWithHardGate(
   };
 }
 
-/**
- * Python/LibreOffice bridge gate.
- *
- * No experiment flag required. If the bridge URL is configured and reachable,
- * execution is allowed after user approval (once per bridge URL per session).
- */
-function wrapPythonBridgeToolWithApprovalGate(
-  tool: AgentTool,
+function createPythonBridgeApprover(
   dependencies: ExperimentalToolGateDependencies,
-): AgentTool {
+): (toolName: string, bridgeUrl: string, params: unknown) => Promise<void> {
   const requestApproval = dependencies.requestPythonBridgeApproval ?? defaultRequestPythonBridgeApproval;
   const getApprovedBridgeUrl =
     dependencies.getApprovedPythonBridgeUrl
@@ -177,6 +171,75 @@ function wrapPythonBridgeToolWithApprovalGate(
   const setApprovedBridgeUrl =
     dependencies.setApprovedPythonBridgeUrl
     ?? defaultSetApprovedPythonBridgeUrl;
+
+  return async (toolName: string, bridgeUrl: string, params: unknown): Promise<void> => {
+    const cachedApprovalUrl = await getApprovedBridgeUrl();
+    if (cachedApprovalUrl === bridgeUrl) {
+      return;
+    }
+
+    const approved = await requestApproval({
+      toolName,
+      bridgeUrl,
+      params,
+    });
+    if (!approved) {
+      throw new Error("Python/LibreOffice execution cancelled by user.");
+    }
+
+    await setApprovedBridgeUrl(bridgeUrl);
+  };
+}
+
+/**
+ * Python tools with a built-in fallback (`python_run`, `python_transform_range`).
+ *
+ * Behavior:
+ * - If bridge is configured + reachable, request approval once per bridge URL.
+ * - If bridge URL is missing/invalid, allow tool execution so it can fall back
+ *   to in-browser Pyodide.
+ * - If bridge is configured but unreachable, keep blocking with an explicit
+ *   reachability error.
+ */
+function wrapPythonToolWithOptionalBridgeApproval(
+  tool: AgentTool,
+  dependencies: ExperimentalToolGateDependencies,
+): AgentTool {
+  const approveBridgeUsage = createPythonBridgeApprover(dependencies);
+
+  return {
+    ...tool,
+    execute: async (toolCallId, params, signal, onUpdate) => {
+      const gate = await evaluatePythonBridgeGate(dependencies);
+      if (gate.allowed) {
+        const bridgeUrl = gate.bridgeUrl;
+        if (!bridgeUrl) {
+          throw new Error("Python bridge gate did not return a bridge URL.");
+        }
+
+        await approveBridgeUsage(tool.name, bridgeUrl, params);
+      } else {
+        const reason = gate.reason ?? "bridge_unreachable";
+
+        // Missing/invalid URL means the tool can still run via Pyodide fallback.
+        if (reason === "bridge_unreachable") {
+          throw new Error(buildPythonBridgeGateErrorMessage(reason));
+        }
+      }
+
+      return tool.execute(toolCallId, params, signal, onUpdate);
+    },
+  };
+}
+
+/**
+ * Python tools that strictly require the native bridge (`libreoffice_convert`).
+ */
+function wrapPythonBridgeOnlyToolWithApprovalGate(
+  tool: AgentTool,
+  dependencies: ExperimentalToolGateDependencies,
+): AgentTool {
+  const approveBridgeUsage = createPythonBridgeApprover(dependencies);
 
   return {
     ...tool,
@@ -192,19 +255,7 @@ function wrapPythonBridgeToolWithApprovalGate(
         throw new Error("Python bridge gate did not return a bridge URL.");
       }
 
-      const cachedApprovalUrl = await getApprovedBridgeUrl();
-      if (cachedApprovalUrl !== bridgeUrl) {
-        const approved = await requestApproval({
-          toolName: tool.name,
-          bridgeUrl,
-          params,
-        });
-        if (!approved) {
-          throw new Error("Python/LibreOffice execution cancelled by user.");
-        }
-
-        await setApprovedBridgeUrl(bridgeUrl);
-      }
+      await approveBridgeUsage(tool.name, bridgeUrl, params);
 
       return tool.execute(toolCallId, params, signal, onUpdate);
     },
@@ -216,8 +267,11 @@ function wrapPythonBridgeToolWithApprovalGate(
  *
  * Current rules:
  * - `tmux` requires an experiment flag, bridge URL, and health check.
- * - `python_run`, `libreoffice_convert`, `python_transform_range` require a
- *   configured + reachable bridge URL and user approval (no experiment flag).
+ * - `python_run` and `python_transform_range` can run with Pyodide fallback
+ *   when bridge URL is missing/invalid; bridge approval is required when a
+ *   reachable bridge is present.
+ * - `libreoffice_convert` strictly requires a configured + reachable bridge and
+ *   approval (no Pyodide fallback).
  * - `execute_office_js` requires explicit user confirmation on every call.
  * - `files` has no gate — read, write, and delete are always available.
  */
@@ -238,8 +292,13 @@ export function applyExperimentalToolGates(
       continue;
     }
 
-    if (PYTHON_TOOL_NAMES.has(tool.name)) {
-      gatedTools.push(wrapPythonBridgeToolWithApprovalGate(tool, dependencies));
+    if (PYTHON_FALLBACK_TOOL_NAMES.has(tool.name)) {
+      gatedTools.push(wrapPythonToolWithOptionalBridgeApproval(tool, dependencies));
+      continue;
+    }
+
+    if (PYTHON_BRIDGE_ONLY_TOOL_NAMES.has(tool.name)) {
+      gatedTools.push(wrapPythonBridgeOnlyToolWithApprovalGate(tool, dependencies));
       continue;
     }
 
