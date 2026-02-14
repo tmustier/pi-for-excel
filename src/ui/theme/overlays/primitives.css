@@ -77,6 +77,17 @@
   outline: none;
 }
 
+.pi-overlay-inline-control {
+  border: 1px solid var(--alpha-10);
+  border-radius: var(--radius-sm);
+  padding: 5px 8px;
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  background: var(--white-alpha-65);
+  color: var(--foreground);
+  outline: none;
+}
+
 .pi-overlay-textarea {
   min-height: 220px;
   max-height: 42vh;
@@ -87,10 +98,16 @@
 .pi-overlay-textarea:focus-visible,
 .pi-overlay-input:focus,
 .pi-overlay-input:focus-visible,
+.pi-overlay-inline-control:focus,
+.pi-overlay-inline-control:focus-visible,
 .pi-overlay-btn:focus-visible,
 .pi-overlay-tab:focus-visible {
   border-color: var(--green-alpha-25);
   box-shadow: 0 0 0 2px var(--pi-green-lighter);
+}
+
+.pi-overlay-inline-control:disabled {
+  opacity: 0.6;
 }
 
 .pi-overlay-footer {

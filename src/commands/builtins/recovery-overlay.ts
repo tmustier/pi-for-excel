@@ -175,10 +175,10 @@ export async function showRecoveryDialog(opts: {
   const searchInput = document.createElement("input");
   searchInput.type = "text";
   searchInput.placeholder = "Search by id, tool, or range…";
-  searchInput.className = "pi-recovery-search";
+  searchInput.className = "pi-recovery-search pi-overlay-inline-control";
 
   const toolFilterSelect = document.createElement("select");
-  toolFilterSelect.className = "pi-recovery-filter-select";
+  toolFilterSelect.className = "pi-recovery-filter-select pi-overlay-inline-control";
 
   const sortButton = document.createElement("button");
   sortButton.type = "button";
@@ -231,7 +231,7 @@ export async function showRecoveryDialog(opts: {
   retentionInput.type = "number";
   retentionInput.min = "5";
   retentionInput.max = "120";
-  retentionInput.className = "pi-recovery-retention__input";
+  retentionInput.className = "pi-recovery-retention__input pi-overlay-inline-control";
 
   const retentionSuffix = document.createElement("span");
   retentionSuffix.className = "pi-recovery-retention__suffix";

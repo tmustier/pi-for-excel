@@ -122,7 +122,7 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
   filterLabel.textContent = "Filter";
 
   const filterSelect = document.createElement("select");
-  filterSelect.className = "pi-files-dialog__filter-select";
+  filterSelect.className = "pi-files-dialog__filter-select pi-overlay-inline-control";
   filterLabel.appendChild(filterSelect);
 
   const quickFilters = document.createElement("div");

@@ -45,17 +45,6 @@
 .pi-files-dialog__filter-select {
   min-width: 240px;
   max-width: min(100%, 320px);
-  border: 1px solid var(--alpha-10);
-  border-radius: var(--radius-sm);
-  background: var(--white-alpha-65);
-  color: var(--foreground);
-  font-family: var(--font-sans);
-  font-size: var(--text-sm);
-  padding: 5px 8px;
-}
-
-.pi-files-dialog__filter-select:disabled {
-  opacity: 0.6;
 }
 
 .pi-files-dialog__quick-filters {
