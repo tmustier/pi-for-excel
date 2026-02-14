@@ -74,7 +74,14 @@ function sendToWorker(
   return new Promise<PyodideWorkerResponse>((resolve, reject) => {
     const timeoutId = setTimeout(() => {
       pendingRequests.delete(request.id);
-      reject(new Error(`Pyodide execution timed out after ${timeoutMs}ms`));
+
+      // Terminate the hung worker so it doesn't block future calls
+      if (worker) {
+        worker.terminate();
+        worker = null;
+      }
+
+      reject(new Error(`Pyodide execution timed out after ${timeoutMs}ms. Worker was terminated.`));
     }, timeoutMs);
 
     pendingRequests.set(request.id, { resolve, reject, timeoutId });

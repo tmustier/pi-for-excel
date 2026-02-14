@@ -10,7 +10,6 @@
  */
 
 // Worker globals — declared locally to avoid tsconfig lib conflicts
-declare function importScripts(...urls: string[]): void;
 declare const self: {
   addEventListener(type: "message", listener: (event: MessageEvent) => void): void;
   postMessage(message: unknown): void;
@@ -68,10 +67,12 @@ async function ensurePyodide(): Promise<PyodideInterface> {
   if (loadingPromise) return loadingPromise;
 
   loadingPromise = (async () => {
-    // Import Pyodide loader from CDN
-    importScripts(`${PYODIDE_CDN_URL}pyodide.js`);
+    // Dynamic import from CDN — works in module workers (no importScripts)
+    const mod = await import(/* @vite-ignore */ `${PYODIDE_CDN_URL}pyodide.mjs`) as {
+      loadPyodide: typeof loadPyodide;
+    };
 
-    const instance = await loadPyodide({
+    const instance = await mod.loadPyodide({
       indexURL: PYODIDE_CDN_URL,
     });
 
@@ -179,7 +180,7 @@ except Exception:
     }
   }
 
-  // Set up input_data if provided
+  // Set up or clear input_data between requests to prevent data leakage
   if (request.inputJson) {
     py.globals.set("__input_json__", request.inputJson);
     await py.runPythonAsync(`
@@ -187,6 +188,8 @@ import json as __json__
 input_data = __json__.loads(__input_json__)
 del __input_json__
 `);
+  } else {
+    await py.runPythonAsync("input_data = None");
   }
 
   // Set up stdout/stderr capture
