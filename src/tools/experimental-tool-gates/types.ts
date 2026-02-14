@@ -31,7 +31,6 @@ export interface TmuxBridgeGateDependencies {
 }
 
 export type PythonBridgeGateReason =
-  | "python_experiment_disabled"
   | "missing_bridge_url"
   | "invalid_bridge_url"
   | "bridge_unreachable";
@@ -43,21 +42,9 @@ export interface PythonBridgeGateResult {
 }
 
 export interface PythonBridgeGateDependencies {
-  isPythonExperimentEnabled?: () => boolean;
   getPythonBridgeUrl?: () => Promise<string | undefined>;
   validatePythonBridgeUrl?: (url: string) => string | null;
   probePythonBridge?: (bridgeUrl: string) => Promise<boolean>;
-}
-
-export type FilesWorkspaceGateReason = "files_experiment_disabled";
-
-export interface FilesWorkspaceGateResult {
-  allowed: boolean;
-  reason?: FilesWorkspaceGateReason;
-}
-
-export interface FilesWorkspaceGateDependencies {
-  isFilesWorkspaceExperimentEnabled?: () => boolean;
 }
 
 export interface PythonBridgeApprovalRequest {
@@ -73,8 +60,7 @@ export interface OfficeJsExecuteApprovalRequest {
 
 export interface ExperimentalToolGateDependencies extends
   TmuxBridgeGateDependencies,
-  PythonBridgeGateDependencies,
-  FilesWorkspaceGateDependencies {
+  PythonBridgeGateDependencies {
   requestPythonBridgeApproval?: (request: PythonBridgeApprovalRequest) => Promise<boolean>;
   getApprovedPythonBridgeUrl?: () => Promise<string | undefined>;
   setApprovedPythonBridgeUrl?: (bridgeUrl: string) => Promise<void>;

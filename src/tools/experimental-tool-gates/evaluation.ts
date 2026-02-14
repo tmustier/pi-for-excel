@@ -2,12 +2,8 @@ import { validateOfficeProxyUrl } from "../../auth/proxy-validation.js";
 import { isExperimentalFeatureEnabled } from "../../experiments/flags.js";
 
 import {
-  PYTHON_BRIDGE_APPROVED_URL_SETTING_KEY,
   PYTHON_BRIDGE_URL_SETTING_KEY,
   TMUX_BRIDGE_URL_SETTING_KEY,
-  type FilesWorkspaceGateDependencies,
-  type FilesWorkspaceGateReason,
-  type FilesWorkspaceGateResult,
   type PythonBridgeGateDependencies,
   type PythonBridgeGateReason,
   type PythonBridgeGateResult,
@@ -21,14 +17,6 @@ const BRIDGE_HEALTH_TIMEOUT_MS = 900;
 
 function defaultIsTmuxExperimentEnabled(): boolean {
   return isExperimentalFeatureEnabled("tmux_bridge");
-}
-
-function defaultIsPythonExperimentEnabled(): boolean {
-  return isExperimentalFeatureEnabled("python_bridge");
-}
-
-function defaultIsFilesWorkspaceExperimentEnabled(): boolean {
-  return isExperimentalFeatureEnabled("files_workspace");
 }
 
 async function defaultGetBridgeUrl(settingKey: string): Promise<string | undefined> {
@@ -64,11 +52,11 @@ async function defaultSetBridgeSetting(settingKey: string, value: string): Promi
 }
 
 export async function defaultGetApprovedPythonBridgeUrl(): Promise<string | undefined> {
-  return defaultGetBridgeUrl(PYTHON_BRIDGE_APPROVED_URL_SETTING_KEY);
+  return defaultGetBridgeUrl("python.bridge.approved.url");
 }
 
 export async function defaultSetApprovedPythonBridgeUrl(bridgeUrl: string): Promise<void> {
-  await defaultSetBridgeSetting(PYTHON_BRIDGE_APPROVED_URL_SETTING_KEY, bridgeUrl);
+  await defaultSetBridgeSetting("python.bridge.approved.url", bridgeUrl);
 }
 
 function defaultValidateBridgeUrl(url: string): string | null {
@@ -144,17 +132,16 @@ export async function evaluateTmuxBridgeGate(
   };
 }
 
+/**
+ * Evaluate whether the Python/LibreOffice bridge is reachable.
+ *
+ * No experiment flag required — if a URL is configured and the bridge is
+ * reachable, tools are allowed. The user approval dialog (in wrappers.ts)
+ * serves as the security boundary.
+ */
 export async function evaluatePythonBridgeGate(
   dependencies: PythonBridgeGateDependencies = {},
 ): Promise<PythonBridgeGateResult> {
-  const isEnabled = dependencies.isPythonExperimentEnabled ?? defaultIsPythonExperimentEnabled;
-  if (!isEnabled()) {
-    return {
-      allowed: false,
-      reason: "python_experiment_disabled",
-    };
-  }
-
   const getBridgeUrl = dependencies.getPythonBridgeUrl ?? defaultGetPythonBridgeUrl;
   const rawBridgeUrl = await getBridgeUrl();
   if (!rawBridgeUrl) {
@@ -189,23 +176,6 @@ export async function evaluatePythonBridgeGate(
   };
 }
 
-export function evaluateFilesWorkspaceGate(
-  dependencies: FilesWorkspaceGateDependencies = {},
-): FilesWorkspaceGateResult {
-  const isEnabled =
-    dependencies.isFilesWorkspaceExperimentEnabled
-    ?? defaultIsFilesWorkspaceExperimentEnabled;
-
-  if (!isEnabled()) {
-    return {
-      allowed: false,
-      reason: "files_experiment_disabled",
-    };
-  }
-
-  return { allowed: true };
-}
-
 export function buildTmuxBridgeGateErrorMessage(reason: TmuxBridgeGateReason): string {
   switch (reason) {
     case "tmux_experiment_disabled":
@@ -221,20 +191,11 @@ export function buildTmuxBridgeGateErrorMessage(reason: TmuxBridgeGateReason): s
 
 export function buildPythonBridgeGateErrorMessage(reason: PythonBridgeGateReason): string {
   switch (reason) {
-    case "python_experiment_disabled":
-      return "Python bridge is disabled. Enable it with /experimental on python-bridge.";
     case "missing_bridge_url":
       return `Python bridge URL is not configured. Run /experimental python-bridge-url https://localhost:<port> (setting: ${PYTHON_BRIDGE_URL_SETTING_KEY}).`;
     case "invalid_bridge_url":
       return "Python bridge URL is invalid. Use a full URL like https://localhost:3340.";
     case "bridge_unreachable":
       return "Python bridge is not reachable at the configured URL.";
-  }
-}
-
-export function buildFilesWorkspaceGateErrorMessage(reason: FilesWorkspaceGateReason): string {
-  switch (reason) {
-    case "files_experiment_disabled":
-      return "Files workspace write/delete actions are disabled. Enable them with /experimental on files-workspace.";
   }
 }

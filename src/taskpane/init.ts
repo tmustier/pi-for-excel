@@ -27,7 +27,7 @@ import {
   PI_EXPERIMENTAL_FEATURE_CHANGED_EVENT,
   PI_EXPERIMENTAL_TOOL_CONFIG_CHANGED_EVENT,
 } from "../experiments/events.js";
-import { isExperimentalFeatureEnabled, setExperimentalFeatureEnabled } from "../experiments/flags.js";
+import { isExperimentalFeatureEnabled } from "../experiments/flags.js";
 import { convertToLlm } from "../messages/convert-to-llm.js";
 import { getFilesWorkspace } from "../files/workspace.js";
 import { createAllTools } from "../tools/index.js";
@@ -1390,13 +1390,6 @@ export async function initTaskpane(opts: {
         }
 
         const importedLabel = `${count} file${count === 1 ? "" : "s"}`;
-
-        if (!isExperimentalFeatureEnabled("files_workspace")) {
-          setExperimentalFeatureEnabled("files_workspace", true);
-          showToast(`Imported ${importedLabel} into Files. The Files feature was enabled automatically.`);
-          return;
-        }
-
         showToast(`Imported ${importedLabel} into Files.`);
       })
       .catch((error: unknown) => {

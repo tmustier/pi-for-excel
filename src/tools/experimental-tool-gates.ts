@@ -10,9 +10,6 @@ export {
   PYTHON_BRIDGE_URL_SETTING_KEY,
   TMUX_BRIDGE_URL_SETTING_KEY,
   type ExperimentalToolGateDependencies,
-  type FilesWorkspaceGateDependencies,
-  type FilesWorkspaceGateReason,
-  type FilesWorkspaceGateResult,
   type OfficeJsExecuteApprovalRequest,
   type PythonBridgeApprovalRequest,
   type PythonBridgeGateDependencies,
@@ -24,10 +21,8 @@ export {
 } from "./experimental-tool-gates/types.js";
 
 export {
-  buildFilesWorkspaceGateErrorMessage,
   buildPythonBridgeGateErrorMessage,
   buildTmuxBridgeGateErrorMessage,
-  evaluateFilesWorkspaceGate,
   evaluatePythonBridgeGate,
   evaluateTmuxBridgeGate,
 } from "./experimental-tool-gates/evaluation.js";

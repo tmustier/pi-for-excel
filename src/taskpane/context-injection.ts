@@ -3,7 +3,7 @@
  *
  * Adds (when available):
  * - workbook structure context (blueprint), only on first send and when invalidated
- * - workspace files summary (when files-workspace experiment is enabled)
+ * - workspace files summary
  * - selection context (read around current selection)
  * - change tracker summary (cells edited since last message)
  */
@@ -13,7 +13,6 @@ import type { AgentMessage } from "@mariozechner/pi-agent-core";
 import type { ChangeTracker } from "../context/change-tracker.js";
 import { getBlueprint, getBlueprintRevision } from "../context/blueprint.js";
 import { readSelectionContext } from "../context/selection.js";
-import { isExperimentalFeatureEnabled } from "../experiments/flags.js";
 import { getFilesWorkspace } from "../files/workspace.js";
 import { extractTextFromContent } from "../utils/content.js";
 import { getWorkbookContext } from "../workbook/context.js";
@@ -129,39 +128,37 @@ export function createContextInjector(changeTracker: ChangeTracker) {
     }
 
     try {
-      if (isExperimentalFeatureEnabled("files_workspace")) {
-        const workspace = getFilesWorkspace();
-        const snapshot = await withTimeout(workspace.getSnapshot().catch(() => null), 1200);
+      const workspace = getFilesWorkspace();
+      const snapshot = await withTimeout(workspace.getSnapshot().catch(() => null), 1200);
 
-        if (snapshot) {
-          const signature = `${snapshot.backend.kind}|${snapshot.signature}`;
-          const hasWorkspaceMessage = historyHasWorkspaceFilesRefresh(messages);
+      if (snapshot) {
+        const signature = `${snapshot.backend.kind}|${snapshot.signature}`;
+        const hasWorkspaceMessage = historyHasWorkspaceFilesRefresh(messages);
 
-          if (lastInjectedWorkspaceSignature === undefined && hasWorkspaceMessage) {
-            lastInjectedWorkspaceSignature = signature;
-          }
-
-          const shouldInjectInitial =
-            lastInjectedWorkspaceSignature === undefined &&
-            !hasWorkspaceMessage &&
-            snapshot.files.length > 0;
-          const shouldInjectChanged =
-            lastInjectedWorkspaceSignature !== undefined &&
-            signature !== lastInjectedWorkspaceSignature;
-
-          if (shouldInjectInitial || shouldInjectChanged) {
-            const summary = await workspace.getContextSummary(20);
-            const section = summary
-              ? buildWorkspaceFilesSection(summary, shouldInjectChanged ? "files_changed" : "initial")
-              : buildWorkspaceFilesSection(
-                "### Workspace Files\n- _No files currently available._",
-                "files_changed",
-              );
-            injections.push(section);
-          }
-
+        if (lastInjectedWorkspaceSignature === undefined && hasWorkspaceMessage) {
           lastInjectedWorkspaceSignature = signature;
         }
+
+        const shouldInjectInitial =
+          lastInjectedWorkspaceSignature === undefined &&
+          !hasWorkspaceMessage &&
+          snapshot.files.length > 0;
+        const shouldInjectChanged =
+          lastInjectedWorkspaceSignature !== undefined &&
+          signature !== lastInjectedWorkspaceSignature;
+
+        if (shouldInjectInitial || shouldInjectChanged) {
+          const summary = await workspace.getContextSummary(20);
+          const section = summary
+            ? buildWorkspaceFilesSection(summary, shouldInjectChanged ? "files_changed" : "initial")
+            : buildWorkspaceFilesSection(
+              "### Workspace Files\n- _No files currently available._",
+              "files_changed",
+            );
+          injections.push(section);
+        }
+
+        lastInjectedWorkspaceSignature = signature;
       } else {
         lastInjectedWorkspaceSignature = undefined;
       }

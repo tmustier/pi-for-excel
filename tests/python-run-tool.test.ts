@@ -27,7 +27,6 @@ void test("python_run returns guidance when bridge URL is not configured", async
   const result = await tool.execute("tc-missing", { code: "print('hello')" });
 
   assert.match(firstText(result), /python-bridge-url/u);
-  assert.match(firstText(result), /\/experimental on python-bridge/u);
   assert.equal(result.details?.kind, "python_bridge");
   assert.equal(result.details?.ok, false);
   assert.equal(result.details?.error, "missing_bridge_url");

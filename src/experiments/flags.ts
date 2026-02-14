@@ -10,8 +10,6 @@ import { dispatchExperimentalFeatureChanged } from "./events.js";
 
 export type ExperimentalFeatureId =
   | "tmux_bridge"
-  | "python_bridge"
-  | "files_workspace"
   | "external_skills_discovery"
   | "remote_extension_urls"
   | "extension_permission_gates"
@@ -44,24 +42,6 @@ const EXPERIMENTAL_FEATURES = [
     description: "Allow local tmux bridge integration for interactive shell sessions.",
     wiring: "wired",
     storageKey: "pi.experimental.tmuxBridge",
-  },
-  {
-    id: "python_bridge",
-    slug: "python-bridge",
-    aliases: ["python", "libreoffice-bridge"],
-    title: "Python / LibreOffice bridge",
-    description: "Allow local Python and LibreOffice bridge integrations.",
-    wiring: "wired",
-    storageKey: "pi.experimental.pythonBridge",
-  },
-  {
-    id: "files_workspace",
-    slug: "files-workspace",
-    aliases: ["files", "workspace-files", "artifacts"],
-    title: "Files",
-    description: "Allow assistant write/delete access to files (list/read + built-in docs stay available).",
-    wiring: "wired",
-    storageKey: "pi.experimental.filesWorkspace",
   },
   {
     id: "external_skills_discovery",

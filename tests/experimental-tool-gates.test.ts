@@ -6,10 +6,8 @@ import { Type } from "@sinclair/typebox";
 
 import {
   applyExperimentalToolGates,
-  buildFilesWorkspaceGateErrorMessage,
   buildPythonBridgeGateErrorMessage,
   buildTmuxBridgeGateErrorMessage,
-  evaluateFilesWorkspaceGate,
   evaluatePythonBridgeGate,
   evaluateTmuxBridgeGate,
 } from "../src/tools/experimental-tool-gates.ts";
@@ -121,50 +119,22 @@ void test("evaluateTmuxBridgeGate reports explicit reason codes", async () => {
   assert.match(buildTmuxBridgeGateErrorMessage(unreachable.reason), /not reachable/i);
 });
 
-void test("files tool allows list/read while write/delete stay gated", async () => {
+void test("files tool passes through without any gate", async () => {
   let executeCount = 0;
 
   const [filesTool] = await applyExperimentalToolGates([
     createTestTool("files", () => {
       executeCount += 1;
     }),
-  ], {
-    isFilesWorkspaceExperimentEnabled: () => false,
-  });
+  ], {});
 
+  // All actions pass through directly
   await filesTool.execute("call-files-list", { action: "list" });
-  await filesTool.execute("call-files-read", { action: "read", path: "assistant-docs/docs/extensions.md" });
+  await filesTool.execute("call-files-read", { action: "read", path: "notes.md" });
+  await filesTool.execute("call-files-write", { action: "write", path: "notes.md", content: "hello" });
+  await filesTool.execute("call-files-delete", { action: "delete", path: "notes.md" });
 
-  await assert.rejects(
-    () => filesTool.execute("call-files-write", {
-      action: "write",
-      path: "notes.md",
-      content: "hello",
-    }),
-    /files-workspace/i,
-  );
-
-  await assert.rejects(
-    () => filesTool.execute("call-files-delete", {
-      action: "delete",
-      path: "notes.md",
-    }),
-    /files-workspace/i,
-  );
-
-  assert.equal(executeCount, 2);
-
-  const enabledGate = evaluateFilesWorkspaceGate({
-    isFilesWorkspaceExperimentEnabled: () => true,
-  });
-  assert.equal(enabledGate.allowed, true);
-
-  const disabledGate = evaluateFilesWorkspaceGate({
-    isFilesWorkspaceExperimentEnabled: () => false,
-  });
-  assert.equal(disabledGate.allowed, false);
-  assert.equal(disabledGate.reason, "files_experiment_disabled");
-  assert.match(buildFilesWorkspaceGateErrorMessage("files_experiment_disabled"), /files-workspace/i);
+  assert.equal(executeCount, 4);
 });
 
 void test("execute_office_js is available without experimental feature gates", async () => {
@@ -232,29 +202,19 @@ void test("execute_office_js fails closed when confirmation UI is unavailable", 
   assert.equal(executeCount, 0);
 });
 
-void test("python bridge tools stay registered and hard-gated", async () => {
-  let pythonExecuteCount = 0;
-  let libreofficeExecuteCount = 0;
-  let transformExecuteCount = 0;
+void test("python bridge tools require URL + probe but no experiment flag", async () => {
+  let executeCount = 0;
 
   const tools = [
-    createTestTool("python_run", () => {
-      pythonExecuteCount += 1;
-    }),
-    createTestTool("libreoffice_convert", () => {
-      libreofficeExecuteCount += 1;
-    }),
-    createTestTool("python_transform_range", () => {
-      transformExecuteCount += 1;
-    }),
+    createTestTool("python_run", () => { executeCount += 1; }),
+    createTestTool("libreoffice_convert", () => { executeCount += 1; }),
+    createTestTool("python_transform_range", () => { executeCount += 1; }),
     createTestTool("read_range"),
   ];
 
+  // No bridge URL → gate fails with missing_bridge_url
   const gatedTools = await applyExperimentalToolGates(tools, {
-    isPythonExperimentEnabled: () => false,
-    getPythonBridgeUrl: () => Promise.resolve("https://localhost:3340"),
-    validatePythonBridgeUrl: () => "https://localhost:3340",
-    probePythonBridge: () => Promise.resolve(true),
+    getPythonBridgeUrl: () => Promise.resolve(undefined),
   });
 
   assert.deepEqual(gatedTools.map((tool) => tool.name), [
@@ -269,34 +229,25 @@ void test("python bridge tools stay registered and hard-gated", async () => {
 
   await assert.rejects(
     () => pythonTool.execute("call-python", { code: "print('hi')" }),
-    /\/experimental on python-bridge/i,
+    /not configured/i,
   );
 
-  const libreofficeTool = gatedTools.find((tool) => tool.name === "libreoffice_convert");
-  assert.ok(libreofficeTool);
+  // Bridge unreachable → gate fails
+  const gatedTools2 = await applyExperimentalToolGates(tools, {
+    getPythonBridgeUrl: () => Promise.resolve("https://localhost:3340"),
+    validatePythonBridgeUrl: () => "https://localhost:3340",
+    probePythonBridge: () => Promise.resolve(false),
+  });
+
+  const pythonTool2 = gatedTools2.find((tool) => tool.name === "python_run");
+  assert.ok(pythonTool2);
 
   await assert.rejects(
-    () => libreofficeTool.execute("call-libreoffice", {
-      input_path: "/tmp/in.xlsx",
-      target_format: "csv",
-    }),
-    /\/experimental on python-bridge/i,
+    () => pythonTool2.execute("call-python", { code: "print('hi')" }),
+    /not reachable/i,
   );
 
-  const transformTool = gatedTools.find((tool) => tool.name === "python_transform_range");
-  assert.ok(transformTool);
-
-  await assert.rejects(
-    () => transformTool.execute("call-transform", {
-      range: "Sheet1!A1:B3",
-      code: "result = input_data['values']",
-    }),
-    /\/experimental on python-bridge/i,
-  );
-
-  assert.equal(pythonExecuteCount, 0);
-  assert.equal(libreofficeExecuteCount, 0);
-  assert.equal(transformExecuteCount, 0);
+  assert.equal(executeCount, 0);
 });
 
 void test("python bridge tools require explicit user approval", async () => {
@@ -308,7 +259,6 @@ void test("python bridge tools require explicit user approval", async () => {
       executeCount += 1;
     }),
   ], {
-    isPythonExperimentEnabled: () => true,
     getPythonBridgeUrl: () => Promise.resolve("https://localhost:3340"),
     validatePythonBridgeUrl: () => "https://localhost:3340",
     probePythonBridge: () => Promise.resolve(true),
@@ -337,7 +287,6 @@ void test("approved python bridge calls proceed to tool execution", async () => 
       executeCount += 1;
     }),
   ], {
-    isPythonExperimentEnabled: () => true,
     getPythonBridgeUrl: () => Promise.resolve("https://localhost:3340"),
     validatePythonBridgeUrl: () => "https://localhost:3340",
     probePythonBridge: () => Promise.resolve(true),
@@ -359,7 +308,6 @@ void test("python bridge approval is cached per bridge URL", async () => {
       executeCount += 1;
     }),
   ], {
-    isPythonExperimentEnabled: () => true,
     getPythonBridgeUrl: () => Promise.resolve(currentBridgeUrl),
     validatePythonBridgeUrl: (url) => url,
     probePythonBridge: () => Promise.resolve(true),
@@ -392,7 +340,6 @@ void test("python bridge approval is cached per bridge URL", async () => {
 
 void test("evaluatePythonBridgeGate reports explicit reason codes", async () => {
   const missingUrl = await evaluatePythonBridgeGate({
-    isPythonExperimentEnabled: () => true,
     getPythonBridgeUrl: () => Promise.resolve(undefined),
   });
 
@@ -400,7 +347,6 @@ void test("evaluatePythonBridgeGate reports explicit reason codes", async () => 
   assert.equal(missingUrl.reason, "missing_bridge_url");
 
   const unreachable = await evaluatePythonBridgeGate({
-    isPythonExperimentEnabled: () => true,
     getPythonBridgeUrl: () => Promise.resolve("https://localhost:3340"),
     validatePythonBridgeUrl: () => "https://localhost:3340",
     probePythonBridge: () => Promise.resolve(false),

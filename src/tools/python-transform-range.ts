@@ -418,7 +418,7 @@ export function createPythonTransformRangeTool(
               type: "text",
               text:
                 "Python bridge URL is not configured. " +
-                "Run /experimental python-bridge-url https://localhost:3340 and enable /experimental on python-bridge.",
+                "Run /experimental python-bridge-url https://localhost:3340 to set it up.",
             }],
             details: {
               kind: "python_transform_range",

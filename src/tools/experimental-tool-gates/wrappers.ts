@@ -1,18 +1,15 @@
 import type { AgentTool } from "@mariozechner/pi-agent-core";
 
 import {
-  buildFilesWorkspaceGateErrorMessage,
   buildPythonBridgeGateErrorMessage,
   buildTmuxBridgeGateErrorMessage,
   defaultGetApprovedPythonBridgeUrl,
   defaultSetApprovedPythonBridgeUrl,
-  evaluateFilesWorkspaceGate,
   evaluatePythonBridgeGate,
   evaluateTmuxBridgeGate,
 } from "./evaluation.js";
 import {
   EXECUTE_OFFICE_JS_TOOL_NAME,
-  FILES_TOOL_NAME,
   PYTHON_TOOL_NAMES,
   TMUX_TOOL_NAME,
   type ExperimentalToolGateDependencies,
@@ -27,22 +24,6 @@ function isRecordObject(value: unknown): value is Record<string, unknown> {
 function getRecordValue(record: Record<string, unknown>, key: string): string | undefined {
   const value = record[key];
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
-}
-
-function getFilesAction(params: unknown): "list" | "read" | "write" | "delete" | null {
-  if (!isRecordObject(params)) return null;
-
-  const action = params.action;
-  if (action === "list" || action === "read" || action === "write" || action === "delete") {
-    return action;
-  }
-
-  return null;
-}
-
-function allowsFilesActionWhenExperimentDisabled(params: unknown): boolean {
-  const action = getFilesAction(params);
-  return action === "list" || action === "read";
 }
 
 function getPythonApprovalMessage(
@@ -158,24 +139,6 @@ function wrapTmuxToolWithHardGate(
   };
 }
 
-function wrapFilesToolWithHardGate(
-  tool: AgentTool,
-  dependencies: ExperimentalToolGateDependencies,
-): AgentTool {
-  return {
-    ...tool,
-    execute: async (toolCallId, params, signal, onUpdate) => {
-      const gate = evaluateFilesWorkspaceGate(dependencies);
-      if (!gate.allowed && !allowsFilesActionWhenExperimentDisabled(params)) {
-        const reason = gate.reason ?? "files_experiment_disabled";
-        throw new Error(buildFilesWorkspaceGateErrorMessage(reason));
-      }
-
-      return tool.execute(toolCallId, params, signal, onUpdate);
-    },
-  };
-}
-
 function wrapExecuteOfficeJsToolWithHardGate(
   tool: AgentTool,
   dependencies: ExperimentalToolGateDependencies,
@@ -197,7 +160,13 @@ function wrapExecuteOfficeJsToolWithHardGate(
   };
 }
 
-function wrapPythonBridgeToolWithHardGate(
+/**
+ * Python/LibreOffice bridge gate.
+ *
+ * No experiment flag required. If the bridge URL is configured and reachable,
+ * execution is allowed after user approval (once per bridge URL per session).
+ */
+function wrapPythonBridgeToolWithApprovalGate(
   tool: AgentTool,
   dependencies: ExperimentalToolGateDependencies,
 ): AgentTool {
@@ -246,12 +215,11 @@ function wrapPythonBridgeToolWithHardGate(
  * Apply execution gates to tool calls.
  *
  * Current rules:
- * - `tmux`, `files`, `execute_office_js`, `python_run`, `libreoffice_convert`, and
- *   `python_transform_range` stay registered to keep the tool list stable.
- * - bridge-backed tools re-check experiment flags (and bridge health) on every execution.
- * - `files` keeps list/read available when disabled, but still gates write/delete.
- * - python/libreoffice bridge tools require user confirmation once per configured bridge URL.
- * - execute_office_js requires explicit user confirmation on every execution.
+ * - `tmux` requires an experiment flag, bridge URL, and health check.
+ * - `python_run`, `libreoffice_convert`, `python_transform_range` require a
+ *   configured + reachable bridge URL and user approval (no experiment flag).
+ * - `execute_office_js` requires explicit user confirmation on every call.
+ * - `files` has no gate — read, write, and delete are always available.
  */
 export function applyExperimentalToolGates(
   tools: AgentTool[],
@@ -265,18 +233,13 @@ export function applyExperimentalToolGates(
       continue;
     }
 
-    if (tool.name === FILES_TOOL_NAME) {
-      gatedTools.push(wrapFilesToolWithHardGate(tool, dependencies));
-      continue;
-    }
-
     if (tool.name === EXECUTE_OFFICE_JS_TOOL_NAME) {
       gatedTools.push(wrapExecuteOfficeJsToolWithHardGate(tool, dependencies));
       continue;
     }
 
     if (PYTHON_TOOL_NAMES.has(tool.name)) {
-      gatedTools.push(wrapPythonBridgeToolWithHardGate(tool, dependencies));
+      gatedTools.push(wrapPythonBridgeToolWithApprovalGate(tool, dependencies));
       continue;
     }
 

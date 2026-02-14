@@ -379,7 +379,6 @@ export function showExtensionsDialog(manager: ExtensionRuntimeManager): void {
   };
 
   const renderLocalBridgeState = async (): Promise<void> => {
-    const enabled = isExperimentalFeatureEnabled("python_bridge");
     const configuredUrl = await readSettingValue(PYTHON_BRIDGE_URL_SETTING_KEY);
 
     if (configuredUrl && localBridgeUrlInput.value.trim().length === 0) {
@@ -391,7 +390,7 @@ export function showExtensionsDialog(manager: ExtensionRuntimeManager): void {
       : "Bridge URL not set";
 
     localBridgeStatusBadgeSlot.replaceChildren(
-      createOverlayBadge(enabled ? "enabled" : "disabled", enabled ? "ok" : "muted"),
+      createOverlayBadge(configuredUrl ? "configured" : "not set", configuredUrl ? "ok" : "muted"),
     );
   };
 
@@ -656,10 +655,9 @@ export function showExtensionsDialog(manager: ExtensionRuntimeManager): void {
       const normalizedUrl = validateOfficeProxyUrl(candidateUrl);
       await writeSettingValue(PYTHON_BRIDGE_URL_SETTING_KEY, normalizedUrl);
       dispatchExperimentalToolConfigChanged({ configKey: PYTHON_BRIDGE_URL_SETTING_KEY });
-      setExperimentalFeatureEnabled("python_bridge", true);
 
       localBridgeUrlInput.value = normalizedUrl;
-      showToast(`Python bridge enabled at ${normalizedUrl}`);
+      showToast(`Python bridge configured at ${normalizedUrl}`);
     });
   });
 
@@ -683,9 +681,11 @@ export function showExtensionsDialog(manager: ExtensionRuntimeManager): void {
   });
 
   localBridgeDisableButton.addEventListener("click", () => {
-    void runAction(() => {
-      setExperimentalFeatureEnabled("python_bridge", false);
-      showToast("Python bridge disabled.");
+    void runAction(async () => {
+      await deleteSettingValue(PYTHON_BRIDGE_URL_SETTING_KEY);
+      dispatchExperimentalToolConfigChanged({ configKey: PYTHON_BRIDGE_URL_SETTING_KEY });
+      localBridgeUrlInput.value = "";
+      showToast("Python bridge URL cleared.");
     });
   });
 

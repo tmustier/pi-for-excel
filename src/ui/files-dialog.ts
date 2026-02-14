@@ -9,7 +9,6 @@ import {
   type WorkspaceFileEntry,
 } from "../files/types.js";
 import { type FilesWorkspaceAuditContext, getFilesWorkspace } from "../files/workspace.js";
-import { isExperimentalFeatureEnabled, setExperimentalFeatureEnabled } from "../experiments/flags.js";
 import { getErrorMessage } from "../utils/errors.js";
 import { formatWorkbookLabel, getWorkbookContext } from "../workbook/context.js";
 import {
@@ -466,18 +465,17 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
       filterOptions.find((option) => option.value === selectedFilter)?.label
       ?? "All files";
 
-    const filesExperimentEnabled = isExperimentalFeatureEnabled("files_workspace");
     const workspaceFilesCount = files.length - builtinDocsCount;
 
-    enableButton.hidden = filesExperimentEnabled;
-    uploadButton.disabled = !filesExperimentEnabled;
-    newFileButton.disabled = !filesExperimentEnabled;
-    nativeButton.disabled = !filesExperimentEnabled || !backend.nativeSupported;
+    enableButton.hidden = true;
+    uploadButton.disabled = false;
+    newFileButton.disabled = false;
+    nativeButton.disabled = !backend.nativeSupported;
     nativeButton.hidden = !backend.nativeSupported;
     disconnectNativeButton.hidden = backend.kind !== "native-directory";
 
     setStatus(buildFilesDialogStatusMessage({
-      filesExperimentEnabled,
+      filesExperimentEnabled: true,
       totalCount: files.length,
       filteredCount: filteredFiles.length,
       selectedFilter,
@@ -600,12 +598,6 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
   };
 
   dialog.addCleanup(cleanup);
-
-  enableButton.addEventListener("click", () => {
-    setExperimentalFeatureEnabled("files_workspace", true);
-    void renderList();
-    showToast("Enabled file write/delete access.");
-  });
 
   uploadButton.addEventListener("click", () => {
     hiddenInput.click();

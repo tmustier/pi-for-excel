@@ -1,11 +1,9 @@
 /**
  * python_run — Experimental local Python bridge adapter.
  *
- * This tool stays registered for a stable tool list/prompt cache,
- * but execution is gated by:
- * - /experimental on python-bridge
- * - /experimental python-bridge-url https://localhost:<port>
- * - reachable bridge health endpoint
+ * This tool stays registered for a stable tool list/prompt cache.
+ * Execution requires a configured and reachable bridge URL
+ * (/experimental python-bridge-url https://localhost:<port>).
  */
 
 import type { AgentTool, AgentToolResult } from "@mariozechner/pi-agent-core";
@@ -393,7 +391,7 @@ function buildOutputPreview(output: string | undefined): string | undefined {
 function buildMissingBridgeConfigurationMessage(): string {
   return (
     "Python bridge URL is not configured. " +
-    "Run /experimental python-bridge-url https://localhost:3340 and enable /experimental on python-bridge."
+    "Run /experimental python-bridge-url https://localhost:3340 to set it up."
   );
 }
 

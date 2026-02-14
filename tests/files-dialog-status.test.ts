@@ -3,24 +3,21 @@ import { test } from "node:test";
 
 import { buildFilesDialogStatusMessage } from "../src/ui/files-dialog-status.ts";
 
-void test("status message explains built-in docs when write/delete is gated", () => {
+void test("status message reports total count when showing all files", () => {
   const message = buildFilesDialogStatusMessage({
-    filesExperimentEnabled: false,
-    totalCount: 4,
-    filteredCount: 2,
-    selectedFilter: "builtin",
-    activeFilterLabel: "Built-in docs",
-    builtinDocsCount: 3,
-    workspaceFilesCount: 1,
+    totalCount: 10,
+    filteredCount: 10,
+    selectedFilter: "all",
+    activeFilterLabel: "All files",
+    builtinDocsCount: 4,
+    workspaceFilesCount: 6,
   });
 
-  assert.match(message, /Built-in docs stay available/i);
-  assert.match(message, /Enable write access/i);
+  assert.equal(message, "10 files available to the assistant.");
 });
 
-void test("status message reports active filtered count when enabled", () => {
+void test("status message reports active filtered count", () => {
   const message = buildFilesDialogStatusMessage({
-    filesExperimentEnabled: true,
     totalCount: 10,
     filteredCount: 3,
     selectedFilter: "builtin",

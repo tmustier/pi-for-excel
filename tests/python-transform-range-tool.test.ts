@@ -39,7 +39,6 @@ void test("python_transform_range returns bridge setup guidance when URL is miss
   });
 
   assert.match(firstText(result), /python-bridge-url/u);
-  assert.match(firstText(result), /\/experimental on python-bridge/u);
   assert.equal(result.details?.kind, "python_transform_range");
   assert.equal(result.details?.blocked, false);
   assert.equal(result.details?.error, "missing_bridge_url");
