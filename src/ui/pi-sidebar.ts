@@ -12,7 +12,7 @@ import { customElement, property, query, state } from "lit/decorators.js";
 import type { Agent, AgentEvent } from "@mariozechner/pi-agent-core";
 import type { ToolResultMessage } from "@mariozechner/pi-ai";
 import type { StreamingMessageContainer } from "@mariozechner/pi-web-ui/dist/components/StreamingMessageContainer.js";
-import { ArchiveRestore, ChevronRight, FileText, History, type IconNode } from "lucide";
+import { ArchiveRestore, ChevronRight, History, type IconNode } from "lucide";
 import "./pi-input.js";
 import "./working-indicator.js";
 import { initToolGrouping } from "./tool-grouping.js";
@@ -541,11 +541,10 @@ export class PiSidebar extends LitElement {
   }
 
   private _renderQuickActions() {
-    const showRules = Boolean(this.onOpenRules);
     const showResume = Boolean(this.onOpenResumePicker);
     const showBackups = Boolean(this.onOpenRecovery);
 
-    if (!showRules && !showResume && !showBackups) {
+    if (!showResume && !showBackups) {
       return nothing;
     }
 
@@ -556,14 +555,6 @@ export class PiSidebar extends LitElement {
 
     return html`
       <div class="pi-quick-actions">
-        ${showRules
-          ? this._renderQuickActionButton({
-            label: "Rules",
-            title: "Edit rules and conventions",
-            iconNode: FileText,
-            onClick: this.onOpenRules,
-          })
-          : nothing}
         ${showResume
           ? this._renderQuickActionButton({
             label: "Resume",

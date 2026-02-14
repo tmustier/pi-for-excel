@@ -1389,13 +1389,15 @@ export async function initTaskpane(opts: {
           return;
         }
 
+        const importedLabel = `${count} file${count === 1 ? "" : "s"}`;
+
         if (!isExperimentalFeatureEnabled("files_workspace")) {
           setExperimentalFeatureEnabled("files_workspace", true);
-          showToast(`Imported ${count} file${count === 1 ? "" : "s"} and enabled files-workspace.`);
+          showToast(`Imported ${importedLabel} into Files. The Files feature was enabled automatically.`);
           return;
         }
 
-        showToast(`Imported ${count} file${count === 1 ? "" : "s"}.`);
+        showToast(`Imported ${importedLabel} into Files.`);
       })
       .catch((error: unknown) => {
         showToast(`Import failed: ${error instanceof Error ? error.message : "Unknown error"}`);
