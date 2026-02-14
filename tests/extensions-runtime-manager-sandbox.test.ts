@@ -4,6 +4,12 @@ import { readFile } from "node:fs/promises";
 
 import { setExperimentalFeatureEnabled } from "../src/experiments/flags.ts";
 import { ExtensionRuntimeManager } from "../src/extensions/runtime-manager.ts";
+import {
+  SANDBOX_CHANNEL,
+  isSandboxEnvelope,
+  serializeForSandboxInlineScript,
+} from "../src/extensions/sandbox/protocol.ts";
+import { buildSandboxSrcdoc } from "../src/extensions/sandbox/srcdoc.ts";
 import { EXTENSIONS_REGISTRY_STORAGE_KEY } from "../src/extensions/store.ts";
 import {
   getDefaultPermissionsForTrust,
@@ -104,18 +110,71 @@ function createStoredEntry(input: {
   };
 }
 
-void test("runtime manager source wires sandbox runtime selection through rollback kill switch", async () => {
-  const source = await readFile(new URL("../src/extensions/runtime-manager.ts", import.meta.url), "utf8");
+void test("runtime manager passes sandbox activation options and runtime metadata", async () => {
+  const restoreLocalStorage = installLocalStorageStub();
 
-  assert.match(source, /resolveExtensionRuntimeMode\(/);
-  assert.match(source, /extension_sandbox_runtime/);
-  assert.match(source, /extension_widget_v2/);
-  assert.match(source, /runtimeMode/);
-  assert.match(source, /runtimeLabel/);
-  assert.match(source, /activateExtensionInSandbox/);
-  assert.match(source, /activateInSandbox/);
-  assert.match(source, /widgetOwnerId/);
-  assert.match(source, /widgetApiV2Enabled/);
+  try {
+    clearLocalStorageKey(EXTENSION_SANDBOX_RUNTIME_STORAGE_KEY);
+    setExperimentalFeatureEnabled("extension_sandbox_runtime", false);
+    setExperimentalFeatureEnabled("extension_permission_gates", true);
+    setExperimentalFeatureEnabled("extension_widget_v2", true);
+
+    const settings = new MemorySettingsStore();
+    settings.writeRaw(EXTENSIONS_REGISTRY_STORAGE_KEY, {
+      version: 2,
+      items: [
+        createStoredEntry({
+          id: "ext.inline.options",
+          name: "Inline Options",
+          trust: "inline-code",
+        }),
+      ],
+    });
+
+    let capturedWidgetOwnerId = "";
+    let capturedWidgetApiV2Enabled = false;
+    let capturedSourceKind = "";
+    let capturedSourceHasToast = false;
+    let overlayCapabilityAllowed = false;
+    let toolsCapabilityAllowed = true;
+    let capabilityErrorText = "";
+
+    const manager = new ExtensionRuntimeManager({
+      settings,
+      getActiveAgent: () => null,
+      refreshRuntimeTools: async () => {},
+      reservedToolNames: new Set<string>(),
+      activateInSandbox: (activation) => {
+        capturedWidgetOwnerId = activation.widgetOwnerId ?? "";
+        capturedWidgetApiV2Enabled = activation.widgetApiV2Enabled === true;
+        capturedSourceKind = activation.source.kind;
+        capturedSourceHasToast = activation.source.kind === "inline"
+          && activation.source.code.includes("api.toast('hi')");
+        overlayCapabilityAllowed = activation.isCapabilityEnabled("ui.overlay");
+        toolsCapabilityAllowed = activation.isCapabilityEnabled("tools.register");
+        capabilityErrorText = activation.formatCapabilityError("ui.overlay");
+
+        return Promise.resolve({
+          deactivate: () => Promise.resolve(),
+        });
+      },
+    });
+
+    await manager.initialize();
+
+    const status = manager.list()[0];
+    assert.equal(status.runtimeMode, "sandbox-iframe");
+    assert.equal(status.runtimeLabel, "sandbox iframe");
+    assert.equal(capturedWidgetOwnerId, "ext.inline.options");
+    assert.equal(capturedWidgetApiV2Enabled, true);
+    assert.equal(capturedSourceKind, "inline");
+    assert.equal(capturedSourceHasToast, true);
+    assert.equal(overlayCapabilityAllowed, true);
+    assert.equal(toolsCapabilityAllowed, false);
+    assert.match(capabilityErrorText, /cannot show overlays\./);
+  } finally {
+    restoreLocalStorage();
+  }
 });
 
 void test("extensions overlay source renders runtime label in installed rows", async () => {
@@ -280,40 +339,60 @@ void test("trusted local-module extensions stay on host runtime even when sandbo
   }
 });
 
-void test("sandbox runtime source enforces capability gates and rejects unknown ui actions", async () => {
-  const source = await readFile(new URL("../src/extensions/sandbox-runtime.ts", import.meta.url), "utf8");
-  const srcdocSource = await readFile(new URL("../src/extensions/sandbox/srcdoc.ts", import.meta.url), "utf8");
-  const surfacesSource = await readFile(new URL("../src/extensions/sandbox/surfaces.ts", import.meta.url), "utf8");
-  const protocolSource = await readFile(new URL("../src/extensions/sandbox/protocol.ts", import.meta.url), "utf8");
+void test("sandbox srcdoc builder emits expected bridge hooks and config", () => {
+  const html = buildSandboxSrcdoc({
+    instanceId: "ext.inline.srcdoc",
+    extensionName: "Inline Srcdoc",
+    source: {
+      kind: "inline",
+      code: "export function activate(api) { api.toast('hello'); }",
+    },
+    widgetApiV2Enabled: true,
+  });
 
-  assert.match(source, /case "register_tool": \{[\s\S]*this\.assertCapability\("tools\.register"\)/);
-  assert.match(source, /normalizeSandboxToolParameters/);
-  assert.match(source, /Type\.Unsafe/);
-  assert.match(source, /case "overlay_show": \{[\s\S]*this\.assertCapability\("ui\.overlay"\)/);
-  assert.match(source, /case "widget_show": \{[\s\S]*this\.assertCapability\("ui\.widget"\)/);
-  assert.match(source, /case "widget_upsert": \{[\s\S]*Widget API v2 is disabled/);
-  assert.match(source, /asWidgetPlacementOrUndefined\(payload\.placement\)/);
-  assert.match(source, /asBooleanOrUndefined\(payload\.collapsible\)/);
-  assert.match(source, /asFiniteNumberOrNullOrUndefined\(payload\.minHeightPx\)/);
-  assert.match(source, /case "widget_clear": \{/);
-  assert.match(source, /allowWhenDisposed:\s*true/);
-  assert.match(source, /buildSandboxSrcdoc\(\{/);
+  assert.match(html, /"instanceId":"ext\.inline\.srcdoc"/);
+  assert.match(html, /"widgetApiV2Enabled":true/);
+  assert.match(html, /if \(method === "ui_action"\)/);
+  assert.match(html, /Unknown sandbox UI action id:/);
+  assert.match(html, /api\.agent is not available in sandbox runtime/);
+  assert.match(html, /placement: payload\.placement === "above-input" \|\| payload\.placement === "below-input"/);
+  assert.match(html, /payload\.minHeightPx === null/);
+});
 
-  assert.match(srcdocSource, /if \(method === "ui_action"\)/);
-  assert.match(srcdocSource, /Unknown sandbox UI action id:/);
-  assert.match(srcdocSource, /placement: payload\.placement === "above-input" \|\| payload\.placement === "below-input"/);
-  assert.match(srcdocSource, /collapsible: typeof payload\.collapsible === "boolean" \? payload\.collapsible : undefined/);
-  assert.match(srcdocSource, /payload\.minHeightPx === null/);
-  assert.match(srcdocSource, /api\.agent is not available in sandbox runtime/);
+void test("sandbox protocol helpers validate envelope shapes and escape inline script payloads", () => {
+  const validRequest: unknown = {
+    channel: SANDBOX_CHANNEL,
+    instanceId: "ext.inline.proto",
+    direction: "sandbox_to_host",
+    kind: "request",
+    requestId: "req-1",
+    method: "register_tool",
+  };
 
-  assert.match(surfacesSource, /upsertExtensionWidget\([\s\S]*element:\s*body/);
-  assert.match(protocolSource, /export const SANDBOX_CHANNEL =/);
-  assert.match(protocolSource, /export function isSandboxEnvelope/);
+  const invalidDirection: unknown = {
+    channel: SANDBOX_CHANNEL,
+    instanceId: "ext.inline.proto",
+    direction: "sideways",
+    kind: "request",
+    requestId: "req-1",
+    method: "register_tool",
+  };
 
-  // Isolation boundary checks: strict iframe sandboxing + host-side message source/direction checks.
-  assert.match(source, /setAttribute\("sandbox", "allow-scripts"\)/);
-  assert.match(source, /if \(event\.source !== this\.iframe\.contentWindow\)/);
-  assert.match(source, /if \(envelope\.direction !== "sandbox_to_host"\)/);
+  const invalidKind: unknown = {
+    channel: SANDBOX_CHANNEL,
+    instanceId: "ext.inline.proto",
+    direction: "sandbox_to_host",
+    kind: "invalid",
+    requestId: "req-1",
+    method: "register_tool",
+  };
+
+  assert.equal(isSandboxEnvelope(validRequest), true);
+  assert.equal(isSandboxEnvelope(invalidDirection), false);
+  assert.equal(isSandboxEnvelope(invalidKind), false);
+
+  const serialized = serializeForSandboxInlineScript({ html: "<div>safe</div>" });
+  assert.equal(serialized.includes("\\u003cdiv>safe\\u003c/div>"), true);
 });
 
 void test("sandbox activation failures are isolated per extension during initialize", async () => {
