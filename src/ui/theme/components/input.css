@@ -44,7 +44,7 @@
 .pi-input-textarea {
   display: block;
   width: 100%;
-  padding: 11px 44px 11px 72px;
+  padding: 11px 52px 11px 72px;
   min-height: 40px;
   max-height: 40vh;
   border: none;
@@ -57,12 +57,13 @@
   resize: none;
   outline: none;
   overflow-y: auto;
+  overflow-x: hidden;
   field-sizing: content;
 }
 
 .pi-input-textarea:placeholder-shown {
   white-space: nowrap;
-  overflow-x: hidden;
+  overflow: hidden;
   text-overflow: ellipsis;
 }
 
