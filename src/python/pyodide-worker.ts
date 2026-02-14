@@ -51,7 +51,7 @@ interface PyodideInterface {
   };
 }
 
-declare function loadPyodide(options?: {
+declare function _loadPyodide(options?: {
   indexURL?: string;
   stdout?: (text: string) => void;
   stderr?: (text: string) => void;
@@ -69,7 +69,7 @@ async function ensurePyodide(): Promise<PyodideInterface> {
   loadingPromise = (async () => {
     // Dynamic import from CDN — works in module workers (no importScripts)
     const mod = await import(/* @vite-ignore */ `${PYODIDE_CDN_URL}pyodide.mjs`) as {
-      loadPyodide: typeof loadPyodide;
+      loadPyodide: typeof _loadPyodide;
     };
 
     const instance = await mod.loadPyodide({
