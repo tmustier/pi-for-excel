@@ -9,8 +9,6 @@ void test("status message reports total count when showing all files", () => {
     filteredCount: 10,
     selectedFilter: "all",
     activeFilterLabel: "All files",
-    builtinDocsCount: 4,
-    workspaceFilesCount: 6,
   });
 
   assert.equal(message, "10 files available to the assistant.");
@@ -22,8 +20,6 @@ void test("status message reports active filtered count", () => {
     filteredCount: 3,
     selectedFilter: "builtin",
     activeFilterLabel: "Built-in docs",
-    builtinDocsCount: 4,
-    workspaceFilesCount: 6,
   });
 
   assert.equal(message, "3 of 10 files shown · Built-in docs.");

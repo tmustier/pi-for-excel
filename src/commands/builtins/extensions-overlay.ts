@@ -241,7 +241,7 @@ export function showExtensionsDialog(manager: ExtensionRuntimeManager): void {
 
   const localBridgeSection = document.createElement("section");
   localBridgeSection.className = "pi-overlay-section";
-  localBridgeSection.appendChild(createOverlaySectionTitle("Local Python / LibreOffice bridge (experimental)"));
+  localBridgeSection.appendChild(createOverlaySectionTitle("Local Python / LibreOffice bridge"));
 
   const localBridgeCard = document.createElement("div");
   localBridgeCard.className = "pi-overlay-surface pi-ext-local-bridge-card";
@@ -261,20 +261,18 @@ export function showExtensionsDialog(manager: ExtensionRuntimeManager): void {
   localBridgeUrlRow.className = "pi-ext-local-bridge-url-row";
 
   const localBridgeUrlInput = createOverlayInput({ placeholder: "https://localhost:3340" });
-  const localBridgeEnableButton = createOverlayButton({ text: "Enable + save URL" });
   const localBridgeSaveUrlButton = createOverlayButton({ text: "Save URL" });
-  const localBridgeDisableButton = createOverlayButton({ text: "Disable" });
+  const localBridgeDisableButton = createOverlayButton({ text: "Clear" });
 
   localBridgeUrlRow.append(
     localBridgeUrlInput,
-    localBridgeEnableButton,
     localBridgeSaveUrlButton,
     localBridgeDisableButton,
   );
 
   const localBridgeHint = document.createElement("p");
   localBridgeHint.textContent =
-    "Enable the Python bridge and save the URL in one step (equivalent to two /experimental commands).";
+    "This configures the native bridge URL used by Python and LibreOffice tools.";
   localBridgeHint.className = "pi-overlay-hint";
 
   localBridgeCard.append(localBridgeStatusRow, localBridgeUrlRow, localBridgeHint);
@@ -343,7 +341,6 @@ export function showExtensionsDialog(manager: ExtensionRuntimeManager): void {
     installCodeButton.disabled = busy;
     copyTemplateButton.disabled = busy;
     localBridgeUrlInput.disabled = busy;
-    localBridgeEnableButton.disabled = busy;
     localBridgeSaveUrlButton.disabled = busy;
     localBridgeDisableButton.disabled = busy;
     sandboxEnableButton.disabled = busy;
@@ -644,22 +641,6 @@ export function showExtensionsDialog(manager: ExtensionRuntimeManager): void {
       installedList.appendChild(createInstalledRow(status));
     }
   };
-
-  localBridgeEnableButton.addEventListener("click", () => {
-    void runAction(async () => {
-      const candidateUrl = localBridgeUrlInput.value.trim();
-      if (candidateUrl.length === 0) {
-        throw new Error("Provide a Python bridge URL (example: https://localhost:3340)");
-      }
-
-      const normalizedUrl = validateOfficeProxyUrl(candidateUrl);
-      await writeSettingValue(PYTHON_BRIDGE_URL_SETTING_KEY, normalizedUrl);
-      dispatchExperimentalToolConfigChanged({ configKey: PYTHON_BRIDGE_URL_SETTING_KEY });
-
-      localBridgeUrlInput.value = normalizedUrl;
-      showToast(`Python bridge configured at ${normalizedUrl}`);
-    });
-  });
 
   localBridgeSaveUrlButton.addEventListener("click", () => {
     void runAction(async () => {

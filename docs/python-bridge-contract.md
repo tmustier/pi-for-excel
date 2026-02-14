@@ -1,6 +1,6 @@
 # Python / LibreOffice bridge contract (v1)
 
-Status: implemented as an **opt-in local helper**.
+Status: implemented as an optional **local helper** (native bridge). `python_run` and `python_transform_range` also support in-browser Pyodide fallback.
 
 - Add-in adapters:
   - `src/tools/python-run.ts` (`python_run`)
@@ -11,12 +11,17 @@ Status: implemented as an **opt-in local helper**.
 
 ## Gate model
 
-Bridge-backed tools remain registered (stable tool list / prompt caching), but execution is blocked unless all gates pass:
+Bridge-backed tools remain registered (stable tool list / prompt caching).
 
-1. `/experimental on python-bridge`
-2. `python.bridge.url` is configured (`/experimental python-bridge-url <url>`)
-3. bridge `GET /health` succeeds
-4. user confirms the first Python/LibreOffice execution per configured bridge URL
+Native bridge usage requires:
+
+1. `python.bridge.url` is configured (`/experimental python-bridge-url <url>`)
+2. bridge `GET /health` succeeds
+3. user confirms the first Python/LibreOffice execution per configured bridge URL
+
+Notes:
+- `libreoffice_convert` is bridge-only and blocked when these checks fail.
+- `python_run` / `python_transform_range` can still execute via Pyodide fallback when bridge checks fail.
 
 Optional bearer auth:
 
@@ -36,16 +41,15 @@ npm run python:bridge:https
 PYTHON_BRIDGE_MODE=real npm run python:bridge:https
 ```
 
-Then enable/configure in the add-in:
+Then configure in the add-in:
 
 ```bash
-/experimental on python-bridge
 /experimental python-bridge-url https://localhost:3340
 # optional
 /experimental python-bridge-token <token>
 ```
 
-Or use the extensions UI: `/extensions` → **Local Python / LibreOffice bridge** → **Enable + save URL**.
+Or use the extensions UI: `/extensions` → **Local Python / LibreOffice bridge** → **Save URL**.
 
 Bridge endpoints:
 

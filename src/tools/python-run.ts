@@ -1,9 +1,8 @@
 /**
- * python_run — Experimental local Python bridge adapter.
+ * python_run — Execute Python via native bridge (preferred) or Pyodide fallback.
  *
  * This tool stays registered for a stable tool list/prompt cache.
- * Execution requires a configured and reachable bridge URL
- * (/experimental python-bridge-url https://localhost:<port>).
+ * If no native bridge is configured/reachable, it can run in-browser via Pyodide.
  */
 
 import type { AgentTool, AgentToolResult } from "@mariozechner/pi-agent-core";

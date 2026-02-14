@@ -1,9 +1,9 @@
 /**
  * python_transform_range — Read a range, run Python transform, write results back.
  *
- * High-level helper for common offline workflows:
+ * High-level helper for common workflows:
  * 1) read tabular values from Excel
- * 2) send them to the local Python bridge as JSON
+ * 2) execute Python (native bridge preferred, Pyodide fallback when available)
  * 3) parse returned result JSON into a 2D grid
  * 4) write transformed data back into Excel
  */

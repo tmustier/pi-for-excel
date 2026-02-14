@@ -157,9 +157,15 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 - **Diagnostics UX:** `/experimental tmux-status` reports feature flag, URL/token config, gate result, and bridge health details for quick troubleshooting.
 - **Rationale:** stable local adapter contract now (issue #3) with safe stub-first rollout and incremental hardening.
 
-## Feature-flagged Python / LibreOffice bridge tools (`python_run`, `libreoffice_convert`, `python_transform_range`)
-- **Availability:** non-core feature-flagged tools, always registered via `createAllTools()`; execution is gated by `applyExperimentalToolGates()`.
-- **Gate model:** requires `python-bridge` experiment enabled, configured `python.bridge.url`, successful bridge `/health` probe, and user confirmation once per configured bridge URL.
+## Python / LibreOffice execution tools (`python_run`, `libreoffice_convert`, `python_transform_range`)
+- **Availability:** always registered via `createAllTools()`.
+- **Runtime model:**
+  - `python_run`, `python_transform_range`: native bridge preferred when configured; otherwise fallback to in-browser Pyodide.
+  - `libreoffice_convert`: native bridge only (no Pyodide fallback).
+- **Gate model:**
+  - no `python-bridge` experiment flag.
+  - when native bridge is configured + reachable, first execution requires user confirmation (cached once per bridge URL).
+  - bridge-only tool (`libreoffice_convert`) is blocked if bridge URL is missing/invalid/unreachable.
 - **Execution policy:**
   - `python_run` + `libreoffice_convert` → `read/none` (no direct workbook mutation)
   - `python_transform_range` → `mutate/content` (writes transformed values into workbook)
@@ -169,9 +175,9 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 - **Bridge contract:**
   - `POST /v1/python-run` — execute Python snippet with optional `input_json`, return stdout/stderr/result JSON
   - `POST /v1/libreoffice-convert` — convert files across `csv|pdf|xlsx`
-- **Security posture:** local opt-in only; bridge URL validated via `validateOfficeProxyUrl`; tool execution re-checks gate before every call; bridge enforces loopback+origin checks and optional bearer token (`PYTHON_BRIDGE_TOKEN` / setting `python.bridge.token`, managed via `/experimental python-bridge-token ...`).
+- **Security posture:** bridge URL validated via `validateOfficeProxyUrl`; approval prompt protects native bridge execution; bridge enforces loopback+origin checks and optional bearer token (`PYTHON_BRIDGE_TOKEN` / setting `python.bridge.token`, managed via `/experimental python-bridge-token ...`).
 - **Overwrite perf guard (`python_transform_range`):** pre-write `values/formulas` reads are skipped for large `allow_overwrite: true` outputs (> `MAX_RECOVERY_CELLS`) since those snapshots would be dropped anyway.
-- **Rationale:** unblock heavier offline analysis/conversion workflows for issue #25 while keeping workbook writes explicit/auditable and adding an approval checkpoint for local execution.
+- **Rationale:** unblock heavier offline analysis/conversion workflows while keeping workbook writes explicit/auditable and reducing setup friction via Pyodide fallback.
 
 ## External tool integrations (`web_search`, `fetch_page`, `mcp`)
 - **Packaging:** exposed as opt-in **integrations** instead of always-on core tools.

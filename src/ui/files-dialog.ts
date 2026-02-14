@@ -112,7 +112,7 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
 
   const helperLine = document.createElement("div");
   helperLine.className = "pi-files-dialog__helper";
-  helperLine.textContent = "Built-in docs are always available. Enable write access for assistant file management.";
+  helperLine.textContent = "Built-in docs are always available. Uploaded files can be managed directly from this dialog.";
 
   const filters = document.createElement("div");
   filters.className = "pi-files-dialog__filters";
@@ -463,8 +463,6 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
       filterOptions.find((option) => option.value === selectedFilter)?.label
       ?? "All files";
 
-    const workspaceFilesCount = files.length - builtinDocsCount;
-
     newFileButton.disabled = false;
     nativeButton.disabled = !backend.nativeSupported;
     nativeButton.hidden = !backend.nativeSupported;
@@ -475,8 +473,6 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
       filteredCount: filteredFiles.length,
       selectedFilter,
       activeFilterLabel,
-      builtinDocsCount,
-      workspaceFilesCount,
     }));
 
     list.replaceChildren();
