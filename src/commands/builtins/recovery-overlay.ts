@@ -4,6 +4,14 @@
 
 import { formatRelativeDate } from "./overlay-relative-date.js";
 import {
+  applyRecoveryFilters,
+  buildToolFilterOptions,
+  DEFAULT_FILTER_STATE,
+  type RecoveryFilterState,
+  type RecoverySortOrder,
+  type RecoveryToolFilter,
+} from "./recovery-filtering.js";
+import {
   closeOverlayById,
   createOverlayDialog,
   createOverlayHeader,
@@ -53,12 +61,60 @@ function formatRecoveryToolLabel(toolName: RecoveryCheckpointToolName): string {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Export
+// ---------------------------------------------------------------------------
+
+function exportCheckpointsAsJson(
+  checkpoints: RecoveryCheckpointSummary[],
+  workbookLabel: string,
+): void {
+  const payload = {
+    exported: new Date().toISOString(),
+    workbook: workbookLabel,
+    count: checkpoints.length,
+    checkpoints,
+  };
+
+  const json = JSON.stringify(payload, null, 2);
+  const blob = new Blob([json], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+
+  const opened = window.open(url, "_blank");
+  if (!opened) {
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `pi-backups-${new Date().toISOString().slice(0, 10)}.json`;
+    anchor.rel = "noopener";
+    anchor.hidden = true;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+  }
+
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+// ---------------------------------------------------------------------------
+// Retention
+// ---------------------------------------------------------------------------
+
+export interface RetentionConfig {
+  maxSnapshots: number;
+}
+
+// ---------------------------------------------------------------------------
+// Overlay
+// ---------------------------------------------------------------------------
+
 export async function showRecoveryDialog(opts: {
   workbookLabel: string;
   loadCheckpoints: () => Promise<RecoveryCheckpointSummary[]>;
   onRestore: (snapshotId: string) => Promise<void>;
   onDelete: (snapshotId: string) => Promise<boolean>;
   onClear: () => Promise<number>;
+  getRetentionConfig?: () => Promise<RetentionConfig>;
+  setRetentionConfig?: (config: RetentionConfig) => Promise<void>;
 }): Promise<void> {
   if (closeOverlayById(RECOVERY_OVERLAY_ID)) {
     return;
@@ -84,6 +140,28 @@ export async function showRecoveryDialog(opts: {
   saveBoundaryHint.className = "pi-overlay-hint";
   saveBoundaryHint.textContent = "Backups reset after you save this workbook.";
 
+  // -- Search + filters --
+
+  const searchRow = document.createElement("div");
+  searchRow.className = "pi-recovery-search-row";
+
+  const searchInput = document.createElement("input");
+  searchInput.type = "text";
+  searchInput.placeholder = "Search by id, tool, or range…";
+  searchInput.className = "pi-recovery-search";
+
+  const toolFilterSelect = document.createElement("select");
+  toolFilterSelect.className = "pi-recovery-filter-select";
+
+  const sortButton = document.createElement("button");
+  sortButton.type = "button";
+  sortButton.className = "pi-overlay-btn pi-overlay-btn--ghost pi-recovery-sort-btn";
+  sortButton.textContent = "↓ Newest";
+
+  searchRow.append(searchInput, toolFilterSelect, sortButton);
+
+  // -- Toolbar --
+
   const toolbar = document.createElement("div");
   toolbar.className = "pi-recovery-toolbar";
 
@@ -91,6 +169,11 @@ export async function showRecoveryDialog(opts: {
   refreshButton.type = "button";
   refreshButton.className = "pi-overlay-btn pi-overlay-btn--ghost";
   refreshButton.textContent = "Refresh";
+
+  const exportButton = document.createElement("button");
+  exportButton.type = "button";
+  exportButton.className = "pi-overlay-btn pi-overlay-btn--ghost";
+  exportButton.textContent = "Export";
 
   const clearButton = document.createElement("button");
   clearButton.type = "button";
@@ -100,15 +183,54 @@ export async function showRecoveryDialog(opts: {
   const statusText = document.createElement("span");
   statusText.className = "pi-recovery-status";
 
-  toolbar.append(refreshButton, clearButton, statusText);
+  toolbar.append(refreshButton, exportButton, clearButton, statusText);
+
+  // -- Retention --
+
+  const retentionRow = document.createElement("div");
+  retentionRow.className = "pi-recovery-retention";
+
+  const retentionLabel = document.createElement("label");
+  retentionLabel.className = "pi-recovery-retention__label";
+  retentionLabel.textContent = "Keep at most";
+
+  const retentionInput = document.createElement("input");
+  retentionInput.type = "number";
+  retentionInput.min = "5";
+  retentionInput.max = "120";
+  retentionInput.className = "pi-recovery-retention__input";
+
+  const retentionSuffix = document.createElement("span");
+  retentionSuffix.className = "pi-recovery-retention__suffix";
+  retentionSuffix.textContent = "backups";
+
+  const retentionSave = document.createElement("button");
+  retentionSave.type = "button";
+  retentionSave.className = "pi-overlay-btn pi-overlay-btn--ghost";
+  retentionSave.textContent = "Save";
+
+  retentionRow.append(retentionLabel, retentionInput, retentionSuffix, retentionSave);
+
+  const hasRetention = opts.getRetentionConfig !== undefined && opts.setRetentionConfig !== undefined;
+  retentionRow.hidden = !hasRetention;
+
+  // -- List --
 
   const list = document.createElement("div");
   list.className = "pi-recovery-list";
 
-  dialog.card.append(header, workbookTag, saveBoundaryHint, toolbar, list);
+  // -- Assemble --
 
-  let checkpoints: RecoveryCheckpointSummary[] = [];
+  dialog.card.append(
+    header, workbookTag, saveBoundaryHint,
+    searchRow, toolbar, retentionRow, list,
+  );
+
+  // -- State --
+
+  let allCheckpoints: RecoveryCheckpointSummary[] = [];
   let busy = false;
+  const filterState: RecoveryFilterState = { ...DEFAULT_FILTER_STATE };
 
   const formatChangedLabel = (changedCount: number): string =>
     `${changedCount.toLocaleString()} change${changedCount === 1 ? "" : "s"}`;
@@ -118,32 +240,64 @@ export async function showRecoveryDialog(opts: {
   const setBusy = (next: boolean): void => {
     busy = next;
     refreshButton.disabled = next;
-    clearButton.disabled = next || checkpoints.length === 0;
+    exportButton.disabled = next || allCheckpoints.length === 0;
+    clearButton.disabled = next || allCheckpoints.length === 0;
+    searchInput.disabled = next;
+    toolFilterSelect.disabled = next;
+    sortButton.disabled = next;
+    retentionSave.disabled = next;
 
     for (const button of list.querySelectorAll<HTMLButtonElement>("button")) {
       button.disabled = next;
     }
   };
 
+  const syncFilterControls = (): void => {
+    const options = buildToolFilterOptions(allCheckpoints);
+    toolFilterSelect.replaceChildren();
+    for (const opt of options) {
+      const el = document.createElement("option");
+      el.value = opt.value;
+      el.textContent = `${opt.label} (${opt.count})`;
+      el.selected = opt.value === filterState.toolFilter;
+      toolFilterSelect.appendChild(el);
+    }
+
+    sortButton.textContent = filterState.sortOrder === "newest" ? "↓ Newest" : "↑ Oldest";
+  };
+
   const renderList = (): void => {
+    const filtered = applyRecoveryFilters(allCheckpoints, filterState);
+    syncFilterControls();
+
     list.replaceChildren();
 
-    if (checkpoints.length === 0) {
+    if (allCheckpoints.length === 0) {
       const empty = document.createElement("div");
       empty.className = "pi-overlay-empty";
       empty.textContent = "No backups for this workbook yet.";
       list.appendChild(empty);
       statusText.textContent = "No backups";
       clearButton.disabled = true;
+      exportButton.disabled = true;
       return;
     }
 
-    for (const checkpoint of checkpoints) {
+    if (filtered.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "pi-overlay-empty";
+      empty.textContent = "No backups match the current filters.";
+      list.appendChild(empty);
+      statusText.textContent = `0 of ${allCheckpoints.length} shown`;
+      return;
+    }
+
+    for (const checkpoint of filtered) {
       const item = document.createElement("div");
       item.className = "pi-overlay-surface pi-recovery-item";
 
-      const header = document.createElement("div");
-      header.className = "pi-recovery-item__header";
+      const itemHeader = document.createElement("div");
+      itemHeader.className = "pi-recovery-item__header";
 
       const titleEl = document.createElement("span");
       titleEl.className = "pi-recovery-item__title";
@@ -153,7 +307,7 @@ export async function showRecoveryDialog(opts: {
       timeEl.className = "pi-recovery-item__time";
       timeEl.textContent = formatRelativeDate(new Date(checkpoint.at).toISOString());
 
-      header.append(titleEl, timeEl);
+      itemHeader.append(titleEl, timeEl);
 
       const meta = document.createElement("div");
       meta.className = "pi-recovery-item__meta";
@@ -181,7 +335,7 @@ export async function showRecoveryDialog(opts: {
 
           try {
             await opts.onRestore(checkpoint.id);
-            checkpoints = await opts.loadCheckpoints();
+            allCheckpoints = await opts.loadCheckpoints();
             renderList();
           } catch (error: unknown) {
             const message = error instanceof Error ? error.message : "Unknown error";
@@ -209,7 +363,7 @@ export async function showRecoveryDialog(opts: {
               showToast("Backup not found");
             }
 
-            checkpoints = await opts.loadCheckpoints();
+            allCheckpoints = await opts.loadCheckpoints();
             renderList();
           } catch (error: unknown) {
             const message = error instanceof Error ? error.message : "Unknown error";
@@ -222,7 +376,7 @@ export async function showRecoveryDialog(opts: {
       });
 
       actions.append(restoreButton, deleteButton);
-      item.append(header, meta, actions);
+      item.append(itemHeader, meta, actions);
 
       if (checkpoint.restoredFromSnapshotId) {
         const restoredMeta = document.createElement("div");
@@ -234,14 +388,49 @@ export async function showRecoveryDialog(opts: {
       list.appendChild(item);
     }
 
-    statusText.textContent = `${checkpoints.length} backup${checkpoints.length === 1 ? "" : "s"}`;
-    clearButton.disabled = busy || checkpoints.length === 0;
+    if (filtered.length < allCheckpoints.length) {
+      statusText.textContent = `${filtered.length} of ${allCheckpoints.length} shown`;
+    } else {
+      statusText.textContent = `${allCheckpoints.length} backup${allCheckpoints.length === 1 ? "" : "s"}`;
+    }
+
+    clearButton.disabled = busy || allCheckpoints.length === 0;
+    exportButton.disabled = busy || allCheckpoints.length === 0;
   };
 
   const reload = async (): Promise<void> => {
-    checkpoints = await opts.loadCheckpoints();
+    allCheckpoints = await opts.loadCheckpoints();
     renderList();
   };
+
+  // -- Event listeners --
+
+  let searchTimer: ReturnType<typeof setTimeout> | null = null;
+
+  searchInput.addEventListener("input", () => {
+    if (searchTimer !== null) clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+      filterState.search = searchInput.value;
+      renderList();
+    }, 200);
+  });
+
+  toolFilterSelect.addEventListener("change", () => {
+    filterState.toolFilter = toolFilterSelect.value as RecoveryToolFilter;
+    renderList();
+  });
+
+  sortButton.addEventListener("click", () => {
+    const next: RecoverySortOrder = filterState.sortOrder === "newest" ? "oldest" : "newest";
+    filterState.sortOrder = next;
+    renderList();
+  });
+
+  exportButton.addEventListener("click", () => {
+    if (busy || allCheckpoints.length === 0) return;
+    exportCheckpointsAsJson(allCheckpoints, opts.workbookLabel);
+    showToast(`Exported ${allCheckpoints.length} backup${allCheckpoints.length === 1 ? "" : "s"}`);
+  });
 
   refreshButton.addEventListener("click", () => {
     if (busy) return;
@@ -262,9 +451,9 @@ export async function showRecoveryDialog(opts: {
   });
 
   clearButton.addEventListener("click", () => {
-    if (busy || checkpoints.length === 0) return;
+    if (busy || allCheckpoints.length === 0) return;
 
-    const proceed = window.confirm(`Delete all ${checkpoints.length} backups for this workbook?`);
+    const proceed = window.confirm(`Delete all ${allCheckpoints.length} backups for this workbook?`);
     if (!proceed) return;
 
     void (async () => {
@@ -284,11 +473,54 @@ export async function showRecoveryDialog(opts: {
     })();
   });
 
+  retentionSave.addEventListener("click", () => {
+    if (busy) return;
+
+    const setConfig = opts.setRetentionConfig;
+    if (!setConfig) return;
+
+    const value = parseInt(retentionInput.value, 10);
+    if (!Number.isFinite(value) || value < 5 || value > 120) {
+      showToast("Retention limit must be between 5 and 120");
+      return;
+    }
+
+    void (async () => {
+      setBusy(true);
+      try {
+        await setConfig({ maxSnapshots: value });
+        showToast(`Retention set to ${value} backups`);
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : "Unknown error";
+        showToast(`Failed to save retention: ${message}`);
+      } finally {
+        setBusy(false);
+      }
+    })();
+  });
+
+  // -- Cleanup --
+
+  dialog.addCleanup(() => {
+    if (searchTimer !== null) clearTimeout(searchTimer);
+  });
+
+  // -- Mount + initial load --
+
   dialog.mount();
 
   setBusy(true);
   statusText.textContent = "Loading…";
   try {
+    if (opts.getRetentionConfig) {
+      try {
+        const config = await opts.getRetentionConfig();
+        retentionInput.value = String(config.maxSnapshots);
+      } catch {
+        retentionInput.value = "120";
+      }
+    }
+
     await reload();
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error";

@@ -88,6 +88,7 @@ import { setActiveProviders } from "../compat/model-selector-patch.js";
 import { createWorkbookCoordinator } from "../workbook/coordinator.js";
 import { formatWorkbookLabel, getWorkbookContext } from "../workbook/context.js";
 import { getWorkbookRecoveryLog, type WorkbookRecoverySnapshot } from "../workbook/recovery-log.js";
+import { readRetentionLimit, writeRetentionLimit } from "../workbook/recovery/log-store.js";
 import {
   WorkbookSaveBoundaryMonitor,
   startWorkbookSaveBoundaryPolling,
@@ -1225,6 +1226,13 @@ export async function initTaskpane(opts: {
         const removed = await workbookRecoveryLog.clearForCurrentWorkbook();
         await refreshRecoveryQuickActionState();
         return removed;
+      },
+      getRetentionConfig: async () => {
+        const maxSnapshots = await readRetentionLimit();
+        return { maxSnapshots };
+      },
+      setRetentionConfig: async (config) => {
+        await writeRetentionLimit(config.maxSnapshots);
       },
     });
   };
