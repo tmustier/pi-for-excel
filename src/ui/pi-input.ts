@@ -39,6 +39,7 @@ export class PiInput extends LitElement {
 
   private _placeholderTimer?: ReturnType<typeof setInterval>;
   private _actionsMenuDocumentClickHandler?: (event: MouseEvent) => void;
+  private _actionsMenuDocumentKeydownHandler?: (event: KeyboardEvent) => void;
 
   get value(): string { return this._value; }
   set value(v: string) {
@@ -153,26 +154,48 @@ export class PiInput extends LitElement {
   }
 
   private _attachActionsMenuDocumentListener(): void {
-    if (this._actionsMenuDocumentClickHandler) return;
+    if (!this._actionsMenuDocumentClickHandler) {
+      this._actionsMenuDocumentClickHandler = (event: MouseEvent) => {
+        const anchor = this.querySelector(".pi-input-actions-anchor");
+        const target = event.target;
+        if (anchor && target instanceof Node && anchor.contains(target)) {
+          return;
+        }
 
-    this._actionsMenuDocumentClickHandler = (event: MouseEvent) => {
-      const anchor = this.querySelector(".pi-input-actions-anchor");
-      const target = event.target;
-      if (anchor && target instanceof Node && anchor.contains(target)) {
-        return;
-      }
+        this._closeActionsMenu();
+      };
 
-      this._closeActionsMenu();
-    };
+      document.addEventListener("click", this._actionsMenuDocumentClickHandler, true);
+    }
 
-    document.addEventListener("click", this._actionsMenuDocumentClickHandler, true);
+    if (!this._actionsMenuDocumentKeydownHandler) {
+      this._actionsMenuDocumentKeydownHandler = (event: KeyboardEvent) => {
+        if (event.key !== "Escape") {
+          return;
+        }
+
+        event.preventDefault();
+        event.stopPropagation();
+        this._closeActionsMenu();
+
+        const actionsButton = this.querySelector<HTMLButtonElement>(".pi-input-btn--actions");
+        actionsButton?.focus();
+      };
+
+      document.addEventListener("keydown", this._actionsMenuDocumentKeydownHandler, true);
+    }
   }
 
   private _detachActionsMenuDocumentListener(): void {
-    if (!this._actionsMenuDocumentClickHandler) return;
+    if (this._actionsMenuDocumentClickHandler) {
+      document.removeEventListener("click", this._actionsMenuDocumentClickHandler, true);
+      this._actionsMenuDocumentClickHandler = undefined;
+    }
 
-    document.removeEventListener("click", this._actionsMenuDocumentClickHandler, true);
-    this._actionsMenuDocumentClickHandler = undefined;
+    if (this._actionsMenuDocumentKeydownHandler) {
+      document.removeEventListener("keydown", this._actionsMenuDocumentKeydownHandler, true);
+      this._actionsMenuDocumentKeydownHandler = undefined;
+    }
   }
 
   private _openActionsMenu(): void {
