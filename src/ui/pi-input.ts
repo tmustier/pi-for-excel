@@ -17,10 +17,10 @@ import { customElement, property, state, query } from "lit/decorators.js";
 import { doesOverlayClaimEscape } from "../utils/escape-guard.js";
 
 const PLACEHOLDER_HINTS = [
-  "Ask Pi anything about your workbook…",
+  "Ask Pi about your workbook…",
   "Type / for commands…",
-  "Ask Pi anything about your workbook…",
-  "Tell Pi what to change…",
+  "Ask Pi what to change…",
+  "Summarize this workbook…",
 ];
 
 export type PiInputAction = "open-files" | "open-rules" | "open-resume" | "open-backups";

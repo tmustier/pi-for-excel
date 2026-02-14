@@ -53,10 +53,17 @@
   font-family: var(--font-sans);
   font-size: var(--text-base);
   line-height: 1.5;
+  white-space: pre-wrap;
   resize: none;
   outline: none;
   overflow-y: auto;
   field-sizing: content;
+}
+
+.pi-input-textarea:placeholder-shown {
+  white-space: nowrap;
+  overflow-x: hidden;
+  text-overflow: ellipsis;
 }
 
 .pi-input-textarea::placeholder {
