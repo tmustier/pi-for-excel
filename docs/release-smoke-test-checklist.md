@@ -227,6 +227,8 @@ Expected:
 
 ### H-1. Error-path matrix
 
+Automated baseline coverage exists in `tests/error-path-matrix.test.ts` (wrong key, expired token, proxy-down transport, rate-limit errors, network disconnect). Still run the host/manual matrix below for UX behavior validation.
+
 Validate these explicit failures:
 
 - wrong API key
