@@ -144,6 +144,27 @@
   margin-top: 8px;
 }
 
+.pi-overlay-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pi-overlay-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pi-overlay-toolbar-status {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--muted-foreground);
+}
+
 .pi-overlay-btn {
   border-radius: var(--radius-sm);
   padding: 7px 12px;

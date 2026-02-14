@@ -190,7 +190,10 @@ export async function showRecoveryDialog(opts: {
   // -- Toolbar --
 
   const toolbar = document.createElement("div");
-  toolbar.className = "pi-recovery-toolbar";
+  toolbar.className = "pi-overlay-toolbar";
+
+  const toolbarActions = document.createElement("div");
+  toolbarActions.className = "pi-overlay-toolbar-actions";
 
   const fullBackupButton = document.createElement("button");
   fullBackupButton.type = "button";
@@ -213,10 +216,12 @@ export async function showRecoveryDialog(opts: {
   clearButton.className = "pi-overlay-btn pi-overlay-btn--ghost pi-overlay-btn--danger";
   clearButton.textContent = "Clear all";
 
-  const statusText = document.createElement("span");
-  statusText.className = "pi-recovery-status";
+  toolbarActions.append(fullBackupButton, refreshButton, exportButton, clearButton);
 
-  toolbar.append(fullBackupButton, refreshButton, exportButton, clearButton, statusText);
+  const statusText = document.createElement("span");
+  statusText.className = "pi-overlay-toolbar-status";
+
+  toolbar.append(toolbarActions, statusText);
 
   // -- Retention --
 

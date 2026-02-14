@@ -28,14 +28,6 @@
   flex-shrink: 0;
 }
 
-/* Toolbar */
-
-.pi-recovery-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
 /* Retention row */
 
 .pi-recovery-retention {
@@ -52,13 +44,6 @@
   padding: 4px 6px;
   font-family: var(--font-mono);
   text-align: center;
-}
-
-.pi-recovery-status {
-  margin-left: auto;
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  color: var(--muted-foreground);
 }
 
 .pi-recovery-list {
