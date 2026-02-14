@@ -1,5 +1,4 @@
 export const TMUX_TOOL_NAME = "tmux";
-export const FILES_TOOL_NAME = "files";
 export const EXECUTE_OFFICE_JS_TOOL_NAME = "execute_office_js";
 export const PYTHON_TOOL_NAMES = new Set<string>([
   "python_run",

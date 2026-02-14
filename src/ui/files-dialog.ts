@@ -97,7 +97,6 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
   const controls = document.createElement("div");
   controls.className = "pi-files-dialog__controls";
 
-  const enableButton = makeButton("Enable workspace write access", "pi-overlay-btn pi-overlay-btn--ghost");
   const uploadButton = makeButton("Upload", "pi-overlay-btn pi-overlay-btn--ghost");
   const newFileButton = makeButton("New text file", "pi-overlay-btn pi-overlay-btn--ghost");
   const nativeButton = makeButton("Select folder", "pi-overlay-btn pi-overlay-btn--ghost");
@@ -176,7 +175,6 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
   viewer.append(viewerHeader, viewerNote, viewerTextarea, viewerPreview);
 
   controls.append(
-    enableButton,
     uploadButton,
     newFileButton,
     nativeButton,
@@ -467,15 +465,12 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
 
     const workspaceFilesCount = files.length - builtinDocsCount;
 
-    enableButton.hidden = true;
-    uploadButton.disabled = false;
     newFileButton.disabled = false;
     nativeButton.disabled = !backend.nativeSupported;
     nativeButton.hidden = !backend.nativeSupported;
     disconnectNativeButton.hidden = backend.kind !== "native-directory";
 
     setStatus(buildFilesDialogStatusMessage({
-      filesExperimentEnabled: true,
       totalCount: files.length,
       filteredCount: filteredFiles.length,
       selectedFilter,

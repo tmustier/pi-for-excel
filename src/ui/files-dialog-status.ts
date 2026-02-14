@@ -1,8 +1,6 @@
 import type { FilesDialogFilterValue } from "./files-dialog-filtering.js";
 
 export function buildFilesDialogStatusMessage(args: {
-  /** @deprecated Files are always enabled. Kept for caller compatibility. */
-  filesExperimentEnabled?: boolean;
   totalCount: number;
   filteredCount: number;
   selectedFilter: FilesDialogFilterValue;
