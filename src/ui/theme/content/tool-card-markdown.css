@@ -10,6 +10,17 @@
 .pi-tool-card__markdown markdown-block { font-size: var(--text-sm); line-height: 1.5; }
 .pi-tool-card__markdown markdown-block p { font-size: var(--text-sm); margin: 0 0 6px; }
 
+/* Heading scale — compact for sidebar tool cards */
+.pi-tool-card__markdown h1 { font-size: var(--text-sm); font-weight: 700; line-height: 1.3; margin: 10px 0 4px; }
+.pi-tool-card__markdown h2 { font-size: var(--text-sm); font-weight: 700; line-height: 1.35; margin: 8px 0 4px; }
+.pi-tool-card__markdown h3 { font-size: var(--text-sm); font-weight: 700; line-height: 1.4; margin: 6px 0 3px; }
+.pi-tool-card__markdown h4,
+.pi-tool-card__markdown h5,
+.pi-tool-card__markdown h6 { font-size: var(--text-sm); font-weight: 600; line-height: 1.4; margin: 6px 0 3px; }
+.pi-tool-card__markdown h1:first-child,
+.pi-tool-card__markdown h2:first-child,
+.pi-tool-card__markdown h3:first-child { margin-top: 0; }
+
 /* Tables: compact sizing for sidebar width */
 .pi-tool-card__markdown table {
   font-size: var(--text-sm);

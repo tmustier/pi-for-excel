@@ -105,6 +105,16 @@ function tryFormatJsonOutput(text: string): { isJson: boolean; formatted: string
 }
 
 /**
+ * Strip YAML frontmatter (`---` delimited block at the start of the text).
+ * Without this, marked.js treats the closing `---` as a setext heading
+ * marker, causing frontmatter fields to render as giant headings.
+ */
+function stripYamlFrontmatter(text: string): string {
+  // Match opening --- on its own line, content, then closing --- on its own line.
+  return text.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, "");
+}
+
+/**
  * Heuristic: does the text contain markdown syntax that benefits from
  * rendering via `<markdown-block>` rather than plain text?
  *
@@ -1039,8 +1049,9 @@ function createExcelMarkdownRenderer(toolName: SupportedToolName): ToolRenderer<
         const { text, images } = splitToolResultContent(result);
         const standaloneImagePath = detectStandaloneImagePath(text);
         const json = tryFormatJsonOutput(text);
-        const humanizedText = compactRangesInMarkdown(humanizeColorsInText(text));
-        const useMarkdown = !json.isJson && looksLikeMarkdown(text);
+        const cleanedText = stripYamlFrontmatter(text);
+        const humanizedText = compactRangesInMarkdown(humanizeColorsInText(cleanedText));
+        const useMarkdown = !json.isJson && looksLikeMarkdown(cleanedText);
         const csvTable = isReadRangeCsvDetails(result.details)
           ? renderCsvTable(result.details)
           : null;
