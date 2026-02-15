@@ -41,6 +41,9 @@ interface SettingsStore {
   set(key: string, value: unknown): Promise<void>;
 }
 
+let settingsDialogOpenInFlight: Promise<void> | null = null;
+let pendingSectionFocus: SettingsOverlaySection | null = null;
+
 function sectionSelector(section: SettingsOverlaySection): string {
   return `[data-settings-section=\"${section}\"]`;
 }
@@ -90,8 +93,18 @@ async function buildProvidersSection(): Promise<HTMLElement> {
   providerList.className = "pi-welcome-providers pi-provider-picker-list pi-settings-provider-list";
 
   const storage = getAppStorage();
-  const configuredKeys = await storage.providerKeys.list();
-  const configuredSet = new Set(configuredKeys);
+
+  let configuredSet = new Set<string>();
+  try {
+    const configuredKeys = await storage.providerKeys.list();
+    configuredSet = new Set(configuredKeys);
+  } catch {
+    const warning = document.createElement("p");
+    warning.className = "pi-overlay-hint pi-overlay-text-warning";
+    warning.textContent = "Saved provider state is temporarily unavailable. You can still connect providers.";
+    shell.content.appendChild(warning);
+  }
+
   const expandedRef: { current: HTMLElement | null } = { current: null };
 
   for (const provider of ALL_PROVIDERS) {
@@ -269,37 +282,63 @@ export async function showSettingsDialog(options: ShowSettingsDialogOptions = {}
     return;
   }
 
-  const appStorage = getAppStorage();
+  if (settingsDialogOpenInFlight) {
+    if (options.section) {
+      pendingSectionFocus = options.section;
+    }
 
-  const dialog = createOverlayDialog({
-    overlayId: SETTINGS_OVERLAY_ID,
-    cardClassName: "pi-welcome-card pi-overlay-card pi-overlay-card--l pi-settings-dialog",
-  });
+    await settingsDialogOpenInFlight;
 
-  const { header } = createOverlayHeader({
-    onClose: dialog.close,
-    closeLabel: "Close settings",
-    title: "Settings",
-    subtitle: "Providers, proxy, and experimental features.",
-  });
+    const mounted = document.getElementById(SETTINGS_OVERLAY_ID);
+    if (mounted instanceof HTMLElement && options.section) {
+      focusSettingsSection(mounted, options.section);
+    }
+    return;
+  }
 
-  const body = document.createElement("div");
-  body.className = "pi-overlay-body pi-settings-body";
+  pendingSectionFocus = options.section ?? pendingSectionFocus;
 
-  const providersSection = await buildProvidersSection();
-  const proxySection = buildProxySection(appStorage.settings);
-  const experimentalSection = buildExperimentalSection();
+  settingsDialogOpenInFlight = (async () => {
+    const appStorage = getAppStorage();
 
-  body.append(providersSection, proxySection, experimentalSection);
-  dialog.card.append(header, body);
-  dialog.mount();
-
-  if (options.section) {
-    requestAnimationFrame(() => {
-      const mounted = document.getElementById(SETTINGS_OVERLAY_ID);
-      if (mounted instanceof HTMLElement && options.section) {
-        focusSettingsSection(mounted, options.section);
-      }
+    const dialog = createOverlayDialog({
+      overlayId: SETTINGS_OVERLAY_ID,
+      cardClassName: "pi-welcome-card pi-overlay-card pi-overlay-card--l pi-settings-dialog",
     });
+
+    const { header } = createOverlayHeader({
+      onClose: dialog.close,
+      closeLabel: "Close settings",
+      title: "Settings",
+      subtitle: "Providers, proxy, and experimental features.",
+    });
+
+    const body = document.createElement("div");
+    body.className = "pi-overlay-body pi-settings-body";
+
+    const providersSection = await buildProvidersSection();
+    const proxySection = buildProxySection(appStorage.settings);
+    const experimentalSection = buildExperimentalSection();
+
+    body.append(providersSection, proxySection, experimentalSection);
+    dialog.card.append(header, body);
+    dialog.mount();
+
+    if (pendingSectionFocus) {
+      const section = pendingSectionFocus;
+      pendingSectionFocus = null;
+      requestAnimationFrame(() => {
+        const mounted = document.getElementById(SETTINGS_OVERLAY_ID);
+        if (mounted instanceof HTMLElement) {
+          focusSettingsSection(mounted, section);
+        }
+      });
+    }
+  })();
+
+  try {
+    await settingsDialogOpenInFlight;
+  } finally {
+    settingsDialogOpenInFlight = null;
   }
 }

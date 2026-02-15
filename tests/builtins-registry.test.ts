@@ -223,6 +223,18 @@ void test("provider and experimental overlays are aliases into settings sections
   assert.match(experimentalSource, /buildExperimentalFeatureContent/);
 });
 
+void test("settings overlay serializes open flow and tolerates provider storage lookup failure", async () => {
+  const settingsOverlaySource = await readFile(
+    new URL("../src/commands/builtins/settings-overlay.ts", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(settingsOverlaySource, /settingsDialogOpenInFlight/);
+  assert.match(settingsOverlaySource, /pendingSectionFocus/);
+  assert.match(settingsOverlaySource, /await settingsDialogOpenInFlight/);
+  assert.match(settingsOverlaySource, /Saved provider state is temporarily unavailable/);
+});
+
 void test("slash-command busy policy is centralized and includes /yolo", async () => {
   const keyboardActionsSource = await readFile(
     new URL("../src/taskpane/keyboard-shortcuts/editor-actions.ts", import.meta.url),
