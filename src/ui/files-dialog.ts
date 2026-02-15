@@ -27,6 +27,7 @@ import {
   type FilesDialogFilterValue,
 } from "./files-dialog-filtering.js";
 import { buildFilesDialogStatusMessage } from "./files-dialog-status.js";
+import { buildFilesDialogTree, type FilesDialogFolderNode } from "./files-dialog-tree.js";
 import { showToast } from "./toast.js";
 
 const OVERLAY_ID = FILES_WORKSPACE_OVERLAY_ID;
@@ -45,6 +46,10 @@ function formatRelativeDate(timestamp: number): string {
   if (diff < 86_400_000) return `${Math.round(diff / 3_600_000)}h ago`;
   if (diff < 604_800_000) return `${Math.round(diff / 86_400_000)}d ago`;
   return new Date(timestamp).toLocaleDateString();
+}
+
+function formatFileCountLabel(count: number): string {
+  return `${count} file${count === 1 ? "" : "s"}`;
 }
 
 function makeButton(label: string, className: string): HTMLButtonElement {
@@ -199,6 +204,7 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
   let selectedFilter: FilesDialogFilterValue = "all";
   let currentWorkbookId: string | null = null;
   let currentWorkbookLabel: string | null = null;
+  const collapsedFolderPaths = new Set<string>();
 
   const quickFilterButtons: Array<{
     value: FilesDialogFilterValue;
@@ -408,6 +414,160 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
     }
   };
 
+  const rowActionClassName = "pi-overlay-btn pi-overlay-btn--ghost pi-overlay-btn--compact";
+
+  const createFileRow = (file: WorkspaceFileEntry): HTMLElement => {
+    const row = document.createElement("div");
+    row.className = "pi-files-dialog__row";
+
+    const info = document.createElement("div");
+    info.className = "pi-files-dialog__info";
+
+    const nameRow = document.createElement("div");
+    nameRow.className = "pi-files-dialog__name-row";
+
+    const name = document.createElement("div");
+    name.className = "pi-files-dialog__name";
+    name.textContent = file.path;
+
+    nameRow.appendChild(name);
+
+    if (file.sourceKind === "builtin-doc") {
+      const sourceBadge = document.createElement("span");
+      sourceBadge.className = "pi-files-dialog__source-badge";
+      sourceBadge.textContent = "Built-in";
+      nameRow.appendChild(sourceBadge);
+    }
+
+    if (file.workbookTag) {
+      const workbookTag = document.createElement("span");
+      workbookTag.className = "pi-files-dialog__workbook-tag";
+      workbookTag.textContent = file.workbookTag.workbookLabel;
+      nameRow.appendChild(workbookTag);
+    }
+
+    const meta = document.createElement("div");
+    meta.className = "pi-files-dialog__meta";
+    meta.textContent = `${formatBytes(file.size)} · ${file.kind} · ${formatRelativeDate(file.modifiedAt)}`;
+
+    info.append(nameRow, meta);
+
+    const actions = document.createElement("div");
+    actions.className = "pi-files-dialog__actions";
+
+    const openButton = makeButton("Open", rowActionClassName);
+    openButton.addEventListener("click", () => {
+      void openViewer(file);
+    });
+
+    const downloadButton = makeButton("Download", rowActionClassName);
+    downloadButton.addEventListener("click", () => {
+      void workspace.downloadFile(file.path).catch((error: unknown) => {
+        showToast(`Download failed: ${getErrorMessage(error)}`);
+      });
+    });
+
+    const renameButton = makeButton("Rename", rowActionClassName);
+    renameButton.disabled = file.readOnly;
+    if (file.readOnly) {
+      renameButton.title = "Built-in docs are read-only.";
+    }
+    renameButton.addEventListener("click", () => {
+      const nextName = window.prompt("Rename file", file.path);
+      if (!nextName) return;
+
+      void workspace.renameFile(file.path, nextName, {
+        audit: DIALOG_AUDIT_CONTEXT,
+      }).catch((error: unknown) => {
+        showToast(`Rename failed: ${getErrorMessage(error)}`);
+      });
+    });
+
+    const deleteButton = makeButton(
+      "Delete",
+      `${rowActionClassName} pi-overlay-btn--danger`,
+    );
+    deleteButton.disabled = file.readOnly;
+    if (file.readOnly) {
+      deleteButton.title = "Built-in docs are read-only.";
+    }
+    deleteButton.addEventListener("click", () => {
+      const ok = window.confirm(`Delete '${file.path}'?`);
+      if (!ok) return;
+
+      void workspace.deleteFile(file.path, {
+        audit: DIALOG_AUDIT_CONTEXT,
+      }).catch((error: unknown) => {
+        showToast(`Delete failed: ${getErrorMessage(error)}`);
+      });
+    });
+
+    actions.append(openButton, downloadButton, renameButton, deleteButton);
+    row.append(info, actions);
+
+    return row;
+  };
+
+  const appendFolderNode = (container: HTMLElement, folder: FilesDialogFolderNode): void => {
+    const folderCard = document.createElement("section");
+    folderCard.className = "pi-files-dialog__folder";
+
+    const folderHeader = document.createElement("button");
+    folderHeader.type = "button";
+    folderHeader.className = "pi-files-dialog__folder-header";
+
+    const isCollapsed = collapsedFolderPaths.has(folder.folderPath);
+    if (isCollapsed) {
+      folderCard.classList.add("is-collapsed");
+    }
+
+    folderHeader.setAttribute("aria-expanded", isCollapsed ? "false" : "true");
+
+    const folderHeaderStart = document.createElement("span");
+    folderHeaderStart.className = "pi-files-dialog__folder-header-start";
+
+    const caret = document.createElement("span");
+    caret.className = "pi-files-dialog__folder-caret";
+    caret.textContent = isCollapsed ? "▸" : "▾";
+
+    const name = document.createElement("span");
+    name.className = "pi-files-dialog__folder-name";
+    name.textContent = folder.folderName;
+
+    folderHeaderStart.append(caret, name);
+
+    const count = document.createElement("span");
+    count.className = "pi-files-dialog__folder-count";
+    count.textContent = formatFileCountLabel(folder.totalFileCount);
+
+    folderHeader.append(folderHeaderStart, count);
+
+    const folderChildren = document.createElement("div");
+    folderChildren.className = "pi-files-dialog__folder-children";
+    folderChildren.hidden = isCollapsed;
+
+    for (const file of folder.files) {
+      folderChildren.appendChild(createFileRow(file));
+    }
+
+    for (const childFolder of folder.children) {
+      appendFolderNode(folderChildren, childFolder);
+    }
+
+    folderHeader.addEventListener("click", () => {
+      if (collapsedFolderPaths.has(folder.folderPath)) {
+        collapsedFolderPaths.delete(folder.folderPath);
+      } else {
+        collapsedFolderPaths.add(folder.folderPath);
+      }
+
+      void renderList();
+    });
+
+    folderCard.append(folderHeader, folderChildren);
+    container.appendChild(folderCard);
+  };
+
   const renderList = async () => {
     const [backend, files, workbookContext] = await Promise.all([
       workspace.getBackendStatus(),
@@ -488,97 +648,20 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
       empty.textContent = "No files match the selected filter.";
       list.appendChild(empty);
     } else {
-      for (const file of filteredFiles) {
-        const row = document.createElement("div");
-        row.className = "pi-files-dialog__row";
+      const tree = buildFilesDialogTree(filteredFiles);
 
-        const info = document.createElement("div");
-        info.className = "pi-files-dialog__info";
-
-        const nameRow = document.createElement("div");
-        nameRow.className = "pi-files-dialog__name-row";
-
-        const name = document.createElement("div");
-        name.className = "pi-files-dialog__name";
-        name.textContent = file.path;
-
-        nameRow.appendChild(name);
-
-        if (file.sourceKind === "builtin-doc") {
-          const sourceBadge = document.createElement("span");
-          sourceBadge.className = "pi-files-dialog__source-badge";
-          sourceBadge.textContent = "Built-in";
-          nameRow.appendChild(sourceBadge);
-        }
-
-        if (file.workbookTag) {
-          const workbookTag = document.createElement("span");
-          workbookTag.className = "pi-files-dialog__workbook-tag";
-          workbookTag.textContent = file.workbookTag.workbookLabel;
-          nameRow.appendChild(workbookTag);
-        }
-
-        const meta = document.createElement("div");
-        meta.className = "pi-files-dialog__meta";
-        meta.textContent = `${formatBytes(file.size)} · ${file.kind} · ${formatRelativeDate(file.modifiedAt)}`;
-
-        info.append(nameRow, meta);
-
-        const actions = document.createElement("div");
-        actions.className = "pi-files-dialog__actions";
-
-        const rowActionClassName = "pi-overlay-btn pi-overlay-btn--ghost pi-overlay-btn--compact";
-
-        const openButton = makeButton("Open", rowActionClassName);
-        openButton.addEventListener("click", () => {
-          void openViewer(file);
+      if (tree.rootFiles.length > 0) {
+        appendFolderNode(list, {
+          folderName: "workspace root",
+          folderPath: "__workspace_root__",
+          files: tree.rootFiles,
+          children: [],
+          totalFileCount: tree.rootFiles.length,
         });
+      }
 
-        const downloadButton = makeButton("Download", rowActionClassName);
-        downloadButton.addEventListener("click", () => {
-          void workspace.downloadFile(file.path).catch((error: unknown) => {
-            showToast(`Download failed: ${getErrorMessage(error)}`);
-          });
-        });
-
-        const renameButton = makeButton("Rename", rowActionClassName);
-        renameButton.disabled = file.readOnly;
-        if (file.readOnly) {
-          renameButton.title = "Built-in docs are read-only.";
-        }
-        renameButton.addEventListener("click", () => {
-          const nextName = window.prompt("Rename file", file.path);
-          if (!nextName) return;
-
-          void workspace.renameFile(file.path, nextName, {
-            audit: DIALOG_AUDIT_CONTEXT,
-          }).catch((error: unknown) => {
-            showToast(`Rename failed: ${getErrorMessage(error)}`);
-          });
-        });
-
-        const deleteButton = makeButton(
-          "Delete",
-          `${rowActionClassName} pi-overlay-btn--danger`,
-        );
-        deleteButton.disabled = file.readOnly;
-        if (file.readOnly) {
-          deleteButton.title = "Built-in docs are read-only.";
-        }
-        deleteButton.addEventListener("click", () => {
-          const ok = window.confirm(`Delete '${file.path}'?`);
-          if (!ok) return;
-
-          void workspace.deleteFile(file.path, {
-            audit: DIALOG_AUDIT_CONTEXT,
-          }).catch((error: unknown) => {
-            showToast(`Delete failed: ${getErrorMessage(error)}`);
-          });
-        });
-
-        actions.append(openButton, downloadButton, renameButton, deleteButton);
-        row.append(info, actions);
-        list.appendChild(row);
+      for (const folder of tree.folders) {
+        appendFolderNode(list, folder);
       }
     }
 

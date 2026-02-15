@@ -9,6 +9,7 @@ import {
   isFilesDialogFilterSelectable,
   parseFilesDialogFilterValue,
 } from "../src/ui/files-dialog-filtering.ts";
+import { buildFilesDialogTree } from "../src/ui/files-dialog-tree.ts";
 
 function makeFile(args: {
   path: string;
@@ -82,4 +83,36 @@ void test("fileMatchesFilesDialogFilter handles builtin/current/tag filters", ()
     filter: "tag:wb-1",
     currentWorkbookId: null,
   }), true);
+});
+
+void test("buildFilesDialogTree groups nested folders and root files", () => {
+  const files = [
+    makeFile({ path: "notes/index.md" }),
+    makeFile({ path: "workbooks/budget/extract.csv" }),
+    makeFile({ path: "workbooks/budget/analysis.md" }),
+    makeFile({ path: "workbooks/forecast/input.json" }),
+    makeFile({ path: "standalone.txt" }),
+  ];
+
+  const tree = buildFilesDialogTree(files);
+
+  assert.equal(tree.rootFiles.length, 1);
+  assert.equal(tree.rootFiles[0]?.path, "standalone.txt");
+
+  const notes = tree.folders.find((folder) => folder.folderPath === "notes");
+  assert.ok(notes);
+  assert.equal(notes.totalFileCount, 1);
+  assert.equal(notes.files[0]?.path, "notes/index.md");
+
+  const workbooks = tree.folders.find((folder) => folder.folderPath === "workbooks");
+  assert.ok(workbooks);
+  assert.equal(workbooks.totalFileCount, 3);
+
+  const budget = workbooks.children.find((folder) => folder.folderPath === "workbooks/budget");
+  assert.ok(budget);
+  assert.equal(budget.totalFileCount, 2);
+
+  const forecast = workbooks.children.find((folder) => folder.folderPath === "workbooks/forecast");
+  assert.ok(forecast);
+  assert.equal(forecast.totalFileCount, 1);
 });
