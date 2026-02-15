@@ -1,13 +1,12 @@
 /**
- * Proxy (local helper) status detection and status bar indicator.
+ * Proxy status detection.
  *
  * Periodically checks whether the local HTTPS proxy is reachable and
- * dispatches a custom event so the status bar can reflect the state.
+ * dispatches a custom event so UI surfaces can react.
  */
 
 import { DEFAULT_LOCAL_PROXY_URL } from "../auth/proxy-validation.js";
 
-const DISMISSED_KEY = "pi.proxy.status.dismissed";
 const CHECK_INTERVAL_MS = 30_000;
 const CHECK_TIMEOUT_MS = 1_500;
 
@@ -18,22 +17,6 @@ let intervalId: ReturnType<typeof setInterval> | undefined;
 
 export function getProxyState(): ProxyState {
   return currentState;
-}
-
-export function isProxyDismissed(): boolean {
-  try {
-    return localStorage.getItem(DISMISSED_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
-
-export function dismissProxyStatus(): void {
-  try {
-    localStorage.setItem(DISMISSED_KEY, "1");
-  } catch {
-    // ignore
-  }
 }
 
 async function probeProxy(proxyUrl: string): Promise<boolean> {

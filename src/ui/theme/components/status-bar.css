@@ -11,11 +11,12 @@
   font-size: var(--text-sm);
   letter-spacing: 0.01em;
   color: var(--muted-foreground);
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   overflow: visible;
   min-width: 0;
   position: relative;
   z-index: 20;
+  container-type: inline-size;
 }
 
 .pi-status-bar button {
@@ -135,6 +136,18 @@
   font-weight: 600;
 }
 
+.pi-status-ctx__pct,
+.pi-status-ctx__sep,
+.pi-status-ctx__limit {
+  display: inline-flex;
+  align-items: center;
+}
+
+.pi-status-ctx__sep {
+  margin: 0 1px;
+  opacity: 0.75;
+}
+
 /* Debug token breakdown appended next to the context percentage. */
 .pi-status-ctx__debug {
   margin-left: 6px;
@@ -162,26 +175,6 @@
   background: var(--green-alpha-12);
 }
 
-.pi-status-rules {
-  border: 1px solid transparent;
-  border-radius: var(--radius-xs);
-  background: var(--alpha-3);
-  padding: 2px 6px;
-  font-family: var(--font-sans);
-  font-size: var(--text-xs);
-  text-transform: lowercase;
-  color: var(--muted-foreground);
-  transition: background var(--duration-fast), color var(--duration-fast), border-color var(--duration-fast);
-  white-space: nowrap;
-  margin-left: auto;
-}
-
-.pi-status-rules:hover {
-  background: var(--pi-green-lighter);
-  border-color: var(--green-alpha-20);
-  color: var(--foreground);
-}
-
 .pi-status-mode {
   display: inline-flex;
   align-items: center;
@@ -194,6 +187,7 @@
   cursor: pointer;
   white-space: nowrap;
   flex-shrink: 0;
+  margin-left: auto;
   transition: background var(--duration-fast), border-color var(--duration-fast), color var(--duration-fast);
 }
 
@@ -537,116 +531,16 @@
   color: var(--muted-foreground);
 }
 
-/* ── Proxy status badge ─────────────────────────────── */
+@container (max-width: 300px) {
+  .pi-status-ctx__sep,
+  .pi-status-ctx__limit,
+  .pi-status-ctx__debug {
+    display: none;
+  }
 
-.pi-status-proxy {
-  font-family: var(--font-sans);
-  font-size: var(--text-xs);
-  white-space: nowrap;
-  border: none;
-  background: none;
-  padding: 1px 4px;
-  border-radius: var(--radius-xs);
-}
-
-.pi-status-proxy--ok {
-  color: var(--pi-green);
-  font-weight: 500;
-}
-
-.pi-status-proxy--missing {
-  color: var(--muted-foreground);
-  text-decoration: underline dotted;
-  text-underline-offset: 2px;
-  cursor: pointer;
-}
-
-.pi-status-proxy--missing:hover {
-  color: var(--foreground);
-}
-
-/* ── Proxy helper popover ────────────────────────────── */
-
-.pi-proxy-popover {
-  max-width: 320px;
-  padding: 14px 16px;
-  font-family: var(--font-sans);
-}
-
-.pi-proxy-popover__title {
-  font-size: var(--text-base);
-  font-weight: 600;
-  color: var(--foreground);
-  margin-bottom: 4px;
-}
-
-.pi-proxy-popover__text {
-  font-size: var(--text-sm);
-  color: var(--muted-foreground);
-  line-height: 1.45;
-  margin-bottom: 8px;
-}
-
-.pi-proxy-popover__cmd {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
-  border-radius: var(--radius-xs);
-  background: var(--alpha-4);
-  border: 1px solid var(--alpha-8);
-  margin-bottom: 8px;
-}
-
-.pi-proxy-popover__cmd code {
-  flex: 1;
-  font-family: var(--font-mono);
-  font-size: var(--text-sm);
-  color: var(--foreground);
-}
-
-.pi-proxy-popover__copy {
-  background: none;
-  border: none;
-  color: var(--muted-foreground);
-  cursor: pointer;
-  padding: 0;
-  font-size: 14px;
-}
-
-.pi-proxy-popover__copy:hover {
-  color: var(--foreground);
-}
-
-.pi-proxy-popover__footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: var(--text-xs);
-}
-
-.pi-proxy-popover__link {
-  color: var(--primary);
-  text-decoration: none;
-  cursor: pointer;
-}
-
-.pi-proxy-popover__link:hover {
-  text-decoration: underline;
-}
-
-.pi-proxy-popover__dismiss {
-  background: none;
-  border: none;
-  color: var(--muted-foreground);
-  font-family: var(--font-sans);
-  font-size: var(--text-xs);
-  cursor: pointer;
-  padding: 0;
-}
-
-.pi-proxy-popover__dismiss:hover {
-  color: var(--foreground);
+  .pi-status-mode {
+    margin-left: 0;
+  }
 }
 
 

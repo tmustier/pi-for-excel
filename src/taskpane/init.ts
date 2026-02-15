@@ -98,6 +98,7 @@ import { requestConfirmationDialog } from "../ui/confirm-dialog.js";
 import { TOOL_APPROVAL_OVERLAY_ID } from "../ui/overlay-ids.js";
 import { showActionToast, showToast } from "../ui/toast.js";
 import { PiSidebar } from "../ui/pi-sidebar.js";
+import { createProxyBanner } from "../ui/proxy-banner.js";
 import { setActiveProviders } from "../compat/model-selector-patch.js";
 import { createWorkbookCoordinator } from "../workbook/coordinator.js";
 import { formatWorkbookLabel, getWorkbookContext } from "../workbook/context.js";
@@ -126,11 +127,10 @@ import {
 } from "./tab-layout.js";
 import { createTabLayoutPersistence } from "./tab-layout-persistence.js";
 import { injectStatusBar } from "./status-bar.js";
-import { dismissProxyStatus, startProxyPolling } from "./proxy-status.js";
+import { getProxyState, startProxyPolling } from "./proxy-status.js";
 import {
   closeStatusPopover,
   toggleContextPopover,
-  toggleProxyPopover,
   toggleThinkingPopover,
 } from "./status-popovers.js";
 import { showWelcomeLogin } from "./welcome-login.js";
@@ -1519,6 +1519,27 @@ export async function initTaskpane(opts: {
     }
   }
 
+  // ── Proxy warning banner (state-driven) ──
+  {
+    const messagesContainer = sidebar.querySelector(".pi-messages");
+    const host = messagesContainer?.parentElement;
+    if (host) {
+      const proxyBanner = createProxyBanner();
+      host.insertBefore(proxyBanner.root, host.firstChild);
+      proxyBanner.update(getProxyState());
+
+      document.addEventListener("pi:proxy-state-changed", (event: Event) => {
+        if (!(event instanceof CustomEvent)) return;
+        const detail: unknown = event.detail;
+        if (!isRecord(detail)) return;
+        const state = detail.state;
+        if (state === "detected" || state === "not-detected" || state === "unknown") {
+          proxyBanner.update(state);
+        }
+      });
+    }
+  }
+
   // ── Register extensions ──
   await extensionManager.initialize();
 
@@ -1675,13 +1696,6 @@ export async function initTaskpane(opts: {
       return;
     }
 
-    // Rules editor
-    if (el.closest(".pi-status-rules")) {
-      closeStatusPopover();
-      void openRulesEditor();
-      return;
-    }
-
     // Execution mode toggle
     if (el.closest(".pi-status-mode")) {
       closeStatusPopover();
@@ -1698,24 +1712,6 @@ export async function initTaskpane(opts: {
     // Thinking level selector
     if (el.closest(".pi-status-thinking")) {
       openThinkingPopoverFrom(el);
-      return;
-    }
-
-    // Proxy status — "no helper" click shows help popover
-    const proxyTrigger = el.closest(".pi-status-proxy--missing");
-    if (proxyTrigger) {
-      toggleProxyPopover({
-        anchor: proxyTrigger,
-        onDismiss: () => {
-          dismissProxyStatus();
-          // Re-render status bar to hide the "no helper" indicator
-          const statusBar = document.getElementById("pi-status-bar");
-          if (statusBar) {
-            const proxyEl = statusBar.querySelector(".pi-status-proxy--missing");
-            proxyEl?.remove();
-          }
-        },
-      });
       return;
     }
 

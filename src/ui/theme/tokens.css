@@ -92,6 +92,9 @@
   --pi-green-light: oklch(0.45 0.12 160 / 0.08);
   --pi-green-lighter: oklch(0.45 0.12 160 / 0.04);
   --pi-yellow: oklch(0.72 0.16 84);
+  --pi-amber: var(--pi-yellow);
+  --amber-alpha-8: oklch(0.72 0.16 84 / 0.08);
+  --amber-alpha-16: oklch(0.72 0.16 84 / 0.16);
   --pi-surface: var(--sidebar);
 
   --pi-surface-translucent: oklch(0.98 0.002 90 / 0.85);
@@ -186,6 +189,9 @@
   --pi-green-light: oklch(0.66 0.12 160 / 0.18);
   --pi-green-lighter: oklch(0.66 0.12 160 / 0.10);
   --pi-yellow: oklch(0.79 0.14 84);
+  --pi-amber: var(--pi-yellow);
+  --amber-alpha-8: oklch(0.79 0.14 84 / 0.14);
+  --amber-alpha-16: oklch(0.79 0.14 84 / 0.24);
   --pi-surface-translucent: oklch(0.2 0.012 260 / 0.88);
   --pi-inner-bg: oklch(0.24 0.012 260);
   --pi-grid-line: oklch(0.8 0.05 160 / 0.08);

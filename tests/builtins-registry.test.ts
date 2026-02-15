@@ -188,6 +188,25 @@ void test("taskpane init wires gear settings to unified settings overlay", async
   );
 });
 
+void test("taskpane init mounts proxy banner and reacts to proxy state changes", async () => {
+  const initSource = await readFile(new URL("../src/taskpane/init.ts", import.meta.url), "utf8");
+
+  assert.match(initSource, /createProxyBanner/);
+  assert.match(initSource, /document\.addEventListener\("pi:proxy-state-changed"/);
+  assert.match(initSource, /proxyBanner\.update\(getProxyState\(\)\)/);
+});
+
+void test("status bar keeps model, thinking, context, and mode without rules\/proxy badges", async () => {
+  const statusBarSource = await readFile(new URL("../src/taskpane/status-bar.ts", import.meta.url), "utf8");
+
+  assert.match(statusBarSource, /pi-status-model/);
+  assert.match(statusBarSource, /pi-status-thinking/);
+  assert.match(statusBarSource, /pi-status-ctx__pct/);
+  assert.match(statusBarSource, /pi-status-mode/);
+  assert.doesNotMatch(statusBarSource, /pi-status-rules/);
+  assert.doesNotMatch(statusBarSource, /pi-status-proxy/);
+});
+
 void test("sidebar utilities menu includes extensions label", async () => {
   const sidebarSource = await readFile(new URL("../src/ui/pi-sidebar.ts", import.meta.url), "utf8");
 

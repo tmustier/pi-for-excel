@@ -1,0 +1,111 @@
+/* ═══════════════════════════════════════════════════════
+   Proxy banner — state-driven warning above chat messages
+   ═══════════════════════════════════════════════════════ */
+
+.pi-proxy-banner {
+  margin: 8px 10px 4px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--amber-alpha-16);
+  border-left: 3px solid var(--pi-amber);
+  background: var(--amber-alpha-8);
+  flex-shrink: 0;
+}
+
+.pi-proxy-banner__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.pi-proxy-banner__text {
+  margin: 0;
+  color: var(--foreground);
+  font-size: var(--text-sm);
+  line-height: 1.35;
+}
+
+.pi-proxy-banner__action {
+  border: none;
+  background: none;
+  color: var(--primary);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  cursor: pointer;
+  padding: 0;
+  white-space: nowrap;
+}
+
+.pi-proxy-banner__action:hover {
+  text-decoration: underline;
+}
+
+.pi-proxy-banner__details {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--amber-alpha-16);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pi-proxy-banner__details-text {
+  margin: 0;
+  color: var(--foreground);
+  font-size: var(--text-sm);
+  line-height: 1.4;
+}
+
+.pi-proxy-banner__code {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--amber-alpha-16);
+  background: var(--white-alpha-45);
+  border-radius: var(--radius-xs);
+  padding: 6px 8px;
+}
+
+.pi-proxy-banner__code code {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--foreground);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pi-proxy-banner__copy {
+  border: none;
+  background: none;
+  color: var(--muted-foreground);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.pi-proxy-banner__copy:hover {
+  color: var(--foreground);
+}
+
+.pi-proxy-banner__hint {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: var(--text-xs);
+  line-height: 1.35;
+}
+
+.pi-proxy-banner__link {
+  color: var(--primary);
+  font-size: var(--text-sm);
+  text-decoration: none;
+}
+
+.pi-proxy-banner__link:hover {
+  text-decoration: underline;
+}
