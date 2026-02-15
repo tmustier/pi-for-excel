@@ -26,7 +26,6 @@ import {
   PI_EXPERIMENTAL_FEATURE_CHANGED_EVENT,
   PI_EXPERIMENTAL_TOOL_CONFIG_CHANGED_EVENT,
 } from "../experiments/events.js";
-import { isExperimentalFeatureEnabled } from "../experiments/flags.js";
 import { convertToLlm } from "../messages/convert-to-llm.js";
 import { getFilesWorkspace } from "../files/workspace.js";
 import { createAllTools } from "../tools/index.js";
@@ -351,13 +350,11 @@ export async function initTaskpane(opts: {
 
     let mergedSkills = bundledSkills;
 
-    if (isExperimentalFeatureEnabled("external_skills_discovery")) {
-      try {
-        const externalSkills = await loadExternalAgentSkillsFromWorkspace(getFilesWorkspace());
-        mergedSkills = mergeAgentSkillDefinitions(bundledSkills, externalSkills);
-      } catch (error: unknown) {
-        console.warn("[skills] Failed to load external skills:", error);
-      }
+    try {
+      const externalSkills = await loadExternalAgentSkillsFromWorkspace(getFilesWorkspace());
+      mergedSkills = mergeAgentSkillDefinitions(bundledSkills, externalSkills);
+    } catch (error: unknown) {
+      console.warn("[skills] Failed to load external skills:", error);
     }
 
     try {

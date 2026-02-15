@@ -1,4 +1,3 @@
-import { isExperimentalFeatureEnabled } from "../../experiments/flags.js";
 import { getFilesWorkspace } from "../../files/workspace.js";
 import {
   filterAgentSkillsByEnabledState,
@@ -40,15 +39,10 @@ export async function buildSkillsSnapshot(settings: AddonsSettingsStore): Promis
     activationLoadError = error instanceof Error ? error.message : "Unknown error";
   }
 
-  const externalDiscoveryEnabled = isExperimentalFeatureEnabled("external_skills_discovery");
   const skills = mergeAgentSkillDefinitions(bundled, external);
 
-  const discoverableSkills = externalDiscoveryEnabled
-    ? skills
-    : bundled;
-
   const activeSkills = filterAgentSkillsByEnabledState({
-    skills: discoverableSkills,
+    skills,
     disabledSkillNames: disabledNames,
   });
 
@@ -56,7 +50,6 @@ export async function buildSkillsSnapshot(settings: AddonsSettingsStore): Promis
     skills,
     activeNames: new Set(activeSkills.map((skill) => skill.name.trim().toLowerCase())),
     disabledNames,
-    externalDiscoveryEnabled,
     externalLoadError,
     activationLoadError,
   };
@@ -127,13 +120,6 @@ export function renderSkillsSection(args: {
   }
 
   section.appendChild(list);
-
-  if (!args.snapshot.externalDiscoveryEnabled) {
-    const notice = document.createElement("p");
-    notice.className = "pi-overlay-hint";
-    notice.textContent = "External skill discovery is off; external skills may appear inactive until enabled in Experimental settings.";
-    section.appendChild(notice);
-  }
 
   if (args.snapshot.externalLoadError) {
     const warning = document.createElement("p");

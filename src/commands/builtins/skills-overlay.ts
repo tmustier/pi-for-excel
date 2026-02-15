@@ -3,7 +3,6 @@
  */
 
 import { getAppStorage } from "@mariozechner/pi-web-ui/dist/storage/app-storage.js";
-import { isExperimentalFeatureEnabled } from "../../experiments/flags.js";
 import { getFilesWorkspace } from "../../files/workspace.js";
 import { mergeAgentSkillDefinitions, listAgentSkills } from "../../skills/catalog.js";
 import {
@@ -35,7 +34,6 @@ interface SkillsSnapshot {
   external: AgentSkillDefinition[];
   active: AgentSkillDefinition[];
   disabledNames: Set<string>;
-  externalDiscoveryEnabled: boolean;
   externalLoadError: string | null;
   activationLoadError: string | null;
 }
@@ -203,11 +201,7 @@ async function buildSnapshot(settings: SkillActivationMutableSettingsStore): Pro
     console.warn("[skills] Failed to load skill activation state for UI:", error);
   }
 
-  const externalDiscoveryEnabled = isExperimentalFeatureEnabled("external_skills_discovery");
-
-  const discoverable = externalDiscoveryEnabled
-    ? mergeAgentSkillDefinitions(bundled, external)
-    : bundled;
+  const discoverable = mergeAgentSkillDefinitions(bundled, external);
 
   const active = filterAgentSkillsByEnabledState({
     skills: discoverable,
@@ -219,7 +213,6 @@ async function buildSnapshot(settings: SkillActivationMutableSettingsStore): Pro
     external,
     active,
     disabledNames,
-    externalDiscoveryEnabled,
     externalLoadError,
     activationLoadError,
   };
@@ -382,11 +375,7 @@ export function showSkillsDialog(): void {
         .filter((name) => bundledNames.has(name)),
     );
 
-    if (current.externalDiscoveryEnabled) {
-      summaryText.textContent = `Prompt currently includes ${formatSkillCount(current.active.length)} (bundled + discoverable external).`;
-    } else {
-      summaryText.textContent = `Prompt currently includes ${formatSkillCount(current.active.length)} (bundled only). External discovery is disabled.`;
-    }
+    summaryText.textContent = `Prompt currently includes ${formatSkillCount(current.active.length)} (bundled + discoverable external).`;
 
     summaryHint.textContent = defaultSummaryHint;
     summaryHint.classList.remove("pi-overlay-text-warning");
@@ -428,9 +417,7 @@ export function showSkillsDialog(): void {
       },
     });
 
-    const externalEmptyMessage = current.externalDiscoveryEnabled
-      ? "No external skills are configured."
-      : "No external skills are configured. Enable /experimental on external_skills_discovery after adding one to activate it.";
+    const externalEmptyMessage = "No external skills are configured. Add one using the form above.";
 
     renderSkillList({
       container: externalList,

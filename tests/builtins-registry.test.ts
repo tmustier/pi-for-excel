@@ -118,14 +118,9 @@ void test("builtins registry wires /addons, /experimental, /extensions, and /int
   assert.match(experimentalFlagsSource, /extension-sandbox-rollback/);
   assert.match(experimentalFlagsSource, /extension_widget_v2/);
   assert.match(experimentalFlagsSource, /extension-widget-v2/);
-  assert.match(experimentalFlagsSource, /external_skills_discovery/);
-  assert.match(experimentalFlagsSource, /external-skills-discovery/);
   assert.match(experimentalFlagsSource, /ui_dark_mode/);
   assert.match(experimentalFlagsSource, /dark-mode/);
-  assert.match(
-    experimentalFlagsSource,
-    /id:\s*"external_skills_discovery"[\s\S]*?wiring:\s*"wired"/,
-  );
+  assert.doesNotMatch(experimentalFlagsSource, /external_skills_discovery/);
   assert.doesNotMatch(experimentalFlagsSource, /id:\s*"mcp_tools"/);
 });
 

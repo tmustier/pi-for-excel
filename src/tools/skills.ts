@@ -50,9 +50,8 @@ async function getDefaultCatalog(): Promise<SkillsToolCatalog> {
   return defaultCatalog;
 }
 
-async function defaultIsExternalDiscoveryEnabled(): Promise<boolean> {
-  const flagsModule = await import("../experiments/flags.js");
-  return flagsModule.isExperimentalFeatureEnabled("external_skills_discovery");
+function defaultIsExternalDiscoveryEnabled(): boolean {
+  return true;
 }
 
 async function defaultLoadExternalSkills(): Promise<AgentSkillDefinition[]> {

@@ -10,7 +10,6 @@ import { dispatchExperimentalFeatureChanged } from "./events.js";
 
 export type ExperimentalFeatureId =
   | "tmux_bridge"
-  | "external_skills_discovery"
   | "ui_dark_mode"
   | "remote_extension_urls"
   | "extension_permission_gates"
@@ -43,16 +42,6 @@ const EXPERIMENTAL_FEATURES = [
     description: "Allow local tmux bridge integration for interactive shell sessions.",
     wiring: "wired",
     storageKey: "pi.experimental.tmuxBridge",
-  },
-  {
-    id: "external_skills_discovery",
-    slug: "external-skills-discovery",
-    aliases: ["external-skills", "skills-discovery"],
-    title: "External skills discovery",
-    description: "Allow loading Agent Skills from Files workspace external skill files.",
-    warning: "Security: external skills can contain untrusted instructions and executable references.",
-    wiring: "wired",
-    storageKey: "pi.experimental.externalSkillsDiscovery",
   },
   {
     id: "ui_dark_mode",

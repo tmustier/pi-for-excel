@@ -45,7 +45,6 @@ export interface SkillsSnapshot {
   skills: AgentSkillDefinition[];
   activeNames: Set<string>;
   disabledNames: Set<string>;
-  externalDiscoveryEnabled: boolean;
   externalLoadError: string | null;
   activationLoadError: string | null;
 }
