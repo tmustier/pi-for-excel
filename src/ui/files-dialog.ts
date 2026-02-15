@@ -405,8 +405,7 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
 
   const createFileRow = (file: WorkspaceFileEntry): HTMLElement => {
     const row = document.createElement("div");
-    row.className = "pi-files-dialog__row";
-    row.style.cursor = "pointer";
+    row.className = "pi-files-row";
     row.tabIndex = 0;
     row.setAttribute("role", "button");
     row.setAttribute("aria-label", `Open ${file.path}`);
@@ -414,44 +413,44 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
     const fileIcon = file.kind === "text" ? "📄" : isImageMimeType(file.mimeType) ? "🖼" : "📎";
 
     const info = document.createElement("div");
-    info.className = "pi-files-dialog__info";
+    info.className = "pi-files-row__info";
 
     const nameRow = document.createElement("div");
-    nameRow.className = "pi-files-dialog__name-row";
+    nameRow.className = "pi-files-row__name-row";
 
     const iconEl = document.createElement("span");
-    iconEl.className = "pi-files-dialog__icon";
+    iconEl.className = "pi-files-row__icon";
     iconEl.textContent = fileIcon;
 
     const name = document.createElement("div");
-    name.className = "pi-files-dialog__name";
+    name.className = "pi-files-row__name";
     name.textContent = file.path;
 
     nameRow.append(iconEl, name);
 
     if (file.sourceKind === "builtin-doc") {
       const sourceBadge = document.createElement("span");
-      sourceBadge.className = "pi-files-dialog__source-badge";
+      sourceBadge.className = "pi-files-row__badge pi-files-row__badge--info";
       sourceBadge.textContent = "Built-in";
       nameRow.appendChild(sourceBadge);
     }
 
     if (file.workbookTag) {
       const workbookTag = document.createElement("span");
-      workbookTag.className = "pi-files-dialog__workbook-tag";
+      workbookTag.className = "pi-files-row__badge pi-files-row__badge--ok";
       workbookTag.textContent = file.workbookTag.workbookLabel;
       nameRow.appendChild(workbookTag);
     }
 
     const meta = document.createElement("div");
-    meta.className = "pi-files-dialog__meta";
+    meta.className = "pi-files-row__meta";
     meta.textContent = `${formatBytes(file.size)} · ${file.kind} · ${formatRelativeDate(file.modifiedAt)}`;
 
     info.append(nameRow, meta);
 
     // Click or keyboard activate row to open viewer
     const activateRow = (event: Event) => {
-      if ((event.target as HTMLElement).closest(".pi-files-dialog__overflow")) return;
+      if ((event.target as HTMLElement).closest(".pi-files-row__overflow")) return;
       if ((event.target as HTMLElement).closest(".pi-files-overflow-menu")) return;
       void openViewer(file);
     };
@@ -466,7 +465,7 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
     // Overflow menu (⋯)
     const overflowBtn = document.createElement("button");
     overflowBtn.type = "button";
-    overflowBtn.className = "pi-files-dialog__overflow";
+    overflowBtn.className = "pi-files-row__overflow";
     overflowBtn.textContent = "⋯";
     overflowBtn.title = "File actions";
 
@@ -560,53 +559,44 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
     folder: FilesDialogFolderNode,
     collapseKey: string,
   ): void => {
-    const folderCard = document.createElement("section");
-    folderCard.className = "pi-files-dialog__folder";
+    const section = document.createElement("section");
+    section.className = "pi-files-section";
 
-    const folderHeader = document.createElement("button");
-    folderHeader.type = "button";
-    folderHeader.className = "pi-files-dialog__folder-header";
+    const header = document.createElement("button");
+    header.type = "button";
+    header.className = "pi-files-section__header";
 
-    const folderHeaderStart = document.createElement("span");
-    folderHeaderStart.className = "pi-files-dialog__folder-header-start";
-
-    const caret = document.createElement("span");
-    caret.className = "pi-files-dialog__folder-caret";
-
-    const name = document.createElement("span");
-    name.className = "pi-files-dialog__folder-name";
-    name.textContent = folder.folderName;
-
-    folderHeaderStart.append(caret, name);
+    const label = document.createElement("span");
+    label.className = "pi-files-section__label";
+    label.textContent = folder.folderName.toUpperCase();
 
     const count = document.createElement("span");
-    count.className = "pi-files-dialog__folder-count";
+    count.className = "pi-files-section__count";
     count.textContent = formatFileCountLabel(folder.totalFileCount);
 
-    folderHeader.append(folderHeaderStart, count);
+    header.append(label, count);
 
-    const folderChildren = document.createElement("div");
-    folderChildren.className = "pi-files-dialog__folder-children";
+    const body = document.createElement("div");
+    body.className = "pi-files-section__body";
 
     const applyCollapsedState = (isCollapsed: boolean): void => {
-      folderCard.classList.toggle("is-collapsed", isCollapsed);
-      folderHeader.setAttribute("aria-expanded", isCollapsed ? "false" : "true");
-      folderChildren.hidden = isCollapsed;
-      caret.textContent = isCollapsed ? "▸" : "▾";
+      section.classList.toggle("is-collapsed", isCollapsed);
+      header.setAttribute("aria-expanded", isCollapsed ? "false" : "true");
+      body.hidden = isCollapsed;
     };
 
     let isCollapsed = collapsedFolderPaths.has(collapseKey);
     applyCollapsedState(isCollapsed);
 
     for (const file of folder.files) {
-      folderChildren.appendChild(createFileRow(file));
+      body.appendChild(createFileRow(file));
     }
 
     for (const childFolder of folder.children) {
-      appendFolderNode(folderChildren, childFolder, getFolderCollapseKey(childFolder.folderPath));
+      appendFolderNode(body, childFolder, getFolderCollapseKey(childFolder.folderPath));
     }
 
-    folderHeader.addEventListener("click", () => {
+    header.addEventListener("click", () => {
       isCollapsed = !isCollapsed;
       if (isCollapsed) {
         collapsedFolderPaths.add(collapseKey);
@@ -617,8 +607,8 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
       applyCollapsedState(isCollapsed);
     });
 
-    folderCard.append(folderHeader, folderChildren);
-    container.appendChild(folderCard);
+    section.append(header, body);
+    container.appendChild(section);
   };
 
   const renderList = async () => {
