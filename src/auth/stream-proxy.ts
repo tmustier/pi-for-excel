@@ -8,10 +8,18 @@
  * We route requests through a user-configured local CORS proxy when enabled.
  */
 
-import { streamSimple, type Api, type Context, type Model, type StreamOptions } from "@mariozechner/pi-ai";
+import {
+  getModels,
+  streamSimple,
+  type Api,
+  type Context,
+  type Model,
+  type StreamOptions,
+} from "@mariozechner/pi-ai";
 
 import { isDebugEnabled } from "../debug/debug.js";
 import { selectToolBundle, type ToolBundleId } from "../context/tool-disclosure.js";
+import { modelRecencyScore } from "../models/model-ordering.js";
 import { normalizeProxyUrl, validateOfficeProxyUrl } from "./proxy-validation.js";
 
 export type GetProxyUrl = () => Promise<string | undefined>;
@@ -56,6 +64,62 @@ function applyProxy(model: Model<Api>, proxyUrl: string): Model<Api> {
     ...model,
     baseUrl: `${normalizedProxy}/?url=${encodeURIComponent(model.baseUrl)}`,
   };
+}
+
+type GoogleOAuthProvider = "google-gemini-cli" | "google-antigravity";
+
+const GOOGLE_CODE_ASSIST_DEFAULT_BASE_URL = "https://cloudcode-pa.googleapis.com";
+
+function isGoogleOAuthProvider(provider: string): provider is GoogleOAuthProvider {
+  return provider === "google-gemini-cli" || provider === "google-antigravity";
+}
+
+function pickPreferredGoogleOAuthModel(provider: GoogleOAuthProvider): Model<Api> | null {
+  const models = getModels(provider);
+
+  const stablePro = models
+    .filter((m) => /^gemini-(?!.*preview).*?-pro/i.test(m.id))
+    .sort((a, b) => modelRecencyScore(a.id) - modelRecencyScore(b.id));
+  if (stablePro.length > 0) {
+    return stablePro[stablePro.length - 1] ?? null;
+  }
+
+  const stableAny = models
+    .filter((m) => /^gemini-(?!.*preview)/i.test(m.id))
+    .sort((a, b) => modelRecencyScore(a.id) - modelRecencyScore(b.id));
+  if (stableAny.length > 0) {
+    return stableAny[stableAny.length - 1] ?? null;
+  }
+
+  const geminiAny = models
+    .filter((m) => /^gemini-/i.test(m.id))
+    .sort((a, b) => modelRecencyScore(a.id) - modelRecencyScore(b.id));
+  return geminiAny[geminiAny.length - 1] ?? null;
+}
+
+function normalizeGoogleOAuthModel(model: Model<Api>): Model<Api> {
+  const provider = model.provider;
+  if (!isGoogleOAuthProvider(provider)) {
+    return model;
+  }
+
+  let normalized: Model<Api> = model;
+
+  if (/preview/i.test(normalized.id)) {
+    const fallbackModel = pickPreferredGoogleOAuthModel(provider);
+    if (fallbackModel) {
+      normalized = fallbackModel;
+    }
+  }
+
+  if (provider === "google-antigravity" && !normalized.baseUrl) {
+    normalized = {
+      ...normalized,
+      baseUrl: GOOGLE_CODE_ASSIST_DEFAULT_BASE_URL,
+    };
+  }
+
+  return normalized;
 }
 
 /**
@@ -352,8 +416,10 @@ export function createOfficeStreamFn(getProxyUrl: GetProxyUrl) {
       ? context
       : { ...context, tools: toolSelection.tools };
 
+    const normalizedModel = normalizeGoogleOAuthModel(model);
+
     const callRecord = recordCall(
-      model,
+      normalizedModel,
       effectiveContext,
       options,
       continuation,
@@ -363,16 +429,16 @@ export function createOfficeStreamFn(getProxyUrl: GetProxyUrl) {
 
     const proxyUrl = await getProxyUrl();
     if (!proxyUrl) {
-      return streamSimple(model, effectiveContext, effectiveOptions);
+      return streamSimple(normalizedModel, effectiveContext, effectiveOptions);
     }
 
-    if (!shouldProxyProvider(model.provider, options?.apiKey)) {
-      return streamSimple(model, effectiveContext, effectiveOptions);
+    if (!shouldProxyProvider(normalizedModel.provider, options?.apiKey)) {
+      return streamSimple(normalizedModel, effectiveContext, effectiveOptions);
     }
 
     // Guardrails: fail fast for known-bad proxy configs (e.g., HTTP proxy from HTTPS taskpane).
     const validated = validateOfficeProxyUrl(proxyUrl);
 
-    return streamSimple(applyProxy(model, validated), effectiveContext, effectiveOptions);
+    return streamSimple(applyProxy(normalizedModel, validated), effectiveContext, effectiveOptions);
   };
 }
