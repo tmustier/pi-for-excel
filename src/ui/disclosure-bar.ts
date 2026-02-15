@@ -26,6 +26,8 @@ function setAcknowledged(): void {
 export interface DisclosureBarOptions {
   /** Number of configured providers (bar only shows when ≥1). */
   providerCount: number;
+  /** Callback to open Settings overlay. If provided, "Change anytime in Settings" becomes a link. */
+  onOpenSettings?: () => void;
 }
 
 /**
@@ -116,9 +118,23 @@ export function createDisclosureBar(options: DisclosureBarOptions): HTMLElement 
   customizeBtn.textContent = "Customize";
   actions.appendChild(customizeBtn);
 
-  const hint = document.createElement("span");
-  hint.className = "pi-disclosure-bar__muted";
-  hint.textContent = "· Change anytime in Settings";
+  let hint: HTMLElement;
+  if (options.onOpenSettings) {
+    const link = document.createElement("button");
+    link.type = "button";
+    link.className = "pi-disclosure-bar__settings-link";
+    link.textContent = "Change anytime in Settings";
+    link.addEventListener("click", () => {
+      dismiss();
+      options.onOpenSettings?.();
+    });
+    hint = link;
+  } else {
+    const span = document.createElement("span");
+    span.className = "pi-disclosure-bar__muted";
+    span.textContent = "· Change anytime in Settings";
+    hint = span;
+  }
   actions.appendChild(hint);
 
   customizeBtn.addEventListener("click", () => {

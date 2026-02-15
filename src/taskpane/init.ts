@@ -1534,7 +1534,10 @@ export async function initTaskpane(opts: {
   // Must run after runtime bootstrap so the sidebar has rendered .pi-messages.
   {
     const { createDisclosureBar } = await import("../ui/disclosure-bar.js");
-    const disclosureEl = createDisclosureBar({ providerCount: availableProviders.length });
+    const disclosureEl = createDisclosureBar({
+      providerCount: availableProviders.length,
+      onOpenSettings: () => void showSettingsDialog(),
+    });
     if (disclosureEl) {
       const messagesContainer = sidebar.querySelector(".pi-messages");
       if (messagesContainer) {

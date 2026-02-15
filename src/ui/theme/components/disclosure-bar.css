@@ -43,6 +43,22 @@
   color: var(--muted-foreground);
 }
 
+.pi-disclosure-bar__settings-link {
+  background: none;
+  border: none;
+  color: var(--muted-foreground);
+  font-size: var(--text-xs);
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 2px;
+}
+
+.pi-disclosure-bar__settings-link:hover {
+  color: var(--foreground);
+}
+
 /* ── Expandable picker ──────────────────────────────── */
 
 .pi-disclosure-picker {
