@@ -226,6 +226,7 @@ void test("workspace context summary includes only relevant folders and current 
 void test("workspace context relevance signature ignores scratch-only changes", () => {
   const baseSnapshot = createWorkspaceSnapshot([
     { path: "notes/index.md", workbookId: "wb-a" },
+    { path: "notes/budget.md", workbookId: "wb-a" },
     { path: "imports/source.csv", workbookId: "wb-a" },
     { path: "workbooks/budget-2026/extract.csv", workbookId: "wb-a" },
     { path: "scratch/temp-a.txt", workbookId: "wb-a" },
@@ -233,6 +234,7 @@ void test("workspace context relevance signature ignores scratch-only changes", 
 
   const scratchChangedSnapshot = createWorkspaceSnapshot([
     { path: "notes/index.md", workbookId: "wb-a" },
+    { path: "notes/budget.md", workbookId: "wb-a" },
     { path: "imports/source.csv", workbookId: "wb-a" },
     { path: "workbooks/budget-2026/extract.csv", workbookId: "wb-a" },
     { path: "scratch/temp-b.txt", workbookId: "wb-a" },
@@ -240,7 +242,16 @@ void test("workspace context relevance signature ignores scratch-only changes", 
 
   const importChangedSnapshot = createWorkspaceSnapshot([
     { path: "notes/index.md", workbookId: "wb-a" },
+    { path: "notes/budget.md", workbookId: "wb-a" },
     { path: "imports/new-source.csv", workbookId: "wb-a" },
+    { path: "workbooks/budget-2026/extract.csv", workbookId: "wb-a" },
+    { path: "scratch/temp-a.txt", workbookId: "wb-a" },
+  ]);
+
+  const noteChangedSnapshot = createWorkspaceSnapshot([
+    { path: "notes/index.md", workbookId: "wb-a" },
+    { path: "notes/budget-v2.md", workbookId: "wb-a" },
+    { path: "imports/source.csv", workbookId: "wb-a" },
     { path: "workbooks/budget-2026/extract.csv", workbookId: "wb-a" },
     { path: "scratch/temp-a.txt", workbookId: "wb-a" },
   ]);
@@ -260,6 +271,12 @@ void test("workspace context relevance signature ignores scratch-only changes", 
     currentWorkbookId: "wb-a",
   });
 
+  const noteChanged = buildWorkspaceContextSummary({
+    snapshot: noteChangedSnapshot,
+    currentWorkbookId: "wb-a",
+  });
+
   assert.equal(scratchChanged.relevantSignature, base.relevantSignature);
   assert.notEqual(importChanged.relevantSignature, base.relevantSignature);
+  assert.notEqual(noteChanged.relevantSignature, base.relevantSignature);
 });

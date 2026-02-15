@@ -451,8 +451,7 @@ export function buildWorkspaceContextSummary(args: WorkspaceContextSummaryArgs):
   const signatureParts = [
     `backend:${args.snapshot.backend.kind}`,
     `workbook:${args.currentWorkbookId ?? "none"}`,
-    `notes-count:${notesFiles.length}`,
-    `notes-index:${notesIndexFile ? buildContextFileSignature(notesIndexFile) : "none"}`,
+    `notes-files:${notesFiles.map((file) => buildContextFileSignature(file)).join(",")}`,
     `imports:${importFiles.map((file) => buildContextFileSignature(file)).join(",")}`,
     `workbook-files:${currentWorkbookFiles.map((file) => buildContextFileSignature(file)).join(",")}`,
   ];
