@@ -8,6 +8,7 @@ export const RESUME_OVERLAY_ID = "pi-resume-overlay";
 export const RECOVERY_OVERLAY_ID = "pi-recovery-overlay";
 export const SHORTCUTS_OVERLAY_ID = "pi-shortcuts-overlay";
 export const EXPERIMENTAL_OVERLAY_ID = "pi-experimental-overlay";
+export const ADDONS_OVERLAY_ID = "pi-addons-overlay";
 export const EXTENSIONS_OVERLAY_ID = "pi-extensions-overlay";
 export const INTEGRATIONS_OVERLAY_ID = "pi-integrations-overlay";
 export const SKILLS_OVERLAY_ID = "pi-skills-overlay";

@@ -8,6 +8,7 @@
  *   'pi-send'        → detail: { text: string }
  *   'pi-abort'       → (no detail)
  *   'pi-files-drop'  → detail: { files: File[] }
+ *   'pi-open-files'  → (no detail)
  */
 
 import { html, LitElement } from "lit";
@@ -30,7 +31,6 @@ export class PiInput extends LitElement {
   @state() private _placeholderIndex = 0;
   @state() private _isDragOver = false;
   @query("textarea") private _textarea!: HTMLTextAreaElement;
-  @query(".pi-input-file") private _fileInput?: HTMLInputElement;
 
   private _placeholderTimer?: ReturnType<typeof setInterval>;
 
@@ -120,17 +120,8 @@ export class PiInput extends LitElement {
     this._dispatchFiles(files);
   };
 
-  private _openFilePicker = () => {
-    this._fileInput?.click();
-  };
-
-  private _onFileInputChange = (event: Event) => {
-    const target = event.target;
-    if (!(target instanceof HTMLInputElement) || !target.files) return;
-
-    const files = Array.from(target.files);
-    this._dispatchFiles(files);
-    target.value = "";
+  private _openFilesWorkspace = () => {
+    this.dispatchEvent(new CustomEvent("pi-open-files", { bubbles: true }));
   };
 
   private _send() {
@@ -173,18 +164,12 @@ export class PiInput extends LitElement {
         @dragleave=${this._onDragLeave}
         @drop=${this._onDrop}
       >
-        <input
-          class="pi-input-file"
-          type="file"
-          multiple
-          @change=${this._onFileInputChange}
-        />
         <button
           class="pi-input-btn pi-input-btn--attach"
           type="button"
-          @click=${this._openFilePicker}
-          aria-label="Attach files"
-          title="Attach files"
+          @click=${this._openFilesWorkspace}
+          aria-label="Open Files"
+          title="Open Files"
         >
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.44 11.05-8.49 8.49a5.5 5.5 0 0 1-7.78-7.78l9.2-9.19a3.5 3.5 0 0 1 4.95 4.95l-9.19 9.2a1.5 1.5 0 0 1-2.12-2.13l8.49-8.48"/></svg>
         </button>

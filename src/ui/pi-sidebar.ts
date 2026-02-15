@@ -110,6 +110,7 @@ export class PiSidebar extends LitElement {
   @property({ attribute: false }) onOpenRules?: () => void;
   @property({ attribute: false }) onOpenAddons?: () => void;
   @property({ attribute: false }) onOpenSettings?: () => void;
+  @property({ attribute: false }) onOpenFilesWorkspace?: () => void;
   @property({ attribute: false }) onFilesDrop?: (files: File[]) => void;
   @property({ attribute: false }) onOpenResumePicker?: () => void;
   @property({ attribute: false }) onOpenRecovery?: () => void;
@@ -411,6 +412,10 @@ export class PiSidebar extends LitElement {
     this.onFilesDrop?.(event.detail.files);
   };
 
+  private _onOpenFilesWorkspace = () => {
+    this.onOpenFilesWorkspace?.();
+  };
+
   private _updateSessionTabOverflow() {
     const scroller = this._tabsScroller;
     if (!scroller) {
@@ -566,6 +571,7 @@ export class PiSidebar extends LitElement {
           @pi-send=${this._onSend}
           @pi-abort=${this._onAbort}
           @pi-files-drop=${this._onFilesDrop}
+          @pi-open-files=${this._onOpenFilesWorkspace}
         ></pi-input>
         <div id="pi-status-bar" class="pi-status-bar"></div>
       </div>

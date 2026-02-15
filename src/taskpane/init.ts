@@ -34,6 +34,7 @@ import { createAllTools } from "../tools/index.js";
 import { applyExperimentalToolGates } from "../tools/experimental-tool-gates.js";
 import { withWorkbookCoordinator } from "../tools/with-workbook-coordinator.js";
 import { registerBuiltins } from "../commands/builtins.js";
+import { showAddonsDialog } from "../commands/builtins/addons-overlay.js";
 import { showExtensionsDialog } from "../commands/builtins/extensions-overlay.js";
 import { showIntegrationsDialog } from "../commands/builtins/integrations-overlay.js";
 import { showSkillsDialog } from "../commands/builtins/skills-overlay.js";
@@ -78,6 +79,7 @@ import { loadExternalAgentSkillsFromSettings } from "../skills/external-store.js
 import { createSkillReadCache } from "../skills/read-cache.js";
 import { initAppStorage } from "../storage/init-app-storage.js";
 import { renderError } from "../ui/loading.js";
+import { showFilesWorkspaceDialog } from "../ui/files-dialog.js";
 
 import {
   PI_REQUEST_INPUT_FOCUS_EVENT,
@@ -423,7 +425,6 @@ export async function initTaskpane(opts: {
 
     const address = restored.result.address;
     showToast(`Reverted ${address}`);
-    await refreshRecoveryQuickActionState();
   };
 
   const toRecoveryCheckpointSummary = (
@@ -436,10 +437,6 @@ export async function initTaskpane(opts: {
     changedCount: snapshot.changedCount,
     restoredFromSnapshotId: snapshot.restoredFromSnapshotId,
   });
-
-  // Previously used to toggle pi-input's recovery-aware quick action.
-  // Retained as a no-op stub so call sites don't need sweeping removal.
-  const refreshRecoveryQuickActionState = async (): Promise<void> => {};
 
   const formatSessionTitle = (title: string): string => {
     const trimmed = title.trim();
@@ -549,7 +546,6 @@ export async function initTaskpane(opts: {
 
   const refreshWorkbookState = async () => {
     await resolveWorkbookContext();
-    await refreshRecoveryQuickActionState();
     sidebar.requestUpdate();
 
     await refreshCapabilitiesForAllRuntimes();
@@ -1159,7 +1155,6 @@ export async function initTaskpane(opts: {
 
     if (event.type === "completed" || event.type === "failed") {
       runtimeManager.setRuntimeLockState(runtime.runtimeId, "idle");
-      void refreshRecoveryQuickActionState();
     }
   });
 
@@ -1184,6 +1179,14 @@ export async function initTaskpane(opts: {
     showSkillsDialog();
   };
 
+  const openAddonsManager = () => {
+    showAddonsDialog({
+      openIntegrationsManager,
+      openSkillsManager,
+      openExtensionsManager,
+    });
+  };
+
   const openRecoveryDialog = async (): Promise<void> => {
     const workbookContext = await resolveWorkbookContext();
 
@@ -1195,17 +1198,12 @@ export async function initTaskpane(opts: {
       },
       onRestore: async (snapshotId: string) => {
         await restoreCheckpointById(snapshotId);
-        await refreshRecoveryQuickActionState();
       },
       onDelete: async (snapshotId: string) => {
-        const removed = await workbookRecoveryLog.delete(snapshotId);
-        await refreshRecoveryQuickActionState();
-        return removed;
+        return workbookRecoveryLog.delete(snapshotId);
       },
       onClear: async () => {
-        const removed = await workbookRecoveryLog.clearForCurrentWorkbook();
-        await refreshRecoveryQuickActionState();
-        return removed;
+        return workbookRecoveryLog.clearForCurrentWorkbook();
       },
       onCreateManualFullBackup: async () => {
         return createManualFullBackup();
@@ -1347,10 +1345,13 @@ export async function initTaskpane(opts: {
     void openRulesEditor();
   };
   sidebar.onOpenAddons = () => {
-    openIntegrationsManager();
+    openAddonsManager();
   };
   sidebar.onOpenSettings = () => {
     void SettingsDialog.open([new ApiKeysTab(), new ProxyTab()]);
+  };
+  sidebar.onOpenFilesWorkspace = () => {
+    void showFilesWorkspaceDialog();
   };
   sidebar.onFilesDrop = (files: File[]) => {
     const workspace = getFilesWorkspace();

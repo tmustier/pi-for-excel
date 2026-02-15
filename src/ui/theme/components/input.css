@@ -37,10 +37,6 @@
   pointer-events: none;
 }
 
-.pi-input-file {
-  display: none;
-}
-
 .pi-input-textarea {
   display: block;
   width: 100%;
