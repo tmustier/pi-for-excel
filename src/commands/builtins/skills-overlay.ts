@@ -21,6 +21,7 @@ interface SkillsSnapshot {
   external: AgentSkillDefinition[];
   active: AgentSkillDefinition[];
   externalDiscoveryEnabled: boolean;
+  externalLoadError: string | null;
 }
 
 function normalizeSkillName(name: string): string {
@@ -109,7 +110,17 @@ function renderSkillList(args: {
 async function buildSnapshot(): Promise<SkillsSnapshot> {
   const settings = getAppStorage().settings;
   const bundled = listAgentSkills();
-  const external = await loadExternalAgentSkillsFromSettings(settings);
+
+  let external: AgentSkillDefinition[] = [];
+  let externalLoadError: string | null = null;
+
+  try {
+    external = await loadExternalAgentSkillsFromSettings(settings);
+  } catch (error: unknown) {
+    externalLoadError = error instanceof Error ? error.message : "Unknown error";
+    console.warn("[skills] Failed to load external skills for UI:", error);
+  }
+
   const externalDiscoveryEnabled = isExperimentalFeatureEnabled("external_skills_discovery");
 
   const active = externalDiscoveryEnabled
@@ -121,6 +132,7 @@ async function buildSnapshot(): Promise<SkillsSnapshot> {
     external,
     active,
     externalDiscoveryEnabled,
+    externalLoadError,
   };
 }
 
@@ -204,6 +216,11 @@ export function showSkillsDialog(): void {
         summaryText.textContent = `Prompt currently includes ${formatSkillCount(snapshot.active.length)} (bundled + discoverable external).`;
       } else {
         summaryText.textContent = `Prompt currently includes ${formatSkillCount(snapshot.active.length)} (bundled only). External discovery is disabled.`;
+      }
+
+      if (snapshot.externalLoadError) {
+        summaryHint.textContent = `External skills could not be loaded (${snapshot.externalLoadError}). Showing bundled skills only.`;
+        summaryHint.classList.add("pi-overlay-text-warning");
       }
 
       renderSkillList({
