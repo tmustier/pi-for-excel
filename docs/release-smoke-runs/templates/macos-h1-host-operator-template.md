@@ -55,10 +55,10 @@ Capture:
 
 ## H1-B — Expired OAuth token
 
-Preferred (deterministic) approach:
+Preferred (deterministic, localhost/dev manifest) approach:
 
 1. Quit Excel.
-2. Backup `~/.pi/auth.json`.
+2. Backup `~/.pi/agent/auth.json`.
 3. For the OAuth provider under test (e.g. Anthropic), replace token fields with obviously invalid values while keeping valid JSON.
 4. Reopen Excel + taskpane.
 5. Send a provider-backed prompt.
@@ -70,9 +70,11 @@ Expected:
 Capture:
 - `h1-b-expired-oauth.png`
 - exact error text
-- restore original `~/.pi/auth.json` after test
+- restore original `~/.pi/agent/auth.json` after test
 
-If policy forbids editing auth.json, run with a deliberately expired/revoked OAuth session and mark method in notes.
+Notes:
+- `~/.pi/agent/auth.json` is the dev credential source used by `/__pi-auth`.
+- If running production manifest (no `/__pi-auth`), use a deliberately expired/revoked OAuth session instead and record the method in notes.
 
 ---
 
