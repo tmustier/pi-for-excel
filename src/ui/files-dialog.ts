@@ -407,6 +407,9 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
     const row = document.createElement("div");
     row.className = "pi-files-dialog__row";
     row.style.cursor = "pointer";
+    row.tabIndex = 0;
+    row.setAttribute("role", "button");
+    row.setAttribute("aria-label", `Open ${file.path}`);
 
     const fileIcon = file.kind === "text" ? "📄" : isImageMimeType(file.mimeType) ? "🖼" : "📎";
 
@@ -446,11 +449,18 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
 
     info.append(nameRow, meta);
 
-    // Click row to open viewer
-    row.addEventListener("click", (event) => {
-      // Don't open viewer if the click was on the overflow menu button
+    // Click or keyboard activate row to open viewer
+    const activateRow = (event: Event) => {
       if ((event.target as HTMLElement).closest(".pi-files-dialog__overflow")) return;
+      if ((event.target as HTMLElement).closest(".pi-files-overflow-menu")) return;
       void openViewer(file);
+    };
+    row.addEventListener("click", activateRow);
+    row.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        activateRow(event);
+      }
     });
 
     // Overflow menu (⋯)
@@ -526,7 +536,7 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
         }, "danger");
       }
 
-      overflowBtn.appendChild(menu);
+      row.appendChild(menu);
 
       const closeOnOutsideClick = (e: MouseEvent) => {
         if (!menu.contains(e.target as Node)) {
