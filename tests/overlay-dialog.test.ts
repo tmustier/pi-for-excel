@@ -7,9 +7,48 @@ import {
   createOverlayDialog,
   createOverlayDialogManager,
 } from "../src/ui/overlay-dialog.ts";
-import { CONFIRM_DIALOG_OVERLAY_ID } from "../src/ui/overlay-ids.ts";
+import {
+  CONFIRM_DIALOG_OVERLAY_ID,
+  TEXT_INPUT_DIALOG_OVERLAY_ID,
+} from "../src/ui/overlay-ids.ts";
 import { requestConfirmationDialog } from "../src/ui/confirm-dialog.ts";
+import { requestTextInputDialog } from "../src/ui/text-input-dialog.ts";
 import { installFakeDom } from "./fake-dom.test.ts";
+
+function findButtonByText(root: HTMLElement, text: string): HTMLElement | null {
+  const buttons = root.querySelectorAll("button");
+
+  for (const candidate of buttons) {
+    if (!(candidate instanceof HTMLElement) || candidate.tagName !== "BUTTON") {
+      continue;
+    }
+
+    if (candidate.textContent === text) {
+      return candidate;
+    }
+  }
+
+  return null;
+}
+
+function findFirstInput(root: HTMLElement): HTMLInputElement | null {
+  const queue: Element[] = Array.from(root.children);
+
+  while (queue.length > 0) {
+    const next = queue.shift();
+    if (!next) {
+      continue;
+    }
+
+    if (next instanceof HTMLInputElement) {
+      return next;
+    }
+
+    queue.push(...Array.from(next.children));
+  }
+
+  return null;
+}
 
 void test("closeOverlayById returns false when overlay does not exist", () => {
   const { restore } = installFakeDom();
@@ -152,19 +191,7 @@ void test("confirmation dialog resolves true when confirm button is clicked", as
     const overlay = document.getElementById(CONFIRM_DIALOG_OVERLAY_ID);
     assert.ok(overlay);
 
-    const buttons = overlay.querySelectorAll("button");
-
-    let approveButton: HTMLElement | null = null;
-    for (const button of buttons) {
-      if (!(button instanceof HTMLElement) || button.tagName !== "BUTTON") {
-        continue;
-      }
-
-      if (button.textContent === "Allow once") {
-        approveButton = button;
-        break;
-      }
-    }
+    const approveButton = findButtonByText(overlay, "Allow once");
 
     assert.ok(approveButton);
     if (!approveButton) {
@@ -176,6 +203,75 @@ void test("confirmation dialog resolves true when confirm button is clicked", as
     const approved = await pendingApproval;
     assert.equal(approved, true);
     assert.equal(document.getElementById(CONFIRM_DIALOG_OVERLAY_ID), null);
+  } finally {
+    restore();
+  }
+});
+
+void test("text input dialog resolves entered value on confirm", async () => {
+  const { document, restore } = installFakeDom();
+
+  try {
+    const pendingResult = requestTextInputDialog({
+      title: "Rename file",
+      initialValue: "notes.md",
+      confirmLabel: "Rename",
+      cancelLabel: "Cancel",
+      restoreFocusOnClose: false,
+    });
+
+    const overlay = document.getElementById(TEXT_INPUT_DIALOG_OVERLAY_ID);
+    assert.ok(overlay);
+
+    const input = findFirstInput(overlay);
+    assert.ok(input);
+    if (!input) {
+      throw new Error("Text input not found");
+    }
+
+    input.value = "notes-renamed.md";
+
+    const confirmButton = findButtonByText(overlay, "Rename");
+    assert.ok(confirmButton);
+    if (!confirmButton) {
+      throw new Error("Confirm button not found");
+    }
+
+    confirmButton.dispatchEvent(new Event("click"));
+
+    const value = await pendingResult;
+    assert.equal(value, "notes-renamed.md");
+    assert.equal(document.getElementById(TEXT_INPUT_DIALOG_OVERLAY_ID), null);
+  } finally {
+    restore();
+  }
+});
+
+void test("text input dialog resolves null on cancel", async () => {
+  const { document, restore } = installFakeDom();
+
+  try {
+    const pendingResult = requestTextInputDialog({
+      title: "Rename file",
+      confirmLabel: "Rename",
+      cancelLabel: "Cancel",
+      restoreFocusOnClose: false,
+    });
+
+    const overlay = document.getElementById(TEXT_INPUT_DIALOG_OVERLAY_ID);
+    assert.ok(overlay);
+
+    const cancelButton = findButtonByText(overlay, "Cancel");
+    assert.ok(cancelButton);
+    if (!cancelButton) {
+      throw new Error("Cancel button not found");
+    }
+
+    cancelButton.dispatchEvent(new Event("click"));
+
+    const value = await pendingResult;
+    assert.equal(value, null);
+    assert.equal(document.getElementById(TEXT_INPUT_DIALOG_OVERLAY_ID), null);
   } finally {
     restore();
   }

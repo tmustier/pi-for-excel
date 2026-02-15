@@ -125,6 +125,31 @@ function isActiveContentMimeType(mimeType: string): boolean {
   );
 }
 
+function closeWindowSafely(windowHandle: Window | null): void {
+  if (!windowHandle || windowHandle.closed) {
+    return;
+  }
+
+  try {
+    windowHandle.close();
+  } catch {
+    // ignore close errors
+  }
+}
+
+function tryOpenDownloadWindow(url: string, pendingWindow: Window | null): boolean {
+  if (pendingWindow && !pendingWindow.closed) {
+    try {
+      pendingWindow.location.replace(url);
+      return true;
+    } catch {
+      closeWindowSafely(pendingWindow);
+    }
+  }
+
+  return window.open(url, "_blank") !== null;
+}
+
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
@@ -1206,56 +1231,62 @@ export class FilesWorkspace {
       throw new Error("Downloads are not available in this environment.");
     }
 
-    const normalizedPath = normalizeWorkspacePath(path);
-    const backend = await this.getBackend();
-    const builtinResult = getBuiltinWorkspaceDoc(normalizedPath);
+    const pendingWindow = window.open("", "_blank");
 
-    let result: WorkspaceFileReadResult;
     try {
-      result = await backend.readFile(normalizedPath);
-    } catch (error: unknown) {
-      if (!builtinResult || !isMissingWorkspaceFileError(error)) {
-        throw error;
+      const normalizedPath = normalizeWorkspacePath(path);
+      const backend = await this.getBackend();
+      const builtinResult = getBuiltinWorkspaceDoc(normalizedPath);
+
+      let result: WorkspaceFileReadResult;
+      try {
+        result = await backend.readFile(normalizedPath);
+      } catch (error: unknown) {
+        if (!builtinResult || !isMissingWorkspaceFileError(error)) {
+          throw error;
+        }
+
+        result = builtinResult;
       }
 
-      result = builtinResult;
+      const bytes = result.base64
+        ? base64ToBytes(result.base64)
+        : encodeTextUtf8(result.text ?? "");
+
+      const mimeType = result.mimeType && isTextMimeType(result.mimeType)
+        ? result.mimeType
+        : inferMimeType(result.name, result.mimeType);
+
+      // Sanitize script-capable MIME types (HTML, SVG, JS) to prevent
+      // active-content execution at the app origin when opened via blob URL.
+      const safeMimeType = isActiveContentMimeType(mimeType)
+        ? "application/octet-stream"
+        : mimeType;
+
+      const blob = new Blob([toArrayBuffer(bytes)], { type: safeMimeType });
+      const url = URL.createObjectURL(blob);
+
+      // Open a blank tab synchronously before async file IO (above) to keep
+      // user activation in Office WKWebView. Then navigate it to the blob URL.
+      // Fall back to <a download> when popups are blocked.
+      const openedInWindow = tryOpenDownloadWindow(url, pendingWindow);
+      if (!openedInWindow) {
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = result.name;
+        anchor.rel = "noopener";
+        anchor.style.display = "none";
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+      }
+
+      // Delay revocation so the opened window can finish loading the blob.
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (error: unknown) {
+      closeWindowSafely(pendingWindow);
+      throw error;
     }
-
-    const bytes = result.base64
-      ? base64ToBytes(result.base64)
-      : encodeTextUtf8(result.text ?? "");
-
-    const mimeType = result.mimeType && isTextMimeType(result.mimeType)
-      ? result.mimeType
-      : inferMimeType(result.name, result.mimeType);
-
-    // Sanitize script-capable MIME types (HTML, SVG, JS) to prevent
-    // active-content execution at the app origin when opened via blob URL.
-    const safeMimeType = isActiveContentMimeType(mimeType)
-      ? "application/octet-stream"
-      : mimeType;
-
-    const blob = new Blob([toArrayBuffer(bytes)], { type: safeMimeType });
-    const url = URL.createObjectURL(blob);
-
-    // Office Add-in WebView (WKWebView on macOS) silently ignores programmatic
-    // <a download> clicks for binary content types.  Try window.open() first
-    // for WebView compatibility; fall back to <a download> if the popup is
-    // blocked (e.g. lost user activation in standard browsers).
-    const opened = window.open(url, "_blank");
-    if (!opened) {
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = result.name;
-      anchor.rel = "noopener";
-      anchor.style.display = "none";
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-    }
-
-    // Delay revocation so the opened window can finish loading the blob.
-    setTimeout(() => URL.revokeObjectURL(url), 60_000);
   }
 
   async getContextSummary(currentWorkbookId: string | null): Promise<WorkspaceContextSummary> {

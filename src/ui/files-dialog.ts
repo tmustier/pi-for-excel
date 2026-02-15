@@ -18,6 +18,7 @@ import {
 } from "./overlay-dialog.js";
 import { requestConfirmationDialog } from "./confirm-dialog.js";
 import { FILES_WORKSPACE_OVERLAY_ID } from "./overlay-ids.js";
+import { requestTextInputDialog } from "./text-input-dialog.js";
 import {
   buildFilesDialogFilterOptions,
   countBuiltInDocs,
@@ -64,6 +65,43 @@ function makeButton(label: string, className: string): HTMLButtonElement {
   button.className = className;
   button.textContent = label;
   return button;
+}
+
+function getFileExtension(fileName: string): string | null {
+  const trimmed = fileName.trim();
+  const lastDot = trimmed.lastIndexOf(".");
+  if (lastDot <= 0 || lastDot === trimmed.length - 1) {
+    return null;
+  }
+
+  return trimmed.slice(lastDot + 1).toLowerCase();
+}
+
+function getBinaryPreviewNote(file: WorkspaceFileEntry): string {
+  const extension = getFileExtension(file.name);
+  if (!extension) {
+    return "Preview not available for this binary file. Use Download to inspect it locally.";
+  }
+
+  return `Preview not available for .${extension} files. Use Download to inspect locally.`;
+}
+
+function resolveRenameDestinationPath(currentPath: string, inputPath: string): string {
+  const normalizedInput = inputPath.trim().replaceAll("\\", "/");
+  if (normalizedInput.length === 0) {
+    return currentPath;
+  }
+
+  if (normalizedInput.includes("/")) {
+    return normalizedInput;
+  }
+
+  const lastSlash = currentPath.lastIndexOf("/");
+  if (lastSlash < 0) {
+    return normalizedInput;
+  }
+
+  return `${currentPath.slice(0, lastSlash + 1)}${normalizedInput}`;
 }
 
 function isImageMimeType(mimeType: string): boolean {
@@ -348,7 +386,7 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
 
   const openBinaryPlaceholder = (entry: WorkspaceFileEntry) => {
     viewerTitle.textContent = entry.path;
-    viewerNote.textContent = "Preview not available for this binary file. Use Download to inspect it locally.";
+    viewerNote.textContent = getBinaryPreviewNote(entry);
 
     const message = document.createElement("div");
     message.className = "pi-files-dialog__preview-empty";
@@ -504,11 +542,32 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
 
       if (!file.readOnly) {
         addMenuItem("Rename", () => {
-          const nextName = window.prompt("Rename file", file.path);
-          if (!nextName) return;
-          void workspace.renameFile(file.path, nextName, {
-            audit: DIALOG_AUDIT_CONTEXT,
-          }).catch((error: unknown) => {
+          void (async () => {
+            const nextPathInput = await requestTextInputDialog({
+              title: "Rename file",
+              message: file.path,
+              initialValue: file.path,
+              placeholder: "folder/file.ext",
+              confirmLabel: "Rename",
+              cancelLabel: "Cancel",
+              restoreFocusOnClose: false,
+            });
+
+            if (nextPathInput === null) {
+              return;
+            }
+
+            const nextPath = resolveRenameDestinationPath(file.path, nextPathInput);
+            if (nextPath === file.path) {
+              return;
+            }
+
+            await workspace.renameFile(file.path, nextPath, {
+              audit: DIALOG_AUDIT_CONTEXT,
+            });
+
+            showToast(`Renamed to ${nextPath}.`);
+          })().catch((error: unknown) => {
             showToast(`Rename failed: ${getErrorMessage(error)}`);
           });
         });
@@ -674,7 +733,7 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
     if (files.length === 0) {
       const empty = document.createElement("div");
       empty.className = "pi-files-dialog__empty";
-      empty.textContent = "No files yet. Upload documents or create a text file.";
+      empty.textContent = "No files yet. Upload documents to get started.";
       list.appendChild(empty);
     } else if (filteredFiles.length === 0) {
       const empty = document.createElement("div");
