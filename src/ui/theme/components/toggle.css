@@ -95,19 +95,19 @@
   box-shadow: 0 1px 2px var(--alpha-12);
 }
 
-/* Hide ::after when explicit __thumb element exists */
-.pi-toggle__input ~ .pi-toggle__thumb ~ .pi-toggle__track::after,
+/* Hide ::after pseudo-thumb when explicit __thumb element exists */
 .pi-toggle:has(.pi-toggle__thumb) .pi-toggle__track::after {
   display: none;
 }
 
-/* Checked state */
-.pi-toggle__input:checked + .pi-toggle__track {
+/* Checked state — use ~ (general sibling) so it works with both
+   markup variants: input+track and input+thumb+track */
+.pi-toggle__input:checked ~ .pi-toggle__track {
   background: var(--pi-green);
   border-color: var(--pi-green);
 }
 
-.pi-toggle__input:checked + .pi-toggle__track::after {
+.pi-toggle__input:checked ~ .pi-toggle__track::after {
   transform: translateX(14px);
 }
 
@@ -116,7 +116,7 @@
 }
 
 /* Focus */
-.pi-toggle__input:focus-visible + .pi-toggle__track {
+.pi-toggle__input:focus-visible ~ .pi-toggle__track {
   outline: 2px solid var(--ring);
   outline-offset: 2px;
 }
