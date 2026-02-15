@@ -2,7 +2,7 @@
 
 Open-source, multi-model AI sidebar add-in for Microsoft Excel. Powered by [Pi](https://pi.dev).
 
-Pi for Excel gives you a conversational AI assistant that can read, write, and format your spreadsheets — directly from an Excel sidebar panel. Bring your own API key or OAuth login for Anthropic, OpenAI, Google Gemini, or GitHub Copilot.
+Pi for Excel is an AI agent that lives inside Excel. It reads your workbook, makes changes, and does research — using any model you choose. Bring your own API key or OAuth login for Anthropic, OpenAI, Google Gemini, or GitHub Copilot.
 
 ## Features
 

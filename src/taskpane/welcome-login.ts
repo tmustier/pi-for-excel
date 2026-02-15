@@ -101,7 +101,7 @@ export async function showWelcomeLogin(providerKeys: ProviderKeysStore): Promise
     subtitle.textContent = "Connect an AI provider to get started";
 
     const intro = createElement("p", "pi-welcome-intro");
-    intro.textContent = "Pi reads your workbook, explains formulas, and makes edits directly in Excel.";
+    intro.textContent = "An AI agent that reads your spreadsheet, makes changes, and does the research — using models you already have.";
 
     const providerSectionTitle = createElement("p", "pi-welcome-section-title");
     providerSectionTitle.textContent = "Choose a provider";
