@@ -110,6 +110,11 @@ const DEFAULT_ALLOWED_TARGET_HOSTS = new Set([
   "cloudcode-pa.googleapis.com",
   "daily-cloudcode-pa.sandbox.googleapis.com",
   "api.z.ai",
+  // Web search providers
+  "s.jina.ai",
+  "google.serper.dev",
+  "api.tavily.com",
+  "api.search.brave.com",
 ]);
 
 const allowAllTargetHosts = envFlag("ALLOW_ALL_TARGET_HOSTS");
