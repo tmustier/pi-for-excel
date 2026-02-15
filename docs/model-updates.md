@@ -85,7 +85,8 @@ We intentionally avoid pinning exact versioned IDs now. Instead we:
     - Important: IDs like `claude-opus-4-20250514` are treated as **major only** (`40`) and the `YYYYMMDD` part is considered a separate date suffix by `modelRecencyScore()`.
   - **OpenAI Codex:** latest `gpt-5.x-codex`, then latest `gpt-5.x`
     - `gpt-5.3-codex` scores as `53`.
-  - **Google:** latest `gemini-*-pro*` (regex: `/^gemini-.*-pro/i`)
+  - **Google (API key):** latest `gemini-*-pro*` (regex: `/^gemini-.*-pro/i`)
+  - **Google OAuth providers (`google-gemini-cli`, `google-antigravity`):** prefer stable Gemini before previews
 
   The ordering logic is driven by:
   - `providerPriority()` (Anthropic → OpenAI Codex → OpenAI → Google → …)

@@ -87,7 +87,8 @@ export function installModelSelectorPatch(): void {
     // - then show "featured" models (latest per provider, pattern-based)
     //   - Anthropic: latest Sonnet if its version > latest Opus, then latest Opus
     //   - OpenAI Codex: latest gpt-5.x-codex, then latest gpt-5.x
-    //   - Google: latest gemini-*-pro*
+    //   - Google API-key: latest gemini-*-pro*
+    //   - Google OAuth (Gemini CLI / Antigravity): prefer stable Gemini before previews
     // - then show the remaining models, sorted deterministically
 
     const byProvider = new Map<string, ModelSelectorItem[]>();
@@ -195,7 +196,34 @@ export function installModelSelectorPatch(): void {
         continue;
       }
 
-      if (provider === "google" || provider === "google-gemini-cli" || provider === "google-antigravity") {
+      if (provider === "google") {
+        const bestPro = pickBestByRecency(models, (m) => /^gemini-.*-pro/i.test(m.id));
+        if (bestPro) {
+          featured.push(bestPro);
+          continue;
+        }
+
+        const best = pickBest(models);
+        if (best) featured.push(best);
+        continue;
+      }
+
+      if (provider === "google-gemini-cli" || provider === "google-antigravity") {
+        const bestStablePro = pickBestByRecency(
+          models,
+          (m) => /^gemini-(?!.*preview).*?-pro/i.test(m.id),
+        );
+        if (bestStablePro) {
+          featured.push(bestStablePro);
+          continue;
+        }
+
+        const bestStable = pickBestByRecency(models, (m) => /^gemini-(?!.*preview)/i.test(m.id));
+        if (bestStable) {
+          featured.push(bestStable);
+          continue;
+        }
+
         const bestPro = pickBestByRecency(models, (m) => /^gemini-.*-pro/i.test(m.id));
         if (bestPro) {
           featured.push(bestPro);

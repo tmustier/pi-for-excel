@@ -11,6 +11,7 @@ import { render } from "lit";
 
 import { installFetchInterceptor } from "../auth/cors-proxy.js";
 import { installModelSelectorPatch } from "../compat/model-selector-patch.js";
+import { installProcessEnvShim } from "../compat/process-env-shim.js";
 import { renderLoading, renderError } from "../ui/loading.js";
 import { getErrorMessage } from "../utils/errors.js";
 
@@ -55,6 +56,7 @@ export function bootstrapTaskpane(): void {
   render(renderLoading(), loadingRoot);
 
   // Global patches
+  installProcessEnvShim();
   installFetchInterceptor();
   installModelSelectorPatch();
 

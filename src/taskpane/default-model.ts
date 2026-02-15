@@ -29,10 +29,15 @@ const DEFAULT_MODEL_RULES: DefaultModelRule[] = [
   { provider: "google", match: /^gemini-/i },
 
   // Google Cloud Code Assist (Gemini CLI)
+  // Prefer stable Gemini variants before preview models.
+  { provider: "google-gemini-cli", match: /^gemini-(?!.*preview).*?-pro/i },
+  { provider: "google-gemini-cli", match: /^gemini-(?!.*preview)/i },
   { provider: "google-gemini-cli", match: /^gemini-.*-pro/i },
   { provider: "google-gemini-cli", match: /^gemini-/i },
 
   // Google Antigravity (Gemini/Claude/GPT-OSS)
+  { provider: "google-antigravity", match: /^gemini-(?!.*preview).*?-pro/i },
+  { provider: "google-antigravity", match: /^gemini-(?!.*preview)/i },
   { provider: "google-antigravity", match: /^gemini-.*-pro/i },
   { provider: "google-antigravity", match: /^gemini-/i },
   { provider: "google-antigravity", match: /^.+$/ },
