@@ -91,7 +91,7 @@ export function showIntegrationsDialog(dependencies: IntegrationsDialogDependenc
     onClose: closeOverlay,
     closeLabel: "Close tools and MCP",
     title: INTEGRATIONS_MANAGER_LABEL,
-    subtitle: "Manage web search, page fetch, and MCP servers. External tools are on by default.",
+    subtitle: "Manage web search, page fetch, and MCP servers (alpha). External tools are on by default.",
   });
 
   const elements = createIntegrationsDialogElements();

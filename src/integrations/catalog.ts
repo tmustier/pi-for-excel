@@ -55,8 +55,8 @@ const INTEGRATION_DEFINITIONS: Record<IntegrationId, IntegrationDefinition> = {
   },
   mcp_tools: {
     id: "mcp_tools",
-    title: "MCP Gateway",
-    description: "Call tools from user-configured MCP servers.",
+    title: "MCP Gateway (Alpha)",
+    description: "Call tools from user-configured MCP servers. Alpha: currently limited to HTTP MCP servers only.",
     agentSkillName: "mcp-gateway",
     warning: "External tools: MCP servers may execute arbitrary remote actions.",
     toolNames: ["mcp"],

@@ -128,7 +128,7 @@ export function createIntegrationsDialogElements(): IntegrationsDialogElements {
 
   const mcpSection = document.createElement("section");
   mcpSection.className = "pi-overlay-section";
-  mcpSection.appendChild(createOverlaySectionTitle("MCP servers"));
+  mcpSection.appendChild(createOverlaySectionTitle("MCP servers (Alpha)"));
 
   const mcpList = document.createElement("div");
   mcpList.className = "pi-overlay-list";
@@ -160,7 +160,7 @@ export function createIntegrationsDialogElements(): IntegrationsDialogElements {
 
   const mcpHint = document.createElement("p");
   mcpHint.className = "pi-overlay-hint";
-  mcpHint.textContent = "Server URL, optional bearer token, and one-click connection test.";
+  mcpHint.textContent = "Alpha: HTTP MCP servers only. Stdio server support (Gmail, Slack, etc.) coming soon — see GitHub for roadmap.";
 
   mcpAddCard.append(mcpAddTitle, mcpAddRow, mcpHint);
 
