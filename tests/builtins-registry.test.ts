@@ -162,6 +162,15 @@ void test("sidebar utilities menu includes add-ons label", async () => {
   assert.doesNotMatch(sidebarSource, /Files…/);
 });
 
+void test("context pill headers expose expanded state and controlled body", async () => {
+  const sidebarSource = await readFile(new URL("../src/ui/pi-sidebar.ts", import.meta.url), "utf8");
+
+  assert.match(sidebarSource, /private readonly _contextPillBodyId = "pi-context-pill-body";/);
+  assert.match(sidebarSource, /class="pi-context-pill__header"[\s\S]*aria-controls=\$\{this\._contextPillBodyId\}/);
+  assert.match(sidebarSource, /class="pi-context-pill__header"[\s\S]*aria-expanded=\$\{expanded \? "true" : "false"\}/);
+  assert.match(sidebarSource, /class="pi-context-pill__body" id=\$\{this\._contextPillBodyId\}/);
+});
+
 void test("input paperclip opens Files workspace through sidebar callback", async () => {
   const inputSource = await readFile(new URL("../src/ui/pi-input.ts", import.meta.url), "utf8");
   const sidebarSource = await readFile(new URL("../src/ui/pi-sidebar.ts", import.meta.url), "utf8");
