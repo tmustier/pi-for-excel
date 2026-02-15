@@ -164,7 +164,7 @@ void test("/experimental on with unknown feature reports available slugs", async
   assert.match(toasts[0], /tmux-bridge/u);
 });
 
-void test("/experimental on mcp-tools redirects to /integrations", async () => {
+void test("/experimental on mcp-tools redirects to /tools alias", async () => {
   const toasts: string[] = [];
 
   const command = getExperimentalCommand({
@@ -178,7 +178,8 @@ void test("/experimental on mcp-tools redirects to /integrations", async () => {
   await command.execute("on mcp-tools");
 
   assert.equal(toasts.length, 1);
-  assert.match(toasts[0], /managed in \/integrations/u);
+  assert.match(toasts[0], /managed in \/tools/u);
+  assert.match(toasts[0], /alias: \/integrations/u);
 });
 
 void test("/experimental tmux-bridge-url shows configured value", async () => {

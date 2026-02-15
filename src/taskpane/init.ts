@@ -1357,6 +1357,7 @@ export async function initTaskpane(opts: {
     getExecutionMode: () => Promise.resolve(getExecutionMode()),
     setExecutionMode,
     openExtensionsManager,
+    openAddonsManager,
     openIntegrationsManager,
     openSkillsManager,
   });

@@ -7,7 +7,7 @@ Issue: [#24](https://github.com/tmustier/pi-for-excel/issues/24)
 
 ## What shipped
 
-- **Integrations manager UI** (`/integrations`)
+- **Tools & MCP manager UI** (`/tools`, alias: `/integrations`)
   - enable/disable integration bundles per **session** and/or **workbook**
   - clear warnings for network/tool access
   - active integrations shown in the status bar
@@ -17,11 +17,11 @@ Issue: [#24](https://github.com/tmustier/pi-for-excel/issues/24)
 - **Web Search integration**
   - tools: `web_search`, `fetch_page`
   - providers: Serper.dev (default), Tavily, Brave Search
-  - configurable provider + provider-specific API key in `/integrations`
+  - configurable provider + provider-specific API key in `/tools` (or `/integrations`)
   - result output includes explicit `Sent:` attribution and provider/transport metadata
 - **MCP integration**
   - tool: `mcp`
-  - server registry (`mcp.servers.v1`) configurable in `/integrations`
+  - server registry (`mcp.servers.v1`) configurable in `/tools` (or `/integrations`)
   - add/remove/test server URL + optional bearer token
 
 ## Runtime model

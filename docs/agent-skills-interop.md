@@ -58,4 +58,4 @@ The system prompt also includes `<available_skills>` entries so the model can ch
 - **Integrations** manage runtime consent, scoping, and local configuration in the Excel add-in.
 
 Use the term **skill** only for standards-based `SKILL.md` artifacts.
-Use **integration** for Excel runtime toggles and UI (`/integrations`).
+Use **integration** for Excel runtime toggles and UI (`/tools`, alias: `/integrations`).

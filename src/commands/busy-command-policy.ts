@@ -5,7 +5,7 @@
  * execution cannot drift.
  */
 
-import { INTEGRATIONS_COMMAND_NAME } from "../integrations/naming.js";
+import { INTEGRATIONS_COMMAND_NAME, TOOLS_COMMAND_NAME } from "../integrations/naming.js";
 
 const BUSY_ALLOWED_COMMANDS = new Set<string>([
   "compact",
@@ -17,6 +17,8 @@ const BUSY_ALLOWED_COMMANDS = new Set<string>([
   "yolo",
   "extensions",
   "skills",
+  "addons",
+  TOOLS_COMMAND_NAME,
   INTEGRATIONS_COMMAND_NAME,
 ]);
 

@@ -5,6 +5,7 @@
  * Integrations, Skills, and Extensions managers.
  */
 
+import { INTEGRATIONS_MANAGER_LABEL } from "../../integrations/naming.js";
 import {
   closeOverlayById,
   createOverlayButton,
@@ -33,7 +34,7 @@ export function showAddonsDialog(actions: AddonsDialogActions): void {
     onClose: dialog.close,
     closeLabel: "Close add-ons",
     title: "Add-ons",
-    subtitle: "Manage integrations, skills, and extensions.",
+    subtitle: "Manage tools & MCP, skills, and extensions.",
   });
 
   const body = document.createElement("div");
@@ -49,7 +50,7 @@ export function showAddonsDialog(actions: AddonsDialogActions): void {
   actionsRow.className = "pi-overlay-actions";
 
   const integrationsButton = createOverlayButton({
-    text: "Integrations",
+    text: INTEGRATIONS_MANAGER_LABEL,
     className: "pi-overlay-btn--primary",
   });
   integrationsButton.addEventListener("click", () => {

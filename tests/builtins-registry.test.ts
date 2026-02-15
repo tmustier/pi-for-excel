@@ -40,11 +40,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-void test("builtins registry wires /experimental, /extensions, and /integrations command registration", async () => {
+void test("builtins registry wires add-ons and tools command registration", async () => {
   const source = await readFile(new URL("../src/commands/builtins/index.ts", import.meta.url), "utf8");
 
   assert.match(source, /createExperimentalCommands/);
   assert.match(source, /\.\.\.createExperimentalCommands\(\)/);
+
+  assert.match(source, /createAddonsCommands/);
+  assert.match(source, /\.\.\.createAddonsCommands\(context\)/);
 
   assert.match(source, /createIntegrationsCommands/);
   assert.match(source, /\.\.\.createIntegrationsCommands\(context\)/);
@@ -131,6 +134,29 @@ void test("taskpane init keeps getIntegrationToolNames imported when used", asyn
   );
 });
 
+void test("integrations builtins expose /tools with /integrations alias", async () => {
+  const source = await readFile(new URL("../src/commands/builtins/integrations.ts", import.meta.url), "utf8");
+
+  assert.match(source, /TOOLS_COMMAND_NAME/);
+  assert.match(source, /INTEGRATIONS_COMMAND_NAME/);
+  assert.match(source, /Alias for \/\$\{TOOLS_COMMAND_NAME\}/);
+});
+
+void test("addons builtins expose /addons command", async () => {
+  const source = await readFile(new URL("../src/commands/builtins/addons.ts", import.meta.url), "utf8");
+
+  assert.match(source, /name:\s*"addons"/);
+  assert.match(source, /openAddonsManager/);
+});
+
+void test("add-ons overlay reuses Tools & MCP naming constants", async () => {
+  const source = await readFile(new URL("../src/commands/builtins/addons-overlay.ts", import.meta.url), "utf8");
+
+  assert.match(source, /INTEGRATIONS_MANAGER_LABEL/);
+  assert.match(source, /text:\s*INTEGRATIONS_MANAGER_LABEL/);
+  assert.doesNotMatch(source, /text:\s*"Integrations"/);
+});
+
 void test("taskpane init wires Files workspace opener", async () => {
   const initSource = await readFile(new URL("../src/taskpane/init.ts", import.meta.url), "utf8");
 
@@ -149,6 +175,7 @@ void test("taskpane init wires add-ons menu opener", async () => {
   assert.match(initSource, /openIntegrationsManager/);
   assert.match(initSource, /openSkillsManager/);
   assert.match(initSource, /openExtensionsManager/);
+  assert.match(initSource, /registerBuiltins\([\s\S]*openAddonsManager/);
   assert.match(initSource, /sidebar\.onOpenAddons\s*=\s*\(\)\s*=>\s*\{\s*openAddonsManager\(\);\s*\};/);
 });
 
@@ -248,6 +275,8 @@ void test("slash-command busy policy is centralized and includes /yolo", async (
 
   assert.match(busyPolicySource, /"yolo"/);
   assert.match(busyPolicySource, /"rules"/);
+  assert.match(busyPolicySource, /"addons"/);
+  assert.match(busyPolicySource, /TOOLS_COMMAND_NAME/);
   assert.match(busyPolicySource, /INTEGRATIONS_COMMAND_NAME/);
 });
 
