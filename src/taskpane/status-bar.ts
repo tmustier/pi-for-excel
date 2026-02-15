@@ -10,10 +10,25 @@ import { formatUsageDebug, isDebugEnabled } from "../debug/debug.js";
 import { estimateContextTokens } from "../utils/context-tokens.js";
 import type { ExecutionMode } from "../execution/mode.js";
 import type { RuntimeLockState } from "./session-runtime-manager.js";
+import { getProxyState, isProxyDismissed, type ProxyState } from "./proxy-status.js";
 
 export type ActiveAgentProvider = () => Agent | null;
 export type ActiveLockStateProvider = () => RuntimeLockState;
 export type ActiveExecutionModeProvider = () => ExecutionMode;
+
+function buildProxyBadge(state: ProxyState): string {
+  if (isProxyDismissed()) return "";
+
+  if (state === "detected") {
+    return `<span class="pi-status-proxy pi-status-proxy--ok" data-tooltip="Local helper is running — web search, sign-in, and external services are available.">helper ✓</span>`;
+  }
+
+  if (state === "not-detected") {
+    return `<button type="button" class="pi-status-proxy pi-status-proxy--missing pi-status-clickable" data-tooltip="Local helper not running — some features are unavailable. Click for help.">no helper</button>`;
+  }
+
+  return "";
+}
 
 function renderStatusBar(
   agent: Agent | null,
@@ -110,6 +125,8 @@ function renderStatusBar(
 
   const rulesTooltip = "Edit rules and conventions for this workbook.";
 
+  const proxyBadge = buildProxyBadge(getProxyState());
+
   el.innerHTML = `
     <button type="button" class="pi-status-model pi-status-clickable" data-tooltip="Switch the AI model powering this session">
       <span class="pi-status-model__mark">π</span>
@@ -121,6 +138,7 @@ function renderStatusBar(
     ${lockBadge}
     <button type="button" class="pi-status-rules pi-status-clickable" data-tooltip="${rulesTooltip}">rules</button>
     ${modeBadge}
+    ${proxyBadge}
   `;
 }
 
@@ -171,6 +189,7 @@ export function injectStatusBar(opts: {
 
   document.addEventListener("pi:status-update", onStatusUpdate);
   document.addEventListener("pi:active-runtime-changed", bindActiveAgent);
+  document.addEventListener("pi:proxy-state-changed", onStatusUpdate);
 
   requestAnimationFrame(bindActiveAgent);
 
@@ -178,6 +197,7 @@ export function injectStatusBar(opts: {
     unsubscribeActiveAgent?.();
     document.removeEventListener("pi:status-update", onStatusUpdate);
     document.removeEventListener("pi:active-runtime-changed", bindActiveAgent);
+    document.removeEventListener("pi:proxy-state-changed", onStatusUpdate);
   };
 }
 

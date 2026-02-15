@@ -537,4 +537,32 @@
   color: var(--muted-foreground);
 }
 
+/* ── Proxy status badge ─────────────────────────────── */
+
+.pi-status-proxy {
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+  border: none;
+  background: none;
+  padding: 1px 4px;
+  border-radius: var(--radius-xs);
+}
+
+.pi-status-proxy--ok {
+  color: var(--pi-green);
+  font-weight: 500;
+}
+
+.pi-status-proxy--missing {
+  color: var(--muted-foreground);
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.pi-status-proxy--missing:hover {
+  color: var(--foreground);
+}
+
 

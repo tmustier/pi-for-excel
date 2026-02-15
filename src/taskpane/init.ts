@@ -129,6 +129,7 @@ import {
 } from "./tab-layout.js";
 import { createTabLayoutPersistence } from "./tab-layout-persistence.js";
 import { injectStatusBar } from "./status-bar.js";
+import { startProxyPolling } from "./proxy-status.js";
 import {
   closeStatusPopover,
   toggleContextPopover,
@@ -1594,6 +1595,9 @@ export async function initTaskpane(opts: {
     getLockState: getActiveLockState,
     getExecutionMode,
   });
+
+  // ── Proxy status polling ──
+  startProxyPolling(settings);
 
   // ── Wire command menu to textarea ──
   const wireTextarea = () => {
