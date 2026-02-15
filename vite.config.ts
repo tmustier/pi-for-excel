@@ -262,8 +262,8 @@ export default defineConfig({
       "/api-proxy/chatgpt": proxyEntry("https://chatgpt.com", "/api-proxy/chatgpt"),
       "/api-proxy/google-oauth": proxyEntry("https://oauth2.googleapis.com", "/api-proxy/google-oauth"),
       // Keep more specific Google prefixes before /api-proxy/google to avoid prefix collisions.
-      "/api-proxy/google-cloudcode": proxyEntry("https://cloudcode-pa.googleapis.com", "/api-proxy/google-cloudcode"),
       "/api-proxy/google-cloudcode-sandbox": proxyEntry("https://daily-cloudcode-pa.sandbox.googleapis.com", "/api-proxy/google-cloudcode-sandbox"),
+      "/api-proxy/google-cloudcode": proxyEntry("https://cloudcode-pa.googleapis.com", "/api-proxy/google-cloudcode"),
       "/api-proxy/google": proxyEntry("https://generativelanguage.googleapis.com", "/api-proxy/google"),
     },
   },
