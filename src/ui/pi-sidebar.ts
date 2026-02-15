@@ -151,6 +151,7 @@ export class PiSidebar extends LitElement {
   private _tabContextMenuClickHandler?: (event: MouseEvent) => void;
   private readonly _utilitiesMenuId = "pi-utilities-menu";
   private readonly _tabContextMenuId = "pi-tab-context-menu";
+  private readonly _contextPillBodyId = "pi-context-pill-body";
   private _onEscapeKey = (event: KeyboardEvent) => {
     if (event.key !== "Escape") {
       return;
@@ -943,13 +944,15 @@ export class PiSidebar extends LitElement {
             <button
               type="button"
               class="pi-context-pill__header"
+              aria-controls=${this._contextPillBodyId}
+              aria-expanded=${expanded ? "true" : "false"}
               @click=${this._toggleContextPill}
             >
               <span>Context · no calls yet for this session</span>
               <span class="pi-context-pill__chevron ${expanded ? "pi-context-pill__chevron--open" : ""}">${icon(ChevronRight, "sm")}</span>
             </button>
             ${expanded ? html`
-              <div class="pi-context-pill__body">
+              <div class="pi-context-pill__body" id=${this._contextPillBodyId}>
                 <div class="pi-context-pill__section">
                   <markdown-block .content=${hintMd}></markdown-block>
                 </div>
@@ -1019,13 +1022,15 @@ export class PiSidebar extends LitElement {
           <button
             type="button"
             class="pi-context-pill__header"
+            aria-controls=${this._contextPillBodyId}
+            aria-expanded=${expanded ? "true" : "false"}
             @click=${this._toggleContextPill}
           >
             <span>Context · call #${call}${phaseLabel} · ${formatK(total)} chars</span>
             <span class="pi-context-pill__chevron ${expanded ? "pi-context-pill__chevron--open" : ""}">${icon(ChevronRight, "sm")}</span>
           </button>
           ${expanded ? html`
-            <div class="pi-context-pill__body">
+            <div class="pi-context-pill__body" id=${this._contextPillBodyId}>
               <div class="pi-context-pill__section">
                 <markdown-block .content=${summaryMd}></markdown-block>
               </div>
