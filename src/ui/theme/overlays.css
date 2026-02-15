@@ -7,6 +7,7 @@
 @import "./overlays/primitives.css";
 @import "./overlays/extensions.css";
 @import "./overlays/integrations.css";
+@import "./overlays/skills.css";
 @import "./overlays/provider-resume-shortcuts.css";
 @import "./overlays/recovery.css";
 @import "./overlays/experimental.css";

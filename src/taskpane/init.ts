@@ -36,6 +36,7 @@ import { withWorkbookCoordinator } from "../tools/with-workbook-coordinator.js";
 import { registerBuiltins } from "../commands/builtins.js";
 import { showExtensionsDialog } from "../commands/builtins/extensions-overlay.js";
 import { showIntegrationsDialog } from "../commands/builtins/integrations-overlay.js";
+import { showSkillsDialog } from "../commands/builtins/skills-overlay.js";
 import { ExtensionRuntimeManager } from "../extensions/runtime-manager.js";
 import type { ResumeDialogTarget } from "../commands/builtins/resume-target.js";
 import {
@@ -1192,6 +1193,10 @@ export async function initTaskpane(opts: {
     showExtensionsDialog(extensionManager);
   };
 
+  const openSkillsManager = () => {
+    showSkillsDialog();
+  };
+
   const openRecoveryDialog = async (): Promise<void> => {
     const workbookContext = await resolveWorkbookContext();
 
@@ -1274,6 +1279,7 @@ export async function initTaskpane(opts: {
     setExecutionMode,
     openExtensionsManager,
     openIntegrationsManager,
+    openSkillsManager,
   });
 
   // Slash commands chosen from the popup menu dispatch this event.
@@ -1355,6 +1361,9 @@ export async function initTaskpane(opts: {
   };
   sidebar.onOpenIntegrations = () => {
     openIntegrationsManager();
+  };
+  sidebar.onOpenSkills = () => {
+    openSkillsManager();
   };
   sidebar.onOpenExtensions = () => {
     openExtensionsManager();

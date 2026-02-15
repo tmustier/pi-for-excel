@@ -16,6 +16,7 @@ const BUSY_ALLOWED_COMMANDS = new Set<string>([
   "reopen",
   "yolo",
   "extensions",
+  "skills",
   INTEGRATIONS_COMMAND_NAME,
 ]);
 

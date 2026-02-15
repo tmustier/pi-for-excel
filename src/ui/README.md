@@ -58,7 +58,7 @@ Tailwind v4 puts all utilities inside `@layer utilities`. Unlayered CSS always b
 > - `theme/tokens.css` (1)
 > - `theme/base.css` (2)
 > - `theme/components.css` (3–10, import-only entrypoint) → imports `theme/components/{tabs,input,empty-state,working-indicator,widgets,status-bar,toasts,menus,welcome,files,welcome-login}.css`
-> - `theme/overlays.css` (10b) → imports `theme/overlays/{primitives,extensions,integrations,provider-resume-shortcuts,recovery,experimental}.css`
+> - `theme/overlays.css` (10b) → imports `theme/overlays/{primitives,extensions,integrations,skills,provider-resume-shortcuts,recovery,experimental}.css`
 > - `theme/content-overrides.css` (11) → imports `theme/content/{messages,tool-cards,csv-table,dependency-tree,tool-card-markdown,message-components}.css`
 > - `theme/dialogs.css` (12, stable selectors)
 > - `theme/unstable-overrides.css` (12b, utility-coupled upstream selectors)
