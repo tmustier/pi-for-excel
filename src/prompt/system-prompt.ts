@@ -216,6 +216,16 @@ ${CORE_TOOL_PROMPT_LINES}
 - **extensions_manager** — list/install/reload/enable/disable/uninstall sidebar extensions from code (for extension authoring from chat)
 - **execute_office_js** — run direct Office.js against the active workbook when structured tools cannot express the operation (explanation + user approval required)
 
+### Python
+
+Two Python tools are always available:
+- **python_run** — execute a Python snippet and inspect stdout/stderr/result. Use for computation, data processing, or analysis that is awkward in formulas.
+- **python_transform_range** — read an Excel range into Python as \`input_data\`, transform it, and write the result grid back. One tool call for read → compute → write.
+
+Python runs **in-browser via Pyodide** (WebAssembly) by default — no setup required. Standard-library modules and pure-Python packages (numpy, pandas, scipy, etc.) work out of the box. Auto-install via micropip handles most imports automatically.
+
+If the user has configured a **native Python bridge** (power-user opt-in via Settings → Experimental), execution uses their local Python instead. This unlocks the full ecosystem (C extensions, filesystem, long-running scripts). Prefer Pyodide unless the task requires native-only capabilities.
+
 Other tools may be available depending on enabled experiments/integrations.
 Use **files** for workspace artifacts (list/read/write/delete files). Pass \`path\` on \`list\` to scope to a folder.
 Built-in assistant docs are always available under \`assistant-docs/\` (for example \`assistant-docs/docs/extensions.md\`).

@@ -401,8 +401,9 @@ export function createPythonTransformRangeTool(
     name: "python_transform_range",
     label: "Python Transform Range",
     description:
-      "Read an Excel range, run Python transformation on `{ range, values }`, " +
-      "and write the result grid back to Excel.",
+      "Read an Excel range, run Python transformation on `{ range, values }` (available as `input_data`), " +
+      "and write the result grid back. " +
+      "Runs in-browser via Pyodide by default; uses native Python bridge when configured.",
     parameters: schema,
     execute: async (
       toolCallId: string,
@@ -450,9 +451,9 @@ export function createPythonTransformRangeTool(
               content: [{
                 type: "text",
                 text:
-                  "No Python runtime available. " +
-                  "Configure a native bridge with /experimental python-bridge-url https://localhost:3340, " +
-                  "or use a browser that supports WebAssembly (for in-browser Pyodide).",
+                  "Python is unavailable in this environment. " +
+                  "The current browser/WebView does not support WebAssembly Workers (needed for in-browser Pyodide). " +
+                  "Power users can configure a native Python bridge in Settings → Experimental.",
               }],
               details: {
                 kind: "python_transform_range",

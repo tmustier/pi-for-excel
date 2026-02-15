@@ -39,7 +39,7 @@ void test("python_transform_range returns bridge setup guidance when URL is miss
     code: "result = input_data['values']",
   });
 
-  assert.match(firstText(result), /No Python runtime available/u);
+  assert.match(firstText(result), /Python is unavailable/u);
   assert.equal(result.details?.kind, "python_transform_range");
   assert.equal(result.details?.blocked, false);
   assert.equal(result.details?.error, "no_python_runtime");

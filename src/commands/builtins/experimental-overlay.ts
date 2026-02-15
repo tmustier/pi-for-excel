@@ -150,6 +150,8 @@ export function buildExperimentalFeatureContent(): HTMLDivElement {
     }));
   }
 
+  content.appendChild(buildPythonBridgeSection());
+
   if (advancedSecurityFeatures.length > 0) {
     content.appendChild(buildFeatureSection({
       title: "Advanced / security controls",
@@ -168,13 +170,87 @@ export function buildExperimentalFeatureContent(): HTMLDivElement {
   return content;
 }
 
+function buildPythonBridgeSection(): HTMLElement {
+  const section = document.createElement("section");
+  section.className = "pi-overlay-section pi-experimental-section";
+
+  const title = document.createElement("h3");
+  title.className = "pi-overlay-section-title";
+  title.textContent = "Native Python bridge";
+
+  const hint = document.createElement("p");
+  hint.className = "pi-overlay-hint";
+  hint.textContent =
+    "Python already works out of the box via Pyodide (in-browser WebAssembly). "
+    + "The native bridge is optional — it connects to a local Python process for "
+    + "full ecosystem access (C extensions, filesystem, long-running scripts).";
+
+  const commands = document.createElement("div");
+  commands.className = "pi-experimental-list";
+
+  const urlRow = document.createElement("div");
+  urlRow.className = "pi-experimental-row";
+
+  const urlHeader = document.createElement("div");
+  urlHeader.className = "pi-experimental-row__header";
+
+  const urlTitle = document.createElement("div");
+  urlTitle.className = "pi-experimental-row__title";
+  urlTitle.textContent = "Bridge URL";
+
+  urlHeader.appendChild(urlTitle);
+
+  const urlDesc = document.createElement("div");
+  urlDesc.className = "pi-experimental-row__description";
+  urlDesc.textContent = "Set the URL of your local Python bridge server (e.g. https://localhost:3340).";
+
+  const urlMeta = document.createElement("div");
+  urlMeta.className = "pi-experimental-row__meta";
+
+  const urlCommand = document.createElement("code");
+  urlCommand.className = "pi-experimental-row__command";
+  urlCommand.textContent = "/experimental python-bridge-url <url|show|clear>";
+
+  urlMeta.appendChild(urlCommand);
+  urlRow.append(urlHeader, urlDesc, urlMeta);
+
+  const tokenRow = document.createElement("div");
+  tokenRow.className = "pi-experimental-row";
+
+  const tokenHeader = document.createElement("div");
+  tokenHeader.className = "pi-experimental-row__header";
+
+  const tokenTitle = document.createElement("div");
+  tokenTitle.className = "pi-experimental-row__title";
+  tokenTitle.textContent = "Bridge token";
+
+  tokenHeader.appendChild(tokenTitle);
+
+  const tokenDesc = document.createElement("div");
+  tokenDesc.className = "pi-experimental-row__description";
+  tokenDesc.textContent = "Optional bearer token if your bridge server requires authentication.";
+
+  const tokenMeta = document.createElement("div");
+  tokenMeta.className = "pi-experimental-row__meta";
+
+  const tokenCommand = document.createElement("code");
+  tokenCommand.className = "pi-experimental-row__command";
+  tokenCommand.textContent = "/experimental python-bridge-token <token|show|clear>";
+
+  tokenMeta.appendChild(tokenCommand);
+  tokenRow.append(tokenHeader, tokenDesc, tokenMeta);
+
+  commands.append(urlRow, tokenRow);
+  section.append(title, hint, commands);
+  return section;
+}
+
 export function buildExperimentalFeatureFooter(): HTMLParagraphElement {
   const footer = document.createElement("p");
   footer.className = "pi-experimental-footer";
   footer.textContent =
     "Tip: use /experimental on <feature>, /experimental off <feature>, /experimental toggle <feature>, "
-    + "/experimental tmux-bridge-url <url>, /experimental tmux-bridge-token <token>, /experimental tmux-status, "
-    + "/experimental python-bridge-url <url>, or /experimental python-bridge-token <token>.";
+    + "/experimental tmux-bridge-url <url>, /experimental tmux-bridge-token <token>, or /experimental tmux-status.";
   return footer;
 }
 

@@ -94,7 +94,7 @@ void test("python_run returns error when neither bridge nor Pyodide available", 
 
   assert.equal(result.details?.ok, false);
   assert.equal(result.details?.error, "no_python_runtime");
-  assert.match(firstText(result), /No Python runtime available/);
+  assert.match(firstText(result), /Python is unavailable/);
 });
 
 void test("python_run propagates Pyodide execution errors", async () => {

@@ -27,7 +27,7 @@ void test("python_run returns guidance when no backend is available", async () =
 
   const result = await tool.execute("tc-missing", { code: "print('hello')" });
 
-  assert.match(firstText(result), /No Python runtime available/u);
+  assert.match(firstText(result), /Python is unavailable/u);
   assert.equal(result.details?.kind, "python_bridge");
   assert.equal(result.details?.ok, false);
   assert.equal(result.details?.error, "no_python_runtime");

@@ -362,9 +362,9 @@ function buildOutputPreview(output: string | undefined): string | undefined {
 
 function buildNoPythonAvailableMessage(): string {
   return (
-    "No Python runtime available. " +
-    "Configure a native bridge with /experimental python-bridge-url https://localhost:3340, " +
-    "or use a browser that supports WebAssembly (for in-browser Pyodide)."
+    "Python is unavailable in this environment. " +
+    "The current browser/WebView does not support WebAssembly Workers (needed for in-browser Pyodide). " +
+    "Power users can configure a native Python bridge in Settings → Experimental."
   );
 }
 
@@ -397,8 +397,9 @@ export function createPythonRunTool(
     name: "python_run",
     label: "Python Run",
     description:
-      "Run Python code. Uses a local bridge if configured, otherwise " +
-      "falls back to in-browser Pyodide (WebAssembly). " +
+      "Run Python code in-browser via Pyodide (no setup needed). " +
+      "Standard library and pure-Python packages (numpy, pandas, etc.) work automatically. " +
+      "If a native Python bridge is configured, uses local Python instead. " +
       "Pass optional input_json, inspect stdout/stderr, and chain results into write_cells.",
     parameters: schema,
     execute: async (

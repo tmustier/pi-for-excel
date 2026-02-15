@@ -89,6 +89,16 @@ void test("system prompt includes workbook history recovery tool", () => {
   assert.match(prompt, /modify_structure/);
 });
 
+void test("system prompt documents Python tools and Pyodide default", () => {
+  const prompt = buildSystemPrompt();
+  assert.match(prompt, /### Python/);
+  assert.match(prompt, /\*\*python_run\*\*/);
+  assert.match(prompt, /\*\*python_transform_range\*\*/);
+  assert.match(prompt, /Pyodide/);
+  assert.match(prompt, /no setup required/i);
+  assert.match(prompt, /native Python bridge/i);
+});
+
 void test("system prompt documents trace_dependencies precedents/dependents modes", () => {
   const prompt = buildSystemPrompt();
   assert.match(prompt, /\*\*trace_dependencies\*\*/);

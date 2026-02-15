@@ -159,9 +159,10 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 
 ## Python / LibreOffice execution tools (`python_run`, `libreoffice_convert`, `python_transform_range`)
 - **Availability:** always registered via `createAllTools()`.
-- **Runtime model:**
-  - `python_run`, `python_transform_range`: native bridge preferred when configured; otherwise fallback to in-browser Pyodide.
-  - `libreoffice_convert`: native bridge only (no Pyodide fallback).
+- **Default runtime (Pyodide):** `python_run` and `python_transform_range` run in-browser via Pyodide (WebAssembly) with zero setup. Standard library and pure-Python packages (numpy, pandas, scipy, etc.) auto-install via micropip. ~15MB cold-start on first use, cached by the browser thereafter.
+- **Power-user upgrade (native bridge):** when a bridge URL is configured (Settings → Experimental), Python tools use the local `python3` process instead. This unlocks C extensions, filesystem access, and long-running scripts. `libreoffice_convert` requires the native bridge (no Pyodide equivalent).
+- **Fallback order:** native bridge (if configured) → Pyodide (if WebAssembly + Workers available) → error.
+- **System prompt awareness:** the agent knows Python is available by default via Pyodide and only mentions the native bridge when the task requires native-only capabilities.
 - **Gate model:**
   - no `python-bridge` experiment flag.
   - when native bridge is configured + reachable, first execution requires user confirmation (cached once per bridge URL).
@@ -177,7 +178,7 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
   - `POST /v1/libreoffice-convert` — convert files across `csv|pdf|xlsx`
 - **Security posture:** bridge URL validated via `validateOfficeProxyUrl`; approval prompt protects native bridge execution; bridge enforces loopback+origin checks and optional bearer token (`PYTHON_BRIDGE_TOKEN` / setting `python.bridge.token`, managed via `/experimental python-bridge-token ...`).
 - **Overwrite perf guard (`python_transform_range`):** pre-write `values/formulas` reads are skipped for large `allow_overwrite: true` outputs (> `MAX_RECOVERY_CELLS`) since those snapshots would be dropped anyway.
-- **Rationale:** unblock heavier offline analysis/conversion workflows while keeping workbook writes explicit/auditable and reducing setup friction via Pyodide fallback.
+- **Rationale:** Python works out of the box for most users via Pyodide. The native bridge is a power-user opt-in for full ecosystem access. The system prompt makes the agent aware of both tiers so it can use Python confidently without suggesting unnecessary setup.
 
 ## External tool integrations (`web_search`, `fetch_page`, `mcp`)
 - **Packaging:** exposed as opt-in **integrations** instead of always-on core tools.
