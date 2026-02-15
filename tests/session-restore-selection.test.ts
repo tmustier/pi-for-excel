@@ -81,18 +81,21 @@ void test("recently closed stack reopens newest first and enforces max size", ()
   const stack = new RecentlyClosedStack(2);
 
   stack.push({
+    id: "closed-1",
     sessionId: "session-1",
     title: "One",
     closedAt: "2026-02-11T10:00:00.000Z",
     workbookId: "wb-a",
   });
   stack.push({
+    id: "closed-2",
     sessionId: "session-2",
     title: "Two",
     closedAt: "2026-02-11T10:01:00.000Z",
     workbookId: "wb-a",
   });
   stack.push({
+    id: "closed-3",
     sessionId: "session-3",
     title: "Three",
     closedAt: "2026-02-11T10:02:00.000Z",
@@ -108,6 +111,29 @@ void test("recently closed stack reopens newest first and enforces max size", ()
   assert.equal(stack.popMostRecent()?.sessionId, "session-3");
   assert.equal(stack.popMostRecent()?.sessionId, "session-2");
   assert.equal(stack.popMostRecent(), null);
+});
+
+void test("recently closed stack removes duplicate-session entries by unique id", () => {
+  const stack = new RecentlyClosedStack(5);
+
+  stack.push({
+    id: "closed-a",
+    sessionId: "session-dup",
+    title: "First",
+    closedAt: "2026-02-11T10:00:00.000Z",
+    workbookId: "wb-a",
+  });
+  stack.push({
+    id: "closed-b",
+    sessionId: "session-dup",
+    title: "Second",
+    closedAt: "2026-02-11T10:05:00.000Z",
+    workbookId: "wb-a",
+  });
+
+  const removed = stack.removeById("closed-a");
+  assert.equal(removed?.id, "closed-a");
+  assert.deepEqual(stack.snapshot().map((item) => item.id), ["closed-b"]);
 });
 
 void test("resume target labels and workbook confirmation copy follow selected target", () => {

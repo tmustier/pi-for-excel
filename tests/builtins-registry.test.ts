@@ -261,13 +261,14 @@ void test("resume overlay surfaces recently closed tabs and taskpane wires reope
 
   assert.match(resumeSource, /Recently closed/);
   assert.match(resumeSource, /getRecentlyClosedItems\?: \(\) => readonly ResumeRecentlyClosedItem\[]/);
-  assert.match(resumeSource, /onReopenRecentlyClosed\?: \(sessionId: string\) => Promise<boolean>/);
+  assert.match(resumeSource, /onReopenRecentlyClosed\?: \(item: ResumeRecentlyClosedItem\) => Promise<boolean>/);
   assert.match(resumeSource, /REOPENS in new tab/i);
 
   assert.match(initSource, /getRecentlyClosedItems:\s*\(\)\s*=>\s*recentlyClosed\.snapshot\(\)/);
-  assert.match(initSource, /onReopenRecentlyClosed:\s*async \(sessionId: string\) =>/);
-  assert.match(initSource, /const reopenRecentlyClosedBySessionId = async \(sessionId: string\): Promise<boolean> =>/);
-  assert.match(initSource, /recentlyClosed\.removeBySessionId\(sessionId\)/);
+  assert.match(initSource, /onReopenRecentlyClosed:\s*async \(item\) =>/);
+  assert.match(initSource, /const reopenRecentlyClosedById = async \(recentlyClosedId: string\): Promise<boolean> =>/);
+  assert.match(initSource, /recentlyClosed\.removeById\(recentlyClosedId\)/);
+  assert.match(initSource, /if \(reopenResult === "failed"\) \{\s*recentlyClosed\.push\(item\);\s*\}/);
 });
 
 void test("settings builtins route to unified settings overlay", async () => {

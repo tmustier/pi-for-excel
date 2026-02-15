@@ -3,6 +3,7 @@
  */
 
 export interface RecentlyClosedItem {
+  id: string;
   sessionId: string;
   title: string;
   closedAt: string;
@@ -27,6 +28,14 @@ export class RecentlyClosedStack {
 
   popMostRecent(): RecentlyClosedItem | null {
     return this.items.shift() ?? null;
+  }
+
+  removeById(id: string): RecentlyClosedItem | null {
+    const idx = this.items.findIndex((item) => item.id === id);
+    if (idx < 0) return null;
+
+    const [removed] = this.items.splice(idx, 1);
+    return removed ?? null;
   }
 
   removeBySessionId(sessionId: string): RecentlyClosedItem | null {

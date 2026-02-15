@@ -31,6 +31,7 @@ const RESUME_ITEM_KIND_RECENTLY_CLOSED = "recently_closed";
 type ResumeItemKind = typeof RESUME_ITEM_KIND_SESSION | typeof RESUME_ITEM_KIND_RECENTLY_CLOSED;
 
 export interface ResumeRecentlyClosedItem {
+  id: string;
   sessionId: string;
   title: string;
   closedAt: string;
@@ -59,6 +60,7 @@ function buildRecentlyClosedListItem(item: ResumeRecentlyClosedItem): HTMLButton
   const button = document.createElement("button");
   button.className = "pi-welcome-provider pi-resume-item pi-resume-item--recent";
   button.dataset.id = item.sessionId;
+  button.dataset.recentId = item.id;
   button.dataset.resumeKind = RESUME_ITEM_KIND_RECENTLY_CLOSED;
 
   const title = document.createElement("span");
@@ -105,7 +107,7 @@ export async function showResumeDialog(opts: {
   onOpenInNewTab: (sessionData: SessionData) => Promise<void>;
   onReplaceCurrent: (sessionData: SessionData) => Promise<void>;
   getRecentlyClosedItems?: () => readonly ResumeRecentlyClosedItem[];
-  onReopenRecentlyClosed?: (sessionId: string) => Promise<boolean>;
+  onReopenRecentlyClosed?: (item: ResumeRecentlyClosedItem) => Promise<boolean>;
 }): Promise<void> {
   const storage = getAppStorage();
   const allSessions = await storage.sessions.getAllMetadata();
@@ -272,12 +274,14 @@ export async function showResumeDialog(opts: {
     return items.filter((item) => item.workbookId === workbookId || item.workbookId === null);
   };
 
-  const reopenRecentlyClosedById = async (sessionId: string): Promise<boolean> => {
+  let recentlyClosedById = new Map<string, ResumeRecentlyClosedItem>();
+
+  const reopenRecentlyClosedEntry = async (item: ResumeRecentlyClosedItem): Promise<boolean> => {
     if (opts.onReopenRecentlyClosed) {
-      return opts.onReopenRecentlyClosed(sessionId);
+      return opts.onReopenRecentlyClosed(item);
     }
 
-    const sessionData = await storage.sessions.loadSession(sessionId);
+    const sessionData = await storage.sessions.loadSession(item.sessionId);
     if (!sessionData) {
       showToast("Couldn't reopen session");
       return false;
@@ -291,6 +295,8 @@ export async function showResumeDialog(opts: {
   const renderLists = (): void => {
     const sessions = getVisibleSessions().slice(0, 30);
     const recentlyClosedItems = getVisibleRecentlyClosed().slice(0, 6);
+
+    recentlyClosedById = new Map(recentlyClosedItems.map((item) => [item.id, item]));
 
     recentList.replaceChildren();
     list.replaceChildren();
@@ -332,7 +338,21 @@ export async function showResumeDialog(opts: {
 
     void (async () => {
       if (kind === RESUME_ITEM_KIND_RECENTLY_CLOSED) {
-        const reopened = await reopenRecentlyClosedById(id);
+        const recentId = item.dataset.recentId;
+        if (!recentId) {
+          showToast("Session is no longer in recently closed");
+          renderLists();
+          return;
+        }
+
+        const recentEntry = recentlyClosedById.get(recentId);
+        if (!recentEntry) {
+          showToast("Session is no longer in recently closed");
+          renderLists();
+          return;
+        }
+
+        const reopened = await reopenRecentlyClosedEntry(recentEntry);
         if (reopened) {
           closeOverlay();
           return;
