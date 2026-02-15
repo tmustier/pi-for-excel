@@ -40,14 +40,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-void test("builtins registry wires add-ons and tools command registration", async () => {
+void test("builtins registry wires /addons, /experimental, /extensions, and /integrations command registration", async () => {
   const source = await readFile(new URL("../src/commands/builtins/index.ts", import.meta.url), "utf8");
-
-  assert.match(source, /createExperimentalCommands/);
-  assert.match(source, /\.\.\.createExperimentalCommands\(\)/);
 
   assert.match(source, /createAddonsCommands/);
   assert.match(source, /\.\.\.createAddonsCommands\(context\)/);
+
+  assert.match(source, /createExperimentalCommands/);
+  assert.match(source, /\.\.\.createExperimentalCommands\(\)/);
 
   assert.match(source, /createIntegrationsCommands/);
   assert.match(source, /\.\.\.createIntegrationsCommands\(context\)/);
@@ -149,12 +149,14 @@ void test("addons builtins expose /addons command", async () => {
   assert.match(source, /openAddonsManager/);
 });
 
-void test("add-ons overlay reuses Tools & MCP naming constants", async () => {
-  const source = await readFile(new URL("../src/commands/builtins/addons-overlay.ts", import.meta.url), "utf8");
+void test("add-ons connections section links to detailed Tools & MCP manager", async () => {
+  const source = await readFile(
+    new URL("../src/commands/builtins/addons-overlay-connections.ts", import.meta.url),
+    "utf8",
+  );
 
-  assert.match(source, /INTEGRATIONS_MANAGER_LABEL/);
-  assert.match(source, /text:\s*INTEGRATIONS_MANAGER_LABEL/);
-  assert.doesNotMatch(source, /text:\s*"Integrations"/);
+  assert.match(source, /Open detailed Tools & MCP manager…/);
+  assert.match(source, /openIntegrationsManager/);
 });
 
 void test("taskpane init wires Files workspace opener", async () => {
@@ -170,8 +172,10 @@ void test("taskpane init wires Files workspace opener", async () => {
 void test("taskpane init wires add-ons menu opener", async () => {
   const initSource = await readFile(new URL("../src/taskpane/init.ts", import.meta.url), "utf8");
 
-  assert.match(initSource, /const openAddonsManager = \(\) =>/);
-  assert.match(initSource, /showAddonsDialog\(\{/);
+  assert.match(initSource, /const openAddonsManager = \(section\?: AddonsSection\) =>/);
+  assert.match(initSource, /showAddonsDialog\(/);
+  assert.match(initSource, /listExtensions:\s*\(\)\s*=>\s*extensionManager\.list\(\)/);
+  assert.match(initSource, /setExtensionEnabled:\s*\(entryId: string, enabled: boolean\)\s*=>\s*extensionManager\.setExtensionEnabled\(entryId, enabled\)/);
   assert.match(initSource, /openIntegrationsManager/);
   assert.match(initSource, /openSkillsManager/);
   assert.match(initSource, /openExtensionsManager/);
@@ -197,6 +201,29 @@ void test("sidebar utilities menu includes add-ons label", async () => {
   // Extensions and Files removed from gear menu — accessible via Add-ons and 📎 respectively
   assert.doesNotMatch(sidebarSource, /Extensions…/);
   assert.doesNotMatch(sidebarSource, /Files…/);
+});
+
+void test("add-ons overlay groups connections, extensions, and skills", async () => {
+  const addonsSource = await readFile(new URL("../src/commands/builtins/addons-overlay.ts", import.meta.url), "utf8");
+  const connectionsSource = await readFile(
+    new URL("../src/commands/builtins/addons-overlay-connections.ts", import.meta.url),
+    "utf8",
+  );
+  const extensionsSource = await readFile(
+    new URL("../src/commands/builtins/addons-overlay-extensions.ts", import.meta.url),
+    "utf8",
+  );
+  const skillsSource = await readFile(
+    new URL("../src/commands/builtins/addons-overlay-skills.ts", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(addonsSource, /Connections, extensions, and skills in one place/);
+  assert.match(connectionsSource, /dataset\.addonsSection = "connections"/);
+  assert.match(connectionsSource, /configured \(blocked\)/);
+  assert.match(extensionsSource, /dataset\.addonsSection = "extensions"/);
+  assert.match(extensionsSource, /confirmExtensionEnable/);
+  assert.match(skillsSource, /dataset\.addonsSection = "skills"/);
 });
 
 void test("context pill headers expose expanded state and controlled body", async () => {
@@ -250,6 +277,18 @@ void test("provider and experimental overlays are aliases into settings sections
   assert.match(experimentalSource, /buildExperimentalFeatureContent/);
 });
 
+void test("addons and alias commands deep-link to add-ons sections", async () => {
+  const addonsSource = await readFile(new URL("../src/commands/builtins/addons.ts", import.meta.url), "utf8");
+  const integrationsSource = await readFile(new URL("../src/commands/builtins/integrations.ts", import.meta.url), "utf8");
+  const extensionsSource = await readFile(new URL("../src/commands/builtins/extensions.ts", import.meta.url), "utf8");
+
+  assert.match(addonsSource, /name:\s*"addons"/);
+  assert.match(addonsSource, /openAddonsManager\(\)/);
+
+  assert.match(integrationsSource, /openAddonsManager\("connections"\)/);
+  assert.match(extensionsSource, /openAddonsManager\("extensions"\)/);
+});
+
 void test("settings overlay serializes open flow and tolerates provider storage lookup failure", async () => {
   const settingsOverlaySource = await readFile(
     new URL("../src/commands/builtins/settings-overlay.ts", import.meta.url),
@@ -262,7 +301,7 @@ void test("settings overlay serializes open flow and tolerates provider storage 
   assert.match(settingsOverlaySource, /Saved provider state is temporarily unavailable/);
 });
 
-void test("slash-command busy policy is centralized and includes /yolo", async () => {
+void test("slash-command busy policy is centralized and includes /yolo and /addons", async () => {
   const keyboardActionsSource = await readFile(
     new URL("../src/taskpane/keyboard-shortcuts/editor-actions.ts", import.meta.url),
     "utf8",
@@ -274,8 +313,8 @@ void test("slash-command busy policy is centralized and includes /yolo", async (
   assert.match(initSource, /isBusyAllowedCommand/);
 
   assert.match(busyPolicySource, /"yolo"/);
-  assert.match(busyPolicySource, /"rules"/);
   assert.match(busyPolicySource, /"addons"/);
+  assert.match(busyPolicySource, /"rules"/);
   assert.match(busyPolicySource, /TOOLS_COMMAND_NAME/);
   assert.match(busyPolicySource, /INTEGRATIONS_COMMAND_NAME/);
 });

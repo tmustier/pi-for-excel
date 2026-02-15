@@ -1,0 +1,100 @@
+/* Add-ons overlay */
+
+.pi-addons-dialog {
+  overflow: hidden;
+  gap: 12px;
+}
+
+.pi-addons-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  max-height: min(64vh, 620px);
+  padding-right: 2px;
+}
+
+.pi-addons-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pi-addons-connection,
+.pi-addons-extension,
+.pi-addons-skill,
+.pi-addons-connection-status,
+.pi-addons-python-bridge {
+  gap: 8px;
+}
+
+.pi-addons-connection__top,
+.pi-addons-extension__top,
+.pi-addons-skill__top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.pi-addons-connection__text-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.pi-addons-connection__title,
+.pi-addons-extension__name,
+.pi-addons-skill__name,
+.pi-addons-python-bridge__title {
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  color: var(--foreground);
+}
+
+.pi-addons-connection__description,
+.pi-addons-extension__details,
+.pi-addons-skill__description {
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  color: var(--muted-foreground);
+}
+
+.pi-addons-skill__location {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--muted-foreground);
+  background: var(--alpha-4);
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+
+.pi-addons-connection__toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+}
+
+.pi-addons-connection__toggle,
+.pi-addons-extension__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  color: var(--foreground);
+}
+
+.pi-addons-python-bridge__row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 8px;
+  align-items: center;
+}
+
+@media (max-width: 640px) {
+  .pi-addons-python-bridge__row {
+    grid-template-columns: 1fr;
+  }
+}

@@ -7,29 +7,30 @@ import {
   INTEGRATIONS_MANAGER_LABEL_LOWER,
   TOOLS_COMMAND_NAME,
 } from "../../integrations/naming.js";
+import type { AddonsSection } from "./addons-overlay.js";
 import type { SlashCommand } from "../types.js";
 
 export interface IntegrationsCommandActions {
-  openIntegrationsManager: () => void | Promise<void>;
+  openAddonsManager: (section?: AddonsSection) => void | Promise<void>;
 }
 
 export function createIntegrationsCommands(actions: IntegrationsCommandActions): SlashCommand[] {
-  const openManager = () => {
-    void actions.openIntegrationsManager();
+  const openConnections = () => {
+    void actions.openAddonsManager("connections");
   };
 
   return [
     {
       name: TOOLS_COMMAND_NAME,
-      description: `Manage ${INTEGRATIONS_MANAGER_LABEL_LOWER} (web search, page fetch, MCP)`,
+      description: `Manage ${INTEGRATIONS_MANAGER_LABEL_LOWER} (alias for /addons connections)`,
       source: "builtin",
-      execute: openManager,
+      execute: openConnections,
     },
     {
       name: INTEGRATIONS_COMMAND_NAME,
       description: `Alias for /${TOOLS_COMMAND_NAME}`,
       source: "builtin",
-      execute: openManager,
+      execute: openConnections,
     },
   ];
 }

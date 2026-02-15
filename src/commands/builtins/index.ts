@@ -20,8 +20,8 @@ import { createSkillsCommands, type SkillsCommandActions } from "./skills.js";
 export interface BuiltinsContext
   extends SessionCommandActions,
     SettingsCommandActions,
-    ExtensionsCommandActions,
     AddonsCommandActions,
+    ExtensionsCommandActions,
     IntegrationsCommandActions,
     SkillsCommandActions {
   getActiveAgent: ActiveAgentProvider;

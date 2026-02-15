@@ -1,84 +1,277 @@
 /**
- * Add-ons entrypoint overlay.
+ * Add-ons overlay.
  *
- * Keeps a single gear-menu item while preserving direct access to
- * Integrations, Skills, and Extensions managers.
+ * Unified entry point for:
+ * - Connections
+ * - Extensions
+ * - Skills
  */
 
-import { INTEGRATIONS_MANAGER_LABEL } from "../../integrations/naming.js";
+import { getAppStorage } from "@mariozechner/pi-web-ui/dist/storage/app-storage.js";
+
+import { dispatchIntegrationsChanged } from "../../integrations/events.js";
 import {
   closeOverlayById,
-  createOverlayButton,
   createOverlayDialog,
   createOverlayHeader,
 } from "../../ui/overlay-dialog.js";
 import { ADDONS_OVERLAY_ID } from "../../ui/overlay-ids.js";
+import { showToast } from "../../ui/toast.js";
+import {
+  buildConnectionsSnapshot,
+  renderConnectionsSection,
+} from "./addons-overlay-connections.js";
+import { renderExtensionsSection } from "./addons-overlay-extensions.js";
+import {
+  buildSkillsSnapshot,
+  renderSkillsSection,
+} from "./addons-overlay-skills.js";
+import type {
+  AddonsDialogActions,
+  AddonsSection,
+  ShowAddonsDialogOptions,
+} from "./addons-overlay-types.js";
 
-export interface AddonsDialogActions {
-  openIntegrationsManager: () => void;
-  openSkillsManager: () => void;
-  openExtensionsManager: () => void;
+export type { AddonsSection, ShowAddonsDialogOptions, AddonsDialogActions } from "./addons-overlay-types.js";
+
+let addonsDialogOpenInFlight: Promise<void> | null = null;
+let pendingSectionFocus: AddonsSection | null = null;
+
+function sectionSelector(section: AddonsSection): string {
+  return `[data-addons-section=\"${section}\"]`;
 }
 
-export function showAddonsDialog(actions: AddonsDialogActions): void {
-  if (closeOverlayById(ADDONS_OVERLAY_ID)) {
+function focusAddonsSection(overlay: HTMLElement, section: AddonsSection): void {
+  const target = overlay.querySelector<HTMLElement>(sectionSelector(section));
+  if (!target) {
     return;
   }
 
-  const dialog = createOverlayDialog({
-    overlayId: ADDONS_OVERLAY_ID,
-    cardClassName: "pi-welcome-card pi-overlay-card pi-overlay-card--m",
-  });
+  target.scrollIntoView({ behavior: "smooth", block: "start" });
+}
 
-  const { header } = createOverlayHeader({
-    onClose: dialog.close,
-    closeLabel: "Close add-ons",
-    title: "Add-ons",
-    subtitle: "Manage tools & MCP, skills, and extensions.",
-  });
+export async function showAddonsDialog(
+  actions: AddonsDialogActions,
+  options: ShowAddonsDialogOptions = {},
+): Promise<void> {
+  const existing = document.getElementById(ADDONS_OVERLAY_ID);
+  if (existing instanceof HTMLElement) {
+    if (options.section) {
+      focusAddonsSection(existing, options.section);
+      return;
+    }
 
-  const body = document.createElement("div");
-  body.className = "pi-overlay-body";
+    closeOverlayById(ADDONS_OVERLAY_ID);
+    return;
+  }
 
-  const section = document.createElement("section");
-  section.className = "pi-overlay-section";
+  if (addonsDialogOpenInFlight) {
+    if (options.section) {
+      pendingSectionFocus = options.section;
+    }
 
-  const card = document.createElement("div");
-  card.className = "pi-overlay-surface";
+    await addonsDialogOpenInFlight;
 
-  const actionsRow = document.createElement("div");
-  actionsRow.className = "pi-overlay-actions";
+    const mounted = document.getElementById(ADDONS_OVERLAY_ID);
+    if (mounted instanceof HTMLElement && options.section) {
+      focusAddonsSection(mounted, options.section);
+    }
+    return;
+  }
 
-  const integrationsButton = createOverlayButton({
-    text: INTEGRATIONS_MANAGER_LABEL,
-    className: "pi-overlay-btn--primary",
-  });
-  integrationsButton.addEventListener("click", () => {
-    dialog.close();
-    actions.openIntegrationsManager();
-  });
+  pendingSectionFocus = options.section ?? pendingSectionFocus;
 
-  const skillsButton = createOverlayButton({
-    text: "Skills",
-  });
-  skillsButton.addEventListener("click", () => {
-    dialog.close();
-    actions.openSkillsManager();
-  });
+  addonsDialogOpenInFlight = (async () => {
+    const settings = getAppStorage().settings;
 
-  const extensionsButton = createOverlayButton({
-    text: "Extensions",
-  });
-  extensionsButton.addEventListener("click", () => {
-    dialog.close();
-    actions.openExtensionsManager();
-  });
+    const dialog = createOverlayDialog({
+      overlayId: ADDONS_OVERLAY_ID,
+      cardClassName: "pi-welcome-card pi-overlay-card pi-overlay-card--l pi-addons-dialog",
+    });
 
-  actionsRow.append(integrationsButton, skillsButton, extensionsButton);
-  card.appendChild(actionsRow);
-  section.appendChild(card);
-  body.appendChild(section);
+    const managedActions: AddonsDialogActions = {
+      ...actions,
+      openIntegrationsManager: () => {
+        dialog.close();
+        actions.openIntegrationsManager();
+      },
+      openExtensionsManager: () => {
+        dialog.close();
+        actions.openExtensionsManager();
+      },
+      openSkillsManager: () => {
+        dialog.close();
+        actions.openSkillsManager();
+      },
+    };
 
-  dialog.card.append(header, body);
-  dialog.mount();
+    const { header } = createOverlayHeader({
+      onClose: dialog.close,
+      closeLabel: "Close add-ons",
+      title: "Add-ons",
+      subtitle: "Connections, extensions, and skills in one place.",
+    });
+
+    const body = document.createElement("div");
+    body.className = "pi-overlay-body pi-addons-body";
+
+    const connectionsContainer = document.createElement("div");
+    const extensionsContainer = document.createElement("div");
+    const skillsContainer = document.createElement("div");
+    body.append(connectionsContainer, extensionsContainer, skillsContainer);
+
+    dialog.card.append(header, body);
+
+    let disposed = false;
+    dialog.addCleanup(() => {
+      disposed = true;
+    });
+
+    let connectionsBusy = false;
+
+    const refreshExtensions = (): void => {
+      if (disposed) {
+        return;
+      }
+
+      renderExtensionsSection({
+        container: extensionsContainer,
+        actions: managedActions,
+        busy: connectionsBusy,
+        onRefresh: refreshExtensions,
+      });
+    };
+
+    const refreshSkills = async (): Promise<void> => {
+      if (disposed) {
+        return;
+      }
+
+      try {
+        const snapshot = await buildSkillsSnapshot(settings);
+        if (disposed) {
+          return;
+        }
+
+        renderSkillsSection({
+          container: skillsContainer,
+          actions: managedActions,
+          snapshot,
+        });
+      } catch (error: unknown) {
+        skillsContainer.replaceChildren();
+
+        const section = document.createElement("section");
+        section.className = "pi-overlay-section pi-addons-section";
+        section.dataset.addonsSection = "skills";
+
+        const title = document.createElement("h3");
+        title.className = "pi-overlay-section-title";
+        title.textContent = "Skills";
+
+        const warning = document.createElement("p");
+        warning.className = "pi-overlay-hint pi-overlay-text-warning";
+        warning.textContent = `Failed to load skills: ${error instanceof Error ? error.message : "Unknown error"}`;
+
+        section.append(title, warning);
+        skillsContainer.appendChild(section);
+      }
+    };
+
+    const refreshConnections = async (): Promise<void> => {
+      if (disposed) {
+        return;
+      }
+
+      try {
+        const snapshot = await buildConnectionsSnapshot(settings, managedActions);
+        if (disposed) {
+          return;
+        }
+
+        const onMutate = async (
+          mutation: () => Promise<void>,
+          reason: "toggle" | "scope" | "external-toggle" | "config",
+          successMessage?: string,
+        ): Promise<void> => {
+          if (connectionsBusy) {
+            return;
+          }
+
+          connectionsBusy = true;
+          try {
+            await mutation();
+            dispatchIntegrationsChanged({ reason });
+            if (managedActions.onChanged) {
+              await managedActions.onChanged();
+            }
+            if (successMessage) {
+              showToast(successMessage);
+            }
+          } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : "Unknown error";
+            showToast(`Add-ons: ${message}`);
+          } finally {
+            connectionsBusy = false;
+            await refreshConnections();
+            refreshExtensions();
+          }
+        };
+
+        renderConnectionsSection({
+          container: connectionsContainer,
+          snapshot,
+          settings,
+          actions: managedActions,
+          busy: connectionsBusy,
+          onRefresh: () => {
+            void refreshConnections();
+          },
+          onMutate,
+        });
+      } catch (error: unknown) {
+        connectionsContainer.replaceChildren();
+
+        const section = document.createElement("section");
+        section.className = "pi-overlay-section pi-addons-section";
+        section.dataset.addonsSection = "connections";
+
+        const title = document.createElement("h3");
+        title.className = "pi-overlay-section-title";
+        title.textContent = "Connections";
+
+        const warning = document.createElement("p");
+        warning.className = "pi-overlay-hint pi-overlay-text-warning";
+        warning.textContent = `Failed to load connections: ${error instanceof Error ? error.message : "Unknown error"}`;
+
+        section.append(title, warning);
+        connectionsContainer.appendChild(section);
+      }
+    };
+
+    await Promise.all([
+      refreshConnections(),
+      Promise.resolve(refreshExtensions()),
+      refreshSkills(),
+    ]);
+
+    dialog.mount();
+
+    if (pendingSectionFocus) {
+      const section = pendingSectionFocus;
+      pendingSectionFocus = null;
+      requestAnimationFrame(() => {
+        const mounted = document.getElementById(ADDONS_OVERLAY_ID);
+        if (mounted instanceof HTMLElement) {
+          focusAddonsSection(mounted, section);
+        }
+      });
+    }
+  })();
+
+  try {
+    await addonsDialogOpenInFlight;
+  } finally {
+    addonsDialogOpenInFlight = null;
+  }
 }

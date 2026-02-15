@@ -5,6 +5,7 @@
  */
 
 @import "./overlays/primitives.css";
+@import "./overlays/addons.css";
 @import "./overlays/extensions.css";
 @import "./overlays/integrations.css";
 @import "./overlays/skills.css";
