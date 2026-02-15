@@ -135,8 +135,11 @@
   font-family: var(--font-mono);
   font-size: var(--text-sm);
   padding: 2px 6px;
-  background: var(--alpha-5);
+  background: var(--alpha-6);
+  border: 1px solid var(--alpha-10);
   border-radius: var(--radius-xs);
+  box-shadow: 0 1px 0 var(--alpha-6);
+  color: var(--foreground);
   white-space: nowrap;
   flex-shrink: 0;
 }
