@@ -1,0 +1,142 @@
+/* ═══════════════════════════════════════════════════════
+   Disclosure bar — onboarding banner above chat messages
+   ═══════════════════════════════════════════════════════ */
+
+.pi-disclosure-bar {
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  background: var(--glass-bg-solid);
+  border: var(--glass-border);
+  margin: 8px 10px 4px;
+  flex-shrink: 0;
+}
+
+.pi-disclosure-bar__text {
+  font-size: var(--text-sm);
+  color: var(--foreground);
+  line-height: 1.45;
+  margin-bottom: 8px;
+}
+
+.pi-disclosure-bar__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pi-disclosure-bar__link {
+  background: none;
+  border: none;
+  color: var(--primary);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  font-weight: 500;
+  padding: 0;
+}
+
+.pi-disclosure-bar__link:hover {
+  text-decoration: underline;
+}
+
+.pi-disclosure-bar__muted {
+  font-size: var(--text-xs);
+  color: var(--muted-foreground);
+}
+
+/* ── Expandable picker ──────────────────────────────── */
+
+.pi-disclosure-picker {
+  display: none;
+  flex-direction: column;
+  gap: 2px;
+  border-top: 1px solid var(--alpha-6);
+  border-bottom: 1px solid var(--alpha-6);
+  padding: 8px 0;
+  margin-bottom: 8px;
+}
+
+.pi-disclosure-picker.is-visible {
+  display: flex;
+}
+
+/* ── Toggle row (reusable) ──────────────────────────── */
+
+.pi-toggle-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 0;
+  cursor: pointer;
+}
+
+.pi-toggle-row__labels {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.pi-toggle-row__label {
+  font-size: var(--text-sm);
+  color: var(--foreground);
+  font-weight: 500;
+}
+
+.pi-toggle-row__sublabel {
+  font-size: var(--text-xs);
+  color: var(--muted-foreground);
+}
+
+/* ── Toggle switch (CSS-only) ───────────────────────── */
+
+.pi-toggle {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+  width: 32px;
+  height: 18px;
+}
+
+.pi-toggle__input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.pi-toggle__track {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: var(--radius-full);
+  background: var(--alpha-15);
+  transition: background 0.15s ease;
+  cursor: pointer;
+}
+
+.pi-toggle__track::after {
+  content: "";
+  display: block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: white;
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  transition: transform 0.15s ease;
+  box-shadow: 0 1px 2px oklch(0 0 0 / 0.12);
+}
+
+.pi-toggle__input:checked + .pi-toggle__track {
+  background: var(--pi-green);
+}
+
+.pi-toggle__input:checked + .pi-toggle__track::after {
+  transform: translateX(14px);
+}
+
+.pi-toggle__input:focus-visible + .pi-toggle__track {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
