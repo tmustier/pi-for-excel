@@ -79,12 +79,13 @@ For most users, API keys are the smoothest setup and usually do **not** need the
 3. Paste your API key
 4. Click **Save**
 
-### OAuth / account login (Anthropic, OpenAI ChatGPT, GitHub Copilot)
+### OAuth / account login (Anthropic, OpenAI ChatGPT, Google Code Assist/Antigravity, GitHub Copilot)
 
 1. In `/login`, click **Login with …**
 2. Complete login in the browser window that opens
 3. Return to Excel and complete any prompt shown
-   - For OpenAI (ChatGPT), copy the final browser URL (it may be a `localhost` callback URL) and paste it when prompted
+   - For OpenAI + Google OAuth flows, copy the final browser URL (it may be a `localhost` callback URL) and paste it when prompted
+   - Some Google workspace tiers may also ask for a Google Cloud project ID during setup
 
 If login fails with a CORS/network error, follow the next section.
 

@@ -195,7 +195,7 @@ export function installModelSelectorPatch(): void {
         continue;
       }
 
-      if (provider === "google") {
+      if (provider === "google" || provider === "google-gemini-cli" || provider === "google-antigravity") {
         const bestPro = pickBestByRecency(models, (m) => /^gemini-.*-pro/i.test(m.id));
         if (bestPro) {
           featured.push(bestPro);

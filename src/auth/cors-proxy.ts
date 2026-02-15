@@ -28,6 +28,8 @@ const DEV_REWRITES: [string, string][] = [
   ["https://api.openai.com/", "/api-proxy/openai/"],
   ["https://chatgpt.com/", "/api-proxy/chatgpt/"],
   ["https://generativelanguage.googleapis.com/", "/api-proxy/google/"],
+  ["https://cloudcode-pa.googleapis.com/", "/api-proxy/google-cloudcode/"],
+  ["https://daily-cloudcode-pa.sandbox.googleapis.com/", "/api-proxy/google-cloudcode-sandbox/"],
 ];
 
 /** The original, un-patched fetch — use for requests that should bypass the proxy */
@@ -104,6 +106,10 @@ function looksLikeOAuthOrTokenEndpoint(url: string): boolean {
 
     // Google OAuth token endpoint
     if (u.hostname === "oauth2.googleapis.com") return true;
+
+    // Google Cloud Code Assist onboarding/auth-adjacent endpoints
+    if (u.hostname === "cloudcode-pa.googleapis.com" && u.pathname.startsWith("/v1internal")) return true;
+    if (u.hostname === "daily-cloudcode-pa.sandbox.googleapis.com" && u.pathname.startsWith("/v1internal")) return true;
 
     return false;
   } catch {

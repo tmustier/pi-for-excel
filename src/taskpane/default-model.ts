@@ -6,7 +6,12 @@ import { getModel, getModels, type Api, type Model } from "@mariozechner/pi-ai";
 
 import { modelRecencyScore, parseMajorMinor } from "../models/model-ordering.js";
 
-type DefaultProvider = "openai-codex" | "openai" | "google";
+type DefaultProvider =
+  | "openai-codex"
+  | "openai"
+  | "google"
+  | "google-gemini-cli"
+  | "google-antigravity";
 
 type DefaultModelRule = { provider: DefaultProvider; match: RegExp };
 
@@ -22,6 +27,15 @@ const DEFAULT_MODEL_RULES: DefaultModelRule[] = [
   // Gemini defaults: Pro-ish first, then any Gemini
   { provider: "google", match: /^gemini-.*-pro/i },
   { provider: "google", match: /^gemini-/i },
+
+  // Google Cloud Code Assist (Gemini CLI)
+  { provider: "google-gemini-cli", match: /^gemini-.*-pro/i },
+  { provider: "google-gemini-cli", match: /^gemini-/i },
+
+  // Google Antigravity (Gemini/Claude/GPT-OSS)
+  { provider: "google-antigravity", match: /^gemini-.*-pro/i },
+  { provider: "google-antigravity", match: /^gemini-/i },
+  { provider: "google-antigravity", match: /^.+$/ },
 ];
 
 function pickLatestMatchingModel(provider: DefaultProvider, match: RegExp): Model<Api> | null {

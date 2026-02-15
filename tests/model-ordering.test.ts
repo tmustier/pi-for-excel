@@ -75,6 +75,15 @@ void test("provider-map keeps openai-codex distinct from openai", () => {
   assert.equal(mapToApiProvider("openai"), "openai");
 });
 
-void test("browser oauth providers include openai-codex", () => {
+void test("provider-map keeps Google OAuth providers distinct from API-key google", () => {
+  assert.equal(mapToApiProvider("gemini-cli"), "google-gemini-cli");
+  assert.equal(mapToApiProvider("google-gemini-cli"), "google-gemini-cli");
+  assert.equal(mapToApiProvider("antigravity"), "google-antigravity");
+  assert.equal(mapToApiProvider("google-antigravity"), "google-antigravity");
+});
+
+void test("browser oauth providers include OpenAI + Google OAuth providers", () => {
   assert.equal(BROWSER_OAUTH_PROVIDERS.includes("openai-codex"), true);
+  assert.equal(BROWSER_OAUTH_PROVIDERS.includes("google-gemini-cli"), true);
+  assert.equal(BROWSER_OAUTH_PROVIDERS.includes("google-antigravity"), true);
 });

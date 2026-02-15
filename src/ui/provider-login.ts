@@ -29,13 +29,15 @@ export interface ProviderDef {
 export const ALL_PROVIDERS: ProviderDef[] = [
   // OAuth providers first (subscription / account-based flows)
   // Only list flows that are supported in-browser (PKCE/manual paste, no local callback server).
-  { id: "anthropic",       label: "Anthropic",           oauth: "anthropic",      desc: "Claude Pro/Max" },
-  { id: "openai-codex",    label: "OpenAI (ChatGPT)",    oauth: "openai-codex",    desc: "Plus/Pro subscription" },
-  { id: "github-copilot",  label: "GitHub Copilot",      oauth: "github-copilot" },
+  { id: "anthropic",          label: "Anthropic",                oauth: "anthropic",          desc: "Claude Pro/Max" },
+  { id: "openai-codex",       label: "OpenAI (ChatGPT)",         oauth: "openai-codex",       desc: "Plus/Pro subscription" },
+  { id: "google-gemini-cli",  label: "Google Code Assist",       oauth: "google-gemini-cli",  desc: "Gemini via Google account" },
+  { id: "google-antigravity", label: "Google Antigravity",       oauth: "google-antigravity", desc: "Gemini/Claude/GPT-OSS" },
+  { id: "github-copilot",     label: "GitHub Copilot",           oauth: "github-copilot" },
 
   // API key providers
-  { id: "openai",             label: "OpenAI (API)",        desc: "API key" },
-  { id: "google",             label: "Google Gemini",       desc: "API key" },
+  { id: "openai",             label: "OpenAI (API)",             desc: "API key" },
+  { id: "google",             label: "Google Gemini (API)",      desc: "API key" },
   { id: "deepseek",           label: "DeepSeek" },
   { id: "amazon-bedrock",     label: "Amazon Bedrock" },
   { id: "mistral",            label: "Mistral" },
@@ -89,6 +91,21 @@ function normalizeAnthropicAuthorizationInput(input: string): string {
   return value;
 }
 
+function looksLikeOAuthRedirectInput(value: string): boolean {
+  const lower = value.toLowerCase();
+  return (
+    value.includes("#")
+    || value.includes("code=")
+    || lower.startsWith("http://localhost:1455/")
+    || lower.startsWith("http://localhost:8085/")
+    || lower.startsWith("http://localhost:51121/")
+    || lower.startsWith("https://auth.openai.com/")
+    || lower.startsWith("https://accounts.google.com/")
+    || lower.includes("oauth2callback")
+    || lower.includes("oauth-callback")
+  );
+}
+
 function normalizeApiKeyForProvider(
   providerId: string,
   raw: string,
@@ -114,20 +131,28 @@ function normalizeApiKeyForProvider(
     }
   }
 
-  if (providerId === "openai-codex") {
-    const looksLikeAuthCode =
-      key.includes("#") ||
-      key.includes("code=") ||
-      key.startsWith("http://localhost:1455/") ||
-      key.startsWith("https://auth.openai.com/");
+  if (providerId === "openai-codex" && looksLikeOAuthRedirectInput(key)) {
+    return {
+      ok: false,
+      error:
+        "That looks like an OAuth redirect URL/code. Use “Login with OpenAI (ChatGPT)” and paste it in the login prompt (don’t Save it as an API key).",
+    };
+  }
 
-    if (looksLikeAuthCode) {
-      return {
-        ok: false,
-        error:
-          "That looks like an OAuth redirect URL/code. Use “Login with OpenAI (ChatGPT)” and paste it in the login prompt (don’t Save it as an API key).",
-      };
-    }
+  if ((providerId === "google-gemini-cli" || providerId === "google-antigravity") && looksLikeOAuthRedirectInput(key)) {
+    return {
+      ok: false,
+      error:
+        "That looks like an OAuth redirect URL/code. Use “Login with Google …” and paste it in the login prompt (don’t Save it as an API key).",
+    };
+  }
+
+  if (providerId === "google" && looksLikeOAuthRedirectInput(key)) {
+    return {
+      ok: false,
+      error:
+        "That looks like an OAuth redirect URL/code. Use Google API key auth here, or use the dedicated Google OAuth login rows.",
+    };
   }
 
   return { ok: true, key };
@@ -263,7 +288,9 @@ export function buildProviderRow(
     ? "sk-ant-api… or sk-ant-oat…"
     : id === "openai-codex"
       ? "ChatGPT OAuth access token"
-      : "Enter API key";
+      : id === "google-gemini-cli" || id === "google-antigravity"
+        ? "Google OAuth credential JSON"
+        : "Enter API key";
 
   const row = document.createElement("div");
   row.className = "pi-login-row";
@@ -362,7 +389,9 @@ export function buildProviderRow(
                 ? "After completing login, copy the authorization string from the browser. You can paste the full URL, or a CODE#STATE value."
                 : id === "openai-codex"
                   ? "After completing login, copy the final browser URL (usually localhost) from the address bar, then paste it here."
-                  : undefined;
+                  : id === "google-gemini-cli" || id === "google-antigravity"
+                    ? "After sign-in, copy the final browser URL (localhost callback) from the address bar, then paste it here."
+                    : undefined;
 
               const value = await promptForText({
                 title: `Login with ${label}`,

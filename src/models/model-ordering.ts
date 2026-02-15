@@ -11,6 +11,8 @@ const PROVIDER_ORDER: Record<string, number> = {
   "openai-codex": 2,
   openai: 3,
   google: 4,
+  "google-gemini-cli": 4,
+  "google-antigravity": 4,
   "github-copilot": 5,
 };
 
@@ -33,7 +35,7 @@ export function familyPriority(provider: string, id: string): number {
     return 9;
   }
 
-  if (provider === "google") {
+  if (provider === "google" || provider === "google-gemini-cli" || provider === "google-antigravity") {
     // Prefer Pro-ish variants first, then Flash-ish, then any Gemini.
     if (/^gemini-.*-pro/i.test(id)) return 0;
     if (/^gemini-.*-flash/i.test(id)) return 1;

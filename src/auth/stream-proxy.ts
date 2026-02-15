@@ -29,6 +29,11 @@ function shouldProxyProvider(provider: string, apiKey?: string): boolean {
     case "anthropic":
       return typeof apiKey === "string" && apiKey.startsWith("sk-ant-oat");
 
+    // Google Cloud Code Assist providers frequently require proxy in Office webviews.
+    case "google-gemini-cli":
+    case "google-antigravity":
+      return true;
+
     // Z-AI always requires proxy (matches pi-web-ui default)
     case "zai":
       return true;

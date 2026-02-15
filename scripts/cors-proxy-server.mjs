@@ -107,6 +107,8 @@ const DEFAULT_ALLOWED_TARGET_HOSTS = new Set([
   "chatgpt.com",
   "oauth2.googleapis.com",
   "generativelanguage.googleapis.com",
+  "cloudcode-pa.googleapis.com",
+  "daily-cloudcode-pa.sandbox.googleapis.com",
   "api.z.ai",
 ]);
 
