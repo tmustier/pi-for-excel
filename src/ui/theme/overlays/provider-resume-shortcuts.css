@@ -14,6 +14,18 @@
   overflow: hidden;
 }
 
+.pi-resume-body {
+  gap: 12px;
+}
+
+.pi-resume-section {
+  gap: 6px;
+}
+
+.pi-resume-section-hint {
+  margin: 0;
+}
+
 .pi-resume-target-controls {
   display: flex;
   gap: 6px;
@@ -56,6 +68,11 @@
   min-height: 0;
   flex-direction: column;
   gap: 4px;
+}
+
+.pi-resume-list--recent {
+  overflow: visible;
+  flex: 0 0 auto;
 }
 
 .pi-resume-list-empty {

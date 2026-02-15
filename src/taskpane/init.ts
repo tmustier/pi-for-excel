@@ -967,6 +967,10 @@ export async function initTaskpane(opts: {
       onReplaceCurrent: async (sessionData: SessionData) => {
         await replaceActiveRuntimeSession(sessionData);
       },
+      getRecentlyClosedItems: () => recentlyClosed.snapshot(),
+      onReopenRecentlyClosed: async (sessionId: string) => {
+        return reopenRecentlyClosedBySessionId(sessionId);
+      },
     });
   };
 
@@ -995,6 +999,21 @@ export async function initTaskpane(opts: {
     }
   };
 
+  const reopenRecentlyClosedBySessionId = async (sessionId: string): Promise<boolean> => {
+    const item = recentlyClosed.removeBySessionId(sessionId);
+    if (!item) {
+      showToast("Session is no longer in recently closed");
+      return false;
+    }
+
+    const reopened = await reopenRecentlyClosedItem(item);
+    if (!reopened) {
+      recentlyClosed.push(item);
+    }
+
+    return reopened;
+  };
+
   const reopenLastClosed = async (): Promise<void> => {
     const item = recentlyClosed.popMostRecent();
     if (!item) {
@@ -1002,7 +1021,10 @@ export async function initTaskpane(opts: {
       return;
     }
 
-    await reopenRecentlyClosedItem(item);
+    const reopened = await reopenRecentlyClosedItem(item);
+    if (!reopened) {
+      recentlyClosed.push(item);
+    }
   };
 
   const revertLatestCheckpoint = async (): Promise<void> => {
