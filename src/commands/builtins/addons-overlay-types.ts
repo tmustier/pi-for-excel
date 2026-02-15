@@ -21,8 +21,6 @@ export interface AddonsDialogActions {
   getActiveSessionId: () => string | null;
   resolveWorkbookContext: () => Promise<WorkbookContextSnapshot>;
   onChanged?: () => Promise<void> | void;
-  openIntegrationsManager: () => void;
-  openSkillsManager: () => void;
   openExtensionsManager: () => void;
   listExtensions: () => ExtensionRuntimeStatus[];
   setExtensionEnabled: (entryId: string, enabled: boolean) => Promise<void>;

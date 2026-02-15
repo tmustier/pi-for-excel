@@ -42,8 +42,6 @@ import {
 import { registerBuiltins } from "../commands/builtins.js";
 import { showAddonsDialog, type AddonsSection } from "../commands/builtins/addons-overlay.js";
 import { showExtensionsDialog } from "../commands/builtins/extensions-overlay.js";
-import { showIntegrationsDialog } from "../commands/builtins/integrations-overlay.js";
-import { showSkillsDialog } from "../commands/builtins/skills-overlay.js";
 import { ExtensionRuntimeManager } from "../extensions/runtime-manager.js";
 import type { ResumeDialogTarget } from "../commands/builtins/resume-target.js";
 import {
@@ -1276,25 +1274,8 @@ export async function initTaskpane(opts: {
     }
   });
 
-  const openIntegrationsManager = () => {
-    showIntegrationsDialog({
-      getActiveSessionId: () => getActiveRuntime()?.persistence.getSessionId() ?? null,
-      resolveWorkbookContext: async () => {
-        const workbookContext = await resolveWorkbookContext();
-        return {
-          workbookId: workbookContext.workbookId,
-          workbookLabel: formatWorkbookLabel(workbookContext),
-        };
-      },
-    });
-  };
-
   const openExtensionsManager = () => {
     showExtensionsDialog(extensionManager);
-  };
-
-  const openSkillsManager = () => {
-    showSkillsDialog();
   };
 
   const openAddonsManager = (section?: AddonsSection) => {
@@ -1309,8 +1290,6 @@ export async function initTaskpane(opts: {
           };
         },
         onChanged: refreshCapabilitiesForAllRuntimes,
-        openIntegrationsManager,
-        openSkillsManager,
         openExtensionsManager,
         listExtensions: () => extensionManager.list(),
         setExtensionEnabled: (entryId: string, enabled: boolean) => extensionManager.setExtensionEnabled(entryId, enabled),
@@ -1395,7 +1374,6 @@ export async function initTaskpane(opts: {
     getExecutionMode: () => Promise.resolve(getExecutionMode()),
     setExecutionMode,
     openAddonsManager,
-    openSkillsManager,
   });
 
   // Slash commands chosen from the popup menu dispatch this event.

@@ -156,14 +156,15 @@ void test("addons builtins expose /addons command", async () => {
   assert.match(source, /openAddonsManager/);
 });
 
-void test("add-ons connections section links to detailed Tools & MCP manager", async () => {
+void test("add-ons connections section is self-contained", async () => {
   const source = await readFile(
     new URL("../src/commands/builtins/addons-overlay-connections.ts", import.meta.url),
     "utf8",
   );
 
-  assert.match(source, /Open detailed Tools & MCP manager…/);
-  assert.match(source, /openIntegrationsManager/);
+  assert.match(source, /Enable external tools globally/);
+  assert.doesNotMatch(source, /Open detailed Tools & MCP manager…/);
+  assert.doesNotMatch(source, /openIntegrationsManager/);
 });
 
 void test("taskpane init wires Files workspace opener", async () => {
@@ -183,9 +184,9 @@ void test("taskpane init wires add-ons menu opener", async () => {
   assert.match(initSource, /showAddonsDialog\(/);
   assert.match(initSource, /listExtensions:\s*\(\)\s*=>\s*extensionManager\.list\(\)/);
   assert.match(initSource, /setExtensionEnabled:\s*\(entryId: string, enabled: boolean\)\s*=>\s*extensionManager\.setExtensionEnabled\(entryId, enabled\)/);
-  assert.match(initSource, /openIntegrationsManager/);
-  assert.match(initSource, /openSkillsManager/);
   assert.match(initSource, /openExtensionsManager/);
+  assert.doesNotMatch(initSource, /openIntegrationsManager/);
+  assert.doesNotMatch(initSource, /openSkillsManager/);
   assert.match(initSource, /registerBuiltins\([\s\S]*openAddonsManager/);
   assert.match(initSource, /sidebar\.onOpenAddons\s*=\s*\(\)\s*=>\s*\{\s*openAddonsManager\(\);\s*\};/);
 });
@@ -231,6 +232,7 @@ void test("add-ons overlay groups connections, extensions, and skills", async ()
   assert.match(extensionsSource, /dataset\.addonsSection = "extensions"/);
   assert.match(extensionsSource, /confirmExtensionEnable/);
   assert.match(skillsSource, /dataset\.addonsSection = "skills"/);
+  assert.doesNotMatch(skillsSource, /Open full Skills manager…/);
 });
 
 void test("context pill headers expose expanded state and controlled body", async () => {
@@ -304,12 +306,14 @@ void test("addons and alias commands deep-link to add-ons sections", async () =>
   const addonsSource = await readFile(new URL("../src/commands/builtins/addons.ts", import.meta.url), "utf8");
   const integrationsSource = await readFile(new URL("../src/commands/builtins/integrations.ts", import.meta.url), "utf8");
   const extensionsSource = await readFile(new URL("../src/commands/builtins/extensions.ts", import.meta.url), "utf8");
+  const skillsSource = await readFile(new URL("../src/commands/builtins/skills.ts", import.meta.url), "utf8");
 
   assert.match(addonsSource, /name:\s*"addons"/);
   assert.match(addonsSource, /openAddonsManager\(\)/);
 
   assert.match(integrationsSource, /openAddonsManager\("connections"\)/);
   assert.match(extensionsSource, /openAddonsManager\("extensions"\)/);
+  assert.match(skillsSource, /openAddonsManager\("skills"\)/);
 });
 
 void test("settings overlay serializes open flow and tolerates provider storage lookup failure", async () => {

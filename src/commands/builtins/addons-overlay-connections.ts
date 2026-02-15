@@ -200,7 +200,6 @@ export function renderConnectionsSection(args: {
   container: HTMLElement;
   snapshot: ConnectionsSnapshot;
   settings: AddonsSettingsStore;
-  actions: AddonsDialogActions;
   busy: boolean;
   onRefresh: () => void;
   onMutate: (
@@ -391,16 +390,6 @@ export function renderConnectionsSection(args: {
   pythonRow.append(pythonInput, saveButton, clearButton);
   pythonCard.append(pythonTitle, pythonRow, pythonHint);
 
-  const actionsRow = document.createElement("div");
-  actionsRow.className = "pi-overlay-actions";
-
-  const openDetailed = createOverlayButton({ text: "Open detailed Tools & MCP manager…" });
-  openDetailed.addEventListener("click", () => {
-    args.actions.openIntegrationsManager();
-  });
-
-  actionsRow.appendChild(openDetailed);
-
-  section.append(statusCard, list, pythonCard, actionsRow);
+  section.append(statusCard, list, pythonCard);
   args.container.appendChild(section);
 }

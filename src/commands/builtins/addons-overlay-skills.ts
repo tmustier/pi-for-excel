@@ -10,12 +10,10 @@ import {
 import { loadExternalAgentSkillsFromSettings } from "../../skills/external-store.js";
 import {
   createOverlayBadge,
-  createOverlayButton,
   createOverlaySectionTitle,
 } from "../../ui/overlay-dialog.js";
 import type { AgentSkillDefinition } from "../../skills/types.js";
 import type {
-  AddonsDialogActions,
   AddonsSettingsStore,
   SkillsSnapshot,
 } from "./addons-overlay-types.js";
@@ -63,7 +61,6 @@ export async function buildSkillsSnapshot(settings: AddonsSettingsStore): Promis
 
 export function renderSkillsSection(args: {
   container: HTMLElement;
-  actions: AddonsDialogActions;
   snapshot: SkillsSnapshot;
 }): void {
   args.container.replaceChildren();
@@ -147,17 +144,6 @@ export function renderSkillsSection(args: {
     warning.textContent = `Skill activation state unavailable: ${args.snapshot.activationLoadError}`;
     section.appendChild(warning);
   }
-
-  const actionsRow = document.createElement("div");
-  actionsRow.className = "pi-overlay-actions";
-
-  const openButton = createOverlayButton({ text: "Open full Skills manager…" });
-  openButton.addEventListener("click", () => {
-    args.actions.openSkillsManager();
-  });
-
-  actionsRow.appendChild(openButton);
-  section.appendChild(actionsRow);
 
   args.container.appendChild(section);
 }
