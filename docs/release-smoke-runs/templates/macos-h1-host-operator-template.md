@@ -20,7 +20,7 @@ Validate all H-1 failure paths produce clear, recoverable UX:
 2. Sideload latest manifest and open Pi taskpane.
 3. Ensure screenshot path exists, e.g. `~/Desktop/pi-h1-<date>/`.
 4. In Pi:
-   - open `/integrations`
+   - open `/tools` (alias: `/integrations`)
    - enable `Allow external tools (web search / MCP)`
    - enable web search for this session
 5. Record baseline screenshot (`h1-baseline.png`).
@@ -39,7 +39,7 @@ Validate all H-1 failure paths produce clear, recoverable UX:
 
 ## H1-A — Wrong API key
 
-1. `/integrations` → Web Search provider = Serper (or your configured provider).
+1. `/tools` (or `/integrations`) → Web Search provider = Serper (or your configured provider).
 2. Set key to an intentionally invalid value (e.g. `bad-key-h1`).
 3. Prompt: `Use web_search for 'EUR USD exchange rate' and show raw result.`
 
