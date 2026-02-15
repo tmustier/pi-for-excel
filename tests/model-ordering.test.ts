@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { test } from "node:test";
 
 import {
@@ -106,4 +108,26 @@ void test("process-env shim adds process.env for browser-like runtimes", () => {
 
   const envValue = runtime.process.env;
   assert.ok(envValue && typeof envValue === "object" && !Array.isArray(envValue));
+});
+
+void test("vite proxy orders Google routes from most specific to least specific", () => {
+  const viteConfigPath = path.resolve(process.cwd(), "vite.config.ts");
+  const content = readFileSync(viteConfigPath, "utf8");
+
+  const sandboxIndex = content.indexOf('"/api-proxy/google-cloudcode-sandbox"');
+  const cloudcodeIndex = content.indexOf('"/api-proxy/google-cloudcode"');
+  const googleIndex = content.indexOf('"/api-proxy/google"');
+
+  assert.notEqual(sandboxIndex, -1, "expected sandbox proxy route");
+  assert.notEqual(cloudcodeIndex, -1, "expected cloudcode proxy route");
+  assert.notEqual(googleIndex, -1, "expected generic google proxy route");
+
+  assert.ok(
+    sandboxIndex < cloudcodeIndex,
+    "sandbox route must come before cloudcode route",
+  );
+  assert.ok(
+    cloudcodeIndex < googleIndex,
+    "cloudcode route must come before generic google route",
+  );
 });
