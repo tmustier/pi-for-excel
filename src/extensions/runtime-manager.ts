@@ -51,21 +51,8 @@ import { isExperimentalFeatureEnabled } from "../experiments/flags.js";
 import { clearExtensionWidgets } from "./internal/widget-surface.js";
 import { showToast } from "../ui/toast.js";
 import { getEnabledProxyBaseUrl, resolveOutboundRequestUrl } from "../tools/external-fetch.js";
+import { clearExtensionStorage } from "./storage-store.js";
 import {
-  clearExtensionStorage,
-  deleteExtensionStorageValue,
-  getExtensionStorageValue,
-  listExtensionStorageKeys,
-  setExtensionStorageValue,
-} from "./storage-store.js";
-import {
-  installExternalExtensionSkill,
-  listExtensionSkillSummaries,
-  readExtensionSkill,
-  uninstallExternalExtensionSkill,
-} from "./skills-store.js";
-import {
-  createExtensionAgentMessage,
   describeExtensionSource,
   extractAssistantText,
   getRuntimeManagerErrorMessage,
@@ -80,6 +67,7 @@ import {
   readLimitedResponseBody,
   resolveModelForCompletion,
 } from "./runtime-manager-helpers.js";
+import { buildRuntimeManagerActivationBridge } from "./runtime-manager-activation.js";
 
 type AnyAgentTool = AgentTool;
 
@@ -664,6 +652,21 @@ export class ExtensionRuntimeManager {
     };
 
     const widgetApiV2Enabled = isExperimentalFeatureEnabled("extension_widget_v2");
+    const activationBridge = buildRuntimeManagerActivationBridge({
+      entry,
+      settings: this.settings,
+      getRequiredActiveAgent: () => this.getRequiredActiveAgent(),
+      runExtensionLlmCompletion: (request) => this.runExtensionLlmCompletion(entry, request),
+      runExtensionHttpFetch: (url, options) => this.runExtensionHttpFetch(url, options),
+      writeExtensionClipboard: (text) => this.writeExtensionClipboard(text),
+      triggerExtensionDownload: (filename, content, mimeType) => {
+        this.triggerExtensionDownload(filename, content, mimeType);
+      },
+      isCapabilityEnabled,
+      formatCapabilityError,
+      showToastMessage: this.showToastMessage,
+      widgetApiV2Enabled,
+    });
 
     try {
       if (state.runtimeMode === "sandbox-iframe") {
@@ -685,71 +688,15 @@ export class ExtensionRuntimeManager {
           registerTool,
           unregisterTool,
           subscribeAgentEvents,
-          llmComplete: (request) => this.runExtensionLlmCompletion(entry, request),
-          httpFetch: (url, options) => this.runExtensionHttpFetch(url, options),
-          storageGet: (key) => getExtensionStorageValue(this.settings, entry.id, key),
-          storageSet: (key, value) => setExtensionStorageValue(this.settings, entry.id, key, value),
-          storageDelete: (key) => deleteExtensionStorageValue(this.settings, entry.id, key),
-          storageKeys: () => listExtensionStorageKeys(this.settings, entry.id),
-          clipboardWriteText: (text) => this.writeExtensionClipboard(text),
-          injectAgentContext: (content) => {
-            const agent = this.getRequiredActiveAgent();
-            agent.appendMessage(createExtensionAgentMessage(entry.name, "agent.injectContext content", content));
-          },
-          steerAgent: (content) => {
-            const agent = this.getRequiredActiveAgent();
-            agent.steer(createExtensionAgentMessage(entry.name, "agent.steer content", content));
-          },
-          followUpAgent: (content) => {
-            const agent = this.getRequiredActiveAgent();
-            agent.followUp(createExtensionAgentMessage(entry.name, "agent.followUp content", content));
-          },
-          listSkills: () => listExtensionSkillSummaries(this.settings),
-          readSkill: (name) => readExtensionSkill(this.settings, name),
-          installSkill: (name, markdown) => installExternalExtensionSkill(this.settings, name, markdown),
-          uninstallSkill: (name) => uninstallExternalExtensionSkill(this.settings, name),
-          downloadFile: (filename, content, mimeType) => this.triggerExtensionDownload(filename, content, mimeType),
-          isCapabilityEnabled,
-          formatCapabilityError,
-          toast: this.showToastMessage,
-          widgetOwnerId: entry.id,
-          widgetApiV2Enabled,
+          ...activationBridge.sandbox,
         });
       } else {
         const api = createExtensionAPI({
-          getAgent: () => this.getRequiredActiveAgent(),
           registerCommand,
           registerTool,
           unregisterTool,
           subscribeAgentEvents,
-          llmComplete: (request) => this.runExtensionLlmCompletion(entry, request),
-          httpFetch: (url, options) => this.runExtensionHttpFetch(url, options),
-          storageGet: (key) => getExtensionStorageValue(this.settings, entry.id, key),
-          storageSet: (key, value) => setExtensionStorageValue(this.settings, entry.id, key, value),
-          storageDelete: (key) => deleteExtensionStorageValue(this.settings, entry.id, key),
-          storageKeys: () => listExtensionStorageKeys(this.settings, entry.id),
-          clipboardWriteText: (text) => this.writeExtensionClipboard(text),
-          injectAgentContext: (content) => {
-            const agent = this.getRequiredActiveAgent();
-            agent.appendMessage(createExtensionAgentMessage(entry.name, "agent.injectContext content", content));
-          },
-          steerAgent: (content) => {
-            const agent = this.getRequiredActiveAgent();
-            agent.steer(createExtensionAgentMessage(entry.name, "agent.steer content", content));
-          },
-          followUpAgent: (content) => {
-            const agent = this.getRequiredActiveAgent();
-            agent.followUp(createExtensionAgentMessage(entry.name, "agent.followUp content", content));
-          },
-          listSkills: () => listExtensionSkillSummaries(this.settings),
-          readSkill: (name) => readExtensionSkill(this.settings, name),
-          installSkill: (name, markdown) => installExternalExtensionSkill(this.settings, name, markdown),
-          uninstallSkill: (name) => uninstallExternalExtensionSkill(this.settings, name),
-          downloadFile: (filename, content, mimeType) => this.triggerExtensionDownload(filename, content, mimeType),
-          isCapabilityEnabled,
-          formatCapabilityError,
-          extensionOwnerId: entry.id,
-          widgetApiV2Enabled,
+          ...activationBridge.host,
         });
 
         let loadSource: string;
