@@ -17,6 +17,10 @@ export interface ExternalSkillSettingsStore {
   get: (key: string) => Promise<unknown>;
 }
 
+export interface ExternalSkillMutableSettingsStore extends ExternalSkillSettingsStore {
+  set: (key: string, value: unknown) => Promise<void>;
+}
+
 interface StoredExternalSkillItem {
   location: string;
   markdown: string;
@@ -41,6 +45,15 @@ function parseStoredExternalSkillItems(raw: unknown): StoredExternalSkillItem[] 
   if (!Array.isArray(items)) return [];
 
   return items.filter((item) => isStoredExternalSkillItem(item));
+}
+
+function normalizeSkillName(name: string): string {
+  const trimmed = name.trim();
+  if (trimmed.length === 0) {
+    throw new Error("Skill name cannot be empty.");
+  }
+
+  return trimmed;
 }
 
 function buildExternalSkillDefinition(args: {
@@ -96,4 +109,87 @@ export async function loadExternalAgentSkillsFromSettings(
 
   loaded.sort((left, right) => left.name.localeCompare(right.name));
   return loaded;
+}
+
+export interface UpsertExternalAgentSkillResult {
+  name: string;
+  location: string;
+}
+
+export async function upsertExternalAgentSkillInSettings(args: {
+  settings: ExternalSkillMutableSettingsStore;
+  markdown: string;
+  expectedName?: string;
+}): Promise<UpsertExternalAgentSkillResult> {
+  const parsed = parseSkillDocument(args.markdown);
+  if (!parsed) {
+    throw new Error("Invalid SKILL.md document: expected frontmatter with name and description.");
+  }
+
+  if (args.expectedName !== undefined) {
+    const normalizedExpected = normalizeSkillName(args.expectedName);
+    if (parsed.frontmatter.name.toLowerCase() !== normalizedExpected.toLowerCase()) {
+      throw new Error(
+        `Skill name mismatch: expected "${normalizedExpected}" but markdown declares "${parsed.frontmatter.name}".`,
+      );
+    }
+  }
+
+  const existing = parseStoredExternalSkillItems(await args.settings.get(EXTERNAL_AGENT_SKILLS_STORAGE_KEY));
+  const targetName = parsed.frontmatter.name.toLowerCase();
+
+  const nextItems = existing.filter((item) => {
+    const itemParsed = parseSkillDocument(item.markdown);
+    if (!itemParsed) {
+      return true;
+    }
+
+    return itemParsed.frontmatter.name.toLowerCase() !== targetName;
+  });
+
+  const location = `skills/external/${parsed.frontmatter.name}/SKILL.md`;
+  nextItems.push({
+    location,
+    markdown: args.markdown,
+  });
+
+  await args.settings.set(EXTERNAL_AGENT_SKILLS_STORAGE_KEY, {
+    version: 1,
+    items: nextItems,
+  });
+
+  return {
+    name: parsed.frontmatter.name,
+    location,
+  };
+}
+
+export async function removeExternalAgentSkillFromSettings(args: {
+  settings: ExternalSkillMutableSettingsStore;
+  name: string;
+}): Promise<boolean> {
+  const normalizedName = normalizeSkillName(args.name).toLowerCase();
+  const existing = parseStoredExternalSkillItems(await args.settings.get(EXTERNAL_AGENT_SKILLS_STORAGE_KEY));
+
+  let removed = false;
+  const nextItems = existing.filter((item) => {
+    const itemParsed = parseSkillDocument(item.markdown);
+    if (!itemParsed) {
+      return true;
+    }
+
+    const keep = itemParsed.frontmatter.name.toLowerCase() !== normalizedName;
+    if (!keep) {
+      removed = true;
+    }
+
+    return keep;
+  });
+
+  await args.settings.set(EXTERNAL_AGENT_SKILLS_STORAGE_KEY, {
+    version: 1,
+    items: nextItems,
+  });
+
+  return removed;
 }

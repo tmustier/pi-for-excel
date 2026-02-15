@@ -51,3 +51,35 @@
   padding: 2px 6px;
   border-radius: 6px;
 }
+
+.pi-skills-install-title {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  color: var(--muted-foreground);
+}
+
+.pi-skills-install-input {
+  width: 100%;
+  min-height: 140px;
+  resize: vertical;
+  border: 1px solid var(--alpha-12);
+  border-radius: var(--radius-sm);
+  padding: 8px;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  line-height: 1.4;
+  background: var(--white-alpha-70);
+  color: var(--foreground);
+  outline: none;
+}
+
+.pi-skills-install-input:focus,
+.pi-skills-install-input:focus-visible {
+  border-color: var(--green-alpha-25);
+  box-shadow: 0 0 0 2px var(--pi-green-lighter);
+}
+
+.pi-skills-install-input:disabled {
+  opacity: 0.65;
+}
