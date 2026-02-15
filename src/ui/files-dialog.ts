@@ -52,6 +52,12 @@ function formatFileCountLabel(count: number): string {
   return `${count} file${count === 1 ? "" : "s"}`;
 }
 
+const WORKSPACE_ROOT_COLLAPSE_KEY = "workspace-root";
+
+function getFolderCollapseKey(folderPath: string): string {
+  return `path:${folderPath}`;
+}
+
 function makeButton(label: string, className: string): HTMLButtonElement {
   const button = document.createElement("button");
   button.type = "button";
@@ -508,7 +514,11 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
     return row;
   };
 
-  const appendFolderNode = (container: HTMLElement, folder: FilesDialogFolderNode): void => {
+  const appendFolderNode = (
+    container: HTMLElement,
+    folder: FilesDialogFolderNode,
+    collapseKey: string,
+  ): void => {
     const folderCard = document.createElement("section");
     folderCard.className = "pi-files-dialog__folder";
 
@@ -516,19 +526,11 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
     folderHeader.type = "button";
     folderHeader.className = "pi-files-dialog__folder-header";
 
-    const isCollapsed = collapsedFolderPaths.has(folder.folderPath);
-    if (isCollapsed) {
-      folderCard.classList.add("is-collapsed");
-    }
-
-    folderHeader.setAttribute("aria-expanded", isCollapsed ? "false" : "true");
-
     const folderHeaderStart = document.createElement("span");
     folderHeaderStart.className = "pi-files-dialog__folder-header-start";
 
     const caret = document.createElement("span");
     caret.className = "pi-files-dialog__folder-caret";
-    caret.textContent = isCollapsed ? "▸" : "▾";
 
     const name = document.createElement("span");
     name.className = "pi-files-dialog__folder-name";
@@ -544,24 +546,34 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
 
     const folderChildren = document.createElement("div");
     folderChildren.className = "pi-files-dialog__folder-children";
-    folderChildren.hidden = isCollapsed;
+
+    const applyCollapsedState = (isCollapsed: boolean): void => {
+      folderCard.classList.toggle("is-collapsed", isCollapsed);
+      folderHeader.setAttribute("aria-expanded", isCollapsed ? "false" : "true");
+      folderChildren.hidden = isCollapsed;
+      caret.textContent = isCollapsed ? "▸" : "▾";
+    };
+
+    let isCollapsed = collapsedFolderPaths.has(collapseKey);
+    applyCollapsedState(isCollapsed);
 
     for (const file of folder.files) {
       folderChildren.appendChild(createFileRow(file));
     }
 
     for (const childFolder of folder.children) {
-      appendFolderNode(folderChildren, childFolder);
+      appendFolderNode(folderChildren, childFolder, getFolderCollapseKey(childFolder.folderPath));
     }
 
     folderHeader.addEventListener("click", () => {
-      if (collapsedFolderPaths.has(folder.folderPath)) {
-        collapsedFolderPaths.delete(folder.folderPath);
+      isCollapsed = !isCollapsed;
+      if (isCollapsed) {
+        collapsedFolderPaths.add(collapseKey);
       } else {
-        collapsedFolderPaths.add(folder.folderPath);
+        collapsedFolderPaths.delete(collapseKey);
       }
 
-      void renderList();
+      applyCollapsedState(isCollapsed);
     });
 
     folderCard.append(folderHeader, folderChildren);
@@ -653,15 +665,15 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
       if (tree.rootFiles.length > 0) {
         appendFolderNode(list, {
           folderName: "workspace root",
-          folderPath: "__workspace_root__",
+          folderPath: "",
           files: tree.rootFiles,
           children: [],
           totalFileCount: tree.rootFiles.length,
-        });
+        }, WORKSPACE_ROOT_COLLAPSE_KEY);
       }
 
       for (const folder of tree.folders) {
-        appendFolderNode(list, folder);
+        appendFolderNode(list, folder, getFolderCollapseKey(folder.folderPath));
       }
     }
 
