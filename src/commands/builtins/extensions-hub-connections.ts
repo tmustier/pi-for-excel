@@ -75,6 +75,29 @@ function getStatusBadge(ok: boolean, label: string): { text: string; tone: "ok" 
   return ok ? { text: label, tone: "ok" } : { text: label, tone: "muted" };
 }
 
+function describeWebSearchAvailability(args: {
+  sessionEnabled: boolean;
+  workbookEnabled: boolean;
+  workbookLabel: string;
+  hasWorkbook: boolean;
+}): string {
+  const { sessionEnabled, workbookEnabled, workbookLabel, hasWorkbook } = args;
+
+  if (sessionEnabled && workbookEnabled && hasWorkbook) {
+    return `Session + workbook (${workbookLabel})`;
+  }
+
+  if (workbookEnabled && hasWorkbook) {
+    return `Workbook (${workbookLabel})`;
+  }
+
+  if (sessionEnabled) {
+    return hasWorkbook ? "Session only" : "Session";
+  }
+
+  return hasWorkbook ? "Off in all scopes" : "Off";
+}
+
 // ── Main render ─────────────────────────────────────
 
 export async function renderConnectionsTab(args: {
@@ -253,6 +276,27 @@ export async function renderConnectionsTab(args: {
   apiKeyRow.append(apiKeyLabel, apiKeyControls);
   webCard.body.appendChild(apiKeyRow);
 
+  const availability = createConfigValue(describeWebSearchAvailability({
+    sessionEnabled: webSearchSessionEnabled,
+    workbookEnabled: webSearchWorkbookEnabled,
+    workbookLabel: workbookContext.workbookLabel,
+    hasWorkbook: workbookId !== null,
+  }));
+  webCard.body.appendChild(createConfigRow("Availability", availability));
+
+  const scopeDetails = document.createElement("details");
+  scopeDetails.className = "pi-hub-advanced-disclosure pi-hub-scope-disclosure";
+  if (!webSearchEnabled) {
+    scopeDetails.open = true;
+  }
+
+  const scopeSummary = document.createElement("summary");
+  scopeSummary.className = "pi-hub-advanced-summary";
+  scopeSummary.textContent = "Scope controls";
+
+  const scopeBody = document.createElement("div");
+  scopeBody.className = "pi-hub-advanced-body";
+
   const sessionToggleRow = createToggleRow({
     label: "Enable for this session",
     checked: webSearchSessionEnabled,
@@ -274,7 +318,7 @@ export async function renderConnectionsTab(args: {
     },
   });
   sessionToggleRow.input.disabled = isBusy() || !sessionId;
-  webCard.body.appendChild(sessionToggleRow.root);
+  scopeBody.appendChild(sessionToggleRow.root);
 
   const workbookToggleRow = createToggleRow({
     label: workbookId
@@ -299,7 +343,10 @@ export async function renderConnectionsTab(args: {
     },
   });
   workbookToggleRow.input.disabled = isBusy() || !workbookId;
-  webCard.body.appendChild(workbookToggleRow.root);
+  scopeBody.appendChild(workbookToggleRow.root);
+
+  scopeDetails.append(scopeSummary, scopeBody);
+  webCard.body.appendChild(scopeDetails);
 
   container.appendChild(webCard.root);
 

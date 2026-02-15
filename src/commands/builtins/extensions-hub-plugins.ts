@@ -177,19 +177,31 @@ export function renderPluginsTab(args: {
     },
   }));
 
+  const codeAreaId = "pi-plugin-install-code";
+  codeArea.id = codeAreaId;
+
   const toggleCodeLink = document.createElement("button");
   toggleCodeLink.type = "button";
-  toggleCodeLink.className = "pi-section-header__action";
   toggleCodeLink.className = "pi-section-header__action pi-hub-code-toggle";
   toggleCodeLink.textContent = "Or paste code directly…";
+  toggleCodeLink.setAttribute("aria-controls", codeAreaId);
+  toggleCodeLink.setAttribute("aria-expanded", "false");
   toggleCodeLink.addEventListener("click", () => {
     const show = codeArea.hidden;
     codeArea.hidden = !show;
     codeActions.hidden = !show;
     toggleCodeLink.textContent = show ? "Hide code editor" : "Or paste code directly…";
+    toggleCodeLink.setAttribute("aria-expanded", show ? "true" : "false");
+    if (show) {
+      codeArea.focus();
+    }
   });
 
-  installForm.append(toggleCodeLink, codeArea, codeActions);
+  const codeToggleRow = document.createElement("div");
+  codeToggleRow.className = "pi-hub-code-toggle-row";
+  codeToggleRow.appendChild(toggleCodeLink);
+
+  installForm.append(codeToggleRow, codeArea, codeActions);
   container.appendChild(installForm);
 
   // ── Advanced section ──────────────────────────

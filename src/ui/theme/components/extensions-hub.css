@@ -371,11 +371,17 @@
   justify-content: flex-end;
 }
 
+.pi-hub-code-toggle-row {
+  display: flex;
+  justify-content: flex-start;
+}
+
 .pi-hub-code-toggle {
-  font-size: var(--text-xs);
-  display: block;
-  text-align: center;
-  width: 100%;
+  font-size: var(--text-sm);
+  display: inline-flex;
+  align-items: center;
+  text-align: left;
+  width: auto;
 }
 
 .pi-hub-textarea {
@@ -400,6 +406,16 @@
   flex-direction: column;
   gap: 8px;
   margin-top: 10px;
+}
+
+.pi-hub-scope-disclosure {
+  border-top: var(--pi-divider);
+  margin-top: 2px;
+  padding-top: 8px;
+}
+
+.pi-hub-scope-disclosure > summary {
+  margin-bottom: 6px;
 }
 
 .pi-hub-warn-text {
