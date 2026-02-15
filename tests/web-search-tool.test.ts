@@ -133,6 +133,51 @@ void test("web_search falls back to Jina when configured provider returns auth o
   assert.match(details.fallback?.reason ?? "", /429/i);
 });
 
+void test("web_search fallback uses configured Jina API key when available", async () => {
+  const calls: Array<{ provider: string; apiKey: string }> = [];
+
+  const tool = createWebSearchTool({
+    getConfig: () => Promise.resolve({
+      provider: "serper",
+      apiKey: "serper-key",
+      jinaApiKey: "jina-fallback-key",
+    }),
+    executeSearch: (_params, config) => {
+      calls.push({ provider: config.provider, apiKey: config.apiKey });
+
+      if (config.provider === "serper") {
+        return Promise.reject(new Error("Serper.dev search request failed (401): invalid API key"));
+      }
+
+      return Promise.resolve({
+        sentQuery: "excel shortcuts",
+        proxied: false,
+        hits: [{
+          title: "Excel keyboard shortcuts",
+          url: "https://example.com/shortcuts",
+          snippet: "Fallback via authenticated Jina.",
+        }],
+      });
+    },
+  });
+
+  const result = await tool.execute("call-fallback-jina-key", { query: "excel shortcuts" });
+  const details = result.details as {
+    ok?: boolean;
+    provider?: string;
+    fallback?: { fromProvider?: string; toProvider?: string };
+  };
+
+  assert.equal(details.ok, true);
+  assert.equal(details.provider, "jina");
+  assert.equal(details.fallback?.fromProvider, "serper");
+  assert.equal(details.fallback?.toProvider, "jina");
+  assert.deepEqual(calls, [
+    { provider: "serper", apiKey: "serper-key" },
+    { provider: "jina", apiKey: "jina-fallback-key" },
+  ]);
+});
+
 void test("web_search does not fall back for malformed-provider requests", async () => {
   const tool = createWebSearchTool({
     getConfig: () => Promise.resolve({ provider: "serper", apiKey: "token" }),

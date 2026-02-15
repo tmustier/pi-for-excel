@@ -106,6 +106,7 @@ export interface WebSearchToolDetails {
 export interface WebSearchToolConfig {
   provider: WebSearchProvider;
   apiKey?: string;
+  jinaApiKey?: string;
   proxyBaseUrl?: string;
 }
 
@@ -587,6 +588,7 @@ async function defaultGetConfig(): Promise<WebSearchToolConfig> {
   return {
     provider: providerConfig.provider,
     apiKey: getApiKeyForProvider(providerConfig),
+    jinaApiKey: getApiKeyForProvider(providerConfig, "jina"),
     proxyBaseUrl,
   };
 }
@@ -741,6 +743,7 @@ export function createWebSearchTool(
         configuredProvider = config.provider;
 
         const configuredApiKey = normalizeOptionalString(config.apiKey) ?? "";
+        const fallbackJinaApiKey = normalizeOptionalString(config.jinaApiKey) ?? "";
 
         const runSearch = (
           provider: WebSearchProvider,
@@ -781,7 +784,7 @@ export function createWebSearchTool(
           };
 
           try {
-            result = await runSearch("jina", "");
+            result = await runSearch("jina", fallbackJinaApiKey);
             effectiveProvider = "jina";
           } catch (fallbackError: unknown) {
             const primaryMessage = getErrorMessage(error);
