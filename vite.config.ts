@@ -182,7 +182,10 @@ function stubPiWebUiBuiltinToolsPlugin(): Plugin {
 // ============================================================================
 
 /** Common proxy config: strip Origin/Referer so the target sees a server request */
-type ProxyReqLike = { removeHeader(name: string): void };
+type ProxyReqLike = {
+  removeHeader(name: string): void;
+  path?: string;
+};
 type ProxyServerLike = { on(event: "proxyReq", handler: (proxyReq: ProxyReqLike) => void): void };
 
 function stripBrowserHeaders(proxy: ProxyServerLike) {
@@ -193,6 +196,13 @@ function stripBrowserHeaders(proxy: ProxyServerLike) {
     proxyReq.removeHeader("sec-fetch-site");
     proxyReq.removeHeader("sec-fetch-dest");
     proxyReq.removeHeader("anthropic-dangerous-direct-browser-access");
+
+    // Cloud Code Assist endpoints use a colon in the path
+    // (e.g. /v1internal:streamGenerateContent). Some proxy stacks encode
+    // this as %3A, which Google treats as a different path and returns 404.
+    if (typeof proxyReq.path === "string" && proxyReq.path.includes("%3A")) {
+      proxyReq.path = proxyReq.path.replaceAll("%3A", ":").replaceAll("%3a", ":");
+    }
   });
 }
 
