@@ -200,7 +200,7 @@ function stripBrowserHeaders(proxy: ProxyServerLike) {
     // Cloud Code Assist endpoints use a colon in the path
     // (e.g. /v1internal:streamGenerateContent). Some proxy stacks encode
     // this as %3A, which Google treats as a different path and returns 404.
-    if (typeof proxyReq.path === "string" && proxyReq.path.includes("%3A")) {
+    if (typeof proxyReq.path === "string" && /%3a/i.test(proxyReq.path)) {
       proxyReq.path = proxyReq.path.replaceAll("%3A", ":").replaceAll("%3a", ":");
     }
   });
