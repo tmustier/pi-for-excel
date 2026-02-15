@@ -23,7 +23,6 @@ import {
   countBuiltInDocs,
   fileMatchesFilesDialogFilter,
   isFilesDialogFilterSelectable,
-  parseFilesDialogFilterValue,
   type FilesDialogFilterOption,
   type FilesDialogFilterValue,
 } from "./files-dialog-filtering.js";
@@ -110,9 +109,7 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
   controls.className = "pi-files-dialog__controls";
 
   const uploadButton = makeButton("Upload", "pi-overlay-btn pi-overlay-btn--ghost");
-  const newFileButton = makeButton("New text file", "pi-overlay-btn pi-overlay-btn--ghost");
   const nativeButton = makeButton("Select folder", "pi-overlay-btn pi-overlay-btn--ghost");
-  const disconnectNativeButton = makeButton("Use sandbox workspace", "pi-overlay-btn pi-overlay-btn--ghost");
 
   const hiddenInput = document.createElement("input");
   hiddenInput.type = "file";
@@ -122,20 +119,8 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
   const statusLine = document.createElement("div");
   statusLine.className = "pi-files-dialog__status";
 
-  const helperLine = document.createElement("div");
-  helperLine.className = "pi-files-dialog__helper";
-  helperLine.textContent = "Built-in docs are always available. Uploaded files can be managed directly from this dialog.";
-
   const filters = document.createElement("div");
   filters.className = "pi-files-dialog__filters";
-
-  const filterLabel = document.createElement("label");
-  filterLabel.className = "pi-files-dialog__filter-label";
-  filterLabel.textContent = "Filter";
-
-  const filterSelect = document.createElement("select");
-  filterSelect.className = "pi-files-dialog__filter-select pi-overlay-inline-control";
-  filterLabel.appendChild(filterSelect);
 
   const quickFilters = document.createElement("div");
   quickFilters.className = "pi-files-dialog__quick-filters";
@@ -149,7 +134,7 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
   quickCurrentButton.dataset.filter = "current";
 
   quickFilters.append(quickAllButton, quickBuiltinButton, quickCurrentButton);
-  filters.append(filterLabel, quickFilters);
+  filters.append(quickFilters);
 
   const list = document.createElement("div");
   list.className = "pi-files-dialog__list";
@@ -188,9 +173,7 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
 
   controls.append(
     uploadButton,
-    newFileButton,
     nativeButton,
-    disconnectNativeButton,
   );
 
   dialog.card.append(
@@ -198,7 +181,6 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
     controls,
     hiddenInput,
     statusLine,
-    helperLine,
     filters,
     list,
     viewer,
@@ -421,11 +403,12 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
     }
   };
 
-  const rowActionClassName = "pi-overlay-btn pi-overlay-btn--ghost pi-overlay-btn--compact";
-
   const createFileRow = (file: WorkspaceFileEntry): HTMLElement => {
     const row = document.createElement("div");
     row.className = "pi-files-dialog__row";
+    row.style.cursor = "pointer";
+
+    const fileIcon = file.kind === "text" ? "📄" : isImageMimeType(file.mimeType) ? "🖼" : "📎";
 
     const info = document.createElement("div");
     info.className = "pi-files-dialog__info";
@@ -433,11 +416,15 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
     const nameRow = document.createElement("div");
     nameRow.className = "pi-files-dialog__name-row";
 
+    const iconEl = document.createElement("span");
+    iconEl.className = "pi-files-dialog__icon";
+    iconEl.textContent = fileIcon;
+
     const name = document.createElement("div");
     name.className = "pi-files-dialog__name";
     name.textContent = file.path;
 
-    nameRow.appendChild(name);
+    nameRow.append(iconEl, name);
 
     if (file.sourceKind === "builtin-doc") {
       const sourceBadge = document.createElement("span");
@@ -459,69 +446,101 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
 
     info.append(nameRow, meta);
 
-    const actions = document.createElement("div");
-    actions.className = "pi-files-dialog__actions";
-
-    const openButton = makeButton("Open", rowActionClassName);
-    openButton.addEventListener("click", () => {
+    // Click row to open viewer
+    row.addEventListener("click", (event) => {
+      // Don't open viewer if the click was on the overflow menu button
+      if ((event.target as HTMLElement).closest(".pi-files-dialog__overflow")) return;
       void openViewer(file);
     });
 
-    const downloadButton = makeButton("Download", rowActionClassName);
-    downloadButton.addEventListener("click", () => {
-      void workspace.downloadFile(file.path).catch((error: unknown) => {
-        showToast(`Download failed: ${getErrorMessage(error)}`);
-      });
-    });
+    // Overflow menu (⋯)
+    const overflowBtn = document.createElement("button");
+    overflowBtn.type = "button";
+    overflowBtn.className = "pi-files-dialog__overflow";
+    overflowBtn.textContent = "⋯";
+    overflowBtn.title = "File actions";
 
-    const renameButton = makeButton("Rename", rowActionClassName);
-    renameButton.disabled = file.readOnly;
-    if (file.readOnly) {
-      renameButton.title = "Built-in docs are read-only.";
-    }
-    renameButton.addEventListener("click", () => {
-      const nextName = window.prompt("Rename file", file.path);
-      if (!nextName) return;
+    overflowBtn.addEventListener("click", (event) => {
+      event.stopPropagation();
 
-      void workspace.renameFile(file.path, nextName, {
-        audit: DIALOG_AUDIT_CONTEXT,
-      }).catch((error: unknown) => {
-        showToast(`Rename failed: ${getErrorMessage(error)}`);
-      });
-    });
+      // Close any existing overflow menu
+      const existing = document.querySelector(".pi-files-overflow-menu");
+      if (existing) {
+        existing.remove();
+        return;
+      }
 
-    const deleteButton = makeButton(
-      "Delete",
-      `${rowActionClassName} pi-overlay-btn--danger`,
-    );
-    deleteButton.disabled = file.readOnly;
-    if (file.readOnly) {
-      deleteButton.title = "Built-in docs are read-only.";
-    }
-    deleteButton.addEventListener("click", () => {
-      void (async () => {
-        const ok = await requestConfirmationDialog({
-          title: "Delete file?",
-          message: file.path,
-          confirmLabel: "Delete",
-          cancelLabel: "Cancel",
-          confirmButtonTone: "danger",
-          restoreFocusOnClose: false,
+      const menu = document.createElement("div");
+      menu.className = "pi-files-overflow-menu";
+
+      const addMenuItem = (label: string, handler: () => void, tone?: "danger") => {
+        const item = document.createElement("button");
+        item.type = "button";
+        item.className = `pi-files-overflow-menu__item${tone === "danger" ? " pi-files-overflow-menu__item--danger" : ""}`;
+        item.textContent = label;
+        item.addEventListener("click", () => {
+          menu.remove();
+          handler();
         });
-        if (!ok) {
-          return;
+        menu.appendChild(item);
+      };
+
+      addMenuItem("Download", () => {
+        void workspace.downloadFile(file.path).catch((error: unknown) => {
+          showToast(`Download failed: ${getErrorMessage(error)}`);
+        });
+      });
+
+      if (!file.readOnly) {
+        addMenuItem("Rename", () => {
+          const nextName = window.prompt("Rename file", file.path);
+          if (!nextName) return;
+          void workspace.renameFile(file.path, nextName, {
+            audit: DIALOG_AUDIT_CONTEXT,
+          }).catch((error: unknown) => {
+            showToast(`Rename failed: ${getErrorMessage(error)}`);
+          });
+        });
+
+        const sep = document.createElement("div");
+        sep.className = "pi-files-overflow-menu__separator";
+        menu.appendChild(sep);
+
+        addMenuItem("Delete", () => {
+          void (async () => {
+            const ok = await requestConfirmationDialog({
+              title: "Delete file?",
+              message: file.path,
+              confirmLabel: "Delete",
+              cancelLabel: "Cancel",
+              confirmButtonTone: "danger",
+              restoreFocusOnClose: false,
+            });
+            if (!ok) return;
+            await workspace.deleteFile(file.path, {
+              audit: DIALOG_AUDIT_CONTEXT,
+            }).catch((error: unknown) => {
+              showToast(`Delete failed: ${getErrorMessage(error)}`);
+            });
+          })();
+        }, "danger");
+      }
+
+      overflowBtn.appendChild(menu);
+
+      const closeOnOutsideClick = (e: MouseEvent) => {
+        if (!menu.contains(e.target as Node)) {
+          menu.remove();
+          document.removeEventListener("click", closeOnOutsideClick, true);
         }
-
-        await workspace.deleteFile(file.path, {
-          audit: DIALOG_AUDIT_CONTEXT,
-        }).catch((error: unknown) => {
-          showToast(`Delete failed: ${getErrorMessage(error)}`);
-        });
-      })();
+      };
+      // Delay listener to avoid catching the current click
+      requestAnimationFrame(() => {
+        document.addEventListener("click", closeOnOutsideClick, true);
+      });
     });
 
-    actions.append(openButton, downloadButton, renameButton, deleteButton);
-    row.append(info, actions);
+    row.append(info, overflowBtn);
 
     return row;
   };
@@ -625,16 +644,6 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
       selectedFilter = "all";
     }
 
-    filterSelect.replaceChildren();
-    for (const option of filterOptions) {
-      const optionElement = document.createElement("option");
-      optionElement.value = option.value;
-      optionElement.textContent = option.label;
-      optionElement.disabled = option.disabled === true;
-      optionElement.selected = option.value === selectedFilter;
-      filterSelect.appendChild(optionElement);
-    }
-    filterSelect.disabled = files.length === 0;
     syncQuickFilterButtons(filterOptions);
 
     const filteredFiles = files.filter((file) => fileMatchesFilesDialogFilter({
@@ -647,10 +656,8 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
       filterOptions.find((option) => option.value === selectedFilter)?.label
       ?? "All files";
 
-    newFileButton.disabled = false;
     nativeButton.disabled = !backend.nativeSupported;
     nativeButton.hidden = !backend.nativeSupported;
-    disconnectNativeButton.hidden = backend.kind !== "native-directory";
 
     setStatus(buildFilesDialogStatusMessage({
       totalCount: files.length,
@@ -724,33 +731,12 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
       });
   });
 
-  filterSelect.addEventListener("change", () => {
-    selectedFilter = parseFilesDialogFilterValue(filterSelect.value);
-    void renderList();
-  });
-
   for (const quickFilter of quickFilterButtons) {
     quickFilter.button.addEventListener("click", () => {
       selectedFilter = quickFilter.value;
-      filterSelect.value = quickFilter.value;
       void renderList();
     });
   }
-
-  newFileButton.addEventListener("click", () => {
-    const path = window.prompt("New text file path", "notes.md");
-    if (!path) return;
-
-    void workspace.writeTextFile(path, "", undefined, {
-      audit: DIALOG_AUDIT_CONTEXT,
-    })
-      .then(() => {
-        showToast(`Created ${path}.`);
-      })
-      .catch((error: unknown) => {
-        showToast(`Create failed: ${getErrorMessage(error)}`);
-      });
-  });
 
   nativeButton.addEventListener("click", () => {
     void workspace.connectNativeDirectory({
@@ -761,18 +747,6 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
       })
       .catch((error: unknown) => {
         showToast(`Could not connect folder: ${getErrorMessage(error)}`);
-      });
-  });
-
-  disconnectNativeButton.addEventListener("click", () => {
-    void workspace.disconnectNativeDirectory({
-      audit: DIALOG_AUDIT_CONTEXT,
-    })
-      .then(() => {
-        showToast("Switched to sandboxed workspace.");
-      })
-      .catch((error: unknown) => {
-        showToast(`Could not switch workspace: ${getErrorMessage(error)}`);
       });
   });
 

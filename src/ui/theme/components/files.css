@@ -337,3 +337,82 @@
   padding: 8px;
 }
 
+/* ── File icon ──────────────────────────────────────── */
+
+.pi-files-dialog__icon {
+  flex-shrink: 0;
+  font-size: var(--text-base);
+  margin-right: 6px;
+}
+
+/* ── Overflow menu button ───────────────────────────── */
+
+.pi-files-dialog__overflow {
+  appearance: none;
+  -webkit-appearance: none;
+  background: none;
+  border: none;
+  font-size: var(--text-base);
+  color: var(--muted-foreground);
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: var(--radius-xs);
+  position: relative;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.1s ease;
+}
+
+.pi-files-dialog__row:hover .pi-files-dialog__overflow {
+  opacity: 1;
+}
+
+.pi-files-dialog__overflow:hover {
+  background: var(--alpha-6);
+  color: var(--foreground);
+}
+
+/* ── Overflow floating menu ─────────────────────────── */
+
+.pi-files-overflow-menu {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  z-index: 50;
+  min-width: 120px;
+  background: var(--popover);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 4px 12px oklch(0 0 0 / 0.1);
+  padding: 4px 0;
+}
+
+.pi-files-overflow-menu__item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  appearance: none;
+  -webkit-appearance: none;
+  background: none;
+  border: none;
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  color: var(--foreground);
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+.pi-files-overflow-menu__item:hover {
+  background: var(--alpha-6);
+}
+
+.pi-files-overflow-menu__item--danger {
+  color: var(--destructive);
+}
+
+.pi-files-overflow-menu__separator {
+  height: 1px;
+  background: var(--alpha-6);
+  margin: 4px 0;
+}
+
