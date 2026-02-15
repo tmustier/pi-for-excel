@@ -17,7 +17,9 @@ import {
   setSkillEnabledInSettings,
 } from "../src/skills/activation-store.ts";
 import {
+  loadDiscoverableAgentSkillsFromWorkspace,
   loadExternalAgentSkillsFromWorkspace,
+  loadWorkspaceAgentSkillsFromWorkspace,
   removeExternalAgentSkillFromWorkspace,
   upsertExternalAgentSkillInWorkspace,
 } from "../src/skills/external-store.ts";
@@ -163,6 +165,84 @@ description: Wrong path depth.
 
   const skills = await loadExternalAgentSkillsFromWorkspace(workspace);
   assert.deepEqual(skills, []);
+});
+
+void test("loadWorkspaceAgentSkillsFromWorkspace discovers skills/<name>/SKILL.md", async () => {
+  const workspace = new MemoryExternalSkillWorkspace();
+
+  workspace.seedTextFile(
+    "skills/workspace-direct/SKILL.md",
+    `---
+name: workspace-direct
+description: Workspace-discovered skill.
+---
+
+# Workspace Skill
+`,
+  );
+  workspace.seedTextFile(
+    "skills/workspace-direct/README.md",
+    `---
+name: readme
+description: Wrong filename.
+---
+`,
+  );
+  workspace.seedTextFile(
+    "skills/external/managed/SKILL.md",
+    `---
+name: managed
+description: Managed external skill.
+---
+`,
+  );
+
+  const skills = await loadWorkspaceAgentSkillsFromWorkspace(workspace);
+  assert.equal(skills.length, 1);
+  assert.equal(skills[0].name, "workspace-direct");
+  assert.equal(skills[0].location, "skills/workspace-direct/SKILL.md");
+});
+
+void test("loadDiscoverableAgentSkillsFromWorkspace prefers managed external over workspace-discovered", async () => {
+  const workspace = new MemoryExternalSkillWorkspace();
+
+  workspace.seedTextFile(
+    "skills/external/shared-name/SKILL.md",
+    `---
+name: shared-skill
+description: Managed external copy.
+---
+
+# Managed
+`,
+  );
+  workspace.seedTextFile(
+    "skills/workspace-copy/SKILL.md",
+    `---
+name: shared-skill
+description: Workspace copy.
+---
+
+# Workspace
+`,
+  );
+  workspace.seedTextFile(
+    "skills/workspace-only/SKILL.md",
+    `---
+name: workspace-only
+description: Workspace-only skill.
+---
+
+# Workspace only
+`,
+  );
+
+  const skills = await loadDiscoverableAgentSkillsFromWorkspace(workspace);
+
+  assert.deepEqual(skills.map((skill) => skill.name), ["shared-skill", "workspace-only"]);
+  const shared = skills.find((skill) => skill.name === "shared-skill");
+  assert.ok(shared);
+  assert.equal(shared?.location, "skills/external/shared-name/SKILL.md");
 });
 
 void test("upsertExternalAgentSkillInWorkspace installs and overwrites by skill name", async () => {

@@ -39,11 +39,19 @@ Runtime note: `skills` reads are cached per session runtime so repeated reads fo
 
 The system prompt also includes `<available_skills>` entries so the model can choose a matching skill, then load it on demand.
 
-## External discovery (feature-flagged, off by default)
+## Workspace-backed discovery
 
-- Flag: `/experimental on external-skills-discovery`
-- Source: Files workspace path `skills/external/<name>/SKILL.md`
-- Safety: external skills are untrusted input and may contain risky instructions/scripts. Keep this disabled unless you trust the source.
+The runtime discovers non-bundled skills from the Files workspace automatically:
+
+- Managed installs: `skills/external/<name>/SKILL.md`
+- Workspace auto-discovery: `skills/<name>/SKILL.md` (excluding `skills/external/*`)
+
+Name-collision precedence is:
+1. bundled
+2. managed external (`skills/external/...`)
+3. workspace auto-discovered (`skills/<name>/SKILL.md`)
+
+Safety: workspace-provided skills are untrusted input and may contain risky instructions/scripts.
 
 ## Mapping table
 

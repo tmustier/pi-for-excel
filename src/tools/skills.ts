@@ -55,12 +55,12 @@ function defaultIsExternalDiscoveryEnabled(): boolean {
 }
 
 async function defaultLoadExternalSkills(): Promise<AgentSkillDefinition[]> {
-  const [{ getFilesWorkspace }, { loadExternalAgentSkillsFromWorkspace }] = await Promise.all([
+  const [{ getFilesWorkspace }, { loadDiscoverableAgentSkillsFromWorkspace }] = await Promise.all([
     import("../files/workspace.js"),
     import("../skills/external-store.js"),
   ]);
 
-  return loadExternalAgentSkillsFromWorkspace(getFilesWorkspace());
+  return loadDiscoverableAgentSkillsFromWorkspace(getFilesWorkspace());
 }
 
 async function defaultLoadDisabledSkillNames(): Promise<Set<string>> {

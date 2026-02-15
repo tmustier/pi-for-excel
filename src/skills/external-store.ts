@@ -1,7 +1,11 @@
 /**
- * External Agent Skills discovery store (feature-flagged).
+ * External Agent Skills discovery store.
  *
- * Source of truth: Files workspace path `skills/external/<name>/SKILL.md`.
+ * Managed external installs:
+ * - skills/external/<name>/SKILL.md
+ *
+ * Workspace-discovered skills (auto-discovery):
+ * - skills/<name>/SKILL.md
  */
 
 import { getFilesWorkspace, type FilesWorkspace } from "../files/workspace.js";
@@ -12,8 +16,9 @@ import type {
 } from "./types.js";
 import { parseSkillDocument } from "./frontmatter.js";
 
-const EXTERNAL_SKILLS_ROOT_PATH = "skills/external";
-const EXTERNAL_SKILL_FILENAME = "SKILL.md";
+const WORKSPACE_SKILLS_ROOT_PATH = "skills";
+const MANAGED_EXTERNAL_SKILLS_ROOT_PATH = "skills/external";
+const SKILL_FILENAME = "SKILL.md";
 const MAX_EXTERNAL_SKILL_MARKDOWN_CHARS = 1_000_000;
 
 export type ExternalSkillWorkspace = Pick<
@@ -21,7 +26,7 @@ export type ExternalSkillWorkspace = Pick<
   "listFiles" | "readFile" | "writeTextFile" | "deleteFile"
 >;
 
-function isWorkspaceExternalSkillFile(file: WorkspaceFileEntry): boolean {
+function isManagedExternalSkillFile(file: WorkspaceFileEntry): boolean {
   if (file.sourceKind !== "workspace") {
     return false;
   }
@@ -32,7 +37,22 @@ function isWorkspaceExternalSkillFile(file: WorkspaceFileEntry): boolean {
     && parts[0] === "skills"
     && parts[1] === "external"
     && parts[2] !== ""
-    && parts[3] === EXTERNAL_SKILL_FILENAME
+    && parts[3] === SKILL_FILENAME
+  );
+}
+
+function isWorkspaceDiscoveredSkillFile(file: WorkspaceFileEntry): boolean {
+  if (file.sourceKind !== "workspace") {
+    return false;
+  }
+
+  const parts = file.path.split("/");
+  return (
+    parts.length === 3
+    && parts[0] === WORKSPACE_SKILLS_ROOT_PATH
+    && parts[1] !== ""
+    && parts[1] !== "external"
+    && parts[2] === SKILL_FILENAME
   );
 }
 
@@ -55,7 +75,7 @@ function normalizeSkillName(name: string): string {
 
 function getExternalSkillPath(name: string): string {
   const normalized = normalizeSkillName(name);
-  return `${EXTERNAL_SKILLS_ROOT_PATH}/${normalized}/${EXTERNAL_SKILL_FILENAME}`;
+  return `${MANAGED_EXTERNAL_SKILLS_ROOT_PATH}/${normalized}/${SKILL_FILENAME}`;
 }
 
 function buildExternalSkillDefinition(args: {
@@ -79,70 +99,13 @@ function buildExternalSkillDefinition(args: {
   };
 }
 
-async function loadAllExternalAgentSkillDefinitions(
-  workspace: ExternalSkillWorkspace,
-): Promise<AgentSkillDefinition[]> {
-  const files = await workspace.listFiles();
-  const externalFiles = files
-    .filter((file) => isWorkspaceExternalSkillFile(file))
-    .sort((left, right) => left.path.localeCompare(right.path));
-
-  const loaded: AgentSkillDefinition[] = [];
-
-  for (const file of externalFiles) {
-    let readResult: Awaited<ReturnType<ExternalSkillWorkspace["readFile"]>>;
-
-    try {
-      readResult = await workspace.readFile(file.path, {
-        mode: "text",
-        maxChars: MAX_EXTERNAL_SKILL_MARKDOWN_CHARS,
-      });
-    } catch (error: unknown) {
-      console.warn(`[skills] Failed reading external skill file: ${file.path}`, error);
-      continue;
-    }
-
-    if (typeof readResult.text !== "string") {
-      console.warn(`[skills] External skill file is not readable text: ${file.path}`);
-      continue;
-    }
-
-    if (readResult.truncated) {
-      console.warn(`[skills] External skill file is too large to load fully: ${file.path}`);
-      continue;
-    }
-
-    const skill = buildExternalSkillDefinition({
-      location: file.path,
-      markdown: readResult.text,
-      sourceKind: "external",
-    });
-
-    if (!skill) {
-      console.warn(`[skills] Invalid external SKILL.md frontmatter: ${file.path}`);
-      continue;
-    }
-
-    loaded.push(skill);
-  }
-
-  return loaded;
-}
-
-/**
- * Loads external skills from the canonical Files workspace location:
- * `skills/external/<name>/SKILL.md`.
- */
-export async function loadExternalAgentSkillsFromWorkspace(
-  workspace: ExternalSkillWorkspace,
-): Promise<AgentSkillDefinition[]> {
-  const loaded = await loadAllExternalAgentSkillDefinitions(workspace);
+function dedupeSkillsByName(skills: readonly AgentSkillDefinition[], duplicateLabel: string): AgentSkillDefinition[] {
   const byName = new Map<string, AgentSkillDefinition>();
 
-  for (const skill of loaded) {
+  for (const skill of skills) {
     const normalizedName = skill.name.toLowerCase();
     if (byName.has(normalizedName)) {
-      console.warn(`[skills] Duplicate external skill ignored: ${skill.name} (${skill.location})`);
+      console.warn(`[skills] Duplicate ${duplicateLabel} skill ignored: ${skill.name} (${skill.location})`);
       continue;
     }
 
@@ -152,8 +115,147 @@ export async function loadExternalAgentSkillsFromWorkspace(
   return Array.from(byName.values()).sort((left, right) => left.name.localeCompare(right.name));
 }
 
+async function loadSkillDefinitionsFromFiles(args: {
+  workspace: ExternalSkillWorkspace;
+  files: readonly WorkspaceFileEntry[];
+  sourceKind: AgentSkillSourceKind;
+  tooLargeWarningLabel: string;
+  invalidWarningLabel: string;
+}): Promise<AgentSkillDefinition[]> {
+  const loaded: AgentSkillDefinition[] = [];
+
+  for (const file of args.files) {
+    let readResult: Awaited<ReturnType<ExternalSkillWorkspace["readFile"]>>;
+
+    try {
+      readResult = await args.workspace.readFile(file.path, {
+        mode: "text",
+        maxChars: MAX_EXTERNAL_SKILL_MARKDOWN_CHARS,
+      });
+    } catch (error: unknown) {
+      console.warn(`[skills] Failed reading ${args.invalidWarningLabel}: ${file.path}`, error);
+      continue;
+    }
+
+    if (typeof readResult.text !== "string") {
+      console.warn(`[skills] ${args.invalidWarningLabel} is not readable text: ${file.path}`);
+      continue;
+    }
+
+    if (readResult.truncated) {
+      console.warn(`[skills] ${args.tooLargeWarningLabel} is too large to load fully: ${file.path}`);
+      continue;
+    }
+
+    const skill = buildExternalSkillDefinition({
+      location: file.path,
+      markdown: readResult.text,
+      sourceKind: args.sourceKind,
+    });
+
+    if (!skill) {
+      console.warn(`[skills] Invalid SKILL.md frontmatter (${args.invalidWarningLabel}): ${file.path}`);
+      continue;
+    }
+
+    loaded.push(skill);
+  }
+
+  return loaded;
+}
+
+function sortSkillFiles(files: readonly WorkspaceFileEntry[]): WorkspaceFileEntry[] {
+  return [...files].sort((left, right) => left.path.localeCompare(right.path));
+}
+
+async function loadAllManagedExternalAgentSkillDefinitions(args: {
+  workspace: ExternalSkillWorkspace;
+  files?: readonly WorkspaceFileEntry[];
+}): Promise<AgentSkillDefinition[]> {
+  const files = args.files ?? await args.workspace.listFiles();
+  const externalFiles = sortSkillFiles(files.filter((file) => isManagedExternalSkillFile(file)));
+
+  return loadSkillDefinitionsFromFiles({
+    workspace: args.workspace,
+    files: externalFiles,
+    sourceKind: "external",
+    tooLargeWarningLabel: "managed external skill file",
+    invalidWarningLabel: "managed external skill file",
+  });
+}
+
+async function loadAllWorkspaceDiscoveredAgentSkillDefinitions(args: {
+  workspace: ExternalSkillWorkspace;
+  files?: readonly WorkspaceFileEntry[];
+}): Promise<AgentSkillDefinition[]> {
+  const files = args.files ?? await args.workspace.listFiles();
+  const workspaceSkillFiles = sortSkillFiles(files.filter((file) => isWorkspaceDiscoveredSkillFile(file)));
+
+  return loadSkillDefinitionsFromFiles({
+    workspace: args.workspace,
+    files: workspaceSkillFiles,
+    sourceKind: "external",
+    tooLargeWarningLabel: "workspace-discovered skill file",
+    invalidWarningLabel: "workspace-discovered skill file",
+  });
+}
+
+/**
+ * Loads managed external skills from the canonical Files workspace location:
+ * `skills/external/<name>/SKILL.md`.
+ */
+export async function loadExternalAgentSkillsFromWorkspace(
+  workspace: ExternalSkillWorkspace,
+): Promise<AgentSkillDefinition[]> {
+  const loaded = await loadAllManagedExternalAgentSkillDefinitions({ workspace });
+  return dedupeSkillsByName(loaded, "managed external");
+}
+
+/**
+ * Loads auto-discovered workspace skills from:
+ * `skills/<name>/SKILL.md` (excluding `skills/external/*`).
+ */
+export async function loadWorkspaceAgentSkillsFromWorkspace(
+  workspace: ExternalSkillWorkspace,
+): Promise<AgentSkillDefinition[]> {
+  const loaded = await loadAllWorkspaceDiscoveredAgentSkillDefinitions({ workspace });
+  return dedupeSkillsByName(loaded, "workspace-discovered");
+}
+
+/**
+ * Loads all discoverable non-bundled skills.
+ *
+ * Precedence on name collisions:
+ * 1) managed external (`skills/external/<name>/SKILL.md`)
+ * 2) workspace-discovered (`skills/<name>/SKILL.md`)
+ */
+export async function loadDiscoverableAgentSkillsFromWorkspace(
+  workspace: ExternalSkillWorkspace,
+): Promise<AgentSkillDefinition[]> {
+  const files = await workspace.listFiles();
+
+  const [managedExternal, workspaceDiscovered] = await Promise.all([
+    loadAllManagedExternalAgentSkillDefinitions({ workspace, files }).then((loaded) => {
+      return dedupeSkillsByName(loaded, "managed external");
+    }),
+    loadAllWorkspaceDiscoveredAgentSkillDefinitions({ workspace, files }).then((loaded) => {
+      return dedupeSkillsByName(loaded, "workspace-discovered");
+    }),
+  ]);
+
+  return dedupeSkillsByName([...managedExternal, ...workspaceDiscovered], "discoverable");
+}
+
 export async function loadExternalAgentSkills(): Promise<AgentSkillDefinition[]> {
   return loadExternalAgentSkillsFromWorkspace(getFilesWorkspace());
+}
+
+export async function loadWorkspaceAgentSkills(): Promise<AgentSkillDefinition[]> {
+  return loadWorkspaceAgentSkillsFromWorkspace(getFilesWorkspace());
+}
+
+export async function loadDiscoverableAgentSkills(): Promise<AgentSkillDefinition[]> {
+  return loadDiscoverableAgentSkillsFromWorkspace(getFilesWorkspace());
 }
 
 export interface UpsertExternalAgentSkillResult {
@@ -184,7 +286,7 @@ export async function upsertExternalAgentSkillInWorkspace(args: {
   await args.workspace.writeTextFile(location, args.markdown, "text/markdown");
 
   const normalizedName = parsed.frontmatter.name.toLowerCase();
-  const duplicates = (await loadAllExternalAgentSkillDefinitions(args.workspace)).filter((skill) => {
+  const duplicates = (await loadAllManagedExternalAgentSkillDefinitions({ workspace: args.workspace })).filter((skill) => {
     return skill.name.toLowerCase() === normalizedName && skill.location !== location;
   });
 
@@ -214,7 +316,7 @@ export async function removeExternalAgentSkillFromWorkspace(args: {
   name: string;
 }): Promise<boolean> {
   const normalizedName = normalizeSkillName(args.name).toLowerCase();
-  const matches = (await loadAllExternalAgentSkillDefinitions(args.workspace)).filter((skill) => {
+  const matches = (await loadAllManagedExternalAgentSkillDefinitions({ workspace: args.workspace })).filter((skill) => {
     return skill.name.toLowerCase() === normalizedName;
   });
 
