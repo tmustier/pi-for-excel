@@ -1,9 +1,9 @@
 /**
- * Add-ons overlay.
+ * Extensions overlay (formerly Add-ons).
  *
  * Unified entry point for:
  * - Connections
- * - Extensions
+ * - Plugins
  * - Skills
  */
 
@@ -21,7 +21,7 @@ import {
   buildConnectionsSnapshot,
   renderConnectionsSection,
 } from "./addons-overlay-connections.js";
-import { renderExtensionsSection } from "./addons-overlay-extensions.js";
+import { renderPluginsSection } from "./addons-overlay-extensions.js";
 import {
   buildSkillsSnapshot,
   renderSkillsSection,
@@ -34,20 +34,31 @@ import type {
 
 export type { AddonsSection, ShowAddonsDialogOptions, AddonsDialogActions } from "./addons-overlay-types.js";
 
+const EXTENSIONS_TABS: ReadonlyArray<{ section: AddonsSection; label: string }> = [
+  { section: "connections", label: "Connections" },
+  { section: "plugins", label: "Plugins" },
+  { section: "skills", label: "Skills" },
+];
+
 let addonsDialogOpenInFlight: Promise<void> | null = null;
 let pendingSectionFocus: AddonsSection | null = null;
 
-function sectionSelector(section: AddonsSection): string {
-  return `[data-addons-section=\"${section}\"]`;
+function activateExtensionsSection(overlay: HTMLElement, section: AddonsSection): void {
+  const tabButtons = overlay.querySelectorAll<HTMLButtonElement>("[data-extensions-tab]");
+  for (const button of tabButtons) {
+    const isActive = button.dataset.extensionsTab === section;
+    button.classList.toggle("is-active", isActive);
+    button.setAttribute("aria-selected", isActive ? "true" : "false");
+  }
+
+  const panels = overlay.querySelectorAll<HTMLElement>("[data-extensions-panel]");
+  for (const panel of panels) {
+    panel.hidden = panel.dataset.extensionsPanel !== section;
+  }
 }
 
 function focusAddonsSection(overlay: HTMLElement, section: AddonsSection): void {
-  const target = overlay.querySelector<HTMLElement>(sectionSelector(section));
-  if (!target) {
-    return;
-  }
-
-  target.scrollIntoView({ behavior: "smooth", block: "start" });
+  activateExtensionsSection(overlay, section);
 }
 
 export async function showAddonsDialog(
@@ -107,19 +118,48 @@ export async function showAddonsDialog(
 
     const { header } = createOverlayHeader({
       onClose: dialog.close,
-      closeLabel: "Close add-ons",
-      title: "Add-ons",
-      subtitle: "Connections, extensions, and skills in one place.",
+      closeLabel: "Close extensions",
+      title: "Extensions",
+      subtitle: "Connections, plugins, and skills in one place.",
     });
 
     const body = document.createElement("div");
     body.className = "pi-overlay-body pi-addons-body";
 
-    const connectionsContainer = document.createElement("div");
-    const extensionsContainer = document.createElement("div");
-    const skillsContainer = document.createElement("div");
-    body.append(connectionsContainer, extensionsContainer, skillsContainer);
+    const tabs = document.createElement("div");
+    tabs.className = "pi-overlay-tabs";
+    tabs.setAttribute("role", "tablist");
+    tabs.setAttribute("aria-label", "Extensions sections");
 
+    const sectionsWrap = document.createElement("div");
+    sectionsWrap.className = "pi-addons-sections";
+
+    const connectionsContainer = document.createElement("div");
+    connectionsContainer.dataset.extensionsPanel = "connections";
+
+    const pluginsContainer = document.createElement("div");
+    pluginsContainer.dataset.extensionsPanel = "plugins";
+
+    const skillsContainer = document.createElement("div");
+    skillsContainer.dataset.extensionsPanel = "skills";
+
+    sectionsWrap.append(connectionsContainer, pluginsContainer, skillsContainer);
+
+    for (const tab of EXTENSIONS_TABS) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "pi-overlay-tab";
+      button.textContent = tab.label;
+      button.dataset.extensionsTab = tab.section;
+      button.setAttribute("role", "tab");
+      button.setAttribute("aria-selected", "false");
+      button.addEventListener("click", () => {
+        activateExtensionsSection(dialog.overlay, tab.section);
+      });
+      tabs.appendChild(button);
+    }
+
+    body.append(tabs, sectionsWrap);
     dialog.card.append(header, body);
 
     let disposed = false;
@@ -129,16 +169,16 @@ export async function showAddonsDialog(
 
     let connectionsBusy = false;
 
-    const refreshExtensions = (): void => {
+    const refreshPlugins = (): void => {
       if (disposed) {
         return;
       }
 
-      renderExtensionsSection({
-        container: extensionsContainer,
+      renderPluginsSection({
+        container: pluginsContainer,
         actions: managedActions,
         busy: connectionsBusy,
-        onRefresh: refreshExtensions,
+        onRefresh: refreshPlugins,
       });
     };
 
@@ -210,11 +250,11 @@ export async function showAddonsDialog(
             }
           } catch (error: unknown) {
             const message = error instanceof Error ? error.message : "Unknown error";
-            showToast(`Add-ons: ${message}`);
+            showToast(`Extensions: ${message}`);
           } finally {
             connectionsBusy = false;
             await refreshConnections();
-            refreshExtensions();
+            refreshPlugins();
           }
         };
 
@@ -251,22 +291,20 @@ export async function showAddonsDialog(
 
     await Promise.all([
       refreshConnections(),
-      Promise.resolve(refreshExtensions()),
+      Promise.resolve(refreshPlugins()),
       refreshSkills(),
     ]);
 
     dialog.mount();
 
-    if (pendingSectionFocus) {
-      const section = pendingSectionFocus;
-      pendingSectionFocus = null;
-      requestAnimationFrame(() => {
-        const mounted = document.getElementById(ADDONS_OVERLAY_ID);
-        if (mounted instanceof HTMLElement) {
-          focusAddonsSection(mounted, section);
-        }
-      });
-    }
+    const initialSection = pendingSectionFocus ?? "connections";
+    pendingSectionFocus = null;
+    requestAnimationFrame(() => {
+      const mounted = document.getElementById(ADDONS_OVERLAY_ID);
+      if (mounted instanceof HTMLElement) {
+        activateExtensionsSection(mounted, initialSection);
+      }
+    });
   })();
 
   try {

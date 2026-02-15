@@ -30,7 +30,7 @@ function confirmExtensionEnable(status: ExtensionRuntimeStatus): boolean {
   }
 
   const lines = [
-    `Enable extension "${status.name}" with higher-risk permissions?`,
+    `Enable plugin "${status.name}" with higher-risk permissions?`,
     "",
     "Granted higher-risk permissions:",
     ...highRiskCapabilities.map((capability) => `- ${capability}`),
@@ -43,7 +43,7 @@ function confirmExtensionEnable(status: ExtensionRuntimeStatus): boolean {
   return window.confirm(lines.join("\n"));
 }
 
-export function renderExtensionsSection(args: {
+export function renderPluginsSection(args: {
   container: HTMLElement;
   actions: AddonsDialogActions;
   busy: boolean;
@@ -53,12 +53,12 @@ export function renderExtensionsSection(args: {
 
   const section = document.createElement("section");
   section.className = "pi-overlay-section pi-addons-section";
-  section.dataset.addonsSection = "extensions";
-  section.appendChild(createOverlaySectionTitle("Extensions"));
+  section.dataset.addonsSection = "plugins";
+  section.appendChild(createOverlaySectionTitle("Plugins"));
 
   const hint = document.createElement("p");
   hint.className = "pi-overlay-hint";
-  hint.textContent = "Code plugins running in the sidebar.";
+  hint.textContent = "Plugins running in the sidebar.";
   section.appendChild(hint);
 
   const list = document.createElement("div");
@@ -68,7 +68,7 @@ export function renderExtensionsSection(args: {
   if (statuses.length === 0) {
     const empty = document.createElement("div");
     empty.className = "pi-overlay-empty";
-    empty.textContent = "No extensions installed.";
+    empty.textContent = "No plugins installed.";
     list.appendChild(empty);
   } else {
     for (const status of statuses) {
@@ -121,7 +121,7 @@ export function renderExtensionsSection(args: {
           })
           .catch((error: unknown) => {
             const message = error instanceof Error ? error.message : "Unknown error";
-            showToast(`Extensions: ${message}`);
+            showToast(`Plugins: ${message}`);
             args.onRefresh();
           });
       });
@@ -145,7 +145,7 @@ export function renderExtensionsSection(args: {
   const actionsRow = document.createElement("div");
   actionsRow.className = "pi-overlay-actions";
 
-  const openButton = createOverlayButton({ text: "Open full Extensions manager…" });
+  const openButton = createOverlayButton({ text: "Open full Plugins manager…" });
   openButton.addEventListener("click", () => {
     args.actions.openExtensionsManager();
   });

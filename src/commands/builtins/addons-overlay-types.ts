@@ -7,7 +7,7 @@ import type { WebSearchConfigStore } from "../../tools/web-search-config.js";
 import type { McpConfigStore } from "../../tools/mcp-config.js";
 import type { AgentSkillDefinition } from "../../skills/types.js";
 
-export type AddonsSection = "connections" | "extensions" | "skills";
+export type AddonsSection = "connections" | "plugins" | "skills";
 
 export interface ShowAddonsDialogOptions {
   section?: AddonsSection;

@@ -1,4 +1,4 @@
-/* Add-ons overlay */
+/* Extensions overlay (legacy add-ons id) */
 
 .pi-addons-dialog {
   overflow: hidden;
@@ -12,6 +12,16 @@
   overflow-y: auto;
   max-height: min(64vh, 620px);
   padding-right: 2px;
+}
+
+.pi-addons-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pi-addons-sections > [data-extensions-panel][hidden] {
+  display: none;
 }
 
 .pi-addons-section {

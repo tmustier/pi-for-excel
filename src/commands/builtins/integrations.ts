@@ -22,7 +22,7 @@ export function createIntegrationsCommands(actions: IntegrationsCommandActions):
   return [
     {
       name: TOOLS_COMMAND_NAME,
-      description: `Manage ${INTEGRATIONS_MANAGER_LABEL_LOWER} (alias for /addons connections)`,
+      description: `Manage ${INTEGRATIONS_MANAGER_LABEL_LOWER} (alias for /extensions connections)`,
       source: "builtin",
       execute: openConnections,
     },

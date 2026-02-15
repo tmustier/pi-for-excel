@@ -1,5 +1,5 @@
 /**
- * Builtin command for unified add-ons management UI.
+ * Builtin commands for unified extensions management UI.
  */
 
 import type { AddonsSection } from "./addons-overlay.js";
@@ -12,8 +12,16 @@ export interface AddonsCommandActions {
 export function createAddonsCommands(actions: AddonsCommandActions): SlashCommand[] {
   return [
     {
+      name: "extensions",
+      description: "Open Extensions (connections, plugins, skills)",
+      source: "builtin",
+      execute: () => {
+        void actions.openAddonsManager();
+      },
+    },
+    {
       name: "addons",
-      description: "Open Add-ons (connections, extensions, skills)",
+      description: "Alias for /extensions",
       source: "builtin",
       execute: () => {
         void actions.openAddonsManager();

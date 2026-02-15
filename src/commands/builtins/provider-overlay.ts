@@ -1,7 +1,7 @@
 /**
  * Provider picker alias.
  *
- * Providers now live under Settings → Providers.
+ * Providers now live under Settings → Logins.
  */
 
 export async function showProviderPicker(): Promise<void> {

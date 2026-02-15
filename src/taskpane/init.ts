@@ -1352,7 +1352,7 @@ export async function initTaskpane(opts: {
   };
 
   configureSettingsDialogDependencies({
-    openAddonsHub: (section?: AddonsSection) => {
+    openExtensionsHub: (section?: AddonsSection) => {
       openAddonsManager(section);
     },
     openRulesDialog: openRulesEditor,
@@ -1484,7 +1484,7 @@ export async function initTaskpane(opts: {
   sidebar.onOpenRules = () => {
     void openRulesEditor();
   };
-  sidebar.onOpenAddons = () => {
+  sidebar.onOpenExtensions = () => {
     openAddonsManager();
   };
   sidebar.onOpenSettings = () => {
@@ -1682,6 +1682,13 @@ export async function initTaskpane(opts: {
     // Model picker
     if (el.closest(".pi-status-model")) {
       openModelSelector();
+      return;
+    }
+
+    // Rules editor
+    if (el.closest(".pi-status-rules")) {
+      closeStatusPopover();
+      void openRulesEditor();
       return;
     }
 

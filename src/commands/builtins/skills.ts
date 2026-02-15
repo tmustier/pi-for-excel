@@ -13,7 +13,7 @@ export function createSkillsCommands(actions: SkillsCommandActions): SlashComman
   return [
     {
       name: "skills",
-      description: "Browse available skills (alias for /addons skills)",
+      description: "Browse available skills (alias for /extensions skills)",
       source: "builtin",
       execute: () => {
         void actions.openAddonsManager("skills");

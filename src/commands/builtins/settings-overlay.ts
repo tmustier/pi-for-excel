@@ -3,7 +3,7 @@
  *
  * Tabs:
  * - Logins (Proxy, Providers)
- * - Extensions (opens unified Add-ons manager)
+ * - Extensions (opens unified Extensions manager)
  * - More (Advanced, Experimental)
  */
 
@@ -51,7 +51,7 @@ interface SettingsStore {
 }
 
 interface SettingsDialogDependencies {
-  openAddonsHub?: (section?: AddonsSection) => void;
+  openExtensionsHub?: (section?: AddonsSection) => void;
   openRulesDialog?: () => Promise<void> | void;
   openRecoveryDialog?: () => Promise<void> | void;
   openShortcutsDialog?: () => void;
@@ -60,7 +60,7 @@ interface SettingsDialogDependencies {
 interface ResolvedSectionFocus {
   tab: SettingsPrimaryTab;
   anchor?: "proxy" | "providers" | "advanced" | "experimental";
-  addonsSection?: AddonsSection;
+  extensionSection?: AddonsSection;
 }
 
 const SETTINGS_TABS: ReadonlyArray<{ id: SettingsPrimaryTab; label: string }> = [
@@ -80,9 +80,9 @@ const EXTENSIONS_LINKS: ReadonlyArray<{
     description: "Web search, MCP, and bridge setup",
   },
   {
-    section: "extensions",
-    label: "Extensions",
-    description: "Installed extensions and enable/disable state",
+    section: "plugins",
+    label: "Plugins",
+    description: "Installed plugins and enable/disable state",
   },
   {
     section: "skills",
@@ -106,13 +106,15 @@ function resolveSectionFocus(section: SettingsOverlaySection | undefined): Resol
     case "proxy":
       return { tab: "logins", anchor: "proxy" };
     case "connections":
-    case "extensions":
+    case "plugins":
     case "skills":
-      return { tab: "extensions", addonsSection: section };
+      return { tab: "extensions", extensionSection: section };
     case "advanced":
       return { tab: "more", anchor: "advanced" };
     case "experimental":
       return { tab: "more", anchor: "experimental" };
+    case "extensions":
+      return { tab: "extensions" };
     case "more":
       return { tab: "more" };
     case "logins":
@@ -139,9 +141,9 @@ function applySectionFocus(overlay: HTMLElement, section: SettingsOverlaySection
   const resolved = resolveSectionFocus(section);
   activateSettingsTab(overlay, resolved.tab);
 
-  if (resolved.addonsSection) {
+  if (resolved.extensionSection) {
     const preferred = overlay.querySelector<HTMLButtonElement>(
-      `[data-settings-addons-link="${resolved.addonsSection}"]`,
+      `[data-settings-extension-link="${resolved.extensionSection}"]`,
     );
     if (preferred) {
       preferred.click();
@@ -363,7 +365,7 @@ function buildExtensionsSection(closeDialog: () => void): HTMLElement {
   const shell = createSectionShell(
     "Extensions",
     "extensions",
-    "Connections, extensions, and skills live in one place.",
+    "Connections, plugins, and skills live in one place.",
   );
 
   const tabs = document.createElement("div");
@@ -378,8 +380,8 @@ function buildExtensionsSection(closeDialog: () => void): HTMLElement {
 
   const applySelection = (section: AddonsSection): void => {
     selectedSection = section;
-    for (const button of tabs.querySelectorAll<HTMLButtonElement>("[data-settings-addons-link]")) {
-      const isActive = button.dataset.settingsAddonsLink === selectedSection;
+    for (const button of tabs.querySelectorAll<HTMLButtonElement>("[data-settings-extension-link]")) {
+      const isActive = button.dataset.settingsExtensionLink === selectedSection;
       button.classList.toggle("is-active", isActive);
       button.setAttribute("aria-selected", isActive ? "true" : "false");
     }
@@ -393,7 +395,7 @@ function buildExtensionsSection(closeDialog: () => void): HTMLElement {
     button.type = "button";
     button.className = "pi-overlay-tab";
     button.textContent = item.label;
-    button.dataset.settingsAddonsLink = item.section;
+    button.dataset.settingsExtensionLink = item.section;
     button.setAttribute("role", "tab");
     button.setAttribute("aria-selected", "false");
     button.addEventListener("click", () => {
@@ -408,14 +410,14 @@ function buildExtensionsSection(closeDialog: () => void): HTMLElement {
   actionRow.className = "pi-overlay-actions pi-settings-extensions-actions";
 
   const openButton = createOverlayButton({
-    text: "Open Add-ons manager…",
+    text: "Open Extensions manager…",
     className: "pi-overlay-btn--primary",
   });
 
-  if (dependencies.openAddonsHub) {
+  if (dependencies.openExtensionsHub) {
     openButton.addEventListener("click", () => {
       closeDialog();
-      dependencies.openAddonsHub?.(selectedSection);
+      dependencies.openExtensionsHub?.(selectedSection);
     });
   } else {
     openButton.disabled = true;
@@ -423,15 +425,15 @@ function buildExtensionsSection(closeDialog: () => void): HTMLElement {
 
   const aliasHint = document.createElement("p");
   aliasHint.className = "pi-overlay-hint";
-  aliasHint.textContent = "Slash commands: /addons, /extensions, /tools, /integrations, /skills";
+  aliasHint.textContent = "Slash commands: /extensions, /addons, /tools, /integrations, /plugins, /skills";
 
   shell.content.append(tabs, description, actionRow, aliasHint);
   actionRow.appendChild(openButton);
 
-  if (!dependencies.openAddonsHub) {
+  if (!dependencies.openExtensionsHub) {
     const warning = document.createElement("p");
     warning.className = "pi-overlay-hint pi-overlay-text-warning";
-    warning.textContent = "Add-ons manager is unavailable in this context.";
+    warning.textContent = "Extensions manager is unavailable in this context.";
     shell.content.appendChild(warning);
   }
 

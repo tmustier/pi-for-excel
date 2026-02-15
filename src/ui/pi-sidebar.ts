@@ -108,7 +108,7 @@ export class PiSidebar extends LitElement {
   @property({ attribute: false }) onMoveTabRight?: (runtimeId: string) => void;
   @property({ attribute: false }) onCloseOtherTabs?: (runtimeId: string) => void;
   @property({ attribute: false }) onOpenRules?: () => void;
-  @property({ attribute: false }) onOpenAddons?: () => void;
+  @property({ attribute: false }) onOpenExtensions?: () => void;
   @property({ attribute: false }) onOpenSettings?: () => void;
   @property({ attribute: false }) onOpenFilesWorkspace?: () => void;
   @property({ attribute: false }) onFilesDrop?: (files: File[]) => void;
@@ -834,8 +834,8 @@ export class PiSidebar extends LitElement {
         <button role="menuitem" class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenRules?.(); }}>
           Rules & conventions…
         </button>
-        <button role="menuitem" class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenAddons?.(); }}>
-          Add-ons…
+        <button role="menuitem" class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenExtensions?.(); }}>
+          Extensions…
         </button>
 
         <div class="pi-utilities-menu__divider" role="separator"></div>

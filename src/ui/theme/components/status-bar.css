@@ -49,7 +49,7 @@
   opacity: 0.9;
 }
 
-/* Model picker — center, absorbs leftover space */
+/* Model picker — left-aligned */
 .pi-status-model {
   display: inline-flex;
   align-items: center;
@@ -59,7 +59,6 @@
   cursor: pointer;
   padding: 2px 6px;
   margin: -2px 0;
-  margin-left: auto;
   border-radius: var(--radius-xs);
   font-family: var(--font-sans);
   font-size: var(--text-sm);
@@ -161,6 +160,26 @@
 .pi-status-lock--active {
   color: var(--primary);
   background: var(--green-alpha-12);
+}
+
+.pi-status-rules {
+  border: 1px solid transparent;
+  border-radius: var(--radius-xs);
+  background: var(--alpha-3);
+  padding: 2px 6px;
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  text-transform: lowercase;
+  color: var(--muted-foreground);
+  transition: background var(--duration-fast), color var(--duration-fast), border-color var(--duration-fast);
+  white-space: nowrap;
+  margin-left: auto;
+}
+
+.pi-status-rules:hover {
+  background: var(--pi-green-lighter);
+  border-color: var(--green-alpha-20);
+  color: var(--foreground);
 }
 
 .pi-status-mode {
