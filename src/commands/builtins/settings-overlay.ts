@@ -251,7 +251,7 @@ function buildExperimentalSection(): HTMLElement {
   );
 
   const content = buildExperimentalFeatureContent();
-  shell.content.appendChild(content.content);
+  shell.content.appendChild(content);
   shell.content.appendChild(buildExperimentalFeatureFooter());
 
   return shell.section;

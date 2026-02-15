@@ -22,10 +22,6 @@ interface FeatureSectionSpec {
   features: ExperimentalFeatureSnapshot[];
 }
 
-export interface ExperimentalFeatureContent {
-  content: HTMLDivElement;
-  hasFeatures: boolean;
-}
 
 function isAdvancedSecurityFeature(feature: ExperimentalFeatureSnapshot): boolean {
   return ADVANCED_SECURITY_FEATURE_IDS.has(feature.id);
@@ -129,7 +125,7 @@ function buildFeatureSection(spec: FeatureSectionSpec): HTMLElement {
   return section;
 }
 
-export function buildExperimentalFeatureContent(): ExperimentalFeatureContent {
+export function buildExperimentalFeatureContent(): HTMLDivElement {
   const content = document.createElement("div");
   content.className = "pi-experimental-content";
 
@@ -169,10 +165,7 @@ export function buildExperimentalFeatureContent(): ExperimentalFeatureContent {
     content.appendChild(empty);
   }
 
-  return {
-    content,
-    hasFeatures: snapshots.length > 0,
-  };
+  return content;
 }
 
 export function buildExperimentalFeatureFooter(): HTMLParagraphElement {
