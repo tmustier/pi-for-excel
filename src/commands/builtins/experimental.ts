@@ -167,7 +167,7 @@ function getLegacyFeatureRedirectMessage(featureArg: string): string | null {
     return null;
   }
 
-  return "External tools (including MCP) are managed in /integrations, not /experimental.";
+  return "External tools (including MCP) are managed in /integrations (Tools & MCP), not /experimental.";
 }
 
 function usageText(): string {

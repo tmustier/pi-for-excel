@@ -13,6 +13,9 @@ export const INTEGRATION_LABEL_LOWER = "integration";
 export const INTEGRATIONS_LABEL = "Integrations";
 export const INTEGRATIONS_LABEL_LOWER = "integrations";
 
+export const INTEGRATIONS_MANAGER_LABEL = "Tools & MCP";
+export const INTEGRATIONS_MANAGER_LABEL_LOWER = "tools & MCP";
+
 export const ACTIVE_INTEGRATIONS_PROMPT_HEADING = "Active Integrations";
 export const ACTIVE_INTEGRATIONS_TOOLTIP_PREFIX = "Active integrations";
 

@@ -147,7 +147,7 @@ export function showExperimentalDialog(): void {
     title: "Experimental Features",
     subtitle:
       "These toggles are local to this browser profile. Use carefully — some are security-sensitive. "
-      + "Web Search and MCP are managed in /integrations.",
+      + "Web Search and MCP are managed in /integrations (Tools & MCP).",
   });
 
   const snapshots = getExperimentalFeatureSnapshots();

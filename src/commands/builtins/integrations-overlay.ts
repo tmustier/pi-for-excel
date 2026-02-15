@@ -10,6 +10,7 @@ import { dispatchIntegrationsChanged } from "../../integrations/events.js";
 import {
   INTEGRATIONS_LABEL,
   INTEGRATIONS_LABEL_LOWER,
+  INTEGRATIONS_MANAGER_LABEL,
 } from "../../integrations/naming.js";
 import {
   setExternalToolsEnabled,
@@ -87,9 +88,9 @@ export function showIntegrationsDialog(dependencies: IntegrationsDialogDependenc
 
   const { header } = createOverlayHeader({
     onClose: closeOverlay,
-    closeLabel: "Close integrations",
-    title: INTEGRATIONS_LABEL,
-    subtitle: "Add capabilities like web search and external integrations. External tools are off by default.",
+    closeLabel: "Close tools and MCP",
+    title: INTEGRATIONS_MANAGER_LABEL,
+    subtitle: "Manage web search, page fetch, and MCP servers. External tools are off by default.",
   });
 
   const elements = createIntegrationsDialogElements();

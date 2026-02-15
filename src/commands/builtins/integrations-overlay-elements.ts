@@ -1,7 +1,4 @@
 import {
-  INTEGRATIONS_LABEL,
-} from "../../integrations/naming.js";
-import {
   WEB_SEARCH_PROVIDERS,
   WEB_SEARCH_PROVIDER_INFO,
 } from "../../tools/web-search-config.js";
@@ -63,7 +60,7 @@ export function createIntegrationsDialogElements(): IntegrationsDialogElements {
 
   const integrationsSection = document.createElement("section");
   integrationsSection.className = "pi-overlay-section";
-  integrationsSection.appendChild(createOverlaySectionTitle(`${INTEGRATIONS_LABEL} bundles`));
+  integrationsSection.appendChild(createOverlaySectionTitle("Capability bundles"));
 
   const integrationsList = document.createElement("div");
   integrationsList.className = "pi-overlay-list";

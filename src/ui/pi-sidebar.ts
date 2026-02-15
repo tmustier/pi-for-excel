@@ -19,7 +19,7 @@ import { initToolGrouping } from "./tool-grouping.js";
 import { applyMessageStyleHooks } from "./message-style-hooks.js";
 import type { PiInput, PiInputAction } from "./pi-input.js";
 import { isDebugEnabled, formatK } from "../debug/debug.js";
-import { INTEGRATIONS_LABEL } from "../integrations/naming.js";
+import { INTEGRATIONS_MANAGER_LABEL } from "../integrations/naming.js";
 import {
   getPayloadStats,
   getLastContext,
@@ -858,7 +858,7 @@ export class PiSidebar extends LitElement {
           Rules & conventions…
         </button>
         <button role="menuitem" class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenIntegrations?.(); }}>
-          ${INTEGRATIONS_LABEL}…
+          ${INTEGRATIONS_MANAGER_LABEL}…
         </button>
         ${this.onOpenExtensions
           ? html`
