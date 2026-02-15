@@ -179,6 +179,17 @@
   flex-wrap: wrap;
 }
 
+.pi-overlay-input-actions-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.pi-overlay-text-warning {
+  color: oklch(0.54 0.12 35);
+}
+
 .pi-overlay-btn {
   border-radius: var(--radius-sm);
   padding: 7px 12px;
@@ -387,6 +398,16 @@
 
 .pi-overlay-actions--wrap {
   flex-wrap: wrap;
+}
+
+.pi-overlay-actions--inline {
+  margin-top: 0;
+}
+
+@media (max-width: 740px) {
+  .pi-overlay-input-actions-row--stack-mobile {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* ── Conventions editor (rules overlay) ───────────────────────── */

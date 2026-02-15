@@ -76,12 +76,6 @@
   color: var(--muted-foreground);
 }
 
-.pi-recovery-item__actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
 .pi-recovery-item__restored {
   font-family: var(--font-mono);
   font-size: var(--text-xs);

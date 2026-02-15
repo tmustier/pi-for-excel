@@ -258,7 +258,7 @@ export function showExtensionsDialog(manager: ExtensionRuntimeManager): void {
   localBridgeStatusRow.append(localBridgeStatusText, localBridgeStatusBadgeSlot);
 
   const localBridgeUrlRow = document.createElement("div");
-  localBridgeUrlRow.className = "pi-ext-local-bridge-url-row";
+  localBridgeUrlRow.className = "pi-overlay-input-actions-row";
 
   const localBridgeUrlInput = createOverlayInput({ placeholder: "https://localhost:3340" });
   const localBridgeSaveUrlButton = createOverlayButton({ text: "Save URL" });
@@ -505,7 +505,7 @@ export function showExtensionsDialog(manager: ExtensionRuntimeManager): void {
       const runtimeWarning = document.createElement("div");
       runtimeWarning.textContent =
         "Host-runtime fallback is enabled: this untrusted extension runs in host runtime. Disable fallback above to restore sandbox mode.";
-      runtimeWarning.className = "pi-ext-installed-row__error";
+      runtimeWarning.className = "pi-ext-installed-row__error pi-overlay-text-warning";
       details.appendChild(runtimeWarning);
     }
 
@@ -535,7 +535,7 @@ export function showExtensionsDialog(manager: ExtensionRuntimeManager): void {
       if (riskLabel) {
         const risk = document.createElement("span");
         risk.textContent = `(${riskLabel})`;
-        risk.className = "pi-ext-installed-row__risk";
+        risk.className = "pi-ext-installed-row__risk pi-overlay-text-warning";
         toggleText.append(" ", risk);
       }
 
@@ -580,7 +580,7 @@ export function showExtensionsDialog(manager: ExtensionRuntimeManager): void {
     if (status.lastError) {
       const errorLine = document.createElement("div");
       errorLine.textContent = `Last error: ${status.lastError}`;
-      errorLine.className = "pi-ext-installed-row__error";
+      errorLine.className = "pi-ext-installed-row__error pi-overlay-text-warning";
       details.appendChild(errorLine);
     }
 

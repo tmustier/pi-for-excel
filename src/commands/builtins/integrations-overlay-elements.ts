@@ -100,7 +100,7 @@ export function createIntegrationsDialogElements(): IntegrationsDialogElements {
   webSearchProviderRow.append(webSearchProviderSelect, webSearchProviderSignupLink);
 
   const webSearchInputRow = document.createElement("div");
-  webSearchInputRow.className = "pi-integrations-web-search-row";
+  webSearchInputRow.className = "pi-overlay-input-actions-row pi-overlay-input-actions-row--stack-mobile";
 
   const webSearchApiKeyInput = createOverlayInput({ placeholder: "API key", type: "password" });
   const webSearchSaveButton = createOverlayButton({ text: "Save key" });

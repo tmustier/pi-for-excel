@@ -353,7 +353,7 @@ export async function showRecoveryDialog(opts: {
       meta.textContent = `${formatChangedLabel(checkpoint.changedCount)} · #${shortId(checkpoint.id)}`;
 
       const actions = document.createElement("div");
-      actions.className = "pi-recovery-item__actions";
+      actions.className = "pi-overlay-actions pi-overlay-actions--inline";
 
       const restoreButton = document.createElement("button");
       restoreButton.type = "button";

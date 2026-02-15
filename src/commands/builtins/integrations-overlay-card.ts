@@ -47,7 +47,7 @@ export function createIntegrationCard(args: {
   top.append(textWrap, badges);
 
   const warning = document.createElement("div");
-  warning.className = "pi-integrations-card__warning";
+  warning.className = "pi-integrations-card__warning pi-overlay-text-warning";
   warning.textContent = integration.warning ?? "";
   warning.hidden = !integration.warning;
 

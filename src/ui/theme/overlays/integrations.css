@@ -58,7 +58,6 @@
 .pi-integrations-card__warning {
   font-family: var(--font-sans);
   font-size: var(--text-sm);
-  color: oklch(0.55 0.12 35);
 }
 
 .pi-integrations-card__toggles {
@@ -69,13 +68,6 @@
 
 .pi-integrations-web-search-provider-row .pi-overlay-input {
   flex: 1;
-}
-
-.pi-integrations-web-search-row {
-  display: grid;
-  grid-template-columns: 1fr auto auto auto;
-  gap: 8px;
-  align-items: center;
 }
 
 .pi-integrations-mcp-add-title {
@@ -113,7 +105,4 @@
     align-items: stretch;
   }
 
-  .pi-integrations-web-search-row {
-    grid-template-columns: 1fr;
-  }
 }
