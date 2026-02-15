@@ -5,46 +5,82 @@ import { createFetchPageTool } from "../src/tools/fetch-page.ts";
 import { createMcpTool } from "../src/tools/mcp.ts";
 import { createWebSearchTool } from "../src/tools/web-search.ts";
 
-void test("error-path matrix: wrong web_search API key returns structured error", async () => {
+void test("error-path matrix: wrong web_search API key falls back to Jina with warning", async () => {
   const tool = createWebSearchTool({
     getConfig: () => Promise.resolve({ provider: "serper", apiKey: "bad-key" }),
-    executeSearch: () => {
-      return Promise.reject(new Error("Serper.dev search request failed (401): invalid API key"));
+    executeSearch: (_params, config) => {
+      if (config.provider === "serper") {
+        return Promise.reject(new Error("Serper.dev search request failed (401): invalid API key"));
+      }
+
+      return Promise.resolve({
+        sentQuery: "latest cpi",
+        proxied: false,
+        hits: [{
+          title: "CPI release",
+          url: "https://example.com/cpi",
+          snippet: "Fallback search result.",
+        }],
+      });
     },
   });
 
   const result = await tool.execute("call-1", { query: "latest cpi" });
   const text = result.content[0]?.type === "text" ? result.content[0].text : "";
 
-  assert.match(text, /^Error: /);
-  assert.match(text, /401/i);
-  assert.match(text, /invalid api key/i);
+  assert.doesNotMatch(text, /^Error: /);
+  assert.match(text, /used Jina Search/i);
+  assert.match(text, /Web search via Jina Search/i);
 
-  const details = result.details as { ok?: boolean; provider?: string; error?: string };
-  assert.equal(details.ok, false);
-  assert.equal(details.provider, "serper");
-  assert.match(details.error ?? "", /401/i);
+  const details = result.details as {
+    ok?: boolean;
+    provider?: string;
+    fallback?: { fromProvider?: string; toProvider?: string; reason?: string };
+  };
+  assert.equal(details.ok, true);
+  assert.equal(details.provider, "jina");
+  assert.equal(details.fallback?.fromProvider, "serper");
+  assert.equal(details.fallback?.toProvider, "jina");
+  assert.match(details.fallback?.reason ?? "", /401/i);
 });
 
-void test("error-path matrix: web_search surfaces rate-limit failures without throwing", async () => {
+void test("error-path matrix: web_search rate-limit failures fall back to Jina", async () => {
   const tool = createWebSearchTool({
     getConfig: () => Promise.resolve({ provider: "tavily", apiKey: "tv-key" }),
-    executeSearch: () => {
-      return Promise.reject(new Error("429 Too Many Requests: rate limit exceeded"));
+    executeSearch: (_params, config) => {
+      if (config.provider === "tavily") {
+        return Promise.reject(new Error("429 Too Many Requests: rate limit exceeded"));
+      }
+
+      return Promise.resolve({
+        sentQuery: "fx rates",
+        proxied: false,
+        hits: [{
+          title: "FX rates overview",
+          url: "https://example.com/fx",
+          snippet: "Fallback result.",
+        }],
+      });
     },
   });
 
   const result = await tool.execute("call-2", { query: "fx rates" });
   const text = result.content[0]?.type === "text" ? result.content[0].text : "";
 
-  assert.match(text, /^Error: /);
-  assert.match(text, /429/i);
+  assert.doesNotMatch(text, /^Error: /);
+  assert.match(text, /used Jina Search/i);
   assert.match(text, /rate limit/i);
 
-  const details = result.details as { ok?: boolean; provider?: string; error?: string };
-  assert.equal(details.ok, false);
-  assert.equal(details.provider, "tavily");
-  assert.match(details.error ?? "", /rate limit/i);
+  const details = result.details as {
+    ok?: boolean;
+    provider?: string;
+    fallback?: { fromProvider?: string; toProvider?: string; reason?: string };
+  };
+  assert.equal(details.ok, true);
+  assert.equal(details.provider, "jina");
+  assert.equal(details.fallback?.fromProvider, "tavily");
+  assert.equal(details.fallback?.toProvider, "jina");
+  assert.match(details.fallback?.reason ?? "", /rate limit/i);
 });
 
 void test("error-path matrix: fetch_page reports proxy-down transport errors", async () => {

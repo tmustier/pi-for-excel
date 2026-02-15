@@ -4,10 +4,13 @@ import { test } from "node:test";
 import {
   clearWebSearchApiKey,
   getApiKeyForProvider,
+  getWebSearchEndpoint,
   isApiKeyRequired,
   loadWebSearchProviderConfig,
   saveWebSearchApiKey,
   saveWebSearchProvider,
+  WEB_SEARCH_PROVIDER_ENDPOINT_HOSTS,
+  WEB_SEARCH_PROVIDERS,
   type WebSearchConfigStore,
 } from "../src/tools/web-search-config.ts";
 
@@ -104,4 +107,11 @@ void test("web search config clears only the selected provider key", async () =>
 
   assert.equal(getApiKeyForProvider(config, "serper"), undefined);
   assert.equal(getApiKeyForProvider(config, "brave"), "br-123");
+});
+
+void test("web search provider endpoints expose stable host list", () => {
+  const expectedHosts = WEB_SEARCH_PROVIDERS.map((provider) => new URL(getWebSearchEndpoint(provider)).hostname.toLowerCase());
+
+  assert.deepEqual(WEB_SEARCH_PROVIDER_ENDPOINT_HOSTS, expectedHosts);
+  assert.equal(new Set(WEB_SEARCH_PROVIDER_ENDPOINT_HOSTS).size, WEB_SEARCH_PROVIDER_ENDPOINT_HOSTS.length);
 });

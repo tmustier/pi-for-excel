@@ -3,19 +3,45 @@ import { test } from "node:test";
 
 import { createWebSearchTool } from "../src/tools/web-search.ts";
 
-void test("web_search reports missing API key for key-required provider", async () => {
+void test("web_search falls back to Jina when key-required provider is missing an API key", async () => {
+  const calledProviders: string[] = [];
+
   const tool = createWebSearchTool({
     getConfig: () => Promise.resolve({ provider: "serper", apiKey: undefined }),
+    executeSearch: (_params, config) => {
+      calledProviders.push(config.provider);
+      return Promise.resolve({
+        sentQuery: "latest inflation data",
+        proxied: false,
+        hits: [
+          {
+            title: "Inflation summary",
+            url: "https://example.com/inflation",
+            snippet: "Fallback result via Jina.",
+          },
+        ],
+      });
+    },
   });
 
   const result = await tool.execute("call-1", { query: "latest inflation data" });
   const text = result.content[0]?.type === "text" ? result.content[0].text : "";
 
-  assert.match(text, /API key is missing/i);
-  assert.match(text, /Serper API key/i);
-  assert.ok(result.details);
-  assert.equal((result.details as { ok?: boolean }).ok, false);
-  assert.equal((result.details as { provider?: string }).provider, "serper");
+  assert.match(text, /used Jina Search/i);
+  assert.match(text, /Web search via Jina Search/);
+  assert.deepEqual(calledProviders, ["jina"]);
+
+  const details = result.details as {
+    ok?: boolean;
+    provider?: string;
+    fallback?: { fromProvider?: string; toProvider?: string; reason?: string };
+  };
+
+  assert.equal(details.ok, true);
+  assert.equal(details.provider, "jina");
+  assert.equal(details.fallback?.fromProvider, "serper");
+  assert.equal(details.fallback?.toProvider, "jina");
+  assert.match(details.fallback?.reason ?? "", /api key is missing/i);
 });
 
 void test("web_search renders compact cited results for serper", async () => {
@@ -59,6 +85,71 @@ void test("web_search renders compact cited results for serper", async () => {
   assert.equal(details.provider, "serper");
   assert.equal(details.resultCount, 2);
   assert.equal(details.maxResults, 2);
+});
+
+void test("web_search falls back to Jina when configured provider returns auth or rate-limit errors", async () => {
+  const calledProviders: string[] = [];
+
+  const tool = createWebSearchTool({
+    getConfig: () => Promise.resolve({ provider: "tavily", apiKey: "tv-key" }),
+    executeSearch: (_params, config) => {
+      calledProviders.push(config.provider);
+
+      if (config.provider === "tavily") {
+        return Promise.reject(new Error("429 Too Many Requests: rate limit exceeded"));
+      }
+
+      return Promise.resolve({
+        sentQuery: "excel volatility functions",
+        proxied: false,
+        hits: [
+          {
+            title: "Volatile functions in Excel",
+            url: "https://example.com/volatile",
+            snippet: "NOW, TODAY, RAND and more.",
+          },
+        ],
+      });
+    },
+  });
+
+  const result = await tool.execute("call-fallback-429", { query: "excel volatility functions" });
+  const text = result.content[0]?.type === "text" ? result.content[0].text : "";
+
+  assert.match(text, /Tavily search failed/i);
+  assert.match(text, /used Jina Search/i);
+  assert.deepEqual(calledProviders, ["tavily", "jina"]);
+
+  const details = result.details as {
+    ok?: boolean;
+    provider?: string;
+    fallback?: { fromProvider?: string; toProvider?: string; reason?: string };
+  };
+
+  assert.equal(details.ok, true);
+  assert.equal(details.provider, "jina");
+  assert.equal(details.fallback?.fromProvider, "tavily");
+  assert.equal(details.fallback?.toProvider, "jina");
+  assert.match(details.fallback?.reason ?? "", /429/i);
+});
+
+void test("web_search does not fall back for malformed-provider requests", async () => {
+  const tool = createWebSearchTool({
+    getConfig: () => Promise.resolve({ provider: "serper", apiKey: "token" }),
+    executeSearch: () => Promise.reject(new Error("Serper.dev search request failed (400): invalid request body")),
+  });
+
+  const result = await tool.execute("call-no-fallback-400", { query: "excel formula" });
+  const text = result.content[0]?.type === "text" ? result.content[0].text : "";
+
+  assert.match(text, /^Error: /);
+  assert.match(text, /400/i);
+  assert.doesNotMatch(text, /used Jina Search/i);
+
+  const details = result.details as { ok?: boolean; provider?: string; fallback?: unknown };
+  assert.equal(details.ok, false);
+  assert.equal(details.provider, "serper");
+  assert.equal(details.fallback, undefined);
 });
 
 void test("web_search works without API key for jina (zero-config)", async () => {

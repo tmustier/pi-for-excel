@@ -18,6 +18,7 @@ export interface WebSearchProviderInfo {
   title: string;
   shortDescription: string;
   signupUrl: string;
+  searchEndpoint: string;
   apiKeyLabel: string;
   apiKeyHelp: string;
   /** When true the provider works without an API key (key is optional for higher limits). */
@@ -30,6 +31,7 @@ export const WEB_SEARCH_PROVIDER_INFO: Record<WebSearchProvider, WebSearchProvid
     title: "Jina Search (default)",
     shortDescription: "Works out of the box — no signup or API key needed.",
     signupUrl: "https://jina.ai",
+    searchEndpoint: "https://s.jina.ai/",
     apiKeyLabel: "Jina API key",
     apiKeyHelp: "Optional. Add a key for higher rate limits.",
     apiKeyOptional: true,
@@ -39,6 +41,7 @@ export const WEB_SEARCH_PROVIDER_INFO: Record<WebSearchProvider, WebSearchProvid
     title: "Serper.dev",
     shortDescription: "Google SERP API, easy onboarding (free tier, no credit card).",
     signupUrl: "https://serper.dev",
+    searchEndpoint: "https://google.serper.dev/search",
     apiKeyLabel: "Serper API key",
     apiKeyHelp: "Free tier available with email signup.",
   },
@@ -47,6 +50,7 @@ export const WEB_SEARCH_PROVIDER_INFO: Record<WebSearchProvider, WebSearchProvid
     title: "Tavily",
     shortDescription: "AI-native web search with relevance-ranked results.",
     signupUrl: "https://tavily.com",
+    searchEndpoint: "https://api.tavily.com/search",
     apiKeyLabel: "Tavily API key",
     apiKeyHelp: "Free monthly credits, no credit card required.",
   },
@@ -55,10 +59,20 @@ export const WEB_SEARCH_PROVIDER_INFO: Record<WebSearchProvider, WebSearchProvid
     title: "Brave Search",
     shortDescription: "Direct Brave Search API support (existing users).",
     signupUrl: "https://api.search.brave.com",
+    searchEndpoint: "https://api.search.brave.com/res/v1/web/search",
     apiKeyLabel: "Brave API key",
     apiKeyHelp: "Brave Search API subscription token.",
   },
 };
+
+export function getWebSearchEndpoint(provider: WebSearchProvider): string {
+  return WEB_SEARCH_PROVIDER_INFO[provider].searchEndpoint;
+}
+
+export const WEB_SEARCH_PROVIDER_ENDPOINT_HOSTS: string[] = WEB_SEARCH_PROVIDERS.map((provider) => {
+  const endpoint = getWebSearchEndpoint(provider);
+  return new URL(endpoint).hostname.toLowerCase();
+});
 
 const WEB_SEARCH_API_KEY_BY_PROVIDER_SETTING_KEY: Record<WebSearchProvider, string> = {
   jina: WEB_SEARCH_JINA_API_KEY_SETTING_KEY,

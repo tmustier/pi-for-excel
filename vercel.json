@@ -61,7 +61,7 @@
         },
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'none'; script-src 'self' https://appsforoffice.microsoft.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https://appsforoffice.microsoft.com https://api.anthropic.com https://console.anthropic.com https://api.openai.com https://auth.openai.com https://chatgpt.com https://generativelanguage.googleapis.com https://oauth2.googleapis.com https://github.com https://api.github.com https://*.githubcopilot.com https://s.jina.ai https://localhost:* https://127.0.0.1:*; object-src 'none'; base-uri 'none'; form-action 'none'"
+          "value": "default-src 'none'; script-src 'self' https://appsforoffice.microsoft.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https://appsforoffice.microsoft.com https://api.anthropic.com https://console.anthropic.com https://api.openai.com https://auth.openai.com https://chatgpt.com https://generativelanguage.googleapis.com https://oauth2.googleapis.com https://github.com https://api.github.com https://*.githubcopilot.com https://s.jina.ai https://google.serper.dev https://api.tavily.com https://api.search.brave.com https://localhost:* https://127.0.0.1:*; object-src 'none'; base-uri 'none'; form-action 'none'"
         }
       ]
     },

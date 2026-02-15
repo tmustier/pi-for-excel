@@ -18,6 +18,7 @@ Issue: [#24](https://github.com/tmustier/pi-for-excel/issues/24)
   - tools: `web_search`, `fetch_page`
   - providers: Jina (default, no key required), Serper.dev, Tavily, Brave Search
   - configurable provider + provider-specific API key in `/tools` (or `/integrations`)
+  - fallback: if a configured keyed provider fails with auth/rate-limit/server/network errors, search retries with Jina for that request and surfaces a warning
   - result output includes explicit `Sent:` attribution and provider/transport metadata
 - **MCP integration**
   - tool: `mcp`

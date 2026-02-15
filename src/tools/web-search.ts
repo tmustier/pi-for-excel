@@ -19,6 +19,7 @@ import {
 } from "./external-fetch.js";
 import {
   getApiKeyForProvider,
+  getWebSearchEndpoint,
   isApiKeyRequired,
   loadWebSearchProviderConfig,
   type WebSearchProvider,
@@ -26,10 +27,6 @@ import {
   WEB_SEARCH_PROVIDER_INFO,
 } from "./web-search-config.js";
 
-const JINA_WEB_SEARCH_ENDPOINT = "https://s.jina.ai/";
-const BRAVE_WEB_SEARCH_ENDPOINT = "https://api.search.brave.com/res/v1/web/search";
-const SERPER_WEB_SEARCH_ENDPOINT = "https://google.serper.dev/search";
-const TAVILY_WEB_SEARCH_ENDPOINT = "https://api.tavily.com/search";
 const WEB_SEARCH_TIMEOUT_MS = 12_000;
 
 const RECENCY_VALUES = ["day", "week", "month", "year"] as const;
@@ -84,6 +81,12 @@ export interface WebSearchHit {
   snippet: string;
 }
 
+export interface WebSearchFallbackInfo {
+  fromProvider: WebSearchProvider;
+  toProvider: "jina";
+  reason: string;
+}
+
 export interface WebSearchToolDetails {
   kind: "web_search";
   ok: boolean;
@@ -96,6 +99,7 @@ export interface WebSearchToolDetails {
   resultCount?: number;
   proxied?: boolean;
   proxyBaseUrl?: string;
+  fallback?: WebSearchFallbackInfo;
   error?: string;
 }
 
@@ -111,18 +115,20 @@ export interface WebSearchExecuteConfig {
   proxyBaseUrl?: string;
 }
 
+export interface WebSearchExecutionResult {
+  hits: WebSearchHit[];
+  sentQuery: string;
+  proxied: boolean;
+  proxyBaseUrl?: string;
+}
+
 export interface WebSearchToolDependencies {
   getConfig?: () => Promise<WebSearchToolConfig>;
   executeSearch?: (
     params: Params,
     config: WebSearchExecuteConfig,
     signal: AbortSignal | undefined,
-  ) => Promise<{
-    hits: WebSearchHit[];
-    sentQuery: string;
-    proxied: boolean;
-    proxyBaseUrl?: string;
-  }>;
+  ) => Promise<WebSearchExecutionResult>;
 }
 
 export interface WebSearchApiKeyValidationResult {
@@ -221,6 +227,27 @@ function providerInfo(provider: WebSearchProvider): WebSearchProviderInfo {
   return WEB_SEARCH_PROVIDER_INFO[provider];
 }
 
+type WebSearchFailureKind = "missing_api_key" | "http" | "network" | "timeout";
+
+class WebSearchExecutionError extends Error {
+  readonly provider: WebSearchProvider;
+  readonly kind: WebSearchFailureKind;
+  readonly statusCode?: number;
+
+  constructor(args: {
+    provider: WebSearchProvider;
+    kind: WebSearchFailureKind;
+    message: string;
+    statusCode?: number;
+  }) {
+    super(args.message);
+    this.name = "WebSearchExecutionError";
+    this.provider = args.provider;
+    this.kind = args.kind;
+    this.statusCode = args.statusCode;
+  }
+}
+
 interface ProviderRequest {
   requestInit: {
     method: "GET" | "POST";
@@ -240,7 +267,7 @@ function buildProviderRequest(
   const maxResults = params.max_results ?? 5;
 
   if (provider === "jina") {
-    const targetUrl = `${JINA_WEB_SEARCH_ENDPOINT}${encodeURIComponent(sentQuery)}`;
+    const targetUrl = `${getWebSearchEndpoint(provider)}${encodeURIComponent(sentQuery)}`;
     const headers: Record<string, string> = {
       Accept: "application/json",
       "X-Retain-Images": "none",
@@ -261,7 +288,7 @@ function buildProviderRequest(
   }
 
   if (provider === "brave") {
-    const url = new URL(BRAVE_WEB_SEARCH_ENDPOINT);
+    const url = new URL(getWebSearchEndpoint(provider));
     url.searchParams.set("q", sentQuery);
     url.searchParams.set("count", String(maxResults));
 
@@ -293,7 +320,7 @@ function buildProviderRequest(
     }
 
     return {
-      targetUrl: SERPER_WEB_SEARCH_ENDPOINT,
+      targetUrl: getWebSearchEndpoint(provider),
       sentQuery,
       requestInit: {
         method: "POST",
@@ -317,7 +344,7 @@ function buildProviderRequest(
   };
 
   return {
-    targetUrl: TAVILY_WEB_SEARCH_ENDPOINT,
+    targetUrl: getWebSearchEndpoint(provider),
     sentQuery,
     requestInit: {
       method: "POST",
@@ -438,6 +465,60 @@ function parseSearchHits(provider: WebSearchProvider, payload: unknown, maxResul
   return hits;
 }
 
+function shouldFallbackToJina(provider: WebSearchProvider, error: unknown): boolean {
+  if (provider === "jina") return false;
+
+  if (error instanceof WebSearchExecutionError) {
+    if (error.kind === "missing_api_key") return true;
+    if (error.kind === "network" || error.kind === "timeout") return true;
+
+    if (error.kind === "http") {
+      const status = error.statusCode;
+      if (typeof status !== "number") return false;
+      return status === 401 || status === 403 || status === 429 || status >= 500;
+    }
+
+    return false;
+  }
+
+  const message = getErrorMessage(error).toLowerCase();
+
+  if (/\b(401|403|429)\b/.test(message)) {
+    return true;
+  }
+
+  if (/\b5\d{2}\b/.test(message)) {
+    return true;
+  }
+
+  if (
+    message.includes("timed out")
+    || message.includes("timeout")
+    || message.includes("networkerror")
+    || message.includes("fetch failed")
+    || message.includes("econnrefused")
+    || message.includes("econnreset")
+    || message.includes("enotfound")
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+function summarizeFallbackReason(message: string): string {
+  const compact = message.replaceAll(/\s+/g, " ").trim();
+  if (compact.length <= 180) return compact;
+  return `${compact.slice(0, 177)}...`;
+}
+
+function buildFallbackWarning(fallback: WebSearchFallbackInfo): string {
+  const fromInfo = providerInfo(fallback.fromProvider);
+  const toInfo = providerInfo(fallback.toProvider);
+
+  return `⚠️ ${fromInfo.title} search failed (${fallback.reason}) — used ${toInfo.title} for this request. Check your ${fromInfo.apiKeyLabel} in ${integrationsCommandHint()}.`;
+}
+
 function buildResultMarkdown(args: {
   provider: WebSearchProvider;
   params: Params;
@@ -445,12 +526,19 @@ function buildResultMarkdown(args: {
   hits: WebSearchHit[];
   proxied: boolean;
   proxyBaseUrl?: string;
+  fallback?: WebSearchFallbackInfo;
 }): string {
-  const { provider, params, sentQuery, hits, proxied, proxyBaseUrl } = args;
+  const { provider, params, sentQuery, hits, proxied, proxyBaseUrl, fallback } = args;
 
   const providerTitle = providerInfo(provider).title;
 
   const lines: string[] = [];
+
+  if (fallback) {
+    lines.push(buildFallbackWarning(fallback));
+    lines.push("");
+  }
+
   lines.push(`Web search via ${providerTitle}`);
   lines.push("");
   lines.push("Sent:");
@@ -507,54 +595,73 @@ async function defaultExecuteSearch(
   params: Params,
   config: WebSearchExecuteConfig,
   signal: AbortSignal | undefined,
-): Promise<{
-  hits: WebSearchHit[];
-  sentQuery: string;
-  proxied: boolean;
-  proxyBaseUrl?: string;
-}> {
+): Promise<WebSearchExecutionResult> {
   const request = buildProviderRequest(params, config.provider, config.apiKey);
   const resolved = resolveOutboundRequestUrl({
     targetUrl: request.targetUrl,
     proxyBaseUrl: config.proxyBaseUrl,
   });
 
-  return runWithTimeoutAbort({
-    signal,
-    timeoutMs: WEB_SEARCH_TIMEOUT_MS,
-    timeoutErrorMessage: `web_search timed out after ${WEB_SEARCH_TIMEOUT_MS}ms.`,
-    run: async (requestSignal) => {
-      const response = await fetch(resolved.requestUrl, {
-        method: request.requestInit.method,
-        headers: request.requestInit.headers,
-        body: request.requestInit.body,
-        signal: requestSignal,
-      });
+  try {
+    return await runWithTimeoutAbort({
+      signal,
+      timeoutMs: WEB_SEARCH_TIMEOUT_MS,
+      timeoutErrorMessage: `web_search timed out after ${WEB_SEARCH_TIMEOUT_MS}ms.`,
+      run: async (requestSignal) => {
+        const response = await fetch(resolved.requestUrl, {
+          method: request.requestInit.method,
+          headers: request.requestInit.headers,
+          body: request.requestInit.body,
+          signal: requestSignal,
+        });
 
-      const text = await response.text();
+        const text = await response.text();
 
-      if (!response.ok) {
-        const reason = getHttpErrorReason(response.status, text);
-        throw new Error(`${providerInfo(config.provider).title} search request failed (${response.status}): ${reason}`);
-      }
+        if (!response.ok) {
+          const reason = getHttpErrorReason(response.status, text);
+          throw new WebSearchExecutionError({
+            provider: config.provider,
+            kind: "http",
+            statusCode: response.status,
+            message: `${providerInfo(config.provider).title} search request failed (${response.status}): ${reason}`,
+          });
+        }
 
-      let payload: unknown = null;
-      try {
-        payload = JSON.parse(text);
-      } catch {
-        payload = null;
-      }
+        let payload: unknown = null;
+        try {
+          payload = JSON.parse(text);
+        } catch {
+          payload = null;
+        }
 
-      const hits = parseSearchHits(config.provider, payload, params.max_results);
+        const hits = parseSearchHits(config.provider, payload, params.max_results);
 
-      return {
-        hits,
-        sentQuery: request.sentQuery,
-        proxied: resolved.proxied,
-        proxyBaseUrl: resolved.proxyBaseUrl,
-      };
-    },
-  });
+        return {
+          hits,
+          sentQuery: request.sentQuery,
+          proxied: resolved.proxied,
+          proxyBaseUrl: resolved.proxyBaseUrl,
+        };
+      },
+    });
+  } catch (error: unknown) {
+    if (error instanceof WebSearchExecutionError) {
+      throw error;
+    }
+
+    if (error instanceof Error && error.message === "Aborted") {
+      throw error;
+    }
+
+    const message = getErrorMessage(error);
+    const kind: WebSearchFailureKind = message.includes("timed out after") ? "timeout" : "network";
+
+    throw new WebSearchExecutionError({
+      provider: config.provider,
+      kind,
+      message,
+    });
+  }
 }
 
 export async function validateWebSearchApiKey(args: {
@@ -624,23 +731,22 @@ export function createWebSearchTool(
       signal: AbortSignal | undefined,
     ): Promise<AgentToolResult<WebSearchToolDetails>> => {
       let params: Params | null = null;
-      let provider: WebSearchProvider = "jina";
+      let configuredProvider: WebSearchProvider = "jina";
 
       try {
-        params = parseParams(rawParams);
+        const parsedParams = parseParams(rawParams);
+        params = parsedParams;
 
         const config = await getConfig();
-        provider = config.provider;
+        configuredProvider = config.provider;
 
-        const apiKey = normalizeOptionalString(config.apiKey) ?? "";
-        if (!apiKey && isApiKeyRequired(provider)) {
-          throw new Error(
-            `Web search API key is missing. Open ${integrationsCommandHint()} and set the ${providerInfo(provider).apiKeyLabel}.`,
-          );
-        }
+        const configuredApiKey = normalizeOptionalString(config.apiKey) ?? "";
 
-        const result = await executeSearch(
-          params,
+        const runSearch = (
+          provider: WebSearchProvider,
+          apiKey: string,
+        ): Promise<WebSearchExecutionResult> => executeSearch(
+          parsedParams,
           {
             provider,
             apiKey,
@@ -649,27 +755,64 @@ export function createWebSearchTool(
           signal,
         );
 
+        let effectiveProvider = configuredProvider;
+        let fallback: WebSearchFallbackInfo | undefined;
+
+        let result: WebSearchExecutionResult;
+        try {
+          if (!configuredApiKey && isApiKeyRequired(configuredProvider)) {
+            throw new WebSearchExecutionError({
+              provider: configuredProvider,
+              kind: "missing_api_key",
+              message: `Web search API key is missing. Open ${integrationsCommandHint()} and set the ${providerInfo(configuredProvider).apiKeyLabel}.`,
+            });
+          }
+
+          result = await runSearch(configuredProvider, configuredApiKey);
+        } catch (error: unknown) {
+          if (!shouldFallbackToJina(configuredProvider, error)) {
+            throw error;
+          }
+
+          fallback = {
+            fromProvider: configuredProvider,
+            toProvider: "jina",
+            reason: summarizeFallbackReason(getErrorMessage(error)),
+          };
+
+          try {
+            result = await runSearch("jina", "");
+            effectiveProvider = "jina";
+          } catch (fallbackError: unknown) {
+            const primaryMessage = getErrorMessage(error);
+            const fallbackMessage = getErrorMessage(fallbackError);
+            throw new Error(`${primaryMessage}; fallback to Jina Search also failed: ${fallbackMessage}`);
+          }
+        }
+
         return {
           content: [{ type: "text", text: buildResultMarkdown({
-            provider,
-            params,
+            provider: effectiveProvider,
+            params: parsedParams,
             sentQuery: result.sentQuery,
             hits: result.hits,
             proxied: result.proxied,
             proxyBaseUrl: result.proxyBaseUrl,
+            fallback,
           }) }],
           details: {
             kind: "web_search",
             ok: true,
-            provider,
-            query: params.query,
+            provider: effectiveProvider,
+            query: parsedParams.query,
             sentQuery: result.sentQuery,
-            recency: params.recency,
-            siteFilters: parseSites(params.site),
-            maxResults: params.max_results ?? 5,
+            recency: parsedParams.recency,
+            siteFilters: parseSites(parsedParams.site),
+            maxResults: parsedParams.max_results ?? 5,
             resultCount: result.hits.length,
             proxied: result.proxied,
             proxyBaseUrl: result.proxyBaseUrl,
+            fallback,
           },
         };
       } catch (error: unknown) {
@@ -682,7 +825,7 @@ export function createWebSearchTool(
           details: {
             kind: "web_search",
             ok: false,
-            provider,
+            provider: configuredProvider,
             query: fallbackQuery,
             sentQuery: fallbackQuery,
             maxResults: params?.max_results ?? 5,

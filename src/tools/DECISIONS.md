@@ -184,7 +184,8 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 - **Packaging:** exposed as opt-in **integrations** instead of always-on core tools.
 - **Scopes:** integrations can be enabled per-**session** and/or per-**workbook**; effective integrations are the union (ordered by catalog).
 - **Global gate:** `external.tools.enabled` defaults to **off** and blocks all external integration tools until explicitly enabled.
-- **Web search providers:** Serper.dev (default), Tavily, and Brave Search (`web_search`) with optional proxy routing and explicit "Sent" attribution in results.
+- **Web search providers:** Jina (default, zero-config), Serper.dev, Tavily, and Brave Search (`web_search`) with optional proxy routing and explicit "Sent" attribution in results.
+- **Fallback behavior:** when a configured keyed provider fails with auth/rate-limit/server/network errors, `web_search` automatically retries with Jina for that call and includes a warning in tool output/details.
 - **Page retrieval companion:** `fetch_page` fetches URL content and returns extracted markdown for source grounding workflows (`web_search` → `fetch_page`).
 - **MCP integration:** configurable server registry (`mcp.servers.v1`), UI add/remove/test, and a single `mcp` gateway tool for list/search/describe/call flows.
 - **Rationale:** satisfy issue #24 with explicit consent, clear attribution, and minimal overlap with the extension system.

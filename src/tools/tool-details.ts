@@ -237,6 +237,12 @@ export interface SkillsErrorDetails {
 
 export type SkillsToolDetails = SkillsListDetails | SkillsReadDetails | SkillsErrorDetails;
 
+export interface WebSearchFallbackDetails {
+  fromProvider: string;
+  toProvider: string;
+  reason: string;
+}
+
 export interface WebSearchDetails {
   kind: "web_search";
   ok: boolean;
@@ -249,6 +255,7 @@ export interface WebSearchDetails {
   resultCount?: number;
   proxied?: boolean;
   proxyBaseUrl?: string;
+  fallback?: WebSearchFallbackDetails;
   error?: string;
 }
 
@@ -365,6 +372,20 @@ export type ExcelToolDetails =
 
 function isOptionalString(value: unknown): value is string | undefined {
   return value === undefined || typeof value === "string";
+}
+
+function isWebSearchFallbackDetails(value: unknown): value is WebSearchFallbackDetails {
+  if (!isRecord(value)) return false;
+
+  return (
+    typeof value.fromProvider === "string" &&
+    typeof value.toProvider === "string" &&
+    typeof value.reason === "string"
+  );
+}
+
+function isOptionalWebSearchFallbackDetails(value: unknown): value is WebSearchFallbackDetails | undefined {
+  return value === undefined || isWebSearchFallbackDetails(value);
 }
 
 function isOptionalNumber(value: unknown): value is number | undefined {
@@ -801,6 +822,7 @@ export function isWebSearchDetails(value: unknown): value is WebSearchDetails {
     isOptionalNumber(value.resultCount) &&
     isOptionalBoolean(value.proxied) &&
     isOptionalString(value.proxyBaseUrl) &&
+    isOptionalWebSearchFallbackDetails(value.fallback) &&
     isOptionalString(value.error)
   );
 }
