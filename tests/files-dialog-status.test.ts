@@ -11,7 +11,7 @@ void test("status message reports total count when showing all files", () => {
     activeFilterLabel: "All files",
   });
 
-  assert.equal(message, "10 files available to the assistant.");
+  assert.equal(message, "10 files available to the agent.");
 });
 
 void test("status message reports active filtered count", () => {
