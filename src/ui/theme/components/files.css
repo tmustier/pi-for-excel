@@ -129,12 +129,17 @@
   text-transform: uppercase;
   letter-spacing: 0.06em;
   transition: color var(--duration-fast);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .pi-files-section__count {
   font-family: var(--font-mono);
   font-size: var(--text-xs);
   color: var(--muted-foreground);
+  flex-shrink: 0;
 }
 
 .pi-files-section__body {
@@ -213,6 +218,10 @@
 }
 
 .pi-files-row__meta {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-family: var(--font-sans);
   font-size: var(--text-xs);
   color: var(--muted-foreground);

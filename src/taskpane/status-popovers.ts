@@ -330,12 +330,29 @@ export function toggleProxyPopover(opts: ProxyPopoverOptions): void {
   copyBtn.title = "Copy";
   copyBtn.textContent = "⧉";
   copyBtn.addEventListener("click", () => {
-    void navigator.clipboard.writeText(PROXY_COMMAND).then(() => {
-      copyBtn.textContent = "✓";
-      setTimeout(() => {
-        copyBtn.textContent = "⧉";
-      }, 1500);
-    });
+    if (!navigator.clipboard?.writeText) {
+      // Fallback: select the text so the user can Cmd+C / Ctrl+C
+      const range = document.createRange();
+      range.selectNodeContents(code);
+      const sel = window.getSelection();
+      sel?.removeAllRanges();
+      sel?.addRange(range);
+      return;
+    }
+    void navigator.clipboard.writeText(PROXY_COMMAND).then(
+      () => {
+        copyBtn.textContent = "✓";
+        setTimeout(() => { copyBtn.textContent = "⧉"; }, 1500);
+      },
+      () => {
+        // Permission denied — select text as fallback
+        const range = document.createRange();
+        range.selectNodeContents(code);
+        const sel = window.getSelection();
+        sel?.removeAllRanges();
+        sel?.addRange(range);
+      },
+    );
   });
 
   cmdRow.append(code, copyBtn);
