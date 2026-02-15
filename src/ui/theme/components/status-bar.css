@@ -565,4 +565,88 @@
   color: var(--foreground);
 }
 
+/* ── Proxy helper popover ────────────────────────────── */
+
+.pi-proxy-popover {
+  max-width: 320px;
+  padding: 14px 16px;
+  font-family: var(--font-sans);
+}
+
+.pi-proxy-popover__title {
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--foreground);
+  margin-bottom: 4px;
+}
+
+.pi-proxy-popover__text {
+  font-size: var(--text-sm);
+  color: var(--muted-foreground);
+  line-height: 1.45;
+  margin-bottom: 8px;
+}
+
+.pi-proxy-popover__cmd {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: var(--radius-xs);
+  background: var(--alpha-4);
+  border: 1px solid var(--alpha-8);
+  margin-bottom: 8px;
+}
+
+.pi-proxy-popover__cmd code {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--foreground);
+}
+
+.pi-proxy-popover__copy {
+  background: none;
+  border: none;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  padding: 0;
+  font-size: 14px;
+}
+
+.pi-proxy-popover__copy:hover {
+  color: var(--foreground);
+}
+
+.pi-proxy-popover__footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: var(--text-xs);
+}
+
+.pi-proxy-popover__link {
+  color: var(--primary);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.pi-proxy-popover__link:hover {
+  text-decoration: underline;
+}
+
+.pi-proxy-popover__dismiss {
+  background: none;
+  border: none;
+  color: var(--muted-foreground);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  cursor: pointer;
+  padding: 0;
+}
+
+.pi-proxy-popover__dismiss:hover {
+  color: var(--foreground);
+}
+
 

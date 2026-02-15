@@ -6,7 +6,7 @@ import type { ThinkingLevel } from "@mariozechner/pi-agent-core";
 
 export type StatusCommandName = "compact" | "new";
 
-type StatusPopoverKind = "thinking" | "context";
+type StatusPopoverKind = "thinking" | "context" | "proxy";
 
 interface ActivePopoverState {
   kind: StatusPopoverKind;
@@ -288,4 +288,83 @@ export function toggleContextPopover(opts: ContextPopoverOptions): void {
 
   popover.append(title, description, actions);
   mountPopover("context", opts.anchor, popover);
+}
+
+// ── Proxy helper popover ──────────────────────────────────────────────
+
+const PROXY_COMMAND = "npx pi-for-excel-proxy";
+const INSTALL_GUIDE_URL = "https://pi.dev/excel#connect";
+
+export interface ProxyPopoverOptions {
+  anchor: Element;
+  onDismiss: () => void;
+}
+
+export function toggleProxyPopover(opts: ProxyPopoverOptions): void {
+  if (shouldToggle("proxy", opts.anchor)) {
+    closeStatusPopover();
+    return;
+  }
+
+  const popover = createPopoverBase("proxy");
+  popover.classList.add("pi-proxy-popover");
+
+  const title = document.createElement("div");
+  title.className = "pi-proxy-popover__title";
+  title.textContent = "Local helper not running";
+
+  const body = document.createElement("div");
+  body.className = "pi-proxy-popover__text";
+  body.textContent =
+    "Some features (web search, sign-in, external services) need a small local helper. Start it with:";
+
+  const cmdRow = document.createElement("div");
+  cmdRow.className = "pi-proxy-popover__cmd";
+
+  const code = document.createElement("code");
+  code.textContent = PROXY_COMMAND;
+
+  const copyBtn = document.createElement("button");
+  copyBtn.type = "button";
+  copyBtn.className = "pi-proxy-popover__copy";
+  copyBtn.title = "Copy";
+  copyBtn.textContent = "⧉";
+  copyBtn.addEventListener("click", () => {
+    void navigator.clipboard.writeText(PROXY_COMMAND).then(() => {
+      copyBtn.textContent = "✓";
+      setTimeout(() => {
+        copyBtn.textContent = "⧉";
+      }, 1500);
+    });
+  });
+
+  cmdRow.append(code, copyBtn);
+
+  const hint = document.createElement("div");
+  hint.className = "pi-proxy-popover__text";
+  hint.textContent = "Keep it running while using Pi.";
+
+  const footer = document.createElement("div");
+  footer.className = "pi-proxy-popover__footer";
+
+  const guideLink = document.createElement("a");
+  guideLink.className = "pi-proxy-popover__link";
+  guideLink.href = INSTALL_GUIDE_URL;
+  guideLink.target = "_blank";
+  guideLink.rel = "noopener noreferrer";
+  guideLink.textContent = "No Node.js? See install guide →";
+
+  const dismissBtn = document.createElement("button");
+  dismissBtn.type = "button";
+  dismissBtn.className = "pi-proxy-popover__dismiss";
+  dismissBtn.textContent = "Don't show again";
+  dismissBtn.addEventListener("click", () => {
+    opts.onDismiss();
+    closeStatusPopover();
+  });
+
+  footer.append(guideLink, dismissBtn);
+
+  popover.append(title, body, cmdRow, hint, footer);
+  mountPopover("proxy", opts.anchor, popover);
 }

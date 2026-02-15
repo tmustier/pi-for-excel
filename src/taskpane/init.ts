@@ -129,10 +129,11 @@ import {
 } from "./tab-layout.js";
 import { createTabLayoutPersistence } from "./tab-layout-persistence.js";
 import { injectStatusBar } from "./status-bar.js";
-import { startProxyPolling } from "./proxy-status.js";
+import { dismissProxyStatus, startProxyPolling } from "./proxy-status.js";
 import {
   closeStatusPopover,
   toggleContextPopover,
+  toggleProxyPopover,
   toggleThinkingPopover,
 } from "./status-popovers.js";
 import { showWelcomeLogin } from "./welcome-login.js";
@@ -1728,10 +1729,21 @@ export async function initTaskpane(opts: {
       return;
     }
 
-    // Proxy status — "no helper" click opens settings
-    if (el.closest(".pi-status-proxy--missing")) {
-      closeStatusPopover();
-      void showSettingsDialog();
+    // Proxy status — "no helper" click shows help popover
+    const proxyTrigger = el.closest(".pi-status-proxy--missing");
+    if (proxyTrigger) {
+      toggleProxyPopover({
+        anchor: proxyTrigger,
+        onDismiss: () => {
+          dismissProxyStatus();
+          // Re-render status bar to hide the "no helper" indicator
+          const statusBar = document.getElementById("pi-status-bar");
+          if (statusBar) {
+            const proxyEl = statusBar.querySelector(".pi-status-proxy--missing");
+            proxyEl?.remove();
+          }
+        },
+      });
       return;
     }
 
