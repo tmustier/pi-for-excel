@@ -1,5 +1,11 @@
 /* Experimental feature manager */
 
+.pi-experimental-content {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
 .pi-experimental-list {
   display: flex;
   flex-direction: column;

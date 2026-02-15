@@ -9,7 +9,6 @@ import { html, render } from "lit";
 import { Agent } from "@mariozechner/pi-agent-core";
 import { ApiKeyPromptDialog } from "@mariozechner/pi-web-ui/dist/dialogs/ApiKeyPromptDialog.js";
 import { ModelSelector } from "@mariozechner/pi-web-ui/dist/dialogs/ModelSelector.js";
-import { ApiKeysTab, ProxyTab, SettingsDialog } from "@mariozechner/pi-web-ui/dist/dialogs/SettingsDialog.js";
 import { getAppStorage } from "@mariozechner/pi-web-ui/dist/storage/app-storage.js";
 import type { SessionData } from "@mariozechner/pi-web-ui/dist/storage/types.js";
 
@@ -51,6 +50,7 @@ import {
   showRulesDialog,
   showRecoveryDialog,
   showResumeDialog,
+  showSettingsDialog,
   showShortcutsDialog,
   type RecoveryCheckpointSummary,
 } from "../commands/builtins/overlays.js";
@@ -1433,7 +1433,7 @@ export async function initTaskpane(opts: {
     openAddonsManager();
   };
   sidebar.onOpenSettings = () => {
-    void SettingsDialog.open([new ApiKeysTab(), new ProxyTab()]);
+    void showSettingsDialog();
   };
   sidebar.onOpenFilesWorkspace = () => {
     void showFilesWorkspaceDialog();

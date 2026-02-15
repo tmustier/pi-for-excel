@@ -2,13 +2,11 @@
  * Builtin settings/auth commands.
  */
 
-import { ApiKeysTab, ProxyTab, SettingsDialog } from "@mariozechner/pi-web-ui/dist/dialogs/SettingsDialog.js";
-
 import type { ExecutionMode } from "../../execution/mode.js";
 import { formatExecutionModeLabel, toggleExecutionMode } from "../../execution/mode.js";
 import { showToast } from "../../ui/toast.js";
 import type { SlashCommand } from "../types.js";
-import { showProviderPicker } from "./overlays.js";
+import { showProviderPicker, showSettingsDialog } from "./overlays.js";
 
 export interface SettingsCommandActions {
   openInstructionsEditor: () => Promise<void>;
@@ -55,10 +53,10 @@ export function createSettingsCommands(actions: SettingsCommandActions): SlashCo
   return [
     {
       name: "settings",
-      description: "Settings (API keys + CORS proxy)",
+      description: "Settings (providers, proxy, experiments)",
       source: "builtin",
       execute: () => {
-        void SettingsDialog.open([new ApiKeysTab(), new ProxyTab()]);
+        void showSettingsDialog();
       },
     },
     {

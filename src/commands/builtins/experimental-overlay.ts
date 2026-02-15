@@ -1,5 +1,5 @@
 /**
- * Experimental features overlay.
+ * Experimental features section builder.
  */
 
 import {
@@ -8,12 +8,6 @@ import {
   setExperimentalFeatureEnabled,
   type ExperimentalFeatureSnapshot,
 } from "../../experiments/flags.js";
-import {
-  closeOverlayById,
-  createOverlayDialog,
-  createOverlayHeader,
-} from "../../ui/overlay-dialog.js";
-import { EXPERIMENTAL_OVERLAY_ID } from "../../ui/overlay-ids.js";
 import { showToast } from "../../ui/toast.js";
 
 const ADVANCED_SECURITY_FEATURE_IDS = new Set<ExperimentalFeatureSnapshot["id"]>([
@@ -26,6 +20,11 @@ interface FeatureSectionSpec {
   title: string;
   hint: string;
   features: ExperimentalFeatureSnapshot[];
+}
+
+export interface ExperimentalFeatureContent {
+  content: HTMLDivElement;
+  hasFeatures: boolean;
 }
 
 function isAdvancedSecurityFeature(feature: ExperimentalFeatureSnapshot): boolean {
@@ -82,10 +81,9 @@ function buildFeatureRow(feature: ExperimentalFeatureSnapshot): HTMLElement {
 
   const readiness = document.createElement("div");
   readiness.className = "pi-experimental-row__readiness";
-  readiness.textContent =
-    feature.wiring === "wired"
-      ? "Ready now"
-      : "Flag only for now — this capability is planned but not wired yet.";
+  readiness.textContent = feature.wiring === "wired"
+    ? "Ready now"
+    : "Flag only for now — this capability is planned but not wired yet.";
 
   const applyState = (enabled: boolean): void => {
     applyStatusVisual(status, enabled);
@@ -110,7 +108,7 @@ function buildFeatureRow(feature: ExperimentalFeatureSnapshot): HTMLElement {
 
 function buildFeatureSection(spec: FeatureSectionSpec): HTMLElement {
   const section = document.createElement("section");
-  section.className = "pi-overlay-section";
+  section.className = "pi-overlay-section pi-experimental-section";
 
   const title = document.createElement("h3");
   title.className = "pi-overlay-section-title";
@@ -131,24 +129,9 @@ function buildFeatureSection(spec: FeatureSectionSpec): HTMLElement {
   return section;
 }
 
-export function showExperimentalDialog(): void {
-  if (closeOverlayById(EXPERIMENTAL_OVERLAY_ID)) {
-    return;
-  }
-
-  const dialog = createOverlayDialog({
-    overlayId: EXPERIMENTAL_OVERLAY_ID,
-    cardClassName: "pi-welcome-card pi-overlay-card pi-overlay-card--m pi-experimental-card",
-  });
-
-  const { header } = createOverlayHeader({
-    onClose: dialog.close,
-    closeLabel: "Close experimental features",
-    title: "Experimental Features",
-    subtitle:
-      "These toggles are local to this browser profile. Use carefully — some are security-sensitive. "
-      + "Web Search and MCP are managed in /integrations (Tools & MCP).",
-  });
+export function buildExperimentalFeatureContent(): ExperimentalFeatureContent {
+  const content = document.createElement("div");
+  content.className = "pi-experimental-content";
 
   const snapshots = getExperimentalFeatureSnapshots();
   const experimentalFeatures: ExperimentalFeatureSnapshot[] = [];
@@ -163,17 +146,8 @@ export function showExperimentalDialog(): void {
     experimentalFeatures.push(feature);
   }
 
-  const footer = document.createElement("p");
-  footer.className = "pi-experimental-footer";
-  footer.textContent =
-    "Tip: use /experimental on <feature>, /experimental off <feature>, /experimental toggle <feature>, /experimental tmux-bridge-url <url>, /experimental tmux-bridge-token <token>, /experimental tmux-status, /experimental python-bridge-url <url>, or /experimental python-bridge-token <token>.";
-
-  const body = document.createElement("div");
-  body.className = "pi-overlay-body";
-  body.append(header);
-
   if (experimentalFeatures.length > 0) {
-    body.appendChild(buildFeatureSection({
+    content.appendChild(buildFeatureSection({
       title: "Experimental capabilities",
       hint: "In-progress features that may evolve quickly.",
       features: experimentalFeatures,
@@ -181,7 +155,7 @@ export function showExperimentalDialog(): void {
   }
 
   if (advancedSecurityFeatures.length > 0) {
-    body.appendChild(buildFeatureSection({
+    content.appendChild(buildFeatureSection({
       title: "Advanced / security controls",
       hint: "Power-user toggles for extension trust, permissions, and rollback behavior.",
       features: advancedSecurityFeatures,
@@ -192,11 +166,27 @@ export function showExperimentalDialog(): void {
     const empty = document.createElement("p");
     empty.className = "pi-overlay-empty";
     empty.textContent = "No experimental features are currently available.";
-    body.appendChild(empty);
+    content.appendChild(empty);
   }
 
-  body.appendChild(footer);
+  return {
+    content,
+    hasFeatures: snapshots.length > 0,
+  };
+}
 
-  dialog.card.append(body);
-  dialog.mount();
+export function buildExperimentalFeatureFooter(): HTMLParagraphElement {
+  const footer = document.createElement("p");
+  footer.className = "pi-experimental-footer";
+  footer.textContent =
+    "Tip: use /experimental on <feature>, /experimental off <feature>, /experimental toggle <feature>, "
+    + "/experimental tmux-bridge-url <url>, /experimental tmux-bridge-token <token>, /experimental tmux-status, "
+    + "/experimental python-bridge-url <url>, or /experimental python-bridge-token <token>.";
+  return footer;
+}
+
+export function showExperimentalDialog(): void {
+  void import("./settings-overlay.js").then(({ showSettingsDialog }) => {
+    void showSettingsDialog({ section: "experimental" });
+  });
 }

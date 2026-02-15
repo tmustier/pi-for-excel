@@ -1,0 +1,69 @@
+/* Unified Settings overlay */
+
+.pi-settings-dialog {
+  max-height: 80vh;
+  overflow: hidden;
+}
+
+.pi-settings-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  max-height: min(64vh, 600px);
+  padding-right: 2px;
+}
+
+.pi-settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pi-settings-section__content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pi-settings-provider-list {
+  overflow: visible;
+  max-height: none;
+}
+
+.pi-settings-proxy-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pi-settings-proxy-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.pi-settings-proxy-enabled {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  color: var(--foreground);
+  white-space: nowrap;
+}
+
+.pi-settings-proxy-url {
+  min-width: 0;
+}
+
+.pi-settings-proxy-status {
+  margin: 0;
+}
+
+@media (max-width: 520px) {
+  .pi-settings-proxy-row {
+    grid-template-columns: 1fr;
+  }
+}

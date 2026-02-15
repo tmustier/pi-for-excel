@@ -4,6 +4,7 @@
 
 export { showRulesDialog } from "./rules-overlay.js";
 export { showProviderPicker } from "./provider-overlay.js";
+export { showSettingsDialog, type SettingsOverlaySection } from "./settings-overlay.js";
 export { showResumeDialog } from "./resume-overlay.js";
 export {
   showRecoveryDialog,

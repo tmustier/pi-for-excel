@@ -152,6 +152,16 @@ void test("taskpane init wires add-ons menu opener", async () => {
   assert.match(initSource, /sidebar\.onOpenAddons\s*=\s*\(\)\s*=>\s*\{\s*openAddonsManager\(\);\s*\};/);
 });
 
+void test("taskpane init wires gear settings to unified settings overlay", async () => {
+  const initSource = await readFile(new URL("../src/taskpane/init.ts", import.meta.url), "utf8");
+
+  assert.match(initSource, /showSettingsDialog/);
+  assert.match(
+    initSource,
+    /sidebar\.onOpenSettings\s*=\s*\(\)\s*=>\s*\{\s*void showSettingsDialog\(\);\s*\};/,
+  );
+});
+
 void test("sidebar utilities menu includes add-ons label", async () => {
   const sidebarSource = await readFile(new URL("../src/ui/pi-sidebar.ts", import.meta.url), "utf8");
 
@@ -191,12 +201,26 @@ void test("session builtins include recovery and manual-backup commands", async 
   assert.match(sessionSource, /restoreManualFullBackup/);
 });
 
-void test("settings builtins include yolo execution-mode command", async () => {
+void test("settings builtins route to unified settings overlay", async () => {
   const settingsSource = await readFile(new URL("../src/commands/builtins/settings.ts", import.meta.url), "utf8");
+
+  assert.match(settingsSource, /name:\s*"settings"/);
+  assert.match(settingsSource, /showSettingsDialog/);
+  assert.match(settingsSource, /name:\s*"login"/);
+  assert.match(settingsSource, /showProviderPicker/);
 
   assert.match(settingsSource, /name:\s*"yolo"/);
   assert.match(settingsSource, /Toggle execution mode \(Auto vs Confirm\)/);
   assert.match(settingsSource, /Usage:\s*\/yolo/);
+});
+
+void test("provider and experimental overlays are aliases into settings sections", async () => {
+  const providerSource = await readFile(new URL("../src/commands/builtins/provider-overlay.ts", import.meta.url), "utf8");
+  const experimentalSource = await readFile(new URL("../src/commands/builtins/experimental-overlay.ts", import.meta.url), "utf8");
+
+  assert.match(providerSource, /showSettingsDialog\(\{ section: "providers" \}\)/);
+  assert.match(experimentalSource, /showSettingsDialog\(\{ section: "experimental" \}\)/);
+  assert.match(experimentalSource, /buildExperimentalFeatureContent/);
 });
 
 void test("slash-command busy policy is centralized and includes /yolo", async () => {
