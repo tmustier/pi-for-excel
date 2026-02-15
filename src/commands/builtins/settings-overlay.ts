@@ -425,7 +425,7 @@ function buildExtensionsSection(closeDialog: () => void): HTMLElement {
 
   const aliasHint = document.createElement("p");
   aliasHint.className = "pi-overlay-hint";
-  aliasHint.textContent = "Slash commands: /extensions, /addons, /tools, /integrations, /plugins, /skills";
+  aliasHint.textContent = "Slash commands: /extensions, /tools, /plugins, /skills";
 
   shell.content.append(tabs, description, actionRow, aliasHint);
   actionRow.appendChild(openButton);
