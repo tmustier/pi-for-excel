@@ -2,7 +2,7 @@
  * Unified settings overlay.
  *
  * Tabs:
- * - Providers (API keys, local helper)
+ * - Providers (API keys, proxy)
  * - More (Advanced, Experimental)
  */
 
@@ -200,9 +200,9 @@ async function buildProvidersSection(): Promise<HTMLElement> {
 
 function buildProxySection(settingsStore: SettingsStore): HTMLElement {
   const shell = createSectionShell(
-    "Local helper",
+    "Proxy",
     "proxy",
-    "Route requests through a local helper when OAuth is blocked by CORS.",
+    "Route API calls through a local proxy.",
   );
 
   const card = document.createElement("div");
@@ -218,7 +218,7 @@ function buildProxySection(settingsStore: SettingsStore): HTMLElement {
   enabledInput.type = "checkbox";
 
   const enabledText = document.createElement("span");
-  enabledText.textContent = "Route through local helper";
+  enabledText.textContent = "Route API calls through a local proxy";
 
   enabledLabel.append(enabledInput, enabledText);
 
@@ -283,7 +283,7 @@ function buildProxySection(settingsStore: SettingsStore): HTMLElement {
       ? `Proxy enabled at ${normalizedUrl}`
       : `Proxy saved at ${normalizedUrl} (currently disabled)`;
     status.classList.remove("pi-overlay-text-warning");
-    showToast("Local helper settings saved");
+    showToast("Proxy settings saved");
   };
 
   saveButton.addEventListener("click", () => {
@@ -312,12 +312,12 @@ function buildProxySection(settingsStore: SettingsStore): HTMLElement {
         : DEFAULT_LOCAL_PROXY_URL;
 
       status.textContent = enabledInput.checked
-        ? `Local helper enabled at ${urlInput.value}`
-        : "Local helper disabled";
+        ? `Proxy enabled at ${urlInput.value}`
+        : "Proxy disabled";
     } catch {
       enabledInput.checked = false;
       urlInput.value = DEFAULT_LOCAL_PROXY_URL;
-      status.textContent = "Local helper disabled";
+      status.textContent = "Proxy disabled";
     }
   })();
 
@@ -412,7 +412,7 @@ export async function showSettingsDialog(options: ShowSettingsDialogOptions = {}
       onClose: dialog.close,
       closeLabel: "Close settings",
       title: "Settings",
-      subtitle: "Providers, execution mode, and advanced options",
+      subtitle: "Providers, proxy, and preferences",
     });
 
     const body = document.createElement("div");
