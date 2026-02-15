@@ -20,6 +20,7 @@ import { getEnabledProxyBaseUrl } from "../../tools/external-fetch.js";
 import {
   clearWebSearchApiKey,
   getApiKeyForProvider,
+  isApiKeyRequired,
   loadWebSearchProviderConfig,
   maskSecret,
   saveWebSearchApiKey,
@@ -260,16 +261,28 @@ export function showIntegrationsDialog(dependencies: IntegrationsDialogDependenc
     const selectedProvider = currentSnapshot.webSearchConfig.provider;
     const selectedProviderInfo = WEB_SEARCH_PROVIDER_INFO[selectedProvider];
     const selectedProviderKey = getApiKeyForProvider(currentSnapshot.webSearchConfig, selectedProvider);
+    const keyRequired = isApiKeyRequired(selectedProvider);
 
     elements.webSearchProviderSelect.value = selectedProvider;
-    elements.webSearchProviderSignupLink.href = selectedProviderInfo.signupUrl;
-    elements.webSearchProviderSignupLink.textContent = `Get key (${selectedProviderInfo.title})`;
-    elements.webSearchApiKeyInput.placeholder = selectedProviderInfo.apiKeyLabel;
+
+    if (keyRequired) {
+      elements.webSearchProviderSignupLink.href = selectedProviderInfo.signupUrl;
+      elements.webSearchProviderSignupLink.textContent = `Get key (${selectedProviderInfo.title})`;
+      elements.webSearchProviderSignupLink.hidden = false;
+    } else {
+      elements.webSearchProviderSignupLink.hidden = true;
+    }
+
+    elements.webSearchApiKeyInput.placeholder = keyRequired
+      ? selectedProviderInfo.apiKeyLabel
+      : `${selectedProviderInfo.apiKeyLabel} (optional)`;
 
     if (selectedProviderKey) {
       elements.webSearchStatus.textContent = `${selectedProviderInfo.apiKeyLabel}: ${maskSecret(selectedProviderKey)} (length ${selectedProviderKey.length})`;
-    } else {
+    } else if (keyRequired) {
       elements.webSearchStatus.textContent = `${selectedProviderInfo.apiKeyLabel} not set.`;
+    } else {
+      elements.webSearchStatus.textContent = "Ready — no API key needed.";
     }
 
     elements.webSearchHint.textContent = `${selectedProviderInfo.shortDescription} ${selectedProviderInfo.apiKeyHelp} Used by web_search and fetch_page.`;

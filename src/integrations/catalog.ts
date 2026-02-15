@@ -39,7 +39,7 @@ const INTEGRATION_DEFINITIONS: Record<IntegrationId, IntegrationDefinition> = {
   web_search: {
     id: "web_search",
     title: "Web Search",
-    description: "Search external web content (Serper/Tavily/Brave) and fetch readable page content.",
+    description: "Search external web content and fetch readable page content. Works out of the box with Jina (default); optionally Serper, Tavily, or Brave.",
     agentSkillName: "web-search",
     warning: "External network access: queries and fetched URLs are sent to the configured provider/target host.",
     toolNames: ["web_search", "fetch_page"],

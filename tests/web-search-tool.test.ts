@@ -3,7 +3,7 @@ import { test } from "node:test";
 
 import { createWebSearchTool } from "../src/tools/web-search.ts";
 
-void test("web_search reports missing API key for selected provider", async () => {
+void test("web_search reports missing API key for key-required provider", async () => {
   const tool = createWebSearchTool({
     getConfig: () => Promise.resolve({ provider: "serper", apiKey: undefined }),
   });
@@ -59,6 +59,34 @@ void test("web_search renders compact cited results for serper", async () => {
   assert.equal(details.provider, "serper");
   assert.equal(details.resultCount, 2);
   assert.equal(details.maxResults, 2);
+});
+
+void test("web_search works without API key for jina (zero-config)", async () => {
+  const tool = createWebSearchTool({
+    getConfig: () => Promise.resolve({ provider: "jina", apiKey: undefined }),
+    executeSearch: () => Promise.resolve({
+      sentQuery: "excel vlookup",
+      proxied: false,
+      hits: [
+        {
+          title: "VLOOKUP function",
+          url: "https://support.microsoft.com/vlookup",
+          snippet: "Use VLOOKUP to find things in a table.",
+        },
+      ],
+    }),
+  });
+
+  const result = await tool.execute("call-jina-1", { query: "excel vlookup", max_results: 1 });
+  const text = result.content[0]?.type === "text" ? result.content[0].text : "";
+
+  assert.match(text, /Web search via Jina Search/);
+  assert.match(text, /\[1\] \[VLOOKUP function\]/);
+
+  const details = result.details as { ok?: boolean; provider?: string; resultCount?: number };
+  assert.equal(details.ok, true);
+  assert.equal(details.provider, "jina");
+  assert.equal(details.resultCount, 1);
 });
 
 void test("web_search keeps provider metadata for brave responses", async () => {

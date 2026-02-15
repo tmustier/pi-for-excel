@@ -6,11 +6,12 @@ export const WEB_SEARCH_PROVIDER_SETTING_KEY = "web.search.provider";
 export const WEB_SEARCH_BRAVE_API_KEY_SETTING_KEY = "web.search.brave.apiKey";
 export const WEB_SEARCH_SERPER_API_KEY_SETTING_KEY = "web.search.serper.apiKey";
 export const WEB_SEARCH_TAVILY_API_KEY_SETTING_KEY = "web.search.tavily.apiKey";
+export const WEB_SEARCH_JINA_API_KEY_SETTING_KEY = "web.search.jina.apiKey";
 
-export const WEB_SEARCH_PROVIDERS = ["serper", "tavily", "brave"] as const;
+export const WEB_SEARCH_PROVIDERS = ["jina", "serper", "tavily", "brave"] as const;
 export type WebSearchProvider = (typeof WEB_SEARCH_PROVIDERS)[number];
 
-export const DEFAULT_WEB_SEARCH_PROVIDER: WebSearchProvider = "serper";
+export const DEFAULT_WEB_SEARCH_PROVIDER: WebSearchProvider = "jina";
 
 export interface WebSearchProviderInfo {
   id: WebSearchProvider;
@@ -19,12 +20,23 @@ export interface WebSearchProviderInfo {
   signupUrl: string;
   apiKeyLabel: string;
   apiKeyHelp: string;
+  /** When true the provider works without an API key (key is optional for higher limits). */
+  apiKeyOptional?: boolean;
 }
 
 export const WEB_SEARCH_PROVIDER_INFO: Record<WebSearchProvider, WebSearchProviderInfo> = {
+  jina: {
+    id: "jina",
+    title: "Jina Search (default)",
+    shortDescription: "Works out of the box — no signup or API key needed.",
+    signupUrl: "https://jina.ai",
+    apiKeyLabel: "Jina API key",
+    apiKeyHelp: "Optional. Add a key for higher rate limits.",
+    apiKeyOptional: true,
+  },
   serper: {
     id: "serper",
-    title: "Serper.dev (default)",
+    title: "Serper.dev",
     shortDescription: "Google SERP API, easy onboarding (free tier, no credit card).",
     signupUrl: "https://serper.dev",
     apiKeyLabel: "Serper API key",
@@ -49,6 +61,7 @@ export const WEB_SEARCH_PROVIDER_INFO: Record<WebSearchProvider, WebSearchProvid
 };
 
 const WEB_SEARCH_API_KEY_BY_PROVIDER_SETTING_KEY: Record<WebSearchProvider, string> = {
+  jina: WEB_SEARCH_JINA_API_KEY_SETTING_KEY,
   serper: WEB_SEARCH_SERPER_API_KEY_SETTING_KEY,
   tavily: WEB_SEARCH_TAVILY_API_KEY_SETTING_KEY,
   brave: WEB_SEARCH_BRAVE_API_KEY_SETTING_KEY,
@@ -75,7 +88,7 @@ function normalizeOptionalString(value: unknown): string | undefined {
 }
 
 function parseProvider(value: unknown): WebSearchProvider | undefined {
-  if (value === "serper" || value === "tavily" || value === "brave") {
+  if (value === "jina" || value === "serper" || value === "tavily" || value === "brave") {
     return value;
   }
   return undefined;
@@ -84,13 +97,15 @@ function parseProvider(value: unknown): WebSearchProvider | undefined {
 export async function loadWebSearchProviderConfig(
   settings: WebSearchConfigReader,
 ): Promise<WebSearchProviderConfig> {
-  const [providerRaw, serperApiKeyRaw, tavilyApiKeyRaw, braveApiKeyRaw] = await Promise.all([
+  const [providerRaw, jinaApiKeyRaw, serperApiKeyRaw, tavilyApiKeyRaw, braveApiKeyRaw] = await Promise.all([
     settings.get(WEB_SEARCH_PROVIDER_SETTING_KEY),
+    settings.get(WEB_SEARCH_JINA_API_KEY_SETTING_KEY),
     settings.get(WEB_SEARCH_SERPER_API_KEY_SETTING_KEY),
     settings.get(WEB_SEARCH_TAVILY_API_KEY_SETTING_KEY),
     settings.get(WEB_SEARCH_BRAVE_API_KEY_SETTING_KEY),
   ]);
 
+  const jinaApiKey = normalizeOptionalString(jinaApiKeyRaw);
   const serperApiKey = normalizeOptionalString(serperApiKeyRaw);
   const tavilyApiKey = normalizeOptionalString(tavilyApiKeyRaw);
   const braveApiKey = normalizeOptionalString(braveApiKeyRaw);
@@ -101,6 +116,7 @@ export async function loadWebSearchProviderConfig(
   return {
     provider,
     apiKeys: {
+      jina: jinaApiKey,
       serper: serperApiKey,
       tavily: tavilyApiKey,
       brave: braveApiKey,
@@ -146,6 +162,11 @@ export function getApiKeyForProvider(
   provider: WebSearchProvider = config.provider,
 ): string | undefined {
   return normalizeOptionalString(config.apiKeys[provider]);
+}
+
+/** Returns true when the provider cannot work without an API key. */
+export function isApiKeyRequired(provider: WebSearchProvider): boolean {
+  return WEB_SEARCH_PROVIDER_INFO[provider].apiKeyOptional !== true;
 }
 
 export function maskSecret(secret: string): string {

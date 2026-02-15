@@ -25,11 +25,11 @@ import type {
 export type IntegrationsSettingsStore = IntegrationSettingsStore & WebSearchConfigStore & McpConfigStore;
 
 export function normalizeWebSearchProvider(value: string): WebSearchProvider {
-  if (value === "serper" || value === "tavily" || value === "brave") {
+  if (value === "jina" || value === "serper" || value === "tavily" || value === "brave") {
     return value;
   }
 
-  return "serper";
+  return "jina";
 }
 
 export function getSettingsStore(): Promise<IntegrationsSettingsStore> {

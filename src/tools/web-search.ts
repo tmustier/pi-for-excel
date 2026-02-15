@@ -1,5 +1,5 @@
 /**
- * web_search — external web search (Serper/Tavily/Brave).
+ * web_search — external web search (Jina/Serper/Tavily/Brave).
  */
 
 import type { AgentTool, AgentToolResult } from "@mariozechner/pi-agent-core";
@@ -19,12 +19,14 @@ import {
 } from "./external-fetch.js";
 import {
   getApiKeyForProvider,
+  isApiKeyRequired,
   loadWebSearchProviderConfig,
   type WebSearchProvider,
   type WebSearchProviderInfo,
   WEB_SEARCH_PROVIDER_INFO,
 } from "./web-search-config.js";
 
+const JINA_WEB_SEARCH_ENDPOINT = "https://s.jina.ai/";
 const BRAVE_WEB_SEARCH_ENDPOINT = "https://api.search.brave.com/res/v1/web/search";
 const SERPER_WEB_SEARCH_ENDPOINT = "https://google.serper.dev/search";
 const TAVILY_WEB_SEARCH_ENDPOINT = "https://api.tavily.com/search";
@@ -103,13 +105,17 @@ export interface WebSearchToolConfig {
   proxyBaseUrl?: string;
 }
 
+export interface WebSearchExecuteConfig {
+  provider: WebSearchProvider;
+  apiKey: string;
+  proxyBaseUrl?: string;
+}
+
 export interface WebSearchToolDependencies {
   getConfig?: () => Promise<WebSearchToolConfig>;
   executeSearch?: (
     params: Params,
-    config: Required<Pick<WebSearchToolConfig, "provider" | "apiKey">> & {
-      proxyBaseUrl?: string;
-    },
+    config: WebSearchExecuteConfig,
     signal: AbortSignal | undefined,
   ) => Promise<{
     hits: WebSearchHit[];
@@ -232,6 +238,27 @@ function buildProviderRequest(
 ): ProviderRequest {
   const sentQuery = buildSentQuery(params);
   const maxResults = params.max_results ?? 5;
+
+  if (provider === "jina") {
+    const targetUrl = `${JINA_WEB_SEARCH_ENDPOINT}${encodeURIComponent(sentQuery)}`;
+    const headers: Record<string, string> = {
+      Accept: "application/json",
+      "X-Retain-Images": "none",
+    };
+
+    if (apiKey) {
+      headers.Authorization = `Bearer ${apiKey}`;
+    }
+
+    return {
+      targetUrl,
+      sentQuery,
+      requestInit: {
+        method: "GET",
+        headers,
+      },
+    };
+  }
 
   if (provider === "brave") {
     const url = new URL(BRAVE_WEB_SEARCH_ENDPOINT);
@@ -385,7 +412,19 @@ function parseTavilyHits(payload: unknown): WebSearchHit[] {
   );
 }
 
+function parseJinaHits(payload: unknown): WebSearchHit[] {
+  return parseHitsFromEntries(
+    readArrayPath(payload, ["data"]),
+    {
+      titleKey: "title",
+      urlKey: "url",
+      snippetKeys: ["description", "content"],
+    },
+  );
+}
+
 const SEARCH_HIT_PARSERS: Record<WebSearchProvider, (payload: unknown) => WebSearchHit[]> = {
+  jina: parseJinaHits,
   brave: parseBraveHits,
   serper: parseSerperHits,
   tavily: parseTavilyHits,
@@ -462,9 +501,7 @@ async function defaultGetConfig(): Promise<WebSearchToolConfig> {
 
 async function defaultExecuteSearch(
   params: Params,
-  config: Required<Pick<WebSearchToolConfig, "provider" | "apiKey">> & {
-    proxyBaseUrl?: string;
-  },
+  config: WebSearchExecuteConfig,
   signal: AbortSignal | undefined,
 ): Promise<{
   hits: WebSearchHit[];
@@ -575,7 +612,7 @@ export function createWebSearchTool(
     name: "web_search",
     label: "Web Search",
     description:
-      "Search the public web via Serper, Tavily, or Brave Search. Returns compact, cited links with snippets.",
+      "Search the public web. Returns compact, cited links with snippets. Works out of the box with Jina (default); optionally Serper, Tavily, or Brave.",
     parameters: schema,
     execute: async (
       _toolCallId: string,
@@ -583,7 +620,7 @@ export function createWebSearchTool(
       signal: AbortSignal | undefined,
     ): Promise<AgentToolResult<WebSearchToolDetails>> => {
       let params: Params | null = null;
-      let provider: WebSearchProvider = "serper";
+      let provider: WebSearchProvider = "jina";
 
       try {
         params = parseParams(rawParams);
@@ -591,8 +628,8 @@ export function createWebSearchTool(
         const config = await getConfig();
         provider = config.provider;
 
-        const apiKey = normalizeOptionalString(config.apiKey);
-        if (!apiKey) {
+        const apiKey = normalizeOptionalString(config.apiKey) ?? "";
+        if (!apiKey && isApiKeyRequired(provider)) {
           throw new Error(
             `Web search API key is missing. Open ${integrationsCommandHint()} and set the ${providerInfo(provider).apiKeyLabel}.`,
           );
