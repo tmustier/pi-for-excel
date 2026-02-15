@@ -745,7 +745,7 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
 
       if (tree.rootFiles.length > 0) {
         appendFolderNode(list, {
-          folderName: "workspace root",
+          folderName: "General",
           folderPath: "",
           files: tree.rootFiles,
           children: [],

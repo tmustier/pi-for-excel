@@ -7,7 +7,7 @@ export function buildFilesDialogStatusMessage(args: {
   activeFilterLabel: string;
 }): string {
   if (args.selectedFilter === "all") {
-    return `${args.totalCount} file${args.totalCount === 1 ? "" : "s"} available to the assistant.`;
+    return `${args.totalCount} file${args.totalCount === 1 ? "" : "s"} available to the agent.`;
   }
 
   return (

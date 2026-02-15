@@ -105,7 +105,9 @@ export function createOverlayButton(options: OverlayButtonOptions): HTMLButtonEl
 
   button.type = options.type ?? "button";
   button.textContent = options.text;
-  button.className = mergeClassName("pi-overlay-btn pi-overlay-btn--ghost", options.className);
+  const hasVariant = options.className?.includes("pi-overlay-btn--") ?? false;
+  const base = hasVariant ? "pi-overlay-btn" : "pi-overlay-btn pi-overlay-btn--ghost";
+  button.className = mergeClassName(base, options.className);
 
   return button;
 }
