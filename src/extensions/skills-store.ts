@@ -1,6 +1,6 @@
 import { mergeAgentSkillDefinitions, listAgentSkills } from "../skills/catalog.js";
 import {
-  loadDiscoverableAgentSkills,
+  loadExternalAgentSkills,
   removeExternalAgentSkill,
   upsertExternalAgentSkill,
 } from "../skills/external-store.js";
@@ -13,8 +13,8 @@ export interface SkillSummaryItem {
 
 async function loadMergedSkills() {
   const bundled = listAgentSkills();
-  const discoverable = await loadDiscoverableAgentSkills();
-  return mergeAgentSkillDefinitions(bundled, discoverable);
+  const external = await loadExternalAgentSkills();
+  return mergeAgentSkillDefinitions(bundled, external);
 }
 
 function normalizeSkillName(name: string): string {
