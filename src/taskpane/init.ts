@@ -1523,9 +1523,9 @@ export async function initTaskpane(opts: {
   {
     const messagesContainer = sidebar.querySelector(".pi-messages");
     const host = messagesContainer?.parentElement;
-    if (host) {
+    if (host && messagesContainer) {
       const proxyBanner = createProxyBanner();
-      host.insertBefore(proxyBanner.root, host.firstChild);
+      host.insertBefore(proxyBanner.root, messagesContainer);
       proxyBanner.update(getProxyState());
 
       document.addEventListener("pi:proxy-state-changed", (event: Event) => {
