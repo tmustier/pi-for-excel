@@ -257,9 +257,20 @@ export default defineConfig({
     },
   },
 
+  // Replace Node-style process.env reads in browser bundles.
+  // Some upstream provider code still references process.env directly.
+  define: {
+    "process.env": "{}",
+  },
+
   // Prevent esbuild from downleveling class fields (breaks Lit's @state/@property)
   optimizeDeps: {
-    esbuildOptions: { target: "esnext" },
+    esbuildOptions: {
+      target: "esnext",
+      define: {
+        "process.env": "{}",
+      },
+    },
   },
   esbuild: { target: "esnext" },
 
