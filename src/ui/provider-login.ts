@@ -431,7 +431,7 @@ export function buildProviderRow(
           if (isLikelyCors) {
             errorEl.textContent =
               "Login was blocked by browser CORS. Enable /settings → Proxy with " +
-              `${DEFAULT_LOCAL_PROXY_URL} (local HTTPS proxy helper running), then retry. ` +
+              `${DEFAULT_LOCAL_PROXY_URL} (local HTTPS proxy running), then retry. ` +
               `Guide: ${PROXY_HELPER_DOCS_URL}`;
           } else {
             errorEl.textContent = msg || "Login failed";

@@ -72,7 +72,7 @@ If you get a response, install is complete.
 
 ### Recommended (easiest): API key
 
-For most users, API keys are the smoothest setup and usually do **not** need the proxy helper.
+For most users, API keys are the smoothest setup and usually do **not** need the proxy.
 
 1. In Pi, run `/login` (or use the welcome screen)
 2. Expand a provider row (OpenAI, Google Gemini, Anthropic, etc.)
@@ -91,7 +91,7 @@ If login fails with a CORS/network error, follow the next section.
 
 ---
 
-## OAuth logins and CORS helper
+## OAuth logins and CORS proxy
 
 Some OAuth/token endpoints are blocked by CORS inside Office webviews (especially on macOS WKWebView).
 
@@ -102,7 +102,7 @@ Typical symptoms:
 
 ### What to do
 
-1. Run a local HTTPS proxy helper on the same machine as Excel (defaults to `https://localhost:3003`):
+1. Run a local HTTPS proxy on the same machine as Excel (defaults to `https://localhost:3003`):
 
 If you already have Node.js:
 
@@ -119,7 +119,7 @@ curl -fsSL https://piforexcel.com/proxy | sh
 If the user is non-technical, a teammate/admin can run this step for them on their machine.
 
 2. In Pi, open `/settings` → **Proxy**:
-   - enable **Use CORS Proxy**
+   - enable **Proxy**
    - set URL to `https://localhost:3003`
 
 3. Retry OAuth login

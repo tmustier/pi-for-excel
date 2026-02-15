@@ -119,10 +119,10 @@ The dev manifest points to `https://localhost:3000`. The production manifest (`m
 | `npm run test:models` | Unit tests — model ordering |
 | `npm run test:context` | Unit tests — tools, context, sessions, extensions, integrations |
 | `npm run test:security` | Security policy tests — proxy, CORS, sandbox, OAuth |
-| `npm run proxy:https` | CORS proxy helper for OAuth flows (default `https://localhost:3003`) |
+| `npm run proxy:https` | CORS proxy for OAuth flows (default `https://localhost:3003`) |
 | `npm run validate` | Validate the Office add-in manifest |
 
-### CORS proxy helper
+### CORS proxy
 
 Some OAuth token endpoints are blocked by CORS inside Office webviews. If OAuth login fails:
 

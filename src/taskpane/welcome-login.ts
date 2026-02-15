@@ -154,7 +154,7 @@ export async function showWelcomeLogin(providerKeys: ProviderKeysStore): Promise
     proxyHint.append(
       "Needed only when OAuth login is blocked by CORS. Keep this URL at ",
       proxyCode,
-      ", run a local HTTPS proxy helper, then enable this toggle. ",
+      ", run a local HTTPS proxy, then enable this toggle. ",
       proxyGuideLink,
       ".",
     );
