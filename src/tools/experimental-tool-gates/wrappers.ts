@@ -157,9 +157,13 @@ function wrapExecuteOfficeJsToolWithHardGate(
     execute: async (toolCallId, params, signal, onUpdate) => {
       throwIfAborted(signal);
 
-      const approved = await requestApproval(getOfficeJsExecuteApprovalRequest(params));
-      if (!approved) {
-        throw new Error("Office.js execution cancelled by user.");
+      // Auto mode trusts Office.js — skip approval prompt.
+      const mode = await (dependencies.getExecutionMode?.() ?? Promise.resolve("safe" as const));
+      if (mode !== "yolo") {
+        const approved = await requestApproval(getOfficeJsExecuteApprovalRequest(params));
+        if (!approved) {
+          throw new Error("Office.js execution cancelled by user.");
+        }
       }
 
       throwIfAborted(signal);

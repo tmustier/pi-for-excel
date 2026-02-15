@@ -70,4 +70,6 @@ export interface ExperimentalToolGateDependencies extends
   getApprovedPythonBridgeUrl?: () => Promise<string | undefined>;
   setApprovedPythonBridgeUrl?: (bridgeUrl: string) => Promise<void>;
   requestOfficeJsExecuteApproval?: (request: OfficeJsExecuteApprovalRequest) => Promise<boolean>;
+  /** When provided, Auto mode skips the Office.js approval prompt. */
+  getExecutionMode?: () => Promise<"yolo" | "safe">;
 }

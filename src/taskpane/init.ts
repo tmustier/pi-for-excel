@@ -670,6 +670,7 @@ export async function initTaskpane(opts: {
       }).filter(isRuntimeAgentTool);
 
       const gatedCoreTools = await applyExperimentalToolGates(coreTools, {
+        getExecutionMode: () => Promise.resolve(getExecutionMode()),
         requestOfficeJsExecuteApproval: (request) => {
           return requestRuntimeToolApproval({
             title: "Allow direct Office.js execution?",
