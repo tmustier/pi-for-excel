@@ -91,9 +91,17 @@ export async function showAddonsDialog(
 
     const managedActions: AddonsDialogActions = {
       ...actions,
+      openIntegrationsManager: () => {
+        dialog.close();
+        actions.openIntegrationsManager();
+      },
       openExtensionsManager: () => {
         dialog.close();
         actions.openExtensionsManager();
+      },
+      openSkillsManager: () => {
+        dialog.close();
+        actions.openSkillsManager();
       },
     };
 
@@ -147,6 +155,7 @@ export async function showAddonsDialog(
 
         renderSkillsSection({
           container: skillsContainer,
+          actions: managedActions,
           snapshot,
         });
       } catch (error: unknown) {
@@ -213,6 +222,7 @@ export async function showAddonsDialog(
           container: connectionsContainer,
           snapshot,
           settings,
+          actions: managedActions,
           busy: connectionsBusy,
           onRefresh: () => {
             void refreshConnections();
