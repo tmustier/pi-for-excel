@@ -430,8 +430,12 @@ const SEARCH_HIT_PARSERS: Record<WebSearchProvider, (payload: unknown) => WebSea
   tavily: parseTavilyHits,
 };
 
-function parseSearchHits(provider: WebSearchProvider, payload: unknown): WebSearchHit[] {
-  return SEARCH_HIT_PARSERS[provider](payload);
+function parseSearchHits(provider: WebSearchProvider, payload: unknown, maxResults?: number): WebSearchHit[] {
+  const hits = SEARCH_HIT_PARSERS[provider](payload);
+  if (typeof maxResults === "number" && hits.length > maxResults) {
+    return hits.slice(0, maxResults);
+  }
+  return hits;
 }
 
 function buildResultMarkdown(args: {
@@ -541,7 +545,7 @@ async function defaultExecuteSearch(
         payload = null;
       }
 
-      const hits = parseSearchHits(config.provider, payload);
+      const hits = parseSearchHits(config.provider, payload, params.max_results);
 
       return {
         hits,

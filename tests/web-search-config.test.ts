@@ -37,7 +37,17 @@ void test("web search config defaults to jina provider", async () => {
   assert.equal(getApiKeyForProvider(config), undefined);
 });
 
-void test("web search config falls back to brave when only legacy brave key is present", async () => {
+void test("web search config infers serper when only serper key is present", async () => {
+  const settings = new MemorySettingsStore();
+  await saveWebSearchApiKey(settings, "serper", "sp-legacy");
+
+  const config = await loadWebSearchProviderConfig(settings);
+
+  assert.equal(config.provider, "serper");
+  assert.equal(getApiKeyForProvider(config), "sp-legacy");
+});
+
+void test("web search config infers brave when only brave key is present", async () => {
   const settings = new MemorySettingsStore();
   await saveWebSearchApiKey(settings, "brave", "br-legacy");
 

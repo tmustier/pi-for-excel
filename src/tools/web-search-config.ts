@@ -110,8 +110,11 @@ export async function loadWebSearchProviderConfig(
   const tavilyApiKey = normalizeOptionalString(tavilyApiKeyRaw);
   const braveApiKey = normalizeOptionalString(braveApiKeyRaw);
 
+  // Prefer an explicitly saved provider. Otherwise, if any key-required provider
+  // has a key, infer that provider so existing users aren't silently switched to
+  // the zero-config default after an upgrade.
   const provider = parseProvider(providerRaw)
-    ?? (braveApiKey ? "brave" : DEFAULT_WEB_SEARCH_PROVIDER);
+    ?? (serperApiKey ? "serper" : braveApiKey ? "brave" : tavilyApiKey ? "tavily" : DEFAULT_WEB_SEARCH_PROVIDER);
 
   return {
     provider,
