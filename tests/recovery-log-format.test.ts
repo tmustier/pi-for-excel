@@ -23,6 +23,11 @@ import {
   validateStringGrid,
 } from "../src/workbook/recovery/format-state-utils.ts";
 import {
+  isRecoveryConditionalDataBarState,
+  isRecoveryConditionalIconSetState,
+  normalizeConditionalFormatType,
+} from "../src/workbook/recovery/conditional-format-normalization.ts";
+import {
   createInMemorySettingsStore,
   findSnapshotById,
   withoutUndefined,
@@ -119,6 +124,80 @@ void test("format-state utilities validate string grid shape", () => {
 
   assert.equal(validateStringGrid([["0.00"]], 2, 1), null);
   assert.equal(validateStringGrid([["0.00", 42]], 1, 2), null);
+});
+
+void test("conditional-format normalization maps supported Excel types", () => {
+  assert.equal(normalizeConditionalFormatType("Custom"), "custom");
+  assert.equal(normalizeConditionalFormatType("colorScale"), "color_scale");
+  assert.equal(normalizeConditionalFormatType("IconSet"), "icon_set");
+  assert.equal(normalizeConditionalFormatType("NotSupported"), null);
+});
+
+void test("conditional-format guards validate data-bar and icon-set rule state", () => {
+  assert.equal(
+    isRecoveryConditionalDataBarState({
+      axisColor: "#000000",
+      axisFormat: "Automatic",
+      barDirection: "Context",
+      showDataBarOnly: false,
+      lowerBoundRule: { type: "LowestValue" },
+      upperBoundRule: { type: "HighestValue", formula: "100" },
+      positiveFillColor: "#63C384",
+      positiveBorderColor: "#2E8540",
+      positiveGradientFill: true,
+      negativeFillColor: "#D13438",
+      negativeBorderColor: "#A4262C",
+      negativeMatchPositiveFillColor: false,
+      negativeMatchPositiveBorderColor: false,
+    }),
+    true,
+  );
+
+  assert.equal(
+    isRecoveryConditionalDataBarState({
+      axisFormat: "Automatic",
+      barDirection: "Context",
+      showDataBarOnly: false,
+      lowerBoundRule: { type: "LowestValue", formula: 42 },
+      upperBoundRule: { type: "HighestValue" },
+      positiveFillColor: "#63C384",
+      positiveGradientFill: true,
+      negativeFillColor: "#D13438",
+      negativeMatchPositiveFillColor: false,
+      negativeMatchPositiveBorderColor: false,
+    }),
+    false,
+  );
+
+  assert.equal(
+    isRecoveryConditionalIconSetState({
+      style: "ThreeTrafficLights1",
+      reverseIconOrder: false,
+      showIconOnly: false,
+      criteria: [
+        { type: "Percent", operator: "GreaterThanOrEqual", formula: "0" },
+        {
+          type: "Percent",
+          operator: "GreaterThanOrEqual",
+          formula: "33",
+          customIcon: { set: "ThreeTrafficLights1", index: 1 },
+        },
+      ],
+    }),
+    true,
+  );
+
+  assert.equal(
+    isRecoveryConditionalIconSetState({
+      style: "ThreeTrafficLights1",
+      reverseIconOrder: false,
+      showIconOnly: false,
+      criteria: [
+        { type: "Percent", operator: "LessThan", formula: "0" },
+      ],
+    }),
+    false,
+  );
 });
 
 void test("persisted format checkpoints retain dimension state", async () => {
