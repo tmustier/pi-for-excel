@@ -4,27 +4,13 @@ import { excelRun, getRange } from "../../excel/helpers.js";
 import { isRecord } from "../../utils/type-guards.js";
 import { cloneRecoveryConditionalFormatRules } from "./clone.js";
 import type {
-  RecoveryConditionalCellValueOperator,
-  RecoveryConditionalColorCriterionType,
   RecoveryConditionalColorScaleCriterion,
-  RecoveryConditionalColorScaleState,
-  RecoveryConditionalDataBarAxisFormat,
-  RecoveryConditionalDataBarDirection,
   RecoveryConditionalDataBarRule,
-  RecoveryConditionalDataBarRuleType,
-  RecoveryConditionalDataBarState,
   RecoveryConditionalFormatCaptureResult,
   RecoveryConditionalFormatRule,
   RecoveryConditionalFormatRuleType,
   RecoveryConditionalIcon,
   RecoveryConditionalIconCriterion,
-  RecoveryConditionalIconCriterionOperator,
-  RecoveryConditionalIconCriterionType,
-  RecoveryConditionalIconSet,
-  RecoveryConditionalIconSetState,
-  RecoveryConditionalPresetCriterion,
-  RecoveryConditionalTextOperator,
-  RecoveryConditionalTopBottomCriterionType,
 } from "./types.js";
 
 import {
