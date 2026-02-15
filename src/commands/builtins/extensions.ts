@@ -2,11 +2,11 @@
  * Builtin command for plugin management UI.
  */
 
-import type { AddonsSection } from "./addons-overlay.js";
+import type { ExtensionsHubTab } from "./extensions-hub-overlay.js";
 import type { SlashCommand } from "../types.js";
 
 export interface ExtensionsCommandActions {
-  openAddonsManager: (section?: AddonsSection) => void | Promise<void>;
+  openExtensionsHub: (tab?: ExtensionsHubTab) => void | Promise<void>;
 }
 
 export function createExtensionsCommands(actions: ExtensionsCommandActions): SlashCommand[] {
@@ -16,7 +16,7 @@ export function createExtensionsCommands(actions: ExtensionsCommandActions): Sla
       description: "Manage installed plugins (alias for /extensions plugins)",
       source: "builtin",
       execute: () => {
-        void actions.openAddonsManager("plugins");
+        void actions.openExtensionsHub("plugins");
       },
     },
   ];

@@ -6,11 +6,11 @@ import {
   INTEGRATIONS_MANAGER_LABEL_LOWER,
   TOOLS_COMMAND_NAME,
 } from "../../integrations/naming.js";
-import type { AddonsSection } from "./addons-overlay.js";
+import type { ExtensionsHubTab } from "./extensions-hub-overlay.js";
 import type { SlashCommand } from "../types.js";
 
 export interface IntegrationsCommandActions {
-  openAddonsManager: (section?: AddonsSection) => void | Promise<void>;
+  openExtensionsHub: (tab?: ExtensionsHubTab) => void | Promise<void>;
 }
 
 export function createIntegrationsCommands(actions: IntegrationsCommandActions): SlashCommand[] {
@@ -20,7 +20,7 @@ export function createIntegrationsCommands(actions: IntegrationsCommandActions):
       description: `Manage ${INTEGRATIONS_MANAGER_LABEL_LOWER} (alias for /extensions connections)`,
       source: "builtin",
       execute: () => {
-        void actions.openAddonsManager("connections");
+        void actions.openExtensionsHub("connections");
       },
     },
   ];

@@ -2,11 +2,11 @@
  * Builtin command for skills catalog UI.
  */
 
-import type { AddonsSection } from "./addons-overlay.js";
+import type { ExtensionsHubTab } from "./extensions-hub-overlay.js";
 import type { SlashCommand } from "../types.js";
 
 export interface SkillsCommandActions {
-  openAddonsManager: (section?: AddonsSection) => void | Promise<void>;
+  openExtensionsHub: (tab?: ExtensionsHubTab) => void | Promise<void>;
 }
 
 export function createSkillsCommands(actions: SkillsCommandActions): SlashCommand[] {
@@ -16,7 +16,7 @@ export function createSkillsCommands(actions: SkillsCommandActions): SlashComman
       description: "Browse available skills (alias for /extensions skills)",
       source: "builtin",
       execute: () => {
-        void actions.openAddonsManager("skills");
+        void actions.openExtensionsHub("skills");
       },
     },
   ];

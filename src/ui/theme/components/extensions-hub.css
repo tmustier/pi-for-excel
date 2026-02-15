@@ -1,0 +1,420 @@
+/* ═══════════════════════════════════════════════════════
+   Extensions hub — shared components
+   
+   Item cards, section headers, callouts, add forms,
+   empty states used by the Extensions hub overlay tabs.
+   
+   Used by: extensions-hub-overlay, -connections, -plugins, -skills
+   ═══════════════════════════════════════════════════════ */
+
+/* ── Item card (connection / plugin / skill) ────────── */
+
+.pi-item-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border: 1px solid var(--alpha-8);
+  background: var(--white-alpha-35);
+  border-radius: 10px;
+  overflow: hidden;
+  transition: border-color var(--duration-fast);
+}
+
+.pi-item-card:hover {
+  border-color: var(--alpha-12);
+}
+
+.pi-item-card__header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  cursor: default;
+}
+
+.pi-item-card__header--expandable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.pi-item-card__header--expandable:hover {
+  background: var(--alpha-3);
+}
+
+.pi-item-card__icon {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  background: var(--alpha-6);
+  font-size: 14px;
+  line-height: 1;
+}
+
+.pi-item-card__icon--green {
+  background: var(--green-alpha-12);
+  color: var(--pi-green);
+}
+
+.pi-item-card__icon--blue {
+  background: oklch(0.55 0.12 250 / 0.10);
+  color: oklch(0.45 0.10 250);
+}
+
+.pi-item-card__icon--purple {
+  background: oklch(0.55 0.12 300 / 0.10);
+  color: oklch(0.45 0.10 300);
+}
+
+.pi-item-card__icon--amber {
+  background: oklch(0.72 0.16 84 / 0.12);
+  color: oklch(0.55 0.14 84);
+}
+
+.pi-item-card__text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1;
+  min-width: 0;
+}
+
+.pi-item-card__name {
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  font-weight: 500;
+  color: var(--foreground);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pi-item-card__desc {
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  color: var(--muted-foreground);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pi-item-card__meta {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--muted-foreground);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pi-item-card__right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.pi-item-card__chevron {
+  width: 16px;
+  height: 16px;
+  color: var(--muted-foreground);
+  transition: transform var(--duration-fast);
+  flex-shrink: 0;
+}
+
+.pi-item-card[data-expanded] .pi-item-card__chevron {
+  transform: rotate(90deg);
+}
+
+.pi-item-card__body {
+  display: none;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 12px 12px;
+  border-top: var(--pi-divider);
+}
+
+.pi-item-card[data-expanded] .pi-item-card__body {
+  display: flex;
+}
+
+/* Config rows inside expanded cards */
+.pi-item-card__config-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.pi-item-card__config-label {
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  color: var(--muted-foreground);
+  flex-shrink: 0;
+}
+
+.pi-item-card__config-value {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--foreground);
+  background: var(--alpha-4);
+  padding: 3px 7px;
+  border-radius: 6px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 260px;
+}
+
+.pi-item-card__config-input {
+  flex: 1;
+  max-width: 260px;
+  border: 1px solid var(--alpha-10);
+  border-radius: var(--radius-sm);
+  padding: 5px 8px;
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  background: var(--white-alpha-65);
+  color: var(--foreground);
+  outline: none;
+}
+
+.pi-item-card__config-input:focus {
+  border-color: var(--green-alpha-25);
+  box-shadow: 0 0 0 2px var(--pi-green-lighter);
+}
+
+/* Permissions grid */
+.pi-item-card__permissions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.pi-item-card__permissions .pi-toggle-row {
+  min-height: 22px;
+}
+
+/* ── Section header ─────────────────────────────────── */
+
+.pi-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-bottom: 4px;
+}
+
+.pi-section-header__label {
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--muted-foreground);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.pi-section-header__count {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--muted-foreground);
+}
+
+.pi-section-header__action {
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  color: var(--primary);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+.pi-section-header__action:hover {
+  text-decoration: underline;
+}
+
+/* ── Callout / notice ───────────────────────────────── */
+
+.pi-callout {
+  display: flex;
+  gap: 10px;
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+}
+
+.pi-callout--info {
+  background: oklch(0.55 0.12 250 / 0.06);
+  border: 1px solid oklch(0.55 0.12 250 / 0.15);
+  color: oklch(0.35 0.08 250);
+}
+
+.pi-callout--warn {
+  background: oklch(0.72 0.16 84 / 0.08);
+  border: 1px solid oklch(0.72 0.16 84 / 0.20);
+  color: oklch(0.45 0.10 84);
+}
+
+.pi-callout--success {
+  background: var(--green-alpha-6);
+  border: 1px solid var(--green-alpha-14);
+  color: oklch(0.35 0.10 160);
+}
+
+.pi-callout--compact {
+  padding: 6px 10px;
+}
+
+.pi-callout__icon {
+  flex-shrink: 0;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.pi-callout__body {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ── Add form (dashed border) ───────────────────────── */
+
+.pi-add-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px dashed var(--alpha-12);
+  border-radius: 10px;
+  background: var(--alpha-2);
+}
+
+.pi-add-form__row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.pi-add-form__input {
+  flex: 1;
+  border: 1px solid var(--alpha-10);
+  border-radius: var(--radius-sm);
+  padding: 6px 8px;
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  background: var(--white-alpha-70);
+  color: var(--foreground);
+  outline: none;
+}
+
+.pi-add-form__input:focus {
+  border-color: var(--green-alpha-25);
+  box-shadow: 0 0 0 2px var(--pi-green-lighter);
+}
+
+.pi-add-form__input::placeholder {
+  color: var(--muted-foreground);
+}
+
+/* ── Empty state (inline) ───────────────────────────── */
+
+.pi-empty-inline {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 20px 12px;
+  text-align: center;
+  border: 1px dashed var(--alpha-8);
+  border-radius: 10px;
+}
+
+.pi-empty-inline__icon {
+  font-size: 20px;
+  opacity: 0.4;
+}
+
+.pi-empty-inline__text {
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  color: var(--muted-foreground);
+}
+
+/* ── Layout helpers (avoiding inline styles) ────────── */
+
+.pi-hub-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pi-hub-stack--lg {
+  gap: 12px;
+}
+
+.pi-hub-inline-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex: 1;
+  max-width: 260px;
+}
+
+.pi-hub-actions-end {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.pi-hub-code-toggle {
+  font-size: var(--text-xs);
+  display: block;
+  text-align: center;
+  width: 100%;
+}
+
+.pi-hub-textarea {
+  min-height: 80px;
+  resize: vertical;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+
+.pi-hub-advanced-summary {
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  color: var(--muted-foreground);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  user-select: none;
+}
+
+.pi-hub-advanced-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.pi-hub-warn-text {
+  color: var(--destructive);
+}
+
+.pi-item-card__config-select {
+  max-width: 180px;
+}
+
+/* ── Reduced motion ─────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  .pi-item-card,
+  .pi-item-card__chevron {
+    transition: none;
+  }
+}

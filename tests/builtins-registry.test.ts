@@ -151,7 +151,7 @@ void test("extensions builtins expose /extensions without /addons alias", async 
 
   assert.match(source, /name:\s*"extensions"/);
   assert.doesNotMatch(source, /name:\s*"addons"/);
-  assert.match(source, /openAddonsManager/);
+  assert.match(source, /openExtensionsHub/);
 });
 
 void test("add-ons connections section links to detailed Tools & MCP manager", async () => {
@@ -177,16 +177,12 @@ void test("taskpane init wires Files workspace opener", async () => {
 void test("taskpane init wires extensions menu opener", async () => {
   const initSource = await readFile(new URL("../src/taskpane/init.ts", import.meta.url), "utf8");
 
-  assert.match(initSource, /const openAddonsManager = \(section\?: AddonsSection\) =>/);
-  assert.match(initSource, /showAddonsDialog\(/);
-  assert.match(initSource, /listExtensions:\s*\(\)\s*=>\s*extensionManager\.list\(\)/);
-  assert.match(initSource, /setExtensionEnabled:\s*\(entryId: string, enabled: boolean\)\s*=>\s*extensionManager\.setExtensionEnabled\(entryId, enabled\)/);
-  assert.match(initSource, /openIntegrationsManager/);
-  assert.match(initSource, /openSkillsManager/);
-  assert.match(initSource, /openExtensionsManager/);
+  assert.match(initSource, /const openExtensionsHub = \(tab\?: ExtensionsHubTab\): void =>/);
+  assert.match(initSource, /showExtensionsHubDialog\(/);
+  assert.match(initSource, /extensionManager/);
   assert.match(initSource, /configureSettingsDialogDependencies/);
-  assert.match(initSource, /registerBuiltins\([\s\S]*openAddonsManager/);
-  assert.match(initSource, /sidebar\.onOpenExtensions\s*=\s*\(\)\s*=>\s*\{\s*openAddonsManager\(\);\s*\};/);
+  assert.match(initSource, /registerBuiltins\([\s\S]*openExtensionsHub/);
+  assert.match(initSource, /sidebar\.onOpenExtensions\s*=\s*\(\)\s*=>\s*\{\s*openExtensionsHub\(\);\s*\};/);
 });
 
 void test("taskpane init wires gear settings to unified settings overlay", async () => {
@@ -208,28 +204,28 @@ void test("sidebar utilities menu includes extensions label", async () => {
   assert.doesNotMatch(sidebarSource, /Add-ons…/);
 });
 
-void test("extensions overlay groups connections, plugins, and skills with tabs", async () => {
-  const addonsSource = await readFile(new URL("../src/commands/builtins/addons-overlay.ts", import.meta.url), "utf8");
+void test("extensions hub groups connections, plugins, and skills with tabs", async () => {
+  const hubSource = await readFile(new URL("../src/commands/builtins/extensions-hub-overlay.ts", import.meta.url), "utf8");
   const connectionsSource = await readFile(
-    new URL("../src/commands/builtins/addons-overlay-connections.ts", import.meta.url),
+    new URL("../src/commands/builtins/extensions-hub-connections.ts", import.meta.url),
     "utf8",
   );
-  const extensionsSource = await readFile(
-    new URL("../src/commands/builtins/addons-overlay-extensions.ts", import.meta.url),
+  const pluginsSource = await readFile(
+    new URL("../src/commands/builtins/extensions-hub-plugins.ts", import.meta.url),
     "utf8",
   );
   const skillsSource = await readFile(
-    new URL("../src/commands/builtins/addons-overlay-skills.ts", import.meta.url),
+    new URL("../src/commands/builtins/extensions-hub-skills.ts", import.meta.url),
     "utf8",
   );
 
-  assert.match(addonsSource, /Connections, plugins, and skills in one place/);
-  assert.match(addonsSource, /data-extensions-tab/);
-  assert.match(connectionsSource, /dataset\.addonsSection = "connections"/);
-  assert.match(connectionsSource, /configured \(blocked\)/);
-  assert.match(extensionsSource, /dataset\.addonsSection = "plugins"/);
-  assert.match(extensionsSource, /renderPluginsSection/);
-  assert.match(skillsSource, /dataset\.addonsSection = "skills"/);
+  assert.match(hubSource, /title:\s*"Extensions"/);
+  assert.match(hubSource, /Connections, plugins, and skills that extend Pi/);
+  assert.match(hubSource, /dataset\.hubTab/);
+  assert.match(hubSource, /dataset\.hubPanel/);
+  assert.match(connectionsSource, /Web search/);
+  assert.match(pluginsSource, /Installed/);
+  assert.match(skillsSource, /Bundled skills/);
 });
 
 void test("context pill headers expose expanded state and controlled body", async () => {
@@ -299,7 +295,7 @@ void test("provider and experimental overlays are aliases into settings sections
   assert.match(experimentalSource, /buildExperimentalFeatureContent/);
 });
 
-void test("extensions and alias commands deep-link to extensions sections", async () => {
+void test("extensions and alias commands deep-link to hub tabs", async () => {
   const addonsSource = await readFile(new URL("../src/commands/builtins/addons.ts", import.meta.url), "utf8");
   const integrationsSource = await readFile(new URL("../src/commands/builtins/integrations.ts", import.meta.url), "utf8");
   const extensionsSource = await readFile(new URL("../src/commands/builtins/extensions.ts", import.meta.url), "utf8");
@@ -307,11 +303,11 @@ void test("extensions and alias commands deep-link to extensions sections", asyn
 
   assert.match(addonsSource, /name:\s*"extensions"/);
   assert.doesNotMatch(addonsSource, /name:\s*"addons"/);
-  assert.match(addonsSource, /openAddonsManager\(\)/);
+  assert.match(addonsSource, /openExtensionsHub\(\)/);
 
-  assert.match(integrationsSource, /openAddonsManager\("connections"\)/);
-  assert.match(extensionsSource, /openAddonsManager\("plugins"\)/);
-  assert.match(skillsSource, /openAddonsManager\("skills"\)/);
+  assert.match(integrationsSource, /openExtensionsHub\("connections"\)/);
+  assert.match(extensionsSource, /openExtensionsHub\("plugins"\)/);
+  assert.match(skillsSource, /openExtensionsHub\("skills"\)/);
 });
 
 void test("settings overlay serializes open flow and tolerates provider storage lookup failure", async () => {
