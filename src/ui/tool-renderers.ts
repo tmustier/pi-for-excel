@@ -210,7 +210,7 @@ function renderImages(images: ImageContent[]): TemplateResult {
         const src = `data:${img.mimeType};base64,${img.data}`;
         return html`
           <div class="border border-border rounded-lg overflow-hidden bg-background">
-            <img src=${src} class="block w-full h-auto" />
+            <img src=${src} alt="Tool result image" class="block w-full h-auto" />
           </div>
         `;
       })}

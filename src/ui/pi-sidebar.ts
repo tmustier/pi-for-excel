@@ -932,13 +932,14 @@ export class PiSidebar extends LitElement {
       return html`
         <div class="px-4">
           <div class="pi-context-pill">
-            <div
+            <button
+              type="button"
               class="pi-context-pill__header"
               @click=${this._toggleContextPill}
             >
               <span>Context · no calls yet for this session</span>
               <span class="pi-context-pill__chevron ${expanded ? "pi-context-pill__chevron--open" : ""}">${icon(ChevronRight, "sm")}</span>
-            </div>
+            </button>
             ${expanded ? html`
               <div class="pi-context-pill__body">
                 <div class="pi-context-pill__section">
@@ -1007,13 +1008,14 @@ export class PiSidebar extends LitElement {
     return html`
       <div class="px-4">
         <div class="pi-context-pill">
-          <div
+          <button
+            type="button"
             class="pi-context-pill__header"
             @click=${this._toggleContextPill}
           >
             <span>Context · call #${call}${phaseLabel} · ${formatK(total)} chars</span>
             <span class="pi-context-pill__chevron ${expanded ? "pi-context-pill__chevron--open" : ""}">${icon(ChevronRight, "sm")}</span>
-          </div>
+          </button>
           ${expanded ? html`
             <div class="pi-context-pill__body">
               <div class="pi-context-pill__section">

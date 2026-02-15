@@ -35,6 +35,7 @@
   line-height: 1.55;
   max-width: 220px;
   margin: 0;
+  text-wrap: balance;
 }
 
 .pi-empty__hints {

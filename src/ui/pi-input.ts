@@ -286,6 +286,8 @@ export class PiInput extends LitElement {
           .value=${this._value}
           placeholder=${this.isStreaming ? "Guide response (↵) · New question (⌥↵)" : PLACEHOLDER_HINTS[this._placeholderIndex]}
           rows="1"
+          aria-label="Chat message"
+          autocomplete="off"
           @input=${this._onInput}
           @keydown=${this._onKeydown}
         ></textarea>

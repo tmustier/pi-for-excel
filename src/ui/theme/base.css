@@ -25,3 +25,17 @@ body {
 *::-webkit-scrollbar-thumb:hover { background: oklch(0.70 0 0); }
 
 
+/* Prevent double-tap zoom delay on touch devices */
+button, a, [role="button"], [role="menuitem"], input, textarea, select {
+  touch-action: manipulation;
+}
+
+/* Reduced-motion: collapse all animations and transitions globally */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

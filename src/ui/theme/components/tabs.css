@@ -141,10 +141,13 @@
   caret-color: transparent;
 }
 
-.pi-session-tab__main:focus,
+.pi-session-tab__main:focus {
+  outline: none;
+}
+
 .pi-session-tab__main:focus-visible {
   outline: none;
-  box-shadow: none;
+  box-shadow: 0 0 0 2px var(--green-alpha-12);
 }
 
 .pi-session-tab__title {

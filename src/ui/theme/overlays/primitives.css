@@ -5,6 +5,7 @@
   width: min(520px, 92vw);
   max-height: min(80vh, 720px);
   gap: 10px;
+  overscroll-behavior: contain;
 }
 
 .pi-overlay-card--s {
@@ -25,6 +26,7 @@
   font-size: var(--text-md);
   font-weight: 600;
   color: var(--foreground);
+  text-wrap: balance;
 }
 
 .pi-overlay-tabs {

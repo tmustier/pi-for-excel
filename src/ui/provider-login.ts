@@ -147,6 +147,8 @@ function promptForText(opts: {
     const input = document.createElement("input");
     input.className = "pi-prompt-input";
     input.type = "text";
+    input.autocomplete = "off";
+    input.setAttribute("aria-label", opts.title);
 
     const actions = document.createElement("div");
     actions.className = "pi-prompt-actions";
@@ -267,7 +269,7 @@ export function buildProviderRow(
         </div>
       ` : ""}
       <div class="pi-login-key-row">
-        <input class="pi-login-key" type="password" placeholder="${keyPlaceholder}" />
+        <input class="pi-login-key" type="password" placeholder="${keyPlaceholder}" aria-label="API key for ${label}" autocomplete="off" spellcheck="false" />
         <button class="pi-login-save">Save</button>
       </div>
       <p class="pi-login-error" hidden></p>

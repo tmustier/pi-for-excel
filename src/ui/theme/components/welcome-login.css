@@ -117,6 +117,11 @@
   outline: none;
 }
 
+.pi-welcome-proxy__url:focus-visible {
+  border-color: var(--green-alpha-25);
+  box-shadow: 0 0 0 2px var(--pi-green-lighter);
+}
+
 .pi-welcome-proxy__save {
   padding: 7px 10px;
   border-radius: var(--radius-sm);
@@ -202,6 +207,7 @@
   font-size: var(--text-md);
   font-weight: 600;
   color: var(--foreground);
+  text-wrap: balance;
 }
 
 .pi-prompt-message {
@@ -232,7 +238,7 @@
   outline: none;
 }
 
-.pi-prompt-input:focus {
+.pi-prompt-input:focus-visible {
   border-color: var(--green-alpha-25);
   box-shadow: 0 0 0 2px var(--pi-green-lighter);
 }
@@ -389,7 +395,7 @@
   outline: none;
 }
 
-.pi-login-key:focus {
+.pi-login-key:focus-visible {
   border-color: var(--green-alpha-25);
   box-shadow: 0 0 0 2px var(--pi-green-lighter);
 }
