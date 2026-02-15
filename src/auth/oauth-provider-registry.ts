@@ -11,8 +11,11 @@ import type { OAuthProviderInterface } from "@mariozechner/pi-ai";
 import { anthropicOAuthProvider } from "@mariozechner/pi-ai/dist/utils/oauth/anthropic.js";
 import { githubCopilotOAuthProvider } from "@mariozechner/pi-ai/dist/utils/oauth/github-copilot.js";
 
+import { openaiCodexBrowserOAuthProvider } from "./openai-codex-browser-oauth.js";
+
 const OAUTH_PROVIDERS: Map<string, OAuthProviderInterface> = new Map([
   [anthropicOAuthProvider.id, anthropicOAuthProvider],
+  [openaiCodexBrowserOAuthProvider.id, openaiCodexBrowserOAuthProvider],
   [githubCopilotOAuthProvider.id, githubCopilotOAuthProvider],
 ]);
 

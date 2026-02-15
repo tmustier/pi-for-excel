@@ -20,5 +20,5 @@ export function mapToApiProvider(oauthProviderId: string): string {
   return PROVIDER_MAP[oauthProviderId] || oauthProviderId;
 }
 
-/** OAuth providers whose flows work in-browser (PKCE, no server needed) */
-export const BROWSER_OAUTH_PROVIDERS = ["anthropic", "github-copilot"];
+/** OAuth providers whose flows work in-browser (PKCE/manual paste, no local callback server) */
+export const BROWSER_OAUTH_PROVIDERS = ["anthropic", "openai-codex", "github-copilot"];
