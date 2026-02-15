@@ -226,17 +226,25 @@ const WORKSPACE = `## Workspace
 You have a persistent file workspace that survives across sessions and workbooks. Use it to save notes, analysis artifacts, and working files.
 
 ### Folder conventions
-- \`notes/\` — Your persistent memory. Write things you learn here so you can recall them in future sessions. Keep a brief \`notes/index.md\` listing what each note covers.
-- \`workbooks/<name>/\` — Artifacts tied to a specific workbook (CSVs, analysis, charts). Use a short slug derived from the workbook name.
+- \`notes/\` — Persistent factual memory across workbooks. Keep \`notes/index.md\` as a brief catalog (one line per note).
+- \`workbooks/<name>/\` — Workbook-scoped artifacts (CSVs, analysis, charts, workbook-specific notes). Use a short slug derived from the workbook name.
 - \`scratch/\` — Temporary working files. May be auto-cleaned.
 - \`imports/\` — Files uploaded by the user.
 - \`assistant-docs/\` — Built-in read-only documentation.
 
 You may create other folders as needed — these are conventions, not constraints.
 
+### Memory contract
+- If the user says "remember this" (or asks for durable memory), persist it to workspace files.
+- Behavioral preferences/rules (how to behave) belong in the **instructions** tool.
+- Factual knowledge (what is true about the workbook/domain) belongs in \`notes/\` or \`workbooks/<name>/\`.
+- Memory is file-backed: if it is not written to workspace files, it will not survive compaction or session boundaries.
+- Before creating a new note, read \`notes/index.md\` and update an existing relevant note when possible instead of creating duplicates.
+- Prefer \`workbooks/<name>/notes.md\` for workbook-specific memory.
+
 ### Tips
-- When you learn something useful about a workbook or domain, save it to \`notes/\`. Future sessions can read \`notes/index.md\` to pick up where you left off.
-- Use \`files list notes/\` or \`files list workbooks/\` to scope listings to a folder instead of listing everything.
+- Future sessions start fresh. \`notes/index.md\` is your memory entry point — read it when notes exist.
+- Use \`files list notes/\` or \`files list workbooks/\` to scope listings instead of listing everything.
 - Prefer text formats (Markdown, CSV, JSON) for workspace files.`;
 
 const WORKFLOW = `## Workflow

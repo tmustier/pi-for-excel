@@ -117,7 +117,11 @@ void test("system prompt includes workspace folder conventions", () => {
   assert.match(prompt, /scratch\//);
   assert.match(prompt, /imports\//);
   assert.match(prompt, /notes\/index\.md/);
-  assert.match(prompt, /persistent memory/i);
+  assert.match(prompt, /Memory contract/);
+  assert.match(prompt, /remember this/i);
+  assert.match(prompt, /file-backed/i);
+  assert.match(prompt, /\*\*instructions\*\* tool/i);
+  assert.match(prompt, /workbooks\/<name>\/notes\.md/i);
 });
 
 void test("system prompt mentions extension manager tool for chat-driven authoring", () => {

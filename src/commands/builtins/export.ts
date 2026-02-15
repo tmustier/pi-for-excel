@@ -19,6 +19,11 @@ import { isRecord } from "../../utils/type-guards.js";
 import type { PiSidebar } from "../../ui/pi-sidebar.js";
 import { getWorkbookChangeAuditLog } from "../../audit/workbook-change-audit.js";
 import { effectiveKeepRecentTokens, effectiveReserveTokens } from "../../compaction/defaults.js";
+import {
+  buildCompactionMemoryFocusInstruction,
+  collectCompactionMemoryCues,
+  mergeCompactionAdditionalFocus,
+} from "../../compaction/memory-nudge.js";
 
 type TranscriptEntry = {
   role: AgentMessage["role"];
@@ -535,6 +540,8 @@ export function createCompactCommands(getActiveAgent: ActiveAgentProvider): Slas
         );
 
         const { boundaryStart, previousSummary } = getPreviousCompaction(messagesWithoutArchived);
+        const userCompactionFocus = args.trim() || undefined;
+        let memoryNudgeShown = false;
 
         const runOnce = async (limits: SerializeLimits, keepRecentOverride?: number): Promise<{
           summary: string;
@@ -551,8 +558,22 @@ export function createCompactCommands(getActiveAgent: ActiveAgentProvider): Slas
             throw new Error("Nothing to compact");
           }
 
+          const memoryCues = collectCompactionMemoryCues(messagesToSummarize);
+          if (memoryCues.cueCount > 0 && !memoryNudgeShown) {
+            const cueLabel = memoryCues.cueCount === 1 ? "cue" : "cues";
+            showToast(
+              `Compaction reminder: found ${memoryCues.cueCount} memory ${cueLabel} in older messages. Save durable facts to notes/ (rules via instructions) if needed.`,
+              12000,
+            );
+            memoryNudgeShown = true;
+          }
+
           const conversationText = serializeConversation(messagesToSummarize, limits);
-          const customInstructions = args.trim() || undefined;
+          const memoryFocus = buildCompactionMemoryFocusInstruction(memoryCues);
+          const customInstructions = mergeCompactionAdditionalFocus(
+            userCompactionFocus,
+            memoryFocus,
+          );
           const promptText = buildSummarizationPrompt({
             conversationText,
             previousSummary,

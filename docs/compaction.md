@@ -51,6 +51,13 @@ Then we ask the current model to produce a structured checkpoint (or update the 
 
 Those arguments are appended to the prompt as an “Additional focus”.
 
+Compaction also runs a lightweight **memory nudge** on the messages being summarized:
+
+- if older user messages include explicit memory cues (for example, "remember this" / "don't forget"), Pi shows a reminder toast before summarization
+- the summarizer gets extra focus instructions to call out durable memory in **Critical Context** and distinguish:
+  - behavioral preferences/rules → `instructions`
+  - factual memory → `notes/` or workbook-scoped notes
+
 ### 4) Replace the session messages
 
 After summarization succeeds, we replace the in-memory session with:
