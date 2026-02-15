@@ -231,6 +231,8 @@ Expected:
 
 Automated baseline coverage exists in `tests/error-path-matrix.test.ts` (wrong key, expired token, proxy-down transport, rate-limit errors, network disconnect). Still run the host/manual matrix below for UX behavior validation.
 
+For a focused desktop-Excel pass, use `docs/release-smoke-runs/templates/macos-h1-host-operator-template.md`.
+
 Validate these explicit failures:
 
 - wrong API key
