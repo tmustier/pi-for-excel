@@ -1523,19 +1523,6 @@ export async function initTaskpane(opts: {
   };
 
 
-  // ── Disclosure bar (onboarding banner) ──
-  {
-    const { createDisclosureBar } = await import("../ui/disclosure-bar.js");
-    const disclosureEl = createDisclosureBar({ providerCount: availableProviders.length });
-    if (disclosureEl) {
-      // Insert above the message list, inside the sidebar's messages area.
-      const messagesContainer = sidebar.querySelector(".pi-messages");
-      if (messagesContainer) {
-        messagesContainer.parentElement?.insertBefore(disclosureEl, messagesContainer);
-      }
-    }
-  }
-
   // Bootstrap from persisted tab layout; fallback to legacy single-runtime restore.
   const restoredRuntime = await restorePersistedTabLayout();
   if (!restoredRuntime) {
@@ -1544,6 +1531,19 @@ export async function initTaskpane(opts: {
 
   tabLayoutPersistence.enable();
   maybePersistTabLayout();
+
+  // ── Disclosure bar (onboarding banner) ──
+  // Must run after runtime bootstrap so the sidebar has rendered .pi-messages.
+  {
+    const { createDisclosureBar } = await import("../ui/disclosure-bar.js");
+    const disclosureEl = createDisclosureBar({ providerCount: availableProviders.length });
+    if (disclosureEl) {
+      const messagesContainer = sidebar.querySelector(".pi-messages");
+      if (messagesContainer) {
+        messagesContainer.parentElement?.insertBefore(disclosureEl, messagesContainer);
+      }
+    }
+  }
 
   // ── Register extensions ──
   await extensionManager.initialize();
