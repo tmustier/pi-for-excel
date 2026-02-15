@@ -41,9 +41,14 @@ async function probeProxy(proxyUrl: string): Promise<boolean> {
   const timeout = setTimeout(() => controller.abort(), CHECK_TIMEOUT_MS);
 
   try {
-    const url = `${proxyUrl.replace(/\/+$/, "")}/?url=${encodeURIComponent("https://example.com")}`;
-    const resp = await fetch(url, { signal: controller.signal });
-    return resp.ok;
+    // Probe without a ?url= parameter — the proxy returns 400 ("Missing target"),
+    // which proves it's running. This avoids hitting the target allowlist.
+    const url = `${proxyUrl.replace(/\/+$/, "")}/`;
+    const resp = await fetch(url, { method: "HEAD", signal: controller.signal });
+    // Any response (200, 400, 404) proves the proxy is reachable.
+    // Only network errors (fetch throws) indicate it's not running.
+    void resp;
+    return true;
   } catch {
     return false;
   } finally {

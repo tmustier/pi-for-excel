@@ -1715,6 +1715,13 @@ export async function initTaskpane(opts: {
       return;
     }
 
+    // Proxy status — "no helper" click opens settings
+    if (el.closest(".pi-status-proxy--missing")) {
+      closeStatusPopover();
+      void showSettingsDialog();
+      return;
+    }
+
     closeStatusPopover();
   });
 
