@@ -51,6 +51,8 @@ import {
   getErrorMessage,
   normalizeSandboxToolParameters,
   normalizeSandboxToolResult,
+  parseSandboxHttpRequestOptions,
+  parseSandboxLlmCompletionRequest,
   sanitizeText,
 } from "./sandbox/runtime-helpers.js";
 import { isRecord } from "../utils/type-guards.js";
@@ -481,39 +483,7 @@ class SandboxRuntimeHost {
           this.assertCapability("llm.complete");
 
           const payload = asRecord(params, "llm_complete params");
-          const request = payload.request;
-
-          if (!isRecord(request)) {
-            throw new Error("llm_complete request must be an object.");
-          }
-
-          const messagesRaw = request.messages;
-          if (!Array.isArray(messagesRaw)) {
-            throw new Error("llm_complete request.messages must be an array.");
-          }
-
-          const messages: LlmCompletionRequest["messages"] = [];
-          for (const value of messagesRaw) {
-            if (!isRecord(value)) {
-              throw new Error("llm_complete messages entries must be objects.");
-            }
-
-            const role = value.role;
-            const content = value.content;
-            if ((role !== "user" && role !== "assistant") || typeof content !== "string") {
-              throw new Error("llm_complete messages entries must contain role + string content.");
-            }
-
-            messages.push({ role, content });
-          }
-
-          const completionRequest: LlmCompletionRequest = {
-            model: typeof request.model === "string" ? request.model : undefined,
-            systemPrompt: typeof request.systemPrompt === "string" ? request.systemPrompt : undefined,
-            messages,
-            maxTokens: typeof request.maxTokens === "number" ? request.maxTokens : undefined,
-          };
-
+          const completionRequest = parseSandboxLlmCompletionRequest(payload.request);
           const result = await this.options.llmComplete(completionRequest);
           this.sendResponse(requestId, true, result);
           return;
@@ -524,39 +494,7 @@ class SandboxRuntimeHost {
 
           const payload = asRecord(params, "http_fetch params");
           const url = asNonEmptyString(payload.url, "url");
-          const optionsRaw = payload.options;
-          let options: HttpRequestOptions | undefined;
-
-          if (isRecord(optionsRaw)) {
-            const methodRaw = optionsRaw.method;
-            const method = methodRaw === "GET"
-              || methodRaw === "POST"
-              || methodRaw === "PUT"
-              || methodRaw === "PATCH"
-              || methodRaw === "DELETE"
-              || methodRaw === "HEAD"
-              ? methodRaw
-              : undefined;
-
-            const headersRaw = optionsRaw.headers;
-            let headers: Record<string, string> | undefined;
-            if (isRecord(headersRaw)) {
-              headers = {};
-              for (const [key, value] of Object.entries(headersRaw)) {
-                if (typeof value === "string") {
-                  headers[key] = value;
-                }
-              }
-            }
-
-            options = {
-              method,
-              headers,
-              body: typeof optionsRaw.body === "string" ? optionsRaw.body : undefined,
-              timeoutMs: typeof optionsRaw.timeoutMs === "number" ? optionsRaw.timeoutMs : undefined,
-            };
-          }
-
+          const options = parseSandboxHttpRequestOptions(payload.options);
           const response = await this.options.httpFetch(url, options);
           this.sendResponse(requestId, true, response);
           return;

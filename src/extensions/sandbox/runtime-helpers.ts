@@ -1,6 +1,7 @@
 import type { AgentToolResult } from "@mariozechner/pi-agent-core";
 import { Kind, Type, type TSchema } from "@sinclair/typebox";
 
+import type { HttpRequestOptions, LlmCompletionRequest } from "../../commands/extension-api.js";
 import { isRecord } from "../../utils/type-guards.js";
 
 type WidgetPlacement = "above-input" | "below-input";
@@ -71,6 +72,74 @@ export function asWidgetPlacementOrUndefined(value: unknown): WidgetPlacement | 
 
 export function asBooleanOrUndefined(value: unknown): boolean | undefined {
   return typeof value === "boolean" ? value : undefined;
+}
+
+export function parseSandboxLlmCompletionRequest(requestRaw: unknown): LlmCompletionRequest {
+  if (!isRecord(requestRaw)) {
+    throw new Error("llm_complete request must be an object.");
+  }
+
+  const messagesRaw = requestRaw.messages;
+  if (!Array.isArray(messagesRaw)) {
+    throw new Error("llm_complete request.messages must be an array.");
+  }
+
+  const messages: LlmCompletionRequest["messages"] = [];
+  for (const value of messagesRaw) {
+    if (!isRecord(value)) {
+      throw new Error("llm_complete messages entries must be objects.");
+    }
+
+    const role = value.role;
+    const content = value.content;
+    if ((role !== "user" && role !== "assistant") || typeof content !== "string") {
+      throw new Error("llm_complete messages entries must contain role + string content.");
+    }
+
+    messages.push({ role, content });
+  }
+
+  return {
+    model: typeof requestRaw.model === "string" ? requestRaw.model : undefined,
+    systemPrompt: typeof requestRaw.systemPrompt === "string" ? requestRaw.systemPrompt : undefined,
+    messages,
+    maxTokens: typeof requestRaw.maxTokens === "number" ? requestRaw.maxTokens : undefined,
+  };
+}
+
+function asHttpMethodOrUndefined(value: unknown): HttpRequestOptions["method"] | undefined {
+  return value === "GET"
+    || value === "POST"
+    || value === "PUT"
+    || value === "PATCH"
+    || value === "DELETE"
+    || value === "HEAD"
+    ? value
+    : undefined;
+}
+
+export function parseSandboxHttpRequestOptions(optionsRaw: unknown): HttpRequestOptions | undefined {
+  if (!isRecord(optionsRaw)) {
+    return undefined;
+  }
+
+  const headersRaw = optionsRaw.headers;
+  let headers: Record<string, string> | undefined;
+  if (isRecord(headersRaw)) {
+    headers = {};
+    for (const [key, value] of Object.entries(headersRaw)) {
+      if (typeof value === "string") {
+        headers[key] = value;
+      }
+    }
+  }
+
+  return {
+    method: asHttpMethodOrUndefined(optionsRaw.method),
+    headers,
+    body: typeof optionsRaw.body === "string" ? optionsRaw.body : undefined,
+    timeoutMs: typeof optionsRaw.timeoutMs === "number" ? optionsRaw.timeoutMs : undefined,
+  };
 }
 
 function isTypeBoxSchema(value: unknown): value is TSchema {
