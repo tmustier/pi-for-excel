@@ -163,16 +163,31 @@ test("proxy default allowlist includes supported web search providers", async (t
   });
 
   const { stdout } = proxy.getLogs();
-  const hosts = [
+  const allowlistLine = stdout
+    .split("\n")
+    .find((line) => line.includes("Allowed target hosts"));
+
+  assert.ok(allowlistLine, "Expected startup logs to include default allowed target hosts");
+
+  const loggedHosts = new Set(
+    allowlistLine
+      .split(":")
+      .slice(1)
+      .join(":")
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean),
+  );
+
+  const requiredHosts = [
     "s.jina.ai",
     "google.serper.dev",
     "api.tavily.com",
     "api.search.brave.com",
   ];
 
-  for (const host of hosts) {
-    const escapedHost = host.replaceAll(".", "\\.");
-    assert.match(stdout, new RegExp(`\\b${escapedHost}\\b`));
+  for (const host of requiredHosts) {
+    assert.ok(loggedHosts.has(host), `Expected ${host} in default target allowlist log`);
   }
 });
 
