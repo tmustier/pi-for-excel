@@ -16,21 +16,7 @@ import {
   DEFAULT_LOCAL_PROXY_URL,
   validateOfficeProxyUrl,
 } from "./proxy-validation.js";
-
-const DEV_REWRITES: [string, string][] = [
-  // OAuth token endpoints
-  ["https://console.anthropic.com/", "/oauth-proxy/anthropic/"],
-  ["https://github.com/", "/oauth-proxy/github/"],
-  ["https://auth.openai.com/", "/api-proxy/openai-auth/"],
-  ["https://oauth2.googleapis.com/", "/api-proxy/google-oauth/"],
-  // API endpoints
-  ["https://api.anthropic.com/", "/api-proxy/anthropic/"],
-  ["https://api.openai.com/", "/api-proxy/openai/"],
-  ["https://chatgpt.com/", "/api-proxy/chatgpt/"],
-  ["https://generativelanguage.googleapis.com/", "/api-proxy/google/"],
-  ["https://cloudcode-pa.googleapis.com/", "/api-proxy/google-cloudcode/"],
-  ["https://daily-cloudcode-pa.sandbox.googleapis.com/", "/api-proxy/google-cloudcode-sandbox/"],
-];
+import { rewriteDevProxyUrl } from "./dev-rewrites.js";
 
 /** The original, un-patched fetch — use for requests that should bypass the proxy */
 export let originalFetch: typeof window.fetch;
@@ -144,14 +130,7 @@ export function installFetchInterceptor(): void {
 
     // Dev: Vite reverse proxies
     if (import.meta.env.DEV) {
-      let rewritten: string | null = null;
-      for (const [prefix, proxy] of DEV_REWRITES) {
-        if (url.startsWith(prefix)) {
-          rewritten = url.replace(prefix, proxy);
-          break;
-        }
-      }
-
+      const rewritten = rewriteDevProxyUrl(url);
       if (!rewritten) return originalFetch(input, init);
 
       const newInit = stripAnthropicBrowserHeader(init);

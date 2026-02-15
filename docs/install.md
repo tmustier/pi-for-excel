@@ -124,6 +124,19 @@ If the user is non-technical, a teammate/admin can run this step for them on the
 
 3. Retry OAuth login
 
+Quick proxy sanity check (advanced):
+- In Terminal, run:
+
+```bash
+curl -k -i -s \
+  'https://localhost:3000/api-proxy/google-cloudcode/v1internal:streamGenerateContent?alt=sse' \
+  -X POST -H 'content-type: application/json' -d '{}' | head
+```
+
+- `401` means proxy routing is working (request reached Google, but without auth token).
+- `404` usually means a proxy/path issue.
+- Use single quotes around the URL in zsh so `?alt=sse` is not treated as a glob.
+
 Notes:
 - Keep the proxy URL on **HTTPS** (`https://...`), not HTTP.
 - API-key providers generally work without proxy.

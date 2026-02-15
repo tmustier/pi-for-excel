@@ -10,6 +10,7 @@ import {
   providerPriority,
 } from "../src/models/model-ordering.ts";
 import { BROWSER_OAUTH_PROVIDERS, mapToApiProvider } from "../src/auth/provider-map.ts";
+import { rewriteDevProxyUrl } from "../src/auth/dev-rewrites.ts";
 import { installProcessEnvShim } from "../src/compat/process-env-shim.ts";
 
 void test("parseMajorMinor packs Claude-style -major-minor as major*10+minor", () => {
@@ -108,6 +109,25 @@ void test("process-env shim adds process.env for browser-like runtimes", () => {
 
   const envValue = runtime.process.env;
   assert.ok(envValue && typeof envValue === "object" && !Array.isArray(envValue));
+});
+
+void test("dev rewrite routes cloudcode hosts to dedicated proxies", () => {
+  assert.equal(
+    rewriteDevProxyUrl("https://cloudcode-pa.googleapis.com/v1internal:streamGenerateContent?alt=sse"),
+    "/api-proxy/google-cloudcode/v1internal:streamGenerateContent?alt=sse",
+  );
+
+  assert.equal(
+    rewriteDevProxyUrl("https://daily-cloudcode-pa.sandbox.googleapis.com/v1internal:streamGenerateContent?alt=sse"),
+    "/api-proxy/google-cloudcode-sandbox/v1internal:streamGenerateContent?alt=sse",
+  );
+
+  assert.equal(
+    rewriteDevProxyUrl("https://generativelanguage.googleapis.com/v1beta/models"),
+    "/api-proxy/google/v1beta/models",
+  );
+
+  assert.equal(rewriteDevProxyUrl("https://example.com/test"), null);
 });
 
 void test("vite proxy orders Google routes from most specific to least specific", () => {
