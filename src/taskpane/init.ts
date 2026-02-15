@@ -1350,9 +1350,6 @@ export async function initTaskpane(opts: {
   };
 
   configureSettingsDialogDependencies({
-    openExtensionsHub: (section?: AddonsSection) => {
-      openAddonsManager(section);
-    },
     openRulesDialog: openRulesEditor,
     openRecoveryDialog,
     openShortcutsDialog: showShortcutsDialog,

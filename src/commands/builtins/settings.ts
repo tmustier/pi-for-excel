@@ -53,7 +53,7 @@ export function createSettingsCommands(actions: SettingsCommandActions): SlashCo
   return [
     {
       name: "settings",
-      description: "Settings (logins, extensions, more)",
+      description: "Settings (providers and advanced options)",
       source: "builtin",
       execute: () => {
         void showSettingsDialog();
@@ -61,7 +61,7 @@ export function createSettingsCommands(actions: SettingsCommandActions): SlashCo
     },
     {
       name: "login",
-      description: "Open logins settings (proxy + providers)",
+      description: "Open provider settings",
       source: "builtin",
       execute: async () => {
         await showSettingsDialog({ section: "logins" });

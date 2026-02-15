@@ -2,8 +2,7 @@
  * Unified settings overlay.
  *
  * Tabs:
- * - Logins (Proxy, Providers)
- * - Extensions (opens unified Extensions manager)
+ * - Providers (API keys, local helper)
  * - More (Advanced, Experimental)
  */
 
@@ -51,7 +50,6 @@ interface SettingsStore {
 }
 
 interface SettingsDialogDependencies {
-  openExtensionsHub?: (section?: AddonsSection) => void;
   openRulesDialog?: () => Promise<void> | void;
   openRecoveryDialog?: () => Promise<void> | void;
   openShortcutsDialog?: () => void;
@@ -60,36 +58,14 @@ interface SettingsDialogDependencies {
 interface ResolvedSectionFocus {
   tab: SettingsPrimaryTab;
   anchor?: "proxy" | "providers" | "advanced" | "experimental";
-  extensionSection?: AddonsSection;
 }
 
 const SETTINGS_TABS: ReadonlyArray<{ id: SettingsPrimaryTab; label: string }> = [
-  { id: "logins", label: "Logins" },
-  { id: "extensions", label: "Extensions" },
+  { id: "logins", label: "Providers" },
   { id: "more", label: "More" },
 ];
 
-const EXTENSIONS_LINKS: ReadonlyArray<{
-  section: AddonsSection;
-  label: string;
-  description: string;
-}> = [
-  {
-    section: "connections",
-    label: "Connections",
-    description: "Web search, MCP, and bridge setup",
-  },
-  {
-    section: "plugins",
-    label: "Plugins",
-    description: "Installed plugins and enable/disable state",
-  },
-  {
-    section: "skills",
-    label: "Skills",
-    description: "Bundled + external skill catalog",
-  },
-];
+
 
 let settingsDialogOpenInFlight: Promise<void> | null = null;
 let pendingSectionFocus: SettingsOverlaySection | null = null;
@@ -105,18 +81,16 @@ function resolveSectionFocus(section: SettingsOverlaySection | undefined): Resol
       return { tab: "logins", anchor: "providers" };
     case "proxy":
       return { tab: "logins", anchor: "proxy" };
-    case "connections":
-    case "plugins":
-    case "skills":
-      return { tab: "extensions", extensionSection: section };
     case "advanced":
       return { tab: "more", anchor: "advanced" };
     case "experimental":
       return { tab: "more", anchor: "experimental" };
-    case "extensions":
-      return { tab: "extensions" };
     case "more":
       return { tab: "more" };
+    case "connections":
+    case "plugins":
+    case "skills":
+    case "extensions":
     case "logins":
     default:
       return { tab: "logins" };
@@ -140,15 +114,6 @@ function activateSettingsTab(overlay: HTMLElement, tab: SettingsPrimaryTab): voi
 function applySectionFocus(overlay: HTMLElement, section: SettingsOverlaySection): void {
   const resolved = resolveSectionFocus(section);
   activateSettingsTab(overlay, resolved.tab);
-
-  if (resolved.extensionSection) {
-    const preferred = overlay.querySelector<HTMLButtonElement>(
-      `[data-settings-extension-link="${resolved.extensionSection}"]`,
-    );
-    if (preferred) {
-      preferred.click();
-    }
-  }
 
   if (!resolved.anchor) {
     return;
@@ -235,9 +200,9 @@ async function buildProvidersSection(): Promise<HTMLElement> {
 
 function buildProxySection(settingsStore: SettingsStore): HTMLElement {
   const shell = createSectionShell(
-    "Proxy",
+    "Local helper",
     "proxy",
-    "Use a local HTTPS proxy only when OAuth is blocked by CORS.",
+    "Route requests through a local helper when OAuth is blocked by CORS.",
   );
 
   const card = document.createElement("div");
@@ -253,7 +218,7 @@ function buildProxySection(settingsStore: SettingsStore): HTMLElement {
   enabledInput.type = "checkbox";
 
   const enabledText = document.createElement("span");
-  enabledText.textContent = "Enable proxy";
+  enabledText.textContent = "Route through local helper";
 
   enabledLabel.append(enabledInput, enabledText);
 
@@ -318,7 +283,7 @@ function buildProxySection(settingsStore: SettingsStore): HTMLElement {
       ? `Proxy enabled at ${normalizedUrl}`
       : `Proxy saved at ${normalizedUrl} (currently disabled)`;
     status.classList.remove("pi-overlay-text-warning");
-    showToast("Proxy settings saved");
+    showToast("Local helper settings saved");
   };
 
   saveButton.addEventListener("click", () => {
@@ -347,96 +312,17 @@ function buildProxySection(settingsStore: SettingsStore): HTMLElement {
         : DEFAULT_LOCAL_PROXY_URL;
 
       status.textContent = enabledInput.checked
-        ? `Proxy enabled at ${urlInput.value}`
-        : "Proxy disabled";
+        ? `Local helper enabled at ${urlInput.value}`
+        : "Local helper disabled";
     } catch {
       enabledInput.checked = false;
       urlInput.value = DEFAULT_LOCAL_PROXY_URL;
-      status.textContent = "Proxy disabled";
+      status.textContent = "Local helper disabled";
     }
   })();
 
   card.append(controlsRow, status, helper);
   shell.content.appendChild(card);
-  return shell.section;
-}
-
-function buildExtensionsSection(closeDialog: () => void): HTMLElement {
-  const shell = createSectionShell(
-    "Extensions",
-    "extensions",
-    "Connections, plugins, and skills live in one place.",
-  );
-
-  const tabs = document.createElement("div");
-  tabs.className = "pi-overlay-tabs";
-  tabs.setAttribute("role", "tablist");
-  tabs.setAttribute("aria-label", "Extensions sections");
-
-  const description = document.createElement("p");
-  description.className = "pi-overlay-hint";
-
-  let selectedSection: AddonsSection = "connections";
-
-  const applySelection = (section: AddonsSection): void => {
-    selectedSection = section;
-    for (const button of tabs.querySelectorAll<HTMLButtonElement>("[data-settings-extension-link]")) {
-      const isActive = button.dataset.settingsExtensionLink === selectedSection;
-      button.classList.toggle("is-active", isActive);
-      button.setAttribute("aria-selected", isActive ? "true" : "false");
-    }
-
-    const selected = EXTENSIONS_LINKS.find((item) => item.section === section);
-    description.textContent = selected ? selected.description : "";
-  };
-
-  for (const item of EXTENSIONS_LINKS) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "pi-overlay-tab";
-    button.textContent = item.label;
-    button.dataset.settingsExtensionLink = item.section;
-    button.setAttribute("role", "tab");
-    button.setAttribute("aria-selected", "false");
-    button.addEventListener("click", () => {
-      applySelection(item.section);
-    });
-    tabs.appendChild(button);
-  }
-
-  applySelection(selectedSection);
-
-  const actionRow = document.createElement("div");
-  actionRow.className = "pi-overlay-actions pi-settings-extensions-actions";
-
-  const openButton = createOverlayButton({
-    text: "Open Extensions manager…",
-    className: "pi-overlay-btn--primary",
-  });
-
-  if (dependencies.openExtensionsHub) {
-    openButton.addEventListener("click", () => {
-      closeDialog();
-      dependencies.openExtensionsHub?.(selectedSection);
-    });
-  } else {
-    openButton.disabled = true;
-  }
-
-  const aliasHint = document.createElement("p");
-  aliasHint.className = "pi-overlay-hint";
-  aliasHint.textContent = "Slash commands: /extensions, /tools, /plugins, /skills";
-
-  shell.content.append(tabs, description, actionRow, aliasHint);
-  actionRow.appendChild(openButton);
-
-  if (!dependencies.openExtensionsHub) {
-    const warning = document.createElement("p");
-    warning.className = "pi-overlay-hint pi-overlay-text-warning";
-    warning.textContent = "Extensions manager is unavailable in this context.";
-    shell.content.appendChild(warning);
-  }
-
   return shell.section;
 }
 
@@ -526,7 +412,7 @@ export async function showSettingsDialog(options: ShowSettingsDialogOptions = {}
       onClose: dialog.close,
       closeLabel: "Close settings",
       title: "Settings",
-      subtitle: "Logins, extensions, and advanced options.",
+      subtitle: "Providers, execution mode, and advanced options",
     });
 
     const body = document.createElement("div");
@@ -548,17 +434,12 @@ export async function showSettingsDialog(options: ShowSettingsDialogOptions = {}
       await buildProvidersSection(),
     );
 
-    const extensionsPanel = document.createElement("div");
-    extensionsPanel.className = "pi-settings-panel";
-    extensionsPanel.dataset.settingsPanel = "extensions";
-    extensionsPanel.appendChild(buildExtensionsSection(dialog.close));
-
     const morePanel = document.createElement("div");
     morePanel.className = "pi-settings-panel";
     morePanel.dataset.settingsPanel = "more";
     morePanel.appendChild(buildMoreSection());
 
-    panels.append(loginsPanel, extensionsPanel, morePanel);
+    panels.append(loginsPanel, morePanel);
 
     for (const tab of SETTINGS_TABS) {
       const button = document.createElement("button");
