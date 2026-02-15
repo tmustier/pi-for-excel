@@ -5,7 +5,6 @@
  * later only requires edits in one place.
  */
 
-export const INTEGRATIONS_COMMAND_NAME = "integrations";
 export const TOOLS_COMMAND_NAME = "tools";
 
 export const INTEGRATION_LABEL = "Integration";
@@ -21,7 +20,7 @@ export const ACTIVE_INTEGRATIONS_PROMPT_HEADING = "Active Integrations";
 export const ACTIVE_INTEGRATIONS_TOOLTIP_PREFIX = "Active integrations";
 
 export function integrationsCommandHint(): string {
-  return `/${TOOLS_COMMAND_NAME} (or /${INTEGRATIONS_COMMAND_NAME})`;
+  return `/${TOOLS_COMMAND_NAME}`;
 }
 
 export function formatIntegrationCountLabel(count: number): string {

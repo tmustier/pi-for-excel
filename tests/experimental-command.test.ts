@@ -179,7 +179,6 @@ void test("/experimental on mcp-tools redirects to /tools alias", async () => {
 
   assert.equal(toasts.length, 1);
   assert.match(toasts[0], /managed in \/tools/u);
-  assert.match(toasts[0], /alias: \/integrations/u);
 });
 
 void test("/experimental tmux-bridge-url shows configured value", async () => {

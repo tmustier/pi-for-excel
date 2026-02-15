@@ -831,11 +831,17 @@ export class PiSidebar extends LitElement {
         <button role="menuitem" class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenSettings?.(); }}>
           Settings…
         </button>
-        <button role="menuitem" class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenRules?.(); }}>
-          Rules & conventions…
-        </button>
         <button role="menuitem" class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenExtensions?.(); }}>
           Extensions…
+        </button>
+
+        <div class="pi-utilities-menu__divider" role="separator"></div>
+
+        <button role="menuitem" class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this._onOpenFilesWorkspace(); }}>
+          Files…
+        </button>
+        <button role="menuitem" class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenRules?.(); }}>
+          Rules & conventions…
         </button>
 
         <div class="pi-utilities-menu__divider" role="separator"></div>

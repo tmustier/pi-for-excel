@@ -5,7 +5,7 @@
  * execution cannot drift.
  */
 
-import { INTEGRATIONS_COMMAND_NAME, TOOLS_COMMAND_NAME } from "../integrations/naming.js";
+import { TOOLS_COMMAND_NAME } from "../integrations/naming.js";
 
 const BUSY_ALLOWED_COMMANDS = new Set<string>([
   "compact",
@@ -16,11 +16,10 @@ const BUSY_ALLOWED_COMMANDS = new Set<string>([
   "reopen",
   "yolo",
   "extensions",
-  "addons",
   "plugins",
   "skills",
+  "files",
   TOOLS_COMMAND_NAME,
-  INTEGRATIONS_COMMAND_NAME,
 ]);
 
 export function isBusyAllowedCommand(commandName: string): boolean {

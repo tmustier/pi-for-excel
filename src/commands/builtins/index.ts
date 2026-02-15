@@ -16,6 +16,7 @@ import { createExtensionsCommands, type ExtensionsCommandActions } from "./exten
 import { createAddonsCommands, type AddonsCommandActions } from "./addons.js";
 import { createIntegrationsCommands, type IntegrationsCommandActions } from "./integrations.js";
 import { createSkillsCommands, type SkillsCommandActions } from "./skills.js";
+import { createFilesCommands, type FilesCommandActions } from "./files.js";
 
 export interface BuiltinsContext
   extends SessionCommandActions,
@@ -23,7 +24,8 @@ export interface BuiltinsContext
     AddonsCommandActions,
     ExtensionsCommandActions,
     IntegrationsCommandActions,
-    SkillsCommandActions {
+    SkillsCommandActions,
+    FilesCommandActions {
   getActiveAgent: ActiveAgentProvider;
 }
 
@@ -36,6 +38,7 @@ export function registerBuiltins(context: BuiltinsContext): void {
     ...createAddonsCommands(context),
     ...createIntegrationsCommands(context),
     ...createSkillsCommands(context),
+    ...createFilesCommands(context),
     ...createExperimentalCommands(),
     ...createDebugCommands(),
     ...createClipboardCommands(context.getActiveAgent),

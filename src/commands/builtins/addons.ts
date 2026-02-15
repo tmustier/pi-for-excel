@@ -19,13 +19,5 @@ export function createAddonsCommands(actions: AddonsCommandActions): SlashComman
         void actions.openAddonsManager();
       },
     },
-    {
-      name: "addons",
-      description: "Alias for /extensions",
-      source: "builtin",
-      execute: () => {
-        void actions.openAddonsManager();
-      },
-    },
   ];
 }

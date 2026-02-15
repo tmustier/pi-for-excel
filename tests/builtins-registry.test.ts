@@ -40,7 +40,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-void test("builtins registry wires /addons, /experimental, /extensions, and /integrations command registration", async () => {
+void test("builtins registry wires /addons, /experimental, /extensions, /integrations, and /files command registration", async () => {
   const source = await readFile(new URL("../src/commands/builtins/index.ts", import.meta.url), "utf8");
 
   assert.match(source, /createAddonsCommands/);
@@ -54,6 +54,9 @@ void test("builtins registry wires /addons, /experimental, /extensions, and /int
 
   assert.match(source, /createExtensionsCommands/);
   assert.match(source, /\.\.\.createExtensionsCommands\(context\)/);
+
+  assert.match(source, /createFilesCommands/);
+  assert.match(source, /\.\.\.createFilesCommands\(context\)/);
 
   const extensionApiSource = await readFile(new URL("../src/commands/extension-api.ts", import.meta.url), "utf8");
   const extensionModuleImportSource = await readFile(
@@ -141,20 +144,18 @@ void test("taskpane init keeps getIntegrationToolNames imported when used", asyn
   );
 });
 
-void test("integrations builtins expose /tools with /integrations alias", async () => {
+void test("integrations builtins expose /tools without /integrations alias", async () => {
   const source = await readFile(new URL("../src/commands/builtins/integrations.ts", import.meta.url), "utf8");
 
   assert.match(source, /TOOLS_COMMAND_NAME/);
-  assert.match(source, /INTEGRATIONS_COMMAND_NAME/);
-  assert.match(source, /Alias for \/\$\{TOOLS_COMMAND_NAME\}/);
+  assert.doesNotMatch(source, /INTEGRATIONS_COMMAND_NAME/);
 });
 
-void test("extensions builtins expose /extensions with /addons alias", async () => {
+void test("extensions builtins expose /extensions without /addons alias", async () => {
   const source = await readFile(new URL("../src/commands/builtins/addons.ts", import.meta.url), "utf8");
 
   assert.match(source, /name:\s*"extensions"/);
-  assert.match(source, /name:\s*"addons"/);
-  assert.match(source, /Alias for \/extensions/);
+  assert.doesNotMatch(source, /name:\s*"addons"/);
   assert.match(source, /openAddonsManager/);
 });
 
@@ -208,8 +209,8 @@ void test("sidebar utilities menu includes extensions label", async () => {
 
   assert.match(sidebarSource, /aria-label="Settings and tools"/);
   assert.match(sidebarSource, /Extensions…/);
+  assert.match(sidebarSource, /Files…/);
   assert.doesNotMatch(sidebarSource, /Add-ons…/);
-  assert.doesNotMatch(sidebarSource, /Files…/);
 });
 
 void test("extensions overlay groups connections, plugins, and skills with tabs", async () => {
@@ -310,7 +311,7 @@ void test("extensions and alias commands deep-link to extensions sections", asyn
   const skillsSource = await readFile(new URL("../src/commands/builtins/skills.ts", import.meta.url), "utf8");
 
   assert.match(addonsSource, /name:\s*"extensions"/);
-  assert.match(addonsSource, /name:\s*"addons"/);
+  assert.doesNotMatch(addonsSource, /name:\s*"addons"/);
   assert.match(addonsSource, /openAddonsManager\(\)/);
 
   assert.match(integrationsSource, /openAddonsManager\("connections"\)/);
@@ -342,10 +343,11 @@ void test("slash-command busy policy is centralized and includes /yolo and /addo
   assert.match(initSource, /isBusyAllowedCommand/);
 
   assert.match(busyPolicySource, /"yolo"/);
-  assert.match(busyPolicySource, /"addons"/);
   assert.match(busyPolicySource, /"rules"/);
+  assert.match(busyPolicySource, /"files"/);
   assert.match(busyPolicySource, /TOOLS_COMMAND_NAME/);
-  assert.match(busyPolicySource, /INTEGRATIONS_COMMAND_NAME/);
+  assert.doesNotMatch(busyPolicySource, /INTEGRATIONS_COMMAND_NAME/);
+  assert.doesNotMatch(busyPolicySource, /"addons"/);
 });
 
 void test("taskpane init wires recovery overlay opener", async () => {

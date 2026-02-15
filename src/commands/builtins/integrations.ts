@@ -3,7 +3,6 @@
  */
 
 import {
-  INTEGRATIONS_COMMAND_NAME,
   INTEGRATIONS_MANAGER_LABEL_LOWER,
   TOOLS_COMMAND_NAME,
 } from "../../integrations/naming.js";
@@ -15,22 +14,14 @@ export interface IntegrationsCommandActions {
 }
 
 export function createIntegrationsCommands(actions: IntegrationsCommandActions): SlashCommand[] {
-  const openConnections = () => {
-    void actions.openAddonsManager("connections");
-  };
-
   return [
     {
       name: TOOLS_COMMAND_NAME,
       description: `Manage ${INTEGRATIONS_MANAGER_LABEL_LOWER} (alias for /extensions connections)`,
       source: "builtin",
-      execute: openConnections,
-    },
-    {
-      name: INTEGRATIONS_COMMAND_NAME,
-      description: `Alias for /${TOOLS_COMMAND_NAME}`,
-      source: "builtin",
-      execute: openConnections,
+      execute: () => {
+        void actions.openAddonsManager("connections");
+      },
     },
   ];
 }
