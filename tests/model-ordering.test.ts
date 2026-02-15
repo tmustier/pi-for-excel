@@ -7,6 +7,7 @@ import {
   parseMajorMinor,
   providerPriority,
 } from "../src/models/model-ordering.ts";
+import { BROWSER_OAUTH_PROVIDERS, mapToApiProvider } from "../src/auth/provider-map.ts";
 
 void test("parseMajorMinor packs Claude-style -major-minor as major*10+minor", () => {
   assert.equal(parseMajorMinor("claude-opus-4-5"), 45);
@@ -67,4 +68,13 @@ void test("compareModels sorts by provider, family, then recency", () => {
 
   // Sanity: providerPriority is stable
   assert.ok(providerPriority("anthropic") < providerPriority("openai"));
+});
+
+void test("provider-map keeps openai-codex distinct from openai", () => {
+  assert.equal(mapToApiProvider("openai-codex"), "openai-codex");
+  assert.equal(mapToApiProvider("openai"), "openai");
+});
+
+void test("browser oauth providers include openai-codex", () => {
+  assert.equal(BROWSER_OAUTH_PROVIDERS.includes("openai-codex"), true);
 });
