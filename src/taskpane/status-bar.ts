@@ -8,25 +8,17 @@ import { showToast } from "../ui/toast.js";
 import { escapeAttr, escapeHtml } from "../utils/html.js";
 import { formatUsageDebug, isDebugEnabled } from "../debug/debug.js";
 import { estimateContextTokens } from "../utils/context-tokens.js";
-import {
-  ACTIVE_INTEGRATIONS_TOOLTIP_PREFIX,
-  formatIntegrationCountLabel,
-} from "../integrations/naming.js";
 import type { ExecutionMode } from "../execution/mode.js";
 import type { RuntimeLockState } from "./session-runtime-manager.js";
 
 export type ActiveAgentProvider = () => Agent | null;
 export type ActiveLockStateProvider = () => RuntimeLockState;
-export type ActiveRulesProvider = () => boolean;
 export type ActiveExecutionModeProvider = () => ExecutionMode;
-export type ActiveIntegrationsProvider = () => string[];
 
 function renderStatusBar(
   agent: Agent | null,
   lockState: RuntimeLockState,
-  rulesActive: boolean,
   executionMode: ExecutionMode,
-  activeIntegrations: string[],
 ): void {
   const el = document.getElementById("pi-status-bar");
   if (!el) return;
@@ -90,10 +82,6 @@ function renderStatusBar(
   const chevronSvg = `<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>`;
   const affordanceChevronSvg = `<svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>`;
   const brainSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 18V5"/><path d="M15 13a4.17 4.17 0 0 1-3-4 4.17 4.17 0 0 1-3 4"/><path d="M17.598 6.5A3 3 0 1 0 12 5a3 3 0 1 0-5.598 1.5"/><path d="M17.997 5.125a4 4 0 0 1 2.526 5.77"/><path d="M18 18a4 4 0 0 0 2-7.464"/><path d="M19.967 17.483A4 4 0 1 1 12 18a4 4 0 1 1-7.967-.517"/><path d="M6 18a4 4 0 0 1-2-7.464"/><path d="M6.003 5.125a4 4 0 0 0-2.526 5.77"/></svg>`;
-  // Lucide "file-text" — rules/instructions icon
-  const rulesSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>`;
-  // Lucide "plug" — integrations icon
-  const integrationsSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a6 6 0 0 1-6 6a6 6 0 0 1-6-6V8Z"/></svg>`;
 
   const debugOn = isDebugEnabled();
 
@@ -108,39 +96,27 @@ function renderStatusBar(
     lockBadge = `<span class="pi-status-lock pi-status-lock--active" data-tooltip="This session currently holds the workbook write lock.">lock</span>`;
   }
 
-  const rulesActiveClass = rulesActive ? " pi-status-rules--active" : "";
-  const rulesTooltip = rulesActive
-    ? "Custom rules are active. Click to edit rules &amp; number format."
-    : "Click to edit rules &amp; number format preferences.";
-  const rulesBadge = `<button type="button" class="pi-status-rules pi-status-clickable${rulesActiveClass}" data-tooltip="${rulesTooltip}">${rulesSvg}<span>rules</span><span class="pi-status-affordance" aria-hidden="true">${affordanceChevronSvg}</span></button>`;
-
-  const modeIsYolo = executionMode === "yolo";
-  const modeBadgeClass = modeIsYolo ? " pi-status-mode--yolo" : " pi-status-mode--safe";
-  const modeLabel = modeIsYolo ? "yolo" : "safe";
-  const modeTooltip = modeIsYolo
-    ? "YOLO mode: mutating tool calls run without pre-execution confirmation. Click to switch to Safe mode."
-    : "Safe mode: mutating tool calls require pre-execution confirmation. Click to switch to YOLO mode.";
+  const modeIsAuto = executionMode === "yolo";
+  const modeBadgeClass = modeIsAuto ? " pi-status-mode--auto" : " pi-status-mode--confirm";
+  const modeLabel = modeIsAuto ? "auto" : "confirm";
+  const modeTooltip = modeIsAuto
+    ? "Auto: Pi applies workbook changes immediately. Click to switch to Confirm."
+    : "Confirm: Pi asks before each workbook change. Click to switch to Auto.";
   const modeBadge = `<button type="button" class="pi-status-mode pi-status-clickable${modeBadgeClass}" data-tooltip="${modeTooltip}"><span>${modeLabel}</span><span class="pi-status-affordance" aria-hidden="true">${affordanceChevronSvg}</span></button>`;
-
-  const integrationsBadge = activeIntegrations.length > 0
-    ? `<button type="button" class="pi-status-integrations pi-status-clickable" data-tooltip="${ACTIVE_INTEGRATIONS_TOOLTIP_PREFIX}: ${escapeAttr(activeIntegrations.join(", "))}. Click to manage.">${integrationsSvg}<span>${formatIntegrationCountLabel(activeIntegrations.length)}</span><span class="pi-status-affordance" aria-hidden="true">${affordanceChevronSvg}</span></button>`
-    : "";
 
   const thinkingTooltip = escapeAttr(
     "How deeply Pi reasons before answering — higher is slower but more thorough. Click to choose, or ⇧Tab to cycle.",
   );
 
   el.innerHTML = `
-    <button type="button" class="pi-status-ctx pi-status-ctx--trigger pi-status-clickable has-tooltip" data-status-popover="${ctxPopoverText}" aria-label="Context usage ${pct}% of ${ctxLabel}"><span class="${ctxColor}">${pct}%</span> / ${ctxLabel}${usageDebug}<span class="pi-status-affordance" aria-hidden="true">${affordanceChevronSvg}</span><span class="pi-tooltip pi-tooltip--left">${ctxBaseTooltip}${ctxWarning.length > 0 ? ` ${ctxWarning}` : ""}</span></button>
-    ${lockBadge}
-    ${rulesBadge}
-    ${modeBadge}
-    ${integrationsBadge}
     <button type="button" class="pi-status-model pi-status-clickable" data-tooltip="Switch the AI model powering this session">
       <span class="pi-status-model__mark">π</span>
       <span class="pi-status-model__name">${modelAliasEscaped}</span>
       ${chevronSvg}
     </button>
+    <button type="button" class="pi-status-ctx pi-status-ctx--trigger pi-status-clickable has-tooltip" data-status-popover="${ctxPopoverText}" aria-label="Context usage ${pct}% of ${ctxLabel}"><span class="${ctxColor}">${pct}%</span> / ${ctxLabel}${usageDebug}<span class="pi-status-affordance" aria-hidden="true">${affordanceChevronSvg}</span><span class="pi-tooltip pi-tooltip--left">${ctxBaseTooltip}${ctxWarning.length > 0 ? ` ${ctxWarning}` : ""}</span></button>
+    ${lockBadge}
+    ${modeBadge}
     <button type="button" class="pi-status-thinking pi-status-clickable" data-tooltip="${thinkingTooltip}" aria-label="Thinking level ${thinkingLevel}">${brainSvg} ${thinkingLevel}<span class="pi-status-affordance" aria-hidden="true">${affordanceChevronSvg}</span></button>
   `;
 }
@@ -148,36 +124,28 @@ function renderStatusBar(
 export function updateStatusBarForAgent(
   agent: Agent,
   lockState: RuntimeLockState = "idle",
-  rulesActive = false,
   executionMode: ExecutionMode = "yolo",
-  activeIntegrations: string[] = [],
 ): void {
-  renderStatusBar(agent, lockState, rulesActive, executionMode, activeIntegrations);
+  renderStatusBar(agent, lockState, executionMode);
 }
 
 export function updateStatusBar(
   getActiveAgent: ActiveAgentProvider,
   getLockState?: ActiveLockStateProvider,
-  getRulesActive?: ActiveRulesProvider,
   getExecutionMode?: ActiveExecutionModeProvider,
-  getActiveIntegrations?: ActiveIntegrationsProvider,
 ): void {
   const activeAgent = getActiveAgent();
   const lockState = getLockState ? getLockState() : "idle";
-  const rulesActive = getRulesActive ? getRulesActive() : false;
   const executionMode = getExecutionMode ? getExecutionMode() : "yolo";
-  const activeIntegrations = getActiveIntegrations ? getActiveIntegrations() : [];
-  renderStatusBar(activeAgent, lockState, rulesActive, executionMode, activeIntegrations);
+  renderStatusBar(activeAgent, lockState, executionMode);
 }
 
 export function injectStatusBar(opts: {
   getActiveAgent: ActiveAgentProvider;
   getLockState?: ActiveLockStateProvider;
-  getRulesActive?: ActiveRulesProvider;
   getExecutionMode?: ActiveExecutionModeProvider;
-  getActiveIntegrations?: ActiveIntegrationsProvider;
 }): () => void {
-  const { getActiveAgent, getLockState, getRulesActive, getExecutionMode, getActiveIntegrations } = opts;
+  const { getActiveAgent, getLockState, getExecutionMode } = opts;
 
   let unsubscribeActiveAgent: (() => void) | undefined;
 
@@ -187,16 +155,16 @@ export function injectStatusBar(opts: {
     const activeAgent = getActiveAgent();
     if (activeAgent) {
       unsubscribeActiveAgent = activeAgent.subscribe(
-        () => updateStatusBar(getActiveAgent, getLockState, getRulesActive, getExecutionMode, getActiveIntegrations),
+        () => updateStatusBar(getActiveAgent, getLockState, getExecutionMode),
       );
     } else {
       unsubscribeActiveAgent = undefined;
     }
 
-    updateStatusBar(getActiveAgent, getLockState, getRulesActive, getExecutionMode, getActiveIntegrations);
+    updateStatusBar(getActiveAgent, getLockState, getExecutionMode);
   };
 
-  const onStatusUpdate = () => updateStatusBar(getActiveAgent, getLockState, getRulesActive, getExecutionMode, getActiveIntegrations);
+  const onStatusUpdate = () => updateStatusBar(getActiveAgent, getLockState, getExecutionMode);
 
   document.addEventListener("pi:status-update", onStatusUpdate);
   document.addEventListener("pi:active-runtime-changed", bindActiveAgent);

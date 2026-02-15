@@ -168,7 +168,7 @@ void test("safe execution mode blocks mutate calls when approval is denied", asy
 
   await assert.rejects(
     () => wrapped.execute("tc-safe-block", { range: "Sheet1!A1", values: [[1]] }),
-    /Mutation cancelled by user \(Safe mode\)\./u,
+    /Mutation cancelled by user \(Confirm mode\)\./u,
   );
 
   assert.equal(approvalCalls, 1);

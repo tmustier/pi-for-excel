@@ -17,9 +17,8 @@ import "./pi-input.js";
 import "./working-indicator.js";
 import { initToolGrouping } from "./tool-grouping.js";
 import { applyMessageStyleHooks } from "./message-style-hooks.js";
-import type { PiInput, PiInputAction } from "./pi-input.js";
+import type { PiInput } from "./pi-input.js";
 import { isDebugEnabled, formatK } from "../debug/debug.js";
-import { INTEGRATIONS_MANAGER_LABEL } from "../integrations/naming.js";
 import {
   getPayloadStats,
   getLastContext,
@@ -109,17 +108,12 @@ export class PiSidebar extends LitElement {
   @property({ attribute: false }) onMoveTabRight?: (runtimeId: string) => void;
   @property({ attribute: false }) onCloseOtherTabs?: (runtimeId: string) => void;
   @property({ attribute: false }) onOpenRules?: () => void;
-  @property({ attribute: false }) onOpenIntegrations?: () => void;
-  @property({ attribute: false }) onOpenSkills?: () => void;
-  @property({ attribute: false }) onOpenExtensions?: () => void;
+  @property({ attribute: false }) onOpenAddons?: () => void;
   @property({ attribute: false }) onOpenSettings?: () => void;
-  @property({ attribute: false }) onOpenFiles?: () => void;
   @property({ attribute: false }) onFilesDrop?: (files: File[]) => void;
   @property({ attribute: false }) onOpenResumePicker?: () => void;
   @property({ attribute: false }) onOpenRecovery?: () => void;
-  @property({ attribute: false }) onReopenLastClosed?: () => void;
   @property({ attribute: false }) onOpenShortcuts?: () => void;
-  @property({ type: Boolean }) hasRecoveryCheckpoints = false;
 
   @state() private _hasMessages = false;
   @state() private _isStreaming = false;
@@ -417,29 +411,6 @@ export class PiSidebar extends LitElement {
     this.onFilesDrop?.(event.detail.files);
   };
 
-  private _onInputAction = (event: CustomEvent<{ action: PiInputAction }>) => {
-    const { action } = event.detail;
-
-    if (action === "open-files") {
-      this.onOpenFiles?.();
-      return;
-    }
-
-    if (action === "open-rules") {
-      this.onOpenRules?.();
-      return;
-    }
-
-    if (action === "open-resume") {
-      this.onOpenResumePicker?.();
-      return;
-    }
-
-    if (action === "open-backups") {
-      this.onOpenRecovery?.();
-    }
-  };
-
   private _updateSessionTabOverflow() {
     const scroller = this._tabsScroller;
     if (!scroller) {
@@ -592,11 +563,9 @@ export class PiSidebar extends LitElement {
       <div class="pi-input-area">
         <pi-input
           .isStreaming=${this._isStreaming}
-          .hasRecoveryCheckpoints=${this.hasRecoveryCheckpoints}
           @pi-send=${this._onSend}
           @pi-abort=${this._onAbort}
           @pi-files-drop=${this._onFilesDrop}
-          @pi-input-action=${this._onInputAction}
         ></pi-input>
         <div id="pi-status-bar" class="pi-status-bar"></div>
       </div>
@@ -859,25 +828,8 @@ export class PiSidebar extends LitElement {
         <button role="menuitem" class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenRules?.(); }}>
           Rules & conventions…
         </button>
-        <button role="menuitem" class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenIntegrations?.(); }}>
-          ${INTEGRATIONS_MANAGER_LABEL}…
-        </button>
-        ${this.onOpenSkills
-          ? html`
-            <button role="menuitem" class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenSkills?.(); }}>
-              Skills…
-            </button>
-          `
-          : nothing}
-        ${this.onOpenExtensions
-          ? html`
-            <button role="menuitem" class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenExtensions?.(); }}>
-              Extensions…
-            </button>
-          `
-          : nothing}
-        <button role="menuitem" class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenFiles?.(); }}>
-          Files…
+        <button role="menuitem" class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenAddons?.(); }}>
+          Add-ons…
         </button>
 
         <div class="pi-utilities-menu__divider" role="separator"></div>
@@ -885,13 +837,6 @@ export class PiSidebar extends LitElement {
         <button role="menuitem" class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenResumePicker?.(); }}>
           Resume session…
         </button>
-        ${this.onReopenLastClosed
-          ? html`
-            <button role="menuitem" class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onReopenLastClosed?.(); }}>
-              Reopen last closed
-            </button>
-          `
-          : nothing}
         <button role="menuitem" class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenRecovery?.(); }}>
           Backups…
         </button>

@@ -163,43 +163,6 @@
   background: var(--green-alpha-12);
 }
 
-.pi-status-rules {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  border: 1px solid var(--alpha-8);
-  background: var(--alpha-4);
-  color: var(--muted-foreground);
-  border-radius: var(--radius-xs);
-  padding: 2px 6px;
-  font-size: var(--text-xs);
-  font-family: var(--font-sans);
-  line-height: 1.4;
-  cursor: pointer;
-  white-space: nowrap;
-  flex-shrink: 0;
-  transition: background var(--duration-fast), border-color var(--duration-fast), color var(--duration-fast);
-}
-
-.pi-status-rules svg {
-  flex-shrink: 0;
-}
-
-.pi-status-rules:hover {
-  background: var(--alpha-8);
-  border-color: var(--alpha-12);
-}
-
-.pi-status-rules--active {
-  border-color: var(--green-alpha-25);
-  background: var(--pi-green-light);
-  color: var(--primary);
-}
-
-.pi-status-rules--active:hover {
-  background: var(--green-alpha-14);
-}
-
 .pi-status-mode {
   display: inline-flex;
   align-items: center;
@@ -215,53 +178,26 @@
   transition: background var(--duration-fast), border-color var(--duration-fast), color var(--duration-fast);
 }
 
-.pi-status-mode--yolo {
+.pi-status-mode--auto {
   border: 1px solid oklch(0.66 0.19 145 / 0.38);
   background: oklch(0.66 0.19 145 / 0.12);
   color: oklch(0.45 0.15 145);
 }
 
-.pi-status-mode--yolo:hover {
+.pi-status-mode--auto:hover {
   background: oklch(0.66 0.19 145 / 0.2);
   border-color: oklch(0.66 0.19 145 / 0.48);
 }
 
-.pi-status-mode--safe {
+.pi-status-mode--confirm {
   border: 1px solid oklch(0.65 0.17 40 / 0.38);
   background: oklch(0.65 0.17 40 / 0.12);
   color: oklch(0.48 0.12 40);
 }
 
-.pi-status-mode--safe:hover {
+.pi-status-mode--confirm:hover {
   background: oklch(0.65 0.17 40 / 0.2);
   border-color: oklch(0.65 0.17 40 / 0.48);
-}
-
-.pi-status-integrations {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  border: 1px solid oklch(0.67 0.17 35 / 0.32);
-  background: oklch(0.67 0.17 35 / 0.09);
-  color: oklch(0.5 0.12 35);
-  border-radius: var(--radius-xs);
-  padding: 2px 6px;
-  font-size: var(--text-xs);
-  font-family: var(--font-sans);
-  line-height: 1.4;
-  cursor: pointer;
-  white-space: nowrap;
-  flex-shrink: 0;
-  transition: background var(--duration-fast), border-color var(--duration-fast);
-}
-
-.pi-status-integrations svg {
-  flex-shrink: 0;
-}
-
-.pi-status-integrations:hover {
-  background: oklch(0.67 0.17 35 / 0.16);
-  border-color: oklch(0.67 0.17 35 / 0.42);
 }
 
 /* Context debug pill — collapsible block matching thinking-block style. */

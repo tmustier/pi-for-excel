@@ -144,20 +144,20 @@ void test("taskpane init wires Files workspace opener when sidebar callback is p
   );
 });
 
-void test("taskpane init wires extensions menu opener", async () => {
+void test("taskpane init wires add-ons menu opener", async () => {
   const initSource = await readFile(new URL("../src/taskpane/init.ts", import.meta.url), "utf8");
 
-  assert.match(initSource, /const openExtensionsManager = \(\) =>/);
-  assert.match(initSource, /sidebar\.onOpenExtensions\s*=\s*\(\)\s*=>\s*\{\s*openExtensionsManager\(\);\s*\};/);
+  assert.match(initSource, /sidebar\.onOpenAddons\s*=/);
 });
 
-void test("sidebar utilities menu includes extensions and files labels", async () => {
+void test("sidebar utilities menu includes add-ons label", async () => {
   const sidebarSource = await readFile(new URL("../src/ui/pi-sidebar.ts", import.meta.url), "utf8");
 
   assert.match(sidebarSource, /aria-label="Settings and tools"/);
-  assert.match(sidebarSource, /Extensions…/);
-  assert.match(sidebarSource, /Files…/);
-  assert.doesNotMatch(sidebarSource, /Files workspace \(Beta\)…/);
+  assert.match(sidebarSource, /Add-ons…/);
+  // Extensions and Files removed from gear menu — accessible via Add-ons and 📎 respectively
+  assert.doesNotMatch(sidebarSource, /Extensions…/);
+  assert.doesNotMatch(sidebarSource, /Files…/);
 });
 
 void test("session builtins include recovery and manual-backup commands", async () => {
@@ -175,7 +175,7 @@ void test("settings builtins include yolo execution-mode command", async () => {
   const settingsSource = await readFile(new URL("../src/commands/builtins/settings.ts", import.meta.url), "utf8");
 
   assert.match(settingsSource, /name:\s*"yolo"/);
-  assert.match(settingsSource, /Toggle execution mode \(YOLO vs Safe\)/);
+  assert.match(settingsSource, /Toggle execution mode \(Auto vs Confirm\)/);
   assert.match(settingsSource, /Usage:\s*\/yolo/);
 });
 

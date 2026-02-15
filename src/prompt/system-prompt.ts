@@ -68,7 +68,7 @@ function buildExecutionModeSection(mode: ExecutionMode | undefined): string {
   if (mode === "safe") {
     return `## Execution mode
 
-Current mode: **Safe**
+Current mode: **Confirm**
 
 - Ask for explicit user confirmation before mutating workbook tools.
 - Treat destructive structure operations as high-risk and reconfirm before proceeding.
@@ -77,7 +77,7 @@ Current mode: **Safe**
 
   return `## Execution mode
 
-Current mode: **YOLO**
+Current mode: **Auto**
 
 - Favor low-friction execution for workbook mutations.
 - Do not add extra pre-execution confirmation prompts beyond existing safety gates.
@@ -253,7 +253,7 @@ const WORKFLOW = `## Workflow
 2. **Verify writes.** write_cells auto-verifies and reports errors. If errors occur, diagnose and fix.
 3. **Overwrite protection.** write_cells blocks if the target has data. Ask the user before setting allow_overwrite=true.
 4. **Prefer formulas** over hardcoded values. Put assumptions in separate cells and reference them.
-5. **Plan complex tasks.** In Safe mode, present a plan and get approval first. In YOLO mode, keep plans concise and proceed unless the user asked to review first.
+5. **Plan complex tasks.** In Confirm mode, present a plan and get approval first. In Auto mode, keep plans concise and proceed unless the user asked to review first.
 6. **Analysis = read-only.** When the user asks about data, read and answer in chat. Only write when asked to modify.
 7. **Extension requests.** If the user asks to create/update an extension, generate code and use **extensions_manager** so it is installed directly.`;
 

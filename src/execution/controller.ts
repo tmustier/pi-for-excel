@@ -43,7 +43,7 @@ export async function createExecutionModeController(
     toggleFromUi: async () => {
       const nextMode = toggleExecutionMode(mode);
       await applyMode(nextMode);
-      options.showToast?.(`${formatExecutionModeLabel(nextMode)} mode active.`);
+      options.showToast?.(`${formatExecutionModeLabel(nextMode)} mode.`);
     },
   };
 }

@@ -78,7 +78,7 @@ import { loadExternalAgentSkillsFromSettings } from "../skills/external-store.js
 import { createSkillReadCache } from "../skills/read-cache.js";
 import { initAppStorage } from "../storage/init-app-storage.js";
 import { renderError } from "../ui/loading.js";
-import { showFilesWorkspaceDialog } from "../ui/files-dialog.js";
+
 import {
   PI_REQUEST_INPUT_FOCUS_EVENT,
   moveCursorToEnd,
@@ -437,22 +437,9 @@ export async function initTaskpane(opts: {
     restoredFromSnapshotId: snapshot.restoredFromSnapshotId,
   });
 
-  const refreshRecoveryQuickActionState = async (): Promise<void> => {
-    try {
-      const checkpoints = await workbookRecoveryLog.listForCurrentWorkbook(1);
-      sidebar.hasRecoveryCheckpoints = checkpoints.length > 0;
-    } catch {
-      sidebar.hasRecoveryCheckpoints = false;
-    }
-  };
-
-  const getActiveIntegrationTitles = (): string[] => {
-    const runtime = getActiveRuntime();
-    if (!runtime) return [];
-
-    const integrationIds = runtimeActiveIntegrationIds.get(runtime.runtimeId) ?? [];
-    return buildIntegrationPromptEntries(integrationIds).map((entry) => entry.title);
-  };
+  // Previously used to toggle pi-input's recovery-aware quick action.
+  // Retained as a no-op stub so call sites don't need sweeping removal.
+  const refreshRecoveryQuickActionState = async (): Promise<void> => {};
 
   const formatSessionTitle = (title: string): string => {
     const trimmed = title.trim();
@@ -1359,17 +1346,8 @@ export async function initTaskpane(opts: {
   sidebar.onOpenRules = () => {
     void openRulesEditor();
   };
-  sidebar.onOpenIntegrations = () => {
+  sidebar.onOpenAddons = () => {
     openIntegrationsManager();
-  };
-  sidebar.onOpenSkills = () => {
-    openSkillsManager();
-  };
-  sidebar.onOpenExtensions = () => {
-    openExtensionsManager();
-  };
-  sidebar.onOpenFiles = () => {
-    void showFilesWorkspaceDialog();
   };
   sidebar.onOpenSettings = () => {
     void SettingsDialog.open([new ApiKeysTab(), new ProxyTab()]);
@@ -1395,9 +1373,6 @@ export async function initTaskpane(opts: {
   };
   sidebar.onOpenResumePicker = () => {
     void openResumePicker("new_tab");
-  };
-  sidebar.onReopenLastClosed = () => {
-    void reopenLastClosed();
   };
   sidebar.onOpenRecovery = () => {
     void openRecoveryDialog();
@@ -1476,9 +1451,7 @@ export async function initTaskpane(opts: {
   injectStatusBar({
     getActiveAgent,
     getLockState: getActiveLockState,
-    getRulesActive: () => rulesActive,
     getExecutionMode,
-    getActiveIntegrations: getActiveIntegrationTitles,
   });
 
   // ── Wire command menu to textarea ──
@@ -1571,24 +1544,10 @@ export async function initTaskpane(opts: {
       return;
     }
 
-    // Rules editor
-    if (el.closest(".pi-status-rules")) {
-      closeStatusPopover();
-      void openRulesEditor();
-      return;
-    }
-
     // Execution mode toggle
     if (el.closest(".pi-status-mode")) {
       closeStatusPopover();
       void toggleExecutionModeFromUi();
-      return;
-    }
-
-    // Integrations manager
-    if (el.closest(".pi-status-integrations")) {
-      closeStatusPopover();
-      openIntegrationsManager();
       return;
     }
 

@@ -8,7 +8,6 @@
  *   'pi-send'        → detail: { text: string }
  *   'pi-abort'       → (no detail)
  *   'pi-files-drop'  → detail: { files: File[] }
- *   'pi-input-action' → detail: { action: PiInputAction }
  */
 
 import { html, LitElement } from "lit";
@@ -23,23 +22,17 @@ const PLACEHOLDER_HINTS = [
   "Summarize workbook…",
 ];
 
-export type PiInputAction = "open-files" | "open-rules" | "open-resume" | "open-backups";
-
 @customElement("pi-input")
 export class PiInput extends LitElement {
   @property({ type: Boolean }) isStreaming = false;
-  @property({ type: Boolean }) hasRecoveryCheckpoints = false;
 
   @state() private _value = "";
   @state() private _placeholderIndex = 0;
   @state() private _isDragOver = false;
-  @state() private _actionsMenuOpen = false;
   @query("textarea") private _textarea!: HTMLTextAreaElement;
   @query(".pi-input-file") private _fileInput?: HTMLInputElement;
 
   private _placeholderTimer?: ReturnType<typeof setInterval>;
-  private _actionsMenuDocumentClickHandler?: (event: MouseEvent) => void;
-  private _actionsMenuDocumentKeydownHandler?: (event: KeyboardEvent) => void;
 
   get value(): string { return this._value; }
   set value(v: string) {
@@ -77,12 +70,6 @@ export class PiInput extends LitElement {
       if (this._value.startsWith("/")) return;
       e.preventDefault();
       this._send();
-      return;
-    }
-
-    if (e.key === "Escape" && this._actionsMenuOpen) {
-      e.preventDefault();
-      this._closeActionsMenu();
       return;
     }
 
@@ -146,91 +133,6 @@ export class PiInput extends LitElement {
     target.value = "";
   };
 
-  private _dispatchInputAction(action: PiInputAction): void {
-    this.dispatchEvent(new CustomEvent<{ action: PiInputAction }>("pi-input-action", {
-      bubbles: true,
-      detail: { action },
-    }));
-  }
-
-  private _attachActionsMenuDocumentListener(): void {
-    if (!this._actionsMenuDocumentClickHandler) {
-      this._actionsMenuDocumentClickHandler = (event: MouseEvent) => {
-        const anchor = this.querySelector(".pi-input-actions-anchor");
-        const target = event.target;
-        if (anchor && target instanceof Node && anchor.contains(target)) {
-          return;
-        }
-
-        this._closeActionsMenu();
-      };
-
-      document.addEventListener("click", this._actionsMenuDocumentClickHandler, true);
-    }
-
-    if (!this._actionsMenuDocumentKeydownHandler) {
-      this._actionsMenuDocumentKeydownHandler = (event: KeyboardEvent) => {
-        if (event.key !== "Escape") {
-          return;
-        }
-
-        event.preventDefault();
-        event.stopPropagation();
-        this._closeActionsMenu();
-
-        const actionsButton = this.querySelector<HTMLButtonElement>(".pi-input-btn--actions");
-        actionsButton?.focus();
-      };
-
-      document.addEventListener("keydown", this._actionsMenuDocumentKeydownHandler, true);
-    }
-  }
-
-  private _detachActionsMenuDocumentListener(): void {
-    if (this._actionsMenuDocumentClickHandler) {
-      document.removeEventListener("click", this._actionsMenuDocumentClickHandler, true);
-      this._actionsMenuDocumentClickHandler = undefined;
-    }
-
-    if (this._actionsMenuDocumentKeydownHandler) {
-      document.removeEventListener("keydown", this._actionsMenuDocumentKeydownHandler, true);
-      this._actionsMenuDocumentKeydownHandler = undefined;
-    }
-  }
-
-  private _openActionsMenu(): void {
-    if (this._actionsMenuOpen) return;
-
-    this._actionsMenuOpen = true;
-    this._attachActionsMenuDocumentListener();
-  }
-
-  private _closeActionsMenu(): void {
-    if (!this._actionsMenuOpen) return;
-
-    this._actionsMenuOpen = false;
-    this._detachActionsMenuDocumentListener();
-  }
-
-  private _toggleActionsMenu(): void {
-    if (this._actionsMenuOpen) {
-      this._closeActionsMenu();
-      return;
-    }
-
-    this._openActionsMenu();
-  }
-
-  private _onActionImportFiles = () => {
-    this._closeActionsMenu();
-    this._openFilePicker();
-  };
-
-  private _onActionClick(action: PiInputAction) {
-    this._closeActionsMenu();
-    this._dispatchInputAction(action);
-  }
-
   private _send() {
     const text = this._value.trim();
     if (!text) return;
@@ -256,16 +158,12 @@ export class PiInput extends LitElement {
   override disconnectedCallback() {
     super.disconnectedCallback();
     if (this._placeholderTimer) { clearInterval(this._placeholderTimer); this._placeholderTimer = undefined; }
-    this._closeActionsMenu();
   }
 
   override firstUpdated() { this._textarea?.focus(); }
 
   override render() {
     const hasContent = this._value.trim().length > 0;
-    const backupsTitle = this.hasRecoveryCheckpoints
-      ? "Browse and restore backups"
-      : "Browse backups and create a manual full-workbook backup";
 
     return html`
       <div
@@ -281,6 +179,15 @@ export class PiInput extends LitElement {
           multiple
           @change=${this._onFileInputChange}
         />
+        <button
+          class="pi-input-btn pi-input-btn--attach"
+          type="button"
+          @click=${this._openFilePicker}
+          aria-label="Attach files"
+          title="Attach files"
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.44 11.05-8.49 8.49a5.5 5.5 0 0 1-7.78-7.78l9.2-9.19a3.5 3.5 0 0 1 4.95 4.95l-9.19 9.2a1.5 1.5 0 0 1-2.12-2.13l8.49-8.48"/></svg>
+        </button>
         <textarea
           class="pi-input-textarea"
           .value=${this._value}
@@ -291,79 +198,6 @@ export class PiInput extends LitElement {
           @input=${this._onInput}
           @keydown=${this._onKeydown}
         ></textarea>
-
-        <div class="pi-input-actions-anchor">
-          <button
-            class="pi-input-btn pi-input-btn--actions"
-            type="button"
-            @click=${this._toggleActionsMenu}
-            aria-label="Input actions"
-            title="Input actions"
-            aria-haspopup="menu"
-            aria-expanded=${this._actionsMenuOpen ? "true" : "false"}
-          >
-            +
-          </button>
-
-          ${this._actionsMenuOpen
-            ? html`
-              <div class="pi-input-actions-menu" role="menu" aria-label="Input actions">
-                <button
-                  type="button"
-                  role="menuitem"
-                  class="pi-input-actions-menu__item"
-                  @click=${this._onActionImportFiles}
-                >
-                  Import files…
-                </button>
-                <div class="pi-input-actions-menu__divider" role="separator"></div>
-                <button
-                  type="button"
-                  role="menuitem"
-                  class="pi-input-actions-menu__item"
-                  @click=${() => this._onActionClick("open-files")}
-                >
-                  Files…
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  class="pi-input-actions-menu__item"
-                  @click=${() => this._onActionClick("open-rules")}
-                >
-                  Rules…
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  class="pi-input-actions-menu__item"
-                  @click=${() => this._onActionClick("open-resume")}
-                >
-                  Resume session…
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  class="pi-input-actions-menu__item"
-                  @click=${() => this._onActionClick("open-backups")}
-                  title=${backupsTitle}
-                >
-                  Backups…
-                </button>
-              </div>
-            `
-            : null}
-        </div>
-
-        <button
-          class="pi-input-btn pi-input-btn--attach"
-          type="button"
-          @click=${this._openFilePicker}
-          aria-label="Import files into Files"
-          title="Import files into Files"
-        >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.44 11.05-8.49 8.49a5.5 5.5 0 0 1-7.78-7.78l9.2-9.19a3.5 3.5 0 0 1 4.95 4.95l-9.19 9.2a1.5 1.5 0 0 1-2.12-2.13l8.49-8.48"/></svg>
-        </button>
         ${this._isDragOver
           ? html`<div class="pi-input-drop-hint">Drop files to import into Files</div>`
           : null}

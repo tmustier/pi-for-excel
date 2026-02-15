@@ -22,10 +22,10 @@ function modeUsageText(): string {
 
 function modeDescription(mode: ExecutionMode): string {
   if (mode === "yolo") {
-    return `${formatExecutionModeLabel(mode)} mode active — workbook mutations run without pre-execution confirmations.`;
+    return `${formatExecutionModeLabel(mode)} mode — Pi applies workbook changes immediately.`;
   }
 
-  return `${formatExecutionModeLabel(mode)} mode active — workbook mutations require pre-execution confirmation.`;
+  return `${formatExecutionModeLabel(mode)} mode — Pi asks before each workbook change.`;
 }
 
 function parseExecutionModeArg(input: string): "status" | "toggle" | ExecutionMode | null {
@@ -71,7 +71,7 @@ export function createSettingsCommands(actions: SettingsCommandActions): SlashCo
     },
     {
       name: "yolo",
-      description: "Toggle execution mode (YOLO vs Safe)",
+      description: "Toggle execution mode (Auto vs Confirm)",
       source: "builtin",
       execute: async (args: string) => {
         const command = parseExecutionModeArg(args);

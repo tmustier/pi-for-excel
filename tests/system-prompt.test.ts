@@ -17,14 +17,14 @@ void test("system prompt defaults to YOLO execution mode guidance", () => {
   const prompt = buildSystemPrompt();
 
   assert.match(prompt, /## Execution mode/);
-  assert.match(prompt, /Current mode:\s*\*\*YOLO\*\*/);
+  assert.match(prompt, /Current mode:\s*\*\*Auto\*\*/);
   assert.match(prompt, /low-friction execution/i);
 });
 
-void test("system prompt renders Safe execution mode guidance", () => {
+void test("system prompt renders Confirm execution mode guidance", () => {
   const prompt = buildSystemPrompt({ executionMode: "safe" });
 
-  assert.match(prompt, /Current mode:\s*\*\*Safe\*\*/);
+  assert.match(prompt, /Current mode:\s*\*\*Confirm\*\*/);
   assert.match(prompt, /explicit user confirmation before mutating workbook tools/i);
   assert.match(prompt, /destructive structure operations as high-risk/i);
 });

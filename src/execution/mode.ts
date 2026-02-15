@@ -1,8 +1,17 @@
-/** Execution mode persistence + helpers (YOLO vs Safe). */
+/**
+ * Execution mode persistence + helpers.
+ *
+ * Storage values remain "yolo" (= auto) and "safe" (= confirm) for backward
+ * compatibility. User-facing labels are "Auto" and "Confirm".
+ */
 
 export const EXECUTION_MODE_SETTING_KEY = "execution.mode.v1";
 export const PI_EXECUTION_MODE_CHANGED_EVENT = "pi:execution-mode-changed";
 
+/**
+ * Internal storage values. "yolo" = Auto (changes run immediately),
+ * "safe" = Confirm (Pi asks before each workbook mutation).
+ */
 export type ExecutionMode = "yolo" | "safe";
 
 export interface ExecutionModeStore {
@@ -38,7 +47,7 @@ export function toggleExecutionMode(mode: ExecutionMode): ExecutionMode {
 }
 
 export function formatExecutionModeLabel(mode: ExecutionMode): string {
-  return mode === "yolo" ? "YOLO" : "Safe";
+  return mode === "yolo" ? "Auto" : "Confirm";
 }
 
 export function dispatchExecutionModeChanged(mode: ExecutionMode): void {
