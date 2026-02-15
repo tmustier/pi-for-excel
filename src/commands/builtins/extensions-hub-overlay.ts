@@ -15,12 +15,16 @@ import {
 } from "../../ui/overlay-dialog.js";
 import { ADDONS_OVERLAY_ID } from "../../ui/overlay-ids.js";
 import { showToast } from "../../ui/toast.js";
-import type { WorkbookContextSnapshot } from "./integrations-overlay-types.js";
 import { renderConnectionsTab } from "./extensions-hub-connections.js";
 import { renderPluginsTab } from "./extensions-hub-plugins.js";
 import { renderSkillsTab } from "./extensions-hub-skills.js";
 
 export type ExtensionsHubTab = "connections" | "plugins" | "skills";
+
+export interface WorkbookContextSnapshot {
+  workbookId: string | null;
+  workbookLabel: string;
+}
 
 export interface ExtensionsHubDependencies {
   getActiveSessionId: () => string | null;

@@ -41,7 +41,7 @@ import {
   TMUX_BRIDGE_URL_SETTING_KEY,
 } from "../../tools/experimental-tool-gates.js";
 import { isExperimentalFeatureEnabled } from "../../experiments/flags.js";
-import { probeMcpServer } from "./integrations-overlay-mcp-probe.js";
+import { probeMcpServer } from "./extensions-hub-mcp-probe.js";
 import { showToast } from "../../ui/toast.js";
 import {
   createToggleRow,

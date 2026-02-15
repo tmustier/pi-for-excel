@@ -177,10 +177,10 @@ void test("runtime manager passes sandbox activation options and runtime metadat
   }
 });
 
-void test("extensions overlay source keeps runtime badge on non-builtin rows", async () => {
-  const source = await readFile(new URL("../src/commands/builtins/extensions-overlay.ts", import.meta.url), "utf8");
+void test("extensions hub plugins source includes runtime metadata for installed rows", async () => {
+  const source = await readFile(new URL("../src/commands/builtins/extensions-hub-plugins.ts", import.meta.url), "utf8");
 
-  assert.match(source, /if \(!isBuiltin\)[\s\S]*createOverlayBadge\(status\.runtimeLabel, runtimeBadgeColor\)/);
+  assert.match(source, /description:\s*`\$\{status\.sourceLabel\} · \$\{status\.runtimeLabel\}`/);
 });
 
 void test("untrusted extensions default to sandbox runtime when rollback kill switch is unset", async () => {

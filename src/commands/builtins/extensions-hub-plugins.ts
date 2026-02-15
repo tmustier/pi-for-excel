@@ -292,10 +292,14 @@ function renderPluginCard(
           })();
         },
       });
-      // Use sublabel styling for compact grid
-      const labelEl = row.root.querySelector(".pi-toggle-row__label");
-      if (labelEl) {
-        labelEl.className = "pi-toggle-row__sublabel";
+      // Use sublabel styling for compact grid.
+      // Avoid querySelector so this remains compatible with fake test DOMs.
+      const labels = row.root.firstElementChild;
+      if (labels instanceof HTMLElement) {
+        const labelEl = labels.firstElementChild;
+        if (labelEl instanceof HTMLElement) {
+          labelEl.className = "pi-toggle-row__sublabel";
+        }
       }
       grid.appendChild(row.root);
     }

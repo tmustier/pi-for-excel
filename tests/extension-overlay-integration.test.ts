@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { showExtensionsDialog } from "../src/commands/builtins/extensions-overlay.ts";
+import { renderPluginsTab } from "../src/commands/builtins/extensions-hub-plugins.ts";
 import { createExtensionAPI } from "../src/commands/extension-api.ts";
 import {
   describeStoredExtensionTrust,
@@ -14,8 +14,7 @@ import { ExtensionRuntimeManager, type ExtensionRuntimeStatus } from "../src/ext
 import { describeExtensionSource } from "../src/extensions/runtime-manager-helpers.ts";
 import { describeExtensionRuntimeMode, type ExtensionRuntimeMode } from "../src/extensions/runtime-mode.ts";
 import type { ExtensionSettingsStore, StoredExtensionSource } from "../src/extensions/store.ts";
-import { closeOverlayById } from "../src/ui/overlay-dialog.ts";
-import { EXTENSIONS_OVERLAY_ID, EXTENSION_OVERLAY_ID } from "../src/ui/overlay-ids.ts";
+import { EXTENSION_OVERLAY_ID } from "../src/ui/overlay-ids.ts";
 import { installFakeDom } from "./fake-dom.test.ts";
 
 class MemorySettingsStore implements ExtensionSettingsStore {
@@ -117,10 +116,6 @@ function createRuntimeStatus(input: {
   };
 }
 
-function hasClass(element: HTMLElement, className: string): boolean {
-  return element.className.split(/\s+/u).includes(className);
-}
-
 function collectElements(root: HTMLElement, predicate: (element: HTMLElement) => boolean): HTMLElement[] {
   const matches: HTMLElement[] = [];
 
@@ -142,68 +137,10 @@ function collectElements(root: HTMLElement, predicate: (element: HTMLElement) =>
   return matches;
 }
 
-function findElementByTagAndText(root: HTMLElement, tagName: string, text: string): HTMLElement | null {
-  const normalizedTag = tagName.toUpperCase();
-  const matches = collectElements(
-    root,
-    (element) => element.tagName === normalizedTag && (element.textContent ?? "") === text,
-  );
-
-  return matches[0] ?? null;
-}
-
-function findCollapsibleSection(root: HTMLElement, summaryText: string): HTMLElement | null {
-  const sections = collectElements(root, (element) => element.tagName === "DETAILS" && hasClass(element, "pi-overlay-section"));
-
-  for (const section of sections) {
-    const summary = Array.from(section.children).find(
-      (child) => child instanceof HTMLElement
-        && child.tagName === "SUMMARY"
-        && (child.textContent ?? "") === summaryText,
-    );
-
-    if (summary) {
-      return section;
-    }
-  }
-
-  return null;
-}
-
-function findInstalledRowByName(root: HTMLElement, extensionName: string): HTMLElement | null {
-  const names = collectElements(
-    root,
-    (element) => hasClass(element, "pi-ext-installed-row__name") && (element.textContent ?? "") === extensionName,
-  );
-
-  const row = names[0]?.closest<HTMLElement>(".pi-ext-installed-row");
-  return row instanceof HTMLElement ? row : null;
-}
-
-function collectBadgeTexts(root: HTMLElement): string[] {
-  return collectElements(root, (element) => hasClass(element, "pi-overlay-badge"))
-    .map((badge) => badge.textContent ?? "");
-}
-
-function collectSummaryTexts(root: HTMLElement): string[] {
-  return collectElements(root, (element) => element.tagName === "SUMMARY")
-    .map((summary) => summary.textContent ?? "");
-}
-
 function collectTextContent(root: HTMLElement): string[] {
   return collectElements(root, () => true)
     .map((element) => (element.textContent ?? "").trim())
     .filter((text) => text.length > 0);
-}
-
-async function settleOverlayWork(): Promise<void> {
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    await new Promise<void>((resolve) => {
-      setTimeout(() => {
-        resolve();
-      }, 0);
-    });
-  }
 }
 
 void test("extension overlay show/dismiss mounts and tears down shared overlay", () => {
@@ -250,7 +187,7 @@ void test("extension overlay show/dismiss mounts and tears down shared overlay",
   }
 });
 
-void test("extensions manager overlay renders collapsed sections and compact row metadata", async () => {
+void test("extensions hub plugins tab renders installed/extensions sections", () => {
   const { document, restore } = installFakeDom();
 
   try {
@@ -282,70 +219,21 @@ void test("extensions manager overlay renders collapsed sections and compact row
 
     const manager = new StaticExtensionRuntimeManager([builtinStatus, inlineErrorStatus]);
 
-    showExtensionsDialog(manager);
-    await settleOverlayWork();
+    const container = document.createElement("div");
+    renderPluginsTab({
+      container,
+      manager,
+      isBusy: () => false,
+      onChanged: async () => {},
+    });
 
-    const overlay = document.getElementById(EXTENSIONS_OVERLAY_ID);
-    assert.ok(overlay);
-    if (!overlay) {
-      return;
-    }
-
-    assert.notEqual(findElementByTagAndText(overlay, "h2", "Extensions"), null);
-    assert.notEqual(
-      findElementByTagAndText(overlay, "p", "Extensions can read/write workbook data. Only enable code you trust."),
-      null,
-    );
-
-    const addExtensionSection = findCollapsibleSection(overlay, "Add extension");
-    const advancedSection = findCollapsibleSection(overlay, "Advanced");
-
-    assert.ok(addExtensionSection);
-    assert.ok(advancedSection);
-    assert.equal(addExtensionSection?.getAttribute("open"), null);
-    assert.equal(advancedSection?.getAttribute("open"), null);
-
-    const snakeRow = findInstalledRowByName(overlay, "Snake");
-    assert.ok(snakeRow);
-    if (!snakeRow) {
-      return;
-    }
-
-    const snakeBadges = collectBadgeTexts(snakeRow);
-    assert.equal(snakeBadges.includes("loaded"), true);
-    assert.equal(snakeBadges.includes("all permissions"), true);
-    assert.equal(snakeBadges.includes("1 tool"), true);
-    assert.equal(snakeBadges.includes("1 command"), true);
-    assert.equal(snakeBadges.includes("builtin"), false);
-    assert.equal(snakeBadges.includes("host runtime"), false);
-
-    const snakeSummaries = collectSummaryTexts(snakeRow);
-    assert.equal(snakeSummaries.includes(`Permissions (${builtinStatus.grantedCapabilities.length})`), true);
-
-    const inlineRow = findInstalledRowByName(overlay, "Broken Inline");
-    assert.ok(inlineRow);
-    if (!inlineRow) {
-      return;
-    }
-
-    const inlineBadges = collectBadgeTexts(inlineRow);
-    assert.equal(inlineBadges.includes("error"), true);
-    assert.equal(inlineBadges.includes("inline code"), true);
-    assert.equal(inlineBadges.includes("sandbox iframe"), true);
-
-    const inlineSummaries = collectSummaryTexts(inlineRow);
-    assert.equal(inlineSummaries.includes(`Permissions (${inlineErrorStatus.grantedCapabilities.length})`), true);
-    assert.equal(inlineSummaries.includes("Failed to load"), true);
-
-    const errorDetails = collectElements(inlineRow, (element) => hasClass(element, "pi-ext-installed-row__error-detail"));
-    assert.equal(errorDetails.length, 1);
-    assert.equal(errorDetails[0].textContent, inlineErrorStatus.lastError);
-
-    const inlineTexts = collectTextContent(inlineRow);
-    assert.equal(inlineTexts.some((text) => text.startsWith("Last error:")), false);
+    const texts = collectTextContent(container);
+    assert.equal(texts.includes("Installed"), true);
+    assert.equal(texts.includes("Install"), true);
+    assert.equal(texts.includes("Advanced"), true);
+    assert.equal(texts.includes("Snake"), true);
+    assert.equal(texts.includes("Broken Inline"), true);
   } finally {
-    closeOverlayById(EXTENSIONS_OVERLAY_ID);
-    await settleOverlayWork();
     restore();
   }
 });

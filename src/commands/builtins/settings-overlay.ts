@@ -28,8 +28,8 @@ import {
   buildExperimentalFeatureContent,
   buildExperimentalFeatureFooter,
 } from "./experimental-overlay.js";
-import type { AddonsSection } from "./addons-overlay.js";
 
+type LegacyExtensionsSection = "connections" | "plugins" | "skills";
 type SettingsPrimaryTab = "logins" | "extensions" | "more";
 
 export type SettingsOverlaySection =
@@ -38,7 +38,7 @@ export type SettingsOverlaySection =
   | "proxy"
   | "advanced"
   | "experimental"
-  | AddonsSection;
+  | LegacyExtensionsSection;
 
 export interface ShowSettingsDialogOptions {
   section?: SettingsOverlaySection;

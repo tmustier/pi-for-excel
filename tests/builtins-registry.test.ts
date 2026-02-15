@@ -87,26 +87,18 @@ void test("builtins registry wires /addons, /experimental, /extensions, /integra
   assert.match(runtimeManagerSource, /activateExtensionInSandbox/);
   assert.match(runtimeManagerSource, /extension_sandbox_runtime/);
 
-  const extensionsOverlaySource = await readFile(
-    new URL("../src/commands/builtins/extensions-overlay.ts", import.meta.url),
+  const extensionsHubPluginsSource = await readFile(
+    new URL("../src/commands/builtins/extensions-hub-plugins.ts", import.meta.url),
     "utf8",
   );
-  assert.match(extensionsOverlaySource, /manager\.setExtensionCapability\(/);
-  assert.match(extensionsOverlaySource, /toggle\.type = "checkbox"/);
-  assert.match(extensionsOverlaySource, /confirmExtensionInstall\(/);
-  assert.match(extensionsOverlaySource, /confirmExtensionEnable\(/);
-  assert.match(extensionsOverlaySource, /Sandbox runtime \(default for untrusted sources\)/);
-  assert.match(extensionsOverlaySource, /setExperimentalFeatureEnabled\("extension_sandbox_runtime", true\)/);
-  assert.match(extensionsOverlaySource, /setExperimentalFeatureEnabled\("extension_sandbox_runtime", false\)/);
-  assert.match(extensionsOverlaySource, /Host-runtime fallback is enabled: this untrusted extension runs in host runtime/);
-  assert.match(extensionsOverlaySource, /higher-risk permissions/);
-  assert.match(extensionsOverlaySource, /Updated permissions for/);
-  assert.match(extensionsOverlaySource, /Permissions \(\$\{grantedCapabilities\.size\}\)/);
-  assert.match(extensionsOverlaySource, /createOverlayBadge\("all permissions", "muted"\)/);
-  assert.match(extensionsOverlaySource, /addExtensionSummary\.textContent = "Add extension"/);
-  assert.match(extensionsOverlaySource, /advancedSummary\.textContent = "Advanced"/);
-  assert.match(extensionsOverlaySource, /errorSummary\.textContent = "Failed to load"/);
-  assert.match(extensionsOverlaySource, /reload failed \(see Failed to load\)/);
+  assert.match(extensionsHubPluginsSource, /manager\.setExtensionCapability\(/);
+  assert.match(extensionsHubPluginsSource, /confirmInstall\(/);
+  assert.match(extensionsHubPluginsSource, /confirmEnable\(/);
+  assert.match(extensionsHubPluginsSource, /higher-risk permissions/);
+  assert.match(extensionsHubPluginsSource, /createSectionHeader\(\{ label: "Permissions" \}\)/);
+  assert.match(extensionsHubPluginsSource, /installFromUrl\(/);
+  assert.match(extensionsHubPluginsSource, /installFromCode\(/);
+  assert.match(extensionsHubPluginsSource, /summary\.textContent = "Advanced"/);
 
   const extensionsDocsSource = await readFile(new URL("../docs/extensions.md", import.meta.url), "utf8");
   assert.match(extensionsDocsSource, /## Permission review\/revoke/);
@@ -154,14 +146,15 @@ void test("extensions builtins expose /extensions without /addons alias", async 
   assert.match(source, /openExtensionsHub/);
 });
 
-void test("add-ons connections section links to detailed Tools & MCP manager", async () => {
+void test("extensions hub connections tab includes MCP test flow", async () => {
   const source = await readFile(
-    new URL("../src/commands/builtins/addons-overlay-connections.ts", import.meta.url),
+    new URL("../src/commands/builtins/extensions-hub-connections.ts", import.meta.url),
     "utf8",
   );
 
-  assert.match(source, /Open detailed Tools & MCP manager…/);
-  assert.match(source, /openIntegrationsManager/);
+  assert.match(source, /label: "MCP servers"/);
+  assert.match(source, /\+ Add server/);
+  assert.match(source, /probeMcpServer/);
 });
 
 void test("taskpane init wires Files workspace opener", async () => {
