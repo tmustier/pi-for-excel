@@ -138,7 +138,13 @@ function buildIntegrationCard(args: {
   badges.className = "pi-overlay-badges";
 
   const active = args.snapshot.activeIntegrationIds.includes(args.integrationId);
-  badges.appendChild(createOverlayBadge(active ? "active" : "inactive", active ? "ok" : "muted"));
+  const blockedByGlobalGate = active && !args.snapshot.externalToolsEnabled;
+
+  if (blockedByGlobalGate) {
+    badges.appendChild(createOverlayBadge("configured (blocked)", "warn"));
+  } else {
+    badges.appendChild(createOverlayBadge(active ? "active" : "inactive", active ? "ok" : "muted"));
+  }
 
   top.append(textWrap, badges);
 
@@ -235,9 +241,13 @@ export function renderConnectionsSection(args: {
 
   const summary = document.createElement("p");
   summary.className = "pi-overlay-hint";
-  summary.textContent = args.snapshot.activeIntegrationIds.length > 0
-    ? `Active integrations: ${args.snapshot.activeIntegrationIds.join(", ")}`
-    : "No integrations enabled for the current session/workbook.";
+  if (args.snapshot.activeIntegrationIds.length === 0) {
+    summary.textContent = "No integrations enabled for the current session/workbook.";
+  } else if (!args.snapshot.externalToolsEnabled) {
+    summary.textContent = `Configured integrations are blocked while external tools are disabled: ${args.snapshot.activeIntegrationIds.join(", ")}`;
+  } else {
+    summary.textContent = `Active integrations: ${args.snapshot.activeIntegrationIds.join(", ")}`;
+  }
 
   const webSearchStatus = document.createElement("p");
   webSearchStatus.className = "pi-overlay-hint";

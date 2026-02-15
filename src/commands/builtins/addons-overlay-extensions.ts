@@ -4,7 +4,44 @@ import {
   createOverlaySectionTitle,
 } from "../../ui/overlay-dialog.js";
 import { showToast } from "../../ui/toast.js";
+import type { ExtensionRuntimeStatus } from "../../extensions/runtime-manager.js";
 import type { AddonsDialogActions } from "./addons-overlay-types.js";
+
+const HIGH_RISK_CAPABILITIES = new Set<string>([
+  "tools.register",
+  "agent.read",
+  "agent.events.read",
+  "llm.complete",
+  "http.fetch",
+  "agent.context.write",
+  "agent.steer",
+  "agent.followup",
+  "skills.write",
+]);
+
+function confirmExtensionEnable(status: ExtensionRuntimeStatus): boolean {
+  if (status.trust === "builtin") {
+    return true;
+  }
+
+  const highRiskCapabilities = status.grantedCapabilities.filter((capability) => HIGH_RISK_CAPABILITIES.has(capability));
+  if (highRiskCapabilities.length === 0) {
+    return true;
+  }
+
+  const lines = [
+    `Enable extension "${status.name}" with higher-risk permissions?`,
+    "",
+    "Granted higher-risk permissions:",
+    ...highRiskCapabilities.map((capability) => `- ${capability}`),
+    "",
+    `Source: ${status.trustLabel}`,
+    "",
+    "You can edit permissions later in /extensions.",
+  ];
+
+  return window.confirm(lines.join("\n"));
+}
 
 export function renderExtensionsSection(args: {
   container: HTMLElement;
@@ -68,6 +105,11 @@ export function renderExtensionsSection(args: {
       toggle.checked = status.enabled;
       toggle.disabled = args.busy;
       toggle.addEventListener("change", () => {
+        if (toggle.checked && !status.enabled && !confirmExtensionEnable(status)) {
+          toggle.checked = false;
+          return;
+        }
+
         void args.actions.setExtensionEnabled(status.id, toggle.checked)
           .then(async () => {
             if (args.actions.onChanged) {
