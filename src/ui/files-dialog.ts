@@ -407,8 +407,8 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
     const row = document.createElement("div");
     row.className = "pi-files-row";
     row.tabIndex = 0;
-    row.setAttribute("role", "row");
-    row.setAttribute("aria-label", file.path);
+    row.setAttribute("role", "listitem");
+    row.setAttribute("aria-label", `${file.path} — press Enter to open`);
 
     const fileIcon = file.kind === "text" ? "📄" : isImageMimeType(file.mimeType) ? "🖼" : "📎";
 
