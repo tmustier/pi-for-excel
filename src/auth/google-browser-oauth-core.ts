@@ -79,18 +79,27 @@ function parseAuthorizationInput(input: string): ParsedAuthorizationInput {
   return { code: value };
 }
 
-function parseTokenPayload(payload: unknown): GoogleTokenPayload | null {
+function parseTokenPayload(
+  payload: unknown,
+  fallbackRefreshToken?: string,
+): GoogleTokenPayload | null {
   if (!isRecord(payload)) {
     return null;
   }
 
   const accessToken = payload.access_token;
-  const refreshToken = payload.refresh_token;
+  const refreshTokenValue = payload.refresh_token;
   const expiresIn = payload.expires_in;
+
+  const refreshToken =
+    typeof refreshTokenValue === "string"
+      ? refreshTokenValue
+      : fallbackRefreshToken;
 
   if (
     typeof accessToken !== "string"
     || typeof refreshToken !== "string"
+    || refreshToken.trim().length === 0
     || typeof expiresIn !== "number"
   ) {
     return null;
@@ -158,7 +167,7 @@ async function refreshAccessToken(
     throw new Error(`Google token refresh failed (${response.status}): ${errorText}`);
   }
 
-  const payload = parseTokenPayload(await response.json());
+  const payload = parseTokenPayload(await response.json(), refreshToken);
   if (!payload) {
     throw new Error("Google refresh response is missing required fields");
   }
