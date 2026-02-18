@@ -11,6 +11,7 @@ import {
   resolveFilesDialogConnectFolderButtonState,
   resolveFilesDialogSourceLabel,
 } from "../src/ui/files-dialog-filtering.ts";
+import { resolveRenameDestinationPath } from "../src/ui/files-dialog-paths.ts";
 
 function makeFile(path: string, overrides: Partial<WorkspaceFileEntry> = {}): WorkspaceFileEntry {
   return {
@@ -230,4 +231,45 @@ void test("resolveFilesDialogConnectFolderButtonState reflects backend status", 
     label: "Connected ✓",
     title: "Folder already connected",
   });
+});
+
+void test("resolveRenameDestinationPath keeps extension when user omits it", () => {
+  assert.equal(
+    resolveRenameDestinationPath("reports/q1/revenue.xlsx", "revenue-final"),
+    "reports/q1/revenue-final.xlsx",
+  );
+
+  assert.equal(
+    resolveRenameDestinationPath("reports/q1/revenue.xlsx", "archive/revenue-final"),
+    "archive/revenue-final.xlsx",
+  );
+});
+
+void test("resolveRenameDestinationPath respects explicit target extensions", () => {
+  assert.equal(
+    resolveRenameDestinationPath("reports/q1/revenue.xlsx", "revenue-final.csv"),
+    "reports/q1/revenue-final.csv",
+  );
+
+  assert.equal(
+    resolveRenameDestinationPath("reports/q1/revenue.xlsx", ".hidden"),
+    "reports/q1/.hidden",
+  );
+
+  assert.equal(
+    resolveRenameDestinationPath("reports/q1/revenue.xlsx", "revenue."),
+    "reports/q1/revenue.",
+  );
+});
+
+void test("resolveRenameDestinationPath handles empty and trailing-slash input", () => {
+  assert.equal(
+    resolveRenameDestinationPath("reports/q1/revenue.xlsx", ""),
+    "reports/q1/revenue.xlsx",
+  );
+
+  assert.equal(
+    resolveRenameDestinationPath("reports/q1/revenue.xlsx", "archive/"),
+    "reports/q1/revenue.xlsx",
+  );
 });
