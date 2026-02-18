@@ -11,6 +11,7 @@ import {
   resolveFilesDialogConnectFolderButtonState,
   resolveFilesDialogSourceLabel,
 } from "../src/ui/files-dialog-filtering.ts";
+import { resolveSafeFilesDialogBlobMimeType } from "../src/ui/files-dialog-mime.ts";
 import { resolveRenameDestinationPath } from "../src/ui/files-dialog-paths.ts";
 
 function makeFile(path: string, overrides: Partial<WorkspaceFileEntry> = {}): WorkspaceFileEntry {
@@ -272,4 +273,16 @@ void test("resolveRenameDestinationPath handles empty and trailing-slash input",
     resolveRenameDestinationPath("reports/q1/revenue.xlsx", "archive/"),
     "reports/q1/revenue.xlsx",
   );
+});
+
+void test("resolveSafeFilesDialogBlobMimeType downgrades active-content types", () => {
+  assert.equal(resolveSafeFilesDialogBlobMimeType("text/html"), "application/octet-stream");
+  assert.equal(resolveSafeFilesDialogBlobMimeType("image/svg+xml"), "application/octet-stream");
+  assert.equal(resolveSafeFilesDialogBlobMimeType("text/javascript; charset=utf-8"), "application/octet-stream");
+});
+
+void test("resolveSafeFilesDialogBlobMimeType preserves safe types", () => {
+  assert.equal(resolveSafeFilesDialogBlobMimeType("text/plain"), "text/plain");
+  assert.equal(resolveSafeFilesDialogBlobMimeType("application/pdf"), "application/pdf");
+  assert.equal(resolveSafeFilesDialogBlobMimeType(""), "application/octet-stream");
 });

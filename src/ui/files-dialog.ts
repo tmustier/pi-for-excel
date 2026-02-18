@@ -33,6 +33,7 @@ import {
   createOverlayHeader,
 } from "./overlay-dialog.js";
 import { FILES_WORKSPACE_OVERLAY_ID } from "./overlay-ids.js";
+import { resolveSafeFilesDialogBlobMimeType } from "./files-dialog-mime.js";
 import { resolveRenameDestinationPath } from "./files-dialog-paths.js";
 import { requestTextInputDialog } from "./text-input-dialog.js";
 import { showToast } from "./toast.js";
@@ -617,7 +618,7 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
         }
 
         const blob = new Blob([result.text], {
-          type: file.mimeType || "text/plain",
+          type: resolveSafeFilesDialogBlobMimeType(file.mimeType || "text/plain"),
         });
 
         openBlobInNewTab(blob, pendingWindow);
@@ -637,7 +638,7 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
 
       const bytes = base64ToBytes(result.base64);
       const blob = new Blob([toArrayBuffer(bytes)], {
-        type: file.mimeType,
+        type: resolveSafeFilesDialogBlobMimeType(file.mimeType),
       });
 
       openBlobInNewTab(blob, pendingWindow);
