@@ -12,6 +12,7 @@ import { isRecord } from "../utils/type-guards.js";
 import { base64ToBytes, bytesToBase64, encodeTextUtf8, truncateBase64, truncateText } from "./encoding.js";
 import { MemoryBackend, NativeDirectoryBackend, OpfsBackend, type WorkspaceBackend } from "./backend.js";
 import { getBuiltinWorkspaceDoc, isBuiltinWorkspacePath, listBuiltinWorkspaceDocs } from "./builtin-docs.js";
+import { resolveSafeBlobUrlMimeType } from "./blob-url-safety.js";
 import { inferMimeType, isTextMimeType } from "./mime.js";
 import { getWorkspaceBaseName, normalizeWorkspacePath } from "./path.js";
 import {
@@ -114,18 +115,6 @@ function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   const out = new ArrayBuffer(bytes.byteLength);
   new Uint8Array(out).set(bytes);
   return out;
-}
-
-/** MIME types that can execute script when opened as a blob URL at the app origin. */
-function isActiveContentMimeType(mimeType: string): boolean {
-  const lower = mimeType.toLowerCase();
-  return (
-    lower === "text/html" ||
-    lower === "application/xhtml+xml" ||
-    lower === "image/svg+xml" ||
-    lower === "text/javascript" ||
-    lower === "application/javascript"
-  );
 }
 
 function closeWindowSafely(windowHandle: Window | null): void {
@@ -1580,9 +1569,7 @@ export class FilesWorkspace {
 
       // Sanitize script-capable MIME types (HTML, SVG, JS) to prevent
       // active-content execution at the app origin when opened via blob URL.
-      const safeMimeType = isActiveContentMimeType(mimeType)
-        ? "application/octet-stream"
-        : mimeType;
+      const safeMimeType = resolveSafeBlobUrlMimeType(mimeType);
 
       const blob = new Blob([toArrayBuffer(bytes)], { type: safeMimeType });
       const url = URL.createObjectURL(blob);

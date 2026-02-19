@@ -242,7 +242,7 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 - **Audit trail:** persisted locally (list/read/write/delete/rename/import/backend switches) including actor, source, timestamp, and workbook label. Not shown in the Files dialog UI — available via `/export audit` for debugging.
 - **Download fix:** uses `window.open(blobUrl)` instead of `<a download>` + `anchor.click()` for reliable binary file downloads in Office Add-in WebView (WKWebView on macOS silently ignores programmatic anchor clicks).
 - **Detail actions:** file detail view exposes `Open ↗` + `Download` for all files, and writable files also expose `Rename` + `Delete`.
-- **Open safety:** `Open ↗` sanitizes script-capable MIME types (`text/html`, `image/svg+xml`, JavaScript, etc.) to `application/octet-stream` before opening blob URLs.
+- **Open safety:** `Open ↗` and file downloads both sanitize script-capable MIME types (`text/html`, `image/svg+xml`, JavaScript, etc.) to `application/octet-stream` via shared blob-URL safety helpers.
 - **Rename safety:** if a rename input omits an extension, preserve the current extension (`report.xlsx` + `report-final` → `report-final.xlsx`) unless the user explicitly types a dotted name.
 - **Preview UX:** Files dialog supports inline text editing plus image/PDF preview; other binaries fall back to metadata + download. Built-in docs are marked read-only in the UI.
 - **Filter UX:** Files dialog includes workbook-tag filtering (`all`, `current workbook`, `untagged`, and per-tag options) without changing underlying shared storage.

@@ -1,5 +1,5 @@
 /**
- * MIME helpers for Files dialog open/download actions.
+ * Blob URL safety helpers shared by file open/download flows.
  */
 
 const ACTIVE_CONTENT_MIME_TYPES = new Set<string>([
@@ -13,7 +13,7 @@ const ACTIVE_CONTENT_MIME_TYPES = new Set<string>([
 /**
  * Returns a MIME type safe to open via blob URL under the add-in origin.
  */
-export function resolveSafeFilesDialogBlobMimeType(mimeType: string): string {
+export function resolveSafeBlobUrlMimeType(mimeType: string): string {
   const trimmed = mimeType.trim();
   if (trimmed.length === 0) {
     return "application/octet-stream";
