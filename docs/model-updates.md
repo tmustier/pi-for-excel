@@ -19,6 +19,16 @@ This doc describes how to update:
 - If you want to add newly-released models and they’re missing from our add-in.
 - **If it’s been > 1 week since the last verification date above**, refresh deps + re-check model IDs.
 
+## What is now automated
+
+- Dependabot checks npm dependencies **daily**.
+- A dedicated Dependabot group (`pi-stack`) keeps these packages in one PR:
+  - `@mariozechner/pi-ai`
+  - `@mariozechner/pi-web-ui`
+  - `@mariozechner/pi-agent-core`
+- `.github/workflows/dependabot-pi-automerge.yml` auto-approves + enables auto-merge for that Dependabot group (merge still waits for green checks).
+- `npm run check` includes `scripts/check-pi-deps-lockstep.mjs`, which fails if those three package versions drift.
+
 ## Step-by-step
 
 ### 1) Check current installed versions

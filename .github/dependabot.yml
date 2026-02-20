@@ -5,13 +5,24 @@ updates:
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
-      interval: "weekly"
+      interval: "daily"
     open-pull-requests-limit: 10
     ignore:
       - dependency-name: "eslint"
         update-types:
           - "version-update:semver-major"
     groups:
+      # Keep core Pi packages in one lockstep PR so model-registry bumps are easy to validate.
+      # This group is intentionally listed before the generic group.
+      pi-stack:
+        patterns:
+          - "@mariozechner/pi-ai"
+          - "@mariozechner/pi-web-ui"
+          - "@mariozechner/pi-agent-core"
+        update-types:
+          - "minor"
+          - "patch"
+
       npm-minor-and-patch:
         patterns:
           - "*"

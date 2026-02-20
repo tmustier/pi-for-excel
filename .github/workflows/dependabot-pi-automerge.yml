@@ -1,0 +1,46 @@
+name: Dependabot Pi auto-merge
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, ready_for_review]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: dependabot-pi-automerge-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  enable-automerge:
+    if: >-
+      github.actor == 'dependabot[bot]' &&
+      github.event.pull_request.draft == false &&
+      startsWith(github.event.pull_request.head.ref, 'dependabot/npm_and_yarn/pi-stack-')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Approve Dependabot Pi stack update
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: |
+          APPROVAL_COUNT=$(gh pr view "$PR_URL" --json reviews --jq '[.reviews[] | select(.author.login == "github-actions[bot]" and .state == "APPROVED")] | length')
+          if [ "$APPROVAL_COUNT" -eq 0 ]; then
+            gh pr review --approve "$PR_URL"
+          else
+            echo "Approval already present from github-actions[bot]."
+          fi
+
+      - name: Enable auto-merge once checks are green
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: |
+          if gh pr view "$PR_URL" --json autoMergeRequest --jq '.autoMergeRequest != null' | grep -q 'true'; then
+            echo "Auto-merge already enabled."
+            exit 0
+          fi
+
+          gh pr merge --auto --squash "$PR_URL"
