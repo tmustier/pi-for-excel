@@ -27,7 +27,7 @@ This doc describes how to update:
   - `@mariozechner/pi-web-ui`
   - `@mariozechner/pi-agent-core`
 - `.github/workflows/dependabot-pi-automerge.yml` auto-approves + enables auto-merge for that Dependabot group (merge still waits for green checks).
-- `npm run check` includes `scripts/check-pi-deps-lockstep.mjs`, which fails if those three package versions drift.
+- `npm run check` includes `scripts/check-pi-deps-lockstep.mjs`, which fails if those three package versions drift in either `package.json` specs or `package-lock.json` resolved versions.
 
 ## Step-by-step
 
