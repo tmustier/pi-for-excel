@@ -33,9 +33,9 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.76.0",
-    "@mariozechner/pi-agent-core": "^0.53.0",
-    "@mariozechner/pi-ai": "^0.53.0",
-    "@mariozechner/pi-web-ui": "^0.53.0",
+    "@mariozechner/pi-agent-core": "^0.54.0",
+    "@mariozechner/pi-ai": "^0.54.0",
+    "@mariozechner/pi-web-ui": "^0.54.0",
     "@sinclair/typebox": "^0.34.41",
     "lit": "^3.2.1",
     "marked": "^17.0.3"

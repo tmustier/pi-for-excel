@@ -1,6 +1,6 @@
 # Model / dependency update playbook
 
-**Last verified:** 2026-02-15
+**Last verified:** 2026-02-20
 
 This repo hardcodes a small set of "featured" and "preferred" model IDs (for sorting + default selection). Those IDs come from Pi’s model registry (`@mariozechner/pi-ai`) and will drift as new models ship (e.g. `gpt-5.3-codex`, `claude-opus-4-6`).
 
