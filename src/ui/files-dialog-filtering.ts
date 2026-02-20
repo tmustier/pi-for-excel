@@ -3,6 +3,7 @@ import type { WorkspaceBackendStatus, WorkspaceFileEntry } from "../files/types.
 export interface FilesDialogBadge {
   tone: "ok" | "muted" | "info";
   label: string;
+  title?: string;
 }
 
 export interface FilesDialogFolderGroup {
@@ -45,7 +46,16 @@ export function resolveFilesDialogBadge(file: WorkspaceFileEntry): FilesDialogBa
   }
 
   if (file.workbookTag) {
-    return { tone: "ok", label: file.workbookTag.workbookLabel };
+    const workbookLabel = file.workbookTag.workbookLabel.trim();
+    if (workbookLabel.length > 0) {
+      return {
+        tone: "muted",
+        label: "Workbook",
+        title: `Tagged to ${workbookLabel}`,
+      };
+    }
+
+    return { tone: "muted", label: "Workbook" };
   }
 
   if (isAgentWrittenNotesFilePath(file.path)) {

@@ -760,6 +760,9 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
       const badgeElement = document.createElement("span");
       badgeElement.className = `pi-overlay-badge pi-overlay-badge--${badge.tone}`;
       badgeElement.textContent = badge.label;
+      if (badge.title) {
+        badgeElement.title = badge.title;
+      }
       nameRow.appendChild(badgeElement);
     }
 

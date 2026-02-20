@@ -172,7 +172,23 @@ void test("resolveFilesDialogBadge follows priority rules", () => {
       taggedAt: 1,
     },
   });
-  assert.deepEqual(resolveFilesDialogBadge(tagged), { tone: "ok", label: "Budget.xlsx" });
+  assert.deepEqual(resolveFilesDialogBadge(tagged), {
+    tone: "muted",
+    label: "Workbook",
+    title: "Tagged to Budget.xlsx",
+  });
+
+  const taggedWithoutLabel = makeFile("uploads/plan.md", {
+    workbookTag: {
+      workbookId: "wb-a",
+      workbookLabel: "   ",
+      taggedAt: 1,
+    },
+  });
+  assert.deepEqual(resolveFilesDialogBadge(taggedWithoutLabel), {
+    tone: "muted",
+    label: "Workbook",
+  });
 
   const agentNotes = makeFile("notes/today.md");
   assert.deepEqual(resolveFilesDialogBadge(agentNotes), { tone: "muted", label: "Agent" });
