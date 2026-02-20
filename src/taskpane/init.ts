@@ -261,6 +261,10 @@ export async function initTaskpane(opts: {
     setActiveProviders(combinedProviders);
   };
 
+  document.addEventListener("pi:providers-changed", () => {
+    void refreshConfiguredProviders();
+  });
+
   try {
     await awaitWithTimeout("Provider lookup", 3500, refreshConfiguredProviders());
   } catch (error: unknown) {
@@ -1592,10 +1596,6 @@ export async function initTaskpane(opts: {
 
   // ── Register extensions ──
   await extensionManager.initialize();
-
-  document.addEventListener("pi:providers-changed", () => {
-    void refreshConfiguredProviders();
-  });
 
   // ── Keyboard shortcuts ──
   installKeyboardShortcuts({
