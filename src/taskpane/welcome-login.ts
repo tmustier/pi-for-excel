@@ -99,6 +99,10 @@ export async function showWelcomeLogin(providerKeys: ProviderKeysStore): Promise
 
     const providerList = createElement("div", "pi-welcome-providers");
 
+    const customGatewayButton = createElement("button", "pi-welcome-custom-gateway");
+    customGatewayButton.type = "button";
+    customGatewayButton.textContent = "Use a custom OpenAI-compatible gateway";
+
     const proxyToggle = createElement("button", "pi-welcome-proxy-toggle");
     proxyToggle.type = "button";
     proxyToggle.textContent = "Having login trouble? Configure local proxy";
@@ -159,12 +163,25 @@ export async function showWelcomeLogin(providerKeys: ProviderKeysStore): Promise
       intro,
       providerSectionTitle,
       providerList,
+      customGatewayButton,
       proxyToggle,
       proxyPanel,
     );
 
     dialog.overlay.setAttribute("aria-labelledby", titleId);
     dialog.overlay.setAttribute("aria-describedby", subtitleId);
+
+    customGatewayButton.addEventListener("click", () => {
+      closeOverlay();
+
+      void import("../commands/builtins/settings-overlay.js")
+        .then(({ showSettingsDialog }) => {
+          void showSettingsDialog({ section: "custom-gateways" });
+        })
+        .catch(() => {
+          showToast("Couldn't open custom gateway settings.");
+        });
+    });
 
     proxyToggle.addEventListener("click", () => {
       const willOpen = proxyPanel.hidden;

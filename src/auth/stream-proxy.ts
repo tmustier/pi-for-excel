@@ -20,12 +20,17 @@ import {
 import { isDebugEnabled } from "../debug/debug.js";
 import { selectToolBundle, type ToolBundleId } from "../context/tool-disclosure.js";
 import { modelRecencyScore } from "../models/model-ordering.js";
+import { OPENAI_GATEWAY_PROVIDER_PREFIX } from "./custom-gateways.js";
 import { normalizeProxyUrl, validateOfficeProxyUrl } from "./proxy-validation.js";
 
 export type GetProxyUrl = () => Promise<string | undefined>;
 
 function shouldProxyProvider(provider: string, apiKey?: string): boolean {
   const p = provider.toLowerCase();
+
+  if (p.startsWith(OPENAI_GATEWAY_PROVIDER_PREFIX.toLowerCase())) {
+    return true;
+  }
 
   switch (p) {
     // Known to require proxy in browser webviews (CORS blocked)

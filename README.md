@@ -32,6 +32,7 @@ Pi for Excel is an AI agent that lives inside Excel. It reads your workbook, mak
 - **OpenAI** / **OpenAI Codex** — API key
 - **Google Gemini** — API key
 - **GitHub Copilot** — OAuth
+- **Custom OpenAI-compatible gateways** — configure endpoint + model + API key in `/settings`
 
 **Session management** — multiple session tabs per workbook, auto-save/restore, session history, `/resume` to pick up where you left off.
 
@@ -63,7 +64,7 @@ Pi for Excel is an AI agent that lives inside Excel. It reads your workbook, mak
 1. Download [`manifest.prod.xml`](https://pi-for-excel.vercel.app/manifest.prod.xml)
 2. Add it to Excel — see [**install guide**](docs/install.md) for step-by-step instructions (macOS + Windows)
 3. Click **Open Pi** in the ribbon
-4. Connect a provider (paste an API key or sign in with OAuth)
+4. Connect a provider (API key or OAuth), or configure a custom OpenAI-compatible gateway in `/settings`
 5. Start chatting — try `What sheets do I have?` or `Summarize my current selection`
 
 ## Developer Quick Start

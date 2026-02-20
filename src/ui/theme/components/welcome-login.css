@@ -194,6 +194,24 @@
   background: var(--green-alpha-6);
 }
 
+.pi-welcome-custom-gateway {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px dashed var(--green-alpha-25);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--pi-green-strong);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  text-align: center;
+  cursor: pointer;
+}
+
+.pi-welcome-custom-gateway:hover {
+  background: var(--green-alpha-6);
+}
+
 /* Prompt overlay used during OAuth code/device flows */
 .pi-prompt-card {
   text-align: left;

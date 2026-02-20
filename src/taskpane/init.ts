@@ -20,6 +20,7 @@ import {
   validateOfficeProxyUrl,
 } from "../auth/proxy-validation.js";
 import { restoreCredentials } from "../auth/restore.js";
+import { collectCustomProviderRuntimeInfo } from "../auth/custom-gateways.js";
 import { invalidateBlueprint } from "../context/blueprint.js";
 import { ChangeTracker } from "../context/change-tracker.js";
 import {
@@ -186,7 +187,7 @@ export async function initTaskpane(opts: {
   const changeTracker = new ChangeTracker();
 
   // 1. Storage
-  const { providerKeys, sessions, settings } = initAppStorage();
+  const { providerKeys, sessions, settings, customProviders } = initAppStorage();
 
   // Seed a predictable proxy default for OAuth flows.
   await ensureDefaultProxyUrl(settings);
@@ -222,10 +223,46 @@ export async function initTaskpane(opts: {
     console.warn("[auth] Credential restore skipped:", error);
   }
 
-  // 2b. Welcome/login if no providers
+  // 2b. Resolve available providers (built-ins + configured custom providers)
   let availableProviders: string[] = [];
+  let customProviderApiKeys = new Map<string, string | undefined>();
+  let defaultCustomModel: ReturnType<typeof collectCustomProviderRuntimeInfo>["defaultModel"] = null;
+
+  const refreshConfiguredProviders = async (): Promise<void> => {
+    const combinedProviders = new Set<string>();
+    let nextCustomApiKeys = new Map<string, string | undefined>();
+    let nextDefaultCustomModel: ReturnType<typeof collectCustomProviderRuntimeInfo>["defaultModel"] = null;
+
+    try {
+      const configuredBuiltInProviders = await providerKeys.list();
+      for (const provider of configuredBuiltInProviders) {
+        combinedProviders.add(provider);
+      }
+    } catch (error: unknown) {
+      console.warn("[auth] Built-in provider lookup failed:", error);
+    }
+
+    try {
+      const configuredCustomProviders = await customProviders.getAll();
+      const customInfo = collectCustomProviderRuntimeInfo(configuredCustomProviders);
+      nextCustomApiKeys = customInfo.apiKeys;
+      nextDefaultCustomModel = customInfo.defaultModel;
+
+      for (const provider of customInfo.providerNames) {
+        combinedProviders.add(provider);
+      }
+    } catch (error: unknown) {
+      console.warn("[auth] Custom provider lookup failed:", error);
+    }
+
+    availableProviders = Array.from(combinedProviders);
+    customProviderApiKeys = nextCustomApiKeys;
+    defaultCustomModel = nextDefaultCustomModel;
+    setActiveProviders(combinedProviders);
+  };
+
   try {
-    availableProviders = await awaitWithTimeout("Provider key lookup", 3000, providerKeys.list());
+    await awaitWithTimeout("Provider lookup", 3500, refreshConfiguredProviders());
   } catch (error: unknown) {
     console.warn("[auth] Provider lookup failed during startup:", error);
   }
@@ -241,8 +278,7 @@ export async function initTaskpane(opts: {
 
   // 4. Shared runtime dependencies
   // Workbook structure context is injected separately by transformContext.
-  setActiveProviders(new Set(availableProviders));
-  const defaultModel = pickDefaultModel(availableProviders);
+  const defaultModel = pickDefaultModel(availableProviders, defaultCustomModel);
 
   const streamFn = createOfficeStreamFn(async () => {
     // In dev mode, Vite's reverse proxy handles CORS — don't double-proxy.
@@ -775,9 +811,12 @@ export async function initTaskpane(opts: {
       const key = await getAppStorage().providerKeys.get(provider);
       if (key) return key;
 
+      if (customProviderApiKeys.has(provider)) {
+        return customProviderApiKeys.get(provider) ?? undefined;
+      }
+
       const success = await ApiKeyPromptDialog.prompt(provider);
-      const updated = await providerKeys.list();
-      setActiveProviders(new Set(updated));
+      await refreshConfiguredProviders();
       if (success) {
         clearErrorBanner(errorRoot);
         return (await getAppStorage().providerKeys.get(provider)) ?? undefined;
@@ -1555,10 +1594,7 @@ export async function initTaskpane(opts: {
   await extensionManager.initialize();
 
   document.addEventListener("pi:providers-changed", () => {
-    void (async () => {
-      const updated = await providerKeys.list();
-      setActiveProviders(new Set(updated));
-    })();
+    void refreshConfiguredProviders();
   });
 
   // ── Keyboard shortcuts ──

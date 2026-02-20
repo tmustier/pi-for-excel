@@ -50,7 +50,10 @@ function pickLatestMatchingModel(provider: DefaultProvider, match: RegExp): Mode
   return candidates[0] ?? null;
 }
 
-export function pickDefaultModel(availableProviders: string[]): Model<Api> {
+export function pickDefaultModel(
+  availableProviders: string[],
+  customDefaultModel?: Model<Api> | null,
+): Model<Api> {
   // Anthropic special-case:
   // Prefer Opus, except if there's a *newer-version* Sonnet, use that first.
   if (availableProviders.includes("anthropic")) {
@@ -75,6 +78,10 @@ export function pickDefaultModel(availableProviders: string[]): Model<Api> {
     if (!availableProviders.includes(rule.provider)) continue;
     const m = pickLatestMatchingModel(rule.provider, rule.match);
     if (m) return m;
+  }
+
+  if (customDefaultModel) {
+    return customDefaultModel;
   }
 
   // Absolute fallback: keep this resilient across pi-ai version bumps

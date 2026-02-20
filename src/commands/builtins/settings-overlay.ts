@@ -36,17 +36,25 @@ import {
   buildExperimentalFeatureContent,
   buildExperimentalFeatureFooter,
 } from "./experimental-overlay.js";
+import { buildCustomGatewaySection } from "./custom-gateway-settings.js";
 
 type LegacyExtensionsSection = "connections" | "plugins" | "skills";
 type SettingsPrimaryTab = "logins" | "more";
 
-type SettingsAnchor = "proxy" | "providers" | "execution-mode" | "advanced" | "experimental";
+type SettingsAnchor =
+  | "proxy"
+  | "providers"
+  | "custom-gateways"
+  | "execution-mode"
+  | "advanced"
+  | "experimental";
 
 type SettingsCleanupRegistrar = (cleanup: () => void) => void;
 
 export type SettingsOverlaySection =
   | SettingsPrimaryTab
   | "providers"
+  | "custom-gateways"
   | "proxy"
   | "execution-mode"
   | "advanced"
@@ -92,6 +100,8 @@ function resolveSectionFocus(section: SettingsOverlaySection | undefined): Resol
   switch (section) {
     case "providers":
       return { tab: "logins", anchor: "providers" };
+    case "custom-gateways":
+      return { tab: "logins", anchor: "custom-gateways" };
     case "proxy":
       return { tab: "logins", anchor: "proxy" };
     case "execution-mode":
@@ -643,6 +653,11 @@ export async function showSettingsDialog(options: ShowSettingsDialogOptions = {}
     loginsPanel.append(
       buildProxySection(appStorage.settings, dialog.addCleanup),
       await buildProvidersSection(),
+      await buildCustomGatewaySection({
+        onProvidersChanged: () => {
+          document.dispatchEvent(new CustomEvent("pi:providers-changed"));
+        },
+      }),
     );
 
     const morePanel = document.createElement("div");

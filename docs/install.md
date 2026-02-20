@@ -97,6 +97,21 @@ For most users, API keys are the smoothest setup and usually do **not** need the
 3. Paste your API key
 4. Click **Save**
 
+### Custom OpenAI-compatible gateway (company or local)
+
+Use this when your org exposes an OpenAI-compatible endpoint (or for local OpenAI-compatible servers).
+
+1. In Pi, open `/settings`
+2. Under **Custom OpenAI-compatible gateways**, set:
+   - **Endpoint** (base URL)
+   - **Model** (model ID)
+   - **API key** (optional for some local servers)
+3. Save the gateway, then choose its model from `/model`
+
+Notes:
+- If your gateway is publicly reachable over HTTPS, you can usually connect directly (no proxy).
+- For localhost/private endpoints via the local proxy, you may need to configure proxy host policy env vars (for example `ALLOWED_TARGET_HOSTS`, `ALLOW_LOOPBACK_TARGETS`, or `ALLOW_PRIVATE_TARGETS`) when starting `pi-for-excel-proxy`.
+
 ### OAuth / account login (Anthropic, OpenAI ChatGPT, Google Code Assist/Antigravity, GitHub Copilot)
 
 1. In `/login`, click **Login with …**
