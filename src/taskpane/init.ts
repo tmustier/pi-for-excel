@@ -227,6 +227,7 @@ export async function initTaskpane(opts: {
   let availableProviders: string[] = [];
   let customProviderApiKeys = new Map<string, string | undefined>();
   let defaultCustomModel: ReturnType<typeof collectCustomProviderRuntimeInfo>["defaultModel"] = null;
+  let defaultModel = pickDefaultModel([], null);
 
   const refreshConfiguredProviders = async (): Promise<void> => {
     const combinedProviders = new Set<string>();
@@ -258,6 +259,7 @@ export async function initTaskpane(opts: {
     availableProviders = Array.from(combinedProviders);
     customProviderApiKeys = nextCustomApiKeys;
     defaultCustomModel = nextDefaultCustomModel;
+    defaultModel = pickDefaultModel(availableProviders, defaultCustomModel);
     setActiveProviders(combinedProviders);
   };
 
@@ -282,7 +284,6 @@ export async function initTaskpane(opts: {
 
   // 4. Shared runtime dependencies
   // Workbook structure context is injected separately by transformContext.
-  const defaultModel = pickDefaultModel(availableProviders, defaultCustomModel);
 
   const streamFn = createOfficeStreamFn(async () => {
     // In dev mode, Vite's reverse proxy handles CORS — don't double-proxy.
