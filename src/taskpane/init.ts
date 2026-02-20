@@ -30,6 +30,10 @@ import { convertToLlm } from "../messages/convert-to-llm.js";
 import { getFilesWorkspace } from "../files/workspace.js";
 import { createAllTools } from "../tools/index.js";
 import {
+  applyToolOutputTruncation,
+  saveTruncatedToolOutputToWorkspace,
+} from "../tools/output-truncation.js";
+import {
   applyExperimentalToolGates,
   buildOfficeJsExecuteApprovalMessage,
   buildPythonBridgeApprovalMessage,
@@ -697,7 +701,7 @@ export async function initTaskpane(opts: {
         ...extensionManager.getRegisteredTools(),
       ]);
 
-      const tools = withWorkbookCoordinator(
+      const coordinatedTools = withWorkbookCoordinator(
         runtimeTools,
         workbookCoordinator,
         {
@@ -721,6 +725,10 @@ export async function initTaskpane(opts: {
           },
         },
       );
+
+      const tools = applyToolOutputTruncation(coordinatedTools, {
+        saveTruncatedOutput: saveTruncatedToolOutputToWorkspace,
+      });
 
       const systemPrompt = await buildRuntimeSystemPrompt({
         workbookId,

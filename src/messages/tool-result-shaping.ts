@@ -8,6 +8,7 @@ interface ToolResultShapingConfig {
 
 export const DEFAULT_TOOL_RESULT_SHAPING: Readonly<ToolResultShapingConfig> = {
   // Keep recent tool outputs fully intact so immediate follow-up reasoning stays high quality.
+  // Primary payload safety comes from execution-time tool-output truncation.
   recentToolResultsToKeep: 6,
   // Older tool results above this size are compacted for model-facing context.
   maxCharsBeforeCompaction: 1200,

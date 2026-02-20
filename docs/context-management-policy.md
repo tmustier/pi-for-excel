@@ -125,7 +125,10 @@ Implications:
 - Add model-facing truncation/summarization for older or oversized tool results.
 - Keep full raw output in UI/tool cards (no loss of user-visible detail).
 - Keep recency window for exact details (latest N tool results untouched).
-- **Current rollout (v1):** keep latest **6** tool results untouched; compact older tool results when payload exceeds **1,200 chars** or contains images; include a deterministic **500-char preview** in compacted form.
+- **Current rollout (v1):**
+  - **execution-time guardrail (primary):** global tool-output truncation wrapper on all registered tools with Pi-aligned limits (**50KB UTF-8 bytes** or **2000 lines**, whichever first)
+  - **history shaping (secondary):** keep latest **6** tool results untouched; compact older tool results when payload exceeds **1,200 chars** or contains images; include a deterministic **500-char preview** in compacted form.
+  - truncated outputs include stable machine metadata (`details.outputTruncation`) and best-effort full-output persistence under Files workspace `.tool-output/...`.
 
 **Success:** lower message-context growth rate with no UX regression.
 

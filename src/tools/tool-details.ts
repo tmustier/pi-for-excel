@@ -14,6 +14,24 @@ export interface RecoveryCheckpointDetails {
   reason?: string;
 }
 
+export type ToolOutputTruncationStrategy = "head" | "tail";
+
+export type ToolOutputTruncationReason = "lines" | "bytes" | null;
+
+export interface ToolOutputTruncationDetails {
+  version: 1;
+  strategy: ToolOutputTruncationStrategy;
+  truncated: boolean;
+  truncatedBy: ToolOutputTruncationReason;
+  totalLines: number;
+  totalBytes: number;
+  outputLines: number;
+  outputBytes: number;
+  maxLines: number;
+  maxBytes: number;
+  fullOutputWorkspacePath?: string;
+}
+
 export interface WriteCellsDetails {
   kind: "write_cells";
   blocked: boolean;
@@ -394,6 +412,40 @@ function isOptionalNumber(value: unknown): value is number | undefined {
 
 function isOptionalBoolean(value: unknown): value is boolean | undefined {
   return value === undefined || typeof value === "boolean";
+}
+
+function isToolOutputTruncationStrategy(value: unknown): value is ToolOutputTruncationStrategy {
+  return value === "head" || value === "tail";
+}
+
+function isToolOutputTruncationReason(value: unknown): value is ToolOutputTruncationReason {
+  return value === "lines" || value === "bytes" || value === null;
+}
+
+export function isToolOutputTruncationDetails(value: unknown): value is ToolOutputTruncationDetails {
+  if (!isRecord(value)) return false;
+
+  return (
+    value.version === 1 &&
+    isToolOutputTruncationStrategy(value.strategy) &&
+    typeof value.truncated === "boolean" &&
+    isToolOutputTruncationReason(value.truncatedBy) &&
+    typeof value.totalLines === "number" &&
+    typeof value.totalBytes === "number" &&
+    typeof value.outputLines === "number" &&
+    typeof value.outputBytes === "number" &&
+    typeof value.maxLines === "number" &&
+    typeof value.maxBytes === "number" &&
+    isOptionalString(value.fullOutputWorkspacePath)
+  );
+}
+
+export function getToolOutputTruncationDetails(details: unknown): ToolOutputTruncationDetails | undefined {
+  if (!isRecord(details)) return undefined;
+  const value = details.outputTruncation;
+  return isToolOutputTruncationDetails(value)
+    ? value
+    : undefined;
 }
 
 function isOptionalTraceDependenciesMode(value: unknown): value is TraceDependenciesMode | undefined {

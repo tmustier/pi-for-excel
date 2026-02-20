@@ -105,6 +105,16 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 - **Execution policy:** classified as read/none for workbook coordinator purposes (it mutates prompt metadata, not workbook cells/structure).
 - **Rationale:** AGENTS.md-style persistent guidance without creating a separate workbook mutation path.
 
+## Global tool output truncation (Pi-style guardrail)
+- **Scope:** applied as a runtime wrapper around all registered tools (core + integrations + extensions) before tool results are persisted to message history.
+- **Limits:** **50KB** UTF-8 bytes and **2000 lines** (whichever is hit first), aligned with pi-coding-agent defaults.
+- **Strategy:**
+  - default: **head** truncation (read/search style outputs)
+  - specific log/terminal style tools (`python_run`, `tmux`, `mcp`, `execute_office_js`): **tail** truncation
+- **Metadata:** truncated results include stable `details.outputTruncation` with strategy, hit reason, total/output sizes, and limits.
+- **Overflow persistence:** best-effort full-output save to Files workspace under `.tool-output/...` for truncated payloads within save budget.
+- **Rationale:** enforce predictable context-safe bounds independent of per-tool implementation details; keep `shapeToolResultsForLlm` as a secondary history-shaping layer.
+
 ## Tool card input/output humanization (UI)
 - **Input:** tool parameters are rendered as a clean key-value list instead of raw JSON. Each tool has a per-tool humanizer in `src/ui/humanize-params.ts` that maps params to readable labels (e.g. "Range", "Fill ● White", "Font ● Gray, italic").
 - **Output:** hex color codes (`#RRGGBB`) in tool result text are replaced with human-readable names via nearest-match against a ~45-color palette (`src/ui/color-names.ts`). Section label changed from "Output" to "Result".
