@@ -57,6 +57,19 @@ You can try to install and run this on Windows — it might work!
 
 For more detail, see [Microsoft's guide for Windows](https://learn.microsoft.com/en-us/office/dev/add-ins/testing/sideload-office-add-ins-for-testing).
 
+### Excel on the Web (Office Online)
+
+1. Open **[Excel (Web)](https://www.office.com/launch/excel)** in your browser  
+2. Select an existing workbook or create a new Excel file  
+3. In the **Home** tab (Start ribbon), click **Add-ins** on the right side  
+4. Click **More Add-ins**  
+5. Go to **My Add-ins**  
+6. Click **Manage My Add-ins**  
+7. Click **Upload My Add-in**  
+8. Upload the `manifest.prod.xml` file  
+
+> ⚠️ On Excel Web, the add-in can disappear after several days. If that happens, repeat the upload steps above.
+
 ---
 
 ## 3) First-run check
