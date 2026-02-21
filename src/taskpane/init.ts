@@ -216,14 +216,7 @@ export async function initTaskpane(opts: {
     // ignore
   }
 
-  // 2. Restore auth (bounded to avoid indefinite startup hang)
-  try {
-    await awaitWithTimeout("Credential restore", 6000, restoreCredentials(providerKeys, settings));
-  } catch (error: unknown) {
-    console.warn("[auth] Credential restore skipped:", error);
-  }
-
-  // 2b. Resolve available providers (built-ins + configured custom providers)
+  // 2. Resolve available providers (built-ins + configured custom providers)
   let availableProviders: string[] = [];
   let customProviderApiKeys = new Map<string, string | undefined>();
   let defaultCustomModel: ReturnType<typeof collectCustomProviderRuntimeInfo>["defaultModel"] = null;
@@ -266,6 +259,27 @@ export async function initTaskpane(opts: {
   document.addEventListener("pi:providers-changed", () => {
     void refreshConfiguredProviders();
   });
+
+  // 2b. Restore auth (bounded to avoid indefinite startup hang).
+  // If restore completes after the startup timeout, refresh providers in the
+  // background so newly-restored providers appear in the model picker.
+  const credentialRestorePromise = restoreCredentials(providerKeys, settings);
+
+  void credentialRestorePromise
+    .then(() => {
+      void refreshConfiguredProviders().catch((error: unknown) => {
+        console.warn("[auth] Provider refresh after credential restore failed:", error);
+      });
+    })
+    .catch((error: unknown) => {
+      console.warn("[auth] Credential restore failed:", error);
+    });
+
+  try {
+    await awaitWithTimeout("Credential restore", 6000, credentialRestorePromise);
+  } catch (error: unknown) {
+    console.warn("[auth] Credential restore skipped:", error);
+  }
 
   try {
     await awaitWithTimeout("Provider lookup", 3500, refreshConfiguredProviders());
@@ -1596,7 +1610,20 @@ export async function initTaskpane(opts: {
   }
 
   // ── Register extensions ──
-  await extensionManager.initialize();
+  // Never let extension startup block core UI wiring (status bar + slash menu).
+  // Some extension sources can be slow/unreachable; continue boot even if this
+  // is still in-flight, and let extensions finish loading in the background.
+  const extensionInitialization = extensionManager.initialize();
+
+  void extensionInitialization.catch((error: unknown) => {
+    console.warn("[pi] Extension initialization failed:", error);
+  });
+
+  try {
+    await awaitWithTimeout("Extension initialization", 5000, extensionInitialization);
+  } catch (error: unknown) {
+    console.warn("[pi] Extension initialization did not complete during startup:", error);
+  }
 
   // ── Keyboard shortcuts ──
   installKeyboardShortcuts({
@@ -1676,13 +1703,21 @@ export async function initTaskpane(opts: {
       return;
     }
 
-    closeStatusPopover();
+    void (async () => {
+      try {
+        await refreshConfiguredProviders();
+      } catch (error: unknown) {
+        console.warn("[auth] Failed to refresh providers before opening model selector:", error);
+      }
 
-    void ModelSelector.open(activeAgent.state.model, (model) => {
-      activeAgent.setModel(model);
-      document.dispatchEvent(new CustomEvent("pi:status-update"));
-      requestAnimationFrame(() => sidebar.requestUpdate());
-    });
+      closeStatusPopover();
+
+      await ModelSelector.open(activeAgent.state.model, (model) => {
+        activeAgent.setModel(model);
+        document.dispatchEvent(new CustomEvent("pi:status-update"));
+        requestAnimationFrame(() => sidebar.requestUpdate());
+      });
+    })();
   };
 
   const openThinkingPopoverFrom = (target: Element): void => {
