@@ -70,7 +70,7 @@ type SettingsStore = IntegrationSettingsStore & WebSearchConfigStore & McpConfig
 // ── Helpers ─────────────────────────────────────────
 
 function normalizeProvider(value: string): WebSearchProvider {
-  if (value === "jina" || value === "serper" || value === "tavily" || value === "brave") return value;
+  if (value === "jina" || value === "firecrawl" || value === "serper" || value === "tavily" || value === "brave") return value;
   return "jina";
 }
 

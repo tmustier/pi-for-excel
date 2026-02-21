@@ -112,6 +112,7 @@ const DEFAULT_ALLOWED_TARGET_HOSTS = new Set([
   "api.z.ai",
   // Web search providers
   "s.jina.ai",
+  "api.firecrawl.dev",
   "google.serper.dev",
   "api.tavily.com",
   "api.search.brave.com",

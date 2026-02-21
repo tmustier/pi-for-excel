@@ -7,8 +7,9 @@ export const WEB_SEARCH_BRAVE_API_KEY_SETTING_KEY = "web.search.brave.apiKey";
 export const WEB_SEARCH_SERPER_API_KEY_SETTING_KEY = "web.search.serper.apiKey";
 export const WEB_SEARCH_TAVILY_API_KEY_SETTING_KEY = "web.search.tavily.apiKey";
 export const WEB_SEARCH_JINA_API_KEY_SETTING_KEY = "web.search.jina.apiKey";
+export const WEB_SEARCH_FIRECRAWL_API_KEY_SETTING_KEY = "web.search.firecrawl.apiKey";
 
-export const WEB_SEARCH_PROVIDERS = ["jina", "serper", "tavily", "brave"] as const;
+export const WEB_SEARCH_PROVIDERS = ["jina", "firecrawl", "serper", "tavily", "brave"] as const;
 export type WebSearchProvider = (typeof WEB_SEARCH_PROVIDERS)[number];
 
 export const DEFAULT_WEB_SEARCH_PROVIDER: WebSearchProvider = "jina";
@@ -29,12 +30,20 @@ export const WEB_SEARCH_PROVIDER_INFO: Record<WebSearchProvider, WebSearchProvid
   jina: {
     id: "jina",
     title: "Jina Search (default)",
-    shortDescription: "Works out of the box — no signup or API key needed.",
+    shortDescription: "Fast web search API with free tier.",
     signupUrl: "https://jina.ai",
     searchEndpoint: "https://s.jina.ai/",
     apiKeyLabel: "Jina API key",
-    apiKeyHelp: "Optional. Add a key for higher rate limits.",
-    apiKeyOptional: true,
+    apiKeyHelp: "Free tier available at jina.ai.",
+  },
+  firecrawl: {
+    id: "firecrawl",
+    title: "Firecrawl",
+    shortDescription: "Web search with optional page scraping. 500 free credits.",
+    signupUrl: "https://firecrawl.dev",
+    searchEndpoint: "https://api.firecrawl.dev/v2/search",
+    apiKeyLabel: "Firecrawl API key",
+    apiKeyHelp: "Free tier with 500 credits, no credit card required.",
   },
   serper: {
     id: "serper",
@@ -76,6 +85,7 @@ export const WEB_SEARCH_PROVIDER_ENDPOINT_HOSTS: string[] = WEB_SEARCH_PROVIDERS
 
 const WEB_SEARCH_API_KEY_BY_PROVIDER_SETTING_KEY: Record<WebSearchProvider, string> = {
   jina: WEB_SEARCH_JINA_API_KEY_SETTING_KEY,
+  firecrawl: WEB_SEARCH_FIRECRAWL_API_KEY_SETTING_KEY,
   serper: WEB_SEARCH_SERPER_API_KEY_SETTING_KEY,
   tavily: WEB_SEARCH_TAVILY_API_KEY_SETTING_KEY,
   brave: WEB_SEARCH_BRAVE_API_KEY_SETTING_KEY,
@@ -102,7 +112,7 @@ function normalizeOptionalString(value: unknown): string | undefined {
 }
 
 function parseProvider(value: unknown): WebSearchProvider | undefined {
-  if (value === "jina" || value === "serper" || value === "tavily" || value === "brave") {
+  if (value === "jina" || value === "firecrawl" || value === "serper" || value === "tavily" || value === "brave") {
     return value;
   }
   return undefined;
@@ -111,15 +121,17 @@ function parseProvider(value: unknown): WebSearchProvider | undefined {
 export async function loadWebSearchProviderConfig(
   settings: WebSearchConfigReader,
 ): Promise<WebSearchProviderConfig> {
-  const [providerRaw, jinaApiKeyRaw, serperApiKeyRaw, tavilyApiKeyRaw, braveApiKeyRaw] = await Promise.all([
+  const [providerRaw, jinaApiKeyRaw, firecrawlApiKeyRaw, serperApiKeyRaw, tavilyApiKeyRaw, braveApiKeyRaw] = await Promise.all([
     settings.get(WEB_SEARCH_PROVIDER_SETTING_KEY),
     settings.get(WEB_SEARCH_JINA_API_KEY_SETTING_KEY),
+    settings.get(WEB_SEARCH_FIRECRAWL_API_KEY_SETTING_KEY),
     settings.get(WEB_SEARCH_SERPER_API_KEY_SETTING_KEY),
     settings.get(WEB_SEARCH_TAVILY_API_KEY_SETTING_KEY),
     settings.get(WEB_SEARCH_BRAVE_API_KEY_SETTING_KEY),
   ]);
 
   const jinaApiKey = normalizeOptionalString(jinaApiKeyRaw);
+  const firecrawlApiKey = normalizeOptionalString(firecrawlApiKeyRaw);
   const serperApiKey = normalizeOptionalString(serperApiKeyRaw);
   const tavilyApiKey = normalizeOptionalString(tavilyApiKeyRaw);
   const braveApiKey = normalizeOptionalString(braveApiKeyRaw);
@@ -128,12 +140,13 @@ export async function loadWebSearchProviderConfig(
   // has a key, infer that provider so existing users aren't silently switched to
   // the zero-config default after an upgrade.
   const provider = parseProvider(providerRaw)
-    ?? (serperApiKey ? "serper" : braveApiKey ? "brave" : tavilyApiKey ? "tavily" : DEFAULT_WEB_SEARCH_PROVIDER);
+    ?? (firecrawlApiKey ? "firecrawl" : serperApiKey ? "serper" : braveApiKey ? "brave" : tavilyApiKey ? "tavily" : DEFAULT_WEB_SEARCH_PROVIDER);
 
   return {
     provider,
     apiKeys: {
       jina: jinaApiKey,
+      firecrawl: firecrawlApiKey,
       serper: serperApiKey,
       tavily: tavilyApiKey,
       brave: braveApiKey,

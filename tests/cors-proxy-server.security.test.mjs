@@ -181,6 +181,7 @@ test("proxy default allowlist includes supported web search providers", async (t
 
   const requiredHosts = [
     "s.jina.ai",
+    "api.firecrawl.dev",
     "google.serper.dev",
     "api.tavily.com",
     "api.search.brave.com",

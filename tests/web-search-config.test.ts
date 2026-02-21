@@ -74,14 +74,34 @@ void test("web search config stores provider-specific api keys", async () => {
   assert.equal(getApiKeyForProvider(config, "brave"), "br-123");
 });
 
-void test("jina does not require an API key", () => {
-  assert.equal(isApiKeyRequired("jina"), false);
-});
-
-void test("serper/tavily/brave require an API key", () => {
+void test("all providers require an API key", () => {
+  assert.equal(isApiKeyRequired("jina"), true);
+  assert.equal(isApiKeyRequired("firecrawl"), true);
   assert.equal(isApiKeyRequired("serper"), true);
   assert.equal(isApiKeyRequired("tavily"), true);
   assert.equal(isApiKeyRequired("brave"), true);
+});
+
+void test("web search config infers firecrawl when only firecrawl key is present", async () => {
+  const settings = new MemorySettingsStore();
+  await saveWebSearchApiKey(settings, "firecrawl", "fc-legacy");
+
+  const config = await loadWebSearchProviderConfig(settings);
+
+  assert.equal(config.provider, "firecrawl");
+  assert.equal(getApiKeyForProvider(config), "fc-legacy");
+});
+
+void test("web search config stores firecrawl api key", async () => {
+  const settings = new MemorySettingsStore();
+
+  await saveWebSearchProvider(settings, "firecrawl");
+  await saveWebSearchApiKey(settings, "firecrawl", "fc_test_key");
+
+  const config = await loadWebSearchProviderConfig(settings);
+
+  assert.equal(config.provider, "firecrawl");
+  assert.equal(getApiKeyForProvider(config, "firecrawl"), "fc_test_key");
 });
 
 void test("web search config stores jina api key", async () => {

@@ -3,11 +3,11 @@ import { test } from "node:test";
 
 import { createWebSearchTool } from "../src/tools/web-search.ts";
 
-void test("web_search falls back to Jina when key-required provider is missing an API key", async () => {
+void test("web_search falls back to Jina when key-required provider is missing an API key and Jina key exists", async () => {
   const calledProviders: string[] = [];
 
   const tool = createWebSearchTool({
-    getConfig: () => Promise.resolve({ provider: "serper", apiKey: undefined }),
+    getConfig: () => Promise.resolve({ provider: "serper", apiKey: undefined, jinaApiKey: "jina-fallback-key" }),
     executeSearch: (_params, config) => {
       calledProviders.push(config.provider);
       return Promise.resolve({
@@ -42,6 +42,22 @@ void test("web_search falls back to Jina when key-required provider is missing a
   assert.equal(details.fallback?.fromProvider, "serper");
   assert.equal(details.fallback?.toProvider, "jina");
   assert.match(details.fallback?.reason ?? "", /api key is missing/i);
+});
+
+void test("web_search does NOT fall back to Jina when no Jina API key is configured", async () => {
+  const tool = createWebSearchTool({
+    getConfig: () => Promise.resolve({ provider: "serper", apiKey: undefined }),
+  });
+
+  const result = await tool.execute("call-no-fallback", { query: "latest inflation data" });
+  const text = result.content[0]?.type === "text" ? result.content[0].text : "";
+
+  assert.match(text, /Error:.*API key.*missing/i);
+
+  const details = result.details as { ok?: boolean; provider?: string; fallback?: unknown };
+  assert.equal(details.ok, false);
+  assert.equal(details.provider, "serper");
+  assert.equal(details.fallback, undefined);
 });
 
 void test("web_search renders compact cited results for serper", async () => {
@@ -91,7 +107,7 @@ void test("web_search falls back to Jina when configured provider returns auth o
   const calledProviders: string[] = [];
 
   const tool = createWebSearchTool({
-    getConfig: () => Promise.resolve({ provider: "tavily", apiKey: "tv-key" }),
+    getConfig: () => Promise.resolve({ provider: "tavily", apiKey: "tv-key", jinaApiKey: "jina-key" }),
     executeSearch: (_params, config) => {
       calledProviders.push(config.provider);
 
@@ -197,9 +213,24 @@ void test("web_search does not fall back for malformed-provider requests", async
   assert.equal(details.fallback, undefined);
 });
 
-void test("web_search works without API key for jina (zero-config)", async () => {
+void test("web_search returns error when jina API key is missing", async () => {
   const tool = createWebSearchTool({
     getConfig: () => Promise.resolve({ provider: "jina", apiKey: undefined }),
+  });
+
+  const result = await tool.execute("call-jina-no-key", { query: "excel vlookup", max_results: 1 });
+  const text = result.content[0]?.type === "text" ? result.content[0].text : "";
+
+  assert.match(text, /Error:.*API key.*missing/i);
+
+  const details = result.details as { ok?: boolean; provider?: string; error?: string };
+  assert.equal(details.ok, false);
+  assert.equal(details.provider, "jina");
+});
+
+void test("web_search works with jina API key", async () => {
+  const tool = createWebSearchTool({
+    getConfig: () => Promise.resolve({ provider: "jina", apiKey: "jina-test-key" }),
     executeSearch: () => Promise.resolve({
       sentQuery: "excel vlookup",
       proxied: false,
@@ -223,6 +254,40 @@ void test("web_search works without API key for jina (zero-config)", async () =>
   assert.equal(details.ok, true);
   assert.equal(details.provider, "jina");
   assert.equal(details.resultCount, 1);
+});
+
+void test("web_search works with firecrawl provider", async () => {
+  const calls: Array<{ provider: string; apiKey: string }> = [];
+
+  const tool = createWebSearchTool({
+    getConfig: () => Promise.resolve({ provider: "firecrawl", apiKey: "fc-key" }),
+    executeSearch: (_params, config) => {
+      calls.push({ provider: config.provider, apiKey: config.apiKey });
+      return Promise.resolve({
+        sentQuery: "excel pivot tables",
+        proxied: false,
+        hits: [
+          {
+            title: "PivotTable tutorial",
+            url: "https://support.microsoft.com/pivottable",
+            snippet: "Create a PivotTable in Excel.",
+          },
+        ],
+      });
+    },
+  });
+
+  const result = await tool.execute("call-fc-1", { query: "excel pivot tables", max_results: 1 });
+  const text = result.content[0]?.type === "text" ? result.content[0].text : "";
+
+  assert.match(text, /Web search via Firecrawl/);
+  assert.match(text, /\[1\] \[PivotTable tutorial\]/);
+
+  const details = result.details as { ok?: boolean; provider?: string; resultCount?: number };
+  assert.equal(details.ok, true);
+  assert.equal(details.provider, "firecrawl");
+  assert.equal(details.resultCount, 1);
+  assert.deepEqual(calls, [{ provider: "firecrawl", apiKey: "fc-key" }]);
 });
 
 void test("web_search keeps provider metadata for brave responses", async () => {
@@ -252,7 +317,7 @@ void test("web_search keeps provider metadata for brave responses", async () => 
 
 void test("web_search reports proxy-down error when proxy is unreachable", async () => {
   const tool = createWebSearchTool({
-    getConfig: () => Promise.resolve({ provider: "jina", apiKey: undefined, proxyBaseUrl: "https://localhost:3003" }),
+    getConfig: () => Promise.resolve({ provider: "jina", apiKey: "jina-key", proxyBaseUrl: "https://localhost:3003" }),
     executeSearch: () => Promise.reject(new TypeError("Load failed")),
   });
 
@@ -270,7 +335,7 @@ void test("web_search reports proxy-down error when proxy is unreachable", async
 
 void test("web_search does not flag proxyDown when proxy is not configured", async () => {
   const tool = createWebSearchTool({
-    getConfig: () => Promise.resolve({ provider: "jina", apiKey: undefined }),
+    getConfig: () => Promise.resolve({ provider: "jina", apiKey: "jina-key" }),
     executeSearch: () => Promise.reject(new TypeError("Load failed")),
   });
 

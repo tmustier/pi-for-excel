@@ -48,6 +48,13 @@ const serperRecencyToTbs: Record<RecencyValue, string> = {
   year: "qdr:y",
 };
 
+const firecrawlRecencyToTbs: Record<RecencyValue, string> = {
+  day: "qdr:d",
+  week: "qdr:w",
+  month: "qdr:m",
+  year: "qdr:y",
+};
+
 function StringEnum<T extends string[]>(values: [...T], opts?: { description?: string }) {
   return Type.Union(values.map((value) => Type.Literal(value)), opts);
 }
@@ -272,22 +279,27 @@ function buildProviderRequest(
   const maxResults = params.max_results ?? 5;
 
   if (provider === "jina") {
-    const targetUrl = `${getWebSearchEndpoint(provider)}${encodeURIComponent(sentQuery)}`;
-    const headers: Record<string, string> = {
-      Accept: "application/json",
-      "X-Retain-Images": "none",
+    const body: Record<string, unknown> = {
+      q: sentQuery,
     };
 
-    if (apiKey) {
-      headers.Authorization = `Bearer ${apiKey}`;
+    if (maxResults !== 5) {
+      body.num = maxResults;
     }
 
     return {
-      targetUrl,
+      targetUrl: getWebSearchEndpoint(provider),
       sentQuery,
       requestInit: {
-        method: "GET",
-        headers,
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+          "X-Retain-Images": "none",
+          "X-Respond-With": "no-content",
+        },
+        body: JSON.stringify(body),
       },
     };
   }
@@ -333,6 +345,31 @@ function buildProviderRequest(
           Accept: "application/json",
           "Content-Type": "application/json",
           "X-API-KEY": apiKey,
+        },
+        body: JSON.stringify(body),
+      },
+    };
+  }
+
+  if (provider === "firecrawl") {
+    const body: Record<string, unknown> = {
+      query: sentQuery,
+      limit: maxResults,
+    };
+
+    if (params.recency) {
+      body.tbs = firecrawlRecencyToTbs[params.recency];
+    }
+
+    return {
+      targetUrl: getWebSearchEndpoint(provider),
+      sentQuery,
+      requestInit: {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify(body),
       },
@@ -455,8 +492,20 @@ function parseJinaHits(payload: unknown): WebSearchHit[] {
   );
 }
 
+function parseFirecrawlHits(payload: unknown): WebSearchHit[] {
+  return parseHitsFromEntries(
+    readArrayPath(payload, ["data", "web"]),
+    {
+      titleKey: "title",
+      urlKey: "url",
+      snippetKeys: ["description"],
+    },
+  );
+}
+
 const SEARCH_HIT_PARSERS: Record<WebSearchProvider, (payload: unknown) => WebSearchHit[]> = {
   jina: parseJinaHits,
+  firecrawl: parseFirecrawlHits,
   brave: parseBraveHits,
   serper: parseSerperHits,
   tavily: parseTavilyHits,
@@ -729,7 +778,7 @@ export function createWebSearchTool(
     name: "web_search",
     label: "Web Search",
     description:
-      "Search the public web. Returns compact, cited links with snippets. Works out of the box with Jina (default); optionally Serper, Tavily, or Brave.",
+      "Search the public web. Returns compact, cited links with snippets. Supports Jina (default), Firecrawl, Serper, Tavily, or Brave.",
     parameters: schema,
     execute: async (
       _toolCallId: string,
@@ -779,7 +828,7 @@ export function createWebSearchTool(
 
           result = await runSearch(configuredProvider, configuredApiKey);
         } catch (error: unknown) {
-          if (!shouldFallbackToJina(configuredProvider, error)) {
+          if (!fallbackJinaApiKey || !shouldFallbackToJina(configuredProvider, error)) {
             throw error;
           }
 
