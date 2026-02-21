@@ -2,12 +2,12 @@
  * Web-search configuration shared by tool + settings UI.
  */
 
-import { isRecord } from "../utils/type-guards.js";
-import {
-  CONNECTION_STORE_KEY,
-  loadConnectionStoreDocument,
-  saveConnectionStoreDocument,
-} from "../connections/store.js";
+const CONNECTION_STORE_KEY = "connections.store.v1";
+const CONNECTION_STORE_VERSION = 1;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
 
 export const WEB_SEARCH_PROVIDER_SETTING_KEY = "web.search.provider";
 export const WEB_SEARCH_BRAVE_API_KEY_SETTING_KEY = "web.search.brave.apiKey";
@@ -204,11 +204,66 @@ function mergeApiKeys(args: {
   return merged;
 }
 
+type StoredConnectionRecord = {
+  status?: "connected" | "missing" | "invalid" | "error";
+  lastValidatedAt?: string;
+  lastError?: string;
+  secrets?: Record<string, string>;
+};
+
+async function loadConnectionStoreItems(
+  settings: WebSearchConfigStore,
+): Promise<Record<string, StoredConnectionRecord>> {
+  const raw = await settings.get(CONNECTION_STORE_KEY);
+  if (!isRecord(raw)) return {};
+
+  const rawItems = raw.items;
+  if (!isRecord(rawItems)) return {};
+
+  const items: Record<string, StoredConnectionRecord> = {};
+
+  for (const [connectionId, rawRecord] of Object.entries(rawItems)) {
+    if (!isRecord(rawRecord)) continue;
+
+    const rawSecrets = rawRecord.secrets;
+    const secrets: Record<string, string> = {};
+    if (isRecord(rawSecrets)) {
+      for (const [fieldId, value] of Object.entries(rawSecrets)) {
+        const normalized = normalizeOptionalString(value);
+        if (!normalized) continue;
+        secrets[fieldId] = normalized;
+      }
+    }
+
+    const status = rawRecord.status;
+    items[connectionId] = {
+      status: status === "connected" || status === "missing" || status === "invalid" || status === "error"
+        ? status
+        : undefined,
+      lastValidatedAt: normalizeOptionalString(rawRecord.lastValidatedAt),
+      lastError: normalizeOptionalString(rawRecord.lastError),
+      secrets,
+    };
+  }
+
+  return items;
+}
+
+async function saveConnectionStoreItems(
+  settings: WebSearchConfigStore,
+  items: Record<string, StoredConnectionRecord>,
+): Promise<void> {
+  await settings.set(CONNECTION_STORE_KEY, {
+    version: CONNECTION_STORE_VERSION,
+    items,
+  });
+}
+
 async function writeConnectionStoreWebSearchApiKeys(
   settings: WebSearchConfigStore,
   apiKeys: Partial<Record<WebSearchProvider, string>>,
 ): Promise<void> {
-  const items = await loadConnectionStoreDocument(settings);
+  const items = await loadConnectionStoreItems(settings);
   const previous = items[WEB_SEARCH_CONNECTION_ID];
 
   const secrets: Record<string, string> = {};
@@ -222,7 +277,7 @@ async function writeConnectionStoreWebSearchApiKeys(
   if (Object.keys(secrets).length === 0) {
     if (WEB_SEARCH_CONNECTION_ID in items) {
       delete items[WEB_SEARCH_CONNECTION_ID];
-      await saveConnectionStoreDocument(settings, items);
+      await saveConnectionStoreItems(settings, items);
     }
     return;
   }
@@ -234,7 +289,7 @@ async function writeConnectionStoreWebSearchApiKeys(
     secrets,
   };
 
-  await saveConnectionStoreDocument(settings, items);
+  await saveConnectionStoreItems(settings, items);
 }
 
 async function clearLegacyWebSearchApiKey(
