@@ -27,7 +27,10 @@ import {
 } from "./experimental-tool-gates.js";
 
 const TMUX_BRIDGE_API_PATH = "/v1/tmux";
-const TMUX_BRIDGE_TIMEOUT_MS = 15_000;
+const DEFAULT_TMUX_BRIDGE_TIMEOUT_MS = 15_000;
+const TMUX_BRIDGE_TIMEOUT_BUFFER_MS = 5_000;
+const MAX_TMUX_BRIDGE_TIMEOUT_MS = 245_000;
+const DEFAULT_SEND_AND_CAPTURE_TIMEOUT_MS = 5_000;
 
 export const TMUX_BRIDGE_TOKEN_SETTING_KEY = "tmux.bridge.token";
 
@@ -374,6 +377,24 @@ async function defaultGetBridgeConfig(): Promise<TmuxBridgeConfig | null> {
   }
 }
 
+export function computeTmuxFetchTimeoutMs(request: TmuxBridgeRequest): number {
+  const waitMs = typeof request.wait_ms === "number" ? request.wait_ms : 0;
+
+  const captureTimeoutMs =
+    request.action === "send_and_capture"
+      ? (typeof request.timeout_ms === "number"
+        ? request.timeout_ms
+        : DEFAULT_SEND_AND_CAPTURE_TIMEOUT_MS)
+      : 0;
+
+  const computedTimeoutMs = waitMs + captureTimeoutMs + TMUX_BRIDGE_TIMEOUT_BUFFER_MS;
+  if (computedTimeoutMs < DEFAULT_TMUX_BRIDGE_TIMEOUT_MS) {
+    return DEFAULT_TMUX_BRIDGE_TIMEOUT_MS;
+  }
+
+  return Math.min(computedTimeoutMs, MAX_TMUX_BRIDGE_TIMEOUT_MS);
+}
+
 async function defaultCallBridge(
   request: TmuxBridgeRequest,
   config: TmuxBridgeConfig,
@@ -381,10 +402,11 @@ async function defaultCallBridge(
 ): Promise<TmuxBridgeResponse> {
   const endpoint = joinBridgeUrl(config.url, TMUX_BRIDGE_API_PATH);
   const controller = new AbortController();
+  const timeoutMs = computeTmuxFetchTimeoutMs(request);
 
   const timeoutId = setTimeout(() => {
     controller.abort();
-  }, TMUX_BRIDGE_TIMEOUT_MS);
+  }, timeoutMs);
 
   const abortFromCaller = () => {
     controller.abort();
@@ -444,7 +466,7 @@ async function defaultCallBridge(
       if (signal?.aborted) {
         throw new Error("Aborted");
       }
-      throw new Error(`Tmux bridge request timed out after ${TMUX_BRIDGE_TIMEOUT_MS}ms.`);
+      throw new Error(`Tmux bridge request timed out after ${timeoutMs}ms.`);
     }
 
     throw error;
