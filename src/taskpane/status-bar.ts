@@ -9,6 +9,14 @@ import { escapeAttr, escapeHtml } from "../utils/html.js";
 import { formatUsageDebug, isDebugEnabled } from "../debug/debug.js";
 import { estimateContextTokens } from "../utils/context-tokens.js";
 import type { ExecutionMode } from "../execution/mode.js";
+import {
+  getStatusContextHealth,
+  STATUS_CONTEXT_DESC_ATTR,
+  STATUS_CONTEXT_TOKENS_ATTR,
+  STATUS_CONTEXT_TOOLTIP_DESCRIPTION,
+  STATUS_CONTEXT_WARNING_ATTR,
+  STATUS_CONTEXT_WARNING_SEVERITY_ATTR,
+} from "./status-context.js";
 import type { RuntimeLockState } from "./session-runtime-manager.js";
 
 export type ActiveAgentProvider = () => Agent | null;
@@ -57,27 +65,16 @@ function renderStatusBar(
   const thinkingLevel = thinkingLabels[state.thinkingLevel] || state.thinkingLevel;
 
   // Context health: color + tooltip based on usage
-  let ctxColor = "";
-  const ctxBaseTooltip = `How much of Pi's memory (context window) the conversation is using — ${totalTokens.toLocaleString()} / ${contextWindow.toLocaleString()} tokens. as this fills up, Pi may get confused. Free up context with /compact or start a fresh chat with /new`;
-  let ctxWarning = "";
-  let ctxWarningText = "";
-  if (pct > 100) {
-    ctxColor = "pi-status-ctx--red";
-    ctxWarningText = "Context is full — the next message will fail. Use /compact to summarize earlier messages, or /new for a fresh chat.";
-    ctxWarning = `<span class="pi-tooltip__warn pi-tooltip__warn--red">${ctxWarningText}</span>`;
-  } else if (pct > 60) {
-    ctxColor = "pi-status-ctx--red";
-    ctxWarningText = `Context ${pct}% full — responses will get less accurate. Use /compact to free space, or /new for a fresh chat.`;
-    ctxWarning = `<span class="pi-tooltip__warn pi-tooltip__warn--red">${ctxWarningText}</span>`;
-  } else if (pct > 40) {
-    ctxColor = "pi-status-ctx--yellow";
-    ctxWarningText = `Context ${pct}% full. Consider /compact to free space, or /new for a fresh chat.`;
-    ctxWarning = `<span class="pi-tooltip__warn pi-tooltip__warn--yellow">${ctxWarningText}</span>`;
-  }
+  const ctxDescription = STATUS_CONTEXT_TOOLTIP_DESCRIPTION;
+  const ctxTokenDetail = `${totalTokens.toLocaleString()} / ${contextWindow.toLocaleString()} tokens`;
 
-  const ctxPopoverText = escapeAttr(
-    ctxWarningText.length > 0 ? `${ctxBaseTooltip} ${ctxWarningText}` : ctxBaseTooltip,
-  );
+  const contextHealth = getStatusContextHealth(pct);
+  const ctxColor = contextHealth.colorClass;
+  const ctxWarningText = contextHealth.warning?.text ?? "";
+  const ctxWarningSeverity = contextHealth.warning?.severity ?? "";
+  const ctxWarning = contextHealth.warning
+    ? `<span class="pi-tooltip__warn pi-tooltip__warn--${contextHealth.warning.severity}">${escapeHtml(`${contextHealth.warning.text} ${contextHealth.warning.actionText}`)}</span>`
+    : "";
 
   const chevronSvg = `<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>`;
   const affordanceChevronSvg = `<svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>`;
@@ -108,14 +105,18 @@ function renderStatusBar(
     "How deeply Pi reasons before answering — higher is slower but more thorough. Click to choose, or ⇧Tab to cycle.",
   );
 
+  const ctxPopoverDesc = escapeAttr(ctxDescription);
+  const ctxPopoverTokens = escapeAttr(ctxTokenDetail);
+  const ctxPopoverWarnText = ctxWarningText.length > 0 ? escapeAttr(ctxWarningText) : "";
+
   el.innerHTML = `
-    <button type="button" class="pi-status-model pi-status-clickable" data-tooltip="Switch the AI model powering this session">
+    <button type="button" class="pi-status-model pi-status-clickable" data-tooltip="Switch the AI model for this session.">
       <span class="pi-status-model__mark">π</span>
       <span class="pi-status-model__name">${modelAliasEscaped}</span>
       ${chevronSvg}
     </button>
     <button type="button" class="pi-status-thinking pi-status-clickable" data-tooltip="${thinkingTooltip}" aria-label="Thinking level ${thinkingLevel}">${brainSvg} ${thinkingLevel}<span class="pi-status-affordance" aria-hidden="true">${affordanceChevronSvg}</span></button>
-    <button type="button" class="pi-status-ctx pi-status-ctx--trigger pi-status-clickable has-tooltip" data-status-popover="${ctxPopoverText}" aria-label="Context usage ${pct}% of ${ctxLabel}"><span class="pi-status-ctx__pct ${ctxColor}">${pct}%</span><span class="pi-status-ctx__sep">/</span><span class="pi-status-ctx__limit">${ctxLabel}</span>${usageDebug}<span class="pi-status-affordance" aria-hidden="true">${affordanceChevronSvg}</span><span class="pi-tooltip pi-tooltip--left">${ctxBaseTooltip}${ctxWarning.length > 0 ? ` ${ctxWarning}` : ""}</span></button>
+    <button type="button" class="pi-status-ctx pi-status-ctx--trigger pi-status-clickable has-tooltip" ${STATUS_CONTEXT_DESC_ATTR}="${ctxPopoverDesc}" ${STATUS_CONTEXT_TOKENS_ATTR}="${ctxPopoverTokens}" ${STATUS_CONTEXT_WARNING_ATTR}="${ctxPopoverWarnText}" ${STATUS_CONTEXT_WARNING_SEVERITY_ATTR}="${ctxWarningSeverity}" aria-label="Context usage ${pct}% of ${ctxLabel}"><span class="pi-status-ctx__pct ${ctxColor}">${pct}%</span><span class="pi-status-ctx__sep">/</span><span class="pi-status-ctx__limit">${ctxLabel}</span>${usageDebug}<span class="pi-status-affordance" aria-hidden="true">${affordanceChevronSvg}</span><span class="pi-tooltip pi-tooltip--left"><span class="pi-tooltip__desc">${escapeHtml(ctxDescription)}</span><span class="pi-tooltip__tokens">${escapeHtml(ctxTokenDetail)}</span>${ctxWarning}</span></button>
     ${lockBadge}
     ${modeBadge}
   `;

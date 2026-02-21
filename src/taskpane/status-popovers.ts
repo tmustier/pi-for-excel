@@ -4,6 +4,8 @@
 
 import type { ThinkingLevel } from "@mariozechner/pi-agent-core";
 
+import type { StatusContextWarningSeverity } from "./status-context.js";
+
 export type StatusCommandName = "compact" | "new";
 
 type StatusPopoverKind = "thinking" | "context";
@@ -26,6 +28,8 @@ interface ThinkingPopoverOptions {
 interface ContextPopoverOptions {
   anchor: Element;
   description: string;
+  tokenDetail?: string;
+  warning?: { text: string; severity: StatusContextWarningSeverity };
   onRunCommand: (command: StatusCommandName) => void;
 }
 
@@ -268,6 +272,22 @@ export function toggleContextPopover(opts: ContextPopoverOptions): void {
 
   const description = createDescriptionBlock(opts.description);
 
+  if (opts.tokenDetail) {
+    const detail = document.createElement("p");
+    detail.className = "pi-status-popover__token-detail";
+    detail.textContent = opts.tokenDetail;
+    popover.append(title, description, detail);
+  } else {
+    popover.append(title, description);
+  }
+
+  if (opts.warning) {
+    const warn = document.createElement("p");
+    warn.className = `pi-status-popover__warning pi-status-popover__warning--${opts.warning.severity}`;
+    warn.textContent = opts.warning.text;
+    popover.appendChild(warn);
+  }
+
   const actions = document.createElement("div");
   actions.className = "pi-status-popover__commands";
 
@@ -275,7 +295,7 @@ export function toggleContextPopover(opts: ContextPopoverOptions): void {
     createCommandButton({
       command: "compact",
       title: "Compact conversation",
-      description: "Summarize earlier messages to free context budget.",
+      description: "Summarize earlier messages to free space.",
       onRun: opts.onRunCommand,
     }),
     createCommandButton({
@@ -286,7 +306,7 @@ export function toggleContextPopover(opts: ContextPopoverOptions): void {
     }),
   );
 
-  popover.append(title, description, actions);
+  popover.appendChild(actions);
   mountPopover("context", opts.anchor, popover);
 }
 

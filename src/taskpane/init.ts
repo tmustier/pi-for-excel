@@ -132,6 +132,14 @@ import {
 } from "./tab-layout.js";
 import { createTabLayoutPersistence } from "./tab-layout-persistence.js";
 import { injectStatusBar } from "./status-bar.js";
+import {
+  parseStatusContextWarningSeverity,
+  STATUS_CONTEXT_DESC_ATTR,
+  STATUS_CONTEXT_POPOVER_FALLBACK_DESCRIPTION,
+  STATUS_CONTEXT_TOKENS_ATTR,
+  STATUS_CONTEXT_WARNING_ATTR,
+  STATUS_CONTEXT_WARNING_SEVERITY_ATTR,
+} from "./status-context.js";
 import { getProxyState, startProxyPolling } from "./proxy-status.js";
 import {
   closeStatusPopover,
@@ -1730,7 +1738,7 @@ export async function initTaskpane(opts: {
       return;
     }
 
-    const description = trigger.getAttribute("data-tooltip") ?? "Choose how long the model thinks before responding.";
+    const description = trigger.getAttribute("data-tooltip") ?? "Choose how deeply Pi reasons before responding.";
 
     toggleThinkingPopover({
       anchor: trigger,
@@ -1749,13 +1757,26 @@ export async function initTaskpane(opts: {
     const trigger = target.closest(".pi-status-ctx--trigger");
     if (!trigger) return;
 
-    const description = trigger.getAttribute("data-status-popover")
-      ?? trigger.querySelector(".pi-tooltip")?.textContent
-      ?? "How much of the model's context window has been used.";
+    const description = trigger.getAttribute(STATUS_CONTEXT_DESC_ATTR)
+      ?? STATUS_CONTEXT_POPOVER_FALLBACK_DESCRIPTION;
+
+    const tokenDetail = trigger.getAttribute(STATUS_CONTEXT_TOKENS_ATTR) ?? undefined;
+
+    const warnText = trigger.getAttribute(STATUS_CONTEXT_WARNING_ATTR) ?? "";
+    const warnSeverity = trigger.getAttribute(STATUS_CONTEXT_WARNING_SEVERITY_ATTR);
+    let warning: { text: string; severity: "yellow" | "red" } | undefined;
+    if (warnText.length > 0) {
+      warning = {
+        text: warnText,
+        severity: parseStatusContextWarningSeverity(warnSeverity),
+      };
+    }
 
     toggleContextPopover({
       anchor: trigger,
       description,
+      tokenDetail,
+      warning,
       onRunCommand: (command) => {
         runSlashCommand(command);
       },

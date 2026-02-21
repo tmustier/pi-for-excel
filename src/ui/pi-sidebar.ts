@@ -1068,7 +1068,7 @@ export class PiSidebar extends LitElement {
             ${this.emptyHints.map((hint) => html`
               <button
                 class="pi-empty__hint"
-                title="Insert prompt into the input so you can edit it before sending"
+                title="Insert into input — edit before sending."
                 @click=${() => this._applyHintPrompt(hint.prompt)}
               >
                 <span class="pi-empty__hint-label">${hint.label}</span>

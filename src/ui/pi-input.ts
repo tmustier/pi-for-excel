@@ -21,8 +21,8 @@ import { doesOverlayClaimEscape } from "../utils/escape-guard.js";
 const PLACEHOLDER_HINTS = [
   "Ask about this workbook…",
   "Type / for commands…",
-  "Make a workbook change…",
-  "Summarize workbook…",
+  "Ask Pi to edit this workbook…",
+  "Summarize this workbook…",
 ];
 
 @customElement("pi-input")
@@ -170,8 +170,8 @@ export class PiInput extends LitElement {
           class="pi-input-btn pi-input-btn--attach"
           type="button"
           @click=${this._openFilesWorkspace}
-          aria-label="Open Files"
-          title="Open Files"
+          aria-label="Browse files"
+          title="Browse files"
         >
           ${icon(FileText, "sm")}
         </button>
