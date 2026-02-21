@@ -304,6 +304,8 @@ export interface McpGatewayDetails {
   proxyBaseUrl?: string;
   resultPreview?: string;
   error?: string;
+  /** `true` when the failure is due to the local CORS proxy being unreachable. */
+  proxyDown?: boolean;
 }
 
 export type FilesWorkspaceBackendKind = "native-directory" | "opfs" | "memory";
@@ -914,7 +916,8 @@ export function isMcpGatewayDetails(value: unknown): value is McpGatewayDetails 
     isOptionalBoolean(value.proxied) &&
     isOptionalString(value.proxyBaseUrl) &&
     isOptionalString(value.resultPreview) &&
-    isOptionalString(value.error)
+    isOptionalString(value.error) &&
+    isOptionalBoolean(value.proxyDown)
   );
 }
 

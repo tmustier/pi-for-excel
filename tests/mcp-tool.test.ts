@@ -180,3 +180,52 @@ void test("mcp tool call requires server when tool name is ambiguous", async () 
   assert.match(text, /available on multiple servers.*specify the server parameter/i);
   assert.equal(callInvoked, false);
 });
+
+void test("mcp reports proxy-down error when proxy transport is unreachable", async () => {
+  const tool = createMcpTool({
+    getRuntimeConfig: () => Promise.resolve({
+      servers: [TEST_SERVER],
+      proxyBaseUrl: "https://localhost:3003",
+    }),
+    callJsonRpc: () => Promise.reject(new TypeError("Load failed")),
+  });
+
+  const result = await tool.execute("call-4", { connect: "local" });
+  const text = result.content[0]?.type === "text" ? result.content[0].text : "";
+
+  assert.match(text, /local CORS proxy is not running/i);
+  assert.match(text, /npx pi-for-excel-proxy/i);
+  assert.match(text, /Do not retry/i);
+
+  const details = result.details as {
+    ok?: boolean;
+    operation?: string;
+    server?: string;
+    proxyBaseUrl?: string;
+    proxyDown?: boolean;
+  };
+  assert.equal(details.ok, false);
+  assert.equal(details.operation, "connect");
+  assert.equal(details.server, "local");
+  assert.equal(details.proxyBaseUrl, "https://localhost:3003");
+  assert.equal(details.proxyDown, true);
+});
+
+void test("mcp does not flag proxyDown when proxy answered with upstream fetch failure", async () => {
+  const tool = createMcpTool({
+    getRuntimeConfig: () => Promise.resolve({
+      servers: [TEST_SERVER],
+      proxyBaseUrl: "https://localhost:3003",
+    }),
+    callJsonRpc: () => Promise.reject(new Error("MCP request failed (502): Proxy error: fetch failed")),
+  });
+
+  const result = await tool.execute("call-5", { connect: "local" });
+  const text = result.content[0]?.type === "text" ? result.content[0].text : "";
+
+  assert.match(text, /^Error: MCP request failed \(502\): Proxy error: fetch failed$/);
+
+  const details = result.details as { ok?: boolean; proxyDown?: boolean };
+  assert.equal(details.ok, false);
+  assert.equal(details.proxyDown, false);
+});

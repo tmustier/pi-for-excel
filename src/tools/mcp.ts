@@ -14,7 +14,12 @@ import {
 } from "../utils/network.js";
 import { isRecord } from "../utils/type-guards.js";
 import type { ProxyAwareSettingsStore } from "./external-fetch.js";
-import { getEnabledProxyBaseUrl, resolveOutboundRequestUrl } from "./external-fetch.js";
+import {
+  buildProxyDownErrorMessage,
+  getEnabledProxyBaseUrl,
+  isLikelyProxyConnectionError,
+  resolveOutboundRequestUrl,
+} from "./external-fetch.js";
 import {
   loadMcpServers,
   type McpServerConfig,
@@ -81,6 +86,8 @@ export interface McpGatewayDetails {
   proxyBaseUrl?: string;
   resultPreview?: string;
   error?: string;
+  /** `true` when the failure is due to the local CORS proxy being unreachable. */
+  proxyDown?: boolean;
 }
 
 export interface McpRuntimeConfig {
@@ -488,9 +495,11 @@ export function createMcpTool(
       signal: AbortSignal | undefined,
     ): Promise<AgentToolResult<McpGatewayDetails>> => {
       const params = parseParams(rawParams);
+      let usedProxyBaseUrl: string | undefined;
 
       try {
         const runtimeConfig = await getRuntimeConfig();
+        usedProxyBaseUrl = runtimeConfig.proxyBaseUrl;
         const enabledServers = runtimeConfig.servers.filter((server) => server.enabled);
 
         if (runtimeConfig.servers.length === 0) {
@@ -770,6 +779,10 @@ export function createMcpTool(
         };
       } catch (error: unknown) {
         const message = getErrorMessage(error);
+        const proxyDown = isLikelyProxyConnectionError(message, usedProxyBaseUrl);
+        const displayMessage = proxyDown
+          ? buildProxyDownErrorMessage("MCP gateway", message)
+          : `Error: ${message}`;
 
         const operation = params.tool
           ? "tool"
@@ -784,14 +797,16 @@ export function createMcpTool(
                   : "status";
 
         return {
-          content: [{ type: "text", text: `Error: ${message}` }],
+          content: [{ type: "text", text: displayMessage }],
           details: {
             kind: "mcp_gateway",
             ok: false,
             operation,
             server: params.server ?? params.connect,
             tool: params.tool ?? params.describe,
+            proxyBaseUrl: usedProxyBaseUrl,
             error: message,
+            proxyDown,
           },
         };
       }
