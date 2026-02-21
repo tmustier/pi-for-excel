@@ -408,10 +408,10 @@ export class PiSidebar extends LitElement {
       cancelAnimationFrame(this._innerScrollRAF);
       this._innerScrollRAF = undefined;
     }
-    // Reset per-stream state. Weak refs let removed nodes GC naturally.
+    // Reset per-stream follow state. Keep listener registry so we don't
+    // duplicate listeners if streaming toggles while the same pane stays mounted.
     this._innerScrollSeen = new WeakSet<HTMLElement>();
     this._innerScrollDetached = new WeakSet<HTMLElement>();
-    this._innerScrollListeners = new WeakMap<HTMLElement, () => void>();
   }
 
   /** Lazily attach a scroll listener that tracks user-initiated detach/re-engage. */
