@@ -324,14 +324,16 @@
   color: var(--foreground);
 }
 
-/* Status-bar tooltips — clamp to the status-bar width on narrow sidebars. */
+/* Status-bar tooltips (anchored to trigger edge to avoid hover-gap flicker) */
+.pi-status-bar [data-tooltip] {
+  position: relative;
+}
 .pi-status-bar [data-tooltip]::after {
   content: attr(data-tooltip);
   position: absolute;
   bottom: 100%;
-  left: 0;
-  right: 0;
-  margin: auto;
+  left: 50%;
+  transform: translateX(-50%);
   padding: 5px 9px;
   border-radius: var(--radius-xs);
   background: var(--popover);
@@ -343,7 +345,7 @@
   text-align: left;
   white-space: normal;
   width: max-content;
-  max-width: min(200px, calc(100% - 16px));
+  max-width: min(200px, calc(100vw - 24px));
   box-shadow: 0 2px 8px rgba(0,0,0,0.18);
   border: 1px solid var(--border);
   pointer-events: none;
@@ -356,6 +358,16 @@
   visibility: visible;
   opacity: 1;
   transition: opacity var(--duration-fast) ease;
+}
+/* Keep data-tooltips inside the sidebar */
+.pi-status-bar [data-tooltip]:first-child::after {
+  left: 0;
+  transform: none;
+}
+.pi-status-bar [data-tooltip]:last-child::after {
+  left: auto;
+  right: 0;
+  transform: none;
 }
 
 /* DOM-based rich tooltips (supports HTML / colored lines) */
@@ -577,6 +589,12 @@
 
   .pi-status-mode {
     margin-left: 0;
+  }
+
+  .pi-status-thinking[data-tooltip]::after {
+    left: auto;
+    right: 0;
+    transform: none;
   }
 }
 
