@@ -38,6 +38,9 @@ import {
 } from "../tools/output-truncation.js";
 import { withConnectionPreflight } from "../tools/with-connection-preflight.js";
 import {
+  migrateLegacyWebSearchApiKeysToConnectionStore,
+} from "../tools/web-search-config.js";
+import {
   applyExperimentalToolGates,
   buildOfficeJsExecuteApprovalMessage,
   buildPythonBridgeApprovalMessage,
@@ -202,6 +205,13 @@ export async function initTaskpane(opts: {
 
   // Seed a predictable proxy default for OAuth flows.
   await ensureDefaultProxyUrl(settings);
+
+  // Migrate legacy web-search API keys to the connection store schema.
+  try {
+    await migrateLegacyWebSearchApiKeysToConnectionStore(settings);
+  } catch (error: unknown) {
+    console.warn("[pi] Failed to migrate legacy web-search API keys:", error);
+  }
 
   // 1b. Auto-compaction (Pi defaults to enabled)
   let autoCompactEnabled = true;

@@ -2,6 +2,13 @@
  * Web-search configuration shared by tool + settings UI.
  */
 
+import { isRecord } from "../utils/type-guards.js";
+import {
+  CONNECTION_STORE_KEY,
+  loadConnectionStoreDocument,
+  saveConnectionStoreDocument,
+} from "../connections/store.js";
+
 export const WEB_SEARCH_PROVIDER_SETTING_KEY = "web.search.provider";
 export const WEB_SEARCH_BRAVE_API_KEY_SETTING_KEY = "web.search.brave.apiKey";
 export const WEB_SEARCH_SERPER_API_KEY_SETTING_KEY = "web.search.serper.apiKey";
@@ -91,6 +98,16 @@ const WEB_SEARCH_API_KEY_BY_PROVIDER_SETTING_KEY: Record<WebSearchProvider, stri
   brave: WEB_SEARCH_BRAVE_API_KEY_SETTING_KEY,
 };
 
+export const WEB_SEARCH_CONNECTION_ID = "builtin.web_search.providers";
+
+const WEB_SEARCH_CONNECTION_SECRET_FIELD_BY_PROVIDER: Record<WebSearchProvider, string> = {
+  jina: "jina_api_key",
+  firecrawl: "firecrawl_api_key",
+  serper: "serper_api_key",
+  tavily: "tavily_api_key",
+  brave: "brave_api_key",
+};
+
 export interface WebSearchConfigReader {
   get(key: string): Promise<unknown>;
 }
@@ -118,11 +135,20 @@ function parseProvider(value: unknown): WebSearchProvider | undefined {
   return undefined;
 }
 
-export async function loadWebSearchProviderConfig(
+function createEmptyApiKeyMap(): Partial<Record<WebSearchProvider, string>> {
+  return {
+    jina: undefined,
+    firecrawl: undefined,
+    serper: undefined,
+    tavily: undefined,
+    brave: undefined,
+  };
+}
+
+async function loadLegacyWebSearchApiKeys(
   settings: WebSearchConfigReader,
-): Promise<WebSearchProviderConfig> {
-  const [providerRaw, jinaApiKeyRaw, firecrawlApiKeyRaw, serperApiKeyRaw, tavilyApiKeyRaw, braveApiKeyRaw] = await Promise.all([
-    settings.get(WEB_SEARCH_PROVIDER_SETTING_KEY),
+): Promise<Partial<Record<WebSearchProvider, string>>> {
+  const [jinaApiKeyRaw, firecrawlApiKeyRaw, serperApiKeyRaw, tavilyApiKeyRaw, braveApiKeyRaw] = await Promise.all([
     settings.get(WEB_SEARCH_JINA_API_KEY_SETTING_KEY),
     settings.get(WEB_SEARCH_FIRECRAWL_API_KEY_SETTING_KEY),
     settings.get(WEB_SEARCH_SERPER_API_KEY_SETTING_KEY),
@@ -130,27 +156,158 @@ export async function loadWebSearchProviderConfig(
     settings.get(WEB_SEARCH_BRAVE_API_KEY_SETTING_KEY),
   ]);
 
-  const jinaApiKey = normalizeOptionalString(jinaApiKeyRaw);
-  const firecrawlApiKey = normalizeOptionalString(firecrawlApiKeyRaw);
-  const serperApiKey = normalizeOptionalString(serperApiKeyRaw);
-  const tavilyApiKey = normalizeOptionalString(tavilyApiKeyRaw);
-  const braveApiKey = normalizeOptionalString(braveApiKeyRaw);
+  return {
+    jina: normalizeOptionalString(jinaApiKeyRaw),
+    firecrawl: normalizeOptionalString(firecrawlApiKeyRaw),
+    serper: normalizeOptionalString(serperApiKeyRaw),
+    tavily: normalizeOptionalString(tavilyApiKeyRaw),
+    brave: normalizeOptionalString(braveApiKeyRaw),
+  };
+}
+
+async function loadConnectionStoreWebSearchApiKeys(
+  settings: WebSearchConfigReader,
+): Promise<Partial<Record<WebSearchProvider, string>>> {
+  const rawStore = await settings.get(CONNECTION_STORE_KEY);
+  if (!isRecord(rawStore)) return createEmptyApiKeyMap();
+
+  const rawItems = rawStore.items;
+  if (!isRecord(rawItems)) return createEmptyApiKeyMap();
+
+  const rawRecord = rawItems[WEB_SEARCH_CONNECTION_ID];
+  if (!isRecord(rawRecord)) return createEmptyApiKeyMap();
+
+  const rawSecrets = rawRecord.secrets;
+  if (!isRecord(rawSecrets)) return createEmptyApiKeyMap();
+
+  const apiKeys = createEmptyApiKeyMap();
+
+  for (const provider of WEB_SEARCH_PROVIDERS) {
+    const fieldId = WEB_SEARCH_CONNECTION_SECRET_FIELD_BY_PROVIDER[provider];
+    apiKeys[provider] = normalizeOptionalString(rawSecrets[fieldId]);
+  }
+
+  return apiKeys;
+}
+
+function mergeApiKeys(args: {
+  primary: Partial<Record<WebSearchProvider, string>>;
+  fallback: Partial<Record<WebSearchProvider, string>>;
+}): Partial<Record<WebSearchProvider, string>> {
+  const merged = createEmptyApiKeyMap();
+
+  for (const provider of WEB_SEARCH_PROVIDERS) {
+    merged[provider] = normalizeOptionalString(args.primary[provider])
+      ?? normalizeOptionalString(args.fallback[provider]);
+  }
+
+  return merged;
+}
+
+async function writeConnectionStoreWebSearchApiKeys(
+  settings: WebSearchConfigStore,
+  apiKeys: Partial<Record<WebSearchProvider, string>>,
+): Promise<void> {
+  const items = await loadConnectionStoreDocument(settings);
+  const previous = items[WEB_SEARCH_CONNECTION_ID];
+
+  const secrets: Record<string, string> = {};
+  for (const provider of WEB_SEARCH_PROVIDERS) {
+    const normalized = normalizeOptionalString(apiKeys[provider]);
+    if (!normalized) continue;
+    const fieldId = WEB_SEARCH_CONNECTION_SECRET_FIELD_BY_PROVIDER[provider];
+    secrets[fieldId] = normalized;
+  }
+
+  if (Object.keys(secrets).length === 0) {
+    if (WEB_SEARCH_CONNECTION_ID in items) {
+      delete items[WEB_SEARCH_CONNECTION_ID];
+      await saveConnectionStoreDocument(settings, items);
+    }
+    return;
+  }
+
+  items[WEB_SEARCH_CONNECTION_ID] = {
+    status: "connected",
+    lastValidatedAt: previous?.lastValidatedAt,
+    lastError: undefined,
+    secrets,
+  };
+
+  await saveConnectionStoreDocument(settings, items);
+}
+
+async function clearLegacyWebSearchApiKey(
+  settings: WebSearchConfigStore,
+  provider: WebSearchProvider,
+): Promise<void> {
+  const key = WEB_SEARCH_API_KEY_BY_PROVIDER_SETTING_KEY[provider];
+
+  if (typeof settings.delete === "function") {
+    await settings.delete(key);
+    return;
+  }
+
+  await settings.set(key, "");
+}
+
+export async function migrateLegacyWebSearchApiKeysToConnectionStore(
+  settings: WebSearchConfigStore,
+): Promise<boolean> {
+  const [legacyApiKeys, connectionApiKeys] = await Promise.all([
+    loadLegacyWebSearchApiKeys(settings),
+    loadConnectionStoreWebSearchApiKeys(settings),
+  ]);
+
+  const mergedApiKeys = mergeApiKeys({
+    primary: connectionApiKeys,
+    fallback: legacyApiKeys,
+  });
+
+  const shouldWriteConnectionStore = JSON.stringify(mergedApiKeys) !== JSON.stringify(connectionApiKeys);
+
+  const providersWithLegacyKeys = WEB_SEARCH_PROVIDERS.filter((provider) =>
+    normalizeOptionalString(legacyApiKeys[provider]) !== undefined,
+  );
+
+  if (!shouldWriteConnectionStore && providersWithLegacyKeys.length === 0) {
+    return false;
+  }
+
+  if (shouldWriteConnectionStore) {
+    await writeConnectionStoreWebSearchApiKeys(settings, mergedApiKeys);
+  }
+
+  for (const provider of providersWithLegacyKeys) {
+    await clearLegacyWebSearchApiKey(settings, provider);
+  }
+
+  return shouldWriteConnectionStore || providersWithLegacyKeys.length > 0;
+}
+
+export async function loadWebSearchProviderConfig(
+  settings: WebSearchConfigReader,
+): Promise<WebSearchProviderConfig> {
+  const [providerRaw, connectionApiKeys, legacyApiKeys] = await Promise.all([
+    settings.get(WEB_SEARCH_PROVIDER_SETTING_KEY),
+    loadConnectionStoreWebSearchApiKeys(settings),
+    loadLegacyWebSearchApiKeys(settings),
+  ]);
+
+  const apiKeys = mergeApiKeys({
+    primary: connectionApiKeys,
+    fallback: legacyApiKeys,
+  });
 
   // Prefer an explicitly saved provider. Otherwise, if any key-required provider
   // has a key, infer that provider so existing users aren't silently switched to
   // the zero-config default after an upgrade.
   const provider = parseProvider(providerRaw)
-    ?? (firecrawlApiKey ? "firecrawl" : serperApiKey ? "serper" : braveApiKey ? "brave" : tavilyApiKey ? "tavily" : DEFAULT_WEB_SEARCH_PROVIDER);
+    ?? (apiKeys.firecrawl ? "firecrawl" : apiKeys.serper ? "serper" : apiKeys.brave ? "brave" : apiKeys.tavily ? "tavily" : DEFAULT_WEB_SEARCH_PROVIDER);
 
   return {
     provider,
-    apiKeys: {
-      jina: jinaApiKey,
-      firecrawl: firecrawlApiKey,
-      serper: serperApiKey,
-      tavily: tavilyApiKey,
-      brave: braveApiKey,
-    },
+    apiKeys,
   };
 }
 
@@ -171,20 +328,28 @@ export async function saveWebSearchApiKey(
     throw new Error("API key cannot be empty.");
   }
 
-  await settings.set(WEB_SEARCH_API_KEY_BY_PROVIDER_SETTING_KEY[provider], normalized);
+  const current = await loadWebSearchProviderConfig(settings);
+  const nextApiKeys = {
+    ...current.apiKeys,
+    [provider]: normalized,
+  };
+
+  await writeConnectionStoreWebSearchApiKeys(settings, nextApiKeys);
+  await clearLegacyWebSearchApiKey(settings, provider);
 }
 
 export async function clearWebSearchApiKey(
   settings: WebSearchConfigStore,
   provider: WebSearchProvider,
 ): Promise<void> {
-  const key = WEB_SEARCH_API_KEY_BY_PROVIDER_SETTING_KEY[provider];
-  if (typeof settings.delete === "function") {
-    await settings.delete(key);
-    return;
-  }
+  const current = await loadWebSearchProviderConfig(settings);
+  const nextApiKeys = {
+    ...current.apiKeys,
+    [provider]: undefined,
+  };
 
-  await settings.set(key, "");
+  await writeConnectionStoreWebSearchApiKeys(settings, nextApiKeys);
+  await clearLegacyWebSearchApiKey(settings, provider);
 }
 
 export function getApiKeyForProvider(
