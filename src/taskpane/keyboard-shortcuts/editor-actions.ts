@@ -34,15 +34,6 @@ interface SidebarInputHost {
   getTextarea: () => HTMLTextAreaElement | undefined;
 }
 
-function actionToEditorText(action: QueuedEditorAction): string {
-  if (action.type === "prompt") {
-    return action.text;
-  }
-
-  const args = action.args.trim();
-  return args ? `/${action.name} ${args}` : `/${action.name}`;
-}
-
 function mergeQueuedAndCurrentText(queuedTexts: string[], currentText: string): string {
   return [...queuedTexts, currentText]
     .filter((text) => text.trim().length > 0)
@@ -55,6 +46,7 @@ export function restoreQueuedMessagesToEditor(args: {
   agent: Agent | null;
   queueDisplay: QueueDisplay | null;
   actionQueue: ActionQueue | null;
+  requeueCommands?: boolean;
 }): number {
   const {
     sidebar,
@@ -62,6 +54,7 @@ export function restoreQueuedMessagesToEditor(args: {
     agent,
     queueDisplay,
     actionQueue,
+    requeueCommands = true,
   } = args;
 
   const queuedMessages = queueDisplay?.drainQueuedMessages() ?? [];
@@ -70,9 +63,27 @@ export function restoreQueuedMessagesToEditor(args: {
   }
 
   const queuedActions = actionQueue?.drainQueuedActions() ?? [];
+  const queuedPromptTexts: string[] = [];
+  const queuedCommands: Array<{ name: string; args: string }> = [];
+
+  for (const action of queuedActions) {
+    if (action.type === "prompt") {
+      queuedPromptTexts.push(action.text);
+      continue;
+    }
+
+    queuedCommands.push({ name: action.name, args: action.args });
+  }
+
+  if (requeueCommands && actionQueue) {
+    for (const command of queuedCommands) {
+      actionQueue.enqueueCommand(command.name, command.args);
+    }
+  }
+
   const queuedTexts = [
     ...queuedMessages.map((message) => message.text),
-    ...queuedActions.map(actionToEditorText),
+    ...queuedPromptTexts,
   ];
 
   if (queuedTexts.length === 0) {

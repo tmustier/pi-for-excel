@@ -290,6 +290,7 @@ export function installKeyboardShortcuts(opts: {
         agent,
         queueDisplay: getActiveQueueDisplay(),
         actionQueue: getActiveActionQueue(),
+        requeueCommands: false,
       });
 
       const preservedText = sidebar.getInput()?.value ?? textarea?.value ?? "";
@@ -309,8 +310,12 @@ export function installKeyboardShortcuts(opts: {
       return true;
     },
     (context) => {
-      const { event, isInEditor, textarea, agent } = context;
-      if (!isRestoreQueuedMessagesShortcut(event) || !isInEditor || !textarea) {
+      const { event, isInEditor, textarea, keyTarget, agent } = context;
+      if (!isRestoreQueuedMessagesShortcut(event)) {
+        return false;
+      }
+
+      if (!isInEditor && isTextEntryTarget(keyTarget)) {
         return false;
       }
 

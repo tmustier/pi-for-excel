@@ -136,7 +136,12 @@ export function isRestoreQueuedMessagesShortcut(event: RestoreQueuedShortcutEven
   if (event.repeat) return false;
   if (!event.altKey || event.metaKey || event.ctrlKey || event.shiftKey) return false;
 
-  return event.key === "ArrowUp" || event.key === "Up" || event.code === "ArrowUp" || event.keyCode === 38;
+  if (event.key === "ArrowUp" || event.key === "Up" || event.code === "ArrowUp" || event.keyCode === 38) {
+    return true;
+  }
+
+  // Some hosts/webviews translate Alt/Option+↑ into PageUp.
+  return event.key === "PageUp" || event.code === "PageUp" || event.keyCode === 33;
 }
 
 export function shouldBlurEditorFromEscape(opts: {

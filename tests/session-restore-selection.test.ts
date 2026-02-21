@@ -550,10 +550,35 @@ void test("Arrow and fallback tab-switch shortcuts resolve expected direction", 
   );
 });
 
-void test("Alt+Up detection only matches plain restore-queue chord", () => {
+void test("Alt+Up detection matches host fallbacks and rejects modified chords", () => {
   assert.equal(
     isRestoreQueuedMessagesShortcut({
       key: "ArrowUp",
+      repeat: false,
+      metaKey: false,
+      ctrlKey: false,
+      shiftKey: false,
+      altKey: true,
+    }),
+    true,
+  );
+
+  assert.equal(
+    isRestoreQueuedMessagesShortcut({
+      key: "PageUp",
+      repeat: false,
+      metaKey: false,
+      ctrlKey: false,
+      shiftKey: false,
+      altKey: true,
+    }),
+    true,
+  );
+
+  assert.equal(
+    isRestoreQueuedMessagesShortcut({
+      key: "Unidentified",
+      code: "PageUp",
       repeat: false,
       metaKey: false,
       ctrlKey: false,
@@ -614,6 +639,7 @@ void test("queued restore prepends follow-up and compact queue items before draf
   };
 
   const input = { value: "Draft note" };
+  const requeuedCommands: Array<{ name: string; args: string }> = [];
 
   const restoredCount = restoreQueuedMessagesToEditor({
     sidebar: {
@@ -632,8 +658,8 @@ void test("queued restore prepends follow-up and compact queue items before draf
       ],
     },
     actionQueue: {
-      enqueueCommand: () => {
-        // unused in this test
+      enqueueCommand: (name, args) => {
+        requeuedCommands.push({ name, args });
       },
       drainQueuedActions: () => [
         { type: "prompt", text: "Queued during /compact" },
@@ -643,18 +669,50 @@ void test("queued restore prepends follow-up and compact queue items before draf
     },
   });
 
-  assert.equal(restoredCount, 4);
+  assert.equal(restoredCount, 3);
   assert.equal(clearQueueCalls, 1);
+  assert.deepEqual(requeuedCommands, [{ name: "compact", args: "" }]);
   assert.equal(
     input.value,
     [
       "Follow-up while streaming",
       "Steer while streaming",
       "Queued during /compact",
-      "/compact",
       "Draft note",
     ].join("\n\n"),
   );
+});
+
+void test("queued restore can drop queued commands when requested", () => {
+  const input = { value: "Draft" };
+  const requeuedCommands: Array<{ name: string; args: string }> = [];
+
+  const restoredCount = restoreQueuedMessagesToEditor({
+    sidebar: {
+      getInput: () => input,
+      getTextarea: () => undefined,
+    },
+    textarea: undefined,
+    agent: null,
+    queueDisplay: {
+      add: () => {
+        // unused in this test
+      },
+      drainQueuedMessages: () => [],
+    },
+    actionQueue: {
+      enqueueCommand: (name, args) => {
+        requeuedCommands.push({ name, args });
+      },
+      drainQueuedActions: () => [{ type: "command", name: "compact", args: "" }],
+      isBusy: () => true,
+    },
+    requeueCommands: false,
+  });
+
+  assert.equal(restoredCount, 0);
+  assert.deepEqual(requeuedCommands, []);
+  assert.equal(input.value, "Draft");
 });
 
 void test("queued restore is a no-op when nothing is pending", () => {

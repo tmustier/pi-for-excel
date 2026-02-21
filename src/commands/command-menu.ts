@@ -83,14 +83,16 @@ export function isCommandMenuVisible(): boolean {
 export function handleCommandMenuKey(e: KeyboardEvent): boolean {
   if (!isCommandMenuVisible()) return false;
 
-  if (e.key === "ArrowUp") {
+  const hasModifier = e.altKey || e.ctrlKey || e.metaKey || e.shiftKey;
+
+  if (e.key === "ArrowUp" && !hasModifier) {
     e.preventDefault();
     selectedIndex = Math.max(0, selectedIndex - 1);
     renderMenu();
     return true;
   }
 
-  if (e.key === "ArrowDown") {
+  if (e.key === "ArrowDown" && !hasModifier) {
     e.preventDefault();
     selectedIndex = Math.min(filteredCommands.length - 1, selectedIndex + 1);
     renderMenu();
