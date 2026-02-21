@@ -57,7 +57,22 @@ void test("getDefinition returns definition without ownerId", () => {
   assert.equal(def.id, "ext.apollo.apollo");
   assert.equal(def.title, "Apollo");
   assert.equal(def.capability, "company enrichment via Apollo API");
-  assert.equal((def as Record<string, unknown>).ownerId, undefined);
+  assert.equal(Reflect.get(def, "ownerId"), undefined);
+});
+
+void test("getDefinition returns detached objects", () => {
+  const manager = new ConnectionManager({ settings: createMemorySettings() });
+  manager.registerDefinition("ext.apollo", APOLLO_DEFINITION);
+
+  const first = manager.getDefinition("ext.apollo.apollo");
+  assert.ok(first);
+  first.title = "Changed";
+  first.secretFields[0].label = "Changed field";
+
+  const second = manager.getDefinition("ext.apollo.apollo");
+  assert.ok(second);
+  assert.equal(second.title, "Apollo");
+  assert.equal(second.secretFields[0].label, "API key");
 });
 
 // ── listDefinitions ─────────────────────────────────
@@ -77,7 +92,21 @@ void test("listDefinitions returns definitions sorted by title", () => {
   assert.equal(defs[0].title, "Apollo");
   assert.equal(defs[1].title, "Vendor API");
   // No ownerId leaked
-  assert.equal((defs[0] as Record<string, unknown>).ownerId, undefined);
+  assert.equal(Reflect.get(defs[0], "ownerId"), undefined);
+});
+
+void test("listDefinitions returns detached objects", () => {
+  const manager = new ConnectionManager({ settings: createMemorySettings() });
+  manager.registerDefinition("ext.apollo", APOLLO_DEFINITION);
+
+  const defs = manager.listDefinitions();
+  assert.equal(defs.length, 1);
+  defs[0].title = "Changed";
+  defs[0].secretFields[0].label = "Changed field";
+
+  const next = manager.listDefinitions();
+  assert.equal(next[0].title, "Apollo");
+  assert.equal(next[0].secretFields[0].label, "API key");
 });
 
 // ── getSecretFieldPresence ──────────────────────────

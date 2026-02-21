@@ -7,7 +7,6 @@
 
 import type { ConnectionManager } from "../../connections/manager.js";
 import type { ConnectionDefinition, ConnectionSnapshot, ConnectionStatus } from "../../connections/types.js";
-import type { ExtensionRuntimeManager } from "../../extensions/runtime-manager.js";
 import {
   createCallout,
   createItemCard,
@@ -19,6 +18,7 @@ import {
 } from "../../ui/extensions-hub-components.js";
 import { lucide, AlertTriangle, Plug } from "../../ui/lucide-icons.js";
 import { showToast } from "../../ui/toast.js";
+import { formatRelativeDate } from "./overlay-relative-date.js";
 
 // ── Badge mapping ───────────────────────────────────
 
@@ -36,25 +36,6 @@ function connectionBadge(status: ConnectionStatus): BadgeSpec {
   }
 }
 
-// ── Relative time formatting ────────────────────────
-
-function relativeTime(isoString: string): string {
-  const diffMs = Date.now() - new Date(isoString).getTime();
-  if (diffMs < 0) return "just now";
-
-  const seconds = Math.floor(diffMs / 1000);
-  if (seconds < 60) return "just now";
-
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes} min ago`;
-
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
-}
-
 // ── Connection card ─────────────────────────────────
 
 function renderConnectionCard(args: {
@@ -62,9 +43,8 @@ function renderConnectionCard(args: {
   snapshot: ConnectionSnapshot;
   presence: Record<string, boolean>;
   connectionManager: ConnectionManager;
-  onMutated: () => void;
 }): HTMLElement {
-  const { definition, snapshot, presence, connectionManager, onMutated } = args;
+  const { definition, snapshot, presence, connectionManager } = args;
   const badge = connectionBadge(snapshot.status);
   const needsAction = snapshot.status === "missing" || snapshot.status === "error";
 
@@ -119,7 +99,7 @@ function renderConnectionCard(args: {
   if (snapshot.status === "connected" && snapshot.lastValidatedAt) {
     const meta = document.createElement("div");
     meta.className = "pi-item-card__meta";
-    meta.textContent = `Last validated: ${relativeTime(snapshot.lastValidatedAt)}`;
+    meta.textContent = `Last validated: ${formatRelativeDate(snapshot.lastValidatedAt)}`;
     card.body.appendChild(meta);
   }
 
@@ -151,7 +131,6 @@ function renderConnectionCard(args: {
             input.value = "";
           }
           showToast(`Saved ${definition.title} credentials`);
-          onMutated();
         } catch (err: unknown) {
           showToast(`Save failed: ${err instanceof Error ? err.message : String(err)}`);
         }
@@ -166,7 +145,6 @@ function renderConnectionCard(args: {
         try {
           await connectionManager.clearSecretsFromHost(definition.id);
           showToast(`Cleared ${definition.title} credentials`);
-          onMutated();
         } catch (err: unknown) {
           showToast(`Clear failed: ${err instanceof Error ? err.message : String(err)}`);
         }
@@ -185,10 +163,14 @@ function renderConnectionCard(args: {
 
 // ── Section renderer ────────────────────────────────
 
+interface ExtensionListSource {
+  list: () => readonly { id: string }[];
+}
+
 export async function renderExtensionConnectionsSection(args: {
   container: HTMLElement;
   connectionManager: ConnectionManager;
-  extensionManager: ExtensionRuntimeManager;
+  extensionManager: ExtensionListSource;
 }): Promise<void> {
   const { container, connectionManager, extensionManager } = args;
 
@@ -223,9 +205,6 @@ export async function renderExtensionConnectionsSection(args: {
       snapshot,
       presence,
       connectionManager,
-      onMutated: () => {
-        // Manager notifies listeners → live refresh handles re-render
-      },
     });
     list.appendChild(cardEl);
   }

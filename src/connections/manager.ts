@@ -161,6 +161,24 @@ function normalizeConnectionDefinition(definition: ConnectionDefinition): Connec
   };
 }
 
+function toPublicConnectionDefinition(
+  definition: RegisteredConnectionDefinition,
+): ConnectionDefinition {
+  return {
+    id: definition.id,
+    title: definition.title,
+    capability: definition.capability,
+    authKind: definition.authKind,
+    setupHint: definition.setupHint,
+    secretFields: definition.secretFields.map((field) => ({
+      id: field.id,
+      label: field.label,
+      required: field.required,
+      maskInUi: field.maskInUi,
+    })),
+  };
+}
+
 async function mutateConnectionRecord(args: {
   settings: ConnectionSettingsStore;
   connectionId: string;
@@ -284,16 +302,14 @@ export class ConnectionManager {
   getDefinition(connectionId: string): ConnectionDefinition | null {
     const definition = this.definitions.get(normalizeConnectionId(connectionId));
     if (!definition) return null;
-    const { ownerId: _ownerId, ...rest } = definition;
-    return rest;
+    return toPublicConnectionDefinition(definition);
   }
 
   /** Returns all registered definitions, sorted by title. */
   listDefinitions(): ConnectionDefinition[] {
     const results: ConnectionDefinition[] = [];
     for (const definition of this.definitions.values()) {
-      const { ownerId: _ownerId, ...rest } = definition;
-      results.push(rest);
+      results.push(toPublicConnectionDefinition(definition));
     }
     results.sort((a, b) => a.title.localeCompare(b.title));
     return results;

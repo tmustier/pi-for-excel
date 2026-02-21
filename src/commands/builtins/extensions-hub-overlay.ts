@@ -18,6 +18,7 @@ import { ADDONS_OVERLAY_ID } from "../../ui/overlay-ids.js";
 import { showToast } from "../../ui/toast.js";
 import { renderConnectionsTab } from "./extensions-hub-connections.js";
 import { renderPluginsTab } from "./extensions-hub-plugins.js";
+import { createDeferredConnectionsRefreshController } from "./extensions-hub-refresh.js";
 import { renderSkillsTab } from "./extensions-hub-skills.js";
 
 export type ExtensionsHubTab = "connections" | "plugins" | "skills";
@@ -137,45 +138,6 @@ export async function showExtensionsHubDialog(
 
     let disposed = false;
 
-    // ── Live refresh on background state changes ───
-    // Skip refresh when the user is actively editing a secret input
-    // to avoid wiping in-progress credential entry.
-    const hasActiveSecretInput = (): boolean => {
-      const active = document.activeElement;
-      return active instanceof HTMLInputElement
-        && active.closest("[data-hub-panel='connections']") !== null;
-    };
-
-    let pendingRefresh = false;
-    const deferredRefresh = (): void => {
-      if (disposed) return;
-      if (hasActiveSecretInput()) {
-        pendingRefresh = true;
-        return;
-      }
-      pendingRefresh = false;
-      void refreshAll();
-    };
-
-    // Flush deferred refresh when user leaves input
-    const onFocusOut = (): void => {
-      if (pendingRefresh) {
-        pendingRefresh = false;
-        if (!disposed) void refreshAll();
-      }
-    };
-    connectionsPanel.addEventListener("focusout", onFocusOut);
-
-    const unsubConnection = deps.connectionManager.subscribe(deferredRefresh);
-    const unsubExtension = deps.extensionManager.subscribe(deferredRefresh);
-
-    dialog.addCleanup(() => {
-      disposed = true;
-      unsubConnection();
-      unsubExtension();
-      connectionsPanel.removeEventListener("focusout", onFocusOut);
-    });
-
     // ── Shared mutation helper ─────────────────────
     let busy = false;
 
@@ -242,6 +204,42 @@ export async function showExtensionsHubDialog(
         refreshSkills(),
       ]);
     };
+
+    // ── Live refresh on background state changes ───
+    // Skip refresh when a connection secret input is active so we do not wipe
+    // in-progress edits. Focus transitions input→input are resolved on next tick.
+    const hasActiveSecretInput = (): boolean => {
+      const active = document.activeElement;
+      return active instanceof HTMLInputElement && connectionsPanel.contains(active);
+    };
+
+    const refreshController = createDeferredConnectionsRefreshController({
+      isDisposed: () => disposed,
+      hasActiveSecretInput,
+      refresh: () => {
+        if (!disposed) void refreshAll();
+      },
+    });
+
+    const onConnectionsFocusOut = (): void => {
+      refreshController.onConnectionsFocusOut();
+    };
+
+    connectionsPanel.addEventListener("focusout", onConnectionsFocusOut);
+    const unsubConnection = deps.connectionManager.subscribe(() => {
+      refreshController.requestRefresh();
+    });
+    const unsubExtension = deps.extensionManager.subscribe(() => {
+      refreshController.requestRefresh();
+    });
+
+    dialog.addCleanup(() => {
+      disposed = true;
+      refreshController.dispose();
+      unsubConnection();
+      unsubExtension();
+      connectionsPanel.removeEventListener("focusout", onConnectionsFocusOut);
+    });
 
     // ── Mount & initial render ─────────────────────
     try {
