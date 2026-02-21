@@ -1,5 +1,4 @@
 import { readFileSync, readdirSync } from "node:fs";
-import minimatch from "minimatch";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -53,6 +52,53 @@ function walkFiles(rootDir) {
   return discovered;
 }
 
+function segmentPatternToRegex(segmentPattern) {
+  const escaped = segmentPattern.replace(/[|\\{}()[\]^$+?.]/g, "\\$&");
+  return new RegExp(`^${escaped.replaceAll("*", "[^/]*")}$`);
+}
+
+function segmentMatchesPattern(segmentPattern, segment) {
+  if (segmentPattern === "*") {
+    return true;
+  }
+
+  return segmentPatternToRegex(segmentPattern).test(segment);
+}
+
+function pathMatchesPattern(pathPattern, absolutePath) {
+  const patternSegments = toPosixPath(pathPattern).split("/");
+  const valueSegments = toPosixPath(absolutePath).split("/");
+
+  function matchesFrom(patternIndex, valueIndex) {
+    if (patternIndex >= patternSegments.length) {
+      return valueIndex >= valueSegments.length;
+    }
+
+    const patternSegment = patternSegments[patternIndex];
+    if (patternSegment === "**") {
+      if (matchesFrom(patternIndex + 1, valueIndex)) {
+        return true;
+      }
+
+      return valueIndex < valueSegments.length
+        ? matchesFrom(patternIndex, valueIndex + 1)
+        : false;
+    }
+
+    if (valueIndex >= valueSegments.length) {
+      return false;
+    }
+
+    if (!segmentMatchesPattern(patternSegment, valueSegments[valueIndex])) {
+      return false;
+    }
+
+    return matchesFrom(patternIndex + 1, valueIndex + 1);
+  }
+
+  return matchesFrom(0, 0);
+}
+
 function resolveGlobMatches(importerUrl, pattern) {
   const importerFilePath = fileURLToPath(importerUrl);
   const importerDir = path.dirname(importerFilePath);
@@ -63,9 +109,8 @@ function resolveGlobMatches(importerUrl, pattern) {
     return [absolutePattern];
   }
 
-  const patternPosix = toPosixPath(absolutePattern);
   const candidates = walkFiles(searchRoot);
-  return candidates.filter((candidate) => minimatch(toPosixPath(candidate), patternPosix, { dot: true }));
+  return candidates.filter((candidate) => pathMatchesPattern(absolutePattern, candidate));
 }
 
 function toGlobResultKey(importerUrl, absolutePath) {
