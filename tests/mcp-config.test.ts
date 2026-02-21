@@ -42,6 +42,23 @@ class FailingConnectionStoreSettings extends MemorySettingsStore {
   }
 }
 
+class FailingServerSettings extends MemorySettingsStore {
+  private failServerDocumentWrite = false;
+
+  armServerDocumentFailure(): void {
+    this.failServerDocumentWrite = true;
+  }
+
+  override set(key: string, value: unknown): Promise<void> {
+    if (this.failServerDocumentWrite && key === MCP_SERVERS_SETTING_KEY) {
+      this.failServerDocumentWrite = false;
+      return Promise.reject(new Error("simulated mcp.servers write failure"));
+    }
+
+    return super.set(key, value);
+  }
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
@@ -156,6 +173,51 @@ void test("saveMcpServers does not strip legacy tokens when token-store write fa
 
   const tokens = readConnectionStoreTokenMap(settings);
   assert.equal(tokens, undefined);
+});
+
+void test("saveMcpServers rolls back token changes when server-document write fails", async () => {
+  const settings = new FailingServerSettings();
+
+  await settings.set(CONNECTION_STORE_KEY, {
+    version: 1,
+    items: {
+      [MCP_SERVER_TOKENS_CONNECTION_ID]: {
+        status: "connected",
+        secrets: {
+          "mcp-local": "existing-token",
+        },
+      },
+    },
+  });
+
+  await settings.set(MCP_SERVERS_SETTING_KEY, {
+    version: 1,
+    servers: [
+      {
+        id: "mcp-local",
+        name: "local",
+        url: "https://localhost:4010/mcp",
+        enabled: true,
+      },
+    ],
+  });
+
+  settings.armServerDocumentFailure();
+
+  await assert.rejects(
+    saveMcpServers(settings, [{
+      id: "mcp-local",
+      name: "local",
+      url: "https://localhost:4010/mcp",
+      enabled: true,
+      token: "new-token",
+    }]),
+    /simulated mcp\.servers write failure/,
+  );
+
+  const tokens = readConnectionStoreTokenMap(settings);
+  assert.ok(tokens);
+  assert.equal(tokens["mcp-local"], "existing-token");
 });
 
 void test("loadMcpServers falls back to legacy token when connection store token is absent", async () => {

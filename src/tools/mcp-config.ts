@@ -374,8 +374,20 @@ export async function saveMcpServers(
 
   // Write tokens first so a failed connection-store write never strips legacy
   // token fields from mcp.servers.v1 before persistence succeeds.
+  const previousTokenMap = await loadConnectionStoreMcpTokens(settings);
   await writeConnectionStoreMcpTokens(settings, tokensByServerId);
-  await settings.set(MCP_SERVERS_SETTING_KEY, createDocument(stripServerTokens(normalized)));
+
+  try {
+    await settings.set(MCP_SERVERS_SETTING_KEY, createDocument(stripServerTokens(normalized)));
+  } catch (error: unknown) {
+    try {
+      await writeConnectionStoreMcpTokens(settings, previousTokenMap);
+    } catch {
+      // best-effort rollback only; rethrow original failure below.
+    }
+
+    throw error;
+  }
 }
 
 export function createMcpServerConfig(input: {
