@@ -314,12 +314,27 @@ export function injectStatusBar(opts: {
     markStatusBarInteractionEndSoon();
   };
 
+  const onFocusOut = (event: FocusEvent): void => {
+    const currentHost = resolveStatusBarHost(event.target);
+    if (!currentHost) {
+      return;
+    }
+
+    const relatedHost = resolveStatusBarHost(event.relatedTarget);
+    if (relatedHost === currentHost) {
+      return;
+    }
+
+    markStatusBarInteractionEndSoon();
+  };
+
   const onStatusUpdate = () => requestRender();
 
   document.addEventListener("pi:status-update", onStatusUpdate);
   document.addEventListener("pi:active-runtime-changed", bindActiveAgent);
   document.addEventListener("pointerover", onPointerOver, true);
   document.addEventListener("pointerout", onPointerOut, true);
+  document.addEventListener("focusout", onFocusOut, true);
 
   requestAnimationFrame(bindActiveAgent);
 
@@ -332,6 +347,7 @@ export function injectStatusBar(opts: {
     document.removeEventListener("pi:active-runtime-changed", bindActiveAgent);
     document.removeEventListener("pointerover", onPointerOver, true);
     document.removeEventListener("pointerout", onPointerOut, true);
+    document.removeEventListener("focusout", onFocusOut, true);
   };
 }
 
