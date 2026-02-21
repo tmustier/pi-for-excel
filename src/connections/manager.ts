@@ -278,6 +278,106 @@ export class ConnectionManager {
     return Array.from(this.definitions.keys()).sort((left, right) => left.localeCompare(right));
   }
 
+  // ── Host-facing APIs (trusted UI surface) ──────────
+
+  /** Returns the full definition for a registered connection, or null. */
+  getDefinition(connectionId: string): ConnectionDefinition | null {
+    const definition = this.definitions.get(normalizeConnectionId(connectionId));
+    if (!definition) return null;
+    const { ownerId: _ownerId, ...rest } = definition;
+    return rest;
+  }
+
+  /** Returns all registered definitions, sorted by title. */
+  listDefinitions(): ConnectionDefinition[] {
+    const results: ConnectionDefinition[] = [];
+    for (const definition of this.definitions.values()) {
+      const { ownerId: _ownerId, ...rest } = definition;
+      results.push(rest);
+    }
+    results.sort((a, b) => a.title.localeCompare(b.title));
+    return results;
+  }
+
+  /**
+   * Returns presence flags for each secret field (true = stored, false = absent).
+   * Never exposes raw secret values to the UI.
+   */
+  async getSecretFieldPresence(connectionId: string): Promise<Record<string, boolean>> {
+    const definition = this.getRequiredDefinition(connectionId);
+    const items = await loadConnectionStoreDocument(this.settings);
+    const record = items[definition.id];
+    const secrets = record?.secrets ?? {};
+
+    const presence: Record<string, boolean> = {};
+    for (const field of definition.secretFields) {
+      const value = secrets[field.id];
+      presence[field.id] = typeof value === "string" && value.trim().length > 0;
+    }
+    return presence;
+  }
+
+  /**
+   * Merge-patch secrets from the host UI (bypasses owner check).
+   * Only non-empty values are merged; empty strings are ignored.
+   * Clears error/invalid status on save (optimistic recovery).
+   */
+  async updateSecretsFromHost(connectionId: string, partialSecrets: Record<string, string>): Promise<void> {
+    const definition = this.getRequiredDefinition(connectionId);
+    const patch = normalizeSecrets(partialSecrets);
+
+    if (Object.keys(patch).length === 0) return;
+
+    const allowedSecretIds = new Set<string>(definition.secretFields.map((field) => field.id));
+    for (const fieldId of Object.keys(patch)) {
+      if (!allowedSecretIds.has(fieldId)) {
+        throw new Error(`Unknown secret field "${fieldId}" for connection "${definition.id}".`);
+      }
+    }
+
+    const changed = await mutateConnectionRecord({
+      settings: this.settings,
+      connectionId: definition.id,
+      mutator: (record) => {
+        const merged = { ...(record?.secrets ?? {}), ...patch };
+        const requiredPresent = hasRequiredSecrets(definition, merged);
+
+        return {
+          status: requiredPresent ? "connected" : "missing",
+          lastValidatedAt: undefined,
+          lastError: undefined,
+          secrets: merged,
+        };
+      },
+    });
+
+    if (changed) {
+      this.notify();
+    }
+  }
+
+  /**
+   * Clear all secrets for a connection from the host UI (bypasses owner check).
+   */
+  async clearSecretsFromHost(connectionId: string): Promise<void> {
+    this.getRequiredDefinition(connectionId);
+
+    const changed = await mutateConnectionRecord({
+      settings: this.settings,
+      connectionId,
+      mutator: () => ({
+        status: "missing",
+        lastValidatedAt: undefined,
+        lastError: undefined,
+        secrets: {},
+      }),
+    });
+
+    if (changed) {
+      this.notify();
+    }
+  }
+
   private getRequiredDefinition(connectionId: string): RegisteredConnectionDefinition {
     const normalizedConnectionId = normalizeConnectionId(connectionId);
     const definition = this.definitions.get(normalizedConnectionId);

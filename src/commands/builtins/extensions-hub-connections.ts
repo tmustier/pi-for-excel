@@ -63,6 +63,7 @@ import {
 } from "../../ui/extensions-hub-components.js";
 import { lucide, Search, Terminal, Zap } from "../../ui/lucide-icons.js";
 import type { ExtensionsHubDependencies } from "./extensions-hub-overlay.js";
+import { renderExtensionConnectionsSection } from "./extensions-hub-extension-connections.js";
 
 type SettingsStore = IntegrationSettingsStore & WebSearchConfigStore & McpConfigStore & {
   delete?: (key: string) => Promise<void>;
@@ -415,6 +416,13 @@ export async function renderConnectionsTab(args: {
   webCard.body.appendChild(scopeDetails);
 
   container.appendChild(webCard.root);
+
+  // ── Extension connections section ─────────────
+  await renderExtensionConnectionsSection({
+    container,
+    connectionManager: deps.connectionManager,
+    extensionManager: deps.extensionManager,
+  });
 
   // ── MCP servers section ───────────────────────
   const mcpAddForm = createAddForm();

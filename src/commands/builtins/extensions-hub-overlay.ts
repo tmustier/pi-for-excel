@@ -6,6 +6,7 @@
  */
 
 import { getAppStorage } from "@mariozechner/pi-web-ui/dist/storage/app-storage.js";
+import type { ConnectionManager } from "../../connections/manager.js";
 import type { ExtensionRuntimeManager } from "../../extensions/runtime-manager.js";
 import { dispatchIntegrationsChanged } from "../../integrations/events.js";
 import {
@@ -30,6 +31,7 @@ export interface ExtensionsHubDependencies {
   getActiveSessionId: () => string | null;
   resolveWorkbookContext: () => Promise<WorkbookContextSnapshot>;
   extensionManager: ExtensionRuntimeManager;
+  connectionManager: ConnectionManager;
   onChanged?: () => Promise<void> | void;
 }
 
@@ -134,7 +136,45 @@ export async function showExtensionsHubDialog(
     dialog.card.append(header, body);
 
     let disposed = false;
-    dialog.addCleanup(() => { disposed = true; });
+
+    // ── Live refresh on background state changes ───
+    // Skip refresh when the user is actively editing a secret input
+    // to avoid wiping in-progress credential entry.
+    const hasActiveSecretInput = (): boolean => {
+      const active = document.activeElement;
+      return active instanceof HTMLInputElement
+        && active.closest("[data-hub-panel='connections']") !== null;
+    };
+
+    let pendingRefresh = false;
+    const deferredRefresh = (): void => {
+      if (disposed) return;
+      if (hasActiveSecretInput()) {
+        pendingRefresh = true;
+        return;
+      }
+      pendingRefresh = false;
+      void refreshAll();
+    };
+
+    // Flush deferred refresh when user leaves input
+    const onFocusOut = (): void => {
+      if (pendingRefresh) {
+        pendingRefresh = false;
+        if (!disposed) void refreshAll();
+      }
+    };
+    connectionsPanel.addEventListener("focusout", onFocusOut);
+
+    const unsubConnection = deps.connectionManager.subscribe(deferredRefresh);
+    const unsubExtension = deps.extensionManager.subscribe(deferredRefresh);
+
+    dialog.addCleanup(() => {
+      disposed = true;
+      unsubConnection();
+      unsubExtension();
+      connectionsPanel.removeEventListener("focusout", onFocusOut);
+    });
 
     // ── Shared mutation helper ─────────────────────
     let busy = false;

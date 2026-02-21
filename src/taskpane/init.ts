@@ -1390,6 +1390,7 @@ export async function initTaskpane(opts: {
           };
         },
         extensionManager,
+        connectionManager,
         onChanged: refreshCapabilitiesForAllRuntimes,
       },
       { tab },
