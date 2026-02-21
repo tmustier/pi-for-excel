@@ -40,6 +40,7 @@ import { withConnectionPreflight } from "../tools/with-connection-preflight.js";
 import {
   migrateLegacyWebSearchApiKeysToConnectionStore,
 } from "../tools/web-search-config.js";
+import { migrateLegacyMcpTokensToConnectionStore } from "../tools/mcp-config.js";
 import {
   applyExperimentalToolGates,
   buildOfficeJsExecuteApprovalMessage,
@@ -211,6 +212,13 @@ export async function initTaskpane(opts: {
     await migrateLegacyWebSearchApiKeysToConnectionStore(settings);
   } catch (error: unknown) {
     console.warn("[pi] Failed to migrate legacy web-search API keys:", error);
+  }
+
+  // Migrate legacy MCP bearer tokens to the connection store schema.
+  try {
+    await migrateLegacyMcpTokensToConnectionStore(settings);
+  } catch (error: unknown) {
+    console.warn("[pi] Failed to migrate legacy MCP bearer tokens:", error);
   }
 
   // 1b. Auto-compaction (Pi defaults to enabled)

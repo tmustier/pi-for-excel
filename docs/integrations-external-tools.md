@@ -24,6 +24,7 @@ Issue: [#24](https://github.com/tmustier/pi-for-excel/issues/24)
   - tool: `mcp`
   - server registry (`mcp.servers.v1`) configurable in `/tools`
   - add/remove/test server URL + optional bearer token
+  - bearer tokens are stored in the shared connection store (`connections.store.v1`, record `builtin.mcp.servers`) with legacy `mcp.servers.v1` token fallback/migration
 
 ## Runtime model
 

@@ -200,7 +200,7 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 - **Web search providers:** Jina (default, zero-config), Serper.dev, Tavily, and Brave Search (`web_search`) with optional proxy routing and explicit "Sent" attribution in results.
 - **Fallback behavior:** when a configured keyed provider fails with auth/rate-limit/server/network errors, `web_search` automatically retries with Jina for that call and includes a warning in tool output/details.
 - **Page retrieval companion:** `fetch_page` fetches URL content and returns extracted markdown for source grounding workflows (`web_search` → `fetch_page`).
-- **MCP integration:** configurable server registry (`mcp.servers.v1`), UI add/remove/test, and a single `mcp` gateway tool for list/search/describe/call flows.
+- **MCP integration:** configurable server registry (`mcp.servers.v1`) + bearer token secrets in connection store (`connections.store.v1` / `builtin.mcp.servers`), UI add/remove/test, and a single `mcp` gateway tool for list/search/describe/call flows.
 - **Rationale:** satisfy issue #24 with explicit consent, clear attribution, and minimal overlap with the extension system.
 
 ## Direct Office.js tool (`execute_office_js`)
