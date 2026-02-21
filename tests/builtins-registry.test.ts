@@ -372,11 +372,19 @@ void test("slash-command busy policy is centralized and supports extension comma
   assert.doesNotMatch(busyPolicySource, /"addons"/);
 });
 
-void test("escape guard treats extension widget slots as escape owners", async () => {
+void test("escape guard scopes widget escape claims to abort paths", async () => {
   const escapeGuardSource = await readFile(new URL("../src/utils/escape-guard.ts", import.meta.url), "utf8");
+  const keyboardShortcutsSource = await readFile(new URL("../src/taskpane/keyboard-shortcuts.ts", import.meta.url), "utf8");
+  const inputSource = await readFile(new URL("../src/ui/pi-input.ts", import.meta.url), "utf8");
+  const initSource = await readFile(new URL("../src/taskpane/init.ts", import.meta.url), "utf8");
 
+  assert.match(escapeGuardSource, /export function doesExtensionWidgetClaimEscape/);
   assert.match(escapeGuardSource, /#pi-widget-slot:not\(:empty\)/);
   assert.match(escapeGuardSource, /#pi-widget-slot-below:not\(:empty\)/);
+
+  assert.match(keyboardShortcutsSource, /doesExtensionWidgetClaimEscape/);
+  assert.match(inputSource, /doesExtensionWidgetClaimEscape/);
+  assert.match(initSource, /doesOverlayClaimEscape\(document\.activeElement\)/);
 });
 
 void test("taskpane init wires recovery overlay opener", async () => {

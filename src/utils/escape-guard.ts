@@ -5,17 +5,20 @@
  * Esc should dismiss that UI instead of aborting the active agent turn.
  */
 
-const ESCAPE_OWNER_SELECTORS = [
+const OVERLAY_ESCAPE_OWNER_SELECTORS = [
   ".pi-welcome-overlay[data-claims-escape='true']",
   ".pi-utilities-menu",
   ".pi-status-popover",
   "#pi-command-menu",
-  "#pi-widget-slot:not(:empty)",
-  "#pi-widget-slot-below:not(:empty)",
   "agent-model-selector",
   "agent-settings-dialog",
   "api-key-prompt-dialog",
   "agent-api-key-dialog",
+] as const;
+
+const WIDGET_ESCAPE_OWNER_SELECTORS = [
+  "#pi-widget-slot:not(:empty)",
+  "#pi-widget-slot-below:not(:empty)",
 ] as const;
 
 function isElementTarget(value: EventTarget): value is Element {
@@ -61,21 +64,33 @@ function hasVisibleMatches(selector: string): boolean {
   return false;
 }
 
+function doesSelectorSetClaimEscape(target: EventTarget | null | undefined, selectors: readonly string[]): boolean {
+  const targetElement = getTargetElement(target ?? null);
+  if (targetElement) {
+    for (const selector of selectors) {
+      if (targetElement.closest(selector)) return true;
+    }
+  }
+
+  for (const selector of selectors) {
+    if (hasVisibleMatches(selector)) return true;
+  }
+
+  return false;
+}
+
 export function doesOverlayClaimEscape(target?: EventTarget | null): boolean {
   if (typeof document === "undefined") {
     return false;
   }
 
-  const targetElement = getTargetElement(target ?? null);
-  if (targetElement) {
-    for (const selector of ESCAPE_OWNER_SELECTORS) {
-      if (targetElement.closest(selector)) return true;
-    }
+  return doesSelectorSetClaimEscape(target, OVERLAY_ESCAPE_OWNER_SELECTORS);
+}
+
+export function doesExtensionWidgetClaimEscape(target?: EventTarget | null): boolean {
+  if (typeof document === "undefined") {
+    return false;
   }
 
-  for (const selector of ESCAPE_OWNER_SELECTORS) {
-    if (hasVisibleMatches(selector)) return true;
-  }
-
-  return false;
+  return doesSelectorSetClaimEscape(target, WIDGET_ESCAPE_OWNER_SELECTORS);
 }

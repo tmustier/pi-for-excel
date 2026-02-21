@@ -11,7 +11,10 @@ import type { PiSidebar } from "../ui/pi-sidebar.js";
 import { moveCursorToEnd } from "../ui/input-focus.js";
 import { isActionToastVisible, showToast } from "../ui/toast.js";
 
-import { doesOverlayClaimEscape } from "../utils/escape-guard.js";
+import {
+  doesExtensionWidgetClaimEscape,
+  doesOverlayClaimEscape,
+} from "../utils/escape-guard.js";
 import { blurTextEntryTarget, isTextEntryTarget } from "../utils/text-entry.js";
 import {
   handleCommandMenuKey,
@@ -263,7 +266,8 @@ export function installKeyboardShortcuts(opts: {
     (context) => {
       const { event, isStreaming, agent, keyTarget } = context;
       const isEscapeKey = event.key === "Escape" || event.key === "Esc";
-      const escapeClaimedByOverlay = isEscapeKey && doesOverlayClaimEscape(keyTarget);
+      const escapeClaimedByOverlay = isEscapeKey
+        && (doesOverlayClaimEscape(keyTarget) || doesExtensionWidgetClaimEscape(keyTarget));
 
       if (
         !isEscapeKey
