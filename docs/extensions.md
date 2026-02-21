@@ -97,6 +97,17 @@ Connection registration + credential lifecycle APIs:
 
 Use this to declare extension-specific connection requirements (capability + secret fields), store credentials securely in host-managed local settings, and surface deterministic setup/auth states to the assistant.
 
+#### User setup via `/tools → Connections`
+
+Registered extension connections appear automatically in the `/tools` overlay under **Extension connections** (between Web search and MCP servers). Each connection renders as a card with:
+
+- Status badge: **Connected** / **Not configured** / **Invalid** / **Error**
+- Secret field inputs (empty by default; `✓ Saved` indicator when a value exists)
+- Save (merge-patch — only entered fields are updated) and Clear actions
+- Error callout when the last tool call triggered an auth failure
+
+The section is hidden when no extensions are installed and shows an empty state when extensions are installed but none have registered connections.
+
 ### `agent`
 Agent API surface:
 - `agent.raw` (host runtime only; capability-gated)
