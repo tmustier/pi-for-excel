@@ -381,7 +381,12 @@ export async function saveMcpServers(
     await settings.set(MCP_SERVERS_SETTING_KEY, createDocument(stripServerTokens(normalized)));
   } catch (error: unknown) {
     try {
-      await writeConnectionStoreMcpTokens(settings, previousTokenMap);
+      const currentTokenMap = await loadConnectionStoreMcpTokens(settings);
+      const rollbackIsSafe = areTokenMapsEqual(currentTokenMap, tokensByServerId);
+
+      if (rollbackIsSafe) {
+        await writeConnectionStoreMcpTokens(settings, previousTokenMap);
+      }
     } catch {
       // best-effort rollback only; rethrow original failure below.
     }
