@@ -81,6 +81,7 @@ void test("tmux tool sends v1 bridge contract payload for send_and_capture", asy
     lines: 80,
     wait_for: "done",
     timeout_ms: 5000,
+    wait_ms: 15000,
     join_wrapped: true,
   });
 
@@ -92,6 +93,7 @@ void test("tmux tool sends v1 bridge contract payload for send_and_capture", asy
   assert.equal(capturedRequest?.lines, 80);
   assert.equal(capturedRequest?.wait_for, "done");
   assert.equal(capturedRequest?.timeout_ms, 5000);
+  assert.equal(capturedRequest?.wait_ms, 15000);
   assert.equal(capturedRequest?.join_wrapped, true);
 
   assert.ok(capturedConfig);

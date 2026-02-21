@@ -266,6 +266,42 @@ test("stub mode supports create/list/send/capture/kill lifecycle", async (t) => 
   assert.deepEqual(afterKillPayload.sessions, []);
 });
 
+test("capture_pane wait_ms delays response in stub mode", async (t) => {
+  const bridge = await startBridge();
+  t.after(async () => {
+    await bridge.stop();
+  });
+
+  const createSession = await fetch(`http://127.0.0.1:${bridge.port}/v1/tmux`, requestInit("POST", {
+    action: "create_session",
+    session: "slow-capture",
+  }));
+  assert.equal(createSession.status, 200);
+
+  const send = await fetch(`http://127.0.0.1:${bridge.port}/v1/tmux`, requestInit("POST", {
+    action: "send_keys",
+    session: "slow-capture",
+    text: "echo hello",
+    enter: true,
+  }));
+  assert.equal(send.status, 200);
+
+  const startedAt = Date.now();
+  const capture = await fetch(`http://127.0.0.1:${bridge.port}/v1/tmux`, requestInit("POST", {
+    action: "capture_pane",
+    session: "slow-capture",
+    lines: 20,
+    wait_ms: 250,
+  }));
+  const elapsedMs = Date.now() - startedAt;
+
+  assert.equal(capture.status, 200);
+  assert.ok(elapsedMs >= 180, `Expected capture to wait at least ~180ms, got ${String(elapsedMs)}ms`);
+
+  const payload = await capture.json();
+  assert.match(payload.output, /echo hello/);
+});
+
 test("tmux bridge rejects invalid action payloads", async (t) => {
   const bridge = await startBridge();
   t.after(async () => {

@@ -69,6 +69,8 @@ const MIN_CAPTURE_LINES = 1;
 const MAX_CAPTURE_LINES = 5000;
 const MIN_WAIT_TIMEOUT_MS = 100;
 const MAX_WAIT_TIMEOUT_MS = 120_000;
+const MIN_CAPTURE_WAIT_MS = 0;
+const MAX_CAPTURE_WAIT_MS = 120_000;
 
 const SESSION_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/;
 const KEY_TOKEN_PATTERN = /^[A-Za-z0-9._:+-]{1,48}$/;
@@ -241,6 +243,17 @@ function parseBoundedInteger(value, options) {
   return value;
 }
 
+function parseOptionalBoundedInteger(value, options) {
+  if (value === undefined) return undefined;
+  if (typeof value !== "number" || !Number.isInteger(value)) {
+    throw new HttpError(400, `${options.name} must be an integer.`);
+  }
+  if (value < options.min || value > options.max) {
+    throw new HttpError(400, `${options.name} must be between ${options.min} and ${options.max}.`);
+  }
+  return value;
+}
+
 function normalizeSessionName(value, options = {}) {
   const session = normalizeOptionalString(value);
   if (!session) {
@@ -366,6 +379,11 @@ function parseTmuxRequest(payload) {
       max: MAX_WAIT_TIMEOUT_MS,
       defaultValue: DEFAULT_WAIT_TIMEOUT_MS,
     }),
+    wait_ms: parseOptionalBoundedInteger(payload.wait_ms, {
+      name: "wait_ms",
+      min: MIN_CAPTURE_WAIT_MS,
+      max: MAX_CAPTURE_WAIT_MS,
+    }),
     join_wrapped: typeof payload.join_wrapped === "boolean" ? payload.join_wrapped : undefined,
   };
 
@@ -447,6 +465,11 @@ function createStubBackend() {
 
     const timeoutMs = request.timeout_ms ?? DEFAULT_WAIT_TIMEOUT_MS;
     const lines = request.lines ?? DEFAULT_CAPTURE_LINES;
+    const waitMs = request.wait_ms ?? 0;
+
+    if (waitMs > 0) {
+      await delay(waitMs);
+    }
 
     if (!request.wait_for) {
       return {
@@ -524,6 +547,11 @@ function createStubBackend() {
         }
 
         case "capture_pane": {
+          const waitMs = request.wait_ms ?? 0;
+          if (waitMs > 0) {
+            await delay(waitMs);
+          }
+
           return {
             ok: true,
             action: "capture_pane",
@@ -746,6 +774,11 @@ function createRealTmuxBackend() {
     await sendRealInput(request);
 
     const timeoutMs = request.timeout_ms ?? DEFAULT_WAIT_TIMEOUT_MS;
+    const waitMs = request.wait_ms ?? 0;
+
+    if (waitMs > 0) {
+      await delay(waitMs);
+    }
 
     if (!request.wait_for) {
       return {
@@ -809,6 +842,11 @@ function createRealTmuxBackend() {
         }
 
         case "capture_pane": {
+          const waitMs = request.wait_ms ?? 0;
+          if (waitMs > 0) {
+            await delay(waitMs);
+          }
+
           return {
             ok: true,
             action: "capture_pane",
