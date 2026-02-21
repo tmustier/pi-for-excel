@@ -13,7 +13,7 @@ import {
 } from "../src/tools/mcp-config.ts";
 
 class MemorySettingsStore {
-  private readonly values = new Map<string, unknown>();
+  protected readonly values = new Map<string, unknown>();
 
   get(key: string): Promise<unknown> {
     return Promise.resolve(this.values.has(key) ? this.values.get(key) ?? null : null);
@@ -26,6 +26,19 @@ class MemorySettingsStore {
 
   peek(key: string): unknown {
     return this.values.get(key);
+  }
+}
+
+class FailingConnectionStoreSettings extends MemorySettingsStore {
+  private failConnectionStoreWrite = true;
+
+  override set(key: string, value: unknown): Promise<void> {
+    if (this.failConnectionStoreWrite && key === CONNECTION_STORE_KEY) {
+      this.failConnectionStoreWrite = false;
+      return Promise.reject(new Error("simulated connection store failure"));
+    }
+
+    return super.set(key, value);
   }
 }
 
@@ -108,6 +121,41 @@ void test("saveMcpServers stores bearer tokens in connection store", async () =>
   const tokens = readConnectionStoreTokenMap(settings);
   assert.ok(tokens);
   assert.equal(tokens[first.id], "secret-token");
+});
+
+void test("saveMcpServers does not strip legacy tokens when token-store write fails", async () => {
+  const settings = new FailingConnectionStoreSettings();
+
+  await settings.set(MCP_SERVERS_SETTING_KEY, {
+    version: 1,
+    servers: [
+      {
+        id: "mcp-local",
+        name: "local",
+        url: "https://localhost:4010/mcp",
+        enabled: true,
+        token: "legacy-token",
+      },
+    ],
+  });
+
+  await assert.rejects(
+    saveMcpServers(settings, [{
+      id: "mcp-local",
+      name: "local",
+      url: "https://localhost:4010/mcp",
+      enabled: true,
+      token: "new-token",
+    }]),
+    /simulated connection store failure/,
+  );
+
+  const storedServers = readStoredServerEntries(settings);
+  assert.equal(storedServers.length, 1);
+  assert.equal(storedServers[0].token, "legacy-token");
+
+  const tokens = readConnectionStoreTokenMap(settings);
+  assert.equal(tokens, undefined);
 });
 
 void test("loadMcpServers falls back to legacy token when connection store token is absent", async () => {

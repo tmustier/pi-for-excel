@@ -372,8 +372,10 @@ export async function saveMcpServers(
   const normalized = uniqueById(normalizeServers(servers));
   const tokensByServerId = readTokenMapFromServers(normalized);
 
-  await settings.set(MCP_SERVERS_SETTING_KEY, createDocument(stripServerTokens(normalized)));
+  // Write tokens first so a failed connection-store write never strips legacy
+  // token fields from mcp.servers.v1 before persistence succeeds.
   await writeConnectionStoreMcpTokens(settings, tokensByServerId);
+  await settings.set(MCP_SERVERS_SETTING_KEY, createDocument(stripServerTokens(normalized)));
 }
 
 export function createMcpServerConfig(input: {
