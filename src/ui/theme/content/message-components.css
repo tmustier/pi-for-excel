@@ -143,12 +143,35 @@ thinking-block markdown-block {
   display: none;
 }
 
-/* Abort message — indent to align with content */
+/* Abort message — clear separator + icon-labelled status */
 .pi-assistant-aborted {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
+  margin: 12px 16px 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+
   font-size: var(--text-sm);
+  font-style: normal;
   color: var(--muted-foreground);
-  font-style: italic;
-  padding-left: 12px;
+  letter-spacing: 0.01em;
+}
+
+/* Filled stop square (universal "stop" symbol) */
+.pi-assistant-aborted::before {
+  content: "";
+  display: block;
+  width: 10px;
+  height: 10px;
+  flex-shrink: 0;
+  background-color: var(--muted-foreground);
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Crect x='5' y='5' width='14' height='14' rx='3' fill='%23000'/%3E%3C/svg%3E");
+  -webkit-mask-size: contain;
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Crect x='5' y='5' width='14' height='14' rx='3' fill='%23000'/%3E%3C/svg%3E");
+  mask-size: contain;
+  opacity: 0.7;
 }
 
 /* Streaming cursor — hidden; the pi-working indicator already signals activity */
