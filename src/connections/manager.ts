@@ -360,11 +360,11 @@ export class ConnectionManager {
    * Clear all secrets for a connection from the host UI (bypasses owner check).
    */
   async clearSecretsFromHost(connectionId: string): Promise<void> {
-    this.getRequiredDefinition(connectionId);
+    const definition = this.getRequiredDefinition(connectionId);
 
     const changed = await mutateConnectionRecord({
       settings: this.settings,
-      connectionId,
+      connectionId: definition.id,
       mutator: () => ({
         status: "missing",
         lastValidatedAt: undefined,

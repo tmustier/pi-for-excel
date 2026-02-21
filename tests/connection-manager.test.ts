@@ -237,6 +237,19 @@ void test("clearSecretsFromHost notifies listeners", async () => {
   assert.ok(notified);
 });
 
+void test("clearSecretsFromHost normalizes connection id", async () => {
+  const manager = new ConnectionManager({ settings: createMemorySettings() });
+  manager.registerDefinition("ext.apollo", APOLLO_DEFINITION);
+  await manager.setSecrets("ext.apollo", "ext.apollo.apollo", { apiKey: "sk-test" });
+
+  // Use uppercase variant — should still clear the right record
+  await manager.clearSecretsFromHost("EXT.APOLLO.APOLLO");
+
+  const snapshot = await manager.getSnapshot("ext.apollo.apollo");
+  assert.ok(snapshot);
+  assert.equal(snapshot.status, "missing");
+});
+
 void test("clearSecretsFromHost throws for unregistered connection", async () => {
   const manager = new ConnectionManager({ settings: createMemorySettings() });
 
