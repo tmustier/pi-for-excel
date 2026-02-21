@@ -24,7 +24,7 @@ This policy sets clear guardrails so we can improve context quality while preser
 ## Current baseline (implemented)
 
 - Each model call is built from: `systemPrompt + messages + tools`.
-- Tool bundles are selected deterministically on every call (including tool-result continuations) in `src/auth/stream-proxy.ts` (`selectToolBundle()`).
+- Tool disclosure is deterministic on every call (including tool-result continuations) in `src/auth/stream-proxy.ts` (`selectToolBundle()`): when tools are present, runtime currently sends the full tool set.
 - Session IDs are stable per chat runtime (`agent.sessionId`), which is used by providers for cache continuity.
 - Status/debug UI already shows payload composition counters (`systemChars`, `toolSchemaChars`, `messageChars`, call count).
 - Context window estimation uses provider usage anchored by `calculateContextTokens()` (`input + output + cacheRead + cacheWrite`) in `src/utils/context-tokens.ts`.
@@ -72,7 +72,7 @@ Implications:
 | Layer | Policy | Reinjection trigger |
 |---|---|---|
 | Base system prompt | Keep minimal and stable per session | Every call (provider APIs are request-based) |
-| Tool schemas | Include a deterministic bundle on every call so continuations can keep using tools | Every call |
+| Tool schemas | Include a deterministic tool set on every call so continuations can keep using tools (current runtime policy: full set) | Every call |
 | Workbook structural context | Inject as separate context block (not baked repeatedly into base prompt) | Session start + workbook hash/version change |
 | Per-turn auto-context (selection + recent changes) | Keep bounded and high-signal | Per user turn when non-empty |
 | Tool results in model-facing history | Keep fresh full detail short-term, summarize/prune older bulky outputs | On pressure/threshold |
@@ -102,19 +102,18 @@ Implications:
 
 ---
 
-### Slice 2 — Cache-safe progressive tool disclosure
+### Slice 2 — Cache-safe tool disclosure
 
-**Goal:** reduce per-call schema weight without cache thrash or breaking multi-step tool loops.
+**Goal:** maximize cache reuse and avoid intent-based cache key partitioning.
 
-- Define a few fixed tool bundles (example: `core`, `analysis`, `formatting`, `structure`).
-- Select bundle by intent/routing, but keep bundle definitions stable and deterministic.
-- Preserve a manual fallback to expose all tools.
-- **Current rollout (v1):** `core` (default), `analysis`, `formatting`, `structure`, `comments`, `full`.
-  - only applies when the active toolset is the built-in core set
-  - if non-core/extension tools are present, keep full tool visibility (`full`) to avoid accidental capability loss
-  - if a prompt matches multiple intent buckets, fall back to `full` for that request to avoid capability gaps
+- Keep tool-bundle metadata centralized (`src/tools/capabilities.ts`) for shared UI/prompt metadata and future opt-in routing.
+- Runtime disclosure currently prefers cache continuity over schema minimization: when tools are present, expose `full`.
+- Continuations still include tools on every call so multi-step tool loops remain intact.
+- **Current rollout (v2):**
+  - `none` when no tools are present
+  - `full` for both core-only and mixed (core + non-core/extension) toolsets
 
-**Success:** lower average `toolSchemaChars` while maintaining stable cache patterns.
+**Success:** stable prompt-cache patterns with no capability gaps across turns.
 
 ---
 

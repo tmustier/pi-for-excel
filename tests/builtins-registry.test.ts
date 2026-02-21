@@ -508,10 +508,10 @@ void test("extension registry migrates legacy v1 entries to v2 permissions", asy
   assert.equal(migrated.items.length, 1);
 });
 
-void test("tool disclosure bundles are centralized in capabilities metadata", async () => {
+void test("tool disclosure bundles remain centralized in capabilities metadata", async () => {
   const disclosureSource = await readFile(new URL("../src/context/tool-disclosure.ts", import.meta.url), "utf8");
-  assert.match(disclosureSource, /chooseToolDisclosureBundle/);
-  assert.match(disclosureSource, /filterToolsForDisclosureBundle/);
+  assert.match(disclosureSource, /type ToolDisclosureBundleId/);
+  assert.doesNotMatch(disclosureSource, /TOOL_DISCLOSURE_BUNDLES\s*=/);
 
   const capabilitiesSource = await readFile(new URL("../src/tools/capabilities.ts", import.meta.url), "utf8");
   assert.match(capabilitiesSource, /TOOL_DISCLOSURE_BUNDLES/);

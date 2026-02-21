@@ -5,7 +5,6 @@ import type { Context, Tool } from "@mariozechner/pi-ai";
 import { Type } from "@sinclair/typebox";
 
 import { selectToolBundle } from "../src/context/tool-disclosure.ts";
-import { TOOL_DISCLOSURE_BUNDLES } from "../src/tools/capabilities.ts";
 import { CORE_TOOL_NAMES } from "../src/tools/names.ts";
 
 function createTool(name: string): Tool {
@@ -49,40 +48,17 @@ function createCoreToolSet(): Tool[] {
   return CORE_TOOL_NAMES.map((name) => createTool(name));
 }
 
-void test("selectToolBundle chooses formatting bundle for formatting intents", () => {
+void test("selectToolBundle returns none when no tools are present", () => {
+  const result = selectToolBundle({ messages: [] });
+  assert.equal(result.bundleId, "none");
+  assert.equal(result.tools, undefined);
+});
+
+void test("selectToolBundle keeps full core tool visibility for cache stability", () => {
   const context = createContext({
     prompt: "Please format this table with borders and color.",
     tools: createCoreToolSet(),
-  });
-
-  const result = selectToolBundle(context);
-
-  assert.equal(result.bundleId, "formatting");
-  assert.deepEqual(
-    result.tools?.map((tool) => tool.name),
-    [...TOOL_DISCLOSURE_BUNDLES.formatting],
-  );
-});
-
-void test("selectToolBundle chooses analysis bundle for dependency intents", () => {
-  const context = createContext({
-    prompt: "Trace precedents and explain this formula.",
-    tools: createCoreToolSet(),
-  });
-
-  const result = selectToolBundle(context);
-
-  assert.equal(result.bundleId, "analysis");
-  assert.deepEqual(
-    result.tools?.map((tool) => tool.name),
-    [...TOOL_DISCLOSURE_BUNDLES.analysis],
-  );
-});
-
-void test("selectToolBundle falls back to full for mixed-intent prompts", () => {
-  const context = createContext({
-    prompt: "Insert a row and add a comment on it.",
-    tools: createCoreToolSet(),
+    includeAutoContextMessage: true,
   });
 
   const result = selectToolBundle(context);
@@ -105,20 +81,4 @@ void test("selectToolBundle keeps full tools when non-core tools are present", (
 
   assert.equal(result.bundleId, "full");
   assert.deepEqual(result.tools?.map((tool) => tool.name), tools.map((tool) => tool.name));
-});
-
-void test("selectToolBundle ignores trailing auto-context user messages", () => {
-  const context = createContext({
-    prompt: "Comment on this range.",
-    tools: createCoreToolSet(),
-    includeAutoContextMessage: true,
-  });
-
-  const result = selectToolBundle(context);
-
-  assert.equal(result.bundleId, "comments");
-  assert.deepEqual(
-    result.tools?.map((tool) => tool.name),
-    [...TOOL_DISCLOSURE_BUNDLES.comments],
-  );
 });
