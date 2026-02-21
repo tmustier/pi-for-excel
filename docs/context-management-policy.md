@@ -187,6 +187,13 @@ Implications:
 
 ---
 
+## #424 investigation updates (current)
+
+- **Area 1 — compaction call-shape:** **defer behavior change** for now.
+  - Keep the current isolated summarizer request in `src/commands/builtins/export.ts`.
+  - Rationale: current behavior matches upstream `pi-coding-agent` compaction flow, and a cache-safe fork requires additional guardrails (transform-context replay, tool-call fallback, and explicit compaction-buffer budgeting).
+  - Research memo: `docs/archive/issue-424-compaction-call-shape.md`.
+
 ## Open decisions
 
 1. Exact tool bundle definitions + routing heuristics.
