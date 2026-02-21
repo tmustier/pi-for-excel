@@ -249,3 +249,37 @@ void test("web_search keeps provider metadata for brave responses", async () => 
   assert.equal(details.proxied, true);
   assert.equal(details.proxyBaseUrl, "https://localhost:3003");
 });
+
+void test("web_search reports proxy-down error when proxy is unreachable", async () => {
+  const tool = createWebSearchTool({
+    getConfig: () => Promise.resolve({ provider: "jina", apiKey: undefined, proxyBaseUrl: "https://localhost:3003" }),
+    executeSearch: () => Promise.reject(new TypeError("Load failed")),
+  });
+
+  const result = await tool.execute("call-proxy-down", { query: "test query" });
+  const text = result.content[0];
+  assert.equal(text.type, "text");
+  assert.ok((text as { text: string }).text.includes("local CORS proxy is not running"));
+  assert.ok((text as { text: string }).text.includes("npx pi-for-excel-proxy"));
+  assert.ok((text as { text: string }).text.includes("Do not retry"));
+
+  const details = result.details as { ok?: boolean; proxyDown?: boolean; error?: string };
+  assert.equal(details.ok, false);
+  assert.equal(details.proxyDown, true);
+});
+
+void test("web_search does not flag proxyDown when proxy is not configured", async () => {
+  const tool = createWebSearchTool({
+    getConfig: () => Promise.resolve({ provider: "jina", apiKey: undefined }),
+    executeSearch: () => Promise.reject(new TypeError("Load failed")),
+  });
+
+  const result = await tool.execute("call-no-proxy", { query: "test query" });
+  const text = result.content[0];
+  assert.equal(text.type, "text");
+  assert.ok((text as { text: string }).text.startsWith("Error:"));
+
+  const details = result.details as { ok?: boolean; proxyDown?: boolean };
+  assert.equal(details.ok, false);
+  assert.equal(details.proxyDown, false);
+});

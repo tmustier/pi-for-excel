@@ -13,7 +13,9 @@ import {
 } from "../utils/network.js";
 import { isRecord } from "../utils/type-guards.js";
 import {
+  buildProxyDownErrorMessage,
   getEnabledProxyBaseUrl,
+  isLikelyProxyConnectionError,
   resolveOutboundRequestUrl,
   type ProxyAwareSettingsStore,
 } from "./external-fetch.js";
@@ -101,6 +103,8 @@ export interface WebSearchToolDetails {
   proxyBaseUrl?: string;
   fallback?: WebSearchFallbackInfo;
   error?: string;
+  /** `true` when the failure is due to the local CORS proxy being unreachable. */
+  proxyDown?: boolean;
 }
 
 export interface WebSearchToolConfig {
@@ -734,6 +738,7 @@ export function createWebSearchTool(
     ): Promise<AgentToolResult<WebSearchToolDetails>> => {
       let params: Params | null = null;
       let configuredProvider: WebSearchProvider = "jina";
+      let usedProxyBaseUrl: string | undefined;
 
       try {
         const parsedParams = parseParams(rawParams);
@@ -741,6 +746,7 @@ export function createWebSearchTool(
 
         const config = await getConfig();
         configuredProvider = config.provider;
+        usedProxyBaseUrl = config.proxyBaseUrl;
 
         const configuredApiKey = normalizeOptionalString(config.apiKey) ?? "";
         const fallbackJinaApiKey = normalizeOptionalString(config.jinaApiKey) ?? "";
@@ -820,11 +826,15 @@ export function createWebSearchTool(
         };
       } catch (error: unknown) {
         const message = getErrorMessage(error);
+        const proxyDown = isLikelyProxyConnectionError(message, usedProxyBaseUrl);
+        const displayMessage = proxyDown
+          ? buildProxyDownErrorMessage("Web search", message)
+          : `Error: ${message}`;
         const fallbackQuery = params?.query
           ?? (isRecord(rawParams) && typeof rawParams.query === "string" ? rawParams.query : "");
 
         return {
-          content: [{ type: "text", text: `Error: ${message}` }],
+          content: [{ type: "text", text: displayMessage }],
           details: {
             kind: "web_search",
             ok: false,
@@ -833,6 +843,7 @@ export function createWebSearchTool(
             sentQuery: fallbackQuery,
             maxResults: params?.max_results ?? 5,
             error: message,
+            proxyDown,
           },
         };
       }

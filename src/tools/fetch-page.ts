@@ -8,7 +8,9 @@ import { Type, type Static, type TSchema } from "@sinclair/typebox";
 import { getErrorMessage } from "../utils/errors.js";
 import { runWithTimeoutAbort } from "../utils/network.js";
 import {
+  buildProxyDownErrorMessage,
   getEnabledProxyBaseUrl,
+  isLikelyProxyConnectionError,
   resolveOutboundRequestUrl,
   type ProxyAwareSettingsStore,
 } from "./external-fetch.js";
@@ -47,6 +49,8 @@ export interface FetchPageToolDetails {
   proxyBaseUrl?: string;
   contentType?: string;
   error?: string;
+  /** `true` when the failure is due to the local CORS proxy being unreachable. */
+  proxyDown?: boolean;
 }
 
 export interface FetchPageToolConfig {
@@ -339,6 +343,7 @@ export function createFetchPageTool(
       signal: AbortSignal | undefined,
     ): Promise<AgentToolResult<FetchPageToolDetails>> => {
       let targetUrl = "";
+      let usedProxyBaseUrl: string | undefined;
 
       try {
         const params = parseParams(rawParams);
@@ -348,6 +353,7 @@ export function createFetchPageTool(
         enforceDomainRateLimit(parsedUrl.hostname, now());
 
         const config = await getConfig();
+        usedProxyBaseUrl = config.proxyBaseUrl;
         const resolved = resolveOutboundRequestUrl({
           targetUrl,
           proxyBaseUrl: config.proxyBaseUrl,
@@ -397,13 +403,19 @@ export function createFetchPageTool(
         };
       } catch (error: unknown) {
         const message = getErrorMessage(error);
+        const proxyDown = isLikelyProxyConnectionError(message, usedProxyBaseUrl);
+        const displayMessage = proxyDown
+          ? buildProxyDownErrorMessage("Page fetch", message)
+          : `Error: ${message}`;
+
         return {
-          content: [{ type: "text", text: `Error: ${message}` }],
+          content: [{ type: "text", text: displayMessage }],
           details: {
             kind: "fetch_page",
             ok: false,
             url: targetUrl,
             error: message,
+            proxyDown,
           },
         };
       }

@@ -68,3 +68,40 @@ void test("fetch_page enforces per-domain rate limit", async () => {
   assert.match(text, /Rate limited/i);
   assert.equal((second.details as { ok?: boolean }).ok, false);
 });
+
+void test("fetch_page reports proxy-down error when proxy is unreachable", async () => {
+  const tool = createFetchPageTool({
+    getConfig: () => Promise.resolve({ proxyBaseUrl: "https://localhost:3003" }),
+    executeFetch: () => Promise.reject(new TypeError("Load failed")),
+    now: () => 10_000,
+  });
+
+  const result = await tool.execute("call-proxy-down", { url: "https://example.com/page" });
+  const text = result.content[0]?.type === "text" ? result.content[0].text : "";
+
+  assert.ok(text.includes("local CORS proxy is not running"));
+  assert.ok(text.includes("npx pi-for-excel-proxy"));
+  assert.ok(text.includes("Do not retry"));
+
+  const details = result.details as { ok?: boolean; proxyDown?: boolean; error?: string };
+  assert.equal(details.ok, false);
+  assert.equal(details.proxyDown, true);
+});
+
+void test("fetch_page does not flag proxyDown when proxy is not configured", async () => {
+  const tool = createFetchPageTool({
+    getConfig: () => Promise.resolve({}),
+    executeFetch: () => Promise.reject(new TypeError("Load failed")),
+    now: () => 15_000,
+  });
+
+  const result = await tool.execute("call-no-proxy", { url: "https://example.com/page" });
+  const text = result.content[0]?.type === "text" ? result.content[0].text : "";
+
+  assert.ok(text.startsWith("Error:"));
+  assert.ok(!text.includes("proxy"));
+
+  const details = result.details as { ok?: boolean; proxyDown?: boolean };
+  assert.equal(details.ok, false);
+  assert.equal(details.proxyDown, false);
+});

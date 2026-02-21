@@ -275,6 +275,8 @@ export interface WebSearchDetails {
   proxyBaseUrl?: string;
   fallback?: WebSearchFallbackDetails;
   error?: string;
+  /** `true` when the failure is due to the local CORS proxy being unreachable. */
+  proxyDown?: boolean;
 }
 
 export interface FetchPageDetails {
@@ -288,6 +290,8 @@ export interface FetchPageDetails {
   proxyBaseUrl?: string;
   contentType?: string;
   error?: string;
+  /** `true` when the failure is due to the local CORS proxy being unreachable. */
+  proxyDown?: boolean;
 }
 
 export interface McpGatewayDetails {
@@ -875,7 +879,8 @@ export function isWebSearchDetails(value: unknown): value is WebSearchDetails {
     isOptionalBoolean(value.proxied) &&
     isOptionalString(value.proxyBaseUrl) &&
     isOptionalWebSearchFallbackDetails(value.fallback) &&
-    isOptionalString(value.error)
+    isOptionalString(value.error) &&
+    isOptionalBoolean(value.proxyDown)
   );
 }
 
@@ -892,7 +897,8 @@ export function isFetchPageDetails(value: unknown): value is FetchPageDetails {
     isOptionalBoolean(value.proxied) &&
     isOptionalString(value.proxyBaseUrl) &&
     isOptionalString(value.contentType) &&
-    isOptionalString(value.error)
+    isOptionalString(value.error) &&
+    isOptionalBoolean(value.proxyDown)
   );
 }
 
