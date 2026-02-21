@@ -155,6 +155,7 @@ import {
 } from "./session-runtime-manager.js";
 import {
   awaitWithTimeout,
+  createAsyncCoalescer,
   isLikelyCorsErrorMessage,
   isRuntimeAgentTool,
   normalizeRuntimeTools,
@@ -613,7 +614,7 @@ export async function initTaskpane(opts: {
     document.dispatchEvent(new CustomEvent("pi:status-update"));
   });
 
-  const refreshCapabilitiesForAllRuntimes = async () => {
+  const runCapabilityRefreshPass = async (): Promise<void> => {
     const runtimes = runtimeManager.listRuntimes();
 
     for (const runtime of runtimes) {
@@ -629,6 +630,8 @@ export async function initTaskpane(opts: {
 
     document.dispatchEvent(new CustomEvent("pi:status-update"));
   };
+
+  const refreshCapabilitiesForAllRuntimes = createAsyncCoalescer(runCapabilityRefreshPass);
 
   const reservedToolNames = new Set([
     ...createAllTools().map((tool) => tool.name),
@@ -843,6 +846,7 @@ export async function initTaskpane(opts: {
     });
 
     runtimeAgent = agent;
+    let currentRuntimeSystemPrompt = initialCapabilities.systemPrompt;
 
     const refreshRuntimeCapabilities = async () => {
       const nextSessionId = runtimeAgent?.sessionId ?? runtimeSessionId;
@@ -850,7 +854,11 @@ export async function initTaskpane(opts: {
 
       const next = await buildRuntimeCapabilities(nextSessionId);
       agent.setTools(next.tools);
-      agent.setSystemPrompt(next.systemPrompt);
+
+      if (next.systemPrompt !== currentRuntimeSystemPrompt) {
+        agent.setSystemPrompt(next.systemPrompt);
+        currentRuntimeSystemPrompt = next.systemPrompt;
+      }
     };
 
     runtimeCapabilityRefreshers.set(runtimeId, refreshRuntimeCapabilities);

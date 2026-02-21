@@ -3,6 +3,7 @@ import { test } from "node:test";
 
 import {
   awaitWithTimeout,
+  createAsyncCoalescer,
   isLikelyCorsErrorMessage,
   normalizeRuntimeTools,
 } from "../src/taskpane/runtime-utils.ts";
@@ -48,6 +49,51 @@ void test("normalizeRuntimeTools drops invalid and duplicate entries", () => {
   assert.equal(normalized.length, 1);
   assert.equal(normalized[0]?.name, "alpha");
   assert.equal(normalized[0]?.description, "alpha tool");
+});
+
+void test("createAsyncCoalescer coalesces overlapping calls into a single rerun", async () => {
+  let runCount = 0;
+  const blockers: Array<() => void> = [];
+
+  const run = createAsyncCoalescer(async () => {
+    runCount += 1;
+    await new Promise<void>((resolve) => {
+      blockers.push(resolve);
+    });
+  });
+
+  const first = run();
+  await Promise.resolve();
+
+  assert.equal(runCount, 1);
+  assert.equal(blockers.length, 1);
+
+  const second = run();
+  const third = run();
+  await Promise.resolve();
+
+  assert.equal(runCount, 1);
+
+  const releaseFirst = blockers.shift();
+  if (!releaseFirst) {
+    throw new Error("Expected first blocker");
+  }
+  releaseFirst();
+
+  await Promise.resolve();
+  await Promise.resolve();
+
+  assert.equal(runCount, 2);
+  assert.equal(blockers.length, 1);
+
+  const releaseSecond = blockers.shift();
+  if (!releaseSecond) {
+    throw new Error("Expected second blocker");
+  }
+  releaseSecond();
+
+  await Promise.all([first, second, third]);
+  assert.equal(runCount, 2);
 });
 
 void test("awaitWithTimeout resolves when task finishes in time", async () => {
