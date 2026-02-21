@@ -9,23 +9,53 @@
  * Remaining risks we harden here:
  * - `javascript:` / `data:` links in markdown
  * - automatic network requests via markdown images: ![alt](https://...)
+ * - `$...$` KaTeX collisions with currency prose in thinking/tool output
  *
- * We patch marked's Renderer prototype once at boot.
+ * We patch marked once at boot.
  */
 
-import { marked, type Tokens } from "marked";
+import { marked, type MarkedExtension, type Tokens } from "marked";
 
 import {
   createMarkdownImageRenderPlan,
   isAllowedMarkdownUrl,
+  isMarkdownExtensionDisabledByPolicy,
 } from "./marked-safety-policy.js";
 import { escapeAttr, escapeHtml } from "../utils/html.js";
 
 let installed = false;
 
+function withoutDisabledMarkedExtensions(extension: MarkedExtension): MarkedExtension {
+  const extensionList = extension.extensions;
+  if (!Array.isArray(extensionList) || extensionList.length === 0) {
+    return extension;
+  }
+
+  const filteredExtensions = extensionList.filter(
+    (definition) => !isMarkdownExtensionDisabledByPolicy(definition.name),
+  );
+
+  if (filteredExtensions.length === extensionList.length) {
+    return extension;
+  }
+
+  return {
+    ...extension,
+    extensions: filteredExtensions,
+  };
+}
+
 export function installMarkedSafetyPatch(): void {
   if (installed) return;
   installed = true;
+
+  const originalUse = marked.use;
+  marked.use = function patchedMarkedUse(
+    this: typeof marked,
+    ...extensions: MarkedExtension[]
+  ): typeof marked {
+    return originalUse.call(this, ...extensions.map(withoutDisabledMarkedExtensions));
+  };
 
   // Defensive: marked's types are permissive, but we still narrow token shapes.
   const rendererProto = marked.Renderer.prototype;

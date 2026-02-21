@@ -6,6 +6,7 @@
  */
 
 const ALLOWED_LINK_PROTOCOLS = new Set(["http:", "https:", "mailto:", "tel:"]);
+const DISABLED_MARKDOWN_EXTENSION_NAMES = new Set(["inlineMathDollar", "blockMathDollar"]);
 
 export type MarkdownImageRenderPlan =
   | { kind: "link"; href: string; label: string }
@@ -29,6 +30,16 @@ export function isAllowedMarkdownUrl(raw: string): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * mini-lit enables `$...$` and `$$...$$` KaTeX extensions by default.
+ * In spreadsheet/finance prose this collides with currency notation and
+ * causes large chunks of text to render as math. We disable only the
+ * dollar-delimited math extensions and keep `\(...\)` / `\[...\]` support.
+ */
+export function isMarkdownExtensionDisabledByPolicy(name: string): boolean {
+  return DISABLED_MARKDOWN_EXTENSION_NAMES.has(name);
 }
 
 export function getMarkdownImageLabel(alt: string): string {

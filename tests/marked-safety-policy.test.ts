@@ -5,6 +5,7 @@ import {
   createMarkdownImageRenderPlan,
   getMarkdownImageLabel,
   isAllowedMarkdownUrl,
+  isMarkdownExtensionDisabledByPolicy,
 } from "../src/compat/marked-safety-policy.ts";
 
 void test("isAllowedMarkdownUrl blocks unsafe protocols", () => {
@@ -17,6 +18,12 @@ void test("isAllowedMarkdownUrl blocks unsafe protocols", () => {
   assert.equal(isAllowedMarkdownUrl("data:text/html,<h1>x</h1>"), false);
   assert.equal(isAllowedMarkdownUrl("file:///etc/passwd"), false);
   assert.equal(isAllowedMarkdownUrl(""), false);
+});
+
+void test("policy disables dollar-delimited KaTeX extensions", () => {
+  assert.equal(isMarkdownExtensionDisabledByPolicy("inlineMathDollar"), true);
+  assert.equal(isMarkdownExtensionDisabledByPolicy("blockMathDollar"), true);
+  assert.equal(isMarkdownExtensionDisabledByPolicy("inlineMathLatex"), false);
 });
 
 void test("markdown image plans never render <img>", () => {
