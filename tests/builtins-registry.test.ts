@@ -351,16 +351,23 @@ void test("settings overlay serializes open flow and adopts shared proxy + execu
   assert.doesNotMatch(settingsOverlaySource, /text:\s*"Save"/);
 });
 
-void test("slash-command busy policy is centralized and supports extension command defaults", async () => {
+void test("slash-command busy policy is centralized and shared across entry points", async () => {
   const keyboardActionsSource = await readFile(
     new URL("../src/taskpane/keyboard-shortcuts/editor-actions.ts", import.meta.url),
     "utf8",
   );
   const initSource = await readFile(new URL("../src/taskpane/init.ts", import.meta.url), "utf8");
+  const slashExecutionSource = await readFile(
+    new URL("../src/commands/slash-command-execution.ts", import.meta.url),
+    "utf8",
+  );
   const busyPolicySource = await readFile(new URL("../src/commands/busy-command-policy.ts", import.meta.url), "utf8");
 
-  assert.match(keyboardActionsSource, /isBusyAllowedCommand/);
-  assert.match(initSource, /isBusyAllowedCommand/);
+  assert.match(keyboardActionsSource, /executeSlashCommand/);
+  assert.match(initSource, /executeSlashCommand/);
+
+  assert.match(slashExecutionSource, /isBusyAllowedCommand/);
+  assert.match(slashExecutionSource, /commandRegistry\.get\(options\.name\)/);
 
   assert.match(busyPolicySource, /"yolo"/);
   assert.match(busyPolicySource, /"rules"/);
@@ -372,18 +379,19 @@ void test("slash-command busy policy is centralized and supports extension comma
   assert.doesNotMatch(busyPolicySource, /"addons"/);
 });
 
-void test("escape guard scopes widget escape claims to abort paths", async () => {
+void test("escape guard scopes widget claims to streaming abort paths", async () => {
   const escapeGuardSource = await readFile(new URL("../src/utils/escape-guard.ts", import.meta.url), "utf8");
   const keyboardShortcutsSource = await readFile(new URL("../src/taskpane/keyboard-shortcuts.ts", import.meta.url), "utf8");
   const inputSource = await readFile(new URL("../src/ui/pi-input.ts", import.meta.url), "utf8");
   const initSource = await readFile(new URL("../src/taskpane/init.ts", import.meta.url), "utf8");
 
   assert.match(escapeGuardSource, /export function doesExtensionWidgetClaimEscape/);
+  assert.match(escapeGuardSource, /export function doesUiClaimStreamingEscape/);
   assert.match(escapeGuardSource, /#pi-widget-slot:not\(:empty\)/);
   assert.match(escapeGuardSource, /#pi-widget-slot-below:not\(:empty\)/);
 
-  assert.match(keyboardShortcutsSource, /doesExtensionWidgetClaimEscape/);
-  assert.match(inputSource, /doesExtensionWidgetClaimEscape/);
+  assert.match(keyboardShortcutsSource, /doesUiClaimStreamingEscape/);
+  assert.match(inputSource, /doesUiClaimStreamingEscape/);
   assert.match(initSource, /doesOverlayClaimEscape\(document\.activeElement\)/);
 });
 

@@ -7,8 +7,7 @@ import type { Agent, AgentMessage } from "@mariozechner/pi-agent-core";
 import type { PiSidebar } from "../../ui/pi-sidebar.js";
 import { showToast } from "../../ui/toast.js";
 import { hideCommandMenu } from "../../commands/command-menu.js";
-import { isBusyAllowedCommand } from "../../commands/busy-command-policy.js";
-import { commandRegistry } from "../../commands/types.js";
+import { executeSlashCommand } from "../../commands/slash-command-execution.js";
 
 export type QueueDisplay = {
   add: (type: "steer" | "follow-up", text: string) => void;
@@ -50,37 +49,44 @@ export function handleSlashCommandExecution(args: {
   const spaceIdx = val.indexOf(" ");
   const cmdName = spaceIdx > 0 ? val.slice(1, spaceIdx) : val.slice(1);
   const argsText = spaceIdx > 0 ? val.slice(spaceIdx + 1) : "";
-  const cmd = commandRegistry.get(cmdName);
-  if (!cmd) return false;
-
   const actionQueue = getActiveActionQueue();
   const busy = isStreaming || actionQueue?.isBusy() === true;
 
-  if (busy && !isBusyAllowedCommand(cmd)) {
+  const result = executeSlashCommand({
+    name: cmdName,
+    args: argsText,
+    busy,
+    enqueueCommand: actionQueue
+      ? (name: string, args: string) => {
+        actionQueue.enqueueCommand(name, args);
+      }
+      : undefined,
+    beforeExecute: () => {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      hideCommandMenu();
+
+      const input = sidebar.getInput();
+      if (input) input.clear();
+    },
+  });
+
+  if (result === "not-found") {
+    return false;
+  }
+
+  if (result === "busy-blocked") {
     event.preventDefault();
     event.stopImmediatePropagation();
     showToast(`Can't run /${cmdName} while Pi is busy`);
     return true;
   }
 
-  event.preventDefault();
-  event.stopImmediatePropagation();
-  hideCommandMenu();
-
-  const input = sidebar.getInput();
-  if (input) input.clear();
-
-  if (cmdName === "compact") {
-    if (!actionQueue) {
-      showToast("No active session");
-      return true;
-    }
-
-    actionQueue.enqueueCommand(cmdName, argsText);
+  if (result === "missing-queue") {
+    showToast("No active session");
     return true;
   }
 
-  void cmd.execute(argsText);
   return true;
 }
 

@@ -94,3 +94,11 @@ export function doesExtensionWidgetClaimEscape(target?: EventTarget | null): boo
 
   return doesSelectorSetClaimEscape(target, WIDGET_ESCAPE_OWNER_SELECTORS);
 }
+
+/**
+ * Used by streaming abort handlers where both overlays and extension widgets
+ * should consume Escape before aborting the active turn.
+ */
+export function doesUiClaimStreamingEscape(target?: EventTarget | null): boolean {
+  return doesOverlayClaimEscape(target) || doesExtensionWidgetClaimEscape(target);
+}

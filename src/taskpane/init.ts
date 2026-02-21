@@ -57,8 +57,7 @@ import {
 } from "../commands/builtins/overlays.js";
 import { configureSettingsDialogDependencies } from "../commands/builtins/settings-overlay.js";
 import { wireCommandMenu } from "../commands/command-menu.js";
-import { isBusyAllowedCommand } from "../commands/busy-command-policy.js";
-import { commandRegistry } from "../commands/types.js";
+import { executeSlashCommand } from "../commands/slash-command-execution.js";
 import {
   getUserRules,
   getWorkbookRules,
@@ -1470,23 +1469,28 @@ export async function initTaskpane(opts: {
       return;
     }
 
-    const cmd = commandRegistry.get(name);
-    if (!cmd) {
+    const busy = activeRuntime.agent.state.isStreaming || activeRuntime.actionQueue.isBusy();
+    const result = executeSlashCommand({
+      name,
+      args,
+      busy,
+      enqueueCommand: (commandName: string, commandArgs: string) => {
+        activeRuntime.actionQueue.enqueueCommand(commandName, commandArgs);
+      },
+    });
+
+    if (result === "not-found") {
       return;
     }
 
-    const busy = activeRuntime.agent.state.isStreaming || activeRuntime.actionQueue.isBusy();
-    if (busy && !isBusyAllowedCommand(cmd)) {
+    if (result === "busy-blocked") {
       showToast(`Can't run /${name} while Pi is busy`);
       return;
     }
 
-    if (name === "compact") {
-      activeRuntime.actionQueue.enqueueCommand(name, args);
-      return;
+    if (result === "missing-queue") {
+      showToast("No active session");
     }
-
-    void cmd.execute(args);
   };
   document.addEventListener("pi:command-run", onCommandRun);
 

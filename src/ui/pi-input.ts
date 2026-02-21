@@ -16,10 +16,7 @@ import { icon } from "@mariozechner/mini-lit";
 import { customElement, property, state, query } from "lit/decorators.js";
 import { FileText } from "lucide";
 
-import {
-  doesExtensionWidgetClaimEscape,
-  doesOverlayClaimEscape,
-} from "../utils/escape-guard.js";
+import { doesUiClaimStreamingEscape } from "../utils/escape-guard.js";
 
 const PLACEHOLDER_HINTS = [
   "Ask about this workbook…",
@@ -79,7 +76,7 @@ export class PiInput extends LitElement {
     }
 
     if (e.key === "Escape" && this.isStreaming) {
-      if (doesOverlayClaimEscape(e.target) || doesExtensionWidgetClaimEscape(e.target)) return;
+      if (doesUiClaimStreamingEscape(e.target)) return;
       e.preventDefault();
       this.dispatchEvent(new CustomEvent("pi-abort", { bubbles: true }));
     }
