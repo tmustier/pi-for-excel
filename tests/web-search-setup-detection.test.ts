@@ -42,24 +42,30 @@ function createFailedDetails(overrides?: Partial<WebSearchDetails>): WebSearchDe
   };
 }
 
-void test("detectWebSearchSetupContext returns needs_key when key is missing and proxy is reachable", async () => {
+void test("detectWebSearchSetupContext returns needs_key and skips probing when proxy is not enabled", async () => {
   const settings = new MemorySettingsStore();
+  let probeCalls = 0;
 
   const context = await detectWebSearchSetupContext(
     createFailedDetails(),
     settings,
     {
       isDev: false,
-      probeProxyReachability: () => Promise.resolve(true),
+      probeProxyReachability: () => {
+        probeCalls += 1;
+        return Promise.resolve(true);
+      },
     },
   );
 
   assert.equal(context.mode.type, "needs_key");
   assert.equal(context.provider, "jina");
+  assert.equal(probeCalls, 0);
 });
 
-void test("detectWebSearchSetupContext returns needs_both when key is missing and proxy is unreachable", async () => {
+void test("detectWebSearchSetupContext returns needs_both when proxy is enabled but unreachable", async () => {
   const settings = new MemorySettingsStore();
+  await settings.set("proxy.enabled", true);
 
   const context = await detectWebSearchSetupContext(
     createFailedDetails(),

@@ -72,7 +72,9 @@ export async function detectWebSearchSetupContext(
   const probeProxy = deps?.probeProxyReachability ?? probeProxyReachability;
 
   let needsProxy = details.proxyDown === true;
-  if (!needsProxy && needsKey && !isDev) {
+  const shouldProbeProxy = !needsProxy && needsKey && !isDev && proxyBaseUrl !== undefined;
+
+  if (shouldProbeProxy) {
     const probeUrl = proxyBaseUrl ?? DEFAULT_LOCAL_PROXY_URL;
     const proxyReachable = await probeProxy(probeUrl, 1500);
     needsProxy = !proxyReachable;
