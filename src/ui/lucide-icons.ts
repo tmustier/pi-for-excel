@@ -11,7 +11,9 @@ import { iconDOM } from "@mariozechner/mini-lit";
 import type { IconNode } from "lucide";
 import {
   AlertTriangle,
+  Check,
   ClipboardList,
+  Copy,
   FileSpreadsheet,
   FileText,
   Folder,
@@ -37,7 +39,9 @@ export function lucide(glyph: IconNode): SVGElement {
 
 export {
   AlertTriangle,
+  Check,
   ClipboardList,
+  Copy,
   FileSpreadsheet,
   FileText,
   Folder,
