@@ -92,6 +92,9 @@ function formatPayloadShape(shape: PayloadShapeSummary | undefined): string {
   return `keys:${keysLabel}; arrays:${arrayPreview}${arraySuffix}`;
 }
 
+const AUTO_SCROLL_DISENGAGE_PX = 32;
+const AUTO_SCROLL_REENGAGE_PX = 20;
+
 @customElement("pi-sidebar")
 export class PiSidebar extends LitElement {
   @property({ attribute: false }) agent?: Agent;
@@ -334,6 +337,19 @@ export class PiSidebar extends LitElement {
     this._groupingRoot = inner;
   }
 
+  private _scrollToBottom(container: HTMLElement): void {
+    container.scrollTop = container.scrollHeight;
+    this._lastScrollTop = container.scrollTop;
+  }
+
+  private _scrollToBottomIfNeeded(): void {
+    if (!this._autoScroll || !this._scrollContainerEl) {
+      return;
+    }
+
+    this._scrollToBottom(this._scrollContainerEl);
+  }
+
   private _setupAutoScroll() {
     const container = this._scrollContainer;
     if (!container || this._scrollContainerEl === container) return;
@@ -345,22 +361,25 @@ export class PiSidebar extends LitElement {
     }
 
     this._scrollContainerEl = container;
+    this._lastScrollTop = container.scrollTop;
+
+    this._resizeObserver = new ResizeObserver(() => {
+      this._scrollToBottomIfNeeded();
+    });
+    this._resizeObserver.observe(container);
 
     const content = container.querySelector(".pi-messages__inner");
     if (content) {
-      this._resizeObserver = new ResizeObserver(() => {
-        if (this._autoScroll && this._scrollContainerEl) {
-          this._scrollContainerEl.scrollTop = this._scrollContainerEl.scrollHeight;
-        }
-      });
       this._resizeObserver.observe(content);
     }
+
+    this._scrollToBottomIfNeeded();
 
     this._scrollListener = () => {
       const top = container.scrollTop;
       const distFromBottom = container.scrollHeight - top - container.clientHeight;
-      if (top < this._lastScrollTop && distFromBottom > 50) this._autoScroll = false;
-      else if (distFromBottom < 10) this._autoScroll = true;
+      if (top < this._lastScrollTop && distFromBottom > AUTO_SCROLL_DISENGAGE_PX) this._autoScroll = false;
+      else if (distFromBottom < AUTO_SCROLL_REENGAGE_PX) this._autoScroll = true;
       this._lastScrollTop = top;
     };
     container.addEventListener("scroll", this._scrollListener);
