@@ -5,6 +5,8 @@
  * unavailable. Expands inline with quick setup guidance.
  */
 
+import { AlertTriangle, Check, Copy, lucide } from "./lucide-icons.js";
+
 const PROXY_COMMAND = "npx pi-for-excel-proxy";
 const INSTALL_GUIDE_URL = "https://pi.dev/excel#connect";
 
@@ -35,7 +37,15 @@ export function createProxyBanner(): ProxyBannerHandle {
 
   const text = document.createElement("p");
   text.className = "pi-proxy-banner__text";
-  text.textContent = "⚠ Proxy not running · some features won't work.";
+
+  const warningIcon = lucide(AlertTriangle);
+  warningIcon.classList.add("pi-proxy-banner__text-icon");
+  warningIcon.setAttribute("aria-hidden", "true");
+
+  const textLabel = document.createElement("span");
+  textLabel.textContent = "Proxy not running · some features won't work.";
+
+  text.append(warningIcon, textLabel);
 
   const action = document.createElement("button");
   action.type = "button";
@@ -61,8 +71,23 @@ export function createProxyBanner(): ProxyBannerHandle {
   const copyButton = document.createElement("button");
   copyButton.type = "button";
   copyButton.className = "pi-proxy-banner__copy";
-  copyButton.textContent = "📋";
-  copyButton.title = "Copy command";
+
+  let resetCopyIconTimeout: ReturnType<typeof setTimeout> | null = null;
+
+  const renderCopyIcon = (): void => {
+    copyButton.replaceChildren(lucide(Copy));
+    copyButton.title = "Copy command";
+    copyButton.setAttribute("aria-label", "Copy command");
+  };
+
+  const renderCopiedIcon = (): void => {
+    copyButton.replaceChildren(lucide(Check));
+    copyButton.title = "Copied";
+    copyButton.setAttribute("aria-label", "Copied");
+  };
+
+  renderCopyIcon();
+
   copyButton.addEventListener("click", () => {
     if (!navigator.clipboard?.writeText) {
       selectElementText(code);
@@ -71,9 +96,13 @@ export function createProxyBanner(): ProxyBannerHandle {
 
     void navigator.clipboard.writeText(PROXY_COMMAND).then(
       () => {
-        copyButton.textContent = "✓";
-        setTimeout(() => {
-          copyButton.textContent = "📋";
+        renderCopiedIcon();
+        if (resetCopyIconTimeout) {
+          clearTimeout(resetCopyIconTimeout);
+        }
+        resetCopyIconTimeout = setTimeout(() => {
+          renderCopyIcon();
+          resetCopyIconTimeout = null;
         }, 1400);
       },
       () => {
