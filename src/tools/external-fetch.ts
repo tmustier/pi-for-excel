@@ -75,23 +75,30 @@ export function resolveOutboundRequestUrl(args: {
 const PROXY_START_COMMAND = "npx pi-for-excel-proxy";
 
 /**
- * Common fetch error messages produced when the local proxy is unreachable.
- * WebKit: "Load failed"; Chrome: "Failed to fetch"; Node: "fetch failed" /
- * "ECONNREFUSED".
+ * Common transport-level errors emitted when the app cannot connect to the
+ * proxy process itself.
  */
-const PROXY_DOWN_ERROR_PATTERNS = [
+const PROXY_DOWN_TRANSPORT_PATTERNS = [
   "load failed",
   "failed to fetch",
-  "fetch failed",
+  "networkerror when attempting to fetch resource",
   "econnrefused",
-  "econnreset",
-  "network error",
-  "networkerror",
+  "err_connection_refused",
+  "connection refused",
+] as const;
+
+/**
+ * Signals that the proxy did answer, but failed while fetching the target URL.
+ * In these cases the proxy is running, so we should not report "proxy down".
+ */
+const PROXY_REACHABLE_FAILURE_PATTERNS = [
+  "proxy error:",
+  "request failed (",
 ] as const;
 
 /**
  * Returns `true` when the error looks like a connection failure to the local
- * proxy (as opposed to an upstream API error or timeout).
+ * proxy (as opposed to an upstream API failure surfaced by the proxy).
  */
 export function isLikelyProxyConnectionError(
   errorMessage: string,
@@ -99,7 +106,19 @@ export function isLikelyProxyConnectionError(
 ): boolean {
   if (!proxyBaseUrl) return false;
   const lower = errorMessage.toLowerCase();
-  return PROXY_DOWN_ERROR_PATTERNS.some((pattern) => lower.includes(pattern));
+
+  if (PROXY_REACHABLE_FAILURE_PATTERNS.some((pattern) => lower.includes(pattern))) {
+    return false;
+  }
+
+  if (PROXY_DOWN_TRANSPORT_PATTERNS.some((pattern) => lower.includes(pattern))) {
+    return true;
+  }
+
+  // Node fetch transport failures often collapse to a generic "fetch failed".
+  // Keep this as a last resort, but only after excluding known proxy-answered
+  // failure signatures above.
+  return lower.includes("fetch failed");
 }
 
 /**
@@ -111,7 +130,7 @@ export function buildProxyDownErrorMessage(
   originalError: string,
 ): string {
   return (
-    `${toolLabel} failed because the local CORS proxy is not running. `
+    `Error: ${toolLabel} failed because the local CORS proxy is not running. `
     + `The Excel add-in cannot reach external APIs without it.\n\n`
     + `To fix: run \`${PROXY_START_COMMAND}\` in a terminal and keep that window open.\n\n`
     + `Do not retry — requests will keep failing until the proxy is started.\n\n`

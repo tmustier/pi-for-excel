@@ -84,9 +84,19 @@ void test("isLikelyProxyConnectionError returns false for non-network errors wit
   );
 });
 
+void test("isLikelyProxyConnectionError returns false when proxy answered with upstream fetch failure", () => {
+  assert.equal(
+    isLikelyProxyConnectionError(
+      "fetch_page request failed (502): Proxy error: fetch failed",
+      "https://localhost:3003",
+    ),
+    false,
+  );
+});
+
 void test("buildProxyDownErrorMessage includes tool label, fix command, and original error", () => {
   const message = buildProxyDownErrorMessage("Web search", "Load failed");
-  assert.ok(message.includes("Web search"));
+  assert.ok(message.startsWith("Error: Web search failed"));
   assert.ok(message.includes("npx pi-for-excel-proxy"));
   assert.ok(message.includes("Do not retry"));
   assert.ok(message.includes("Load failed"));
