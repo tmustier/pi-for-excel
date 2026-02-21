@@ -96,12 +96,12 @@ const AUTO_SCROLL_DISENGAGE_PX = 32;
 const AUTO_SCROLL_REENGAGE_PX = 20;
 
 /**
- * When auto-follow is active and a thinking/tool block is expanded during
- * streaming, consider the inner scroll area "near the bottom" if within
- * this many pixels. Once the user scrolls further up we stop forcing the
- * inner container down, same hysteresis idea as the outer scroller.
+ * Inner-scroller hysteresis — same idea as the outer constants above.
+ * A per-element scroll listener marks the pane as "detached" when the user
+ * scrolls up past the disengage threshold, and clears it near the bottom.
  */
-const INNER_SCROLL_NEAR_BOTTOM_PX = 30;
+const INNER_SCROLL_DISENGAGE_PX = AUTO_SCROLL_DISENGAGE_PX;
+const INNER_SCROLL_REENGAGE_PX = AUTO_SCROLL_REENGAGE_PX;
 
 /**
  * CSS selector for inner scrollable areas inside the streaming message.
@@ -164,9 +164,12 @@ export class PiSidebar extends LitElement {
   private _groupingRoot?: HTMLElement;
   /** rAF handle for the inner-container auto-scroll loop (thinking / tool blocks). */
   private _innerScrollRAF?: number;
-  /** Tracks elements we have already scrolled once so we can distinguish
-   *  "just expanded" (→ snap to bottom) from "user scrolled to the top". */
+  /** Inner elements we have snapped to bottom at least once. */
   private _innerScrollSeen = new WeakSet<HTMLElement>();
+  /** Inner elements the user has manually scrolled away from bottom. */
+  private _innerScrollDetached = new WeakSet<HTMLElement>();
+  /** Per-element scroll listeners registered lazily during inner auto-scroll. */
+  private _innerScrollListeners = new WeakMap<HTMLElement, () => void>();
   /** Previous value of `_isStreaming` so we can detect edges in `updated()`. */
   private _wasStreaming = false;
   private _utilitiesMenuClickHandler?: (event: MouseEvent) => void;
@@ -405,12 +408,31 @@ export class PiSidebar extends LitElement {
       cancelAnimationFrame(this._innerScrollRAF);
       this._innerScrollRAF = undefined;
     }
+    // Reset per-stream state. Weak refs let removed nodes GC naturally.
+    this._innerScrollSeen = new WeakSet<HTMLElement>();
+    this._innerScrollDetached = new WeakSet<HTMLElement>();
+    this._innerScrollListeners = new WeakMap<HTMLElement, () => void>();
+  }
+
+  /** Lazily attach a scroll listener that tracks user-initiated detach/re-engage. */
+  private _ensureInnerScrollListener(el: HTMLElement): void {
+    if (this._innerScrollListeners.has(el)) return;
+    const onScroll = () => {
+      const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
+      if (dist > INNER_SCROLL_DISENGAGE_PX) {
+        this._innerScrollDetached.add(el);
+      } else if (dist < INNER_SCROLL_REENGAGE_PX) {
+        this._innerScrollDetached.delete(el);
+      }
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    this._innerScrollListeners.set(el, onScroll);
   }
 
   /**
    * For each expanded inner-scrollable container inside the *streaming*
-   * message, snap it to the bottom — unless the user has manually scrolled
-   * up inside it (same conceptual hysteresis as the outer scroller).
+   * message, pin it to the bottom — unless the user has manually scrolled
+   * away (tracked by a per-element scroll listener, not a distance guess).
    */
   private _scrollStreamingInnerContainers(): void {
     if (!this._autoScroll || !this._scrollContainerEl) return;
@@ -425,21 +447,24 @@ export class PiSidebar extends LitElement {
     );
 
     for (const el of containers) {
-      // Not scrollable yet (content fits in the viewport).
+      this._ensureInnerScrollListener(el);
+
+      // Not scrollable yet — content still fits inside the viewport.
       if (el.scrollHeight <= el.clientHeight) continue;
 
-      const distFromBottom =
-        el.scrollHeight - el.scrollTop - el.clientHeight;
-
       if (!this._innerScrollSeen.has(el)) {
-        // First encounter — element was just expanded → snap to bottom.
+        // First overflow encounter (just expanded / content just exceeded cap).
         el.scrollTop = el.scrollHeight;
         this._innerScrollSeen.add(el);
-      } else if (distFromBottom <= INNER_SCROLL_NEAR_BOTTOM_PX) {
-        // Already following — keep following.
-        el.scrollTop = el.scrollHeight;
+        this._innerScrollDetached.delete(el);
+        continue;
       }
-      // Otherwise the user has scrolled up inside the block — leave it alone.
+
+      // User scrolled up inside this pane — leave it alone.
+      if (this._innerScrollDetached.has(el)) continue;
+
+      // Auto-follow.
+      el.scrollTop = el.scrollHeight;
     }
   }
 
