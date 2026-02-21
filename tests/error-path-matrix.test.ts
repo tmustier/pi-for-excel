@@ -7,7 +7,7 @@ import { createWebSearchTool } from "../src/tools/web-search.ts";
 
 void test("error-path matrix: wrong web_search API key falls back to Jina with warning", async () => {
   const tool = createWebSearchTool({
-    getConfig: () => Promise.resolve({ provider: "serper", apiKey: "bad-key" }),
+    getConfig: () => Promise.resolve({ provider: "serper", apiKey: "bad-key", jinaApiKey: "jina-fallback-key" }),
     executeSearch: (_params, config) => {
       if (config.provider === "serper") {
         return Promise.reject(new Error("Serper.dev search request failed (401): invalid API key"));
@@ -46,7 +46,7 @@ void test("error-path matrix: wrong web_search API key falls back to Jina with w
 
 void test("error-path matrix: web_search rate-limit failures fall back to Jina", async () => {
   const tool = createWebSearchTool({
-    getConfig: () => Promise.resolve({ provider: "tavily", apiKey: "tv-key" }),
+    getConfig: () => Promise.resolve({ provider: "tavily", apiKey: "tv-key", jinaApiKey: "jina-fallback-key" }),
     executeSearch: (_params, config) => {
       if (config.provider === "tavily") {
         return Promise.reject(new Error("429 Too Many Requests: rate limit exceeded"));
