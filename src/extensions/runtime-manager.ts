@@ -78,7 +78,7 @@ function buildExtensionToolSourceNote(entry: StoredExtensionEntry): string {
 }
 
 function withExtensionToolDescription(tool: AnyAgentTool, entry: StoredExtensionEntry): string {
-  const baseDescription = tool.description.trim();
+  const baseDescription = typeof tool.description === "string" ? tool.description.trim() : "";
   const sourceNote = buildExtensionToolSourceNote(entry);
 
   if (baseDescription.length === 0) {
