@@ -98,6 +98,24 @@ function normalizeIdentifier(kind: "command" | "tool", value: string): string {
   return trimmed;
 }
 
+function assertValidToolDefinition(name: string, tool: ExtensionToolDefinition): void {
+  const execute: unknown = Reflect.get(tool, "execute");
+  if (typeof execute === "function") {
+    return;
+  }
+
+  const handler: unknown = Reflect.get(tool, "handler");
+  if (typeof handler === "function") {
+    throw new Error(
+      `Extension tool "${name}" is invalid: use execute(params, signal?, onUpdate?) instead of handler.`,
+    );
+  }
+
+  throw new Error(
+    `Extension tool "${name}" is invalid: execute must be a function.`,
+  );
+}
+
 function defaultRegisterCommand(name: string, cmd: ExtensionCommand): void {
   commandRegistry.register({
     name,
@@ -247,6 +265,8 @@ export function createExtensionAPI(options: CreateExtensionAPIOptions): ExcelExt
       }
 
       const normalizedName = normalizeIdentifier("tool", name);
+      assertValidToolDefinition(normalizedName, tool);
+
       const wrappedTool: AgentTool = {
         name: normalizedName,
         label: tool.label ?? normalizedName,
