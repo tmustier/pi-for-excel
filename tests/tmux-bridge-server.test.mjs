@@ -302,6 +302,35 @@ test("capture_pane wait_ms delays response in stub mode", async (t) => {
   assert.match(payload.output, /echo hello/);
 });
 
+test("send_and_capture wait_for matches in stub mode", async (t) => {
+  const bridge = await startBridge();
+  t.after(async () => {
+    await bridge.stop();
+  });
+
+  const createSession = await fetch(`http://127.0.0.1:${bridge.port}/v1/tmux`, requestInit("POST", {
+    action: "create_session",
+    session: "wait-for-demo",
+  }));
+  assert.equal(createSession.status, 200);
+
+  const sendAndCapture = await fetch(`http://127.0.0.1:${bridge.port}/v1/tmux`, requestInit("POST", {
+    action: "send_and_capture",
+    session: "wait-for-demo",
+    text: "echo ready",
+    enter: true,
+    wait_for: "echo ready",
+    timeout_ms: 1000,
+    lines: 20,
+  }));
+
+  assert.equal(sendAndCapture.status, 200);
+
+  const payload = await sendAndCapture.json();
+  assert.equal(payload.action, "send_and_capture");
+  assert.match(payload.output, /echo ready/);
+});
+
 test("tmux bridge rejects invalid action payloads", async (t) => {
   const bridge = await startBridge();
   t.after(async () => {

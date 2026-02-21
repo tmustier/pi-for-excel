@@ -71,6 +71,8 @@ const MIN_WAIT_TIMEOUT_MS = 100;
 const MAX_WAIT_TIMEOUT_MS = 120_000;
 const MIN_CAPTURE_WAIT_MS = 0;
 const MAX_CAPTURE_WAIT_MS = 120_000;
+const STUB_WAIT_FOR_POLL_INTERVAL_MS = 100;
+const REAL_WAIT_FOR_POLL_INTERVAL_MS = 120;
 
 const SESSION_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/;
 const KEY_TOKEN_PATTERN = /^[A-Za-z0-9._:+-]{1,48}$/;
@@ -423,6 +425,39 @@ function parseTmuxRequest(payload) {
   }
 }
 
+async function maybeDelayCapture(waitMs) {
+  if (typeof waitMs === "number" && waitMs > 0) {
+    await delay(waitMs);
+  }
+}
+
+async function captureWithOptionalWaitFor(options) {
+  const {
+    waitFor,
+    timeoutMs,
+    pollIntervalMs,
+    capture,
+  } = options;
+
+  if (!waitFor) {
+    return capture();
+  }
+
+  const matcher = new RegExp(waitFor, "m");
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt <= timeoutMs) {
+    const output = await capture();
+    if (matcher.test(output)) {
+      return output;
+    }
+
+    await delay(pollIntervalMs);
+  }
+
+  throw new HttpError(408, `wait_for regex did not match before timeout (${timeoutMs}ms).`);
+}
+
 function createStubBackend() {
   const sessions = new Map();
 
@@ -465,39 +500,22 @@ function createStubBackend() {
 
     const timeoutMs = request.timeout_ms ?? DEFAULT_WAIT_TIMEOUT_MS;
     const lines = request.lines ?? DEFAULT_CAPTURE_LINES;
-    const waitMs = request.wait_ms ?? 0;
 
-    if (waitMs > 0) {
-      await delay(waitMs);
-    }
+    await maybeDelayCapture(request.wait_ms);
 
-    if (!request.wait_for) {
-      return {
-        ok: true,
-        action: "send_and_capture",
-        session: request.session,
-        output: captureLines(request.session, lines),
-      };
-    }
+    const output = await captureWithOptionalWaitFor({
+      waitFor: request.wait_for,
+      timeoutMs,
+      pollIntervalMs: STUB_WAIT_FOR_POLL_INTERVAL_MS,
+      capture: async () => captureLines(request.session, lines),
+    });
 
-    const matcher = new RegExp(request.wait_for, "m");
-    const startedAt = Date.now();
-
-    while (Date.now() - startedAt <= timeoutMs) {
-      const output = captureLines(request.session, lines);
-      if (matcher.test(output)) {
-        return {
-          ok: true,
-          action: "send_and_capture",
-          session: request.session,
-          output,
-        };
-      }
-
-      await delay(100);
-    }
-
-    throw new HttpError(408, `wait_for regex did not match before timeout (${timeoutMs}ms).`);
+    return {
+      ok: true,
+      action: "send_and_capture",
+      session: request.session,
+      output,
+    };
   }
 
   return {
@@ -547,10 +565,7 @@ function createStubBackend() {
         }
 
         case "capture_pane": {
-          const waitMs = request.wait_ms ?? 0;
-          if (waitMs > 0) {
-            await delay(waitMs);
-          }
+          await maybeDelayCapture(request.wait_ms);
 
           return {
             ok: true,
@@ -774,39 +789,22 @@ function createRealTmuxBackend() {
     await sendRealInput(request);
 
     const timeoutMs = request.timeout_ms ?? DEFAULT_WAIT_TIMEOUT_MS;
-    const waitMs = request.wait_ms ?? 0;
 
-    if (waitMs > 0) {
-      await delay(waitMs);
-    }
+    await maybeDelayCapture(request.wait_ms);
 
-    if (!request.wait_for) {
-      return {
-        ok: true,
-        action: "send_and_capture",
-        session: request.session,
-        output: await captureRealPane(request.session, request),
-      };
-    }
+    const output = await captureWithOptionalWaitFor({
+      waitFor: request.wait_for,
+      timeoutMs,
+      pollIntervalMs: REAL_WAIT_FOR_POLL_INTERVAL_MS,
+      capture: async () => captureRealPane(request.session, request),
+    });
 
-    const matcher = new RegExp(request.wait_for, "m");
-    const startedAt = Date.now();
-
-    while (Date.now() - startedAt <= timeoutMs) {
-      const output = await captureRealPane(request.session, request);
-      if (matcher.test(output)) {
-        return {
-          ok: true,
-          action: "send_and_capture",
-          session: request.session,
-          output,
-        };
-      }
-
-      await delay(120);
-    }
-
-    throw new HttpError(408, `wait_for regex did not match before timeout (${timeoutMs}ms).`);
+    return {
+      ok: true,
+      action: "send_and_capture",
+      session: request.session,
+      output,
+    };
   }
 
   return {
@@ -842,10 +840,7 @@ function createRealTmuxBackend() {
         }
 
         case "capture_pane": {
-          const waitMs = request.wait_ms ?? 0;
-          if (waitMs > 0) {
-            await delay(waitMs);
-          }
+          await maybeDelayCapture(request.wait_ms);
 
           return {
             ok: true,
