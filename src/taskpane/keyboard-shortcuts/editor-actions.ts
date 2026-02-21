@@ -9,14 +9,100 @@ import { showToast } from "../../ui/toast.js";
 import { hideCommandMenu } from "../../commands/command-menu.js";
 import { executeSlashCommand } from "../../commands/slash-command-execution.js";
 
+export type QueuedEditorMessage = {
+  type: "steer" | "follow-up";
+  text: string;
+};
+
 export type QueueDisplay = {
   add: (type: "steer" | "follow-up", text: string) => void;
+  drainQueuedMessages: () => QueuedEditorMessage[];
 };
+
+export type QueuedEditorAction =
+  | { type: "prompt"; text: string }
+  | { type: "command"; name: string; args: string };
 
 export type ActionQueue = {
   enqueueCommand: (name: string, args: string) => void;
+  drainQueuedActions: () => QueuedEditorAction[];
   isBusy: () => boolean;
 };
+
+interface SidebarInputHost {
+  getInput: () => { value: string } | undefined;
+  getTextarea: () => HTMLTextAreaElement | undefined;
+}
+
+function actionToEditorText(action: QueuedEditorAction): string {
+  if (action.type === "prompt") {
+    return action.text;
+  }
+
+  const args = action.args.trim();
+  return args ? `/${action.name} ${args}` : `/${action.name}`;
+}
+
+function mergeQueuedAndCurrentText(queuedTexts: string[], currentText: string): string {
+  return [...queuedTexts, currentText]
+    .filter((text) => text.trim().length > 0)
+    .join("\n\n");
+}
+
+export function restoreQueuedMessagesToEditor(args: {
+  sidebar: SidebarInputHost;
+  textarea: HTMLTextAreaElement | undefined;
+  agent: Agent | null;
+  queueDisplay: QueueDisplay | null;
+  actionQueue: ActionQueue | null;
+}): number {
+  const {
+    sidebar,
+    textarea,
+    agent,
+    queueDisplay,
+    actionQueue,
+  } = args;
+
+  const queuedMessages = queueDisplay?.drainQueuedMessages() ?? [];
+  if (queuedMessages.length > 0) {
+    agent?.clearAllQueues();
+  }
+
+  const queuedActions = actionQueue?.drainQueuedActions() ?? [];
+  const queuedTexts = [
+    ...queuedMessages.map((message) => message.text),
+    ...queuedActions.map(actionToEditorText),
+  ];
+
+  if (queuedTexts.length === 0) {
+    return 0;
+  }
+
+  const input = sidebar.getInput();
+  const currentText = textarea?.value ?? input?.value ?? "";
+  const mergedText = mergeQueuedAndCurrentText(queuedTexts, currentText);
+
+  if (input) {
+    input.value = mergedText;
+  } else if (textarea) {
+    textarea.value = mergedText;
+  }
+
+  const activeTextarea = sidebar.getTextarea() ?? textarea;
+  if (activeTextarea) {
+    if (typeof activeTextarea.focus === "function") {
+      activeTextarea.focus();
+    }
+
+    if (typeof activeTextarea.setSelectionRange === "function") {
+      const cursor = activeTextarea.value.length;
+      activeTextarea.setSelectionRange(cursor, cursor);
+    }
+  }
+
+  return queuedTexts.length;
+}
 
 export function handleSlashCommandExecution(args: {
   event: KeyboardEvent;

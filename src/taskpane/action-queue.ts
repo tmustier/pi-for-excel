@@ -19,6 +19,7 @@ export type QueuedAction =
 export interface ActionQueue {
   enqueuePrompt: (text: string) => void;
   enqueueCommand: (name: string, args: string) => void;
+  drainQueuedActions: () => QueuedAction[];
   isBusy: () => boolean;
   shutdown: () => void;
 }
@@ -143,5 +144,16 @@ export function createActionQueue(opts: {
     void process();
   };
 
-  return { enqueuePrompt, enqueueCommand, isBusy, shutdown };
+  const drainQueuedActions = (): QueuedAction[] => {
+    if (actions.length === 0) {
+      return [];
+    }
+
+    const drained = [...actions];
+    actions.length = 0;
+    syncDisplay();
+    return drained;
+  };
+
+  return { enqueuePrompt, enqueueCommand, drainQueuedActions, isBusy, shutdown };
 }

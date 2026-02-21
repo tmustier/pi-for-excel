@@ -23,6 +23,7 @@ import { flashThinkingLevel, updateStatusBarForAgent } from "./status-bar.js";
 import {
   handleSlashCommandExecution,
   handleStreamingSteerOrFollowUp,
+  restoreQueuedMessagesToEditor,
   type ActionQueue,
   type QueueDisplay,
 } from "./keyboard-shortcuts/editor-actions.js";
@@ -33,6 +34,7 @@ import {
   isCreateTabShortcut,
   isFocusInputShortcut,
   isReopenLastClosedShortcut,
+  isRestoreQueuedMessagesShortcut,
   isUndoCloseTabShortcut,
   shouldAbortFromEscape,
   shouldBlurEditorFromEscape,
@@ -44,6 +46,7 @@ export {
   isCreateTabShortcut,
   isFocusInputShortcut,
   isReopenLastClosedShortcut,
+  isRestoreQueuedMessagesShortcut,
   isUndoCloseTabShortcut,
   shouldAbortFromEscape,
   shouldBlurEditorFromEscape,
@@ -261,7 +264,7 @@ export function installKeyboardShortcuts(opts: {
       return true;
     },
     (context) => {
-      const { event, isStreaming, agent, keyTarget } = context;
+      const { event, isStreaming, agent, keyTarget, textarea } = context;
       const isEscapeKey = event.key === "Escape" || event.key === "Esc";
       const escapeClaimedByOverlay = isEscapeKey && doesUiClaimStreamingEscape(keyTarget);
 
@@ -278,8 +281,57 @@ export function installKeyboardShortcuts(opts: {
       }
 
       event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+
+      restoreQueuedMessagesToEditor({
+        sidebar,
+        textarea,
+        agent,
+        queueDisplay: getActiveQueueDisplay(),
+        actionQueue: getActiveActionQueue(),
+      });
+
+      const preservedText = sidebar.getInput()?.value ?? textarea?.value ?? "";
+
       markUserAborted(agent);
       agent.abort();
+
+      if (preservedText.trim().length > 0) {
+        requestAnimationFrame(() => {
+          const activeInput = sidebar.getInput();
+          if (!activeInput) return;
+          if (activeInput.value.trim().length > 0) return;
+          activeInput.value = preservedText;
+        });
+      }
+
+      return true;
+    },
+    (context) => {
+      const { event, isInEditor, textarea, agent } = context;
+      if (!isRestoreQueuedMessagesShortcut(event) || !isInEditor || !textarea) {
+        return false;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+
+      const restoredCount = restoreQueuedMessagesToEditor({
+        sidebar,
+        textarea,
+        agent,
+        queueDisplay: getActiveQueueDisplay(),
+        actionQueue: getActiveActionQueue(),
+      });
+
+      if (restoredCount === 0) {
+        showToast("No queued messages to restore");
+      } else {
+        showToast(`Restored ${restoredCount} queued message${restoredCount === 1 ? "" : "s"} to editor`);
+      }
+
       return true;
     },
     (context) => {

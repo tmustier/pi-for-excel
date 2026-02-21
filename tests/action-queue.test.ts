@@ -11,6 +11,7 @@ class TestAgent extends Agent {
   promptCalls: string[] = [];
   waitForIdleCalls = 0;
   onPrompt?: (text: string) => void;
+  onWaitForIdle?: () => Promise<void>;
 
   constructor() {
     super({
@@ -23,6 +24,10 @@ class TestAgent extends Agent {
 
   override waitForIdle(): Promise<void> {
     this.waitForIdleCalls += 1;
+    if (this.onWaitForIdle) {
+      return this.onWaitForIdle();
+    }
+
     return Promise.resolve();
   }
 
@@ -248,4 +253,49 @@ void test("ordered queue runs compact, prompt, then compact", async () => {
       queue.shutdown();
     },
   );
+});
+
+void test("drainQueuedActions clears pending prompts and commands in FIFO order", async () => {
+  const agent = new TestAgent();
+  const waitGate = createDeferred();
+
+  const queueSnapshots: Array<Array<{ type: "prompt" | "command"; label: string; text: string }>> = [];
+
+  agent.onWaitForIdle = () => waitGate.promise;
+
+  const queue = createActionQueue({
+    agent,
+    autoCompactEnabled: false,
+    sidebar: {
+      setBusyIndicator: () => {
+        // no-op
+      },
+    },
+    queueDisplay: {
+      setActionQueue: (items) => {
+        queueSnapshots.push(items.map((item) => ({ ...item })));
+      },
+    },
+  });
+
+  queue.enqueueCommand("compact", "");
+  queue.enqueuePrompt("after compact");
+  queue.enqueueCommand("compact", "deep");
+
+  await waitForCondition(() => agent.waitForIdleCalls > 0);
+
+  const drained = queue.drainQueuedActions();
+  assert.deepEqual(drained, [
+    { type: "command", name: "compact", args: "" },
+    { type: "prompt", text: "after compact" },
+    { type: "command", name: "compact", args: "deep" },
+  ]);
+
+  const latestSnapshot = queueSnapshots[queueSnapshots.length - 1] ?? [];
+  assert.deepEqual(latestSnapshot, []);
+
+  waitGate.resolve();
+  await waitForCondition(() => !queue.isBusy());
+
+  queue.shutdown();
 });

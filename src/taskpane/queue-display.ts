@@ -14,10 +14,24 @@ import { extractTextFromContent } from "../utils/content.js";
 export type QueuedMessageType = "steer" | "follow-up";
 export type QueuedActionType = "prompt" | "command";
 
-type QueuedItem = { type: QueuedMessageType; text: string };
+export type QueuedMessageItem = { type: QueuedMessageType; text: string };
 type QueuedActionItem = { type: QueuedActionType; label: string; text: string };
 
-function renderQueuedItem({ type, text }: QueuedItem): HTMLElement {
+function getQueuedRestoreShortcutHint(): string {
+  if (typeof navigator === "undefined") {
+    return "Alt+↑";
+  }
+
+  const platform = navigator.platform ?? "";
+  const userAgent = navigator.userAgent ?? "";
+  if (platform.startsWith("Mac") || userAgent.includes("Macintosh")) {
+    return "⌥↑";
+  }
+
+  return "Alt+↑";
+}
+
+function renderQueuedItem({ type, text }: QueuedMessageItem): HTMLElement {
   const itemEl = document.createElement("div");
   itemEl.className = "pi-queue__item";
 
@@ -40,6 +54,7 @@ function renderQueuedItem({ type, text }: QueuedItem): HTMLElement {
 export type QueueDisplay = {
   add: (type: QueuedMessageType, text: string) => void;
   clear: () => void;
+  drainQueuedMessages: () => QueuedMessageItem[];
   setActionQueue: (items: Array<{ type: QueuedActionType; label: string; text: string }>) => void;
   attach: (sidebar: PiSidebar) => void;
   detach: () => void;
@@ -50,7 +65,7 @@ export function createQueueDisplay(opts: {
 }): QueueDisplay {
   const { agent } = opts;
 
-  const queued: QueuedItem[] = [];
+  const queued: QueuedMessageItem[] = [];
   let queuedActions: QueuedActionItem[] = [];
   let attachedSidebar: PiSidebar | null = null;
 
@@ -110,6 +125,11 @@ export function createQueueDisplay(opts: {
       fragment.appendChild(itemEl);
     }
 
+    const hintEl = document.createElement("div");
+    hintEl.className = "pi-queue__hint";
+    hintEl.textContent = `↳ ${getQueuedRestoreShortcutHint()} to edit queued messages`;
+    fragment.appendChild(hintEl);
+
     container.replaceChildren(fragment);
   }
 
@@ -121,6 +141,17 @@ export function createQueueDisplay(opts: {
   function clear(): void {
     queued.length = 0;
     updateQueueDisplay();
+  }
+
+  function drainQueuedMessages(): QueuedMessageItem[] {
+    if (queued.length === 0) {
+      return [];
+    }
+
+    const drained = [...queued];
+    queued.length = 0;
+    updateQueueDisplay();
+    return drained;
   }
 
   function setActionQueue(items: QueuedActionItem[]): void {
@@ -162,5 +193,5 @@ export function createQueueDisplay(opts: {
     }
   });
 
-  return { add, clear, setActionQueue, attach, detach };
+  return { add, clear, drainQueuedMessages, setActionQueue, attach, detach };
 }

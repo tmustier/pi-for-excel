@@ -36,6 +36,17 @@ export interface AdjacentTabShortcutEventLike {
   altKey: boolean;
 }
 
+export interface RestoreQueuedShortcutEventLike {
+  key: string;
+  code?: string;
+  keyCode?: number;
+  repeat: boolean;
+  metaKey: boolean;
+  ctrlKey: boolean;
+  shiftKey: boolean;
+  altKey: boolean;
+}
+
 function isShortcutLetter(event: TabShortcutEventLike, letter: "t" | "w" | "z"): boolean {
   if (event.key.toLowerCase() === letter) {
     return true;
@@ -119,6 +130,13 @@ export function getAdjacentTabDirectionFromShortcut(
   }
 
   return null;
+}
+
+export function isRestoreQueuedMessagesShortcut(event: RestoreQueuedShortcutEventLike): boolean {
+  if (event.repeat) return false;
+  if (!event.altKey || event.metaKey || event.ctrlKey || event.shiftKey) return false;
+
+  return event.key === "ArrowUp" || event.key === "Up" || event.code === "ArrowUp" || event.keyCode === 38;
 }
 
 export function shouldBlurEditorFromEscape(opts: {

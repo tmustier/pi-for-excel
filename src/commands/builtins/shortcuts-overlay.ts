@@ -54,6 +54,7 @@ const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
       same("Enter", "Send message"),
       same("Enter (while streaming)", "Interrupt and redirect"),
       { mac: "⌥ Enter", win: "Alt+Enter", description: "Queue follow-up" },
+      { mac: "⌥ ↑", win: "Alt+↑", description: "Restore queued messages" },
       { mac: "⇧ Tab", win: "Shift+Tab", description: "Cycle thinking level" },
     ],
   },
