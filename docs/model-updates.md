@@ -90,7 +90,7 @@ We intentionally avoid pinning exact versioned IDs now. Instead we:
   3) then the rest sorted deterministically
 
   Featured rules (current desired behavior):
-  - **Anthropic:** latest **Sonnet** *if* its version > latest **Opus**, then latest **Opus**
+  - **Anthropic:** latest **Sonnet** *if* its version >= latest **Opus**, then latest **Opus**
     - Version compare uses `parseMajorMinor()` where `claude-opus-4-5` → `45`, `claude-opus-4-6` → `46`.
     - Important: IDs like `claude-opus-4-20250514` are treated as **major only** (`40`) and the `YYYYMMDD` part is considered a separate date suffix by `modelRecencyScore()`.
   - **OpenAI Codex:** latest `gpt-5.x-codex`, then latest `gpt-5.x`
@@ -107,7 +107,7 @@ We intentionally avoid pinning exact versioned IDs now. Instead we:
   UI: the model picker is opened from the footer status bar (click the π model button).
 
 - Pick the default model via pattern rules:
-  - Anthropic is a small special-case (Opus unless a newer-version Sonnet exists; version compare uses `parseMajorMinor`)
+  - Anthropic is a small special-case (Sonnet when version ties or is newer than Opus; version compare uses `parseMajorMinor`)
   - otherwise `DEFAULT_MODEL_RULES` + `pickLatestMatchingModel()` (uses `getModels(provider)` to find the newest available ID)
 
 When new models ship, this usually “just works” as long as naming stays consistent. You only need to update these rules if:

@@ -85,7 +85,7 @@ export function installModelSelectorPatch(): void {
     // "Latest for each" behavior:
     // - keep current model at the very top
     // - then show "featured" models (latest per provider, pattern-based)
-    //   - Anthropic: latest Sonnet if its version > latest Opus, then latest Opus
+    //   - Anthropic: latest Sonnet if its version >= latest Opus, then latest Opus
     //   - OpenAI Codex: latest gpt-5.x-codex, then latest gpt-5.x
     //   - Google API-key: latest gemini-*-pro*
     //   - Google OAuth (Gemini CLI / Antigravity): prefer stable Gemini before previews
@@ -157,7 +157,7 @@ export function installModelSelectorPatch(): void {
         if (bestOpus && bestSonnet) {
           const opusVer = parseMajorMinor(bestOpus.id);
           const sonnetVer = parseMajorMinor(bestSonnet.id);
-          if (sonnetVer > opusVer) {
+          if (sonnetVer >= opusVer) {
             featured.push(bestSonnet, bestOpus);
             continue;
           }

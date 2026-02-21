@@ -55,7 +55,8 @@ export function pickDefaultModel(
   customDefaultModel?: Model<Api> | null,
 ): Model<Api> {
   // Anthropic special-case:
-  // Prefer Opus, except if there's a *newer-version* Sonnet, use that first.
+  // Prefer Sonnet when its major/minor version is >= Opus (e.g. Sonnet 4-6 over Opus 4-6).
+  // Otherwise prefer Opus.
   if (availableProviders.includes("anthropic")) {
     const models: Model<Api>[] = getModels("anthropic");
     const opus = models
@@ -66,7 +67,7 @@ export function pickDefaultModel(
       .sort((a, b) => modelRecencyScore(b.id) - modelRecencyScore(a.id))[0];
 
     if (opus && sonnet) {
-      return parseMajorMinor(sonnet.id) > parseMajorMinor(opus.id) ? sonnet : opus;
+      return parseMajorMinor(sonnet.id) >= parseMajorMinor(opus.id) ? sonnet : opus;
     }
 
     if (opus) return opus;
