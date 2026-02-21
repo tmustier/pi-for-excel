@@ -249,6 +249,7 @@
       display: block;
       max-width: 540px;
       width: 100%;
+      height: auto;
       border-radius: var(--radius);
       border: 1px solid var(--card-border);
       box-shadow: var(--shadow);
