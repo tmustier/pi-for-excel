@@ -17,6 +17,10 @@ import { humanizeColorsInText } from "./color-names.js";
 import { stripYamlFrontmatter } from "./markdown-preprocess.js";
 import { TOOL_NAMES_WITH_RENDERER, type UiToolName } from "../tools/capabilities.js";
 import {
+  mountSearchSetupCard,
+  shouldShowSearchSetupCard,
+} from "./web-search-setup-card.js";
+import {
   isCommentsDetails,
   isConditionalFormatDetails,
   isExplainFormulaDetails,
@@ -1059,6 +1063,15 @@ function createExcelMarkdownRenderer(toolName: SupportedToolName): ToolRenderer<
           : "Dependencies";
         const formulaExplanation = renderExplainFormulaDetails(result.details);
 
+        // Search setup card: show inline guided setup when web_search fails
+        const resultDetails: unknown = result.details;
+        const searchSetupDetails = shouldShowSearchSetupCard(resultDetails) ? resultDetails : null;
+        const initSearchSetup = (el: Element | undefined): void => {
+          if (el instanceof HTMLElement && searchSetupDetails) {
+            mountSearchSetupCard(el, searchSetupDetails);
+          }
+        };
+
         return {
           content: html`
             <div class="pi-tool-card" data-state=${state} data-tool-name=${toolName}>
@@ -1114,6 +1127,7 @@ function createExcelMarkdownRenderer(toolName: SupportedToolName): ToolRenderer<
                 </div>
               </div>
             </div>
+            ${searchSetupDetails !== null ? html`<div ${ref(initSearchSetup)}></div>` : html``}
           `,
           isCustom: true,
         };
