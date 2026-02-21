@@ -370,6 +370,12 @@
   transform: none;
 }
 
+.pi-status-mode[data-tooltip]::after {
+  left: auto;
+  right: 0;
+  transform: none;
+}
+
 /* DOM-based rich tooltips (supports HTML / colored lines) */
 .pi-status-bar .has-tooltip {
   position: relative;

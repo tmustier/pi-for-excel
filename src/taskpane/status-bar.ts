@@ -23,6 +23,32 @@ export type ActiveAgentProvider = () => Agent | null;
 export type ActiveLockStateProvider = () => RuntimeLockState;
 export type ActiveExecutionModeProvider = () => ExecutionMode;
 
+function adjustContextTooltipAlignment(statusBar: HTMLElement): void {
+  const trigger = statusBar.querySelector<HTMLElement>(".pi-status-ctx--trigger");
+  const tooltip = trigger?.querySelector<HTMLElement>(".pi-tooltip");
+  if (!trigger || !tooltip) return;
+
+  tooltip.classList.remove("pi-tooltip--left", "pi-tooltip--right");
+
+  const viewportWidth = document.documentElement.clientWidth;
+  const triggerRect = trigger.getBoundingClientRect();
+  const tooltipWidth = tooltip.offsetWidth;
+  if (tooltipWidth <= 0) return;
+
+  const centeredLeft = triggerRect.left + ((triggerRect.width - tooltipWidth) / 2);
+  const centeredRight = centeredLeft + tooltipWidth;
+  const edgePadding = 8;
+
+  if (centeredRight > viewportWidth - edgePadding) {
+    tooltip.classList.add("pi-tooltip--right");
+    return;
+  }
+
+  if (centeredLeft < edgePadding) {
+    tooltip.classList.add("pi-tooltip--left");
+  }
+}
+
 function renderStatusBar(
   agent: Agent | null,
   lockState: RuntimeLockState,
@@ -116,10 +142,12 @@ function renderStatusBar(
       ${chevronSvg}
     </button>
     <button type="button" class="pi-status-thinking pi-status-clickable" data-tooltip="${thinkingTooltip}" aria-label="Thinking level ${thinkingLevel}">${brainSvg} ${thinkingLevel}<span class="pi-status-affordance" aria-hidden="true">${affordanceChevronSvg}</span></button>
-    <button type="button" class="pi-status-ctx pi-status-ctx--trigger pi-status-clickable has-tooltip" ${STATUS_CONTEXT_DESC_ATTR}="${ctxPopoverDesc}" ${STATUS_CONTEXT_TOKENS_ATTR}="${ctxPopoverTokens}" ${STATUS_CONTEXT_WARNING_ATTR}="${ctxPopoverWarnText}" ${STATUS_CONTEXT_WARNING_SEVERITY_ATTR}="${ctxWarningSeverity}" aria-label="Context usage ${pct}% of ${ctxLabel}"><span class="pi-status-ctx__pct ${ctxColor}">${pct}%</span><span class="pi-status-ctx__sep">/</span><span class="pi-status-ctx__limit">${ctxLabel}</span>${usageDebug}<span class="pi-status-affordance" aria-hidden="true">${affordanceChevronSvg}</span><span class="pi-tooltip pi-tooltip--left"><span class="pi-tooltip__desc">${escapeHtml(ctxDescription)}</span><span class="pi-tooltip__tokens">${escapeHtml(ctxTokenDetail)}</span>${ctxWarning}</span></button>
+    <button type="button" class="pi-status-ctx pi-status-ctx--trigger pi-status-clickable has-tooltip" ${STATUS_CONTEXT_DESC_ATTR}="${ctxPopoverDesc}" ${STATUS_CONTEXT_TOKENS_ATTR}="${ctxPopoverTokens}" ${STATUS_CONTEXT_WARNING_ATTR}="${ctxPopoverWarnText}" ${STATUS_CONTEXT_WARNING_SEVERITY_ATTR}="${ctxWarningSeverity}" aria-label="Context usage ${pct}% of ${ctxLabel}"><span class="pi-status-ctx__pct ${ctxColor}">${pct}%</span><span class="pi-status-ctx__sep">/</span><span class="pi-status-ctx__limit">${ctxLabel}</span>${usageDebug}<span class="pi-status-affordance" aria-hidden="true">${affordanceChevronSvg}</span><span class="pi-tooltip"><span class="pi-tooltip__desc">${escapeHtml(ctxDescription)}</span><span class="pi-tooltip__tokens">${escapeHtml(ctxTokenDetail)}</span>${ctxWarning}</span></button>
     ${lockBadge}
     ${modeBadge}
   `;
+
+  adjustContextTooltipAlignment(el);
 }
 
 export function updateStatusBarForAgent(
