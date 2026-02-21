@@ -27,13 +27,17 @@ export interface BuiltinsContext
     SkillsCommandActions,
     FilesCommandActions {
   getActiveAgent: ActiveAgentProvider;
+  openModelSelector: () => void;
 }
 
 /** Register all built-in commands. Call once after runtime manager is ready. */
 export function registerBuiltins(context: BuiltinsContext): void {
   // Keep registration order stable: this is the order shown in the command menu.
   const builtins: SlashCommand[] = [
-    ...createModelCommands(context.getActiveAgent),
+    ...createModelCommands({
+      getActiveAgent: context.getActiveAgent,
+      openModelSelector: context.openModelSelector,
+    }),
     ...createSettingsCommands(context),
     ...createAddonsCommands(context),
     ...createToolsCommands(context),

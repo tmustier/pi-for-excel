@@ -1279,6 +1279,39 @@ export async function initTaskpane(opts: {
     showToast(`Renamed to ${nextTitle}`);
   };
 
+  const resolveRuntimeTabTitle = (runtimeId: string, runtime: SessionRuntime): string => {
+    return runtimeManager.snapshotTabs().find((tab) => tab.runtimeId === runtimeId)?.title
+      ?? formatSessionTitle(runtime.persistence.getSessionTitle());
+  };
+
+  type RuntimeModel = Agent["state"]["model"];
+
+  const cloneRuntimeToNewTab = async (args: {
+    sourceRuntime: SessionRuntime;
+    targetModel: RuntimeModel;
+    targetTitle: string;
+  }): Promise<SessionRuntime> => {
+    const clonedRuntime = await createRuntime({
+      activate: true,
+      autoRestoreLatest: false,
+    });
+
+    clonedRuntime.agent.replaceMessages(args.sourceRuntime.agent.state.messages);
+    clonedRuntime.agent.setModel(args.targetModel);
+    clonedRuntime.agent.setThinkingLevel(args.sourceRuntime.agent.state.thinkingLevel);
+
+    await clonedRuntime.persistence.renameSession(args.targetTitle);
+    clonedRuntime.queueDisplay.clear();
+    clonedRuntime.queueDisplay.setActionQueue([]);
+    sidebar.syncFromAgent();
+    sidebar.requestUpdate();
+    document.dispatchEvent(new CustomEvent("pi:model-changed"));
+    document.dispatchEvent(new CustomEvent("pi:status-update"));
+    await clonedRuntime.persistence.saveSession({ force: true });
+
+    return clonedRuntime;
+  };
+
   const duplicateRuntimeTab = async (runtimeId: string): Promise<void> => {
     const sourceRuntime = runtimeManager.getRuntime(runtimeId);
     if (!sourceRuntime) {
@@ -1291,32 +1324,14 @@ export async function initTaskpane(opts: {
       return;
     }
 
-    const duplicateRuntime = await createRuntime({
-      activate: true,
-      autoRestoreLatest: false,
-    });
-
-    duplicateRuntime.agent.replaceMessages(sourceRuntime.agent.state.messages);
-
-    const sourceModel = sourceRuntime.agent.state.model;
-    if (sourceModel) {
-      duplicateRuntime.agent.setModel(sourceModel);
-    }
-
-    duplicateRuntime.agent.setThinkingLevel(sourceRuntime.agent.state.thinkingLevel);
-
-    const sourceTitle = runtimeManager.snapshotTabs().find((tab) => tab.runtimeId === runtimeId)?.title
-      ?? formatSessionTitle(sourceRuntime.persistence.getSessionTitle());
+    const sourceTitle = resolveRuntimeTabTitle(runtimeId, sourceRuntime);
     const duplicateTitle = `${sourceTitle} copy`;
 
-    await duplicateRuntime.persistence.renameSession(duplicateTitle);
-    duplicateRuntime.queueDisplay.clear();
-    duplicateRuntime.queueDisplay.setActionQueue([]);
-    sidebar.syncFromAgent();
-    sidebar.requestUpdate();
-    document.dispatchEvent(new CustomEvent("pi:model-changed"));
-    document.dispatchEvent(new CustomEvent("pi:status-update"));
-    await duplicateRuntime.persistence.saveSession({ force: true });
+    await cloneRuntimeToNewTab({
+      sourceRuntime,
+      targetModel: sourceRuntime.agent.state.model,
+      targetTitle: duplicateTitle,
+    });
 
     showToast(`Duplicated ${sourceTitle}`);
   };
@@ -1436,8 +1451,71 @@ export async function initTaskpane(opts: {
     setExecutionMode,
   });
 
+  const applyModelSelection = async (runtimeId: string, nextModel: RuntimeModel): Promise<void> => {
+    const runtime = runtimeManager.getRuntime(runtimeId);
+    if (!runtime) {
+      showToast("Session not found");
+      return;
+    }
+
+    const currentModel = runtime.agent.state.model;
+    if (currentModel.provider === nextModel.provider && currentModel.id === nextModel.id) {
+      return;
+    }
+
+    if (runtime.agent.state.isStreaming || runtime.actionQueue.isBusy()) {
+      showToast("Wait for this tab to finish before changing models");
+      return;
+    }
+
+    if (runtime.agent.state.messages.length === 0) {
+      runtime.agent.setModel(nextModel);
+      document.dispatchEvent(new CustomEvent("pi:model-changed"));
+      document.dispatchEvent(new CustomEvent("pi:status-update"));
+      requestAnimationFrame(() => sidebar.requestUpdate());
+      return;
+    }
+
+    const sourceTitle = resolveRuntimeTabTitle(runtimeId, runtime);
+    const modelForkTitle = `${sourceTitle} (${nextModel.id})`;
+
+    await cloneRuntimeToNewTab({
+      sourceRuntime: runtime,
+      targetModel: nextModel,
+      targetTitle: modelForkTitle,
+    });
+
+    showToast(`Opened ${modelForkTitle} in a new tab`);
+  };
+
+  const openModelSelector = (): void => {
+    const activeRuntime = getActiveRuntime();
+    if (!activeRuntime) {
+      showToast("No active session");
+      return;
+    }
+
+    const targetRuntimeId = activeRuntime.runtimeId;
+    const currentModel = activeRuntime.agent.state.model;
+
+    void (async () => {
+      try {
+        await refreshConfiguredProviders();
+      } catch (error: unknown) {
+        console.warn("[auth] Failed to refresh providers before opening model selector:", error);
+      }
+
+      closeStatusPopover();
+
+      await ModelSelector.open(currentModel, (model) => {
+        void applyModelSelection(targetRuntimeId, model);
+      });
+    })();
+  };
+
   registerBuiltins({
     getActiveAgent,
+    openModelSelector,
     renameActiveSession: async (title: string) => {
       const activeRuntime = getActiveRuntime();
       if (!activeRuntime) {
@@ -1742,30 +1820,6 @@ export async function initTaskpane(opts: {
 
   const runSlashCommand = (name: string, args = ""): void => {
     document.dispatchEvent(new CustomEvent("pi:command-run", { detail: { name, args } }));
-  };
-
-  const openModelSelector = (): void => {
-    const activeAgent = getActiveAgent();
-    if (!activeAgent) {
-      showToast("No active session");
-      return;
-    }
-
-    void (async () => {
-      try {
-        await refreshConfiguredProviders();
-      } catch (error: unknown) {
-        console.warn("[auth] Failed to refresh providers before opening model selector:", error);
-      }
-
-      closeStatusPopover();
-
-      await ModelSelector.open(activeAgent.state.model, (model) => {
-        activeAgent.setModel(model);
-        document.dispatchEvent(new CustomEvent("pi:status-update"));
-        requestAnimationFrame(() => sidebar.requestUpdate());
-      });
-    })();
   };
 
   const openThinkingPopoverFrom = (target: Element): void => {

@@ -3,36 +3,34 @@
  */
 
 import type { Agent } from "@mariozechner/pi-agent-core";
-import { ModelSelector } from "@mariozechner/pi-web-ui/dist/dialogs/ModelSelector.js";
 
 import type { SlashCommand } from "../types.js";
 import { showToast } from "../../ui/toast.js";
 
 export type ActiveAgentProvider = () => Agent | null;
 
-function openModelSelector(getActiveAgent: ActiveAgentProvider): void {
-  const agent = getActiveAgent();
-  if (!agent) {
-    showToast("No active session");
-    return;
-  }
-
-  void ModelSelector.open(agent.state.model, (model) => {
-    agent.setModel(model);
-    document.dispatchEvent(new CustomEvent("pi:model-changed"));
-    document.dispatchEvent(new CustomEvent("pi:status-update"));
-  });
+export interface ModelCommandActions {
+  getActiveAgent: ActiveAgentProvider;
+  openModelSelector: () => void;
 }
 
-export function createModelCommands(getActiveAgent: ActiveAgentProvider): SlashCommand[] {
+export function createModelCommands(actions: ModelCommandActions): SlashCommand[] {
+  const runModelSelector = (): void => {
+    const agent = actions.getActiveAgent();
+    if (!agent) {
+      showToast("No active session");
+      return;
+    }
+
+    actions.openModelSelector();
+  };
+
   return [
     {
       name: "model",
       description: "Change the AI model",
       source: "builtin",
-      execute: () => {
-        openModelSelector(getActiveAgent);
-      },
+      execute: runModelSelector,
     },
     {
       name: "default-models",
@@ -41,7 +39,7 @@ export function createModelCommands(getActiveAgent: ActiveAgentProvider): SlashC
       execute: () => {
         // TODO: implement scoped models dialog
         // For now, open model selector as a placeholder
-        openModelSelector(getActiveAgent);
+        runModelSelector();
       },
     },
   ];
