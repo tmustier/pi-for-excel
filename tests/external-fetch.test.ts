@@ -94,6 +94,16 @@ void test("isLikelyProxyConnectionError returns false when proxy answered with u
   );
 });
 
+void test("isLikelyProxyConnectionError returns false for upstream messages that merely contain fetch failed", () => {
+  assert.equal(
+    isLikelyProxyConnectionError(
+      "JSON-RPC error: upstream fetch failed while calling backend service",
+      "https://localhost:3003",
+    ),
+    false,
+  );
+});
+
 void test("buildProxyDownErrorMessage includes tool label, fix command, and original error", () => {
   const message = buildProxyDownErrorMessage("Web search", "Load failed");
   assert.ok(message.startsWith("Error: Web search failed"));

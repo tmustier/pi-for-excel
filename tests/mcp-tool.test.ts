@@ -211,19 +211,19 @@ void test("mcp reports proxy-down error when proxy transport is unreachable", as
   assert.equal(details.proxyDown, true);
 });
 
-void test("mcp does not flag proxyDown when proxy answered with upstream fetch failure", async () => {
+void test("mcp does not flag proxyDown for upstream JSON-RPC errors containing fetch failed", async () => {
   const tool = createMcpTool({
     getRuntimeConfig: () => Promise.resolve({
       servers: [TEST_SERVER],
       proxyBaseUrl: "https://localhost:3003",
     }),
-    callJsonRpc: () => Promise.reject(new Error("MCP request failed (502): Proxy error: fetch failed")),
+    callJsonRpc: () => Promise.reject(new Error("JSON-RPC error: upstream fetch failed while calling backend service")),
   });
 
   const result = await tool.execute("call-5", { connect: "local" });
   const text = result.content[0]?.type === "text" ? result.content[0].text : "";
 
-  assert.match(text, /^Error: MCP request failed \(502\): Proxy error: fetch failed$/);
+  assert.match(text, /^Error: JSON-RPC error: upstream fetch failed while calling backend service$/);
 
   const details = result.details as { ok?: boolean; proxyDown?: boolean };
   assert.equal(details.ok, false);

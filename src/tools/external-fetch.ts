@@ -105,7 +105,7 @@ export function isLikelyProxyConnectionError(
   proxyBaseUrl: string | undefined,
 ): boolean {
   if (!proxyBaseUrl) return false;
-  const lower = errorMessage.toLowerCase();
+  const lower = errorMessage.trim().toLowerCase();
 
   if (PROXY_REACHABLE_FAILURE_PATTERNS.some((pattern) => lower.includes(pattern))) {
     return false;
@@ -115,10 +115,10 @@ export function isLikelyProxyConnectionError(
     return true;
   }
 
-  // Node fetch transport failures often collapse to a generic "fetch failed".
-  // Keep this as a last resort, but only after excluding known proxy-answered
-  // failure signatures above.
-  return lower.includes("fetch failed");
+  // Node fetch transport failures often collapse to exactly "fetch failed".
+  // Keep this fallback strict so upstream/server messages that merely contain
+  // those words are not misclassified as proxy-down.
+  return lower === "fetch failed";
 }
 
 /**
