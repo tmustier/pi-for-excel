@@ -162,6 +162,7 @@ import {
   createAsyncCoalescer,
   createRuntimeToolFingerprint,
   isLikelyCorsErrorMessage,
+  shouldApplyRuntimeToolUpdate,
   isRuntimeAgentTool,
   normalizeRuntimeTools,
 } from "./runtime-utils.js";
@@ -874,8 +875,18 @@ export async function initTaskpane(opts: {
 
       const next = await buildRuntimeCapabilities(nextSessionId);
       const nextToolsFingerprint = createRuntimeToolFingerprint(next.tools);
+      const hasExtensionTools = extensionManager.getRegisteredTools().length > 0;
 
-      if (nextToolsFingerprint !== currentRuntimeToolsFingerprint) {
+      // Extension tools can change runtime behavior without metadata deltas
+      // (same schema, new execute handler). Keep those refreshes eager so
+      // extension hot-reload updates are never skipped.
+      if (
+        shouldApplyRuntimeToolUpdate({
+          hasExtensionTools,
+          previousFingerprint: currentRuntimeToolsFingerprint,
+          nextFingerprint: nextToolsFingerprint,
+        })
+      ) {
         agent.setTools(next.tools);
         currentRuntimeToolsFingerprint = nextToolsFingerprint;
       }

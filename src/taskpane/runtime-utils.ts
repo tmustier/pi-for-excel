@@ -47,6 +47,18 @@ export function createRuntimeToolFingerprint(tools: readonly AgentTool[]): strin
   return hashString(parts.join("\u001e"));
 }
 
+export function shouldApplyRuntimeToolUpdate(args: {
+  hasExtensionTools: boolean;
+  previousFingerprint: string;
+  nextFingerprint: string;
+}): boolean {
+  if (args.hasExtensionTools) {
+    return true;
+  }
+
+  return args.previousFingerprint !== args.nextFingerprint;
+}
+
 export function isRuntimeAgentTool(value: unknown): value is AgentTool {
   if (!isRecord(value)) return false;
 

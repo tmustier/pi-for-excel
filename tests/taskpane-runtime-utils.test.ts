@@ -7,6 +7,7 @@ import {
   createRuntimeToolFingerprint,
   isLikelyCorsErrorMessage,
   normalizeRuntimeTools,
+  shouldApplyRuntimeToolUpdate,
 } from "../src/taskpane/runtime-utils.ts";
 
 function createFingerprintTestTool(args: {
@@ -129,6 +130,37 @@ void test("createRuntimeToolFingerprint changes when tool metadata changes", () 
 
   assert.notEqual(baselineFingerprint, createRuntimeToolFingerprint(changedDescription));
   assert.notEqual(baselineFingerprint, createRuntimeToolFingerprint(reordered));
+});
+
+void test("shouldApplyRuntimeToolUpdate applies updates when fingerprint changes", () => {
+  assert.equal(
+    shouldApplyRuntimeToolUpdate({
+      hasExtensionTools: false,
+      previousFingerprint: "aaaa",
+      nextFingerprint: "bbbb",
+    }),
+    true,
+  );
+
+  assert.equal(
+    shouldApplyRuntimeToolUpdate({
+      hasExtensionTools: false,
+      previousFingerprint: "same",
+      nextFingerprint: "same",
+    }),
+    false,
+  );
+});
+
+void test("shouldApplyRuntimeToolUpdate forces updates when extension tools are present", () => {
+  assert.equal(
+    shouldApplyRuntimeToolUpdate({
+      hasExtensionTools: true,
+      previousFingerprint: "same",
+      nextFingerprint: "same",
+    }),
+    true,
+  );
 });
 
 void test("createAsyncCoalescer coalesces overlapping calls into a single rerun", async () => {
