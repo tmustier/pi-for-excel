@@ -45,6 +45,7 @@ import type {
   CreateExtensionAPIOptions,
   ExcelExtensionAPI,
   ExtensionCommand,
+  ExtensionConnectionDefinition,
   ExtensionToolDefinition,
   HttpRequestOptions,
   HttpResponse,
@@ -65,6 +66,8 @@ export type {
   ExtensionAgentAPI,
   ExtensionCleanup,
   ExtensionCommand,
+  ExtensionConnectionDefinition,
+  ExtensionConnectionsAPI,
   ExtensionToolDefinition,
   HttpAPI,
   HttpRequestOptions,
@@ -96,6 +99,63 @@ function normalizeIdentifier(kind: "command" | "tool", value: string): string {
     throw new Error(`Extension ${kind} name cannot be empty`);
   }
   return trimmed;
+}
+
+function normalizeConnectionIdentifier(value: string): string {
+  const trimmed = value.trim().toLowerCase();
+  if (trimmed.length === 0) {
+    throw new Error("Connection id cannot be empty");
+  }
+
+  return trimmed;
+}
+
+function qualifyOwnedConnectionId(ownerId: string, connectionId: string): string {
+  const normalizedConnectionId = normalizeConnectionIdentifier(connectionId);
+  const ownerPrefix = `${ownerId.toLowerCase()}.`;
+
+  if (normalizedConnectionId.startsWith(ownerPrefix)) {
+    return normalizedConnectionId;
+  }
+
+  return `${ownerPrefix}${normalizedConnectionId}`;
+}
+
+function normalizeToolConnectionRequirements(
+  rawValue: unknown,
+  ownerId: string,
+): string[] | undefined {
+  const normalizedIds: string[] = [];
+
+  if (typeof rawValue === "string") {
+    normalizedIds.push(qualifyOwnedConnectionId(ownerId, rawValue));
+  } else if (Array.isArray(rawValue)) {
+    for (const item of rawValue) {
+      if (typeof item !== "string") {
+        throw new Error("requiresConnection entries must be strings.");
+      }
+
+      normalizedIds.push(qualifyOwnedConnectionId(ownerId, item));
+    }
+  } else if (rawValue !== undefined) {
+    throw new Error("requiresConnection must be a string or array of strings.");
+  }
+
+  if (normalizedIds.length === 0) {
+    return undefined;
+  }
+
+  return Array.from(new Set(normalizedIds));
+}
+
+function normalizeConnectionDefinitionForOwner(
+  ownerId: string,
+  definition: ExtensionConnectionDefinition,
+): ExtensionConnectionDefinition {
+  return {
+    ...definition,
+    id: qualifyOwnedConnectionId(ownerId, definition.id),
+  };
 }
 
 function assertValidToolDefinition(name: string, tool: ExtensionToolDefinition): void {
@@ -212,6 +272,15 @@ export function createExtensionAPI(options: CreateExtensionAPIOptions): ExcelExt
   const registerCommand = options.registerCommand ?? defaultRegisterCommand;
   const registerTool = options.registerTool;
   const unregisterTool = options.unregisterTool;
+  const registerConnection = options.registerConnection;
+  const unregisterConnection = options.unregisterConnection;
+  const listConnections = options.listConnections;
+  const getConnection = options.getConnection;
+  const setConnectionSecrets = options.setConnectionSecrets;
+  const clearConnectionSecrets = options.clearConnectionSecrets;
+  const markConnectionValidated = options.markConnectionValidated;
+  const markConnectionInvalid = options.markConnectionInvalid;
+  const markConnectionStatus = options.markConnectionStatus;
   const subscribeAgentEvents = options.subscribeAgentEvents
     ?? ((handler: (ev: AgentEvent) => void) => options.getAgent().subscribe(handler));
   const llmComplete = options.llmComplete;
@@ -233,6 +302,7 @@ export function createExtensionAPI(options: CreateExtensionAPIOptions): ExcelExt
   const isCapabilityEnabled = options.isCapabilityEnabled;
   const formatCapabilityError = options.formatCapabilityError ?? getDefaultCapabilityErrorMessage;
   const widgetOwnerId = getWidgetOwnerId(options);
+  const connectionOwnerId = widgetOwnerId;
   const widgetApiV2Enabled = resolveWidgetApiV2Enabled(options);
 
   const assertCapability = (capability: ExtensionCapability): void => {
@@ -277,6 +347,15 @@ export function createExtensionAPI(options: CreateExtensionAPIOptions): ExcelExt
         },
       };
 
+      const requiresConnection = normalizeToolConnectionRequirements(
+        Reflect.get(tool, "requiresConnection"),
+        connectionOwnerId,
+      );
+
+      if (requiresConnection && requiresConnection.length > 0) {
+        Reflect.set(wrappedTool, "requiresConnection", requiresConnection);
+      }
+
       registerTool(wrappedTool);
     },
 
@@ -288,6 +367,132 @@ export function createExtensionAPI(options: CreateExtensionAPIOptions): ExcelExt
       }
 
       unregisterTool(normalizeIdentifier("tool", name));
+    },
+
+    connections: {
+      register(definition: ExtensionConnectionDefinition): string {
+        assertCapability("connections.readwrite");
+
+        if (!registerConnection) {
+          throw new Error("Extension host does not support connections.register()");
+        }
+
+        const normalizedDefinition = normalizeConnectionDefinitionForOwner(connectionOwnerId, definition);
+        return registerConnection(normalizedDefinition);
+      },
+
+      unregister(connectionId: string): void {
+        assertCapability("connections.readwrite");
+
+        if (!unregisterConnection) {
+          throw new Error("Extension host does not support connections.unregister()");
+        }
+
+        unregisterConnection(qualifyOwnedConnectionId(connectionOwnerId, connectionId));
+      },
+
+      async list() {
+        assertCapability("connections.readwrite");
+
+        if (!listConnections) {
+          throw new Error("Extension host does not support connections.list()");
+        }
+
+        return listConnections();
+      },
+
+      async get(connectionId: string) {
+        assertCapability("connections.readwrite");
+
+        if (!getConnection) {
+          throw new Error("Extension host does not support connections.get()");
+        }
+
+        return getConnection(qualifyOwnedConnectionId(connectionOwnerId, connectionId));
+      },
+
+      async setSecrets(connectionId: string, secrets: Record<string, string>): Promise<void> {
+        assertCapability("connections.readwrite");
+
+        if (!setConnectionSecrets) {
+          throw new Error("Extension host does not support connections.setSecrets()");
+        }
+
+        await setConnectionSecrets(
+          qualifyOwnedConnectionId(connectionOwnerId, connectionId),
+          secrets,
+        );
+      },
+
+      async clearSecrets(connectionId: string): Promise<void> {
+        assertCapability("connections.readwrite");
+
+        if (!clearConnectionSecrets) {
+          throw new Error("Extension host does not support connections.clearSecrets()");
+        }
+
+        await clearConnectionSecrets(qualifyOwnedConnectionId(connectionOwnerId, connectionId));
+      },
+
+      async markValidated(connectionId: string): Promise<void> {
+        assertCapability("connections.readwrite");
+
+        if (!markConnectionValidated) {
+          throw new Error("Extension host does not support connections.markValidated()");
+        }
+
+        await markConnectionValidated(qualifyOwnedConnectionId(connectionOwnerId, connectionId));
+      },
+
+      async markInvalid(connectionId: string, reason: string): Promise<void> {
+        assertCapability("connections.readwrite");
+
+        if (!markConnectionInvalid) {
+          throw new Error("Extension host does not support connections.markInvalid()");
+        }
+
+        await markConnectionInvalid(
+          qualifyOwnedConnectionId(connectionOwnerId, connectionId),
+          reason,
+        );
+      },
+
+      async markStatus(connectionId: string, status: "connected" | "missing" | "invalid" | "error", reason?: string): Promise<void> {
+        assertCapability("connections.readwrite");
+
+        const normalizedConnectionId = qualifyOwnedConnectionId(connectionOwnerId, connectionId);
+
+        if (markConnectionStatus) {
+          await markConnectionStatus(normalizedConnectionId, status, reason);
+          return;
+        }
+
+        if (status === "connected") {
+          if (!markConnectionValidated) {
+            throw new Error("Extension host does not support setting connection status to connected.");
+          }
+          await markConnectionValidated(normalizedConnectionId);
+          return;
+        }
+
+        if (status === "invalid") {
+          if (!markConnectionInvalid) {
+            throw new Error("Extension host does not support setting connection status to invalid.");
+          }
+          await markConnectionInvalid(normalizedConnectionId, reason ?? "Connection marked invalid.");
+          return;
+        }
+
+        if (status === "missing") {
+          if (!clearConnectionSecrets) {
+            throw new Error("Extension host does not support setting connection status to missing.");
+          }
+          await clearConnectionSecrets(normalizedConnectionId);
+          return;
+        }
+
+        throw new Error("Extension host does not support setting connection status to error.");
+      },
     },
 
     agent: {

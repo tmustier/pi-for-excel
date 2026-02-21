@@ -4,8 +4,11 @@ import { readFile } from "node:fs/promises";
 
 import { Type } from "@sinclair/typebox";
 
+import { ConnectionManager } from "../src/connections/manager.ts";
 import { setExperimentalFeatureEnabled } from "../src/experiments/flags.ts";
 import { ExtensionRuntimeManager } from "../src/extensions/runtime-manager.ts";
+import { isConnectionToolErrorDetails } from "../src/tools/tool-details.ts";
+import { withConnectionPreflight } from "../src/tools/with-connection-preflight.ts";
 import {
   SANDBOX_CHANNEL,
   isSandboxEnvelope,
@@ -34,6 +37,10 @@ class MemorySettingsStore {
   writeRaw(key: string, value: unknown): void {
     this.values.set(key, value);
   }
+}
+
+function createConnectionManager(settings: MemorySettingsStore): ConnectionManager {
+  return new ConnectionManager({ settings });
 }
 
 class MemoryLocalStorage {
@@ -143,6 +150,7 @@ void test("runtime manager passes sandbox activation options and runtime metadat
 
     const manager = new ExtensionRuntimeManager({
       settings,
+      connectionManager: createConnectionManager(settings),
       getActiveAgent: () => null,
       refreshRuntimeTools: async () => {},
       reservedToolNames: new Set<string>(),
@@ -208,6 +216,7 @@ void test("untrusted extensions default to sandbox runtime when rollback kill sw
 
     const manager = new ExtensionRuntimeManager({
       settings,
+      connectionManager: createConnectionManager(settings),
       getActiveAgent: () => null,
       refreshRuntimeTools: async () => {},
       reservedToolNames: new Set<string>(),
@@ -260,6 +269,7 @@ void test("rollback kill switch routes untrusted extensions back to host runtime
 
     const manager = new ExtensionRuntimeManager({
       settings,
+      connectionManager: createConnectionManager(settings),
       getActiveAgent: () => null,
       refreshRuntimeTools: async () => {},
       reservedToolNames: new Set<string>(),
@@ -312,6 +322,7 @@ void test("trusted local-module extensions stay on host runtime even when sandbo
 
     const manager = new ExtensionRuntimeManager({
       settings,
+      connectionManager: createConnectionManager(settings),
       getActiveAgent: () => null,
       refreshRuntimeTools: async () => {},
       reservedToolNames: new Set<string>(),
@@ -361,6 +372,7 @@ void test("host runtime extension tools include source provenance in description
 
     const manager = new ExtensionRuntimeManager({
       settings,
+      connectionManager: createConnectionManager(settings),
       getActiveAgent: () => null,
       refreshRuntimeTools: async () => {},
       reservedToolNames: new Set<string>(),
@@ -418,6 +430,7 @@ void test("host runtime extension tools tolerate missing descriptions", async ()
 
     const manager = new ExtensionRuntimeManager({
       settings,
+      connectionManager: createConnectionManager(settings),
       getActiveAgent: () => null,
       refreshRuntimeTools: async () => {},
       reservedToolNames: new Set<string>(),
@@ -475,6 +488,7 @@ void test("host runtime extension tool errors include extension ownership contex
 
     const manager = new ExtensionRuntimeManager({
       settings,
+      connectionManager: createConnectionManager(settings),
       getActiveAgent: () => null,
       refreshRuntimeTools: async () => {},
       reservedToolNames: new Set<string>(),
@@ -608,6 +622,7 @@ void test("sandbox activation failures are isolated per extension during initial
 
     const manager = new ExtensionRuntimeManager({
       settings,
+      connectionManager: createConnectionManager(settings),
       getActiveAgent: () => null,
       refreshRuntimeTools: async () => {},
       reservedToolNames: new Set<string>(),
@@ -673,6 +688,7 @@ void test("sandbox capability denial surfaces deterministic permission error", a
 
     const manager = new ExtensionRuntimeManager({
       settings,
+      connectionManager: createConnectionManager(settings),
       getActiveAgent: () => null,
       refreshRuntimeTools: async () => {},
       reservedToolNames: new Set<string>(),
@@ -698,4 +714,153 @@ void test("sandbox capability denial surfaces deterministic permission error", a
   } finally {
     restoreLocalStorage();
   }
+});
+
+void test("host runtime extensions must register required connections before tool registration", async () => {
+  const restoreLocalStorage = installLocalStorageStub();
+
+  try {
+    clearLocalStorageKey(EXTENSION_SANDBOX_RUNTIME_STORAGE_KEY);
+
+    const settings = new MemorySettingsStore();
+    settings.writeRaw(EXTENSIONS_REGISTRY_STORAGE_KEY, {
+      version: 2,
+      items: [
+        createStoredEntry({
+          id: "ext.apollo.req",
+          name: "Apollo Requires Connection",
+          trust: "local-module",
+        }),
+      ],
+    });
+
+    const manager = new ExtensionRuntimeManager({
+      settings,
+      connectionManager: createConnectionManager(settings),
+      getActiveAgent: () => null,
+      refreshRuntimeTools: async () => {},
+      reservedToolNames: new Set<string>(),
+      loadExtensionFromSource: (api) => {
+        api.registerTool("apollo_lookup", {
+          description: "Lookup company via Apollo",
+          parameters: Type.Object({
+            company: Type.String(),
+          }),
+          requiresConnection: "apollo",
+          execute: () => ({
+            content: [{ type: "text", text: "ok" }],
+            details: undefined,
+          }),
+        });
+
+        return Promise.resolve({
+          deactivate: () => Promise.resolve(),
+        });
+      },
+      activateInSandbox: () => {
+        throw new Error("sandbox runtime should not be used for local-module extensions");
+      },
+    });
+
+    await manager.initialize();
+
+    const status = manager.list()[0];
+    assert.equal(status.loaded, false);
+    assert.match(status.lastError ?? "", /is not registered/);
+  } finally {
+    restoreLocalStorage();
+  }
+});
+
+void test("connection preflight blocks missing connections before tool execution", async () => {
+  const settings = new MemorySettingsStore();
+  const connectionManager = createConnectionManager(settings);
+
+  connectionManager.registerDefinition("ext.apollo", {
+    id: "ext.apollo.apollo",
+    title: "Apollo",
+    capability: "company and contact enrichment",
+    authKind: "api_key",
+    secretFields: [{ id: "apiKey", label: "API key", required: true }],
+  });
+
+  let executed = false;
+
+  const tool = {
+    name: "apollo_lookup",
+    label: "Apollo Lookup",
+    description: "Lookup company profiles",
+    parameters: Type.Object({
+      company: Type.String(),
+    }),
+    execute: () => {
+      executed = true;
+      return {
+        content: [{ type: "text", text: "should not execute" }],
+        details: undefined,
+      };
+    },
+  };
+
+  Reflect.set(tool, "requiresConnection", ["ext.apollo.apollo"]);
+
+  const tools = withConnectionPreflight([tool], {
+    connectionManager,
+  });
+
+  const result = await tools[0].execute("tool-call-1", { company: "Acme" });
+
+  assert.equal(executed, false);
+  assert.equal(isConnectionToolErrorDetails(result.details), true);
+  if (isConnectionToolErrorDetails(result.details)) {
+    assert.equal(result.details.errorCode, "missing_connection");
+    assert.equal(result.details.connectionId, "ext.apollo.apollo");
+  }
+});
+
+void test("connection preflight maps runtime auth failures to connection_auth_failed", async () => {
+  const settings = new MemorySettingsStore();
+  const connectionManager = createConnectionManager(settings);
+
+  connectionManager.registerDefinition("ext.apollo", {
+    id: "ext.apollo.apollo",
+    title: "Apollo",
+    capability: "company and contact enrichment",
+    authKind: "api_key",
+    secretFields: [{ id: "apiKey", label: "API key", required: true }],
+  });
+
+  await connectionManager.setSecrets("ext.apollo", "ext.apollo.apollo", {
+    apiKey: "top-secret-api-key",
+  });
+
+  const tool = {
+    name: "apollo_lookup",
+    label: "Apollo Lookup",
+    description: "Lookup company profiles",
+    parameters: Type.Object({
+      company: Type.String(),
+    }),
+    execute: () => {
+      throw new Error("401 Unauthorized: invalid API key top-secret-api-key");
+    },
+  };
+
+  Reflect.set(tool, "requiresConnection", ["ext.apollo.apollo"]);
+
+  const tools = withConnectionPreflight([tool], {
+    connectionManager,
+  });
+
+  const result = await tools[0].execute("tool-call-2", { company: "Acme" });
+  assert.equal(isConnectionToolErrorDetails(result.details), true);
+
+  if (isConnectionToolErrorDetails(result.details)) {
+    assert.equal(result.details.errorCode, "connection_auth_failed");
+    assert.ok(!result.details.reason?.includes("top-secret-api-key"));
+  }
+
+  const state = await connectionManager.getState("ext.apollo.apollo");
+  assert.equal(state?.status, "error");
+  assert.ok(!state?.lastError?.includes("top-secret-api-key"));
 });

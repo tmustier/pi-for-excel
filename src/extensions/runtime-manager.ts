@@ -10,6 +10,7 @@
 
 import type { Agent, AgentEvent, AgentTool } from "@mariozechner/pi-agent-core";
 
+import type { ConnectionManager } from "../connections/manager.js";
 import {
   createExtensionAPI,
   loadExtension,
@@ -68,6 +69,7 @@ import {
   resolveModelForCompletion,
 } from "./runtime-manager-helpers.js";
 import { buildRuntimeManagerActivationBridge } from "./runtime-manager-activation.js";
+import { getToolRequiredConnectionIds } from "../tools/connection-requirements.js";
 
 type AnyAgentTool = AgentTool;
 
@@ -134,6 +136,7 @@ export interface ExtensionRuntimeStatus {
 
 export interface ExtensionRuntimeManagerOptions {
   settings: ExtensionSettingsStore;
+  connectionManager: ConnectionManager;
   getActiveAgent: () => Agent | null;
   refreshRuntimeTools: () => Promise<void>;
   reservedToolNames: ReadonlySet<string>;
@@ -144,6 +147,7 @@ export interface ExtensionRuntimeManagerOptions {
 
 export class ExtensionRuntimeManager {
   private readonly settings: ExtensionSettingsStore;
+  private readonly connectionManager: ConnectionManager;
   private readonly getActiveAgent: () => Agent | null;
   private readonly refreshRuntimeTools: () => Promise<void>;
   private readonly reservedToolNames: ReadonlySet<string>;
@@ -163,6 +167,7 @@ export class ExtensionRuntimeManager {
 
   constructor(options: ExtensionRuntimeManagerOptions) {
     this.settings = options.settings;
+    this.connectionManager = options.connectionManager;
     this.getActiveAgent = options.getActiveAgent;
     this.refreshRuntimeTools = options.refreshRuntimeTools;
     this.reservedToolNames = options.reservedToolNames;
@@ -309,6 +314,7 @@ export class ExtensionRuntimeManager {
     }
 
     await this.deactivateEntry(entryId);
+    this.connectionManager.unregisterDefinitionsByOwner(entryId);
     await clearExtensionStorage(this.settings, entryId);
     this.entries.splice(entryIndex, 1);
     this.lastErrors.delete(entryId);
@@ -565,6 +571,7 @@ export class ExtensionRuntimeManager {
 
   private async activateEntry(entry: StoredExtensionEntry): Promise<void> {
     await this.deactivateEntry(entry.id);
+    this.connectionManager.unregisterDefinitionsByOwner(entry.id);
 
     const state: LoadedExtensionState = {
       entryId: entry.id,
@@ -619,6 +626,11 @@ export class ExtensionRuntimeManager {
 
       assertToolExecuteFunction(tool, entry);
 
+      const requiredConnectionIds = getToolRequiredConnectionIds(tool);
+      for (const connectionId of requiredConnectionIds) {
+        this.connectionManager.assertConnectionOwnedBy(entry.id, connectionId);
+      }
+
       const wrappedTool: AnyAgentTool = {
         ...tool,
         description: withExtensionToolDescription(tool, entry),
@@ -633,6 +645,10 @@ export class ExtensionRuntimeManager {
           }
         },
       };
+
+      if (requiredConnectionIds.length > 0) {
+        Reflect.set(wrappedTool, "requiresConnection", requiredConnectionIds);
+      }
 
       this.toolOwners.set(wrappedTool.name, entry.id);
       this.extensionTools.set(wrappedTool.name, wrappedTool);
@@ -702,6 +718,7 @@ export class ExtensionRuntimeManager {
     const activationBridge = buildRuntimeManagerActivationBridge({
       entry,
       settings: this.settings,
+      connectionManager: this.connectionManager,
       getRequiredActiveAgent: () => this.getRequiredActiveAgent(),
       runExtensionLlmCompletion: (request) => this.runExtensionLlmCompletion(entry, request),
       runExtensionHttpFetch: (url, options) => this.runExtensionHttpFetch(url, options),
@@ -834,6 +851,12 @@ export class ExtensionRuntimeManager {
       toolsChanged = toolsChanged || deleted;
     }
     state.toolNames.clear();
+
+    try {
+      this.connectionManager.unregisterDefinitionsByOwner(state.entryId);
+    } catch (error: unknown) {
+      failures.push(getRuntimeManagerErrorMessage(error));
+    }
 
     if (state.inlineBlobUrl) {
       URL.revokeObjectURL(state.inlineBlobUrl);

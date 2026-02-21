@@ -7,6 +7,8 @@ import type {
   LlmCompletionRequest,
   LlmCompletionResult,
 } from "../commands/extension-api.js";
+import type { ConnectionManager } from "../connections/manager.js";
+import type { ConnectionStatus } from "../connections/types.js";
 import type { ExtensionCapability } from "./permissions.js";
 import {
   deleteExtensionStorageValue,
@@ -42,6 +44,15 @@ type HostActivationBridge = Pick<
   | "installSkill"
   | "uninstallSkill"
   | "downloadFile"
+  | "registerConnection"
+  | "unregisterConnection"
+  | "listConnections"
+  | "getConnection"
+  | "setConnectionSecrets"
+  | "clearConnectionSecrets"
+  | "markConnectionValidated"
+  | "markConnectionInvalid"
+  | "markConnectionStatus"
   | "isCapabilityEnabled"
   | "formatCapabilityError"
   | "extensionOwnerId"
@@ -65,12 +76,36 @@ type SandboxActivationBridge = Pick<
   | "installSkill"
   | "uninstallSkill"
   | "downloadFile"
+  | "registerConnection"
+  | "unregisterConnection"
+  | "listConnections"
+  | "getConnection"
+  | "setConnectionSecrets"
+  | "clearConnectionSecrets"
+  | "markConnectionValidated"
+  | "markConnectionInvalid"
+  | "markConnectionStatus"
   | "isCapabilityEnabled"
   | "formatCapabilityError"
   | "toast"
   | "widgetOwnerId"
   | "widgetApiV2Enabled"
 >;
+
+function qualifyConnectionIdForEntry(entryId: string, connectionId: string): string {
+  const normalizedConnectionId = connectionId.trim().toLowerCase();
+  if (normalizedConnectionId.length === 0) {
+    throw new Error("Connection id cannot be empty.");
+  }
+
+  const ownerPrefix = `${entryId.toLowerCase()}.`;
+
+  if (normalizedConnectionId.startsWith(ownerPrefix)) {
+    return normalizedConnectionId;
+  }
+
+  return `${ownerPrefix}${normalizedConnectionId}`;
+}
 
 export interface RuntimeManagerActivationBridge {
   host: HostActivationBridge;
@@ -80,6 +115,7 @@ export interface RuntimeManagerActivationBridge {
 export interface BuildRuntimeManagerActivationBridgeOptions {
   entry: StoredExtensionEntry;
   settings: ExtensionSettingsStore;
+  connectionManager: ConnectionManager;
   getRequiredActiveAgent: () => Agent;
   runExtensionLlmCompletion: (request: LlmCompletionRequest) => Promise<LlmCompletionResult>;
   runExtensionHttpFetch: (url: string, options?: HttpRequestOptions) => Promise<HttpResponse>;
@@ -97,6 +133,7 @@ export function buildRuntimeManagerActivationBridge(
   const {
     entry,
     settings,
+    connectionManager,
     getRequiredActiveAgent,
     runExtensionLlmCompletion,
     runExtensionHttpFetch,
@@ -141,6 +178,94 @@ export function buildRuntimeManagerActivationBridge(
     triggerExtensionDownload(filename, content, mimeType);
   };
 
+  const registerConnection = (definition: Parameters<ConnectionManager["registerDefinition"]>[1]) => {
+    const normalizedDefinition = {
+      ...definition,
+      id: qualifyConnectionIdForEntry(entry.id, definition.id),
+    };
+
+    return connectionManager.registerDefinition(entry.id, normalizedDefinition);
+  };
+
+  const unregisterConnection = (connectionId: string): void => {
+    const normalizedConnectionId = qualifyConnectionIdForEntry(entry.id, connectionId);
+    connectionManager.unregisterDefinition(entry.id, normalizedConnectionId);
+  };
+
+  const listConnections = async () => {
+    const ownerPrefix = `${entry.id.toLowerCase()}.`;
+    const snapshots = await connectionManager.listSnapshots();
+
+    return snapshots
+      .filter((snapshot) => snapshot.connectionId.startsWith(ownerPrefix))
+      .map((snapshot) => ({
+        connectionId: snapshot.connectionId,
+        status: snapshot.status,
+        lastValidatedAt: snapshot.lastValidatedAt,
+        lastError: snapshot.lastError,
+      }));
+  };
+
+  const getConnection = async (connectionId: string) => {
+    const normalizedConnectionId = qualifyConnectionIdForEntry(entry.id, connectionId);
+    const snapshot = await connectionManager.getSnapshot(normalizedConnectionId);
+    if (!snapshot) return null;
+
+    return {
+      connectionId: snapshot.connectionId,
+      status: snapshot.status,
+      lastValidatedAt: snapshot.lastValidatedAt,
+      lastError: snapshot.lastError,
+    };
+  };
+
+  const setConnectionSecrets = async (connectionId: string, secrets: Record<string, string>): Promise<void> => {
+    const normalizedConnectionId = qualifyConnectionIdForEntry(entry.id, connectionId);
+    await connectionManager.setSecrets(entry.id, normalizedConnectionId, secrets);
+  };
+
+  const clearConnectionSecrets = async (connectionId: string): Promise<void> => {
+    const normalizedConnectionId = qualifyConnectionIdForEntry(entry.id, connectionId);
+    await connectionManager.clearSecrets(entry.id, normalizedConnectionId);
+  };
+
+  const markConnectionValidated = async (connectionId: string): Promise<void> => {
+    const normalizedConnectionId = qualifyConnectionIdForEntry(entry.id, connectionId);
+    await connectionManager.markValidated(entry.id, normalizedConnectionId);
+  };
+
+  const markConnectionInvalid = async (connectionId: string, reason: string): Promise<void> => {
+    const normalizedConnectionId = qualifyConnectionIdForEntry(entry.id, connectionId);
+    await connectionManager.markInvalid(entry.id, normalizedConnectionId, reason);
+  };
+
+  const markConnectionStatus = async (
+    connectionId: string,
+    status: ConnectionStatus,
+    reason?: string,
+  ): Promise<void> => {
+    const normalizedConnectionId = qualifyConnectionIdForEntry(entry.id, connectionId);
+
+    if (status === "connected") {
+      await connectionManager.markValidated(entry.id, normalizedConnectionId);
+      return;
+    }
+
+    if (status === "missing") {
+      await connectionManager.clearSecrets(entry.id, normalizedConnectionId);
+      return;
+    }
+
+    if (status === "invalid") {
+      await connectionManager.markInvalid(entry.id, normalizedConnectionId, reason ?? "Connection marked invalid.");
+      return;
+    }
+
+    await connectionManager.markRuntimeAuthFailure(normalizedConnectionId, {
+      message: reason ?? "Connection reported runtime authentication failure.",
+    });
+  };
+
   const host: HostActivationBridge = {
     getAgent: getRequiredActiveAgent,
     llmComplete: runExtensionLlmCompletion,
@@ -158,6 +283,15 @@ export function buildRuntimeManagerActivationBridge(
     installSkill,
     uninstallSkill,
     downloadFile,
+    registerConnection,
+    unregisterConnection,
+    listConnections,
+    getConnection,
+    setConnectionSecrets,
+    clearConnectionSecrets,
+    markConnectionValidated,
+    markConnectionInvalid,
+    markConnectionStatus,
     isCapabilityEnabled,
     formatCapabilityError,
     extensionOwnerId: entry.id,
@@ -180,6 +314,15 @@ export function buildRuntimeManagerActivationBridge(
     installSkill,
     uninstallSkill,
     downloadFile,
+    registerConnection,
+    unregisterConnection,
+    listConnections,
+    getConnection,
+    setConnectionSecrets,
+    clearConnectionSecrets,
+    markConnectionValidated,
+    markConnectionInvalid,
+    markConnectionStatus,
     isCapabilityEnabled,
     formatCapabilityError,
     toast: showToastMessage,

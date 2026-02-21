@@ -307,3 +307,92 @@ void test("createExtensionAPI forwards dynamic tools, storage, and agent steerin
   assert.equal(steeredMessage, "stop and rethink");
   assert.equal(followUpMessage, "run review pass");
 });
+
+void test("createExtensionAPI forwards qualified connection requirements on tools", () => {
+  let registeredRequirements: unknown;
+
+  const api = createExtensionAPI({
+    getAgent: () => {
+      throw new Error("getAgent should not be called");
+    },
+    extensionOwnerId: "ext.apollo",
+    registerTool: (tool) => {
+      registeredRequirements = Reflect.get(tool, "requiresConnection");
+    },
+    isCapabilityEnabled: createCapabilityGate(new Set<ExtensionCapability>([
+      "tools.register",
+    ])),
+  });
+
+  api.registerTool("apollo_lookup", {
+    description: "Lookup a company",
+    parameters: Type.Object({
+      company: Type.String(),
+    }),
+    requiresConnection: "apollo",
+    execute: () => ({
+      content: [{ type: "text", text: "ok" }],
+      details: undefined,
+    }),
+  });
+
+  assert.deepEqual(registeredRequirements, ["ext.apollo.apollo"]);
+});
+
+void test("createExtensionAPI connection APIs enforce capability and owner-qualified ids", async () => {
+  const seenConnectionIds: string[] = [];
+  let savedSecrets: Record<string, string> | null = null;
+
+  const api = createExtensionAPI({
+    getAgent: () => {
+      throw new Error("getAgent should not be called");
+    },
+    extensionOwnerId: "ext.apollo",
+    registerConnection: (definition) => {
+      seenConnectionIds.push(definition.id);
+      return definition.id;
+    },
+    setConnectionSecrets: (connectionId, secrets) => {
+      seenConnectionIds.push(connectionId);
+      savedSecrets = secrets;
+      return Promise.resolve();
+    },
+    listConnections: () => Promise.resolve([]),
+    getConnection: () => Promise.resolve(null),
+    clearConnectionSecrets: () => Promise.resolve(),
+    markConnectionValidated: () => Promise.resolve(),
+    markConnectionInvalid: () => Promise.resolve(),
+    markConnectionStatus: () => Promise.resolve(),
+    isCapabilityEnabled: createCapabilityGate(new Set<ExtensionCapability>([
+      "connections.readwrite",
+    ])),
+  });
+
+  const registeredId = api.connections.register({
+    id: "apollo",
+    title: "Apollo",
+    capability: "company enrichment",
+    authKind: "api_key",
+    secretFields: [{ id: "apiKey", label: "API key", required: true }],
+  });
+
+  await api.connections.setSecrets("apollo", { apiKey: "test-key" });
+
+  assert.equal(registeredId, "ext.apollo.apollo");
+  assert.deepEqual(seenConnectionIds, ["ext.apollo.apollo", "ext.apollo.apollo"]);
+  assert.deepEqual(savedSecrets, { apiKey: "test-key" });
+
+  const deniedApi = createExtensionAPI({
+    getAgent: () => {
+      throw new Error("getAgent should not be called");
+    },
+    listConnections: () => Promise.resolve([]),
+    isCapabilityEnabled: createCapabilityGate(new Set<ExtensionCapability>([])),
+    formatCapabilityError: (capability) => `DENIED:${capability}`,
+  });
+
+  await assert.rejects(
+    async () => deniedApi.connections.list(),
+    /DENIED:connections\.readwrite/,
+  );
+});

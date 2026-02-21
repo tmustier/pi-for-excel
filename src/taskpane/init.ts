@@ -29,11 +29,14 @@ import {
 } from "../experiments/events.js";
 import { convertToLlm } from "../messages/convert-to-llm.js";
 import { getFilesWorkspace } from "../files/workspace.js";
+import { ConnectionManager } from "../connections/manager.js";
 import { createAllTools } from "../tools/index.js";
+import { collectRequiredConnectionIds } from "../tools/connection-requirements.js";
 import {
   applyToolOutputTruncation,
   saveTruncatedToolOutputToWorkspace,
 } from "../tools/output-truncation.js";
+import { withConnectionPreflight } from "../tools/with-connection-preflight.js";
 import {
   applyExperimentalToolGates,
   buildOfficeJsExecuteApprovalMessage,
@@ -438,8 +441,10 @@ export async function initTaskpane(opts: {
   const buildRuntimeSystemPrompt = async (args: {
     workbookId: string | null;
     activeIntegrationIds: readonly string[];
+    requiredConnectionIds: readonly string[];
   }): Promise<string> => {
     const availableSkills = await resolveAvailableSkills();
+    const activeConnections = await connectionManager.listPromptEntries(args.requiredConnectionIds);
 
     try {
       const userRules = await getUserRules(settings);
@@ -451,13 +456,18 @@ export async function initTaskpane(opts: {
         userInstructions: userRules,
         workbookInstructions: workbookRules,
         activeIntegrations,
+        activeConnections,
         availableSkills,
         executionMode: getExecutionMode(),
         conventions,
       });
     } catch {
       setRulesActive(false);
-      return buildSystemPrompt({ availableSkills, executionMode: getExecutionMode() });
+      return buildSystemPrompt({
+        activeConnections,
+        availableSkills,
+        executionMode: getExecutionMode(),
+      });
     }
   };
 
@@ -624,11 +634,17 @@ export async function initTaskpane(opts: {
     ...createAllTools().map((tool) => tool.name),
     ...getIntegrationToolNames(),
   ]);
+  const connectionManager = new ConnectionManager({ settings });
   const extensionManager = new ExtensionRuntimeManager({
     settings,
+    connectionManager,
     getActiveAgent,
     refreshRuntimeTools: refreshCapabilitiesForAllRuntimes,
     reservedToolNames,
+  });
+
+  connectionManager.subscribe(() => {
+    void refreshCapabilitiesForAllRuntimes();
   });
 
   const refreshWorkbookState = async () => {
@@ -763,6 +779,8 @@ export async function initTaskpane(opts: {
         ...extensionManager.getRegisteredTools(),
       ]);
 
+      const requiredConnectionIds = collectRequiredConnectionIds(runtimeTools);
+
       const coordinatedTools = withWorkbookCoordinator(
         runtimeTools,
         workbookCoordinator,
@@ -788,13 +806,18 @@ export async function initTaskpane(opts: {
         },
       );
 
-      const tools = applyToolOutputTruncation(coordinatedTools, {
+      const preflightTools = withConnectionPreflight(coordinatedTools, {
+        connectionManager,
+      });
+
+      const tools = applyToolOutputTruncation(preflightTools, {
         saveTruncatedOutput: saveTruncatedToolOutputToWorkspace,
       });
 
       const systemPrompt = await buildRuntimeSystemPrompt({
         workbookId,
         activeIntegrationIds,
+        requiredConnectionIds,
       });
 
       return {

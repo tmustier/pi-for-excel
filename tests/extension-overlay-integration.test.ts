@@ -3,6 +3,7 @@ import { test } from "node:test";
 
 import { renderPluginsTab } from "../src/commands/builtins/extensions-hub-plugins.ts";
 import { createExtensionAPI } from "../src/commands/extension-api.ts";
+import { ConnectionManager } from "../src/connections/manager.ts";
 import {
   describeStoredExtensionTrust,
   getDefaultPermissionsForTrust,
@@ -31,8 +32,11 @@ class StaticExtensionRuntimeManager extends ExtensionRuntimeManager {
   private readonly statuses: ExtensionRuntimeStatus[];
 
   constructor(statuses: readonly ExtensionRuntimeStatus[]) {
+    const settings = new MemorySettingsStore();
+
     super({
-      settings: new MemorySettingsStore(),
+      settings,
+      connectionManager: new ConnectionManager({ settings }),
       getActiveAgent: () => null,
       refreshRuntimeTools: async () => {},
       reservedToolNames: new Set<string>(),

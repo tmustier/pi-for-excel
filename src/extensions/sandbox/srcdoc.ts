@@ -545,6 +545,28 @@ export function buildSandboxSrcdoc(options: BuildSandboxSrcdocOptions): string {
               throw new Error('registerTool execute must be a function');
             }
 
+            const requiresConnection = (() => {
+              if (typeof tool.requiresConnection === "string") {
+                return [tool.requiresConnection];
+              }
+
+              if (Array.isArray(tool.requiresConnection)) {
+                for (const entry of tool.requiresConnection) {
+                  if (typeof entry !== "string") {
+                    throw new Error('registerTool requiresConnection entries must be strings');
+                  }
+                }
+
+                return tool.requiresConnection;
+              }
+
+              if (typeof tool.requiresConnection === "undefined") {
+                return undefined;
+              }
+
+              throw new Error('registerTool requiresConnection must be a string or array of strings');
+            })();
+
             const toolId = 'tool-' + String(nextRequestId++);
             toolHandlers.set(toolId, (params) => tool.execute(params));
 
@@ -554,6 +576,7 @@ export function buildSandboxSrcdoc(options: BuildSandboxSrcdocOptions): string {
               label: typeof tool.label === "string" ? tool.label : normalizedName,
               description: typeof tool.description === "string" ? tool.description : "",
               parameters: tool.parameters,
+              requiresConnection,
             }));
           },
 
@@ -566,6 +589,164 @@ export function buildSandboxSrcdoc(options: BuildSandboxSrcdocOptions): string {
             queueActivationOp(requestHost("unregister_tool", {
               name: normalizedName,
             }));
+          },
+
+          connections: {
+            register(definition) {
+              if (!definition || typeof definition !== "object") {
+                throw new Error('connections.register requires a definition object');
+              }
+
+              const rawConnectionId = typeof definition.id === "string"
+                ? definition.id.trim()
+                : "";
+
+              if (!rawConnectionId) {
+                throw new Error('connections.register requires definition.id');
+              }
+
+              queueActivationOp(requestHost("connections_register", { definition }));
+
+              const ownerId = config.instanceId.includes(".")
+                ? config.instanceId.slice(0, config.instanceId.lastIndexOf("."))
+                : config.instanceId;
+
+              const ownerPrefix = ownerId.toLowerCase() + ".";
+              const normalizedConnectionId = rawConnectionId.toLowerCase();
+
+              if (normalizedConnectionId.startsWith(ownerPrefix)) {
+                return normalizedConnectionId;
+              }
+
+              return ownerPrefix + normalizedConnectionId;
+            },
+
+            unregister(connectionId) {
+              const normalizedConnectionId = typeof connectionId === "string"
+                ? connectionId.trim()
+                : "";
+
+              if (!normalizedConnectionId) {
+                throw new Error('connections.unregister requires a non-empty connection id');
+              }
+
+              queueActivationOp(requestHost("connections_unregister", {
+                connectionId: normalizedConnectionId,
+              }));
+            },
+
+            list() {
+              return requestHost("connections_list", {});
+            },
+
+            get(connectionId) {
+              const normalizedConnectionId = typeof connectionId === "string"
+                ? connectionId.trim()
+                : "";
+
+              if (!normalizedConnectionId) {
+                throw new Error('connections.get requires a non-empty connection id');
+              }
+
+              return requestHost("connections_get", {
+                connectionId: normalizedConnectionId,
+              });
+            },
+
+            setSecrets(connectionId, secrets) {
+              const normalizedConnectionId = typeof connectionId === "string"
+                ? connectionId.trim()
+                : "";
+
+              if (!normalizedConnectionId) {
+                throw new Error('connections.setSecrets requires a non-empty connection id');
+              }
+
+              if (!secrets || typeof secrets !== "object" || Array.isArray(secrets)) {
+                throw new Error('connections.setSecrets requires a secrets object');
+              }
+
+              return requestHost("connections_set_secrets", {
+                connectionId: normalizedConnectionId,
+                secrets,
+              });
+            },
+
+            clearSecrets(connectionId) {
+              const normalizedConnectionId = typeof connectionId === "string"
+                ? connectionId.trim()
+                : "";
+
+              if (!normalizedConnectionId) {
+                throw new Error('connections.clearSecrets requires a non-empty connection id');
+              }
+
+              return requestHost("connections_clear_secrets", {
+                connectionId: normalizedConnectionId,
+              });
+            },
+
+            markValidated(connectionId) {
+              const normalizedConnectionId = typeof connectionId === "string"
+                ? connectionId.trim()
+                : "";
+
+              if (!normalizedConnectionId) {
+                throw new Error('connections.markValidated requires a non-empty connection id');
+              }
+
+              return requestHost("connections_mark_validated", {
+                connectionId: normalizedConnectionId,
+              });
+            },
+
+            markInvalid(connectionId, reason) {
+              const normalizedConnectionId = typeof connectionId === "string"
+                ? connectionId.trim()
+                : "";
+
+              const normalizedReason = typeof reason === "string"
+                ? reason.trim()
+                : "";
+
+              if (!normalizedConnectionId) {
+                throw new Error('connections.markInvalid requires a non-empty connection id');
+              }
+
+              if (!normalizedReason) {
+                throw new Error('connections.markInvalid requires a non-empty reason');
+              }
+
+              return requestHost("connections_mark_invalid", {
+                connectionId: normalizedConnectionId,
+                reason: normalizedReason,
+              });
+            },
+
+            markStatus(connectionId, status, reason) {
+              const normalizedConnectionId = typeof connectionId === "string"
+                ? connectionId.trim()
+                : "";
+
+              if (!normalizedConnectionId) {
+                throw new Error('connections.markStatus requires a non-empty connection id');
+              }
+
+              if (
+                status !== "connected"
+                && status !== "missing"
+                && status !== "invalid"
+                && status !== "error"
+              ) {
+                throw new Error('connections.markStatus status must be connected|missing|invalid|error');
+              }
+
+              return requestHost("connections_mark_status", {
+                connectionId: normalizedConnectionId,
+                status,
+                reason: typeof reason === "string" ? reason : undefined,
+              });
+            },
           },
 
           agent: {

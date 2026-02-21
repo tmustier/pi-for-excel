@@ -82,6 +82,20 @@ Notes:
 - In sandbox runtime, plain JSON schema objects are accepted and wrapped safely by the host bridge.
 - Tool names must not conflict with core built-in tools.
 - Tool names must be unique across enabled extensions.
+- `toolDef.requiresConnection` can be a string or string[] of connection ids.
+  - IDs are owner-qualified automatically (for extension `ext.foo`, `"apollo"` becomes `"ext.foo.apollo"`).
+  - Required connections are preflight-checked before tool execution.
+
+### `connections`
+Connection registration + credential lifecycle APIs:
+- `connections.register(definition)`
+- `connections.unregister(connectionId)`
+- `connections.list()` / `connections.get(connectionId)`
+- `connections.setSecrets(connectionId, secrets)` / `connections.clearSecrets(connectionId)`
+- `connections.markValidated(connectionId)` / `connections.markInvalid(connectionId, reason)`
+- `connections.markStatus(connectionId, status, reason?)`
+
+Use this to declare extension-specific connection requirements (capability + secret fields), store credentials securely in host-managed local settings, and surface deterministic setup/auth states to the assistant.
 
 ### `agent`
 Agent API surface:
@@ -255,6 +269,7 @@ High-risk capabilities include:
 - `agent.steer`
 - `agent.followup`
 - `skills.write`
+- `connections.readwrite`
 
 ## Sandbox runtime default + rollback kill switch
 

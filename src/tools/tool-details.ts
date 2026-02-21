@@ -6,6 +6,7 @@
  */
 
 import type { WorkbookCellChangeSummary } from "../audit/cell-diff.js";
+import type { ConnectionToolErrorDetails } from "../connections/types.js";
 import { isRecord } from "../utils/type-guards.js";
 
 export interface RecoveryCheckpointDetails {
@@ -392,7 +393,8 @@ export type ExcelToolDetails =
   | WebSearchDetails
   | FetchPageDetails
   | McpGatewayDetails
-  | FilesToolDetails;
+  | FilesToolDetails
+  | ConnectionToolErrorDetails;
 
 function isOptionalString(value: unknown): value is string | undefined {
   return value === undefined || typeof value === "string";
@@ -918,6 +920,29 @@ export function isMcpGatewayDetails(value: unknown): value is McpGatewayDetails 
     isOptionalString(value.resultPreview) &&
     isOptionalString(value.error) &&
     isOptionalBoolean(value.proxyDown)
+  );
+}
+
+function isConnectionToolErrorCode(value: unknown): value is ConnectionToolErrorDetails["errorCode"] {
+  return value === "missing_connection"
+    || value === "invalid_connection"
+    || value === "connection_auth_failed";
+}
+
+export function isConnectionToolErrorDetails(value: unknown): value is ConnectionToolErrorDetails {
+  if (!isRecord(value)) return false;
+  if (value.kind !== "connection_error") return false;
+
+  const reason = value.reason;
+
+  return (
+    value.ok === false &&
+    isConnectionToolErrorCode(value.errorCode) &&
+    typeof value.connectionId === "string" &&
+    typeof value.connectionTitle === "string" &&
+    (value.status === "connected" || value.status === "missing" || value.status === "invalid" || value.status === "error") &&
+    typeof value.setupHint === "string" &&
+    (reason === undefined || typeof reason === "string")
   );
 }
 

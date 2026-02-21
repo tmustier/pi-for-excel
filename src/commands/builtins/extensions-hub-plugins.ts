@@ -47,6 +47,7 @@ const HIGH_RISK_CAPABILITIES = new Set<ExtensionCapability>([
   "agent.steer",
   "agent.followup",
   "skills.write",
+  "connections.readwrite",
 ]);
 
 // ── Helpers ─────────────────────────────────────────

@@ -7,6 +7,11 @@ import type {
 } from "@mariozechner/pi-agent-core";
 import type { Static, TSchema } from "@sinclair/typebox";
 
+import type {
+  ConnectionAuthKind,
+  ConnectionState,
+  ConnectionStatus,
+} from "../connections/types.js";
 import type { ExtensionCapability } from "../extensions/permissions.js";
 import type { ExtensionWidgetPlacement } from "../extensions/internal/widget-surface.js";
 
@@ -26,11 +31,44 @@ export interface ExtensionToolDefinition<TParameters extends TSchema = TSchema, 
   description: string;
   parameters: TParameters;
   label?: string;
+  /**
+   * One or more registered connection ids that must be configured before this
+   * tool can execute.
+   */
+  requiresConnection?: string | readonly string[];
   execute: (
     params: Static<TParameters>,
     signal?: AbortSignal,
     onUpdate?: AgentToolUpdateCallback<TDetails>,
   ) => Promise<AgentToolResult<TDetails>> | AgentToolResult<TDetails>;
+}
+
+export interface ExtensionConnectionSecretField {
+  id: string;
+  label: string;
+  required: boolean;
+  maskInUi?: boolean;
+}
+
+export interface ExtensionConnectionDefinition {
+  id: string;
+  title: string;
+  capability: string;
+  authKind: ConnectionAuthKind;
+  secretFields: readonly ExtensionConnectionSecretField[];
+  setupHint?: string;
+}
+
+export interface ExtensionConnectionsAPI {
+  register(definition: ExtensionConnectionDefinition): string;
+  unregister(connectionId: string): void;
+  list(): Promise<ConnectionState[]>;
+  get(connectionId: string): Promise<ConnectionState | null>;
+  setSecrets(connectionId: string, secrets: Record<string, string>): Promise<void>;
+  clearSecrets(connectionId: string): Promise<void>;
+  markValidated(connectionId: string): Promise<void>;
+  markInvalid(connectionId: string, reason: string): Promise<void>;
+  markStatus(connectionId: string, status: ConnectionStatus, reason?: string): Promise<void>;
 }
 
 export interface OverlayAPI {
@@ -152,6 +190,8 @@ export interface ExcelExtensionAPI {
   registerTool(name: string, tool: ExtensionToolDefinition): void;
   /** Remove a previously registered custom tool */
   unregisterTool(name: string): void;
+  /** Register/list/update connection requirements and status. */
+  connections: ExtensionConnectionsAPI;
   /** Agent access and steering APIs */
   readonly agent: ExtensionAgentAPI;
   /** LLM completion API via host mediation */
@@ -181,6 +221,15 @@ export interface CreateExtensionAPIOptions {
   registerCommand?: (name: string, cmd: ExtensionCommand) => void;
   registerTool?: (tool: AgentTool) => void;
   unregisterTool?: (name: string) => void;
+  registerConnection?: (definition: ExtensionConnectionDefinition) => string;
+  unregisterConnection?: (connectionId: string) => void;
+  listConnections?: () => Promise<ConnectionState[]>;
+  getConnection?: (connectionId: string) => Promise<ConnectionState | null>;
+  setConnectionSecrets?: (connectionId: string, secrets: Record<string, string>) => Promise<void>;
+  clearConnectionSecrets?: (connectionId: string) => Promise<void>;
+  markConnectionValidated?: (connectionId: string) => Promise<void>;
+  markConnectionInvalid?: (connectionId: string, reason: string) => Promise<void>;
+  markConnectionStatus?: (connectionId: string, status: ConnectionStatus, reason?: string) => Promise<void>;
   subscribeAgentEvents?: (handler: (ev: AgentEvent) => void) => () => void;
   llmComplete?: (request: LlmCompletionRequest) => Promise<LlmCompletionResult>;
   httpFetch?: (url: string, options?: HttpRequestOptions) => Promise<HttpResponse>;

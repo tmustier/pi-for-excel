@@ -24,6 +24,7 @@ export interface StoredExtensionPermissions {
   llmComplete: boolean;
   httpFetch: boolean;
   storageReadWrite: boolean;
+  connectionsReadWrite: boolean;
   clipboardWrite: boolean;
   agentContextWrite: boolean;
   agentSteer: boolean;
@@ -85,6 +86,11 @@ const EXTENSION_CAPABILITY_DESCRIPTORS = [
     label: "read/write extension storage",
   },
   {
+    capability: "connections.readwrite",
+    permissionKey: "connectionsReadWrite",
+    label: "manage connection definitions and secrets",
+  },
+  {
     capability: "clipboard.write",
     permissionKey: "clipboardWrite",
     label: "write clipboard text",
@@ -142,6 +148,7 @@ const TRUSTED_PERMISSIONS: StoredExtensionPermissions = {
   llmComplete: true,
   httpFetch: true,
   storageReadWrite: true,
+  connectionsReadWrite: true,
   clipboardWrite: true,
   agentContextWrite: false,
   agentSteer: false,
@@ -162,6 +169,7 @@ const RESTRICTED_UNTRUSTED_PERMISSIONS: StoredExtensionPermissions = {
   llmComplete: false,
   httpFetch: false,
   storageReadWrite: true,
+  connectionsReadWrite: false,
   clipboardWrite: true,
   agentContextWrite: false,
   agentSteer: false,
@@ -199,6 +207,7 @@ function clonePermissions(source: StoredExtensionPermissions): StoredExtensionPe
     llmComplete: source.llmComplete,
     httpFetch: source.httpFetch,
     storageReadWrite: source.storageReadWrite,
+    connectionsReadWrite: source.connectionsReadWrite,
     clipboardWrite: source.clipboardWrite,
     agentContextWrite: source.agentContextWrite,
     agentSteer: source.agentSteer,
@@ -263,6 +272,7 @@ export function normalizeStoredExtensionPermissions(
     llmComplete: normalizeBooleanOrFallback(raw.llmComplete, defaults.llmComplete),
     httpFetch: normalizeBooleanOrFallback(raw.httpFetch, defaults.httpFetch),
     storageReadWrite: normalizeBooleanOrFallback(raw.storageReadWrite, defaults.storageReadWrite),
+    connectionsReadWrite: normalizeBooleanOrFallback(raw.connectionsReadWrite, defaults.connectionsReadWrite),
     clipboardWrite: normalizeBooleanOrFallback(raw.clipboardWrite, defaults.clipboardWrite),
     agentContextWrite: normalizeBooleanOrFallback(raw.agentContextWrite, defaults.agentContextWrite),
     agentSteer: normalizeBooleanOrFallback(raw.agentSteer, defaults.agentSteer),

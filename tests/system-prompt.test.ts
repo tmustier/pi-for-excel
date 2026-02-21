@@ -190,3 +190,41 @@ void test("system prompt renders active integrations with Agent Skill mapping", 
   assert.match(prompt, /### Web Search/);
   assert.match(prompt, /Agent Skill mapping: `web-search`/);
 });
+
+void test("system prompt renders connections section with capability context and setup guidance", () => {
+  const prompt = buildSystemPrompt({
+    activeConnections: [
+      {
+        id: "ext.apollo.apollo",
+        title: "Apollo",
+        capability: "company and contact enrichment via Apollo API",
+        status: "missing",
+        setupHint: "Open /tools → Connections → Apollo",
+      },
+      {
+        id: "ext.crm.crm",
+        title: "CRM",
+        capability: "account and opportunity lookups",
+        status: "connected",
+        setupHint: "Open /tools → Connections → CRM",
+      },
+      {
+        id: "ext.vendor.vendor",
+        title: "Vendor API",
+        capability: "procurement data pull",
+        status: "error",
+        setupHint: "Open /tools → Connections → Vendor API",
+        lastError: "401 unauthorized",
+      },
+    ],
+  });
+
+  assert.match(prompt, /## Connections/);
+  assert.match(prompt, /Connected:/);
+  assert.match(prompt, /Not configured:/);
+  assert.match(prompt, /Needs attention:/);
+  assert.match(prompt, /Apollo/);
+  assert.match(prompt, /company and contact enrichment via Apollo API/);
+  assert.match(prompt, /Open \/tools → Connections/);
+  assert.match(prompt, /Never ask the user to paste API keys, tokens, or passwords in chat/);
+});

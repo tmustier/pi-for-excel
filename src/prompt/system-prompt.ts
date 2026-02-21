@@ -19,6 +19,15 @@ export interface ActiveIntegrationPromptEntry {
   warning?: string;
 }
 
+export interface ActiveConnectionPromptEntry {
+  id: string;
+  title: string;
+  capability: string;
+  status: "connected" | "missing" | "invalid" | "error";
+  setupHint: string;
+  lastError?: string;
+}
+
 export interface AvailableSkillPromptEntry {
   name: string;
   description: string;
@@ -29,6 +38,7 @@ export interface SystemPromptOptions {
   userInstructions?: string | null;
   workbookInstructions?: string | null;
   activeIntegrations?: ActiveIntegrationPromptEntry[];
+  activeConnections?: ActiveConnectionPromptEntry[];
   availableSkills?: AvailableSkillPromptEntry[];
   executionMode?: ExecutionMode;
   /** Resolved conventions (defaults merged with stored). Omit to skip convention diff section. */
@@ -106,6 +116,51 @@ function buildActiveIntegrationsSection(activeIntegrations: ActiveIntegrationPro
   return lines.join("\n").trimEnd();
 }
 
+function buildConnectionsSection(activeConnections: ActiveConnectionPromptEntry[] | undefined): string | null {
+  if (!activeConnections || activeConnections.length === 0) {
+    return null;
+  }
+
+  const connected = activeConnections.filter((entry) => entry.status === "connected");
+  const missing = activeConnections.filter((entry) => entry.status === "missing");
+  const attention = activeConnections.filter((entry) => entry.status === "invalid" || entry.status === "error");
+
+  const lines: string[] = [
+    "## Connections",
+    "Connection status for tools that declare explicit connection requirements.",
+    "Never ask the user to paste API keys, tokens, or passwords in chat.",
+    "If a required connection is unavailable, direct the user to /tools → Connections.",
+    "",
+  ];
+
+  if (connected.length > 0) {
+    lines.push("Connected:");
+    for (const entry of connected) {
+      lines.push(`- **${entry.title}** — ${entry.capability}`);
+    }
+    lines.push("");
+  }
+
+  if (missing.length > 0) {
+    lines.push("Not configured:");
+    for (const entry of missing) {
+      lines.push(`- **${entry.title}** — ${entry.capability}. Setup: ${entry.setupHint}.`);
+    }
+    lines.push("");
+  }
+
+  if (attention.length > 0) {
+    lines.push("Needs attention:");
+    for (const entry of attention) {
+      const reason = entry.lastError ? ` (${entry.lastError})` : "";
+      lines.push(`- **${entry.title}** — ${entry.capability}${reason}. Setup: ${entry.setupHint}.`);
+    }
+    lines.push("");
+  }
+
+  return lines.join("\n").trimEnd();
+}
+
 function escapeXml(text: string): string {
   return text
     .replaceAll("&", "&amp;")
@@ -154,6 +209,11 @@ export function buildSystemPrompt(opts: SystemPromptOptions = {}): string {
   const integrationsSection = buildActiveIntegrationsSection(opts.activeIntegrations);
   if (integrationsSection) {
     sections.push(integrationsSection);
+  }
+
+  const connectionsSection = buildConnectionsSection(opts.activeConnections);
+  if (connectionsSection) {
+    sections.push(connectionsSection);
   }
 
   const availableSkillsSection = buildAvailableSkillsSection(opts.availableSkills);

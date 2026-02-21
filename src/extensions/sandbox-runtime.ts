@@ -11,6 +11,7 @@ import type { TSchema } from "@sinclair/typebox";
 
 import type {
   ExtensionCommand,
+  ExtensionConnectionDefinition,
   HttpRequestOptions,
   HttpResponse,
   LlmCompletionRequest,
@@ -18,6 +19,7 @@ import type {
   LoadedExtensionHandle,
   SkillSummary,
 } from "../commands/extension-api.js";
+import type { ConnectionState, ConnectionStatus } from "../connections/types.js";
 import type { ExtensionCapability } from "./permissions.js";
 import {
   clearExtensionWidgets,
@@ -96,6 +98,15 @@ export interface SandboxActivationOptions {
   installSkill: (name: string, markdown: string) => Promise<void>;
   uninstallSkill: (name: string) => Promise<void>;
   downloadFile: (filename: string, content: string, mimeType?: string) => void;
+  registerConnection: (definition: ExtensionConnectionDefinition) => string;
+  unregisterConnection: (connectionId: string) => void;
+  listConnections: () => Promise<ConnectionState[]>;
+  getConnection: (connectionId: string) => Promise<ConnectionState | null>;
+  setConnectionSecrets: (connectionId: string, secrets: Record<string, string>) => Promise<void>;
+  clearConnectionSecrets: (connectionId: string) => Promise<void>;
+  markConnectionValidated: (connectionId: string) => Promise<void>;
+  markConnectionInvalid: (connectionId: string, reason: string) => Promise<void>;
+  markConnectionStatus: (connectionId: string, status: ConnectionStatus, reason?: string) => Promise<void>;
   isCapabilityEnabled: (capability: ExtensionCapability) => boolean;
   formatCapabilityError: (capability: ExtensionCapability) => string;
   toast: (message: string) => void;
@@ -107,6 +118,86 @@ interface SandboxPendingRequest {
   resolve: (value: unknown) => void;
   reject: (reason: unknown) => void;
   timeoutId: ReturnType<typeof setTimeout>;
+}
+
+function parseConnectionStatus(value: unknown): ConnectionStatus {
+  if (value === "connected" || value === "missing" || value === "invalid" || value === "error") {
+    return value;
+  }
+
+  throw new Error("Invalid connection status.");
+}
+
+function parseConnectionSecrets(value: unknown): Record<string, string> {
+  const payload = asRecord(value, "connection secrets");
+  const secrets: Record<string, string> = {};
+
+  for (const [fieldId, rawSecret] of Object.entries(payload)) {
+    if (typeof rawSecret !== "string") {
+      throw new Error(`Connection secret field \"${fieldId}\" must be a string.`);
+    }
+
+    secrets[fieldId] = rawSecret;
+  }
+
+  return secrets;
+}
+
+function parseConnectionDefinition(value: unknown): ExtensionConnectionDefinition {
+  const payload = asRecord(value, "connection definition");
+  const title = asNonEmptyString(payload.title, "title");
+  const id = asNonEmptyString(payload.id, "id");
+  const capability = asNonEmptyString(payload.capability, "capability");
+
+  const authKindRaw = payload.authKind;
+  if (
+    authKindRaw !== "api_key"
+    && authKindRaw !== "bearer_token"
+    && authKindRaw !== "oauth"
+    && authKindRaw !== "custom"
+  ) {
+    throw new Error("connection definition authKind must be one of: api_key, bearer_token, oauth, custom.");
+  }
+
+  if (!Array.isArray(payload.secretFields)) {
+    throw new Error("connection definition secretFields must be an array.");
+  }
+
+  const secretFields = payload.secretFields.map((fieldRaw, index) => {
+    const field = asRecord(fieldRaw, `secretFields[${index}]`);
+    const fieldId = asNonEmptyString(field.id, `secretFields[${index}].id`);
+    const label = asNonEmptyString(field.label, `secretFields[${index}].label`);
+    const required = field.required;
+    if (typeof required !== "boolean") {
+      throw new Error(`secretFields[${index}].required must be a boolean.`);
+    }
+
+    const maskInUi = field.maskInUi;
+    if (maskInUi !== undefined && typeof maskInUi !== "boolean") {
+      throw new Error(`secretFields[${index}].maskInUi must be a boolean when provided.`);
+    }
+
+    return {
+      id: fieldId,
+      label,
+      required,
+      maskInUi,
+    };
+  });
+
+  const setupHintRaw = payload.setupHint;
+  const setupHint = typeof setupHintRaw === "string" && setupHintRaw.trim().length > 0
+    ? setupHintRaw.trim()
+    : undefined;
+
+  return {
+    id,
+    title,
+    capability,
+    authKind: authKindRaw,
+    secretFields,
+    setupHint,
+  };
 }
 
 class SandboxRuntimeHost {
@@ -447,6 +538,36 @@ class SandboxRuntimeHost {
           const parametersRaw = payload.parameters;
           const parameters = normalizeSandboxToolParameters(parametersRaw);
 
+          const requiresConnectionRaw = payload.requiresConnection;
+          let requiresConnection: string[] | undefined;
+
+          if (requiresConnectionRaw !== undefined) {
+            if (!Array.isArray(requiresConnectionRaw)) {
+              throw new Error("register_tool requiresConnection must be an array of strings.");
+            }
+
+            const normalizedRequirements: string[] = [];
+            for (const requirement of requiresConnectionRaw) {
+              if (typeof requirement !== "string") {
+                throw new Error("register_tool requiresConnection entries must be strings.");
+              }
+
+              const trimmed = requirement.trim().toLowerCase();
+              if (trimmed.length === 0) continue;
+
+              const ownerPrefix = `${this.widgetOwnerId.toLowerCase()}.`;
+              const qualified = trimmed.startsWith(ownerPrefix)
+                ? trimmed
+                : `${ownerPrefix}${trimmed}`;
+
+              normalizedRequirements.push(qualified);
+            }
+
+            requiresConnection = normalizedRequirements.length > 0
+              ? Array.from(new Set(normalizedRequirements))
+              : undefined;
+          }
+
           const tool: AgentTool<TSchema, unknown> = {
             name,
             label,
@@ -464,6 +585,10 @@ class SandboxRuntimeHost {
               return normalizeSandboxToolResult(result);
             },
           };
+
+          if (requiresConnection && requiresConnection.length > 0) {
+            Reflect.set(tool, "requiresConnection", requiresConnection);
+          }
 
           this.options.registerTool(tool);
           this.sendResponse(requestId, true, null);
@@ -630,6 +755,100 @@ class SandboxRuntimeHost {
           const mimeType = typeof payload.mimeType === "string" ? payload.mimeType : undefined;
 
           this.options.downloadFile(filename, content, mimeType);
+          this.sendResponse(requestId, true, null);
+          return;
+        }
+
+        case "connections_register": {
+          this.assertCapability("connections.readwrite");
+
+          const payload = asRecord(params, "connections_register params");
+          const definition = parseConnectionDefinition(payload.definition);
+          const connectionId = this.options.registerConnection(definition);
+          this.sendResponse(requestId, true, { connectionId });
+          return;
+        }
+
+        case "connections_unregister": {
+          this.assertCapability("connections.readwrite");
+
+          const payload = asRecord(params, "connections_unregister params");
+          const connectionId = asNonEmptyString(payload.connectionId, "connectionId");
+          this.options.unregisterConnection(connectionId);
+          this.sendResponse(requestId, true, null);
+          return;
+        }
+
+        case "connections_list": {
+          this.assertCapability("connections.readwrite");
+          const states = await this.options.listConnections();
+          this.sendResponse(requestId, true, states);
+          return;
+        }
+
+        case "connections_get": {
+          this.assertCapability("connections.readwrite");
+
+          const payload = asRecord(params, "connections_get params");
+          const connectionId = asNonEmptyString(payload.connectionId, "connectionId");
+          const state = await this.options.getConnection(connectionId);
+          this.sendResponse(requestId, true, state);
+          return;
+        }
+
+        case "connections_set_secrets": {
+          this.assertCapability("connections.readwrite");
+
+          const payload = asRecord(params, "connections_set_secrets params");
+          const connectionId = asNonEmptyString(payload.connectionId, "connectionId");
+          const secrets = parseConnectionSecrets(payload.secrets);
+          await this.options.setConnectionSecrets(connectionId, secrets);
+          this.sendResponse(requestId, true, null);
+          return;
+        }
+
+        case "connections_clear_secrets": {
+          this.assertCapability("connections.readwrite");
+
+          const payload = asRecord(params, "connections_clear_secrets params");
+          const connectionId = asNonEmptyString(payload.connectionId, "connectionId");
+          await this.options.clearConnectionSecrets(connectionId);
+          this.sendResponse(requestId, true, null);
+          return;
+        }
+
+        case "connections_mark_validated": {
+          this.assertCapability("connections.readwrite");
+
+          const payload = asRecord(params, "connections_mark_validated params");
+          const connectionId = asNonEmptyString(payload.connectionId, "connectionId");
+          await this.options.markConnectionValidated(connectionId);
+          this.sendResponse(requestId, true, null);
+          return;
+        }
+
+        case "connections_mark_invalid": {
+          this.assertCapability("connections.readwrite");
+
+          const payload = asRecord(params, "connections_mark_invalid params");
+          const connectionId = asNonEmptyString(payload.connectionId, "connectionId");
+          const reason = asNonEmptyString(payload.reason, "reason");
+          await this.options.markConnectionInvalid(connectionId, reason);
+          this.sendResponse(requestId, true, null);
+          return;
+        }
+
+        case "connections_mark_status": {
+          this.assertCapability("connections.readwrite");
+
+          const payload = asRecord(params, "connections_mark_status params");
+          const connectionId = asNonEmptyString(payload.connectionId, "connectionId");
+          const status = parseConnectionStatus(payload.status);
+          const reason = typeof payload.reason === "string" && payload.reason.trim().length > 0
+            ? payload.reason
+            : undefined;
+
+          await this.options.markConnectionStatus(connectionId, status, reason);
           this.sendResponse(requestId, true, null);
           return;
         }

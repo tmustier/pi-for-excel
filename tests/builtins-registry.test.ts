@@ -425,6 +425,7 @@ void test("permission helper updates one capability without mutating others", ()
     llmComplete: false,
     httpFetch: false,
     storageReadWrite: true,
+    connectionsReadWrite: false,
     clipboardWrite: true,
     agentContextWrite: false,
     agentSteer: false,
