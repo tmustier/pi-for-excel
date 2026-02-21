@@ -58,7 +58,12 @@ function renderStatusBar(
   if (!el) return;
 
   if (!agent) {
-    el.innerHTML = `<span class="pi-status-ctx">No active session</span>`;
+    const emptyMarkup = `<span class="pi-status-ctx">No active session</span>`;
+    const emptySignature = "no-agent";
+    if (el.getAttribute("data-status-signature") !== emptySignature) {
+      el.innerHTML = emptyMarkup;
+      el.setAttribute("data-status-signature", emptySignature);
+    }
     return;
   }
 
@@ -101,7 +106,6 @@ function renderStatusBar(
   const ctxWarning = contextHealth.warning
     ? `<span class="pi-tooltip__warn pi-tooltip__warn--${contextHealth.warning.severity}">${escapeHtml(`${contextHealth.warning.text} ${contextHealth.warning.actionText}`)}</span>`
     : "";
-
   const chevronSvg = `<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>`;
   const affordanceChevronSvg = `<svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>`;
   const brainSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 18V5"/><path d="M15 13a4.17 4.17 0 0 1-3-4 4.17 4.17 0 0 1-3 4"/><path d="M17.598 6.5A3 3 0 1 0 12 5a3 3 0 1 0-5.598 1.5"/><path d="M17.997 5.125a4 4 0 0 1 2.526 5.77"/><path d="M18 18a4 4 0 0 0 2-7.464"/><path d="M19.967 17.483A4 4 0 1 1 12 18a4 4 0 1 1-7.967-.517"/><path d="M6 18a4 4 0 0 1-2-7.464"/><path d="M6.003 5.125a4 4 0 0 0-2.526 5.77"/></svg>`;
@@ -135,7 +139,7 @@ function renderStatusBar(
   const ctxPopoverTokens = escapeAttr(ctxTokenDetail);
   const ctxPopoverWarnText = ctxWarningText.length > 0 ? escapeAttr(ctxWarningText) : "";
 
-  el.innerHTML = `
+  const nextMarkup = `
     <div class="pi-status-main">
       <button type="button" class="pi-status-model pi-status-clickable pi-status-tooltip--left" data-tooltip="Switch the AI model for this session.">
         <span class="pi-status-model__mark">π</span>
@@ -151,6 +155,27 @@ function renderStatusBar(
     </div>
   `;
 
+  const renderSignature = JSON.stringify({
+    modelAlias,
+    thinkingLevel,
+    pct,
+    ctxLabel,
+    ctxColor,
+    ctxTokenDetail,
+    ctxWarningText,
+    ctxWarningSeverity,
+    usageDebug,
+    lockState,
+    executionMode,
+  });
+
+  if (el.getAttribute("data-status-signature") === renderSignature) {
+    adjustContextTooltipAlignment(el);
+    return;
+  }
+
+  el.innerHTML = nextMarkup;
+  el.setAttribute("data-status-signature", renderSignature);
   adjustContextTooltipAlignment(el);
 }
 
@@ -181,33 +206,132 @@ export function injectStatusBar(opts: {
   const { getActiveAgent, getLockState, getExecutionMode } = opts;
 
   let unsubscribeActiveAgent: (() => void) | undefined;
+  let hasDeferredRender = false;
+  let statusBarInteracting = false;
+  let interactionLeaveTimer: number | null = null;
+
+  const INTERACTION_SETTLE_MS = 180;
+
+  const clearInteractionLeaveTimer = (): void => {
+    if (interactionLeaveTimer === null) {
+      return;
+    }
+
+    window.clearTimeout(interactionLeaveTimer);
+    interactionLeaveTimer = null;
+  };
+
+  const flushDeferredRender = (): void => {
+    if (!hasDeferredRender) {
+      return;
+    }
+
+    hasDeferredRender = false;
+    updateStatusBar(getActiveAgent, getLockState, getExecutionMode);
+  };
+
+  const markStatusBarInteractionStart = (): void => {
+    clearInteractionLeaveTimer();
+    statusBarInteracting = true;
+  };
+
+  const markStatusBarInteractionEndSoon = (): void => {
+    clearInteractionLeaveTimer();
+    interactionLeaveTimer = window.setTimeout(() => {
+      interactionLeaveTimer = null;
+      statusBarInteracting = false;
+      flushDeferredRender();
+    }, INTERACTION_SETTLE_MS);
+  };
+
+  const isStatusBarFocused = (): boolean => {
+    const active = document.activeElement;
+    return active instanceof Element && active.closest("#pi-status-bar") !== null;
+  };
+
+  // Avoid replacing status-bar DOM while it's hovered/focused so CSS tooltips
+  // stay stable even under high-frequency runtime updates.
+  const shouldDeferRenderForInteraction = (): boolean => {
+    return statusBarInteracting || isStatusBarFocused();
+  };
+
+  const requestRender = (): void => {
+    if (shouldDeferRenderForInteraction()) {
+      hasDeferredRender = true;
+      return;
+    }
+
+    hasDeferredRender = false;
+    updateStatusBar(getActiveAgent, getLockState, getExecutionMode);
+  };
 
   const bindActiveAgent = () => {
     unsubscribeActiveAgent?.();
 
     const activeAgent = getActiveAgent();
     if (activeAgent) {
-      unsubscribeActiveAgent = activeAgent.subscribe(
-        () => updateStatusBar(getActiveAgent, getLockState, getExecutionMode),
-      );
+      unsubscribeActiveAgent = activeAgent.subscribe(requestRender);
     } else {
       unsubscribeActiveAgent = undefined;
     }
 
-    updateStatusBar(getActiveAgent, getLockState, getExecutionMode);
+    requestRender();
   };
 
-  const onStatusUpdate = () => updateStatusBar(getActiveAgent, getLockState, getExecutionMode);
+  const resolveStatusBarHost = (target: EventTarget | null): Element | null => {
+    if (!(target instanceof Element)) {
+      return null;
+    }
+
+    return target.closest("#pi-status-bar");
+  };
+
+  const onPointerOver = (event: PointerEvent): void => {
+    const currentHost = resolveStatusBarHost(event.target);
+    if (!currentHost) {
+      return;
+    }
+
+    const relatedHost = resolveStatusBarHost(event.relatedTarget);
+    if (relatedHost === currentHost) {
+      return;
+    }
+
+    markStatusBarInteractionStart();
+  };
+
+  const onPointerOut = (event: PointerEvent): void => {
+    const currentHost = resolveStatusBarHost(event.target);
+    if (!currentHost) {
+      return;
+    }
+
+    const relatedHost = resolveStatusBarHost(event.relatedTarget);
+    if (relatedHost === currentHost) {
+      return;
+    }
+
+    markStatusBarInteractionEndSoon();
+  };
+
+  const onStatusUpdate = () => requestRender();
 
   document.addEventListener("pi:status-update", onStatusUpdate);
   document.addEventListener("pi:active-runtime-changed", bindActiveAgent);
+  document.addEventListener("pointerover", onPointerOver, true);
+  document.addEventListener("pointerout", onPointerOut, true);
 
   requestAnimationFrame(bindActiveAgent);
 
   return () => {
+    clearInteractionLeaveTimer();
+    statusBarInteracting = false;
+    hasDeferredRender = false;
     unsubscribeActiveAgent?.();
     document.removeEventListener("pi:status-update", onStatusUpdate);
     document.removeEventListener("pi:active-runtime-changed", bindActiveAgent);
+    document.removeEventListener("pointerover", onPointerOver, true);
+    document.removeEventListener("pointerout", onPointerOut, true);
   };
 }
 
