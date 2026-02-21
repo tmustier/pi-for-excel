@@ -82,7 +82,11 @@ function readBundledMarkdownByPath(): Record<string, string> {
       import: "default",
     });
 
-    const docsMarkdownByPath = import.meta.glob<string>("../../docs/**/*.md", {
+    const docsMarkdownByPath = import.meta.glob<string>([
+      "../../docs/**/*.md",
+      "!../../docs/archive/**/*.md",
+      "!../../docs/release-smoke-runs/**/*.md",
+    ], {
       eager: true,
       query: "?raw",
       import: "default",
