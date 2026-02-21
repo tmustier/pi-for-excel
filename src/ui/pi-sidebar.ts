@@ -95,6 +95,23 @@ function formatPayloadShape(shape: PayloadShapeSummary | undefined): string {
 const AUTO_SCROLL_DISENGAGE_PX = 32;
 const AUTO_SCROLL_REENGAGE_PX = 20;
 
+/**
+ * When auto-follow is active and a thinking/tool block is expanded during
+ * streaming, consider the inner scroll area "near the bottom" if within
+ * this many pixels. Once the user scrolls further up we stop forcing the
+ * inner container down, same hysteresis idea as the outer scroller.
+ */
+const INNER_SCROLL_NEAR_BOTTOM_PX = 30;
+
+/**
+ * CSS selector for inner scrollable areas inside the streaming message.
+ *
+ * - `thinking-block markdown-block` — thinking body (max-height 300 px)
+ * - `.pi-tool-card__body--open`     — expanded tool card (max-height 2000 px)
+ */
+const INNER_SCROLLABLE_SELECTOR =
+  "thinking-block markdown-block, .pi-tool-card__body--open";
+
 @customElement("pi-sidebar")
 export class PiSidebar extends LitElement {
   @property({ attribute: false }) agent?: Agent;
@@ -145,6 +162,13 @@ export class PiSidebar extends LitElement {
   private _scrollContainerEl?: HTMLElement;
   private _scrollListener?: () => void;
   private _groupingRoot?: HTMLElement;
+  /** rAF handle for the inner-container auto-scroll loop (thinking / tool blocks). */
+  private _innerScrollRAF?: number;
+  /** Tracks elements we have already scrolled once so we can distinguish
+   *  "just expanded" (→ snap to bottom) from "user scrolled to the top". */
+  private _innerScrollSeen = new WeakSet<HTMLElement>();
+  /** Previous value of `_isStreaming` so we can detect edges in `updated()`. */
+  private _wasStreaming = false;
   private _utilitiesMenuClickHandler?: (event: MouseEvent) => void;
   private _tabContextMenuClickHandler?: (event: MouseEvent) => void;
   private readonly _utilitiesMenuId = "pi-utilities-menu";
@@ -259,6 +283,7 @@ export class PiSidebar extends LitElement {
     }
     this._scrollContainerEl = undefined;
     this._scrollListener = undefined;
+    this._stopInnerAutoScroll();
 
     document.removeEventListener("pi:status-update", this._onPayloadUpdate);
     document.removeEventListener("pi:debug-changed", this._onPayloadUpdate);
@@ -279,6 +304,15 @@ export class PiSidebar extends LitElement {
   override updated(_changed: PropertyValues<this>) {
     this._ensureMessageEnhancements();
     this._updateSessionTabOverflow();
+
+    if (this._isStreaming !== this._wasStreaming) {
+      this._wasStreaming = this._isStreaming;
+      if (this._isStreaming) {
+        this._startInnerAutoScroll();
+      } else {
+        this._stopInnerAutoScroll();
+      }
+    }
   }
 
   private _setupSubscription() {
@@ -349,6 +383,67 @@ export class PiSidebar extends LitElement {
 
     this._scrollToBottom(this._scrollContainerEl);
   }
+
+  /* ── Inner auto-scroll (thinking / tool blocks) ────────── */
+
+  /**
+   * Start the rAF loop that keeps expanded thinking-block and tool-card
+   * inner scroll areas pinned to the bottom while the outer auto-follow
+   * is active.  Only runs while `_isStreaming` is true.
+   */
+  private _startInnerAutoScroll(): void {
+    if (this._innerScrollRAF !== undefined) return;
+    const tick = (): void => {
+      this._scrollStreamingInnerContainers();
+      this._innerScrollRAF = requestAnimationFrame(tick);
+    };
+    this._innerScrollRAF = requestAnimationFrame(tick);
+  }
+
+  private _stopInnerAutoScroll(): void {
+    if (this._innerScrollRAF !== undefined) {
+      cancelAnimationFrame(this._innerScrollRAF);
+      this._innerScrollRAF = undefined;
+    }
+  }
+
+  /**
+   * For each expanded inner-scrollable container inside the *streaming*
+   * message, snap it to the bottom — unless the user has manually scrolled
+   * up inside it (same conceptual hysteresis as the outer scroller).
+   */
+  private _scrollStreamingInnerContainers(): void {
+    if (!this._autoScroll || !this._scrollContainerEl) return;
+
+    const streaming = this._scrollContainerEl.querySelector(
+      "streaming-message-container",
+    );
+    if (!streaming) return;
+
+    const containers = streaming.querySelectorAll<HTMLElement>(
+      INNER_SCROLLABLE_SELECTOR,
+    );
+
+    for (const el of containers) {
+      // Not scrollable yet (content fits in the viewport).
+      if (el.scrollHeight <= el.clientHeight) continue;
+
+      const distFromBottom =
+        el.scrollHeight - el.scrollTop - el.clientHeight;
+
+      if (!this._innerScrollSeen.has(el)) {
+        // First encounter — element was just expanded → snap to bottom.
+        el.scrollTop = el.scrollHeight;
+        this._innerScrollSeen.add(el);
+      } else if (distFromBottom <= INNER_SCROLL_NEAR_BOTTOM_PX) {
+        // Already following — keep following.
+        el.scrollTop = el.scrollHeight;
+      }
+      // Otherwise the user has scrolled up inside the block — leave it alone.
+    }
+  }
+
+  /* ── Outer auto-scroll ───────────────────────────────────── */
 
   private _setupAutoScroll() {
     const container = this._scrollContainer;
