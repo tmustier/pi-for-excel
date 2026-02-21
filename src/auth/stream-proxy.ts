@@ -21,6 +21,11 @@ import { isDebugEnabled } from "../debug/debug.js";
 import { selectToolBundle, type ToolBundleId } from "../context/tool-disclosure.js";
 import { modelRecencyScore } from "../models/model-ordering.js";
 import { OPENAI_GATEWAY_PROVIDER_PREFIX } from "./custom-gateways.js";
+import {
+  createPrefixFingerprint,
+  type PrefixChangeReason,
+  PrefixChangeTracker,
+} from "./prefix-churn.js";
 import { normalizeProxyUrl, validateOfficeProxyUrl } from "./proxy-validation.js";
 
 export type GetProxyUrl = () => Promise<string | undefined>;
@@ -157,6 +162,14 @@ export interface PayloadStats {
   messageCount: number;
   /** Total chars of all messages (JSON-serialized) on last call. */
   messageChars: number;
+  /** Number of calls where cached prefix fingerprint changed within a session. */
+  prefixChanges: number;
+  /** Prefix changes attributed to model identity changes. */
+  prefixModelChanges: number;
+  /** Prefix changes attributed to system prompt changes. */
+  prefixSystemPromptChanges: number;
+  /** Prefix changes attributed to tool schema changes. */
+  prefixToolChanges: number;
 }
 
 export interface PayloadShapeSummary {
@@ -181,6 +194,8 @@ export interface PayloadSnapshot {
   totalChars: number;
   toolCount: number;
   messageCount: number;
+  prefixChanged: boolean;
+  prefixChangeReasons: PrefixChangeReason[];
   payloadShape?: PayloadShapeSummary;
 }
 
@@ -191,6 +206,10 @@ const stats: PayloadStats = {
   toolCount: 0,
   messageCount: 0,
   messageChars: 0,
+  prefixChanges: 0,
+  prefixModelChanges: 0,
+  prefixSystemPromptChanges: 0,
+  prefixToolChanges: 0,
 };
 
 /**
@@ -219,6 +238,9 @@ const payloadSnapshots: PayloadSnapshot[] = [];
 /** Snapshot of the last LLM context (only kept when debug is on). */
 let lastContext: Context | undefined;
 const lastContextBySession = new Map<string, Context>();
+const prefixChangeTracker = new PrefixChangeTracker({
+  maxTrackedSessions: MAX_SESSION_CONTEXTS,
+});
 
 export function getPayloadStats(): Readonly<PayloadStats> {
   return stats;
@@ -353,13 +375,34 @@ function recordCall(
     stats.toolSchemaChars = 0;
   }
 
+  const sessionId = getSessionId(options);
+  const prefixFingerprint = createPrefixFingerprint(model, context);
+  const prefixChangeReasons = prefixChangeTracker.observe(sessionId, prefixFingerprint);
+  const prefixChanged = prefixChangeReasons.length > 0;
+
+  if (prefixChanged) {
+    stats.prefixChanges += 1;
+    for (const reason of prefixChangeReasons) {
+      if (reason === "model") {
+        stats.prefixModelChanges += 1;
+        continue;
+      }
+
+      if (reason === "systemPrompt") {
+        stats.prefixSystemPromptChanges += 1;
+        continue;
+      }
+
+      stats.prefixToolChanges += 1;
+    }
+  }
+
   const call = stats.calls;
   const captureSnapshot = isDebugEnabled();
 
   if (captureSnapshot) {
     lastContext = context;
 
-    const sessionId = getSessionId(options);
     if (sessionId) {
       setSessionContext(sessionId, context);
     }
@@ -380,6 +423,8 @@ function recordCall(
       totalChars,
       toolCount: stats.toolCount,
       messageCount: stats.messageCount,
+      prefixChanged,
+      prefixChangeReasons: prefixChangeReasons.slice(),
     });
   }
 

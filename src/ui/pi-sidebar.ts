@@ -92,6 +92,14 @@ function formatPayloadShape(shape: PayloadShapeSummary | undefined): string {
   return `keys:${keysLabel}; arrays:${arrayPreview}${arraySuffix}`;
 }
 
+function formatPrefixChange(reasons: readonly string[]): string {
+  if (reasons.length === 0) {
+    return "stable";
+  }
+
+  return reasons.join("+");
+}
+
 const AUTO_SCROLL_DISENGAGE_PX = 32;
 const AUTO_SCROLL_REENGAGE_PX = 20;
 
@@ -1069,10 +1077,16 @@ export class PiSidebar extends LitElement {
 
     const ctx = expanded ? getLastContext(sessionId) : undefined;
 
+    const prefixChangeSummary = latestSnapshot.prefixChanged
+      ? `yes (${formatPrefixChange(latestSnapshot.prefixChangeReasons)})`
+      : "no (stable)";
+
     const summaryRows = [
       `| | value |`,
       `|---|---|`,
       `| Call | #${call}${latestSnapshot.isToolContinuation ? " (continuation)" : " (first)"} |`,
+      `| Prefix changed | ${prefixChangeSummary} |`,
+      `| Prefix churn totals | ${this._payloadStats.prefixChanges} calls (model ${this._payloadStats.prefixModelChanges}, system ${this._payloadStats.prefixSystemPromptChanges}, tools ${this._payloadStats.prefixToolChanges}) |`,
       `| System prompt | ${systemChars.toLocaleString()} chars |`,
       `| Tool schemas (${toolCount}) | ${toolSchemaChars.toLocaleString()} chars |`,
       `| Tool bundle | \`${latestSnapshot.toolBundle}\` |`,
@@ -1084,13 +1098,16 @@ export class PiSidebar extends LitElement {
     const summaryMd = summaryRows.join("\n");
 
     const recentMd = [
-      `| call | phase | bundle | tools | total chars | payload shape |`,
-      `|---|---|---|---|---|---|`,
+      `| call | phase | bundle | tools | prefix | total chars | payload shape |`,
+      `|---|---|---|---|---|---|---|`,
       ...sessionSnapshots.slice(-8).reverse().map((snapshot) => {
         const phase = snapshot.isToolContinuation ? "continuation" : "first";
         const tools = snapshot.toolsIncluded ? String(snapshot.toolCount) : "stripped";
+        const prefix = snapshot.prefixChanged
+          ? formatPrefixChange(snapshot.prefixChangeReasons)
+          : "stable";
         const payloadShape = formatPayloadShape(snapshot.payloadShape);
-        return `| #${snapshot.call} | ${phase} | \`${snapshot.toolBundle}\` | ${tools} | ${snapshot.totalChars.toLocaleString()} | ${payloadShape} |`;
+        return `| #${snapshot.call} | ${phase} | \`${snapshot.toolBundle}\` | ${tools} | ${prefix} | ${snapshot.totalChars.toLocaleString()} | ${payloadShape} |`;
       }),
     ].join("\n");
 

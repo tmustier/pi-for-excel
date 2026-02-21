@@ -26,7 +26,7 @@ This policy sets clear guardrails so we can improve context quality while preser
 - Each model call is built from: `systemPrompt + messages + tools`.
 - Tool disclosure is deterministic on every call (including tool-result continuations) in `src/auth/stream-proxy.ts` (`selectToolBundle()`): when tools are present, runtime currently sends the full tool set.
 - Session IDs are stable per chat runtime (`agent.sessionId`), which is used by providers for cache continuity.
-- Status/debug UI already shows payload composition counters (`systemChars`, `toolSchemaChars`, `messageChars`, call count).
+- Status/debug UI already shows payload composition counters (`systemChars`, `toolSchemaChars`, `messageChars`, call count) plus prefix-churn counters (`prefixChanges`, split by model/system/tools).
 - Context window estimation uses provider usage anchored by `calculateContextTokens()` (`input + output + cacheRead + cacheWrite`) in `src/utils/context-tokens.ts`.
 - Auto-compaction now uses shared hard budgets (`getCompactionThresholds`) for earlier quality protection while preserving existing status-bar warning semantics.
 
