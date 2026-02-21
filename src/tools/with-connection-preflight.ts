@@ -9,6 +9,7 @@ import type {
   ConnectionToolErrorCode,
   ConnectionToolErrorDetails,
 } from "../connections/types.js";
+import { isRecord } from "../utils/type-guards.js";
 import { getToolRequiredConnectionIds } from "./connection-requirements.js";
 
 function normalizeErrorMessage(error: unknown): string {
@@ -17,6 +18,103 @@ function normalizeErrorMessage(error: unknown): string {
   }
 
   return String(error);
+}
+
+function normalizeConnectionIdentifier(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function containsToken(haystack: string, token: string): boolean {
+  const normalizedToken = normalizeConnectionIdentifier(token);
+  if (normalizedToken.length === 0) {
+    return false;
+  }
+
+  const boundaryPattern = new RegExp(`(^|[^a-z0-9])${escapeRegExp(normalizedToken)}([^a-z0-9]|$)`);
+  return boundaryPattern.test(haystack);
+}
+
+function extractExplicitConnectionId(error: unknown): string | undefined {
+  if (!isRecord(error)) {
+    return undefined;
+  }
+
+  const directConnectionId = error.connectionId;
+  if (typeof directConnectionId === "string") {
+    return normalizeConnectionIdentifier(directConnectionId);
+  }
+
+  const details = error.details;
+  if (!isRecord(details)) {
+    return undefined;
+  }
+
+  const detailsConnectionId = details.connectionId;
+  if (typeof detailsConnectionId !== "string") {
+    return undefined;
+  }
+
+  return normalizeConnectionIdentifier(detailsConnectionId);
+}
+
+function snapshotMatchesAuthFailure(snapshot: ConnectionSnapshot, normalizedErrorMessage: string): boolean {
+  const normalizedConnectionId = normalizeConnectionIdentifier(snapshot.connectionId);
+  if (normalizedErrorMessage.includes(normalizedConnectionId)) {
+    return true;
+  }
+
+  const normalizedTitle = normalizeConnectionIdentifier(snapshot.title);
+  if (normalizedTitle.length >= 3 && normalizedErrorMessage.includes(normalizedTitle)) {
+    return true;
+  }
+
+  const idParts = normalizedConnectionId.split(".");
+  const shortId = idParts[idParts.length - 1];
+  return typeof shortId === "string"
+    && shortId.length >= 3
+    && containsToken(normalizedErrorMessage, shortId);
+}
+
+function resolveAuthFailureSnapshot(args: {
+  snapshots: readonly ConnectionSnapshot[];
+  error: unknown;
+  errorMessage: string;
+}): ConnectionSnapshot | null {
+  if (args.snapshots.length === 0) {
+    return null;
+  }
+
+  if (args.snapshots.length === 1) {
+    return args.snapshots[0] ?? null;
+  }
+
+  const explicitConnectionId = extractExplicitConnectionId(args.error);
+  if (explicitConnectionId) {
+    const explicitMatches = args.snapshots.filter((snapshot) => {
+      const normalizedSnapshotId = normalizeConnectionIdentifier(snapshot.connectionId);
+      return normalizedSnapshotId === explicitConnectionId
+        || normalizedSnapshotId.endsWith(`.${explicitConnectionId}`);
+    });
+
+    if (explicitMatches.length === 1) {
+      return explicitMatches[0] ?? null;
+    }
+  }
+
+  const normalizedErrorMessage = args.errorMessage.toLowerCase();
+  const textMatches = args.snapshots.filter((snapshot) => {
+    return snapshotMatchesAuthFailure(snapshot, normalizedErrorMessage);
+  });
+
+  if (textMatches.length === 1) {
+    return textMatches[0] ?? null;
+  }
+
+  return null;
 }
 
 function mapStatusToErrorCode(status: ConnectionSnapshot["status"]): ConnectionToolErrorCode {
@@ -114,20 +212,29 @@ function wrapTool(tool: AgentTool, connectionManager: ConnectionManager): AgentT
         return await tool.execute(toolCallId, params, signal, onUpdate);
       } catch (error: unknown) {
         const errorMessage = normalizeErrorMessage(error);
-        const primarySnapshot = snapshots[0];
 
-        if (primarySnapshot && looksLikeConnectionAuthFailure(errorMessage)) {
+        if (looksLikeConnectionAuthFailure(errorMessage)) {
+          const authFailureSnapshot = resolveAuthFailureSnapshot({
+            snapshots,
+            error,
+            errorMessage,
+          });
+
+          if (!authFailureSnapshot) {
+            throw error;
+          }
+
           try {
-            await connectionManager.markRuntimeAuthFailure(primarySnapshot.connectionId, {
+            await connectionManager.markRuntimeAuthFailure(authFailureSnapshot.connectionId, {
               message: errorMessage,
             });
           } catch {
             // best-effort status update only
           }
 
-          const refreshedSnapshot = await connectionManager.getSnapshot(primarySnapshot.connectionId);
+          const refreshedSnapshot = await connectionManager.getSnapshot(authFailureSnapshot.connectionId);
           const snapshotForResponse: ConnectionSnapshot = refreshedSnapshot ?? {
-            ...primarySnapshot,
+            ...authFailureSnapshot,
             status: "error",
           };
 

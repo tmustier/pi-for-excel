@@ -716,7 +716,7 @@ void test("sandbox capability denial surfaces deterministic permission error", a
   }
 });
 
-void test("host runtime extensions must register required connections before tool registration", async () => {
+void test("host runtime extensions can register required connections after tool registration during activation", async () => {
   const restoreLocalStorage = installLocalStorageStub();
 
   try {
@@ -729,6 +729,74 @@ void test("host runtime extensions must register required connections before too
         createStoredEntry({
           id: "ext.apollo.req",
           name: "Apollo Requires Connection",
+          trust: "local-module",
+        }),
+      ],
+    });
+
+    const manager = new ExtensionRuntimeManager({
+      settings,
+      connectionManager: createConnectionManager(settings),
+      getActiveAgent: () => null,
+      refreshRuntimeTools: async () => {},
+      reservedToolNames: new Set<string>(),
+      loadExtensionFromSource: (api) => {
+        api.registerTool("apollo_lookup", {
+          description: "Lookup company via Apollo",
+          parameters: Type.Object({
+            company: Type.String(),
+          }),
+          requiresConnection: "apollo",
+          execute: () => ({
+            content: [{ type: "text", text: "ok" }],
+            details: undefined,
+          }),
+        });
+
+        api.connections.register({
+          id: "apollo",
+          title: "Apollo",
+          capability: "company and contact enrichment",
+          authKind: "api_key",
+          secretFields: [{ id: "apiKey", label: "API key", required: true }],
+        });
+
+        return Promise.resolve({
+          deactivate: () => Promise.resolve(),
+        });
+      },
+      activateInSandbox: () => {
+        throw new Error("sandbox runtime should not be used for local-module extensions");
+      },
+    });
+
+    await manager.initialize();
+
+    const status = manager.list()[0];
+    assert.equal(status.loaded, true);
+    assert.equal(status.lastError, null);
+
+    const tool = manager.getRegisteredTools()[0];
+    assert.ok(tool);
+    assert.deepEqual(Reflect.get(tool, "requiresConnection"), ["ext.apollo.req.apollo"]);
+  } finally {
+    restoreLocalStorage();
+  }
+});
+
+void test("host runtime extensions fail activation when required connections were never registered", async () => {
+  const restoreLocalStorage = installLocalStorageStub();
+
+  try {
+    clearLocalStorageKey(EXTENSION_SANDBOX_RUNTIME_STORAGE_KEY);
+
+    const settings = new MemorySettingsStore();
+    settings.writeRaw(EXTENSIONS_REGISTRY_STORAGE_KEY, {
+      version: 2,
+      items: [
+        createStoredEntry({
+          id: "ext.apollo.req.missing",
+          name: "Apollo Missing Connection",
           trust: "local-module",
         }),
       ],
@@ -766,7 +834,7 @@ void test("host runtime extensions must register required connections before too
 
     const status = manager.list()[0];
     assert.equal(status.loaded, false);
-    assert.match(status.lastError ?? "", /is not registered/);
+    assert.match(status.lastError ?? "", /requires an invalid connection/);
   } finally {
     restoreLocalStorage();
   }
@@ -863,4 +931,65 @@ void test("connection preflight maps runtime auth failures to connection_auth_fa
   const state = await connectionManager.getState("ext.apollo.apollo");
   assert.equal(state?.status, "error");
   assert.ok(!state?.lastError?.includes("top-secret-api-key"));
+});
+
+void test("connection preflight attributes auth failures to the matching required connection", async () => {
+  const settings = new MemorySettingsStore();
+  const connectionManager = createConnectionManager(settings);
+
+  connectionManager.registerDefinition("ext.multi", {
+    id: "ext.multi.crm",
+    title: "CRM",
+    capability: "contact sync",
+    authKind: "api_key",
+    secretFields: [{ id: "apiKey", label: "API key", required: true }],
+  });
+
+  connectionManager.registerDefinition("ext.multi", {
+    id: "ext.multi.billing",
+    title: "Billing",
+    capability: "invoice sync",
+    authKind: "api_key",
+    secretFields: [{ id: "apiKey", label: "API key", required: true }],
+  });
+
+  await connectionManager.setSecrets("ext.multi", "ext.multi.crm", {
+    apiKey: "crm-key",
+  });
+  await connectionManager.setSecrets("ext.multi", "ext.multi.billing", {
+    apiKey: "billing-key",
+  });
+
+  const tool = {
+    name: "sync_everything",
+    label: "Sync everything",
+    description: "Sync CRM and billing systems",
+    parameters: Type.Object({
+      dryRun: Type.Boolean(),
+    }),
+    execute: () => {
+      throw new Error("403 Forbidden for ext.multi.billing: invalid token billing-key");
+    },
+  };
+
+  Reflect.set(tool, "requiresConnection", ["ext.multi.crm", "ext.multi.billing"]);
+
+  const tools = withConnectionPreflight([tool], {
+    connectionManager,
+  });
+
+  const result = await tools[0].execute("tool-call-3", { dryRun: false });
+  assert.equal(isConnectionToolErrorDetails(result.details), true);
+
+  if (isConnectionToolErrorDetails(result.details)) {
+    assert.equal(result.details.errorCode, "connection_auth_failed");
+    assert.equal(result.details.connectionId, "ext.multi.billing");
+    assert.ok(!result.details.reason?.includes("billing-key"));
+  }
+
+  const crmState = await connectionManager.getState("ext.multi.crm");
+  const billingState = await connectionManager.getState("ext.multi.billing");
+
+  assert.equal(crmState?.status, "connected");
+  assert.equal(billingState?.status, "error");
 });

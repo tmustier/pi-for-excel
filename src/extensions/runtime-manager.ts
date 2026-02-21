@@ -585,6 +585,27 @@ export class ExtensionRuntimeManager {
 
     let activationPhase = true;
     let toolsChangedDuringActivation = false;
+    const pendingToolConnectionChecks = new Map<string, readonly string[]>();
+
+    const assertToolConnectionOwnership = (
+      toolName: string,
+      requiredConnectionIds: readonly string[],
+    ): void => {
+      for (const connectionId of requiredConnectionIds) {
+        try {
+          this.connectionManager.assertConnectionOwnedBy(entry.id, connectionId);
+        } catch (error: unknown) {
+          const message = getRuntimeManagerErrorMessage(error);
+          throw new Error(`Tool "${toolName}" requires an invalid connection "${connectionId}": ${message}`);
+        }
+      }
+    };
+
+    const validatePendingToolConnectionChecks = (): void => {
+      for (const [toolName, requiredConnectionIds] of pendingToolConnectionChecks.entries()) {
+        assertToolConnectionOwnership(toolName, requiredConnectionIds);
+      }
+    };
 
     const refreshToolsForDynamicChange = (): void => {
       void this.refreshRuntimeTools().catch((error: unknown) => {
@@ -627,8 +648,10 @@ export class ExtensionRuntimeManager {
       assertToolExecuteFunction(tool, entry);
 
       const requiredConnectionIds = getToolRequiredConnectionIds(tool);
-      for (const connectionId of requiredConnectionIds) {
-        this.connectionManager.assertConnectionOwnedBy(entry.id, connectionId);
+      if (activationPhase) {
+        pendingToolConnectionChecks.set(tool.name, requiredConnectionIds);
+      } else {
+        assertToolConnectionOwnership(tool.name, requiredConnectionIds);
       }
 
       const wrappedTool: AnyAgentTool = {
@@ -679,6 +702,7 @@ export class ExtensionRuntimeManager {
       state.toolNames.delete(normalizedName);
       this.toolOwners.delete(normalizedName);
       this.extensionTools.delete(normalizedName);
+      pendingToolConnectionChecks.delete(normalizedName);
 
       if (!activationPhase) {
         refreshToolsForDynamicChange();
@@ -774,6 +798,9 @@ export class ExtensionRuntimeManager {
 
         state.handle = await this.loadExtensionFromSource(api, loadSource);
       }
+
+      validatePendingToolConnectionChecks();
+      pendingToolConnectionChecks.clear();
 
       activationPhase = false;
       this.activeStates.set(entry.id, state);
