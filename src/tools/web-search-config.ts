@@ -199,6 +199,64 @@ export function isApiKeyRequired(provider: WebSearchProvider): boolean {
   return WEB_SEARCH_PROVIDER_INFO[provider].apiKeyOptional !== true;
 }
 
+function hasRepeatedLongSegment(value: string): boolean {
+  const minimumSegmentLength = 12;
+  const maxSegmentLength = Math.floor(value.length / 2);
+  if (maxSegmentLength < minimumSegmentLength) return false;
+
+  for (let segmentLength = maxSegmentLength; segmentLength >= minimumSegmentLength; segmentLength -= 1) {
+    for (let start = 0; start + (segmentLength * 2) <= value.length; start += 1) {
+      const segment = value.slice(start, start + segmentLength);
+      const nextSegment = value.slice(start + segmentLength, start + (segmentLength * 2));
+      if (segment === nextSegment) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Quick format check for an API key before saving. Returns `null` when the key
+ * looks plausible, or a human-readable warning string when it looks wrong.
+ *
+ * This is intentionally loose — it catches obvious mistakes (empty, whitespace,
+ * too short, wrong prefix) without risking false rejections if a provider
+ * tweaks their format.
+ */
+export function checkApiKeyFormat(provider: WebSearchProvider, apiKey: string): string | null {
+  const key = apiKey.trim();
+
+  if (key.length === 0) return "API key is empty.";
+
+  if (/\s/.test(key)) {
+    return "API key contains spaces or newlines — check for copy-paste errors.";
+  }
+
+  if (key.length < 10) {
+    return "API key looks too short — check for truncation.";
+  }
+
+  if (hasRepeatedLongSegment(key)) {
+    return "API key contains a repeated long segment — check for accidental double paste.";
+  }
+
+  if (provider === "jina" && !key.startsWith("jina_")) {
+    return "Jina keys usually start with \"jina_\" — double-check the value.";
+  }
+
+  if (provider === "firecrawl" && !key.startsWith("fc-")) {
+    return "Firecrawl keys usually start with \"fc-\" — double-check the value.";
+  }
+
+  if (provider === "tavily" && !key.startsWith("tvly-")) {
+    return "Tavily keys usually start with \"tvly-\" — double-check the value.";
+  }
+
+  return null;
+}
+
 export function maskSecret(secret: string): string {
   const length = secret.length;
   if (length <= 4) {

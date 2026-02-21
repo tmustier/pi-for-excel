@@ -1,6 +1,6 @@
 {
   "name": "pi-for-excel-proxy",
-  "version": "0.2.1-pre",
+  "version": "0.2.2-pre",
   "description": "One-command local HTTPS proxy helper for Pi for Excel OAuth logins.",
   "type": "module",
   "bin": {

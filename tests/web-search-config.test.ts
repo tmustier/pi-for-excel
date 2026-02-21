@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  checkApiKeyFormat,
   clearWebSearchApiKey,
   getApiKeyForProvider,
   getWebSearchEndpoint,
@@ -127,6 +128,44 @@ void test("web search config clears only the selected provider key", async () =>
 
   assert.equal(getApiKeyForProvider(config, "serper"), undefined);
   assert.equal(getApiKeyForProvider(config, "brave"), "br-123");
+});
+
+// ── checkApiKeyFormat ────────────────────────────────────
+
+void test("checkApiKeyFormat returns null for valid keys", () => {
+  assert.equal(checkApiKeyFormat("jina", "jina_abc123defXYZ456"), null);
+  assert.equal(checkApiKeyFormat("firecrawl", "fc-abc123def456"), null);
+  assert.equal(checkApiKeyFormat("tavily", "tvly-abc123def456"), null);
+  assert.equal(checkApiKeyFormat("serper", "abc123def456ghi789xyz0"), null);
+  assert.equal(checkApiKeyFormat("brave", "BSAabc123def456"), null);
+});
+
+void test("checkApiKeyFormat catches empty and whitespace keys", () => {
+  assert.ok(checkApiKeyFormat("jina", ""));
+  assert.ok(checkApiKeyFormat("jina", "   "));
+  assert.match(checkApiKeyFormat("jina", "jina_abc def") ?? "", /spaces/i);
+  assert.match(checkApiKeyFormat("jina", "jina_abc\ndef") ?? "", /spaces/i);
+});
+
+void test("checkApiKeyFormat catches too-short keys", () => {
+  assert.match(checkApiKeyFormat("serper", "abc") ?? "", /short/i);
+});
+
+void test("checkApiKeyFormat catches repeated long segments", () => {
+  const key = "jina_abcdef1234567890";
+  assert.match(checkApiKeyFormat("jina", `${key}${key}`) ?? "", /repeated long segment/i);
+  assert.match(checkApiKeyFormat("jina", `${key}${key}Z`) ?? "", /repeated long segment/i);
+});
+
+void test("checkApiKeyFormat warns on wrong prefix", () => {
+  assert.match(checkApiKeyFormat("jina", "sk-abc123def456abc123") ?? "", /jina_/);
+  assert.match(checkApiKeyFormat("firecrawl", "jina_abc123def456abc1") ?? "", /fc-/);
+  assert.match(checkApiKeyFormat("tavily", "sk-abc123def456abc123") ?? "", /tvly-/);
+});
+
+void test("checkApiKeyFormat does not warn on unknown prefix for serper/brave", () => {
+  assert.equal(checkApiKeyFormat("serper", "anyformat1234567890"), null);
+  assert.equal(checkApiKeyFormat("brave", "anyformat1234567890"), null);
 });
 
 void test("web search provider endpoints expose stable host list", () => {

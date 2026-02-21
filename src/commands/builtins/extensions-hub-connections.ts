@@ -17,6 +17,7 @@ import {
   setIntegrationEnabledInScope,
 } from "../../integrations/store.js";
 import {
+  checkApiKeyFormat,
   getApiKeyForProvider,
   isApiKeyRequired,
   loadWebSearchProviderConfig,
@@ -315,10 +316,13 @@ export async function renderConnectionsTab(args: {
     onClick: () => {
       const key = apiKeyInput.value.trim();
       if (!key) { showToast("Enter an API key first."); return; }
+      const formatWarning = checkApiKeyFormat(selectedProvider, key);
       void runMutation(
         () => saveWebSearchApiKey(settings, selectedProvider, key),
         "config",
-        `Saved ${providerInfo.apiKeyLabel}`,
+        formatWarning
+          ? `⚠️ ${formatWarning} Key saved anyway — use Validate to test it.`
+          : `Saved ${providerInfo.apiKeyLabel}`,
       );
     },
   });
