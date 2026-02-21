@@ -9,7 +9,7 @@ metadata:
 
 # Python Bridge
 
-The Python bridge gives Pi access to native Python on the user's machine. It is an opt-in, feature-flagged capability that upgrades the default in-browser Pyodide runtime.
+The Python bridge gives Pi access to native Python on the user's machine. It is an opt-in capability that upgrades the default in-browser Pyodide runtime.
 
 ## Pyodide (default) vs Native bridge
 

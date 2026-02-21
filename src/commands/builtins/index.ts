@@ -14,7 +14,7 @@ import { createSessionIdentityCommands, createSessionLifecycleCommands, type Ses
 import { createHelpCommands } from "./help.js";
 import { createExtensionsCommands, type ExtensionsCommandActions } from "./extensions.js";
 import { createAddonsCommands, type AddonsCommandActions } from "./addons.js";
-import { createIntegrationsCommands, type IntegrationsCommandActions } from "./integrations.js";
+import { createToolsCommands, type ToolsCommandActions } from "./tools.js";
 import { createSkillsCommands, type SkillsCommandActions } from "./skills.js";
 import { createFilesCommands, type FilesCommandActions } from "./files.js";
 
@@ -23,7 +23,7 @@ export interface BuiltinsContext
     SettingsCommandActions,
     AddonsCommandActions,
     ExtensionsCommandActions,
-    IntegrationsCommandActions,
+    ToolsCommandActions,
     SkillsCommandActions,
     FilesCommandActions {
   getActiveAgent: ActiveAgentProvider;
@@ -36,7 +36,7 @@ export function registerBuiltins(context: BuiltinsContext): void {
     ...createModelCommands(context.getActiveAgent),
     ...createSettingsCommands(context),
     ...createAddonsCommands(context),
-    ...createIntegrationsCommands(context),
+    ...createToolsCommands(context),
     ...createSkillsCommands(context),
     ...createFilesCommands(context),
     ...createExperimentalCommands(),

@@ -50,11 +50,10 @@ Pi for Excel is an AI agent that lives inside Excel. It reads your workbook, mak
 - **Web Search** (Jina default, Serper/Tavily/Brave) + `fetch_page` — find and read external sources without leaving Excel
 - **MCP Gateway** — connect to user-configured MCP servers for custom tool access
 
-**Feature-flagged capabilities** (managed via `/experimental`):
-- Tmux bridge — local terminal control from the sidebar
-- Python / LibreOffice bridge — run Python scripts and convert files locally
+**Bridge + advanced controls** (managed via `/experimental`):
+- Tmux bridge settings — configure bridge URL/token and run health checks
+- Python / LibreOffice bridge settings — configure bridge URL/token
 - Files workspace write/delete gate — shared artifact storage across sessions (assistant built-in docs under `assistant-docs/` are always available read-only)
-- External skills discovery — opt-in loading of locally configured external `SKILL.md` sources
 - Advanced extension controls — remote URL opt-in, permission enforcement, sandbox rollback, and Widget API v2
 
 (Web Search + MCP are managed in `/tools`, or `/extensions` → Connections.)

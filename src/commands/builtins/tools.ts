@@ -1,5 +1,5 @@
 /**
- * Builtin command for integration management UI.
+ * Builtin command for Tools & MCP management UI.
  */
 
 import {
@@ -9,11 +9,11 @@ import {
 import type { ExtensionsHubTab } from "./extensions-hub-overlay.js";
 import type { SlashCommand } from "../types.js";
 
-export interface IntegrationsCommandActions {
+export interface ToolsCommandActions {
   openExtensionsHub: (tab?: ExtensionsHubTab) => void | Promise<void>;
 }
 
-export function createIntegrationsCommands(actions: IntegrationsCommandActions): SlashCommand[] {
+export function createToolsCommands(actions: ToolsCommandActions): SlashCommand[] {
   return [
     {
       name: TOOLS_COMMAND_NAME,

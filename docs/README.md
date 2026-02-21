@@ -23,7 +23,7 @@ This folder contains **current** docs that should match shipped behavior.
 - [UI architecture](../src/ui/README.md)
 - [Tool behavior decisions](../src/tools/DECISIONS.md)
 
-## Feature-flagged local bridge contracts
+## Local bridge contracts
 - [Tmux bridge contract (v1)](./tmux-bridge-contract.md)
 - [Python / LibreOffice bridge contract (v1)](./python-bridge-contract.md)
 

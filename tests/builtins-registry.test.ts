@@ -40,7 +40,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-void test("builtins registry wires /addons, /experimental, /extensions, /integrations, and /files command registration", async () => {
+void test("builtins registry wires /addons, /experimental, /extensions, /tools, and /files command registration", async () => {
   const source = await readFile(new URL("../src/commands/builtins/index.ts", import.meta.url), "utf8");
 
   assert.match(source, /createAddonsCommands/);
@@ -49,8 +49,8 @@ void test("builtins registry wires /addons, /experimental, /extensions, /integra
   assert.match(source, /createExperimentalCommands/);
   assert.match(source, /\.\.\.createExperimentalCommands\(\)/);
 
-  assert.match(source, /createIntegrationsCommands/);
-  assert.match(source, /\.\.\.createIntegrationsCommands\(context\)/);
+  assert.match(source, /createToolsCommands/);
+  assert.match(source, /\.\.\.createToolsCommands\(context\)/);
 
   assert.match(source, /createExtensionsCommands/);
   assert.match(source, /\.\.\.createExtensionsCommands\(context\)/);
@@ -129,8 +129,8 @@ void test("taskpane init keeps getIntegrationToolNames imported when used", asyn
   );
 });
 
-void test("integrations builtins expose /tools without /integrations alias", async () => {
-  const source = await readFile(new URL("../src/commands/builtins/integrations.ts", import.meta.url), "utf8");
+void test("tools builtins expose /tools without /integrations alias", async () => {
+  const source = await readFile(new URL("../src/commands/builtins/tools.ts", import.meta.url), "utf8");
 
   assert.match(source, /TOOLS_COMMAND_NAME/);
   assert.doesNotMatch(source, /INTEGRATIONS_COMMAND_NAME/);
@@ -321,7 +321,7 @@ void test("provider and experimental overlays are aliases into settings sections
 
 void test("extensions and alias commands deep-link to hub tabs", async () => {
   const addonsSource = await readFile(new URL("../src/commands/builtins/addons.ts", import.meta.url), "utf8");
-  const integrationsSource = await readFile(new URL("../src/commands/builtins/integrations.ts", import.meta.url), "utf8");
+  const toolsSource = await readFile(new URL("../src/commands/builtins/tools.ts", import.meta.url), "utf8");
   const extensionsSource = await readFile(new URL("../src/commands/builtins/extensions.ts", import.meta.url), "utf8");
   const skillsSource = await readFile(new URL("../src/commands/builtins/skills.ts", import.meta.url), "utf8");
 
@@ -329,7 +329,7 @@ void test("extensions and alias commands deep-link to hub tabs", async () => {
   assert.doesNotMatch(addonsSource, /name:\s*"addons"/);
   assert.match(addonsSource, /openExtensionsHub\(\)/);
 
-  assert.match(integrationsSource, /openExtensionsHub\("connections"\)/);
+  assert.match(toolsSource, /openExtensionsHub\("connections"\)/);
   assert.match(extensionsSource, /openExtensionsHub\("plugins"\)/);
   assert.match(skillsSource, /openExtensionsHub\("skills"\)/);
 });

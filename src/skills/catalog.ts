@@ -4,11 +4,7 @@
  * Source of truth: top-level `skills/<skill-name>/SKILL.md` files.
  */
 
-import mcpGatewaySkillMarkdown from "../../skills/mcp-gateway/SKILL.md?raw";
-import pythonBridgeSkillMarkdown from "../../skills/python-bridge/SKILL.md?raw";
-import tmuxBridgeSkillMarkdown from "../../skills/tmux-bridge/SKILL.md?raw";
-import webSearchSkillMarkdown from "../../skills/web-search/SKILL.md?raw";
-
+import { loadRawMarkdownFromTestGlob } from "../utils/test-raw-markdown-glob.js";
 import { parseSkillDocument, type ParsedSkillFrontmatter } from "./frontmatter.js";
 import type {
   AgentSkillDefinition,
@@ -21,24 +17,56 @@ interface BundledSkillSource {
   markdown: string;
 }
 
-const BUNDLED_SKILL_SOURCES: readonly BundledSkillSource[] = [
-  {
-    location: "skills/web-search/SKILL.md",
-    markdown: webSearchSkillMarkdown,
-  },
-  {
-    location: "skills/mcp-gateway/SKILL.md",
-    markdown: mcpGatewaySkillMarkdown,
-  },
-  {
-    location: "skills/tmux-bridge/SKILL.md",
-    markdown: tmuxBridgeSkillMarkdown,
-  },
-  {
-    location: "skills/python-bridge/SKILL.md",
-    markdown: pythonBridgeSkillMarkdown,
-  },
-] as const;
+function toRepoRelativePath(globPath: string): string {
+  const normalized = globPath.replaceAll("\\", "/");
+  if (normalized.startsWith("./")) {
+    return normalized.slice(2);
+  }
+
+  let cursor = normalized;
+  while (cursor.startsWith("../")) {
+    cursor = cursor.slice(3);
+  }
+
+  return cursor;
+}
+
+function isBundledSkillLocation(value: string): boolean {
+  if (!value.startsWith("skills/")) {
+    return false;
+  }
+
+  const segments = value.split("/");
+  if (segments.length !== 3) {
+    return false;
+  }
+
+  return segments[2] === "SKILL.md";
+}
+
+function readBundledSkillMarkdownByPath(): Record<string, string> {
+  try {
+    return import.meta.glob<string>("../../skills/*/SKILL.md", {
+      eager: true,
+      query: "?raw",
+      import: "default",
+    });
+  } catch {
+    return loadRawMarkdownFromTestGlob("../../skills/*/SKILL.md", import.meta.url);
+  }
+}
+
+function buildBundledSkillSources(): BundledSkillSource[] {
+  return Object.entries(readBundledSkillMarkdownByPath())
+    .map(([globPath, markdown]) => ({
+      location: toRepoRelativePath(globPath),
+      markdown,
+    }))
+    .filter((source) => isBundledSkillLocation(source.location))
+    .sort((left, right) => left.location.localeCompare(right.location));
+}
+
+const BUNDLED_SKILL_SOURCES: readonly BundledSkillSource[] = buildBundledSkillSources();
 
 function buildDefinition(args: {
   location: string;
