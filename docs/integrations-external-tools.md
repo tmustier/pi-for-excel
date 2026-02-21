@@ -7,7 +7,7 @@ Issue: [#24](https://github.com/tmustier/pi-for-excel/issues/24)
 
 ## What shipped
 
-- **Tools & MCP manager UI** (`/tools`, alias: `/integrations`)
+- **Tools & MCP manager UI** (`/tools`, or `/extensions` → Connections)
   - enable/disable integration bundles per **session** and/or **workbook**
   - clear warnings for network/tool access
   - active integrations shown in the status bar
@@ -17,12 +17,12 @@ Issue: [#24](https://github.com/tmustier/pi-for-excel/issues/24)
 - **Web Search integration**
   - tools: `web_search`, `fetch_page`
   - providers: Jina (default, no key required), Serper.dev, Tavily, Brave Search
-  - configurable provider + provider-specific API key in `/tools` (or `/integrations`)
+  - configurable provider + provider-specific API key in `/tools`
   - fallback: if a configured keyed provider fails with auth/rate-limit/server/network errors, search retries with Jina for that request and surfaces a warning
   - result output includes explicit `Sent:` attribution and provider/transport metadata
 - **MCP integration**
   - tool: `mcp`
-  - server registry (`mcp.servers.v1`) configurable in `/tools` (or `/integrations`)
+  - server registry (`mcp.servers.v1`) configurable in `/tools`
   - add/remove/test server URL + optional bearer token
 
 ## Runtime model

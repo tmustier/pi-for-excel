@@ -5,6 +5,8 @@
  */
 
 import mcpGatewaySkillMarkdown from "../../skills/mcp-gateway/SKILL.md?raw";
+import pythonBridgeSkillMarkdown from "../../skills/python-bridge/SKILL.md?raw";
+import tmuxBridgeSkillMarkdown from "../../skills/tmux-bridge/SKILL.md?raw";
 import webSearchSkillMarkdown from "../../skills/web-search/SKILL.md?raw";
 
 import { parseSkillDocument, type ParsedSkillFrontmatter } from "./frontmatter.js";
@@ -27,6 +29,14 @@ const BUNDLED_SKILL_SOURCES: readonly BundledSkillSource[] = [
   {
     location: "skills/mcp-gateway/SKILL.md",
     markdown: mcpGatewaySkillMarkdown,
+  },
+  {
+    location: "skills/tmux-bridge/SKILL.md",
+    markdown: tmuxBridgeSkillMarkdown,
+  },
+  {
+    location: "skills/python-bridge/SKILL.md",
+    markdown: pythonBridgeSkillMarkdown,
   },
 ] as const;
 

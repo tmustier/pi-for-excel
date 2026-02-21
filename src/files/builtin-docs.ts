@@ -1,11 +1,27 @@
 /**
  * Built-in, read-only docs exposed through the files workspace.
+ *
+ * Every non-archive doc is bundled so the assistant can answer user
+ * questions accurately instead of hallucinating setup instructions.
  */
 
 import projectReadmeMarkdown from "../../README.md?raw";
 import docsReadmeMarkdown from "../../docs/README.md?raw";
+import docsAgentSkillsInteropMarkdown from "../../docs/agent-skills-interop.md?raw";
+import docsCompactionMarkdown from "../../docs/compaction.md?raw";
+import docsContextManagementPolicyMarkdown from "../../docs/context-management-policy.md?raw";
+import docsDeployVercelMarkdown from "../../docs/deploy-vercel.md?raw";
 import docsExtensionsMarkdown from "../../docs/extensions.md?raw";
+import docsFilesWorkspaceMarkdown from "../../docs/files-workspace.md?raw";
+import docsInstallMarkdown from "../../docs/install.md?raw";
 import docsIntegrationsMarkdown from "../../docs/integrations-external-tools.md?raw";
+import docsManualFullBackupsMarkdown from "../../docs/manual-full-backups.md?raw";
+import docsModelUpdatesMarkdown from "../../docs/model-updates.md?raw";
+import docsPythonBridgeContractMarkdown from "../../docs/python-bridge-contract.md?raw";
+import docsSecurityThreatModelMarkdown from "../../docs/security-threat-model.md?raw";
+import docsTmuxBridgeContractMarkdown from "../../docs/tmux-bridge-contract.md?raw";
+import docsReleaseNotesV070Markdown from "../../docs/release-notes/v0.7.0-pre.md?raw";
+import docsReleaseNotesV080Markdown from "../../docs/release-notes/v0.8.0-pre.md?raw";
 
 import { normalizeWorkspacePath } from "./path.js";
 import type { WorkspaceFileEntry, WorkspaceFileReadResult } from "./types.js";
@@ -19,14 +35,29 @@ const BUILTIN_DOCS_PREFIX = "assistant-docs";
 const BUILTIN_DOC_TIMESTAMP = Date.now();
 
 const BUILTIN_DOC_SOURCES: readonly BuiltinDocSource[] = [
+  // Project root
   {
     path: `${BUILTIN_DOCS_PREFIX}/README.md`,
     markdown: projectReadmeMarkdown,
   },
+
+  // Docs index
   {
     path: `${BUILTIN_DOCS_PREFIX}/docs/README.md`,
     markdown: docsReadmeMarkdown,
   },
+
+  // Guides
+  {
+    path: `${BUILTIN_DOCS_PREFIX}/docs/install.md`,
+    markdown: docsInstallMarkdown,
+  },
+  {
+    path: `${BUILTIN_DOCS_PREFIX}/docs/deploy-vercel.md`,
+    markdown: docsDeployVercelMarkdown,
+  },
+
+  // Runtime features
   {
     path: `${BUILTIN_DOCS_PREFIX}/docs/extensions.md`,
     markdown: docsExtensionsMarkdown,
@@ -34,6 +65,56 @@ const BUILTIN_DOC_SOURCES: readonly BuiltinDocSource[] = [
   {
     path: `${BUILTIN_DOCS_PREFIX}/docs/integrations-external-tools.md`,
     markdown: docsIntegrationsMarkdown,
+  },
+  {
+    path: `${BUILTIN_DOCS_PREFIX}/docs/agent-skills-interop.md`,
+    markdown: docsAgentSkillsInteropMarkdown,
+  },
+  {
+    path: `${BUILTIN_DOCS_PREFIX}/docs/compaction.md`,
+    markdown: docsCompactionMarkdown,
+  },
+  {
+    path: `${BUILTIN_DOCS_PREFIX}/docs/manual-full-backups.md`,
+    markdown: docsManualFullBackupsMarkdown,
+  },
+  {
+    path: `${BUILTIN_DOCS_PREFIX}/docs/files-workspace.md`,
+    markdown: docsFilesWorkspaceMarkdown,
+  },
+
+  // Architecture & policy
+  {
+    path: `${BUILTIN_DOCS_PREFIX}/docs/context-management-policy.md`,
+    markdown: docsContextManagementPolicyMarkdown,
+  },
+  {
+    path: `${BUILTIN_DOCS_PREFIX}/docs/security-threat-model.md`,
+    markdown: docsSecurityThreatModelMarkdown,
+  },
+  {
+    path: `${BUILTIN_DOCS_PREFIX}/docs/model-updates.md`,
+    markdown: docsModelUpdatesMarkdown,
+  },
+
+  // Feature-flagged bridge contracts
+  {
+    path: `${BUILTIN_DOCS_PREFIX}/docs/tmux-bridge-contract.md`,
+    markdown: docsTmuxBridgeContractMarkdown,
+  },
+  {
+    path: `${BUILTIN_DOCS_PREFIX}/docs/python-bridge-contract.md`,
+    markdown: docsPythonBridgeContractMarkdown,
+  },
+
+  // Release notes
+  {
+    path: `${BUILTIN_DOCS_PREFIX}/docs/release-notes/v0.7.0-pre.md`,
+    markdown: docsReleaseNotesV070Markdown,
+  },
+  {
+    path: `${BUILTIN_DOCS_PREFIX}/docs/release-notes/v0.8.0-pre.md`,
+    markdown: docsReleaseNotesV080Markdown,
   },
 ] as const;
 

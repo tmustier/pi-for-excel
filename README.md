@@ -42,12 +42,12 @@ Pi for Excel is an AI agent that lives inside Excel. It reads your workbook, mak
 
 **Formatting conventions** — define your house style once (currency symbol, negative style, decimal places) and the AI follows it automatically.
 
-**Slash commands** — `/model`, `/login`, `/settings`, `/rules`, `/extensions`, `/integrations`, `/export`, `/compact`, `/new`, `/resume`, `/history`, `/shortcuts`, and more.
+**Slash commands** — `/model`, `/login`, `/settings`, `/rules`, `/extensions`, `/tools`, `/export`, `/compact`, `/new`, `/resume`, `/history`, `/shortcuts`, and more.
 
 **Extensions** — install sidebar extensions (mini-apps) from chat. The AI can generate and install extension code directly via the `extensions_manager` tool. Extensions run in an iframe sandbox by default.
 
 **Integrations** — opt-in external tool integrations:
-- **Web Search** (Serper/Tavily/Brave) + `fetch_page` — find and read external sources without leaving Excel
+- **Web Search** (Jina default, Serper/Tavily/Brave) + `fetch_page` — find and read external sources without leaving Excel
 - **MCP Gateway** — connect to user-configured MCP servers for custom tool access
 
 **Feature-flagged capabilities** (managed via `/experimental`):
@@ -57,7 +57,7 @@ Pi for Excel is an AI agent that lives inside Excel. It reads your workbook, mak
 - External skills discovery — opt-in loading of locally configured external `SKILL.md` sources
 - Advanced extension controls — remote URL opt-in, permission enforcement, sandbox rollback, and Widget API v2
 
-(Web Search + MCP are managed in `/integrations`.)
+(Web Search + MCP are managed in `/tools`, or `/extensions` → Connections.)
 
 ## Install
 
@@ -218,7 +218,7 @@ pkg/python-bridge/     # Publishable npm CLI package: `pi-for-excel-python-bridg
 pkg/tmux-bridge/       # Publishable npm CLI package: `pi-for-excel-tmux-bridge`
 tests/                 # Unit + security tests (~50 test files)
 docs/                  # Current docs (install/deploy/features/policy) + archive/ for historical plans
-skills/                # Bundled Agent Skill definitions (web-search, mcp-gateway)
+skills/                # Bundled Agent Skill definitions (web-search, mcp-gateway, tmux-bridge, python-bridge)
 public/assets/         # Add-in icons (16/32/80/128px)
 ```
 

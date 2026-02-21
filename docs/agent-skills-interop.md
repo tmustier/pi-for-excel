@@ -12,6 +12,8 @@ In this repo, standards artifacts live in:
 
 - `skills/web-search/SKILL.md`
 - `skills/mcp-gateway/SKILL.md`
+- `skills/tmux-bridge/SKILL.md`
+- `skills/python-bridge/SKILL.md`
 
 ## 2) Integrations (Excel runtime)
 
@@ -66,4 +68,4 @@ Safety: workspace-provided skills are untrusted input and may contain risky inst
 - **Integrations** manage runtime consent, scoping, and local configuration in the Excel add-in.
 
 Use the term **skill** only for standards-based `SKILL.md` artifacts.
-Use **integration** for Excel runtime toggles and UI (`/tools`, alias: `/integrations`).
+Use **integration** for Excel runtime toggles and UI (`/tools`, or `/extensions` → Connections).
