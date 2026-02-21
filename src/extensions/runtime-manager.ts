@@ -73,6 +73,35 @@ type AnyAgentTool = AgentTool;
 
 type ManagerListener = () => void;
 
+function buildExtensionToolSourceNote(entry: StoredExtensionEntry): string {
+  return `Source: extension "${entry.name}" (${entry.id}).`;
+}
+
+function withExtensionToolDescription(tool: AnyAgentTool, entry: StoredExtensionEntry): string {
+  const baseDescription = typeof tool.description === "string" ? tool.description.trim() : "";
+  const sourceNote = buildExtensionToolSourceNote(entry);
+
+  if (baseDescription.length === 0) {
+    return sourceNote;
+  }
+
+  if (baseDescription.includes(sourceNote)) {
+    return baseDescription;
+  }
+
+  return `${baseDescription}\n\n${sourceNote}`;
+}
+
+function assertToolExecuteFunction(tool: AnyAgentTool, entry: StoredExtensionEntry): void {
+  if (typeof Reflect.get(tool, "execute") === "function") {
+    return;
+  }
+
+  throw new Error(
+    `Tool "${tool.name}" from extension "${entry.name}" is invalid: execute must be a function.`,
+  );
+}
+
 interface LoadedExtensionState {
   entryId: string;
   runtimeMode: ExtensionRuntimeMode;
@@ -588,9 +617,26 @@ export class ExtensionRuntimeManager {
         throw new Error(`Tool name "${tool.name}" is registered multiple times by this extension`);
       }
 
-      this.toolOwners.set(tool.name, entry.id);
-      this.extensionTools.set(tool.name, tool);
-      state.toolNames.add(tool.name);
+      assertToolExecuteFunction(tool, entry);
+
+      const wrappedTool: AnyAgentTool = {
+        ...tool,
+        description: withExtensionToolDescription(tool, entry),
+        execute: async (toolCallId, params, signal, onUpdate) => {
+          try {
+            return await tool.execute(toolCallId, params, signal, onUpdate);
+          } catch (error: unknown) {
+            const message = getRuntimeManagerErrorMessage(error);
+            throw new Error(
+              `[Extension ${entry.name}] Tool "${tool.name}" failed: ${message}`,
+            );
+          }
+        },
+      };
+
+      this.toolOwners.set(wrappedTool.name, entry.id);
+      this.extensionTools.set(wrappedTool.name, wrappedTool);
+      state.toolNames.add(wrappedTool.name);
 
       if (activationPhase) {
         toolsChangedDuringActivation = true;

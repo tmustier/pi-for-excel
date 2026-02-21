@@ -538,6 +538,10 @@ export function buildSandboxSrcdoc(options: BuildSandboxSrcdocOptions): string {
             }
 
             if (typeof tool.execute !== "function") {
+              if (typeof tool.handler === "function") {
+                throw new Error('registerTool execute must be a function (did you mean "execute" instead of "handler"?)');
+              }
+
               throw new Error('registerTool execute must be a function');
             }
 

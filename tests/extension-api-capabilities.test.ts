@@ -173,6 +173,48 @@ void test("createExtensionAPI registerTool forwards metadata to host registrar",
   assert.equal(registeredDescription, "Echo");
 });
 
+void test("createExtensionAPI registerTool fails fast when execute is missing", () => {
+  let registerCalls = 0;
+
+  const api = createExtensionAPI({
+    getAgent: () => {
+      throw new Error("getAgent should not be called");
+    },
+    registerTool: () => {
+      registerCalls += 1;
+    },
+    isCapabilityEnabled: createCapabilityGate(new Set<ExtensionCapability>([
+      "commands.register",
+      "tools.register",
+      "agent.read",
+      "agent.events.read",
+      "ui.overlay",
+      "ui.widget",
+      "ui.toast",
+    ])),
+  });
+
+  const badTool = {
+    description: "Echo",
+    parameters: Type.Object({
+      text: Type.String(),
+    }),
+    handler: () => ({
+      content: [{ type: "text", text: "Echo:hello" }],
+      details: undefined,
+    }),
+  };
+
+  assert.throws(
+    () => {
+      Reflect.apply(api.registerTool, api, ["echo", badTool]);
+    },
+    /use execute\(params, signal\?, onUpdate\?\) instead of handler/i,
+  );
+
+  assert.equal(registerCalls, 0);
+});
+
 void test("createExtensionAPI denies llm.complete when capability is blocked", async () => {
   const api = createExtensionAPI({
     getAgent: () => {

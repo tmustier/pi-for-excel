@@ -1,0 +1,262 @@
+/* ═══════════════════════════════════════════════════════
+   Web search setup card — inline setup after failed search
+   ═══════════════════════════════════════════════════════ */
+
+.pi-search-setup {
+  margin: 6px 0 2px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--amber-alpha-16);
+  border-left: 3px solid var(--pi-amber);
+  background: var(--amber-alpha-8);
+  transition: opacity 0.2s ease;
+}
+
+.pi-search-setup.is-dismissed {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.pi-search-setup__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pi-search-setup__icon {
+  flex-shrink: 0;
+  color: var(--pi-amber);
+}
+
+.pi-search-setup__title {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--foreground);
+  line-height: 1.35;
+}
+
+.pi-search-setup__body {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.pi-search-setup__text {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--foreground);
+  line-height: 1.4;
+}
+
+/* ── Steps ──────────────────────────────────────────── */
+
+.pi-search-setup__step {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pi-search-setup__step-label {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--foreground);
+  line-height: 1.35;
+}
+
+/* ── Copyable command (reuses proxy-banner pattern) ── */
+
+.pi-search-setup__code {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--amber-alpha-16);
+  background: var(--white-alpha-45);
+  border-radius: var(--radius-xs);
+  padding: 6px 8px;
+}
+
+.pi-search-setup__code code {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--foreground);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pi-search-setup__copy {
+  border: none;
+  background: none;
+  color: var(--muted-foreground);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 18px;
+  block-size: 18px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.pi-search-setup__copy > svg {
+  inline-size: 14px;
+  block-size: 14px;
+}
+
+.pi-search-setup__copy:hover {
+  color: var(--foreground);
+}
+
+/* ── Key input row ──────────────────────────────────── */
+
+.pi-search-setup__input-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.pi-search-setup__input {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  background: var(--background);
+  color: var(--foreground);
+  outline: none;
+}
+
+.pi-search-setup__input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 1px var(--primary);
+}
+
+.pi-search-setup__input::placeholder {
+  color: var(--muted-foreground);
+}
+
+.pi-search-setup__save {
+  border: 1px solid var(--primary);
+  background: var(--primary);
+  color: var(--primary-foreground);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  padding: 5px 12px;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.pi-search-setup__save:hover {
+  opacity: 0.9;
+}
+
+.pi-search-setup__save:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* ── Status / validation feedback ───────────────────── */
+
+.pi-search-setup__status {
+  display: block;
+  font-size: var(--text-xs);
+  line-height: 1.35;
+  color: var(--muted-foreground);
+  min-height: 1em;
+}
+
+.pi-search-setup__status:empty {
+  display: none;
+}
+
+.pi-search-setup__status.is-ok {
+  color: var(--pi-green);
+}
+
+.pi-search-setup__status.is-warn {
+  color: var(--pi-amber);
+}
+
+.pi-search-setup__status.is-error {
+  color: var(--destructive);
+}
+
+/* ── Links ──────────────────────────────────────────── */
+
+.pi-search-setup__link {
+  color: var(--primary);
+  font-size: var(--text-sm);
+  text-decoration: none;
+}
+
+.pi-search-setup__link:hover {
+  text-decoration: underline;
+}
+
+/* ── Hint text ──────────────────────────────────────── */
+
+.pi-search-setup__hint {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: var(--text-xs);
+  line-height: 1.35;
+}
+
+.pi-search-setup__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pi-search-setup__retry {
+  border: 1px solid var(--border);
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  padding: 4px 10px;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+}
+
+.pi-search-setup__retry:hover {
+  background: var(--white-alpha-45);
+}
+
+.pi-search-setup__retry:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* ── Footer ─────────────────────────────────────────── */
+
+.pi-search-setup__footer {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--amber-alpha-16);
+  display: flex;
+  justify-content: flex-end;
+}
+
+.pi-search-setup__dismiss {
+  border: none;
+  background: none;
+  color: var(--muted-foreground);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  cursor: pointer;
+  padding: 2px 0;
+}
+
+.pi-search-setup__dismiss:hover {
+  color: var(--foreground);
+  text-decoration: underline;
+}

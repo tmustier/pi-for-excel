@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { readFile } from "node:fs/promises";
 
+import { Type } from "@sinclair/typebox";
+
 import { setExperimentalFeatureEnabled } from "../src/experiments/flags.ts";
 import { ExtensionRuntimeManager } from "../src/extensions/runtime-manager.ts";
 import {
@@ -334,6 +336,180 @@ void test("trusted local-module extensions stay on host runtime even when sandbo
     assert.equal(status.loaded, true);
     assert.equal(hostLoadCalls, 1);
     assert.equal(sandboxLoadCalls, 0);
+  } finally {
+    restoreLocalStorage();
+  }
+});
+
+void test("host runtime extension tools include source provenance in descriptions", async () => {
+  const restoreLocalStorage = installLocalStorageStub();
+
+  try {
+    clearLocalStorageKey(EXTENSION_SANDBOX_RUNTIME_STORAGE_KEY);
+
+    const settings = new MemorySettingsStore();
+    settings.writeRaw(EXTENSIONS_REGISTRY_STORAGE_KEY, {
+      version: 2,
+      items: [
+        createStoredEntry({
+          id: "ext.apollo",
+          name: "Apollo Helper",
+          trust: "local-module",
+        }),
+      ],
+    });
+
+    const manager = new ExtensionRuntimeManager({
+      settings,
+      getActiveAgent: () => null,
+      refreshRuntimeTools: async () => {},
+      reservedToolNames: new Set<string>(),
+      loadExtensionFromSource: (api) => {
+        api.registerTool("apollo_enrich", {
+          description: "Enrich contacts with Apollo API",
+          parameters: Type.Object({
+            linkedin_url: Type.String(),
+          }),
+          execute: () => ({
+            content: [{ type: "text", text: "ok" }],
+            details: undefined,
+          }),
+        });
+
+        return Promise.resolve({
+          deactivate: () => Promise.resolve(),
+        });
+      },
+      activateInSandbox: () => {
+        throw new Error("sandbox runtime should not be used for local-module extensions");
+      },
+    });
+
+    await manager.initialize();
+
+    const tools = manager.getRegisteredTools();
+    assert.equal(tools.length, 1);
+
+    const description = tools[0]?.description ?? "";
+    assert.match(description, /Enrich contacts with Apollo API/);
+    assert.match(description, /Source: extension "Apollo Helper" \(ext\.apollo\)\./);
+  } finally {
+    restoreLocalStorage();
+  }
+});
+
+void test("host runtime extension tools tolerate missing descriptions", async () => {
+  const restoreLocalStorage = installLocalStorageStub();
+
+  try {
+    clearLocalStorageKey(EXTENSION_SANDBOX_RUNTIME_STORAGE_KEY);
+
+    const settings = new MemorySettingsStore();
+    settings.writeRaw(EXTENSIONS_REGISTRY_STORAGE_KEY, {
+      version: 2,
+      items: [
+        createStoredEntry({
+          id: "ext.apollo.missing-description",
+          name: "Apollo Helper",
+          trust: "local-module",
+        }),
+      ],
+    });
+
+    const manager = new ExtensionRuntimeManager({
+      settings,
+      getActiveAgent: () => null,
+      refreshRuntimeTools: async () => {},
+      reservedToolNames: new Set<string>(),
+      loadExtensionFromSource: (api) => {
+        const toolWithoutDescription = {
+          parameters: Type.Object({
+            linkedin_url: Type.String(),
+          }),
+          execute: () => ({
+            content: [{ type: "text", text: "ok" }],
+            details: undefined,
+          }),
+        };
+
+        Reflect.apply(api.registerTool, api, ["apollo_enrich", toolWithoutDescription]);
+
+        return Promise.resolve({
+          deactivate: () => Promise.resolve(),
+        });
+      },
+      activateInSandbox: () => {
+        throw new Error("sandbox runtime should not be used for local-module extensions");
+      },
+    });
+
+    await manager.initialize();
+
+    const tools = manager.getRegisteredTools();
+    assert.equal(tools.length, 1);
+
+    const description = tools[0]?.description ?? "";
+    assert.equal(description, "Source: extension \"Apollo Helper\" (ext.apollo.missing-description).");
+  } finally {
+    restoreLocalStorage();
+  }
+});
+
+void test("host runtime extension tool errors include extension ownership context", async () => {
+  const restoreLocalStorage = installLocalStorageStub();
+
+  try {
+    clearLocalStorageKey(EXTENSION_SANDBOX_RUNTIME_STORAGE_KEY);
+
+    const settings = new MemorySettingsStore();
+    settings.writeRaw(EXTENSIONS_REGISTRY_STORAGE_KEY, {
+      version: 2,
+      items: [
+        createStoredEntry({
+          id: "ext.apollo.error",
+          name: "Apollo Helper",
+          trust: "local-module",
+        }),
+      ],
+    });
+
+    const manager = new ExtensionRuntimeManager({
+      settings,
+      getActiveAgent: () => null,
+      refreshRuntimeTools: async () => {},
+      reservedToolNames: new Set<string>(),
+      loadExtensionFromSource: (api) => {
+        api.registerTool("apollo_enrich", {
+          description: "Enrich contacts with Apollo API",
+          parameters: Type.Object({
+            linkedin_url: Type.String(),
+          }),
+          execute: () => {
+            throw new Error("tool.execute is not a function");
+          },
+        });
+
+        return Promise.resolve({
+          deactivate: () => Promise.resolve(),
+        });
+      },
+      activateInSandbox: () => {
+        throw new Error("sandbox runtime should not be used for local-module extensions");
+      },
+    });
+
+    await manager.initialize();
+
+    const tool = manager.getRegisteredTools()[0];
+    assert.ok(tool);
+    if (!tool) {
+      return;
+    }
+
+    await assert.rejects(
+      async () => tool.execute("call-1", { linkedin_url: "https://linkedin.com/in/alice" }),
+      /\[Extension Apollo Helper\] Tool "apollo_enrich" failed: tool\.execute is not a function/,
+    );
   } finally {
     restoreLocalStorage();
   }
