@@ -1470,8 +1470,13 @@ export async function initTaskpane(opts: {
       return;
     }
 
+    const cmd = commandRegistry.get(name);
+    if (!cmd) {
+      return;
+    }
+
     const busy = activeRuntime.agent.state.isStreaming || activeRuntime.actionQueue.isBusy();
-    if (busy && !isBusyAllowedCommand(name)) {
+    if (busy && !isBusyAllowedCommand(cmd)) {
       showToast(`Can't run /${name} while Pi is busy`);
       return;
     }
@@ -1481,8 +1486,7 @@ export async function initTaskpane(opts: {
       return;
     }
 
-    const cmd = commandRegistry.get(name);
-    if (cmd) void cmd.execute(args);
+    void cmd.execute(args);
   };
   document.addEventListener("pi:command-run", onCommandRun);
 

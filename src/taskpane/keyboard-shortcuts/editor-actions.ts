@@ -56,7 +56,7 @@ export function handleSlashCommandExecution(args: {
   const actionQueue = getActiveActionQueue();
   const busy = isStreaming || actionQueue?.isBusy() === true;
 
-  if (busy && !isBusyAllowedCommand(cmdName)) {
+  if (busy && !isBusyAllowedCommand(cmd)) {
     event.preventDefault();
     event.stopImmediatePropagation();
     showToast(`Can't run /${cmdName} while Pi is busy`);

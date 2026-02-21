@@ -417,9 +417,11 @@ class SandboxRuntimeHost {
           const commandId = asNonEmptyString(payload.commandId, "commandId");
           const name = asNonEmptyString(payload.name, "name");
           const description = typeof payload.description === "string" ? payload.description : "";
+          const busyAllowed = typeof payload.busyAllowed === "boolean" ? payload.busyAllowed : true;
 
           this.options.registerCommand(name, {
             description,
+            busyAllowed,
             handler: async (args: string) => {
               await this.callSandbox("invoke_command", {
                 commandId,

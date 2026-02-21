@@ -16,6 +16,7 @@ type Pt = { x: number; y: number };
 export function activate(api: ExcelExtensionAPI) {
   api.registerCommand("snake", {
     description: "Play Snake! 🐍",
+    busyAllowed: true,
     handler: () => {
       const el = document.createElement("div");
       el.style.cssText = `

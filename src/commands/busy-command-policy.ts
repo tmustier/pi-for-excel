@@ -6,6 +6,7 @@
  */
 
 import { TOOLS_COMMAND_NAME } from "../integrations/naming.js";
+import type { SlashCommand } from "./types.js";
 
 const BUSY_ALLOWED_COMMANDS = new Set<string>([
   "compact",
@@ -22,6 +23,14 @@ const BUSY_ALLOWED_COMMANDS = new Set<string>([
   TOOLS_COMMAND_NAME,
 ]);
 
-export function isBusyAllowedCommand(commandName: string): boolean {
-  return BUSY_ALLOWED_COMMANDS.has(commandName);
+export function isBusyAllowedCommand(command: Pick<SlashCommand, "name" | "source" | "busyAllowed">): boolean {
+  if (BUSY_ALLOWED_COMMANDS.has(command.name)) {
+    return true;
+  }
+
+  if (command.source === "extension") {
+    return command.busyAllowed ?? true;
+  }
+
+  return command.busyAllowed === true;
 }

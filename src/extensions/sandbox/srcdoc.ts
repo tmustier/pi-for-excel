@@ -515,6 +515,7 @@ export function buildSandboxSrcdoc(options: BuildSandboxSrcdocOptions): string {
             }
 
             const description = typeof cmd.description === "string" ? cmd.description : "";
+            const busyAllowed = typeof cmd.busyAllowed === "boolean" ? cmd.busyAllowed : true;
             const commandId = 'cmd-' + String(nextRequestId++);
             commandHandlers.set(commandId, cmd.handler);
 
@@ -522,6 +523,7 @@ export function buildSandboxSrcdoc(options: BuildSandboxSrcdocOptions): string {
               commandId,
               name: normalizedName,
               description,
+              busyAllowed,
             }));
           },
 

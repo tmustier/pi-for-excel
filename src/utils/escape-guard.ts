@@ -10,6 +10,8 @@ const ESCAPE_OWNER_SELECTORS = [
   ".pi-utilities-menu",
   ".pi-status-popover",
   "#pi-command-menu",
+  "#pi-widget-slot:not(:empty)",
+  "#pi-widget-slot-below:not(:empty)",
   "agent-model-selector",
   "agent-settings-dialog",
   "api-key-prompt-dialog",

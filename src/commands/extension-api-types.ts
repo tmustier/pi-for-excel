@@ -12,6 +12,11 @@ import type { ExtensionWidgetPlacement } from "../extensions/internal/widget-sur
 
 export interface ExtensionCommand {
   description: string;
+  /**
+   * Allow running this command while the active runtime is busy/streaming.
+   * Defaults to true for extension commands.
+   */
+  busyAllowed?: boolean;
   handler: (args: string) => void | Promise<void>;
 }
 

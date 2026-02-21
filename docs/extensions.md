@@ -67,8 +67,12 @@ On disable/reload/uninstall, Pi runs cleanup functions (reverse order), then `de
 
 ## API surface (`ExcelExtensionAPI`)
 
-### `registerCommand(name, { description, handler })`
+### `registerCommand(name, { description, handler, busyAllowed? })`
 Registers a slash command.
+
+- `busyAllowed` controls whether the command can run while Pi is actively streaming/busy.
+- Default: `true` for extension commands.
+- Set `busyAllowed: false` when the command should wait until Pi is idle.
 
 ### `registerTool(name, toolDef)` / `unregisterTool(name)`
 Registers or removes an agent-callable tool.

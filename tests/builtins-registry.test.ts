@@ -351,7 +351,7 @@ void test("settings overlay serializes open flow and adopts shared proxy + execu
   assert.doesNotMatch(settingsOverlaySource, /text:\s*"Save"/);
 });
 
-void test("slash-command busy policy is centralized and includes /yolo and /addons", async () => {
+void test("slash-command busy policy is centralized and supports extension command defaults", async () => {
   const keyboardActionsSource = await readFile(
     new URL("../src/taskpane/keyboard-shortcuts/editor-actions.ts", import.meta.url),
     "utf8",
@@ -366,8 +366,17 @@ void test("slash-command busy policy is centralized and includes /yolo and /addo
   assert.match(busyPolicySource, /"rules"/);
   assert.match(busyPolicySource, /"files"/);
   assert.match(busyPolicySource, /TOOLS_COMMAND_NAME/);
+  assert.match(busyPolicySource, /command\.source === "extension"/);
+  assert.match(busyPolicySource, /command\.busyAllowed \?\? true/);
   assert.doesNotMatch(busyPolicySource, /INTEGRATIONS_COMMAND_NAME/);
   assert.doesNotMatch(busyPolicySource, /"addons"/);
+});
+
+void test("escape guard treats extension widget slots as escape owners", async () => {
+  const escapeGuardSource = await readFile(new URL("../src/utils/escape-guard.ts", import.meta.url), "utf8");
+
+  assert.match(escapeGuardSource, /#pi-widget-slot:not\(:empty\)/);
+  assert.match(escapeGuardSource, /#pi-widget-slot-below:not\(:empty\)/);
 });
 
 void test("taskpane init wires recovery overlay opener", async () => {

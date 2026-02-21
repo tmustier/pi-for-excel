@@ -13,6 +13,13 @@ export interface SlashCommand {
   source: CommandSource;
   /** Execute the command. `args` is everything after the command name. */
   execute: (args: string) => void | Promise<void>;
+  /**
+   * Optional busy policy override.
+   *
+   * When true, command is allowed while the active runtime is busy.
+   * Extension commands default to busy-allowed unless explicitly set to false.
+   */
+  busyAllowed?: boolean;
   /** Optional: is this command available right now? */
   enabled?: () => boolean;
 }

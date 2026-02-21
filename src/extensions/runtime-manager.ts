@@ -567,6 +567,7 @@ export class ExtensionRuntimeManager {
         description: cmd.description,
         source: "extension",
         execute: cmd.handler,
+        busyAllowed: cmd.busyAllowed ?? true,
       });
 
       this.commandOwners.set(name, entry.id);
