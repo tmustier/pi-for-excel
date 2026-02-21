@@ -87,6 +87,7 @@ Optional auth header when configured:
   "lines": 120,
   "wait_for": "optional regex string",
   "timeout_ms": 5000,
+  "wait_ms": 15000,
   "join_wrapped": false
 }
 ```
@@ -99,8 +100,9 @@ Optional auth header when configured:
 - `kill_session`: requires `session`
 - `send_keys`: requires `session` + at least one of (`text`, `keys`, `enter=true`)
 - `send_and_capture`: same as `send_keys`
+- `wait_ms`: optional delay (0..120000ms) before capture for `capture_pane`/`send_and_capture`
 
-Tip: `send_keys` sends input only. Use `capture_pane` or `send_and_capture` when you need terminal output.
+Tip: `send_keys` sends input only. Use `capture_pane` or `send_and_capture` when you need terminal output. For long-running jobs, set `wait_ms` on capture calls (for example 15000-30000) instead of tight polling loops.
 
 ## Response schema
 

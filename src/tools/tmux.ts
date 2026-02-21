@@ -27,7 +27,10 @@ import {
 } from "./experimental-tool-gates.js";
 
 const TMUX_BRIDGE_API_PATH = "/v1/tmux";
-const TMUX_BRIDGE_TIMEOUT_MS = 15_000;
+const DEFAULT_TMUX_BRIDGE_TIMEOUT_MS = 15_000;
+const TMUX_BRIDGE_TIMEOUT_BUFFER_MS = 5_000;
+const MAX_TMUX_BRIDGE_TIMEOUT_MS = 245_000;
+const DEFAULT_SEND_AND_CAPTURE_TIMEOUT_MS = 5_000;
 
 export const TMUX_BRIDGE_TOKEN_SETTING_KEY = "tmux.bridge.token";
 
@@ -59,7 +62,8 @@ const schema = Type.Object({
   action: StringEnum([...TMUX_ACTIONS], {
     description:
       "Tmux operation to run on the local bridge. " +
-      "Use list_sessions first, then create_session/send_keys/capture_pane.",
+      "Use list_sessions first, then create_session/send_keys/capture_pane. " +
+      "For long-running commands, prefer send_and_capture with wait_for or capture_pane with wait_ms.",
   }),
   session: Type.Optional(Type.String({
     description:
@@ -72,7 +76,8 @@ const schema = Type.Object({
   })),
   text: Type.Optional(Type.String({
     description:
-      "Literal text to send to the tmux pane. Applies to send_keys and send_and_capture.",
+      "Literal text to send to the tmux pane (for example shell commands like `pi`). " +
+      "Applies to send_keys and send_and_capture.",
   })),
   keys: Type.Optional(Type.Array(Type.String({
     description:
@@ -99,6 +104,13 @@ const schema = Type.Object({
     maximum: 120_000,
     description: "Max wait time in ms for send_and_capture.",
   })),
+  wait_ms: Type.Optional(Type.Integer({
+    minimum: 0,
+    maximum: 120_000,
+    description:
+      "Optional pause before capture (capture_pane/send_and_capture). " +
+      "Use this to avoid rapid polling for long-running commands.",
+  })),
   join_wrapped: Type.Optional(Type.Boolean({
     description:
       "If true, request wrapped terminal lines to be joined by the bridge before return.",
@@ -122,6 +134,7 @@ export interface TmuxBridgeRequest {
   lines?: number;
   wait_for?: string;
   timeout_ms?: number;
+  wait_ms?: number;
   join_wrapped?: boolean;
 }
 
@@ -214,6 +227,9 @@ function parseParams(raw: unknown): Params {
   const timeoutMs = toOptionalInteger(raw.timeout_ms);
   if (timeoutMs !== undefined) params.timeout_ms = timeoutMs;
 
+  const waitMs = toOptionalInteger(raw.wait_ms);
+  if (waitMs !== undefined) params.wait_ms = waitMs;
+
   const joinWrapped = toOptionalBoolean(raw.join_wrapped);
   if (joinWrapped !== undefined) params.join_wrapped = joinWrapped;
 
@@ -241,6 +257,10 @@ function validateActionParams(params: Params): void {
 
   if (params.timeout_ms !== undefined && (params.timeout_ms < 100 || params.timeout_ms > 120_000)) {
     throw new Error("timeout_ms must be between 100 and 120000");
+  }
+
+  if (params.wait_ms !== undefined && (params.wait_ms < 0 || params.wait_ms > 120_000)) {
+    throw new Error("wait_ms must be between 0 and 120000");
   }
 
   switch (params.action) {
@@ -279,6 +299,7 @@ function toBridgeRequest(params: Params): TmuxBridgeRequest {
     lines: params.lines,
     wait_for: cleanOptionalString(params.wait_for),
     timeout_ms: params.timeout_ms,
+    wait_ms: params.wait_ms,
     join_wrapped: params.join_wrapped,
   };
 }
@@ -356,6 +377,24 @@ async function defaultGetBridgeConfig(): Promise<TmuxBridgeConfig | null> {
   }
 }
 
+export function computeTmuxFetchTimeoutMs(request: TmuxBridgeRequest): number {
+  const waitMs = typeof request.wait_ms === "number" ? request.wait_ms : 0;
+
+  const captureTimeoutMs =
+    request.action === "send_and_capture"
+      ? (typeof request.timeout_ms === "number"
+        ? request.timeout_ms
+        : DEFAULT_SEND_AND_CAPTURE_TIMEOUT_MS)
+      : 0;
+
+  const computedTimeoutMs = waitMs + captureTimeoutMs + TMUX_BRIDGE_TIMEOUT_BUFFER_MS;
+  if (computedTimeoutMs < DEFAULT_TMUX_BRIDGE_TIMEOUT_MS) {
+    return DEFAULT_TMUX_BRIDGE_TIMEOUT_MS;
+  }
+
+  return Math.min(computedTimeoutMs, MAX_TMUX_BRIDGE_TIMEOUT_MS);
+}
+
 async function defaultCallBridge(
   request: TmuxBridgeRequest,
   config: TmuxBridgeConfig,
@@ -363,10 +402,11 @@ async function defaultCallBridge(
 ): Promise<TmuxBridgeResponse> {
   const endpoint = joinBridgeUrl(config.url, TMUX_BRIDGE_API_PATH);
   const controller = new AbortController();
+  const timeoutMs = computeTmuxFetchTimeoutMs(request);
 
   const timeoutId = setTimeout(() => {
     controller.abort();
-  }, TMUX_BRIDGE_TIMEOUT_MS);
+  }, timeoutMs);
 
   const abortFromCaller = () => {
     controller.abort();
@@ -426,7 +466,7 @@ async function defaultCallBridge(
       if (signal?.aborted) {
         throw new Error("Aborted");
       }
-      throw new Error(`Tmux bridge request timed out after ${TMUX_BRIDGE_TIMEOUT_MS}ms.`);
+      throw new Error(`Tmux bridge request timed out after ${timeoutMs}ms.`);
     }
 
     throw error;
@@ -475,7 +515,7 @@ function formatBridgeSuccessText(
 
       return (
         `Sent keys to tmux session \"${session}\". ` +
-        "Use send_and_capture or capture_pane to fetch terminal output."
+        "Use send_and_capture (with wait_for when possible) or capture_pane (optionally with wait_ms) to fetch terminal output."
       );
     }
 
@@ -532,7 +572,7 @@ export function createTmuxTool(
     label: "Tmux",
     description:
       "Interact with a local tmux bridge. " +
-      "Actions: list/create/send/capture/kill sessions for local shell workflows.",
+      "Actions: list/create/send/capture/kill sessions for local shell workflows, including launching installed CLIs like `pi`.",
     parameters: schema,
     execute: async (
       _toolCallId: string,

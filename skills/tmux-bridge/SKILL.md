@@ -21,6 +21,20 @@ When the bridge is running, the `tmux` tool can:
 - **send_and_capture** — send a command and wait for output in one call
 - **kill_session** — close a session
 
+## Running `pi` (or other local CLIs) via tmux
+
+The tmux pane is a normal local shell. If `pi` is installed, you can invoke it directly with `send_keys`/`send_and_capture` text like any other command.
+
+Recommended flow:
+1. `list_sessions` then `create_session` (or reuse an existing session)
+2. Optional one-time check: `command -v pi`
+3. Send the `pi ...` command
+4. Monitor output with `capture_pane`
+
+For long-running jobs, avoid rapid repeated captures. Prefer:
+- `capture_pane` with `wait_ms` (for example 15000-30000), or
+- `send_and_capture` with `wait_for` + `timeout_ms` when you know a completion pattern.
+
 ## How to set it up
 
 ### 1. Start the bridge

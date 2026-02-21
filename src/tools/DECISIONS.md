@@ -164,6 +164,7 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
   - `capture_pane`
   - `send_and_capture`
   - `kill_session`
+  - capture actions support optional `wait_ms` delay (0..120000) to avoid tight polling loops for long-running commands
 - **Security posture:** local opt-in only; bridge URL validated via `validateOfficeProxyUrl`; tool execution re-checks gate before every call; bridge enforces loopback+origin checks and optional bearer token (`TMUX_BRIDGE_TOKEN` / setting `tmux.bridge.token`, managed via `/experimental tmux-bridge-token ...`).
 - **Diagnostics UX:** `/experimental tmux-status` reports URL/token config, gate result, and bridge health details for quick troubleshooting.
 - **Rationale:** stable local adapter contract now (issue #3) with one-command real execution and incremental hardening.

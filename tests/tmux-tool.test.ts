@@ -4,6 +4,7 @@ import { test } from "node:test";
 import type { AgentToolResult } from "@mariozechner/pi-agent-core";
 
 import {
+  computeTmuxFetchTimeoutMs,
   createTmuxTool,
   type TmuxBridgeConfig,
   type TmuxBridgeRequest,
@@ -18,6 +19,42 @@ function firstText(result: AgentToolResult<TmuxToolDetails>): string {
   }
   return first.text;
 }
+
+void test("tmux fetch timeout includes wait_ms and send_and_capture timeout", () => {
+  const captureTimeout = computeTmuxFetchTimeoutMs({
+    action: "capture_pane",
+    session: "demo",
+    wait_ms: 30_000,
+  });
+  assert.equal(captureTimeout, 35_000);
+
+  const sendAndCaptureTimeout = computeTmuxFetchTimeoutMs({
+    action: "send_and_capture",
+    session: "demo",
+    text: "pi --help",
+    wait_ms: 30_000,
+    timeout_ms: 120_000,
+  });
+  assert.equal(sendAndCaptureTimeout, 155_000);
+});
+
+void test("tmux fetch timeout keeps sane defaults and hard cap", () => {
+  const defaultTimeout = computeTmuxFetchTimeoutMs({
+    action: "send_and_capture",
+    session: "demo",
+    text: "echo ready",
+  });
+  assert.equal(defaultTimeout, 15_000);
+
+  const cappedTimeout = computeTmuxFetchTimeoutMs({
+    action: "send_and_capture",
+    session: "demo",
+    text: "echo done",
+    wait_ms: 240_000,
+    timeout_ms: 120_000,
+  });
+  assert.equal(cappedTimeout, 245_000);
+});
 
 void test("tmux tool returns guidance when bridge URL is not configured", async () => {
   const tool = createTmuxTool({
@@ -81,6 +118,7 @@ void test("tmux tool sends v1 bridge contract payload for send_and_capture", asy
     lines: 80,
     wait_for: "done",
     timeout_ms: 5000,
+    wait_ms: 15000,
     join_wrapped: true,
   });
 
@@ -92,6 +130,7 @@ void test("tmux tool sends v1 bridge contract payload for send_and_capture", asy
   assert.equal(capturedRequest?.lines, 80);
   assert.equal(capturedRequest?.wait_for, "done");
   assert.equal(capturedRequest?.timeout_ms, 5000);
+  assert.equal(capturedRequest?.wait_ms, 15000);
   assert.equal(capturedRequest?.join_wrapped, true);
 
   assert.ok(capturedConfig);
