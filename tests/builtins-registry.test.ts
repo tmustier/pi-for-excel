@@ -443,6 +443,7 @@ void test("permission helper updates one capability without mutating others", ()
     httpFetch: false,
     storageReadWrite: true,
     connectionsReadWrite: false,
+    connectionsSecretsRead: false,
     clipboardWrite: true,
     agentContextWrite: false,
     agentSteer: false,

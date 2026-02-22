@@ -276,6 +276,7 @@ export function createExtensionAPI(options: CreateExtensionAPIOptions): ExcelExt
   const unregisterConnection = options.unregisterConnection;
   const listConnections = options.listConnections;
   const getConnection = options.getConnection;
+  const getConnectionSecrets = options.getConnectionSecrets;
   const setConnectionSecrets = options.setConnectionSecrets;
   const clearConnectionSecrets = options.clearConnectionSecrets;
   const markConnectionValidated = options.markConnectionValidated;
@@ -409,6 +410,16 @@ export function createExtensionAPI(options: CreateExtensionAPIOptions): ExcelExt
         }
 
         return getConnection(qualifyOwnedConnectionId(connectionOwnerId, connectionId));
+      },
+
+      async getSecrets(connectionId: string): Promise<Record<string, string> | null> {
+        assertCapability("connections.secrets.read");
+
+        if (!getConnectionSecrets) {
+          throw new Error("Extension host does not support connections.getSecrets()");
+        }
+
+        return getConnectionSecrets(qualifyOwnedConnectionId(connectionOwnerId, connectionId));
       },
 
       async setSecrets(connectionId: string, secrets: Record<string, string>): Promise<void> {

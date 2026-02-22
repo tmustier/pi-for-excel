@@ -134,11 +134,16 @@ export function parseSandboxHttpRequestOptions(optionsRaw: unknown): HttpRequest
     }
   }
 
+  const normalizedConnection = typeof optionsRaw.connection === "string"
+    ? optionsRaw.connection.trim()
+    : "";
+
   return {
     method: asHttpMethodOrUndefined(optionsRaw.method),
     headers,
     body: typeof optionsRaw.body === "string" ? optionsRaw.body : undefined,
     timeoutMs: typeof optionsRaw.timeoutMs === "number" ? optionsRaw.timeoutMs : undefined,
+    ...(normalizedConnection.length > 0 ? { connection: normalizedConnection } : {}),
   };
 }
 

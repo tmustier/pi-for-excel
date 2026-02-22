@@ -102,6 +102,7 @@ export interface SandboxActivationOptions {
   unregisterConnection: (connectionId: string) => void;
   listConnections: () => Promise<ConnectionState[]>;
   getConnection: (connectionId: string) => Promise<ConnectionState | null>;
+  getConnectionSecrets: (connectionId: string) => Promise<Record<string, string> | null>;
   setConnectionSecrets: (connectionId: string, secrets: Record<string, string>) => Promise<void>;
   clearConnectionSecrets: (connectionId: string) => Promise<void>;
   markConnectionValidated: (connectionId: string) => Promise<void>;
@@ -141,6 +142,50 @@ function parseConnectionSecrets(value: unknown): Record<string, string> {
   }
 
   return secrets;
+}
+
+function parseConnectionHttpAuth(value: unknown): ExtensionConnectionDefinition["httpAuth"] {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+
+  const payload = asRecord(value, "connection definition httpAuth");
+
+  if (payload.placement !== "header") {
+    throw new Error("connection definition httpAuth.placement must be \"header\".");
+  }
+
+  const headerName = asNonEmptyString(payload.headerName, "httpAuth.headerName");
+  const valueTemplate = asNonEmptyString(payload.valueTemplate, "httpAuth.valueTemplate");
+
+  if (!Array.isArray(payload.allowedHosts)) {
+    throw new Error("connection definition httpAuth.allowedHosts must be an array.");
+  }
+
+  const allowedHosts: string[] = [];
+  for (const [index, host] of payload.allowedHosts.entries()) {
+    if (typeof host !== "string") {
+      throw new Error(`httpAuth.allowedHosts[${index}] must be a string.`);
+    }
+
+    const normalizedHost = host.trim().toLowerCase();
+    if (normalizedHost.length === 0) {
+      throw new Error(`httpAuth.allowedHosts[${index}] cannot be empty.`);
+    }
+
+    allowedHosts.push(normalizedHost);
+  }
+
+  if (allowedHosts.length === 0) {
+    throw new Error("connection definition httpAuth.allowedHosts must contain at least one host.");
+  }
+
+  return {
+    placement: "header",
+    headerName,
+    valueTemplate,
+    allowedHosts,
+  };
 }
 
 function parseConnectionDefinition(value: unknown): ExtensionConnectionDefinition {
@@ -190,12 +235,15 @@ function parseConnectionDefinition(value: unknown): ExtensionConnectionDefinitio
     ? setupHintRaw.trim()
     : undefined;
 
+  const httpAuth = parseConnectionHttpAuth(payload.httpAuth);
+
   return {
     id,
     title,
     capability,
     authKind: authKindRaw,
     secretFields,
+    httpAuth,
     setupHint,
   };
 }
@@ -793,6 +841,16 @@ class SandboxRuntimeHost {
           const connectionId = asNonEmptyString(payload.connectionId, "connectionId");
           const state = await this.options.getConnection(connectionId);
           this.sendResponse(requestId, true, state);
+          return;
+        }
+
+        case "connections_get_secrets": {
+          this.assertCapability("connections.secrets.read");
+
+          const payload = asRecord(params, "connections_get_secrets params");
+          const connectionId = asNonEmptyString(payload.connectionId, "connectionId");
+          const secrets = await this.options.getConnectionSecrets(connectionId);
+          this.sendResponse(requestId, true, secrets);
           return;
         }
 

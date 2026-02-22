@@ -50,12 +50,20 @@ export interface ExtensionConnectionSecretField {
   maskInUi?: boolean;
 }
 
+export interface ExtensionConnectionHttpAuthDefinition {
+  placement: "header";
+  headerName: string;
+  valueTemplate: string;
+  allowedHosts: readonly string[];
+}
+
 export interface ExtensionConnectionDefinition {
   id: string;
   title: string;
   capability: string;
   authKind: ConnectionAuthKind;
   secretFields: readonly ExtensionConnectionSecretField[];
+  httpAuth?: ExtensionConnectionHttpAuthDefinition;
   setupHint?: string;
 }
 
@@ -64,6 +72,7 @@ export interface ExtensionConnectionsAPI {
   unregister(connectionId: string): void;
   list(): Promise<ConnectionState[]>;
   get(connectionId: string): Promise<ConnectionState | null>;
+  getSecrets(connectionId: string): Promise<Record<string, string> | null>;
   setSecrets(connectionId: string, secrets: Record<string, string>): Promise<void>;
   clearSecrets(connectionId: string): Promise<void>;
   markValidated(connectionId: string): Promise<void>;
@@ -135,6 +144,8 @@ export interface HttpRequestOptions {
   headers?: Record<string, string>;
   body?: string;
   timeoutMs?: number;
+  /** Optional owner-qualified or local connection id for host-injected auth. */
+  connection?: string;
 }
 
 export interface HttpResponse {
@@ -225,6 +236,7 @@ export interface CreateExtensionAPIOptions {
   unregisterConnection?: (connectionId: string) => void;
   listConnections?: () => Promise<ConnectionState[]>;
   getConnection?: (connectionId: string) => Promise<ConnectionState | null>;
+  getConnectionSecrets?: (connectionId: string) => Promise<Record<string, string> | null>;
   setConnectionSecrets?: (connectionId: string, secrets: Record<string, string>) => Promise<void>;
   clearConnectionSecrets?: (connectionId: string) => Promise<void>;
   markConnectionValidated?: (connectionId: string) => Promise<void>;

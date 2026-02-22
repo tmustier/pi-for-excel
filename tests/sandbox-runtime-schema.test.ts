@@ -87,6 +87,7 @@ void test("parseSandboxHttpRequestOptions normalizes method/headers/body", () =>
     },
     body: "{\"ok\":true}",
     timeoutMs: 2500,
+    connection: "  acme  ",
   });
 
   assert.deepEqual(options, {
@@ -96,6 +97,7 @@ void test("parseSandboxHttpRequestOptions normalizes method/headers/body", () =>
     },
     body: "{\"ok\":true}",
     timeoutMs: 2500,
+    connection: "acme",
   });
 
   assert.equal(parseSandboxHttpRequestOptions("not-an-object"), undefined);

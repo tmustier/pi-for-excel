@@ -653,6 +653,20 @@ export function buildSandboxSrcdoc(options: BuildSandboxSrcdocOptions): string {
               });
             },
 
+            getSecrets(connectionId) {
+              const normalizedConnectionId = typeof connectionId === "string"
+                ? connectionId.trim()
+                : "";
+
+              if (!normalizedConnectionId) {
+                throw new Error('connections.getSecrets requires a non-empty connection id');
+              }
+
+              return requestHost("connections_get_secrets", {
+                connectionId: normalizedConnectionId,
+              });
+            },
+
             setSecrets(connectionId, secrets) {
               const normalizedConnectionId = typeof connectionId === "string"
                 ? connectionId.trim()

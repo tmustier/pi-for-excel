@@ -109,6 +109,40 @@ void test("listDefinitions returns detached objects", () => {
   assert.equal(next[0].secretFields[0].label, "API key");
 });
 
+void test("registerDefinition validates and normalizes httpAuth configuration", () => {
+  const manager = new ConnectionManager({ settings: createMemorySettings() });
+
+  manager.registerDefinition("ext.apollo", {
+    ...APOLLO_DEFINITION,
+    httpAuth: {
+      placement: "header",
+      headerName: "Authorization",
+      valueTemplate: "Bearer {apiKey}",
+      allowedHosts: ["API.APOLLO.COM", "api.apollo.com"],
+    },
+  });
+
+  const definition = manager.getDefinition("ext.apollo.apollo");
+  assert.ok(definition?.httpAuth);
+  assert.deepEqual(definition?.httpAuth?.allowedHosts, ["api.apollo.com"]);
+
+  assert.throws(
+    () => {
+      manager.registerDefinition("ext.apollo", {
+        ...APOLLO_DEFINITION,
+        id: "ext.apollo.bad-template",
+        httpAuth: {
+          placement: "header",
+          headerName: "Authorization",
+          valueTemplate: "Bearer {missingField}",
+          allowedHosts: ["api.apollo.com"],
+        },
+      });
+    },
+    /unknown secret field "missingField"/,
+  );
+});
+
 // ── getSecretFieldPresence ──────────────────────────
 
 void test("getSecretFieldPresence returns all false when no secrets stored", async () => {
@@ -140,6 +174,29 @@ void test("getSecretFieldPresence handles multi-field partial secrets", async ()
   assert.equal(presence.clientId, true);
   assert.equal(presence.clientSecret, false);
   assert.equal(presence.endpoint, false);
+});
+
+void test("getSecretsForOwner returns owner-scoped secret copies", async () => {
+  const manager = new ConnectionManager({ settings: createMemorySettings() });
+  manager.registerDefinition("ext.apollo", APOLLO_DEFINITION);
+  await manager.setSecrets("ext.apollo", "ext.apollo.apollo", {
+    apiKey: "sk-test-123",
+  });
+
+  const secrets = await manager.getSecretsForOwner("ext.apollo", "ext.apollo.apollo");
+  assert.deepEqual(secrets, { apiKey: "sk-test-123" });
+
+  if (secrets) {
+    secrets.apiKey = "changed-local-copy";
+  }
+
+  const again = await manager.getSecretsForOwner("ext.apollo", "ext.apollo.apollo");
+  assert.deepEqual(again, { apiKey: "sk-test-123" });
+
+  await assert.rejects(
+    () => manager.getSecretsForOwner("ext.other", "ext.apollo.apollo"),
+    /not owned by this extension\/runtime owner/,
+  );
 });
 
 // ── redactMessageForConnection ──────────────────────

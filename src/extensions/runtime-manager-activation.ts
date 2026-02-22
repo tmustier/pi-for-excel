@@ -8,7 +8,12 @@ import type {
   LlmCompletionResult,
 } from "../commands/extension-api.js";
 import type { ConnectionManager } from "../connections/manager.js";
-import type { ConnectionStatus } from "../connections/types.js";
+import type {
+  ConnectionDefinition,
+  ConnectionSnapshot,
+  ConnectionStatus,
+  ConnectionToolErrorDetails,
+} from "../connections/types.js";
 import type { ExtensionCapability } from "./permissions.js";
 import {
   deleteExtensionStorageValue,
@@ -48,6 +53,7 @@ type HostActivationBridge = Pick<
   | "unregisterConnection"
   | "listConnections"
   | "getConnection"
+  | "getConnectionSecrets"
   | "setConnectionSecrets"
   | "clearConnectionSecrets"
   | "markConnectionValidated"
@@ -80,6 +86,7 @@ type SandboxActivationBridge = Pick<
   | "unregisterConnection"
   | "listConnections"
   | "getConnection"
+  | "getConnectionSecrets"
   | "setConnectionSecrets"
   | "clearConnectionSecrets"
   | "markConnectionValidated"
@@ -105,6 +112,112 @@ function qualifyConnectionIdForEntry(entryId: string, connectionId: string): str
   }
 
   return `${ownerPrefix}${normalizedConnectionId}`;
+}
+
+function mapStatusToConnectionErrorCode(status: ConnectionStatus): ConnectionToolErrorDetails["errorCode"] {
+  if (status === "missing") return "missing_connection";
+  if (status === "invalid") return "invalid_connection";
+  if (status === "error") return "connection_auth_failed";
+  return "invalid_connection";
+}
+
+function buildConnectionErrorMessage(details: ConnectionToolErrorDetails): string {
+  if (details.errorCode === "missing_connection") {
+    return `Connection "${details.connectionTitle}" is not configured. ${details.setupHint}.`;
+  }
+
+  if (details.errorCode === "invalid_connection") {
+    const reasonSuffix = details.reason ? ` (${details.reason})` : "";
+    return `Connection "${details.connectionTitle}" is invalid${reasonSuffix}. ${details.setupHint}.`;
+  }
+
+  const reasonSuffix = details.reason ? ` (${details.reason})` : "";
+  return `Connection "${details.connectionTitle}" failed authentication${reasonSuffix}. ${details.setupHint}.`;
+}
+
+function createConnectionFetchError(details: ConnectionToolErrorDetails): Error {
+  const error = new Error(buildConnectionErrorMessage(details));
+  Reflect.set(error, "details", details);
+  Reflect.set(error, "connectionId", details.connectionId);
+  return error;
+}
+
+function buildConnectionErrorDetails(args: {
+  snapshot: ConnectionSnapshot;
+  errorCode: ConnectionToolErrorDetails["errorCode"];
+  status?: ConnectionStatus;
+  reason?: string;
+}): ConnectionToolErrorDetails {
+  return {
+    kind: "connection_error",
+    ok: false,
+    errorCode: args.errorCode,
+    connectionId: args.snapshot.connectionId,
+    connectionTitle: args.snapshot.title,
+    status: args.status ?? args.snapshot.status,
+    setupHint: args.snapshot.setupHint,
+    reason: args.reason,
+  };
+}
+
+function renderHttpAuthValueTemplate(args: {
+  valueTemplate: string;
+  secrets: Record<string, string>;
+}): string {
+  const placeholderPattern = /\{([^{}]+)\}/g;
+  let rendered = args.valueTemplate;
+  let match = placeholderPattern.exec(args.valueTemplate);
+
+  while (match) {
+    const placeholderRaw = match[1];
+    const placeholder = placeholderRaw.trim();
+    if (placeholder.length === 0) {
+      throw new Error("httpAuth.valueTemplate contains an empty placeholder.");
+    }
+
+    const value = args.secrets[placeholder];
+    if (typeof value !== "string" || value.trim().length === 0) {
+      throw new Error(
+        `httpAuth.valueTemplate references secret field "${placeholder}" with no stored value.`,
+      );
+    }
+
+    rendered = rendered.replaceAll(`{${placeholderRaw}}`, value);
+    match = placeholderPattern.exec(args.valueTemplate);
+  }
+
+  return rendered;
+}
+
+function isAllowedHttpAuthHost(args: {
+  definition: ConnectionDefinition;
+  targetHost: string;
+}): boolean {
+  const httpAuth = args.definition.httpAuth;
+  if (!httpAuth) {
+    return false;
+  }
+
+  const normalizedTargetHost = args.targetHost.toLowerCase();
+  return httpAuth.allowedHosts.some((host) => host.toLowerCase() === normalizedTargetHost);
+}
+
+function buildHttpAuthHeader(args: {
+  definition: ConnectionDefinition;
+  secrets: Record<string, string>;
+}): { headerName: string; value: string } {
+  const httpAuth = args.definition.httpAuth;
+  if (!httpAuth) {
+    throw new Error("Connection does not define httpAuth.");
+  }
+
+  return {
+    headerName: httpAuth.headerName,
+    value: renderHttpAuthValueTemplate({
+      valueTemplate: httpAuth.valueTemplate,
+      secrets: args.secrets,
+    }),
+  };
 }
 
 export interface RuntimeManagerActivationBridge {
@@ -219,6 +332,11 @@ export function buildRuntimeManagerActivationBridge(
     };
   };
 
+  const getConnectionSecrets = async (connectionId: string): Promise<Record<string, string> | null> => {
+    const normalizedConnectionId = qualifyConnectionIdForEntry(entry.id, connectionId);
+    return connectionManager.getSecretsForOwner(entry.id, normalizedConnectionId);
+  };
+
   const setConnectionSecrets = async (connectionId: string, secrets: Record<string, string>): Promise<void> => {
     const normalizedConnectionId = qualifyConnectionIdForEntry(entry.id, connectionId);
     await connectionManager.setSecrets(entry.id, normalizedConnectionId, secrets);
@@ -266,10 +384,138 @@ export function buildRuntimeManagerActivationBridge(
     });
   };
 
+  const runConnectionAwareHttpFetch = async (url: string, options?: HttpRequestOptions): Promise<HttpResponse> => {
+    const connectionName = options?.connection;
+
+    if (typeof connectionName !== "string" || connectionName.trim().length === 0) {
+      return runExtensionHttpFetch(url, options);
+    }
+
+    const normalizedConnectionId = qualifyConnectionIdForEntry(entry.id, connectionName);
+    const snapshot = await connectionManager.getSnapshot(normalizedConnectionId);
+
+    if (!snapshot) {
+      throw createConnectionFetchError({
+        kind: "connection_error",
+        ok: false,
+        errorCode: "invalid_connection",
+        connectionId: normalizedConnectionId,
+        connectionTitle: normalizedConnectionId,
+        status: "invalid",
+        setupHint: "Reload the extension, then open /tools → Connections.",
+        reason: "Connection requirement is not registered in this session.",
+      });
+    }
+
+    if (snapshot.status !== "connected") {
+      throw createConnectionFetchError(buildConnectionErrorDetails({
+        snapshot,
+        errorCode: mapStatusToConnectionErrorCode(snapshot.status),
+        reason: snapshot.lastError,
+      }));
+    }
+
+    let definition: ConnectionDefinition | null = null;
+    try {
+      connectionManager.assertConnectionOwnedBy(entry.id, normalizedConnectionId);
+      definition = connectionManager.getDefinition(normalizedConnectionId);
+    } catch {
+      definition = null;
+    }
+
+    if (!definition || !definition.httpAuth) {
+      throw createConnectionFetchError(buildConnectionErrorDetails({
+        snapshot,
+        errorCode: "invalid_connection",
+        reason: "Connection does not define host-managed httpAuth.",
+      }));
+    }
+
+    let parsedUrl: URL;
+    try {
+      parsedUrl = new URL(url);
+    } catch {
+      throw new Error("Invalid URL.");
+    }
+
+    if (!isAllowedHttpAuthHost({
+      definition,
+      targetHost: parsedUrl.hostname,
+    })) {
+      throw createConnectionFetchError(buildConnectionErrorDetails({
+        snapshot,
+        errorCode: "invalid_connection",
+        reason: `Host \"${parsedUrl.hostname}\" is not allowed for this connection.`,
+      }));
+    }
+
+    const secrets = await connectionManager.getSecretsForOwner(entry.id, normalizedConnectionId);
+    if (!secrets) {
+      throw createConnectionFetchError(buildConnectionErrorDetails({
+        snapshot,
+        errorCode: "missing_connection",
+        status: "missing",
+        reason: "No credentials stored for this connection.",
+      }));
+    }
+
+    let authHeader: { headerName: string; value: string };
+    try {
+      authHeader = buildHttpAuthHeader({
+        definition,
+        secrets,
+      });
+    } catch (error: unknown) {
+      const reason = error instanceof Error ? error.message : String(error);
+      throw createConnectionFetchError(buildConnectionErrorDetails({
+        snapshot,
+        errorCode: "invalid_connection",
+        reason,
+      }));
+    }
+
+    const mergedHeaders: Record<string, string> = {
+      ...(options?.headers ?? {}),
+      [authHeader.headerName]: authHeader.value,
+    };
+
+    const requestOptions: HttpRequestOptions = {
+      method: options?.method,
+      headers: mergedHeaders,
+      body: options?.body,
+      timeoutMs: options?.timeoutMs,
+      connection: normalizedConnectionId,
+    };
+
+    const response = await runExtensionHttpFetch(url, requestOptions);
+
+    if (response.status === 401 || response.status === 403) {
+      const authFailureMessage = `HTTP ${response.status} ${response.statusText}`;
+
+      try {
+        await connectionManager.markRuntimeAuthFailure(normalizedConnectionId, {
+          message: authFailureMessage,
+        });
+      } catch {
+        // best-effort status update only
+      }
+
+      const latestSnapshot = await connectionManager.getSnapshot(normalizedConnectionId) ?? snapshot;
+      throw createConnectionFetchError(buildConnectionErrorDetails({
+        snapshot: latestSnapshot,
+        status: "error",
+        errorCode: "connection_auth_failed",
+        reason: latestSnapshot.lastError ?? authFailureMessage,
+      }));
+    }
+
+    return response;
+  };
+
   const host: HostActivationBridge = {
     getAgent: getRequiredActiveAgent,
     llmComplete: runExtensionLlmCompletion,
-    httpFetch: runExtensionHttpFetch,
+    httpFetch: runConnectionAwareHttpFetch,
     storageGet,
     storageSet,
     storageDelete,
@@ -287,6 +533,7 @@ export function buildRuntimeManagerActivationBridge(
     unregisterConnection,
     listConnections,
     getConnection,
+    getConnectionSecrets,
     setConnectionSecrets,
     clearConnectionSecrets,
     markConnectionValidated,
@@ -300,7 +547,7 @@ export function buildRuntimeManagerActivationBridge(
 
   const sandbox: SandboxActivationBridge = {
     llmComplete: runExtensionLlmCompletion,
-    httpFetch: runExtensionHttpFetch,
+    httpFetch: runConnectionAwareHttpFetch,
     storageGet,
     storageSet,
     storageDelete,
@@ -318,6 +565,7 @@ export function buildRuntimeManagerActivationBridge(
     unregisterConnection,
     listConnections,
     getConnection,
+    getConnectionSecrets,
     setConnectionSecrets,
     clearConnectionSecrets,
     markConnectionValidated,

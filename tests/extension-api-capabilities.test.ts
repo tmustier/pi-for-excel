@@ -382,6 +382,25 @@ void test("createExtensionAPI connection APIs enforce capability and owner-quali
   assert.deepEqual(seenConnectionIds, ["ext.apollo.apollo", "ext.apollo.apollo"]);
   assert.deepEqual(savedSecrets, { apiKey: "test-key" });
 
+  let requestedSecretsConnectionId = "";
+  const secretsApi = createExtensionAPI({
+    getAgent: () => {
+      throw new Error("getAgent should not be called");
+    },
+    extensionOwnerId: "ext.apollo",
+    getConnectionSecrets: (connectionId) => {
+      requestedSecretsConnectionId = connectionId;
+      return Promise.resolve({ apiKey: "from-store" });
+    },
+    isCapabilityEnabled: createCapabilityGate(new Set<ExtensionCapability>([
+      "connections.secrets.read",
+    ])),
+  });
+
+  const secrets = await secretsApi.connections.getSecrets("apollo");
+  assert.equal(requestedSecretsConnectionId, "ext.apollo.apollo");
+  assert.deepEqual(secrets, { apiKey: "from-store" });
+
   const deniedApi = createExtensionAPI({
     getAgent: () => {
       throw new Error("getAgent should not be called");
@@ -394,5 +413,10 @@ void test("createExtensionAPI connection APIs enforce capability and owner-quali
   await assert.rejects(
     async () => deniedApi.connections.list(),
     /DENIED:connections\.readwrite/,
+  );
+
+  await assert.rejects(
+    async () => deniedApi.connections.getSecrets("apollo"),
+    /DENIED:connections\.secrets\.read/,
   );
 });

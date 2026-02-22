@@ -20,6 +20,8 @@ interface RegisteredConnectionDefinition extends ConnectionDefinition {
 type ConnectionManagerListener = () => void;
 
 const CONNECTION_ID_PATTERN = /^[a-z0-9][a-z0-9._-]{1,95}$/;
+const HTTP_HEADER_NAME_PATTERN = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
+const HTTP_ALLOWED_HOST_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/;
 
 const ALL_CONNECTION_STATUSES: readonly ConnectionStatus[] = [
   "connected",
@@ -70,6 +72,73 @@ function normalizeSecrets(input: Record<string, string>): Record<string, string>
   }
 
   return normalized;
+}
+
+function normalizeAllowedHttpHost(host: string, index: number): string {
+  const normalized = normalizeNonEmpty(host, `httpAuth.allowedHosts[${index}]`).toLowerCase();
+  if (!HTTP_ALLOWED_HOST_PATTERN.test(normalized)) {
+    throw new Error(
+      `httpAuth.allowedHosts[${index}] must be a valid hostname (exact match only): "${host}".`,
+    );
+  }
+
+  return normalized;
+}
+
+function normalizeHttpAuthConfig(args: {
+  definition: ConnectionDefinition;
+  allowedSecretIds: ReadonlySet<string>;
+}): ConnectionDefinition["httpAuth"] {
+  const httpAuth = args.definition.httpAuth;
+  if (!httpAuth) {
+    return undefined;
+  }
+
+  if (httpAuth.placement !== "header") {
+    throw new Error("connection httpAuth placement must be \"header\".");
+  }
+
+  const headerName = normalizeNonEmpty(httpAuth.headerName, "httpAuth.headerName");
+  if (!HTTP_HEADER_NAME_PATTERN.test(headerName)) {
+    throw new Error("connection httpAuth.headerName must be a valid HTTP header token.");
+  }
+
+  const valueTemplate = normalizeNonEmpty(httpAuth.valueTemplate, "httpAuth.valueTemplate");
+  const placeholderPattern = /\{([^{}]+)\}/g;
+  let placeholderMatch: RegExpExecArray | null = placeholderPattern.exec(valueTemplate);
+
+  while (placeholderMatch) {
+    const placeholderRaw = placeholderMatch[1];
+    const placeholder = normalizeNonEmpty(placeholderRaw, "httpAuth value template placeholder");
+
+    if (!args.allowedSecretIds.has(placeholder)) {
+      throw new Error(
+        `connection httpAuth.valueTemplate references unknown secret field "${placeholder}".`,
+      );
+    }
+
+    placeholderMatch = placeholderPattern.exec(valueTemplate);
+  }
+
+  if (!Array.isArray(httpAuth.allowedHosts) || httpAuth.allowedHosts.length === 0) {
+    throw new Error("connection httpAuth.allowedHosts must contain at least one host.");
+  }
+
+  const normalizedHosts = new Set<string>();
+  for (const [index, host] of httpAuth.allowedHosts.entries()) {
+    if (typeof host !== "string") {
+      throw new Error(`httpAuth.allowedHosts[${index}] must be a string.`);
+    }
+
+    normalizedHosts.add(normalizeAllowedHttpHost(host, index));
+  }
+
+  return {
+    placement: "header",
+    headerName,
+    valueTemplate,
+    allowedHosts: Array.from(normalizedHosts),
+  };
 }
 
 function escapeRegExp(value: string): string {
@@ -149,12 +218,19 @@ function normalizeConnectionDefinition(definition: ConnectionDefinition): Connec
     };
   });
 
+  const allowedSecretIds = new Set<string>(secretFields.map((field) => field.id));
+  const httpAuth = normalizeHttpAuthConfig({
+    definition,
+    allowedSecretIds,
+  });
+
   return {
     ...definition,
     id,
     title,
     capability,
     secretFields,
+    httpAuth,
     setupHint: definition.setupHint?.trim().length
       ? definition.setupHint.trim()
       : undefined,
@@ -170,6 +246,14 @@ function toPublicConnectionDefinition(
     capability: definition.capability,
     authKind: definition.authKind,
     setupHint: definition.setupHint,
+    httpAuth: definition.httpAuth
+      ? {
+        placement: definition.httpAuth.placement,
+        headerName: definition.httpAuth.headerName,
+        valueTemplate: definition.httpAuth.valueTemplate,
+        allowedHosts: [...definition.httpAuth.allowedHosts],
+      }
+      : undefined,
     secretFields: definition.secretFields.map((field) => ({
       id: field.id,
       label: field.label,
@@ -426,6 +510,34 @@ export class ConnectionManager {
         `Connection "${definition.id}" is not owned by this extension/runtime owner.`,
       );
     }
+  }
+
+  async getSecretsForOwner(ownerId: string, connectionId: string): Promise<Record<string, string> | null> {
+    this.assertConnectionOwnedBy(ownerId, connectionId);
+    const definition = this.getRequiredDefinition(connectionId);
+    const items = await loadConnectionStoreDocument(this.settings);
+    const record = items[definition.id];
+    const storedSecrets = record?.secrets;
+
+    if (!storedSecrets) {
+      return null;
+    }
+
+    const secrets: Record<string, string> = {};
+    for (const [fieldId, value] of Object.entries(storedSecrets)) {
+      if (typeof value !== "string") {
+        continue;
+      }
+
+      const trimmed = value.trim();
+      if (trimmed.length === 0) {
+        continue;
+      }
+
+      secrets[fieldId] = trimmed;
+    }
+
+    return Object.keys(secrets).length > 0 ? secrets : null;
   }
 
   async setSecrets(ownerId: string, connectionId: string, secrets: Record<string, string>): Promise<void> {

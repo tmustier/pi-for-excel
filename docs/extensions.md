@@ -94,8 +94,13 @@ Connection registration + credential lifecycle APIs:
 - `connections.setSecrets(connectionId, secrets)` / `connections.clearSecrets(connectionId)`
 - `connections.markValidated(connectionId)` / `connections.markInvalid(connectionId, reason)`
 - `connections.markStatus(connectionId, status, reason?)`
+- `connections.getSecrets(connectionId)` (**escape hatch**; gated by `connections.secrets.read`)
 
 Use this to declare extension-specific connection requirements (capability + secret fields), store credentials securely in host-managed local settings, and surface deterministic setup/auth states to the assistant.
+
+Default recommendation:
+- Prefer host-managed auth injection (`http.fetch(..., { connection: "..." })`) so extension code does not handle raw secrets.
+- Use `connections.getSecrets(...)` only for advanced/non-standard auth flows (for example SDK bootstrap or custom request signing).
 
 #### User setup via `/tools → Connections`
 
@@ -107,6 +112,24 @@ Registered extension connections appear automatically in the `/tools` overlay un
 - Error callout when the last tool call triggered an auth failure
 
 The section is hidden when no extensions are installed and shows an empty state when extensions are installed but none have registered connections.
+
+#### `definition.httpAuth` (host-injected auth)
+
+Optional connection definition block for `http.fetch(..., { connection })`:
+
+```ts
+httpAuth: {
+  placement: "header",
+  headerName: "Authorization",
+  valueTemplate: "Bearer {apiKey}",
+  allowedHosts: ["api.example.com"],
+}
+```
+
+Rules:
+- `placement` currently supports `"header"` only.
+- `valueTemplate` placeholders (`{...}`) must reference declared `secretFields` ids.
+- `allowedHosts` is required and uses exact host matching for safe auth injection.
 
 ### `agent`
 Agent API surface:
@@ -127,6 +150,17 @@ Cache/prompt-shape guidance for extension authors:
 
 ### `http.fetch(url, options?)`
 Host-mediated outbound HTTP fetch with security policy enforcement.
+
+Options include:
+- `method`, `headers`, `body`, `timeoutMs`
+- optional `connection` id for host-managed auth injection
+
+When `connection` is provided:
+- host qualifies and validates ownership (`ext.<id>.<connection>`)
+- connection status must be `connected`
+- request host must match `definition.httpAuth.allowedHosts`
+- auth headers are injected from stored connection secrets
+- 401/403 responses mark the connection as runtime auth-failed and surface structured connection errors
 
 ### `storage.get/set/delete/keys`
 Persistent extension-scoped key/value storage.
@@ -288,6 +322,7 @@ High-risk capabilities include:
 - `agent.followup`
 - `skills.write`
 - `connections.readwrite`
+- `connections.secrets.read`
 
 ## Sandbox runtime default + rollback kill switch
 
