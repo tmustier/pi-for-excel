@@ -130,6 +130,7 @@ function buildConnectionsSection(activeConnections: ActiveConnectionPromptEntry[
     "Connection status for tools that declare explicit connection requirements.",
     "Never ask the user to paste API keys, tokens, or passwords in chat.",
     "If a required connection is unavailable, direct the user to /tools → Connections.",
+    "If a request depends on a missing/invalid/error connection, guide setup first before attempting that tool call.",
     "",
   ];
 

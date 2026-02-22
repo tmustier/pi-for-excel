@@ -227,4 +227,45 @@ void test("system prompt renders connections section with capability context and
   assert.match(prompt, /company and contact enrichment via Apollo API/);
   assert.match(prompt, /Open \/tools → Connections/);
   assert.match(prompt, /Never ask the user to paste API keys, tokens, or passwords in chat/);
+  assert.match(prompt, /guide setup first before attempting that tool call/);
+});
+
+void test("system prompt keeps setup hints capability-linked for proactive connection guidance", () => {
+  const prompt = buildSystemPrompt({
+    activeConnections: [
+      {
+        id: "builtin.web.search",
+        title: "Web Search",
+        capability: "fresh web research",
+        status: "missing",
+        setupHint: "Open /tools → Connections → Web search",
+      },
+      {
+        id: "builtin.mcp.servers",
+        title: "MCP Servers",
+        capability: "external tool APIs through MCP",
+        status: "error",
+        setupHint: "Open /tools → Connections → MCP",
+        lastError: "401 unauthorized",
+      },
+    ],
+  });
+
+  const expectations: Array<{ title: string; capability: string; setupHint: string }> = [
+    {
+      title: "Web Search",
+      capability: "fresh web research",
+      setupHint: "Open /tools → Connections → Web search",
+    },
+    {
+      title: "MCP Servers",
+      capability: "external tool APIs through MCP",
+      setupHint: "Open /tools → Connections → MCP",
+    },
+  ];
+
+  for (const expectation of expectations) {
+    assert.match(prompt, new RegExp(`\\*\\*${expectation.title}\\*\\* — ${expectation.capability}`));
+    assert.match(prompt, new RegExp(`Setup: ${expectation.setupHint}\\.`));
+  }
 });
