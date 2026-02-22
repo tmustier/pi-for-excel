@@ -4,23 +4,24 @@
  * Probes Python and tmux bridges once at session init, returning a compact
  * status snapshot that feeds into `buildSystemPrompt({ localServices })`.
  *
- * Reuses the same URL resolution + validation logic as the per-call gates
- * in `evaluation.ts`, but parses the full `/health` JSON payload for
- * richer status (python version, libreoffice availability, tmux sessions).
+ * Reuses shared bridge URL/probe helpers used by the per-call gates in
+ * `evaluation.ts`, but parses the full `/health` JSON payload for richer
+ * status (python version, libreoffice availability, tmux sessions).
  */
 
-import { validateOfficeProxyUrl } from "../auth/proxy-validation.js";
 import { isRecord } from "../utils/type-guards.js";
 
+import {
+  fetchBridgeHealthJson,
+  getBridgeSetting,
+  resolveValidatedBridgeUrl,
+} from "./bridge-service-utils.js";
 import {
   DEFAULT_PYTHON_BRIDGE_URL,
   DEFAULT_TMUX_BRIDGE_URL,
   PYTHON_BRIDGE_URL_SETTING_KEY,
   TMUX_BRIDGE_URL_SETTING_KEY,
 } from "./experimental-tool-gates/types.js";
-
-const BRIDGE_HEALTH_PATH = "/health";
-const BRIDGE_HEALTH_TIMEOUT_MS = 900;
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -56,56 +57,6 @@ export interface BridgeHealthDependencies {
   getPythonBridgeUrl?: () => Promise<string | undefined>;
   getTmuxBridgeUrl?: () => Promise<string | undefined>;
   fetchHealth?: (url: string) => Promise<unknown>;
-}
-
-// ---------------------------------------------------------------------------
-// URL resolution (same logic as evaluation.ts)
-// ---------------------------------------------------------------------------
-
-async function defaultGetBridgeUrl(settingKey: string): Promise<string | undefined> {
-  try {
-    const storageModule = await import("@mariozechner/pi-web-ui/dist/storage/app-storage.js");
-    const storage = storageModule.getAppStorage();
-    const value = await storage.settings.get<string>(settingKey);
-    if (typeof value !== "string") return undefined;
-
-    const trimmed = value.trim();
-    return trimmed.length > 0 ? trimmed : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-function resolveAndValidateUrl(configuredUrl: string | undefined, defaultUrl: string): string | null {
-  const rawUrl = configuredUrl ?? defaultUrl;
-  try {
-    return validateOfficeProxyUrl(rawUrl);
-  } catch {
-    return null;
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Health fetch with timeout
-// ---------------------------------------------------------------------------
-
-async function defaultFetchHealth(url: string): Promise<unknown> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), BRIDGE_HEALTH_TIMEOUT_MS);
-
-  try {
-    const target = `${url.replace(/\/+$/, "")}${BRIDGE_HEALTH_PATH}`;
-    const response = await fetch(target, {
-      method: "GET",
-      signal: controller.signal,
-    });
-    if (!response.ok) return null;
-    return await response.json() as unknown;
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timeoutId);
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -188,17 +139,17 @@ function parseTmuxHealth(payload: unknown): TmuxServiceEntry {
 export async function probeLocalServices(
   deps: BridgeHealthDependencies = {},
 ): Promise<LocalServiceEntry[]> {
-  const getPythonUrl = deps.getPythonBridgeUrl ?? (() => defaultGetBridgeUrl(PYTHON_BRIDGE_URL_SETTING_KEY));
-  const getTmuxUrl = deps.getTmuxBridgeUrl ?? (() => defaultGetBridgeUrl(TMUX_BRIDGE_URL_SETTING_KEY));
-  const fetchHealth = deps.fetchHealth ?? defaultFetchHealth;
+  const getPythonUrl = deps.getPythonBridgeUrl ?? (() => getBridgeSetting(PYTHON_BRIDGE_URL_SETTING_KEY));
+  const getTmuxUrl = deps.getTmuxBridgeUrl ?? (() => getBridgeSetting(TMUX_BRIDGE_URL_SETTING_KEY));
+  const fetchHealth = deps.fetchHealth ?? fetchBridgeHealthJson;
 
   const [pythonConfiguredUrl, tmuxConfiguredUrl] = await Promise.all([
     getPythonUrl(),
     getTmuxUrl(),
   ]);
 
-  const pythonUrl = resolveAndValidateUrl(pythonConfiguredUrl, DEFAULT_PYTHON_BRIDGE_URL);
-  const tmuxUrl = resolveAndValidateUrl(tmuxConfiguredUrl, DEFAULT_TMUX_BRIDGE_URL);
+  const pythonUrl = resolveValidatedBridgeUrl(pythonConfiguredUrl, DEFAULT_PYTHON_BRIDGE_URL).bridgeUrl;
+  const tmuxUrl = resolveValidatedBridgeUrl(tmuxConfiguredUrl, DEFAULT_TMUX_BRIDGE_URL).bridgeUrl;
 
   const [pythonPayload, tmuxPayload] = await Promise.all([
     pythonUrl ? fetchHealth(pythonUrl) : Promise.resolve(null),

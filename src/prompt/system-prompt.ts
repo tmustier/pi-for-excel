@@ -164,6 +164,11 @@ function buildConnectionsSection(activeConnections: ActiveConnectionPromptEntry[
   return lines.join("\n").trimEnd();
 }
 
+const LOCAL_SERVICE_SORT_ORDER: Record<LocalServiceEntry["name"], number> = {
+  python: 0,
+  tmux: 1,
+};
+
 function buildLocalServicesSection(localServices: LocalServiceEntry[] | undefined): string | null {
   if (!localServices || localServices.length === 0) {
     return null;
@@ -176,7 +181,11 @@ function buildLocalServicesSection(localServices: LocalServiceEntry[] | undefine
     "",
   ];
 
-  for (const service of localServices) {
+  const sortedLocalServices = [...localServices].sort((left, right) => {
+    return LOCAL_SERVICE_SORT_ORDER[left.name] - LOCAL_SERVICE_SORT_ORDER[right.name];
+  });
+
+  for (const service of sortedLocalServices) {
     lines.push(service.name === "python"
       ? formatPythonServiceLine(service)
       : formatTmuxServiceLine(service));

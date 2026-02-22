@@ -322,6 +322,20 @@ void test("system prompt renders Local Services for both bridges running", () =>
   assert.match(prompt, /shell commands/);
 });
 
+void test("system prompt renders local services in stable python→tmux order", () => {
+  const services: LocalServiceEntry[] = [
+    { name: "tmux", displayName: "Terminal (tmux)", status: "not_running", skillName: "tmux-bridge" },
+    { name: "python", displayName: "Python (native)", status: "not_running", skillName: "python-bridge" },
+  ];
+  const prompt = buildSystemPrompt({ localServices: services });
+
+  const pythonIdx = prompt.indexOf("**Python (native):**");
+  const tmuxIdx = prompt.indexOf("**Terminal (tmux):**");
+  assert.ok(pythonIdx > -1, "Python line should exist");
+  assert.ok(tmuxIdx > -1, "tmux line should exist");
+  assert.ok(pythonIdx < tmuxIdx, "Python should be listed before tmux");
+});
+
 void test("system prompt renders partial python (no libreoffice)", () => {
   const services: LocalServiceEntry[] = [
     {

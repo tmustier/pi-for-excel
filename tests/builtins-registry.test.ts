@@ -132,6 +132,15 @@ void test("taskpane init keeps getIntegrationToolNames imported when used", asyn
   );
 });
 
+void test("taskpane init refreshes capabilities when local services probe resolves", async () => {
+  const initSource = await readFile(new URL("../src/taskpane/init.ts", import.meta.url), "utf8");
+
+  assert.match(
+    initSource,
+    /void probeLocalServices\(\)\.then\(\s*\(result\) => \{[\s\S]*localServicesSnapshot\s*=\s*result;[\s\S]*void refreshCapabilitiesForAllRuntimes\(\);[\s\S]*\},/,
+  );
+});
+
 void test("tools builtins expose /tools without /integrations alias", async () => {
   const source = await readFile(new URL("../src/commands/builtins/tools.ts", import.meta.url), "utf8");
 
