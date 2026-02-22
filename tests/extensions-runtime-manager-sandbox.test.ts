@@ -458,12 +458,20 @@ void test("extension tool revision increments on schema-stable reloads", async (
     });
 
     let executeVersion = 0;
+    const refreshRevisionSnapshots: number[] = [];
 
-    const manager = new ExtensionRuntimeManager({
+    let manager: ExtensionRuntimeManager | null = null;
+    manager = new ExtensionRuntimeManager({
       settings,
       connectionManager: createConnectionManager(settings),
       getActiveAgent: () => null,
-      refreshRuntimeTools: async () => {},
+      refreshRuntimeTools: () => {
+        if (!manager) {
+          throw new Error("manager not initialized");
+        }
+        refreshRevisionSnapshots.push(manager.getToolRevision());
+        return Promise.resolve();
+      },
       reservedToolNames: new Set<string>(),
       loadExtensionFromSource: (api) => {
         executeVersion += 1;
@@ -495,6 +503,7 @@ void test("extension tool revision increments on schema-stable reloads", async (
 
     const revisionAfterInitialize = manager.getToolRevision();
     assert.equal(revisionAfterInitialize > 0, true);
+    assert.equal(refreshRevisionSnapshots.includes(revisionAfterInitialize), true);
 
     const initialTool = manager.getRegisteredTools()[0];
     assert.ok(initialTool);
@@ -510,6 +519,13 @@ void test("extension tool revision increments on schema-stable reloads", async (
 
     const revisionAfterReload = manager.getToolRevision();
     assert.equal(revisionAfterReload > revisionAfterInitialize, true);
+    assert.equal(refreshRevisionSnapshots.includes(revisionAfterReload), true);
+
+    for (let i = 1; i < refreshRevisionSnapshots.length; i += 1) {
+      const previous = refreshRevisionSnapshots[i - 1];
+      const current = refreshRevisionSnapshots[i];
+      assert.equal(current >= previous, true);
+    }
 
     const reloadedTool = manager.getRegisteredTools()[0];
     assert.ok(reloadedTool);
