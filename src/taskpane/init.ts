@@ -890,6 +890,7 @@ export async function initTaskpane(opts: {
     runtimeAgent = agent;
     let currentRuntimeSystemPrompt = initialCapabilities.systemPrompt;
     let currentRuntimeToolsFingerprint = createRuntimeToolFingerprint(initialCapabilities.tools);
+    let currentExtensionToolRevision = extensionManager.getToolRevision();
 
     const refreshRuntimeCapabilities = async () => {
       const nextSessionId = runtimeAgent?.sessionId ?? runtimeSessionId;
@@ -897,20 +898,19 @@ export async function initTaskpane(opts: {
 
       const next = await buildRuntimeCapabilities(nextSessionId);
       const nextToolsFingerprint = createRuntimeToolFingerprint(next.tools);
-      const hasExtensionTools = extensionManager.getRegisteredTools().length > 0;
+      const nextExtensionToolRevision = extensionManager.getToolRevision();
 
-      // Extension tools can change runtime behavior without metadata deltas
-      // (same schema, new execute handler). Keep those refreshes eager so
-      // extension hot-reload updates are never skipped.
       if (
         shouldApplyRuntimeToolUpdate({
-          hasExtensionTools,
           previousFingerprint: currentRuntimeToolsFingerprint,
           nextFingerprint: nextToolsFingerprint,
+          previousExtensionToolRevision: currentExtensionToolRevision,
+          nextExtensionToolRevision,
         })
       ) {
         agent.setTools(next.tools);
         currentRuntimeToolsFingerprint = nextToolsFingerprint;
+        currentExtensionToolRevision = nextExtensionToolRevision;
       }
 
       if (next.systemPrompt !== currentRuntimeSystemPrompt) {

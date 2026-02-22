@@ -36,7 +36,7 @@ Use this as the default expectation map when reviewing context-shape changes.
 | Connection status change (same toolset) | `["systemPrompt"]` | Connection prompt section updates; tool schema usually unchanged. |
 | Integration toggle (`web_search`, `mcp_tools`) | `["systemPrompt", "tools"]` | Both prompt integration section and tool list change. |
 | Extension add/remove tool (schema delta) | includes `"tools"` | Tool schema changed. |
-| Extension handler hot-reload with same schema | `[]` | #436 keeps extension refresh eager while preserving schema-stable prefixes. |
+| Extension handler hot-reload with same schema | `[]` | #444 uses extension tool revision tracking so handler swaps still refresh runtime tools while schema-stable prefixes remain unchanged. |
 | Extension `llm.complete` side call | Main runtime session: `[]` | Side completions use an extension-scoped session key, so prefix churn is isolated from the primary runtime session. |
 
 ## Investigation rules

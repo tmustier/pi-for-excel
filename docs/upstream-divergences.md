@@ -43,33 +43,29 @@ pi-mono parity (in-place), and kept fork as an advanced opt-in setting.
 
 | | pi-mono | Pi for Excel |
 |---|---|---|
-| When tools change | Direct `setTools()` on explicit user action | Periodic rebuilds; fingerprint guard skips no-ops |
+| When tools change | Direct `setTools()` on explicit user action | Event-driven capability refreshes; apply `setTools()` only when tool fingerprint or extension tool revision changes |
 
 **Rationale:** This is not a disagreement with upstream — it's compensating for
 a different lifecycle. Pi-mono's tool set only changes when the user explicitly
-does something (e.g. `/tools`). In Excel, tools are rebuilt on many events:
+does something (e.g. `/tools`). In Excel, capability refresh passes run on many
+events (focus/visibility return, integrations/connections/skills/rules/execution-mode/experimental updates, extension activation).
 
-- Window focus / visibility change (integration or connection state may have
-  changed while Excel was backgrounded)
-- Integration toggled on/off
-- Extension installed, reloaded, or uninstalled
-- Execution mode changed (auto vs ask-first)
-- Workbook rules edited
-- Experimental feature or tool config toggled
+Each refresh rebuilds tool objects. Without a guard, every pass would call
+`agent.setTools(...)` even when schema metadata is identical.
 
-Each rebuild constructs fresh JavaScript objects even when nothing materially
-changed. Without the fingerprint guard, every rebuild would call
-`agent.setTools(...)` and invalidate the provider's cached prefix.
+We therefore gate tool updates by:
+- stable metadata fingerprint (`name`, `label`, `description`, `parameters`)
+- extension tool revision (increments on extension tool register/unregister/reload)
 
-**Exception:** When extension tools are registered, we always apply the refresh.
-An extension might swap a tool's `execute` handler (hot-reload) without changing
-its schema, so the fingerprint would look identical but the behavior changed.
+The revision keeps schema-stable hot-reload correctness (new `execute` handler,
+same schema) without blanket eager updates on every refresh pass.
 
-**Status:** Shipped in #436. This divergence is justified by architecture
-difference and does not contradict upstream design.
+**Status:** Shipped in #436, refined in #444 with extension tool revision
+tracking. Divergence remains architecture-driven.
 
 **Files:** `src/taskpane/runtime-utils.ts` (`createRuntimeToolFingerprint`,
-`shouldApplyRuntimeToolUpdate`), applied in `src/taskpane/init.ts`
+`shouldApplyRuntimeToolUpdate`), `src/extensions/runtime-manager.ts`
+(`getToolRevision`), applied in `src/taskpane/init.ts`
 
 ---
 

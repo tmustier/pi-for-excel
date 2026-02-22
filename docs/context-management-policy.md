@@ -25,7 +25,7 @@ This policy sets clear guardrails so we can improve context quality while preser
 
 - Each model call is built from: `systemPrompt + messages + tools`.
 - Tool disclosure is deterministic on every call (including tool-result continuations) in `src/auth/stream-proxy.ts` (`selectToolBundle()`): when tools are present, runtime currently sends the full tool set.
-- Runtime capability refresh in `src/taskpane/init.ts` now fingerprints tool metadata and only calls `agent.setTools(...)` when the fingerprint changes (avoids no-op tool churn during refresh passes), while still forcing eager refreshes when extension tools are present so hot-reloaded handlers are applied immediately.
+- Runtime capability refresh in `src/taskpane/init.ts` now calls `agent.setTools(...)` only when tool metadata fingerprint changes **or** extension tool revision changes (extension register/unregister/reload), avoiding no-op churn on unrelated refresh passes while preserving schema-stable hot-reload correctness.
 - Session IDs are stable per chat runtime (`agent.sessionId`), which is used by providers for cache continuity.
 - Status/debug UI already shows payload composition counters (`systemChars`, `toolSchemaChars`, `messageChars`, call count) plus prefix-churn counters (`prefixChanges`, split by model/system/tools).
 - Context window estimation uses provider usage anchored by `calculateContextTokens()` (`input + output + cacheRead + cacheWrite`) in `src/utils/context-tokens.ts`.
@@ -194,7 +194,7 @@ Implications:
 |---|---|---|---|
 | 1) Compaction call-shape | **Defer** behavior change | ✅ documented | Keep isolated summarizer request for now. Memo: `docs/archive/issue-424-compaction-call-shape.md`. |
 | 2) Mid-session model switching | **Implement** cache-safe behavior | ✅ shipped (#428, #442) | Default now matches pi-mono (in-place); optional fork-to-new-tab behavior is available as an advanced setting for non-empty sessions. See `docs/upstream-divergences.md` §1. |
-| 3) Mid-session toolset churn | **Implement** targeted stabilization | ✅ shipped (#436) | Runtime now skips no-op `setTools(...)` updates via fingerprinting, while keeping extension-tool refreshes eager for handler hot-reloads. See `docs/upstream-divergences.md` §2. |
+| 3) Mid-session toolset churn | **Implement** targeted stabilization | ✅ shipped (#436), refined (#444) | Runtime skips no-op `setTools(...)` updates via fingerprinting and uses extension tool revision tracking for schema-stable hot-reload updates (without blanket eager refreshes). See `docs/upstream-divergences.md` §2. |
 | 4) Mid-session system-prompt churn | **Keep + defer deeper refactor** | ✅ decision recorded | Keep dynamic safety-critical sections (rules, execution mode, connection/integration/skills state) in system prompt for now. Defer stable-base + volatile-message layering until telemetry justifies complexity. |
 | 5) Side LLM operations (`llm.complete`) | **Keep intentionally independent** | ✅ guidance + session-key isolation implemented | Treat extension side-completions as separate from main runtime context; extension calls now use extension-scoped side session keys so observability/prefix churn is isolated from the primary runtime. See `docs/upstream-divergences.md` §3. |
 | 6) Cache observability policy | **Implement v1 workflow policy** | ✅ policy + baseline matrix documented | Use prefix-churn counters + payload snapshots as release/PR smoke signals for context changes. Baselines: `docs/cache-observability-baselines.md`. |

@@ -47,16 +47,23 @@ export function createRuntimeToolFingerprint(tools: readonly AgentTool[]): strin
   return hashString(parts.join("\u001e"));
 }
 
+/**
+ * Decide whether a runtime refresh pass should call `agent.setTools(...)`.
+ *
+ * We update tools when either metadata changed (fingerprint delta) or when
+ * extension-owned tool behavior changed without metadata deltas (revision delta).
+ */
 export function shouldApplyRuntimeToolUpdate(args: {
-  hasExtensionTools: boolean;
   previousFingerprint: string;
   nextFingerprint: string;
+  previousExtensionToolRevision: number;
+  nextExtensionToolRevision: number;
 }): boolean {
-  if (args.hasExtensionTools) {
+  if (args.previousFingerprint !== args.nextFingerprint) {
     return true;
   }
 
-  return args.previousFingerprint !== args.nextFingerprint;
+  return args.previousExtensionToolRevision !== args.nextExtensionToolRevision;
 }
 
 export function isRuntimeAgentTool(value: unknown): value is AgentTool {

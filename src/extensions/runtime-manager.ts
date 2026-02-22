@@ -165,6 +165,7 @@ export class ExtensionRuntimeManager {
 
   private entries: StoredExtensionEntry[] = [];
   private initialized = false;
+  private extensionToolRevision = 0;
 
   constructor(options: ExtensionRuntimeManagerOptions) {
     this.settings = options.settings;
@@ -222,6 +223,14 @@ export class ExtensionRuntimeManager {
 
   getRegisteredTools(): AnyAgentTool[] {
     return Array.from(this.extensionTools.values());
+  }
+
+  getToolRevision(): number {
+    return this.extensionToolRevision;
+  }
+
+  private bumpExtensionToolRevision(): void {
+    this.extensionToolRevision += 1;
   }
 
   async initialize(): Promise<void> {
@@ -679,6 +688,7 @@ export class ExtensionRuntimeManager {
 
       this.toolOwners.set(wrappedTool.name, entry.id);
       this.extensionTools.set(wrappedTool.name, wrappedTool);
+      this.bumpExtensionToolRevision();
       state.toolNames.add(wrappedTool.name);
 
       if (activationPhase) {
@@ -705,7 +715,10 @@ export class ExtensionRuntimeManager {
 
       state.toolNames.delete(normalizedName);
       this.toolOwners.delete(normalizedName);
-      this.extensionTools.delete(normalizedName);
+      const deleted = this.extensionTools.delete(normalizedName);
+      if (deleted) {
+        this.bumpExtensionToolRevision();
+      }
       pendingToolConnectionChecks.delete(normalizedName);
 
       if (!activationPhase) {
@@ -880,6 +893,9 @@ export class ExtensionRuntimeManager {
       this.toolOwners.delete(toolName);
       const deleted = this.extensionTools.delete(toolName);
       toolsChanged = toolsChanged || deleted;
+    }
+    if (toolsChanged) {
+      this.bumpExtensionToolRevision();
     }
     state.toolNames.clear();
 

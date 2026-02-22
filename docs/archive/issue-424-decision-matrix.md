@@ -15,7 +15,7 @@ This memo consolidates all six investigation areas from #424 after the landed sl
 |---|---|---|
 | 1) Compaction call-shape | **Defer** | Keep current isolated summarizer call for now. See `issue-424-compaction-call-shape.md` for guardrails required before revisiting cache-safe fork compaction. |
 | 2) Mid-session model switching | **Implement** | Shipped in #428: non-empty sessions fork into a new tab/runtime on model change. |
-| 3) Mid-session toolset churn | **Implement** | Shipped in #436: no-op tool-refresh suppression via metadata fingerprinting, with eager refresh preserved when extension tools are present. |
+| 3) Mid-session toolset churn | **Implement** | Shipped in #436, refined in #444: no-op tool-refresh suppression via metadata fingerprinting plus extension tool revision tracking for schema-stable handler reloads. |
 | 4) Mid-session system-prompt churn | **Keep now, defer deeper refactor** | Keep dynamic safety-critical prompt sections in system prompt (rules, execution mode, connection/integration/skills state). Defer stable-base + volatile-message split until telemetry indicates material churn pain. |
 | 5) Side LLM operations (`llm.complete`) | **Keep independent** | Treat extension side-completions as intentionally separate from the primary runtime prefix. Extension calls now use extension-scoped side session keys so side-call churn is isolated from primary runtime telemetry. |
 | 6) Cache observability policy | **Implement v1 policy** | Use existing prefix-churn counters + payload snapshots as mandatory PR/release investigation signals for context-shape changes (workflow policy, not CI hard gate yet). |

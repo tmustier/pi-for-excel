@@ -135,29 +135,32 @@ void test("createRuntimeToolFingerprint changes when tool metadata changes", () 
 void test("shouldApplyRuntimeToolUpdate applies updates when fingerprint changes", () => {
   assert.equal(
     shouldApplyRuntimeToolUpdate({
-      hasExtensionTools: false,
       previousFingerprint: "aaaa",
       nextFingerprint: "bbbb",
+      previousExtensionToolRevision: 1,
+      nextExtensionToolRevision: 1,
     }),
     true,
   );
 
   assert.equal(
     shouldApplyRuntimeToolUpdate({
-      hasExtensionTools: false,
       previousFingerprint: "same",
       nextFingerprint: "same",
+      previousExtensionToolRevision: 3,
+      nextExtensionToolRevision: 3,
     }),
     false,
   );
 });
 
-void test("shouldApplyRuntimeToolUpdate forces updates when extension tools are present", () => {
+void test("shouldApplyRuntimeToolUpdate applies updates when extension tool revision changes", () => {
   assert.equal(
     shouldApplyRuntimeToolUpdate({
-      hasExtensionTools: true,
       previousFingerprint: "same",
       nextFingerprint: "same",
+      previousExtensionToolRevision: 2,
+      nextExtensionToolRevision: 3,
     }),
     true,
   );

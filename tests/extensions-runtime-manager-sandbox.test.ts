@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { readFile } from "node:fs/promises";
 
 import { Type } from "@sinclair/typebox";
+import type { ImageContent, TextContent } from "@mariozechner/pi-ai";
 
 import { ConnectionManager } from "../src/connections/manager.ts";
 import { CONNECTION_STORE_KEY } from "../src/connections/store.ts";
@@ -423,6 +424,102 @@ void test("host runtime extension tools include source provenance in description
     const description = tools[0]?.description ?? "";
     assert.match(description, /Enrich contacts with Apollo API/);
     assert.match(description, /Source: extension "Apollo Helper" \(ext\.apollo\)\./);
+  } finally {
+    restoreLocalStorage();
+  }
+});
+
+void test("extension tool revision increments on schema-stable reloads", async () => {
+  const restoreLocalStorage = installLocalStorageStub();
+
+  const readFirstText = (parts: ReadonlyArray<TextContent | ImageContent>): string | null => {
+    for (const part of parts) {
+      if (part.type === "text") {
+        return part.text;
+      }
+    }
+
+    return null;
+  };
+
+  try {
+    clearLocalStorageKey(EXTENSION_SANDBOX_RUNTIME_STORAGE_KEY);
+
+    const settings = new MemorySettingsStore();
+    settings.writeRaw(EXTENSIONS_REGISTRY_STORAGE_KEY, {
+      version: 2,
+      items: [
+        createStoredEntry({
+          id: "ext.apollo.revision",
+          name: "Apollo Revision",
+          trust: "local-module",
+        }),
+      ],
+    });
+
+    let executeVersion = 0;
+
+    const manager = new ExtensionRuntimeManager({
+      settings,
+      connectionManager: createConnectionManager(settings),
+      getActiveAgent: () => null,
+      refreshRuntimeTools: async () => {},
+      reservedToolNames: new Set<string>(),
+      loadExtensionFromSource: (api) => {
+        executeVersion += 1;
+        const currentVersion = executeVersion;
+
+        api.registerTool("apollo_enrich", {
+          description: "Enrich contacts with Apollo API",
+          parameters: Type.Object({
+            linkedin_url: Type.String(),
+          }),
+          execute: () => ({
+            content: [{ type: "text", text: `v${currentVersion}` }],
+            details: undefined,
+          }),
+        });
+
+        return Promise.resolve({
+          deactivate: () => Promise.resolve(),
+        });
+      },
+      activateInSandbox: () => {
+        throw new Error("sandbox runtime should not be used for local-module extensions");
+      },
+    });
+
+    assert.equal(manager.getToolRevision(), 0);
+
+    await manager.initialize();
+
+    const revisionAfterInitialize = manager.getToolRevision();
+    assert.equal(revisionAfterInitialize > 0, true);
+
+    const initialTool = manager.getRegisteredTools()[0];
+    assert.ok(initialTool);
+    if (!initialTool) {
+      return;
+    }
+
+    const initialResult = await initialTool.execute("call-1", { linkedin_url: "https://linkedin.com/in/alice" });
+    const initialText = readFirstText(initialResult.content);
+    assert.equal(initialText, "v1");
+
+    await manager.reloadExtension("ext.apollo.revision");
+
+    const revisionAfterReload = manager.getToolRevision();
+    assert.equal(revisionAfterReload > revisionAfterInitialize, true);
+
+    const reloadedTool = manager.getRegisteredTools()[0];
+    assert.ok(reloadedTool);
+    if (!reloadedTool) {
+      return;
+    }
+
+    const reloadedResult = await reloadedTool.execute("call-2", { linkedin_url: "https://linkedin.com/in/alice" });
+    const reloadedText = readFirstText(reloadedResult.content);
+    assert.equal(reloadedText, "v2");
   } finally {
     restoreLocalStorage();
   }
