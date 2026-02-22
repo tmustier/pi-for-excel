@@ -190,10 +190,26 @@ Implications:
 
 ## #424 investigation updates (current)
 
-- **Area 1 — compaction call-shape:** **defer behavior change** for now.
-  - Keep the current isolated summarizer request in `src/commands/builtins/export.ts`.
-  - Rationale: current behavior matches upstream `pi-coding-agent` compaction flow, and a cache-safe fork requires additional guardrails (transform-context replay, tool-call fallback, and explicit compaction-buffer budgeting).
-  - Research memo: `docs/archive/issue-424-compaction-call-shape.md`.
+| Area | Decision | Status | Notes |
+|---|---|---|---|
+| 1) Compaction call-shape | **Defer** behavior change | ✅ documented | Keep isolated summarizer request for now. Memo: `docs/archive/issue-424-compaction-call-shape.md`. |
+| 2) Mid-session model switching | **Implement** cache-safe behavior | ✅ shipped (#428) | Non-empty sessions now fork into a new tab/model runtime; empty sessions still switch in place. |
+| 3) Mid-session toolset churn | **Implement** targeted stabilization | ✅ shipped (#436) | Runtime now skips no-op `setTools(...)` updates via fingerprinting, while keeping extension-tool refreshes eager for handler hot-reloads. |
+| 4) Mid-session system-prompt churn | **Keep + defer deeper refactor** | ✅ decision recorded | Keep dynamic safety-critical sections (rules, execution mode, connection/integration/skills state) in system prompt for now. Defer stable-base + volatile-message layering until telemetry justifies complexity. |
+| 5) Side LLM operations (`llm.complete`) | **Keep intentionally independent** | ✅ decision recorded | Treat extension side-completions as separate from main runtime context; add explicit extension-author guidance on cache impact (see `docs/extensions.md`). Defer parent-prefix reuse mode. |
+| 6) Cache observability policy | **Implement v1 workflow policy** | ✅ policy defined | Use prefix-churn counters + payload snapshots as release/PR smoke signals for context changes. |
+
+### Cache observability policy (v1)
+
+For context/tool/prompt changes, treat the following as a required investigation checklist (not hard-fail CI gates yet):
+
+1. Enable debug mode and capture a short deterministic session (at least 5 calls including one tool loop).
+2. Inspect `prefixChanges` and reason breakdown (`model`, `systemPrompt`, `tools`) from status/debug snapshots.
+3. Investigate unexpected churn when:
+   - model changes occur without explicit user/model-selector action,
+   - system-prompt changes occur without explicit rules/execution-mode/integration/connection/skills updates,
+   - tool-schema changes occur without explicit integration/extension/tool-config updates.
+4. Record findings in PR summary when a context-shape change is intentional.
 
 ## Open decisions
 

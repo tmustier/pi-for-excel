@@ -4,6 +4,11 @@ These docs are kept for historical context but are **not** the current source of
 
 If behavior in code conflicts with an archived doc, trust current implementation + active docs in `docs/`.
 
+## Archived on 2026-02-22
+
+- `issue-424-compaction-call-shape.md`
+- `issue-424-decision-matrix.md`
+
 ## Archived on 2026-02-13
 
 - `cleanup-approach.md`

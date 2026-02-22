@@ -43,6 +43,17 @@ Run in repo root:
 
 Record run date and commit SHA in the evidence table below.
 
+### Context/cache instrumentation sanity (for context-shape changes)
+
+Run this add-on check when the release includes changes to model context composition (system prompt, tool disclosure, toolset refresh, compaction, or context injection):
+
+1. Enable debug mode.
+2. Run a deterministic mini-session (≥5 calls, including at least one tool loop).
+3. Record prefix churn counters (`prefixChanges`, `prefixModelChanges`, `prefixSystemPromptChanges`, `prefixToolChanges`).
+4. Confirm each non-zero reason has an intentional trigger in the scenario.
+
+If churn is unexpected, treat as a release blocker until explained or fixed.
+
 ## Environment matrix
 
 - macOS Excel Desktop: **required**
