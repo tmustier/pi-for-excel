@@ -132,12 +132,14 @@ void test("taskpane init keeps getIntegrationToolNames imported when used", asyn
   );
 });
 
-void test("taskpane init refreshes capabilities when local services probe resolves", async () => {
+void test("taskpane init waits for local services probe and refreshes capabilities", async () => {
   const initSource = await readFile(new URL("../src/taskpane/init.ts", import.meta.url), "utf8");
 
+  assert.match(initSource, /let localServicesReady: Promise<void> = Promise\.resolve\(\);/);
+  assert.match(initSource, /await localServicesReady;/);
   assert.match(
     initSource,
-    /void probeLocalServices\(\)\.then\(\s*\(result\) => \{[\s\S]*localServicesSnapshot\s*=\s*result;[\s\S]*void refreshCapabilitiesForAllRuntimes\(\);[\s\S]*\},/,
+    /localServicesReady\s*=\s*probeLocalServices\(\)\.then\(\s*\(result\) => \{[\s\S]*localServicesSnapshot\s*=\s*result;[\s\S]*void refreshCapabilitiesForAllRuntimes\(\);[\s\S]*\},/,
   );
 });
 

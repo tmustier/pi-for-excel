@@ -66,6 +66,27 @@ void test("parses fully healthy python bridge", async () => {
   assert.equal(python.status, "running");
   assert.equal(python.name === "python" && python.pythonVersion, "3.12.1");
   assert.equal(python.name === "python" && python.libreofficeAvailable, true);
+  assert.equal(python.name === "python" && python.libreofficeVersion, "7.6.4");
+});
+
+void test("normalizes verbose libreoffice version strings", async () => {
+  const entries = await probeLocalServices(makeDeps({
+    fetchHealth: (url) => {
+      if (url.includes("3340")) {
+        return Promise.resolve({
+          ok: true,
+          mode: "real",
+          python: { available: true, version: "3.12.1" },
+          libreoffice: { available: true, version: "LibreOffice 7.6.4.1 40(Build:1)" },
+        });
+      }
+      return Promise.resolve(null);
+    },
+  }));
+
+  const python = findPython(entries);
+  assert.ok(python);
+  assert.equal(python.name === "python" && python.libreofficeVersion, "7.6.4.1");
 });
 
 // ---------------------------------------------------------------------------

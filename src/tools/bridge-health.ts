@@ -35,6 +35,7 @@ export interface PythonServiceEntry {
   status: LocalServiceStatus;
   pythonVersion?: string;
   libreofficeAvailable?: boolean;
+  libreofficeVersion?: string;
   skillName: "python-bridge";
 }
 
@@ -63,6 +64,20 @@ export interface BridgeHealthDependencies {
 // Health payload parsing
 // ---------------------------------------------------------------------------
 
+function parseLibreofficeVersion(rawVersion: string | undefined): string | undefined {
+  if (!rawVersion) {
+    return undefined;
+  }
+
+  const trimmed = rawVersion.trim();
+  if (trimmed.length === 0) {
+    return undefined;
+  }
+
+  const matched = trimmed.match(/\d+\.\d+(?:\.\d+){0,2}/);
+  return matched?.[0] ?? trimmed;
+}
+
 function parsePythonHealth(payload: unknown): PythonServiceEntry {
   const base: PythonServiceEntry = {
     name: "python",
@@ -79,9 +94,11 @@ function parsePythonHealth(payload: unknown): PythonServiceEntry {
   const pythonAvailable = python?.available === true;
   const pythonVersion = typeof python?.version === "string" ? python.version : undefined;
 
-  // Extract libreoffice availability
+  // Extract libreoffice availability/version
   const libreoffice = isRecord(payload.libreoffice) ? payload.libreoffice : undefined;
   const libreofficeAvailable = libreoffice?.available === true;
+  const libreofficeVersionRaw = typeof libreoffice?.version === "string" ? libreoffice.version : undefined;
+  const libreofficeVersion = parseLibreofficeVersion(libreofficeVersionRaw);
 
   if (!pythonAvailable) {
     // Bridge process is running but Python binary is missing — treat as not_running
@@ -96,6 +113,7 @@ function parsePythonHealth(payload: unknown): PythonServiceEntry {
     status,
     pythonVersion,
     libreofficeAvailable,
+    libreofficeVersion,
   };
 }
 

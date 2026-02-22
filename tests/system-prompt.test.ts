@@ -295,6 +295,7 @@ void test("system prompt renders Local Services for both bridges not running", (
 
   assert.match(prompt, /## Local Services/);
   assert.match(prompt, /Probed at session start/);
+  assert.match(prompt, /use the skills tool to read the referenced skill before responding/);
   assert.match(prompt, /\*\*Python \(native\)\:\*\* not running/);
   assert.match(prompt, /Pyodide/);
   assert.match(prompt, /read skill "python-bridge"/);
@@ -306,7 +307,7 @@ void test("system prompt renders Local Services for both bridges running", () =>
   const services: LocalServiceEntry[] = [
     {
       name: "python", displayName: "Python (native)", status: "running",
-      pythonVersion: "3.12.1", libreofficeAvailable: true, skillName: "python-bridge",
+      pythonVersion: "3.12.1", libreofficeAvailable: true, libreofficeVersion: "7.6.4", skillName: "python-bridge",
     },
     {
       name: "tmux", displayName: "Terminal (tmux)", status: "running",
@@ -317,7 +318,7 @@ void test("system prompt renders Local Services for both bridges running", () =>
 
   assert.match(prompt, /## Local Services/);
   assert.match(prompt, /\*\*Python \(native\)\:\*\* running — python 3\.12\.1/);
-  assert.match(prompt, /libreoffice available/);
+  assert.match(prompt, /libreoffice 7\.6\.4/);
   assert.match(prompt, /\*\*Terminal \(tmux\)\:\*\* running — tmux 3\.4, 2 active sessions/);
   assert.match(prompt, /shell commands/);
 });
@@ -358,8 +359,8 @@ void test("system prompt renders partial tmux (stub mode)", () => {
   ];
   const prompt = buildSystemPrompt({ localServices: services });
 
-  assert.match(prompt, /\*\*Terminal \(tmux\)\:\*\* bridge running but tmux not fully available/);
-  assert.match(prompt, /Read skill "tmux-bridge" for troubleshooting/);
+  assert.match(prompt, /\*\*Terminal \(tmux\)\:\*\* bridge running but tmux is not installed/);
+  assert.match(prompt, /Shell command execution requires tmux — read skill "tmux-bridge" for install instructions/);
 });
 
 void test("Local Services section is placed after Connections, before Skills", () => {

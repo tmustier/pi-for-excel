@@ -178,6 +178,7 @@ function buildLocalServicesSection(localServices: LocalServiceEntry[] | undefine
     "## Local Services",
     "",
     "These run on the user's machine alongside Excel. Probed at session start.",
+    "When a service is unavailable, use the skills tool to read the referenced skill before responding.",
     "",
   ];
 
@@ -215,7 +216,11 @@ function formatPythonServiceLine(service: LocalServiceEntry & { name: "python" }
   }
 
   // "running" — fully healthy
-  const loPart = service.libreofficeAvailable ? ", libreoffice available" : "";
+  const loPart = service.libreofficeVersion
+    ? `, libreoffice ${service.libreofficeVersion}`
+    : service.libreofficeAvailable
+      ? ", libreoffice available"
+      : "";
   return (
     `- **${label}:** running — ${versionPart}${loPart}. ` +
     `Uses local Python instead of in-browser Pyodide. Full ecosystem available (C extensions, filesystem, long-running scripts, file conversion via LibreOffice).`
@@ -234,8 +239,8 @@ function formatTmuxServiceLine(service: LocalServiceEntry & { name: "tmux" }): s
 
   if (service.status === "partial") {
     return (
-      `- **${label}:** bridge running but tmux not fully available. ` +
-      `Read skill "${service.skillName}" for troubleshooting.`
+      `- **${label}:** bridge running but tmux is not installed. ` +
+      `Shell command execution requires tmux — read skill "${service.skillName}" for install instructions.`
     );
   }
 

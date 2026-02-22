@@ -484,12 +484,15 @@ export async function initTaskpane(opts: {
 
   // Probe local bridge services once at init. Snapshot is stable for the session.
   let localServicesSnapshot: LocalServiceEntry[] = [];
+  let localServicesReady: Promise<void> = Promise.resolve();
 
   const buildRuntimeSystemPrompt = async (args: {
     workbookId: string | null;
     activeIntegrationIds: readonly string[];
     requiredConnectionIds: readonly string[];
   }): Promise<string> => {
+    await localServicesReady;
+
     const availableSkills = await resolveAvailableSkills();
     const activeConnections = await connectionManager.listPromptEntries(args.requiredConnectionIds);
 
@@ -743,9 +746,9 @@ export async function initTaskpane(opts: {
   });
 
   // Start bridge health probe now that refreshCapabilitiesForAllRuntimes is available.
-  // On completion, updates the snapshot and triggers a prompt refresh so the
-  // ## Local Services section appears even if the initial prompt was built earlier.
-  void probeLocalServices().then(
+  // The first runtime prompt waits for this promise, preventing a first-turn
+  // gap where Local Services has not been populated yet.
+  localServicesReady = probeLocalServices().then(
     (result) => {
       localServicesSnapshot = result;
       void refreshCapabilitiesForAllRuntimes();
