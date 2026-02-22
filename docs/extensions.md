@@ -118,6 +118,12 @@ Agent API surface:
 ### `llm.complete(request)`
 Host-mediated LLM completion. Supports optional model override (`provider/modelId` or model id), optional `systemPrompt`, and `messages` (`user`/`assistant`).
 
+Cache/prompt-shape guidance for extension authors:
+- Treat `llm.complete` as an **independent side completion** by default (separate from the main chat loop/tool prefix).
+- Keep `systemPrompt` short and stable across repeated extension calls when possible.
+- Put volatile data in `messages` rather than rewriting `systemPrompt` every call.
+- Use `agent.injectContext` / `agent.steer` when you need to influence the primary runtime conversation instead of emulating it through `llm.complete`.
+
 ### `http.fetch(url, options?)`
 Host-mediated outbound HTTP fetch with security policy enforcement.
 
