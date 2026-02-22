@@ -600,6 +600,26 @@
       padding: 1px 4px;
       border-radius: 3px;
     }
+    .ext-surface-block--mb16 { margin-bottom: 16px; }
+    .ext-surface-block--mb14 { margin-bottom: 14px; }
+    .ext-surface-block__section-title {
+      font-size: 13.5px;
+      font-weight: 700;
+      margin: 14px 0 8px;
+    }
+    .ext-surface-block__meta {
+      font-size: 12.5px;
+      color: var(--muted);
+      line-height: 1.55;
+      margin-bottom: 10px;
+    }
+    .ext-surface-block__meta code {
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      background: oklch(0 0 0 / 0.04);
+      padding: 1px 4px;
+      border-radius: 3px;
+    }
 
     /* ── Extension callout & detail surfaces ── */
     .ext-callout {
@@ -612,6 +632,8 @@
       border: 1px solid oklch(0.88 0.04 270);
       margin-bottom: 8px;
     }
+    .ext-callout--mb12 { margin-bottom: 12px; }
+    .ext-details { margin-top: 12px; }
     .ext-callout__icon {
       flex-shrink: 0;
       width: 32px;
@@ -1174,6 +1196,12 @@
 
     /* ── Spec rows (label-value horizontal pairs) ── */
     .spec-list { margin: 10px 0; }
+    .spec-list--flush { margin: 0; }
+    .spec-list--compact {
+      margin: 0;
+      font-size: 12px;
+    }
+    .spec-list--wide-keys { --spec-key-w: 140px; }
     .spec-row {
       display: flex;
       gap: 12px;
@@ -1898,7 +1926,7 @@
 </p>
 
 <!-- ── Skills ── -->
-<div class="ext-surface-block reveal" style="margin-bottom:16px">
+<div class="ext-surface-block ext-surface-block--mb16 reveal">
   <div class="ext-surface-block__head">
     <svg class="ext-surface-block__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
     <span class="ext-surface-block__title">Skills</span>
@@ -1921,7 +1949,7 @@
       toggle per-skill
     </span>
   </div>
-  <div class="spec-list" style="margin:0; font-size:12px">
+  <div class="spec-list spec-list--compact">
     <div class="spec-row"><div class="spec-key">Bundled</div><div class="spec-val">python-bridge · tmux-bridge · web-search · mcp-gateway — loaded via Vite <code>import.meta.glob</code></div></div>
     <div class="spec-row"><div class="spec-key">External</div><div class="spec-val"><code>skills/external/&lt;name&gt;/SKILL.md</code> — managed installs via the <code>skills</code> tool or workspace discovery</div></div>
     <div class="spec-row"><div class="spec-key">Prompt</div><div class="spec-val">Catalog listed in system prompt under <code>## Available Agent Skills</code>; body injected on read. Session-scoped read cache avoids duplicates.</div></div>
@@ -1930,7 +1958,7 @@
 </div>
 
 <!-- ── Connections ── -->
-<div class="ext-surface-block reveal" style="margin-bottom:16px">
+<div class="ext-surface-block ext-surface-block--mb16 reveal">
   <div class="ext-surface-block__head">
     <svg class="ext-surface-block__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--amber)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/></svg>
     <span class="ext-surface-block__title">Connections</span>
@@ -1940,7 +1968,7 @@
     surfaces auth state, and gates tool access — if a tool's connection isn't configured, the tool is
     withheld from the model. Managed in <code>/extensions → Connections</code>.
   </p>
-  <div class="spec-list" style="margin:0; font-size:12px; --spec-key-w:140px">
+  <div class="spec-list spec-list--compact spec-list--wide-keys">
     <div class="spec-row"><div class="spec-key">External tools</div><div class="spec-val">Master toggle for web search, fetch, and other network-dependent tools</div></div>
     <div class="spec-row"><div class="spec-key">Web search</div><div class="spec-val">Jina (default, no key) · Serper · Tavily · Brave Search — provider-specific API key fields</div></div>
     <div class="spec-row"><div class="spec-key">Plugin connections</div><div class="spec-val">Owner-scoped (<code>{ownerId}.{connId}</code>). Auto-rendered setup UI from plugin declarations.</div></div>
@@ -1948,7 +1976,7 @@
 </div>
 
 <!-- ── Plugins ── -->
-<div class="ext-surface-block reveal" style="margin-bottom:14px">
+<div class="ext-surface-block ext-surface-block--mb14 reveal">
   <div class="ext-surface-block__head">
     <svg class="ext-surface-block__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--violet)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/></svg>
     <span class="ext-surface-block__title">Plugins</span>
@@ -1959,14 +1987,14 @@
   </p>
 
   <!-- Self-authoring callout -->
-  <div class="ext-callout" style="margin-bottom:12px">
+  <div class="ext-callout ext-callout--mb12">
     <div class="ext-callout__icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg></div>
     <div class="ext-callout__body">
       <strong>Pi can extend itself</strong> — design, generate, install, reload, and iterate on plugins without leaving the conversation. The <code>extensions_manager</code> tool handles the full lifecycle: list → install → enable → reload → uninstall.
     </div>
   </div>
 
-  <h4 style="font-size:13.5px; font-weight:700; margin:14px 0 8px">What Plugins Register</h4>
+  <h4 class="ext-surface-block__section-title">What Plugins Register</h4>
 
   <div class="ext-surfaces">
     <div class="ext-surface">
@@ -1996,9 +2024,9 @@
     </div>
   </div>
 
-  <h4 style="font-size:13.5px; font-weight:700; margin:14px 0 8px">18 Capability Gates</h4>
-  <p style="font-size:12.5px; color:var(--muted); line-height:1.55; margin-bottom:10px">
-    Every API call passes through <code style="font-size:10.5px; background:oklch(0 0 0 / 0.04); padding:1px 4px; border-radius:3px">assertCapability()</code>. Sandbox iframe bridges all 18 surfaces via postMessage with CSP + TypeBox schema reconstruction.
+  <h4 class="ext-surface-block__section-title">18 Capability Gates</h4>
+  <p class="ext-surface-block__meta">
+    Every API call passes through <code>assertCapability()</code>. Sandbox iframe bridges all 18 surfaces via postMessage with CSP + TypeBox schema reconstruction.
   </p>
 
   <div class="cap-grid">
@@ -2046,7 +2074,7 @@
     </div>
   </div>
 
-  <h4 style="font-size:13.5px; font-weight:700; margin:14px 0 8px">Trust Tiers &amp; Runtime</h4>
+  <h4 class="ext-surface-block__section-title">Trust Tiers &amp; Runtime</h4>
 
   <div class="ext-trust">
     <div class="ext-trust__tier">
@@ -2067,16 +2095,16 @@
     </div>
   </div>
 
-  <details style="margin-top:12px">
+  <details class="ext-details">
     <summary>Lifecycle &amp; Activation Bridge</summary>
     <div class="inner">
-      <div class="spec-list" style="margin:0">
+      <div class="spec-list spec-list--flush">
         <div class="spec-row"><div class="spec-key">Load</div><div class="spec-val">v2 doc from SettingsStore (v1 auto-migrated). Source: module specifier or inline code blob URL.</div></div>
         <div class="spec-row"><div class="spec-key">Activate</div><div class="spec-val">Resolve runtime (host / sandbox). Build activation bridge. Register tools &amp; commands with conflict check.</div></div>
         <div class="spec-row"><div class="spec-key">Deactivate</div><div class="spec-val">Reverse order: handle → widgets → events → commands → tools → connections → blob URLs.</div></div>
       </div>
       <hr style="border:none;border-top:1px dashed oklch(0 0 0 / 0.08);margin:10px 0">
-      <div class="spec-list" style="margin:0">
+      <div class="spec-list spec-list--flush">
         <div class="spec-row"><div class="spec-key">LLM bridge</div><div class="spec-val">Active agent's model + API key. Per-plugin side session ID for isolated cache telemetry.</div></div>
         <div class="spec-row"><div class="spec-key">HTTP bridge</div><div class="spec-val">URL validation + blocked hostnames (loopback/private) + proxy routing + 256 KB limit.</div></div>
         <div class="spec-row"><div class="spec-key">Storage bridge</div><div class="spec-val">Per-plugin key-value in SettingsStore, 1 MB limit.</div></div>
@@ -2336,7 +2364,7 @@
 <details class="reveal">
   <summary>Stream Proxy (<code>createOfficeStreamFn</code>)</summary>
   <div class="inner">
-    <div class="spec-list" style="margin:0">
+    <div class="spec-list spec-list--flush">
       <div class="spec-row"><div class="spec-key">Intercept</div><div class="spec-val">Every LLM call — routing, model normalization, tool bundle selection</div></div>
       <div class="spec-row"><div class="spec-key">Proxy routing</div><div class="spec-val">Anthropic OAuth, OpenAI Codex, Google Code Assist, Z-AI, custom gateways</div></div>
       <div class="spec-row"><div class="spec-key">Normalization</div><div class="spec-val">Google preview models → stable fallback, Antigravity → Code Assist base URL</div></div>
@@ -2349,7 +2377,7 @@
 <details class="reveal">
   <summary>CORS Proxy (fetch interceptor)</summary>
   <div class="inner">
-    <div class="spec-list" style="margin:0">
+    <div class="spec-list spec-list--flush">
       <div class="spec-row"><div class="spec-key">Dev</div><div class="spec-val">Vite reverse proxies — 11 rewrite rules for Anthropic / OpenAI / Google / GitHub endpoints</div></div>
       <div class="spec-row"><div class="spec-key">Production</div><div class="spec-val">User-configured CORS proxy (localhost:3003 default). Conservative endpoint matching</div></div>
       <div class="spec-row"><div class="spec-key">Hygiene</div><div class="spec-val">Strips <code>anthropic-dangerous-direct-browser-access</code> header when proxied</div></div>
@@ -2478,7 +2506,7 @@
 <details class="reveal" style="margin-top:12px">
   <summary>Compaction Strategy</summary>
   <div class="inner">
-    <div class="spec-list" style="margin:0">
+    <div class="spec-list spec-list--flush">
       <div class="spec-row"><div class="spec-key">Quality caps</div><div class="spec-val"><strong>88%</strong> of context for ≥128K models, <strong>85%</strong> for ≥200K</div></div>
       <div class="spec-row"><div class="spec-key">Auto-compact</div><div class="spec-val">Before each user prompt if projected tokens exceed hard threshold (requires ≥4 messages)</div></div>
       <div class="spec-row"><div class="spec-key">Soft warning</div><div class="spec-val">At hard threshold − 5% (min 2K tokens), floors at 70%</div></div>
@@ -2491,7 +2519,7 @@
 <details class="reveal">
   <summary>Known prefix change triggers</summary>
   <div class="inner">
-    <div class="spec-list" style="margin:0">
+    <div class="spec-list spec-list--flush">
       <div class="spec-row"><div class="spec-key" style="color:var(--green)">Repeated turns</div><div class="spec-val">No churn (cache hit)</div></div>
       <div class="spec-row"><div class="spec-key">/model switch</div><div class="spec-val"><code>["model"]</code></div></div>
       <div class="spec-row"><div class="spec-key">Rules / exec mode</div><div class="spec-val"><code>["systemPrompt"]</code></div></div>
@@ -2783,7 +2811,7 @@
 <details class="reveal" style="margin-top:12px">
   <summary>Build &amp; Config</summary>
   <div class="inner">
-    <div class="spec-list" style="margin:0">
+    <div class="spec-list spec-list--flush">
       <div class="spec-row">
         <div class="spec-key">Vite</div>
         <div class="spec-val">HTTPS dev server, pi-auth plugin, stub plugins for heavy Node deps, 11 proxy entries</div>
