@@ -2,6 +2,63 @@ import type { AgentTool } from "@mariozechner/pi-agent-core";
 
 import { isRecord } from "../utils/type-guards.js";
 
+const FNV_OFFSET_BASIS = 0x811c9dc5;
+const FNV_PRIME = 0x01000193;
+
+function hashString(value: string): string {
+  let hash = FNV_OFFSET_BASIS;
+
+  for (let i = 0; i < value.length; i += 1) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, FNV_PRIME) >>> 0;
+  }
+
+  return hash.toString(16).padStart(8, "0");
+}
+
+function serializeToolParameters(parameters: unknown): string {
+  try {
+    const serialized = JSON.stringify(parameters);
+    return serialized ?? "null";
+  } catch {
+    return "[unserializable]";
+  }
+}
+
+/**
+ * Build a stable fingerprint for runtime tool metadata.
+ *
+ * We intentionally exclude function identity (`execute`) so refresh passes that
+ * rebuild tool objects without schema changes can be no-ops.
+ */
+export function createRuntimeToolFingerprint(tools: readonly AgentTool[]): string {
+  if (tools.length === 0) {
+    return "";
+  }
+
+  const parts: string[] = [];
+
+  for (const tool of tools) {
+    parts.push(
+      `${tool.name}\u001f${tool.label}\u001f${tool.description}\u001f${serializeToolParameters(tool.parameters)}`,
+    );
+  }
+
+  return hashString(parts.join("\u001e"));
+}
+
+export function shouldApplyRuntimeToolUpdate(args: {
+  hasExtensionTools: boolean;
+  previousFingerprint: string;
+  nextFingerprint: string;
+}): boolean {
+  if (args.hasExtensionTools) {
+    return true;
+  }
+
+  return args.previousFingerprint !== args.nextFingerprint;
+}
+
 export function isRuntimeAgentTool(value: unknown): value is AgentTool {
   if (!isRecord(value)) return false;
 

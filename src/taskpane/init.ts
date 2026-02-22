@@ -160,7 +160,9 @@ import {
 import {
   awaitWithTimeout,
   createAsyncCoalescer,
+  createRuntimeToolFingerprint,
   isLikelyCorsErrorMessage,
+  shouldApplyRuntimeToolUpdate,
   isRuntimeAgentTool,
   normalizeRuntimeTools,
 } from "./runtime-utils.js";
@@ -865,13 +867,29 @@ export async function initTaskpane(opts: {
 
     runtimeAgent = agent;
     let currentRuntimeSystemPrompt = initialCapabilities.systemPrompt;
+    let currentRuntimeToolsFingerprint = createRuntimeToolFingerprint(initialCapabilities.tools);
 
     const refreshRuntimeCapabilities = async () => {
       const nextSessionId = runtimeAgent?.sessionId ?? runtimeSessionId;
       runtimeSessionId = nextSessionId;
 
       const next = await buildRuntimeCapabilities(nextSessionId);
-      agent.setTools(next.tools);
+      const nextToolsFingerprint = createRuntimeToolFingerprint(next.tools);
+      const hasExtensionTools = extensionManager.getRegisteredTools().length > 0;
+
+      // Extension tools can change runtime behavior without metadata deltas
+      // (same schema, new execute handler). Keep those refreshes eager so
+      // extension hot-reload updates are never skipped.
+      if (
+        shouldApplyRuntimeToolUpdate({
+          hasExtensionTools,
+          previousFingerprint: currentRuntimeToolsFingerprint,
+          nextFingerprint: nextToolsFingerprint,
+        })
+      ) {
+        agent.setTools(next.tools);
+        currentRuntimeToolsFingerprint = nextToolsFingerprint;
+      }
 
       if (next.systemPrompt !== currentRuntimeSystemPrompt) {
         agent.setSystemPrompt(next.systemPrompt);
