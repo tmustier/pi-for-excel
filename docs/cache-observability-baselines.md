@@ -28,7 +28,8 @@ Use this as the default expectation map when reviewing context-shape changes.
 |---|---|---|
 | Fresh session first call | `[]` | No previous fingerprint exists yet. |
 | Repeated turns with no settings/runtime changes | `[]` | Prefix should stay stable. |
-| `/model` in **non-empty** session | Source tab: `[]` (new runtime is created) | #428 forks model changes to a new tab/runtime to protect cache continuity. |
+| `/model` in **non-empty** session (default behavior) | `["model"]` | #442 restored in-place switching as default (pi-mono parity). |
+| `/model` in **non-empty** session (fork opt-in enabled) | Source tab: `[]`; first call in new tab: `[]` | Model change creates a new runtime/session key instead of mutating the current tab prefix. |
 | `/model` in **empty** session | `["model"]` | Empty sessions switch in-place. |
 | Rules/workbook rules changed | `["systemPrompt"]` | Rules are rendered into system prompt. |
 | Execution mode toggle (Auto/Confirm) | `["systemPrompt"]` | Mode guidance lives in system prompt. |

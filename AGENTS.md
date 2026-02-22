@@ -48,6 +48,14 @@ Notes for agents working in this repo.
 - Avoid Node-only imports and side-effect barrel imports.
 - After import/dependency changes, run `npm run build` and check chunk sizes + Vite browser-compat warnings.
 
+### Prompt caching gotchas
+- Prompt cache keys are prefix-based and sensitive to: model identity, system prompt, tool schemas, and session key.
+- Keep static prefix content stable (no timestamps/random IDs in system prompt or tool metadata).
+- Prefer message-tail updates for volatile state (auto-context/system reminders) instead of mutating base prompt text every turn.
+- Keep tool ordering deterministic; do not rebuild tool lists with unstable ordering.
+- Do not reintroduce blanket eager `setTools(...)` on refresh passes when extension tools exist; use fingerprint + extension tool revision semantics.
+- When changing context/tool/model wiring, validate against `docs/cache-observability-baselines.md` and record expected vs observed `prefixChangeReasons`.
+
 ## TypeScript policy
 - No `// @ts-ignore`.
 - If unavoidable: `// @ts-expect-error -- <reason>` with a real reason.
