@@ -10,6 +10,7 @@ import { diffFromDefaults } from "../conventions/store.js";
 import type { ExecutionMode } from "../execution/mode.js";
 import { ACTIVE_INTEGRATIONS_PROMPT_HEADING } from "../integrations/naming.js";
 import { buildCoreToolPromptLines } from "../tools/capabilities.js";
+import type { LocalServiceEntry } from "../tools/bridge-health.js";
 
 export interface ActiveIntegrationPromptEntry {
   id: string;
@@ -39,6 +40,7 @@ export interface SystemPromptOptions {
   workbookInstructions?: string | null;
   activeIntegrations?: ActiveIntegrationPromptEntry[];
   activeConnections?: ActiveConnectionPromptEntry[];
+  localServices?: LocalServiceEntry[];
   availableSkills?: AvailableSkillPromptEntry[];
   executionMode?: ExecutionMode;
   /** Resolved conventions (defaults merged with stored). Omit to skip convention diff section. */
@@ -162,6 +164,83 @@ function buildConnectionsSection(activeConnections: ActiveConnectionPromptEntry[
   return lines.join("\n").trimEnd();
 }
 
+function buildLocalServicesSection(localServices: LocalServiceEntry[] | undefined): string | null {
+  if (!localServices || localServices.length === 0) {
+    return null;
+  }
+
+  const lines: string[] = [
+    "## Local Services",
+    "",
+    "These run on the user's machine alongside Excel. Probed at session start.",
+    "",
+  ];
+
+  for (const service of localServices) {
+    lines.push(service.name === "python"
+      ? formatPythonServiceLine(service)
+      : formatTmuxServiceLine(service));
+  }
+
+  return lines.join("\n").trimEnd();
+}
+
+function formatPythonServiceLine(service: LocalServiceEntry & { name: "python" }): string {
+  const label = service.displayName;
+  if (service.status === "not_running") {
+    return (
+      `- **${label}:** not running. Python tools use in-browser Pyodide, which handles most tasks (numpy, pandas, scipy). ` +
+      `If the user needs C extensions, local filesystem access, or file conversion via LibreOffice, suggest setting up the native Python bridge — ` +
+      `read skill "${service.skillName}" for instructions.`
+    );
+  }
+
+  const versionPart = service.pythonVersion ? `python ${service.pythonVersion}` : "python available";
+
+  if (service.status === "partial" && service.libreofficeAvailable === false) {
+    return (
+      `- **${label}:** running — ${versionPart}, libreoffice not installed. ` +
+      `Full Python ecosystem available but file conversion (PDF, DOCX, etc.) requires LibreOffice — ` +
+      `read skill "${service.skillName}" for install instructions.`
+    );
+  }
+
+  // "running" — fully healthy
+  const loPart = service.libreofficeAvailable ? ", libreoffice available" : "";
+  return (
+    `- **${label}:** running — ${versionPart}${loPart}. ` +
+    `Uses local Python instead of in-browser Pyodide. Full ecosystem available (C extensions, filesystem, long-running scripts, file conversion via LibreOffice).`
+  );
+}
+
+function formatTmuxServiceLine(service: LocalServiceEntry & { name: "tmux" }): string {
+  const label = service.displayName;
+  if (service.status === "not_running") {
+    return (
+      `- **${label}:** not running. If a task would benefit from running shell commands locally ` +
+      `(git, build tools, file management), explain what terminal access would enable and offer to help set it up — ` +
+      `read skill "${service.skillName}" for instructions.`
+    );
+  }
+
+  if (service.status === "partial") {
+    return (
+      `- **${label}:** bridge running but tmux not fully available. ` +
+      `Read skill "${service.skillName}" for troubleshooting.`
+    );
+  }
+
+  // "running" — fully healthy
+  const versionPart = service.tmuxVersion ? `tmux ${service.tmuxVersion}` : "tmux available";
+  const sessionsPart = typeof service.tmuxSessions === "number"
+    ? `, ${service.tmuxSessions} active session${service.tmuxSessions === 1 ? "" : "s"}`
+    : "";
+  return (
+    `- **${label}:** running — ${versionPart}${sessionsPart}. ` +
+    `Lets you run shell commands on the user's machine (git, build tools, file management, installed CLIs).`
+  );
+}
+
 function escapeXml(text: string): string {
   return text
     .replaceAll("&", "&amp;")
@@ -215,6 +294,11 @@ export function buildSystemPrompt(opts: SystemPromptOptions = {}): string {
   const connectionsSection = buildConnectionsSection(opts.activeConnections);
   if (connectionsSection) {
     sections.push(connectionsSection);
+  }
+
+  const localServicesSection = buildLocalServicesSection(opts.localServices);
+  if (localServicesSection) {
+    sections.push(localServicesSection);
   }
 
   const availableSkillsSection = buildAvailableSkillsSection(opts.availableSkills);
@@ -284,8 +368,6 @@ Two Python tools are always available:
 - **python_transform_range** — read an Excel range into Python as \`input_data\`, transform it, and write the result grid back. One tool call for read → compute → write.
 
 Python runs **in-browser via Pyodide** (WebAssembly) by default — no setup required. Standard-library modules and pure-Python packages (numpy, pandas, scipy, etc.) work out of the box. Auto-install via micropip handles most imports automatically.
-
-If the user has configured a **native Python bridge** (power-user opt-in via Settings → Experimental), execution uses their local Python instead. This unlocks the full ecosystem (C extensions, filesystem, long-running scripts). Prefer Pyodide unless the task requires native-only capabilities.
 
 Other tools may be available depending on enabled experiments/integrations.
 Use **files** for workspace artifacts (list/read/write/delete files). Pass \`path\` on \`list\` to scope to a folder.

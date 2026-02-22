@@ -91,6 +91,7 @@ import {
 import { PI_INTEGRATIONS_CHANGED_EVENT } from "../integrations/events.js";
 import { getExternalToolsEnabled, resolveConfiguredIntegrationIds } from "../integrations/store.js";
 import { buildSystemPrompt } from "../prompt/system-prompt.js";
+import { probeLocalServices, type LocalServiceEntry } from "../tools/bridge-health.js";
 import {
   buildAgentSkillPromptEntries,
   listAgentSkills,
@@ -481,6 +482,9 @@ export async function initTaskpane(opts: {
     }
   };
 
+  // Probe local bridge services once at init. Snapshot is stable for the session.
+  let localServicesSnapshot: LocalServiceEntry[] = [];
+
   const buildRuntimeSystemPrompt = async (args: {
     workbookId: string | null;
     activeIntegrationIds: readonly string[];
@@ -500,6 +504,7 @@ export async function initTaskpane(opts: {
         workbookInstructions: workbookRules,
         activeIntegrations,
         activeConnections,
+        localServices: localServicesSnapshot,
         availableSkills,
         executionMode: getExecutionMode(),
         conventions,
@@ -508,6 +513,7 @@ export async function initTaskpane(opts: {
       setRulesActive(false);
       return buildSystemPrompt({
         activeConnections,
+        localServices: localServicesSnapshot,
         availableSkills,
         executionMode: getExecutionMode(),
       });
@@ -735,6 +741,17 @@ export async function initTaskpane(opts: {
   document.addEventListener(PI_EXECUTION_MODE_CHANGED_EVENT, () => {
     void refreshCapabilitiesForAllRuntimes();
   });
+
+  // Start bridge health probe now that refreshCapabilitiesForAllRuntimes is available.
+  // On completion, updates the snapshot and triggers a prompt refresh so the
+  // ## Local Services section appears even if the initial prompt was built earlier.
+  void probeLocalServices().then(
+    (result) => {
+      localServicesSnapshot = result;
+      void refreshCapabilitiesForAllRuntimes();
+    },
+    (error: unknown) => { console.warn("[pi] Local services probe failed:", error); },
+  );
 
   const normalizeApprovalMessage = (title: string, message: string): string => {
     const lines = message.split("\n");

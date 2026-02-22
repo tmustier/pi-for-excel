@@ -3,6 +3,7 @@ import { test } from "node:test";
 
 import { buildSystemPrompt } from "../src/prompt/system-prompt.ts";
 import { resolveConventions } from "../src/conventions/store.ts";
+import type { LocalServiceEntry } from "../src/tools/bridge-health.ts";
 
 void test("system prompt includes default placeholders when instructions are absent", () => {
   const prompt = buildSystemPrompt();
@@ -89,14 +90,15 @@ void test("system prompt includes workbook history recovery tool", () => {
   assert.match(prompt, /modify_structure/);
 });
 
-void test("system prompt documents Python tools and Pyodide default", () => {
+void test("system prompt documents Python tools and Pyodide default (bridge awareness moved to Local Services)", () => {
   const prompt = buildSystemPrompt();
   assert.match(prompt, /### Python/);
   assert.match(prompt, /\*\*python_run\*\*/);
   assert.match(prompt, /\*\*python_transform_range\*\*/);
   assert.match(prompt, /Pyodide/);
   assert.match(prompt, /no setup required/i);
-  assert.match(prompt, /native Python bridge/i);
+  // Bridge-awareness content moved to dynamic ## Local Services section
+  assert.ok(!prompt.includes("native Python bridge"), "TOOLS section should not contain bridge-awareness content");
 });
 
 void test("system prompt documents trace_dependencies precedents/dependents modes", () => {
@@ -268,4 +270,120 @@ void test("system prompt keeps setup hints capability-linked for proactive conne
     assert.match(prompt, new RegExp(`\\*\\*${expectation.title}\\*\\* — ${expectation.capability}`));
     assert.match(prompt, new RegExp(`Setup: ${expectation.setupHint}\\.`));
   }
+});
+
+// ---------------------------------------------------------------------------
+// ## Local Services section
+// ---------------------------------------------------------------------------
+
+void test("system prompt omits Local Services when no entries provided", () => {
+  const prompt = buildSystemPrompt();
+  assert.ok(!prompt.includes("## Local Services"));
+});
+
+void test("system prompt omits Local Services when empty array", () => {
+  const prompt = buildSystemPrompt({ localServices: [] });
+  assert.ok(!prompt.includes("## Local Services"));
+});
+
+void test("system prompt renders Local Services for both bridges not running", () => {
+  const services: LocalServiceEntry[] = [
+    { name: "python", displayName: "Python (native)", status: "not_running", skillName: "python-bridge" },
+    { name: "tmux", displayName: "Terminal (tmux)", status: "not_running", skillName: "tmux-bridge" },
+  ];
+  const prompt = buildSystemPrompt({ localServices: services });
+
+  assert.match(prompt, /## Local Services/);
+  assert.match(prompt, /Probed at session start/);
+  assert.match(prompt, /\*\*Python \(native\)\:\*\* not running/);
+  assert.match(prompt, /Pyodide/);
+  assert.match(prompt, /read skill "python-bridge"/);
+  assert.match(prompt, /\*\*Terminal \(tmux\)\:\*\* not running/);
+  assert.match(prompt, /read skill "tmux-bridge"/);
+});
+
+void test("system prompt renders Local Services for both bridges running", () => {
+  const services: LocalServiceEntry[] = [
+    {
+      name: "python", displayName: "Python (native)", status: "running",
+      pythonVersion: "3.12.1", libreofficeAvailable: true, skillName: "python-bridge",
+    },
+    {
+      name: "tmux", displayName: "Terminal (tmux)", status: "running",
+      tmuxVersion: "3.4", tmuxSessions: 2, skillName: "tmux-bridge",
+    },
+  ];
+  const prompt = buildSystemPrompt({ localServices: services });
+
+  assert.match(prompt, /## Local Services/);
+  assert.match(prompt, /\*\*Python \(native\)\:\*\* running — python 3\.12\.1/);
+  assert.match(prompt, /libreoffice available/);
+  assert.match(prompt, /\*\*Terminal \(tmux\)\:\*\* running — tmux 3\.4, 2 active sessions/);
+  assert.match(prompt, /shell commands/);
+});
+
+void test("system prompt renders partial python (no libreoffice)", () => {
+  const services: LocalServiceEntry[] = [
+    {
+      name: "python", displayName: "Python (native)", status: "partial",
+      pythonVersion: "3.11.0", libreofficeAvailable: false, skillName: "python-bridge",
+    },
+    { name: "tmux", displayName: "Terminal (tmux)", status: "not_running", skillName: "tmux-bridge" },
+  ];
+  const prompt = buildSystemPrompt({ localServices: services });
+
+  assert.match(prompt, /\*\*Python \(native\)\:\*\* running — python 3\.11\.0, libreoffice not installed/);
+  assert.match(prompt, /file conversion.*requires LibreOffice/);
+  assert.match(prompt, /read skill "python-bridge" for install instructions/);
+});
+
+void test("system prompt renders partial tmux (stub mode)", () => {
+  const services: LocalServiceEntry[] = [
+    { name: "python", displayName: "Python (native)", status: "not_running", skillName: "python-bridge" },
+    { name: "tmux", displayName: "Terminal (tmux)", status: "partial", skillName: "tmux-bridge" },
+  ];
+  const prompt = buildSystemPrompt({ localServices: services });
+
+  assert.match(prompt, /\*\*Terminal \(tmux\)\:\*\* bridge running but tmux not fully available/);
+  assert.match(prompt, /Read skill "tmux-bridge" for troubleshooting/);
+});
+
+void test("Local Services section is placed after Connections, before Skills", () => {
+  const services: LocalServiceEntry[] = [
+    { name: "python", displayName: "Python (native)", status: "not_running", skillName: "python-bridge" },
+    { name: "tmux", displayName: "Terminal (tmux)", status: "not_running", skillName: "tmux-bridge" },
+  ];
+  const prompt = buildSystemPrompt({
+    localServices: services,
+    activeConnections: [
+      { id: "test", title: "Test", capability: "testing", status: "connected", setupHint: "n/a" },
+    ],
+    availableSkills: [
+      { name: "test-skill", description: "A test skill", location: "skills/test/SKILL.md" },
+    ],
+  });
+
+  const connectionsIdx = prompt.indexOf("## Connections");
+  const localServicesIdx = prompt.indexOf("## Local Services");
+  const skillsIdx = prompt.indexOf("## Available Agent Skills");
+
+  assert.ok(connectionsIdx > -1, "Connections section should exist");
+  assert.ok(localServicesIdx > -1, "Local Services section should exist");
+  assert.ok(skillsIdx > -1, "Skills section should exist");
+  assert.ok(connectionsIdx < localServicesIdx, "Local Services should come after Connections");
+  assert.ok(localServicesIdx < skillsIdx, "Local Services should come before Skills");
+});
+
+void test("tmux session count uses singular for 1 session", () => {
+  const services: LocalServiceEntry[] = [
+    { name: "python", displayName: "Python (native)", status: "not_running", skillName: "python-bridge" },
+    {
+      name: "tmux", displayName: "Terminal (tmux)", status: "running",
+      tmuxVersion: "3.5", tmuxSessions: 1, skillName: "tmux-bridge",
+    },
+  ];
+  const prompt = buildSystemPrompt({ localServices: services });
+
+  assert.match(prompt, /1 active session\b/);
+  assert.ok(!prompt.includes("1 active sessions"));
 });
