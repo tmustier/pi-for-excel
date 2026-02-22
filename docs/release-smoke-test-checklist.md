@@ -45,12 +45,17 @@ Record run date and commit SHA in the evidence table below.
 
 ### Context/cache instrumentation sanity (for context-shape changes)
 
-Run this add-on check when the release includes changes to model context composition (system prompt, tool disclosure, toolset refresh, compaction, or context injection):
+Run this add-on check when the release includes changes to model context composition (system prompt, tool disclosure, toolset refresh, compaction, or context injection).
+
+References:
+- baseline matrix: `docs/cache-observability-baselines.md`
+- run template: `docs/release-smoke-runs/templates/context-cache-telemetry-template.md`
 
 1. Enable debug mode.
 2. Run a deterministic mini-session (≥5 calls, including at least one tool loop).
 3. Record prefix churn counters (`prefixChanges`, `prefixModelChanges`, `prefixSystemPromptChanges`, `prefixToolChanges`).
-4. Confirm each non-zero reason has an intentional trigger in the scenario.
+4. Compare observed `prefixChangeReasons` to baseline expectations for each trigger.
+5. Confirm each non-zero reason has an intentional trigger in the scenario.
 
 If churn is unexpected, treat as a release blocker until explained or fixed.
 

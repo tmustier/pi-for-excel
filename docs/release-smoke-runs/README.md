@@ -24,6 +24,7 @@ Keep each run append-only; create a new file for each run instead of rewriting o
 - macOS host run: `docs/release-smoke-runs/templates/macos-host-smoke-template.md`
 - macOS H-1 focused operator run: `docs/release-smoke-runs/templates/macos-h1-host-operator-template.md`
 - Windows host run: `docs/release-smoke-runs/templates/windows-host-smoke-template.md`
+- Context/cache telemetry run: `docs/release-smoke-runs/templates/context-cache-telemetry-template.md`
 
 Recommended workflow:
 
