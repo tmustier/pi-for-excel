@@ -17,6 +17,7 @@ This folder contains **current** docs that should match shipped behavior.
 - [Manual full-workbook backups (`/backup`)](./manual-full-backups.md)
 
 ## Architecture & policy
+- [Upstream divergences from pi-mono](./upstream-divergences.md)
 - [Context management policy (cache-safe)](./context-management-policy.md)
 - [Cache observability baselines](./cache-observability-baselines.md)
 - [Security threat model](./security-threat-model.md)
