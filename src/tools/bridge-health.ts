@@ -75,7 +75,7 @@ function parseLibreofficeVersion(rawVersion: string | undefined): string | undef
   }
 
   const matched = trimmed.match(/\d+\.\d+(?:\.\d+){0,2}/);
-  return matched?.[0] ?? trimmed;
+  return matched?.[0];
 }
 
 function parsePythonHealth(payload: unknown): PythonServiceEntry {

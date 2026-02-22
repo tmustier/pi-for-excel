@@ -89,6 +89,26 @@ void test("normalizes verbose libreoffice version strings", async () => {
   assert.equal(python.name === "python" && python.libreofficeVersion, "7.6.4.1");
 });
 
+void test("ignores non-numeric libreoffice version strings", async () => {
+  const entries = await probeLocalServices(makeDeps({
+    fetchHealth: (url) => {
+      if (url.includes("3340")) {
+        return Promise.resolve({
+          ok: true,
+          mode: "real",
+          python: { available: true, version: "3.12.1" },
+          libreoffice: { available: true, version: "ready and healthy" },
+        });
+      }
+      return Promise.resolve(null);
+    },
+  }));
+
+  const python = findPython(entries);
+  assert.ok(python);
+  assert.equal(python.name === "python" && python.libreofficeVersion, undefined);
+});
+
 // ---------------------------------------------------------------------------
 // Python bridge up, libreoffice missing → partial
 // ---------------------------------------------------------------------------
