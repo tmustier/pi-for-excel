@@ -192,6 +192,36 @@ export function createExtensionAgentMessage(extensionName: string, label: string
   };
 }
 
+const EXTENSION_LLM_SESSION_KEY_SEGMENT = "ext-llm";
+
+function normalizeExtensionSessionKeyPart(value: string | undefined): string {
+  if (typeof value !== "string") {
+    return "";
+  }
+
+  return value.trim();
+}
+
+/**
+ * Side `llm.complete` requests are intentionally independent from the main
+ * runtime loop. Use a deterministic extension-scoped session key so prefix
+ * churn/debug signals don't get mixed into the primary runtime session key.
+ */
+export function createExtensionLlmCompletionSessionId(args: {
+  agentSessionId: string | undefined;
+  extensionId: string;
+}): string {
+  const normalizedAgentSessionId = normalizeExtensionSessionKeyPart(args.agentSessionId);
+  const normalizedExtensionId = normalizeExtensionSessionKeyPart(args.extensionId);
+  const extensionSegment = normalizedExtensionId.length > 0 ? normalizedExtensionId : "unknown-extension";
+
+  if (normalizedAgentSessionId.length === 0) {
+    return `${EXTENSION_LLM_SESSION_KEY_SEGMENT}:${extensionSegment}`;
+  }
+
+  return `${normalizedAgentSessionId}::${EXTENSION_LLM_SESSION_KEY_SEGMENT}:${extensionSegment}`;
+}
+
 export function isBlockedExtensionHostname(hostname: string): boolean {
   const normalized = hostname.trim().toLowerCase();
   if (normalized.length === 0) {

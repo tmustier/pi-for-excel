@@ -120,6 +120,7 @@ Host-mediated LLM completion. Supports optional model override (`provider/modelI
 
 Cache/prompt-shape guidance for extension authors:
 - Treat `llm.complete` as an **independent side completion** by default (separate from the main chat loop/tool prefix).
+- Host runtime uses an extension-scoped side session key for `llm.complete`, so side-call churn is isolated from the primary runtime session telemetry.
 - Keep `systemPrompt` short and stable across repeated extension calls when possible.
 - Put volatile data in `messages` rather than rewriting `systemPrompt` every call.
 - Use `agent.injectContext` / `agent.steer` when you need to influence the primary runtime conversation instead of emulating it through `llm.complete`.

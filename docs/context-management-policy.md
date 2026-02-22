@@ -196,7 +196,7 @@ Implications:
 | 2) Mid-session model switching | **Implement** cache-safe behavior | ✅ shipped (#428) | Non-empty sessions now fork into a new tab/model runtime; empty sessions still switch in place. |
 | 3) Mid-session toolset churn | **Implement** targeted stabilization | ✅ shipped (#436) | Runtime now skips no-op `setTools(...)` updates via fingerprinting, while keeping extension-tool refreshes eager for handler hot-reloads. |
 | 4) Mid-session system-prompt churn | **Keep + defer deeper refactor** | ✅ decision recorded | Keep dynamic safety-critical sections (rules, execution mode, connection/integration/skills state) in system prompt for now. Defer stable-base + volatile-message layering until telemetry justifies complexity. |
-| 5) Side LLM operations (`llm.complete`) | **Keep intentionally independent** | ✅ decision recorded | Treat extension side-completions as separate from main runtime context; add explicit extension-author guidance on cache impact (see `docs/extensions.md`). Defer parent-prefix reuse mode. |
+| 5) Side LLM operations (`llm.complete`) | **Keep intentionally independent** | ✅ guidance + session-key isolation implemented | Treat extension side-completions as separate from main runtime context; extension calls now use extension-scoped side session keys so observability/prefix churn is isolated from the primary runtime. |
 | 6) Cache observability policy | **Implement v1 workflow policy** | ✅ policy + baseline matrix documented | Use prefix-churn counters + payload snapshots as release/PR smoke signals for context changes. Baselines: `docs/cache-observability-baselines.md`. |
 
 ### Cache observability policy (v1)

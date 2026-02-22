@@ -54,6 +54,7 @@ import { showToast } from "../ui/toast.js";
 import { getEnabledProxyBaseUrl, resolveOutboundRequestUrl } from "../tools/external-fetch.js";
 import { clearExtensionStorage } from "./storage-store.js";
 import {
+  createExtensionLlmCompletionSessionId,
   describeExtensionSource,
   extractAssistantText,
   getRuntimeManagerErrorMessage,
@@ -417,7 +418,10 @@ export class ExtensionRuntimeManager {
       },
       {
         apiKey,
-        sessionId: agent.sessionId,
+        sessionId: createExtensionLlmCompletionSessionId({
+          agentSessionId: agent.sessionId,
+          extensionId: entry.id,
+        }),
         maxTokens: request.maxTokens,
       },
     );

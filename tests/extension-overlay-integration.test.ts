@@ -12,7 +12,10 @@ import {
   type StoredExtensionTrust,
 } from "../src/extensions/permissions.ts";
 import { ExtensionRuntimeManager, type ExtensionRuntimeStatus } from "../src/extensions/runtime-manager.ts";
-import { describeExtensionSource } from "../src/extensions/runtime-manager-helpers.ts";
+import {
+  createExtensionLlmCompletionSessionId,
+  describeExtensionSource,
+} from "../src/extensions/runtime-manager-helpers.ts";
 import { describeExtensionRuntimeMode, type ExtensionRuntimeMode } from "../src/extensions/runtime-mode.ts";
 import type { ExtensionSettingsStore, StoredExtensionSource } from "../src/extensions/store.ts";
 import { EXTENSION_OVERLAY_ID } from "../src/ui/overlay-ids.ts";
@@ -119,6 +122,29 @@ function createRuntimeStatus(input: {
     lastError: input.lastError ?? null,
   };
 }
+
+void test("createExtensionLlmCompletionSessionId namespaces side completions by extension", () => {
+  const sessionId = createExtensionLlmCompletionSessionId({
+    agentSessionId: "session-abc",
+    extensionId: "ext.weather",
+  });
+
+  assert.equal(sessionId, "session-abc::ext-llm:ext.weather");
+});
+
+void test("createExtensionLlmCompletionSessionId trims values and handles missing base session", () => {
+  const withoutBaseSession = createExtensionLlmCompletionSessionId({
+    agentSessionId: " ",
+    extensionId: " ext.weather ",
+  });
+  assert.equal(withoutBaseSession, "ext-llm:ext.weather");
+
+  const withoutExtensionId = createExtensionLlmCompletionSessionId({
+    agentSessionId: "session-abc",
+    extensionId: "  ",
+  });
+  assert.equal(withoutExtensionId, "session-abc::ext-llm:unknown-extension");
+});
 
 function collectElements(root: HTMLElement, predicate: (element: HTMLElement) => boolean): HTMLElement[] {
   const matches: HTMLElement[] = [];
