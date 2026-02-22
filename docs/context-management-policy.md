@@ -197,19 +197,23 @@ Implications:
 | 3) Mid-session toolset churn | **Implement** targeted stabilization | ✅ shipped (#436) | Runtime now skips no-op `setTools(...)` updates via fingerprinting, while keeping extension-tool refreshes eager for handler hot-reloads. |
 | 4) Mid-session system-prompt churn | **Keep + defer deeper refactor** | ✅ decision recorded | Keep dynamic safety-critical sections (rules, execution mode, connection/integration/skills state) in system prompt for now. Defer stable-base + volatile-message layering until telemetry justifies complexity. |
 | 5) Side LLM operations (`llm.complete`) | **Keep intentionally independent** | ✅ decision recorded | Treat extension side-completions as separate from main runtime context; add explicit extension-author guidance on cache impact (see `docs/extensions.md`). Defer parent-prefix reuse mode. |
-| 6) Cache observability policy | **Implement v1 workflow policy** | ✅ policy defined | Use prefix-churn counters + payload snapshots as release/PR smoke signals for context changes. |
+| 6) Cache observability policy | **Implement v1 workflow policy** | ✅ policy + baseline matrix documented | Use prefix-churn counters + payload snapshots as release/PR smoke signals for context changes. Baselines: `docs/cache-observability-baselines.md`. |
 
 ### Cache observability policy (v1)
 
 For context/tool/prompt changes, treat the following as a required investigation checklist (not hard-fail CI gates yet):
 
+- Baseline expectations by scenario: `docs/cache-observability-baselines.md`
+- Run-log template: `docs/release-smoke-runs/templates/context-cache-telemetry-template.md`
+
 1. Enable debug mode and capture a short deterministic session (at least 5 calls including one tool loop).
 2. Inspect `prefixChanges` and reason breakdown (`model`, `systemPrompt`, `tools`) from status/debug snapshots.
-3. Investigate unexpected churn when:
+3. Compare observed `prefixChangeReasons` to the baseline scenario matrix.
+4. Investigate unexpected churn when:
    - model changes occur without explicit user/model-selector action,
    - system-prompt changes occur without explicit rules/execution-mode/integration/connection/skills updates,
    - tool-schema changes occur without explicit integration/extension/tool-config updates.
-4. Record findings in PR summary when a context-shape change is intentional.
+5. Record findings in PR summary when a context-shape change is intentional.
 
 ## Open decisions
 
