@@ -1,6 +1,6 @@
 {
   "name": "pi-for-excel",
-  "version": "0.8.0-pre",
+  "version": "0.9.0-pre",
   "description": "Open-source, multi-model AI sidebar add-in for Excel. Powered by Pi.",
   "type": "module",
   "scripts": {
