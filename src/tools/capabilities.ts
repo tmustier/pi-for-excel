@@ -109,7 +109,7 @@ const CORE_TOOL_CAPABILITY_METADATA = {
   skills: {
     tier: "core",
     category: "skills",
-    promptDescription: "list/read bundled Agent Skills (SKILL.md) for task-specific workflows",
+    promptDescription: "list/read Agent Skills and install/uninstall external SKILL.md skills",
   },
 } satisfies Record<CoreToolName, CoreToolCapabilityMetadata>;
 

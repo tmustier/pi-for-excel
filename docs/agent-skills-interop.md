@@ -14,6 +14,7 @@ In this repo, standards artifacts live in:
 - `skills/mcp-gateway/SKILL.md`
 - `skills/tmux-bridge/SKILL.md`
 - `skills/python-bridge/SKILL.md`
+- `skills/extending-pi/SKILL.md`
 
 ## 2) Integrations (Excel runtime)
 
@@ -29,11 +30,13 @@ Code lives under `src/integrations/*`.
 
 ## Runtime skill loading
 
-The add-in now exposes a `skills` tool for standards-based skill loading:
+The add-in now exposes a `skills` tool for standards-based skill loading and management:
 
-- `skills` action=`list` → lists bundled Agent Skills
+- `skills` action=`list` → lists bundled+discoverable Agent Skills
 - `skills` action=`read` + `name` → returns full `SKILL.md`
 - `skills` action=`read` + `name` + `refresh=true` → bypasses cache and refreshes from current workspace-backed sources
+- `skills` action=`install` + `name` + `markdown` → installs/updates managed external skill at `skills/external/<name>/SKILL.md`
+- `skills` action=`uninstall` + `name` → removes managed external skill by name
 
 Runtime note: `skills` reads are cached per session runtime so repeated reads for the same skill avoid repeated source lookup. The cache is cleared when the runtime session identity changes (new/resume/switch context).
 

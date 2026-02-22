@@ -255,16 +255,33 @@ export interface SkillsReadDetails {
   readCount?: number;
 }
 
+export interface SkillsInstallDetails {
+  kind: "skills_install";
+  skillName: string;
+  location: string;
+}
+
+export interface SkillsUninstallDetails {
+  kind: "skills_uninstall";
+  skillName: string;
+  removed: boolean;
+}
+
 export interface SkillsErrorDetails {
   kind: "skills_error";
-  action: "read";
+  action: "read" | "install" | "uninstall";
   message: string;
   requestedName?: string;
   availableNames?: string[];
   externalDiscoveryEnabled: boolean;
 }
 
-export type SkillsToolDetails = SkillsListDetails | SkillsReadDetails | SkillsErrorDetails;
+export type SkillsToolDetails =
+  | SkillsListDetails
+  | SkillsReadDetails
+  | SkillsInstallDetails
+  | SkillsUninstallDetails
+  | SkillsErrorDetails;
 
 export interface WebSearchFallbackDetails {
   fromProvider: string;
@@ -922,10 +939,32 @@ export function isSkillsReadDetails(value: unknown): value is SkillsReadDetails 
   );
 }
 
+export function isSkillsInstallDetails(value: unknown): value is SkillsInstallDetails {
+  if (!isRecord(value)) return false;
+  if (value.kind !== "skills_install") return false;
+
+  return (
+    typeof value.skillName === "string" &&
+    typeof value.location === "string"
+  );
+}
+
+export function isSkillsUninstallDetails(value: unknown): value is SkillsUninstallDetails {
+  if (!isRecord(value)) return false;
+  if (value.kind !== "skills_uninstall") return false;
+
+  return (
+    typeof value.skillName === "string" &&
+    typeof value.removed === "boolean"
+  );
+}
+
 export function isSkillsErrorDetails(value: unknown): value is SkillsErrorDetails {
   if (!isRecord(value)) return false;
   if (value.kind !== "skills_error") return false;
-  if (value.action !== "read") return false;
+
+  const action = value.action;
+  if (action !== "read" && action !== "install" && action !== "uninstall") return false;
 
   return (
     typeof value.message === "string" &&

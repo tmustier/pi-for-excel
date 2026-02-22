@@ -33,7 +33,9 @@ import {
   isModifyStructureDetails,
   isPythonTransformRangeDetails,
   isReadRangeCsvDetails,
+  isSkillsInstallDetails,
   isSkillsReadDetails,
+  isSkillsUninstallDetails,
   isTraceDependenciesDetails,
   isViewSettingsDetails,
   isWorkbookHistoryDetails,
@@ -965,6 +967,23 @@ function describeToolCall(
         }
 
         return { action: "Read skill", detail: `${detailName}${sourceSuffix}` };
+      }
+
+      if (action === "install") {
+        const installedName = isSkillsInstallDetails(details)
+          ? details.skillName
+          : name ?? "skill";
+        return { action: "Install skill", detail: installedName };
+      }
+
+      if (action === "uninstall") {
+        const removedName = isSkillsUninstallDetails(details)
+          ? details.skillName
+          : name ?? "skill";
+        const removedSuffix = isSkillsUninstallDetails(details)
+          ? (details.removed ? "" : " (not found)")
+          : "";
+        return { action: "Uninstall skill", detail: `${removedName}${removedSuffix}` };
       }
 
       return { action: "List skills", detail: "" };

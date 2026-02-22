@@ -10,20 +10,27 @@ import type { AgentSkillDefinition } from "../skills/types.js";
 import type { SkillReadCache } from "../skills/read-cache.js";
 import type {
   SkillsErrorDetails,
+  SkillsInstallDetails,
   SkillsListDetails,
   SkillsReadDetails,
   SkillsToolDetails,
+  SkillsUninstallDetails,
 } from "./tool-details.js";
 
 const schema = Type.Object({
   action: Type.Union([
     Type.Literal("list"),
     Type.Literal("read"),
+    Type.Literal("install"),
+    Type.Literal("uninstall"),
   ], {
-    description: "list = show available skills, read = return full SKILL.md for a named skill.",
+    description: "list = show available skills, read = return SKILL.md, install = add/update external skill, uninstall = remove external skill.",
   }),
   name: Type.Optional(Type.String({
-    description: "Skill name (required when action=read).",
+    description: "Skill name (required for read/install/uninstall).",
+  })),
+  markdown: Type.Optional(Type.String({
+    description: "Full SKILL.md markdown (required when action=install).",
   })),
   refresh: Type.Optional(Type.Boolean({
     description: "When true (read only), bypass the session cache and reload from current skill sources.",
@@ -81,6 +88,27 @@ async function defaultLoadDisabledSkillNames(): Promise<Set<string>> {
   }
 }
 
+async function defaultInstallExternalSkill(args: {
+  name: string;
+  markdown: string;
+}): Promise<{ name: string; location: string }> {
+  const { upsertExternalAgentSkill } = await import("../skills/external-store.js");
+  return upsertExternalAgentSkill({
+    markdown: args.markdown,
+    expectedName: args.name,
+  });
+}
+
+async function defaultUninstallExternalSkill(args: { name: string }): Promise<boolean> {
+  const { removeExternalAgentSkill } = await import("../skills/external-store.js");
+  return removeExternalAgentSkill({ name: args.name });
+}
+
+async function defaultDispatchSkillsChanged(reason: "catalog" | "activation"): Promise<void> {
+  const { dispatchSkillsChanged } = await import("../skills/events.js");
+  dispatchSkillsChanged({ reason });
+}
+
 export interface SkillsToolDependencies {
   getSessionId?: () => string | null;
   readCache?: SkillReadCache;
@@ -88,6 +116,9 @@ export interface SkillsToolDependencies {
   isExternalDiscoveryEnabled?: () => boolean | Promise<boolean>;
   loadExternalSkills?: () => Promise<AgentSkillDefinition[]>;
   loadDisabledSkillNames?: () => Promise<Set<string>>;
+  installExternalSkill?: (args: { name: string; markdown: string }) => Promise<{ name: string; location: string }>;
+  uninstallExternalSkill?: (args: { name: string }) => Promise<boolean>;
+  dispatchSkillsChanged?: (reason: "catalog" | "activation") => void | Promise<void>;
 }
 
 function renderSkillListMarkdown(args: {
@@ -171,6 +202,7 @@ function buildSkillsListDetails(args: {
 }
 
 function buildSkillsErrorDetails(args: {
+  action: "read" | "install" | "uninstall";
   message: string;
   externalDiscoveryEnabled: boolean;
   requestedName?: string;
@@ -178,11 +210,33 @@ function buildSkillsErrorDetails(args: {
 }): SkillsErrorDetails {
   return {
     kind: "skills_error",
-    action: "read",
+    action: args.action,
     message: args.message,
     requestedName: args.requestedName,
     availableNames: args.availableNames,
     externalDiscoveryEnabled: args.externalDiscoveryEnabled,
+  };
+}
+
+function buildSkillsInstallDetails(args: {
+  name: string;
+  location: string;
+}): SkillsInstallDetails {
+  return {
+    kind: "skills_install",
+    skillName: args.name,
+    location: args.location,
+  };
+}
+
+function buildSkillsUninstallDetails(args: {
+  name: string;
+  removed: boolean;
+}): SkillsUninstallDetails {
+  return {
+    kind: "skills_uninstall",
+    skillName: args.name,
+    removed: args.removed,
   };
 }
 
@@ -242,14 +296,17 @@ export function createSkillsTool(
     name: "skills",
     label: "Skills",
     description:
-      "List and read bundled Agent Skills (SKILL.md). "
-      + "Use this to load detailed, task-specific workflows on demand.",
+      "List/read Agent Skills (SKILL.md), and install/uninstall external skills. "
+      + "Use this to load or manage task-specific workflows on demand.",
     parameters: schema,
     execute: async (_toolCallId: string, params: Params): Promise<AgentToolResult<SkillsToolDetails>> => {
       const catalog = dependencies.catalog ?? await getDefaultCatalog();
       const isExternalDiscoveryEnabled = dependencies.isExternalDiscoveryEnabled ?? defaultIsExternalDiscoveryEnabled;
       const loadExternalSkills = dependencies.loadExternalSkills ?? defaultLoadExternalSkills;
       const loadDisabledSkillNames = dependencies.loadDisabledSkillNames ?? defaultLoadDisabledSkillNames;
+      const installExternalSkill = dependencies.installExternalSkill ?? defaultInstallExternalSkill;
+      const uninstallExternalSkill = dependencies.uninstallExternalSkill ?? defaultUninstallExternalSkill;
+      const dispatchSkillsChanged = dependencies.dispatchSkillsChanged ?? defaultDispatchSkillsChanged;
 
       const externalDiscoveryEnabled = await isExternalDiscoveryEnabled();
       const skills = await resolveAllSkills({
@@ -271,15 +328,101 @@ export function createSkillsTool(
 
       const requestedName = params.name?.trim() ?? "";
       if (requestedName.length === 0) {
-        const message = "Error: name is required when action=read.";
+        const message = `Error: name is required when action=${params.action}.`;
         return {
           content: [{ type: "text", text: message }],
           details: buildSkillsErrorDetails({
+            action: params.action,
             message,
             externalDiscoveryEnabled,
             availableNames: skills.map((skill) => skill.name),
           }),
         };
+      }
+
+      if (params.action === "install") {
+        const markdown = params.markdown;
+        if (typeof markdown !== "string" || markdown.trim().length === 0) {
+          const message = "Error: markdown is required when action=install.";
+          return {
+            content: [{ type: "text", text: message }],
+            details: buildSkillsErrorDetails({
+              action: "install",
+              message,
+              externalDiscoveryEnabled,
+              requestedName,
+              availableNames: skills.map((skill) => skill.name),
+            }),
+          };
+        }
+
+        try {
+          const installed = await installExternalSkill({
+            name: requestedName,
+            markdown,
+          });
+
+          readCache?.clearAll();
+          await dispatchSkillsChanged("catalog");
+
+          const text = `Installed external skill: \`${installed.name}\` (${installed.location}).`;
+          return {
+            content: [{ type: "text", text }],
+            details: buildSkillsInstallDetails({
+              name: installed.name,
+              location: installed.location,
+            }),
+          };
+        } catch (error: unknown) {
+          const reason = error instanceof Error ? error.message : String(error);
+          const message = `Failed to install skill \`${requestedName}\`: ${reason}`;
+          return {
+            content: [{ type: "text", text: message }],
+            details: buildSkillsErrorDetails({
+              action: "install",
+              message,
+              externalDiscoveryEnabled,
+              requestedName,
+              availableNames: skills.map((skill) => skill.name),
+            }),
+          };
+        }
+      }
+
+      if (params.action === "uninstall") {
+        try {
+          const removed = await uninstallExternalSkill({ name: requestedName });
+
+          if (removed) {
+            readCache?.clearAll();
+            await dispatchSkillsChanged("catalog");
+          }
+
+          const text = removed
+            ? `Uninstalled external skill: \`${requestedName}\`.`
+            : `External skill not found: \`${requestedName}\`.`;
+
+          return {
+            content: [{ type: "text", text }],
+            details: buildSkillsUninstallDetails({
+              name: requestedName,
+              removed,
+            }),
+          };
+        } catch (error: unknown) {
+          const reason = error instanceof Error ? error.message : String(error);
+          const message = `Failed to uninstall skill \`${requestedName}\`: ${reason}`;
+          return {
+            content: [{ type: "text", text: message }],
+            details: buildSkillsErrorDetails({
+              action: "uninstall",
+              message,
+              externalDiscoveryEnabled,
+              requestedName,
+              availableNames: skills.map((skill) => skill.name),
+            }),
+          };
+        }
       }
 
       const refresh = params.refresh === true;
@@ -323,6 +466,7 @@ export function createSkillsTool(
         return {
           content: [{ type: "text", text: message }],
           details: buildSkillsErrorDetails({
+            action: "read",
             message,
             externalDiscoveryEnabled,
             requestedName,

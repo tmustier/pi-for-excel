@@ -5,8 +5,10 @@ import type { AgentSkillDefinition } from "../src/skills/types.ts";
 import { createSkillReadCache } from "../src/skills/read-cache.ts";
 import {
   isSkillsErrorDetails,
+  isSkillsInstallDetails,
   isSkillsListDetails,
   isSkillsReadDetails,
+  isSkillsUninstallDetails,
 } from "../src/tools/tool-details.ts";
 import { createSkillsTool } from "../src/tools/skills.ts";
 
@@ -262,4 +264,99 @@ void test("skills read ignores stale cache entries when skill becomes disabled",
   if (!isSkillsErrorDetails(secondRead.details)) return;
 
   assert.match(secondRead.details.message, /Skill not found: `web-search`/);
+});
+
+void test("skills install writes external skill and emits structured install details", async () => {
+  let installedName = "";
+  let installedMarkdown = "";
+  let changedReason = "";
+
+  const tool = createSkillsTool({
+    catalog: { list: () => [WEB_SEARCH_SKILL] },
+    isExternalDiscoveryEnabled: () => true,
+    loadExternalSkills: () => Promise.resolve([]),
+    installExternalSkill: (args) => {
+      installedName = args.name;
+      installedMarkdown = args.markdown;
+      return Promise.resolve({
+        name: args.name,
+        location: `skills/external/${args.name}/SKILL.md`,
+      });
+    },
+    dispatchSkillsChanged: (reason) => {
+      changedReason = reason;
+    },
+  });
+
+  const markdown = "---\nname: custom-skill\ndescription: Custom\n---\n\nBody";
+  const result = await tool.execute("call-install", {
+    action: "install",
+    name: "custom-skill",
+    markdown,
+  });
+
+  assert.equal(installedName, "custom-skill");
+  assert.equal(installedMarkdown, markdown);
+  assert.equal(changedReason, "catalog");
+
+  assert.ok(isSkillsInstallDetails(result.details));
+  if (!isSkillsInstallDetails(result.details)) return;
+
+  assert.equal(result.details.skillName, "custom-skill");
+  assert.equal(result.details.location, "skills/external/custom-skill/SKILL.md");
+});
+
+void test("skills install requires markdown", async () => {
+  const tool = createSkillsTool({
+    catalog: { list: () => [WEB_SEARCH_SKILL] },
+    isExternalDiscoveryEnabled: () => false,
+    loadExternalSkills: () => Promise.resolve([]),
+  });
+
+  const result = await tool.execute("call-install-missing", {
+    action: "install",
+    name: "custom-skill",
+  });
+
+  assert.ok(isSkillsErrorDetails(result.details));
+  if (!isSkillsErrorDetails(result.details)) return;
+
+  assert.equal(result.details.action, "install");
+  assert.match(result.details.message, /markdown is required/i);
+});
+
+void test("skills uninstall reports removed state and emits refresh only when removed", async () => {
+  let changedCount = 0;
+
+  const tool = createSkillsTool({
+    catalog: { list: () => [WEB_SEARCH_SKILL] },
+    isExternalDiscoveryEnabled: () => true,
+    loadExternalSkills: () => Promise.resolve([]),
+    uninstallExternalSkill: (args) => Promise.resolve(args.name === "custom-skill"),
+    dispatchSkillsChanged: () => {
+      changedCount += 1;
+    },
+  });
+
+  const removed = await tool.execute("call-uninstall-yes", {
+    action: "uninstall",
+    name: "custom-skill",
+  });
+
+  assert.ok(isSkillsUninstallDetails(removed.details));
+  if (!isSkillsUninstallDetails(removed.details)) return;
+
+  assert.equal(removed.details.skillName, "custom-skill");
+  assert.equal(removed.details.removed, true);
+
+  const missing = await tool.execute("call-uninstall-no", {
+    action: "uninstall",
+    name: "missing-skill",
+  });
+
+  assert.ok(isSkillsUninstallDetails(missing.details));
+  if (!isSkillsUninstallDetails(missing.details)) return;
+
+  assert.equal(missing.details.removed, false);
+  assert.equal(changedCount, 1);
 });

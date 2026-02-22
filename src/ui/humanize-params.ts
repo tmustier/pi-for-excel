@@ -756,6 +756,11 @@ function humanizeSkills(p: Record<string, unknown>): ParamItem[] {
     items.push({ label: "Refresh", value: "yes" });
   }
 
+  if (typeof p.markdown === "string") {
+    const markdown = p.markdown;
+    items.push({ label: "SKILL.md", value: `${markdown.length} chars` });
+  }
+
   return items;
 }
 
