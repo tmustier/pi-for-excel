@@ -224,6 +224,16 @@ function wrapTool(tool: AgentTool, connectionManager: ConnectionManager): AgentT
             throw error;
           }
 
+          let redactedErrorMessage = errorMessage;
+          try {
+            redactedErrorMessage = await connectionManager.redactMessageForConnection(
+              authFailureSnapshot.connectionId,
+              errorMessage,
+            );
+          } catch {
+            // best-effort redaction only; fallback to original message below.
+          }
+
           try {
             await connectionManager.markRuntimeAuthFailure(authFailureSnapshot.connectionId, {
               message: errorMessage,
@@ -233,15 +243,17 @@ function wrapTool(tool: AgentTool, connectionManager: ConnectionManager): AgentT
           }
 
           const refreshedSnapshot = await connectionManager.getSnapshot(authFailureSnapshot.connectionId);
-          const snapshotForResponse: ConnectionSnapshot = refreshedSnapshot ?? {
-            ...authFailureSnapshot,
+          const snapshotBase = refreshedSnapshot ?? authFailureSnapshot;
+          const snapshotForResponse: ConnectionSnapshot = {
+            ...snapshotBase,
             status: "error",
+            lastError: snapshotBase.lastError ?? redactedErrorMessage,
           };
 
           return buildConnectionErrorResult({
             snapshot: snapshotForResponse,
             errorCode: "connection_auth_failed",
-            reason: snapshotForResponse.lastError ?? errorMessage,
+            reason: snapshotForResponse.lastError,
           });
         }
 

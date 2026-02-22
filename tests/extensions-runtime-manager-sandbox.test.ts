@@ -5,6 +5,7 @@ import { readFile } from "node:fs/promises";
 import { Type } from "@sinclair/typebox";
 
 import { ConnectionManager } from "../src/connections/manager.ts";
+import { CONNECTION_STORE_KEY } from "../src/connections/store.ts";
 import { setExperimentalFeatureEnabled } from "../src/experiments/flags.ts";
 import { ExtensionRuntimeManager } from "../src/extensions/runtime-manager.ts";
 import { isConnectionToolErrorDetails } from "../src/tools/tool-details.ts";
@@ -36,6 +37,23 @@ class MemorySettingsStore {
 
   writeRaw(key: string, value: unknown): void {
     this.values.set(key, value);
+  }
+}
+
+class FailingConnectionStoreSettings extends MemorySettingsStore {
+  private failNextConnectionStoreWrite = false;
+
+  armConnectionStoreFailure(): void {
+    this.failNextConnectionStoreWrite = true;
+  }
+
+  override set(key: string, value: unknown): Promise<void> {
+    if (this.failNextConnectionStoreWrite && key === CONNECTION_STORE_KEY) {
+      this.failNextConnectionStoreWrite = false;
+      return Promise.reject(new Error("simulated connection store failure"));
+    }
+
+    return super.set(key, value);
   }
 }
 
@@ -928,9 +946,64 @@ void test("connection preflight maps runtime auth failures to connection_auth_fa
     assert.ok(!result.details.reason?.includes("top-secret-api-key"));
   }
 
+  const text = result.content[0]?.type === "text" ? result.content[0].text : "";
+  assert.ok(!text.includes("top-secret-api-key"));
+
   const state = await connectionManager.getState("ext.apollo.apollo");
   assert.equal(state?.status, "error");
   assert.ok(!state?.lastError?.includes("top-secret-api-key"));
+});
+
+void test("connection preflight still redacts auth failures when status persistence fails", async () => {
+  const settings = new FailingConnectionStoreSettings();
+  const connectionManager = createConnectionManager(settings);
+
+  connectionManager.registerDefinition("ext.apollo", {
+    id: "ext.apollo.apollo",
+    title: "Apollo",
+    capability: "company and contact enrichment",
+    authKind: "api_key",
+    secretFields: [{ id: "apiKey", label: "API key", required: true }],
+  });
+
+  await connectionManager.setSecrets("ext.apollo", "ext.apollo.apollo", {
+    apiKey: "top-secret-api-key",
+  });
+
+  settings.armConnectionStoreFailure();
+
+  const tool = {
+    name: "apollo_lookup",
+    label: "Apollo Lookup",
+    description: "Lookup company profiles",
+    parameters: Type.Object({
+      company: Type.String(),
+    }),
+    execute: () => {
+      throw new Error("401 Unauthorized: invalid API key top-secret-api-key");
+    },
+  };
+
+  Reflect.set(tool, "requiresConnection", ["ext.apollo.apollo"]);
+
+  const tools = withConnectionPreflight([tool], {
+    connectionManager,
+  });
+
+  const result = await tools[0].execute("tool-call-2b", { company: "Acme" });
+  assert.equal(isConnectionToolErrorDetails(result.details), true);
+
+  if (isConnectionToolErrorDetails(result.details)) {
+    assert.equal(result.details.errorCode, "connection_auth_failed");
+    assert.equal(result.details.status, "error");
+    assert.ok(!result.details.reason?.includes("top-secret-api-key"));
+  }
+
+  const text = result.content[0]?.type === "text" ? result.content[0].text : "";
+  assert.ok(!text.includes("top-secret-api-key"));
+
+  const state = await connectionManager.getState("ext.apollo.apollo");
+  assert.equal(state?.status, "connected");
 });
 
 void test("connection preflight attributes auth failures to the matching required connection", async () => {

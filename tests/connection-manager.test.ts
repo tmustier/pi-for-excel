@@ -142,6 +142,48 @@ void test("getSecretFieldPresence handles multi-field partial secrets", async ()
   assert.equal(presence.endpoint, false);
 });
 
+// ── redactMessageForConnection ──────────────────────
+
+void test("redactMessageForConnection masks stored secrets", async () => {
+  const manager = new ConnectionManager({ settings: createMemorySettings() });
+  manager.registerDefinition("ext.vendor", MULTI_FIELD_DEFINITION);
+
+  await manager.setSecrets("ext.vendor", "ext.vendor.vendor", {
+    clientId: "client-123",
+    clientSecret: "top-secret-token",
+  });
+
+  const redacted = await manager.redactMessageForConnection(
+    "ext.vendor.vendor",
+    "403 Forbidden: invalid credential top-secret-token for client-123",
+  );
+
+  assert.ok(!redacted.includes("top-secret-token"));
+  assert.ok(!redacted.includes("client-123"));
+  assert.match(redacted, /••••/);
+});
+
+void test("markInvalid redacts stored secret values from failure reasons", async () => {
+  const manager = new ConnectionManager({ settings: createMemorySettings() });
+  manager.registerDefinition("ext.vendor", MULTI_FIELD_DEFINITION);
+
+  await manager.setSecrets("ext.vendor", "ext.vendor.vendor", {
+    clientId: "client-123",
+    clientSecret: "top-secret-token",
+  });
+
+  await manager.markInvalid(
+    "ext.vendor",
+    "ext.vendor.vendor",
+    "Credential top-secret-token for client-123 is revoked",
+  );
+
+  const snapshot = await manager.getSnapshot("ext.vendor.vendor");
+  assert.equal(snapshot?.status, "invalid");
+  assert.ok(!snapshot?.lastError?.includes("top-secret-token"));
+  assert.ok(!snapshot?.lastError?.includes("client-123"));
+});
+
 // ── updateSecretsFromHost ───────────────────────────
 
 void test("updateSecretsFromHost merges into empty store", async () => {

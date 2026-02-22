@@ -334,6 +334,19 @@ export class ConnectionManager {
   }
 
   /**
+   * Redacts stored secret values for a registered connection from a message.
+   * Useful for tool/runtime error surfaces that must never leak credentials.
+   */
+  async redactMessageForConnection(connectionId: string, message: string): Promise<string> {
+    const definition = this.getRequiredDefinition(connectionId);
+    const normalizedMessage = normalizeNonEmpty(message, "message");
+    const items = await loadConnectionStoreDocument(this.settings);
+    const record = items[definition.id];
+
+    return redactSecretsInMessage(normalizedMessage, record?.secrets);
+  }
+
+  /**
    * Merge-patch secrets from the host UI (bypasses owner check).
    * Only non-empty values are merged; empty strings are ignored.
    * Clears error/invalid status on save (optimistic recovery).
