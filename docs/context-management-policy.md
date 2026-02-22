@@ -193,7 +193,7 @@ Implications:
 | Area | Decision | Status | Notes |
 |---|---|---|---|
 | 1) Compaction call-shape | **Defer** behavior change | ✅ documented | Keep isolated summarizer request for now. Memo: `docs/archive/issue-424-compaction-call-shape.md`. |
-| 2) Mid-session model switching | **Implement** cache-safe behavior | ✅ shipped (#428), revisiting default | Non-empty sessions currently fork into a new tab/model runtime; will change default to in-place (pi-mono parity) with fork as opt-in. See `docs/upstream-divergences.md` §1. |
+| 2) Mid-session model switching | **Implement** cache-safe behavior | ✅ shipped (#428, #442) | Default now matches pi-mono (in-place); optional fork-to-new-tab behavior is available as an advanced setting for non-empty sessions. See `docs/upstream-divergences.md` §1. |
 | 3) Mid-session toolset churn | **Implement** targeted stabilization | ✅ shipped (#436) | Runtime now skips no-op `setTools(...)` updates via fingerprinting, while keeping extension-tool refreshes eager for handler hot-reloads. See `docs/upstream-divergences.md` §2. |
 | 4) Mid-session system-prompt churn | **Keep + defer deeper refactor** | ✅ decision recorded | Keep dynamic safety-critical sections (rules, execution mode, connection/integration/skills state) in system prompt for now. Defer stable-base + volatile-message layering until telemetry justifies complexity. |
 | 5) Side LLM operations (`llm.complete`) | **Keep intentionally independent** | ✅ guidance + session-key isolation implemented | Treat extension side-completions as separate from main runtime context; extension calls now use extension-scoped side session keys so observability/prefix churn is isolated from the primary runtime. See `docs/upstream-divergences.md` §3. |

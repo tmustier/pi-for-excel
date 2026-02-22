@@ -75,6 +75,12 @@ import {
   PI_EXECUTION_MODE_CHANGED_EVENT,
   type ExecutionMode,
 } from "../execution/mode.js";
+import {
+  getStoredModelSwitchBehavior,
+  setStoredModelSwitchBehavior,
+  shouldForkModelSwitch,
+  type ModelSwitchBehavior,
+} from "../models/switch-behavior.js";
 import { getResolvedConventions } from "../conventions/store.js";
 import {
   buildIntegrationPromptEntries,
@@ -400,6 +406,22 @@ export async function initTaskpane(opts: {
 
   const toggleExecutionModeFromUi = async (): Promise<void> => {
     await executionModeController.toggleFromUi();
+  };
+
+  const loadModelSwitchBehavior = async (): Promise<ModelSwitchBehavior> => {
+    try {
+      return await getStoredModelSwitchBehavior(settings);
+    } catch {
+      return "inPlace";
+    }
+  };
+
+  let modelSwitchBehavior: ModelSwitchBehavior = await loadModelSwitchBehavior();
+
+  const getModelSwitchBehavior = (): ModelSwitchBehavior => modelSwitchBehavior;
+
+  const setModelSwitchBehavior = async (nextBehavior: ModelSwitchBehavior): Promise<void> => {
+    modelSwitchBehavior = await setStoredModelSwitchBehavior(settings, nextBehavior);
   };
 
   const resolveWorkbookContext = async (): Promise<Awaited<ReturnType<typeof getWorkbookContext>>> => {
@@ -1485,6 +1507,8 @@ export async function initTaskpane(opts: {
     openShortcutsDialog: showShortcutsDialog,
     getExecutionMode,
     setExecutionMode,
+    getModelSwitchBehavior,
+    setModelSwitchBehavior,
   });
 
   const applyModelSelection = async (runtimeId: string, nextModel: RuntimeModel): Promise<void> => {
@@ -1504,7 +1528,10 @@ export async function initTaskpane(opts: {
       return;
     }
 
-    if (runtime.agent.state.messages.length === 0) {
+    const hasMessages = runtime.agent.state.messages.length > 0;
+    const behavior = getModelSwitchBehavior();
+
+    if (!shouldForkModelSwitch({ behavior, hasMessages })) {
       runtime.agent.setModel(nextModel);
       document.dispatchEvent(new CustomEvent("pi:model-changed"));
       document.dispatchEvent(new CustomEvent("pi:status-update"));

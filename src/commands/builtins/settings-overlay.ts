@@ -14,6 +14,7 @@ import {
   validateOfficeProxyUrl,
 } from "../../auth/proxy-validation.js";
 import { PI_EXECUTION_MODE_CHANGED_EVENT, type ExecutionMode } from "../../execution/mode.js";
+import type { ModelSwitchBehavior } from "../../models/switch-behavior.js";
 import { getProxyState, type ProxyState } from "../../taskpane/proxy-status.js";
 import {
   createCallout,
@@ -76,6 +77,8 @@ interface SettingsDialogDependencies {
   openShortcutsDialog?: () => void;
   getExecutionMode?: () => ExecutionMode;
   setExecutionMode?: (mode: ExecutionMode) => Promise<void>;
+  getModelSwitchBehavior?: () => ModelSwitchBehavior;
+  setModelSwitchBehavior?: (behavior: ModelSwitchBehavior) => Promise<void>;
 }
 
 interface ResolvedSectionFocus {
@@ -556,6 +559,57 @@ function buildMoreSection(registerCleanup?: SettingsCleanupRegistrar): HTMLEleme
     "advanced",
     "Power-user shortcuts for rules, backups, and keyboard shortcuts.",
   );
+
+  const modelSwitchCard = document.createElement("div");
+  modelSwitchCard.className = "pi-overlay-surface pi-settings-model-switch-card";
+
+  const modelSwitchToggle = createToggleRow({
+    label: "Fork model switch into new tab",
+    sublabel: "For non-empty chats, open a cloned tab instead of switching this tab in place.",
+  });
+
+  const modelSwitchHint = document.createElement("p");
+  modelSwitchHint.className = "pi-overlay-hint pi-settings-model-switch-hint";
+  modelSwitchHint.textContent = "Default: switch in place (pi-mono parity).";
+
+  modelSwitchCard.append(modelSwitchToggle.root, modelSwitchHint);
+  advanced.content.appendChild(modelSwitchCard);
+
+  const getModelSwitchBehavior = dependencies.getModelSwitchBehavior;
+  const setModelSwitchBehavior = dependencies.setModelSwitchBehavior;
+
+  if (!getModelSwitchBehavior || !setModelSwitchBehavior) {
+    modelSwitchToggle.input.disabled = true;
+  } else {
+    let currentBehavior = getModelSwitchBehavior();
+    modelSwitchToggle.input.checked = currentBehavior === "fork";
+
+    modelSwitchToggle.input.addEventListener("change", () => {
+      const nextBehavior: ModelSwitchBehavior = modelSwitchToggle.input.checked ? "fork" : "inPlace";
+      if (nextBehavior === currentBehavior) {
+        return;
+      }
+
+      modelSwitchToggle.input.disabled = true;
+
+      void setModelSwitchBehavior(nextBehavior).then(
+        () => {
+          currentBehavior = nextBehavior;
+          showToast(
+            nextBehavior === "fork"
+              ? "Model switch will open a new tab for non-empty chats."
+              : "Model switch will stay in the current tab.",
+          );
+        },
+        () => {
+          modelSwitchToggle.input.checked = currentBehavior === "fork";
+          showToast("Couldn't update model switch setting.");
+        },
+      ).finally(() => {
+        modelSwitchToggle.input.disabled = false;
+      });
+    });
+  }
 
   const advancedActions = document.createElement("div");
   advancedActions.className = "pi-overlay-actions pi-settings-advanced-actions";

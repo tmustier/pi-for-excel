@@ -19,23 +19,23 @@ don't accumulate silently.
 | | pi-mono | Pi for Excel (current) |
 |---|---|---|
 | Empty session | Switch in place | Switch in place |
-| Non-empty session | Switch in place | Fork to a new tab with the new model |
+| Non-empty session (default) | Switch in place | Switch in place |
+| Non-empty session (opt-in) | N/A | Fork to a new tab with the new model |
 
 **Rationale:** When you switch models mid-conversation, the API provider's
 cached prefix becomes invalid (different model = different cache key). Forking
-preserves the original tab's cache if the user switches back.
+can preserve the original tab's cache if the user switches back, but forcing
+fork by default is surprising UX for many users.
 
-**Status:** Shipped in #428. **However**, the default should match upstream
-(in-place). We plan to make this configurable:
+**Status:** #428 introduced fork-on-non-empty. #442 changed default back to
+pi-mono parity (in-place), and kept fork as an advanced opt-in setting.
 
-- **Default:** in-place switch (pi-mono parity)
-- **Option:** fork to new tab (current Excel behavior)
+- **Default:** in-place switch (parity)
+- **Option:** fork to new tab for non-empty sessions
 
-The setting will live under advanced/experimental preferences. See the related
-GitHub issue comment for tracking.
-
-**Files:** `src/taskpane/init.ts` (`applyModelSelection`,
-`cloneRuntimeToNewTab`)
+**Files:** `src/models/switch-behavior.ts`, `src/taskpane/init.ts`
+(`applyModelSelection`, `cloneRuntimeToNewTab`),
+`src/commands/builtins/settings-overlay.ts`
 
 ---
 

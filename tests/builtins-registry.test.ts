@@ -191,6 +191,8 @@ void test("taskpane init wires gear settings to unified settings overlay", async
   );
   assert.match(initSource, /configureSettingsDialogDependencies\([\s\S]*getExecutionMode/);
   assert.match(initSource, /configureSettingsDialogDependencies\([\s\S]*setExecutionMode/);
+  assert.match(initSource, /configureSettingsDialogDependencies\([\s\S]*getModelSwitchBehavior/);
+  assert.match(initSource, /configureSettingsDialogDependencies\([\s\S]*setModelSwitchBehavior/);
 });
 
 void test("taskpane init mounts proxy banner and reacts to proxy state changes", async () => {
@@ -351,6 +353,7 @@ void test("settings overlay serializes open flow and adopts shared proxy + execu
   assert.match(settingsOverlaySource, /createConfigRow/);
   assert.match(settingsOverlaySource, /createCallout/);
   assert.match(settingsOverlaySource, /"Auto mode"/);
+  assert.match(settingsOverlaySource, /"Fork model switch into new tab"/);
   assert.doesNotMatch(settingsOverlaySource, /text:\s*"Save"/);
 });
 
