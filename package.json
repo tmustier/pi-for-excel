@@ -42,12 +42,12 @@
     "marked": "^17.0.3"
   },
   "devDependencies": {
-    "@types/office-js": "^1.0.574",
+    "@types/office-js": "^1.0.575",
     "eslint": "^10.0.1",
     "office-addin-debugging": "^6.0.6",
     "office-addin-manifest": "^2.1.2",
     "typescript": "^5.7.0",
-    "typescript-eslint": "^8.56.0",
+    "typescript-eslint": "^8.56.1",
     "vite": "^7.3.1"
   },
   "license": "MIT",
