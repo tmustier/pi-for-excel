@@ -42,7 +42,7 @@
     "marked": "^17.0.3"
   },
   "devDependencies": {
-    "@types/office-js": "^1.0.576",
+    "@types/office-js": "^1.0.577",
     "eslint": "^10.0.2",
     "office-addin-debugging": "^6.0.6",
     "office-addin-manifest": "^2.1.2",
