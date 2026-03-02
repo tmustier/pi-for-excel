@@ -1,19 +1,18 @@
 version: 2
 
 updates:
-  # Keep npm dependencies fresh (security + bugfixes)
+  # Keep Pi packages in lockstep, but reduce update churn from daily patch releases.
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
-      interval: "daily"
-    open-pull-requests-limit: 10
-    ignore:
-      - dependency-name: "eslint"
-        update-types:
-          - "version-update:semver-major"
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    allow:
+      - dependency-name: "@mariozechner/pi-ai"
+      - dependency-name: "@mariozechner/pi-web-ui"
+      - dependency-name: "@mariozechner/pi-agent-core"
     groups:
-      # Keep core Pi packages in one lockstep PR so model-registry bumps are easy to validate.
-      # This group is intentionally listed before the generic group.
       pi-stack:
         patterns:
           - "@mariozechner/pi-ai"
@@ -23,6 +22,20 @@ updates:
           - "minor"
           - "patch"
 
+  # Keep other npm dependencies fresh (security + bugfixes).
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "daily"
+    open-pull-requests-limit: 10
+    ignore:
+      - dependency-name: "eslint"
+        update-types:
+          - "version-update:semver-major"
+      - dependency-name: "@mariozechner/pi-ai"
+      - dependency-name: "@mariozechner/pi-web-ui"
+      - dependency-name: "@mariozechner/pi-agent-core"
+    groups:
       npm-minor-and-patch:
         patterns:
           - "*"
