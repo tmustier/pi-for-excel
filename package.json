@@ -42,7 +42,7 @@
     "marked": "^17.0.3"
   },
   "devDependencies": {
-    "@types/office-js": "^1.0.577",
+    "@types/office-js": "^1.0.580",
     "eslint": "^10.0.2",
     "office-addin-debugging": "^6.0.6",
     "office-addin-manifest": "^2.1.2",
@@ -61,6 +61,8 @@
   "overrides": {
     "tmp": "0.2.5",
     "axios": "1.13.5",
-    "minimatch": ">=10.2.1"
+    "minimatch": "10.2.4",
+    "rollup": "4.59.0",
+    "basic-ftp": "5.2.0"
   }
 }
