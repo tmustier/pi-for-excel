@@ -39,7 +39,7 @@
     "@mariozechner/pi-web-ui": "^0.55.3",
     "@sinclair/typebox": "^0.34.41",
     "lit": "^3.2.1",
-    "marked": "^17.0.3"
+    "marked": "^17.0.4"
   },
   "devDependencies": {
     "@types/office-js": "^1.0.580",
