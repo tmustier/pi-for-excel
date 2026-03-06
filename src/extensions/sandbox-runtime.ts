@@ -27,9 +27,11 @@ import {
 } from "./internal/widget-surface.js";
 import { normalizeSandboxUiNode } from "./sandbox-ui.js";
 import {
+  SANDBOX_BOOTSTRAP_KIND,
   SANDBOX_CHANNEL,
   SANDBOX_REQUEST_TIMEOUT_MS,
   isSandboxEnvelope,
+  type SandboxBootstrapEnvelope,
   type SandboxRequestEnvelope,
   type SandboxResponseEnvelope,
   type SandboxEventEnvelope,
@@ -256,8 +258,12 @@ class SandboxRuntimeHost {
   private readonly overlayActionIds = new Set<string>();
   private readonly widgetActionIdsByWidgetId = new Map<string, Set<string>>();
 
-  private readonly onWindowMessage = (event: MessageEvent<unknown>) => {
-    this.handleWindowMessage(event);
+  private readonly onIframeLoad = () => {
+    this.bootstrapSandboxPort();
+  };
+
+  private readonly onPortMessage = (event: MessageEvent<unknown>) => {
+    this.handlePortMessage(event);
   };
 
   private readonly readyPromise: Promise<void>;
@@ -268,6 +274,7 @@ class SandboxRuntimeHost {
   private disposed = false;
   private readonly widgetOwnerId: string;
   private readonly widgetApiV2Enabled: boolean;
+  private port: MessagePort | null = null;
 
   constructor(options: SandboxActivationOptions) {
     this.options = options;
@@ -286,6 +293,7 @@ class SandboxRuntimeHost {
     this.iframe.setAttribute("aria-hidden", "true");
     this.iframe.tabIndex = -1;
     this.iframe.style.display = "none";
+    this.iframe.addEventListener("load", this.onIframeLoad, { once: true });
     this.iframe.srcdoc = buildSandboxSrcdoc({
       instanceId: this.options.instanceId,
       extensionName: this.options.extensionName,
@@ -293,7 +301,6 @@ class SandboxRuntimeHost {
       widgetApiV2Enabled: this.widgetApiV2Enabled,
     });
 
-    window.addEventListener("message", this.onWindowMessage);
     document.body.appendChild(this.iframe);
   }
 
@@ -352,11 +359,61 @@ class SandboxRuntimeHost {
       dismissWidget();
     }
 
-    window.removeEventListener("message", this.onWindowMessage);
+    this.port?.removeEventListener("message", this.onPortMessage);
+    this.port?.close();
+    this.port = null;
+
     this.iframe.remove();
   }
 
+  private bootstrapSandboxPort(): void {
+    if (this.disposed || this.port) {
+      return;
+    }
 
+    const targetWindow = this.iframe.contentWindow;
+    if (!targetWindow) {
+      this.rejectReady?.(new Error("Sandbox frame is not ready."));
+      this.resolveReady = null;
+      this.rejectReady = null;
+      return;
+    }
+
+    const channel = new MessageChannel();
+    const port = channel.port1;
+    this.port = port;
+    port.addEventListener("message", this.onPortMessage);
+    port.start();
+
+    const bootstrap: SandboxBootstrapEnvelope = {
+      channel: SANDBOX_CHANNEL,
+      instanceId: this.options.instanceId,
+      direction: "host_to_sandbox",
+      kind: SANDBOX_BOOTSTRAP_KIND,
+    };
+
+    try {
+      // Sandboxed srcdoc iframes have opaque origins, so the initial port transfer
+      // must use a wildcard target. All subsequent sandbox RPC stays on the
+      // dedicated MessagePort instead of window.postMessage.
+      targetWindow.postMessage(bootstrap, "*", [channel.port2]);
+    } catch (error: unknown) {
+      port.removeEventListener("message", this.onPortMessage);
+      port.close();
+      this.port = null;
+      this.rejectReady?.(new Error(`Sandbox bridge bootstrap failed: ${getErrorMessage(error)}`));
+      this.resolveReady = null;
+      this.rejectReady = null;
+    }
+  }
+
+  private getSandboxPort(): MessagePort {
+    if (!this.port) {
+      throw new Error("Sandbox bridge is not ready.");
+    }
+
+    return this.port;
+  }
 
   private async callSandbox(
     method: string,
@@ -367,11 +424,6 @@ class SandboxRuntimeHost {
   ): Promise<unknown> {
     if (this.disposed && !options?.allowWhenDisposed) {
       throw new Error("Sandbox runtime is already disposed.");
-    }
-
-    const targetWindow = this.iframe.contentWindow;
-    if (!targetWindow) {
-      throw new Error("Sandbox frame is not ready.");
     }
 
     const requestId = `req-${this.nextRequestId}`;
@@ -399,7 +451,7 @@ class SandboxRuntimeHost {
         params,
       };
 
-      targetWindow.postMessage(envelope, "*");
+      this.getSandboxPort().postMessage(envelope);
     });
   }
 
@@ -408,8 +460,7 @@ class SandboxRuntimeHost {
     ok: boolean,
     payload: unknown,
   ): void {
-    const targetWindow = this.iframe.contentWindow;
-    if (!targetWindow) {
+    if (!this.port) {
       return;
     }
 
@@ -428,12 +479,11 @@ class SandboxRuntimeHost {
       envelope.error = typeof payload === "string" ? payload : "Unknown host error";
     }
 
-    targetWindow.postMessage(envelope, "*");
+    this.port.postMessage(envelope);
   }
 
   private sendEvent(eventName: string, data: unknown): void {
-    const targetWindow = this.iframe.contentWindow;
-    if (!targetWindow) {
+    if (!this.port) {
       return;
     }
 
@@ -446,7 +496,7 @@ class SandboxRuntimeHost {
       data,
     };
 
-    targetWindow.postMessage(envelope, "*");
+    this.port.postMessage(envelope);
   }
 
   private replaceActionIds(target: Set<string>, next: Set<string>): void {
@@ -475,11 +525,7 @@ class SandboxRuntimeHost {
       });
   }
 
-  private handleWindowMessage(event: MessageEvent<unknown>): void {
-    if (event.source !== this.iframe.contentWindow) {
-      return;
-    }
-
+  private handlePortMessage(event: MessageEvent<unknown>): void {
     const envelope = event.data;
     if (!isSandboxEnvelope(envelope)) {
       return;

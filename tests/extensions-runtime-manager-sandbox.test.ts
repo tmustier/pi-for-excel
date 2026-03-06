@@ -12,7 +12,9 @@ import { ExtensionRuntimeManager } from "../src/extensions/runtime-manager.ts";
 import { isConnectionToolErrorDetails } from "../src/tools/tool-details.ts";
 import { withConnectionPreflight } from "../src/tools/with-connection-preflight.ts";
 import {
+  SANDBOX_BOOTSTRAP_KIND,
   SANDBOX_CHANNEL,
+  isSandboxBootstrapEnvelope,
   isSandboxEnvelope,
   serializeForSandboxInlineScript,
 } from "../src/extensions/sandbox/protocol.ts";
@@ -673,14 +675,25 @@ void test("sandbox srcdoc builder emits expected bridge hooks and config", () =>
 
   assert.match(html, /"instanceId":"ext\.inline\.srcdoc"/);
   assert.match(html, /"widgetApiV2Enabled":true/);
+  assert.match(html, /"bootstrapKind":"bootstrap"/);
   assert.match(html, /if \(method === "ui_action"\)/);
   assert.match(html, /Unknown sandbox UI action id:/);
   assert.match(html, /api\.agent is not available in sandbox runtime/);
+  assert.match(html, /event\.source !== parent/);
+  assert.match(html, /message\.kind !== config\.bootstrapKind/);
+  assert.match(html, /hostPort\.addEventListener\("message", handleHostMessage\)/);
   assert.match(html, /placement: payload\.placement === "above-input" \|\| payload\.placement === "below-input"/);
   assert.match(html, /payload\.minHeightPx === null/);
 });
 
 void test("sandbox protocol helpers validate envelope shapes and escape inline script payloads", () => {
+  const validBootstrap: unknown = {
+    channel: SANDBOX_CHANNEL,
+    instanceId: "ext.inline.proto",
+    direction: "host_to_sandbox",
+    kind: SANDBOX_BOOTSTRAP_KIND,
+  };
+
   const validRequest: unknown = {
     channel: SANDBOX_CHANNEL,
     instanceId: "ext.inline.proto",
@@ -708,6 +721,8 @@ void test("sandbox protocol helpers validate envelope shapes and escape inline s
     method: "register_tool",
   };
 
+  assert.equal(isSandboxBootstrapEnvelope(validBootstrap), true);
+  assert.equal(isSandboxBootstrapEnvelope(validRequest), false);
   assert.equal(isSandboxEnvelope(validRequest), true);
   assert.equal(isSandboxEnvelope(invalidDirection), false);
   assert.equal(isSandboxEnvelope(invalidKind), false);
@@ -720,7 +735,10 @@ void test("sandbox runtime host source retains isolation boundary guards", async
   const hostSource = await readFile(new URL("../src/extensions/sandbox-runtime.ts", import.meta.url), "utf8");
 
   assert.match(hostSource, /setAttribute\("sandbox", "allow-scripts"\)/);
-  assert.match(hostSource, /if \(event\.source !== this\.iframe\.contentWindow\)/);
+  assert.match(hostSource, /new MessageChannel\(\)/);
+  assert.match(hostSource, /postMessage\(bootstrap,/);
+  assert.match(hostSource, /channel\.port2/);
+  assert.match(hostSource, /this\.getSandboxPort\(\)\.postMessage\(envelope\)/);
   assert.match(hostSource, /if \(envelope\.direction !== "sandbox_to_host"\)/);
   assert.match(hostSource, /if \(!isSandboxEnvelope\(envelope\)\)/);
 });

@@ -1,4 +1,5 @@
 import {
+  SANDBOX_BOOTSTRAP_KIND,
   SANDBOX_CHANNEL,
   serializeForSandboxInlineScript,
 } from "./protocol.js";
@@ -29,6 +30,7 @@ export function buildSandboxSrcdoc(options: BuildSandboxSrcdocOptions): string {
 
     const config = {
       channel: SANDBOX_CHANNEL,
+      bootstrapKind: SANDBOX_BOOTSTRAP_KIND,
       instanceId: options.instanceId,
       extensionName: options.extensionName,
       source: sourceConfig,
@@ -75,6 +77,7 @@ export function buildSandboxSrcdoc(options: BuildSandboxSrcdocOptions): string {
         "button",
       ]);
 
+      let hostPort = null;
       let nextRequestId = 1;
       let moduleDeactivate = null;
       let cleanups = [];
@@ -89,7 +92,11 @@ export function buildSandboxSrcdoc(options: BuildSandboxSrcdocOptions): string {
       }
 
       function sendToHost(envelope) {
-        parent.postMessage(envelope, "*");
+        if (!hostPort) {
+          throw new Error('Sandbox host port is not ready');
+        }
+
+        hostPort.postMessage(envelope);
       }
 
       function sendEvent(eventName, data) {
@@ -447,7 +454,7 @@ export function buildSandboxSrcdoc(options: BuildSandboxSrcdocOptions): string {
         }
       }
 
-      window.addEventListener("message", (event) => {
+      function handleHostMessage(event) {
         const message = event.data;
         if (!message || typeof message !== "object") {
           return;
@@ -485,6 +492,38 @@ export function buildSandboxSrcdoc(options: BuildSandboxSrcdocOptions): string {
         if (message.kind === "event") {
           handleHostEvent(message);
         }
+      }
+
+      window.addEventListener("message", (event) => {
+        if (event.source !== parent) {
+          return;
+        }
+
+        const message = event.data;
+        if (!message || typeof message !== "object") {
+          return;
+        }
+
+        if (message.channel !== config.channel || message.instanceId !== config.instanceId) {
+          return;
+        }
+
+        if (message.direction !== "host_to_sandbox" || message.kind !== config.bootstrapKind) {
+          return;
+        }
+
+        const port = event.ports[0];
+        if (!(port instanceof MessagePort) || hostPort) {
+          return;
+        }
+
+        hostPort = port;
+        hostPort.addEventListener("message", handleHostMessage);
+        hostPort.start();
+
+        void activateExtension().catch((error) => {
+          sendEvent("error", { message: getErrorMessage(error) });
+        });
       });
 
       function queueActivationOp(promise) {
@@ -1022,10 +1061,6 @@ export function buildSandboxSrcdoc(options: BuildSandboxSrcdocOptions): string {
 
         sendEvent("ready", null);
       }
-
-      activateExtension().catch((error) => {
-        sendEvent("error", { message: getErrorMessage(error) });
-      });
     </script>
   </body>
 </html>`;

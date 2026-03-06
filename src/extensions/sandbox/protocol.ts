@@ -2,6 +2,7 @@ import { isRecord } from "../../utils/type-guards.js";
 
 export const SANDBOX_CHANNEL = "pi.extension.sandbox.rpc.v1";
 export const SANDBOX_REQUEST_TIMEOUT_MS = 15_000;
+export const SANDBOX_BOOTSTRAP_KIND = "bootstrap";
 
 export type SandboxDirection = "sandbox_to_host" | "host_to_sandbox";
 
@@ -12,6 +13,13 @@ interface SandboxEnvelopeBase {
   instanceId: string;
   direction: SandboxDirection;
   kind: SandboxEnvelopeKind;
+}
+
+export interface SandboxBootstrapEnvelope {
+  channel: string;
+  instanceId: string;
+  direction: "host_to_sandbox";
+  kind: typeof SANDBOX_BOOTSTRAP_KIND;
 }
 
 export interface SandboxRequestEnvelope extends SandboxEnvelopeBase {
@@ -37,7 +45,12 @@ export interface SandboxEventEnvelope extends SandboxEnvelopeBase {
 
 export type SandboxEnvelope = SandboxRequestEnvelope | SandboxResponseEnvelope | SandboxEventEnvelope;
 
-export function isSandboxEnvelope(value: unknown): value is SandboxEnvelope {
+function hasValidSandboxEnvelopeBase(value: unknown): value is Record<string, unknown> & {
+  channel: string;
+  instanceId: string;
+  direction: SandboxDirection;
+  kind: string;
+} {
   if (!isRecord(value)) {
     return false;
   }
@@ -59,6 +72,23 @@ export function isSandboxEnvelope(value: unknown): value is SandboxEnvelope {
     return false;
   }
 
+  return typeof kind === "string";
+}
+
+export function isSandboxBootstrapEnvelope(value: unknown): value is SandboxBootstrapEnvelope {
+  if (!hasValidSandboxEnvelopeBase(value)) {
+    return false;
+  }
+
+  return value.direction === "host_to_sandbox" && value.kind === SANDBOX_BOOTSTRAP_KIND;
+}
+
+export function isSandboxEnvelope(value: unknown): value is SandboxEnvelope {
+  if (!hasValidSandboxEnvelopeBase(value)) {
+    return false;
+  }
+
+  const kind = value.kind;
   if (kind !== "request" && kind !== "response" && kind !== "event") {
     return false;
   }
