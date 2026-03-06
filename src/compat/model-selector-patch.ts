@@ -13,10 +13,14 @@ import { ModelSelector } from "@mariozechner/pi-web-ui/dist/dialogs/ModelSelecto
 
 import {
   compareModels as compareModelRefs,
+  compareOpenAiModelIds,
   familyPriority,
+  isOpenAiCodexModelId,
+  isOpenAiGeneralGptModelId,
   modelRecencyScore,
   parseMajorMinor,
   providerPriority,
+  shouldPreferOpenAiGeneralModel,
 } from "../models/model-ordering.js";
 
 let _activeProviders: Set<string> | null = null;
@@ -151,21 +155,7 @@ export function installModelSelectorPatch(): void {
     ): ModelSelectorItem | null => {
       const list = models.filter(filter);
       if (!list.length) return null;
-      return (
-        list
-          .slice()
-          .sort((a, b) => {
-            const aRec = modelRecencyScore(a.id);
-            const bRec = modelRecencyScore(b.id);
-            if (aRec !== bRec) return bRec - aRec;
-
-            const aFam = familyPriority(a.provider, a.id);
-            const bFam = familyPriority(b.provider, b.id);
-            if (aFam !== bFam) return aFam - bFam;
-
-            return a.id.localeCompare(b.id);
-          })[0] ?? null
-      );
+      return list.slice().sort((a, b) => compareOpenAiModelIds(a.id, b.id))[0] ?? null;
     };
 
     const featured: ModelSelectorItem[] = [];
@@ -205,17 +195,11 @@ export function installModelSelectorPatch(): void {
       }
 
       if (provider === "openai-codex" || provider === "openai") {
-        const bestCodex = pickBestOpenAi(
-          models,
-          (m) => /^gpt-5\.(\d+)-codex(?:-|$)/.test(m.id),
-        );
-        const bestGpt5 = pickBestOpenAi(
-          models,
-          (m) => /^gpt-5\./.test(m.id) && !/codex/.test(m.id),
-        );
+        const bestCodex = pickBestOpenAi(models, (m) => isOpenAiCodexModelId(m.id));
+        const bestGpt5 = pickBestOpenAi(models, (m) => isOpenAiGeneralGptModelId(m.id));
 
         if (bestCodex && bestGpt5) {
-          if (parseMajorMinor(bestGpt5.id) >= parseMajorMinor(bestCodex.id)) {
+          if (shouldPreferOpenAiGeneralModel(bestGpt5.id, bestCodex.id)) {
             featured.push(bestGpt5, bestCodex);
             continue;
           }

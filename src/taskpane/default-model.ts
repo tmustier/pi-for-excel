@@ -5,9 +5,12 @@
 import { getModel, getModels, type Api, type Model } from "@mariozechner/pi-ai";
 
 import {
+  compareOpenAiModelIds,
+  isOpenAiCodexModelId,
+  isOpenAiGeneralGptModelId,
   modelRecencyScore,
-  openAiFamilyPriority,
   parseMajorMinor,
+  shouldPreferOpenAiGeneralModel,
 } from "../models/model-ordering.js";
 
 type DefaultProvider =
@@ -50,33 +53,23 @@ function pickLatestMatchingModel(provider: DefaultProvider, match: RegExp): Mode
   return candidates[0] ?? null;
 }
 
-function compareOpenAiCandidates(a: Model<Api>, b: Model<Api>): number {
-  const recency = modelRecencyScore(b.id) - modelRecencyScore(a.id);
-  if (recency !== 0) return recency;
-
-  const family = openAiFamilyPriority(a.id) - openAiFamilyPriority(b.id);
-  if (family !== 0) return family;
-
-  return a.id.localeCompare(b.id);
-}
-
 function pickPreferredOpenAiModel(provider: "openai-codex" | "openai"): Model<Api> | null {
   const models: Model<Api>[] = getModels(provider);
   const bestGpt = models
-    .filter((m) => /^gpt-5\./.test(m.id) && !/codex/.test(m.id))
-    .sort(compareOpenAiCandidates)[0];
+    .filter((m) => isOpenAiGeneralGptModelId(m.id))
+    .sort((a, b) => compareOpenAiModelIds(a.id, b.id))[0];
   const bestCodex = models
-    .filter((m) => /^gpt-5\.(\d+)-codex(?:-|$)/.test(m.id))
-    .sort(compareOpenAiCandidates)[0];
+    .filter((m) => isOpenAiCodexModelId(m.id))
+    .sort((a, b) => compareOpenAiModelIds(a.id, b.id))[0];
 
   if (bestGpt && bestCodex) {
-    return parseMajorMinor(bestGpt.id) >= parseMajorMinor(bestCodex.id) ? bestGpt : bestCodex;
+    return shouldPreferOpenAiGeneralModel(bestGpt.id, bestCodex.id) ? bestGpt : bestCodex;
   }
 
   if (bestGpt) return bestGpt;
   if (bestCodex) return bestCodex;
 
-  return models.slice().sort(compareOpenAiCandidates)[0] ?? null;
+  return models.slice().sort((a, b) => compareOpenAiModelIds(a.id, b.id))[0] ?? null;
 }
 
 export function pickDefaultModel(

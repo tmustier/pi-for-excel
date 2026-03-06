@@ -5,10 +5,12 @@ import { test } from "node:test";
 
 import {
   compareModels,
+  compareOpenAiModelIds,
   modelRecencyScore,
   openAiFamilyPriority,
   parseMajorMinor,
   providerPriority,
+  shouldPreferOpenAiGeneralModel,
 } from "../src/models/model-ordering.ts";
 import { BROWSER_OAUTH_PROVIDERS, mapToApiProvider } from "../src/auth/provider-map.ts";
 import { rewriteDevProxyUrl } from "../src/auth/dev-rewrites.ts";
@@ -38,6 +40,17 @@ void test("openAiFamilyPriority prefers base GPT-5 over Codex variants", () => {
   assert.ok(openAiFamilyPriority("gpt-5.4-pro") < openAiFamilyPriority("gpt-5.3-codex"));
 });
 
+void test("compareOpenAiModelIds prefers newer versions before family tie-breaks", () => {
+  const ids = ["gpt-5.4-pro", "gpt-5.5-codex", "gpt-5.5"];
+  ids.sort(compareOpenAiModelIds);
+  assert.deepEqual(ids, ["gpt-5.5", "gpt-5.5-codex", "gpt-5.4-pro"]);
+});
+
+void test("shouldPreferOpenAiGeneralModel only prefers GPT when it is as new or newer", () => {
+  assert.equal(shouldPreferOpenAiGeneralModel("gpt-5.4", "gpt-5.3-codex"), true);
+  assert.equal(shouldPreferOpenAiGeneralModel("gpt-5.4-pro", "gpt-5.5-codex"), false);
+});
+
 void test("modelRecencyScore prefers higher version, then later date suffix", () => {
   assert.ok(
     modelRecencyScore("claude-opus-4-20250201") > modelRecencyScore("claude-opus-4-20250101"),
@@ -51,7 +64,7 @@ void test("modelRecencyScore prefers higher version, then later date suffix", ()
   );
 });
 
-void test("compareModels sorts by provider, family, then recency", () => {
+void test("compareModels sorts non-OpenAI models by provider, family, then recency", () => {
   const models = [
     { provider: "openai", id: "gpt-5.3" },
     { provider: "anthropic", id: "claude-opus-4-6" },
@@ -80,16 +93,16 @@ void test("compareModels sorts by provider, family, then recency", () => {
   assert.ok(providerPriority("anthropic") < providerPriority("openai"));
 });
 
-void test("openai compareModels prefers GPT-5 over older Codex variants", () => {
+void test("openai compareModels prefers newer Codex over older GPT variants", () => {
   const models = [
-    { provider: "openai", id: "gpt-5.3-codex" },
-    { provider: "openai", id: "gpt-5.4" },
     { provider: "openai", id: "gpt-5.4-pro" },
+    { provider: "openai", id: "gpt-5.5-codex" },
+    { provider: "openai", id: "gpt-5.5" },
   ];
 
   models.sort(compareModels);
 
-  assert.deepEqual(models.map((m) => m.id), ["gpt-5.4", "gpt-5.4-pro", "gpt-5.3-codex"]);
+  assert.deepEqual(models.map((m) => m.id), ["gpt-5.5", "gpt-5.5-codex", "gpt-5.4-pro"]);
 });
 
 void test("provider-map keeps openai-codex distinct from openai", () => {

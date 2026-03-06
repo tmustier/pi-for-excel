@@ -24,12 +24,20 @@ const OPENAI_CODEX_RE = /^gpt-5\.(\d+)-codex(?:-|$)/;
 const OPENAI_PLAIN_GPT_RE = /^gpt-5\.(\d+)$/;
 const OPENAI_GPT_RE = /^gpt-5\./;
 
+export function isOpenAiCodexModelId(id: string): boolean {
+  return OPENAI_CODEX_RE.test(id);
+}
+
+export function isOpenAiGeneralGptModelId(id: string): boolean {
+  return OPENAI_GPT_RE.test(id) && !isOpenAiCodexModelId(id);
+}
+
 export function openAiFamilyPriority(id: string): number {
   // Prefer the latest general GPT-5 model first, then other GPT-5 variants,
   // then Codex-specialized variants, then older o-series fallbacks.
   if (OPENAI_PLAIN_GPT_RE.test(id)) return 0;
-  if (OPENAI_GPT_RE.test(id) && !OPENAI_CODEX_RE.test(id)) return 1;
-  if (OPENAI_CODEX_RE.test(id)) return 2;
+  if (isOpenAiGeneralGptModelId(id)) return 1;
+  if (isOpenAiCodexModelId(id)) return 2;
   if (id.startsWith("gpt-")) return 3;
   if (id.startsWith("o")) return 4;
   return 9;
@@ -110,10 +118,29 @@ export function modelRecencyScore(id: string): number {
   return majorMinor * 100_000_000 + date;
 }
 
+export function compareOpenAiModelIds(aId: string, bId: string): number {
+  const recency = modelRecencyScore(bId) - modelRecencyScore(aId);
+  if (recency !== 0) return recency;
+
+  const family = openAiFamilyPriority(aId) - openAiFamilyPriority(bId);
+  if (family !== 0) return family;
+
+  return aId.localeCompare(bId);
+}
+
+export function shouldPreferOpenAiGeneralModel(generalId: string, codexId: string): boolean {
+  return parseMajorMinor(generalId) >= parseMajorMinor(codexId);
+}
+
 export function compareModels(a: ModelRef, b: ModelRef): number {
   const aProv = providerPriority(a.provider);
   const bProv = providerPriority(b.provider);
   if (aProv !== bProv) return aProv - bProv;
+
+  if (a.provider === b.provider && (a.provider === "openai-codex" || a.provider === "openai")) {
+    // OpenAI is recency-first so newer Codex variants still outrank older GPT variants.
+    return compareOpenAiModelIds(a.id, b.id);
+  }
 
   const aFam = familyPriority(a.provider, a.id);
   const bFam = familyPriority(b.provider, b.id);
