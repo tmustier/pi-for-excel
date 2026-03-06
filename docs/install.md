@@ -203,6 +203,11 @@ If you installed with `manifest.prod.xml`, Pi for Excel loads from a hosted URL 
 ### I installed, but changes are not visible
 - Close and reopen Excel to clear cached taskpane state
 
+### Do I need to install a separate Office.js bridge?
+- No — Office.js support comes from Excel itself when you install Pi with `manifest.prod.xml`
+- You do **not** need `generator-office`, Yeoman, or any extra Office.js package to use the hosted add-in
+- The optional local helper services are only for OAuth proxying, native Python / LibreOffice, and tmux
+
 ### OAuth login still fails
 - Confirm proxy is running and reachable at the exact URL in `/settings`
 - Confirm proxy URL is `https://localhost:<port>` (not `http://`)
