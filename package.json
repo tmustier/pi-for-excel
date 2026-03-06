@@ -34,12 +34,12 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
-    "@mariozechner/pi-agent-core": "^0.55.3",
-    "@mariozechner/pi-ai": "^0.55.3",
-    "@mariozechner/pi-web-ui": "^0.55.3",
+    "@mariozechner/pi-agent-core": "^0.56.2",
+    "@mariozechner/pi-ai": "^0.56.2",
+    "@mariozechner/pi-web-ui": "^0.56.2",
     "@sinclair/typebox": "^0.34.41",
     "lit": "^3.2.1",
-    "marked": "^17.0.3"
+    "marked": "^17.0.4"
   },
   "devDependencies": {
     "@types/office-js": "^1.0.580",
@@ -63,6 +63,9 @@
     "axios": "1.13.5",
     "minimatch": "10.2.4",
     "rollup": "4.59.0",
-    "basic-ftp": "5.2.0"
+    "basic-ftp": "5.2.0",
+    "underscore": "1.13.8",
+    "tar": "7.5.10",
+    "fast-xml-parser": "5.4.2"
   }
 }

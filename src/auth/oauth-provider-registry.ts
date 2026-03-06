@@ -1,15 +1,17 @@
 /**
  * Minimal OAuth provider registry for the Excel taskpane.
  *
- * We intentionally avoid importing `@mariozechner/pi-ai`'s OAuth index, which
- * registers CLI-only providers (Google Antigravity / Gemini CLI) that pull in
- * Node-only modules (e.g. `http`) and bloat browser bundles.
+ * pi-ai 0.56+ exposes OAuth providers via the public `@mariozechner/pi-ai/oauth`
+ * subpath instead of package-internal deep imports. We still curate our own
+ * registry here so the taskpane can substitute browser-safe Google/OpenAI flows.
  */
 
 import type { OAuthProviderInterface } from "@mariozechner/pi-ai";
 
-import { anthropicOAuthProvider } from "@mariozechner/pi-ai/dist/utils/oauth/anthropic.js";
-import { githubCopilotOAuthProvider } from "@mariozechner/pi-ai/dist/utils/oauth/github-copilot.js";
+import {
+  anthropicOAuthProvider,
+  githubCopilotOAuthProvider,
+} from "@mariozechner/pi-ai/oauth";
 
 import { openaiCodexBrowserOAuthProvider } from "./openai-codex-browser-oauth.js";
 import {

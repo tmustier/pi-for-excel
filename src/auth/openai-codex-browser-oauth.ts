@@ -13,7 +13,7 @@ import type {
   OAuthLoginCallbacks,
   OAuthProviderInterface,
 } from "@mariozechner/pi-ai";
-import { generatePKCE } from "@mariozechner/pi-ai/dist/utils/oauth/pkce.js";
+import { generatePKCE } from "./pkce.js";
 
 const CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann";
 const AUTHORIZE_URL = "https://auth.openai.com/oauth/authorize";

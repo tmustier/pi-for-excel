@@ -1,8 +1,8 @@
 # Model / dependency update playbook
 
-**Last verified:** 2026-02-20
+**Last verified:** 2026-03-06
 
-This repo hardcodes a small set of "featured" and "preferred" model IDs (for sorting + default selection). Those IDs come from Pi’s model registry (`@mariozechner/pi-ai`) and will drift as new models ship (e.g. `gpt-5.3-codex`, `claude-opus-4-6`).
+This repo hardcodes a small set of "featured" and "preferred" model IDs (for sorting + default selection). Those IDs come from Pi’s model registry (`@mariozechner/pi-ai`) and will drift as new models ship (e.g. `gpt-5.4`, `gpt-5.3-codex`, `claude-opus-4-6`).
 
 This doc describes how to update:
 - the **Pi dependency versions** we ship (`@mariozechner/pi-ai`, `@mariozechner/pi-web-ui`, `@mariozechner/pi-agent-core`)
@@ -65,6 +65,7 @@ npm install
 Search the local registry:
 
 ```bash
+rg -n "gpt-5\\.4"       node_modules/@mariozechner/pi-ai/dist/models.generated.js -S
 rg -n "gpt-5\\.3-codex" node_modules/@mariozechner/pi-ai/dist/models.generated.js -S
 rg -n "claude-opus-4-6"  node_modules/@mariozechner/pi-ai/dist/models.generated.js -S
 ```
@@ -93,21 +94,23 @@ We intentionally avoid pinning exact versioned IDs now. Instead we:
   - **Anthropic:** latest **Sonnet** *if* its version >= latest **Opus**, then latest **Opus**
     - Version compare uses `parseMajorMinor()` where `claude-opus-4-5` → `45`, `claude-opus-4-6` → `46`.
     - Important: IDs like `claude-opus-4-20250514` are treated as **major only** (`40`) and the `YYYYMMDD` part is considered a separate date suffix by `modelRecencyScore()`.
-  - **OpenAI Codex:** latest `gpt-5.x-codex`, then latest `gpt-5.x`
-    - `gpt-5.3-codex` scores as `53`.
+  - **OpenAI (`openai` + `openai-codex`):** latest general `gpt-5.x` *if* its version >= latest `gpt-5.x-codex`, then latest Codex
+    - `gpt-5.4` scores as `54`; `gpt-5.3-codex` scores as `53`.
+    - Plain `gpt-5.x` beats same-version suffixed variants (`gpt-5.4` before `gpt-5.4-pro`).
   - **Google (API key):** latest `gemini-*-pro*` (regex: `/^gemini-.*-pro/i`)
   - **Google OAuth providers (`google-gemini-cli`, `google-antigravity`):** prefer stable Gemini before previews
 
   The ordering logic is driven by:
   - `providerPriority()` (Anthropic → OpenAI Codex → OpenAI → Google → …)
-  - `familyPriority()` (Opus/Sonnet/Haiku, Codex vs non-Codex, etc.)
-  - `parseMajorMinor()` + `modelRecencyScore()` (treats `4-6` as `46`, `5.3` as `53`, and keeps `YYYYMMDD` as a separate date suffix)
+  - `familyPriority()` / `openAiFamilyPriority()` (Opus/Sonnet/Haiku, GPT vs Codex, etc.)
+  - `parseMajorMinor()` + `modelRecencyScore()` (treats `4-6` as `46`, `5.4` as `54`, and keeps `YYYYMMDD` as a separate date suffix)
   - `compareModels()` (provider + family + recency tie-breaks; deterministic sorting)
 
   UI: the model picker is opened from the footer status bar (click the π model button).
 
-- Pick the default model via pattern rules:
+- Pick the default model via provider-aware rules:
   - Anthropic is a small special-case (Sonnet when version ties or is newer than Opus; version compare uses `parseMajorMinor`)
+  - OpenAI (`openai` + `openai-codex`) prefers the newest general GPT-5 when it is at least as new as Codex, with Codex as fallback
   - otherwise `DEFAULT_MODEL_RULES` + `pickLatestMatchingModel()` (uses `getModels(provider)` to find the newest available ID)
 
 When new models ship, this usually “just works” as long as naming stays consistent. You only need to update these rules if:

@@ -86,7 +86,8 @@ export function installModelSelectorPatch(): void {
     // - keep current model at the very top
     // - then show "featured" models (latest per provider, pattern-based)
     //   - Anthropic: latest Sonnet if its version >= latest Opus, then latest Opus
-    //   - OpenAI Codex: latest gpt-5.x-codex, then latest gpt-5.x
+    //   - OpenAI (API + ChatGPT): latest GPT-5 when its version >= latest Codex,
+    //     then latest Codex
     //   - Google API-key: latest gemini-*-pro*
     //   - Google OAuth (Gemini CLI / Antigravity): prefer stable Gemini before previews
     // - then show the remaining models, sorted deterministically
@@ -144,6 +145,29 @@ export function installModelSelectorPatch(): void {
       );
     };
 
+    const pickBestOpenAi = (
+      models: ModelSelectorItem[],
+      filter: (m: ModelSelectorItem) => boolean,
+    ): ModelSelectorItem | null => {
+      const list = models.filter(filter);
+      if (!list.length) return null;
+      return (
+        list
+          .slice()
+          .sort((a, b) => {
+            const aRec = modelRecencyScore(a.id);
+            const bRec = modelRecencyScore(b.id);
+            if (aRec !== bRec) return bRec - aRec;
+
+            const aFam = familyPriority(a.provider, a.id);
+            const bFam = familyPriority(b.provider, b.id);
+            if (aFam !== bFam) return aFam - bFam;
+
+            return a.id.localeCompare(b.id);
+          })[0] ?? null
+      );
+    };
+
     const featured: ModelSelectorItem[] = [];
     for (const provider of providers) {
       const models = byProvider.get(provider);
@@ -180,16 +204,34 @@ export function installModelSelectorPatch(): void {
         continue;
       }
 
-      if (provider === "openai-codex") {
-        const bestCodex = pickBestByRecency(models, (m) => /^gpt-5\.(\d+)-codex$/.test(m.id));
-        const bestGpt5 = pickBestByRecency(
+      if (provider === "openai-codex" || provider === "openai") {
+        const bestCodex = pickBestOpenAi(
+          models,
+          (m) => /^gpt-5\.(\d+)-codex(?:-|$)/.test(m.id),
+        );
+        const bestGpt5 = pickBestOpenAi(
           models,
           (m) => /^gpt-5\./.test(m.id) && !/codex/.test(m.id),
         );
 
-        if (bestCodex) featured.push(bestCodex);
-        if (bestGpt5) featured.push(bestGpt5);
-        if (bestCodex || bestGpt5) continue;
+        if (bestCodex && bestGpt5) {
+          if (parseMajorMinor(bestGpt5.id) >= parseMajorMinor(bestCodex.id)) {
+            featured.push(bestGpt5, bestCodex);
+            continue;
+          }
+          featured.push(bestCodex, bestGpt5);
+          continue;
+        }
+
+        if (bestGpt5) {
+          featured.push(bestGpt5);
+          continue;
+        }
+
+        if (bestCodex) {
+          featured.push(bestCodex);
+          continue;
+        }
 
         const best = pickBest(models);
         if (best) featured.push(best);

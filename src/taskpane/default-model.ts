@@ -4,7 +4,11 @@
 
 import { getModel, getModels, type Api, type Model } from "@mariozechner/pi-ai";
 
-import { modelRecencyScore, parseMajorMinor } from "../models/model-ordering.js";
+import {
+  modelRecencyScore,
+  openAiFamilyPriority,
+  parseMajorMinor,
+} from "../models/model-ordering.js";
 
 type DefaultProvider =
   | "openai-codex"
@@ -16,14 +20,6 @@ type DefaultProvider =
 type DefaultModelRule = { provider: DefaultProvider; match: RegExp };
 
 const DEFAULT_MODEL_RULES: DefaultModelRule[] = [
-  // Prefer latest GPT-5.x Codex on ChatGPT subscription (openai-codex)
-  { provider: "openai-codex", match: /^gpt-5\.(\d+)-codex$/ },
-  { provider: "openai-codex", match: /^gpt-5\./ },
-
-  // API key OpenAI provider (if user connected OpenAI instead of openai-codex)
-  { provider: "openai", match: /^gpt-5\.(\d+)-codex$/ },
-  { provider: "openai", match: /^gpt-5\./ },
-
   // Gemini defaults: Pro-ish first, then any Gemini
   { provider: "google", match: /^gemini-.*-pro/i },
   { provider: "google", match: /^gemini-/i },
@@ -46,8 +42,41 @@ const DEFAULT_MODEL_RULES: DefaultModelRule[] = [
 function pickLatestMatchingModel(provider: DefaultProvider, match: RegExp): Model<Api> | null {
   const models: Model<Api>[] = getModels(provider);
   const candidates = models.filter((m) => match.test(m.id));
-  candidates.sort((a, b) => modelRecencyScore(b.id) - modelRecencyScore(a.id));
+  candidates.sort((a, b) => {
+    const recency = modelRecencyScore(b.id) - modelRecencyScore(a.id);
+    if (recency !== 0) return recency;
+    return a.id.localeCompare(b.id);
+  });
   return candidates[0] ?? null;
+}
+
+function compareOpenAiCandidates(a: Model<Api>, b: Model<Api>): number {
+  const recency = modelRecencyScore(b.id) - modelRecencyScore(a.id);
+  if (recency !== 0) return recency;
+
+  const family = openAiFamilyPriority(a.id) - openAiFamilyPriority(b.id);
+  if (family !== 0) return family;
+
+  return a.id.localeCompare(b.id);
+}
+
+function pickPreferredOpenAiModel(provider: "openai-codex" | "openai"): Model<Api> | null {
+  const models: Model<Api>[] = getModels(provider);
+  const bestGpt = models
+    .filter((m) => /^gpt-5\./.test(m.id) && !/codex/.test(m.id))
+    .sort(compareOpenAiCandidates)[0];
+  const bestCodex = models
+    .filter((m) => /^gpt-5\.(\d+)-codex(?:-|$)/.test(m.id))
+    .sort(compareOpenAiCandidates)[0];
+
+  if (bestGpt && bestCodex) {
+    return parseMajorMinor(bestGpt.id) >= parseMajorMinor(bestCodex.id) ? bestGpt : bestCodex;
+  }
+
+  if (bestGpt) return bestGpt;
+  if (bestCodex) return bestCodex;
+
+  return models.slice().sort(compareOpenAiCandidates)[0] ?? null;
 }
 
 export function pickDefaultModel(
@@ -72,6 +101,15 @@ export function pickDefaultModel(
 
     if (opus) return opus;
     if (sonnet) return sonnet;
+  }
+
+  // OpenAI special-case:
+  // Prefer the newest general GPT-5 model when it is at least as new as Codex
+  // (e.g. GPT-5.4 over GPT-5.3 Codex), while keeping Codex as fallback.
+  for (const provider of ["openai-codex", "openai"] as const) {
+    if (!availableProviders.includes(provider)) continue;
+    const model = pickPreferredOpenAiModel(provider);
+    if (model) return model;
   }
 
   // Other providers: pattern-based rules

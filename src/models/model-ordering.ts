@@ -20,6 +20,21 @@ export function providerPriority(provider: string): number {
   return PROVIDER_ORDER[provider] ?? 999;
 }
 
+const OPENAI_CODEX_RE = /^gpt-5\.(\d+)-codex(?:-|$)/;
+const OPENAI_PLAIN_GPT_RE = /^gpt-5\.(\d+)$/;
+const OPENAI_GPT_RE = /^gpt-5\./;
+
+export function openAiFamilyPriority(id: string): number {
+  // Prefer the latest general GPT-5 model first, then other GPT-5 variants,
+  // then Codex-specialized variants, then older o-series fallbacks.
+  if (OPENAI_PLAIN_GPT_RE.test(id)) return 0;
+  if (OPENAI_GPT_RE.test(id) && !OPENAI_CODEX_RE.test(id)) return 1;
+  if (OPENAI_CODEX_RE.test(id)) return 2;
+  if (id.startsWith("gpt-")) return 3;
+  if (id.startsWith("o")) return 4;
+  return 9;
+}
+
 export function familyPriority(provider: string, id: string): number {
   if (provider === "anthropic") {
     if (id.startsWith("claude-opus-")) return 0;
@@ -29,10 +44,7 @@ export function familyPriority(provider: string, id: string): number {
   }
 
   if (provider === "openai-codex" || provider === "openai") {
-    if (id.includes("codex")) return 0;
-    if (id.startsWith("gpt-")) return 1;
-    if (id.startsWith("o")) return 2;
-    return 9;
+    return openAiFamilyPriority(id);
   }
 
   if (provider === "google" || provider === "google-gemini-cli" || provider === "google-antigravity") {
