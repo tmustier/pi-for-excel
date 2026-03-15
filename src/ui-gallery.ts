@@ -4,18 +4,18 @@
  * No Office.js dependency. Loads the same CSS as the real taskpane and
  * renders mock components for agent-browser screenshot verification.
  *
- * Access at: https://localhost:3000/src/ui-gallery.html
+ * Access at: http://localhost:3000/src/ui-gallery.html
  *
  * Each section has a data-gallery attribute for targeted screenshots:
  *   agent-browser screenshot --selector '[data-gallery="tool-cards"]'
  */
 
-// Load theme CSS (same import chain as the real app)
-import "./ui/theme.css";
+// Boot with the same CSS + patches as the real taskpane.
+// This imports pi-web-ui/app.css, theme.css, and installs Lit/marked/theme patches.
+import "./boot.js";
 
 // Register web components we render
 import "./ui/register-components.js";
-import "@mariozechner/mini-lit/dist/MarkdownBlock.js";
 
 const galleryRoot = document.getElementById("gallery-root");
 if (!galleryRoot) throw new Error("Missing #gallery-root");

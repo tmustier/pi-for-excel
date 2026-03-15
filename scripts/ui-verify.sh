@@ -6,7 +6,7 @@
 #   ./scripts/ui-verify.sh                    # Full gallery screenshot
 #   ./scripts/ui-verify.sh diff-table         # Screenshot specific section
 #   ./scripts/ui-verify.sh taskpane           # Screenshot the real taskpane
-#   ./scripts/ui-verify.sh stop               # Stop dev server + close browser
+#   ./scripts/ui-verify.sh stop               # Close browser + stop dev server (if we started it)
 #
 # Sections (data-gallery attributes in ui-gallery.html):
 #   badges, file-items, tool-cards, tool-groups, diff-table,
@@ -25,6 +25,7 @@ GALLERY_URL="${SCHEME}://localhost:3000/src/ui-gallery.html"
 TASKPANE_URL="${SCHEME}://localhost:3000/src/taskpane.html"
 SESSION_NAME="pi-ui-verify"
 SCREENSHOT_DIR="/tmp/pi-ui-verify"
+DEV_PID_FILE="$SCREENSHOT_DIR/dev.pid"
 
 mkdir -p "$SCREENSHOT_DIR"
 
@@ -38,6 +39,7 @@ ensure_dev_server() {
   cd "$(dirname "$0")/.."
   npm run dev &>/dev/null &
   DEV_PID=$!
+  echo "$DEV_PID" > "$DEV_PID_FILE"
 
   # Wait for server
   for i in $(seq 1 30); do
@@ -52,10 +54,24 @@ ensure_dev_server() {
   exit 1
 }
 
+# Stop a dev server we previously started
+stop_dev_server() {
+  if [[ -f "$DEV_PID_FILE" ]]; then
+    local pid
+    pid=$(<"$DEV_PID_FILE")
+    if kill -0 "$pid" 2>/dev/null; then
+      kill "$pid" 2>/dev/null || true
+      echo "Dev server stopped (pid $pid)."
+    fi
+    rm -f "$DEV_PID_FILE"
+  fi
+}
+
 case "${1:-gallery}" in
   stop)
     npx agent-browser --session "$SESSION_NAME" close 2>/dev/null || true
-    echo "Browser closed."
+    stop_dev_server
+    echo "Cleaned up."
     exit 0
     ;;
 
