@@ -65,7 +65,7 @@
     "rollup": "4.59.0",
     "basic-ftp": "5.2.0",
     "underscore": "1.13.8",
-    "tar": "7.5.10",
+    "tar": "7.5.11",
     "fast-xml-parser": "5.4.2"
   }
 }
