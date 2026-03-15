@@ -69,11 +69,46 @@ Notes for agents working in this repo.
 - `npm run test:context` when touching prompt/context/tool disclosure/session wiring
 - `npm run test:security` when touching proxy/bridge/auth/HTML safety paths
 - Manual Excel smoke test when touching session persistence, tools, auth, or UI wiring
-- For UI/bootstrap issues (e.g. endless "Initializing…"), inspect the page with `agent-browser` first:
-  - `agent-browser --ignore-https-errors open https://localhost:3000/src/taskpane.html`
-  - `agent-browser snapshot -i -c --json`
-  - `agent-browser console --json`
-  - `agent-browser errors --json`
+
+### Visual UI verification (agent-browser)
+
+Use the **UI Gallery** (`src/ui-gallery.html`) to verify CSS and component changes
+without needing Excel. It renders mock components with the real CSS theme.
+
+```bash
+# Ensure dev server is running (starts automatically if needed)
+./scripts/ui-verify.sh                    # Full gallery screenshot
+./scripts/ui-verify.sh diff-table         # Screenshot a specific section
+./scripts/ui-verify.sh taskpane           # Screenshot the real taskpane (waits for Office timeout)
+./scripts/ui-verify.sh stop               # Clean up browser session
+```
+
+Available gallery sections (use as argument):
+`badges`, `file-items`, `tool-cards`, `tool-groups`, `diff-table`,
+`text-preview`, `buttons`, `toasts`, `markdown`
+
+Or use agent-browser directly for interactive inspection:
+```bash
+npx agent-browser --session pi-ui open http://localhost:3000/src/ui-gallery.html
+npx agent-browser --session pi-ui wait 2000
+npx agent-browser --session pi-ui snapshot -i          # See interactive elements
+npx agent-browser --session pi-ui screenshot shot.png  # Capture
+npx agent-browser --session pi-ui close                # Clean up
+```
+
+For **full taskpane** inspection (boots without Excel after 3s timeout):
+```bash
+npx agent-browser open http://localhost:3000/src/taskpane.html
+npx agent-browser wait 4000           # Wait for Office.js fallback
+npx agent-browser snapshot -i -c      # Interactive snapshot
+npx agent-browser console --json      # Check for JS errors
+npx agent-browser errors --json       # Check for page errors
+```
+
+When to add new gallery sections:
+- Adding a new component type → add a mock render in `src/ui-gallery.ts`
+- Changing CSS for an existing component → verify via `./scripts/ui-verify.sh <section>`
+- Before/after comparison → screenshot before change, make edit, screenshot again
 
 ## Pre-commit
 - `.githooks/pre-commit` runs `npm run lint` + `npm run typecheck`.

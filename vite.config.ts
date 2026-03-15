@@ -321,6 +321,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         taskpane: "src/taskpane.html",
+        "ui-gallery": "src/ui-gallery.html",
       },
       // Externalize node:* imports (Rollup can't bundle them for the browser).
       // Note: do NOT externalize regular deps (e.g. @smithy/*). If they leak
