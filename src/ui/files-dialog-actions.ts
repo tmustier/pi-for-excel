@@ -78,11 +78,36 @@ function openBlobInNewTab(blob: Blob, pendingWindow: Window | null): void {
     document.body.appendChild(anchor);
     anchor.click();
     anchor.remove();
+    // Best-effort — anchor click may also silently fail in WebView.
+    // We can't verify whether it worked, so no error toast here.
   }
 
   setTimeout(() => {
     URL.revokeObjectURL(url);
   }, 60_000);
+}
+
+/**
+ * Copy text content to clipboard — reliable in Office WebView where
+ * window.open / blob URLs silently fail.
+ */
+async function copyTextToClipboard(text: string, fileName: string): Promise<void> {
+  await navigator.clipboard.writeText(text);
+  showToast(`Copied ${fileName} to clipboard.`);
+}
+
+/**
+ * Download via data URI — works in WebView where blob URLs may not.
+ */
+function downloadViaDataUri(text: string, fileName: string, mimeType: string): void {
+  const dataUri = `data:${mimeType};charset=utf-8,${encodeURIComponent(text)}`;
+  const anchor = document.createElement("a");
+  anchor.href = dataUri;
+  anchor.download = fileName;
+  anchor.style.display = "none";
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
 }
 
 async function openFileInBrowser(options: {
@@ -141,36 +166,91 @@ export function createFilesDialogDetailActions(options: CreateFilesDialogDetailA
   const actions = document.createElement("div");
   actions.className = "pi-files-detail-actions";
 
-  const openButton = document.createElement("button");
-  openButton.type = "button";
-  openButton.className = options.file.kind === "text"
-    ? "pi-overlay-btn pi-overlay-btn--ghost pi-overlay-btn--compact"
-    : "pi-overlay-btn pi-overlay-btn--primary pi-overlay-btn--compact";
-  openButton.textContent = "Open ↗";
-  openButton.addEventListener("click", () => {
-    void openFileInBrowser({
-      file: options.file,
-      fileRef: options.fileRef,
-      workspace: options.workspace,
-      auditContext: options.auditContext,
-    }).catch((error: unknown) => {
-      showToast(`Open failed: ${getErrorMessage(error)}`);
-    });
-  });
+  const isBuiltIn = isFilesDialogBuiltInDoc(options.file);
 
-  const downloadButton = document.createElement("button");
-  downloadButton.type = "button";
-  downloadButton.className = "pi-overlay-btn pi-overlay-btn--ghost pi-overlay-btn--compact";
-  downloadButton.textContent = "Download";
-  downloadButton.addEventListener("click", () => {
-    void options.workspace.downloadFile(options.file.path, {
-      locationKind: options.fileRef.locationKind,
-    }).catch((error: unknown) => {
-      showToast(`Download failed: ${getErrorMessage(error)}`);
+  if (isBuiltIn && options.file.kind === "text") {
+    // Built-in docs: use clipboard + data-URI download instead of
+    // window.open / blob URLs which silently fail in the Office WebView.
+    // This add-in always runs inside the Office WebView (loaded via
+    // manifest.xml into Excel's sidebar), so this path covers all
+    // production usage. Dev-server testing in a browser is unaffected
+    // because built-in docs are only available via the workspace.
+    const copyButton = document.createElement("button");
+    copyButton.type = "button";
+    copyButton.className = "pi-overlay-btn pi-overlay-btn--ghost pi-overlay-btn--compact";
+    copyButton.textContent = "Copy content";
+    copyButton.addEventListener("click", () => {
+      void (async () => {
+        const result = await options.workspace.readFile(options.file.path, {
+          mode: "text",
+          maxChars: 16_000_000,
+          audit: options.auditContext,
+          locationKind: options.fileRef.locationKind,
+        });
+        if (result.text === undefined) throw new Error("Could not read file.");
+        await copyTextToClipboard(result.text, options.file.name);
+      })().catch((error: unknown) => {
+        showToast(`Copy failed: ${getErrorMessage(error)}`);
+      });
     });
-  });
 
-  actions.append(openButton, downloadButton);
+    const downloadButton = document.createElement("button");
+    downloadButton.type = "button";
+    downloadButton.className = "pi-overlay-btn pi-overlay-btn--ghost pi-overlay-btn--compact";
+    downloadButton.textContent = "Download";
+    downloadButton.addEventListener("click", () => {
+      void (async () => {
+        const result = await options.workspace.readFile(options.file.path, {
+          mode: "text",
+          maxChars: 16_000_000,
+          audit: options.auditContext,
+          locationKind: options.fileRef.locationKind,
+        });
+        if (result.text === undefined) throw new Error("Could not read file.");
+        downloadViaDataUri(
+          result.text,
+          options.file.name,
+          resolveSafeBlobUrlMimeType(options.file.mimeType || "text/plain"),
+        );
+      })().catch((error: unknown) => {
+        showToast(`Download failed: ${getErrorMessage(error)}`);
+      });
+    });
+
+    actions.append(copyButton, downloadButton);
+  } else {
+    // Non-built-in files: use the standard blob URL approach.
+    const openButton = document.createElement("button");
+    openButton.type = "button";
+    openButton.className = options.file.kind === "text"
+      ? "pi-overlay-btn pi-overlay-btn--ghost pi-overlay-btn--compact"
+      : "pi-overlay-btn pi-overlay-btn--primary pi-overlay-btn--compact";
+    openButton.textContent = "Open ↗";
+    openButton.addEventListener("click", () => {
+      void openFileInBrowser({
+        file: options.file,
+        fileRef: options.fileRef,
+        workspace: options.workspace,
+        auditContext: options.auditContext,
+      }).catch((error: unknown) => {
+        showToast(`Open failed: ${getErrorMessage(error)}`);
+      });
+    });
+
+    const downloadButton = document.createElement("button");
+    downloadButton.type = "button";
+    downloadButton.className = "pi-overlay-btn pi-overlay-btn--ghost pi-overlay-btn--compact";
+    downloadButton.textContent = "Download";
+    downloadButton.addEventListener("click", () => {
+      void options.workspace.downloadFile(options.file.path, {
+        locationKind: options.fileRef.locationKind,
+      }).catch((error: unknown) => {
+        showToast(`Download failed: ${getErrorMessage(error)}`);
+      });
+    });
+
+    actions.append(openButton, downloadButton);
+  }
 
   const isReadOnly = options.file.readOnly || isFilesDialogBuiltInDoc(options.file);
   if (isReadOnly) {

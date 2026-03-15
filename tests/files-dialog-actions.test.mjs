@@ -63,7 +63,8 @@ test("detail actions show open/download only for read-only files", () => {
       onAfterDelete: () => Promise.resolve(),
     });
 
-    assert.deepEqual(getButtonLabels(actions), ["Open ↗", "Download"]);
+    // Built-in docs use clipboard copy instead of Open (blob URLs fail in Office WebView).
+    assert.deepEqual(getButtonLabels(actions), ["Copy content", "Download"]);
   } finally {
     restore();
   }

@@ -310,6 +310,11 @@ export default defineConfig({
 
   resolve: {
     alias: buildBrowserAliasMap(),
+    // Force a single `marked` instance so our safety patch
+    // (installMarkedSafetyPatch) intercepts all .use() calls —
+    // including markdown-block's. Without this, mini-lit bundles its
+    // own marked@16 copy that our patch never touches.
+    dedupe: ["marked"],
   },
 
   build: {

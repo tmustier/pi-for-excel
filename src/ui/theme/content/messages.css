@@ -33,43 +33,60 @@ assistant-message { margin-right: var(--pill-inset); }
 }
 
 /* ── Markdown heading scale (sidebar-appropriate) ───────────── */
+/*
+ * IMPORTANT: target `markdown-block h1` (stable custom-element tag), NOT
+ * `.pi-assistant-body h1` (hook-dependent class).
+ *
+ * Tailwind v4's base reset (`@layer base`) sets
+ *   h1,h2,...,h6 { font-size: inherit; font-weight: inherit }
+ * which strips browser defaults. Our overrides are unlayered so they win
+ * over the reset, but ONLY if the selector actually matches. The old
+ * `.pi-assistant-body h1` selector failed whenever the style hook didn't
+ * run (streaming, DOM structure changes from upstream bumps, timing
+ * races) — leaving headings at `inherit` with no cap.
+ *
+ * Using `markdown-block h1` always matches because `markdown-block` is a
+ * stable custom element tag in pi-web-ui's light DOM. This also covers
+ * headings inside thinking blocks and tool cards without needing separate
+ * overrides (those have their own more-specific rules if needed).
+ */
 
-.pi-assistant-body h1 {
+markdown-block h1 {
   font-size: var(--text-lg);
   font-weight: 700;
   line-height: 1.3;
   margin: 16px 0 8px;
 }
 
-.pi-assistant-body h2 {
+markdown-block h2 {
   font-size: var(--text-md);
   font-weight: 700;
   line-height: 1.35;
   margin: 14px 0 6px;
 }
 
-.pi-assistant-body h3 {
+markdown-block h3 {
   font-size: var(--text-base);
   font-weight: 700;
   line-height: 1.4;
   margin: 12px 0 4px;
 }
 
-.pi-assistant-body h4,
-.pi-assistant-body h5,
-.pi-assistant-body h6 {
+markdown-block h4,
+markdown-block h5,
+markdown-block h6 {
   font-size: var(--text-base);
   font-weight: 600;
   line-height: 1.4;
   margin: 10px 0 4px;
 }
 
-.pi-assistant-body h1:first-child,
-.pi-assistant-body h2:first-child,
-.pi-assistant-body h3:first-child,
-.pi-assistant-body h4:first-child,
-.pi-assistant-body h5:first-child,
-.pi-assistant-body h6:first-child {
+markdown-block h1:first-child,
+markdown-block h2:first-child,
+markdown-block h3:first-child,
+markdown-block h4:first-child,
+markdown-block h5:first-child,
+markdown-block h6:first-child {
   margin-top: 0;
 }
 

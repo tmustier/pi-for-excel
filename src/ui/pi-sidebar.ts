@@ -178,6 +178,8 @@ export class PiSidebar extends LitElement {
   private _innerScrollDetached = new WeakSet<HTMLElement>();
   /** Per-element scroll listeners registered lazily during inner auto-scroll. */
   private _innerScrollListeners = new WeakMap<HTMLElement, () => void>();
+  /** Elements with a pending programmatic scroll — consumed by the next scroll event. */
+  private _innerScrollProgrammaticPending = new WeakSet<HTMLElement>();
   /** Previous value of `_isStreaming` so we can detect edges in `updated()`. */
   private _wasStreaming = false;
   private _utilitiesMenuClickHandler?: (event: MouseEvent) => void;
@@ -426,6 +428,13 @@ export class PiSidebar extends LitElement {
   private _ensureInnerScrollListener(el: HTMLElement): void {
     if (this._innerScrollListeners.has(el)) return;
     const onScroll = () => {
+      // Skip the scroll event fired by our programmatic el.scrollTop assignment.
+      // The flag is set per-element before the assignment and consumed here.
+      if (this._innerScrollProgrammaticPending.has(el)) {
+        this._innerScrollProgrammaticPending.delete(el);
+        return;
+      }
+
       const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
       if (dist > INNER_SCROLL_DISENGAGE_PX) {
         this._innerScrollDetached.add(el);
@@ -443,7 +452,11 @@ export class PiSidebar extends LitElement {
    * away (tracked by a per-element scroll listener, not a distance guess).
    */
   private _scrollStreamingInnerContainers(): void {
-    if (!this._autoScroll || !this._scrollContainerEl) return;
+    // Intentionally NOT gated on `this._autoScroll`. Inner containers
+    // (thinking blocks, tool cards) should auto-follow independently of
+    // whether the user has scrolled up in the outer chat. Each inner
+    // element has its own detach/re-engage tracking via _innerScrollDetached.
+    if (!this._scrollContainerEl) return;
 
     const streaming = this._scrollContainerEl.querySelector(
       "streaming-message-container",
@@ -462,6 +475,7 @@ export class PiSidebar extends LitElement {
 
       if (!this._innerScrollSeen.has(el)) {
         // First overflow encounter (just expanded / content just exceeded cap).
+        this._innerScrollProgrammaticPending.add(el);
         el.scrollTop = el.scrollHeight;
         this._innerScrollSeen.add(el);
         this._innerScrollDetached.delete(el);
@@ -471,7 +485,8 @@ export class PiSidebar extends LitElement {
       // User scrolled up inside this pane — leave it alone.
       if (this._innerScrollDetached.has(el)) continue;
 
-      // Auto-follow.
+      // Auto-follow — mark as programmatic so the scroll listener skips it.
+      this._innerScrollProgrammaticPending.add(el);
       el.scrollTop = el.scrollHeight;
     }
   }

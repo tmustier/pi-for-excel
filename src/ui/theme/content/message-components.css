@@ -8,6 +8,46 @@
   border-radius: var(--pill-radius);
 }
 
+/* Group header — collapsible summary */
+.pi-tool-group__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 10px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  color: var(--muted-foreground);
+  text-align: left;
+  transition: color var(--duration-fast);
+}
+
+.pi-tool-group__header:hover {
+  color: var(--foreground);
+}
+
+.pi-tool-group__chevron {
+  font-size: 10px;
+  transition: transform var(--duration-fast);
+  flex-shrink: 0;
+}
+
+.pi-tool-group:not(.pi-tool-group--collapsed) .pi-tool-group__chevron {
+  transform: rotate(90deg);
+}
+
+.pi-tool-group__label {
+  font-weight: 500;
+}
+
+/* Collapsed — hide individual tool cards */
+.pi-tool-group--collapsed > tool-message {
+  display: none;
+}
+
 /* Rows inside group */
 .pi-tool-group > tool-message {
   padding: 1px 6px;
@@ -24,6 +64,16 @@
   background: var(--pi-inner-bg);
   border-radius: var(--radius-sm);
   box-shadow: 0 1px 3px var(--alpha-4);
+}
+
+/* KaTeX defense — if math extensions somehow render despite the policy,
+   prevent the serif/italic font from leaking into the sidebar. This is
+   a CSS safety net that works regardless of which `marked` instance
+   produced the HTML. */
+markdown-block .katex,
+markdown-block .katex * {
+  font-family: var(--font-sans) !important;
+  font-style: normal !important;
 }
 
 /* Markdown — readable at sidebar width */
@@ -88,6 +138,24 @@ thinking-block markdown-block {
   color: var(--muted-foreground);
   max-height: 300px;
   overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* Compact heading scale for thinking blocks — override the global
+   markdown-block heading rules which are sized for the message body. */
+thinking-block markdown-block h1,
+thinking-block markdown-block h2,
+thinking-block markdown-block h3 {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  margin: 8px 0 4px;
+}
+thinking-block markdown-block h4,
+thinking-block markdown-block h5,
+thinking-block markdown-block h6 {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  margin: 6px 0 3px;
 }
 
 /* Added by applyMessageStyleHooks() so we don't depend on utility classes. */

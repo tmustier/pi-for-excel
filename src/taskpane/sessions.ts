@@ -7,6 +7,8 @@
  * - session identity lifecycle (new / rename / resume)
  */
 
+import type { Model } from "@mariozechner/pi-ai";
+import { getModel } from "@mariozechner/pi-ai";
 import type { Agent, AgentMessage } from "@mariozechner/pi-agent-core";
 import type { SessionData } from "@mariozechner/pi-web-ui/dist/storage/types.js";
 import type { SessionsStore } from "@mariozechner/pi-web-ui/dist/storage/stores/sessions-store.js";
@@ -41,6 +43,22 @@ type UserLikeMessage = AgentMessage & {
   role: "user" | "user-with-attachments";
   content: unknown;
 };
+
+/**
+ * Re-resolve a persisted model against the current registry so that
+ * metadata like `contextWindow` picks up upstream changes (e.g. a dep
+ * bump that raised Opus 4.6 from 200k → 1M). Falls back to the
+ * persisted model if the registry doesn't have it (custom gateways, etc.).
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Model<any> from session store
+function refreshModelFromRegistry(persisted: Model<any>): Model<any> {
+  try {
+    const fresh = getModel(persisted.provider as never, persisted.id as never);
+    return fresh ?? persisted;
+  } catch {
+    return persisted;
+  }
+}
 
 function hasAssistantMessage(messages: AgentMessage[]): boolean {
   return messages.some((m) => m.role === "assistant");
@@ -281,7 +299,7 @@ export async function setupSessionPersistence(opts: {
     agent.replaceMessages(sessionData.messages);
 
     if (sessionData.model) {
-      agent.setModel(sessionData.model);
+      agent.setModel(refreshModelFromRegistry(sessionData.model));
     }
     if (sessionData.thinkingLevel) {
       agent.setThinkingLevel(sessionData.thinkingLevel);

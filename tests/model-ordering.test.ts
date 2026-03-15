@@ -227,3 +227,18 @@ void test("Ajv stubs keep fallback behavior explicit", () => {
     "expected ajv-formats stub to expose a no-op default export",
   );
 });
+
+void test("vite deduplicates marked so the safety patch covers all instances", () => {
+  const viteConfigPath = path.resolve(process.cwd(), "vite.config.ts");
+  const content = readFileSync(viteConfigPath, "utf8");
+
+  // The resolve.dedupe config forces all `import ... from "marked"` to
+  // resolve to the same module instance, ensuring installMarkedSafetyPatch()
+  // intercepts markdown-block's .use() calls (it ships its own marked copy).
+  assert.match(
+    content,
+    /dedupe.*\[.*"marked".*\]/s,
+    'expected resolve.dedupe to include "marked" — without it, markdown-block ' +
+    "uses a separate marked instance that our KaTeX safety patch never touches",
+  );
+});
