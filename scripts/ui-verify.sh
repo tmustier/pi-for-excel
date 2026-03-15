@@ -18,9 +18,23 @@
 #
 set -euo pipefail
 
-# Vite dev server uses plain HTTP by default.
-# Override with UI_VERIFY_SCHEME=https if using --https flag.
-SCHEME="${UI_VERIFY_SCHEME:-http}"
+# Auto-detect scheme: Vite enables HTTPS when key.pem + cert.pem exist.
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_DIR="$(dirname "$SCRIPT_DIR")"
+
+if [[ -n "${UI_VERIFY_SCHEME:-}" ]]; then
+  SCHEME="$UI_VERIFY_SCHEME"
+elif [[ -f "$REPO_DIR/key.pem" && -f "$REPO_DIR/cert.pem" ]]; then
+  SCHEME="https"
+else
+  SCHEME="http"
+fi
+
+BROWSER_FLAGS=""
+if [[ "$SCHEME" == "https" ]]; then
+  BROWSER_FLAGS="--ignore-https-errors"
+fi
+
 GALLERY_URL="${SCHEME}://localhost:3000/src/ui-gallery.html"
 TASKPANE_URL="${SCHEME}://localhost:3000/src/taskpane.html"
 SESSION_NAME="pi-ui-verify"
@@ -79,7 +93,7 @@ case "${1:-gallery}" in
     ensure_dev_server
 
     OUTFILE="$SCREENSHOT_DIR/taskpane-$(date +%H%M%S).png"
-    npx agent-browser --session "$SESSION_NAME" open "$TASKPANE_URL" \
+    npx agent-browser $BROWSER_FLAGS --session "$SESSION_NAME" open "$TASKPANE_URL" \
       && npx agent-browser --session "$SESSION_NAME" wait 4000 \
       && npx agent-browser --session "$SESSION_NAME" screenshot "$OUTFILE"
     echo "Screenshot: $OUTFILE"
@@ -89,7 +103,7 @@ case "${1:-gallery}" in
     ensure_dev_server
 
     OUTFILE="$SCREENSHOT_DIR/gallery-$(date +%H%M%S).png"
-    npx agent-browser --session "$SESSION_NAME" open "$GALLERY_URL" \
+    npx agent-browser $BROWSER_FLAGS --session "$SESSION_NAME" open "$GALLERY_URL" \
       && npx agent-browser --session "$SESSION_NAME" wait 2000 \
       && npx agent-browser --session "$SESSION_NAME" screenshot --full "$OUTFILE"
     echo "Screenshot: $OUTFILE"
@@ -105,7 +119,7 @@ case "${1:-gallery}" in
     # Open gallery if not already there
     CURRENT_URL=$(npx agent-browser --session "$SESSION_NAME" get url 2>/dev/null || echo "")
     if [[ "$CURRENT_URL" != *"ui-gallery"* ]]; then
-      npx agent-browser --session "$SESSION_NAME" open "$GALLERY_URL" \
+      npx agent-browser $BROWSER_FLAGS --session "$SESSION_NAME" open "$GALLERY_URL" \
         && npx agent-browser --session "$SESSION_NAME" wait 2000
     fi
 
