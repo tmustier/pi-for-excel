@@ -33,7 +33,7 @@
     "prepare": "node scripts/install-githooks.mjs"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.78.0",
+    "@anthropic-ai/sdk": "^0.80.0",
     "@mariozechner/pi-agent-core": "^0.58.1",
     "@mariozechner/pi-ai": "^0.58.1",
     "@mariozechner/pi-web-ui": "^0.58.1",
@@ -42,12 +42,12 @@
     "marked": "^17.0.4"
   },
   "devDependencies": {
-    "@types/office-js": "^1.0.582",
+    "@types/office-js": "^1.0.583",
     "eslint": "^10.0.3",
     "office-addin-debugging": "^6.0.6",
     "office-addin-manifest": "^2.1.2",
     "typescript": "^5.7.0",
-    "typescript-eslint": "^8.57.0",
+    "typescript-eslint": "^8.57.1",
     "vite": "^7.3.1"
   },
   "license": "MIT",
