@@ -48,7 +48,7 @@
     "office-addin-manifest": "^2.1.2",
     "typescript": "^5.7.0",
     "typescript-eslint": "^8.57.0",
-    "vite": "^7.3.1"
+    "vite": "^7.3.2"
   },
   "license": "MIT",
   "repository": {
@@ -66,6 +66,6 @@
     "basic-ftp": "5.2.0",
     "underscore": "1.13.8",
     "tar": "7.5.11",
-    "fast-xml-parser": "5.4.2"
+    "fast-xml-parser": "5.5.10"
   }
 }
