@@ -3,18 +3,23 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
 
+import { getModels } from "@mariozechner/pi-ai";
+
+import { BROWSER_OAUTH_PROVIDERS, mapToApiProvider } from "../src/auth/provider-map.ts";
+import { rewriteDevProxyUrl } from "../src/auth/dev-rewrites.ts";
+import { installProcessEnvShim } from "../src/compat/process-env-shim.ts";
 import {
   compareModels,
   compareOpenAiModelIds,
+  isOpenAiCodexModelId,
+  isOpenAiGeneralGptModelId,
   modelRecencyScore,
   openAiFamilyPriority,
   parseMajorMinor,
   providerPriority,
   shouldPreferOpenAiGeneralModel,
 } from "../src/models/model-ordering.ts";
-import { BROWSER_OAUTH_PROVIDERS, mapToApiProvider } from "../src/auth/provider-map.ts";
-import { rewriteDevProxyUrl } from "../src/auth/dev-rewrites.ts";
-import { installProcessEnvShim } from "../src/compat/process-env-shim.ts";
+import { pickDefaultModel } from "../src/taskpane/default-model.ts";
 
 void test("parseMajorMinor packs Claude-style -major-minor as major*10+minor", () => {
   assert.equal(parseMajorMinor("claude-opus-4-5"), 45);
@@ -49,6 +54,35 @@ void test("compareOpenAiModelIds prefers newer versions before family tie-breaks
 void test("shouldPreferOpenAiGeneralModel only prefers GPT when it is as new or newer", () => {
   assert.equal(shouldPreferOpenAiGeneralModel("gpt-5.4", "gpt-5.3-codex"), true);
   assert.equal(shouldPreferOpenAiGeneralModel("gpt-5.4-pro", "gpt-5.5-codex"), false);
+});
+
+void test("current pi registry includes GPT-5.4 for OpenAI providers", () => {
+  assert.equal(getModels("openai").some((model) => model.id === "gpt-5.4"), true);
+  assert.equal(getModels("openai-codex").some((model) => model.id === "gpt-5.4"), true);
+  assert.equal(getModels("openai").some((model) => model.id === "gpt-5.3-codex"), true);
+});
+
+void test("pickDefaultModel prefers the newest general GPT-5 when it is as new or newer than Codex", () => {
+  const openAiProviders: Array<"openai" | "openai-codex"> = ["openai", "openai-codex"];
+
+  for (const provider of openAiProviders) {
+    const models = getModels(provider);
+    const bestGeneral = models
+      .filter((model) => isOpenAiGeneralGptModelId(model.id))
+      .sort((a, b) => compareOpenAiModelIds(a.id, b.id))[0];
+    const bestCodex = models
+      .filter((model) => isOpenAiCodexModelId(model.id))
+      .sort((a, b) => compareOpenAiModelIds(a.id, b.id))[0];
+
+    assert.ok(bestGeneral, `expected latest general GPT for ${provider}`);
+    assert.ok(bestCodex, `expected latest Codex model for ${provider}`);
+
+    assert.equal(shouldPreferOpenAiGeneralModel(bestGeneral.id, bestCodex.id), true);
+
+    const selected = pickDefaultModel([provider]);
+    assert.equal(selected.provider, provider);
+    assert.equal(selected.id, bestGeneral.id);
+  }
 });
 
 void test("modelRecencyScore prefers higher version, then later date suffix", () => {
