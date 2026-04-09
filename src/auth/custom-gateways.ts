@@ -195,6 +195,8 @@ function createGatewayModel(args: {
   providerName: string;
   contextWindow: number;
 }): Model<"openai-completions"> {
+  const maxTokens = Math.min(DEFAULT_OPENAI_GATEWAY_MAX_TOKENS, args.contextWindow);
+
   return {
     id: args.modelId,
     name: args.modelId,
@@ -210,7 +212,7 @@ function createGatewayModel(args: {
       cacheWrite: 0,
     },
     contextWindow: args.contextWindow,
-    maxTokens: DEFAULT_OPENAI_GATEWAY_MAX_TOKENS,
+    maxTokens,
   };
 }
 
@@ -309,17 +311,24 @@ export async function saveOpenAiGatewayConfig(
   };
 }
 
+function matchesPersistedCustomModel(
+  storedModel: StoredModel,
+  persistedModel: Pick<Model<Api>, "api" | "id" | "provider" | "baseUrl">,
+): storedModel is Model<Api> {
+  return storedModel.api === persistedModel.api && storedModel.id === persistedModel.id;
+}
+
 export function resolveCustomProviderModel(
   customProviders: CustomProvider[],
   persistedModel: Pick<Model<Api>, "api" | "id" | "provider" | "baseUrl">,
 ): Model<Api> | null {
-  let fallbackMatch: Model<Api> | null = null;
+  const fallbackMatches: Model<Api>[] = [];
 
   for (const provider of customProviders) {
     const storedModels = Array.isArray(provider.models) ? provider.models : [];
 
     for (const storedModel of storedModels) {
-      if (storedModel.api !== persistedModel.api || storedModel.id !== persistedModel.id) {
+      if (!matchesPersistedCustomModel(storedModel, persistedModel)) {
         continue;
       }
 
@@ -327,13 +336,13 @@ export function resolveCustomProviderModel(
         return storedModel;
       }
 
-      if (fallbackMatch === null && storedModel.baseUrl === persistedModel.baseUrl) {
-        fallbackMatch = storedModel;
+      if (storedModel.baseUrl === persistedModel.baseUrl) {
+        fallbackMatches.push(storedModel);
       }
     }
   }
 
-  return fallbackMatch;
+  return fallbackMatches.length === 1 ? fallbackMatches[0] : null;
 }
 
 export async function deleteOpenAiGatewayConfig(

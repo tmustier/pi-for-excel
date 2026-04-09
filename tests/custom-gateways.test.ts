@@ -73,6 +73,21 @@ void test("saveOpenAiGatewayConfig stores custom context window metadata", async
   assert.equal(listed[0]?.contextWindow, 131_072);
 });
 
+void test("saveOpenAiGatewayConfig clamps maxTokens to the configured context window", async () => {
+  const store = new MemoryCustomProvidersStore();
+
+  const saved = await saveOpenAiGatewayConfig(store, {
+    displayName: "Tight budget",
+    endpointUrl: "https://gateway.example.com/v1",
+    modelId: "small-model",
+    contextWindow: 2_048,
+  });
+
+  const storedModel = (await store.get(saved.id))?.models?.[0];
+  assert.equal(storedModel?.contextWindow, 2_048);
+  assert.equal(storedModel?.maxTokens, 2_048);
+});
+
 void test("saveOpenAiGatewayConfig rejects invalid context window values", async () => {
   const store = new MemoryCustomProvidersStore();
 
@@ -133,6 +148,30 @@ void test("resolveCustomProviderModel refreshes renamed gateway models by base U
   assert.ok(refreshed);
   assert.equal(refreshed?.contextWindow, 262_144);
   assert.match(refreshed?.provider ?? "", /^Gateway · Warehouse API EU/);
+});
+
+void test("resolveCustomProviderModel refuses ambiguous base-url fallback matches", async () => {
+  const store = new MemoryCustomProvidersStore();
+
+  await saveOpenAiGatewayConfig(store, {
+    displayName: "Warehouse API US",
+    endpointUrl: "https://warehouse.example.com/v1",
+    modelId: "supply-chain",
+  });
+  await saveOpenAiGatewayConfig(store, {
+    displayName: "Warehouse API EU",
+    endpointUrl: "https://warehouse.example.com/v1",
+    modelId: "supply-chain",
+  });
+
+  const resolved = resolveCustomProviderModel(await store.getAll(), {
+    api: "openai-completions",
+    id: "supply-chain",
+    provider: "Gateway · Warehouse API",
+    baseUrl: "https://warehouse.example.com/v1",
+  });
+
+  assert.equal(resolved, null);
 });
 
 void test("deleteOpenAiGatewayConfig only removes managed gateway entries", async () => {
