@@ -5,6 +5,7 @@
 import { getAppStorage } from "@mariozechner/pi-web-ui/dist/storage/app-storage.js";
 
 import {
+  DEFAULT_OPENAI_GATEWAY_CONTEXT_WINDOW,
   deleteOpenAiGatewayConfig,
   listOpenAiGatewayConfigs,
   saveOpenAiGatewayConfig,
@@ -27,6 +28,10 @@ function createHint(text: string): HTMLParagraphElement {
   hint.className = "pi-overlay-hint";
   hint.textContent = text;
   return hint;
+}
+
+function formatTokenCount(value: number): string {
+  return `${value.toLocaleString()} tokens`;
 }
 
 function createGatewayCard(args: {
@@ -82,11 +87,15 @@ function createGatewayCard(args: {
   model.className = "pi-settings-gateway-item__meta";
   model.textContent = `Model: ${args.gateway.modelId}`;
 
+  const contextWindow = document.createElement("p");
+  contextWindow.className = "pi-settings-gateway-item__meta";
+  contextWindow.textContent = `Max context: ${formatTokenCount(args.gateway.contextWindow)}`;
+
   const keyState = document.createElement("p");
   keyState.className = "pi-settings-gateway-item__meta";
   keyState.textContent = args.gateway.apiKey.length > 0 ? "API key: configured" : "API key: none";
 
-  card.append(topRow, endpoint, model, keyState);
+  card.append(topRow, endpoint, model, contextWindow, keyState);
   return card;
 }
 
@@ -121,6 +130,14 @@ export async function buildCustomGatewaySection(
     placeholder: "model-id",
   });
 
+  const contextWindowInput = createConfigInput({
+    placeholder: String(DEFAULT_OPENAI_GATEWAY_CONTEXT_WINDOW),
+    type: "number",
+  });
+  contextWindowInput.min = "1024";
+  contextWindowInput.step = "1";
+  contextWindowInput.inputMode = "numeric";
+
   const apiKeyInput = createConfigInput({
     placeholder: "API key (optional for local servers)",
     type: "password",
@@ -149,6 +166,10 @@ export async function buildCustomGatewaySection(
     createConfigRow("Name", nameInput),
     createConfigRow("Endpoint", endpointInput),
     createConfigRow("Model", modelInput),
+    createConfigRow("Max context tokens", contextWindowInput),
+    createHint(
+      "Used for Pi's local context budgeting and auto-compaction. Set this to your gateway model's real context window.",
+    ),
     createConfigRow("API key", apiKeyInput),
     errorText,
     formActions,
@@ -180,6 +201,7 @@ export async function buildCustomGatewaySection(
     nameInput.value = "";
     endpointInput.value = "";
     modelInput.value = "";
+    contextWindowInput.value = "";
     apiKeyInput.value = "";
     cancelButton.hidden = true;
     saveButton.textContent = "Save gateway";
@@ -191,6 +213,7 @@ export async function buildCustomGatewaySection(
     nameInput.value = gateway.displayName;
     endpointInput.value = gateway.endpointUrl;
     modelInput.value = gateway.modelId;
+    contextWindowInput.value = String(gateway.contextWindow);
     apiKeyInput.value = gateway.apiKey;
     cancelButton.hidden = false;
     saveButton.textContent = "Update gateway";
@@ -252,12 +275,18 @@ export async function buildCustomGatewaySection(
       cancelButton.disabled = true;
 
       try {
+        const rawContextWindow = contextWindowInput.value.trim();
+        const contextWindow = rawContextWindow.length > 0
+          ? Number(rawContextWindow)
+          : undefined;
+
         const saved = await saveOpenAiGatewayConfig(getAppStorage().customProviders, {
           id: editingGatewayId ?? undefined,
           displayName: nameInput.value,
           endpointUrl: endpointInput.value,
           modelId: modelInput.value,
           apiKey: apiKeyInput.value,
+          contextWindow,
         });
 
         await reloadGateways();

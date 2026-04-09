@@ -7,13 +7,16 @@
  * - session identity lifecycle (new / rename / resume)
  */
 
-import type { Model } from "@mariozechner/pi-ai";
 import { getModel } from "@mariozechner/pi-ai";
 import type { Agent, AgentMessage } from "@mariozechner/pi-agent-core";
 import type { SessionData } from "@mariozechner/pi-web-ui/dist/storage/types.js";
 import type { SessionsStore } from "@mariozechner/pi-web-ui/dist/storage/stores/sessions-store.js";
 import type { SettingsStore } from "@mariozechner/pi-web-ui/dist/storage/stores/settings-store.js";
 
+import {
+  resolveCustomProviderModel,
+  type CustomProvidersStoreLike,
+} from "../auth/custom-gateways.js";
 import { extractTextFromContent } from "../utils/content.js";
 import { getWorkbookContext } from "../workbook/context.js";
 import {
@@ -38,6 +41,7 @@ export interface SessionPersistenceController {
 }
 
 type SessionId = string;
+type PersistedSessionModel = SessionData["model"];
 
 type UserLikeMessage = AgentMessage & {
   role: "user" | "user-with-attachments";
@@ -48,16 +52,37 @@ type UserLikeMessage = AgentMessage & {
  * Re-resolve a persisted model against the current registry so that
  * metadata like `contextWindow` picks up upstream changes (e.g. a dep
  * bump that raised Opus 4.6 from 200k → 1M). Falls back to the
- * persisted model if the registry doesn't have it (custom gateways, etc.).
+ * persisted model if the registry doesn't have it, then tries the live
+ * custom-provider store before finally reusing the persisted snapshot.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Model<any> from session store
-function refreshModelFromRegistry(persisted: Model<any>): Model<any> {
+async function refreshPersistedModel(args: {
+  persisted: PersistedSessionModel;
+  customProvidersStore?: CustomProvidersStoreLike;
+}): Promise<PersistedSessionModel> {
+  const { persisted, customProvidersStore } = args;
+
   try {
     const fresh = getModel(persisted.provider as never, persisted.id as never);
-    return fresh ?? persisted;
+    if (fresh) {
+      return fresh;
+    }
   } catch {
-    return persisted;
+    // Fall through to custom-provider lookup / persisted snapshot.
   }
+
+  if (customProvidersStore) {
+    try {
+      const customProviders = await customProvidersStore.getAll();
+      const freshCustomModel = resolveCustomProviderModel(customProviders, persisted);
+      if (freshCustomModel) {
+        return freshCustomModel;
+      }
+    } catch {
+      // Fall through to the persisted snapshot.
+    }
+  }
+
+  return persisted;
 }
 
 function hasAssistantMessage(messages: AgentMessage[]): boolean {
@@ -121,6 +146,7 @@ export async function setupSessionPersistence(opts: {
   agent: Agent;
   sessions: SessionsStore;
   settings: SettingsStore;
+  customProvidersStore?: CustomProvidersStoreLike;
   initialSessionId?: string;
   autoRestoreLatest?: boolean;
 }): Promise<SessionPersistenceController> {
@@ -299,7 +325,10 @@ export async function setupSessionPersistence(opts: {
     agent.replaceMessages(sessionData.messages);
 
     if (sessionData.model) {
-      agent.setModel(refreshModelFromRegistry(sessionData.model));
+      agent.setModel(await refreshPersistedModel({
+        persisted: sessionData.model,
+        customProvidersStore: opts.customProvidersStore,
+      }));
     }
     if (sessionData.thinkingLevel) {
       agent.setThinkingLevel(sessionData.thinkingLevel);

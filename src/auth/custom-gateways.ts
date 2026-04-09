@@ -9,8 +9,8 @@ const OPENAI_GATEWAY_ID_PREFIX = "pi-openai-gateway:";
 export const OPENAI_GATEWAY_PROVIDER_PREFIX = "Gateway · ";
 const OPENAI_GATEWAY_TYPE = "openai-completions";
 
-const DEFAULT_CONTEXT_WINDOW = 16_384;
-const DEFAULT_MAX_TOKENS = 4_096;
+export const DEFAULT_OPENAI_GATEWAY_CONTEXT_WINDOW = 16_384;
+const DEFAULT_OPENAI_GATEWAY_MAX_TOKENS = 4_096;
 
 type StoredModel = NonNullable<CustomProvider["models"]>[number];
 
@@ -28,6 +28,7 @@ export interface OpenAiGatewayConfig {
   modelId: string;
   apiKey: string;
   providerName: string;
+  contextWindow: number;
 }
 
 export interface SaveOpenAiGatewayInput {
@@ -36,6 +37,7 @@ export interface SaveOpenAiGatewayInput {
   endpointUrl: string;
   modelId: string;
   apiKey?: string;
+  contextWindow?: number;
 }
 
 export interface CustomProviderRuntimeInfo {
@@ -82,6 +84,23 @@ export function normalizeGatewayEndpointUrl(endpointUrl: string): string {
 
 export function normalizeGatewayModelId(modelId: string): string {
   return normalizeRequiredString(modelId, "Model ID");
+}
+
+export function normalizeGatewayContextWindow(contextWindow: number | null | undefined): number {
+  if (contextWindow == null) {
+    return DEFAULT_OPENAI_GATEWAY_CONTEXT_WINDOW;
+  }
+
+  if (!Number.isInteger(contextWindow)) {
+    throw new Error("Max context tokens must be a whole number.");
+  }
+
+  const normalized = contextWindow;
+  if (normalized < 1_024) {
+    throw new Error("Max context tokens must be at least 1024.");
+  }
+
+  return normalized;
 }
 
 function deriveDisplayName(rawName: string | undefined, endpointUrl: string): string {
@@ -166,6 +185,7 @@ function providerToGatewayConfig(provider: CustomProvider): OpenAiGatewayConfig 
     modelId,
     apiKey: normalizeOptionalString(provider.apiKey),
     providerName,
+    contextWindow: normalizeGatewayContextWindow(model.contextWindow),
   };
 }
 
@@ -173,6 +193,7 @@ function createGatewayModel(args: {
   endpointUrl: string;
   modelId: string;
   providerName: string;
+  contextWindow: number;
 }): Model<"openai-completions"> {
   return {
     id: args.modelId,
@@ -188,8 +209,8 @@ function createGatewayModel(args: {
       cacheRead: 0,
       cacheWrite: 0,
     },
-    contextWindow: DEFAULT_CONTEXT_WINDOW,
-    maxTokens: DEFAULT_MAX_TOKENS,
+    contextWindow: args.contextWindow,
+    maxTokens: DEFAULT_OPENAI_GATEWAY_MAX_TOKENS,
   };
 }
 
@@ -239,6 +260,7 @@ export async function saveOpenAiGatewayConfig(
 ): Promise<OpenAiGatewayConfig> {
   const endpointUrl = normalizeGatewayEndpointUrl(input.endpointUrl);
   const modelId = normalizeGatewayModelId(input.modelId);
+  const contextWindow = normalizeGatewayContextWindow(input.contextWindow);
   const existingGateways = await listOpenAiGatewayConfigs(customProvidersStore);
 
   if (input.id) {
@@ -269,6 +291,7 @@ export async function saveOpenAiGatewayConfig(
         endpointUrl,
         modelId,
         providerName,
+        contextWindow,
       }),
     ],
   };
@@ -282,7 +305,35 @@ export async function saveOpenAiGatewayConfig(
     modelId,
     apiKey,
     providerName,
+    contextWindow,
   };
+}
+
+export function resolveCustomProviderModel(
+  customProviders: CustomProvider[],
+  persistedModel: Pick<Model<Api>, "api" | "id" | "provider" | "baseUrl">,
+): Model<Api> | null {
+  let fallbackMatch: Model<Api> | null = null;
+
+  for (const provider of customProviders) {
+    const storedModels = Array.isArray(provider.models) ? provider.models : [];
+
+    for (const storedModel of storedModels) {
+      if (storedModel.api !== persistedModel.api || storedModel.id !== persistedModel.id) {
+        continue;
+      }
+
+      if (storedModel.provider === persistedModel.provider) {
+        return storedModel;
+      }
+
+      if (fallbackMatch === null && storedModel.baseUrl === persistedModel.baseUrl) {
+        fallbackMatch = storedModel;
+      }
+    }
+  }
+
+  return fallbackMatch;
 }
 
 export async function deleteOpenAiGatewayConfig(

@@ -10,6 +10,7 @@ import { Agent } from "@mariozechner/pi-agent-core";
 import { ApiKeyPromptDialog } from "@mariozechner/pi-web-ui/dist/dialogs/ApiKeyPromptDialog.js";
 import { ModelSelector } from "@mariozechner/pi-web-ui/dist/dialogs/ModelSelector.js";
 import { getAppStorage } from "@mariozechner/pi-web-ui/dist/storage/app-storage.js";
+import type { CustomProvider } from "@mariozechner/pi-web-ui/dist/storage/stores/custom-providers-store.js";
 import type { SessionData } from "@mariozechner/pi-web-ui/dist/storage/types.js";
 
 import { createOfficeStreamFn } from "../auth/stream-proxy.js";
@@ -20,7 +21,10 @@ import {
   validateOfficeProxyUrl,
 } from "../auth/proxy-validation.js";
 import { restoreCredentials } from "../auth/restore.js";
-import { collectCustomProviderRuntimeInfo } from "../auth/custom-gateways.js";
+import {
+  collectCustomProviderRuntimeInfo,
+  resolveCustomProviderModel,
+} from "../auth/custom-gateways.js";
 import { invalidateBlueprint } from "../context/blueprint.js";
 import { ChangeTracker } from "../context/change-tracker.js";
 import {
@@ -257,6 +261,7 @@ export async function initTaskpane(opts: {
   // 2. Resolve available providers (built-ins + configured custom providers)
   let availableProviders: string[] = [];
   let customProviderApiKeys = new Map<string, string | undefined>();
+  let configuredCustomProviders: CustomProvider[] = [];
   let defaultCustomModel: ReturnType<typeof collectCustomProviderRuntimeInfo>["defaultModel"] = null;
   let defaultModel = pickDefaultModel([], null);
 
@@ -274,9 +279,11 @@ export async function initTaskpane(opts: {
       console.warn("[auth] Built-in provider lookup failed:", error);
     }
 
+    let nextConfiguredCustomProviders: CustomProvider[] = [];
+
     try {
-      const configuredCustomProviders = await customProviders.getAll();
-      const customInfo = collectCustomProviderRuntimeInfo(configuredCustomProviders);
+      nextConfiguredCustomProviders = await customProviders.getAll();
+      const customInfo = collectCustomProviderRuntimeInfo(nextConfiguredCustomProviders);
       nextCustomApiKeys = customInfo.apiKeys;
       nextDefaultCustomModel = customInfo.defaultModel;
 
@@ -288,14 +295,23 @@ export async function initTaskpane(opts: {
     }
 
     availableProviders = Array.from(combinedProviders);
+    configuredCustomProviders = nextConfiguredCustomProviders;
     customProviderApiKeys = nextCustomApiKeys;
     defaultCustomModel = nextDefaultCustomModel;
     defaultModel = pickDefaultModel(availableProviders, defaultCustomModel);
     setActiveProviders(combinedProviders);
   };
 
+  let onProvidersChanged: (() => void) | null = null;
+
   document.addEventListener("pi:providers-changed", () => {
-    void refreshConfiguredProviders();
+    void refreshConfiguredProviders()
+      .then(() => {
+        onProvidersChanged?.();
+      })
+      .catch((error: unknown) => {
+        console.warn("[auth] Provider refresh after settings change failed:", error);
+      });
   });
 
   // 2b. Restore auth (bounded to avoid indefinite startup hang).
@@ -534,6 +550,48 @@ export async function initTaskpane(opts: {
   const getActiveQueueDisplay = () => getActiveRuntime()?.queueDisplay ?? null;
   const getActiveActionQueue = () => getActiveRuntime()?.actionQueue ?? null;
   const getActiveLockState = () => getActiveRuntime()?.lockState ?? "idle";
+
+  const areRuntimeModelsEquivalent = (
+    left: Agent["state"]["model"],
+    right: Agent["state"]["model"],
+  ): boolean => (
+    left.api === right.api &&
+    left.id === right.id &&
+    left.provider === right.provider &&
+    left.baseUrl === right.baseUrl &&
+    left.contextWindow === right.contextWindow &&
+    left.maxTokens === right.maxTokens
+  );
+
+  const refreshRuntimeModelsFromCustomProviders = (): void => {
+    const activeRuntimeId = getActiveRuntime()?.runtimeId ?? null;
+    let activeRuntimeChanged = false;
+    let anyRuntimeChanged = false;
+
+    for (const runtime of runtimeManager.listRuntimes()) {
+      const currentModel = runtime.agent.state.model;
+      const refreshedModel = resolveCustomProviderModel(configuredCustomProviders, currentModel);
+      if (!refreshedModel || areRuntimeModelsEquivalent(currentModel, refreshedModel)) {
+        continue;
+      }
+
+      runtime.agent.setModel(refreshedModel);
+      anyRuntimeChanged = true;
+      if (runtime.runtimeId === activeRuntimeId) {
+        activeRuntimeChanged = true;
+      }
+    }
+
+    if (!anyRuntimeChanged) {
+      return;
+    }
+
+    document.dispatchEvent(new CustomEvent("pi:status-update"));
+    if (activeRuntimeChanged) {
+      requestAnimationFrame(() => sidebar.requestUpdate());
+    }
+  };
+  onProvidersChanged = refreshRuntimeModelsFromCustomProviders;
 
   const workbookRecoveryLog = getWorkbookRecoveryLog();
   const manualFullBackupStore = getManualFullWorkbookBackupStore();
@@ -980,6 +1038,7 @@ export async function initTaskpane(opts: {
       agent,
       sessions,
       settings,
+      customProvidersStore: customProviders,
       initialSessionId: runtimeSessionId,
       autoRestoreLatest: optsForRuntime.autoRestoreLatest,
     });

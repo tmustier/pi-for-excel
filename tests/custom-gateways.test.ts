@@ -4,9 +4,11 @@ import { test } from "node:test";
 import type { CustomProvider } from "@mariozechner/pi-web-ui/dist/storage/stores/custom-providers-store.js";
 
 import {
+  DEFAULT_OPENAI_GATEWAY_CONTEXT_WINDOW,
   collectCustomProviderRuntimeInfo,
   deleteOpenAiGatewayConfig,
   listOpenAiGatewayConfigs,
+  resolveCustomProviderModel,
   saveOpenAiGatewayConfig,
   type CustomProvidersStoreLike,
 } from "../src/auth/custom-gateways.ts";
@@ -47,10 +49,41 @@ void test("saveOpenAiGatewayConfig stores normalized endpoint/model/provider", a
   assert.equal(saved.modelId, "gpt-4o-mini");
   assert.equal(saved.apiKey, "sk-test");
   assert.match(saved.providerName, /^Gateway · gateway\.example\.com/);
+  assert.equal(saved.contextWindow, DEFAULT_OPENAI_GATEWAY_CONTEXT_WINDOW);
 
   const listed = await listOpenAiGatewayConfigs(store);
   assert.equal(listed.length, 1);
   assert.equal(listed[0]?.providerName, saved.providerName);
+  assert.equal(listed[0]?.contextWindow, DEFAULT_OPENAI_GATEWAY_CONTEXT_WINDOW);
+});
+
+void test("saveOpenAiGatewayConfig stores custom context window metadata", async () => {
+  const store = new MemoryCustomProvidersStore();
+
+  const saved = await saveOpenAiGatewayConfig(store, {
+    displayName: "Big context",
+    endpointUrl: "https://gateway.example.com/v1",
+    modelId: "big-model",
+    contextWindow: 131_072,
+  });
+
+  assert.equal(saved.contextWindow, 131_072);
+
+  const listed = await listOpenAiGatewayConfigs(store);
+  assert.equal(listed[0]?.contextWindow, 131_072);
+});
+
+void test("saveOpenAiGatewayConfig rejects invalid context window values", async () => {
+  const store = new MemoryCustomProvidersStore();
+
+  await assert.rejects(
+    saveOpenAiGatewayConfig(store, {
+      endpointUrl: "https://gateway.example.com/v1",
+      modelId: "too-small",
+      contextWindow: 512,
+    }),
+    /at least 1024/i,
+  );
 });
 
 void test("gateway provider names stay unique when display names collide", async () => {
@@ -70,6 +103,36 @@ void test("gateway provider names stay unique when display names collide", async
 
   assert.notEqual(first.providerName, second.providerName);
   assert.match(second.providerName, /\(2\)$/);
+});
+
+void test("resolveCustomProviderModel refreshes renamed gateway models by base URL and model id", async () => {
+  const store = new MemoryCustomProvidersStore();
+
+  const firstSave = await saveOpenAiGatewayConfig(store, {
+    displayName: "Warehouse API",
+    endpointUrl: "https://warehouse.example.com/v1",
+    modelId: "supply-chain",
+    contextWindow: 16_384,
+  });
+
+  const persistedModel = (await store.get(firstSave.id))?.models?.[0];
+  assert.ok(persistedModel);
+  if (!persistedModel) {
+    throw new Error("Persisted model missing");
+  }
+
+  await saveOpenAiGatewayConfig(store, {
+    id: firstSave.id,
+    displayName: "Warehouse API EU",
+    endpointUrl: "https://warehouse.example.com/v1",
+    modelId: "supply-chain",
+    contextWindow: 262_144,
+  });
+
+  const refreshed = resolveCustomProviderModel(await store.getAll(), persistedModel);
+  assert.ok(refreshed);
+  assert.equal(refreshed?.contextWindow, 262_144);
+  assert.match(refreshed?.provider ?? "", /^Gateway · Warehouse API EU/);
 });
 
 void test("deleteOpenAiGatewayConfig only removes managed gateway entries", async () => {
