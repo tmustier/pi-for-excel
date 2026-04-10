@@ -60,10 +60,10 @@
   },
   "overrides": {
     "tmp": "0.2.5",
-    "axios": "1.13.5",
+    "axios": "1.15.0",
     "minimatch": "10.2.4",
     "rollup": "4.59.0",
-    "basic-ftp": "5.2.0",
+    "basic-ftp": "5.2.2",
     "underscore": "1.13.8",
     "tar": "7.5.11",
     "fast-xml-parser": "5.5.10"
