@@ -1910,7 +1910,7 @@
         <code>createAllTools()</code> → <code>applyExperimentalToolGates()</code> → <code>createToolsForIntegrations()</code> → <code>extensionManager.getRegisteredTools()</code> → <code>normalizeRuntimeTools()</code> → <code>withWorkbookCoordinator()</code> → <code>withConnectionPreflight()</code> → <code>applyToolOutputTruncation()</code>
       </div>
       <ul class="ilist" style="margin-top:8px">
-        <li>Fingerprint comparison (FNV-1a hash of tool schemas) decides whether to call <code>agent.setTools()</code></li>
+        <li>Fingerprint comparison (FNV-1a hash of tool schemas) decides whether to assign <code>agent.state.tools = ...</code></li>
         <li>Extension tool revision counter (monotonic) also triggers refresh when extensions add/remove tools</li>
         <li>Static tool ordering preserved for prompt cache stability</li>
       </ul>
@@ -2498,7 +2498,7 @@
     </div>
     <div class="invariant-body">
       <span class="invariant-name">Runtime tool fingerprinting</span>
-      <span class="invariant-desc">Refresh passes rebuild tool objects but only call <code>agent.setTools()</code> when the metadata fingerprint actually differs. Schema-stable handler swaps are silent no-ops. <code style="font-size:11px;opacity:.6">src/taskpane/runtime-utils.ts</code></span>
+      <span class="invariant-desc">Refresh passes rebuild tool objects but only assign <code>agent.state.tools = ...</code> when the metadata fingerprint actually differs. Schema-stable handler swaps are silent no-ops. <code style="font-size:11px;opacity:.6">src/taskpane/runtime-utils.ts</code></span>
     </div>
   </div>
 </div>

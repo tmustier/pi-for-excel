@@ -575,7 +575,7 @@ export async function initTaskpane(opts: {
         continue;
       }
 
-      runtime.agent.setModel(refreshedModel);
+      runtime.agent.state.model = refreshedModel;
       anyRuntimeChanged = true;
       if (runtime.runtimeId === activeRuntimeId) {
         activeRuntimeChanged = true;
@@ -993,13 +993,13 @@ export async function initTaskpane(opts: {
           nextExtensionToolRevision,
         })
       ) {
-        agent.setTools(next.tools);
+        agent.state.tools = next.tools;
         currentRuntimeToolsFingerprint = nextToolsFingerprint;
         currentExtensionToolRevision = nextExtensionToolRevision;
       }
 
       if (next.systemPrompt !== currentRuntimeSystemPrompt) {
-        agent.setSystemPrompt(next.systemPrompt);
+        agent.state.systemPrompt = next.systemPrompt;
         currentRuntimeSystemPrompt = next.systemPrompt;
       }
     };
@@ -1071,10 +1071,11 @@ export async function initTaskpane(opts: {
 
       if (!isActiveRuntime) return;
 
-      if (agent.state.error) {
-        const isAbort = wasUserAbort || /abort/i.test(agent.state.error) || /cancel/i.test(agent.state.error);
+      const errorMessage = agent.state.errorMessage;
+      if (errorMessage) {
+        const isAbort = wasUserAbort || /abort/i.test(errorMessage) || /cancel/i.test(errorMessage);
         if (!isAbort) {
-          const err = agent.state.error;
+          const err = errorMessage;
           if (isLikelyCorsErrorMessage(err)) {
             showErrorBanner(
               errorRoot,
@@ -1440,9 +1441,9 @@ export async function initTaskpane(opts: {
       autoRestoreLatest: false,
     });
 
-    clonedRuntime.agent.replaceMessages(args.sourceRuntime.agent.state.messages);
-    clonedRuntime.agent.setModel(args.targetModel);
-    clonedRuntime.agent.setThinkingLevel(args.sourceRuntime.agent.state.thinkingLevel);
+    clonedRuntime.agent.state.messages = args.sourceRuntime.agent.state.messages;
+    clonedRuntime.agent.state.model = args.targetModel;
+    clonedRuntime.agent.state.thinkingLevel = args.sourceRuntime.agent.state.thinkingLevel;
 
     await clonedRuntime.persistence.renameSession(args.targetTitle);
     clonedRuntime.queueDisplay.clear();
@@ -1618,7 +1619,7 @@ export async function initTaskpane(opts: {
     const behavior = getModelSwitchBehavior();
 
     if (!shouldForkModelSwitch({ behavior, hasMessages })) {
-      runtime.agent.setModel(nextModel);
+      runtime.agent.state.model = nextModel;
       document.dispatchEvent(new CustomEvent("pi:model-changed"));
       document.dispatchEvent(new CustomEvent("pi:status-update"));
       requestAnimationFrame(() => sidebar.requestUpdate());
@@ -1990,7 +1991,7 @@ export async function initTaskpane(opts: {
       activeLevel: activeAgent.state.thinkingLevel,
       onSelectLevel: (level) => {
         if (activeAgent.state.thinkingLevel === level) return;
-        activeAgent.setThinkingLevel(level);
+        activeAgent.state.thinkingLevel = level;
         document.dispatchEvent(new CustomEvent("pi:status-update"));
       },
     });

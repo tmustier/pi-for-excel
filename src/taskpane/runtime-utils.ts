@@ -48,7 +48,7 @@ export function createRuntimeToolFingerprint(tools: readonly AgentTool[]): strin
 }
 
 /**
- * Decide whether a runtime refresh pass should call `agent.setTools(...)`.
+ * Decide whether a runtime refresh pass should assign `agent.state.tools = ...`.
  *
  * We update tools when either metadata changed (fingerprint delta) or when
  * extension-owned tool behavior changed without metadata deltas (revision delta).

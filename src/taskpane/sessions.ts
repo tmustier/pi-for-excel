@@ -322,16 +322,16 @@ export async function setupSessionPersistence(opts: {
     firstAssistantSeen = hasAssistantMessage(sessionData.messages);
 
     agent.sessionId = sessionId;
-    agent.replaceMessages(sessionData.messages);
+    agent.state.messages = sessionData.messages;
 
     if (sessionData.model) {
-      agent.setModel(await refreshPersistedModel({
+      agent.state.model = await refreshPersistedModel({
         persisted: sessionData.model,
         customProvidersStore: opts.customProvidersStore,
-      }));
+      });
     }
     if (sessionData.thinkingLevel) {
-      agent.setThinkingLevel(sessionData.thinkingLevel);
+      agent.state.thinkingLevel = sessionData.thinkingLevel;
     }
 
     await updateWorkbookAssociation(sessionId);

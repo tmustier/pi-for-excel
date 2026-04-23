@@ -269,7 +269,7 @@ export function buildRuntimeManagerActivationBridge(
 
   const injectAgentContext = (content: string): void => {
     const agent = getRequiredActiveAgent();
-    agent.appendMessage(buildExtensionMessage("agent.injectContext content", content));
+    agent.state.messages.push(buildExtensionMessage("agent.injectContext content", content));
   };
 
   const steerAgent = (content: string): void => {

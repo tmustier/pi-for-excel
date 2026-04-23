@@ -117,5 +117,5 @@ export function pickDefaultModel(
   }
 
   // Absolute fallback: keep this resilient across pi-ai version bumps
-  return getModel("anthropic", "claude-opus-4-6");
+  return getModel("anthropic", "claude-opus-4-7");
 }

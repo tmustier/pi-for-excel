@@ -222,7 +222,7 @@ void test("createExtensionAPI denies llm.complete when capability is blocked", a
     },
     llmComplete: () => Promise.resolve({
       content: "ok",
-      model: "anthropic/claude-opus-4-6",
+      model: "anthropic/claude-opus-4-7",
     }),
     isCapabilityEnabled: createCapabilityGate(new Set<ExtensionCapability>([
       "commands.register",

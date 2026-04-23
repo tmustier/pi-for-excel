@@ -662,7 +662,7 @@ export function createCompactCommands(getActiveAgent: ActiveAgentProvider): Slas
             timestamp: now,
           });
 
-          agent.replaceMessages([archived, compacted, ...out.keptMessages]);
+          agent.state.messages = [archived, compacted, ...out.keptMessages];
 
           const iface = document.querySelector<PiSidebar>("pi-sidebar");
           iface?.requestUpdate();

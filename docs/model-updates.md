@@ -1,8 +1,8 @@
 # Model / dependency update playbook
 
-**Last verified:** 2026-04-07
+**Last verified:** 2026-04-23
 
-This repo hardcodes a small set of "featured" and "preferred" model IDs (for sorting + default selection). Those IDs come from Pi’s model registry (`@mariozechner/pi-ai`) and will drift as new models ship (e.g. `gpt-5.4`, `gpt-5.3-codex`, `claude-opus-4-6`).
+This repo hardcodes a small set of "featured" and "preferred" model IDs (for sorting + default selection). Those IDs come from Pi’s model registry (`@mariozechner/pi-ai`) and will drift as new models ship (e.g. `gpt-5.4`, `gpt-5.3-codex`, `claude-opus-4-7`, `gemini-3.1-pro-preview`).
 
 This doc describes how to update:
 - the **Pi dependency versions** we ship (`@mariozechner/pi-ai`, `@mariozechner/pi-web-ui`, `@mariozechner/pi-agent-core`)
@@ -34,9 +34,9 @@ This doc describes how to update:
 ### 1) Check current installed versions
 
 ```bash
-node -p "require('./node_modules/@mariozechner/pi-ai/package.json').version"
-node -p "require('./node_modules/@mariozechner/pi-web-ui/package.json').version"
-node -p "require('./node_modules/@mariozechner/pi-agent-core/package.json').version"
+node -p "require('@mariozechner/pi-ai/package.json').version"
+node -p "require('@mariozechner/pi-web-ui/package.json').version"
+node -p "require('@mariozechner/pi-agent-core/package.json').version"
 ```
 
 ### 2) Check latest published versions
@@ -67,7 +67,8 @@ Search the local registry:
 ```bash
 rg -n "gpt-5\\.4"       node_modules/@mariozechner/pi-ai/dist/models.generated.js -S
 rg -n "gpt-5\\.3-codex" node_modules/@mariozechner/pi-ai/dist/models.generated.js -S
-rg -n "claude-opus-4-6"  node_modules/@mariozechner/pi-ai/dist/models.generated.js -S
+rg -n "claude-opus-4-7"  node_modules/@mariozechner/pi-ai/dist/models.generated.js -S
+rg -n "gemini-3\\.1-pro-preview" node_modules/@mariozechner/pi-ai/dist/models.generated.js -S
 ```
 
 If an ID doesn’t appear there, **don’t** add it to the add-in yet—either:
@@ -92,18 +93,19 @@ We intentionally avoid pinning exact versioned IDs now. Instead we:
 
   Featured rules (current desired behavior):
   - **Anthropic:** latest **Sonnet** *if* its version >= latest **Opus**, then latest **Opus**
-    - Version compare uses `parseMajorMinor()` where `claude-opus-4-5` → `45`, `claude-opus-4-6` → `46`.
+    - Version compare uses `parseMajorMinor()` where `claude-opus-4-6` → `46`, `claude-opus-4-7` → `47`.
     - Important: IDs like `claude-opus-4-20250514` are treated as **major only** (`40`) and the `YYYYMMDD` part is considered a separate date suffix by `modelRecencyScore()`.
   - **OpenAI (`openai` + `openai-codex`):** latest general `gpt-5.x` *if* its version >= latest `gpt-5.x-codex`, then latest Codex
     - `gpt-5.4` scores as `54`; `gpt-5.3-codex` scores as `53`.
-    - Plain `gpt-5.x` beats same-version suffixed variants (`gpt-5.4` before `gpt-5.4-pro`).
+    - Major-only GPT-5 IDs are also handled (`gpt-5`, `gpt-5-pro`, `gpt-5-codex`).
+    - Plain `gpt-5.x` / `gpt-5` beats same-version suffixed variants (`gpt-5.4` before `gpt-5.4-pro`, `gpt-5` before `gpt-5-pro`).
   - **Google (API key):** latest `gemini-*-pro*` (regex: `/^gemini-.*-pro/i`)
   - **Google OAuth providers (`google-gemini-cli`, `google-antigravity`):** prefer stable Gemini before previews
 
   The ordering logic is driven by:
   - `providerPriority()` (Anthropic → OpenAI Codex → OpenAI → Google → …)
   - `familyPriority()` / `openAiFamilyPriority()` (Opus/Sonnet/Haiku, GPT vs Codex, etc.)
-  - `parseMajorMinor()` + `modelRecencyScore()` (treats `4-6` as `46`, `5.4` as `54`, and keeps `YYYYMMDD` as a separate date suffix)
+  - `parseMajorMinor()` + `modelRecencyScore()` (treats `4-6` as `46`, `5.4` as `54`, keeps `YYYYMMDD` as a separate date suffix, and ignores later date-like suffixes such as `gpt-4o-2024-11-20` or `gemini-2.5-pro-preview-06-05` when extracting the family version)
   - `compareModels()` (provider + family + recency tie-breaks; deterministic sorting)
 
   UI: the model picker is opened from the footer status bar (click the π model button).

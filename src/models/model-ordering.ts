@@ -20,9 +20,16 @@ export function providerPriority(provider: string): number {
   return PROVIDER_ORDER[provider] ?? 999;
 }
 
-const OPENAI_CODEX_RE = /^gpt-5\.(\d+)-codex(?:-|$)/;
-const OPENAI_PLAIN_GPT_RE = /^gpt-5\.(\d+)$/;
-const OPENAI_GPT_RE = /^gpt-5\./;
+const OPENAI_CODEX_RE = /^gpt-5(?:\.(\d+))?-codex(?:-|$)/;
+const OPENAI_PLAIN_GPT_RE = /^gpt-5(?:\.(\d+))?$/;
+const OPENAI_GPT_RE = /^gpt-5(?:[.-]|$)/;
+
+const CLAUDE_HYPHEN_VERSION_RE = /^claude(?:-[a-z]+)*-(\d+)-(\d{1,2})(?:-|$)/i;
+const CLAUDE_MAJOR_RE = /^claude(?:-[a-z]+)*-(\d+)(?:-|$)/i;
+const GPT_DOT_VERSION_RE = /^gpt-(\d+)\.(\d{1,2})(?:-|$)/i;
+const GPT_MAJOR_RE = /^gpt-(\d+)(?:[a-z]+)?(?:-|$)/i;
+const GEMINI_DOT_VERSION_RE = /^gemini(?:-[a-z]+)*-(\d+)\.(\d{1,2})(?:-|$)/i;
+const GEMINI_MAJOR_RE = /^gemini(?:-[a-z]+)*-(\d+)(?:-|$)/i;
 
 export function isOpenAiCodexModelId(id: string): boolean {
   return OPENAI_CODEX_RE.test(id);
@@ -68,14 +75,14 @@ export function familyPriority(provider: string, id: string): number {
 
 export function parseMajorMinor(id: string): number {
   // Extract a comparable major/minor number from common model ID formats.
-  // Important: don't misinterpret 8-digit date suffixes (e.g. 20250514) as "minor".
+  // Important: only parse the leading version segment, not later date-like suffixes.
   // Examples:
-  // - claude-opus-4-5           -> 45
-  // - claude-opus-4-6           -> 46
-  // - claude-opus-4-20250514    -> 40 (major only; date handled separately)
-  // - gpt-5.3-codex             -> 53
-  // - gemini-2.5-pro            -> 25
-  // - gemini-3-pro-preview      -> 30
+  // - claude-opus-4-6                 -> 46
+  // - claude-opus-4-20250514          -> 40 (major only; date handled separately)
+  // - gpt-5.4                         -> 54
+  // - gpt-4o-2024-11-20               -> 40 (not 202411)
+  // - gemini-2.5-pro-preview-06-05    -> 25 (not 65)
+  // - gemini-3-pro-preview            -> 30
 
   const pack = (major: number, minor: number | null): number => {
     if (minor === null) return major * 10;
@@ -85,22 +92,34 @@ export function parseMajorMinor(id: string): number {
     return major * 100 + minor;
   };
 
-  // Claude-style: -4-6 (but NOT -4-20250514)
-  const hyphenVer = id.match(/-(\d+)-(\d{1,2})(?:-|$)/);
-  if (hyphenVer) {
-    return pack(parseInt(hyphenVer[1], 10), parseInt(hyphenVer[2], 10));
+  const claudeHyphenVer = id.match(CLAUDE_HYPHEN_VERSION_RE);
+  if (claudeHyphenVer) {
+    return pack(parseInt(claudeHyphenVer[1], 10), parseInt(claudeHyphenVer[2], 10));
   }
 
-  // OpenAI/Gemini-style: 5.3 / 2.5
-  const dotVer = id.match(/(\d+)\.(\d{1,2})/);
-  if (dotVer) {
-    return pack(parseInt(dotVer[1], 10), parseInt(dotVer[2], 10));
+  const gptDotVer = id.match(GPT_DOT_VERSION_RE);
+  if (gptDotVer) {
+    return pack(parseInt(gptDotVer[1], 10), parseInt(gptDotVer[2], 10));
   }
 
-  // Fallback: first major number after hyphen
-  const majorMatch = id.match(/-(\d+)(?:-|$)/);
-  if (majorMatch) {
-    return pack(parseInt(majorMatch[1], 10), null);
+  const geminiDotVer = id.match(GEMINI_DOT_VERSION_RE);
+  if (geminiDotVer) {
+    return pack(parseInt(geminiDotVer[1], 10), parseInt(geminiDotVer[2], 10));
+  }
+
+  const claudeMajor = id.match(CLAUDE_MAJOR_RE);
+  if (claudeMajor) {
+    return pack(parseInt(claudeMajor[1], 10), null);
+  }
+
+  const gptMajor = id.match(GPT_MAJOR_RE);
+  if (gptMajor) {
+    return pack(parseInt(gptMajor[1], 10), null);
+  }
+
+  const geminiMajor = id.match(GEMINI_MAJOR_RE);
+  if (geminiMajor) {
+    return pack(parseInt(geminiMajor[1], 10), null);
   }
 
   return 0;

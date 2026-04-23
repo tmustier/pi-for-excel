@@ -187,7 +187,7 @@ export function cycleThinkingLevel(agent: Agent): ThinkingLevel {
   const idx = levels.indexOf(current);
   const next = levels[(idx >= 0 ? idx + 1 : 0) % levels.length];
 
-  agent.setThinkingLevel(next);
+  agent.state.thinkingLevel = next;
   updateStatusBarForAgent(agent);
   flashThinkingLevel(next, THINKING_COLORS[next] || "#a0a0a0");
 

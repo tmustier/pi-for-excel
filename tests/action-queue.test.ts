@@ -120,9 +120,9 @@ void test("queued prompt survives compact replaceMessages and runs after compact
         await compactGate.promise;
 
         // Simulate compaction replacing message history while a prompt is queued.
-        agent.replaceMessages([
+        agent.state.messages = [
           createUserMessage("compaction summary", Date.now()),
-        ]);
+        ];
 
         executionOrder.push("compact:end");
         compactFinished.resolve();

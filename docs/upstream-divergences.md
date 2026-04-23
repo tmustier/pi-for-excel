@@ -50,8 +50,8 @@ a different lifecycle. Pi-mono's tool set only changes when the user explicitly
 does something (e.g. `/tools`). In Excel, capability refresh passes run on many
 events (focus/visibility return, integrations/connections/skills/rules/execution-mode/experimental updates, extension activation).
 
-Each refresh rebuilds tool objects. Without a guard, every pass would call
-`agent.setTools(...)` even when schema metadata is identical.
+Each refresh rebuilds tool objects. Without a guard, every pass would assign
+`agent.state.tools = ...` even when schema metadata is identical.
 
 We therefore gate tool updates by:
 - stable metadata fingerprint (`name`, `label`, `description`, `parameters`)
