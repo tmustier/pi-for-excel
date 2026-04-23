@@ -753,6 +753,17 @@ export async function initTaskpane(opts: {
     getActiveAgent,
     refreshRuntimeTools: refreshCapabilitiesForAllRuntimes,
     reservedToolNames,
+    afterInjectAgentContext: async () => {
+      const activeRuntime = getActiveRuntime();
+      if (!activeRuntime) {
+        return;
+      }
+
+      sidebar.syncFromAgent();
+      sidebar.requestUpdate();
+      document.dispatchEvent(new CustomEvent("pi:status-update"));
+      await activeRuntime.persistence.saveSession({ force: true });
+    },
   });
 
   connectionManager.subscribe(() => {

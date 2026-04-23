@@ -132,6 +132,16 @@ void test("modelRecencyScore prefers higher version, then later date suffix", ()
     "expected 20250201 > 20250101 for same major",
   );
 
+  assert.ok(
+    modelRecencyScore("gpt-4o-2024-11-20") > modelRecencyScore("gpt-4o-2024-05-13"),
+    "expected 2024-11-20 > 2024-05-13 for dated GPT snapshots",
+  );
+
+  assert.ok(
+    modelRecencyScore("gemini-2.5-flash-preview-05-20") > modelRecencyScore("gemini-2.5-flash-preview-04-17"),
+    "expected 05-20 > 04-17 for dated Gemini previews",
+  );
+
   // Version beats date.
   assert.ok(
     modelRecencyScore("claude-opus-4-6") > modelRecencyScore("claude-opus-4-20250201"),

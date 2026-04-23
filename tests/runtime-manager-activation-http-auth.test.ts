@@ -45,6 +45,8 @@ function buildBridge(args: {
   entry: StoredExtensionEntry;
   settings: MemorySettingsStore;
   connectionManager: ConnectionManager;
+  getRequiredActiveAgent?: () => Agent;
+  afterInjectAgentContext?: () => Promise<void> | void;
   runExtensionHttpFetch: (url: string, options?: {
     method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "HEAD";
     headers?: Record<string, string>;
@@ -58,15 +60,16 @@ function buildBridge(args: {
     body: string;
   }>;
 }) {
-  const getRequiredActiveAgent = (): Agent => {
+  const getRequiredActiveAgent = args.getRequiredActiveAgent ?? (() => {
     throw new Error("agent access should not be used in this test");
-  };
+  });
 
   return buildRuntimeManagerActivationBridge({
     entry: args.entry,
     settings: args.settings,
     connectionManager: args.connectionManager,
     getRequiredActiveAgent,
+    afterInjectAgentContext: args.afterInjectAgentContext,
     runExtensionLlmCompletion: () => Promise.resolve({
       content: "",
       model: "test/model",
@@ -80,6 +83,53 @@ function buildBridge(args: {
     widgetApiV2Enabled: false,
   });
 }
+
+void test("injectContext appends a message and triggers host sync hook", async () => {
+  const settings = new MemorySettingsStore();
+  const entry = createEntry("ext.inject");
+  const connectionManager = new ConnectionManager({ settings });
+  const messages: Agent["state"]["messages"] = [];
+  let syncCalls = 0;
+
+  const agent = {
+    state: { messages },
+    steer: () => {},
+    followUp: () => {},
+  } as unknown as Agent;
+
+  const bridge = buildBridge({
+    entry,
+    settings,
+    connectionManager,
+    getRequiredActiveAgent: () => agent,
+    afterInjectAgentContext: () => {
+      syncCalls += 1;
+    },
+    runExtensionHttpFetch: () => Promise.resolve({
+      status: 200,
+      statusText: "OK",
+      headers: {},
+      body: "ok",
+    }),
+  });
+
+  bridge.host.injectAgentContext?.("context please");
+  await Promise.resolve();
+
+  assert.equal(syncCalls, 1);
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0]?.role, "user");
+
+  const firstContent = messages[0]?.content[0];
+  assert.ok(firstContent && firstContent.type === "text");
+  if (!firstContent || firstContent.type !== "text") {
+    assert.fail("expected extension context injection to append a text message");
+  }
+
+  const injectedMessageJson = JSON.stringify(messages[0]);
+  assert.match(injectedMessageJson, /\[Extension Acme Extension\]/);
+  assert.match(injectedMessageJson, /context please/);
+});
 
 void test("connection-aware http fetch injects auth header for allowed hosts", async () => {
   const settings = new MemorySettingsStore();

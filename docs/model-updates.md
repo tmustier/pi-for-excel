@@ -34,9 +34,9 @@ This doc describes how to update:
 ### 1) Check current installed versions
 
 ```bash
-node -p "require('@mariozechner/pi-ai/package.json').version"
-node -p "require('@mariozechner/pi-web-ui/package.json').version"
-node -p "require('@mariozechner/pi-agent-core/package.json').version"
+node -p "require('./node_modules/@mariozechner/pi-ai/package.json').version"
+node -p "require('./node_modules/@mariozechner/pi-web-ui/package.json').version"
+node -p "require('./node_modules/@mariozechner/pi-agent-core/package.json').version"
 ```
 
 ### 2) Check latest published versions

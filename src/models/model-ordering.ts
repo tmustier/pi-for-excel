@@ -125,13 +125,37 @@ export function parseMajorMinor(id: string): number {
   return 0;
 }
 
+function parseDateSuffixScore(id: string): number {
+  const compactDateMatch = id.match(/(\d{8})$/);
+  if (compactDateMatch) {
+    return parseInt(compactDateMatch[1], 10);
+  }
+
+  const yearMonthDayMatch = id.match(/(\d{4})-(\d{2})-(\d{2})$/);
+  if (yearMonthDayMatch) {
+    return parseInt(
+      `${yearMonthDayMatch[1]}${yearMonthDayMatch[2]}${yearMonthDayMatch[3]}`,
+      10,
+    );
+  }
+
+  const monthYearMatch = id.match(/(\d{2})-(\d{4})$/);
+  if (monthYearMatch) {
+    return parseInt(`${monthYearMatch[2]}${monthYearMatch[1]}00`, 10);
+  }
+
+  const monthDayMatch = id.match(/(\d{2})-(\d{2})$/);
+  if (monthDayMatch) {
+    return parseInt(`${monthDayMatch[1]}${monthDayMatch[2]}`, 10);
+  }
+
+  return 0;
+}
+
 export function modelRecencyScore(id: string): number {
   // Prefer higher major/minor first, then higher date suffix.
   const majorMinor = parseMajorMinor(id);
-
-  let date = 0;
-  const dateMatch = id.match(/(\d{8})/);
-  if (dateMatch) date = parseInt(dateMatch[1], 10);
+  const date = parseDateSuffixScore(id);
 
   // date is at most 8 digits → multiplier must exceed that range
   return majorMinor * 100_000_000 + date;

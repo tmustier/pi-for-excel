@@ -230,6 +230,7 @@ export interface BuildRuntimeManagerActivationBridgeOptions {
   settings: ExtensionSettingsStore;
   connectionManager: ConnectionManager;
   getRequiredActiveAgent: () => Agent;
+  afterInjectAgentContext?: () => Promise<void> | void;
   runExtensionLlmCompletion: (request: LlmCompletionRequest) => Promise<LlmCompletionResult>;
   runExtensionHttpFetch: (url: string, options?: HttpRequestOptions) => Promise<HttpResponse>;
   writeExtensionClipboard: (text: string) => Promise<void>;
@@ -248,6 +249,7 @@ export function buildRuntimeManagerActivationBridge(
     settings,
     connectionManager,
     getRequiredActiveAgent,
+    afterInjectAgentContext,
     runExtensionLlmCompletion,
     runExtensionHttpFetch,
     writeExtensionClipboard,
@@ -270,6 +272,9 @@ export function buildRuntimeManagerActivationBridge(
   const injectAgentContext = (content: string): void => {
     const agent = getRequiredActiveAgent();
     agent.state.messages.push(buildExtensionMessage("agent.injectContext content", content));
+    void Promise.resolve(afterInjectAgentContext?.()).catch((error: unknown) => {
+      console.warn("[pi] Failed to sync extension-injected context:", error);
+    });
   };
 
   const steerAgent = (content: string): void => {

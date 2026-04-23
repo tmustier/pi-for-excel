@@ -141,6 +141,7 @@ export interface ExtensionRuntimeManagerOptions {
   getActiveAgent: () => Agent | null;
   refreshRuntimeTools: () => Promise<void>;
   reservedToolNames: ReadonlySet<string>;
+  afterInjectAgentContext?: () => Promise<void> | void;
   loadExtensionFromSource?: typeof loadExtension;
   activateInSandbox?: typeof activateExtensionInSandbox;
   showToastMessage?: typeof showToast;
@@ -152,6 +153,7 @@ export class ExtensionRuntimeManager {
   private readonly getActiveAgent: () => Agent | null;
   private readonly refreshRuntimeTools: () => Promise<void>;
   private readonly reservedToolNames: ReadonlySet<string>;
+  private readonly afterInjectAgentContext?: () => Promise<void> | void;
   private readonly loadExtensionFromSource: typeof loadExtension;
   private readonly activateInSandbox: typeof activateExtensionInSandbox;
   private readonly showToastMessage: typeof showToast;
@@ -173,6 +175,7 @@ export class ExtensionRuntimeManager {
     this.getActiveAgent = options.getActiveAgent;
     this.refreshRuntimeTools = options.refreshRuntimeTools;
     this.reservedToolNames = options.reservedToolNames;
+    this.afterInjectAgentContext = options.afterInjectAgentContext;
     this.loadExtensionFromSource = options.loadExtensionFromSource ?? loadExtension;
     this.activateInSandbox = options.activateInSandbox ?? activateExtensionInSandbox;
     this.showToastMessage = options.showToastMessage ?? showToast;
@@ -761,6 +764,7 @@ export class ExtensionRuntimeManager {
       settings: this.settings,
       connectionManager: this.connectionManager,
       getRequiredActiveAgent: () => this.getRequiredActiveAgent(),
+      afterInjectAgentContext: this.afterInjectAgentContext,
       runExtensionLlmCompletion: (request) => this.runExtensionLlmCompletion(entry, request),
       runExtensionHttpFetch: (url, options) => this.runExtensionHttpFetch(url, options),
       writeExtensionClipboard: (text) => this.writeExtensionClipboard(text),
