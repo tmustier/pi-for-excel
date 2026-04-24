@@ -78,7 +78,12 @@ function looksLikeOAuthOrTokenEndpoint(url: string): boolean {
     const u = new URL(url);
 
     // Anthropic OAuth token exchange / refresh
-    if (u.hostname === "console.anthropic.com" && u.pathname.startsWith("/v1/oauth/token")) return true;
+    if (
+      (u.hostname === "console.anthropic.com" || u.hostname === "platform.claude.com") &&
+      u.pathname.startsWith("/v1/oauth/token")
+    ) {
+      return true;
+    }
 
     // GitHub device flow + token exchange (supports enterprise domains too)
     if (u.pathname === "/login/device/code") return true;

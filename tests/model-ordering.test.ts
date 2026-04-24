@@ -315,6 +315,18 @@ void test("process-env shim adds process.env for browser-like runtimes", () => {
   assert.ok(envValue && typeof envValue === "object" && !Array.isArray(envValue));
 });
 
+void test("dev rewrite routes OAuth hosts to dedicated proxies", () => {
+  assert.equal(
+    rewriteDevProxyUrl("https://platform.claude.com/v1/oauth/token"),
+    "/oauth-proxy/anthropic-platform/v1/oauth/token",
+  );
+
+  assert.equal(
+    rewriteDevProxyUrl("https://console.anthropic.com/v1/oauth/token"),
+    "/oauth-proxy/anthropic/v1/oauth/token",
+  );
+});
+
 void test("dev rewrite routes cloudcode hosts to dedicated proxies", () => {
   assert.equal(
     rewriteDevProxyUrl("https://cloudcode-pa.googleapis.com/v1internal:streamGenerateContent?alt=sse"),

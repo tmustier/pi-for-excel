@@ -7,6 +7,7 @@
 export const DEV_REWRITES: ReadonlyArray<readonly [prefix: string, proxy: string]> = [
   // OAuth token endpoints
   ["https://console.anthropic.com/", "/oauth-proxy/anthropic/"],
+  ["https://platform.claude.com/", "/oauth-proxy/anthropic-platform/"],
   ["https://github.com/", "/oauth-proxy/github/"],
   ["https://auth.openai.com/", "/api-proxy/openai-auth/"],
   ["https://oauth2.googleapis.com/", "/api-proxy/google-oauth/"],

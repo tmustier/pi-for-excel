@@ -100,6 +100,7 @@ function envFlag(name) {
 const DEFAULT_ALLOWED_TARGET_HOSTS = new Set([
   "api.anthropic.com",
   "console.anthropic.com",
+  "platform.claude.com",
   "github.com",
   "api.github.com",
   "auth.openai.com",

@@ -156,7 +156,7 @@ test("proxy blocks non-allowlisted hosts by default", async (t) => {
   assert.match(text, /blocked_target_not_allowlisted/);
 });
 
-test("proxy default allowlist includes supported web search providers", async (t) => {
+test("proxy default allowlist includes supported OAuth and web search providers", async (t) => {
   const proxy = await startProxy();
   t.after(async () => {
     await proxy.stop();
@@ -180,6 +180,8 @@ test("proxy default allowlist includes supported web search providers", async (t
   );
 
   const requiredHosts = [
+    "platform.claude.com",
+    "auth.openai.com",
     "s.jina.ai",
     "api.firecrawl.dev",
     "google.serper.dev",
