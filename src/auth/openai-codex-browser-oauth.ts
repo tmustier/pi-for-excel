@@ -261,9 +261,9 @@ export async function loginOpenAICodexInBrowser(
   callbacks.onProgress?.("Exchanging code for tokens…");
   const tokens = await exchangeAuthorizationCode(parsed.code, flow.verifier);
 
-  const accountId = getAccountId(tokens.idToken ?? tokens.accessToken);
+  const accountId = getAccountId(tokens.accessToken);
   if (!accountId) {
-    throw new Error("OpenAI login failed: could not extract ChatGPT account ID");
+    throw new Error("OpenAI login failed: access token is missing ChatGPT account ID");
   }
 
   return {
@@ -283,9 +283,9 @@ export async function refreshOpenAICodexBrowserToken(
   }
 
   const tokens = await refreshAccessToken(refreshToken);
-  const accountId = getAccountId(tokens.idToken ?? tokens.accessToken);
+  const accountId = getAccountId(tokens.accessToken);
   if (!accountId) {
-    throw new Error("OpenAI refresh failed: could not extract ChatGPT account ID");
+    throw new Error("OpenAI refresh failed: access token is missing ChatGPT account ID");
   }
 
   return {

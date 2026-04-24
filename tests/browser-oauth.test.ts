@@ -128,3 +128,43 @@ void test("OpenAI Codex browser OAuth requests the current Codex connector scope
   assert.equal(body.get("grant_type"), "authorization_code");
   assert.equal(body.get("code"), "openai-code");
 });
+
+void test("OpenAI Codex browser OAuth requires account ID on the access token", async (t) => {
+  const originalFetch = globalThis.fetch;
+  const accessTokenWithoutAccount = fakeJwt({ sub: "user_without_embedded_account" });
+  const idTokenWithAccount = fakeJwt({
+    "https://api.openai.com/auth": {
+      chatgpt_account_id: "acct_id_token_only",
+    },
+  });
+
+  globalThis.fetch = (() => Promise.resolve(new Response(JSON.stringify({
+    id_token: idTokenWithAccount,
+    access_token: accessTokenWithoutAccount,
+    refresh_token: "refresh-openai",
+    expires_in: 3600,
+  }), {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+  }))) as typeof fetch;
+
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  const provider = getOAuthProvider("openai-codex");
+  assert.ok(provider);
+
+  let authUrl = "";
+  const callbacks: OAuthLoginCallbacks = {
+    onAuth: (info) => {
+      authUrl = info.url;
+    },
+    onPrompt: () => Promise.resolve(`openai-code#${new URL(authUrl).searchParams.get("state") ?? ""}`),
+  };
+
+  await assert.rejects(
+    () => provider.login(callbacks),
+    /access token is missing ChatGPT account ID/,
+  );
+});
