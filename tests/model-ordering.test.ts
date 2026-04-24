@@ -85,6 +85,9 @@ void test("parseMajorMinor falls back for non-Claude/GPT/Gemini registry familie
   assert.equal(parseMajorMinor("zai.glm-5"), 50);
   assert.equal(parseMajorMinor("zai.glm-4.7"), 47);
   assert.equal(parseMajorMinor("deepseek.v3.2"), 32);
+  assert.equal(parseMajorMinor("MiniMax-M2.7"), 27);
+  assert.equal(parseMajorMinor("moonshotai/Kimi-K2.6"), 26);
+  assert.equal(parseMajorMinor("Qwen/Qwen3.5-coder"), 35);
   assert.equal(parseMajorMinor("amazon.nova-2-lite-v1:0"), 20);
   assert.equal(parseMajorMinor("unknown-model-2024-11-20"), 0);
 });
@@ -187,6 +190,13 @@ void test("compareModels sorts generic versioned registry ids by parsed recency"
   ];
   zaiModels.sort(compareModels);
   assert.deepEqual(zaiModels.map((m) => m.id), ["zai.glm-5", "zai.glm-4.7"]);
+
+  const letterPrefixedModels = [
+    { provider: "openrouter", id: "MiniMax-M2.7" },
+    { provider: "openrouter", id: "MiniMax-M2.6" },
+  ];
+  letterPrefixedModels.sort(compareModels);
+  assert.deepEqual(letterPrefixedModels.map((m) => m.id), ["MiniMax-M2.7", "MiniMax-M2.6"]);
 });
 
 void test("compareModels sorts real namespaced registry ids by parsed recency", () => {

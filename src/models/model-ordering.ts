@@ -45,6 +45,7 @@ const GEMINI_MAJOR_RE = new RegExp(
   `${MODEL_NAME_BOUNDARY}gemini(?:-[a-z]+)*-(\\d+)${MODEL_VERSION_BOUNDARY}`,
   "i",
 );
+const LETTER_PREFIXED_DOT_VERSION_RE = /(?:^|[\/_.-])[a-z]+(\d{1,2})\.(\d{1,2})(?=$|[-/:._])/i;
 const GENERIC_VERSION_RE = /(?:^|[\w~/-][.-]|[-_/])v?(\d{1,2})(?:[.-](\d{1,2})(?:[a-z]+)?)?(?=$|[-/:._])/gi;
 
 export function isOpenAiCodexModelId(id: string): boolean {
@@ -102,6 +103,8 @@ export function parseMajorMinor(id: string): number {
   // - gemini-2.5-pro-preview-06-05            -> 25 (not 65)
   // - google/gemini-3.1-pro-preview           -> 31
   // - gemini-3-pro-preview                    -> 30
+  // - MiniMax-M2.7                            -> 27 (letter-prefixed fallback)
+  // - Qwen/Qwen3.5                            -> 35 (letter-prefixed fallback)
   // - gemma-4-31b-it                          -> 431 (generic fallback)
   // - zai.glm-5                               -> 50 (generic fallback)
 
@@ -141,6 +144,11 @@ export function parseMajorMinor(id: string): number {
   const geminiMajor = id.match(GEMINI_MAJOR_RE);
   if (geminiMajor) {
     return pack(parseInt(geminiMajor[1], 10), null);
+  }
+
+  const letterPrefixedDotVersion = id.match(LETTER_PREFIXED_DOT_VERSION_RE);
+  if (letterPrefixedDotVersion) {
+    return pack(parseInt(letterPrefixedDotVersion[1], 10), parseInt(letterPrefixedDotVersion[2], 10));
   }
 
   for (const genericVersion of id.matchAll(GENERIC_VERSION_RE)) {
