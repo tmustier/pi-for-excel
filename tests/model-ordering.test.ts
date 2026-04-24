@@ -81,7 +81,8 @@ void test("parseMajorMinor supports 2-digit minors (e.g. 5.12)", () => {
 });
 
 void test("parseMajorMinor falls back for non-Claude/GPT/Gemini registry families", () => {
-  assert.equal(parseMajorMinor("gemma-4-31b-it"), 431);
+  assert.equal(parseMajorMinor("gemma-4-31b-it"), 40);
+  assert.equal(parseMajorMinor("gemma-3-27b-it"), 30);
   assert.equal(parseMajorMinor("zai.glm-5"), 50);
   assert.equal(parseMajorMinor("zai.glm-4.7"), 47);
   assert.equal(parseMajorMinor("deepseek.v3.2"), 32);
@@ -212,6 +213,7 @@ void test("compareModels sorts real namespaced registry ids by parsed recency", 
   );
 
   const bedrockModels = [
+    { provider: "amazon-bedrock", id: "google.gemma-3-27b-it" },
     { provider: "amazon-bedrock", id: "anthropic.claude-opus-4-20250514-v1:0" },
     { provider: "amazon-bedrock", id: "anthropic.claude-opus-4-1-20250805-v1:0" },
     { provider: "amazon-bedrock", id: "anthropic.claude-opus-4-7" },
@@ -223,6 +225,7 @@ void test("compareModels sorts real namespaced registry ids by parsed recency", 
       "anthropic.claude-opus-4-7",
       "anthropic.claude-opus-4-1-20250805-v1:0",
       "anthropic.claude-opus-4-20250514-v1:0",
+      "google.gemma-3-27b-it",
     ],
   );
 });

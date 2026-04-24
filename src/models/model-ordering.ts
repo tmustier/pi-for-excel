@@ -46,7 +46,7 @@ const GEMINI_MAJOR_RE = new RegExp(
   "i",
 );
 const LETTER_PREFIXED_DOT_VERSION_RE = /(?:^|[\/_.-])[a-z]+(\d{1,2})\.(\d{1,2})(?=$|[-/:._])/i;
-const GENERIC_VERSION_RE = /(?:^|[\w~/-][.-]|[-_/])v?(\d{1,2})(?:[.-](\d{1,2})(?:[a-z]+)?)?(?=$|[-/:._])/gi;
+const GENERIC_VERSION_RE = /(?:^|[\w~/-][.-]|[-_/])v?(\d{1,2})(?:[.-](\d{1,2})([a-z]+)?)?(?=$|[-/:._])/gi;
 
 export function isOpenAiCodexModelId(id: string): boolean {
   return OPENAI_CODEX_RE.test(id);
@@ -105,7 +105,7 @@ export function parseMajorMinor(id: string): number {
   // - gemini-3-pro-preview                    -> 30
   // - MiniMax-M2.7                            -> 27 (letter-prefixed fallback)
   // - Qwen/Qwen3.5                            -> 35 (letter-prefixed fallback)
-  // - gemma-4-31b-it                          -> 431 (generic fallback)
+  // - gemma-4-31b-it                          -> 40 (generic fallback; ignores size suffix)
   // - zai.glm-5                               -> 50 (generic fallback)
 
   const pack = (major: number, minor: number | null): number => {
@@ -159,7 +159,7 @@ export function parseMajorMinor(id: string): number {
     if (/\d{4}-\d{2}-\d{2}/.test(surrounding)) continue;
 
     const major = parseInt(genericVersion[1], 10);
-    const minor = genericVersion[2] ? parseInt(genericVersion[2], 10) : null;
+    const minor = genericVersion[2] && !genericVersion[3] ? parseInt(genericVersion[2], 10) : null;
     return pack(major, minor);
   }
 
