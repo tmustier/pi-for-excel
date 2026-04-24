@@ -45,6 +45,7 @@ const GEMINI_MAJOR_RE = new RegExp(
   `${MODEL_NAME_BOUNDARY}gemini(?:-[a-z]+)*-(\\d+)${MODEL_VERSION_BOUNDARY}`,
   "i",
 );
+const GENERIC_VERSION_RE = /(?:^|[\w~/-][.-]|[-_/])v?(\d{1,2})(?:[.-](\d{1,2})(?:[a-z]+)?)?(?=$|[-/:._])/gi;
 
 export function isOpenAiCodexModelId(id: string): boolean {
   return OPENAI_CODEX_RE.test(id);
@@ -101,6 +102,8 @@ export function parseMajorMinor(id: string): number {
   // - gemini-2.5-pro-preview-06-05            -> 25 (not 65)
   // - google/gemini-3.1-pro-preview           -> 31
   // - gemini-3-pro-preview                    -> 30
+  // - gemma-4-31b-it                          -> 431 (generic fallback)
+  // - zai.glm-5                               -> 50 (generic fallback)
 
   const pack = (major: number, minor: number | null): number => {
     if (minor === null) return major * 10;
@@ -138,6 +141,18 @@ export function parseMajorMinor(id: string): number {
   const geminiMajor = id.match(GEMINI_MAJOR_RE);
   if (geminiMajor) {
     return pack(parseInt(geminiMajor[1], 10), null);
+  }
+
+  for (const genericVersion of id.matchAll(GENERIC_VERSION_RE)) {
+    const matchIndex = genericVersion.index ?? 0;
+    const digitOffset = genericVersion[0].search(/\d/);
+    const digitIndex = matchIndex + Math.max(digitOffset, 0);
+    const surrounding = id.slice(Math.max(0, digitIndex - 5), digitIndex + 8);
+    if (/\d{4}-\d{2}-\d{2}/.test(surrounding)) continue;
+
+    const major = parseInt(genericVersion[1], 10);
+    const minor = genericVersion[2] ? parseInt(genericVersion[2], 10) : null;
+    return pack(major, minor);
   }
 
   return 0;

@@ -80,6 +80,15 @@ void test("parseMajorMinor supports 2-digit minors (e.g. 5.12)", () => {
   assert.equal(parseMajorMinor("gpt-5.12"), 512);
 });
 
+void test("parseMajorMinor falls back for non-Claude/GPT/Gemini registry families", () => {
+  assert.equal(parseMajorMinor("gemma-4-31b-it"), 431);
+  assert.equal(parseMajorMinor("zai.glm-5"), 50);
+  assert.equal(parseMajorMinor("zai.glm-4.7"), 47);
+  assert.equal(parseMajorMinor("deepseek.v3.2"), 32);
+  assert.equal(parseMajorMinor("amazon.nova-2-lite-v1:0"), 20);
+  assert.equal(parseMajorMinor("unknown-model-2024-11-20"), 0);
+});
+
 void test("OpenAI model helpers handle major-only GPT-5 ids and Codex variants", () => {
   assert.equal(isOpenAiGeneralGptModelId("gpt-5"), true);
   assert.equal(isOpenAiGeneralGptModelId("gpt-5-pro"), true);
@@ -162,6 +171,22 @@ void test("modelRecencyScore prefers higher version, then later date suffix", ()
     modelRecencyScore("claude-opus-4-6") > modelRecencyScore("claude-opus-4-20250201"),
     "expected 4-6 to outrank 4-YYYYMMDD",
   );
+});
+
+void test("compareModels sorts generic versioned registry ids by parsed recency", () => {
+  const gemmaModels = [
+    { provider: "opencode", id: "gemma-3-27b-it" },
+    { provider: "opencode", id: "gemma-4-31b-it" },
+  ];
+  gemmaModels.sort(compareModels);
+  assert.deepEqual(gemmaModels.map((m) => m.id), ["gemma-4-31b-it", "gemma-3-27b-it"]);
+
+  const zaiModels = [
+    { provider: "openrouter", id: "zai.glm-4.7" },
+    { provider: "openrouter", id: "zai.glm-5" },
+  ];
+  zaiModels.sort(compareModels);
+  assert.deepEqual(zaiModels.map((m) => m.id), ["zai.glm-5", "zai.glm-4.7"]);
 });
 
 void test("compareModels sorts real namespaced registry ids by parsed recency", () => {
