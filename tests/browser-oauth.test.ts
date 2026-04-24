@@ -64,6 +64,7 @@ void test("Anthropic OAuth provider uses the browser-safe implementation", async
 
   const authorizeUrl = new URL(authUrl);
   assert.equal(authorizeUrl.hostname, "claude.ai");
+  assert.equal(authorizeUrl.searchParams.get("client_id"), "9d1c250a-e61b-44d9-88ed-5944d1962f5e");
   assert.equal(authorizeUrl.searchParams.get("redirect_uri"), "http://localhost:53692/callback");
 
   assert.equal(requests.length, 1);
@@ -74,7 +75,7 @@ void test("Anthropic OAuth provider uses the browser-safe implementation", async
   assert.equal(body.state, new URL(authUrl).searchParams.get("state"));
 });
 
-void test("OpenAI Codex browser OAuth requests the current Codex connector scopes", async (t) => {
+void test("OpenAI Codex browser OAuth matches current Codex identity scopes", async (t) => {
   const originalFetch = globalThis.fetch;
   const requests: Array<{ url: string; body: unknown }> = [];
   const accessToken = fakeJwt({
@@ -116,11 +117,8 @@ void test("OpenAI Codex browser OAuth requests the current Codex connector scope
 
   const authorizeUrl = new URL(authUrl);
   assert.equal(authorizeUrl.hostname, "auth.openai.com");
-  assert.equal(
-    authorizeUrl.searchParams.get("scope"),
-    "openid profile email offline_access api.connectors.read api.connectors.invoke",
-  );
-  assert.equal(authorizeUrl.searchParams.get("originator"), "codex_vscode");
+  assert.equal(authorizeUrl.searchParams.get("scope"), "openid profile email offline_access");
+  assert.equal(authorizeUrl.searchParams.get("originator"), "pi");
 
   assert.equal(requests.length, 1);
   assert.equal(requests[0]?.url, "https://auth.openai.com/oauth/token");
