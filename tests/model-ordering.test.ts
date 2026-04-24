@@ -142,10 +142,16 @@ void test("pickDefaultModel matches the current OpenAI default-selection contrac
   }
 });
 
-void test("pickDefaultModel falls back to the latest hardcoded Anthropic default", () => {
+void test("pickDefaultModel falls back to the preferred hardcoded OpenAI default", () => {
   const selected = pickDefaultModel([]);
-  assert.equal(selected.provider, "anthropic");
-  assert.equal(selected.id, "claude-opus-4-7");
+  assert.equal(selected.provider, "openai");
+  assert.equal(selected.id, "gpt-5.5");
+});
+
+void test("pickDefaultModel prefers GPT-5.5 when OpenAI and Anthropic are both available", () => {
+  const selected = pickDefaultModel(["anthropic", "openai"]);
+  assert.equal(selected.provider, "openai");
+  assert.equal(selected.id, "gpt-5.5");
 });
 
 void test("modelRecencyScore prefers higher version, then later date suffix", () => {

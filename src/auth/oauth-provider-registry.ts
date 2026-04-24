@@ -9,10 +9,10 @@
 import type { OAuthProviderInterface } from "@mariozechner/pi-ai";
 
 import {
-  anthropicOAuthProvider,
   githubCopilotOAuthProvider,
 } from "@mariozechner/pi-ai/oauth";
 
+import { anthropicBrowserOAuthProvider } from "./anthropic-browser-oauth.js";
 import { openaiCodexBrowserOAuthProvider } from "./openai-codex-browser-oauth.js";
 import {
   googleAntigravityBrowserOAuthProvider,
@@ -20,7 +20,7 @@ import {
 } from "./google-browser-oauth.js";
 
 const OAUTH_PROVIDERS: Map<string, OAuthProviderInterface> = new Map([
-  [anthropicOAuthProvider.id, anthropicOAuthProvider],
+  [anthropicBrowserOAuthProvider.id, anthropicBrowserOAuthProvider],
   [openaiCodexBrowserOAuthProvider.id, openaiCodexBrowserOAuthProvider],
   [googleGeminiCliBrowserOAuthProvider.id, googleGeminiCliBrowserOAuthProvider],
   [googleAntigravityBrowserOAuthProvider.id, googleAntigravityBrowserOAuthProvider],

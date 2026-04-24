@@ -560,7 +560,7 @@ export function buildProviderRow(
             },
             onPrompt: async (prompt) => {
               const helperText = id === "anthropic"
-                ? "After completing login, copy the authorization code shown in the browser. You can paste the code, the full URL, or a CODE#STATE value."
+                ? "After completing login, your browser may show a localhost page that cannot be reached — that's normal. Copy the full URL from the browser address bar and paste it here."
                 : id === "openai-codex"
                   ? "After login, your browser will show a page that says \"can't be reached\" \u2014 that's normal! Copy the full URL from the browser address bar and paste it here."
                   : id === "google-gemini-cli" || id === "google-antigravity"

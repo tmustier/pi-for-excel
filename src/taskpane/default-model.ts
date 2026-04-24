@@ -76,6 +76,16 @@ export function pickDefaultModel(
   availableProviders: string[],
   customDefaultModel?: Model<Api> | null,
 ): Model<Api> {
+  // OpenAI special-case:
+  // GPT-5.5 is the preferred default when an OpenAI-backed provider is available.
+  // Prefer the newest general GPT-5 model when it is at least as new as Codex,
+  // while keeping Codex as fallback.
+  for (const provider of ["openai", "openai-codex"] as const) {
+    if (!availableProviders.includes(provider)) continue;
+    const model = pickPreferredOpenAiModel(provider);
+    if (model) return model;
+  }
+
   // Anthropic special-case:
   // Prefer Sonnet when its major/minor version is >= Opus (e.g. Sonnet 4-6 over Opus 4-6).
   // Otherwise prefer Opus.
@@ -96,15 +106,6 @@ export function pickDefaultModel(
     if (sonnet) return sonnet;
   }
 
-  // OpenAI special-case:
-  // Prefer the newest general GPT-5 model when it is at least as new as Codex
-  // (e.g. GPT-5.4 over GPT-5.3 Codex), while keeping Codex as fallback.
-  for (const provider of ["openai-codex", "openai"] as const) {
-    if (!availableProviders.includes(provider)) continue;
-    const model = pickPreferredOpenAiModel(provider);
-    if (model) return model;
-  }
-
   // Other providers: pattern-based rules
   for (const rule of DEFAULT_MODEL_RULES) {
     if (!availableProviders.includes(rule.provider)) continue;
@@ -117,5 +118,5 @@ export function pickDefaultModel(
   }
 
   // Absolute fallback: keep this resilient across pi-ai version bumps
-  return getModel("anthropic", "claude-opus-4-7");
+  return getModel("openai", "gpt-5.5");
 }
