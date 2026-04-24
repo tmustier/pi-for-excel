@@ -11,6 +11,7 @@ import {
   saveOpenAiGatewayConfig,
   type OpenAiGatewayConfig,
 } from "../../auth/custom-gateways.js";
+import { requestConfirmationDialog } from "../../ui/confirm-dialog.js";
 import {
   createButton,
   createConfigInput,
@@ -238,13 +239,19 @@ export async function buildCustomGatewaySection(
         gateway,
         onEdit: startEditing,
         onDelete: (targetGateway) => {
-          const confirmed = confirm(`Delete gateway \"${targetGateway.displayName}\"?`);
-          if (!confirmed) {
-            return;
-          }
-
           void (async () => {
             try {
+              const confirmed = await requestConfirmationDialog({
+                title: "Delete custom gateway?",
+                message: `Delete gateway \"${targetGateway.displayName}\"? This removes its stored API key from this add-in.`,
+                confirmLabel: "Delete",
+                confirmButtonTone: "danger",
+              });
+
+              if (!confirmed) {
+                return;
+              }
+
               await deleteOpenAiGatewayConfig(getAppStorage().customProviders, targetGateway.id);
               await reloadGateways();
               renderList();
