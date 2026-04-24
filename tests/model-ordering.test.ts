@@ -346,18 +346,26 @@ void test("dev rewrite routes cloudcode hosts to dedicated proxies", () => {
   assert.equal(rewriteDevProxyUrl("https://example.com/test"), null);
 });
 
-void test("vite proxy orders Google routes from most specific to least specific", () => {
+void test("vite proxy orders overlapping routes from most specific to least specific", () => {
   const viteConfigPath = path.resolve(process.cwd(), "vite.config.ts");
   const content = readFileSync(viteConfigPath, "utf8");
 
+  const anthropicPlatformIndex = content.indexOf('"/oauth-proxy/anthropic-platform"');
+  const anthropicIndex = content.indexOf('"/oauth-proxy/anthropic"');
   const sandboxIndex = content.indexOf('"/api-proxy/google-cloudcode-sandbox"');
   const cloudcodeIndex = content.indexOf('"/api-proxy/google-cloudcode"');
   const googleIndex = content.indexOf('"/api-proxy/google"');
 
+  assert.notEqual(anthropicPlatformIndex, -1, "expected Anthropic platform OAuth route");
+  assert.notEqual(anthropicIndex, -1, "expected Anthropic OAuth route");
   assert.notEqual(sandboxIndex, -1, "expected sandbox proxy route");
   assert.notEqual(cloudcodeIndex, -1, "expected cloudcode proxy route");
   assert.notEqual(googleIndex, -1, "expected generic google proxy route");
 
+  assert.ok(
+    anthropicPlatformIndex < anthropicIndex,
+    "Anthropic platform route must come before generic Anthropic route",
+  );
   assert.ok(
     sandboxIndex < cloudcodeIndex,
     "sandbox route must come before cloudcode route",
