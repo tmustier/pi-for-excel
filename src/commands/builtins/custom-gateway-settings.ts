@@ -246,6 +246,7 @@ export async function buildCustomGatewaySection(
                 message: `Delete gateway \"${targetGateway.displayName}\"? This removes its stored API key from this add-in.`,
                 confirmLabel: "Delete",
                 confirmButtonTone: "danger",
+                restoreFocusOnClose: false,
               });
 
               if (!confirmed) {

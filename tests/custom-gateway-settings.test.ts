@@ -10,6 +10,7 @@ void test("custom gateway delete uses the app overlay confirmation instead of na
 
   assert.match(source, /requestConfirmationDialog/);
   assert.match(source, /confirmButtonTone:\s*"danger"/);
+  assert.match(source, /restoreFocusOnClose:\s*false/);
   assert.match(source, /deleteOpenAiGatewayConfig/);
   assert.doesNotMatch(source, /\bconfirm\s*\(/);
 });

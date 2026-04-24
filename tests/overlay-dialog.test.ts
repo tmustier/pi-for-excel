@@ -151,6 +151,49 @@ void test("overlay closes on Escape key", () => {
   }
 });
 
+void test("Escape closes only the topmost overlay", () => {
+  const { document, restore } = installFakeDom();
+
+  try {
+    const parent = createOverlayDialog({
+      overlayId: "overlay-escape-parent",
+      cardClassName: "overlay-card",
+    });
+    const child = createOverlayDialog({
+      overlayId: "overlay-escape-child",
+      cardClassName: "overlay-card",
+    });
+
+    parent.mount();
+    child.mount();
+
+    const childEscape = new Event("keydown", { cancelable: true });
+    Object.defineProperty(childEscape, "key", {
+      configurable: true,
+      value: "Escape",
+    });
+
+    document.dispatchEvent(childEscape);
+
+    assert.equal(document.getElementById("overlay-escape-parent") !== null, true);
+    assert.equal(document.getElementById("overlay-escape-child"), null);
+    assert.equal(childEscape.defaultPrevented, true);
+
+    const parentEscape = new Event("keydown", { cancelable: true });
+    Object.defineProperty(parentEscape, "key", {
+      configurable: true,
+      value: "Escape",
+    });
+
+    document.dispatchEvent(parentEscape);
+
+    assert.equal(document.getElementById("overlay-escape-parent"), null);
+    assert.equal(parentEscape.defaultPrevented, true);
+  } finally {
+    restore();
+  }
+});
+
 void test("overlay dialog manager reuses mounted dialog and resets after dismiss", () => {
   const { document, restore } = installFakeDom();
 

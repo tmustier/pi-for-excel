@@ -12,6 +12,18 @@ function getTargetElement(target: EventTarget | null): Element | null {
   return null;
 }
 
+function isTopmostEscapeClaim(overlay: HTMLElement): boolean {
+  const claimingOverlays = Array.from(
+    document.querySelectorAll<HTMLElement>("[data-claims-escape='true']"),
+  ).filter((candidate) => candidate.isConnected);
+
+  if (claimingOverlays.length === 0) {
+    return true;
+  }
+
+  return claimingOverlays[claimingOverlays.length - 1] === overlay;
+}
+
 export function installOverlayEscapeClose(
   overlay: HTMLElement,
   closeOverlay: () => void,
@@ -29,7 +41,7 @@ export function installOverlayEscapeClose(
       return;
     }
 
-    if (!overlay.isConnected) {
+    if (!overlay.isConnected || !isTopmostEscapeClaim(overlay)) {
       return;
     }
 

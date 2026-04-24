@@ -271,8 +271,21 @@ class FakeDocument extends EventTarget {
     return found as unknown as HTMLElement | null;
   }
 
-  querySelectorAll(_selector: string): Element[] {
-    return [];
+  querySelectorAll(selector: string): Element[] {
+    const matches: Element[] = [];
+
+    const visit = (node: FakeElement): void => {
+      if (matchesSelector(node, selector)) {
+        matches.push(node as unknown as Element);
+      }
+
+      for (const child of node.children) {
+        visit(child);
+      }
+    };
+
+    visit(this.body);
+    return matches;
   }
 }
 
@@ -292,6 +305,10 @@ function matchesSelector(node: FakeElement, selector: string): boolean {
   if (selector === "[contenteditable='true']" || selector === "[contenteditable='plaintext-only']") {
     const value = node.getAttribute("contenteditable");
     return value === "true" || value === "plaintext-only";
+  }
+
+  if (selector === "[data-claims-escape='true']") {
+    return node.dataset.claimsEscape === "true";
   }
 
   if (selector.startsWith(".")) {
