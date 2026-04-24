@@ -24,12 +24,27 @@ const OPENAI_CODEX_RE = /^gpt-5(?:\.(\d+))?-codex(?:-|$)/;
 const OPENAI_PLAIN_GPT_RE = /^gpt-5(?:\.(\d+))?$/;
 const OPENAI_GPT_RE = /^gpt-5(?:[.-]|$)/;
 
-const CLAUDE_HYPHEN_VERSION_RE = /^claude(?:-[a-z]+)*-(\d+)-(\d{1,2})(?:-|$)/i;
-const CLAUDE_MAJOR_RE = /^claude(?:-[a-z]+)*-(\d+)(?:-|$)/i;
-const GPT_DOT_VERSION_RE = /^gpt-(\d+)\.(\d{1,2})(?:-|$)/i;
-const GPT_MAJOR_RE = /^gpt-(\d+)(?:[a-z]+)?(?:-|$)/i;
-const GEMINI_DOT_VERSION_RE = /^gemini(?:-[a-z]+)*-(\d+)\.(\d{1,2})(?:-|$)/i;
-const GEMINI_MAJOR_RE = /^gemini(?:-[a-z]+)*-(\d+)(?:-|$)/i;
+const MODEL_NAME_BOUNDARY = String.raw`(?:^|[\\/~.:])`;
+const MODEL_VERSION_BOUNDARY = String.raw`(?=$|[-/:])`;
+
+const CLAUDE_VERSION_RE = new RegExp(
+  `${MODEL_NAME_BOUNDARY}claude(?:-[a-z]+)*-(\\d+)[.-](\\d{1,2})${MODEL_VERSION_BOUNDARY}`,
+  "i",
+);
+const CLAUDE_MAJOR_RE = new RegExp(
+  `${MODEL_NAME_BOUNDARY}claude(?:-[a-z]+)*-(\\d+)${MODEL_VERSION_BOUNDARY}`,
+  "i",
+);
+const GPT_DOT_VERSION_RE = new RegExp(`${MODEL_NAME_BOUNDARY}gpt-(\\d+)\\.(\\d{1,2})${MODEL_VERSION_BOUNDARY}`, "i");
+const GPT_MAJOR_RE = new RegExp(`${MODEL_NAME_BOUNDARY}gpt-(\\d+)(?:[a-z]+)?${MODEL_VERSION_BOUNDARY}`, "i");
+const GEMINI_DOT_VERSION_RE = new RegExp(
+  `${MODEL_NAME_BOUNDARY}gemini(?:-[a-z]+)*-(\\d+)\\.(\\d{1,2})${MODEL_VERSION_BOUNDARY}`,
+  "i",
+);
+const GEMINI_MAJOR_RE = new RegExp(
+  `${MODEL_NAME_BOUNDARY}gemini(?:-[a-z]+)*-(\\d+)${MODEL_VERSION_BOUNDARY}`,
+  "i",
+);
 
 export function isOpenAiCodexModelId(id: string): boolean {
   return OPENAI_CODEX_RE.test(id);
@@ -77,12 +92,15 @@ export function parseMajorMinor(id: string): number {
   // Extract a comparable major/minor number from common model ID formats.
   // Important: only parse the leading version segment, not later date-like suffixes.
   // Examples:
-  // - claude-opus-4-6                 -> 46
-  // - claude-opus-4-20250514          -> 40 (major only; date handled separately)
-  // - gpt-5.4                         -> 54
-  // - gpt-4o-2024-11-20               -> 40 (not 202411)
-  // - gemini-2.5-pro-preview-06-05    -> 25 (not 65)
-  // - gemini-3-pro-preview            -> 30
+  // - claude-opus-4-6                         -> 46
+  // - claude-opus-4.7                         -> 47
+  // - anthropic.claude-opus-4-1-20250805-v1:0 -> 41 (date handled separately)
+  // - claude-opus-4-20250514                  -> 40 (major only; date handled separately)
+  // - gpt-5.5                                 -> 55
+  // - gpt-4o-2024-11-20                       -> 40 (not 202411)
+  // - gemini-2.5-pro-preview-06-05            -> 25 (not 65)
+  // - google/gemini-3.1-pro-preview           -> 31
+  // - gemini-3-pro-preview                    -> 30
 
   const pack = (major: number, minor: number | null): number => {
     if (minor === null) return major * 10;
@@ -92,9 +110,9 @@ export function parseMajorMinor(id: string): number {
     return major * 100 + minor;
   };
 
-  const claudeHyphenVer = id.match(CLAUDE_HYPHEN_VERSION_RE);
-  if (claudeHyphenVer) {
-    return pack(parseInt(claudeHyphenVer[1], 10), parseInt(claudeHyphenVer[2], 10));
+  const claudeVer = id.match(CLAUDE_VERSION_RE);
+  if (claudeVer) {
+    return pack(parseInt(claudeVer[1], 10), parseInt(claudeVer[2], 10));
   }
 
   const gptDotVer = id.match(GPT_DOT_VERSION_RE);
@@ -126,30 +144,25 @@ export function parseMajorMinor(id: string): number {
 }
 
 function parseDateSuffixScore(id: string): number {
-  const compactDateMatch = id.match(/(\d{8})$/);
-  if (compactDateMatch) {
-    return parseInt(compactDateMatch[1], 10);
+  let score = 0;
+
+  for (const match of id.matchAll(/(?:^|[-/:])(\d{8})(?=$|[-/:])/g)) {
+    score = Math.max(score, parseInt(match[1], 10));
   }
 
-  const yearMonthDayMatch = id.match(/(\d{4})-(\d{2})-(\d{2})$/);
-  if (yearMonthDayMatch) {
-    return parseInt(
-      `${yearMonthDayMatch[1]}${yearMonthDayMatch[2]}${yearMonthDayMatch[3]}`,
-      10,
-    );
+  for (const match of id.matchAll(/(?:^|[-/:])(\d{4})-(\d{2})-(\d{2})(?=$|[-/:])/g)) {
+    score = Math.max(score, parseInt(`${match[1]}${match[2]}${match[3]}`, 10));
   }
 
-  const monthYearMatch = id.match(/(\d{2})-(\d{4})$/);
-  if (monthYearMatch) {
-    return parseInt(`${monthYearMatch[2]}${monthYearMatch[1]}00`, 10);
+  for (const match of id.matchAll(/(?:^|[-/:])(\d{2})-(\d{4})(?=$|[-/:])/g)) {
+    score = Math.max(score, parseInt(`${match[2]}${match[1]}00`, 10));
   }
 
-  const monthDayMatch = id.match(/(\d{2})-(\d{2})$/);
-  if (monthDayMatch) {
-    return parseInt(`${monthDayMatch[1]}${monthDayMatch[2]}`, 10);
+  for (const match of id.matchAll(/(?:^|[-/:])(\d{2})-(\d{2})(?=$|[-/:])/g)) {
+    score = Math.max(score, parseInt(`${match[1]}${match[2]}`, 10));
   }
 
-  return 0;
+  return score;
 }
 
 export function modelRecencyScore(id: string): number {

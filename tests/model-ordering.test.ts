@@ -49,6 +49,13 @@ void test("parseMajorMinor packs Claude-style -major-minor as major*10+minor", (
   assert.equal(parseMajorMinor("claude-opus-4-7"), 47);
 });
 
+void test("parseMajorMinor handles namespaced and dotted Claude registry ids", () => {
+  assert.equal(parseMajorMinor("claude-opus-4.7"), 47);
+  assert.equal(parseMajorMinor("anthropic.claude-opus-4-1-20250805-v1:0"), 41);
+  assert.equal(parseMajorMinor("eu.anthropic.claude-sonnet-4-6"), 46);
+  assert.equal(parseMajorMinor("anthropic/claude-opus-4.7"), 47);
+});
+
 void test("parseMajorMinor does not treat YYYYMMDD as a minor version", () => {
   // This used to incorrectly parse as 4.20250514.
   assert.equal(parseMajorMinor("claude-opus-4-20250514"), 40);
@@ -56,7 +63,9 @@ void test("parseMajorMinor does not treat YYYYMMDD as a minor version", () => {
 
 void test("parseMajorMinor handles dot-style versions", () => {
   assert.equal(parseMajorMinor("gpt-5.3-codex"), 53);
+  assert.equal(parseMajorMinor("gpt-5.5"), 55);
   assert.equal(parseMajorMinor("gemini-2.5-pro"), 25);
+  assert.equal(parseMajorMinor("google/gemini-3.1-pro-preview"), 31);
 });
 
 void test("parseMajorMinor ignores OpenAI dated suffixes after the family name", () => {
@@ -85,9 +94,9 @@ void test("openAiFamilyPriority prefers base GPT-5 over Codex variants", () => {
 });
 
 void test("compareOpenAiModelIds prefers newer versions before family tie-breaks", () => {
-  const ids = ["gpt-4o-2024-11-20", "gpt-5.4-pro", "gpt-5.3-codex"];
+  const ids = ["gpt-4o-2024-11-20", "gpt-5.5", "gpt-5.4-pro", "gpt-5.3-codex"];
   ids.sort(compareOpenAiModelIds);
-  assert.deepEqual(ids, ["gpt-5.4-pro", "gpt-5.3-codex", "gpt-4o-2024-11-20"]);
+  assert.deepEqual(ids, ["gpt-5.5", "gpt-5.4-pro", "gpt-5.3-codex", "gpt-4o-2024-11-20"]);
 });
 
 void test("compareOpenAiModelIds prefers plain GPT-5 over other same-version variants", () => {
@@ -98,7 +107,7 @@ void test("compareOpenAiModelIds prefers plain GPT-5 over other same-version var
 
 void test("shouldPreferOpenAiGeneralModel only prefers GPT when it is as new or newer", () => {
   assert.equal(shouldPreferOpenAiGeneralModel("gpt-5", "gpt-5-codex"), true);
-  assert.equal(shouldPreferOpenAiGeneralModel("gpt-5.4", "gpt-5.3-codex"), true);
+  assert.equal(shouldPreferOpenAiGeneralModel("gpt-5.5", "gpt-5.3-codex"), true);
   assert.equal(shouldPreferOpenAiGeneralModel("gpt-5-pro", "gpt-5.1-codex-max"), false);
 });
 
@@ -138,6 +147,12 @@ void test("modelRecencyScore prefers higher version, then later date suffix", ()
   );
 
   assert.ok(
+    modelRecencyScore("anthropic.claude-opus-4-1-20250805-v1:0") >
+      modelRecencyScore("anthropic.claude-opus-4-1-20250101-v1:0"),
+    "expected embedded Bedrock compact dates to affect recency",
+  );
+
+  assert.ok(
     modelRecencyScore("gemini-2.5-flash-preview-05-20") > modelRecencyScore("gemini-2.5-flash-preview-04-17"),
     "expected 05-20 > 04-17 for dated Gemini previews",
   );
@@ -149,9 +164,37 @@ void test("modelRecencyScore prefers higher version, then later date suffix", ()
   );
 });
 
+void test("compareModels sorts real namespaced registry ids by parsed recency", () => {
+  const copilotModels = [
+    { provider: "github-copilot", id: "claude-opus-4.5" },
+    { provider: "github-copilot", id: "claude-opus-4.7" },
+    { provider: "github-copilot", id: "claude-opus-4.6" },
+  ];
+  copilotModels.sort(compareModels);
+  assert.deepEqual(
+    copilotModels.map((m) => m.id),
+    ["claude-opus-4.7", "claude-opus-4.6", "claude-opus-4.5"],
+  );
+
+  const bedrockModels = [
+    { provider: "amazon-bedrock", id: "anthropic.claude-opus-4-20250514-v1:0" },
+    { provider: "amazon-bedrock", id: "anthropic.claude-opus-4-1-20250805-v1:0" },
+    { provider: "amazon-bedrock", id: "anthropic.claude-opus-4-7" },
+  ];
+  bedrockModels.sort(compareModels);
+  assert.deepEqual(
+    bedrockModels.map((m) => m.id),
+    [
+      "anthropic.claude-opus-4-7",
+      "anthropic.claude-opus-4-1-20250805-v1:0",
+      "anthropic.claude-opus-4-20250514-v1:0",
+    ],
+  );
+});
+
 void test("compareModels sorts non-OpenAI models by provider, family, then recency", () => {
   const models = [
-    { provider: "openai", id: "gpt-5.4" },
+    { provider: "openai", id: "gpt-5.5" },
     { provider: "anthropic", id: "claude-opus-4-7" },
     { provider: "anthropic", id: "claude-sonnet-4-6" },
     { provider: "anthropic", id: "claude-opus-4-6" },
@@ -181,13 +224,14 @@ void test("compareModels sorts non-OpenAI models by provider, family, then recen
 void test("openai compareModels does not mistake dated GPT-4o ids for newer versions", () => {
   const models = [
     { provider: "openai", id: "gpt-4o-2024-11-20" },
+    { provider: "openai", id: "gpt-5.5" },
     { provider: "openai", id: "gpt-5.4-pro" },
     { provider: "openai", id: "gpt-5.3-codex" },
   ];
 
   models.sort(compareModels);
 
-  assert.deepEqual(models.map((m) => m.id), ["gpt-5.4-pro", "gpt-5.3-codex", "gpt-4o-2024-11-20"]);
+  assert.deepEqual(models.map((m) => m.id), ["gpt-5.5", "gpt-5.4-pro", "gpt-5.3-codex", "gpt-4o-2024-11-20"]);
 });
 
 void test("provider-map keeps openai-codex distinct from openai", () => {
