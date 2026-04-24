@@ -1452,7 +1452,7 @@ export async function initTaskpane(opts: {
       autoRestoreLatest: false,
     });
 
-    clonedRuntime.agent.state.messages = args.sourceRuntime.agent.state.messages;
+    clonedRuntime.agent.state.messages = structuredClone(args.sourceRuntime.agent.state.messages);
     clonedRuntime.agent.state.model = args.targetModel;
     clonedRuntime.agent.state.thinkingLevel = args.sourceRuntime.agent.state.thinkingLevel;
 
