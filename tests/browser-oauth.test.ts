@@ -75,7 +75,7 @@ void test("Anthropic OAuth provider uses the browser-safe implementation", async
   assert.equal(body.state, new URL(authUrl).searchParams.get("state"));
 });
 
-void test("OpenAI Codex browser OAuth matches current Codex identity scopes", async (t) => {
+void test("OpenAI Codex browser OAuth matches official Codex CLI authorize parameters", async (t) => {
   const originalFetch = globalThis.fetch;
   const requests: Array<{ url: string; body: unknown }> = [];
   const accessToken = fakeJwt({
@@ -114,17 +114,52 @@ void test("OpenAI Codex browser OAuth matches current Codex identity scopes", as
 
   const credentials = await provider.login(callbacks);
   assert.equal(credentials.accountId, "acct_browser_test");
+  assert.equal(credentials.codexOAuthVersion, "codex-cli-rs-connector-scopes-2026-04");
+  assert.equal(
+    credentials.scopes,
+    "openid profile email offline_access api.connectors.read api.connectors.invoke",
+  );
 
   const authorizeUrl = new URL(authUrl);
   assert.equal(authorizeUrl.hostname, "auth.openai.com");
-  assert.equal(authorizeUrl.searchParams.get("scope"), "openid profile email offline_access");
-  assert.equal(authorizeUrl.searchParams.get("originator"), "pi");
+  assert.equal(
+    authorizeUrl.searchParams.get("scope"),
+    "openid profile email offline_access api.connectors.read api.connectors.invoke",
+  );
+  assert.equal(authorizeUrl.searchParams.get("originator"), "codex_cli_rs");
+  assert.equal(authorizeUrl.searchParams.get("codex_cli_simplified_flow"), "true");
+  assert.equal(authorizeUrl.searchParams.get("id_token_add_organizations"), "true");
+  assert.match(authorizeUrl.searchParams.get("state") ?? "", /^[A-Za-z0-9_-]{43}$/);
 
   assert.equal(requests.length, 1);
   assert.equal(requests[0]?.url, "https://auth.openai.com/oauth/token");
   const body = new URLSearchParams(String(requests[0]?.body));
   assert.equal(body.get("grant_type"), "authorization_code");
   assert.equal(body.get("code"), "openai-code");
+  assert.equal(body.get("redirect_uri"), "http://localhost:1455/auth/callback");
+  assert.equal(body.get("client_id"), "app_EMoamEEZ73f0CkXaXp7hrann");
+  assert.match(body.get("code_verifier") ?? "", /^[A-Za-z0-9_-]{86}$/);
+});
+
+void test("OpenAI Codex browser OAuth rejects stale pre-scope-upgrade credentials", async () => {
+  const provider = getOAuthProvider("openai-codex");
+  assert.ok(provider);
+
+  const staleCredentials = {
+    access: "old-access-token",
+    refresh: "old-refresh-token",
+    expires: Date.now() + 3600_000,
+  };
+
+  assert.throws(
+    () => provider.getApiKey(staleCredentials),
+    /OpenAI login needs to be refreshed for current Codex scopes/,
+  );
+
+  await assert.rejects(
+    () => provider.refreshToken(staleCredentials),
+    /OpenAI login needs to be refreshed for current Codex scopes/,
+  );
 });
 
 void test("OpenAI Codex browser OAuth requires account ID on the access token", async (t) => {

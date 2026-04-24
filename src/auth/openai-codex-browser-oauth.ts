@@ -19,7 +19,10 @@ const CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann";
 const AUTHORIZE_URL = "https://auth.openai.com/oauth/authorize";
 const TOKEN_URL = "https://auth.openai.com/oauth/token";
 const REDIRECT_URI = "http://localhost:1455/auth/callback";
-const SCOPE = "openid profile email offline_access";
+const SCOPE = "openid profile email offline_access api.connectors.read api.connectors.invoke";
+const ORIGINATOR = "codex_cli_rs";
+const CREDENTIAL_VERSION = "codex-cli-rs-connector-scopes-2026-04";
+const STALE_CREDENTIAL_ERROR = "OpenAI login needs to be refreshed for current Codex scopes";
 const JWT_CLAIM_PATH = "https://api.openai.com/auth";
 
 type ParsedAuthorizationInput = { code?: string; state?: string };
@@ -31,19 +34,28 @@ type TokenPayload = {
   expiresInSeconds: number;
 };
 
+type VersionedOpenAICodexCredentials = OAuthCredentials & {
+  codexOAuthVersion?: string;
+  scopes?: string;
+};
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function createState(): string {
-  const bytes = new Uint8Array(16);
+  const bytes = new Uint8Array(32);
   crypto.getRandomValues(bytes);
 
-  let out = "";
+  let binary = "";
   for (const byte of bytes) {
-    out += byte.toString(16).padStart(2, "0");
+    binary += String.fromCharCode(byte);
   }
-  return out;
+
+  return btoa(binary)
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/g, "");
 }
 
 function parseAuthorizationInput(input: string): ParsedAuthorizationInput {
@@ -110,10 +122,10 @@ async function exchangeAuthorizationCode(code: string, verifier: string): Promis
     },
     body: new URLSearchParams({
       grant_type: "authorization_code",
-      client_id: CLIENT_ID,
       code,
-      code_verifier: verifier,
       redirect_uri: REDIRECT_URI,
+      client_id: CLIENT_ID,
+      code_verifier: verifier,
     }),
   });
 
@@ -203,8 +215,36 @@ function getAccountId(accessToken: string): string | null {
   return accountId;
 }
 
+export function isOpenAICodexCredentialRefreshRequired(error: unknown): boolean {
+  return error instanceof Error && error.message.includes(STALE_CREDENTIAL_ERROR);
+}
+
+function isCurrentOpenAICodexCredential(credentials: OAuthCredentials): boolean {
+  const versioned = credentials as VersionedOpenAICodexCredentials;
+  return versioned.codexOAuthVersion === CREDENTIAL_VERSION && versioned.scopes === SCOPE;
+}
+
+function assertCurrentOpenAICodexCredential(credentials: OAuthCredentials): void {
+  if (!isCurrentOpenAICodexCredential(credentials)) {
+    throw new Error(`${STALE_CREDENTIAL_ERROR}. Please disconnect and log in again.`);
+  }
+}
+
+function buildOpenAICodexCredentials(tokens: TokenPayload, accountId: string): OAuthCredentials {
+  const credentials: VersionedOpenAICodexCredentials = {
+    access: tokens.accessToken,
+    refresh: tokens.refreshToken,
+    expires: Date.now() + tokens.expiresInSeconds * 1000,
+    accountId,
+    codexOAuthVersion: CREDENTIAL_VERSION,
+    scopes: SCOPE,
+  };
+
+  return credentials;
+}
+
 async function createAuthorizationFlow(): Promise<{ verifier: string; state: string; url: string }> {
-  const { verifier, challenge } = await generatePKCE();
+  const { verifier, challenge } = await generatePKCE(64);
   const state = createState();
 
   const authUrl = new URL(AUTHORIZE_URL);
@@ -214,10 +254,10 @@ async function createAuthorizationFlow(): Promise<{ verifier: string; state: str
   authUrl.searchParams.set("scope", SCOPE);
   authUrl.searchParams.set("code_challenge", challenge);
   authUrl.searchParams.set("code_challenge_method", "S256");
-  authUrl.searchParams.set("state", state);
   authUrl.searchParams.set("id_token_add_organizations", "true");
   authUrl.searchParams.set("codex_cli_simplified_flow", "true");
-  authUrl.searchParams.set("originator", "pi");
+  authUrl.searchParams.set("state", state);
+  authUrl.searchParams.set("originator", ORIGINATOR);
 
   return {
     verifier,
@@ -266,17 +306,14 @@ export async function loginOpenAICodexInBrowser(
     throw new Error("OpenAI login failed: access token is missing ChatGPT account ID");
   }
 
-  return {
-    access: tokens.accessToken,
-    refresh: tokens.refreshToken,
-    expires: Date.now() + tokens.expiresInSeconds * 1000,
-    accountId,
-  };
+  return buildOpenAICodexCredentials(tokens, accountId);
 }
 
 export async function refreshOpenAICodexBrowserToken(
   credentials: OAuthCredentials,
 ): Promise<OAuthCredentials> {
+  assertCurrentOpenAICodexCredential(credentials);
+
   const refreshToken = credentials.refresh;
   if (typeof refreshToken !== "string" || refreshToken.trim().length === 0) {
     throw new Error("OpenAI refresh failed: missing refresh token");
@@ -288,12 +325,7 @@ export async function refreshOpenAICodexBrowserToken(
     throw new Error("OpenAI refresh failed: access token is missing ChatGPT account ID");
   }
 
-  return {
-    access: tokens.accessToken,
-    refresh: tokens.refreshToken,
-    expires: Date.now() + tokens.expiresInSeconds * 1000,
-    accountId,
-  };
+  return buildOpenAICodexCredentials(tokens, accountId);
 }
 
 export const openaiCodexBrowserOAuthProvider: OAuthProviderInterface = {
@@ -309,6 +341,7 @@ export const openaiCodexBrowserOAuthProvider: OAuthProviderInterface = {
   },
 
   getApiKey(credentials: OAuthCredentials): string {
+    assertCurrentOpenAICodexCredential(credentials);
     return credentials.access;
   },
 };

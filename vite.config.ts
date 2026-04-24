@@ -192,9 +192,14 @@ function stripBrowserHeaders(proxy: ProxyServerLike) {
   proxy.on("proxyReq", (proxyReq) => {
     proxyReq.removeHeader("origin");
     proxyReq.removeHeader("referer");
+    proxyReq.removeHeader("user-agent");
+    proxyReq.removeHeader("accept-language");
     proxyReq.removeHeader("sec-fetch-mode");
     proxyReq.removeHeader("sec-fetch-site");
     proxyReq.removeHeader("sec-fetch-dest");
+    proxyReq.removeHeader("sec-ch-ua");
+    proxyReq.removeHeader("sec-ch-ua-mobile");
+    proxyReq.removeHeader("sec-ch-ua-platform");
     proxyReq.removeHeader("anthropic-dangerous-direct-browser-access");
 
     // Cloud Code Assist endpoints use a colon in the path

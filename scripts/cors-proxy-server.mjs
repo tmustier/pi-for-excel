@@ -229,11 +229,14 @@ function buildOutboundHeaders(inHeaders) {
     if (lower === "host") continue;
     if (lower === "content-length") continue;
     if (lower === "accept-encoding") continue;
+    if (lower === "user-agent") continue;
+    if (lower === "accept-language") continue;
 
     // Strip browser-only / CORS-triggering headers (mimic server requests)
     if (lower === "origin") continue;
     if (lower === "referer") continue;
     if (lower.startsWith("sec-fetch-")) continue;
+    if (lower.startsWith("sec-ch-")) continue;
 
     // Anthropic uses this header to explicitly enable direct browser access.
     // When proxying we want the upstream to behave like a server-to-server call.

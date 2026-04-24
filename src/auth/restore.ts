@@ -11,7 +11,8 @@ import type { ProviderKeysStore } from "@mariozechner/pi-web-ui/dist/storage/sto
 import type { SettingsStore } from "@mariozechner/pi-web-ui/dist/storage/stores/settings-store.js";
 
 import { originalFetch } from "./cors-proxy.js";
-import { loadOAuthCredentials, saveOAuthCredentials } from "./oauth-storage.js";
+import { clearOAuthCredentials, loadOAuthCredentials, saveOAuthCredentials } from "./oauth-storage.js";
+import { isOpenAICodexCredentialRefreshRequired } from "./openai-codex-browser-oauth.js";
 import { mapToApiProvider, BROWSER_OAUTH_PROVIDERS } from "./provider-map.js";
 import { getOAuthProvider } from "./oauth-provider-registry.js";
 import { getErrorMessage } from "../utils/errors.js";
@@ -121,6 +122,15 @@ async function restoreFromPiAuth(
   }
 }
 
+async function clearBrowserOAuthProvider(
+  providerKeys: ProviderKeysStore,
+  settings: SettingsStore,
+  providerId: string,
+): Promise<void> {
+  await clearOAuthCredentials(settings, providerId).catch(() => {});
+  await providerKeys.delete(mapToApiProvider(providerId)).catch(() => {});
+}
+
 async function restoreFromBrowserOAuthStorage(
   providerKeys: ProviderKeysStore,
   settings: SettingsStore,
@@ -143,14 +153,24 @@ async function restoreFromBrowserOAuthStorage(
           await providerKeys.set(apiProvider, provider.getApiKey(refreshed));
           console.log(`[auth] ${provider.name}: token refreshed from IndexedDB`);
         } catch (e: unknown) {
-          console.warn(`[auth] ${provider.name}: refresh failed (${getErrorMessage(e)}), please login again`);
+          if (providerId === "openai-codex" && isOpenAICodexCredentialRefreshRequired(e)) {
+            await clearBrowserOAuthProvider(providerKeys, settings, providerId);
+            console.warn(`[auth] ${provider.name}: stored OAuth grant is stale; cleared credentials, please login again`);
+          } else {
+            console.warn(`[auth] ${provider.name}: refresh failed (${getErrorMessage(e)}), please login again`);
+          }
         }
       } else {
         await providerKeys.set(apiProvider, provider.getApiKey(credentials));
         console.log(`[auth] ${provider.name}: session restored from IndexedDB`);
       }
     } catch (e: unknown) {
-      console.warn(`[auth] ${providerId}: failed to restore (${getErrorMessage(e)})`);
+      if (providerId === "openai-codex" && isOpenAICodexCredentialRefreshRequired(e)) {
+        await clearBrowserOAuthProvider(providerKeys, settings, providerId);
+        console.warn("[auth] OpenAI (ChatGPT Plus/Pro): stored OAuth grant is stale; cleared credentials, please login again");
+      } else {
+        console.warn(`[auth] ${providerId}: failed to restore (${getErrorMessage(e)})`);
+      }
     }
   }
 }
