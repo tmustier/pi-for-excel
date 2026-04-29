@@ -33,7 +33,7 @@
     "prepare": "node scripts/install-githooks.mjs"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.78.0",
+    "@anthropic-ai/sdk": "^0.91.1",
     "@mariozechner/pi-agent-core": "^0.70.0",
     "@mariozechner/pi-ai": "^0.70.0",
     "@mariozechner/pi-web-ui": "^0.70.0",
