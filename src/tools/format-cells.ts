@@ -6,7 +6,7 @@
  */
 
 import { Type, type Static } from "@sinclair/typebox";
-import type { AgentTool, AgentToolResult } from "@mariozechner/pi-agent-core";
+import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import type { FormatCellsDetails } from "./tool-details.js";
 import { excelRun, getRange, parseRangeRef, qualifiedAddress } from "../excel/helpers.js";
 import { getWorkbookChangeAuditLog } from "../audit/workbook-change-audit.js";
@@ -30,7 +30,7 @@ import {
   type NormalizedBorderParams,
 } from "./format-cells-borders.js";
 import { getResolvedConventions } from "../conventions/store.js";
-import { getAppStorage } from "@mariozechner/pi-web-ui/dist/storage/app-storage.js";
+import { getAppStorage } from "@earendil-works/pi-web-ui/dist/storage/app-storage.js";
 
 const DEFAULT_FONT_NAME = "Arial";
 const DEFAULT_FONT_SIZE = 10;

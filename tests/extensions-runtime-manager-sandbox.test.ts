@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { readFile } from "node:fs/promises";
 
 import { Type } from "@sinclair/typebox";
-import type { ImageContent, TextContent } from "@mariozechner/pi-ai";
+import type { ImageContent, TextContent } from "@earendil-works/pi-ai";
 
 import { ConnectionManager } from "../src/connections/manager.ts";
 import { CONNECTION_STORE_KEY } from "../src/connections/store.ts";

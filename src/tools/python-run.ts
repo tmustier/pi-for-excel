@@ -6,7 +6,7 @@
  * it can run in-browser via Pyodide.
  */
 
-import type { AgentTool, AgentToolResult } from "@mariozechner/pi-agent-core";
+import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { Type, type Static, type TSchema } from "@sinclair/typebox";
 
 import { validateOfficeProxyUrl } from "../auth/proxy-validation.js";
@@ -202,7 +202,7 @@ function parseBridgeResponse(value: unknown): PythonBridgeResponse {
 }
 
 async function getSettingsStore() {
-  const storageModule = await import("@mariozechner/pi-web-ui/dist/storage/app-storage.js");
+  const storageModule = await import("@earendil-works/pi-web-ui/dist/storage/app-storage.js");
   return storageModule.getAppStorage().settings;
 }
 

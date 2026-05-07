@@ -1,7 +1,7 @@
 /**
  * Browser-safe OpenAI Codex (ChatGPT OAuth) provider.
  *
- * `@mariozechner/pi-ai` ships an OpenAI Codex OAuth provider that relies on a
+ * `@earendil-works/pi-ai` ships an OpenAI Codex OAuth provider that relies on a
  * local Node callback server, which cannot run inside Office webviews.
  *
  * This implementation keeps the same OAuth endpoints/client config, but uses a
@@ -12,7 +12,7 @@ import type {
   OAuthCredentials,
   OAuthLoginCallbacks,
   OAuthProviderInterface,
-} from "@mariozechner/pi-ai";
+} from "@earendil-works/pi-ai";
 import { generatePKCE } from "./pkce.js";
 
 const CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann";

@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { Agent, type AgentMessage } from "@mariozechner/pi-agent-core";
-import type { ImageContent } from "@mariozechner/pi-ai";
+import { Agent, type AgentMessage } from "@earendil-works/pi-agent-core";
+import type { ImageContent } from "@earendil-works/pi-ai";
 
 import { commandRegistry, type SlashCommand } from "../src/commands/types.ts";
 import { createActionQueue } from "../src/taskpane/action-queue.ts";

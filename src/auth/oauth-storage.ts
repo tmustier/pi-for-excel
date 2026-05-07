@@ -8,8 +8,8 @@
  * execution can read IndexedDB.
  */
 
-import type { OAuthCredentials } from "@mariozechner/pi-ai";
-import type { SettingsStore } from "@mariozechner/pi-web-ui/dist/storage/stores/settings-store.js";
+import type { OAuthCredentials } from "@earendil-works/pi-ai";
+import type { SettingsStore } from "@earendil-works/pi-web-ui/dist/storage/stores/settings-store.js";
 
 import { isRecord } from "../utils/type-guards.js";
 

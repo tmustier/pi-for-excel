@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
 
-import { getModels, type Api, type Model } from "@mariozechner/pi-ai";
+import { getModels, type Api, type Model } from "@earendil-works/pi-ai";
 
 import { BROWSER_OAUTH_PROVIDERS, mapToApiProvider } from "../src/auth/provider-map.ts";
 import { rewriteDevProxyUrl } from "../src/auth/dev-rewrites.ts";

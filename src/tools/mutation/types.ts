@@ -1,4 +1,4 @@
-import type { AgentToolResult } from "@mariozechner/pi-agent-core";
+import type { AgentToolResult } from "@earendil-works/pi-agent-core";
 import type { AppendWorkbookChangeAuditEntryArgs } from "../../audit/workbook-change-audit.js";
 import type { WorkbookRecoverySnapshot } from "../../workbook/recovery-log.js";
 import type { RecoveryCheckpointDetails } from "../tool-details.js";

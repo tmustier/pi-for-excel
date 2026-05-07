@@ -5,7 +5,7 @@
 The sidebar UI has two layers:
 
 1. **Our components** (`pi-sidebar.ts`, `pi-input.ts`) — own the layout shell (scroll area + input footer). Purpose-built for ~350px.
-2. **pi-web-ui content components** — render message internals (markdown, code blocks, tool cards, thinking blocks). Registered via `src/ui/register-components.ts` (deep imports from `@mariozechner/pi-web-ui/dist/*`).
+2. **pi-web-ui content components** — render message internals (markdown, code blocks, tool cards, thinking blocks). Registered via `src/ui/register-components.ts` (deep imports from `@earendil-works/pi-web-ui/dist/*`).
 
 ```
 ┌─ pi-sidebar ──────────────────────────────────────┐
@@ -26,7 +26,7 @@ The sidebar UI has two layers:
 
 **Two CSS files, loaded in order** (see `boot.ts`):
 
-1. `@mariozechner/pi-web-ui/app.css` — Tailwind v4 (utilities in `@layer`)
+1. `@earendil-works/pi-web-ui/app.css` — Tailwind v4 (utilities in `@layer`)
 2. `./ui/theme.css` — our variables, component styles, and content overrides
 
 ### The critical rule

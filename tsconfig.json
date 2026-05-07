@@ -19,7 +19,7 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"],
-      "@mariozechner/pi-web-ui/dist/*": ["node_modules/@mariozechner/pi-web-ui/dist/*"]
+      "@earendil-works/pi-web-ui/dist/*": ["node_modules/@earendil-works/pi-web-ui/dist/*"]
     }
   },
   "include": ["src/**/*.ts"],

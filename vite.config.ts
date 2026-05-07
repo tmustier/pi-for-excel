@@ -73,14 +73,14 @@ function stubBedrockProviderPlugin(): Plugin {
       if (
         id === "./amazon-bedrock.js" &&
         importer &&
-        importer.includes("@mariozechner/pi-ai") &&
+        importer.includes("@earendil-works/pi-ai") &&
         importer.includes("providers/register-builtins")
       ) {
         return stubPath;
       }
 
       // Safety: also catch resolved imports.
-      if (id.includes("@mariozechner/pi-ai") && id.endsWith("/providers/amazon-bedrock.js")) {
+      if (id.includes("@earendil-works/pi-ai") && id.endsWith("/providers/amazon-bedrock.js")) {
         return stubPath;
       }
 
@@ -110,14 +110,14 @@ function stubPiAiOAuthIndexPlugin(): Plugin {
       if (
         cleanId === "./utils/oauth/index.js" &&
         cleanImporter &&
-        cleanImporter.includes("/node_modules/@mariozechner/pi-ai/") &&
+        cleanImporter.includes("/node_modules/@earendil-works/pi-ai/") &&
         cleanImporter.endsWith("/dist/index.js")
       ) {
         return stubPath;
       }
 
       // Safety: catch resolved ids too.
-      if (cleanId.includes("/node_modules/@mariozechner/pi-ai/") && cleanId.endsWith("/dist/utils/oauth/index.js")) {
+      if (cleanId.includes("/node_modules/@earendil-works/pi-ai/") && cleanId.endsWith("/dist/utils/oauth/index.js")) {
         return stubPath;
       }
 
@@ -150,7 +150,7 @@ function stubPiWebUiBuiltinToolsPlugin(): Plugin {
       const cleanId = norm(id);
       const cleanImporter = importer ? norm(importer) : "";
 
-      const importerIsPiWebUi = cleanImporter.includes("@mariozechner/pi-web-ui");
+      const importerIsPiWebUi = cleanImporter.includes("@earendil-works/pi-web-ui");
       if (!importerIsPiWebUi) return null;
 
       // ── Tools (pi-web-ui ships them, but Excel add-in does not) ──
@@ -246,7 +246,7 @@ function buildBrowserAliasMap(): Record<string, string> {
     // pi-web-ui only exports "." + "./app.css". We deep-import from its dist
     // modules to avoid pulling the entire barrel (ChatPanel, artifacts, etc.).
     // This alias bypasses package.json "exports" restrictions.
-    "@mariozechner/pi-web-ui/dist": resolveFromRoot("node_modules/@mariozechner/pi-web-ui/dist"),
+    "@earendil-works/pi-web-ui/dist": resolveFromRoot("node_modules/@earendil-works/pi-web-ui/dist"),
   };
 }
 

@@ -5,9 +5,9 @@
  * human-readable descriptions. Expand to see raw Input/Output.
  */
 
-import type { ImageContent, TextContent, ToolResultMessage } from "@mariozechner/pi-ai";
-import { registerToolRenderer } from "@mariozechner/pi-web-ui/dist/tools/renderer-registry.js";
-import type { ToolRenderer, ToolRenderResult } from "@mariozechner/pi-web-ui/dist/tools/types.js";
+import type { ImageContent, TextContent, ToolResultMessage } from "@earendil-works/pi-ai";
+import { registerToolRenderer } from "@earendil-works/pi-web-ui/dist/tools/renderer-registry.js";
+import type { ToolRenderer, ToolRenderResult } from "@earendil-works/pi-web-ui/dist/tools/types.js";
 import { html, type TemplateResult } from "lit";
 import { createRef, ref } from "lit/directives/ref.js";
 import { renderCollapsibleToolCardHeader, renderToolCardHeader } from "./tool-card-header.js";

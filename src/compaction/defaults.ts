@@ -2,7 +2,7 @@
  * Shared compaction defaults.
  *
  * Base values mirror pi-coding-agent defaults (see
- * /opt/homebrew/lib/node_modules/@mariozechner/pi-coding-agent/docs/compaction.md).
+ * /opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/docs/compaction.md).
  *
  * Slice 5 adds a quality-first cap for large context windows and a soft warning
  * threshold so we compact earlier in long/noisy sessions.

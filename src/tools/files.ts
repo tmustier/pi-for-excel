@@ -2,7 +2,7 @@
  * Experimental files workspace tool.
  */
 
-import type { AgentTool, AgentToolResult } from "@mariozechner/pi-agent-core";
+import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { Type, type Static } from "@sinclair/typebox";
 
 import { formatBytes } from "../files/mime.js";

@@ -2,7 +2,7 @@
  * Tool wrapper that routes mutating tool calls through the workbook coordinator.
  */
 
-import type { AgentTool } from "@mariozechner/pi-agent-core";
+import type { AgentTool } from "@earendil-works/pi-agent-core";
 import type { TSchema } from "typebox";
 
 import {

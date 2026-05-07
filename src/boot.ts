@@ -8,7 +8,7 @@
  * MUST be imported as the first module in taskpane.ts.
  */
 
-import "@mariozechner/pi-web-ui/app.css";
+import "@earendil-works/pi-web-ui/app.css";
 import "./ui/theme.css";
 
 import { installLitClassFieldShadowingPatch } from "./compat/lit-class-field-shadowing.js";

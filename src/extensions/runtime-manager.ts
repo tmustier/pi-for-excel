@@ -8,7 +8,7 @@
  * - expose extension tool list so runtimes can refresh Agent toolsets
  */
 
-import type { Agent, AgentEvent, AgentTool } from "@mariozechner/pi-agent-core";
+import type { Agent, AgentEvent, AgentTool } from "@earendil-works/pi-agent-core";
 
 import type { ConnectionManager } from "../connections/manager.js";
 import {

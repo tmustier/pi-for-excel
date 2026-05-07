@@ -1,5 +1,5 @@
 /**
- * Stub module for `@mariozechner/pi-web-ui/dist/utils/attachment-utils.js`.
+ * Stub module for `@earendil-works/pi-web-ui/dist/utils/attachment-utils.js`.
  *
  * The real module bundles heavy document-parsing dependencies.
  * Pi for Excel currently does not support attachments in the sidebar UI.

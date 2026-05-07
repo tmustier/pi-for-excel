@@ -23,7 +23,7 @@
  * ```
  */
 
-import type { AgentEvent, AgentTool } from "@mariozechner/pi-agent-core";
+import type { AgentEvent, AgentTool } from "@earendil-works/pi-agent-core";
 
 import {
   ALLOW_REMOTE_EXTENSION_URLS_STORAGE_KEY,

@@ -1,9 +1,9 @@
 import { promises as fs } from "node:fs";
 
 const PI_DEPENDENCIES = [
-  "@mariozechner/pi-ai",
-  "@mariozechner/pi-web-ui",
-  "@mariozechner/pi-agent-core",
+  "@earendil-works/pi-ai",
+  "@earendil-works/pi-web-ui",
+  "@earendil-works/pi-agent-core",
 ];
 
 function findMissing(entries) {

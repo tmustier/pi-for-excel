@@ -2,7 +2,7 @@
  * web_search — external web search (Jina/Serper/Tavily/Brave).
  */
 
-import type { AgentTool, AgentToolResult } from "@mariozechner/pi-agent-core";
+import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { Type, type Static, type TSchema } from "@sinclair/typebox";
 
 import { integrationsCommandHint } from "../integrations/naming.js";
@@ -630,7 +630,7 @@ function buildResultMarkdown(args: {
 }
 
 async function defaultGetConfig(): Promise<WebSearchToolConfig> {
-  const storageModule = await import("@mariozechner/pi-web-ui/dist/storage/app-storage.js");
+  const storageModule = await import("@earendil-works/pi-web-ui/dist/storage/app-storage.js");
   const settings: ProxyAwareSettingsStore = storageModule.getAppStorage().settings;
 
   const [providerConfig, proxyBaseUrl] = await Promise.all([

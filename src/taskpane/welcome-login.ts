@@ -2,8 +2,8 @@
  * Welcome/login overlay shown when no providers are configured.
  */
 
-import type { ProviderKeysStore } from "@mariozechner/pi-web-ui/dist/storage/stores/provider-keys-store.js";
-import { getAppStorage } from "@mariozechner/pi-web-ui/dist/storage/app-storage.js";
+import type { ProviderKeysStore } from "@earendil-works/pi-web-ui/dist/storage/stores/provider-keys-store.js";
+import { getAppStorage } from "@earendil-works/pi-web-ui/dist/storage/app-storage.js";
 
 import { closeOverlayById, createOverlayDialog } from "../ui/overlay-dialog.js";
 import { WELCOME_LOGIN_OVERLAY_ID } from "../ui/overlay-ids.js";

@@ -101,7 +101,7 @@ function isSettingsStoreLike(value: unknown): value is SettingsStoreLike {
 
 async function defaultGetSettingsStore(): Promise<SettingsStoreLike | null> {
   try {
-    const storageModule = await import("@mariozechner/pi-web-ui/dist/storage/app-storage.js");
+    const storageModule = await import("@earendil-works/pi-web-ui/dist/storage/app-storage.js");
     const appStorage = storageModule.getAppStorage();
     const settings = isRecord(appStorage) ? appStorage.settings : null;
     return isSettingsStoreLike(settings) ? settings : null;

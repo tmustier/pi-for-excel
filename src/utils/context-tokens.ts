@@ -7,8 +7,8 @@
  * tokenization.
  */
 
-import type { Usage } from "@mariozechner/pi-ai";
-import type { AgentMessage, AgentState } from "@mariozechner/pi-agent-core";
+import type { Usage } from "@earendil-works/pi-ai";
+import type { AgentMessage, AgentState } from "@earendil-works/pi-agent-core";
 
 const CHARS_PER_TOKEN = 4;
 

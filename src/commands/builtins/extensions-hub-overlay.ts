@@ -5,7 +5,7 @@
  * Tabs: Connections | Plugins | Skills
  */
 
-import { getAppStorage } from "@mariozechner/pi-web-ui/dist/storage/app-storage.js";
+import { getAppStorage } from "@earendil-works/pi-web-ui/dist/storage/app-storage.js";
 import type { ConnectionManager } from "../../connections/manager.js";
 import type { ExtensionRuntimeManager } from "../../extensions/runtime-manager.js";
 import { dispatchIntegrationsChanged } from "../../integrations/events.js";

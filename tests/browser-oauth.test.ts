@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import type { OAuthLoginCallbacks } from "@mariozechner/pi-ai";
+import type { OAuthLoginCallbacks } from "@earendil-works/pi-ai";
 
 import { getOAuthProvider } from "../src/auth/oauth-provider-registry.ts";
 

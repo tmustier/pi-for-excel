@@ -1,4 +1,4 @@
-import type { AgentToolResult } from "@mariozechner/pi-agent-core";
+import type { AgentToolResult } from "@earendil-works/pi-agent-core";
 import { Kind, Type, type TSchema } from "@sinclair/typebox";
 
 import type { HttpRequestOptions, LlmCompletionRequest } from "../../commands/extension-api.js";

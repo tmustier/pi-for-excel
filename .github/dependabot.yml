@@ -9,15 +9,15 @@ updates:
       day: "monday"
     open-pull-requests-limit: 5
     allow:
-      - dependency-name: "@mariozechner/pi-ai"
-      - dependency-name: "@mariozechner/pi-web-ui"
-      - dependency-name: "@mariozechner/pi-agent-core"
+      - dependency-name: "@earendil-works/pi-ai"
+      - dependency-name: "@earendil-works/pi-web-ui"
+      - dependency-name: "@earendil-works/pi-agent-core"
     groups:
       pi-stack:
         patterns:
-          - "@mariozechner/pi-ai"
-          - "@mariozechner/pi-web-ui"
-          - "@mariozechner/pi-agent-core"
+          - "@earendil-works/pi-ai"
+          - "@earendil-works/pi-web-ui"
+          - "@earendil-works/pi-agent-core"
         update-types:
           - "minor"
           - "patch"
@@ -32,9 +32,9 @@ updates:
       - dependency-name: "eslint"
         update-types:
           - "version-update:semver-major"
-      - dependency-name: "@mariozechner/pi-ai"
-      - dependency-name: "@mariozechner/pi-web-ui"
-      - dependency-name: "@mariozechner/pi-agent-core"
+      - dependency-name: "@earendil-works/pi-ai"
+      - dependency-name: "@earendil-works/pi-web-ui"
+      - dependency-name: "@earendil-works/pi-agent-core"
     groups:
       npm-minor-and-patch:
         patterns:

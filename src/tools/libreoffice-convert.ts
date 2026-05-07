@@ -6,7 +6,7 @@
  * (configured override or default https://localhost:3340).
  */
 
-import type { AgentTool, AgentToolResult } from "@mariozechner/pi-agent-core";
+import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { Type, type TSchema } from "@sinclair/typebox";
 
 import { getErrorMessage } from "../utils/errors.js";

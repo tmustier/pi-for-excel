@@ -2,7 +2,7 @@
  * Multi-runtime manager for taskpane session tabs.
  */
 
-import type { Agent } from "@mariozechner/pi-agent-core";
+import type { Agent } from "@earendil-works/pi-agent-core";
 
 import type { PiSidebar } from "../ui/pi-sidebar.js";
 import type { ActionQueue } from "./action-queue.js";

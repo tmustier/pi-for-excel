@@ -7,7 +7,7 @@
  * compaction rewrites the message list.
  */
 
-import type { Agent } from "@mariozechner/pi-agent-core";
+import type { Agent } from "@earendil-works/pi-agent-core";
 
 import { commandRegistry } from "../commands/types.js";
 import { maybeAutoCompactBeforePrompt } from "../compaction/auto-compaction.js";

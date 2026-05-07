@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import type { Context, Tool } from "@mariozechner/pi-ai";
+import type { Context, Tool } from "@earendil-works/pi-ai";
 import { Type } from "@sinclair/typebox";
 
 import { selectToolBundle } from "../src/context/tool-disclosure.ts";

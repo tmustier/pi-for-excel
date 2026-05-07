@@ -1,4 +1,4 @@
-import type { AgentTool } from "@mariozechner/pi-agent-core";
+import type { AgentTool } from "@earendil-works/pi-agent-core";
 
 function normalizeConnectionId(rawValue: string): string {
   const normalized = rawValue.trim().toLowerCase();

@@ -1,5 +1,5 @@
 /**
- * Stub module for `@mariozechner/pi-web-ui/dist/dialogs/AttachmentOverlay.js`.
+ * Stub module for `@earendil-works/pi-web-ui/dist/dialogs/AttachmentOverlay.js`.
  *
  * The real overlay renders PDF/DOCX/XLSX previews and bundles large deps.
  */

@@ -1,5 +1,5 @@
 /**
- * Stub module for `@mariozechner/pi-web-ui/dist/tools/extract-document.js`.
+ * Stub module for `@earendil-works/pi-web-ui/dist/tools/extract-document.js`.
  *
  * pi-web-ui's public entrypoint re-exports this tool, and the real
  * implementation pulls in large dependencies via `loadAttachment()`:

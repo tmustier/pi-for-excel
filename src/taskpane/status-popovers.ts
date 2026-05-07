@@ -2,7 +2,7 @@
  * Status-bar popovers (thinking selector + context quick actions).
  */
 
-import type { ThinkingLevel } from "@mariozechner/pi-agent-core";
+import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
 
 import type { StatusContextWarningSeverity } from "./status-context.js";
 

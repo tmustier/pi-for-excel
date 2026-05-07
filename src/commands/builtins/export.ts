@@ -2,8 +2,8 @@
  * Builtin export/compaction commands.
  */
 
-import type { Api, Model, StopReason, Usage } from "@mariozechner/pi-ai";
-import type { AgentMessage } from "@mariozechner/pi-agent-core";
+import type { Api, Model, StopReason, Usage } from "@earendil-works/pi-ai";
+import type { AgentMessage } from "@earendil-works/pi-agent-core";
 
 import type { SlashCommand } from "../types.js";
 import type { ActiveAgentProvider } from "./model.js";

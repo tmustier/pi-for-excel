@@ -2,7 +2,7 @@
  * Status bar rendering + thinking level flash.
  */
 
-import type { Agent } from "@mariozechner/pi-agent-core";
+import type { Agent } from "@earendil-works/pi-agent-core";
 
 import { showToast } from "../ui/toast.js";
 import { escapeAttr, escapeHtml } from "../utils/html.js";

@@ -2,7 +2,7 @@
  * fetch_page — fetch a webpage URL and extract readable markdown content.
  */
 
-import type { AgentTool, AgentToolResult } from "@mariozechner/pi-agent-core";
+import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { Type, type Static, type TSchema } from "@sinclair/typebox";
 
 import { getErrorMessage } from "../utils/errors.js";
@@ -273,7 +273,7 @@ function enforceDomainRateLimit(hostname: string, now: number): void {
 }
 
 async function defaultGetConfig(): Promise<FetchPageToolConfig> {
-  const storageModule = await import("@mariozechner/pi-web-ui/dist/storage/app-storage.js");
+  const storageModule = await import("@earendil-works/pi-web-ui/dist/storage/app-storage.js");
   const settings: ProxyAwareSettingsStore = storageModule.getAppStorage().settings;
   const proxyBaseUrl = await getEnabledProxyBaseUrl(settings);
   return { proxyBaseUrl };

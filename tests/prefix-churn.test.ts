@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { Type } from "@sinclair/typebox";
-import type { Api, Context, Model } from "@mariozechner/pi-ai";
+import type { Api, Context, Model } from "@earendil-works/pi-ai";
 
 import {
   createPrefixFingerprint,

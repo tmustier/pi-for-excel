@@ -6,7 +6,7 @@
  * Security note: avoid `innerHTML` so queued text can't inject markup.
  */
 
-import type { Agent } from "@mariozechner/pi-agent-core";
+import type { Agent } from "@earendil-works/pi-agent-core";
 
 import type { PiSidebar } from "../ui/pi-sidebar.js";
 import { extractTextFromContent } from "../utils/content.js";

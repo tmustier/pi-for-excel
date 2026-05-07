@@ -2,7 +2,7 @@
  * Settings section for custom OpenAI-compatible gateways.
  */
 
-import { getAppStorage } from "@mariozechner/pi-web-ui/dist/storage/app-storage.js";
+import { getAppStorage } from "@earendil-works/pi-web-ui/dist/storage/app-storage.js";
 
 import {
   DEFAULT_OPENAI_GATEWAY_CONTEXT_WINDOW,

@@ -44,7 +44,7 @@ export async function fetchBridgeHealthJson(bridgeUrl: string): Promise<unknown>
 
 export async function getBridgeSetting(settingKey: string): Promise<string | undefined> {
   try {
-    const storageModule = await import("@mariozechner/pi-web-ui/dist/storage/app-storage.js");
+    const storageModule = await import("@earendil-works/pi-web-ui/dist/storage/app-storage.js");
     const storage = storageModule.getAppStorage();
     const value = await storage.settings.get<string>(settingKey);
     if (typeof value !== "string") {
@@ -60,7 +60,7 @@ export async function getBridgeSetting(settingKey: string): Promise<string | und
 
 export async function setBridgeSetting(settingKey: string, value: string): Promise<void> {
   try {
-    const storageModule = await import("@mariozechner/pi-web-ui/dist/storage/app-storage.js");
+    const storageModule = await import("@earendil-works/pi-web-ui/dist/storage/app-storage.js");
     const storage = storageModule.getAppStorage();
     await storage.settings.set(settingKey, value);
   } catch {

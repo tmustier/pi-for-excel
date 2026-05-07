@@ -4,8 +4,8 @@
  * Extracted from taskpane.ts to keep the entrypoint thin.
  */
 
-import type { Agent, ThinkingLevel } from "@mariozechner/pi-agent-core";
-import { supportsXhigh } from "@mariozechner/pi-ai";
+import type { Agent, ThinkingLevel } from "@earendil-works/pi-agent-core";
+import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 
 import type { PiSidebar } from "../ui/pi-sidebar.js";
 import { moveCursorToEnd } from "../ui/input-focus.js";
@@ -168,13 +168,13 @@ export function getThinkingLevels(agent: Agent): ThinkingLevel[] {
   const provider = model.provider;
   if (provider === "openai" || provider === "openai-codex") {
     const levels: ThinkingLevel[] = ["off", "minimal", "low", "medium", "high"];
-    if (supportsXhigh(model)) levels.push("xhigh");
+    if (getSupportedThinkingLevels(model).includes("xhigh")) levels.push("xhigh");
     return levels;
   }
 
   if (provider === "anthropic") {
     const levels: ThinkingLevel[] = ["off", "low", "medium", "high"];
-    if (supportsXhigh(model)) levels.push("xhigh");
+    if (getSupportedThinkingLevels(model).includes("xhigh")) levels.push("xhigh");
     return levels;
   }
 

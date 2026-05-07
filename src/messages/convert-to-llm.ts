@@ -7,9 +7,9 @@
  * - model-facing shaping of older large tool results
  */
 
-import type { AgentMessage } from "@mariozechner/pi-agent-core";
-import type { Message } from "@mariozechner/pi-ai";
-import { defaultConvertToLlm } from "@mariozechner/pi-web-ui/dist/components/Messages.js";
+import type { AgentMessage } from "@earendil-works/pi-agent-core";
+import type { Message } from "@earendil-works/pi-ai";
+import { defaultConvertToLlm } from "@earendil-works/pi-web-ui/dist/components/Messages.js";
 
 import { compactionSummaryToUserMessage } from "./compaction.js";
 import { shapeToolResultsForLlm } from "./tool-result-shaping.js";

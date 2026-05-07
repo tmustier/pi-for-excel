@@ -3,7 +3,7 @@
  */
 
 import { Type, type Static } from "@sinclair/typebox";
-import type { AgentTool, AgentToolResult } from "@mariozechner/pi-agent-core";
+import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 
 import { filterAgentSkillsByEnabledState } from "../skills/activation-store.js";
 import type { AgentSkillDefinition } from "../skills/types.js";
@@ -77,7 +77,7 @@ async function defaultLoadDisabledSkillNames(): Promise<Set<string>> {
 
   try {
     const [{ getAppStorage }, { loadDisabledSkillNamesFromSettings }] = await Promise.all([
-      import("@mariozechner/pi-web-ui/dist/storage/app-storage.js"),
+      import("@earendil-works/pi-web-ui/dist/storage/app-storage.js"),
       import("../skills/activation-store.js"),
     ]);
 

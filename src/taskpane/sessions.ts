@@ -7,11 +7,11 @@
  * - session identity lifecycle (new / rename / resume)
  */
 
-import { getModel } from "@mariozechner/pi-ai";
-import type { Agent, AgentMessage } from "@mariozechner/pi-agent-core";
-import type { SessionData } from "@mariozechner/pi-web-ui/dist/storage/types.js";
-import type { SessionsStore } from "@mariozechner/pi-web-ui/dist/storage/stores/sessions-store.js";
-import type { SettingsStore } from "@mariozechner/pi-web-ui/dist/storage/stores/settings-store.js";
+import { getModel } from "@earendil-works/pi-ai";
+import type { Agent, AgentMessage } from "@earendil-works/pi-agent-core";
+import type { SessionData } from "@earendil-works/pi-web-ui/dist/storage/types.js";
+import type { SessionsStore } from "@earendil-works/pi-web-ui/dist/storage/stores/sessions-store.js";
+import type { SettingsStore } from "@earendil-works/pi-web-ui/dist/storage/stores/settings-store.js";
 
 import {
   resolveCustomProviderModel,

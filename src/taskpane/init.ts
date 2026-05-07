@@ -6,12 +6,12 @@
  */
 
 import { html, render } from "lit";
-import { Agent } from "@mariozechner/pi-agent-core";
-import { ApiKeyPromptDialog } from "@mariozechner/pi-web-ui/dist/dialogs/ApiKeyPromptDialog.js";
-import { ModelSelector } from "@mariozechner/pi-web-ui/dist/dialogs/ModelSelector.js";
-import { getAppStorage } from "@mariozechner/pi-web-ui/dist/storage/app-storage.js";
-import type { CustomProvider } from "@mariozechner/pi-web-ui/dist/storage/stores/custom-providers-store.js";
-import type { SessionData } from "@mariozechner/pi-web-ui/dist/storage/types.js";
+import { Agent } from "@earendil-works/pi-agent-core";
+import { ApiKeyPromptDialog } from "@earendil-works/pi-web-ui/dist/dialogs/ApiKeyPromptDialog.js";
+import { ModelSelector } from "@earendil-works/pi-web-ui/dist/dialogs/ModelSelector.js";
+import { getAppStorage } from "@earendil-works/pi-web-ui/dist/storage/app-storage.js";
+import type { CustomProvider } from "@earendil-works/pi-web-ui/dist/storage/stores/custom-providers-store.js";
+import type { SessionData } from "@earendil-works/pi-web-ui/dist/storage/types.js";
 
 import { createOfficeStreamFn } from "../auth/stream-proxy.js";
 import {

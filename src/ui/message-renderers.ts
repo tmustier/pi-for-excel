@@ -7,7 +7,7 @@
 
 import { html } from "lit";
 import { createRef, ref } from "lit/directives/ref.js";
-import { registerMessageRenderer } from "@mariozechner/pi-web-ui/dist/components/message-renderer-registry.js";
+import { registerMessageRenderer } from "@earendil-works/pi-web-ui/dist/components/message-renderer-registry.js";
 import { renderCollapsibleToolCardHeader } from "./tool-card-header.js";
 
 import type { CompactionSummaryMessage } from "../messages/compaction.js";

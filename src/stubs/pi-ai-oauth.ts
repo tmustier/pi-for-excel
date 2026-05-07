@@ -1,5 +1,5 @@
 /**
- * Stub for `@mariozechner/pi-ai/dist/utils/oauth/index.js` in browser builds.
+ * Stub for `@earendil-works/pi-ai/dist/utils/oauth/index.js` in browser builds.
  *
  * `pi-ai`'s OAuth index registers several CLI-only providers (e.g. Google
  * Antigravity / Gemini CLI) and sets up Node.js fetch proxy plumbing.

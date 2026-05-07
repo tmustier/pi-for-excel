@@ -9,7 +9,7 @@
  * The local bridge contract (v1) is a POST JSON request to /v1/tmux.
  */
 
-import type { AgentTool, AgentToolResult } from "@mariozechner/pi-agent-core";
+import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { Type, type Static, type TSchema } from "@sinclair/typebox";
 
 import { validateOfficeProxyUrl } from "../auth/proxy-validation.js";
@@ -351,7 +351,7 @@ async function defaultGetBridgeConfig(): Promise<TmuxBridgeConfig | null> {
   let token: string | undefined;
 
   try {
-    const storageModule = await import("@mariozechner/pi-web-ui/dist/storage/app-storage.js");
+    const storageModule = await import("@earendil-works/pi-web-ui/dist/storage/app-storage.js");
     const settings = storageModule.getAppStorage().settings;
 
     const urlValue = await settings.get<string>(TMUX_BRIDGE_URL_SETTING_KEY);

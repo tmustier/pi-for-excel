@@ -2,7 +2,7 @@
  * Default model selection for the taskpane.
  */
 
-import { getModel, getModels, type Api, type Model } from "@mariozechner/pi-ai";
+import { getModel, getModels, type Api, type Model } from "@earendil-works/pi-ai";
 
 import {
   compareOpenAiModelIds,
@@ -21,6 +21,10 @@ type DefaultProvider =
   | "google-antigravity";
 
 type DefaultModelRule = { provider: DefaultProvider; match: RegExp };
+
+function getProviderModels(provider: string): Model<Api>[] {
+  return getModels(provider as Parameters<typeof getModels>[0]) as Model<Api>[];
+}
 
 const DEFAULT_MODEL_RULES: DefaultModelRule[] = [
   // Gemini defaults: Pro-ish first, then any Gemini
@@ -43,7 +47,7 @@ const DEFAULT_MODEL_RULES: DefaultModelRule[] = [
 ];
 
 function pickLatestMatchingModel(provider: DefaultProvider, match: RegExp): Model<Api> | null {
-  const models: Model<Api>[] = getModels(provider);
+  const models: Model<Api>[] = getProviderModels(provider);
   const candidates = models.filter((m) => match.test(m.id));
   candidates.sort((a, b) => {
     const recency = modelRecencyScore(b.id) - modelRecencyScore(a.id);
@@ -54,7 +58,7 @@ function pickLatestMatchingModel(provider: DefaultProvider, match: RegExp): Mode
 }
 
 function pickPreferredOpenAiModel(provider: "openai-codex" | "openai"): Model<Api> | null {
-  const models: Model<Api>[] = getModels(provider);
+  const models: Model<Api>[] = getProviderModels(provider);
   const bestGpt = models
     .filter((m) => isOpenAiGeneralGptModelId(m.id))
     .sort((a, b) => compareOpenAiModelIds(a.id, b.id))[0];
@@ -90,7 +94,7 @@ export function pickDefaultModel(
   // Prefer Sonnet when its major/minor version is >= Opus (e.g. Sonnet 4-6 over Opus 4-6).
   // Otherwise prefer Opus.
   if (availableProviders.includes("anthropic")) {
-    const models: Model<Api>[] = getModels("anthropic");
+    const models: Model<Api>[] = getProviderModels("anthropic");
     const opus = models
       .filter((m) => m.id.startsWith("claude-opus-"))
       .sort((a, b) => modelRecencyScore(b.id) - modelRecencyScore(a.id))[0];

@@ -1,4 +1,4 @@
-import type { AgentToolResult } from "@mariozechner/pi-agent-core";
+import type { AgentToolResult } from "@earendil-works/pi-agent-core";
 
 export function appendMutationResultNote<TDetails>(result: AgentToolResult<TDetails>, note: string): void {
   const trimmedNote = note.trim();

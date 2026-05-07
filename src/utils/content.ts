@@ -6,7 +6,7 @@
  * safe to use at those edges.
  */
 
-import type { TextContent, ToolCall } from "@mariozechner/pi-ai";
+import type { TextContent, ToolCall } from "@earendil-works/pi-ai";
 
 import { isRecord } from "./type-guards.js";
 

@@ -8,7 +8,7 @@
  * 4) write transformed data back into Excel
  */
 
-import type { AgentTool, AgentToolResult } from "@mariozechner/pi-agent-core";
+import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { Type, type Static, type TSchema } from "@sinclair/typebox";
 
 import {

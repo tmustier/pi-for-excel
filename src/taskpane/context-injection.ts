@@ -8,7 +8,7 @@
  * - change tracker summary (cells edited since last message)
  */
 
-import type { AgentMessage } from "@mariozechner/pi-agent-core";
+import type { AgentMessage } from "@earendil-works/pi-agent-core";
 
 import type { ChangeTracker } from "../context/change-tracker.js";
 import { getBlueprint, getBlueprintRevision } from "../context/blueprint.js";

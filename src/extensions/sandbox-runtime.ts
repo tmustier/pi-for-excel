@@ -6,7 +6,7 @@
  * sanitized UI projection format (no raw HTML injection).
  */
 
-import type { AgentEvent, AgentTool, AgentToolResult } from "@mariozechner/pi-agent-core";
+import type { AgentEvent, AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import type { TSchema } from "typebox";
 
 import type {

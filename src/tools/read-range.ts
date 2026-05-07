@@ -8,12 +8,12 @@
  */
 
 import { Type, type Static } from "@sinclair/typebox";
-import type { AgentTool, AgentToolResult } from "@mariozechner/pi-agent-core";
+import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { excelRun, getRange, qualifiedAddress, parseCell, colToLetter } from "../excel/helpers.js";
 import { formatAsMarkdownTable, extractFormulas, findErrors } from "../utils/format.js";
 import { getErrorMessage } from "../utils/errors.js";
 import { buildResolvedFormatLabels, getResolvedConventions, humanizeFormat } from "../conventions/index.js";
-import { getAppStorage } from "@mariozechner/pi-web-ui/dist/storage/app-storage.js";
+import { getAppStorage } from "@earendil-works/pi-web-ui/dist/storage/app-storage.js";
 import type { ReadRangeCsvDetails } from "./tool-details.js";
 
 const schema = Type.Object({

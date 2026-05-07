@@ -173,9 +173,9 @@ Pi for Excel is a single-page Office taskpane add-in built with:
 
 - **[Vite](https://vite.dev/)** — dev server + production bundler
 - **[Lit](https://lit.dev/)** — web components for the sidebar UI
-- **[pi-agent-core](https://www.npmjs.com/package/@mariozechner/pi-agent-core)** — agent runtime (tool loop, streaming, state management)
-- **[pi-ai](https://www.npmjs.com/package/@mariozechner/pi-ai)** — multi-provider LLM abstraction (Anthropic, OpenAI, Google, GitHub Copilot)
-- **[pi-web-ui](https://www.npmjs.com/package/@mariozechner/pi-web-ui)** — shared web UI components (message rendering, storage, settings dialogs)
+- **[pi-agent-core](https://www.npmjs.com/package/@earendil-works/pi-agent-core)** — agent runtime (tool loop, streaming, state management)
+- **[pi-ai](https://www.npmjs.com/package/@earendil-works/pi-ai)** — multi-provider LLM abstraction (Anthropic, OpenAI, Google, GitHub Copilot)
+- **[pi-web-ui](https://www.npmjs.com/package/@earendil-works/pi-web-ui)** — shared web UI components (message rendering, storage, settings dialogs)
 - **[Office.js](https://learn.microsoft.com/en-us/office/dev/add-ins/)** — Excel workbook API
 
 ### Source layout

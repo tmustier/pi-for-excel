@@ -15,7 +15,7 @@ import {
   type Context,
   type Model,
   type StreamOptions,
-} from "@mariozechner/pi-ai";
+} from "@earendil-works/pi-ai";
 
 import { isDebugEnabled } from "../debug/debug.js";
 import { selectToolBundle, type ToolBundleId } from "../context/tool-disclosure.js";
@@ -85,7 +85,7 @@ function isGoogleOAuthProvider(provider: string): provider is GoogleOAuthProvide
 }
 
 function pickPreferredGoogleOAuthModel(provider: GoogleOAuthProvider): Model<Api> | null {
-  const models = getModels(provider);
+  const models = getModels(provider as Parameters<typeof getModels>[0]) as Model<Api>[];
 
   const stablePro = models
     .filter((m) => /^gemini-(?!.*preview).*?-pro/i.test(m.id))

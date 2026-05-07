@@ -1,5 +1,5 @@
 /**
- * Stub module for `@mariozechner/pi-web-ui/dist/tools/artifacts/artifacts.js`.
+ * Stub module for `@earendil-works/pi-web-ui/dist/tools/artifacts/artifacts.js`.
  *
  * The real ArtifactsPanel pulls in document preview/rendering dependencies.
  * Pi for Excel does not use artifacts yet.

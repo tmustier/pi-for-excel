@@ -4,7 +4,7 @@ import type {
   AgentTool,
   AgentToolResult,
   AgentToolUpdateCallback,
-} from "@mariozechner/pi-agent-core";
+} from "@earendil-works/pi-agent-core";
 import type { Static, TSchema } from "typebox";
 
 import type {

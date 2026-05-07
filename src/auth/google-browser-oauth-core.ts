@@ -6,7 +6,7 @@ import type {
   OAuthCredentials,
   OAuthLoginCallbacks,
   OAuthProviderInterface,
-} from "@mariozechner/pi-ai";
+} from "@earendil-works/pi-ai";
 import { generatePKCE } from "./pkce.js";
 
 const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";

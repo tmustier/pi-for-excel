@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import type { Agent } from "@mariozechner/pi-agent-core";
+import type { Agent } from "@earendil-works/pi-agent-core";
 
 import { ConnectionManager } from "../src/connections/manager.ts";
 import { buildRuntimeManagerActivationBridge } from "../src/extensions/runtime-manager-activation.ts";

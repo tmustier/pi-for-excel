@@ -2,7 +2,7 @@
  * Editor-focused keyboard actions (slash commands + streaming steer/follow-up).
  */
 
-import type { Agent, AgentMessage } from "@mariozechner/pi-agent-core";
+import type { Agent, AgentMessage } from "@earendil-works/pi-agent-core";
 
 import type { PiSidebar } from "../../ui/pi-sidebar.js";
 import { showToast } from "../../ui/toast.js";

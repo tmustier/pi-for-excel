@@ -5,7 +5,7 @@
  * in `SettingsStore` using a dedicated key prefix.
  */
 
-import type { SettingsStore } from "@mariozechner/pi-web-ui";
+import type { SettingsStore } from "@earendil-works/pi-web-ui";
 
 const SESSION_WORKBOOK_PREFIX = "session.workbook.v1.";
 const WORKBOOK_LATEST_SESSION_PREFIX = "workbook.latestSession.v1.";

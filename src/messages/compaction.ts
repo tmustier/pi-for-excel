@@ -7,7 +7,7 @@
  * - keep the summary in LLM context via Agent.convertToLlm
  */
 
-import type { UserMessage } from "@mariozechner/pi-ai";
+import type { UserMessage } from "@earendil-works/pi-ai";
 
 export const COMPACTION_SUMMARY_PREFIX =
   "The conversation history before this point was compacted into the following summary:\n\n<summary>\n";
@@ -21,7 +21,7 @@ export interface CompactionSummaryMessage {
   timestamp: number;
 }
 
-declare module "@mariozechner/pi-agent-core" {
+declare module "@earendil-works/pi-agent-core" {
   interface CustomAgentMessages {
     compactionSummary: CompactionSummaryMessage;
   }

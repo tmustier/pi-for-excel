@@ -44,7 +44,7 @@ There are multiple tool lists that are already out of sync:
 - A very large JS chunk and chunk-size warnings.
 - Node/browser boundary warnings (e.g. `http` externalized for browser compatibility).
 
-This likely means we’re bundling more of `@mariozechner/pi-web-ui` / `@mariozechner/pi-ai` than the Excel taskpane truly needs.
+This likely means we’re bundling more of `@earendil-works/pi-web-ui` / `@earendil-works/pi-ai` than the Excel taskpane truly needs.
 
 ---
 
@@ -139,7 +139,7 @@ UI then:
 The Excel taskpane is a browser webview. Some transitive dependencies pull in Node-only modules or large optional chunks.
 
 A likely major culprit:
-- `src/ui/pi-sidebar.ts` does `import "@mariozechner/pi-web-ui";` as a side-effect import to register custom elements.
+- `src/ui/pi-sidebar.ts` does `import "@earendil-works/pi-web-ui";` as a side-effect import to register custom elements.
   - Side-effect imports often defeat tree-shaking and pull in far more than needed.
 
 ### Proposal
@@ -150,7 +150,7 @@ A likely major culprit:
 **Phase B: targeted reductions**
 - Replace side-effect imports with explicit, minimal imports where possible.
 - Consider upstream-friendly improvements if needed:
-  - a `@mariozechner/pi-web-ui/register-minimal` entrypoint that registers only the message/tool components we use
+  - a `@earendil-works/pi-web-ui/register-minimal` entrypoint that registers only the message/tool components we use
 - Continue stubbing Node-only providers (similar to existing Bedrock + `stream` stubs) for Office builds.
 
 ### Definition of done

@@ -3,7 +3,7 @@
 **Last reviewed:** 2026-02-22
 
 This document records every place Pi for Excel intentionally diverges from
-[pi-mono](https://github.com/badlogic/pi-mono) / `@mariozechner/pi-coding-agent`
+[pi-mono](https://github.com/badlogic/pi-mono) / `@earendil-works/pi-coding-agent`
 behavior, with rationale and status for each.
 
 **Philosophy:** pi-mono is our upstream and the default is to stay aligned.

@@ -186,7 +186,7 @@ function featureListText(getFeatureSlugs: () => string[]): string {
 }
 
 async function getSettingsStore() {
-  const storageModule = await import("@mariozechner/pi-web-ui/dist/storage/app-storage.js");
+  const storageModule = await import("@earendil-works/pi-web-ui/dist/storage/app-storage.js");
   return storageModule.getAppStorage().settings;
 }
 

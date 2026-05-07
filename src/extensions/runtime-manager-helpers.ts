@@ -4,8 +4,8 @@ import type {
   Message,
   Model,
   Usage,
-} from "@mariozechner/pi-ai";
-import { getModels, getProviders } from "@mariozechner/pi-ai";
+} from "@earendil-works/pi-ai";
+import { getModels, getProviders } from "@earendil-works/pi-ai";
 
 import type { HttpRequestOptions } from "../commands/extension-api.js";
 import { isRecord } from "../utils/type-guards.js";

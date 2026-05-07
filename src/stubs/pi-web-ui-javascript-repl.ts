@@ -1,5 +1,5 @@
 /**
- * Stub module for `@mariozechner/pi-web-ui/dist/tools/javascript-repl.js`.
+ * Stub module for `@earendil-works/pi-web-ui/dist/tools/javascript-repl.js`.
  *
  * The Excel add-in does not expose the JavaScript REPL tool.
  */

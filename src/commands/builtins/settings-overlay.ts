@@ -6,7 +6,7 @@
  * - More (execution mode, advanced, experimental)
  */
 
-import { getAppStorage } from "@mariozechner/pi-web-ui/dist/storage/app-storage.js";
+import { getAppStorage } from "@earendil-works/pi-web-ui/dist/storage/app-storage.js";
 
 import {
   DEFAULT_LOCAL_PROXY_URL,

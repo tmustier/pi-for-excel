@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import type { CustomProvider } from "@mariozechner/pi-web-ui/dist/storage/stores/custom-providers-store.js";
+import type { CustomProvider } from "@earendil-works/pi-web-ui/dist/storage/stores/custom-providers-store.js";
 
 import {
   DEFAULT_OPENAI_GATEWAY_CONTEXT_WINDOW,

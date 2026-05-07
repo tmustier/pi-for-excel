@@ -231,7 +231,7 @@ Repeated server scaffolding exists across scripts (HTTPS toggle, allowed origins
 
 **Evidence from build**
 - Large output: `dist/assets/taskpane-*.js` ≈ **2.5 MB** minified.
-- Vite warnings show many modules are both dynamically and statically imported, preventing expected chunk separation (notably `@mariozechner/pi-web-ui/dist/storage/app-storage.js`).
+- Vite warnings show many modules are both dynamically and statically imported, preventing expected chunk separation (notably `@earendil-works/pi-web-ui/dist/storage/app-storage.js`).
 
 **Files involved (examples):**
 - `src/taskpane/init.ts` (static storage path)

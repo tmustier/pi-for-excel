@@ -2,7 +2,7 @@
  * mcp — Model Context Protocol gateway for configured HTTP servers.
  */
 
-import type { AgentTool, AgentToolResult } from "@mariozechner/pi-agent-core";
+import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { Type, type Static, type TSchema } from "@sinclair/typebox";
 
 import { APP_NAME, APP_VERSION } from "../app/metadata.js";
@@ -293,7 +293,7 @@ function matchesSearch(tool: McpToolDescriptor, query: string): boolean {
 }
 
 async function defaultGetRuntimeConfig(): Promise<McpRuntimeConfig> {
-  const storageModule = await import("@mariozechner/pi-web-ui/dist/storage/app-storage.js");
+  const storageModule = await import("@earendil-works/pi-web-ui/dist/storage/app-storage.js");
   const settingsStore = storageModule.getAppStorage().settings;
   const configStore: McpConfigStore = settingsStore;
   const proxyStore: ProxyAwareSettingsStore = settingsStore;

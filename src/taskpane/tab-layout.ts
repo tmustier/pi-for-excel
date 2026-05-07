@@ -5,7 +5,7 @@
  * the same set of session tabs and active tab.
  */
 
-import type { SettingsStore } from "@mariozechner/pi-web-ui";
+import type { SettingsStore } from "@earendil-works/pi-web-ui";
 
 import { isRecord } from "../utils/type-guards.js";
 

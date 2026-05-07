@@ -2,12 +2,12 @@
  * Shared app storage initialization for taskpane + dialog.
  */
 
-import { AppStorage, setAppStorage } from "@mariozechner/pi-web-ui/dist/storage/app-storage.js";
-import { IndexedDBStorageBackend } from "@mariozechner/pi-web-ui/dist/storage/backends/indexeddb-storage-backend.js";
-import { CustomProvidersStore } from "@mariozechner/pi-web-ui/dist/storage/stores/custom-providers-store.js";
-import { ProviderKeysStore } from "@mariozechner/pi-web-ui/dist/storage/stores/provider-keys-store.js";
-import { SessionsStore } from "@mariozechner/pi-web-ui/dist/storage/stores/sessions-store.js";
-import { SettingsStore } from "@mariozechner/pi-web-ui/dist/storage/stores/settings-store.js";
+import { AppStorage, setAppStorage } from "@earendil-works/pi-web-ui/dist/storage/app-storage.js";
+import { IndexedDBStorageBackend } from "@earendil-works/pi-web-ui/dist/storage/backends/indexeddb-storage-backend.js";
+import { CustomProvidersStore } from "@earendil-works/pi-web-ui/dist/storage/stores/custom-providers-store.js";
+import { ProviderKeysStore } from "@earendil-works/pi-web-ui/dist/storage/stores/provider-keys-store.js";
+import { SessionsStore } from "@earendil-works/pi-web-ui/dist/storage/stores/sessions-store.js";
+import { SettingsStore } from "@earendil-works/pi-web-ui/dist/storage/stores/settings-store.js";
 
 export function initAppStorage(dbName = "pi-for-excel") {
   const settings = new SettingsStore();

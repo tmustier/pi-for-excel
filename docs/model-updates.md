@@ -2,15 +2,15 @@
 
 **Last verified:** 2026-04-24
 
-This repo hardcodes a small set of "featured" and "preferred" model IDs (for sorting + default selection). Those IDs come from Pi’s model registry (`@mariozechner/pi-ai`) and will drift as new models ship (e.g. `gpt-5.5`, `gpt-5.3-codex`, `claude-opus-4-7`, `gemini-3.1-pro-preview`).
+This repo hardcodes a small set of "featured" and "preferred" model IDs (for sorting + default selection). Those IDs come from Pi’s model registry (`@earendil-works/pi-ai`) and will drift as new models ship (e.g. `gpt-5.5`, `gpt-5.3-codex`, `claude-opus-4-7`, `gemini-3.1-pro-preview`).
 
 This doc describes how to update:
-- the **Pi dependency versions** we ship (`@mariozechner/pi-ai`, `@mariozechner/pi-web-ui`, `@mariozechner/pi-agent-core`)
+- the **Pi dependency versions** we ship (`@earendil-works/pi-ai`, `@earendil-works/pi-web-ui`, `@earendil-works/pi-agent-core`)
 - the **model ordering/default-selection behavior** in the add-in (`src/models/model-ordering.ts`, `src/taskpane/default-model.ts`, `src/compat/model-selector-patch.ts`)
 
 ## Source of truth
 
-- **Built-in model IDs:** `node_modules/@mariozechner/pi-ai/dist/models.generated.js`
+- **Built-in model IDs:** `node_modules/@earendil-works/pi-ai/dist/models.generated.js`
   - This file is auto-generated upstream and is what `getModel(provider, id)` resolves against.
 - Don’t rely on Pi’s `docs/models.md` for built-in IDs — that doc is about **custom models** via `~/.pi/agent/models.json`.
 
@@ -23,9 +23,9 @@ This doc describes how to update:
 
 - Dependabot checks npm dependencies **daily**.
 - A dedicated Dependabot group (`pi-stack`) keeps these packages in one PR:
-  - `@mariozechner/pi-ai`
-  - `@mariozechner/pi-web-ui`
-  - `@mariozechner/pi-agent-core`
+  - `@earendil-works/pi-ai`
+  - `@earendil-works/pi-web-ui`
+  - `@earendil-works/pi-agent-core`
 - `.github/workflows/dependabot-pi-automerge.yml` auto-approves + enables auto-merge for that Dependabot group (merge still waits for green checks).
 - `npm run check` includes `scripts/check-pi-deps-lockstep.mjs`, which fails if those three package versions drift in either `package.json` specs or `package-lock.json` resolved versions.
 
@@ -34,25 +34,25 @@ This doc describes how to update:
 ### 1) Check current installed versions
 
 ```bash
-node -p "require('./node_modules/@mariozechner/pi-ai/package.json').version"
-node -p "require('./node_modules/@mariozechner/pi-web-ui/package.json').version"
-node -p "require('./node_modules/@mariozechner/pi-agent-core/package.json').version"
+node -p "require('./node_modules/@earendil-works/pi-ai/package.json').version"
+node -p "require('./node_modules/@earendil-works/pi-web-ui/package.json').version"
+node -p "require('./node_modules/@earendil-works/pi-agent-core/package.json').version"
 ```
 
 ### 2) Check latest published versions
 
 ```bash
-npm view @mariozechner/pi-ai version
-npm view @mariozechner/pi-web-ui version
-npm view @mariozechner/pi-agent-core version
+npm view @earendil-works/pi-ai version
+npm view @earendil-works/pi-web-ui version
+npm view @earendil-works/pi-agent-core version
 ```
 
 ### 3) Bump dependencies in `package.json`
 
 Update these to the same latest version (keep them in lockstep unless you *know* otherwise):
-- `@mariozechner/pi-ai`
-- `@mariozechner/pi-web-ui`
-- `@mariozechner/pi-agent-core`
+- `@earendil-works/pi-ai`
+- `@earendil-works/pi-web-ui`
+- `@earendil-works/pi-agent-core`
 
 Then:
 
@@ -65,14 +65,14 @@ npm install
 Search the local registry:
 
 ```bash
-rg -n "gpt-5\\.5"       node_modules/@mariozechner/pi-ai/dist/models.generated.js -S
-rg -n "gpt-5\\.3-codex" node_modules/@mariozechner/pi-ai/dist/models.generated.js -S
-rg -n "claude-opus-4-7"  node_modules/@mariozechner/pi-ai/dist/models.generated.js -S
-rg -n "gemini-3\\.1-pro-preview" node_modules/@mariozechner/pi-ai/dist/models.generated.js -S
+rg -n "gpt-5\\.5"       node_modules/@earendil-works/pi-ai/dist/models.generated.js -S
+rg -n "gpt-5\\.3-codex" node_modules/@earendil-works/pi-ai/dist/models.generated.js -S
+rg -n "claude-opus-4-7"  node_modules/@earendil-works/pi-ai/dist/models.generated.js -S
+rg -n "gemini-3\\.1-pro-preview" node_modules/@earendil-works/pi-ai/dist/models.generated.js -S
 ```
 
 If an ID doesn’t appear there, **don’t** add it to the add-in yet—either:
-- bump `@mariozechner/pi-ai` further, or
+- bump `@earendil-works/pi-ai` further, or
 - use an older/fallback ID, or
 - define a custom model via `~/.pi/agent/models.json`.
 

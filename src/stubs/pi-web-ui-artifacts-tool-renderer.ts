@@ -1,5 +1,5 @@
 /**
- * Stub module for `@mariozechner/pi-web-ui/dist/tools/artifacts/artifacts-tool-renderer.js`.
+ * Stub module for `@earendil-works/pi-web-ui/dist/tools/artifacts/artifacts-tool-renderer.js`.
  *
  * The Excel add-in does not render artifacts.
  */

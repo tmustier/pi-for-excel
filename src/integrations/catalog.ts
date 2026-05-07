@@ -6,7 +6,7 @@
  * - one or more tools
  */
 
-import type { AgentTool } from "@mariozechner/pi-agent-core";
+import type { AgentTool } from "@earendil-works/pi-agent-core";
 
 import { createMcpTool } from "../tools/mcp.js";
 import { createFetchPageTool } from "../tools/fetch-page.js";

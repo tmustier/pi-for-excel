@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { Agent } from "@mariozechner/pi-agent-core";
+import { Agent } from "@earendil-works/pi-agent-core";
 
 import {
   getCrossWorkbookResumeConfirmMessage,
