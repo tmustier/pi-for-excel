@@ -1,28 +1,9 @@
 version: 2
 
 updates:
-  # Keep Pi packages in lockstep, but reduce update churn from daily patch releases.
-  - package-ecosystem: "npm"
-    directory: "/"
-    schedule:
-      interval: "weekly"
-      day: "monday"
-    open-pull-requests-limit: 5
-    allow:
-      - dependency-name: "@earendil-works/pi-ai"
-      - dependency-name: "@earendil-works/pi-web-ui"
-      - dependency-name: "@earendil-works/pi-agent-core"
-    groups:
-      pi-stack:
-        patterns:
-          - "@earendil-works/pi-ai"
-          - "@earendil-works/pi-web-ui"
-          - "@earendil-works/pi-agent-core"
-        update-types:
-          - "minor"
-          - "patch"
-
-  # Keep other npm dependencies fresh (security + bugfixes).
+  # Keep npm dependencies fresh (security + bugfixes).
+  # Dependabot only allows one npm update config per directory/target-branch, so
+  # Pi stack grouping and general npm grouping must live in the same entry.
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
@@ -32,13 +13,22 @@ updates:
       - dependency-name: "eslint"
         update-types:
           - "version-update:semver-major"
-      - dependency-name: "@earendil-works/pi-ai"
-      - dependency-name: "@earendil-works/pi-web-ui"
-      - dependency-name: "@earendil-works/pi-agent-core"
     groups:
+      pi-stack:
+        patterns:
+          - "@earendil-works/pi-ai"
+          - "@earendil-works/pi-web-ui"
+          - "@earendil-works/pi-agent-core"
+        update-types:
+          - "minor"
+          - "patch"
       npm-minor-and-patch:
         patterns:
           - "*"
+        exclude-patterns:
+          - "@earendil-works/pi-ai"
+          - "@earendil-works/pi-web-ui"
+          - "@earendil-works/pi-agent-core"
         update-types:
           - "minor"
           - "patch"
