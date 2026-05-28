@@ -377,7 +377,7 @@ const handler = async (req, res) => {
 
     res.statusCode = upstream.status;
 
-    // Copy response headers (but keep our CORS headers)
+    // Copy response headers
     upstream.headers.forEach((value, key) => {
       const lower = key.toLowerCase();
       if (lower === "set-cookie") return;
@@ -389,6 +389,15 @@ const handler = async (req, res) => {
 
       // Content-Length can be wrong after decompression; let Node set it.
       if (lower === "content-length") return;
+
+      // Keep our CORS headers.
+      if (lower === "access-control-allow-origin") return;  
+      if (lower === "access-control-allow-methods") return;  
+      if (lower === "access-control-allow-headers") return;  
+      if (lower === "access-control-expose-headers") return;  
+      if (lower === "access-control-max-age") return;  
+      if (lower === "vary") return;
+
       res.setHeader(key, value);
     });
 
