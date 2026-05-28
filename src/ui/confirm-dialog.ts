@@ -5,9 +5,11 @@ import {
   createOverlayHeader,
 } from "./overlay-dialog.js";
 import { CONFIRM_DIALOG_OVERLAY_ID } from "./overlay-ids.js";
+import { t } from "../language/index.js";
 
-const CONFIRMATION_UI_UNAVAILABLE_ERROR =
-  "Confirmation UI is unavailable in this environment.";
+function getConfirmationUiUnavailableError(): string {
+  return t("confirm.unavailable");
+}
 
 export type ConfirmButtonTone = "primary" | "danger";
 
@@ -36,7 +38,7 @@ function getConfirmButtonClassName(tone: ConfirmButtonTone | undefined): string 
 
 export function requestConfirmationDialog(options: ConfirmDialogOptions): Promise<boolean> {
   if (!canRenderConfirmationDialog()) {
-    return Promise.reject(new Error(CONFIRMATION_UI_UNAVAILABLE_ERROR));
+    return Promise.reject(new Error(getConfirmationUiUnavailableError()));
   }
 
   const overlayId = options.overlayId ?? CONFIRM_DIALOG_OVERLAY_ID;
@@ -72,7 +74,7 @@ export function requestConfirmationDialog(options: ConfirmDialogOptions): Promis
 
     const { header } = createOverlayHeader({
       onClose: cancel,
-      closeLabel: options.cancelLabel ?? "Cancel",
+      closeLabel: options.cancelLabel ?? t("confirm.cancel"),
       title: options.title,
     });
 
@@ -87,11 +89,11 @@ export function requestConfirmationDialog(options: ConfirmDialogOptions): Promis
     actions.className = "pi-overlay-actions";
 
     const cancelButton = createOverlayButton({
-      text: options.cancelLabel ?? "Cancel",
+      text: options.cancelLabel ?? t("confirm.cancel"),
     });
 
     const confirmButton = createOverlayButton({
-      text: options.confirmLabel ?? "Confirm",
+      text: options.confirmLabel ?? t("confirm.confirm"),
       className: getConfirmButtonClassName(options.confirmButtonTone),
     });
 

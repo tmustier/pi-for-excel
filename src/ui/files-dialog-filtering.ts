@@ -1,3 +1,4 @@
+import { t } from "../language/index.js";
 import type { WorkspaceBackendStatus, WorkspaceFileEntry } from "../files/types.js";
 
 export interface FilesDialogBadge {
@@ -316,7 +317,7 @@ export function buildFilesDialogSections(args: {
   if (builtinFiles.length > 0) {
     sections.push({
       key: BUILTIN_DOCS_SECTION_KEY,
-      label: "BUILT-IN DOCS",
+      label: t("files-dialog-filtering.sectionBuiltinDocs"),
       files: [...builtinFiles].sort((a, b) => a.path.localeCompare(b.path)),
       folders: [],
     });
@@ -339,7 +340,7 @@ export function resolveFilesDialogConnectFolderButtonState(
     return {
       hidden: true,
       disabled: true,
-      label: "Connect folder",
+      label: t("files-dialog-filtering.connectFolder"),
       title: "",
     };
   }
@@ -356,7 +357,7 @@ export function resolveFilesDialogConnectFolderButtonState(
   return {
     hidden: false,
     disabled: false,
-    label: "Connect folder",
+    label: t("files-dialog-filtering.connectFolder"),
     title: "Connect local folder",
   };
 }

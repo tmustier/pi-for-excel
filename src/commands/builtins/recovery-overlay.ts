@@ -7,6 +7,7 @@
  */
 
 import { formatRelativeDate } from "./overlay-relative-date.js";
+import { t } from "../../language/index.js";
 import {
   applyRecoveryFilters,
   buildToolFilterOptions,
@@ -136,9 +137,9 @@ export async function showRecoveryDialog(opts: {
 
   const { header } = createOverlayHeader({
     onClose: dialog.close,
-    closeLabel: "Close backups",
-    title: "Backups",
-    subtitle: "Snapshots saved before Pi changes your data",
+    closeLabel: t("recovery.close"),
+    title: t("recovery.title"),
+    subtitle: t("recovery.subtitle"),
   });
 
   // -- Warning callout --
@@ -146,7 +147,7 @@ export async function showRecoveryDialog(opts: {
   const warningCallout = createCallout(
     "warn",
     lucide(AlertTriangle),
-    "Backups clear when you save this workbook in Excel.",
+    t("recovery.warning"),
     { compact: true },
   );
 
@@ -157,7 +158,7 @@ export async function showRecoveryDialog(opts: {
 
   const searchInput = document.createElement("input");
   searchInput.type = "text";
-  searchInput.placeholder = "Search backups…";
+  searchInput.placeholder = t("recovery.searchPlaceholder");
   searchInput.className = "pi-recovery-search pi-overlay-inline-control";
 
   const toolFilterSelect = document.createElement("select");
@@ -166,7 +167,7 @@ export async function showRecoveryDialog(opts: {
   const sortButton = document.createElement("button");
   sortButton.type = "button";
   sortButton.className = "pi-overlay-btn pi-overlay-btn--ghost pi-recovery-sort-btn";
-  sortButton.textContent = "↓ Newest";
+  sortButton.textContent = t("recovery.sortNewest");
 
   searchRow.append(searchInput, toolFilterSelect, sortButton);
 
@@ -178,7 +179,7 @@ export async function showRecoveryDialog(opts: {
   const toolbarActions = document.createElement("div");
   toolbarActions.className = "pi-overlay-toolbar-actions";
 
-  const downloadBackupBtn = createButton("Download backup", {
+  const downloadBackupBtn = createButton(t("recovery.downloadBackup"), {
     primary: true,
     compact: true,
     onClick: () => {
@@ -187,7 +188,7 @@ export async function showRecoveryDialog(opts: {
       if (!createManualFullBackup) return;
       void (async () => {
         setBusy(true);
-        statusText.textContent = "Capturing…";
+        statusText.textContent = t("recovery.capturing");
         try {
           const backup = await createManualFullBackup();
           showToast(`Backup downloaded: #${shortId(backup.id)} (${formatBytes(backup.sizeBytes)})`);
@@ -195,7 +196,7 @@ export async function showRecoveryDialog(opts: {
         } catch (error: unknown) {
           const message = error instanceof Error ? error.message : "Unknown error";
           showToast(`Backup failed: ${message}`);
-          statusText.textContent = "Backup failed";
+          statusText.textContent = t("recovery.backupFailed");
         } finally {
           setBusy(false);
         }
@@ -204,19 +205,19 @@ export async function showRecoveryDialog(opts: {
   });
   downloadBackupBtn.hidden = opts.onCreateManualFullBackup === undefined;
 
-  const refreshButton = createButton("Refresh", {
+  const refreshButton = createButton(t("recovery.refresh"), {
     compact: true,
     onClick: () => {
       if (busy) return;
       void (async () => {
         setBusy(true);
-        statusText.textContent = "Refreshing…";
+        statusText.textContent = t("recovery.refreshing");
         try {
           await reload();
         } catch (error: unknown) {
           const message = error instanceof Error ? error.message : "Unknown error";
           showToast(`Refresh failed: ${message}`);
-          statusText.textContent = "Refresh failed";
+          statusText.textContent = t("recovery.refreshFailed");
         } finally {
           setBusy(false);
         }
@@ -224,7 +225,7 @@ export async function showRecoveryDialog(opts: {
     },
   });
 
-  const clearButton = createButton("Clear all", {
+  const clearButton = createButton(t("recovery.clearAll"), {
     danger: true,
     compact: true,
     onClick: () => {
@@ -240,7 +241,7 @@ export async function showRecoveryDialog(opts: {
         });
         if (!proceed || busy) return;
         setBusy(true);
-        statusText.textContent = "Clearing…";
+        statusText.textContent = t("recovery.clearing");
         try {
           const removed = await opts.onClear();
           showToast(`Cleared ${removed} backup${removed === 1 ? "" : "s"}`);
@@ -248,7 +249,7 @@ export async function showRecoveryDialog(opts: {
         } catch (error: unknown) {
           const message = error instanceof Error ? error.message : "Unknown error";
           showToast(`Clear failed: ${message}`);
-          statusText.textContent = "Clear failed";
+          statusText.textContent = t("recovery.clearFailed");
         } finally {
           setBusy(false);
         }
@@ -272,7 +273,7 @@ export async function showRecoveryDialog(opts: {
 
   const retentionSummary = document.createElement("summary");
   retentionSummary.className = "pi-recovery-retention-summary";
-  retentionSummary.textContent = "Retention settings";
+  retentionSummary.textContent = t("recovery.retentionSettings");
   retentionDetails.appendChild(retentionSummary);
 
   const retentionRow = document.createElement("div");
@@ -280,7 +281,7 @@ export async function showRecoveryDialog(opts: {
 
   const retentionLabel = document.createElement("label");
   retentionLabel.className = "pi-recovery-retention__label";
-  retentionLabel.textContent = "Keep at most";
+  retentionLabel.textContent = t("recovery.keepAtMost");
 
   const retentionInput = document.createElement("input");
   retentionInput.type = "number";
@@ -290,9 +291,9 @@ export async function showRecoveryDialog(opts: {
 
   const retentionSuffix = document.createElement("span");
   retentionSuffix.className = "pi-recovery-retention__suffix";
-  retentionSuffix.textContent = "backups";
+  retentionSuffix.textContent = t("recovery.backupsSuffix");
 
-  const retentionSave = createButton("Save", {
+  const retentionSave = createButton(t("recovery.retentionSave"), {
     compact: true,
     onClick: () => {
       if (busy) return;
@@ -375,7 +376,7 @@ export async function showRecoveryDialog(opts: {
       toolFilterSelect.appendChild(el);
     }
 
-    sortButton.textContent = filterState.sortOrder === "newest" ? "↓ Newest" : "↑ Oldest";
+    sortButton.textContent = filterState.sortOrder === "newest" ? t("recovery.sortNewest") : t("recovery.sortOldest");
   };
 
   const renderList = (): void => {
@@ -388,7 +389,7 @@ export async function showRecoveryDialog(opts: {
     if (allCheckpoints.length === 0) {
       const empty = createEmptyInline(
         lucide(Package),
-        "No backups yet\nPi will save snapshots here before making changes to your data.",
+        t("recovery.emptyState"),
       );
       list.appendChild(empty);
       statusText.textContent = "";
@@ -396,7 +397,7 @@ export async function showRecoveryDialog(opts: {
     }
 
     if (filtered.length === 0) {
-      const empty = createEmptyInline(lucide(Search), "No backups match the current filters.");
+      const empty = createEmptyInline(lucide(Search), t("recovery.emptyFilter"));
       list.appendChild(empty);
       statusText.textContent = `0 of ${allCheckpoints.length} shown`;
       return;
@@ -423,14 +424,14 @@ export async function showRecoveryDialog(opts: {
       meta.className = "pi-recovery-item__meta";
       meta.textContent = `${formatChangedLabel(checkpoint.changedCount)} · #${shortId(checkpoint.id)}`;
 
-      const restoreButton = createButton("Restore", {
+      const restoreButton = createButton(t("recovery.restore"), {
         primary: true,
         compact: true,
         onClick: () => {
           if (busy) return;
           void (async () => {
             setBusy(true);
-            statusText.textContent = "Restoring…";
+            statusText.textContent = t("recovery.restoring");
             try {
               await opts.onRestore(checkpoint.id);
               allCheckpoints = await opts.loadCheckpoints();
@@ -438,7 +439,7 @@ export async function showRecoveryDialog(opts: {
             } catch (error: unknown) {
               const message = error instanceof Error ? error.message : "Unknown error";
               showToast(`Restore failed: ${message}`);
-              statusText.textContent = "Restore failed";
+              statusText.textContent = t("recovery.restoreFailed");
             } finally {
               setBusy(false);
             }
@@ -446,7 +447,7 @@ export async function showRecoveryDialog(opts: {
         },
       });
 
-      const deleteButton = createButton("Delete", {
+      const deleteButton = createButton(t("recovery.delete"), {
         danger: true,
         compact: true,
         onClick: () => {
@@ -462,18 +463,18 @@ export async function showRecoveryDialog(opts: {
             });
             if (!proceed || busy) return;
             setBusy(true);
-            statusText.textContent = "Deleting…";
+            statusText.textContent = t("recovery.deleting");
             try {
               const deleted = await opts.onDelete(checkpoint.id);
               if (!deleted) {
-                showToast("Backup not found");
+                showToast(t("recovery.backupNotFound"));
               }
               allCheckpoints = await opts.loadCheckpoints();
               renderList();
             } catch (error: unknown) {
               const message = error instanceof Error ? error.message : "Unknown error";
               showToast(`Delete failed: ${message}`);
-              statusText.textContent = "Delete failed";
+              statusText.textContent = t("recovery.deleteFailed");
             } finally {
               setBusy(false);
             }
@@ -543,7 +544,7 @@ export async function showRecoveryDialog(opts: {
   dialog.mount();
 
   setBusy(true);
-  statusText.textContent = "Loading…";
+  statusText.textContent = t("recovery.loading");
   try {
     if (opts.getRetentionConfig) {
       try {
@@ -558,7 +559,7 @@ export async function showRecoveryDialog(opts: {
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error";
     showToast(`Failed to load backups: ${message}`);
-    statusText.textContent = "Load failed";
+    statusText.textContent = t("recovery.loadFailed");
   } finally {
     setBusy(false);
   }

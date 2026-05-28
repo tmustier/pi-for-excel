@@ -178,7 +178,7 @@ export function createFilesDialogDetailActions(options: CreateFilesDialogDetailA
     const copyButton = document.createElement("button");
     copyButton.type = "button";
     copyButton.className = "pi-overlay-btn pi-overlay-btn--ghost pi-overlay-btn--compact";
-    copyButton.textContent = "Copy content";
+    copyButton.textContent = t("files-dialog-actions.copyContent");
     copyButton.addEventListener("click", () => {
       void (async () => {
         const result = await options.workspace.readFile(options.file.path, {
@@ -197,7 +197,7 @@ export function createFilesDialogDetailActions(options: CreateFilesDialogDetailA
     const downloadButton = document.createElement("button");
     downloadButton.type = "button";
     downloadButton.className = "pi-overlay-btn pi-overlay-btn--ghost pi-overlay-btn--compact";
-    downloadButton.textContent = "Download";
+    downloadButton.textContent = t("files-dialog-actions.download");
     downloadButton.addEventListener("click", () => {
       void (async () => {
         const result = await options.workspace.readFile(options.file.path, {
@@ -225,7 +225,7 @@ export function createFilesDialogDetailActions(options: CreateFilesDialogDetailA
     openButton.className = options.file.kind === "text"
       ? "pi-overlay-btn pi-overlay-btn--ghost pi-overlay-btn--compact"
       : "pi-overlay-btn pi-overlay-btn--primary pi-overlay-btn--compact";
-    openButton.textContent = "Open ↗";
+    openButton.textContent = t("files-dialog-actions.open");
     openButton.addEventListener("click", () => {
       void openFileInBrowser({
         file: options.file,
@@ -240,7 +240,7 @@ export function createFilesDialogDetailActions(options: CreateFilesDialogDetailA
     const downloadButton = document.createElement("button");
     downloadButton.type = "button";
     downloadButton.className = "pi-overlay-btn pi-overlay-btn--ghost pi-overlay-btn--compact";
-    downloadButton.textContent = "Download";
+    downloadButton.textContent = t("files-dialog-actions.download");
     downloadButton.addEventListener("click", () => {
       void options.workspace.downloadFile(options.file.path, {
         locationKind: options.fileRef.locationKind,
@@ -260,7 +260,7 @@ export function createFilesDialogDetailActions(options: CreateFilesDialogDetailA
   const renameButton = document.createElement("button");
   renameButton.type = "button";
   renameButton.className = "pi-overlay-btn pi-overlay-btn--ghost pi-overlay-btn--compact";
-  renameButton.textContent = "Rename";
+  renameButton.textContent = t("files-dialog-actions.rename");
   renameButton.addEventListener("click", () => {
     void (async () => {
       const nextPathInput = await requestTextInputDialog({
@@ -268,8 +268,8 @@ export function createFilesDialogDetailActions(options: CreateFilesDialogDetailA
         message: `${options.file.path} — leave off the extension to keep it.`,
         initialValue: options.file.path,
         placeholder: "folder/file.ext",
-        confirmLabel: "Rename",
-        cancelLabel: "Cancel",
+        confirmLabel: t("files-dialog-actions.rename"),
+        cancelLabel: t("files-dialog-actions.cancel"),
         restoreFocusOnClose: false,
       });
 
@@ -301,14 +301,14 @@ export function createFilesDialogDetailActions(options: CreateFilesDialogDetailA
   const deleteButton = document.createElement("button");
   deleteButton.type = "button";
   deleteButton.className = "pi-overlay-btn pi-overlay-btn--danger pi-overlay-btn--compact";
-  deleteButton.textContent = "Delete";
+  deleteButton.textContent = t("files-dialog-actions.delete");
   deleteButton.addEventListener("click", () => {
     void (async () => {
       const confirmed = await requestConfirmationDialog({
         title: "Delete file?",
         message: options.file.path,
-        confirmLabel: "Delete",
-        cancelLabel: "Cancel",
+        confirmLabel: t("files-dialog-actions.delete"),
+        cancelLabel: t("files-dialog-actions.cancel"),
         confirmButtonTone: "danger",
         restoreFocusOnClose: false,
       });

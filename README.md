@@ -1,8 +1,24 @@
 # Pi for Excel
 
+> **🌐 [English](README.md) | [中文](cn_README.md)**
+
 Open-source, multi-model AI sidebar add-in for Microsoft Excel. Powered by [Pi](https://pi.dev).
 
 Pi for Excel is an AI agent that lives inside Excel. It reads your workbook, makes changes, and does research — using any model you choose. Bring your own API key or OAuth login for Anthropic, OpenAI, Google Gemini, or GitHub Copilot.
+
+---
+
+## 🌍 Language Support
+
+This project now supports **Simplified Chinese (zh-CN)** alongside English:
+
+- **Chinese UI translation**: Most interface text is translated into Chinese. Switch language in **Settings → Advanced → Language** or use the language toggle on the welcome screen.
+- **Translation system**: All user-facing UI strings use a lightweight `t()` translation function with zero third-party dependencies. Translations are stored in `src/language/locales/` as JSON files.
+- **Adding new languages**: Create a new `{lang}.json` file in `src/language/locales/` and import it in `src/language/index.ts`.
+
+See [cn_README.md](cn_README.md) for the Chinese version of this document.
+
+---
 
 ## Features
 

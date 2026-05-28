@@ -5,6 +5,7 @@
  * controls. Most are opt-in; some can be default-on with a persisted override.
  */
 
+import { t } from "../language/index.js";
 import { ALLOW_REMOTE_EXTENSION_URLS_STORAGE_KEY } from "../commands/extension-source-policy.js";
 import { dispatchExperimentalFeatureChanged } from "./events.js";
 
@@ -32,55 +33,57 @@ export interface ExperimentalFeatureDefinition {
   defaultEnabled?: boolean;
 }
 
-const EXPERIMENTAL_FEATURES = [
-  {
-    id: "ui_dark_mode",
-    slug: "dark-mode",
-    aliases: ["theme-dark", "ui-dark-mode"],
-    title: "Dark mode",
-    description: "Enable Office/theme-driven dark mode for the task pane UI.",
-    wiring: "wired",
-    storageKey: "pi.experimental.uiDarkMode",
-  },
-  {
-    id: "remote_extension_urls",
-    slug: "remote-extension-urls",
-    aliases: ["remote-extensions", "extensions-urls"],
-    title: "Remote extension URLs",
-    description: "Allow loading extensions from remote http(s) URLs.",
-    warning: "Unsafe: remote extension code can read workbook data and credentials.",
-    wiring: "wired",
-    storageKey: ALLOW_REMOTE_EXTENSION_URLS_STORAGE_KEY,
-  },
-  {
-    id: "extension_permission_gates",
-    slug: "extension-permissions",
-    aliases: ["extensions-permissions", "extension-capability-gates"],
-    title: "Extension permission gates",
-    description: "Enforce per-extension capability permissions when extensions activate.",
-    wiring: "wired",
-    storageKey: "pi.experimental.extensionPermissionGates",
-  },
-  {
-    id: "extension_sandbox_runtime",
-    slug: "extension-sandbox-rollback",
-    aliases: ["extension-sandbox", "extensions-sandbox", "sandboxed-extensions", "extension-host-fallback"],
-    title: "Extension sandbox rollback",
-    description: "Temporarily route untrusted extensions back to host runtime (kill switch).",
-    warning: "Use only as a rollback path. Default behavior runs untrusted extensions in sandbox iframes.",
-    wiring: "wired",
-    storageKey: "pi.experimental.extensionSandboxHostFallback",
-  },
-  {
-    id: "extension_widget_v2",
-    slug: "extension-widget-v2",
-    aliases: ["extensions-widget-v2", "widget-v2", "extension-widgets"],
-    title: "Extension widget API v2",
-    description: "Enable additive multi-widget lifecycle APIs (upsert/remove/clear) with deterministic placement.",
-    wiring: "wired",
-    storageKey: "pi.experimental.extensionWidgetV2",
-  },
-] as const satisfies readonly ExperimentalFeatureDefinition[];
+function getFeatures(): readonly ExperimentalFeatureDefinition[] {
+  return [
+    {
+      id: "ui_dark_mode",
+      slug: "dark-mode",
+      aliases: ["theme-dark", "ui-dark-mode"],
+      title: t("experimental.dark_mode.title"),
+      description: t("experimental.dark_mode.desc"),
+      wiring: "wired",
+      storageKey: "pi.experimental.uiDarkMode",
+    },
+    {
+      id: "remote_extension_urls",
+      slug: "remote-extension-urls",
+      aliases: ["remote-extensions", "extensions-urls"],
+      title: t("experimental.remote_urls.title"),
+      description: t("experimental.remote_urls.desc"),
+      warning: t("experimental.remote_urls.warning"),
+      wiring: "wired",
+      storageKey: ALLOW_REMOTE_EXTENSION_URLS_STORAGE_KEY,
+    },
+    {
+      id: "extension_permission_gates",
+      slug: "extension-permissions",
+      aliases: ["extensions-permissions", "extension-capability-gates"],
+      title: t("experimental.permission_gates.title"),
+      description: t("experimental.permission_gates.desc"),
+      wiring: "wired",
+      storageKey: "pi.experimental.extensionPermissionGates",
+    },
+    {
+      id: "extension_sandbox_runtime",
+      slug: "extension-sandbox-rollback",
+      aliases: ["extension-sandbox", "extensions-sandbox", "sandboxed-extensions", "extension-host-fallback"],
+      title: t("experimental.sandbox_rollback.title"),
+      description: t("experimental.sandbox_rollback.desc"),
+      warning: t("experimental.sandbox_rollback.warning"),
+      wiring: "wired",
+      storageKey: "pi.experimental.extensionSandboxHostFallback",
+    },
+    {
+      id: "extension_widget_v2",
+      slug: "extension-widget-v2",
+      aliases: ["extensions-widget-v2", "widget-v2", "extension-widgets"],
+      title: t("experimental.widget_v2.title"),
+      description: t("experimental.widget_v2.desc"),
+      wiring: "wired",
+      storageKey: "pi.experimental.extensionWidgetV2",
+    },
+  ];
+}
 
 export interface ExperimentalFeatureSnapshot extends ExperimentalFeatureDefinition {
   enabled: boolean;
@@ -121,7 +124,7 @@ function safeSetItem(key: string, value: string): void {
 }
 
 function getFeatureDefinition(featureId: ExperimentalFeatureId): ExperimentalFeatureDefinition {
-  for (const feature of EXPERIMENTAL_FEATURES) {
+  for (const feature of getFeatures()) {
     if (feature.id === featureId) return feature;
   }
 
@@ -129,18 +132,18 @@ function getFeatureDefinition(featureId: ExperimentalFeatureId): ExperimentalFea
 }
 
 export function listExperimentalFeatures(): readonly ExperimentalFeatureDefinition[] {
-  return EXPERIMENTAL_FEATURES;
+  return getFeatures();
 }
 
 export function getExperimentalFeatureSlugs(): string[] {
-  return EXPERIMENTAL_FEATURES.map((feature) => feature.slug);
+  return getFeatures().map((feature) => feature.slug);
 }
 
 export function resolveExperimentalFeature(input: string): ExperimentalFeatureDefinition | null {
   const token = normalizeFeatureToken(input);
   if (!token) return null;
 
-  for (const feature of EXPERIMENTAL_FEATURES) {
+  for (const feature of getFeatures()) {
     if (token === normalizeFeatureToken(feature.slug)) {
       return feature;
     }
@@ -190,7 +193,7 @@ export function toggleExperimentalFeature(featureId: ExperimentalFeatureId): boo
 }
 
 export function getExperimentalFeatureSnapshots(): ExperimentalFeatureSnapshot[] {
-  return EXPERIMENTAL_FEATURES.map((feature) => ({
+  return getFeatures().map((feature) => ({
     ...feature,
     enabled: isExperimentalFeatureEnabled(feature.id),
   }));

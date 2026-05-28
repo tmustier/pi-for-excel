@@ -26,7 +26,7 @@ async function copyToClipboard(csv: string, btn: HTMLButtonElement): Promise<voi
   try {
     await navigator.clipboard.writeText(csv);
     const orig = btn.textContent;
-    btn.textContent = "Copied!";
+    btn.textContent = t("render-csv-table.copied");
     btn.classList.add("pi-csv-table__copy--done");
     setTimeout(() => {
       btn.textContent = orig;

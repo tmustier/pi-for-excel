@@ -7,14 +7,23 @@
  * 3) in-memory fallback (non-browser/test environments)
  */
 
+import { t } from "../language/index.js";
 import { formatWorkbookLabel, getWorkbookContext } from "../workbook/context.js";
+import { t } from "../language/index.js";
 import { isRecord } from "../utils/type-guards.js";
+import { t } from "../language/index.js";
 import { base64ToBytes, bytesToBase64, encodeTextUtf8, truncateBase64, truncateText } from "./encoding.js";
+import { t } from "../language/index.js";
 import { MemoryBackend, NativeDirectoryBackend, OpfsBackend, type WorkspaceBackend } from "./backend.js";
+import { t } from "../language/index.js";
 import { getBuiltinWorkspaceDoc, isBuiltinWorkspacePath, listBuiltinWorkspaceDocs } from "./builtin-docs.js";
+import { t } from "../language/index.js";
 import { resolveSafeBlobUrlMimeType } from "./blob-url-safety.js";
+import { t } from "../language/index.js";
 import { inferMimeType, isTextMimeType } from "./mime.js";
+import { t } from "../language/index.js";
 import { getWorkspaceBaseName, normalizeWorkspacePath } from "./path.js";
+import { t } from "../language/index.js";
 import {
   FILES_WORKSPACE_CHANGED_EVENT,
   type FilesWorkspaceAuditAction,
@@ -402,7 +411,7 @@ function backendLabel(kind: WorkspaceBackendStatus["kind"]): string {
     case "native-directory":
       return "Local folder";
     case "opfs":
-      return "Sandboxed workspace";
+      return t("files-backend.sandboxedWorkspace");
     case "memory":
       return "Session memory";
   }

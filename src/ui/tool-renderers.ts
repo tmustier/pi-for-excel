@@ -6,24 +6,36 @@
  */
 
 import type { ImageContent, TextContent, ToolResultMessage } from "@earendil-works/pi-ai";
+import { t } from "../language/index.js";
 import { registerToolRenderer } from "@earendil-works/pi-web-ui/dist/tools/renderer-registry.js";
 import type { ToolRenderer, ToolRenderResult } from "@earendil-works/pi-web-ui/dist/tools/types.js";
+import { t } from "../language/index.js";
 import { html, type TemplateResult } from "lit";
+import { t } from "../language/index.js";
 import { createRef, ref } from "lit/directives/ref.js";
+import { t } from "../language/index.js";
 import { renderCollapsibleToolCardHeader, renderToolCardHeader } from "./tool-card-header.js";
+import { t } from "../language/index.js";
 import { cellRef, cellRefDisplay, cellRefs } from "./cell-link.js";
+import { t } from "../language/index.js";
 import { humanizeToolInput } from "./humanize-params.js";
+import { t } from "../language/index.js";
 import { humanizeColorsInText } from "./color-names.js";
+import { t } from "../language/index.js";
 import { stripYamlFrontmatter } from "./markdown-preprocess.js";
+import { t } from "../language/index.js";
 import { TOOL_NAMES_WITH_RENDERER, type UiToolName } from "../tools/capabilities.js";
+import { t } from "../language/index.js";
 import {
   mountSearchSetupCard,
   shouldShowSearchSetupCard,
 } from "./web-search-setup-card.js";
+import { t } from "../language/index.js";
 import {
   mountBridgeSetupCard,
   shouldShowBridgeSetupCard,
 } from "./bridge-setup-card.js";
+import { t } from "../language/index.js";
 import {
   isCommentsDetails,
   isConditionalFormatDetails,
@@ -43,12 +55,16 @@ import {
   type RecoveryCheckpointDetails,
   type WriteCellsDetails,
 } from "../tools/tool-details.js";
+import { t } from "../language/index.js";
 import { getToolExecutionMode } from "../tools/execution-policy.js";
+import { t } from "../language/index.js";
 import {
   buildChangeExplanation,
   type ChangeExplanationInput,
 } from "../audit/change-explanation.js";
+import { t } from "../language/index.js";
 import { renderCsvTable } from "./render-csv-table.js";
+import { t } from "../language/index.js";
 import { renderDepTree } from "./render-dep-tree.js";
 
 // Ensure <markdown-block> custom element is registered before we render it.
@@ -734,7 +750,7 @@ function describeToolCall(
     }
     case "get_workbook_overview": {
       const sheet = p.sheet as string | undefined;
-      return { action: "Overview", detail: sheet ?? "" };
+      return { action: t("tools.action.overview"), detail: sheet ?? "" };
     }
 
     // ── Write tools ──

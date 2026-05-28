@@ -26,6 +26,7 @@ import { PYTHON_BRIDGE_TOKEN_SETTING_KEY } from "../../tools/python-run.js";
 import { TMUX_BRIDGE_TOKEN_SETTING_KEY } from "../../tools/tmux.js";
 import { isRecord } from "../../utils/type-guards.js";
 import { showToast } from "../../ui/toast.js";
+import { t } from "../../language/index.js";
 import { showExperimentalDialog } from "./experimental-overlay.js";
 
 const ENABLE_ACTIONS = new Set(["enable", "on"]);
@@ -166,7 +167,7 @@ function getLegacyFeatureRedirectMessage(featureArg: string): string | null {
     return null;
   }
 
-  return "External tools (including MCP) are managed in /tools, not /experimental.";
+  return t("experimental.legacy_redirect");
 }
 
 function usageText(): string {
@@ -182,7 +183,7 @@ function usageText(): string {
 
 function featureListText(getFeatureSlugs: () => string[]): string {
   const slugs = getFeatureSlugs();
-  return slugs.length > 0 ? slugs.join(", ") : "(none)";
+  return slugs.length > 0 ? slugs.join(", ") : t("experimental.feature.none");
 }
 
 async function getSettingsStore() {
@@ -612,7 +613,7 @@ export function createExperimentalCommands(
   return [
     {
       name: "experimental",
-      description: "Manage experimental features",
+      description: t("command.experimental.manage"),
       source: "builtin",
       execute: async (args: string) => {
         try {
@@ -667,7 +668,7 @@ export function createExperimentalCommands(
 
           if (TMUX_STATUS_ACTIONS.has(action)) {
             if (tokens.length > 1) {
-              resolved.showToast("Usage: /experimental tmux-status");
+              resolved.showToast(t("experimental.usage.tmux_status"));
               return;
             }
 

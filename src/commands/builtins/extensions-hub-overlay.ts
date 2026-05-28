@@ -16,6 +16,7 @@ import {
 } from "../../ui/overlay-dialog.js";
 import { ADDONS_OVERLAY_ID } from "../../ui/overlay-ids.js";
 import { showToast } from "../../ui/toast.js";
+import { t } from "../../language/index.js";
 import { renderConnectionsTab } from "./extensions-hub-connections.js";
 import { renderPluginsTab } from "./extensions-hub-plugins.js";
 import { createDeferredConnectionsRefreshController } from "./extensions-hub-refresh.js";
@@ -37,9 +38,9 @@ export interface ExtensionsHubDependencies {
 }
 
 const TABS: ReadonlyArray<{ id: ExtensionsHubTab; label: string }> = [
-  { id: "connections", label: "Connections" },
-  { id: "plugins", label: "Plugins" },
-  { id: "skills", label: "Skills" },
+  { id: "connections", label: t("extensions-hub.tabConnections") },
+  { id: "plugins", label: t("extensions-hub.tabPlugins") },
+  { id: "skills", label: t("extensions-hub.tabSkills") },
 ];
 
 let openInFlight: Promise<void> | null = null;
@@ -92,9 +93,9 @@ export async function showExtensionsHubDialog(
 
     const { header } = createOverlayHeader({
       onClose: dialog.close,
-      closeLabel: "Close extensions",
-      title: "Extensions",
-      subtitle: "Connections, plugins, and skills that extend Pi",
+      closeLabel: t("extensions-hub.closeLabel"),
+      title: t("extensions-hub.title"),
+      subtitle: t("extensions-hub.subtitle"),
     });
 
     // ── Tab bar ────────────────────────────────────

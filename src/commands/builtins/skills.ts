@@ -4,6 +4,7 @@
 
 import type { ExtensionsHubTab } from "./extensions-hub-overlay.js";
 import type { SlashCommand } from "../types.js";
+import { t } from "../../language/index.js";
 
 export interface SkillsCommandActions {
   openExtensionsHub: (tab?: ExtensionsHubTab) => void | Promise<void>;
@@ -13,7 +14,7 @@ export function createSkillsCommands(actions: SkillsCommandActions): SlashComman
   return [
     {
       name: "skills",
-      description: "Browse available skills (alias for /extensions skills)",
+      description: t("command.skills.desc"),
       source: "builtin",
       execute: () => {
         void actions.openExtensionsHub("skills");

@@ -46,8 +46,10 @@ export function toggleExecutionMode(mode: ExecutionMode): ExecutionMode {
   return mode === "yolo" ? "safe" : "yolo";
 }
 
+import { t } from "../language/index.js";
+
 export function formatExecutionModeLabel(mode: ExecutionMode): string {
-  return mode === "yolo" ? "Auto" : "Confirm";
+  return mode === "yolo" ? t("status.mode.auto") : t("status.mode.confirm");
 }
 
 export function dispatchExecutionModeChanged(mode: ExecutionMode): void {

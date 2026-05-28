@@ -33,6 +33,7 @@ import {
   createToggle,
 } from "../../ui/extensions-hub-components.js";
 import { lucide, ClipboardList } from "../../ui/lucide-icons.js";
+import { t } from "../../language/index.js";
 
 // ── Types ───────────────────────────────────────────
 
@@ -124,12 +125,12 @@ export async function renderSkillsTab(args: {
 
   const statusLine = document.createElement("p");
   statusLine.className = "pi-overlay-hint";
-  statusLine.textContent = `${snapshot.active.length} skills active (${activeBundledCount} bundled, ${activeExternalCount} external)`;
+  statusLine.textContent = t("ext-hub-skills.statusLine", { active: snapshot.active.length, bundled: activeBundledCount, external: activeExternalCount });
   container.appendChild(statusLine);
 
   // ── Bundled section ───────────────────────────
   container.appendChild(createSectionHeader({
-    label: "Bundled skills",
+    label: t("extensions-hub-skills.bundledSection"),
     count: snapshot.bundled.length,
   }));
 
@@ -154,12 +155,12 @@ export async function renderSkillsTab(args: {
 
   // ── External section ──────────────────────────
   container.appendChild(createSectionHeader({
-    label: "External skills",
+    label: t("extensions-hub-skills.externalSection"),
     count: snapshot.external.length,
   }));
 
   if (snapshot.external.length === 0) {
-    container.appendChild(createEmptyInline(lucide(ClipboardList), "No external skills installed.\nPaste a SKILL.md below to add one."));
+    container.appendChild(createEmptyInline(lucide(ClipboardList), t("ext-hub-skills.noExternalSkills")));
   } else {
     const list = document.createElement("div");
     list.className = "pi-hub-stack";
@@ -209,29 +210,29 @@ export async function renderSkillsTab(args: {
   }
 
   // ── Install section ───────────────────────────
-  container.appendChild(createSectionHeader({ label: "Install skill" }));
+  container.appendChild(createSectionHeader({ label: t("extensions-hub-skills.installSection") }));
 
   const installForm = createAddForm();
 
   const hint = document.createElement("p");
   hint.className = "pi-overlay-hint";
-  hint.textContent = "Paste a SKILL.md document below to install an external skill.";
+  hint.textContent = t("extensions-hub-skills.install-hint");
   installForm.appendChild(hint);
 
   const textarea = document.createElement("textarea");
   textarea.className = "pi-overlay-input pi-hub-textarea";
-  textarea.placeholder = "---\nname: my-skill\ndescription: What this skill does\n---\n\nInstructions for the agent...";
+  textarea.placeholder = "---\\nname: my-skill\\ndescription: What this skill does\\n---\\n\\n" + t("extensions-hub-skills.installPlaceholder");
   installForm.appendChild(textarea);
 
   const installActions = document.createElement("div");
   installActions.className = "pi-hub-actions-end";
-  installActions.appendChild(createButton("Install skill", {
+  installActions.appendChild(createButton(t("extensions-hub-skills.installButton"), {
     primary: true,
     compact: true,
     onClick: () => {
       if (isBusy()) return;
       const md = textarea.value.trim();
-      if (!md) { showToast("Paste a SKILL.md document first."); return; }
+      if (!md) { showToast(t("extensions-hub-skills.toast.pasteSkillMd")); return; }
 
       void runMutation(async () => {
         const result = await upsertExternalAgentSkillInWorkspace({
@@ -250,7 +251,7 @@ export async function renderSkillsTab(args: {
   // Footer hint
   const footer = document.createElement("p");
   footer.className = "pi-overlay-hint";
-  footer.textContent = "Skills are instruction documents the AI reads on-demand to learn new workflows. They don't run code — they teach.";
+  footer.textContent = t("extensions-hub-skills.footer-hint");
   container.appendChild(footer);
 }
 
@@ -274,7 +275,7 @@ function renderBundledSkillCard(args: {
     iconColor: "amber",
     name: args.skill.name,
     description: args.skill.description,
-    badges: [{ text: "Bundled", tone: "muted" }],
+    badges: [{ text: t("extensions-hub-skills.bundledBadge"), tone: "muted" }],
     rightContent: toggle.root,
   });
 
@@ -292,7 +293,7 @@ function renderExternalSkillCard(args: {
   onRemove: () => void;
 }): HTMLElement {
   const badges: Array<{ text: string; tone: "ok" | "warn" | "muted" | "info" }> = [
-    { text: "External", tone: "info" },
+    { text: t("extensions-hub-skills.externalBadge"), tone: "info" },
   ];
   if (args.shadowed) {
     badges.push({ text: "Shadowed", tone: "warn" });

@@ -2,6 +2,7 @@
  * Workspace storage backends.
  */
 
+import { t } from "../language/index.js";
 import { base64ToBytes, bytesToBase64, decodeTextUtf8, encodeTextUtf8 } from "./encoding.js";
 import { inferFileKind, inferMimeType } from "./mime.js";
 import { getWorkspaceBaseName, normalizeWorkspacePath, splitWorkspacePath } from "./path.js";
@@ -228,7 +229,7 @@ async function getOpfsRoot(): Promise<FileSystemDirectoryHandle> {
 
 export class OpfsBackend implements WorkspaceBackend {
   readonly kind = "opfs";
-  readonly label = "Sandboxed workspace";
+  readonly label = t("files-backend.sandboxedWorkspace");
 
   async listFiles(): Promise<WorkspaceFileEntry[]> {
     const root = await getOpfsRoot();

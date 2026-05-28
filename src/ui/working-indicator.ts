@@ -11,13 +11,14 @@
 import { html, LitElement } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { pickWhimsicalMessage } from "./whimsical-messages.js";
+import { t } from "../language/index.js";
 
 const HINTS: string[] = [
-  "press Esc to stop",
-  "⇧Tab to adjust reasoning depth",
-  "type / to see commands",
-  "⌃O to collapse tool details",
-  "press Enter to redirect Pi",
+  t("working.hint.escape"),
+  t("working.hint.reasoning"),
+  t("working.hint.commands"),
+  t("working.hint.collapse"),
+  t("working.hint.redirect"),
 ];
 
 @customElement("pi-working-indicator")
@@ -30,7 +31,7 @@ export class WorkingIndicator extends LitElement {
   /** Optional fixed hint (disables hint rotation). */
   @property({ type: String }) hintText?: string;
 
-  @state() private _whimsical = "Working…";
+  @state() private _whimsical = t("working.default");
   @state() private _hintIndex = 0;
   @state() private _fadingWhimsical = false;
   @state() private _fadingHint = false;
@@ -66,7 +67,7 @@ export class WorkingIndicator extends LitElement {
       this._stopRotation();
       this._fadingWhimsical = false;
       this._fadingHint = false;
-      this._whimsical = this.primaryText || "Working…";
+      this._whimsical = this.primaryText || t("working.default");
       this._hintIndex = 0;
       return;
     }
@@ -75,7 +76,7 @@ export class WorkingIndicator extends LitElement {
     if (this._hintTimer) return;
     this._stopRotation();
     // Reset to initial state — random hint from the start
-    this._whimsical = "Working…";
+    this._whimsical = t("working.default");
     this._hintIndex = Math.floor(Math.random() * HINTS.length);
     this._fadingWhimsical = false;
     this._fadingHint = false;

@@ -6,6 +6,7 @@ import type { Agent } from "@earendil-works/pi-agent-core";
 
 import type { SlashCommand } from "../types.js";
 import { showToast } from "../../ui/toast.js";
+import { t } from "../../language/index.js";
 
 export type ActiveAgentProvider = () => Agent | null;
 
@@ -18,7 +19,7 @@ export function createModelCommands(actions: ModelCommandActions): SlashCommand[
   const runModelSelector = (): void => {
     const agent = actions.getActiveAgent();
     if (!agent) {
-      showToast("No active session");
+      showToast(t("command.model.no_session"));
       return;
     }
 
@@ -28,13 +29,13 @@ export function createModelCommands(actions: ModelCommandActions): SlashCommand[
   return [
     {
       name: "model",
-      description: "Change the AI model",
+      description: t("command.model.desc"),
       source: "builtin",
       execute: runModelSelector,
     },
     {
       name: "default-models",
-      description: "Cycle models with Ctrl+P",
+      description: t("command.model.cycle"),
       source: "builtin",
       execute: () => {
         // TODO: implement scoped models dialog
