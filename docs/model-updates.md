@@ -1,6 +1,6 @@
 # Model / dependency update playbook
 
-**Last verified:** 2026-04-24
+**Last verified:** 2026-05-29
 
 This repo hardcodes a small set of "featured" and "preferred" model IDs (for sorting + default selection). Those IDs come from Pi’s model registry (`@earendil-works/pi-ai`) and will drift as new models ship (e.g. `gpt-5.5`, `gpt-5.3-codex`, `claude-opus-4-7`, `gemini-3.1-pro-preview`).
 
@@ -47,17 +47,29 @@ npm view @earendil-works/pi-web-ui version
 npm view @earendil-works/pi-agent-core version
 ```
 
+Also inspect the version lists before choosing a target:
+
+```bash
+npm view @earendil-works/pi-ai versions --json
+npm view @earendil-works/pi-web-ui versions --json
+npm view @earendil-works/pi-agent-core versions --json
+```
+
+Use the newest version that is published for **all three** lockstep packages. As of 2026-05-29, `pi-ai` and `pi-agent-core` are published beyond `0.75.3`, but `pi-web-ui` is not; the latest common lockstep version is therefore `0.75.3`.
+
 ### 3) Bump dependencies in `package.json`
 
-Update these to the same latest version (keep them in lockstep unless you *know* otherwise):
+Update these to the same latest common version (keep them in lockstep unless you *know* otherwise):
 - `@earendil-works/pi-ai`
 - `@earendil-works/pi-web-ui`
 - `@earendil-works/pi-agent-core`
 
+When one package lags behind the others, use exact pins for the common version rather than `^` ranges; otherwise npm can resolve `pi-ai` / `pi-agent-core` past the latest available `pi-web-ui` and fail `npm run check:pi-lockstep`.
+
 Then:
 
 ```bash
-npm install
+npm install @earendil-works/pi-ai@<version> @earendil-works/pi-web-ui@<version> @earendil-works/pi-agent-core@<version> --save-exact
 ```
 
 ### 4) Verify the new model IDs exist in the registry
@@ -69,6 +81,7 @@ rg -n "gpt-5\\.5"       node_modules/@earendil-works/pi-ai/dist/models.generated
 rg -n "gpt-5\\.3-codex" node_modules/@earendil-works/pi-ai/dist/models.generated.js -S
 rg -n "claude-opus-4-7"  node_modules/@earendil-works/pi-ai/dist/models.generated.js -S
 rg -n "gemini-3\\.1-pro-preview" node_modules/@earendil-works/pi-ai/dist/models.generated.js -S
+npm run test:models
 ```
 
 If an ID doesn’t appear there, **don’t** add it to the add-in yet—either:
@@ -82,7 +95,7 @@ Files:
 - `src/models/model-ordering.ts` (provider/family priority + version/recency scoring)
 - `src/taskpane/default-model.ts` (default-model selection rules)
 - `src/compat/model-selector-patch.ts` (ModelSelector ordering/featured-model behavior)
-- `tests/model-ordering.test.ts` (sanity tests; run `npm run test:models` — requires Node 22+)
+- `tests/model-ordering.test.ts` (sanity tests; run `npm run test:models` — requires Node 22.19+)
 
 We intentionally avoid pinning exact versioned IDs now. Instead we:
 

@@ -41,7 +41,7 @@ void test("splitArchivedMessages removes archive wrapper and preserves active me
 
   const compactionSummary = createCompactionSummaryMessage({
     summary: "summary",
-    messageCountBefore: 2,
+    tokensBefore: 42,
     timestamp: 11,
   });
 

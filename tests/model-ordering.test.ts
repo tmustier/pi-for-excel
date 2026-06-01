@@ -3,10 +3,11 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
 
-import { getModels, type Api, type Model } from "@earendil-works/pi-ai";
+import { completeSimple, getModel, getModels, type Api, type Model } from "@earendil-works/pi-ai";
 
 import { BROWSER_OAUTH_PROVIDERS, mapToApiProvider } from "../src/auth/provider-map.ts";
 import { rewriteDevProxyUrl } from "../src/auth/dev-rewrites.ts";
+import { installBedrockProviderStub } from "../src/compat/bedrock-provider-stub.ts";
 import { installProcessEnvShim } from "../src/compat/process-env-shim.ts";
 import {
   compareModels,
@@ -124,11 +125,39 @@ void test("shouldPreferOpenAiGeneralModel only prefers GPT when it is as new or 
   assert.equal(shouldPreferOpenAiGeneralModel("gpt-5-pro", "gpt-5.1-codex-max"), false);
 });
 
+void test("current Pi registry exposes the refreshed preferred model ids", () => {
+  assert.equal(getModel("openai", "gpt-5.5").id, "gpt-5.5");
+  assert.equal(getModel("openai-codex", "gpt-5.3-codex").id, "gpt-5.3-codex");
+  assert.equal(getModel("anthropic", "claude-opus-4-7").id, "claude-opus-4-7");
+  assert.equal(getModel("google", "gemini-3.1-pro-preview").id, "gemini-3.1-pro-preview");
+});
+
 void test("current OpenAI providers expose at least one default-model candidate", () => {
   for (const provider of OPENAI_PROVIDERS) {
     const expected = pickExpectedOpenAiDefault(provider);
     assert.ok(expected, `expected at least one OpenAI default candidate for ${provider}`);
   }
+});
+
+void test("Bedrock provider uses the browser-safe unsupported-provider stub", async () => {
+  installBedrockProviderStub();
+
+  const selected = await completeSimple(
+    getModel("amazon-bedrock", "amazon.nova-micro-v1:0"),
+    {
+      messages: [
+        {
+          role: "user",
+          content: [{ type: "text", text: "hello" }],
+          timestamp: Date.now(),
+        },
+      ],
+    },
+    { maxTokens: 1, maxRetries: 0 },
+  );
+
+  assert.equal(selected.stopReason, "error");
+  assert.match(selected.errorMessage ?? "", /Amazon Bedrock is not supported/);
 });
 
 void test("pickDefaultModel matches the current OpenAI default-selection contract", () => {

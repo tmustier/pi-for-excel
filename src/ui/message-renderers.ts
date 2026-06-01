@@ -10,7 +10,7 @@ import { createRef, ref } from "lit/directives/ref.js";
 import { registerMessageRenderer } from "@earendil-works/pi-web-ui/dist/components/message-renderer-registry.js";
 import { renderCollapsibleToolCardHeader } from "./tool-card-header.js";
 
-import type { CompactionSummaryMessage } from "../messages/compaction.js";
+import { formatCompactionSummaryExtent, type CompactionSummaryMessage } from "../messages/compaction.js";
 import type { ArchivedMessagesMessage } from "../messages/archived-history.js";
 
 // Ensure <markdown-block> is registered.
@@ -74,7 +74,7 @@ registerMessageRenderer("compactionSummary", {
 
     const title = html`
       <span class="pi-tool-card__title">
-        <strong>Summarized ${message.messageCountBefore} messages</strong>
+        <strong>Summarized ${formatCompactionSummaryExtent(message)}</strong>
       </span>
     `;
 

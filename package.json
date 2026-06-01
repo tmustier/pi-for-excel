@@ -34,9 +34,9 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
-    "@earendil-works/pi-agent-core": "^0.74.0",
-    "@earendil-works/pi-ai": "^0.74.0",
-    "@earendil-works/pi-web-ui": "^0.74.0",
+    "@earendil-works/pi-agent-core": "0.75.3",
+    "@earendil-works/pi-ai": "0.75.3",
+    "@earendil-works/pi-web-ui": "0.75.3",
     "@sinclair/typebox": "^0.34.41",
     "lit": "^3.2.1",
     "marked": "^17.0.4"
@@ -57,7 +57,7 @@
     "url": "https://github.com/tmustier/pi-for-excel.git"
   },
   "engines": {
-    "node": "^20.19.0 || ^22.13.0 || >=24"
+    "node": "^22.19.0 || >=24"
   },
   "overrides": {
     "tmp": "0.2.5",
@@ -69,7 +69,7 @@
     "tar": "7.5.11",
     "fast-xml-parser": "5.7.0",
     "@xmldom/xmldom": "0.8.13",
-    "protobufjs": "7.5.5",
+    "protobufjs": "7.6.2",
     "follow-redirects": "1.16.0"
   }
 }

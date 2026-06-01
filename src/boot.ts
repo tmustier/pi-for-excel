@@ -3,7 +3,7 @@
  *
  * 1. Imports Tailwind CSS (pi-web-ui/app.css)
  * 2. Installs compatibility patches (Lit class-field shadowing, markdown safety)
- * 3. Installs a thinking-label patch ("Thinking…" → "Thought for …")
+ * 3. Installs browser/runtime compatibility patches, including the Bedrock stub
  *
  * MUST be imported as the first module in taskpane.ts.
  */
@@ -11,12 +11,14 @@
 import "@earendil-works/pi-web-ui/app.css";
 import "./ui/theme.css";
 
+import { installBedrockProviderStub } from "./compat/bedrock-provider-stub.js";
 import { installLitClassFieldShadowingPatch } from "./compat/lit-class-field-shadowing.js";
 import { installMarkedSafetyPatch } from "./compat/marked-safety.js";
 import { installThinkingDurationPatch } from "./compat/thinking-duration.js";
 import { installDialogStyleHooks } from "./ui/dialog-style-hooks.js";
 import { installThemeModeSync } from "./ui/theme-mode.js";
 
+installBedrockProviderStub();
 installLitClassFieldShadowingPatch();
 installMarkedSafetyPatch();
 installThinkingDurationPatch();
