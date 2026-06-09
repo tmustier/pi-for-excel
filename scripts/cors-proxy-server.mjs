@@ -390,12 +390,10 @@ const handler = async (req, res) => {
       // Content-Length can be wrong after decompression; let Node set it.
       if (lower === "content-length") return;
 
-      // Keep our CORS headers.
-      if (lower === "access-control-allow-origin") return;  
-      if (lower === "access-control-allow-methods") return;  
-      if (lower === "access-control-allow-headers") return;  
-      if (lower === "access-control-expose-headers") return;  
-      if (lower === "access-control-max-age") return;  
+      // Keep our CORS headers (set by setCorsHeaders). Upstream values could
+      // clobber them and break the integration — e.g. llama.cpp returns an
+      // empty Access-Control-Allow-Origin because we don't forward the Origin.
+      if (lower.startsWith("access-control-")) return;
       if (lower === "vary") return;
 
       res.setHeader(key, value);
