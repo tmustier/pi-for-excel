@@ -102,11 +102,14 @@ async function startProxy(extraEnv = {}) {
   };
 }
 
-async function startMockTarget(responseText = "ok") {
+async function startMockTarget(responseText = "ok", extraHeaders = {}) {
   const port = await getFreePort();
   const server = http.createServer((_req, res) => {
     res.statusCode = 200;
     res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    for (const [key, value] of Object.entries(extraHeaders)) {
+      res.setHeader(key, value);
+    }
     res.end(responseText);
   });
 
@@ -251,6 +254,50 @@ test("proxy can allow local targets with explicit overrides", async (t) => {
   assert.equal(response.status, 200);
   const text = await response.text();
   assert.equal(text, "hello-from-local");
+});
+
+test("proxy keeps its own CORS headers when upstream sends conflicting ones", async (t) => {
+  const target = await startMockTarget("upstream-cors", {
+    // llama.cpp-style upstream: empty/incorrect CORS headers that would break
+    // the browser integration if forwarded verbatim.
+    "Access-Control-Allow-Origin": "",
+    "Access-Control-Allow-Methods": "GET",
+    "Access-Control-Allow-Headers": "x-upstream-only",
+    "Access-Control-Max-Age": "0",
+    "Vary": "Accept-Encoding",
+    "X-Upstream-Custom": "passthrough",
+  });
+  t.after(async () => {
+    await target.stop();
+  });
+
+  const proxy = await startProxy({
+    ALLOW_LOOPBACK_TARGETS: "1",
+    ALLOW_PRIVATE_TARGETS: "1",
+  });
+  t.after(async () => {
+    await proxy.stop();
+  });
+
+  const url = encodeURIComponent(`http://127.0.0.1:${target.port}/v1/models`);
+  const response = await fetch(`http://127.0.0.1:${proxy.port}/?url=${url}`, {
+    headers: { Origin: ORIGIN },
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal(await response.text(), "upstream-cors");
+
+  // Our CORS policy must win over upstream values.
+  assert.equal(response.headers.get("access-control-allow-origin"), ORIGIN);
+  assert.equal(
+    response.headers.get("access-control-allow-methods"),
+    "GET,POST,PUT,PATCH,DELETE,OPTIONS",
+  );
+  assert.equal(response.headers.get("access-control-max-age"), "86400");
+  assert.equal(response.headers.get("vary"), "Origin");
+
+  // Unrelated upstream headers still pass through.
+  assert.equal(response.headers.get("x-upstream-custom"), "passthrough");
 });
 
 test("proxy enforces ALLOWED_TARGET_HOSTS when configured", async (t) => {
