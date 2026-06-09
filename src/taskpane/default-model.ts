@@ -91,16 +91,28 @@ export function pickDefaultModel(
   }
 
   // Anthropic special-case:
-  // Prefer Sonnet when its major/minor version is >= Opus (e.g. Sonnet 4-6 over Opus 4-6).
-  // Otherwise prefer Opus.
+  // Prefer the latest Fable when its major/minor version is >= both Opus and
+  // Sonnet (e.g. Fable 5 over Opus 4-8) — Fable is the post-4.x flagship family.
+  // Otherwise prefer Sonnet when its major/minor version is >= Opus
+  // (e.g. Sonnet 4-6 over Opus 4-6), then Opus.
   if (availableProviders.includes("anthropic")) {
     const models: Model<Api>[] = getProviderModels("anthropic");
-    const opus = models
-      .filter((m) => m.id.startsWith("claude-opus-"))
-      .sort((a, b) => modelRecencyScore(b.id) - modelRecencyScore(a.id))[0];
-    const sonnet = models
-      .filter((m) => m.id.startsWith("claude-sonnet-"))
-      .sort((a, b) => modelRecencyScore(b.id) - modelRecencyScore(a.id))[0];
+    const latestWithPrefix = (prefix: string): Model<Api> | undefined =>
+      models
+        .filter((m) => m.id.startsWith(prefix))
+        .sort((a, b) => modelRecencyScore(b.id) - modelRecencyScore(a.id))[0];
+
+    const fable = latestWithPrefix("claude-fable-");
+    const opus = latestWithPrefix("claude-opus-");
+    const sonnet = latestWithPrefix("claude-sonnet-");
+
+    if (
+      fable &&
+      (!opus || parseMajorMinor(fable.id) >= parseMajorMinor(opus.id)) &&
+      (!sonnet || parseMajorMinor(fable.id) >= parseMajorMinor(sonnet.id))
+    ) {
+      return fable;
+    }
 
     if (opus && sonnet) {
       return parseMajorMinor(sonnet.id) >= parseMajorMinor(opus.id) ? sonnet : opus;
