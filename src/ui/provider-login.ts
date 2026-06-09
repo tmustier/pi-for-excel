@@ -317,6 +317,132 @@ function normalizeApiKeyForProvider(
   return { ok: true, key };
 }
 
+/**
+ * Show a non-blocking dialog with a device-code login code (e.g. GitHub
+ * Copilot). The login flow keeps polling in the background, so the dialog
+ * only informs the user; the caller closes it when login settles.
+ */
+function showDeviceCodeDialog(info: { userCode: string; verificationUri: string }): () => void {
+  closeOverlayById(PROVIDER_PROMPT_OVERLAY_ID);
+
+  const dialog = createOverlayDialog({
+    overlayId: PROVIDER_PROMPT_OVERLAY_ID,
+    cardClassName: "pi-welcome-card pi-prompt-card",
+    restoreFocusOnClose: false,
+  });
+
+  const title = document.createElement("h2");
+  title.className = "pi-prompt-title";
+  title.textContent = "Finish sign-in in your browser";
+
+  const message = document.createElement("p");
+  message.className = "pi-prompt-message";
+  message.textContent = "Enter this code on the verification page that just opened:";
+
+  const codeRow = document.createElement("div");
+  codeRow.style.cssText = "display:flex;align-items:center;gap:8px;margin:12px 0;";
+
+  const codeEl = document.createElement("code");
+  codeEl.style.cssText =
+    "flex:1;padding:8px 10px;border-radius:6px;text-align:center;" +
+    "background:var(--pi-code-bg, #1e1e1e);color:var(--pi-code-fg, #d4d4d4);" +
+    "font-size:16px;letter-spacing:2px;font-family:var(--pi-monospace, monospace);user-select:all;";
+  codeEl.textContent = info.userCode;
+
+  const copyBtn = document.createElement("button");
+  copyBtn.type = "button";
+  copyBtn.textContent = "Copy";
+  copyBtn.style.cssText = "padding:6px 12px;border-radius:6px;font-size:13px;cursor:pointer;";
+  copyBtn.addEventListener("click", () => {
+    void navigator.clipboard.writeText(info.userCode).then(() => {
+      copyBtn.textContent = "Copied!";
+      setTimeout(() => { copyBtn.textContent = "Copy"; }, 1500);
+    });
+  });
+
+  codeRow.append(codeEl, copyBtn);
+
+  const helper = document.createElement("p");
+  helper.className = "pi-prompt-helper";
+  helper.textContent = `If no window opened, visit ${info.verificationUri} and enter the code there.`;
+
+  dialog.card.append(title, message, codeRow, helper);
+  dialog.mount();
+
+  return () => dialog.close();
+}
+
+/**
+ * Show a select dialog for OAuth flows that need the user to pick between
+ * options (pi-ai `OAuthLoginCallbacks.onSelect`). Resolves the selected
+ * option id, or `undefined` if the user cancels.
+ */
+function promptForSelect(opts: {
+  title: string;
+  message: string;
+  options: { id: string; label: string }[];
+}): Promise<string | undefined> {
+  return new Promise((resolve) => {
+    closeOverlayById(PROVIDER_PROMPT_OVERLAY_ID);
+
+    const dialog = createOverlayDialog({
+      overlayId: PROVIDER_PROMPT_OVERLAY_ID,
+      cardClassName: "pi-welcome-card pi-prompt-card",
+      restoreFocusOnClose: false,
+    });
+
+    const titleEl = document.createElement("h2");
+    titleEl.className = "pi-prompt-title";
+    titleEl.textContent = opts.title;
+
+    const messageEl = document.createElement("p");
+    messageEl.className = "pi-prompt-message";
+    messageEl.textContent = opts.message;
+
+    const optionList = document.createElement("div");
+    optionList.style.cssText = "display:flex;flex-direction:column;gap:8px;margin:12px 0;";
+
+    let settled = false;
+
+    const settle = (value: string | undefined): void => {
+      if (settled) return;
+      settled = true;
+      dialog.close();
+      resolve(value);
+    };
+
+    for (const option of opts.options) {
+      const optionBtn = document.createElement("button");
+      optionBtn.type = "button";
+      optionBtn.className = "pi-prompt-ok";
+      optionBtn.textContent = option.label;
+      optionBtn.addEventListener("click", () => settle(option.id));
+      optionList.append(optionBtn);
+    }
+
+    const actions = document.createElement("div");
+    actions.className = "pi-prompt-actions";
+
+    const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.className = "pi-prompt-cancel";
+    cancelBtn.textContent = "Cancel";
+    cancelBtn.addEventListener("click", () => settle(undefined));
+    actions.append(cancelBtn);
+
+    dialog.card.append(titleEl, messageEl, optionList, actions);
+
+    dialog.addCleanup(() => {
+      if (!settled) {
+        settled = true;
+        resolve(undefined);
+      }
+    });
+
+    dialog.mount();
+  });
+}
+
 function promptForText(opts: {
   title: string;
   message: string;
@@ -552,37 +678,57 @@ export function buildProviderRow(
             }
           }
 
-          const cred = await oauthProvider.login({
-            onAuth: (info) => {
-              // Prevent the OAuth page from gaining a handle to the add-in window.
-              const w = window.open(info.url, "_blank", "noopener,noreferrer");
-              if (w) w.opener = null;
-            },
-            onPrompt: async (prompt) => {
-              const helperText = id === "anthropic"
-                ? "After completing login, your browser may show a localhost page that cannot be reached — that's normal. Copy the full URL from the browser address bar and paste it here."
-                : id === "openai-codex"
-                  ? "After login, your browser will show a page that says \"can't be reached\" \u2014 that's normal! Copy the full URL from the browser address bar and paste it here."
-                  : id === "google-gemini-cli" || id === "google-antigravity"
-                    ? "After sign-in, your browser will show a page that says \"can't be reached\" \u2014 that's normal! Copy the full URL from the browser address bar and paste it here."
-                    : undefined;
+          const deviceCodeDialogRef: { close: (() => void) | null } = { close: null };
 
-              const value = await promptForText({
-                title: `Login with ${label}`,
-                message: prompt.message,
-                placeholder: prompt.placeholder || "",
-                helperText,
-                submitLabel: "Continue",
-              });
+          let cred;
+          try {
+            cred = await oauthProvider.login({
+              onAuth: (info) => {
+                // Prevent the OAuth page from gaining a handle to the add-in window.
+                const w = window.open(info.url, "_blank", "noopener,noreferrer");
+                if (w) w.opener = null;
+              },
+              onDeviceCode: (info) => {
+                // Device-code flows (e.g. GitHub Copilot): open the verification
+                // page and show the user code to enter there.
+                const w = window.open(info.verificationUri, "_blank", "noopener,noreferrer");
+                if (w) w.opener = null;
+                deviceCodeDialogRef.close = showDeviceCodeDialog(info);
+              },
+              onSelect: (prompt) =>
+                promptForSelect({
+                  title: `Login with ${label}`,
+                  message: prompt.message,
+                  options: prompt.options,
+                }),
+              onPrompt: async (prompt) => {
+                const helperText = id === "anthropic"
+                  ? "After completing login, your browser may show a localhost page that cannot be reached — that's normal. Copy the full URL from the browser address bar and paste it here."
+                  : id === "openai-codex"
+                    ? "After login, your browser will show a page that says \"can't be reached\" \u2014 that's normal! Copy the full URL from the browser address bar and paste it here."
+                    : id === "google-gemini-cli" || id === "google-antigravity"
+                      ? "After sign-in, your browser will show a page that says \"can't be reached\" \u2014 that's normal! Copy the full URL from the browser address bar and paste it here."
+                      : undefined;
 
-              if (id === "anthropic") {
-                return normalizeAnthropicAuthorizationInput(value);
-              }
+                const value = await promptForText({
+                  title: `Login with ${label}`,
+                  message: prompt.message,
+                  placeholder: prompt.placeholder || "",
+                  helperText,
+                  submitLabel: "Continue",
+                });
 
-              return value;
-            },
-            onProgress: (msg) => { oauthBtn.textContent = msg; },
-          });
+                if (id === "anthropic") {
+                  return normalizeAnthropicAuthorizationInput(value);
+                }
+
+                return value;
+              },
+              onProgress: (msg) => { oauthBtn.textContent = msg; },
+            });
+          } finally {
+            deviceCodeDialogRef.close?.();
+          }
 
           const apiKey = oauthProvider.getApiKey(cred);
           await storage.providerKeys.set(id, apiKey);

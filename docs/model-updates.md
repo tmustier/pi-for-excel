@@ -1,8 +1,8 @@
 # Model / dependency update playbook
 
-**Last verified:** 2026-04-24
+**Last verified:** 2026-06-09
 
-This repo hardcodes a small set of "featured" and "preferred" model IDs (for sorting + default selection). Those IDs come from Pi’s model registry (`@earendil-works/pi-ai`) and will drift as new models ship (e.g. `gpt-5.5`, `gpt-5.3-codex`, `claude-opus-4-7`, `gemini-3.1-pro-preview`).
+This repo hardcodes a small set of "featured" and "preferred" model IDs (for sorting + default selection). Those IDs come from Pi’s model registry (`@earendil-works/pi-ai`) and will drift as new models ship (e.g. `gpt-5.5`, `gpt-5.3-codex`, `claude-fable-5`, `claude-opus-4-8`, `gemini-3.1-pro-preview`).
 
 This doc describes how to update:
 - the **Pi dependency versions** we ship (`@earendil-works/pi-ai`, `@earendil-works/pi-web-ui`, `@earendil-works/pi-agent-core`)
@@ -27,7 +27,7 @@ This doc describes how to update:
   - `@earendil-works/pi-web-ui`
   - `@earendil-works/pi-agent-core`
 - `.github/workflows/dependabot-pi-automerge.yml` auto-approves + enables auto-merge for that Dependabot group (merge still waits for green checks).
-- `npm run check` includes `scripts/check-pi-deps-lockstep.mjs`, which fails if those three package versions drift in either `package.json` specs or `package-lock.json` resolved versions.
+- `npm run check` includes `scripts/check-pi-deps-lockstep.mjs`, which enforces the dependency policy below (`pi-ai` === `pi-agent-core`, exact pins, single shared `pi-ai` copy in the lockfile).
 
 ## Step-by-step
 
@@ -47,17 +47,33 @@ npm view @earendil-works/pi-web-ui version
 npm view @earendil-works/pi-agent-core version
 ```
 
-### 3) Bump dependencies in `package.json`
-
-Update these to the same latest version (keep them in lockstep unless you *know* otherwise):
-- `@earendil-works/pi-ai`
-- `@earendil-works/pi-web-ui`
-- `@earendil-works/pi-agent-core`
-
-Then:
+Also inspect the version lists before choosing a target:
 
 ```bash
-npm install
+npm view @earendil-works/pi-ai versions --json
+npm view @earendil-works/pi-web-ui versions --json
+npm view @earendil-works/pi-agent-core versions --json
+```
+
+**Dependency policy (since 2026-06-09):** upstream stopped publishing `pi-web-ui` in lockstep after `0.75.3`, while `pi-ai` / `pi-agent-core` kept moving (and new models like `claude-fable-5` only exist in newer `pi-ai`). The rules are now:
+
+- `@earendil-works/pi-ai` and `@earendil-works/pi-agent-core` move **together** to the newest common version.
+- `@earendil-works/pi-web-ui` stays at the newest *published* version (currently `0.75.3`) and is allowed to lag.
+- All three must be **exact-pinned** in `package.json`.
+- The root `package.json` `overrides` entry for `@earendil-works/pi-ai` (`"$@earendil-works/pi-ai"`) forces `pi-web-ui`'s nested `^0.75.x` range onto the root version so the lockfile resolves **exactly one** copy of `pi-ai`. Two copies = two model registries = the ModelSelector and the app disagree about available models.
+- `scripts/check-pi-deps-lockstep.mjs` (run via `npm run check:pi-lockstep`) enforces all of this.
+- When bumping past `pi-web-ui`'s compiled-against version, re-verify the runtime APIs it imports from `pi-ai` still exist (`complete`, `streamSimple`, `getModel`, `getModels`, `getProviders`, `modelsAreEqual`, `StringEnum`) and check the pi changelog for breaking OAuth/streaming surface changes (e.g. 0.79.x made `onDeviceCode` / `onSelect` required in `OAuthLoginCallbacks`).
+
+### 3) Bump dependencies in `package.json`
+
+```bash
+npm install @earendil-works/pi-ai@<version> @earendil-works/pi-agent-core@<version> --save-exact
+```
+
+Only bump `@earendil-works/pi-web-ui` when upstream actually publishes a newer version:
+
+```bash
+npm install @earendil-works/pi-web-ui@<version> --save-exact
 ```
 
 ### 4) Verify the new model IDs exist in the registry
@@ -67,8 +83,10 @@ Search the local registry:
 ```bash
 rg -n "gpt-5\\.5"       node_modules/@earendil-works/pi-ai/dist/models.generated.js -S
 rg -n "gpt-5\\.3-codex" node_modules/@earendil-works/pi-ai/dist/models.generated.js -S
-rg -n "claude-opus-4-7"  node_modules/@earendil-works/pi-ai/dist/models.generated.js -S
+rg -n "claude-fable-5"   node_modules/@earendil-works/pi-ai/dist/models.generated.js -S
+rg -n "claude-opus-4-8"  node_modules/@earendil-works/pi-ai/dist/models.generated.js -S
 rg -n "gemini-3\\.1-pro-preview" node_modules/@earendil-works/pi-ai/dist/models.generated.js -S
+npm run test:models
 ```
 
 If an ID doesn’t appear there, **don’t** add it to the add-in yet—either:
@@ -82,7 +100,7 @@ Files:
 - `src/models/model-ordering.ts` (provider/family priority + version/recency scoring)
 - `src/taskpane/default-model.ts` (default-model selection rules)
 - `src/compat/model-selector-patch.ts` (ModelSelector ordering/featured-model behavior)
-- `tests/model-ordering.test.ts` (sanity tests; run `npm run test:models` — requires Node 22+)
+- `tests/model-ordering.test.ts` (sanity tests; run `npm run test:models` — requires Node 22.19+)
 
 We intentionally avoid pinning exact versioned IDs now. Instead we:
 
@@ -92,8 +110,8 @@ We intentionally avoid pinning exact versioned IDs now. Instead we:
   3) then the rest sorted deterministically
 
   Featured rules (current desired behavior):
-  - **Anthropic:** latest **Sonnet** *if* its version >= latest **Opus**, then latest **Opus**
-    - Version compare uses `parseMajorMinor()` where `claude-opus-4-6` → `46`, `claude-opus-4-7` → `47`.
+  - **Anthropic:** latest **Fable** first (post-4.x flagship family, e.g. `claude-fable-5`), then latest **Sonnet** *if* its version >= latest **Opus**, then latest **Opus**
+    - Version compare uses `parseMajorMinor()` where `claude-opus-4-6` → `46`, `claude-opus-4-7` → `47`, `claude-fable-5` → `50`.
     - Important: IDs like `claude-opus-4-20250514` are treated as **major only** (`40`) and the `YYYYMMDD` part is considered a separate date suffix by `modelRecencyScore()`.
   - **OpenAI (`openai` + `openai-codex`):** latest general `gpt-5.x` *if* its version >= latest `gpt-5.x-codex`, then latest Codex
     - `gpt-5.5` scores as `55`; `gpt-5.3-codex` scores as `53`.
@@ -111,7 +129,7 @@ We intentionally avoid pinning exact versioned IDs now. Instead we:
   UI: the model picker is opened from the footer status bar (click the π model button).
 
 - Pick the default model via provider-aware rules:
-  - Anthropic is a small special-case (Sonnet when version ties or is newer than Opus; version compare uses `parseMajorMinor`)
+  - Anthropic is a small special-case (latest Fable when its version is >= both Opus and Sonnet; otherwise Sonnet when version ties or is newer than Opus; version compare uses `parseMajorMinor`)
   - OpenAI (`openai` + `openai-codex`) prefers the newest general GPT-5 when it is at least as new as Codex, with Codex as fallback
   - otherwise `DEFAULT_MODEL_RULES` + `pickLatestMatchingModel()` (uses `getModels(provider)` to find the newest available ID)
 

@@ -89,7 +89,8 @@ export function installModelSelectorPatch(): void {
     // "Latest for each" behavior:
     // - keep current model at the very top
     // - then show "featured" models (latest per provider, pattern-based)
-    //   - Anthropic: latest Sonnet if its version >= latest Opus, then latest Opus
+    //   - Anthropic: latest Fable first (post-4.x flagship family), then
+    //     latest Sonnet if its version >= latest Opus, then latest Opus
     //   - OpenAI (API + ChatGPT): latest GPT-5 when its version >= latest Codex,
     //     then latest Codex
     //   - Google API-key: latest gemini-*-pro*
@@ -165,6 +166,11 @@ export function installModelSelectorPatch(): void {
 
       // Provider-specific "latest" rules
       if (provider === "anthropic") {
+        const bestFable = pickBestByRecency(models, (m) => m.id.startsWith("claude-fable-"));
+        if (bestFable) {
+          featured.push(bestFable);
+        }
+
         const bestOpus = pickBestByRecency(models, (m) => m.id.startsWith("claude-opus-"));
         const bestSonnet = pickBestByRecency(models, (m) => m.id.startsWith("claude-sonnet-"));
 
@@ -186,6 +192,11 @@ export function installModelSelectorPatch(): void {
 
         if (bestSonnet) {
           featured.push(bestSonnet);
+          continue;
+        }
+
+        if (bestFable) {
+          // Fable-only provider list — already featured above.
           continue;
         }
 

@@ -548,6 +548,7 @@ export function createCompactCommands(getActiveAgent: ActiveAgentProvider): Slas
           keptMessages: AgentMessage[];
           messagesToArchive: AgentMessage[];
           summarizedCount: number;
+          summarizedTokens: number;
         }> => {
           const keepRecent = keepRecentOverride ?? keepRecentTokens;
           const cutIndex = findCutIndex(messagesWithoutArchived, boundaryStart, keepRecent);
@@ -615,6 +616,10 @@ export function createCompactCommands(getActiveAgent: ActiveAgentProvider): Slas
             keptMessages,
             messagesToArchive: messagesToSummarize,
             summarizedCount: countChatMessages(messagesToSummarize),
+            summarizedTokens: messagesToSummarize.reduce(
+              (total, message) => total + estimateTokens(message),
+              0,
+            ),
           };
         };
 
@@ -636,6 +641,7 @@ export function createCompactCommands(getActiveAgent: ActiveAgentProvider): Slas
             keptMessages: AgentMessage[];
             messagesToArchive: AgentMessage[];
             summarizedCount: number;
+            summarizedTokens: number;
           };
 
           try {
@@ -658,7 +664,7 @@ export function createCompactCommands(getActiveAgent: ActiveAgentProvider): Slas
 
           const compacted = createCompactionSummaryMessage({
             summary: out.summary,
-            messageCountBefore: out.summarizedCount,
+            tokensBefore: out.summarizedTokens,
             timestamp: now,
           });
 

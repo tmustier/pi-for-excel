@@ -69,9 +69,11 @@ export function openAiFamilyPriority(id: string): number {
 
 export function familyPriority(provider: string, id: string): number {
   if (provider === "anthropic") {
-    if (id.startsWith("claude-opus-")) return 0;
-    if (id.startsWith("claude-sonnet-")) return 1;
-    if (id.startsWith("claude-haiku-")) return 2;
+    // Fable is the post-4.x flagship family (e.g. claude-fable-5).
+    if (id.startsWith("claude-fable-")) return 0;
+    if (id.startsWith("claude-opus-")) return 1;
+    if (id.startsWith("claude-sonnet-")) return 2;
+    if (id.startsWith("claude-haiku-")) return 3;
     return 9;
   }
 
@@ -96,6 +98,7 @@ export function parseMajorMinor(id: string): number {
   // Examples:
   // - claude-opus-4-6                         -> 46
   // - claude-opus-4.7                         -> 47
+  // - claude-fable-5                          -> 50 (major only)
   // - anthropic.claude-opus-4-1-20250805-v1:0 -> 41 (date handled separately)
   // - claude-opus-4-20250514                  -> 40 (major only; date handled separately)
   // - gpt-5.5                                 -> 55

@@ -3,10 +3,11 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
 
-import { getModels, type Api, type Model } from "@earendil-works/pi-ai";
+import { completeSimple, getModel, getModels, type Api, type Model } from "@earendil-works/pi-ai";
 
 import { BROWSER_OAUTH_PROVIDERS, mapToApiProvider } from "../src/auth/provider-map.ts";
 import { rewriteDevProxyUrl } from "../src/auth/dev-rewrites.ts";
+import { installBedrockProviderStub } from "../src/compat/bedrock-provider-stub.ts";
 import { installProcessEnvShim } from "../src/compat/process-env-shim.ts";
 import {
   compareModels,
@@ -47,6 +48,12 @@ function pickExpectedOpenAiDefault(provider: OpenAiProvider): Model<Api> | null 
 void test("parseMajorMinor packs Claude-style -major-minor as major*10+minor", () => {
   assert.equal(parseMajorMinor("claude-opus-4-6"), 46);
   assert.equal(parseMajorMinor("claude-opus-4-7"), 47);
+});
+
+void test("parseMajorMinor scores Claude Fable ids as a new major version", () => {
+  assert.equal(parseMajorMinor("claude-fable-5"), 50);
+  assert.equal(parseMajorMinor("anthropic/claude-fable-5"), 50);
+  assert.equal(parseMajorMinor("us.anthropic.claude-fable-5"), 50);
 });
 
 void test("parseMajorMinor handles namespaced and dotted Claude registry ids", () => {
@@ -124,11 +131,61 @@ void test("shouldPreferOpenAiGeneralModel only prefers GPT when it is as new or 
   assert.equal(shouldPreferOpenAiGeneralModel("gpt-5-pro", "gpt-5.1-codex-max"), false);
 });
 
+void test("current Pi registry exposes the refreshed preferred model ids", () => {
+  assert.equal(getModel("openai", "gpt-5.5").id, "gpt-5.5");
+  // pi-ai 0.79.x moved gpt-5.3-codex off the ChatGPT (openai-codex) provider;
+  // it remains available via the OpenAI API provider.
+  assert.equal(getModel("openai-codex", "gpt-5.5").id, "gpt-5.5");
+  assert.equal(getModel("openai", "gpt-5.3-codex").id, "gpt-5.3-codex");
+  assert.equal(getModel("anthropic", "claude-opus-4-7").id, "claude-opus-4-7");
+  assert.equal(getModel("anthropic", "claude-fable-5").id, "claude-fable-5");
+  assert.equal(getModel("google", "gemini-3.1-pro-preview").id, "gemini-3.1-pro-preview");
+});
+
+void test("Claude Fable 5 registry metadata is usable by the add-in", () => {
+  const fable = getModel("anthropic", "claude-fable-5");
+  assert.equal(fable.provider, "anthropic");
+  assert.equal(fable.api, "anthropic-messages");
+  assert.ok(fable.reasoning, "expected Fable 5 to support reasoning");
+  assert.ok(fable.contextWindow >= 1_000_000, "expected a 1M-token context window");
+});
+
+void test("pickDefaultModel prefers the latest Fable for Anthropic-only setups", () => {
+  const models = getModels("anthropic");
+  const fable = models.filter((m) => m.id.startsWith("claude-fable-"));
+  assert.ok(fable.length > 0, "expected at least one Fable model in the registry");
+
+  const selected = pickDefaultModel(["anthropic"]);
+  assert.equal(selected.provider, "anthropic");
+  assert.equal(selected.id, "claude-fable-5");
+});
+
 void test("current OpenAI providers expose at least one default-model candidate", () => {
   for (const provider of OPENAI_PROVIDERS) {
     const expected = pickExpectedOpenAiDefault(provider);
     assert.ok(expected, `expected at least one OpenAI default candidate for ${provider}`);
   }
+});
+
+void test("Bedrock provider uses the browser-safe unsupported-provider stub", async () => {
+  installBedrockProviderStub();
+
+  const selected = await completeSimple(
+    getModel("amazon-bedrock", "amazon.nova-micro-v1:0"),
+    {
+      messages: [
+        {
+          role: "user",
+          content: [{ type: "text", text: "hello" }],
+          timestamp: Date.now(),
+        },
+      ],
+    },
+    { maxTokens: 1, maxRetries: 0 },
+  );
+
+  assert.equal(selected.stopReason, "error");
+  assert.match(selected.errorMessage ?? "", /Amazon Bedrock is not supported/);
 });
 
 void test("pickDefaultModel matches the current OpenAI default-selection contract", () => {
@@ -263,6 +320,22 @@ void test("compareModels sorts non-OpenAI models by provider, family, then recen
 
   // Sanity: providerPriority is stable
   assert.ok(providerPriority("anthropic") < providerPriority("openai"));
+});
+
+void test("compareModels puts the Fable family before Opus/Sonnet/Haiku for Anthropic", () => {
+  const models = [
+    { provider: "anthropic", id: "claude-haiku-4-5" },
+    { provider: "anthropic", id: "claude-opus-4-8" },
+    { provider: "anthropic", id: "claude-fable-5" },
+    { provider: "anthropic", id: "claude-sonnet-4-6" },
+  ];
+
+  models.sort(compareModels);
+
+  assert.deepEqual(
+    models.map((m) => m.id),
+    ["claude-fable-5", "claude-opus-4-8", "claude-sonnet-4-6", "claude-haiku-4-5"],
+  );
 });
 
 void test("openai compareModels does not mistake dated GPT-4o ids for newer versions", () => {

@@ -7,37 +7,40 @@
  * - keep the summary in LLM context via Agent.convertToLlm
  */
 
+import type { CompactionSummaryMessage } from "@earendil-works/pi-agent-core";
 import type { UserMessage } from "@earendil-works/pi-ai";
+
+export type { CompactionSummaryMessage };
 
 export const COMPACTION_SUMMARY_PREFIX =
   "The conversation history before this point was compacted into the following summary:\n\n<summary>\n";
 
 export const COMPACTION_SUMMARY_SUFFIX = "\n</summary>";
 
-export interface CompactionSummaryMessage {
-  role: "compactionSummary";
-  summary: string;
-  messageCountBefore: number;
-  timestamp: number;
-}
-
-declare module "@earendil-works/pi-agent-core" {
-  interface CustomAgentMessages {
-    compactionSummary: CompactionSummaryMessage;
-  }
-}
-
 export function createCompactionSummaryMessage(args: {
   summary: string;
-  messageCountBefore: number;
+  tokensBefore: number;
   timestamp: number;
 }): CompactionSummaryMessage {
   return {
     role: "compactionSummary",
     summary: args.summary,
-    messageCountBefore: args.messageCountBefore,
+    tokensBefore: args.tokensBefore,
     timestamp: args.timestamp,
   };
+}
+
+export function formatCompactionSummaryExtent(msg: CompactionSummaryMessage): string {
+  if (typeof msg.tokensBefore === "number") {
+    return `${msg.tokensBefore.toLocaleString()} token${msg.tokensBefore === 1 ? "" : "s"}`;
+  }
+
+  const legacyMessageCount = (msg as { messageCountBefore?: unknown }).messageCountBefore;
+  if (typeof legacyMessageCount === "number") {
+    return `${legacyMessageCount.toLocaleString()} message${legacyMessageCount === 1 ? "" : "s"}`;
+  }
+
+  return "earlier context";
 }
 
 export function compactionSummaryToUserMessage(
