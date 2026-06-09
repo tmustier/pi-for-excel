@@ -377,7 +377,7 @@ const handler = async (req, res) => {
 
     res.statusCode = upstream.status;
 
-    // Copy response headers (but keep our CORS headers)
+    // Copy response headers
     upstream.headers.forEach((value, key) => {
       const lower = key.toLowerCase();
       if (lower === "set-cookie") return;
@@ -389,6 +389,13 @@ const handler = async (req, res) => {
 
       // Content-Length can be wrong after decompression; let Node set it.
       if (lower === "content-length") return;
+
+      // Keep our CORS headers (set by setCorsHeaders). Upstream values could
+      // clobber them and break the integration — e.g. llama.cpp returns an
+      // empty Access-Control-Allow-Origin because we don't forward the Origin.
+      if (lower.startsWith("access-control-")) return;
+      if (lower === "vary") return;
+
       res.setHeader(key, value);
     });
 
