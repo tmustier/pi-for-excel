@@ -107,7 +107,7 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 
 ## Global tool output truncation (Pi-style guardrail)
 - **Scope:** applied as a runtime wrapper around all registered tools (core + integrations + extensions) before tool results are persisted to message history.
-- **Limits:** **50KB** UTF-8 bytes and **2000 lines** (whichever is hit first), aligned with pi-coding-agent defaults.
+- **Limits:** **50KB** UTF-8 bytes and **2000 lines** (whichever is hit first), aligned with pi-coding-agent defaults. For models with context windows **below 128k**, limits scale linearly with the window (floors: **8KB** / **200 lines**) — resolved per execution from the active model via `src/context/window-budgets.ts` (#566).
 - **Strategy:**
   - default: **head** truncation (read/search style outputs)
   - specific log/terminal style tools (`python_run`, `tmux`, `mcp`, `execute_office_js`): **tail** truncation

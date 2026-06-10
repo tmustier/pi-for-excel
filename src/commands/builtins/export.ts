@@ -3,7 +3,7 @@
  */
 
 import type { Api, Model, StopReason, Usage } from "@earendil-works/pi-ai";
-import type { AgentMessage } from "@earendil-works/pi-agent-core";
+import type { Agent, AgentMessage } from "@earendil-works/pi-agent-core";
 
 import type { SlashCommand } from "../types.js";
 import type { ActiveAgentProvider } from "./model.js";
@@ -484,6 +484,201 @@ export function createExportCommands(getActiveAgent: ActiveAgentProvider): Slash
   ];
 }
 
+/**
+ * Run compaction for a specific agent.
+ *
+ * Used by the `/compact` slash command (with the active agent) and by
+ * auto-compaction / overflow recovery (with the agent that owns the run, which
+ * may not be the active tab).
+ */
+export async function runCompactCommand(agent: Agent, args: string): Promise<void> {
+  const allMessages = agent.state.messages;
+  const {
+    archivedMessages: existingArchivedMessages,
+    messagesWithoutArchived,
+  } = splitArchivedMessages(allMessages);
+
+  if (messagesWithoutArchived.length < 4) {
+    showToast("Too few messages to compact");
+    return;
+  }
+
+  showToast("Compacting to free up context", 60000);
+
+  const now = Date.now();
+  const model = agent.state.model;
+  if (!isApiModel(model)) {
+    showToast("No model configured for compaction");
+    return;
+  }
+
+  // IMPORTANT: use the agent's configured streamFn + api key resolver.
+  // Calling pi-ai's completeSimple() directly bypasses:
+  // - our CORS proxy logic (streamFn)
+  // - our API key/OAuth resolution (agent.getApiKey)
+  // and can crash in browser WebViews due to env key fallbacks using `process`.
+  const apiKey = agent.getApiKey ? await agent.getApiKey(model.provider) : undefined;
+  if (!apiKey) {
+    showToast(`No API key available for ${model.provider}. Use /login or /settings.`);
+    return;
+  }
+
+  const contextWindow = model.contextWindow || 200000;
+
+  // Pi uses reserveTokens to ensure we don't run out of room for the model's response.
+  const reserveTokens = effectiveReserveTokens(contextWindow);
+  const keepRecentTokens = effectiveKeepRecentTokens(contextWindow, reserveTokens);
+
+  const maxTokens = Math.max(
+    256,
+    Math.min(model.maxTokens, Math.floor(0.8 * reserveTokens)),
+  );
+
+  const { boundaryStart, previousSummary } = getPreviousCompaction(messagesWithoutArchived);
+  const userCompactionFocus = args.trim() || undefined;
+  let memoryNudgeShown = false;
+
+  const runOnce = async (limits: SerializeLimits, keepRecentOverride?: number): Promise<{
+    summary: string;
+    keptMessages: AgentMessage[];
+    messagesToArchive: AgentMessage[];
+    summarizedCount: number;
+    summarizedTokens: number;
+  }> => {
+    const keepRecent = keepRecentOverride ?? keepRecentTokens;
+    const cutIndex = findCutIndex(messagesWithoutArchived, boundaryStart, keepRecent);
+    const messagesToSummarize = messagesWithoutArchived.slice(boundaryStart, cutIndex);
+    const keptMessages = messagesWithoutArchived.slice(cutIndex);
+
+    if (messagesToSummarize.length === 0) {
+      throw new Error("Nothing to compact");
+    }
+
+    const memoryCues = collectCompactionMemoryCues(messagesToSummarize);
+    if (memoryCues.cueCount > 0 && !memoryNudgeShown) {
+      const cueLabel = memoryCues.cueCount === 1 ? "cue" : "cues";
+      showToast(
+        `Compaction reminder: found ${memoryCues.cueCount} memory ${cueLabel} in older messages. Save durable facts to notes/ (rules via instructions) if needed.`,
+        12000,
+      );
+      memoryNudgeShown = true;
+    }
+
+    const conversationText = serializeConversation(messagesToSummarize, limits);
+    const memoryFocus = buildCompactionMemoryFocusInstruction(memoryCues);
+    const customInstructions = mergeCompactionAdditionalFocus(
+      userCompactionFocus,
+      memoryFocus,
+    );
+    const promptText = buildSummarizationPrompt({
+      conversationText,
+      previousSummary,
+      customInstructions,
+    });
+
+    const stream = await agent.streamFn(
+      model,
+      {
+        systemPrompt: SUMMARIZATION_SYSTEM_PROMPT,
+        messages: [
+          {
+            role: "user",
+            content: [{ type: "text", text: promptText }],
+            timestamp: Date.now(),
+          },
+        ],
+      },
+      {
+        apiKey,
+        sessionId: agent.sessionId,
+        maxTokens,
+        // Match pi-coding-agent: don't force temperature when using reasoning,
+        // since Anthropic requires temperature=1 when thinking is enabled.
+        reasoning: "high",
+      },
+    );
+
+    const result = await stream.result();
+
+    if (result.stopReason === "error") {
+      throw new Error(result.errorMessage || "Compaction failed");
+    }
+
+    const summary = extractTextBlocks(result.content).trim() || "Summary unavailable";
+
+    return {
+      summary,
+      keptMessages,
+      messagesToArchive: messagesToSummarize,
+      summarizedCount: countChatMessages(messagesToSummarize),
+      summarizedTokens: messagesToSummarize.reduce(
+        (total, message) => total + estimateTokens(message),
+        0,
+      ),
+    };
+  };
+
+  const defaultLimits: SerializeLimits = {
+    maxUserChars: 4000,
+    maxAssistantChars: 8000,
+    maxToolResultChars: 8000,
+  };
+
+  const aggressiveLimits: SerializeLimits = {
+    maxUserChars: 1200,
+    maxAssistantChars: 2500,
+    maxToolResultChars: 2500,
+  };
+
+  try {
+    let out: {
+      summary: string;
+      keptMessages: AgentMessage[];
+      messagesToArchive: AgentMessage[];
+      summarizedCount: number;
+      summarizedTokens: number;
+    };
+
+    try {
+      out = await runOnce(defaultLimits);
+    } catch (e: unknown) {
+      if (!isPromptTooLongError(e)) throw e;
+
+      // Retry once with more aggressive truncation + keeping a larger recent tail.
+      showToast("Compaction input too large — retrying with stronger truncation", 60000);
+
+      const keepMoreRecent = Math.min(contextWindow, keepRecentTokens * 2);
+      out = await runOnce(aggressiveLimits, keepMoreRecent);
+    }
+
+    const archived = createArchivedMessagesMessage({
+      existingArchivedMessages,
+      newlyArchivedMessages: out.messagesToArchive,
+      timestamp: now,
+    });
+
+    const compacted = createCompactionSummaryMessage({
+      summary: out.summary,
+      tokensBefore: out.summarizedTokens,
+      timestamp: now,
+    });
+
+    agent.state.messages = [archived, compacted, ...out.keptMessages];
+
+    const iface = document.querySelector<PiSidebar>("pi-sidebar");
+    iface?.requestUpdate();
+
+    showToast(`Summarized ${out.summarizedCount} messages`);
+  } catch (e: unknown) {
+    const msg = getErrorMessage(e);
+    if (msg === "Nothing to compact") {
+      showToast("Nothing to compact");
+      return;
+    }
+    showToast(`Compact failed: ${msg}`);
+  }
+}
+
 export function createCompactCommands(getActiveAgent: ActiveAgentProvider): SlashCommand[] {
   return [
     {
@@ -497,191 +692,7 @@ export function createCompactCommands(getActiveAgent: ActiveAgentProvider): Slas
           return;
         }
 
-        const allMessages = agent.state.messages;
-        const {
-          archivedMessages: existingArchivedMessages,
-          messagesWithoutArchived,
-        } = splitArchivedMessages(allMessages);
-
-        if (messagesWithoutArchived.length < 4) {
-          showToast("Too few messages to compact");
-          return;
-        }
-
-        showToast("Compacting to free up context", 60000);
-
-        const now = Date.now();
-        const model = agent.state.model;
-        if (!isApiModel(model)) {
-          showToast("No model configured for compaction");
-          return;
-        }
-
-        // IMPORTANT: use the agent's configured streamFn + api key resolver.
-        // Calling pi-ai's completeSimple() directly bypasses:
-        // - our CORS proxy logic (streamFn)
-        // - our API key/OAuth resolution (agent.getApiKey)
-        // and can crash in browser WebViews due to env key fallbacks using `process`.
-        const apiKey = agent.getApiKey ? await agent.getApiKey(model.provider) : undefined;
-        if (!apiKey) {
-          showToast(`No API key available for ${model.provider}. Use /login or /settings.`);
-          return;
-        }
-
-        const contextWindow = model.contextWindow || 200000;
-
-        // Pi uses reserveTokens to ensure we don't run out of room for the model's response.
-        const reserveTokens = effectiveReserveTokens(contextWindow);
-        const keepRecentTokens = effectiveKeepRecentTokens(contextWindow, reserveTokens);
-
-        const maxTokens = Math.max(
-          256,
-          Math.min(model.maxTokens, Math.floor(0.8 * reserveTokens)),
-        );
-
-        const { boundaryStart, previousSummary } = getPreviousCompaction(messagesWithoutArchived);
-        const userCompactionFocus = args.trim() || undefined;
-        let memoryNudgeShown = false;
-
-        const runOnce = async (limits: SerializeLimits, keepRecentOverride?: number): Promise<{
-          summary: string;
-          keptMessages: AgentMessage[];
-          messagesToArchive: AgentMessage[];
-          summarizedCount: number;
-          summarizedTokens: number;
-        }> => {
-          const keepRecent = keepRecentOverride ?? keepRecentTokens;
-          const cutIndex = findCutIndex(messagesWithoutArchived, boundaryStart, keepRecent);
-          const messagesToSummarize = messagesWithoutArchived.slice(boundaryStart, cutIndex);
-          const keptMessages = messagesWithoutArchived.slice(cutIndex);
-
-          if (messagesToSummarize.length === 0) {
-            throw new Error("Nothing to compact");
-          }
-
-          const memoryCues = collectCompactionMemoryCues(messagesToSummarize);
-          if (memoryCues.cueCount > 0 && !memoryNudgeShown) {
-            const cueLabel = memoryCues.cueCount === 1 ? "cue" : "cues";
-            showToast(
-              `Compaction reminder: found ${memoryCues.cueCount} memory ${cueLabel} in older messages. Save durable facts to notes/ (rules via instructions) if needed.`,
-              12000,
-            );
-            memoryNudgeShown = true;
-          }
-
-          const conversationText = serializeConversation(messagesToSummarize, limits);
-          const memoryFocus = buildCompactionMemoryFocusInstruction(memoryCues);
-          const customInstructions = mergeCompactionAdditionalFocus(
-            userCompactionFocus,
-            memoryFocus,
-          );
-          const promptText = buildSummarizationPrompt({
-            conversationText,
-            previousSummary,
-            customInstructions,
-          });
-
-          const stream = await agent.streamFn(
-            model,
-            {
-              systemPrompt: SUMMARIZATION_SYSTEM_PROMPT,
-              messages: [
-                {
-                  role: "user",
-                  content: [{ type: "text", text: promptText }],
-                  timestamp: Date.now(),
-                },
-              ],
-            },
-            {
-              apiKey,
-              sessionId: agent.sessionId,
-              maxTokens,
-              // Match pi-coding-agent: don't force temperature when using reasoning,
-              // since Anthropic requires temperature=1 when thinking is enabled.
-              reasoning: "high",
-            },
-          );
-
-          const result = await stream.result();
-
-          if (result.stopReason === "error") {
-            throw new Error(result.errorMessage || "Compaction failed");
-          }
-
-          const summary = extractTextBlocks(result.content).trim() || "Summary unavailable";
-
-          return {
-            summary,
-            keptMessages,
-            messagesToArchive: messagesToSummarize,
-            summarizedCount: countChatMessages(messagesToSummarize),
-            summarizedTokens: messagesToSummarize.reduce(
-              (total, message) => total + estimateTokens(message),
-              0,
-            ),
-          };
-        };
-
-        const defaultLimits: SerializeLimits = {
-          maxUserChars: 4000,
-          maxAssistantChars: 8000,
-          maxToolResultChars: 8000,
-        };
-
-        const aggressiveLimits: SerializeLimits = {
-          maxUserChars: 1200,
-          maxAssistantChars: 2500,
-          maxToolResultChars: 2500,
-        };
-
-        try {
-          let out: {
-            summary: string;
-            keptMessages: AgentMessage[];
-            messagesToArchive: AgentMessage[];
-            summarizedCount: number;
-            summarizedTokens: number;
-          };
-
-          try {
-            out = await runOnce(defaultLimits);
-          } catch (e: unknown) {
-            if (!isPromptTooLongError(e)) throw e;
-
-            // Retry once with more aggressive truncation + keeping a larger recent tail.
-            showToast("Compaction input too large — retrying with stronger truncation", 60000);
-
-            const keepMoreRecent = Math.min(contextWindow, keepRecentTokens * 2);
-            out = await runOnce(aggressiveLimits, keepMoreRecent);
-          }
-
-          const archived = createArchivedMessagesMessage({
-            existingArchivedMessages,
-            newlyArchivedMessages: out.messagesToArchive,
-            timestamp: now,
-          });
-
-          const compacted = createCompactionSummaryMessage({
-            summary: out.summary,
-            tokensBefore: out.summarizedTokens,
-            timestamp: now,
-          });
-
-          agent.state.messages = [archived, compacted, ...out.keptMessages];
-
-          const iface = document.querySelector<PiSidebar>("pi-sidebar");
-          iface?.requestUpdate();
-
-          showToast(`Summarized ${out.summarizedCount} messages`);
-        } catch (e: unknown) {
-          const msg = getErrorMessage(e);
-          if (msg === "Nothing to compact") {
-            showToast("Nothing to compact");
-            return;
-          }
-          showToast(`Compact failed: ${msg}`);
-        }
+        await runCompactCommand(agent, args);
       },
     },
   ];

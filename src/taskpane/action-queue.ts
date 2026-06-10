@@ -5,12 +5,22 @@
  * (they call `agent.streamFn(...)` directly) and therefore don't set
  * `agent.state.isStreaming`. Without a queue, user input can be lost when
  * compaction rewrites the message list.
+ *
+ * The queue also owns automatic context protection for its agent (#566):
+ * - pre-prompt auto-compaction (existing behavior)
+ * - mid-turn auto-compaction between tool-loop continuations (via
+ *   `agent.prepareNextTurn`)
+ * - one compact-and-retry recovery when a run ends in a context-overflow error
  */
 
 import type { Agent } from "@earendil-works/pi-agent-core";
 
 import { commandRegistry } from "../commands/types.js";
-import { maybeAutoCompactBeforePrompt } from "../compaction/auto-compaction.js";
+import {
+  maybeAutoCompactBeforeContinuation,
+  maybeAutoCompactBeforePrompt,
+} from "../compaction/auto-compaction.js";
+import { recoverFromContextOverflow } from "../compaction/overflow-recovery.js";
 
 export type QueuedAction =
   | { type: "prompt"; text: string }
@@ -37,6 +47,8 @@ export function createActionQueue(opts: {
   sidebar: BusyIndicatorHost;
   queueDisplay: ActionQueueDisplay;
   autoCompactEnabled: boolean;
+  /** Runs compaction for this queue's agent (not the active tab's agent). */
+  runCompact: () => Promise<void>;
 }): ActionQueue {
   const { agent, sidebar, queueDisplay, autoCompactEnabled } = opts;
 
@@ -55,8 +67,32 @@ export function createActionQueue(opts: {
 
   const isBusy = () => running || agent.state.isStreaming;
 
+  const runCompactWithIndicator = async () => {
+    sidebar.setBusyIndicator(
+      "Compacting context…",
+      "Send messages and Pi will see them after compaction",
+    );
+    try {
+      await opts.runCompact();
+    } finally {
+      sidebar.setBusyIndicator(null);
+    }
+  };
+
+  // Mid-turn auto-compaction: checked between tool-loop continuations so a
+  // single tool-heavy turn can't overflow a small context window.
+  agent.prepareNextTurn = async () => {
+    if (closed) return undefined;
+    return maybeAutoCompactBeforeContinuation({
+      agent,
+      enabled: autoCompactEnabled,
+      runCompact: runCompactWithIndicator,
+    });
+  };
+
   const shutdown = () => {
     closed = true;
+    agent.prepareNextTurn = undefined;
     actions.length = 0;
     syncDisplay();
   };
@@ -110,11 +146,22 @@ export function createActionQueue(opts: {
           agent,
           nextUserText: next.text,
           enabled: autoCompactEnabled,
-          runCompact: async () => runCommand("compact", ""),
+          runCompact: runCompactWithIndicator,
         });
 
         if (closed) break;
         await agent.prompt(next.text);
+
+        if (closed) break;
+        if (autoCompactEnabled) {
+          // One compact-and-retry attempt when the run ended in a
+          // context-overflow error. Never loops: a second overflow stays in
+          // the transcript with an actionable error banner.
+          await recoverFromContextOverflow({
+            agent,
+            runCompact: runCompactWithIndicator,
+          });
+        }
       }
     } finally {
       running = false;

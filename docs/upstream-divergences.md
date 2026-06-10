@@ -120,6 +120,31 @@ matches upstream.
 **Files:** `src/compaction/defaults.ts` (`getCompactionThresholds`,
 `LARGE_CONTEXT_HARD_RATIO`, `XL_CONTEXT_HARD_RATIO`)
 
+Since #566, the *trigger points* are closer to upstream again: like pi-mono's
+agent-session, we now also check budgets mid-turn between tool-loop
+continuations (`Agent.prepareNextTurn`) and run one compact-and-retry recovery
+pass when a request fails with a context-overflow error
+(`src/compaction/overflow-recovery.ts`, using pi-ai's `isContextOverflow`).
+What still differs is the quality cap above and the simpler split-turn handling
+(our compaction cuts mid-turn via `findCutIndex` instead of generating separate
+history + turn-prefix summaries).
+
+---
+
+## 5. Context budgets scaled to small context windows
+
+| | pi-mono | Pi for Excel |
+|---|---|---|
+| Tool output cap | fixed 50KB / 2000 lines | scaled linearly below 128k windows (floors 8KB / 200 lines) |
+| Verbatim recent tool results | n/a (no model-facing shaping layer) | 6 at ≥128k, scaled down to a floor of 2 |
+
+**Rationale:** Pi for Excel supports custom gateways with 32k–65k windows where
+a single fixed-cap tool result can consume ~20% of the window. Scaling keeps
+worst-case tool-loop context proportional to the model's actual capacity (#566).
+
+**Files:** `src/context/window-budgets.ts`, wired in `src/taskpane/init.ts`
+(tool truncation limits) and `src/messages/convert-to-llm.ts` (history shaping).
+
 ---
 
 ## Non-divergences worth noting

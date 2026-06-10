@@ -31,7 +31,10 @@ import {
   PI_EXPERIMENTAL_FEATURE_CHANGED_EVENT,
   PI_EXPERIMENTAL_TOOL_CONFIG_CHANGED_EVENT,
 } from "../experiments/events.js";
-import { convertToLlm } from "../messages/convert-to-llm.js";
+import { createConvertToLlm } from "../messages/convert-to-llm.js";
+import { effectiveToolOutputLimits } from "../context/window-budgets.js";
+import { findTrailingContextOverflowError } from "../compaction/overflow-recovery.js";
+import { runCompactCommand } from "../commands/builtins/export.js";
 import { getFilesWorkspace } from "../files/workspace.js";
 import { ConnectionManager } from "../connections/manager.js";
 import { createAllTools } from "../tools/index.js";
@@ -951,6 +954,8 @@ export async function initTaskpane(opts: {
       });
 
       const tools = applyToolOutputTruncation(preflightTools, {
+        // Scale caps with the active model's context window (#566).
+        limits: () => effectiveToolOutputLimits(runtimeAgent?.state.model.contextWindow),
         saveTruncatedOutput: saveTruncatedToolOutputToWorkspace,
       });
 
@@ -978,7 +983,9 @@ export async function initTaskpane(opts: {
         messages: [],
         tools: initialCapabilities.tools,
       },
-      convertToLlm,
+      convertToLlm: createConvertToLlm({
+        getContextWindow: () => runtimeAgent?.state.model.contextWindow,
+      }),
       transformContext: createContextInjector(changeTracker),
       streamFn,
     });
@@ -1043,6 +1050,7 @@ export async function initTaskpane(opts: {
       sidebar,
       queueDisplay,
       autoCompactEnabled,
+      runCompact: () => runCompactCommand(agent, ""),
     });
 
     const persistence = await setupSessionPersistence({
@@ -1087,7 +1095,14 @@ export async function initTaskpane(opts: {
         const isAbort = wasUserAbort || /abort/i.test(errorMessage) || /cancel/i.test(errorMessage);
         if (!isAbort) {
           const err = errorMessage;
-          if (isLikelyCorsErrorMessage(err)) {
+          if (findTrailingContextOverflowError(agent.state)) {
+            showErrorBanner(
+              errorRoot,
+              autoCompactEnabled
+                ? "Context window exceeded — compacting older history and retrying automatically. If this persists, run /compact, scope your request to a smaller range, or use a larger-context model."
+                : "Context window exceeded. Run /compact to free up context, scope your request to a smaller range, or use a larger-context model.",
+            );
+          } else if (isLikelyCorsErrorMessage(err)) {
             showErrorBanner(
               errorRoot,
               `Network error (likely CORS). If you're using OAuth, enable /settings → Proxy with ${DEFAULT_LOCAL_PROXY_URL} and retry. Guide: ${PROXY_HELPER_DOCS_URL}`,

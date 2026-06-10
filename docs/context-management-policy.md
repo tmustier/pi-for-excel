@@ -125,9 +125,9 @@ Implications:
 - Add model-facing truncation/summarization for older or oversized tool results.
 - Keep full raw output in UI/tool cards (no loss of user-visible detail).
 - Keep recency window for exact details (latest N tool results untouched).
-- **Current rollout (v1):**
-  - **execution-time guardrail (primary):** global tool-output truncation wrapper on all registered tools with Pi-aligned limits (**50KB UTF-8 bytes** or **2000 lines**, whichever first)
-  - **history shaping (secondary):** keep latest **6** tool results untouched; compact older tool results when payload exceeds **1,200 chars** or contains images; include a deterministic **500-char preview** in compacted form.
+- **Current rollout (v2):**
+  - **execution-time guardrail (primary):** global tool-output truncation wrapper on all registered tools with Pi-aligned limits (**50KB UTF-8 bytes** or **2000 lines**, whichever first). For context windows **below 128k**, caps scale linearly with the window (floors: 8KB / 200 lines) — see `src/context/window-budgets.ts` (#566).
+  - **history shaping (secondary):** keep latest **6** tool results untouched (scaled down for <128k windows, e.g. **3** at 65k, floor 2); compact older tool results when payload exceeds **1,200 chars** or contains images; include a deterministic **500-char preview** in compacted form.
   - truncated outputs include stable machine metadata (`details.outputTruncation`) and best-effort full-output persistence under Files workspace `.tool-output/...`.
 
 **Success:** lower message-context growth rate with no UX regression.
@@ -155,11 +155,12 @@ Implications:
 - Tune soft/hard compaction thresholds for earlier quality protection.
 - Keep compaction summary compact and action-oriented.
 - Add easier “summarize + start fresh” flow for noisy sessions.
-- **Current rollout (v1):**
+- **Current rollout (v2):**
   - hard trigger = `min(contextWindow - reserveTokens, qualityCap)`
   - `qualityCap` = **88%** of context window for ≥128k models, **85%** for ≥200k models
   - soft warning = max(70% of hard trigger, hard trigger − 5% of context window, min margin 2,048 tokens)
-  - auto-compaction uses hard trigger; status-bar warnings remain on the existing 40%/60% UX thresholds
+  - auto-compaction uses the hard trigger both **before queued prompts** and **mid-turn between tool-loop continuations** (`Agent.prepareNextTurn`); status-bar warnings remain on the existing 40%/60% UX thresholds
+  - runs that still end in a provider **context-overflow error** get one compact-and-retry recovery pass (see `src/compaction/overflow-recovery.ts`, #566)
   - summarized slices are persisted in a UI-only `archivedMessages` bucket with a “Show earlier messages” card (excluded from model context)
 
 **Success:** fewer degraded late-thread responses.

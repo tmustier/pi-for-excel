@@ -1,9 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import type { AgentMessage } from "@earendil-works/pi-agent-core";
+import { Agent, type AgentMessage } from "@earendil-works/pi-agent-core";
+import type { Api, Model, ToolResultMessage } from "@earendil-works/pi-ai";
 
-import { shouldAutoCompactForProjectedTokens } from "../src/compaction/auto-compaction.ts";
+import {
+  maybeAutoCompactBeforeContinuation,
+  shouldAutoCompactForProjectedTokens,
+} from "../src/compaction/auto-compaction.ts";
 import {
   buildCompactionMemoryFocusInstruction,
   collectCompactionMemoryCues,
@@ -25,6 +29,167 @@ function createAssistantMessage(text: string, timestamp: number): AgentMessage {
     timestamp,
   };
 }
+
+function createCompleteAssistantMessage(text: string, timestamp: number): AgentMessage {
+  return {
+    role: "assistant",
+    content: [{ type: "text", text }],
+    api: "openai-completions",
+    provider: "test",
+    model: "test-model",
+    usage: {
+      input: 0,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+      totalTokens: 0,
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+    },
+    stopReason: "toolUse",
+    timestamp,
+  };
+}
+
+function createToolResultMessage(text: string, timestamp: number): ToolResultMessage {
+  return {
+    role: "toolResult",
+    toolCallId: `call-${timestamp}`,
+    toolName: "read_range",
+    content: [{ type: "text", text }],
+    isError: false,
+    timestamp,
+  };
+}
+
+function createModel(contextWindow: number): Model<Api> {
+  return {
+    id: "test-model",
+    name: "Test Model",
+    api: "openai-completions",
+    provider: "test",
+    baseUrl: "https://example.invalid",
+    reasoning: false,
+    input: ["text"],
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    contextWindow,
+    maxTokens: 4096,
+  };
+}
+
+function createAgent(args: { contextWindow: number; messages: AgentMessage[] }): Agent {
+  return new Agent({
+    initialState: {
+      model: createModel(args.contextWindow),
+      messages: args.messages,
+      tools: [],
+    },
+  });
+}
+
+// 32k window → hard trigger at 16,384 tokens (65,536 chars).
+function createToolLoopMessages(toolResultChars: number): AgentMessage[] {
+  return [
+    createUserMessage("analyze this data", 1),
+    createCompleteAssistantMessage("reading…", 2),
+    createToolResultMessage("small output", 3),
+    createCompleteAssistantMessage("reading more…", 4),
+    createToolResultMessage("y".repeat(toolResultChars), 5),
+  ];
+}
+
+void test("mid-turn check compacts and returns a replacement loop context", async () => {
+  const agent = createAgent({
+    contextWindow: 32_768,
+    messages: createToolLoopMessages(80_000),
+  });
+
+  const keptTail = agent.state.messages.slice(-2);
+  let compactRuns = 0;
+
+  const update = await maybeAutoCompactBeforeContinuation({
+    agent,
+    enabled: true,
+    runCompact: () => {
+      compactRuns += 1;
+      agent.state.messages = [createUserMessage("compaction summary", 6), ...keptTail];
+      return Promise.resolve();
+    },
+  });
+
+  assert.equal(compactRuns, 1);
+  assert.notEqual(update, undefined);
+  assert.equal(update?.context?.messages.length, 3);
+  assert.equal(update?.context?.messages[update.context.messages.length - 1]?.role, "toolResult");
+});
+
+void test("mid-turn check is a no-op when disabled or under threshold", async () => {
+  let compactRuns = 0;
+  const runCompact = () => {
+    compactRuns += 1;
+    return Promise.resolve();
+  };
+
+  const overBudget = createAgent({
+    contextWindow: 32_768,
+    messages: createToolLoopMessages(80_000),
+  });
+  assert.equal(
+    await maybeAutoCompactBeforeContinuation({ agent: overBudget, enabled: false, runCompact }),
+    undefined,
+  );
+
+  const underBudget = createAgent({
+    contextWindow: 32_768,
+    messages: createToolLoopMessages(1_000),
+  });
+  assert.equal(
+    await maybeAutoCompactBeforeContinuation({ agent: underBudget, enabled: true, runCompact }),
+    undefined,
+  );
+
+  assert.equal(compactRuns, 0);
+});
+
+void test("mid-turn check skips when the turn is not continuing (no trailing tool result)", async () => {
+  let compactRuns = 0;
+  const agent = createAgent({
+    contextWindow: 32_768,
+    messages: [
+      ...createToolLoopMessages(80_000),
+      createCompleteAssistantMessage("done", 6),
+    ],
+  });
+
+  const update = await maybeAutoCompactBeforeContinuation({
+    agent,
+    enabled: true,
+    runCompact: () => {
+      compactRuns += 1;
+      return Promise.resolve();
+    },
+  });
+
+  assert.equal(update, undefined);
+  assert.equal(compactRuns, 0);
+});
+
+void test("mid-turn check returns undefined when compaction does not rewrite history", async () => {
+  const agent = createAgent({
+    contextWindow: 32_768,
+    messages: createToolLoopMessages(80_000),
+  });
+
+  const update = await maybeAutoCompactBeforeContinuation({
+    agent,
+    enabled: true,
+    runCompact: () => {
+      // compaction failed / nothing to do
+      return Promise.resolve();
+    },
+  });
+
+  assert.equal(update, undefined);
+});
 
 void test("does not trigger auto-compaction before hard threshold", () => {
   const shouldCompact = shouldAutoCompactForProjectedTokens({

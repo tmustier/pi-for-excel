@@ -4,6 +4,16 @@ Pi for Excel runs each chat inside the selected model’s **context window** (e.
 
 `/compact` is the manual escape hatch: it **replaces older history with a structured summary**, while keeping the most recent work verbatim.
 
+## Automatic triggers
+
+Auto-compaction (enabled by default, `compaction.enabled`) uses the shared hard budgets from `getCompactionThresholds` and fires at three points:
+
+1. **Before a queued prompt** — projected context (current estimate + the new prompt) exceeds the hard trigger.
+2. **Mid-turn, between tool-loop continuations** — after each completed tool batch, so a single tool-heavy turn can’t overflow a small context window before the next between-prompt check. The in-flight run continues from the compacted history.
+3. **Context-overflow recovery** — when a run still ends in a provider context-overflow error (e.g. a LiteLLM `ContextWindowExceededError`), Pi drops the failed assistant message, compacts, and retries the turn **once**. A second overflow stays in the transcript with an actionable error banner pointing at `/compact`.
+
+When auto-compaction is disabled, overflow errors surface a banner suggesting `/compact`, scoping the request, or a larger-context model — instead of the raw provider error.
+
 > Note: Compaction permanently drops older messages from the session (except what’s captured in the summary). If you need a full transcript, run `/export` **before** compaction.
 
 ## When to use `/compact`
@@ -109,6 +119,15 @@ Running `/compact` will usually still work because it generates a *separate* sum
 - the context usage % should drop immediately
 
 If compaction fails even after the retry, the fallback is to start a new chat (`/new`) and/or export the transcript first (`/export`).
+
+## Small context windows (custom gateways)
+
+Models behind custom gateways often have much smaller windows (32k–65k) than the 128k–200k mainstream models Pi’s defaults are tuned for. Recommendations:
+
+- **Set “Max context tokens” accurately** in the gateway settings (`/settings` → custom gateway). This single value drives all context budgets: compaction thresholds, tool-output caps, and how many recent tool results are kept verbatim. Overstating it causes hard 400s; understating it wastes capacity.
+- **Budgets scale automatically** below a 128k window: tool-output truncation caps shrink linearly (e.g. ~25KB instead of 50KB at 65k, floor 8KB / 200 lines), and history shaping keeps fewer verbatim tool results (3 at 65k, floor 2).
+- **Scope your prompts.** Select the relevant range or name the sheet you care about instead of asking for whole-workbook analysis; large multi-sheet reads consume a small window very quickly.
+- **Start new chats per task** (`/new`) rather than carrying long histories across unrelated tasks.
 
 ## Status bar interaction
 

@@ -47,7 +47,11 @@ export interface ToolOutputTruncationStoreArgs {
 }
 
 export interface ToolOutputTruncationOptions {
-  limits?: Partial<ToolOutputTruncationLimits>;
+  /**
+   * Static limits, or a resolver called per tool execution (e.g. to scale
+   * limits with the active model's context window).
+   */
+  limits?: Partial<ToolOutputTruncationLimits> | (() => Partial<ToolOutputTruncationLimits>);
   strategyForTool?: (toolName: string) => ToolOutputTruncationStrategy;
   saveTruncatedOutput?: (args: ToolOutputTruncationStoreArgs) => Promise<string | undefined>;
 }
@@ -427,7 +431,7 @@ function wrapToolWithOutputTruncation(
   tool: AgentTool,
   options: {
     strategyForTool: (toolName: string) => ToolOutputTruncationStrategy;
-    limits: ToolOutputTruncationLimits;
+    resolveLimits: () => ToolOutputTruncationLimits;
     saveTruncatedOutput?: (args: ToolOutputTruncationStoreArgs) => Promise<string | undefined>;
   },
 ): AgentTool {
@@ -435,10 +439,11 @@ function wrapToolWithOutputTruncation(
     ...tool,
     execute: async (toolCallId, params, signal, onUpdate) => {
       const strategy = options.strategyForTool(tool.name);
+      const limits = options.resolveLimits();
 
       const wrappedOnUpdate: AgentToolUpdateCallback<unknown> | undefined = onUpdate
         ? (partialResult) => {
-          onUpdate(applyTruncationSync(partialResult, strategy, options.limits));
+          onUpdate(applyTruncationSync(partialResult, strategy, limits));
         }
         : undefined;
 
@@ -447,7 +452,7 @@ function wrapToolWithOutputTruncation(
         toolName: tool.name,
         toolCallId,
         strategy,
-        limits: options.limits,
+        limits,
         saveTruncatedOutput: options.saveTruncatedOutput,
       });
     },
@@ -458,12 +463,15 @@ export function applyToolOutputTruncation(
   tools: AgentTool[],
   options: ToolOutputTruncationOptions = {},
 ): AgentTool[] {
-  const limits = normalizeLimits(options.limits);
+  const limitsOption = options.limits;
+  const resolveLimits = typeof limitsOption === "function"
+    ? () => normalizeLimits(limitsOption())
+    : () => normalizeLimits(limitsOption);
   const strategyForTool = options.strategyForTool ?? defaultStrategyForTool;
 
   return tools.map((tool) => wrapToolWithOutputTruncation(tool, {
     strategyForTool,
-    limits,
+    resolveLimits,
     saveTruncatedOutput: options.saveTruncatedOutput,
   }));
 }

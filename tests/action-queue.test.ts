@@ -2,24 +2,31 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { Agent, type AgentMessage } from "@earendil-works/pi-agent-core";
-import type { ImageContent } from "@earendil-works/pi-ai";
+import type { Api, ImageContent, Model, Usage } from "@earendil-works/pi-ai";
 
 import { commandRegistry, type SlashCommand } from "../src/commands/types.ts";
 import { createActionQueue } from "../src/taskpane/action-queue.ts";
 
 class TestAgent extends Agent {
   promptCalls: string[] = [];
+  continueCalls = 0;
   waitForIdleCalls = 0;
   onPrompt?: (text: string) => void;
   onWaitForIdle?: () => Promise<void>;
 
-  constructor() {
+  constructor(model?: Model<Api>) {
     super({
       initialState: {
+        ...(model ? { model } : {}),
         messages: [],
         tools: [],
       },
     });
+  }
+
+  override continue(): Promise<void> {
+    this.continueCalls += 1;
+    return Promise.resolve();
   }
 
   override waitForIdle(): Promise<void> {
@@ -98,6 +105,30 @@ function createUserMessage(text: string, timestamp: number): AgentMessage {
   };
 }
 
+const EMPTY_USAGE: Usage = {
+  input: 0,
+  output: 0,
+  cacheRead: 0,
+  cacheWrite: 0,
+  totalTokens: 0,
+  cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+};
+
+function createSmallContextModel(): Model<Api> {
+  return {
+    id: "small-model",
+    name: "Small Model",
+    api: "openai-completions",
+    provider: "custom-gateway",
+    baseUrl: "https://gateway.example.invalid",
+    reasoning: false,
+    input: ["text"],
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    contextWindow: 65_536,
+    maxTokens: 4096,
+  };
+}
+
 void test("queued prompt survives compact replaceMessages and runs after compact", async () => {
   const agent = new TestAgent();
   const compactGate = createDeferred();
@@ -132,6 +163,7 @@ void test("queued prompt survives compact replaceMessages and runs after compact
       const queue = createActionQueue({
         agent,
         autoCompactEnabled: false,
+        runCompact: async () => {},
         sidebar: {
           setBusyIndicator: (label, hint) => {
             busyIndicators.push({ label, hint: hint ?? null });
@@ -213,6 +245,7 @@ void test("ordered queue runs compact, prompt, then compact", async () => {
       const queue = createActionQueue({
         agent,
         autoCompactEnabled: false,
+        runCompact: async () => {},
         sidebar: {
           setBusyIndicator: () => {
             // not needed in this test
@@ -266,6 +299,7 @@ void test("drainQueuedActions clears pending prompts and commands in FIFO order"
   const queue = createActionQueue({
     agent,
     autoCompactEnabled: false,
+    runCompact: async () => {},
     sidebar: {
       setBusyIndicator: () => {
         // no-op
@@ -298,4 +332,95 @@ void test("drainQueuedActions clears pending prompts and commands in FIFO order"
   await waitForCondition(() => !queue.isBusy());
 
   queue.shutdown();
+});
+
+void test("prompt ending in context overflow triggers compact-and-retry once", async () => {
+  const model = createSmallContextModel();
+  const agent = new TestAgent(model);
+
+  const toolResult: AgentMessage = {
+    role: "toolResult",
+    toolCallId: "call-1",
+    toolName: "read_range",
+    content: [{ type: "text", text: "rows..." }],
+    isError: false,
+    timestamp: 2,
+  };
+
+  agent.onPrompt = (text) => {
+    // Simulate a run that ends in a provider context-overflow error.
+    agent.state.messages = [
+      createUserMessage(text, 1),
+      toolResult,
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "" }],
+        api: model.api,
+        provider: model.provider,
+        model: model.id,
+        usage: EMPTY_USAGE,
+        stopReason: "error",
+        errorMessage: "Requested token count exceeds the model's maximum context length of 65536 tokens",
+        timestamp: 3,
+      },
+    ];
+  };
+
+  let compactRuns = 0;
+  const queue = createActionQueue({
+    agent,
+    autoCompactEnabled: true,
+    runCompact: () => {
+      compactRuns += 1;
+      agent.state.messages = [createUserMessage("compaction summary", 4), toolResult];
+      return Promise.resolve();
+    },
+    sidebar: {
+      setBusyIndicator: () => {
+        // no-op
+      },
+    },
+    queueDisplay: {
+      setActionQueue: () => {
+        // no-op
+      },
+    },
+  });
+
+  queue.enqueuePrompt("analyze this data");
+
+  await waitForCondition(() => agent.continueCalls === 1 && !queue.isBusy());
+
+  assert.equal(compactRuns, 1);
+  assert.deepEqual(agent.promptCalls, ["analyze this data"]);
+  // Failed assistant message was removed from the retry context.
+  assert.equal(
+    agent.state.messages.some((m) => m.role === "assistant"),
+    false,
+  );
+
+  queue.shutdown();
+});
+
+void test("shutdown uninstalls the mid-turn prepareNextTurn hook", () => {
+  const agent = new TestAgent();
+  const queue = createActionQueue({
+    agent,
+    autoCompactEnabled: true,
+    runCompact: async () => {},
+    sidebar: {
+      setBusyIndicator: () => {
+        // no-op
+      },
+    },
+    queueDisplay: {
+      setActionQueue: () => {
+        // no-op
+      },
+    },
+  });
+
+  assert.equal(typeof agent.prepareNextTurn, "function");
+  queue.shutdown();
+  assert.equal(agent.prepareNextTurn, undefined);
 });
