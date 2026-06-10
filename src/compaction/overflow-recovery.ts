@@ -56,10 +56,18 @@ export async function recoverFromContextOverflow(args: {
   // `state.messages` is replaced (new array identity) when compaction rewrites
   // history; an unchanged reference means compaction failed or was a no-op.
   const beforeCompact = agent.state.messages;
-  await runCompact();
-  if (agent.state.messages === beforeCompact) {
-    // Compaction didn't free anything — restore the failure so it stays
-    // visible and persisted, and let the user act on the hint.
+  let compacted = false;
+  try {
+    await runCompact();
+    compacted = agent.state.messages !== beforeCompact;
+  } catch (err) {
+    // Compaction errors are normally surfaced via toasts inside runCompact;
+    // don't let an unexpected throw break the caller's queue processing.
+    console.warn("[pi] Overflow recovery compaction failed:", err);
+  }
+  if (!compacted) {
+    // Compaction freed nothing (no-op or failure) — restore the failure so it
+    // stays visible and persisted, and let the user act on the banner hint.
     agent.state.messages = [...agent.state.messages, failure];
     return false;
   }

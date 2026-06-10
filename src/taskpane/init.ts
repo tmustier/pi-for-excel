@@ -1099,7 +1099,7 @@ export async function initTaskpane(opts: {
             showErrorBanner(
               errorRoot,
               autoCompactEnabled
-                ? "Context window exceeded — compacting older history and retrying automatically. If this persists, run /compact, scope your request to a smaller range, or use a larger-context model."
+                ? "Context window exceeded — Pi will try compacting older history and retrying once. If this error persists, run /compact, scope your request to a smaller range, or use a larger-context model."
                 : "Context window exceeded. Run /compact to free up context, scope your request to a smaller range, or use a larger-context model.",
             );
           } else if (isLikelyCorsErrorMessage(err)) {

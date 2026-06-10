@@ -192,6 +192,27 @@ void test("recoverFromContextOverflow restores the failure when compaction is a 
   assert.equal(last.errorMessage, LITELLM_OVERFLOW_ERROR);
 });
 
+void test("recoverFromContextOverflow restores the failure when compaction throws", async () => {
+  const model = createModel(65_536);
+  const failure = createOverflowError(model, 3);
+  const agent = createTestAgent({
+    model,
+    messages: [createUser("hi", 1), createToolResult("rows...", 2), failure],
+  });
+
+  const recovered = await recoverFromContextOverflow({
+    agent,
+    runCompact: () => Promise.reject(new Error("summarizer exploded")),
+  });
+
+  assert.equal(recovered, false);
+  assert.equal(agent.continueCalls, 0);
+
+  const last = agent.state.messages[agent.state.messages.length - 1];
+  if (last?.role !== "assistant") throw new Error("expected trailing assistant failure");
+  assert.equal(last.errorMessage, LITELLM_OVERFLOW_ERROR);
+});
+
 void test("recoverFromContextOverflow does nothing without a trailing overflow error", async () => {
   const model = createModel(65_536);
   const agent = createTestAgent({
