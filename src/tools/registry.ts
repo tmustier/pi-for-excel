@@ -60,5 +60,5 @@ export function createCoreTools(options: CreateCoreToolsOptions = {}): AnyCoreTo
     createConventionsTool(),
     createWorkbookHistoryTool(),
     createSkillsTool(options.skills),
-  ] as unknown as AnyCoreTool[];
+  ];
 }

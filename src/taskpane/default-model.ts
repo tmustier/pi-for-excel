@@ -23,7 +23,7 @@ type DefaultProvider =
 type DefaultModelRule = { provider: DefaultProvider; match: RegExp };
 
 function getProviderModels(provider: string): Model<Api>[] {
-  return getModels(provider as Parameters<typeof getModels>[0]) as Model<Api>[];
+  return getModels(provider as Parameters<typeof getModels>[0]);
 }
 
 const DEFAULT_MODEL_RULES: DefaultModelRule[] = [

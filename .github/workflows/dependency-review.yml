@@ -19,14 +19,14 @@ jobs:
 
       - name: Dependency review (pull request)
         if: github.event_name == 'pull_request'
-        uses: actions/dependency-review-action@v4
+        uses: actions/dependency-review-action@v5
         with:
           fail-on-severity: high
           fail-on-scopes: runtime
 
       - name: Dependency review (push diff)
         if: github.event_name == 'push' && github.event.before != '0000000000000000000000000000000000000000'
-        uses: actions/dependency-review-action@v4
+        uses: actions/dependency-review-action@v5
         with:
           fail-on-severity: high
           fail-on-scopes: runtime

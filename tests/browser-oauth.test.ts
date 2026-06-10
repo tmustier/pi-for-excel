@@ -41,7 +41,7 @@ void test("Anthropic OAuth provider uses the browser-safe implementation", async
       status: 200,
       headers: { "Content-Type": "application/json" },
     }));
-  }) as typeof fetch;
+  });
 
   t.after(() => {
     globalThis.fetch = originalFetch;
@@ -95,7 +95,7 @@ void test("OpenAI Codex browser OAuth matches official Codex CLI authorize param
       status: 200,
       headers: { "Content-Type": "application/json" },
     }));
-  }) as typeof fetch;
+  });
 
   t.after(() => {
     globalThis.fetch = originalFetch;
@@ -179,7 +179,7 @@ void test("OpenAI Codex browser OAuth requires account ID on the access token", 
   }), {
     status: 200,
     headers: { "Content-Type": "application/json" },
-  }))) as typeof fetch;
+  })));
 
   t.after(() => {
     globalThis.fetch = originalFetch;
