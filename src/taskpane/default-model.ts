@@ -9,7 +9,6 @@ import {
   isOpenAiCodexModelId,
   isOpenAiGeneralGptModelId,
   modelRecencyScore,
-  parseMajorMinor,
   shouldPreferOpenAiGeneralModel,
 } from "../models/model-ordering.js";
 
@@ -91,10 +90,9 @@ export function pickDefaultModel(
   }
 
   // Anthropic special-case:
-  // Prefer the latest Fable when its major/minor version is >= both Opus and
-  // Sonnet (e.g. Fable 5 over Opus 4-8) — Fable is the post-4.x flagship family.
-  // Otherwise prefer Sonnet when its major/minor version is >= Opus
-  // (e.g. Sonnet 4-6 over Opus 4-6), then Opus.
+  // Default to the latest Opus while Fable is in the registry but unavailable
+  // for normal Anthropic use. Keep Sonnet/Fable as fallbacks for resilience if
+  // a future registry/provider configuration has no Opus entry.
   if (availableProviders.includes("anthropic")) {
     const models: Model<Api>[] = getProviderModels("anthropic");
     const latestWithPrefix = (prefix: string): Model<Api> | undefined =>
@@ -102,24 +100,13 @@ export function pickDefaultModel(
         .filter((m) => m.id.startsWith(prefix))
         .sort((a, b) => modelRecencyScore(b.id) - modelRecencyScore(a.id))[0];
 
-    const fable = latestWithPrefix("claude-fable-");
     const opus = latestWithPrefix("claude-opus-");
     const sonnet = latestWithPrefix("claude-sonnet-");
-
-    if (
-      fable &&
-      (!opus || parseMajorMinor(fable.id) >= parseMajorMinor(opus.id)) &&
-      (!sonnet || parseMajorMinor(fable.id) >= parseMajorMinor(sonnet.id))
-    ) {
-      return fable;
-    }
-
-    if (opus && sonnet) {
-      return parseMajorMinor(sonnet.id) >= parseMajorMinor(opus.id) ? sonnet : opus;
-    }
+    const fable = latestWithPrefix("claude-fable-");
 
     if (opus) return opus;
     if (sonnet) return sonnet;
+    if (fable) return fable;
   }
 
   // Other providers: pattern-based rules

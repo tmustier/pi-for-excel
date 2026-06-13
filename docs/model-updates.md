@@ -111,6 +111,7 @@ We intentionally avoid pinning exact versioned IDs now. Instead we:
 
   Featured rules (current desired behavior):
   - **Anthropic:** latest **Fable** first (post-4.x flagship family, e.g. `claude-fable-5`), then latest **Sonnet** *if* its version >= latest **Opus**, then latest **Opus**
+    - This is picker ordering only; default selection currently skips Fable because it is in the registry but unavailable for normal Anthropic use.
     - Version compare uses `parseMajorMinor()` where `claude-opus-4-6` → `46`, `claude-opus-4-7` → `47`, `claude-fable-5` → `50`.
     - Important: IDs like `claude-opus-4-20250514` are treated as **major only** (`40`) and the `YYYYMMDD` part is considered a separate date suffix by `modelRecencyScore()`.
   - **OpenAI (`openai` + `openai-codex`):** latest general `gpt-5.x` *if* its version >= latest `gpt-5.x-codex`, then latest Codex
@@ -129,7 +130,7 @@ We intentionally avoid pinning exact versioned IDs now. Instead we:
   UI: the model picker is opened from the footer status bar (click the π model button).
 
 - Pick the default model via provider-aware rules:
-  - Anthropic is a small special-case (latest Fable when its version is >= both Opus and Sonnet; otherwise Sonnet when version ties or is newer than Opus; version compare uses `parseMajorMinor`)
+  - Anthropic is a small special-case: latest Opus by default while Fable is in the registry but unavailable; Sonnet and Fable remain fallbacks if Opus is absent.
   - OpenAI (`openai` + `openai-codex`) prefers the newest general GPT-5 when it is at least as new as Codex, with Codex as fallback
   - otherwise `DEFAULT_MODEL_RULES` + `pickLatestMatchingModel()` (uses `getModels(provider)` to find the newest available ID)
 

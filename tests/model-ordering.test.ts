@@ -150,14 +150,14 @@ void test("Claude Fable 5 registry metadata is usable by the add-in", () => {
   assert.ok(fable.contextWindow >= 1_000_000, "expected a 1M-token context window");
 });
 
-void test("pickDefaultModel prefers the latest Fable for Anthropic-only setups", () => {
+void test("pickDefaultModel prefers the latest Opus for Anthropic-only setups", () => {
   const models = getModels("anthropic");
-  const fable = models.filter((m) => m.id.startsWith("claude-fable-"));
-  assert.ok(fable.length > 0, "expected at least one Fable model in the registry");
+  const opus = models.filter((m) => m.id.startsWith("claude-opus-"));
+  assert.ok(opus.length > 0, "expected at least one Opus model in the registry");
 
   const selected = pickDefaultModel(["anthropic"]);
   assert.equal(selected.provider, "anthropic");
-  assert.equal(selected.id, "claude-fable-5");
+  assert.equal(selected.id, "claude-opus-4-8");
 });
 
 void test("current OpenAI providers expose at least one default-model candidate", () => {
