@@ -278,18 +278,26 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 - **Optional explanation UX:** mutation tool cards expose an on-demand **Explain these changes** drawer that synthesizes a concise explanation + clickable citations from structured audit metadata, with bounded payload/text limits.
 - **Rationale:** improve user trust with concrete, navigable deltas while keeping implementation incremental and low-risk.
 
+## Charts tool (`charts`)
+- **Actions:** `list`, `create`, `update`, `delete`, `get_image` in one action-based core tool.
+- **Chart type scope:** v1 exposes common ExcelApi 1.1 chart families only (column/bar/line/area/pie/doughnut/scatter/radar), mapped from friendly names to Office.js `ChartType` values.
+- **Image contract:** `get_image` returns a short text receipt plus an image content block; base64 PNG bytes and dimensions live in `details.image`, not in text output.
+- **Backups:** `create` stores `chart_absent` (restore deletes the created chart); `update` stores `chart_present` with pre-update chart properties. If `update` changes `source_range`, restore cannot revert the prior data source because Office.js does not expose it, so the tool result explicitly notes this limitation. `delete` has no automatic backup in v1 for the same source-range reason and reports `no backup`.
+- **Context impact:** `list`/`get_image` are read-only; `create`/`delete` invalidate structure context, while `update` is content impact.
+- **Rationale:** cover common chart workflows with typed params and visual verification while avoiding a false promise of faithful deleted-chart recreation.
+
 ## Workbook backups (`workbook_history`)
 - **Goal:** prefer low-friction workflows over pre-execution approval selectors by making rollback easy and reliable.
 - **Execution mode toggle:** `/yolo` switches between:
   - `YOLO` (default): mutate tools run without extra pre-execution confirmations.
   - `Safe`: mutate tools require pre-execution confirmation via runtime gate.
-- **Automatic backups:** successful `write_cells`, `fill_formula`, `python_transform_range`, `format_cells`, `conditional_format`, mutating `comments` actions, and supported `modify_structure` actions (`rename_sheet`, `hide_sheet`, `unhide_sheet`, `insert_rows`, `insert_columns`, `add_sheet`, and `duplicate_sheet` when the duplicate has no value data) store pre-mutation snapshots in local `workbook.recovery-snapshots.v1`.
+- **Automatic backups:** successful `write_cells`, `fill_formula`, `python_transform_range`, `format_cells`, `conditional_format`, mutating `comments` actions, `charts` create/update, and supported `modify_structure` actions (`rename_sheet`, `hide_sheet`, `unhide_sheet`, `insert_rows`, `insert_columns`, `add_sheet`, and `duplicate_sheet` when the duplicate has no value data) store pre-mutation snapshots in local `workbook.recovery-snapshots.v1`.
 - **Manual full-workbook fallback (`/backup`):** explicit user-triggered full-file captures are stored in Files workspace under `manual-backups/full-workbook/v1/...` and downloaded for restore. This remains separate from automatic per-mutation checkpoints.
 - **Safety limits:** backup capture is skipped for very large writes (> `MAX_RECOVERY_CELLS`) to avoid oversized local state.
 - **Workbook identity guardrails:** append/list/delete/clear/restore paths are scoped to the active workbook identity; restore rejects identity-less or cross-workbook backups.
 - **Save boundary behavior:** backups are intended as "in between saves" recovery points and are cleared after the workbook transitions from dirty → saved.
 - **Restore UX:** `workbook_history` can list/restore/delete/clear backups; restores also create an inverse backup (`restore_snapshot`) so users can undo a mistaken restore.
-- **Coverage signaling:** `modify_structure` and mutating `view_settings` actions explicitly report when no backup was created.
+- **Coverage signaling:** `modify_structure`, mutating `view_settings`, and `charts delete` actions explicitly report when no backup was created.
 - **Current `modify_structure` backup behavior:** captures/restores all `modify_structure` actions, including value-preserving checkpoints for destructive deletes (`delete_rows`, `delete_columns`, `delete_sheet`) by storing deleted value/formula data when capture is within recovery size limits.
 - **Restore safety gate for structure absence states:** restoring `sheet_absent` / `rows_absent` / `columns_absent` checkpoints remains blocked when target data exists, unless the checkpoint was explicitly generated with data-delete intent during a prior restore inversion (`allowDataDelete`).
 - **Current `format_cells` backup scope:** captures/restores core range-format properties (font/fill/number format/alignment/wrap/borders), row/column dimensions (`column_width`, `row_height`, `auto_fit`), and merge state (`merge`/`unmerge`).

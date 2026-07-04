@@ -25,6 +25,7 @@ import {
   shouldShowBridgeSetupCard,
 } from "./bridge-setup-card.js";
 import {
+  isChartsDetails,
   isCommentsDetails,
   isConditionalFormatDetails,
   isExplainFormulaDetails,
@@ -292,6 +293,19 @@ function renderWorkbookCellDiff(details: unknown): TemplateResult {
   `;
 }
 
+function renderChartImageDetails(details: unknown, hasImageContent: boolean): TemplateResult {
+  if (hasImageContent || !isChartsDetails(details) || !details.image) return html``;
+
+  const src = `data:${details.image.mimeType};base64,${details.image.base64}`;
+  const alt = details.name ? `Chart ${details.name}` : "Chart image";
+
+  return html`
+    <div class="mt-2 border border-border rounded-lg overflow-hidden bg-background">
+      <img src=${src} alt=${alt} class="block w-full h-auto" />
+    </div>
+  `;
+}
+
 function renderExplainFormulaDetails(details: unknown): TemplateResult | null {
   if (!isExplainFormulaDetails(details)) return null;
 
@@ -462,6 +476,19 @@ function buildChangeExplanationInputForTool(
       summary,
       error,
       outputAddress,
+    };
+  }
+
+  if (toolName === "charts") {
+    const detailsAddress = isChartsDetails(details) ? details.address : undefined;
+    const detailsSource = isChartsDetails(details) ? details.sourceRange : undefined;
+    return {
+      toolName,
+      blocked: blockedFromText,
+      changedCount: blockedFromText ? 0 : 1,
+      summary,
+      error,
+      outputAddress: detailsAddress ?? detailsSource ?? range,
     };
   }
 
@@ -656,6 +683,10 @@ function recoveryBadgeForDetails(details: unknown): string {
     return withRecoveryBadge("", details.recovery);
   }
 
+  if (isChartsDetails(details)) {
+    return withRecoveryBadge("", details.recovery);
+  }
+
   return "";
 }
 
@@ -847,6 +878,54 @@ function describeToolCall(
         detail: cell ?? "cell",
         address: cell,
       };
+    }
+    case "charts": {
+      const op = p.action as string | undefined;
+      const recovery = recoveryBadgeForDetails(details);
+      const detailsName = isChartsDetails(details) ? details.name : undefined;
+      const detailsSource = isChartsDetails(details) ? details.sourceRange : undefined;
+      const chartName = detailsName ?? (p.name as string | undefined) ?? (p.new_name as string | undefined);
+      const source = detailsSource ?? (p.source_range as string | undefined);
+
+      if (op === "list") {
+        const count = isChartsDetails(details) && typeof details.count === "number" ? ` (${details.count})` : "";
+        return { action: "Charts", detail: `${(p.sheet as string | undefined) ?? "workbook"}${count}` };
+      }
+
+      if (op === "create") {
+        return {
+          action: "Chart",
+          detail: `'${chartName ?? "new"}' created${source ? ` — ${compactRange(source)}` : ""}${recovery}`,
+          address: source,
+        };
+      }
+
+      if (op === "update") {
+        return {
+          action: "Chart",
+          detail: `'${chartName ?? "chart"}' updated${source ? ` — ${compactRange(source)}` : ""}${recovery}`,
+          address: source,
+        };
+      }
+
+      if (op === "delete") {
+        return {
+          action: "Chart",
+          detail: `'${chartName ?? "chart"}' deleted${recovery}`,
+        };
+      }
+
+      if (op === "get_image") {
+        const size = isChartsDetails(details) && details.image
+          ? ` (${details.image.width}×${details.image.height}px)`
+          : "";
+        return {
+          action: "Chart image",
+          detail: `'${chartName ?? "chart"}'${size}`,
+        };
+      }
+
+      return { action: "Charts", detail: chartName ?? "chart" };
     }
     case "comments": {
       const op = p.action as string | undefined;
@@ -1152,6 +1231,7 @@ function createExcelMarkdownRenderer(toolName: SupportedToolName): ToolRenderer<
                           ? html`<div class="pi-tool-card__markdown"><markdown-block .content=${humanizedText || "(no output)"}></markdown-block></div>`
                           : html`<div class="pi-tool-card__plain-text">${humanizedText || "(no output)"}</div>`}
                     ${renderImages(images)}
+                    ${renderChartImageDetails(result.details, images.length > 0)}
                   </div>
                   ${renderWorkbookCellDiff(result.details)}
                   ${renderChangeExplanationSection(toolName, params, text, result.details)}

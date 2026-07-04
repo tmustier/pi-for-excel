@@ -22,6 +22,7 @@ export type WorkbookAuditToolName =
   | "conditional_format"
   | "modify_structure"
   | "comments"
+  | "charts"
   | "view_settings"
   | "workbook_history"
   | "execute_office_js";
@@ -119,6 +120,7 @@ function isWorkbookAuditToolName(value: unknown): value is WorkbookAuditToolName
     value === "conditional_format" ||
     value === "modify_structure" ||
     value === "comments" ||
+    value === "charts" ||
     value === "view_settings" ||
     value === "workbook_history" ||
     value === "execute_office_js"

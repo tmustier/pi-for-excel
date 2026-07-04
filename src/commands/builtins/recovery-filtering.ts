@@ -23,6 +23,7 @@ const TOOL_FILTER_LABELS: Record<RecoveryCheckpointToolName, string> = {
   format_cells: "Format cells",
   conditional_format: "Conditional format",
   comments: "Comments",
+  charts: "Charts",
   modify_structure: "Modify structure",
   restore_snapshot: "Restore",
 };

@@ -1,5 +1,6 @@
 import { firstCellAddress } from "./recovery/address.js";
 import {
+  cloneRecoveryChartState,
   cloneRecoveryCommentThreadState,
   cloneRecoveryConditionalFormatRules,
   cloneRecoveryFormatRangeState,
@@ -9,6 +10,7 @@ import { isRecoveryConditionalFormatRule } from "./recovery/guards.js";
 
 export {
   firstCellAddress,
+  cloneRecoveryChartState,
   cloneRecoveryCommentThreadState,
   cloneRecoveryConditionalFormatRules,
   cloneRecoveryFormatRangeState,
@@ -22,6 +24,7 @@ export type { CaptureFormatCellsStateOptions } from "./recovery/format-state.js"
 export { applyModifyStructureState, captureModifyStructureState } from "./recovery/structure-state.js";
 export { applyConditionalFormatState, captureConditionalFormatState } from "./recovery/conditional-format-state.js";
 export { applyCommentThreadState, captureCommentThreadState } from "./recovery/comment-state.js";
+export { applyChartState, captureChartPresentState } from "./recovery/chart-state.js";
 
 export type RecoveryConditionalCellValueOperator =
   | "Between"
@@ -217,6 +220,43 @@ export interface RecoveryCommentThreadState {
   resolved: boolean;
   replies: string[];
 }
+
+export interface RecoveryChartTitleState {
+  text: string;
+  visible: boolean;
+}
+
+export interface RecoveryChartLegendState {
+  position: string;
+  visible: boolean;
+}
+
+export interface RecoveryChartPositionState {
+  top: number;
+  left: number;
+  width: number;
+  height: number;
+}
+
+export interface RecoveryChartAbsentState {
+  kind: "chart_absent";
+  sheetName: string;
+  name: string;
+}
+
+export interface RecoveryChartPresentState {
+  kind: "chart_present";
+  sheetName: string;
+  name: string;
+  chartType: string;
+  title: RecoveryChartTitleState;
+  legend: RecoveryChartLegendState;
+  xAxisTitle?: RecoveryChartTitleState;
+  yAxisTitle?: RecoveryChartTitleState;
+  position: RecoveryChartPositionState;
+}
+
+export type RecoveryChartState = RecoveryChartAbsentState | RecoveryChartPresentState;
 
 export type RecoverySheetVisibility = "Visible" | "Hidden" | "VeryHidden";
 

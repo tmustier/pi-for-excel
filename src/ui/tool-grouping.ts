@@ -14,7 +14,7 @@ const TOOL_GROUP_LABELS: Record<string, string> = {
   format_cells: "format operations",
   conditional_format: "conditional formats",
   view_settings: "view changes",
-  chart: "chart operations",
+  charts: "chart operations",
   execute_office_js: "script executions",
 };
 

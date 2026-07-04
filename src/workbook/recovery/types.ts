@@ -7,6 +7,12 @@
 
 export type {
   CaptureFormatCellsStateOptions,
+  RecoveryChartAbsentState,
+  RecoveryChartLegendState,
+  RecoveryChartPositionState,
+  RecoveryChartPresentState,
+  RecoveryChartState,
+  RecoveryChartTitleState,
   RecoveryColumnsAbsentState,
   RecoveryColumnsPresentState,
   RecoveryCommentThreadState,

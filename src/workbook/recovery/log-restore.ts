@@ -4,6 +4,7 @@
 
 import type { WorkbookContext } from "../context.js";
 import type {
+  AppendChartRecoverySnapshotArgs,
   AppendCommentThreadRecoverySnapshotArgs,
   AppendConditionalFormatRecoverySnapshotArgs,
   AppendFormatCellsRecoverySnapshotArgs,
@@ -14,6 +15,7 @@ import type {
   WorkbookRecoverySnapshotKind,
 } from "../recovery-log.js";
 import type {
+  RecoveryChartState,
   RecoveryCommentThreadState,
   RecoveryConditionalFormatCaptureResult,
   RecoveryConditionalFormatRule,
@@ -51,6 +53,10 @@ export interface RestoreWorkbookRecoverySnapshotDependencies {
     address: string,
     state: RecoveryCommentThreadState,
   ) => Promise<RecoveryCommentThreadState>;
+  applyChartSnapshot: (
+    address: string,
+    state: RecoveryChartState,
+  ) => Promise<RecoveryChartState | null>;
   appendRangeSnapshot: (
     args: AppendWorkbookRecoverySnapshotArgs,
     workbookContext: WorkbookContext,
@@ -69,6 +75,10 @@ export interface RestoreWorkbookRecoverySnapshotDependencies {
   ) => Promise<WorkbookRecoverySnapshot | null>;
   appendCommentThreadSnapshot: (
     args: AppendCommentThreadRecoverySnapshotArgs,
+    workbookContext: WorkbookContext,
+  ) => Promise<WorkbookRecoverySnapshot | null>;
+  appendChartSnapshot: (
+    args: AppendChartRecoverySnapshotArgs,
     workbookContext: WorkbookContext,
   ) => Promise<WorkbookRecoverySnapshot | null>;
   toRestoreValues: (values: unknown[][], formulas: unknown[][]) => unknown[][];
@@ -209,6 +219,35 @@ export async function restoreWorkbookRecoverySnapshot(
       },
       workbookContext,
     );
+
+    return {
+      restoredSnapshotId: snapshot.id,
+      inverseSnapshotId: inverseSnapshot?.id ?? null,
+      address: snapshot.address,
+      changedCount: snapshot.changedCount,
+    };
+  }
+
+  if (snapshotKind === "chart_state") {
+    const targetState = snapshot.chartState;
+    if (!targetState) {
+      throw new Error("Chart backup data is missing.");
+    }
+
+    const currentState = await dependencies.applyChartSnapshot(snapshot.address, targetState);
+    const inverseSnapshot = currentState
+      ? await dependencies.appendChartSnapshot(
+        {
+          toolName: "restore_snapshot",
+          toolCallId: `restore:${snapshot.id}`,
+          address: snapshot.address,
+          changedCount: snapshot.changedCount,
+          chartState: currentState,
+          restoredFromSnapshotId: snapshot.id,
+        },
+        workbookContext,
+      )
+      : null;
 
     return {
       restoredSnapshotId: snapshot.id,

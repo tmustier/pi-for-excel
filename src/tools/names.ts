@@ -8,6 +8,7 @@ export const CORE_TOOL_NAMES = [
   "modify_structure",
   "format_cells",
   "conditional_format",
+  "charts",
   "trace_dependencies",
   "explain_formula",
   "view_settings",

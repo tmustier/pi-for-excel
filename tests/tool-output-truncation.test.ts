@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import type { AgentTool } from "@earendil-works/pi-agent-core";
+import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { Type, type Static } from "@sinclair/typebox";
 
 import {
@@ -20,6 +20,7 @@ function createTextTool(args: {
   text: string;
   details?: unknown;
   onUpdateText?: string;
+  imageData?: string;
 }): AgentTool<typeof emptySchema, unknown> {
   return {
     name: args.name,
@@ -39,8 +40,13 @@ function createTextTool(args: {
         });
       }
 
+      const content: AgentToolResult<unknown>["content"] = [{ type: "text", text: args.text }];
+      if (args.imageData) {
+        content.push({ type: "image", data: args.imageData, mimeType: "image/png" });
+      }
+
       return Promise.resolve({
-        content: [{ type: "text", text: args.text }],
+        content,
         details: args.details,
       });
     },
@@ -141,6 +147,31 @@ void test("stores full output path metadata when persistence callback succeeds",
   assert.ok(truncation);
   assert.equal(truncation.truncatedBy, "bytes");
   assert.equal(truncation.fullOutputWorkspacePath, ".tool-output/test-full-output.txt");
+});
+
+void test("preserves image blocks when truncating text", async () => {
+  const tool = createTextTool({
+    name: "charts",
+    text: makeLinePayload(10),
+    imageData: "base64-png",
+  });
+
+  const wrapped = applyToolOutputTruncation([tool], {
+    limits: {
+      maxLines: 2,
+      maxBytes: 500_000,
+    },
+  });
+
+  const result = await wrapped[0].execute("call-image", {});
+  const text = result.content.find((block) => block.type === "text");
+  assert.ok(text);
+  assert.match(text.text, /Output truncated/u);
+
+  const image = result.content.find((block) => block.type === "image");
+  assert.ok(image);
+  assert.equal(image.data, "base64-png");
+  assert.equal(image.mimeType, "image/png");
 });
 
 void test("truncates streaming updates before forwarding onUpdate callback", async () => {
