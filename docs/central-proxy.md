@@ -115,6 +115,6 @@ Then in Excel: open the add-in → `/settings` → Proxy should show your org UR
 
 ## Limitations / future work
 
-- **No client auth token yet** — client restriction is network + CIDR based. Tracked in [#591](https://github.com/tmustier/pi-for-excel/issues/591).
+- **No client auth token yet** — client restriction is network + CIDR based. Tracked in [#595](https://github.com/tmustier/pi-for-excel/issues/595).
 - `ALLOWED_CLIENT_CIDRS` is IPv4-only.
 - The official hosted build (`pi-for-excel.vercel.app`) cannot use an org proxy because of its CSP; central-proxy setups must self-host the static build.
