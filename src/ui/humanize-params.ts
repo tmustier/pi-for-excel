@@ -143,7 +143,7 @@ function formatRangeForDisplay(range: string, maxShow = 3): RangeDisplayResult {
   return {
     sheet: commonSheet,
     display: html`${shown}
-      <span class="pi-params__more">+${more} more</span>`,
+      <span class="pi-params__more">${t("humanize.more", { n: more })}</span>`,
   };
 }
 
@@ -187,7 +187,7 @@ function renderDataPreview(values: unknown[][]): TemplateResult {
               colspan=${showCols + (moreCols > 0 ? 1 : 0)}
               class="pi-data-preview__fade"
             >
-              …${moreRows} more row${moreRows !== 1 ? "s" : ""}
+              …${t(moreRows === 1 ? "humanize.more_rows_one" : "humanize.more_rows_other", { n: moreRows })}
             </td>
           </tr>`
         : nothing}
@@ -200,8 +200,9 @@ function formulaSnippet(formula: string): TemplateResult {
   return html`<code class="pi-params__code">${formula}</code>`;
 }
 
-function plural(n: number, word: string): string {
-  return `${n} ${word}${n !== 1 ? "s" : ""}`;
+/** Localized "{n} row(s)" / "{n} column(s)" unit phrase. */
+function nUnit(n: number, unit: "row" | "column"): string {
+  return t(`humanize.unit.${unit}_${n === 1 ? "one" : "other"}`, { n });
 }
 
 /* ── Layout ─────────────────────────────────────────────────── */
@@ -273,7 +274,7 @@ function humanizeFormatCells(p: Record<string, unknown>): ParamItem[] {
   const alignParts: string[] = [];
   if (p.horizontal_alignment) alignParts.push(str(p.horizontal_alignment));
   if (p.vertical_alignment) alignParts.push("v: " + str(p.vertical_alignment));
-  if (p.wrap_text === true) alignParts.push("wrap");
+  if (p.wrap_text === true) alignParts.push(v("wrap"));
   if (alignParts.length > 0) {
     items.push({ label: l("Align"), value: alignParts.join(", ") });
   }
@@ -281,7 +282,7 @@ function humanizeFormatCells(p: Record<string, unknown>): ParamItem[] {
   // Dimensions
   const cw = num(p.column_width);
   if (cw !== undefined) {
-    items.push({ label: l("Width"), value: String(cw) + " chars" });
+    items.push({ label: l("Width"), value: t("humanize.unit.chars", { n: cw }) });
   }
   const rh = num(p.row_height);
   if (rh !== undefined) {
@@ -293,10 +294,10 @@ function humanizeFormatCells(p: Record<string, unknown>): ParamItem[] {
 
   // Borders
   const edgeLabels: string[] = [];
-  if (p.border_top) edgeLabels.push("top " + str(p.border_top));
-  if (p.border_bottom) edgeLabels.push("bottom " + str(p.border_bottom));
-  if (p.border_left) edgeLabels.push("left " + str(p.border_left));
-  if (p.border_right) edgeLabels.push("right " + str(p.border_right));
+  if (p.border_top) edgeLabels.push(t("humanize.edge.top", { style: str(p.border_top) }));
+  if (p.border_bottom) edgeLabels.push(t("humanize.edge.bottom", { style: str(p.border_bottom) }));
+  if (p.border_left) edgeLabels.push(t("humanize.edge.left", { style: str(p.border_left) }));
+  if (p.border_right) edgeLabels.push(t("humanize.edge.right", { style: str(p.border_right) }));
   if (edgeLabels.length > 0) {
     items.push({ label: l("Borders"), value: edgeLabels.join(", ") });
   } else if (p.borders) {
@@ -324,7 +325,7 @@ function humanizeWriteCells(p: Record<string, unknown>): ParamItem[] {
     const cols = Math.max(...values.map((r) => (Array.isArray(r) ? r.length : 0)));
     items.push({
       label: l("Size"),
-      value: plural(rows, "row") + " × " + plural(cols, "column"),
+      value: nUnit(rows, "row") + " × " + nUnit(cols, "column"),
     });
     items.push({ label: l("Data"), value: renderDataPreview(values) });
   }
@@ -393,7 +394,7 @@ function humanizeSearchWorkbook(p: Record<string, unknown>): ParamItem[] {
   }
   const maxRes = num(p.max_results);
   if (maxRes !== undefined && maxRes !== 20) {
-    items.push({ label: l("Limit"), value: String(maxRes) + " results" });
+    items.push({ label: l("Limit"), value: t("humanize.unit.results", { n: maxRes }) });
   }
 
   return items;
@@ -409,43 +410,51 @@ function humanizeModifyStructure(p: Record<string, unknown>): ParamItem[] {
     case "insert_rows":
       items.push({
         label: l("Action"),
-        value: "Insert " + plural(count, "row") + (pos !== undefined ? " at row " + String(pos) : ""),
+        value: pos !== undefined
+          ? t("humanize.action.insert_at_row", { what: nUnit(count, "row"), pos })
+          : t("humanize.action.insert", { what: nUnit(count, "row") }),
       });
       break;
     case "delete_rows":
       items.push({
         label: l("Action"),
-        value: "Delete " + plural(count, "row") + (pos !== undefined ? " from row " + String(pos) : ""),
+        value: pos !== undefined
+          ? t("humanize.action.delete_from_row", { what: nUnit(count, "row"), pos })
+          : t("humanize.action.delete", { what: nUnit(count, "row") }),
       });
       break;
     case "insert_columns":
       items.push({
         label: l("Action"),
-        value: "Insert " + plural(count, "column") + (pos !== undefined ? " at column " + String(pos) : ""),
+        value: pos !== undefined
+          ? t("humanize.action.insert_at_column", { what: nUnit(count, "column"), pos })
+          : t("humanize.action.insert", { what: nUnit(count, "column") }),
       });
       break;
     case "delete_columns":
       items.push({
         label: l("Action"),
-        value: "Delete " + plural(count, "column") + (pos !== undefined ? " from column " + String(pos) : ""),
+        value: pos !== undefined
+          ? t("humanize.action.delete_from_column", { what: nUnit(count, "column"), pos })
+          : t("humanize.action.delete", { what: nUnit(count, "column") }),
       });
       break;
     case "add_sheet": {
       const name = p.new_name ? str(p.new_name) : p.name ? str(p.name) : "";
       items.push({
         label: l("Action"),
-        value: name ? 'Add sheet "' + name + '"' : "Add sheet",
+        value: name ? t("humanize.action.add_sheet_named", { name }) : t("humanize.action.add_sheet"),
       });
       break;
     }
     case "delete_sheet":
-      items.push({ label: l("Action"), value: "Delete sheet" });
+      items.push({ label: l("Action"), value: t("humanize.action.delete_sheet") });
       break;
     case "rename_sheet": {
       const newName = p.new_name ? str(p.new_name) : "";
       items.push({
         label: l("Action"),
-        value: newName ? 'Rename → "' + newName + '"' : "Rename sheet",
+        value: newName ? t("humanize.action.rename_sheet_to", { name: newName }) : t("humanize.action.rename_sheet"),
       });
       break;
     }
@@ -453,15 +462,15 @@ function humanizeModifyStructure(p: Record<string, unknown>): ParamItem[] {
       const targetName = p.new_name ? str(p.new_name) : "";
       items.push({
         label: l("Action"),
-        value: targetName ? 'Duplicate as "' + targetName + '"' : "Duplicate sheet",
+        value: targetName ? t("humanize.action.duplicate_sheet_as", { name: targetName }) : t("humanize.action.duplicate_sheet"),
       });
       break;
     }
     case "hide_sheet":
-      items.push({ label: l("Action"), value: "Hide sheet" });
+      items.push({ label: l("Action"), value: t("humanize.action.hide_sheet") });
       break;
     case "unhide_sheet":
-      items.push({ label: l("Action"), value: "Show sheet" });
+      items.push({ label: l("Action"), value: t("humanize.action.show_sheet") });
       break;
     default:
       items.push({ label: l("Action"), value: action.replace(/_/g, " ") });
@@ -582,71 +591,76 @@ function humanizeViewSettings(p: Record<string, unknown>): ParamItem[] {
 
   switch (action) {
     case "get":
-      items.push({ label: l("Action"), value: "Get current settings" });
+      items.push({ label: l("Action"), value: t("humanize.action.get_settings") });
       break;
     case "show_gridlines":
-      items.push({ label: l("Action"), value: "Show gridlines" });
+      items.push({ label: l("Action"), value: t("humanize.action.show_gridlines") });
       break;
     case "hide_gridlines":
-      items.push({ label: l("Action"), value: "Hide gridlines" });
+      items.push({ label: l("Action"), value: t("humanize.action.hide_gridlines") });
       break;
     case "show_headings":
-      items.push({ label: l("Action"), value: "Show headings" });
+      items.push({ label: l("Action"), value: t("humanize.action.show_headings") });
       break;
     case "hide_headings":
-      items.push({ label: l("Action"), value: "Hide headings" });
+      items.push({ label: l("Action"), value: t("humanize.action.hide_headings") });
       break;
     case "freeze_rows":
       items.push({
         label: l("Action"),
-        value: count !== undefined ? "Freeze top " + plural(count, "row") : "Freeze rows",
+        value: count !== undefined
+          ? t("humanize.action.freeze_top", { what: nUnit(count, "row") })
+          : t("humanize.action.freeze_rows"),
       });
       break;
     case "freeze_columns":
       items.push({
         label: l("Action"),
-        value:
-          count !== undefined
-            ? "Freeze first " + plural(count, "column")
-            : "Freeze columns",
+        value: count !== undefined
+          ? t("humanize.action.freeze_first", { what: nUnit(count, "column") })
+          : t("humanize.action.freeze_columns"),
       });
       break;
     case "freeze_at":
       items.push({
         label: l("Action"),
-        value: p.range ? "Freeze panes at " + str(p.range) : "Freeze panes",
+        value: p.range
+          ? t("humanize.action.freeze_panes_at", { range: str(p.range) })
+          : t("humanize.action.freeze_panes"),
       });
       break;
     case "unfreeze":
-      items.push({ label: l("Action"), value: "Unfreeze panes" });
+      items.push({ label: l("Action"), value: t("humanize.action.unfreeze") });
       break;
     case "set_tab_color":
       items.push({
         label: l("Action"),
-        value: p.color ? html`Tab color ${colorChip(str(p.color))}` : "Clear tab color",
+        value: p.color
+          ? html`${t("humanize.action.tab_color")} ${colorChip(str(p.color))}`
+          : t("humanize.action.clear_tab_color"),
       });
       break;
     case "hide_sheet":
-      items.push({ label: l("Action"), value: "Hide sheet" });
+      items.push({ label: l("Action"), value: t("humanize.action.hide_sheet") });
       break;
     case "show_sheet":
-      items.push({ label: l("Action"), value: "Show sheet" });
+      items.push({ label: l("Action"), value: t("humanize.action.show_sheet") });
       break;
     case "very_hide_sheet":
-      items.push({ label: l("Action"), value: "Very hide sheet (VeryHidden)" });
+      items.push({ label: l("Action"), value: t("humanize.action.very_hide_sheet") });
       break;
     case "set_standard_width": {
       const width = num(p.width);
       items.push({
         label: l("Action"),
         value: width !== undefined
-          ? "Set standard width to " + String(width)
-          : "Set standard width",
+          ? t("humanize.action.set_standard_width_to", { width })
+          : t("humanize.action.set_standard_width"),
       });
       break;
     }
     case "activate":
-      items.push({ label: l("Action"), value: "Activate sheet" });
+      items.push({ label: l("Action"), value: t("humanize.action.activate_sheet") });
       break;
     default:
       items.push({ label: l("Action"), value: action.replace(/_/g, " ") });
@@ -705,7 +719,7 @@ function humanizeConventions(p: Record<string, unknown>): ParamItem[] {
   if (presetFormats && typeof presetFormats === "object") {
     const count = Object.keys(presetFormats).length;
     if (count > 0) {
-      items.push({ label: l("Built-in presets"), value: `${count} updated` });
+      items.push({ label: l("Built-in presets"), value: v("n_updated", { n: count }) });
     }
   }
 
@@ -713,7 +727,7 @@ function humanizeConventions(p: Record<string, unknown>): ParamItem[] {
   if (customPresets && typeof customPresets === "object") {
     const count = Object.keys(customPresets).length;
     if (count > 0) {
-      items.push({ label: l("Custom presets"), value: `${count} upserted` });
+      items.push({ label: l("Custom presets"), value: v("n_upserted", { n: count }) });
     }
   }
 
@@ -771,7 +785,7 @@ function humanizeSkills(p: Record<string, unknown>): ParamItem[] {
 
   if (typeof p.markdown === "string") {
     const markdown = p.markdown;
-    items.push({ label: l("SKILL.md"), value: `${markdown.length} chars` });
+    items.push({ label: l("SKILL.md"), value: t("humanize.unit.chars", { n: markdown.length }) });
   }
 
   return items;
@@ -799,7 +813,7 @@ function humanizeWebSearch(p: Record<string, unknown>): ParamItem[] {
 
   const maxResults = num(p.max_results);
   if (maxResults !== undefined) {
-    items.push({ label: l("Limit"), value: `${maxResults} results` });
+    items.push({ label: l("Limit"), value: t("humanize.unit.results", { n: maxResults }) });
   }
 
   return items;

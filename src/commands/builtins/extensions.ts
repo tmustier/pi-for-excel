@@ -4,6 +4,7 @@
 
 import type { ExtensionsHubTab } from "./extensions-hub-overlay.js";
 import type { SlashCommand } from "../types.js";
+import { t } from "../../language/index.js";
 
 export interface ExtensionsCommandActions {
   openExtensionsHub: (tab?: ExtensionsHubTab) => void | Promise<void>;
@@ -13,7 +14,7 @@ export function createExtensionsCommands(actions: ExtensionsCommandActions): Sla
   return [
     {
       name: "plugins",
-      description: "Manage installed plugins (alias for /extensions plugins)",
+      description: t("command.plugins.desc"),
       source: "builtin",
       execute: () => {
         void actions.openExtensionsHub("plugins");

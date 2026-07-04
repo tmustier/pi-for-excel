@@ -104,7 +104,7 @@ export function createSessionLifecycleCommands(actions: SessionCommandActions): 
     },
     {
       name: "resume-here",
-      description: "Resume a previous session into the current tab",
+      description: t("command.resume_here.desc"),
       source: "builtin",
       execute: async () => {
         await actions.openResumeDialog("replace_current");

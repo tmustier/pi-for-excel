@@ -9,7 +9,7 @@
  * Usage:
  *   import { t } from "../language/index.js";
  *   element.textContent = t("welcome.subtitle");
- *   element.textContent = t("welcome.connected", { label: "Anthropic" });
+ *   element.textContent = t("settings.toast.connected", { label: "Anthropic" });
  *
  * `en.json` is the source of truth. Untranslated keys silently fall back to
  * English; unknown keys render the key itself (visible in dev, harmless in

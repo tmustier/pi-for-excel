@@ -94,17 +94,20 @@ function describeWebSearchAvailability(args: {
   }
 
   if (workbookEnabled && hasWorkbook) {
-    return `Workbook (${workbookLabel})`;
+    return t("ext-hub-connections.scopeWorkbook", { label: workbookLabel });
   }
 
   if (sessionEnabled) {
-    return hasWorkbook ? t("ext-hub-connections.scopeSessionOnly") : "Session";
+    return hasWorkbook ? t("ext-hub-connections.scopeSessionOnly") : t("ext-hub-connections.scopeSession");
   }
 
-  return hasWorkbook ? t("ext-hub-connections.scopeOff") : "Off";
+  return hasWorkbook ? t("ext-hub-connections.scopeOff") : t("ext-hub-connections.scopeOffShort");
 }
 
-const BRIDGE_SETUP_HINT = t("ext-hub-connections.setupHint");
+// Resolved lazily — t() must not run at module scope (language set at boot).
+function bridgeSetupHint(): string {
+  return t("ext-hub-connections.setupHint");
+}
 
 function selectElementText(element: HTMLElement): void {
   const selection = window.getSelection();
@@ -153,7 +156,7 @@ function createBridgeSetupCommand(command: string): HTMLDivElement {
 
   const hint = document.createElement("p");
   hint.className = "pi-hub-bridge-setup__hint";
-  hint.textContent = BRIDGE_SETUP_HINT;
+  hint.textContent = bridgeSetupHint();
 
   commandRow.append(code, copyButton);
   setup.append(commandRow, hint);

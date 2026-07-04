@@ -660,7 +660,8 @@ function buildMoreSection(registerCleanup?: SettingsCleanupRegistrar): HTMLEleme
   enOpt.textContent = t("settings.section.language.en");
   const zhOpt = document.createElement("option");
   zhOpt.value = "zh-CN";
-  zhOpt.textContent = "中文";
+  // Disclose that the Chinese translation is AI-generated (issue #608).
+  zhOpt.textContent = t("settings.section.language.zh");
   langSelect.append(enOpt, zhOpt);
 
   langSelect.value = getLanguage();

@@ -181,6 +181,28 @@ of `@earendil-works/pi-ai/compat`, `src/stubs/amazon-bedrock.ts`,
 
 ---
 
+## 7. UI localization layer (zero-dep `t()`, zh-CN)
+
+pi-mono has no UI localization; Pi for Excel adds a zero-dependency `t()`
+layer (`src/language/`) with an AI-generated Simplified Chinese locale
+(issue #608, derived from community PR #554).
+
+**Scope limits:**
+- Only in-repo UI chrome is localized. Strings rendered by `pi-web-ui`
+  internals (e.g. parts of message rendering and shared dialogs) remain
+  English until upstream exposes an override path.
+- Agent-facing strings (system prompt, tool names/descriptions/schemas,
+  context injection, compaction prompts) are deliberately **not** localized —
+  prompt-cache prefix stability and model behavior stay language-independent.
+
+**Maintenance:** `tests/i18n-locales.test.ts` enforces en/zh key parity,
+placeholder validity, no dead keys, no unknown keys, and no module-scope
+`t()` calls. New UI strings must be added to both locale files.
+
+**Files:** `src/language/`, `tests/i18n-locales.test.ts`
+
+---
+
 ## Non-divergences worth noting
 
 ### Compaction call shape
