@@ -148,7 +148,8 @@ async function findChartByName(
  * Locate a chart by its stable Office.js id across all sheets. Rename-proof:
  * the id survives chart renames, so this never confuses the target with an
  * unrelated chart that reused its name. Throws when the host cannot load
- * chart ids (callers fall back to name matching).
+ * chart ids; callers must fail safely rather than degrade to name matching
+ * (name matching is reserved for legacy states with no captured id).
  */
 async function findChartById(
   context: Excel.RequestContext,
