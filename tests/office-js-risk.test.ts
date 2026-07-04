@@ -118,6 +118,34 @@ void test("identifiers are deduplicated", () => {
   assert.deepEqual(assessment.identifiers, ["fetch"]);
 });
 
+void test("unicode-escaped identifiers are flagged (reviewer P1 bypass)", () => {
+  for (const snippet of [
+    "await \\u0066etch(\"https://example.com\");",
+    "await \\u{66}etch(url);",
+    "return fe\\u0074ch(url);",
+    "return \\u0077indow.location.href;",
+    "return globalTh\\u0069s;",
+  ]) {
+    const assessment = assessOfficeJsCodeRisk(snippet);
+    assert.equal(assessment.flagged, true, `expected flagged: ${snippet}`);
+  }
+});
+
+void test("nested escape encodings are decoded to a fixpoint", () => {
+  // \u005c decodes to a backslash, yielding \u0066etch, which decodes to fetch.
+  const assessment = assessOfficeJsCodeRisk("\\u005cu0066etch(url);");
+  assert.equal(assessment.flagged, true);
+  assert.ok(assessment.identifiers.includes("fetch"));
+});
+
+void test("string-literal unicode escapes for plain text are not flagged", () => {
+  const assessment = assessOfficeJsCodeRisk(
+    "range.values = [[\"caf\\u00e9\", \"\\u00fcber\"]]; await context.sync();",
+  );
+
+  assert.equal(assessment.flagged, false);
+});
+
 void test("empty code is not flagged", () => {
   const assessment = assessOfficeJsCodeRisk("");
   assert.equal(assessment.flagged, false);

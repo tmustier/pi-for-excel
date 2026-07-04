@@ -17,6 +17,10 @@
  *   harmless member access like `chart.top` or `range.format` never trips the
  *   lint. `constructor` is the exception: the dangerous form *is* the member
  *   access (`({}).constructor.constructor(...)`), so it is flagged anywhere.
+ * - JavaScript accepts Unicode escapes inside identifiers (`\u0066etch`
+ *   executes as `fetch`), so the scan also runs against a version of the code
+ *   with `\uXXXX` / `\u{...}` escapes decoded to a fixpoint. String-literal
+ *   escapes like `"caf\u00e9"` decode to harmless text and do not trip it.
  * - The durable fix is an isolated-realm runner with only a guarded workbook
  *   API bridged in (#605); until then this lint plus the CSP allowlist is the
  *   boundary between workbook-content prompt injection and the page realm.
@@ -90,6 +94,51 @@ const COMPILED_RISK_PATTERNS: readonly CompiledRiskPattern[] = [
   })),
 ];
 
+const UNICODE_ESCAPE_PATTERN = /\\u\{([0-9a-fA-F]{1,6})\}|\\u([0-9a-fA-F]{4})/gu;
+
+/** Max decode passes when chasing nested escape encodings to a fixpoint. */
+const MAX_ESCAPE_DECODE_PASSES = 5;
+
+function decodeUnicodeEscapesOnce(code: string): string {
+  return code.replace(
+    UNICODE_ESCAPE_PATTERN,
+    (match: string, braced: string | undefined, plain: string | undefined) => {
+      const hex = braced ?? plain;
+      if (hex === undefined) {
+        return match;
+      }
+
+      const codePoint = Number.parseInt(hex, 16);
+      if (!Number.isSafeInteger(codePoint) || codePoint > 0x10ffff) {
+        return match;
+      }
+
+      return String.fromCodePoint(codePoint);
+    },
+  );
+}
+
+/**
+ * Produce every distinct decoding of the code, chasing `\u` escapes to a
+ * fixpoint (bounded) so escape-encoded identifiers cannot slip past the scan.
+ */
+function enumerateScanTargets(code: string): string[] {
+  const targets = [code];
+
+  let current = code;
+  for (let pass = 0; pass < MAX_ESCAPE_DECODE_PASSES; pass += 1) {
+    const decoded = decodeUnicodeEscapesOnce(current);
+    if (decoded === current) {
+      break;
+    }
+
+    targets.push(decoded);
+    current = decoded;
+  }
+
+  return targets;
+}
+
 export interface OfficeJsCodeRiskAssessment {
   /** True when the code references ambient authority beyond the Excel API. */
   flagged: boolean;
@@ -102,10 +151,11 @@ export interface OfficeJsCodeRiskAssessment {
  * authority beyond the provided `context: Excel.RequestContext`.
  */
 export function assessOfficeJsCodeRisk(code: string): OfficeJsCodeRiskAssessment {
+  const scanTargets = enumerateScanTargets(code);
   const identifiers: string[] = [];
 
   for (const { identifier, pattern } of COMPILED_RISK_PATTERNS) {
-    if (pattern.test(code)) {
+    if (scanTargets.some((target) => pattern.test(target))) {
       identifiers.push(identifier);
     }
   }
