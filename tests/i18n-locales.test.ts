@@ -57,6 +57,27 @@ void test("zh-CN placeholders are a subset of en placeholders per key", () => {
   assert.deepEqual(violations, [], `zh-CN placeholders missing from en: ${violations.join(", ")}`);
 });
 
+void test("zh-CN drops English-only plural helper placeholders", () => {
+  // Chinese does not inflect nouns for singular/plural, so keeping these
+  // English helper placeholders leaks strings like "file s" into zh-CN UI.
+  const banned = new Set(["plural", "cue"]);
+  const violations: string[] = [];
+  for (const [key, value] of Object.entries(zh)) {
+    for (const v of placeholders(value)) {
+      if (banned.has(v)) violations.push(`${key}: {${v}}`);
+    }
+  }
+  assert.deepEqual(violations, [], `zh-CN should not include English plural helpers: ${violations.join(", ")}`);
+});
+
+void test("zh-CN keeps command syntax placeholders copyable", () => {
+  const violations = Object.entries(zh)
+    .filter(([key]) => key.startsWith("experimental."))
+    .filter(([, value]) => /<[^>]*[\u4e00-\u9fff][^>]*>/.test(value))
+    .map(([key, value]) => `${key}: ${value}`);
+  assert.deepEqual(violations, [], `localized command placeholders in zh-CN: ${violations.join("\n")}`);
+});
+
 void test("en locale has no empty values", () => {
   const empty = Object.entries(en)
     .filter(([, v]) => typeof v !== "string" || v.length === 0)

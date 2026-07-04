@@ -802,7 +802,7 @@
   "settings.section.experimental.hint": "Advanced and in-development features.",
   "settings.section.language.en": "English",
   "settings.section.language.label": "Language / 语言",
-  "settings.section.language.zh": "中文(简体)· AI 翻译",
+  "settings.section.language.zh": "中文（简体）· AI 翻译",
   "settings.section.providers": "Providers",
   "settings.section.providers.hint": "Connect providers to use their models.",
   "settings.section.proxy": "Proxy",
