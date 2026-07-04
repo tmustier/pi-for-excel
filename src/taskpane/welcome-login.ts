@@ -106,7 +106,10 @@ export async function showWelcomeLogin(providerKeys: ProviderKeysStore): Promise
 
     const proxyToggle = createElement("button", "pi-welcome-proxy-toggle");
     proxyToggle.type = "button";
-    proxyToggle.textContent = "Having login trouble? Configure local proxy";
+    const proxyToggleClosedLabel = DEFAULT_PROXY_IS_REMOTE
+      ? "Having login trouble? Check proxy settings"
+      : "Having login trouble? Configure local proxy";
+    proxyToggle.textContent = proxyToggleClosedLabel;
     proxyToggle.setAttribute("aria-expanded", "false");
 
     const proxyPanel = createElement("section", "pi-welcome-proxy");
@@ -115,7 +118,7 @@ export async function showWelcomeLogin(providerKeys: ProviderKeysStore): Promise
     const proxyTopRow = createElement("div", "pi-welcome-proxy__row");
 
     const proxyTitle = createElement("div", "pi-welcome-proxy__title");
-    proxyTitle.textContent = "Local HTTPS proxy";
+    proxyTitle.textContent = DEFAULT_PROXY_IS_REMOTE ? "Organisation proxy" : "Local HTTPS proxy";
 
     const proxyToggleLabel = createElement("label", "pi-welcome-proxy__toggle");
     const proxyEnabledEl = createElement("input", "pi-welcome-proxy__enabled");
@@ -191,8 +194,8 @@ export async function showWelcomeLogin(providerKeys: ProviderKeysStore): Promise
       proxyPanel.hidden = !willOpen;
       proxyToggle.setAttribute("aria-expanded", willOpen ? "true" : "false");
       proxyToggle.textContent = willOpen
-        ? "Hide local proxy settings"
-        : "Having login trouble? Configure local proxy";
+        ? "Hide proxy settings"
+        : proxyToggleClosedLabel;
 
       if (willOpen) {
         proxyUrlEl.focus();

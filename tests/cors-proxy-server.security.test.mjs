@@ -471,3 +471,34 @@ test("allowlisted loopback target works with overrides on a configured allowlist
   assert.equal(ok.status, 200);
   assert.equal(await ok.text(), "hello");
 });
+
+test("proxy exits on explicit ALLOWED_TARGET_HOSTS with no valid entries (fail closed)", async () => {
+  const port = await getFreePort();
+  const child = spawn(process.execPath, [PROXY_SCRIPT_PATH], {
+    env: {
+      ...process.env,
+      HOST: "127.0.0.1",
+      PORT: String(port),
+      ALLOWED_ORIGINS: ORIGIN,
+      ALLOWED_TARGET_HOSTS: " ,, ://bad ,",
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  let stderr = "";
+  child.stderr.setEncoding("utf8");
+  child.stderr.on("data", (chunk) => {
+    stderr += chunk;
+  });
+
+  const [code] = await Promise.race([
+    once(child, "exit"),
+    delay(5000).then(() => {
+      child.kill("SIGKILL");
+      throw new Error("proxy did not exit on invalid ALLOWED_TARGET_HOSTS");
+    }),
+  ]);
+
+  assert.equal(code, 1);
+  assert.match(stderr, /ALLOWED_TARGET_HOSTS was set but contained no valid host entries/);
+});

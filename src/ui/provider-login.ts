@@ -157,9 +157,14 @@ function showProxyGateDialog(): Promise<boolean> {
 
         retryBtn.textContent = "Retry";
         retryBtn.style.opacity = "1";
-        hint.innerHTML =
-          "Helper not detected yet &mdash; make sure it says <strong>&ldquo;Proxy listening&rdquo;</strong> in Terminal, then try again. " +
-          `<a href="${PROXY_HELPER_DOCS_URL}" target="_blank" rel="noopener noreferrer">Step-by-step guide &rarr;</a>`;
+        if (DEFAULT_PROXY_IS_REMOTE) {
+          hint.textContent =
+            `Proxy still not reachable (expected: ${DEFAULT_PROXY_URL}). Check /settings → Proxy or contact your IT team, then try again.`;
+        } else {
+          hint.innerHTML =
+            "Helper not detected yet &mdash; make sure it says <strong>&ldquo;Proxy listening&rdquo;</strong> in Terminal, then try again. " +
+            `<a href="${PROXY_HELPER_DOCS_URL}" target="_blank" rel="noopener noreferrer">Step-by-step guide &rarr;</a>`;
+        }
       })();
     };
 

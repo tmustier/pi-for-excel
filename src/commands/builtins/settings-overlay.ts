@@ -292,7 +292,9 @@ function buildProxySection(
 
   const proxyToggle = createToggleRow({
     label: "Proxy",
-    sublabel: "Route API calls through a local proxy",
+    sublabel: DEFAULT_PROXY_IS_REMOTE
+      ? "Route API calls through your organisation's proxy"
+      : "Route API calls through a local proxy",
     checked: enabled,
     onChange: (checked) => {
       void saveProxyEnabled(checked);

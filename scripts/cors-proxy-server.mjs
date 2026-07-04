@@ -148,6 +148,16 @@ const configuredAllowedTargetHosts = hasConfiguredAllowedTargetHosts
   ? parseAllowedTargetHosts(process.env.ALLOWED_TARGET_HOSTS)
   : new Set();
 
+// SECURITY: fail closed on explicit-but-unparseable ALLOWED_TARGET_HOSTS.
+// Falling back to the default allowlist would silently re-enable legacy
+// override semantics (loopback/private bypass, GitHub-enterprise path
+// bypass) that a configured central proxy relies on being off.
+if (hasConfiguredAllowedTargetHosts && configuredAllowedTargetHosts.size === 0) {
+  console.error("[pi-for-excel] ALLOWED_TARGET_HOSTS was set but contained no valid host entries.");
+  console.error("[pi-for-excel] Expected comma-separated hostnames or IP literals (e.g. api.deepseek.com,10.97.193.77).");
+  process.exit(1);
+}
+
 const allowedTargetHosts = (() => {
   if (allowAllTargetHosts) {
     return new Set();
@@ -495,10 +505,6 @@ server.listen(PORT, HOST, () => {
     if (configuredAllowedTargetHosts.size === 0) {
       console.log("[pi-for-excel] GitHub enterprise OAuth/Copilot endpoints on custom domains are allowed by path.");
     }
-  }
-
-  if (hasConfiguredAllowedTargetHosts && configuredAllowedTargetHosts.size === 0) {
-    console.warn("[pi-for-excel] WARNING: ALLOWED_TARGET_HOSTS had no valid entries; using default allowlist.");
   }
 
   if (allowLoopbackTargets) {
