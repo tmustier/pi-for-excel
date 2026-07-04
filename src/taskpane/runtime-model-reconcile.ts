@@ -26,12 +26,19 @@ export function resolveRuntimeModelSwap(opts: {
   currentModel: { provider: string };
   availableProviders: readonly string[];
   defaultModel: Model<Api>;
-  isStreaming: boolean;
+  /**
+   * True when the runtime is doing any work — streaming OR processing queued
+   * actions (`agent.state.isStreaming || actionQueue.isBusy()`). Working
+   * sessions must never have their model swapped underneath them; callers
+   * skip them and reconcile on a later providers-changed pass.
+   */
+  isBusy: boolean;
 }): RuntimeModelSwap | null {
-  const { currentModel, availableProviders, defaultModel, isStreaming } = opts;
+  const { currentModel, availableProviders, defaultModel, isBusy } = opts;
 
-  // Never yank the model out from under an in-flight run.
-  if (isStreaming) return null;
+  // Never yank the model out from under a working session (streaming or
+  // queue-busy — e.g. /compact, auto-compaction, queued prompts).
+  if (isBusy) return null;
 
   // No providers configured — nothing usable to swap to.
   if (availableProviders.length === 0) return null;

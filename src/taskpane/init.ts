@@ -586,6 +586,15 @@ export async function initTaskpane(opts: {
     };
 
     for (const runtime of runtimeManager.listRuntimes()) {
+      // Never mutate the model of a working session — same busy invariant as
+      // model switching (see applyModelSelection). A skipped runtime is
+      // reconciled on the next providers-changed / credential-restore pass;
+      // its in-flight work already captured the old model, and a
+      // credential-less provider fails fast anyway.
+      if (runtime.agent.state.isStreaming || runtime.actionQueue.isBusy()) {
+        continue;
+      }
+
       const currentModel = runtime.agent.state.model;
 
       // 1. Custom-provider models: pick up edited base URLs/limits in place.
@@ -604,7 +613,7 @@ export async function initTaskpane(opts: {
         currentModel,
         availableProviders,
         defaultModel,
-        isStreaming: runtime.agent.state.isStreaming,
+        isBusy: runtime.agent.state.isStreaming || runtime.actionQueue.isBusy(),
       });
       if (swap && !areRuntimeModelsEquivalent(currentModel, swap.model)) {
         runtime.agent.state.model = swap.model;
