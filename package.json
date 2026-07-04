@@ -39,7 +39,7 @@
     "@earendil-works/pi-web-ui": "0.75.3",
     "@sinclair/typebox": "^0.34.49",
     "lit": "^3.3.3",
-    "marked": "^17.0.4"
+    "marked": "^18.0.5"
   },
   "devDependencies": {
     "@types/office-js": "^1.0.598",
