@@ -219,9 +219,49 @@ export function isOpenAICodexCredentialRefreshRequired(error: unknown): boolean 
   return error instanceof Error && error.message.includes(STALE_CREDENTIAL_ERROR);
 }
 
+const REQUIRED_SCOPES = SCOPE.split(" ");
+
+/**
+ * Check whether the access token JWT itself proves the required scopes were
+ * granted (`scp` array or space-delimited `scope`/`scp` string claim).
+ *
+ * Credentials imported from pi's `auth.json` (via the dev-only `/__pi-auth`
+ * endpoint) or restored from older storage never carry the
+ * `codexOAuthVersion`/`scopes` marker fields — those are only written by this
+ * module's own login/refresh flows. Without this check, every externally
+ * sourced Codex credential would be rejected as stale even when the
+ * underlying grant already includes the connector scopes.
+ */
+function accessTokenHasRequiredScopes(accessToken: unknown): boolean {
+  if (typeof accessToken !== "string") {
+    return false;
+  }
+
+  const payload = decodeJwtPayload(accessToken);
+  if (!payload) {
+    return false;
+  }
+
+  const claim = payload.scp ?? payload.scope;
+  let granted: string[];
+  if (Array.isArray(claim)) {
+    granted = claim.filter((scope): scope is string => typeof scope === "string");
+  } else if (typeof claim === "string") {
+    granted = claim.split(" ");
+  } else {
+    return false;
+  }
+
+  return REQUIRED_SCOPES.every((scope) => granted.includes(scope));
+}
+
 function isCurrentOpenAICodexCredential(credentials: OAuthCredentials): boolean {
   const versioned = credentials as VersionedOpenAICodexCredentials;
-  return versioned.codexOAuthVersion === CREDENTIAL_VERSION && versioned.scopes === SCOPE;
+  if (versioned.codexOAuthVersion === CREDENTIAL_VERSION && versioned.scopes === SCOPE) {
+    return true;
+  }
+
+  return accessTokenHasRequiredScopes(credentials.access);
 }
 
 function assertCurrentOpenAICodexCredential(credentials: OAuthCredentials): void {

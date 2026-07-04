@@ -141,6 +141,105 @@ void test("OpenAI Codex browser OAuth matches official Codex CLI authorize param
   assert.match(body.get("code_verifier") ?? "", /^[A-Za-z0-9_-]{86}$/);
 });
 
+void test("OpenAI Codex browser OAuth accepts pi-sourced credentials with connector scopes in the JWT", async (t) => {
+  const provider = getOAuthProvider("openai-codex");
+  assert.ok(provider);
+
+  // Shaped like pi's auth.json entries: no codexOAuthVersion/scopes markers.
+  const scopedAccessToken = fakeJwt({
+    scp: ["openid", "profile", "email", "offline_access", "api.connectors.read", "api.connectors.invoke"],
+    "https://api.openai.com/auth": {
+      chatgpt_account_id: "acct_pi_auth_json",
+    },
+  });
+  const piSourcedCredentials = {
+    access: scopedAccessToken,
+    refresh: "refresh-from-pi-auth-json",
+    expires: Date.now() + 3600_000,
+  };
+
+  assert.equal(provider.getApiKey(piSourcedCredentials), scopedAccessToken);
+
+  const originalFetch = globalThis.fetch;
+  const requests: Array<{ url: string; body: unknown }> = [];
+  globalThis.fetch = ((url: string | URL | Request, init?: RequestInit): Promise<Response> => {
+    requests.push({ url: requestUrlToString(url), body: init?.body });
+    return Promise.resolve(new Response(JSON.stringify({
+      access_token: scopedAccessToken,
+      refresh_token: "refresh-rotated",
+      expires_in: 3600,
+    }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    }));
+  });
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  const refreshed = await provider.refreshToken(piSourcedCredentials);
+  assert.equal(refreshed.refresh, "refresh-rotated");
+  assert.equal(refreshed.accountId, "acct_pi_auth_json");
+  assert.equal(
+    (refreshed as { codexOAuthVersion?: string }).codexOAuthVersion,
+    "codex-cli-rs-connector-scopes-2026-04",
+  );
+
+  assert.equal(requests.length, 1);
+  const body = new URLSearchParams(String(requests[0]?.body));
+  assert.equal(body.get("grant_type"), "refresh_token");
+  assert.equal(body.get("refresh_token"), "refresh-from-pi-auth-json");
+});
+
+void test("OpenAI Codex browser OAuth accepts space-delimited scope claims", () => {
+  const provider = getOAuthProvider("openai-codex");
+  assert.ok(provider);
+
+  const scopedAccessToken = fakeJwt({
+    scope: "openid profile email offline_access api.connectors.read api.connectors.invoke",
+    "https://api.openai.com/auth": {
+      chatgpt_account_id: "acct_scope_string",
+    },
+  });
+
+  assert.equal(
+    provider.getApiKey({
+      access: scopedAccessToken,
+      refresh: "refresh-scope-string",
+      expires: Date.now() + 3600_000,
+    }),
+    scopedAccessToken,
+  );
+});
+
+void test("OpenAI Codex browser OAuth rejects JWT credentials missing connector scopes", async () => {
+  const provider = getOAuthProvider("openai-codex");
+  assert.ok(provider);
+
+  // Basic scopes only — e.g. a pi login from before the connector-scope upgrade.
+  const basicAccessToken = fakeJwt({
+    scp: ["openid", "profile", "email", "offline_access"],
+    "https://api.openai.com/auth": {
+      chatgpt_account_id: "acct_basic_scopes",
+    },
+  });
+  const staleCredentials = {
+    access: basicAccessToken,
+    refresh: "refresh-basic-scopes",
+    expires: Date.now() + 3600_000,
+  };
+
+  assert.throws(
+    () => provider.getApiKey(staleCredentials),
+    /OpenAI login needs to be refreshed for current Codex scopes/,
+  );
+
+  await assert.rejects(
+    () => provider.refreshToken(staleCredentials),
+    /OpenAI login needs to be refreshed for current Codex scopes/,
+  );
+});
+
 void test("OpenAI Codex browser OAuth rejects stale pre-scope-upgrade credentials", async () => {
   const provider = getOAuthProvider("openai-codex");
   assert.ok(provider);
