@@ -12,8 +12,8 @@
   <DefaultLocale>en-US</DefaultLocale>
   <DisplayName DefaultValue="Pi for Excel" />
   <Description DefaultValue="Open-source, multi-model AI sidebar add-in for Excel. Powered by Pi." />
-  <IconUrl DefaultValue="https://localhost:3000/assets/icon-32.png" />
-  <HighResolutionIconUrl DefaultValue="https://localhost:3000/assets/icon-80.png" />
+  <IconUrl DefaultValue="https://localhost:3141/assets/icon-32.png" />
+  <HighResolutionIconUrl DefaultValue="https://localhost:3141/assets/icon-80.png" />
   <SupportUrl DefaultValue="https://github.com/tmustier/pi-for-excel/issues/new/choose" />
 
   <Hosts>
@@ -21,7 +21,7 @@
   </Hosts>
 
   <DefaultSettings>
-    <SourceLocation DefaultValue="https://localhost:3000/src/taskpane.html" />
+    <SourceLocation DefaultValue="https://localhost:3141/src/taskpane.html" />
   </DefaultSettings>
 
   <Permissions>ReadWriteDocument</Permissions>
@@ -64,12 +64,12 @@
 
     <Resources>
       <bt:Images>
-        <bt:Image id="Icon16" DefaultValue="https://localhost:3000/assets/icon-16.png" />
-        <bt:Image id="Icon32" DefaultValue="https://localhost:3000/assets/icon-32.png" />
-        <bt:Image id="Icon80" DefaultValue="https://localhost:3000/assets/icon-80.png" />
+        <bt:Image id="Icon16" DefaultValue="https://localhost:3141/assets/icon-16.png" />
+        <bt:Image id="Icon32" DefaultValue="https://localhost:3141/assets/icon-32.png" />
+        <bt:Image id="Icon80" DefaultValue="https://localhost:3141/assets/icon-80.png" />
       </bt:Images>
       <bt:Urls>
-        <bt:Url id="TaskpaneUrl" DefaultValue="https://localhost:3000/src/taskpane.html" />
+        <bt:Url id="TaskpaneUrl" DefaultValue="https://localhost:3141/src/taskpane.html" />
       </bt:Urls>
       <bt:ShortStrings>
         <bt:String id="GroupLabel" DefaultValue="Pi" />

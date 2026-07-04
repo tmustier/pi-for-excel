@@ -167,7 +167,7 @@ Quick proxy sanity check (advanced):
 
 ```bash
 curl -k -i -s \
-  'https://localhost:3000/api-proxy/google-cloudcode/v1internal:streamGenerateContent?alt=sse' \
+  'https://localhost:3141/api-proxy/google-cloudcode/v1internal:streamGenerateContent?alt=sse' \
   -X POST -H 'content-type: application/json' -d '{}' | head
 ```
 

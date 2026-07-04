@@ -4,7 +4,7 @@
  * No Office.js dependency. Loads the same CSS as the real taskpane and
  * renders mock components for agent-browser screenshot verification.
  *
- * Access at: http://localhost:3000/src/ui-gallery.html
+ * Access at: http://localhost:3141/src/ui-gallery.html
  *
  * Each section has a data-gallery attribute for targeted screenshots:
  *   agent-browser screenshot --selector '[data-gallery="tool-cards"]'

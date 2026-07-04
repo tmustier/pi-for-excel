@@ -5,7 +5,7 @@ import net from "node:net";
 import { once } from "node:events";
 import { setTimeout as delay } from "node:timers/promises";
 
-const ORIGIN = "https://localhost:3000";
+const ORIGIN = "https://localhost:3141";
 const BRIDGE_SCRIPT_PATH = new URL("../scripts/tmux-bridge-server.mjs", import.meta.url).pathname;
 
 function hasTmuxBinary() {

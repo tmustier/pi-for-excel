@@ -89,7 +89,7 @@ Available gallery sections (use as argument):
 
 Or use agent-browser directly for interactive inspection:
 ```bash
-npx agent-browser --session pi-ui open http://localhost:3000/src/ui-gallery.html
+npx agent-browser --session pi-ui open http://localhost:3141/src/ui-gallery.html
 npx agent-browser --session pi-ui wait 2000
 npx agent-browser --session pi-ui snapshot -i          # See interactive elements
 npx agent-browser --session pi-ui screenshot shot.png  # Capture
@@ -98,7 +98,7 @@ npx agent-browser --session pi-ui close                # Clean up
 
 For **full taskpane** inspection (boots without Excel after 3s timeout):
 ```bash
-npx agent-browser open http://localhost:3000/src/taskpane.html
+npx agent-browser open http://localhost:3141/src/taskpane.html
 npx agent-browser wait 4000           # Wait for Office.js fallback
 npx agent-browser snapshot -i -c      # Interactive snapshot
 npx agent-browser console --json      # Check for JS errors
@@ -119,7 +119,7 @@ Excel loads a sideloaded manifest from:
 `~/Library/Containers/com.microsoft.Excel/Data/Documents/wef/{add-in-id}.manifest.xml`
 
 If local changes do not show up:
-1. Verify sideloaded manifest points to `https://localhost:3000/...` (not production URL).
+1. Verify sideloaded manifest points to `https://localhost:3141/...` (not production URL).
 2. Recopy manifest:
    `cp manifest.xml ~/Library/Containers/com.microsoft.Excel/Data/Documents/wef/a1b2c3d4-e5f6-7890-abcd-ef1234567890.manifest.xml`
 3. Quit Excel fully and reopen.

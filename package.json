@@ -4,7 +4,7 @@
   "description": "Open-source, multi-model AI sidebar add-in for Excel. Powered by Pi.",
   "type": "module",
   "scripts": {
-    "dev": "vite --port 3000",
+    "dev": "vite --port 3141",
     "dev:portless": "portless pi-excel vite",
     "build": "vite build",
     "preview": "vite preview",

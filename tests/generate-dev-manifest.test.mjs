@@ -75,7 +75,13 @@ test("rejects unparseable input", () => {
 });
 
 test("rejects the default dev URL itself", () => {
-  assert.throws(() => resolveDevOrigin({ arg: "localhost:3000" }), /already the default/);
+  assert.throws(() => resolveDevOrigin({ arg: "localhost:3141" }), /already the default/);
+});
+
+test("accepts the retired :3000 default as a custom origin", () => {
+  // The dev default moved from :3000 to :3141; the old port is now just
+  // another custom origin.
+  assert.equal(resolveDevOrigin({ arg: "https://localhost:3000" }).origin, "https://localhost:3000");
 });
 
 // ── renderDevManifest ───────────────────────────────────────────────────────

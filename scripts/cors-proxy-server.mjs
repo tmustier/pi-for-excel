@@ -88,7 +88,7 @@ const HOP_BY_HOP_HEADERS = new Set([
 // a browser tab on any origin can still call it unless we restrict CORS.
 // Default allowlist matches our dev + hosted origins; override via env var.
 const DEFAULT_ALLOWED_ORIGINS = new Set([
-  "https://localhost:3000",
+  "https://localhost:3141",
   "https://pi-for-excel.vercel.app",
 ]);
 

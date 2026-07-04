@@ -219,7 +219,7 @@ function buildBrowserAliases(): { find: string | RegExp; replacement: string }[]
  *
  * Opt-in only: set DEV_HOST=<hostname> explicitly, or run via
  * `npm run dev:portless` (portless injects PORTLESS_URL into the child
- * process). With neither set, the default https://localhost:3000 behavior
+ * process). With neither set, the default https://localhost:3141 behavior
  * is unchanged.
  */
 interface DevProxyConfig {
@@ -236,7 +236,7 @@ function resolveDevProxy(): DevProxyConfig | null {
 
   // Same strict validation as scripts/generate-dev-manifest.mjs (shared
   // helper): https-only bare origin, no credentials/path/query/hash, and
-  // never the default https://localhost:3000. Invalid values fail loud
+  // never the default https://localhost:3141. Invalid values fail loud
   // instead of silently activating (or silently skipping) proxy mode.
   const resolved = resolveDevOrigin({
     env: { DEV_HOST: devHost, PORTLESS_URL: portlessUrl },
@@ -251,7 +251,7 @@ function resolveDevProxy(): DevProxyConfig | null {
 /** Behind the proxy the port comes from PORT (portless-assigned); CLI --port wins over this either way. */
 function parseDevServerPort(raw: string | undefined): number {
   const parsed = Number.parseInt(raw ?? "", 10);
-  return Number.isInteger(parsed) && parsed > 0 && parsed < 65536 ? parsed : 3000;
+  return Number.isInteger(parsed) && parsed > 0 && parsed < 65536 ? parsed : 3141;
 }
 
 // ============================================================================
@@ -292,11 +292,11 @@ export default defineConfig({
           },
         }
       : {
-          // Must stay on :3000 because manifest hardcodes it.
+          // Must stay on :3141 because manifest hardcodes it.
           // Bind IPv6 too: Excel's webview may resolve localhost → ::1 and fail if we only listen on 127.0.0.1.
           host: "::",
           strictPort: true,
-          port: 3000,
+          port: 3141,
           https: hasHttpsCerts
             ? { key: fs.readFileSync(keyPath), cert: fs.readFileSync(certPath) }
             : undefined,

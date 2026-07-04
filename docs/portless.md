@@ -1,7 +1,7 @@
 # Dev server behind portless (opt-in)
 
 **Status:** opt-in recipe. The default dev flow (`npm run dev` on
-`https://localhost:3000` with mkcert certs) is unchanged and remains what the
+`https://localhost:3141` with mkcert certs) is unchanged and remains what the
 manifest, sideload docs, and CI assume. Use this page only if you want the
 [portless](https://portless.sh) flavor: a stable named URL
 (`https://pi-excel.localhost`) with no mkcert step and no fixed port.
@@ -50,7 +50,7 @@ How the Vite side switches over (see `vite.config.ts`):
 
 ## Sideload manifest
 
-`manifest.xml` stays pinned to `https://localhost:3000`. Generate a
+`manifest.xml` stays pinned to `https://localhost:3141`. Generate a
 dev-proxy manifest instead (never committed; it's gitignored):
 
 ```bash
@@ -67,21 +67,21 @@ cp manifest.dev.xml ~/Library/Containers/com.microsoft.Excel/Data/Documents/wef/
 ```
 
 Note: the add-in Id is unchanged, so the dev-proxy manifest **replaces** the
-default `localhost:3000` sideload — you run one or the other, not both. To
+default `localhost:3141` sideload — you run one or the other, not both. To
 switch back, sideload `manifest.xml` again.
 
 ## Bridge / proxy servers (deliberate opt-in)
 
 The local CORS proxy and tmux/python bridges enforce strict origin
-allowlists pinned to `https://localhost:3000` (plus the hosted origin). The
+allowlists pinned to `https://localhost:3141` (plus the hosted origin). The
 portless origin is **deliberately not added by default** — extend the
 allowlist explicitly via the existing `ALLOWED_ORIGINS` env var when you run
 them:
 
 ```bash
-ALLOWED_ORIGINS="https://localhost:3000,https://pi-for-excel.vercel.app,https://pi-excel.localhost" npm run proxy:https
-ALLOWED_ORIGINS="https://localhost:3000,https://pi-for-excel.vercel.app,https://pi-excel.localhost" npm run tmux:bridge:https
-ALLOWED_ORIGINS="https://localhost:3000,https://pi-for-excel.vercel.app,https://pi-excel.localhost" npm run python:bridge:https
+ALLOWED_ORIGINS="https://localhost:3141,https://pi-for-excel.vercel.app,https://pi-excel.localhost" npm run proxy:https
+ALLOWED_ORIGINS="https://localhost:3141,https://pi-for-excel.vercel.app,https://pi-excel.localhost" npm run tmux:bridge:https
+ALLOWED_ORIGINS="https://localhost:3141,https://pi-for-excel.vercel.app,https://pi-excel.localhost" npm run python:bridge:https
 ```
 
 Note `ALLOWED_ORIGINS` **replaces** the default list, so include every origin

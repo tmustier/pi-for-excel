@@ -55,7 +55,7 @@ const keyPath = resolveOptionalEnvPath("PI_FOR_EXCEL_KEY_PATH") ?? path.join(cer
 const certPath = resolveOptionalEnvPath("PI_FOR_EXCEL_CERT_PATH") ?? path.join(certDir, "cert.pem");
 
 const DEFAULT_ALLOWED_ORIGINS = new Set([
-  "https://localhost:3000",
+  "https://localhost:3141",
   "https://pi-for-excel.vercel.app",
 ]);
 

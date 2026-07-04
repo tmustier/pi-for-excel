@@ -14,7 +14,7 @@
 #
 # Prerequisites:
 #   - agent-browser CLI installed
-#   - npm run dev running on port 3000 (script starts it if needed)
+#   - npm run dev running on port 3141 (script starts it if needed)
 #
 set -euo pipefail
 
@@ -35,8 +35,8 @@ if [[ "$SCHEME" == "https" ]]; then
   BROWSER_FLAGS="--ignore-https-errors"
 fi
 
-GALLERY_URL="${SCHEME}://localhost:3000/src/ui-gallery.html"
-TASKPANE_URL="${SCHEME}://localhost:3000/src/taskpane.html"
+GALLERY_URL="${SCHEME}://localhost:3141/src/ui-gallery.html"
+TASKPANE_URL="${SCHEME}://localhost:3141/src/taskpane.html"
 SESSION_NAME="pi-ui-verify"
 SCREENSHOT_DIR="/tmp/pi-ui-verify"
 DEV_PID_FILE="$SCREENSHOT_DIR/dev.pid"
@@ -45,11 +45,11 @@ mkdir -p "$SCREENSHOT_DIR"
 
 # Start dev server if not running
 ensure_dev_server() {
-  if lsof -nP -iTCP:3000 -sTCP:LISTEN &>/dev/null; then
+  if lsof -nP -iTCP:3141 -sTCP:LISTEN &>/dev/null; then
     return 0
   fi
 
-  echo "Starting dev server on port 3000..."
+  echo "Starting dev server on port 3141..."
   cd "$(dirname "$0")/.."
   npm run dev &>/dev/null &
   DEV_PID=$!
@@ -57,7 +57,7 @@ ensure_dev_server() {
 
   # Wait for server
   for i in $(seq 1 30); do
-    if lsof -nP -iTCP:3000 -sTCP:LISTEN &>/dev/null; then
+    if lsof -nP -iTCP:3141 -sTCP:LISTEN &>/dev/null; then
       echo "Dev server ready (pid $DEV_PID)"
       return 0
     fi

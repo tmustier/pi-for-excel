@@ -24,7 +24,7 @@ This checklist maps directly to issue [#179](https://github.com/tmustier/pi-for-
 ## Prerequisites
 
 - Built from latest `origin/main`
-- Excel add-in sideloaded from `https://localhost:3000`
+- Excel add-in sideloaded from `https://localhost:3141`
 - `npm ci`
 - Local cert trusted (`mkcert` flow)
 - Optional local bridges available when testing power-user paths:

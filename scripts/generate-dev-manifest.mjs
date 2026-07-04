@@ -9,21 +9,21 @@
  *   npm run manifest:dev -- my-addin.localhost    # custom hostname
  *   DEV_HOST=pi-excel.localhost node scripts/generate-dev-manifest.mjs
  *
- * Replaces the default dev base URL (https://localhost:3000) in manifest.xml
+ * Replaces the default dev base URL (https://localhost:3141) in manifest.xml
  * with the proxy origin and writes manifest.dev.xml (fixed output path).
  * manifest.xml itself stays untouched and nothing is published to public/.
  *
  * Notes:
  * - Office add-ins require HTTPS, so the proxy origin is always https://.
  * - The add-in Id is unchanged: sideloading manifest.dev.xml replaces the
- *   default localhost:3000 sideload (they are the same add-in to Excel).
+ *   default localhost:3141 sideload (they are the same add-in to Excel).
  */
 
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
-export const DEV_BASE_URL = "https://localhost:3000";
+export const DEV_BASE_URL = "https://localhost:3141";
 export const DEFAULT_DEV_PROXY_HOST = "pi-excel.localhost";
 
 /**

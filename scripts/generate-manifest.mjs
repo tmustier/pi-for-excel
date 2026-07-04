@@ -7,7 +7,7 @@
  *   ADDIN_BASE_URL="https://pi-for-excel.vercel.app" node scripts/generate-manifest.mjs
  *   ADDIN_BASE_URL="https://pi-for-excel.example.com" OUT=manifest.prod.xml node scripts/generate-manifest.mjs
  *
- * Replaces all occurrences of the dev base URL (https://localhost:3000) with ADDIN_BASE_URL.
+ * Replaces all occurrences of the dev base URL (https://localhost:3141) with ADDIN_BASE_URL.
  *
  * Notes:
  * - Office add-ins require HTTPS.
@@ -17,7 +17,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-const DEV_BASE_URL = "https://localhost:3000";
+const DEV_BASE_URL = "https://localhost:3141";
 
 function fail(msg) {
   console.error(`[pi-for-excel] ${msg}`);

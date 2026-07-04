@@ -43,7 +43,7 @@ Keep this URL stable; it becomes the base URL used by `manifest.prod.xml`.
 
 ## Generate / update the production manifest
 
-The dev manifest (`manifest.xml`) points at `https://localhost:3000`.
+The dev manifest (`manifest.xml`) points at `https://localhost:3141`.
 
 Generate the production manifest with the hosted base URL:
 

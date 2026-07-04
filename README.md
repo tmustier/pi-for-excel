@@ -90,8 +90,12 @@ mv localhost.pem cert.pem
 ### Run
 
 ```bash
-npm run dev        # Vite dev server on https://localhost:3000
+npm run dev        # Vite dev server on https://localhost:3141
 ```
+
+> **Note:** the dev port is `3141` (π) — deliberately off the crowded `:3000`.
+> If you sideloaded a manifest before the move from `:3000`, re-copy
+> `manifest.xml` into Excel's `wef` folder and fully restart Excel.
 
 > **Optional:** prefer a stable named URL (`https://pi-excel.localhost`, no mkcert, no fixed port)? See [docs/portless.md](./docs/portless.md) for the opt-in [portless](https://portless.sh) flow.
 
@@ -116,13 +120,13 @@ Windows desktop Excel can't upload a manifest directly — it installs from a tr
 
 **Home** → **Add-ins** → **More Settings** → **Upload My Add-in** → select `manifest.xml`.
 
-The dev manifest points to `https://localhost:3000`. The production manifest (`manifest.prod.xml`) points to the hosted Vercel deployment.
+The dev manifest points to `https://localhost:3141`. The production manifest (`manifest.prod.xml`) points to the hosted Vercel deployment.
 
 ### Useful commands
 
 | Command | Description |
 |---|---|
-| `npm run dev` | Start Vite dev server (port 3000, HTTPS) |
+| `npm run dev` | Start Vite dev server (port 3141, HTTPS) |
 | `npm run dev:portless` | Opt-in: dev server behind portless — [docs/portless.md](./docs/portless.md) |
 | `npm run build` | Production build → `dist/` |
 | `npm run check` | Lint + typecheck + CSS theme checks |

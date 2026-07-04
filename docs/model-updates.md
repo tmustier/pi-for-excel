@@ -144,27 +144,29 @@ Reminder: **`openai-codex` is NOT `openai`** (different base URL). See `src/auth
 
 **Important:** our `manifest.xml` currently points at the **dev server**:
 
-- `https://localhost:3000/src/taskpane.html`
+- `https://localhost:3141/src/taskpane.html`
 
 That means:
 - `npm run build` is a *sanity check* (TypeScript + bundling), but it does **not** change what Excel loads.
-- To test changes in Excel, you need a dev server running on **port 3000**.
+- To test changes in Excel, you need a dev server running on **port 3141**.
 
 Recommended local loop:
 
 ```bash
-# 1) Start dev server (must be :3000 because manifest hardcodes it)
+# 1) Start dev server (must be :3141 because manifest hardcodes it)
 npm run dev
 
 # 2) (Re)register / launch Excel with the add-in
 npm run sideload
 ```
 
-If `npm run dev` says “Port 3000 is in use, trying another one…”, **stop the old server**.
-Excel will keep loading whatever is on `https://localhost:3000/`.
+If `npm run dev` fails with “Port 3141 is already in use” (the config sets
+`strictPort`, so Vite exits rather than silently picking another port),
+**stop the old server** — Excel will keep loading whatever is on
+`https://localhost:3141/`.
 
 ```bash
-lsof -nP -iTCP:3000 -sTCP:LISTEN
+lsof -nP -iTCP:3141 -sTCP:LISTEN
 # then kill the PID, or just stop the process in the terminal running it
 ```
 
