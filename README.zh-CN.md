@@ -2,7 +2,9 @@
 
 [English](./README.md) | 简体中文
 
-> 本文档是简要中文指南,仅涵盖**安装**与**模型配置**。完整功能说明、开发者文档等请参阅[英文版 README](./README.md) 与 [docs/](./docs/README.md) 目录。如中英文内容有出入,以英文文档为准。
+> 本文档是简要中文指南，仅涵盖**安装**与**模型配置**。完整功能说明、开发者文档等请参阅[英文版 README](./README.md) 与 [docs/](./docs/README.md) 目录。如中英文内容有出入，以英文文档为准。
+>
+> 本文档及产品界面的中文翻译由 AI 生成。如发现译文问题，欢迎提 [Issue](https://github.com/tmustier/pi-for-excel/issues) 指正。
 
 Pi for Excel 是一款开源、多模型的 Microsoft Excel AI 侧边栏加载项,由 [Pi](https://pi.dev) 驱动。
 
