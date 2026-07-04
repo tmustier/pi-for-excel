@@ -1,5 +1,7 @@
 # Install Pi for Excel
 
+> 中文用户:简要中文安装与模型配置指南见 [README.zh-CN.md](../README.zh-CN.md)。
+
 No coding or dev tools required — just download one file and add it to Excel.
 
 ---
