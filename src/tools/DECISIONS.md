@@ -208,7 +208,9 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 ## Direct Office.js tool (`execute_office_js`)
 - **Availability:** always available (not behind `/experimental`), always registered via `createAllTools()`.
 - **Contract:** accepts `code` (async function body receiving `context: Excel.RequestContext`) plus a short user-facing `explanation`.
-- **Safety guards:** blocks nested `Excel.run(...)` usage (host already provides context), enforces explanation/code length limits, requires explicit user confirmation on every execution, and fails closed if confirmation UI is unavailable.
+- **Safety guards:** blocks nested `Excel.run(...)` usage (host already provides context), enforces explanation/code length limits, and fails closed if confirmation UI is unavailable when approval is required.
+- **Approval model:** Confirm mode prompts on every call. Auto mode runs pure Excel API code without a prompt (#347), but a static ambient-authority lint (`experimental-tool-gates/office-js-risk.ts`) forces per-call approval — in any mode — when code references browser capabilities beyond the Excel API (network egress, storage, DOM/global handles, workers, dynamic evaluation, `Office.*`, or realm escape via `constructor`). Flagged approvals include the detected identifiers in the prompt.
+- **Threat model:** submitted code executes in the taskpane page realm (blob module import) with ambient access to the realm that holds provider credentials, and workbook content is untrusted input injected into context every turn. The lint is a heuristic tripwire (raw-text scan, false positives cost one dialog); the durable fix is an isolated-realm runner with only a guarded workbook API bridged in (#605).
 - **Result policy:** tool output must be JSON-serializable; non-serializable results are returned as deterministic errors.
 - **Execution policy:** treated as `mutate/structure` to force conservative workbook-context refresh after execution.
 - **Rationale:** unlock advanced Office.js scenarios when structured tools are insufficient while preserving explicit consent.
