@@ -317,11 +317,11 @@ function renderExternalSkillCard(args: {
   });
 
   // Location
-  card.body.appendChild(createConfigRow("Location", createConfigValue(args.skill.location)));
+  card.body.appendChild(createConfigRow(t("ext-hub-skills.location"), createConfigValue(args.skill.location)));
 
   // Remove button
   card.body.appendChild(createActionsRow(
-    createButton("Remove", {
+    createButton(t("ext-hub-skills.remove"), {
       danger: true,
       compact: true,
       onClick: args.onRemove,

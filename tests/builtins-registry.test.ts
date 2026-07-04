@@ -97,7 +97,7 @@ void test("builtins registry wires /addons, /experimental, /extensions, /tools, 
   assert.match(extensionsHubPluginsSource, /manager\.setExtensionCapability\(/);
   assert.match(extensionsHubPluginsSource, /confirmInstall\(/);
   assert.match(extensionsHubPluginsSource, /confirmEnable\(/);
-  assert.match(extensionsHubPluginsSource, /higher-risk permissions/);
+  assert.match(extensionsHubPluginsSource, /ext-hub-plugins\.confirm\.grantedHighRisk/);
   assert.match(extensionsHubPluginsSource, /createSectionHeader\(\{ label: t\("ext-hub-plugins\.permissions"\) \}\)/);
   assert.match(extensionsHubPluginsSource, /installFromUrl\(/);
 
@@ -166,7 +166,7 @@ void test("extensions hub connections tab includes MCP test flow", async () => {
 
   assert.match(source, /label: t\("extensions-hub-connections\.mcpSection"\)/);
   assert.match(source, /extensions-hub-connections\.addServer/);
-  assert.match(source, /createConfigRow\("Availability"/);
+  assert.match(source, /createConfigRow\(t\("extensions-hub-connections\.availability"\)/);
   assert.match(source, /scopeSummary\.textContent = t\("extensions-hub-connections\.scope-controls"\)/);
   assert.match(source, /probeMcpServer/);
 });

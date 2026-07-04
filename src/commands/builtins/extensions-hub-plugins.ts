@@ -68,13 +68,13 @@ async function confirmEnable(status: ExtensionRuntimeStatus): Promise<boolean> {
   return requestConfirmationDialog({
     title: t("ext-hub-plugins.confirmEnableTitle", { name: status.name }),
     message: [
-      "Granted higher-risk permissions:",
+      t("ext-hub-plugins.confirm.grantedHighRisk"),
       ...risky.map((c) => `- ${describeExtensionCapability(c)}`),
       "",
-      `Source: ${status.trustLabel}`,
+      t("ext-hub-plugins.confirm.source", { source: status.trustLabel }),
     ].join("\n"),
-    confirmLabel: "Enable",
-    cancelLabel: "Cancel",
+    confirmLabel: t("ext-hub-plugins.enable"),
+    cancelLabel: t("confirm.cancel"),
     confirmButtonTone: "danger",
     restoreFocusOnClose: false,
   });
@@ -85,18 +85,18 @@ async function confirmInstall(name: string, sourceLabel: string, capabilities: r
   return requestConfirmationDialog({
     title: t("ext-hub-plugins.confirmInstallTitle", { name }),
     message: [
-      `Source: ${sourceLabel}`,
+      t("ext-hub-plugins.confirm.source", { source: sourceLabel }),
       "",
-      "Default permissions:",
+      t("ext-hub-plugins.confirm.defaultPermissions"),
       ...(capabilities.length > 0
         ? capabilities.map((c) => `- ${describeExtensionCapability(c)}`)
-        : ["- (none)"]),
+        : [`- ${t("ext-hub-plugins.confirm.none")}`]),
       ...(risky.length > 0
-        ? ["", "Higher-risk:", ...risky.map((c) => `- ${describeExtensionCapability(c)}`)]
+        ? ["", t("ext-hub-plugins.confirm.higherRisk"), ...risky.map((c) => `- ${describeExtensionCapability(c)}`)]
         : []),
     ].join("\n"),
-    confirmLabel: "Install",
-    cancelLabel: "Cancel",
+    confirmLabel: t("ext-hub-plugins.installButton"),
+    cancelLabel: t("confirm.cancel"),
     confirmButtonTone: risky.length > 0 ? "danger" : "primary",
     restoreFocusOnClose: false,
   });
@@ -181,7 +181,7 @@ function renderPluginCard(
         try {
           await manager.setExtensionEnabled(status.id, checked);
           await onChanged();
-          showToast(`${status.name}: ${checked ? "enabled" : "disabled"}`);
+          showToast(t("ext-hub-plugins.toast.enabledState", { name: status.name, state: t(checked ? "experimental.state.enabled" : "experimental.state.disabled") }));
           refresh();
         } catch (err: unknown) {
           showToast(t("ext-hub-plugins.toast.error", { error: err instanceof Error ? err.message : String(err) }));
@@ -223,7 +223,7 @@ function renderPluginCard(
           void (async () => {
             try {
               await manager.setExtensionCapability(status.id, cap, checked);
-              showToast(`${status.name}: ${describeExtensionCapability(cap)} ${checked ? "granted" : "revoked"}`);
+              showToast(t("ext-hub-plugins.toast.permissionUpdated", { name: status.name, capability: describeExtensionCapability(cap), state: t(checked ? "ext-hub-plugins.granted" : "ext-hub-plugins.revoked") }));
               refresh();
             } catch (err: unknown) {
               showToast(t("ext-hub-plugins.toast.error", { error: err instanceof Error ? err.message : String(err) }));
@@ -256,9 +256,9 @@ function renderPluginCard(
         void (async () => {
           const ok = await requestConfirmationDialog({
             title: t("ext-hub-plugins.confirmUninstallTitle", { name: status.name }),
-            message: "This removes the plugin and its settings.",
-            confirmLabel: "Uninstall",
-            cancelLabel: "Cancel",
+            message: t("ext-hub-plugins.confirm.uninstallMessage"),
+            confirmLabel: t("ext-hub-plugins.uninstall"),
+            cancelLabel: t("confirm.cancel"),
             confirmButtonTone: "danger",
             restoreFocusOnClose: false,
           });

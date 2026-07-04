@@ -190,7 +190,7 @@ function createKeyStep(
   signupLink.href = info.signupUrl;
   signupLink.target = "_blank";
   signupLink.rel = "noopener noreferrer";
-  signupLink.textContent = `Get a free key at ${info.signupUrl.replace(/^https?:\/\//u, "")} ↗`;
+  signupLink.textContent = t("web-search-setup.freeKeyLink", { url: info.signupUrl.replace(/^https?:\/\//u, "") });
 
   const inputRow = document.createElement("div");
   inputRow.className = "pi-search-setup__input-row";

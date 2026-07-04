@@ -371,8 +371,8 @@ export async function showResumeDialog(opts: {
           const proceed = await requestConfirmationDialog({
             title: t("resume.confirm.anotherWorkbookTitle"),
             message: getCrossWorkbookResumeConfirmMessage(targetMode),
-            confirmLabel: "Resume anyway",
-            cancelLabel: "Cancel",
+            confirmLabel: t("resume.confirm.resumeAnyway"),
+            cancelLabel: t("confirm.cancel"),
             restoreFocusOnClose: false,
           });
           if (!proceed) return;

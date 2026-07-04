@@ -31,6 +31,8 @@ function collectSourceFiles(dir: string, out: string[] = []): string[] {
 }
 
 const sourceFiles = collectSourceFiles(join(root, "src"));
+const localizedUiSourceFiles = ["ui", "taskpane", "commands", "compaction", "files"]
+  .flatMap((dir) => collectSourceFiles(join(root, "src", dir)));
 const corpus = sourceFiles.map((f) => readFileSync(f, "utf8")).join("\n");
 
 void test("en and zh-CN locales have identical key sets", () => {
@@ -98,6 +100,29 @@ void test("every static t(\"...\") call site references an existing key", () => 
     }
   }
   assert.deepEqual(missing, [], `t() call sites with unknown keys: ${missing.join(", ")}`);
+});
+
+void test("common UI text sinks use locale keys instead of hardcoded English", () => {
+  // This is a deliberately low-noise guard for the UI surfaces agents most
+  // often edit: DOM text sinks, button/config-row helpers, dialog labels, and
+  // toast templates. It does not try to classify every string literal in src/;
+  // agent-facing prompts, model/provider IDs, CSS classes, and command syntax
+  // are valid English literals elsewhere.
+  const staticSink = /(?:textContent|innerHTML|placeholder|title|subtitle|message|\w*[Ll]abel|showToast|createButton|createConfigRow|\.text)\s*(?:=|:|\()\s*["`][A-Z]/;
+  const toastTemplate = /\b(?:showToast|resolved\.showToast)\(\s*`/;
+  const allowed = /aria-|data-|className|\.css|https?:\/\/|icon\(|throw new Error|const message = error instanceof Error|externalLoadError|activationLoadError/;
+  const offenders: string[] = [];
+
+  for (const f of localizedUiSourceFiles) {
+    const rel = f.slice(root.length + 1);
+    for (const [i, line] of readFileSync(f, "utf8").split("\n").entries()) {
+      if ((staticSink.test(line) || toastTemplate.test(line)) && !/\bt\(/.test(line) && !allowed.test(line)) {
+        offenders.push(`${rel}:${i + 1}: ${line.trim()}`);
+      }
+    }
+  }
+
+  assert.deepEqual(offenders, [], `hardcoded English in localized UI sinks:\n${offenders.join("\n")}`);
 });
 
 void test("no module-scope t() calls (language is set at boot, after import)", () => {

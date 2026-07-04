@@ -307,9 +307,9 @@ export async function renderConnectionsTab(args: {
           if (!testKey) { showToast(t("extensions-hub-connections.toast.noApiKeyToValidate")); return; }
           const proxyBaseUrl = await getEnabledProxyBaseUrl(settings);
           const result = await validateWebSearchApiKey({ provider: selectedProvider, apiKey: testKey, proxyBaseUrl });
-          showToast(result.ok ? `✓ ${result.message}` : `✗ ${result.message}`);
+          showToast(t(result.ok ? "extensions-hub-connections.toast.validationOk" : "extensions-hub-connections.toast.validationFailed", { message: result.message }));
         } catch (err: unknown) {
-          showToast(`✗ ${err instanceof Error ? err.message : String(err)}`);
+          showToast(t("extensions-hub-connections.toast.validationError", { error: err instanceof Error ? err.message : String(err) }));
         }
       })();
     },
@@ -353,7 +353,7 @@ export async function renderConnectionsTab(args: {
     workbookLabel: workbookContext.workbookLabel,
     hasWorkbook: workbookId !== null,
   }));
-  webCard.body.appendChild(createConfigRow("Availability", availability));
+  webCard.body.appendChild(createConfigRow(t("extensions-hub-connections.availability"), availability));
 
   const scopeDetails = document.createElement("details");
   scopeDetails.className = "pi-hub-advanced-disclosure pi-hub-scope-disclosure";
@@ -553,11 +553,11 @@ function renderMcpServerCard(
   });
 
   // URL
-  card.body.appendChild(createConfigRow("URL", createConfigValue(server.url)));
+  card.body.appendChild(createConfigRow(t("extensions-hub-connections.url"), createConfigValue(server.url)));
 
   // Token
   const tokenValue = server.token ? maskSecret(server.token) : t("ext-hub-connections.badgeNoToken");
-  card.body.appendChild(createConfigRow("Token", createConfigValue(tokenValue)));
+  card.body.appendChild(createConfigRow(t("extensions-hub-connections.token"), createConfigValue(tokenValue)));
 
   // Enabled toggle
   const enabledRow = document.createElement("div");
@@ -588,10 +588,12 @@ function renderMcpServerCard(
       void (async () => {
         try {
           const result = await probeMcpServer(server, settings);
-          const transport = result.proxied ? "proxy" : "direct";
-          showToast(`${server.name}: reachable (${result.toolCount} tool${result.toolCount === 1 ? "" : "s"}, ${transport})`);
+          const transport = result.proxied
+            ? t("extensions-hub-connections.transport.proxy")
+            : t("extensions-hub-connections.transport.direct");
+          showToast(t("extensions-hub-connections.toast.serverReachable", { name: server.name, count: result.toolCount, plural: result.toolCount === 1 ? "" : "s", transport }));
         } catch (err: unknown) {
-          showToast(`${server.name}: ${err instanceof Error ? err.message : String(err)}`);
+          showToast(t("extensions-hub-connections.toast.serverError", { name: server.name, error: err instanceof Error ? err.message : String(err) }));
         }
       })();
     },

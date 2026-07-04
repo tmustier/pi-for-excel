@@ -107,7 +107,7 @@ function renderConnectionCard(args: {
   // Actions
   const hasSavedSecrets = Object.values(presence).some(Boolean);
 
-  const saveBtn = createButton("Save", {
+  const saveBtn = createButton(t("ext-hub-extension-connections.save"), {
     primary: true,
     compact: true,
     onClick: () => {
@@ -139,7 +139,7 @@ function renderConnectionCard(args: {
     },
   });
 
-  const clearBtn = createButton("Clear", {
+  const clearBtn = createButton(t("ext-hub-extension-connections.clear"), {
     compact: true,
     onClick: () => {
       void (async () => {

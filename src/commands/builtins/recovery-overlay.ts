@@ -233,9 +233,9 @@ export async function showRecoveryDialog(opts: {
       void (async () => {
         const proceed = await requestConfirmationDialog({
           title: t("recovery.confirm.deleteAllTitle"),
-          message: `This will delete ${allCheckpoints.length} backup${allCheckpoints.length === 1 ? "" : "s"}.`,
-          confirmLabel: "Delete all",
-          cancelLabel: "Cancel",
+          message: t("recovery.confirm.deleteAllMessage", { count: allCheckpoints.length, plural: allCheckpoints.length === 1 ? "" : "s" }),
+          confirmLabel: t("recovery.confirm.deleteAllLabel"),
+          cancelLabel: t("confirm.cancel"),
           confirmButtonTone: "danger",
           restoreFocusOnClose: false,
         });
@@ -455,9 +455,9 @@ export async function showRecoveryDialog(opts: {
           void (async () => {
             const proceed = await requestConfirmationDialog({
               title: t("recovery.confirm.deleteOneTitle"),
-              message: `Backup: ${checkpoint.address} (#${shortId(checkpoint.id)})`,
-              confirmLabel: "Delete",
-              cancelLabel: "Cancel",
+              message: t("recovery.confirm.deleteOneMessage", { address: checkpoint.address, id: shortId(checkpoint.id) }),
+              confirmLabel: t("recovery.confirm.deleteLabel"),
+              cancelLabel: t("confirm.cancel"),
               confirmButtonTone: "danger",
               restoreFocusOnClose: false,
             });

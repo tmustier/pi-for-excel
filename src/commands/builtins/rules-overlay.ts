@@ -818,7 +818,7 @@ export async function showRulesDialog(opts?: {
 
   const { header } = createOverlayHeader({
     onClose: closeOverlay,
-    closeLabel: "Close rules",
+    closeLabel: t("rules.close"),
     title: t("rules.title"),
     subtitle: t("rules.subtitle"),
   });

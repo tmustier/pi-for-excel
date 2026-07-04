@@ -901,7 +901,7 @@ export async function initTaskpane(opts: {
       title: args.title,
       message: normalizeApprovalMessage(args.title, args.message),
       confirmLabel: args.confirmLabel,
-      cancelLabel: "Cancel",
+      cancelLabel: t("confirm.cancel"),
       restoreFocusOnClose: true,
     });
   };
@@ -941,7 +941,7 @@ export async function initTaskpane(opts: {
           return requestRuntimeToolApproval({
             title: t("init.confirm.officeJsTitle"),
             message: buildOfficeJsExecuteApprovalMessage(request),
-            confirmLabel: "Allow once",
+            confirmLabel: t("init.confirm.allowOnce"),
           });
         },
         requestPythonBridgeApproval: (request) => {
@@ -952,7 +952,7 @@ export async function initTaskpane(opts: {
               request.bridgeUrl,
               request.params,
             ),
-            confirmLabel: "Allow bridge",
+            confirmLabel: t("init.confirm.allowBridge"),
           });
         },
       });
@@ -989,7 +989,7 @@ export async function initTaskpane(opts: {
             return requestRuntimeToolApproval({
               title: t("init.confirm.safeModeMutationTitle"),
               message: buildMutationApprovalMessage(request),
-              confirmLabel: "Allow once",
+              confirmLabel: t("init.confirm.allowOnce"),
             });
           },
         },
@@ -1418,9 +1418,9 @@ export async function initTaskpane(opts: {
     if (runtime.agent.state.isStreaming) {
       const proceed = await requestConfirmationDialog({
         title: t("init.confirm.stopAndCloseTitle"),
-        message: "Pi is still responding in this tab. Stop and close it?",
-        confirmLabel: "Stop and close",
-        cancelLabel: "Keep open",
+        message: t("init.confirm.stopAndCloseMessage"),
+        confirmLabel: t("init.confirm.stopAndClose"),
+        cancelLabel: t("init.confirm.keepOpen"),
         confirmButtonTone: "danger",
       });
       if (!proceed) return false;
