@@ -18,6 +18,7 @@ import { createSearchWorkbookTool } from "./search-workbook.js";
 import { createModifyStructureTool } from "./modify-structure.js";
 import { createFormatCellsTool } from "./format-cells.js";
 import { createConditionalFormatTool } from "./conditional-format.js";
+import { createChartsTool } from "./charts.js";
 import { createTraceDependenciesTool } from "./trace-dependencies.js";
 import { createExplainFormulaTool } from "./explain-formula.js";
 import { createViewSettingsTool } from "./view-settings.js";
@@ -52,6 +53,7 @@ export function createCoreTools(options: CreateCoreToolsOptions = {}): AnyCoreTo
     createModifyStructureTool(),
     createFormatCellsTool(),
     createConditionalFormatTool(),
+    createChartsTool(),
     createTraceDependenciesTool(),
     createExplainFormulaTool(),
     createViewSettingsTool(),

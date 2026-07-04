@@ -6,6 +6,7 @@ import { Type } from "@sinclair/typebox";
 
 import {
   applyExperimentalToolGates,
+  buildOfficeJsExecuteApprovalMessage,
   buildPythonBridgeGateErrorMessage,
   buildTmuxBridgeGateErrorMessage,
   evaluatePythonBridgeGate,
@@ -286,6 +287,93 @@ void test("execute_office_js fails closed when confirmation UI is unavailable", 
   );
 
   assert.equal(executeCount, 0);
+});
+
+void test("execute_office_js skips approval in Auto mode for pure Excel API code", async () => {
+  let executeCount = 0;
+  let approvalCount = 0;
+
+  const [officeTool] = await applyExperimentalToolGates([
+    createTestTool("execute_office_js", () => {
+      executeCount += 1;
+    }),
+  ], {
+    getExecutionMode: () => Promise.resolve("yolo" as const),
+    requestOfficeJsExecuteApproval: () => {
+      approvalCount += 1;
+      return Promise.resolve(true);
+    },
+  });
+
+  await officeTool.execute("call-office", {
+    explanation: "Add totals column",
+    code: "const sheet = context.workbook.worksheets.getActiveWorksheet();\nreturn { ok: true };",
+  });
+
+  assert.equal(executeCount, 1);
+  assert.equal(approvalCount, 0);
+});
+
+void test("execute_office_js requires approval in Auto mode when code references ambient browser authority", async () => {
+  let executeCount = 0;
+  let approvalCount = 0;
+
+  const [officeTool] = await applyExperimentalToolGates([
+    createTestTool("execute_office_js", () => {
+      executeCount += 1;
+    }),
+  ], {
+    getExecutionMode: () => Promise.resolve("yolo" as const),
+    requestOfficeJsExecuteApproval: (request) => {
+      approvalCount += 1;
+      assert.deepEqual(request.riskIdentifiers, ["fetch"]);
+
+      const message = buildOfficeJsExecuteApprovalMessage(request);
+      assert.match(message, /beyond the Excel API: fetch/u);
+
+      return Promise.resolve(true);
+    },
+  });
+
+  await officeTool.execute("call-office", {
+    explanation: "Post data to service",
+    code: "await fetch(\"https://example.com\", { method: \"POST\" });",
+  });
+
+  assert.equal(executeCount, 1);
+  assert.equal(approvalCount, 1);
+});
+
+void test("execute_office_js denial of risky code cancels execution in Auto mode", async () => {
+  let executeCount = 0;
+
+  const [officeTool] = await applyExperimentalToolGates([
+    createTestTool("execute_office_js", () => {
+      executeCount += 1;
+    }),
+  ], {
+    getExecutionMode: () => Promise.resolve("yolo" as const),
+    requestOfficeJsExecuteApproval: () => Promise.resolve(false),
+  });
+
+  await assert.rejects(
+    () => officeTool.execute("call-office", {
+      explanation: "Read settings",
+      code: "return localStorage.getItem(\"connections.store.v1\");",
+    }),
+    /cancelled by user/i,
+  );
+
+  assert.equal(executeCount, 0);
+});
+
+void test("buildOfficeJsExecuteApprovalMessage omits risk warning for clean requests", () => {
+  const message = buildOfficeJsExecuteApprovalMessage({
+    explanation: "Add totals column",
+    code: "return { ok: true };",
+  });
+
+  assert.doesNotMatch(message, /beyond the Excel API/u);
 });
 
 void test("python bridge approvals fail open when no approval handler is configured", async () => {

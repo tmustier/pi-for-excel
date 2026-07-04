@@ -71,6 +71,11 @@ const CORE_TOOL_CAPABILITY_METADATA = {
     category: "format",
     promptDescription: "add or clear conditional formatting rules (formula or cell-value)",
   },
+  charts: {
+    tier: "core",
+    category: "structure",
+    promptDescription: "list/create/update/delete charts and capture chart images with get_image for visual verification",
+  },
   trace_dependencies: {
     tier: "core",
     category: "inspect",
@@ -104,7 +109,7 @@ const CORE_TOOL_CAPABILITY_METADATA = {
   workbook_history: {
     tier: "core",
     category: "recovery",
-    promptDescription: "list/restore/delete automatic backups created before Pi edits for supported workbook mutations (`write_cells`, `fill_formula`, `python_transform_range`, `format_cells`, `conditional_format`, `comments`, and supported `modify_structure` actions)",
+    promptDescription: "list/restore/delete automatic backups created before Pi edits for supported workbook mutations (`write_cells`, `fill_formula`, `python_transform_range`, `format_cells`, `conditional_format`, `comments`, `charts` create/update, and supported `modify_structure` actions)",
   },
   skills: {
     tier: "core",
@@ -184,6 +189,7 @@ export const TOOL_DISCLOSURE_TRIGGER_PATTERNS = {
     /\b(add|remove)\b[^\n]{0,20}\b(sheet|sheets|tab|tabs)\b/,
     /\bhide\b[^\n]{0,20}\b(sheet|sheets|tab|tabs)\b/,
     /\bunhide\b[^\n]{0,20}\b(sheet|sheets|tab|tabs)\b/,
+    /\b(chart|charts|charting|plot|plots|graph|graphs)\b/,
     /\bfreeze panes?\b/,
     /\bgridlines?\b/,
     /\bheadings?\b/,
@@ -281,6 +287,7 @@ export const TOOL_UI_METADATA = {
   modify_structure: { renderer: true, humanizer: true },
   format_cells: { renderer: true, humanizer: true },
   conditional_format: { renderer: true, humanizer: true },
+  charts: { renderer: true, humanizer: true },
   trace_dependencies: { renderer: true, humanizer: true },
   explain_formula: { renderer: true, humanizer: true },
   view_settings: { renderer: true, humanizer: true },

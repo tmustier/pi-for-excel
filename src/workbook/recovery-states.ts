@@ -1,5 +1,6 @@
 import { firstCellAddress } from "./recovery/address.js";
 import {
+  cloneRecoveryChartState,
   cloneRecoveryCommentThreadState,
   cloneRecoveryConditionalFormatRules,
   cloneRecoveryFormatRangeState,
@@ -9,6 +10,7 @@ import { isRecoveryConditionalFormatRule } from "./recovery/guards.js";
 
 export {
   firstCellAddress,
+  cloneRecoveryChartState,
   cloneRecoveryCommentThreadState,
   cloneRecoveryConditionalFormatRules,
   cloneRecoveryFormatRangeState,
@@ -22,6 +24,7 @@ export type { CaptureFormatCellsStateOptions } from "./recovery/format-state.js"
 export { applyModifyStructureState, captureModifyStructureState } from "./recovery/structure-state.js";
 export { applyConditionalFormatState, captureConditionalFormatState } from "./recovery/conditional-format-state.js";
 export { applyCommentThreadState, captureCommentThreadState } from "./recovery/comment-state.js";
+export { applyChartState, captureChartPresentState } from "./recovery/chart-state.js";
 
 export type RecoveryConditionalCellValueOperator =
   | "Between"
@@ -216,6 +219,60 @@ export interface RecoveryCommentThreadState {
   content: string;
   resolved: boolean;
   replies: string[];
+}
+
+export interface RecoveryChartTitleState {
+  text: string;
+  visible: boolean;
+}
+
+export interface RecoveryChartLegendState {
+  position: string;
+  visible: boolean;
+}
+
+export interface RecoveryChartPositionState {
+  top: number;
+  left: number;
+  width: number;
+  height: number;
+}
+
+export interface RecoveryChartAbsentState {
+  kind: "chart_absent";
+  sheetName: string;
+  name: string;
+  /**
+   * Stable Office.js chart id captured at creation. Restore prefers this over
+   * the mutable name so rename/name-reuse cannot delete an unrelated chart.
+   */
+  chartId?: string;
+}
+
+export interface RecoveryChartPresentState {
+  kind: "chart_present";
+  sheetName: string;
+  name: string;
+  chartType: string;
+  title: RecoveryChartTitleState;
+  legend: RecoveryChartLegendState;
+  xAxisTitle?: RecoveryChartTitleState;
+  yAxisTitle?: RecoveryChartTitleState;
+  position: RecoveryChartPositionState;
+}
+
+export type RecoveryChartState = RecoveryChartAbsentState | RecoveryChartPresentState;
+
+/** Result of applying a chart snapshot during restore. */
+export interface RecoveryChartApplyResult {
+  /** Inverse state captured before the restore, or null when none applies. */
+  state: RecoveryChartState | null;
+  /**
+   * Address of the chart identity after the restore was applied. A restore can
+   * rename the chart, so inverse snapshots must be stored at this address — not
+   * the pre-restore one — for the rollback backup to be restorable.
+   */
+  address: string;
 }
 
 export type RecoverySheetVisibility = "Visible" | "Hidden" | "VeryHidden";

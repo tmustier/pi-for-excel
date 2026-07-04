@@ -1,5 +1,6 @@
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 
+import { assessOfficeJsCodeRisk } from "./office-js-risk.js";
 import {
   buildPythonBridgeGateErrorMessage,
   buildTmuxBridgeGateErrorMessage,
@@ -207,12 +208,23 @@ export function buildOfficeJsExecuteApprovalMessage(
     .find((line) => line.length > 0)
     ?? "(no code preview)";
 
-  return [
+  const lines = [
     "Allow direct Office.js execution?",
     "",
     `Action: ${explanation}`,
     `Code preview: ${firstLine}`,
-  ].join("\n");
+  ];
+
+  const riskIdentifiers = request.riskIdentifiers ?? [];
+  if (riskIdentifiers.length > 0) {
+    lines.push(
+      "",
+      `⚠️ Code references browser capabilities beyond the Excel API: ${riskIdentifiers.join(", ")}.`,
+      "These can reach network, storage, or credentials — review the code before allowing.",
+    );
+  }
+
+  return lines.join("\n");
 }
 
 function defaultRequestOfficeJsExecuteApproval(
@@ -283,10 +295,20 @@ function wrapExecuteOfficeJsToolWithHardGate(
     execute: async (toolCallId, params, signal, onUpdate) => {
       throwIfAborted(signal);
 
-      // Auto mode trusts Office.js — skip approval prompt.
+      const request = getOfficeJsExecuteApprovalRequest(params);
+      const risk = assessOfficeJsCodeRisk(request.code);
+
+      // Auto mode trusts pure Excel API code — skip the approval prompt.
+      // Code referencing ambient browser authority (network, storage, global
+      // handles, dynamic evaluation) requires approval in every mode: it runs
+      // in the taskpane page realm, and workbook content is untrusted input.
       const mode = await (dependencies.getExecutionMode?.() ?? Promise.resolve("safe" as const));
-      if (mode !== "yolo") {
-        const approved = await requestApproval(getOfficeJsExecuteApprovalRequest(params));
+      if (mode !== "yolo" || risk.flagged) {
+        const approved = await requestApproval(
+          risk.flagged
+            ? { ...request, riskIdentifiers: risk.identifiers }
+            : request,
+        );
         if (!approved) {
           throw new Error("Office.js execution cancelled by user.");
         }
@@ -431,7 +453,10 @@ function wrapPythonBridgeOnlyToolWithApprovalGate(
  *   reachable bridge is present.
  * - `libreoffice_convert` strictly requires a configured + reachable bridge and
  *   approval (no Pyodide fallback).
- * - `execute_office_js` requires explicit user confirmation on every call.
+ * - `execute_office_js` prompts for confirmation on every call in Confirm
+ *   mode. In Auto mode, pure Excel API code runs without a prompt, but code
+ *   referencing ambient browser authority (network, storage, globals,
+ *   dynamic evaluation) still requires per-call approval.
  * - `files` has no gate — read, write, and delete are always available.
  */
 export function applyExperimentalToolGates(

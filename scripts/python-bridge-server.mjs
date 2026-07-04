@@ -1013,6 +1013,9 @@ server.listen(PORT, HOST, () => {
 
   if (authToken) {
     console.log("[pi-for-excel] auth: bearer token required for POST endpoints");
+  } else {
+    console.warn("[pi-for-excel] auth: no bearer token configured — any local process on this machine can drive this bridge.");
+    console.warn("[pi-for-excel] recommended: set PYTHON_BRIDGE_TOKEN=<secret> and mirror it in Pi via /experimental python-bridge-token <secret>");
   }
 
   if (backend.mode === "stub") {

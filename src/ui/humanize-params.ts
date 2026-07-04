@@ -564,6 +564,66 @@ function humanizeExplainFormula(p: Record<string, unknown>): ParamItem[] {
   return items;
 }
 
+function humanizeCharts(p: Record<string, unknown>): ParamItem[] {
+  const items: ParamItem[] = [];
+  const action = str(p.action);
+
+  if (action) {
+    items.push({ label: l("Action"), value: action });
+  }
+
+  if (p.name) {
+    items.push({ label: l("Chart"), value: `'${str(p.name)}'` });
+  }
+
+  if (p.new_name) {
+    items.push({ label: l("Rename to"), value: `'${str(p.new_name)}'` });
+  }
+
+  if (p.sheet) {
+    items.push({ label: l("Sheet"), value: str(p.sheet) });
+  }
+
+  if (p.source_range) {
+    items.push({ label: l("Source"), value: cellRefs(str(p.source_range), Infinity) });
+  }
+
+  if (p.chart_type) {
+    items.push({ label: l("Type"), value: str(p.chart_type).replace(/_/gu, " ") });
+  }
+
+  if (p.series_by) {
+    items.push({ label: l("Series by"), value: str(p.series_by) });
+  }
+
+  if (p.title !== undefined) {
+    items.push({ label: l("Title"), value: str(p.title) || v("hidden") });
+  }
+
+  if (p.legend_position) {
+    items.push({ label: l("Legend"), value: str(p.legend_position) });
+  }
+
+  if (p.x_axis_title !== undefined) {
+    items.push({ label: l("X axis"), value: str(p.x_axis_title) || v("hidden") });
+  }
+
+  if (p.y_axis_title !== undefined) {
+    items.push({ label: l("Y axis"), value: str(p.y_axis_title) || v("hidden") });
+  }
+
+  if (p.position) {
+    items.push({ label: l("Position"), value: cellRefs(str(p.position), Infinity) });
+  }
+
+  const width = num(p.width);
+  if (width !== undefined) {
+    items.push({ label: l("Image width"), value: `${width}px` });
+  }
+
+  return items;
+}
+
 function humanizeComments(p: Record<string, unknown>): ParamItem[] {
   const items: ParamItem[] = [];
 
@@ -995,6 +1055,7 @@ const CORE_HUMANIZERS = {
   search_workbook: humanizeSearchWorkbook,
   modify_structure: humanizeModifyStructure,
   conditional_format: humanizeConditionalFormat,
+  charts: humanizeCharts,
   trace_dependencies: humanizeTraceDependencies,
   explain_formula: humanizeExplainFormula,
   view_settings: humanizeViewSettings,

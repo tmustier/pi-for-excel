@@ -245,7 +245,7 @@ void test("workbook change audit log accepts non-cell mutation tool entries", as
   assert.equal(entries[0]?.changedCount, 2);
 });
 
-void test("workbook change audit log accepts comments/view_settings/workbook_history/execute_office_js entries", async () => {
+void test("workbook change audit log accepts comments/view_settings/workbook_history/charts/execute_office_js entries", async () => {
   const settingsStore = createInMemorySettingsStore();
 
   const log = new WorkbookChangeAuditLog({
@@ -287,6 +287,16 @@ void test("workbook change audit log accepts comments/view_settings/workbook_his
   });
 
   await log.append({
+    toolName: "charts",
+    toolCallId: "call-charts",
+    blocked: false,
+    outputAddress: "Sheet1!SalesChart",
+    changedCount: 1,
+    changes: [],
+    summary: "updated chart SalesChart",
+  });
+
+  await log.append({
     toolName: "execute_office_js",
     toolCallId: "call-office-js",
     blocked: false,
@@ -296,9 +306,10 @@ void test("workbook change audit log accepts comments/view_settings/workbook_his
   });
 
   const entries = await log.list();
-  assert.equal(entries.length, 4);
+  assert.equal(entries.length, 5);
   assert.deepEqual(entries.map((entry) => entry.toolName), [
     "execute_office_js",
+    "charts",
     "workbook_history",
     "view_settings",
     "comments",

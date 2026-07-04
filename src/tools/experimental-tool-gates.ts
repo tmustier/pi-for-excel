@@ -34,3 +34,8 @@ export {
   buildOfficeJsExecuteApprovalMessage,
   buildPythonBridgeApprovalMessage,
 } from "./experimental-tool-gates/wrappers.js";
+
+export {
+  assessOfficeJsCodeRisk,
+  type OfficeJsCodeRiskAssessment,
+} from "./experimental-tool-gates/office-js-risk.js";
