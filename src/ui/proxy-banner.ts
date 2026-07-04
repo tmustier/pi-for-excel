@@ -127,7 +127,9 @@ export function createProxyBanner(): ProxyBannerHandle {
   details.append(detailsIntro, codeRow, hint, guideLink);
 
   action.addEventListener("click", () => {
-    const shouldOpen = details.hidden;
+    // TS6 DOM lib types `hidden` as `boolean | "until-found"`; we only ever
+    // assign booleans here, so coerce for classList.toggle.
+    const shouldOpen = details.hidden === true;
     details.hidden = !shouldOpen;
     root.classList.toggle("is-open", shouldOpen);
     action.textContent = shouldOpen ? "Hide steps" : "How to fix →";

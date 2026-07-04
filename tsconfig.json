@@ -16,10 +16,13 @@
     "declaration": false,
     "sourceMap": true,
     "outDir": "./dist",
-    "baseUrl": ".",
+    // TypeScript 6.0 changed the `types` default from "everything under
+    // node_modules/@types" to []. Globals-only packages must be listed
+    // explicitly (module imports like node:assert still resolve on their own).
+    "types": ["office-js", "node"],
     "paths": {
-      "@/*": ["src/*"],
-      "@earendil-works/pi-web-ui/dist/*": ["node_modules/@earendil-works/pi-web-ui/dist/*"]
+      "@/*": ["./src/*"],
+      "@earendil-works/pi-web-ui/dist/*": ["./node_modules/@earendil-works/pi-web-ui/dist/*"]
     }
   },
   "include": ["src/**/*.ts"],
