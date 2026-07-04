@@ -93,6 +93,8 @@ mv localhost.pem cert.pem
 npm run dev        # Vite dev server on https://localhost:3000
 ```
 
+> **Optional:** prefer a stable named URL (`https://pi-excel.localhost`, no mkcert, no fixed port)? See [docs/portless.md](./docs/portless.md) for the opt-in [portless](https://portless.sh) flow.
+
 Then sideload the dev manifest into Excel:
 
 **macOS** ([Microsoft docs](https://learn.microsoft.com/en-us/office/dev/add-ins/testing/sideload-an-office-add-in-on-mac)):
@@ -121,6 +123,7 @@ The dev manifest points to `https://localhost:3000`. The production manifest (`m
 | Command | Description |
 |---|---|
 | `npm run dev` | Start Vite dev server (port 3000, HTTPS) |
+| `npm run dev:portless` | Opt-in: dev server behind portless — [docs/portless.md](./docs/portless.md) |
 | `npm run build` | Production build → `dist/` |
 | `npm run check` | Lint + typecheck + CSS theme checks |
 | `npm run typecheck` | TypeScript type checking only |

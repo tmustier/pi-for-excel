@@ -37,7 +37,7 @@ jobs:
         run: npm run check
 
       - name: Tests
-        run: npm run test:models && npm run test:context && npm run test:security
+        run: npm run test:models && npm run test:context && npm run test:security && npm run test:manifest
 
       - name: Build
         run: npm run build

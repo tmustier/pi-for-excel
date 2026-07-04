@@ -25,6 +25,9 @@ dist/
 # Certs (generated locally)
 *.pem
 
+# Generated dev-proxy manifest (opt-in portless flow — docs/portless.md)
+manifest.dev.xml
+
 # Vite
 .vite/
 
