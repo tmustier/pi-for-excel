@@ -202,20 +202,20 @@ export const ALL_PROVIDERS: ProviderDef[] = [
   // OAuth providers first (subscription / account-based flows)
   // Only list flows that are supported in-browser (PKCE/manual paste, no local callback server).
   // desc holds a locale key (resolved via t() at render time in buildProviderRow).
-  { id: "anthropic",          label: "Anthropic",                oauth: "anthropic",          desc: "provider.desc.claude" },
-  { id: "openai-codex",       label: "OpenAI (ChatGPT)",         oauth: "openai-codex",       desc: "provider.desc.openai_sub" },
-  { id: "google-gemini-cli",  label: "Google Code Assist",       oauth: "google-gemini-cli",  desc: "provider.desc.gemini_account" },
-  { id: "google-antigravity", label: "Google Antigravity",       oauth: "google-antigravity", desc: "provider.desc.antigravity" },
-  { id: "github-copilot",     label: "GitHub Copilot",           oauth: "github-copilot" },
+  { id: "anthropic",          label: /* brand */ "Anthropic",                oauth: "anthropic",          desc: "provider.desc.claude" },
+  { id: "openai-codex",       label: /* brand */ "OpenAI (ChatGPT)",         oauth: "openai-codex",       desc: "provider.desc.openai_sub" },
+  { id: "google-gemini-cli",  label: /* brand */ "Google Code Assist",       oauth: "google-gemini-cli",  desc: "provider.desc.gemini_account" },
+  { id: "google-antigravity", label: /* brand */ "Google Antigravity",       oauth: "google-antigravity", desc: "provider.desc.antigravity" },
+  { id: "github-copilot",     label: /* brand */ "GitHub Copilot",           oauth: "github-copilot" },
 
   // API key providers
-  { id: "openai",             label: "OpenAI (API)",             desc: "provider.desc.api_key" },
-  { id: "google",             label: "Google Gemini (API)",      desc: "provider.desc.api_key" },
-  { id: "deepseek",           label: "DeepSeek" },
-  { id: "amazon-bedrock",     label: "Amazon Bedrock" },
-  { id: "mistral",            label: "Mistral" },
-  { id: "groq",               label: "Groq" },
-  { id: "xai",                label: "xAI / Grok" },
+  { id: "openai",             label: /* brand */ "OpenAI (API)",             desc: "provider.desc.api_key" },
+  { id: "google",             label: /* brand */ "Google Gemini (API)",      desc: "provider.desc.api_key" },
+  { id: "deepseek",           label: /* brand */ "DeepSeek" },
+  { id: "amazon-bedrock",     label: /* brand */ "Amazon Bedrock" },
+  { id: "mistral",            label: /* brand */ "Mistral" },
+  { id: "groq",               label: /* brand */ "Groq" },
+  { id: "xai",                label: /* brand */ "xAI / Grok" },
 ];
 
 /**

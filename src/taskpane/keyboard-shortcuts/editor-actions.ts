@@ -176,7 +176,7 @@ export function handleSlashCommandExecution(args: {
   if (result === "busy-blocked") {
     event.preventDefault();
     event.stopImmediatePropagation();
-    showToast(`Can't run /${cmdName} while Pi is busy`);
+    showToast(t("shortcuts.toast.cantRunBusy", { command: cmdName }));
     return true;
   }
 

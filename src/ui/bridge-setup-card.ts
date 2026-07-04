@@ -204,7 +204,7 @@ function toLibreOfficeModel(details: LibreOfficeBridgeDetails): BridgeSetupCardM
   }
 
   return {
-    title: "File conversion is unavailable",
+    title: t("bridge-setup.fileConversionUnavailable"),
     command: PYTHON_BRIDGE_SETUP_COMMAND,
     probeUrl: resolveProbeUrl({
       bridgeUrl: details.bridgeUrl,
@@ -231,7 +231,7 @@ function toTransformRangeModel(details: PythonTransformRangeDetails): BridgeSetu
   }
 
   return {
-    title: "Python transform is unavailable",
+    title: t("bridge-setup.pythonTransformUnavailable"),
     command: PYTHON_BRIDGE_SETUP_COMMAND,
     probeUrl: resolveProbeUrl({
       bridgeUrl: details.bridgeUrl,

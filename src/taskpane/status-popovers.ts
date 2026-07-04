@@ -273,7 +273,7 @@ export function toggleContextPopover(opts: ContextPopoverOptions): void {
 
   const title = document.createElement("h3");
   title.className = "pi-status-popover__title";
-  title.textContent = "Context usage";
+  title.textContent = t("status-popovers.contextUsage");
 
   const description = createDescriptionBlock(opts.description);
 

@@ -94,7 +94,7 @@ function openBlobInNewTab(blob: Blob, pendingWindow: Window | null): void {
  */
 async function copyTextToClipboard(text: string, fileName: string): Promise<void> {
   await navigator.clipboard.writeText(text);
-  showToast(`Copied ${fileName} to clipboard.`);
+  showToast(t("files-dialog-actions.toast.copied", { fileName }));
 }
 
 /**
@@ -191,7 +191,7 @@ export function createFilesDialogDetailActions(options: CreateFilesDialogDetailA
         if (result.text === undefined) throw new Error("Could not read file.");
         await copyTextToClipboard(result.text, options.file.name);
       })().catch((error: unknown) => {
-        showToast(`Copy failed: ${getErrorMessage(error)}`);
+        showToast(t("files-dialog-actions.toast.copyFailed", { error: getErrorMessage(error) }));
       });
     });
 
@@ -214,7 +214,7 @@ export function createFilesDialogDetailActions(options: CreateFilesDialogDetailA
           resolveSafeBlobUrlMimeType(options.file.mimeType || "text/plain"),
         );
       })().catch((error: unknown) => {
-        showToast(`Download failed: ${getErrorMessage(error)}`);
+        showToast(t("files-dialog-actions.toast.downloadFailed", { error: getErrorMessage(error) }));
       });
     });
 
@@ -234,7 +234,7 @@ export function createFilesDialogDetailActions(options: CreateFilesDialogDetailA
         workspace: options.workspace,
         auditContext: options.auditContext,
       }).catch((error: unknown) => {
-        showToast(`Open failed: ${getErrorMessage(error)}`);
+        showToast(t("files-dialog-actions.toast.openFailed", { error: getErrorMessage(error) }));
       });
     });
 
@@ -246,7 +246,7 @@ export function createFilesDialogDetailActions(options: CreateFilesDialogDetailA
       void options.workspace.downloadFile(options.file.path, {
         locationKind: options.fileRef.locationKind,
       }).catch((error: unknown) => {
-        showToast(`Download failed: ${getErrorMessage(error)}`);
+        showToast(t("files-dialog-actions.toast.downloadFailed", { error: getErrorMessage(error) }));
       });
     });
 
@@ -265,7 +265,7 @@ export function createFilesDialogDetailActions(options: CreateFilesDialogDetailA
   renameButton.addEventListener("click", () => {
     void (async () => {
       const nextPathInput = await requestTextInputDialog({
-        title: "Rename file",
+        title: t("files-dialog-actions.renameFileTitle"),
         message: `${options.file.path} — leave off the extension to keep it.`,
         initialValue: options.file.path,
         placeholder: "folder/file.ext",
@@ -288,11 +288,11 @@ export function createFilesDialogDetailActions(options: CreateFilesDialogDetailA
         locationKind: options.fileRef.locationKind,
       });
 
-      showToast(`Renamed to ${nextPath}.`);
+      showToast(t("files-dialog-actions.toast.renamed", { path: nextPath }));
 
       await options.onAfterRename(nextPath, options.fileRef.locationKind);
     })().catch((error: unknown) => {
-      showToast(`Rename failed: ${getErrorMessage(error)}`);
+      showToast(t("files-dialog-actions.toast.renameFailed", { error: getErrorMessage(error) }));
     });
   });
 
@@ -306,7 +306,7 @@ export function createFilesDialogDetailActions(options: CreateFilesDialogDetailA
   deleteButton.addEventListener("click", () => {
     void (async () => {
       const confirmed = await requestConfirmationDialog({
-        title: "Delete file?",
+        title: t("files-dialog-actions.deleteFileTitle"),
         message: options.file.path,
         confirmLabel: t("files-dialog-actions.delete"),
         cancelLabel: t("files-dialog-actions.cancel"),
@@ -323,11 +323,11 @@ export function createFilesDialogDetailActions(options: CreateFilesDialogDetailA
         locationKind: options.fileRef.locationKind,
       });
 
-      showToast(`Deleted ${options.file.name}.`);
+      showToast(t("files-dialog-actions.toast.deleted", { name: options.file.name }));
 
       await options.onAfterDelete();
     })().catch((error: unknown) => {
-      showToast(`Delete failed: ${getErrorMessage(error)}`);
+      showToast(t("files-dialog-actions.toast.deleteFailed", { error: getErrorMessage(error) }));
     });
   });
 

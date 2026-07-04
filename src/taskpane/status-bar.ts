@@ -361,7 +361,7 @@ export function flashThinkingLevel(level: string, color: string): void {
     high: "High",
     xhigh: "Max",
   };
-  showToast(`Thinking: ${labels[level] || level} (next turn)`, 1500);
+  showToast(t("status.thinking.toast", { level: labels[level] || level }), 1500);
 
   const el = document.querySelector<HTMLElement>(".pi-status-thinking");
   if (!el) return;

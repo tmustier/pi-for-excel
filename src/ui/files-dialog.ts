@@ -609,7 +609,7 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
           element: createBinaryPreview({
             file,
             icon: lucide(Image),
-            label: "Image preview unavailable",
+            label: t("files-dialog.preview.imageUnavailable"),
           }),
           previewTruncated: false,
           objectUrl: null,
@@ -639,7 +639,7 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
         element: createBinaryPreview({
           file,
           icon: lucide(FileText),
-          label: "PDF document",
+          label: t("files-dialog.preview.pdfDocument"),
         }),
         previewTruncated: false,
         objectUrl: null,
@@ -650,7 +650,7 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
       element: createBinaryPreview({
         file,
         icon: lucide(Paperclip),
-        label: "Binary file",
+        label: t("files-dialog.preview.binaryFile"),
       }),
       previewTruncated: false,
       objectUrl: null,
@@ -695,7 +695,7 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
         element: createBinaryPreview({
           file,
           icon: lucide(AlertTriangle),
-          label: `Preview unavailable: ${getErrorMessage(error)}`,
+          label: t("files-dialog.preview.unavailable", { error: getErrorMessage(error) }),
         }),
         previewTruncated: false,
         objectUrl: null,
@@ -1024,7 +1024,7 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
       audit: DIALOG_AUDIT_CONTEXT,
     })
       .then((count) => {
-        showToast(`Imported ${count} file${count === 1 ? "" : "s"}.`);
+        showToast(t("files-dialog.toast.imported", { count, plural: count === 1 ? "" : "s" }));
       })
       .catch((error: unknown) => {
         showToast(t("files-dialog.toast.uploadFailed", { error: getErrorMessage(error) }));

@@ -43,7 +43,7 @@ export function isAgentWrittenNotesFilePath(path: string): boolean {
 
 export function resolveFilesDialogBadge(file: WorkspaceFileEntry): FilesDialogBadge | null {
   if (isFilesDialogBuiltInDoc(file)) {
-    return { tone: "muted", label: "Read only" };
+    return { tone: "muted", label: t("files-dialog-filtering.readOnly") };
   }
 
   if (file.workbookTag) {
@@ -51,20 +51,20 @@ export function resolveFilesDialogBadge(file: WorkspaceFileEntry): FilesDialogBa
     if (workbookLabel.length > 0) {
       return {
         tone: "muted",
-        label: "Workbook",
-        title: `Tagged to ${workbookLabel}`,
+        label: t("files-dialog-filtering.workbook"),
+        title: t("files-dialog-filtering.taggedTo", { workbookLabel }),
       };
     }
 
-    return { tone: "muted", label: "Workbook" };
+    return { tone: "muted", label: t("files-dialog-filtering.workbook") };
   }
 
   if (isAgentWrittenNotesFilePath(file.path)) {
-    return { tone: "muted", label: "Agent" };
+    return { tone: "muted", label: t("files-dialog-filtering.agent") };
   }
 
   if (isFilesDialogConnectedFolderFile(file)) {
-    return { tone: "info", label: "Folder" };
+    return { tone: "info", label: t("files-dialog-filtering.folder") };
   }
 
   return null;
@@ -274,7 +274,7 @@ export function buildFilesDialogSections(args: {
     const { rootFiles, folders } = groupByFirstDirectory(userFiles, "");
     sections.push({
       key: YOUR_FILES_SECTION_KEY,
-      label: "YOUR FILES",
+      label: t("files-dialog-filtering.sectionYourFiles"),
       files: sortByModifiedAtDescending(rootFiles),
       folders,
     });
@@ -285,7 +285,7 @@ export function buildFilesDialogSections(args: {
     const { rootFiles, folders } = groupByFirstDirectory(notesFiles, "notes/");
     sections.push({
       key: NOTES_SECTION_KEY,
-      label: "PI'S NOTES",
+      label: t("files-dialog-filtering.sectionPiNotes"),
       files: sortByModifiedAtDescending(rootFiles),
       folders,
     });
@@ -296,7 +296,7 @@ export function buildFilesDialogSections(args: {
     const { rootFiles, folders } = groupSkillFiles(skillsFiles);
     sections.push({
       key: SKILLS_SECTION_KEY,
-      label: "SKILLS",
+      label: t("files-dialog-filtering.sectionSkills"),
       files: sortByModifiedAtDescending(rootFiles),
       folders,
     });
@@ -349,8 +349,8 @@ export function resolveFilesDialogConnectFolderButtonState(
     return {
       hidden: false,
       disabled: true,
-      label: "Connected ✓",
-      title: "Folder already connected",
+      label: t("files-dialog-filtering.connected"),
+      title: t("files-dialog-filtering.folderConnectedTitle"),
     };
   }
 
@@ -358,6 +358,6 @@ export function resolveFilesDialogConnectFolderButtonState(
     hidden: false,
     disabled: false,
     label: t("files-dialog-filtering.connectFolder"),
-    title: "Connect local folder",
+    title: t("files-dialog-filtering.connectLocalFolderTitle"),
   };
 }

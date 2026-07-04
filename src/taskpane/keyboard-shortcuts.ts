@@ -335,7 +335,7 @@ export function installKeyboardShortcuts(opts: {
       if (restoredCount === 0) {
         showToast(t("keyboard-shortcuts.toast.noQueuedMessages"));
       } else {
-        showToast(`Restored ${restoredCount} queued message${restoredCount === 1 ? "" : "s"} to editor`);
+        showToast(t("shortcuts.toast.restoredQueued", { count: restoredCount, plural: restoredCount === 1 ? "" : "s" }));
       }
 
       return true;
