@@ -22,7 +22,12 @@ type DefaultProvider =
 type DefaultModelRule = { provider: DefaultProvider; match: RegExp };
 
 function getProviderModels(provider: string): Model<Api>[] {
-  return getModels(provider as Parameters<typeof getModels>[0]);
+  try {
+    return getModels(provider as Parameters<typeof getModels>[0]) ?? [];
+  } catch {
+    // Unknown/custom provider names are not in the built-in registry.
+    return [];
+  }
 }
 
 const DEFAULT_MODEL_RULES: DefaultModelRule[] = [
@@ -118,6 +123,22 @@ export function pickDefaultModel(
 
   if (customDefaultModel) {
     return customDefaultModel;
+  }
+
+  // Any-available-provider fallback (#553): never prefer a model from an
+  // unconfigured provider while a configured provider has registry models
+  // (e.g. github-copilot- or mistral-only setups). An unusable default just
+  // produces an API-key prompt for the wrong provider.
+  for (const provider of availableProviders) {
+    const models = getProviderModels(provider);
+    const best = models
+      .slice()
+      .sort((a, b) => {
+        const recency = modelRecencyScore(b.id) - modelRecencyScore(a.id);
+        if (recency !== 0) return recency;
+        return a.id.localeCompare(b.id);
+      })[0];
+    if (best) return best;
   }
 
   // Absolute fallback: keep this resilient across pi-ai version bumps

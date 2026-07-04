@@ -205,6 +205,28 @@ void test("pickDefaultModel falls back to the preferred hardcoded OpenAI default
   assert.equal(selected.id, "gpt-5.5");
 });
 
+void test("pickDefaultModel never picks an unusable provider while a configured provider has models (#553)", () => {
+  // Providers with registry models but no dedicated default-model rule used
+  // to fall through to openai/gpt-5.5, which the user has no credentials for.
+  for (const provider of ["github-copilot", "mistral", "groq", "xai", "deepseek"]) {
+    const models = getModels(provider as Parameters<typeof getModels>[0]);
+    assert.ok(models.length > 0, `expected registry models for ${provider}`);
+
+    const selected = pickDefaultModel([provider]);
+    assert.equal(
+      selected.provider,
+      provider,
+      `expected default model from ${provider}, got ${selected.provider}/${selected.id}`,
+    );
+  }
+});
+
+void test("pickDefaultModel tolerates unknown provider names", () => {
+  const selected = pickDefaultModel(["some-custom-gateway"]);
+  assert.equal(selected.provider, "openai");
+  assert.equal(selected.id, "gpt-5.5");
+});
+
 void test("pickDefaultModel prefers GPT-5.5 when OpenAI and Anthropic are both available", () => {
   const selected = pickDefaultModel(["anthropic", "openai"]);
   assert.equal(selected.provider, "openai");

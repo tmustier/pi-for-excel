@@ -140,6 +140,7 @@ import {
 
 import { createContextInjector } from "./context-injection.js";
 import { pickDefaultModel } from "./default-model.js";
+import { resolveRuntimeModelSwap } from "./runtime-model-reconcile.js";
 import { getThinkingLevels, installKeyboardShortcuts } from "./keyboard-shortcuts.js";
 import { createQueueDisplay } from "./queue-display.js";
 import { createActionQueue } from "./action-queue.js";
@@ -324,9 +325,15 @@ export async function initTaskpane(opts: {
 
   void credentialRestorePromise
     .then(() => {
-      void refreshConfiguredProviders().catch((error: unknown) => {
-        console.warn("[auth] Provider refresh after credential restore failed:", error);
-      });
+      void refreshConfiguredProviders()
+        .then(() => {
+          // Reconcile any already-created runtimes with the restored
+          // providers (#553) — mirrors the pi:providers-changed path.
+          onProvidersChanged?.();
+        })
+        .catch((error: unknown) => {
+          console.warn("[auth] Provider refresh after credential restore failed:", error);
+        });
     })
     .catch((error: unknown) => {
       console.warn("[auth] Credential restore failed:", error);
@@ -566,22 +573,43 @@ export async function initTaskpane(opts: {
     left.maxTokens === right.maxTokens
   );
 
-  const refreshRuntimeModelsFromCustomProviders = (): void => {
+  const reconcileRuntimeModelsWithProviders = (): void => {
     const activeRuntimeId = getActiveRuntime()?.runtimeId ?? null;
     let activeRuntimeChanged = false;
     let anyRuntimeChanged = false;
 
+    const markChanged = (runtimeId: string): void => {
+      anyRuntimeChanged = true;
+      if (runtimeId === activeRuntimeId) {
+        activeRuntimeChanged = true;
+      }
+    };
+
     for (const runtime of runtimeManager.listRuntimes()) {
       const currentModel = runtime.agent.state.model;
+
+      // 1. Custom-provider models: pick up edited base URLs/limits in place.
       const refreshedModel = resolveCustomProviderModel(configuredCustomProviders, currentModel);
-      if (!refreshedModel || areRuntimeModelsEquivalent(currentModel, refreshedModel)) {
+      if (refreshedModel && !areRuntimeModelsEquivalent(currentModel, refreshedModel)) {
+        runtime.agent.state.model = refreshedModel;
+        markChanged(runtime.runtimeId);
         continue;
       }
 
-      runtime.agent.state.model = refreshedModel;
-      anyRuntimeChanged = true;
-      if (runtime.runtimeId === activeRuntimeId) {
-        activeRuntimeChanged = true;
+      // 2. Unusable providers (#553): a runtime created before login (or whose
+      // provider was disconnected) points at a provider with no credentials.
+      // It cannot complete any request, so move it onto the refreshed default
+      // model instead of prompting for the wrong provider's API key.
+      const swap = resolveRuntimeModelSwap({
+        currentModel,
+        availableProviders,
+        defaultModel,
+        isStreaming: runtime.agent.state.isStreaming,
+      });
+      if (swap && !areRuntimeModelsEquivalent(currentModel, swap.model)) {
+        runtime.agent.state.model = swap.model;
+        runtime.agent.state.thinkingLevel = swap.thinkingLevel;
+        markChanged(runtime.runtimeId);
       }
     }
 
@@ -594,7 +622,7 @@ export async function initTaskpane(opts: {
       requestAnimationFrame(() => sidebar.requestUpdate());
     }
   };
-  onProvidersChanged = refreshRuntimeModelsFromCustomProviders;
+  onProvidersChanged = reconcileRuntimeModelsWithProviders;
 
   const workbookRecoveryLog = getWorkbookRecoveryLog();
   const manualFullBackupStore = getManualFullWorkbookBackupStore();
