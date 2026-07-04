@@ -8,7 +8,7 @@
  * Keep all monkey-patch logic isolated here.
  */
 
-import type { Api, Model } from "@earendil-works/pi-ai";
+import type { Api, Model } from "@earendil-works/pi-ai/compat";
 import { ModelSelector } from "@earendil-works/pi-web-ui/dist/dialogs/ModelSelector.js";
 
 import {

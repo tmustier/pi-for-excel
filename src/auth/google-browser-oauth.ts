@@ -2,7 +2,7 @@
  * Browser-safe Google OAuth providers (Gemini CLI + Antigravity).
  */
 
-import type { OAuthLoginCallbacks } from "@earendil-works/pi-ai";
+import type { OAuthLoginCallbacks } from "@earendil-works/pi-ai/compat";
 
 import {
   type GoogleOAuthFlowConfig,

@@ -12,7 +12,7 @@ import type {
   OAuthCredentials,
   OAuthLoginCallbacks,
   OAuthProviderInterface,
-} from "@earendil-works/pi-ai";
+} from "@earendil-works/pi-ai/compat";
 import { generatePKCE } from "./pkce.js";
 
 const CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann";

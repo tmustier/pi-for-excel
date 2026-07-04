@@ -6,7 +6,7 @@
  * registry here so the taskpane can substitute browser-safe Google/OpenAI flows.
  */
 
-import type { OAuthProviderInterface } from "@earendil-works/pi-ai";
+import type { OAuthProviderInterface } from "@earendil-works/pi-ai/compat";
 
 import {
   githubCopilotOAuthProvider,

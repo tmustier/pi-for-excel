@@ -10,7 +10,7 @@ import { html, LitElement, nothing, type PropertyValues } from "lit";
 import { icon } from "@mariozechner/mini-lit";
 import { customElement, property, query, state } from "lit/decorators.js";
 import type { Agent, AgentEvent } from "@earendil-works/pi-agent-core";
-import type { ToolResultMessage } from "@earendil-works/pi-ai";
+import type { ToolResultMessage } from "@earendil-works/pi-ai/compat";
 import type { StreamingMessageContainer } from "@earendil-works/pi-web-ui/dist/components/StreamingMessageContainer.js";
 import { Archive, ChevronRight, FileText, Keyboard, Puzzle, RotateCcw, Ruler, Settings, Wrench } from "lucide";
 import "./pi-input.js";

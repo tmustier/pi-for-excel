@@ -1,4 +1,4 @@
-import type { Api, Context, Model, Tool } from "@earendil-works/pi-ai";
+import type { Api, Context, Model, Tool } from "@earendil-works/pi-ai/compat";
 
 export type PrefixChangeReason = "model" | "systemPrompt" | "tools";
 

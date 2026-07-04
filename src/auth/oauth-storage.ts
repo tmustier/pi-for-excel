@@ -8,7 +8,7 @@
  * execution can read IndexedDB.
  */
 
-import type { OAuthCredentials } from "@earendil-works/pi-ai";
+import type { OAuthCredentials } from "@earendil-works/pi-ai/compat";
 import type { SettingsStore } from "@earendil-works/pi-web-ui/dist/storage/stores/settings-store.js";
 
 import { isRecord } from "../utils/type-guards.js";

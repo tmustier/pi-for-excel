@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
-import type { ToolResultMessage, UserMessage } from "@earendil-works/pi-ai";
+import type { ToolResultMessage, UserMessage } from "@earendil-works/pi-ai/compat";
 
 import { shapeToolResultsForLlm } from "../src/messages/tool-result-shaping.ts";
 

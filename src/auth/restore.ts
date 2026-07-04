@@ -6,7 +6,7 @@
  * 2. IndexedDB SettingsStore (`oauth.<providerId>`)
  */
 
-import type { OAuthCredentials, OAuthProviderInterface } from "@earendil-works/pi-ai";
+import type { OAuthCredentials, OAuthProviderInterface } from "@earendil-works/pi-ai/compat";
 import type { ProviderKeysStore } from "@earendil-works/pi-web-ui/dist/storage/stores/provider-keys-store.js";
 import type { SettingsStore } from "@earendil-works/pi-web-ui/dist/storage/stores/settings-store.js";
 

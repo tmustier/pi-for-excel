@@ -1,4 +1,4 @@
-import type { Context, Tool } from "@earendil-works/pi-ai";
+import type { Context, Tool } from "@earendil-works/pi-ai/compat";
 
 import { type CoreToolName, CORE_TOOL_NAMES } from "../tools/names.js";
 import { type ToolDisclosureBundleId } from "../tools/capabilities.js";

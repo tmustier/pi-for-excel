@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
 
-import { completeSimple, getModel, getModels, type Api, type Model } from "@earendil-works/pi-ai";
+import { completeSimple, getModel, getModels, type Api, type Model } from "@earendil-works/pi-ai/compat";
 
 import { BROWSER_OAUTH_PROVIDERS, mapToApiProvider } from "../src/auth/provider-map.ts";
 import { rewriteDevProxyUrl } from "../src/auth/dev-rewrites.ts";
@@ -491,9 +491,14 @@ void test("vite aliases Ajv packages to local stubs for CSP-safe Office builds",
     "expected ajv-formats alias to local no-op stub",
   );
   assert.notEqual(
-    content.indexOf("alias: buildBrowserAliasMap()"),
+    content.indexOf("alias: buildBrowserAliases()"),
     -1,
     "expected resolve.alias to use centralized browser alias helper",
+  );
+  assert.notEqual(
+    content.indexOf('{ find: /^@earendil-works\\/pi-ai$/, replacement: "@earendil-works/pi-ai/compat" }'),
+    -1,
+    "expected exact-match pi-ai \u2192 compat alias for pi-web-ui's legacy root imports",
   );
 });
 

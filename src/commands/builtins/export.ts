@@ -2,7 +2,7 @@
  * Builtin export/compaction commands.
  */
 
-import type { Api, Model, StopReason, Usage } from "@earendil-works/pi-ai";
+import type { Api, Model, StopReason, Usage } from "@earendil-works/pi-ai/compat";
 import type { Agent, AgentMessage } from "@earendil-works/pi-agent-core";
 
 import type { SlashCommand } from "../types.js";

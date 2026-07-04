@@ -8,7 +8,7 @@
  */
 
 import type { CompactionSummaryMessage } from "@earendil-works/pi-agent-core";
-import type { UserMessage } from "@earendil-works/pi-ai";
+import type { UserMessage } from "@earendil-works/pi-ai/compat";
 
 export type { CompactionSummaryMessage };
 

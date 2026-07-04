@@ -7,7 +7,7 @@
  * - session identity lifecycle (new / rename / resume)
  */
 
-import { getModel } from "@earendil-works/pi-ai";
+import { getModel } from "@earendil-works/pi-ai/compat";
 import type { Agent, AgentMessage } from "@earendil-works/pi-agent-core";
 import type { SessionData } from "@earendil-works/pi-web-ui/dist/storage/types.js";
 import type { SessionsStore } from "@earendil-works/pi-web-ui/dist/storage/stores/sessions-store.js";

@@ -250,6 +250,23 @@ function buildBrowserAliasMap(): Record<string, string> {
   };
 }
 
+/**
+ * Full browser alias list: the centralized alias map plus pattern-based
+ * aliases that need exact-match regexes.
+ */
+function buildBrowserAliases(): { find: string | RegExp; replacement: string }[] {
+  return [
+    ...Object.entries(buildBrowserAliasMap()).map(([find, replacement]) => ({ find, replacement })),
+
+    // pi-ai 0.80 moved the legacy global API (getModel/getModels/stream/…)
+    // to the "/compat" entrypoint. Our own code imports "/compat" directly;
+    // this alias covers pi-web-ui's dist modules, which still import the old
+    // root surface. Exact-match regex so "/compat" itself is untouched.
+    // Remove once pi-web-ui ships a pi-ai 0.80-native release.
+    { find: /^@earendil-works\/pi-ai$/, replacement: "@earendil-works/pi-ai/compat" },
+  ];
+}
+
 // ============================================================================
 // Vite config
 // ============================================================================
@@ -306,7 +323,7 @@ export default defineConfig({
   esbuild: { target: "esnext" },
 
   resolve: {
-    alias: buildBrowserAliasMap(),
+    alias: buildBrowserAliases(),
     // Force a single `marked` instance so our safety patch
     // (installMarkedSafetyPatch) intercepts all .use() calls —
     // including markdown-block's. Without this, mini-lit bundles its

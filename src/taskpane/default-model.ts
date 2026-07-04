@@ -2,7 +2,7 @@
  * Default model selection for the taskpane.
  */
 
-import { getModel, getModels, type Api, type Model } from "@earendil-works/pi-ai";
+import { getModel, getModels, type Api, type Model } from "@earendil-works/pi-ai/compat";
 
 import {
   compareOpenAiModelIds,

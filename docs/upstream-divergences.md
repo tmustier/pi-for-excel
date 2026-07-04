@@ -147,6 +147,35 @@ worst-case tool-loop context proportional to the model's actual capacity (#566).
 
 ---
 
+## 6. pi-ai legacy API via `/compat` entrypoint (temporary)
+
+| | pi-mono direction | Pi for Excel (current) |
+|---|---|---|
+| pi-ai API surface | Migrating to `createModels()` + provider factories (pi-ai 0.80) | Legacy global API (`getModel`/`getModels`/`stream`/`complete`/…) via `@earendil-works/pi-ai/compat` |
+
+**Rationale:** pi-ai 0.80 removed the global registry/dispatch API from the
+root entrypoint and provides a temporary `/compat` entrypoint that preserves
+it. `pi-web-ui` 0.75.x still imports the old root surface, so a full migration
+to `createModels()` is blocked until pi-web-ui ships a 0.80-native release.
+
+Interim wiring:
+- All first-party imports use `@earendil-works/pi-ai/compat` explicitly.
+- A Vite exact-match alias (`/^@earendil-works\/pi-ai$/` → `…/compat`)
+  covers pi-web-ui's dist modules so the bundle resolves one shared module.
+- The Bedrock browser stub now exports the uniform `ProviderStreams` shape
+  (`stream`/`streamSimple`) required by `setBedrockProviderModule()`.
+
+**Exit plan:** when pi-web-ui supports pi-ai 0.80 natively, migrate first-party
+code to `createModels()`/`getBuiltinModel(s)`, drop the alias, and remove this
+entry. Upstream deletes `/compat` “with the coding-agent ModelManager
+migration”, so this must happen before picking up that release.
+
+**Files:** `vite.config.ts` (`buildBrowserAliases`), all `src`/`tests` imports
+of `@earendil-works/pi-ai/compat`, `src/stubs/amazon-bedrock.ts`,
+`src/compat/bedrock-provider-stub.ts`
+
+---
+
 ## Non-divergences worth noting
 
 ### Compaction call shape
