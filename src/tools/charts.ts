@@ -548,12 +548,22 @@ async function executeCreate(params: Params): Promise<ChartsExecutionResult> {
       chart.name = params.name.trim();
     }
 
-    chart.load("id,name,chartType,top,left,width,height");
+    chart.load("name,chartType,top,left,width,height");
     await context.sync();
+
+    // Best-effort: capture the stable chart id for rename-proof recovery.
+    // Hosts without Chart.id support must still be able to create charts.
+    let chartId: string | undefined;
+    try {
+      chart.load("id");
+      await context.sync();
+      chartId = typeof chart.id === "string" && chart.id.length > 0 ? chart.id : undefined;
+    } catch {
+      chartId = undefined;
+    }
 
     const sourceAddress = qualifiedAddress(source.sheet.name, source.range.address);
     const address = chartDetailsAddress(chartSheet.name, chart.name);
-    const chartId = typeof chart.id === "string" && chart.id.length > 0 ? chart.id : undefined;
     const recoveryState: RecoveryChartAbsentState = {
       kind: "chart_absent",
       sheetName: chartSheet.name,

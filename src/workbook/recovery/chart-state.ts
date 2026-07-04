@@ -159,7 +159,7 @@ async function findChartById(
   await context.sync();
 
   for (const sheet of sheets.items) {
-    sheet.charts.load("items/id,name");
+    sheet.charts.load("items/id");
   }
   await context.sync();
 
@@ -281,23 +281,30 @@ export async function applyChartState(
     const currentChartName = parsedAddress.chartName || targetState.name;
 
     if (targetState.kind === "chart_absent") {
-      let target: ChartTarget | null = null;
-      let matchedById = false;
-
       if (targetState.chartId) {
+        let target: ChartTarget | null;
         try {
           target = await findChartById(context, targetState.chartId);
-          matchedById = true;
         } catch {
-          // Host cannot load chart ids; fall back to name matching below.
-          matchedById = false;
+          // The id was captured at create time, so a host that cannot read
+          // ids now is anomalous. Never degrade to mutable-name deletion —
+          // that is exactly the wrong-chart risk the id exists to prevent.
+          throw new Error(
+            `Could not verify the created chart's identity by id; nothing was deleted. ` +
+            `Delete chart "${currentChartName}" manually if it still exists.`,
+          );
         }
+
+        if (target) {
+          target.chart.delete();
+          await context.sync();
+        }
+
+        return { state: null, address };
       }
 
-      if (!matchedById) {
-        target = await findChartByNameOrNull(context, currentChartName, currentSheetName);
-      }
-
+      // Legacy states without a captured id: unique-name match only.
+      const target = await findChartByNameOrNull(context, currentChartName, currentSheetName);
       if (target) {
         target.chart.delete();
         await context.sync();

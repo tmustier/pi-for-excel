@@ -142,6 +142,24 @@ class FakeChart extends FakeLoadable {
 class FakeChartCollection extends FakeLoadable {
   readonly items: FakeChart[] = [];
 
+  /**
+   * Mirrors Office.js load-path semantics enough to reject collection loads
+   * that reference item-level fields without the `items/` prefix (e.g. the
+   * invalid "items/id,name", where `name` targets the collection itself).
+   */
+  override load(propertyNames?: string | string[]): void {
+    if (typeof propertyNames !== "string") return;
+
+    for (const segment of propertyNames.split(",")) {
+      const trimmed = segment.trim();
+      if (trimmed === "items" || trimmed === "count" || trimmed.startsWith("items/")) {
+        continue;
+      }
+
+      throw new Error(`Invalid ChartCollection load path segment: "${trimmed}"`);
+    }
+  }
+
   get count(): number {
     return this.items.length;
   }
@@ -693,6 +711,37 @@ void test("chart_absent restore deletes by stable id, surviving rename and name 
   assert.equal(created.deleted, true, "the originally created chart should be deleted");
   assert.equal(impostor.deleted, false, "the unrelated chart reusing the name must survive");
   assert.deepEqual(sheet.charts.items.map((item) => item.name), ["New Chart"]);
+});
+
+void test("chart_absent restore fails safely when a stored id cannot be verified", async () => {
+  const sheet = new FakeWorksheet("Sheet1");
+  const context = new FakeContext([sheet]);
+
+  const survivor = sheet.charts.add("ColumnClustered", new FakeRange("A1:B12"));
+  survivor.name = "New Chart";
+
+  const checkpoint: RecoveryChartAbsentState = {
+    kind: "chart_absent",
+    sheetName: "Sheet1",
+    name: "New Chart",
+    chartId: survivor.id,
+  };
+
+  // Simulate a host that cannot read chart ids during restore.
+  const brokenLoad = (path?: string): void => {
+    if (typeof path === "string" && path.includes("items/id")) {
+      throw new Error("Chart.id is not supported on this host.");
+    }
+  };
+  Object.defineProperty(sheet.charts, "load", { value: brokenLoad });
+
+  await assert.rejects(
+    () => withFakeExcel(context, () => applyChartState("Sheet1!New Chart", checkpoint)),
+    /Could not verify the created chart's identity/u,
+  );
+
+  assert.equal(survivor.deleted, false, "never degrade to name-based deletion when the id cannot be verified");
+  assert.equal(sheet.charts.items.length, 1);
 });
 
 void test("chart_absent restore with a missing id deletes nothing", async () => {
