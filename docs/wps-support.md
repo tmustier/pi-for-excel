@@ -13,8 +13,11 @@ WPS Spreadsheets, and the browser-only UI-test fallback. It intentionally does
   can derive one without persisting raw paths/URLs. Core workbook tools are still
   registered in deterministic order but throw a clear “not yet supported on WPS”
   error instead of attempting Office.js.
-- **Browser:** existing local-dev/UI-gallery fallback when Office.js is absent or
-  `Office.onReady` does not fire within the 3s boot fallback.
+- **Browser:** existing local-dev/UI-gallery fallback, used only when Office.js
+  is absent. When Office.js is present but `Office.onReady` has not fired within
+  the 3s boot fallback, the taskpane initializes without waiting but keeps the
+  Office host, so workbook identity and theme are still read lazily from Office
+  globals at call time (matching pre-host-seam behavior for slow Office startups).
 
 ## Host/distribution matrix
 

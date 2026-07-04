@@ -30,8 +30,8 @@ import {
   createSkillsTool,
   type SkillsToolDependencies,
 } from "./skills.js";
-import { selectCoreToolForHost } from "./host-selection.js";
-import { CORE_TOOL_NAMES, type CoreToolName } from "./names.js";
+import { composeCoreToolsForHost } from "./host-selection.js";
+import type { CoreToolName } from "./names.js";
 
 export { CORE_TOOL_NAMES } from "./names.js";
 export type { CoreToolName } from "./names.js";
@@ -72,8 +72,5 @@ export { isCoreToolUnsupportedOnWps } from "./host-selection.js";
 export function createCoreTools(options: CreateCoreToolsOptions = {}): AnyCoreTool[] {
   const hostKind = options.hostKind ?? "office";
 
-  return CORE_TOOL_NAMES.map((name) => {
-    const tool = CORE_TOOL_FACTORIES[name](options);
-    return selectCoreToolForHost(name, tool, hostKind);
-  });
+  return composeCoreToolsForHost((name) => CORE_TOOL_FACTORIES[name](options), hostKind);
 }

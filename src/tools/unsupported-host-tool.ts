@@ -14,6 +14,25 @@ function unsupportedMessage(hostKind: SpreadsheetHostKind, toolName: string): st
   return `${toolName} is not supported on host '${hostKind}'.`;
 }
 
+/**
+ * Typed error thrown when a tool has no implementation on the current host.
+ *
+ * Callers/tests/UI can distinguish "unsupported on this host" from an
+ * implementation failure via `instanceof` or the stable `code` field.
+ */
+export class UnsupportedHostToolError extends Error {
+  readonly code = "unsupported_host_tool";
+  readonly hostKind: SpreadsheetHostKind;
+  readonly toolName: string;
+
+  constructor(hostKind: SpreadsheetHostKind, toolName: string) {
+    super(unsupportedMessage(hostKind, toolName));
+    this.name = "UnsupportedHostToolError";
+    this.hostKind = hostKind;
+    this.toolName = toolName;
+  }
+}
+
 export function createUnsupportedHostTool<TParameters extends TSchema, TDetails>(
   tool: AgentTool<TParameters, TDetails>,
   hostKind: SpreadsheetHostKind,
@@ -21,7 +40,7 @@ export function createUnsupportedHostTool<TParameters extends TSchema, TDetails>
   return {
     ...tool,
     execute: () => {
-      throw new Error(unsupportedMessage(hostKind, tool.name));
+      throw new UnsupportedHostToolError(hostKind, tool.name);
     },
   };
 }

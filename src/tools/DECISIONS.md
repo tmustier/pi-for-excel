@@ -6,6 +6,8 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 - **Tool list:** keep `CORE_TOOL_NAMES` as the single ordered source of truth and keep core tool schemas/metadata stable across hosts.
 - **WPS Phase 1 behavior:** register the same core tools, but wrap workbook-dependent tools with fail-fast handlers that throw “not yet supported on WPS Spreadsheets” before any Office.js path runs.
 - **Local-only core tools:** `instructions`, `conventions`, and `skills` remain available because they operate on settings/skills storage. Workbook-scoped instructions still require a workbook identity and will report identity unavailable until WPS identity is implemented.
+- **Office-coupled non-core tools:** `execute_office_js` and `python_transform_range` drive Office.js/Excel directly, so `createAllTools()` wraps them with the same fail-fast handler on WPS. Local-bridge tools (`tmux`, `python_run`, `libreoffice_convert`, `files`, extensions manager) are host-independent and stay unwrapped.
+- **Typed failure:** fail-fast wrappers throw `UnsupportedHostToolError` (`code: "unsupported_host_tool"`, with `hostKind` + `toolName`), so callers/tests/UI can distinguish "unsupported on this host" from implementation failures.
 - **Rationale:** preserving the tool list avoids prompt-cache/schema churn and keeps disclosure/UI mappings deterministic, while honest runtime failures prevent pretending WPS workbook mutation/read support exists before Phase 2.
 
 ## Column width (`format_cells.column_width`)

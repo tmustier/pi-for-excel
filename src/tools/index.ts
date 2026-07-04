@@ -7,6 +7,7 @@
 
 import type { SpreadsheetHostKind } from "../host/index.js";
 import { createCoreTools } from "./registry.js";
+import { selectOfficeCoupledToolForHost } from "./host-selection.js";
 import type { SkillReadCache } from "../skills/read-cache.js";
 import { createTmuxTool } from "./tmux.js";
 import { createPythonRunTool } from "./python-run.js";
@@ -28,10 +29,11 @@ export interface CreateAllToolsOptions {
 
 export function createAllTools(options: CreateAllToolsOptions = {}) {
   const getExtensionManager = options.getExtensionManager ?? (() => null);
+  const hostKind = options.hostKind ?? "office";
 
   return [
     ...createCoreTools({
-      hostKind: options.hostKind,
+      hostKind,
       skills: {
         getSessionId: options.getSessionId,
         readCache: options.skillReadCache,
@@ -40,9 +42,9 @@ export function createAllTools(options: CreateAllToolsOptions = {}) {
     createTmuxTool(),
     createPythonRunTool(),
     createLibreOfficeConvertTool(),
-    createPythonTransformRangeTool(),
+    selectOfficeCoupledToolForHost(createPythonTransformRangeTool(), hostKind),
     createFilesTool(),
-    createExecuteOfficeJsTool(),
+    selectOfficeCoupledToolForHost(createExecuteOfficeJsTool(), hostKind),
     createExtensionsManagerTool({ getManager: getExtensionManager }),
   ];
 }

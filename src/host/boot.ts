@@ -15,12 +15,21 @@ export interface ResolveSpreadsheetHostForBootOptions {
   officeReadyTimeoutMs?: number;
 }
 
-function browserReadyInfo(reason: "office-unavailable" | "office-timeout"): SpreadsheetHostReadyInfo {
+function browserReadyInfo(reason: "office-unavailable"): SpreadsheetHostReadyInfo {
   return {
     kind: "browser",
     nativeHost: null,
     nativePlatform: null,
     reason,
+  };
+}
+
+function officeTimeoutReadyInfo(): SpreadsheetHostReadyInfo {
+  return {
+    kind: "office",
+    nativeHost: null,
+    nativePlatform: null,
+    reason: "office-timeout",
   };
 }
 
@@ -56,9 +65,14 @@ export async function resolveSpreadsheetHostForBoot(
     };
 
     timeout = setTimeout(() => {
+      // Keep the Office host: before the host seam existed, a slow
+      // `Office.onReady` only delayed init while workbook identity and theme
+      // were still read lazily from Office globals at call time. Pinning the
+      // browser host here would permanently drop workbook identity for slow
+      // Office startups, which would be a behavior change.
       finish({
-        host: new BrowserHost(),
-        readyInfo: browserReadyInfo("office-timeout"),
+        host: officeHost,
+        readyInfo: officeTimeoutReadyInfo(),
       });
     }, timeoutMs);
 
@@ -67,10 +81,9 @@ export async function resolveSpreadsheetHostForBoot(
         finish({ host: officeHost, readyInfo });
       })
       .catch(() => {
-        finish({
-          host: new BrowserHost(),
-          readyInfo: browserReadyInfo("office-unavailable"),
-        });
+        // Match pre-host-seam behavior: a failing `Office.onReady` never
+        // resolved early; init happened at the timeout with Office globals
+        // still read lazily afterwards.
       });
   });
 }

@@ -4,7 +4,7 @@ import type { AgentTool } from "@earendil-works/pi-agent-core";
 import type { TSchema } from "typebox";
 
 import type { SpreadsheetHostKind } from "../host/index.js";
-import type { CoreToolName } from "./names.js";
+import { CORE_TOOL_NAMES, type CoreToolName } from "./names.js";
 import { createUnsupportedHostTool } from "./unsupported-host-tool.js";
 
 export type AnyHostSelectableTool = AgentTool<TSchema, unknown>;
@@ -25,6 +25,35 @@ export function selectCoreToolForHost(
   hostKind: SpreadsheetHostKind,
 ): AnyHostSelectableTool {
   if (hostKind === "wps" && isCoreToolUnsupportedOnWps(name)) {
+    return createUnsupportedHostTool(tool, hostKind);
+  }
+
+  return tool;
+}
+
+/**
+ * Compose the core tool list for a host: `CORE_TOOL_NAMES` drives ordering,
+ * `selectCoreToolForHost` swaps in fail-fast handlers where a host has no
+ * implementation. Kept free of tool-implementation imports so the composition
+ * behavior is directly unit-testable.
+ */
+export function composeCoreToolsForHost(
+  createTool: (name: CoreToolName) => AnyHostSelectableTool,
+  hostKind: SpreadsheetHostKind,
+): AnyHostSelectableTool[] {
+  return CORE_TOOL_NAMES.map((name) => selectCoreToolForHost(name, createTool(name), hostKind));
+}
+
+/**
+ * Non-core tools that drive Office.js/Excel directly (e.g. `execute_office_js`,
+ * `python_transform_range`) must also fail fast on hosts without an Office.js
+ * runtime instead of reaching Office/Excel helper paths.
+ */
+export function selectOfficeCoupledToolForHost(
+  tool: AnyHostSelectableTool,
+  hostKind: SpreadsheetHostKind,
+): AnyHostSelectableTool {
+  if (hostKind === "wps") {
     return createUnsupportedHostTool(tool, hostKind);
   }
 

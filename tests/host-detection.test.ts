@@ -111,7 +111,7 @@ void test("resolveSpreadsheetHostForBoot resolves Office when Office.onReady fir
   });
 });
 
-void test("resolveSpreadsheetHostForBoot uses browser host after Office.onReady timeout", async () => {
+void test("resolveSpreadsheetHostForBoot keeps the Office host after Office.onReady timeout", async () => {
   await withoutHostGlobals(async () => {
     const officeGlobal = {
       onReady: () => new Promise(() => {}),
@@ -119,8 +119,32 @@ void test("resolveSpreadsheetHostForBoot uses browser host after Office.onReady 
 
     await withGlobal("Office", officeGlobal, async () => {
       const result = await resolveSpreadsheetHostForBoot({ officeReadyTimeoutMs: 5 });
-      assert.equal(result.host.kind, "browser");
+      // The Office host is kept so workbook identity/theme keep reading Office
+      // globals lazily, matching pre-host-seam behavior for slow Office startups.
+      assert.equal(result.host.kind, "office");
       assert.equal(result.readyInfo.reason, "office-timeout");
     });
+  });
+});
+
+void test("resolveSpreadsheetHostForBoot keeps the Office host when Office.onReady rejects", async () => {
+  await withoutHostGlobals(async () => {
+    const officeGlobal = {
+      onReady: () => Promise.reject(new Error("boom")),
+    };
+
+    await withGlobal("Office", officeGlobal, async () => {
+      const result = await resolveSpreadsheetHostForBoot({ officeReadyTimeoutMs: 5 });
+      assert.equal(result.host.kind, "office");
+      assert.equal(result.readyInfo.reason, "office-timeout");
+    });
+  });
+});
+
+void test("resolveSpreadsheetHostForBoot uses the browser host when Office.js is absent", async () => {
+  await withoutHostGlobals(async () => {
+    const result = await resolveSpreadsheetHostForBoot({ officeReadyTimeoutMs: 5 });
+    assert.equal(result.host.kind, "browser");
+    assert.equal(result.readyInfo.reason, "office-unavailable");
   });
 });
