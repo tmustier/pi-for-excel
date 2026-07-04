@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
 
-import { getModel } from "@earendil-works/pi-ai";
+import { getModel } from "@earendil-works/pi-ai/compat";
 
 import { resolveRuntimeModelSwap } from "../src/taskpane/runtime-model-reconcile.ts";
 
