@@ -10,6 +10,7 @@ import { WELCOME_LOGIN_OVERLAY_ID } from "../ui/overlay-ids.js";
 import { showToast } from "../ui/toast.js";
 import { setActiveProviders } from "../compat/model-selector-patch.js";
 import {
+  DEFAULT_PROXY_IS_REMOTE,
   DEFAULT_PROXY_URL,
   PROXY_HELPER_DOCS_URL,
   probeProxyReachability,
@@ -149,7 +150,9 @@ export async function showWelcomeLogin(providerKeys: ProviderKeysStore): Promise
     proxyHint.append(
       "Needed only when OAuth login is blocked by CORS. Keep this URL at ",
       proxyCode,
-      ", run a local HTTPS proxy, then enable this toggle. ",
+      DEFAULT_PROXY_IS_REMOTE
+        ? " (your organisation's proxy), then enable this toggle. "
+        : ", run a local HTTPS proxy, then enable this toggle. ",
       proxyGuideLink,
       ".",
     );

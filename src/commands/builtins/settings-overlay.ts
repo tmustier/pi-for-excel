@@ -9,6 +9,7 @@
 import { getAppStorage } from "@earendil-works/pi-web-ui/dist/storage/app-storage.js";
 
 import {
+  DEFAULT_PROXY_IS_REMOTE,
   DEFAULT_PROXY_URL,
   PROXY_HELPER_DOCS_URL,
   validateOfficeProxyUrl,
@@ -443,7 +444,7 @@ function buildProxySection(
   helper.append(
     "Recommended URL: ",
     recommendedUrl,
-    ". Keep this on localhost. ",
+    DEFAULT_PROXY_IS_REMOTE ? ". This is your organisation's proxy. " : ". Keep this on localhost. ",
     guideLink,
     ".",
   );

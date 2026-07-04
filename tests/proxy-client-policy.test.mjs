@@ -91,3 +91,27 @@ test("isAllowedClientAddress denies everything non-loopback with no ranges", () 
   assert.equal(isAllowedClientAddress("10.0.0.1", []), false);
   assert.equal(isAllowedClientAddress("8.8.8.8", []), false);
 });
+
+test("isLoopbackAddress strictly parses address forms", () => {
+  // Malformed / decorated forms must not pass
+  assert.equal(isLoopbackAddress("127.evil"), false);
+  assert.equal(isLoopbackAddress("127.0.0.1:1234"), false);
+  assert.equal(isLoopbackAddress("::ffff:127.0.0.1%lo0"), false);
+  assert.equal(isLoopbackAddress("127.0.0"), false);
+  assert.equal(isLoopbackAddress("0177.0.0.1"), false); // octal-looking form: octet > 255
+  assert.equal(isLoopbackAddress("2130706433"), false); // single-integer IPv4 form
+
+  // Case-insensitive mapped form is fine
+  assert.equal(isLoopbackAddress("::FFFF:127.0.0.1"), true);
+});
+
+test("CIDR matching edge bits: /1 and /32", () => {
+  const one = parseClientCidrAllowlist("128.0.0.0/1").cidrs;
+  assert.equal(isAllowedClientAddress("128.0.0.1", one), true);
+  assert.equal(isAllowedClientAddress("255.255.255.255", one), true);
+  assert.equal(isAllowedClientAddress("100.0.0.1", one), false);
+
+  const exact = parseClientCidrAllowlist("10.1.2.3/32").cidrs;
+  assert.equal(isAllowedClientAddress("10.1.2.3", exact), true);
+  assert.equal(isAllowedClientAddress("10.1.2.4", exact), false);
+});

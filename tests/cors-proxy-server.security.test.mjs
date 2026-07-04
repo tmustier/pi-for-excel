@@ -431,3 +431,43 @@ test("proxy exits when TLS_KEY_PATH/TLS_CERT_PATH are missing files", async () =
   assert.match(stderr, /TLS key\/cert not found/);
   assert.match(stderr, /\/nonexistent\/org\.key/);
 });
+
+test("configured ALLOWED_TARGET_HOSTS is enforced even with loopback/private overrides", async (t) => {
+  const target = await startMockTarget("hello");
+  const proxy = await startProxy({
+    ALLOWED_TARGET_HOSTS: "api.openai.com",
+    ALLOW_LOOPBACK_TARGETS: "1",
+    ALLOW_PRIVATE_TARGETS: "1",
+  });
+  t.after(async () => {
+    await proxy.stop();
+    await target.stop();
+  });
+
+  // Loopback target not in the configured allowlist → blocked despite override flags.
+  const blocked = await fetch(
+    `http://127.0.0.1:${proxy.port}/?url=${encodeURIComponent(`http://127.0.0.1:${target.port}/`)}`,
+    { headers: { Origin: ORIGIN } },
+  );
+  assert.equal(blocked.status, 403);
+  assert.match(await blocked.text(), /blocked_target_not_allowlisted/);
+});
+
+test("allowlisted loopback target works with overrides on a configured allowlist", async (t) => {
+  const target = await startMockTarget("hello");
+  const proxy = await startProxy({
+    ALLOWED_TARGET_HOSTS: "127.0.0.1",
+    ALLOW_LOOPBACK_TARGETS: "1",
+  });
+  t.after(async () => {
+    await proxy.stop();
+    await target.stop();
+  });
+
+  const ok = await fetch(
+    `http://127.0.0.1:${proxy.port}/?url=${encodeURIComponent(`http://127.0.0.1:${target.port}/`)}`,
+    { headers: { Origin: ORIGIN } },
+  );
+  assert.equal(ok.status, 200);
+  assert.equal(await ok.text(), "hello");
+});

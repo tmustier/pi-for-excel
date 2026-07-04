@@ -369,6 +369,9 @@ const handler = async (req, res) => {
     allowLoopbackTargets,
     allowPrivateTargets,
     allowedHosts: effectiveAllowedTargetHosts,
+    // SECURITY: when the operator explicitly configured ALLOWED_TARGET_HOSTS,
+    // loopback/private override flags must not bypass it (central proxies).
+    requireAllowlistForOverriddenTargets: configuredAllowedTargetHosts.size > 0,
   });
 
   if (!targetPolicy.allowed) {

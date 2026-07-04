@@ -142,6 +142,7 @@ export function getBlockedTargetReasonForHostname(hostname, opts = {}) {
     allowLoopbackTargets = false,
     allowPrivateTargets = false,
     allowedHosts = new Set(),
+    requireAllowlistForOverriddenTargets = false,
   } = opts;
 
   const host = normalizeHost(hostname);
@@ -152,9 +153,17 @@ export function getBlockedTargetReasonForHostname(hostname, opts = {}) {
     return "blocked_target_loopback";
   }
 
-  // Preserve legacy semantics: if loopback is explicitly allowed, do not
-  // re-block it under private/local checks or host allowlists.
+  // Legacy semantics (local, default-allowlist deployments): if loopback is
+  // explicitly allowed, do not re-block it under private/local checks or host
+  // allowlists. SECURITY: when the operator explicitly configured a target
+  // allowlist (requireAllowlistForOverriddenTargets), the allowlist still
+  // applies — otherwise ALLOW_LOOPBACK_TARGETS/ALLOW_PRIVATE_TARGETS on a
+  // shared central proxy would silently bypass ALLOWED_TARGET_HOSTS and open
+  // an SSRF path into the proxy's network.
   if (loopback && allowLoopbackTargets) {
+    if (requireAllowlistForOverriddenTargets && !isAllowedTargetHost(host, allowedHosts)) {
+      return "blocked_target_not_allowlisted";
+    }
     return null;
   }
 
@@ -163,9 +172,12 @@ export function getBlockedTargetReasonForHostname(hostname, opts = {}) {
     return "blocked_target_private_ip";
   }
 
-  // Preserve legacy semantics: if private/local literal targets are explicitly
-  // allowed, do not re-block them under host allowlists.
+  // Same shape as the loopback override above: legacy pass-through unless an
+  // explicit allowlist is in force.
   if (allowPrivateTargets && privateOrLocalLiteral) {
+    if (requireAllowlistForOverriddenTargets && !isAllowedTargetHost(host, allowedHosts)) {
+      return "blocked_target_not_allowlisted";
+    }
     return null;
   }
 
@@ -221,12 +233,14 @@ export function evaluateTargetHostPolicy(opts = {}) {
     allowLoopbackTargets = false,
     allowPrivateTargets = false,
     allowedHosts = new Set(),
+    requireAllowlistForOverriddenTargets = false,
   } = opts;
 
   const hostReason = getBlockedTargetReasonForHostname(hostname, {
     allowLoopbackTargets,
     allowPrivateTargets,
     allowedHosts,
+    requireAllowlistForOverriddenTargets,
   });
 
   if (hostReason) {

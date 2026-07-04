@@ -12,6 +12,8 @@ import { isCorsError } from "@earendil-works/pi-web-ui/dist/utils/proxy-utils.js
 import { getOAuthProvider } from "../auth/oauth-provider-registry.js";
 import { clearOAuthCredentials, saveOAuthCredentials } from "../auth/oauth-storage.js";
 import {
+  DEFAULT_PROXY_IS_REMOTE,
+  DEFAULT_PROXY_URL,
   PROXY_HELPER_DOCS_URL,
   probeProxyReachability,
   resolveConfiguredProxyUrl,
@@ -63,9 +65,10 @@ function showProxyGateDialog(): Promise<boolean> {
     const message = document.createElement("p");
     message.className = "pi-prompt-message";
     message.style.lineHeight = "1.5";
-    message.textContent =
-      "This login method needs a small helper running on your Mac. " +
-      "Open the Terminal app and paste this command:";
+    message.textContent = DEFAULT_PROXY_IS_REMOTE
+      ? "This login method needs your organisation's Pi proxy, which doesn't appear reachable right now."
+      : "This login method needs a small helper running on your Mac. " +
+        "Open the Terminal app and paste this command:";
 
     const codeRow = document.createElement("div");
     codeRow.style.cssText = "display:flex;align-items:center;gap:8px;margin:12px 0;";
@@ -93,9 +96,15 @@ function showProxyGateDialog(): Promise<boolean> {
     const hint = document.createElement("p");
     hint.className = "pi-prompt-helper";
     hint.style.lineHeight = "1.5";
-    hint.innerHTML =
-      "Wait until you see <strong>&ldquo;Proxy listening&rdquo;</strong> in Terminal, then click <strong>Retry</strong>. " +
-      `<a href="${PROXY_HELPER_DOCS_URL}" target="_blank" rel="noopener noreferrer">Step-by-step guide &rarr;</a>`;
+    if (DEFAULT_PROXY_IS_REMOTE) {
+      codeRow.style.display = "none";
+      hint.textContent =
+        `Check /settings → Proxy (expected: ${DEFAULT_PROXY_URL}) or contact your IT team, then click Retry.`;
+    } else {
+      hint.innerHTML =
+        "Wait until you see <strong>&ldquo;Proxy listening&rdquo;</strong> in Terminal, then click <strong>Retry</strong>. " +
+        `<a href="${PROXY_HELPER_DOCS_URL}" target="_blank" rel="noopener noreferrer">Step-by-step guide &rarr;</a>`;
+    }
 
     const actions = document.createElement("div");
     actions.className = "pi-prompt-actions";
@@ -762,12 +771,18 @@ export function buildProviderRow(
             (typeof msg === "string" && /load failed|failed to fetch|cors|cross-origin|networkerror/i.test(msg));
 
           if (isLikelyCors) {
-            errorEl.innerHTML =
-              "Login couldn't connect — this provider needs a helper running on your Mac. " +
-              "Open Terminal and run: <code style=\"padding:2px 5px;border-radius:4px;" +
-              "background:var(--pi-code-bg, #1e1e1e);color:var(--pi-code-fg, #d4d4d4)\">" +
-              "npx pi-for-excel-proxy</code>, then try again. " +
-              `<a href="${PROXY_HELPER_DOCS_URL}" target="_blank" rel="noopener noreferrer">Step-by-step guide →</a>`;
+            if (DEFAULT_PROXY_IS_REMOTE) {
+              errorEl.textContent =
+                `Login couldn't connect — your organisation's proxy (${DEFAULT_PROXY_URL}) may be unreachable. ` +
+                "Check /settings → Proxy or contact your IT team, then try again.";
+            } else {
+              errorEl.innerHTML =
+                "Login couldn't connect — this provider needs a helper running on your Mac. " +
+                "Open Terminal and run: <code style=\"padding:2px 5px;border-radius:4px;" +
+                "background:var(--pi-code-bg, #1e1e1e);color:var(--pi-code-fg, #d4d4d4)\">" +
+                "npx pi-for-excel-proxy</code>, then try again. " +
+                `<a href="${PROXY_HELPER_DOCS_URL}" target="_blank" rel="noopener noreferrer">Step-by-step guide →</a>`;
+            }
           } else {
             errorEl.textContent = msg || "Login failed";
           }

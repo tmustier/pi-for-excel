@@ -125,3 +125,73 @@ test("isBlockedTargetByHostname reflects default deny policy", () => {
   assert.equal(isBlockedTargetByHostname("10.0.0.8"), true);
   assert.equal(isBlockedTargetByHostname("api.openai.com"), false);
 });
+
+test("explicit allowlist still applies to loopback/private targets when overrides are enabled", () => {
+  const allowedHosts = new Set(["api.openai.com", "10.97.193.77"]);
+
+  // Private literal NOT in the configured allowlist: blocked even with ALLOW_PRIVATE_TARGETS.
+  assert.deepEqual(
+    evaluateTargetHostPolicy({
+      hostname: "10.0.0.5",
+      allowPrivateTargets: true,
+      allowedHosts,
+      requireAllowlistForOverriddenTargets: true,
+    }),
+    { allowed: false, reason: "blocked_target_not_allowlisted" },
+  );
+
+  // Private literal IN the configured allowlist: allowed.
+  assert.deepEqual(
+    evaluateTargetHostPolicy({
+      hostname: "10.97.193.77",
+      allowPrivateTargets: true,
+      allowedHosts,
+      requireAllowlistForOverriddenTargets: true,
+    }),
+    { allowed: true },
+  );
+
+  // Loopback NOT in the configured allowlist: blocked even with ALLOW_LOOPBACK_TARGETS.
+  assert.deepEqual(
+    evaluateTargetHostPolicy({
+      hostname: "127.0.0.1",
+      allowLoopbackTargets: true,
+      allowedHosts,
+      requireAllowlistForOverriddenTargets: true,
+    }),
+    { allowed: false, reason: "blocked_target_not_allowlisted" },
+  );
+
+  // Loopback IN the configured allowlist: allowed.
+  assert.deepEqual(
+    evaluateTargetHostPolicy({
+      hostname: "localhost",
+      allowLoopbackTargets: true,
+      allowedHosts: new Set(["localhost"]),
+      requireAllowlistForOverriddenTargets: true,
+    }),
+    { allowed: true },
+  );
+});
+
+test("legacy override semantics preserved without requireAllowlistForOverriddenTargets", () => {
+  // Default-allowlist local deployments keep the old behavior: overrides
+  // bypass the host allowlist (e.g. local llama.cpp via ALLOW_LOOPBACK_TARGETS).
+  assert.deepEqual(
+    evaluateTargetHostPolicy({
+      hostname: "127.0.0.1",
+      allowLoopbackTargets: true,
+      allowedHosts: new Set(["api.openai.com"]),
+    }),
+    { allowed: true },
+  );
+
+  assert.deepEqual(
+    evaluateTargetHostPolicy({
+      hostname: "10.0.0.5",
+      allowPrivateTargets: true,
+      allowedHosts: new Set(["api.openai.com"]),
+    }),
+    { allowed: true },
+  );
+});

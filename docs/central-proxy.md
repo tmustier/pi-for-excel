@@ -31,8 +31,8 @@ node scripts/cors-proxy-server.mjs --https
 | `TLS_KEY_PATH` / `TLS_CERT_PATH` | `./key.pem` / `./cert.pem` | Paths to your org-issued TLS key/cert (e.g. `*.example.com`). |
 | `ALLOWED_CLIENT_CIDRS` | *(unset — loopback only)* | Comma-separated IPv4 CIDRs (or bare IPs) allowed as clients, e.g. `10.96.0.0/13,192.168.1.5`. Loopback is always allowed. Invalid entries (including `/0`) are fatal at startup — fail closed. IPv6 client ranges are not supported. |
 | `ALLOWED_ORIGINS` | dev + hosted origins | Comma-separated browser origins allowed by CORS. Set to the origin serving *your* add-in build, e.g. `https://pi-excel.example.com`. |
-| `ALLOWED_TARGET_HOSTS` | built-in provider allowlist | Comma-separated hosts the proxy may forward to. For a locked-down org, set exactly the hosts of your approved providers, e.g. `api.deepseek.com` or an internal gateway host. |
-| `ALLOW_PRIVATE_TARGETS=1` | off | Required only if the target is a private/internal IP (e.g. an on-prem LLM gateway at `10.x.x.x`). Combine with a strict `ALLOWED_TARGET_HOSTS`. |
+| `ALLOWED_TARGET_HOSTS` | built-in provider allowlist | Comma-separated hosts the proxy may forward to. For a locked-down org, set exactly the hosts of your approved providers, e.g. `api.deepseek.com` or an internal gateway host. **When explicitly set, this allowlist also applies to loopback/private targets** — the override flags below cannot bypass it. |
+| `ALLOW_PRIVATE_TARGETS=1` | off | Required only if a target is a private/internal address (e.g. an on-prem LLM gateway at `10.x.x.x`). With an explicit `ALLOWED_TARGET_HOSTS`, the private IP or gateway hostname must **also** be listed there (e.g. `ALLOWED_TARGET_HOSTS=api.deepseek.com,10.97.193.77`) — other private addresses stay blocked. Without an explicit allowlist (legacy local behavior), this flag allows *any* private target: never run that combination on a shared proxy. |
 | `STRICT_TARGET_RESOLUTION=1` | off | Reject targets whose DNS doesn't resolve. Recommended on servers. |
 
 Do **not** set `ALLOW_ALL_TARGET_HOSTS=1` on a shared proxy.
@@ -52,6 +52,8 @@ ALLOW_PRIVATE_TARGETS=1 \
 STRICT_TARGET_RESOLUTION=1 \
 node scripts/cors-proxy-server.mjs
 ```
+
+(`ALLOW_PRIVATE_TARGETS=1` here is only needed because `internal-llm.example.com` resolves to a private address — and it stays constrained to the hosts listed in `ALLOWED_TARGET_HOSTS`.)
 
 At startup the proxy logs its effective client, origin, and target policies — check them.
 

@@ -12,14 +12,6 @@
  *   are normalized to their IPv4 form before matching
  */
 
-export function isLoopbackAddress(addr) {
-  if (!addr) return false;
-  if (addr === "::1" || addr === "0:0:0:0:0:0:0:1") return true;
-  if (addr.startsWith("127.")) return true;
-  if (addr.startsWith("::ffff:127.")) return true;
-  return false;
-}
-
 function ipv4ToInt(ip) {
   const parts = ip.split(".");
   if (parts.length !== 4) return null;
@@ -31,6 +23,21 @@ function ipv4ToInt(ip) {
     value = value * 256 + octet;
   }
   return value;
+}
+
+export function isLoopbackAddress(addr) {
+  if (typeof addr !== "string" || addr.length === 0) return false;
+  const lower = addr.toLowerCase();
+  if (lower === "::1" || lower === "0:0:0:0:0:0:0:1") return true;
+
+  // Strictly parse IPv4 (optionally IPv4-mapped IPv6) and check 127/8.
+  // Prefix-string matching would accept junk like "127.evil" — harmless for
+  // Node-provided socket addresses, but this helper must stay safe if ever
+  // reused with less-trusted address sources.
+  const cleaned = lower.startsWith("::ffff:") ? lower.slice(7) : lower;
+  const value = ipv4ToInt(cleaned);
+  if (value === null) return false;
+  return Math.floor(value / 2 ** 24) === 127;
 }
 
 /**
@@ -87,7 +94,8 @@ export function parseClientCidrAllowlist(raw) {
 
 function normalizeClientAddress(addr) {
   if (typeof addr !== "string") return null;
-  const cleaned = addr.startsWith("::ffff:") ? addr.slice(7) : addr;
+  const lower = addr.toLowerCase();
+  const cleaned = lower.startsWith("::ffff:") ? lower.slice(7) : lower;
   return ipv4ToInt(cleaned) === null ? null : cleaned;
 }
 

@@ -45,6 +45,13 @@ export const DEFAULT_PROXY_URL = resolveDefaultProxyUrl(
 );
 
 /**
+ * True when this build's default proxy is a remote (org/central) proxy.
+ * UI copy uses this to swap local-helper instructions ("run npx pi-for-excel-proxy")
+ * for org guidance ("contact IT / check settings").
+ */
+export const DEFAULT_PROXY_IS_REMOTE = !isLoopbackProxyUrl(DEFAULT_PROXY_URL);
+
+/**
  * Target URL used for proxy reachability probes.
  *
  * Must stay inside scripts/cors-proxy-server.mjs DEFAULT_ALLOWED_TARGET_HOSTS,
