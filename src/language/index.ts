@@ -17,8 +17,8 @@
  * switching reloads the taskpane.
  */
 
-import en from "./locales/en.json";
-import zhCN from "./locales/zh-CN.json";
+import en from "./locales/en.json" with { type: "json" };
+import zhCN from "./locales/zh-CN.json" with { type: "json" };
 
 export const SUPPORTED_LANGUAGES = ["en", "zh-CN"] as const;
 export type SupportedLanguage = (typeof SUPPORTED_LANGUAGES)[number];

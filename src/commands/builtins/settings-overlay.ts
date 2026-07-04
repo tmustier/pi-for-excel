@@ -445,7 +445,6 @@ function buildProxySection(
   guideLink.target = "_blank";
   guideLink.rel = "noopener noreferrer";
   guideLink.textContent = t("settings.section.proxy.guide");
-  guideLink.style.color = "var(--color-link, #3b82f6)";
 
   helper.append(
     t("settings.section.proxy.recommended"),

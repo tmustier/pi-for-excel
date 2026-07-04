@@ -33,14 +33,14 @@ function collectSourceFiles(dir: string, out: string[] = []): string[] {
 const sourceFiles = collectSourceFiles(join(root, "src"));
 const corpus = sourceFiles.map((f) => readFileSync(f, "utf8")).join("\n");
 
-test("en and zh-CN locales have identical key sets", () => {
+void test("en and zh-CN locales have identical key sets", () => {
   const missingInZh = Object.keys(en).filter((k) => !(k in zh)).sort();
   const extraInZh = Object.keys(zh).filter((k) => !(k in en)).sort();
   assert.deepEqual(missingInZh, [], `keys missing in zh-CN.json: ${missingInZh.join(", ")}`);
   assert.deepEqual(extraInZh, [], `keys in zh-CN.json but not en.json: ${extraInZh.join(", ")}`);
 });
 
-test("zh-CN placeholders are a subset of en placeholders per key", () => {
+void test("zh-CN placeholders are a subset of en placeholders per key", () => {
   // zh may drop English plural-helper vars (e.g. {cue}), but must never
   // reference a placeholder the caller does not provide.
   const violations: string[] = [];
@@ -55,14 +55,14 @@ test("zh-CN placeholders are a subset of en placeholders per key", () => {
   assert.deepEqual(violations, [], `zh-CN placeholders missing from en: ${violations.join(", ")}`);
 });
 
-test("en locale has no empty values", () => {
+void test("en locale has no empty values", () => {
   const empty = Object.entries(en)
     .filter(([, v]) => typeof v !== "string" || v.length === 0)
     .map(([k]) => k);
   assert.deepEqual(empty, [], `empty en values: ${empty.join(", ")}`);
 });
 
-test("every locale key is referenced somewhere in src/", () => {
+void test("every locale key is referenced somewhere in src/", () => {
   // Keys appear as t("key") literals, bare string literals in key arrays
   // (whimsical messages, hint keys), or are constructed dynamically:
   // - humanize.label.* via l("Label") slugs in src/ui/humanize-params.ts
@@ -86,7 +86,7 @@ test("every locale key is referenced somewhere in src/", () => {
   assert.deepEqual(unused, [], `locale keys never referenced in src/: ${unused.join(", ")}`);
 });
 
-test("every static t(\"...\") call site references an existing key", () => {
+void test("every static t(\"...\") call site references an existing key", () => {
   const missing: string[] = [];
   for (const f of sourceFiles) {
     const content = readFileSync(f, "utf8");
@@ -100,7 +100,7 @@ test("every static t(\"...\") call site references an existing key", () => {
   assert.deepEqual(missing, [], `t() call sites with unknown keys: ${missing.join(", ")}`);
 });
 
-test("no module-scope t() calls (language is set at boot, after import)", () => {
+void test("no module-scope t() calls (language is set at boot, after import)", () => {
   // Heuristic: track brace/paren depth per file; flag t(" calls at depth 0.
   const offenders: string[] = [];
   for (const f of sourceFiles) {
