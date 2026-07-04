@@ -164,6 +164,11 @@ Interim wiring:
   covers pi-web-ui's dist modules so the bundle resolves one shared module.
 - The Bedrock browser stub now exports the uniform `ProviderStreams` shape
   (`stream`/`streamSimple`) required by `setBedrockProviderModule()`.
+- The 0.79-era `stubBedrockProviderPlugin` / `stubPiAiOAuthIndexPlugin` Vite
+  plugins (and the orphaned `src/stubs/pi-ai-oauth.ts`) were removed: 0.80
+  lazy-loads Bedrock behind a variable specifier and no longer re-exports the
+  OAuth index from its root, so both plugins were dead code whose resolved-id
+  fallbacks had become mis-fire hazards against 0.80's changed layout.
 
 **Exit plan:** when pi-web-ui supports pi-ai 0.80 natively, migrate first-party
 code to `createModels()`/`getBuiltinModel(s)`, drop the alias, and remove this

@@ -55,76 +55,16 @@ function piAuthPlugin(): Plugin {
   };
 }
 
-/**
- * Stub out the Amazon Bedrock provider in browser builds.
- *
- * pi-ai registers all built-in providers at import time, including Bedrock.
- * The Bedrock provider pulls in AWS SDK Node transports which break Vite's
- * production bundling for the browser.
- */
-function stubBedrockProviderPlugin(): Plugin {
-  const stubPath = path.resolve(__dirname, "src/stubs/amazon-bedrock.ts");
-
-  return {
-    name: "stub-bedrock-provider",
-    enforce: "pre",
-    resolveId(id, importer) {
-      // Register-builtins imports Bedrock via a relative path.
-      if (
-        id === "./amazon-bedrock.js" &&
-        importer &&
-        importer.includes("@earendil-works/pi-ai") &&
-        importer.includes("providers/register-builtins")
-      ) {
-        return stubPath;
-      }
-
-      // Safety: also catch resolved imports.
-      if (id.includes("@earendil-works/pi-ai") && id.endsWith("/providers/amazon-bedrock.js")) {
-        return stubPath;
-      }
-
-      return null;
-    },
-  };
-}
-
-/**
- * Stub out pi-ai's OAuth index in browser builds.
- *
- * pi-ai's main entrypoint re-exports the OAuth index, which includes Node-only
- * side effects and CLI-only providers. The Excel add-in uses a small, local
- * OAuth implementation and should not bundle these flows.
- */
-function stubPiAiOAuthIndexPlugin(): Plugin {
-  const stubPath = path.resolve(__dirname, "src/stubs/pi-ai-oauth.ts");
-
-  return {
-    name: "stub-pi-ai-oauth-index",
-    enforce: "pre",
-    resolveId(id, importer) {
-      const cleanId = id.split("?")[0];
-      const cleanImporter = importer?.split("?")[0];
-
-      // pi-ai's dist/index.js re-exports the OAuth index via a relative path.
-      if (
-        cleanId === "./utils/oauth/index.js" &&
-        cleanImporter &&
-        cleanImporter.includes("/node_modules/@earendil-works/pi-ai/") &&
-        cleanImporter.endsWith("/dist/index.js")
-      ) {
-        return stubPath;
-      }
-
-      // Safety: catch resolved ids too.
-      if (cleanId.includes("/node_modules/@earendil-works/pi-ai/") && cleanId.endsWith("/dist/utils/oauth/index.js")) {
-        return stubPath;
-      }
-
-      return null;
-    },
-  };
-}
+// NOTE: pi-ai 0.79-era stubBedrockProviderPlugin / stubPiAiOAuthIndexPlugin
+// were removed with the 0.80 bump: 0.80 lazy-loads the Node-only Bedrock
+// implementation behind a variable specifier (bundlers never see it — the
+// browser-safe unsupported stub is installed at runtime via
+// setBedrockProviderModule, see src/compat/bedrock-provider-stub.ts), and
+// neither dist/index.js nor dist/compat.js re-exports the OAuth index
+// anymore. Their resolved-id fallback branches had also become mis-fire
+// hazards: 0.80's providers/amazon-bedrock.js exports amazonBedrockProvider
+// and the public /oauth entrypoint resolves to dist/utils/oauth/index.js,
+// both incompatible with the old substitute modules.
 
 /**
  * Stub out pi-web-ui tool modules we don't ship in the Excel add-in.
@@ -280,8 +220,6 @@ const hasHttpsCerts = fs.existsSync(keyPath) && fs.existsSync(certPath);
 export default defineConfig({
   plugins: [
     piAuthPlugin(),
-    stubBedrockProviderPlugin(),
-    stubPiAiOAuthIndexPlugin(),
     stubPiWebUiBuiltinToolsPlugin(),
   ],
 
