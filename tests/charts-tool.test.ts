@@ -8,6 +8,11 @@ import {
   executeChartsAction,
   toExcelChartType,
 } from "../src/tools/charts.ts";
+import { applyChartState } from "../src/workbook/recovery/chart-state.ts";
+import {
+  createPersistedWorkbookRecoveryPayload,
+  parsePersistedSnapshots,
+} from "../src/workbook/recovery/log-codec.ts";
 import type { ChartsDetails } from "../src/tools/tool-details.ts";
 import { getToolContextImpact, getToolExecutionMode } from "../src/tools/execution-policy.ts";
 import { WorkbookRecoveryLog, type WorkbookRecoverySnapshot } from "../src/workbook/recovery-log.ts";
@@ -83,7 +88,10 @@ class FakeChartLegend extends FakeLoadable {
   visible = true;
 }
 
+let fakeChartIdCounter = 0;
+
 class FakeChart extends FakeLoadable {
+  readonly id = `fake-chart-id-${(fakeChartIdCounter += 1)}`;
   readonly title = new FakeChartTitle();
   readonly legend = new FakeChartLegend();
   readonly axes = new FakeChartAxes();
@@ -314,6 +322,7 @@ void test("creates charts from a mocked worksheet range", async () => {
     kind: "chart_absent",
     sheetName: "Sheet1",
     name: "Sales",
+    chartId: chart.id,
   });
 });
 
@@ -562,7 +571,9 @@ void test("workbook recovery log persists and restores chart checkpoints", async
     applyChartSnapshot: (address, state) => {
       appliedAddress = address;
       appliedState = state;
-      return Promise.resolve(currentState);
+      // Simulate a restore that renamed the chart: the post-restore identity
+      // differs from the checkpoint address.
+      return Promise.resolve({ state: currentState, address: "Sheet1!Sales (restored)" });
     },
   });
 
@@ -590,6 +601,9 @@ void test("workbook recovery log persists and restores chart checkpoints", async
   assert.ok(inverse);
   assert.equal(inverse.snapshotKind, "chart_state");
   assert.deepEqual(withoutUndefined(inverse.chartState), withoutUndefined(currentState));
+  // The inverse must live at the post-restore identity so that restoring the
+  // rollback can find the chart after a rename-restore.
+  assert.equal(inverse.address, "Sheet1!Sales (restored)");
 });
 
 void test("chart_absent restore can skip inverse snapshot when recreation would be impossible", async () => {
@@ -612,7 +626,7 @@ void test("chart_absent restore can skip inverse snapshot when recreation would 
     now: () => 1700000000200,
     createId: () => "snap-create-chart",
     applySnapshot: () => Promise.resolve({ values: [[1]], formulas: [[1]] }),
-    applyChartSnapshot: () => Promise.resolve(null),
+    applyChartSnapshot: () => Promise.resolve({ state: null, address: "Sheet1!New Chart" }),
   });
 
   const appended = await log.appendChart({
@@ -626,4 +640,133 @@ void test("chart_absent restore can skip inverse snapshot when recreation would 
   assert.ok(appended);
   const restored = await log.restore(appended.id);
   assert.equal(restored.inverseSnapshotId, null);
+});
+
+void test("chart rename restore round-trips through the inverse address", async () => {
+  const sheet = new FakeWorksheet("Sheet1");
+  const context = new FakeContext([sheet]);
+  const chart = sheet.charts.add("ColumnClustered", new FakeRange("A1:B12"));
+  chart.name = "Sales Chart";
+  chart.title.text = "New title";
+
+  const targetState = createChartState("Sales");
+
+  // Restore the pre-rename checkpoint: chart goes back to "Sales".
+  const applied = await withFakeExcel(context, () => applyChartState("Sheet1!Sales Chart", targetState));
+
+  assert.equal(chart.name, "Sales");
+  assert.ok(applied.state);
+  assert.equal(applied.state.kind, "chart_present");
+  assert.equal(applied.state.name, "Sales Chart");
+  // Inverse must be addressed at the post-restore identity, not the stale one.
+  assert.equal(applied.address, "Sheet1!Sales");
+
+  // Restoring the rollback backup at its recorded address must find the chart
+  // and rename it forward again.
+  const rolledBack = await withFakeExcel(context, () => applyChartState(applied.address, applied.state as RecoveryChartState));
+
+  assert.equal(chart.name, "Sales Chart");
+  assert.equal(rolledBack.address, "Sheet1!Sales Chart");
+});
+
+void test("chart_absent restore deletes by stable id, surviving rename and name reuse", async () => {
+  const sheet = new FakeWorksheet("Sheet1");
+  const context = new FakeContext([sheet]);
+
+  const created = sheet.charts.add("ColumnClustered", new FakeRange("A1:B12"));
+  created.name = "New Chart";
+  const checkpoint: RecoveryChartAbsentState = {
+    kind: "chart_absent",
+    sheetName: "Sheet1",
+    name: created.name,
+    chartId: created.id,
+  };
+
+  // The created chart is renamed, and an unrelated chart takes its old name.
+  created.name = "Quarterly";
+  const impostor = sheet.charts.add("Pie", new FakeRange("D1:E4"));
+  impostor.name = "New Chart";
+
+  const applied = await withFakeExcel(context, () => applyChartState("Sheet1!New Chart", checkpoint));
+
+  assert.equal(applied.state, null);
+  assert.equal(created.deleted, true, "the originally created chart should be deleted");
+  assert.equal(impostor.deleted, false, "the unrelated chart reusing the name must survive");
+  assert.deepEqual(sheet.charts.items.map((item) => item.name), ["New Chart"]);
+});
+
+void test("chart_absent restore with a missing id deletes nothing", async () => {
+  const sheet = new FakeWorksheet("Sheet1");
+  const context = new FakeContext([sheet]);
+
+  const survivor = sheet.charts.add("ColumnClustered", new FakeRange("A1:B12"));
+  survivor.name = "New Chart";
+
+  const checkpoint: RecoveryChartAbsentState = {
+    kind: "chart_absent",
+    sheetName: "Sheet1",
+    name: "New Chart",
+    chartId: "fake-chart-id-does-not-exist",
+  };
+
+  const applied = await withFakeExcel(context, () => applyChartState("Sheet1!New Chart", checkpoint));
+
+  assert.equal(applied.state, null);
+  assert.equal(survivor.deleted, false, "a different chart holding the name must not be deleted");
+  assert.equal(sheet.charts.items.length, 1);
+});
+
+void test("persisted chart_state snapshots omit range grids so older codecs drop them", () => {
+  const chartSnapshot: WorkbookRecoverySnapshot = {
+    id: "snap-chart-persist",
+    at: 1700000000300,
+    toolName: "restore_snapshot",
+    toolCallId: "restore:snap-1",
+    address: "Sheet1!Sales",
+    changedCount: 1,
+    cellCount: 1,
+    beforeValues: [],
+    beforeFormulas: [],
+    snapshotKind: "chart_state",
+    chartState: createChartState("Sales"),
+    workbookId: "url_sha256:charts-workbook",
+    workbookLabel: "Charts.xlsx",
+  };
+
+  const rangeSnapshot: WorkbookRecoverySnapshot = {
+    id: "snap-range-persist",
+    at: 1700000000301,
+    toolName: "write_cells",
+    toolCallId: "tc-write",
+    address: "Sheet1!A1",
+    changedCount: 1,
+    cellCount: 1,
+    beforeValues: [[1]],
+    beforeFormulas: [["=A1"]],
+    snapshotKind: "range_values",
+    workbookId: "url_sha256:charts-workbook",
+    workbookLabel: "Charts.xlsx",
+  };
+
+  const payload = createPersistedWorkbookRecoveryPayload([chartSnapshot, rangeSnapshot]);
+
+  const persistedChart = payload.snapshots.find((item) => item.id === "snap-chart-persist");
+  assert.ok(persistedChart);
+  // Older codecs default unknown snapshot kinds to range_values and then
+  // require grids; omitting them makes downgraded readers drop the entry
+  // instead of misreading it as an empty range backup.
+  assert.equal("beforeValues" in persistedChart, false);
+  assert.equal("beforeFormulas" in persistedChart, false);
+
+  const persistedRange = payload.snapshots.find((item) => item.id === "snap-range-persist");
+  assert.ok(persistedRange);
+  assert.deepEqual(persistedRange.beforeValues, [[1]]);
+  assert.deepEqual(persistedRange.beforeFormulas, [["=A1"]]);
+
+  // The current codec must still round-trip the stripped chart snapshot.
+  const reparsed = parsePersistedSnapshots(payload, { maxEntries: 10 });
+  const chartAgain = findSnapshotById(reparsed, "snap-chart-persist");
+  assert.ok(chartAgain);
+  assert.equal(chartAgain.snapshotKind, "chart_state");
+  assert.deepEqual(withoutUndefined(chartAgain.chartState), withoutUndefined(createChartState("Sales")));
 });

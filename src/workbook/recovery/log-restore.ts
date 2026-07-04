@@ -15,6 +15,7 @@ import type {
   WorkbookRecoverySnapshotKind,
 } from "../recovery-log.js";
 import type {
+  RecoveryChartApplyResult,
   RecoveryChartState,
   RecoveryCommentThreadState,
   RecoveryConditionalFormatCaptureResult,
@@ -56,7 +57,7 @@ export interface RestoreWorkbookRecoverySnapshotDependencies {
   applyChartSnapshot: (
     address: string,
     state: RecoveryChartState,
-  ) => Promise<RecoveryChartState | null>;
+  ) => Promise<RecoveryChartApplyResult>;
   appendRangeSnapshot: (
     args: AppendWorkbookRecoverySnapshotArgs,
     workbookContext: WorkbookContext,
@@ -234,15 +235,17 @@ export async function restoreWorkbookRecoverySnapshot(
       throw new Error("Chart backup data is missing.");
     }
 
-    const currentState = await dependencies.applyChartSnapshot(snapshot.address, targetState);
-    const inverseSnapshot = currentState
+    const applied = await dependencies.applyChartSnapshot(snapshot.address, targetState);
+    const inverseSnapshot = applied.state
       ? await dependencies.appendChartSnapshot(
         {
           toolName: "restore_snapshot",
           toolCallId: `restore:${snapshot.id}`,
-          address: snapshot.address,
+          // A restore can rename the chart, so the inverse must be stored at
+          // the post-restore identity for the rollback backup to resolve.
+          address: applied.address,
           changedCount: snapshot.changedCount,
-          chartState: currentState,
+          chartState: applied.state,
           restoredFromSnapshotId: snapshot.id,
         },
         workbookContext,

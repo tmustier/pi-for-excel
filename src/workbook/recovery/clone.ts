@@ -137,6 +137,7 @@ export function cloneRecoveryChartState(state: RecoveryChartState): RecoveryChar
       kind: "chart_absent",
       sheetName: state.sheetName,
       name: state.name,
+      chartId: state.chartId,
     };
   }
 

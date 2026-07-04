@@ -548,15 +548,17 @@ async function executeCreate(params: Params): Promise<ChartsExecutionResult> {
       chart.name = params.name.trim();
     }
 
-    chart.load("name,chartType,top,left,width,height");
+    chart.load("id,name,chartType,top,left,width,height");
     await context.sync();
 
     const sourceAddress = qualifiedAddress(source.sheet.name, source.range.address);
     const address = chartDetailsAddress(chartSheet.name, chart.name);
+    const chartId = typeof chart.id === "string" && chart.id.length > 0 ? chart.id : undefined;
     const recoveryState: RecoveryChartAbsentState = {
       kind: "chart_absent",
       sheetName: chartSheet.name,
       name: chart.name,
+      chartId,
     };
 
     return {

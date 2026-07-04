@@ -31,6 +31,7 @@ import {
   cloneRecoveryConditionalFormatRules,
   cloneRecoveryFormatRangeState,
   cloneRecoveryModifyStructureState,
+  type RecoveryChartApplyResult,
   type RecoveryChartState,
   type RecoveryCommentThreadState,
   type RecoveryConditionalFormatCaptureResult,
@@ -184,7 +185,7 @@ interface WorkbookRecoveryLogDependencies {
   applyChartSnapshot: (
     address: string,
     state: RecoveryChartState,
-  ) => Promise<RecoveryChartState | null>;
+  ) => Promise<RecoveryChartApplyResult>;
 }
 
 function defaultNow(): number {
@@ -254,7 +255,7 @@ async function defaultApplyCommentThreadSnapshot(
 async function defaultApplyChartSnapshot(
   address: string,
   state: RecoveryChartState,
-): Promise<RecoveryChartState | null> {
+): Promise<RecoveryChartApplyResult> {
   return applyChartState(address, state);
 }
 

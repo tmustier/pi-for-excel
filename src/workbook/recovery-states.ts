@@ -242,6 +242,11 @@ export interface RecoveryChartAbsentState {
   kind: "chart_absent";
   sheetName: string;
   name: string;
+  /**
+   * Stable Office.js chart id captured at creation. Restore prefers this over
+   * the mutable name so rename/name-reuse cannot delete an unrelated chart.
+   */
+  chartId?: string;
 }
 
 export interface RecoveryChartPresentState {
@@ -257,6 +262,18 @@ export interface RecoveryChartPresentState {
 }
 
 export type RecoveryChartState = RecoveryChartAbsentState | RecoveryChartPresentState;
+
+/** Result of applying a chart snapshot during restore. */
+export interface RecoveryChartApplyResult {
+  /** Inverse state captured before the restore, or null when none applies. */
+  state: RecoveryChartState | null;
+  /**
+   * Address of the chart identity after the restore was applied. A restore can
+   * rename the chart, so inverse snapshots must be stored at this address — not
+   * the pre-restore one — for the rollback backup to be restorable.
+   */
+  address: string;
+}
 
 export type RecoverySheetVisibility = "Visible" | "Hidden" | "VeryHidden";
 

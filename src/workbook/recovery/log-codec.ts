@@ -30,9 +30,22 @@ export interface ParsePersistedSnapshotsOptions {
   maxEntries: number;
 }
 
+/**
+ * Persisted snapshot shape. Chart-state snapshots are stored without the range
+ * grids so that codecs predating "chart_state" fail their range_values grid
+ * check and drop the entry, instead of misreading it as an empty range backup
+ * after a version downgrade.
+ */
+export type PersistedWorkbookRecoverySnapshot =
+  & Omit<WorkbookRecoverySnapshot, "beforeValues" | "beforeFormulas">
+  & {
+    beforeValues?: unknown[][];
+    beforeFormulas?: unknown[][];
+  };
+
 export interface PersistedWorkbookRecoveryPayload {
   version: 1;
-  snapshots: WorkbookRecoverySnapshot[];
+  snapshots: PersistedWorkbookRecoverySnapshot[];
 }
 
 function defaultCreateId(): string {
@@ -325,7 +338,11 @@ function isRecoveryChartState(value: unknown): value is RecoveryChartState {
   if (!isRecord(value)) return false;
 
   if (value.kind === "chart_absent") {
-    return typeof value.sheetName === "string" && typeof value.name === "string";
+    return (
+      typeof value.sheetName === "string" &&
+      typeof value.name === "string" &&
+      (value.chartId === undefined || typeof value.chartId === "string")
+    );
   }
 
   if (value.kind === "chart_present") {
@@ -499,11 +516,20 @@ export function parsePersistedSnapshots(
     .slice(0, maxEntries);
 }
 
+function toPersistedSnapshot(snapshot: WorkbookRecoverySnapshot): PersistedWorkbookRecoverySnapshot {
+  if (snapshot.snapshotKind !== "chart_state") {
+    return snapshot;
+  }
+
+  const { beforeValues: _beforeValues, beforeFormulas: _beforeFormulas, ...rest } = snapshot;
+  return rest;
+}
+
 export function createPersistedWorkbookRecoveryPayload(
   snapshots: WorkbookRecoverySnapshot[],
 ): PersistedWorkbookRecoveryPayload {
   return {
     version: 1,
-    snapshots,
+    snapshots: snapshots.map(toPersistedSnapshot),
   };
 }

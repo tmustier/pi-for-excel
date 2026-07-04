@@ -3,6 +3,7 @@
 import { excelRun } from "../../excel/helpers.js";
 import { cloneRecoveryChartState } from "./clone.js";
 import type {
+  RecoveryChartApplyResult,
   RecoveryChartPositionState,
   RecoveryChartPresentState,
   RecoveryChartState,
@@ -143,6 +144,36 @@ async function findChartByName(
   return match;
 }
 
+/**
+ * Locate a chart by its stable Office.js id across all sheets. Rename-proof:
+ * the id survives chart renames, so this never confuses the target with an
+ * unrelated chart that reused its name. Throws when the host cannot load
+ * chart ids (callers fall back to name matching).
+ */
+async function findChartById(
+  context: Excel.RequestContext,
+  chartId: string,
+): Promise<ChartTarget | null> {
+  const sheets = context.workbook.worksheets;
+  sheets.load("items/name");
+  await context.sync();
+
+  for (const sheet of sheets.items) {
+    sheet.charts.load("items/id,name");
+  }
+  await context.sync();
+
+  for (const sheet of sheets.items) {
+    for (const chart of sheet.charts.items) {
+      if (chart.id === chartId) {
+        return { sheet, chart };
+      }
+    }
+  }
+
+  return null;
+}
+
 async function findChartByNameOrNull(
   context: Excel.RequestContext,
   name: string,
@@ -243,19 +274,36 @@ export async function captureChartPresentState(
 export async function applyChartState(
   address: string,
   targetState: RecoveryChartState,
-): Promise<RecoveryChartState | null> {
-  return excelRun<RecoveryChartState | null>(async (context) => {
+): Promise<RecoveryChartApplyResult> {
+  return excelRun<RecoveryChartApplyResult>(async (context) => {
     const parsedAddress = parseQualifiedChartName(address);
     const currentSheetName = parsedAddress.sheetName ?? targetState.sheetName;
     const currentChartName = parsedAddress.chartName || targetState.name;
 
     if (targetState.kind === "chart_absent") {
-      const target = await findChartByNameOrNull(context, currentChartName, currentSheetName);
-      if (!target) return null;
+      let target: ChartTarget | null = null;
+      let matchedById = false;
 
-      target.chart.delete();
-      await context.sync();
-      return null;
+      if (targetState.chartId) {
+        try {
+          target = await findChartById(context, targetState.chartId);
+          matchedById = true;
+        } catch {
+          // Host cannot load chart ids; fall back to name matching below.
+          matchedById = false;
+        }
+      }
+
+      if (!matchedById) {
+        target = await findChartByNameOrNull(context, currentChartName, currentSheetName);
+      }
+
+      if (target) {
+        target.chart.delete();
+        await context.sync();
+      }
+
+      return { state: null, address };
     }
 
     let target = await findChartByNameOrNull(context, currentChartName, currentSheetName);
@@ -271,7 +319,12 @@ export async function applyChartState(
     applyChartPresentState(target.chart, targetState);
     await context.sync();
 
-    return cloneRecoveryChartState(currentState);
+    // The restore may have renamed the chart back to targetState.name, so the
+    // inverse snapshot must be addressed at the post-restore identity.
+    return {
+      state: cloneRecoveryChartState(currentState),
+      address: chartAddress(currentState.sheetName, targetState.name),
+    };
   });
 }
 
