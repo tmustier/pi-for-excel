@@ -9,7 +9,7 @@
 import { getAppStorage } from "@earendil-works/pi-web-ui/dist/storage/app-storage.js";
 
 import {
-  DEFAULT_LOCAL_PROXY_URL,
+  DEFAULT_PROXY_URL,
   PROXY_HELPER_DOCS_URL,
   validateOfficeProxyUrl,
 } from "../../auth/proxy-validation.js";
@@ -30,7 +30,7 @@ import {
   createOverlaySectionTitle,
 } from "../../ui/overlay-dialog.js";
 import { SETTINGS_OVERLAY_ID } from "../../ui/overlay-ids.js";
-import { ALL_PROVIDERS, buildProviderRow } from "../../ui/provider-login.js";
+import { VISIBLE_PROVIDERS, buildProviderRow } from "../../ui/provider-login.js";
 import { showToast } from "../../ui/toast.js";
 import { isRecord } from "../../utils/type-guards.js";
 import {
@@ -204,7 +204,7 @@ async function buildProvidersSection(): Promise<HTMLElement> {
 
   const expandedRef: { current: HTMLElement | null } = { current: null };
 
-  for (const provider of ALL_PROVIDERS) {
+  for (const provider of VISIBLE_PROVIDERS) {
     const row = buildProviderRow(provider, {
       isActive: configuredSet.has(provider.id),
       expandedRef,
@@ -284,7 +284,7 @@ function buildProxySection(
   card.className = "pi-overlay-surface pi-settings-proxy-card";
 
   let enabled = false;
-  let proxyUrl = DEFAULT_LOCAL_PROXY_URL;
+  let proxyUrl = DEFAULT_PROXY_URL;
   let proxyState: ProxyState = getProxyState();
   let validationError: string | null = null;
   let urlSaveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -301,7 +301,7 @@ function buildProxySection(
 
   const proxyUrlInput = createConfigInput({
     value: proxyUrl,
-    placeholder: DEFAULT_LOCAL_PROXY_URL,
+    placeholder: DEFAULT_PROXY_URL,
   });
   proxyUrlInput.classList.add("pi-settings-proxy-url");
   proxyUrlInput.spellcheck = false;
@@ -342,7 +342,7 @@ function buildProxySection(
 
   const saveProxyUrl = async (): Promise<void> => {
     const raw = proxyUrlInput.value.trim();
-    const candidate = raw.length > 0 ? raw : DEFAULT_LOCAL_PROXY_URL;
+    const candidate = raw.length > 0 ? raw : DEFAULT_PROXY_URL;
 
     let normalizedUrl: string;
     try {
@@ -432,7 +432,7 @@ function buildProxySection(
   helper.className = "pi-overlay-hint pi-settings-proxy-helper";
 
   const recommendedUrl = document.createElement("code");
-  recommendedUrl.textContent = DEFAULT_LOCAL_PROXY_URL;
+  recommendedUrl.textContent = DEFAULT_PROXY_URL;
 
   const guideLink = document.createElement("a");
   guideLink.href = PROXY_HELPER_DOCS_URL;
@@ -456,10 +456,10 @@ function buildProxySection(
       enabled = storedEnabled === true;
       proxyUrl = typeof storedUrl === "string" && storedUrl.trim().length > 0
         ? storedUrl.trim()
-        : DEFAULT_LOCAL_PROXY_URL;
+        : DEFAULT_PROXY_URL;
     } catch {
       enabled = false;
-      proxyUrl = DEFAULT_LOCAL_PROXY_URL;
+      proxyUrl = DEFAULT_PROXY_URL;
     }
 
     proxyToggle.input.checked = enabled;

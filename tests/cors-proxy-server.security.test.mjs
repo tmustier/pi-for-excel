@@ -317,3 +317,117 @@ test("proxy enforces ALLOWED_TARGET_HOSTS when configured", async (t) => {
   const text = await response.text();
   assert.match(text, /blocked_target_not_allowlisted/);
 });
+
+test("proxy blocks requests without an allowed Origin header", async (t) => {
+  const proxy = await startProxy();
+  t.after(async () => {
+    await proxy.stop();
+  });
+
+  const target = encodeURIComponent("https://api.openai.com/");
+
+  const noOrigin = await fetch(`http://127.0.0.1:${proxy.port}/?url=${target}`);
+  assert.equal(noOrigin.status, 403);
+
+  const badOrigin = await fetch(`http://127.0.0.1:${proxy.port}/?url=${target}`, {
+    headers: { Origin: "https://evil.example.com" },
+  });
+  assert.equal(badOrigin.status, 403);
+});
+
+test("proxy /healthz responds without an Origin header and never proxies", async (t) => {
+  const proxy = await startProxy();
+  t.after(async () => {
+    await proxy.stop();
+  });
+
+  const health = await fetch(`http://127.0.0.1:${proxy.port}/healthz`);
+  assert.equal(health.status, 200);
+  assert.equal(await health.text(), "ok");
+
+  // Query strings (including ?url=) must not turn /healthz into a proxy path.
+  const withUrl = await fetch(
+    `http://127.0.0.1:${proxy.port}/healthz?url=${encodeURIComponent("https://api.openai.com/")}`,
+  );
+  assert.equal(withUrl.status, 200);
+  assert.equal(await withUrl.text(), "ok");
+});
+
+test("proxy boots with ALLOWED_CLIENT_CIDRS, warns, and still serves loopback", async (t) => {
+  const proxy = await startProxy({
+    ALLOWED_CLIENT_CIDRS: "10.96.0.0/13, 192.168.1.5",
+  });
+  t.after(async () => {
+    await proxy.stop();
+  });
+
+  const health = await fetch(`http://127.0.0.1:${proxy.port}/healthz`);
+  assert.equal(health.status, 200);
+
+  const { stdout } = proxy.getLogs();
+  assert.match(stdout, /WARNING: accepting non-loopback clients from: 10\.96\.0\.0\/13, 192\.168\.1\.5/);
+});
+
+test("proxy exits on invalid ALLOWED_CLIENT_CIDRS (fail closed)", async () => {
+  const port = await getFreePort();
+  const child = spawn(process.execPath, [PROXY_SCRIPT_PATH], {
+    env: {
+      ...process.env,
+      HOST: "127.0.0.1",
+      PORT: String(port),
+      ALLOWED_ORIGINS: ORIGIN,
+      ALLOWED_CLIENT_CIDRS: "0.0.0.0/0",
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  let stderr = "";
+  child.stderr.setEncoding("utf8");
+  child.stderr.on("data", (chunk) => {
+    stderr += chunk;
+  });
+
+  const [code] = await Promise.race([
+    once(child, "exit"),
+    delay(5000).then(() => {
+      child.kill("SIGKILL");
+      throw new Error("proxy did not exit on invalid ALLOWED_CLIENT_CIDRS");
+    }),
+  ]);
+
+  assert.equal(code, 1);
+  assert.match(stderr, /Invalid ALLOWED_CLIENT_CIDRS entries: 0\.0\.0\.0\/0/);
+});
+
+test("proxy exits when TLS_KEY_PATH/TLS_CERT_PATH are missing files", async () => {
+  const port = await getFreePort();
+  const child = spawn(process.execPath, [PROXY_SCRIPT_PATH, "--https"], {
+    env: {
+      ...process.env,
+      HOST: "127.0.0.1",
+      PORT: String(port),
+      ALLOWED_ORIGINS: ORIGIN,
+      TLS_KEY_PATH: "/nonexistent/org.key",
+      TLS_CERT_PATH: "/nonexistent/org.pem",
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  let stderr = "";
+  child.stderr.setEncoding("utf8");
+  child.stderr.on("data", (chunk) => {
+    stderr += chunk;
+  });
+
+  const [code] = await Promise.race([
+    once(child, "exit"),
+    delay(5000).then(() => {
+      child.kill("SIGKILL");
+      throw new Error("proxy did not exit on missing TLS files");
+    }),
+  ]);
+
+  assert.equal(code, 1);
+  assert.match(stderr, /TLS key\/cert not found/);
+  assert.match(stderr, /\/nonexistent\/org\.key/);
+});

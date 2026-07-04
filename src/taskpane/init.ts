@@ -15,7 +15,7 @@ import type { SessionData } from "@earendil-works/pi-web-ui/dist/storage/types.j
 
 import { createOfficeStreamFn } from "../auth/stream-proxy.js";
 import {
-  DEFAULT_LOCAL_PROXY_URL,
+  DEFAULT_PROXY_URL,
   PROXY_HELPER_DOCS_URL,
   isLoopbackProxyUrl,
   validateOfficeProxyUrl,
@@ -204,7 +204,7 @@ async function ensureDefaultProxyUrl(settings: ProxySettingsStore): Promise<void
       return;
     }
 
-    await settings.set("proxy.url", DEFAULT_LOCAL_PROXY_URL);
+    await settings.set("proxy.url", DEFAULT_PROXY_URL);
   } catch {
     // ignore
   }
@@ -374,7 +374,7 @@ export async function initTaskpane(opts: {
 
       const rawUrl = await storage.settings.get("proxy.url");
       const trimmedUrl = typeof rawUrl === "string" ? rawUrl.trim() : "";
-      const candidateUrl = trimmedUrl.length > 0 ? trimmedUrl : DEFAULT_LOCAL_PROXY_URL;
+      const candidateUrl = trimmedUrl.length > 0 ? trimmedUrl : DEFAULT_PROXY_URL;
 
       try {
         return validateOfficeProxyUrl(candidateUrl);
@@ -1142,7 +1142,7 @@ export async function initTaskpane(opts: {
           } else if (isLikelyCorsErrorMessage(err)) {
             showErrorBanner(
               errorRoot,
-              `Network error (likely CORS). If you're using OAuth, enable /settings → Proxy with ${DEFAULT_LOCAL_PROXY_URL} and retry. Guide: ${PROXY_HELPER_DOCS_URL}`,
+              `Network error (likely CORS). If you're using OAuth, enable /settings → Proxy with ${DEFAULT_PROXY_URL} and retry. Guide: ${PROXY_HELPER_DOCS_URL}`,
             );
           } else {
             showErrorBanner(errorRoot, `LLM error: ${err}`);

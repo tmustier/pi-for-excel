@@ -5,6 +5,7 @@ This folder contains **current** docs that should match shipped behavior.
 ## Guides
 - [Install Pi for Excel](./install.md)
 - [Deploy hosted build on Vercel](./deploy-vercel.md)
+- [Org-hosted central CORS proxy](./central-proxy.md)
 - [Release notes (`v0.9.5-pre`)](./release-notes/v0.9.5-pre.md)
 - [Release smoke test checklist](./release-smoke-test-checklist.md)
 - [Release smoke run logs](./release-smoke-runs/README.md)

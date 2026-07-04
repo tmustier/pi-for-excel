@@ -19,6 +19,7 @@ import {
 import { PROVIDER_PROMPT_OVERLAY_ID, PROXY_GATE_OVERLAY_ID } from "./overlay-ids.js";
 import { closeOverlayById, createOverlayDialog } from "./overlay-dialog.js";
 import { getErrorMessage } from "../utils/errors.js";
+import { filterProvidersByAllowlist, resolveAllowedProviderIds } from "./provider-allowlist.js";
 
 /**
  * Quick reachability check against the configured proxy URL.
@@ -203,6 +204,18 @@ export const ALL_PROVIDERS: ProviderDef[] = [
   { id: "groq",               label: "Groq" },
   { id: "xai",                label: "xAI / Grok" },
 ];
+
+/**
+ * Providers to show in connect UIs. Equals ALL_PROVIDERS unless the build
+ * sets VITE_PI_ALLOWED_PROVIDERS (org deployments — see docs/central-proxy.md).
+ * UI-level filter only; enforcement lives at the proxy/network layer.
+ */
+export const VISIBLE_PROVIDERS: ProviderDef[] = filterProvidersByAllowlist(
+  ALL_PROVIDERS,
+  resolveAllowedProviderIds(
+    typeof import.meta.env === "undefined" ? undefined : import.meta.env.VITE_PI_ALLOWED_PROVIDERS,
+  ),
+);
 
 export interface ProviderRowCallbacks {
   onConnected: (row: HTMLElement, id: string, label: string) => void;

@@ -13,7 +13,7 @@
 import { getAppStorage } from "@earendil-works/pi-web-ui/dist/storage/app-storage.js";
 
 import {
-  DEFAULT_LOCAL_PROXY_URL,
+  DEFAULT_PROXY_URL,
   validateOfficeProxyUrl,
 } from "./proxy-validation.js";
 import { rewriteDevProxyUrl } from "./dev-rewrites.js";
@@ -62,7 +62,7 @@ async function getEnabledProxyUrl(): Promise<string | undefined> {
   }
 
   const trimmed = typeof url === "string" ? url.trim() : "";
-  const candidateUrl = trimmed.length > 0 ? trimmed : DEFAULT_LOCAL_PROXY_URL;
+  const candidateUrl = trimmed.length > 0 ? trimmed : DEFAULT_PROXY_URL;
 
   // Guardrails: validate proxy URL (and fail fast for mixed-content HTTP proxies).
   // This may throw and should surface to the caller.

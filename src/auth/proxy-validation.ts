@@ -9,6 +9,42 @@
 export const DEFAULT_LOCAL_PROXY_URL = "https://localhost:3003";
 
 /**
+ * Resolve the build-time default proxy URL override (org/central deployments).
+ * Falls back to the local proxy default unless the override is a valid
+ * https:// URL — http would be blocked as mixed content in Office webviews,
+ * so we refuse it here rather than baking in a broken default.
+ */
+export function resolveDefaultProxyUrl(raw: unknown): string {
+  if (typeof raw !== "string") return DEFAULT_LOCAL_PROXY_URL;
+  const candidate = normalizeProxyUrl(raw);
+  if (candidate.length === 0) return DEFAULT_LOCAL_PROXY_URL;
+
+  if (!/^https:\/\//i.test(candidate)) {
+    console.warn(`[pi-for-excel] Ignoring VITE_PI_DEFAULT_PROXY_URL (must be https://): ${candidate}`);
+    return DEFAULT_LOCAL_PROXY_URL;
+  }
+
+  try {
+    // Validate URL shape; result unused.
+    new URL(candidate);
+  } catch {
+    console.warn(`[pi-for-excel] Ignoring VITE_PI_DEFAULT_PROXY_URL (not a valid URL): ${candidate}`);
+    return DEFAULT_LOCAL_PROXY_URL;
+  }
+
+  return candidate;
+}
+
+/**
+ * Effective default proxy URL for this build. Equals DEFAULT_LOCAL_PROXY_URL
+ * unless the build sets VITE_PI_DEFAULT_PROXY_URL (org/central deployments —
+ * see docs/central-proxy.md).
+ */
+export const DEFAULT_PROXY_URL = resolveDefaultProxyUrl(
+  typeof import.meta.env === "undefined" ? undefined : import.meta.env.VITE_PI_DEFAULT_PROXY_URL,
+);
+
+/**
  * Target URL used for proxy reachability probes.
  *
  * Must stay inside scripts/cors-proxy-server.mjs DEFAULT_ALLOWED_TARGET_HOSTS,
@@ -28,7 +64,7 @@ export function normalizeProxyUrl(url: string): string {
  */
 export function resolveConfiguredProxyUrl(rawUrl: unknown): string {
   const trimmed = typeof rawUrl === "string" ? rawUrl.trim() : "";
-  const candidate = trimmed.length > 0 ? trimmed : DEFAULT_LOCAL_PROXY_URL;
+  const candidate = trimmed.length > 0 ? trimmed : DEFAULT_PROXY_URL;
   return normalizeProxyUrl(candidate);
 }
 
@@ -59,7 +95,7 @@ export function validateOfficeProxyUrl(url: string): string {
 
   if (!/^https?:\/\//i.test(normalized)) {
     throw new Error(
-      `Invalid Proxy URL: "${url}". Expected a full URL like ${DEFAULT_LOCAL_PROXY_URL}`,
+      `Invalid Proxy URL: "${url}". Expected a full URL like ${DEFAULT_PROXY_URL}`,
     );
   }
 
@@ -68,7 +104,7 @@ export function validateOfficeProxyUrl(url: string): string {
     parsed = new URL(normalized);
   } catch {
     throw new Error(
-      `Invalid Proxy URL: "${url}". Expected a full URL like ${DEFAULT_LOCAL_PROXY_URL}`,
+      `Invalid Proxy URL: "${url}". Expected a full URL like ${DEFAULT_PROXY_URL}`,
     );
   }
 
@@ -77,7 +113,7 @@ export function validateOfficeProxyUrl(url: string): string {
   if (typeof window !== "undefined" && window.location?.protocol === "https:" && parsed.protocol === "http:") {
     throw new Error(
       `Proxy URL is HTTP (${normalized}) but the add-in is served over HTTPS. Office webviews may block this as mixed content. ` +
-        `Use ${DEFAULT_LOCAL_PROXY_URL} and run a local HTTPS proxy. See ${PROXY_HELPER_DOCS_URL}.`,
+        `Use ${DEFAULT_PROXY_URL} and run an HTTPS proxy. See ${PROXY_HELPER_DOCS_URL}.`,
     );
   }
 

@@ -5,7 +5,7 @@
  * dispatches a custom event so UI surfaces can react.
  */
 
-import { DEFAULT_LOCAL_PROXY_URL } from "../auth/proxy-validation.js";
+import { DEFAULT_PROXY_URL } from "../auth/proxy-validation.js";
 
 const CHECK_INTERVAL_MS = 30_000;
 const CHECK_TIMEOUT_MS = 1_500;
@@ -48,7 +48,7 @@ interface ProxySettingsReader {
 }
 
 export async function checkProxyOnce(settings: ProxySettingsReader): Promise<ProxyState> {
-  let proxyUrl: string = DEFAULT_LOCAL_PROXY_URL;
+  let proxyUrl: string = DEFAULT_PROXY_URL;
   try {
     const raw = await settings.get<string>("proxy.url");
     const stored = typeof raw === "string" ? raw.trim() : "";

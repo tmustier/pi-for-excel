@@ -32,6 +32,10 @@ import {
   normalizeHost,
   parseAllowedTargetHosts,
 } from "./proxy-target-policy.mjs";
+import {
+  isAllowedClientAddress,
+  parseClientCidrAllowlist,
+} from "./proxy-client-policy.mjs";
 
 const args = new Set(process.argv.slice(2));
 const useHttps = args.has("--https") || process.env.HTTPS === "1" || process.env.HTTPS === "true";
@@ -46,8 +50,28 @@ const HOST = process.env.HOST || (useHttps ? "localhost" : "127.0.0.1");
 const PORT = Number.parseInt(process.env.PORT || "3003", 10);
 
 const rootDir = path.resolve(process.cwd());
-const keyPath = path.join(rootDir, "key.pem");
-const certPath = path.join(rootDir, "cert.pem");
+// Central deployments (docs/central-proxy.md) can point at org-issued certs.
+const keyPath = process.env.TLS_KEY_PATH || path.join(rootDir, "key.pem");
+const certPath = process.env.TLS_CERT_PATH || path.join(rootDir, "cert.pem");
+
+// SECURITY: loopback-only by default. Central deployments must opt in to
+// specific IPv4 client ranges; invalid entries are fatal (fail closed).
+const allowedClientCidrs = (() => {
+  const raw = process.env.ALLOWED_CLIENT_CIDRS;
+  if (!raw || raw.trim().length === 0) return [];
+
+  const { cidrs, invalid } = parseClientCidrAllowlist(raw);
+  if (invalid.length > 0) {
+    console.error(`[pi-for-excel] Invalid ALLOWED_CLIENT_CIDRS entries: ${invalid.join(", ")}`);
+    console.error("[pi-for-excel] Expected comma-separated IPv4 CIDRs (e.g. 10.96.0.0/13) or bare IPv4 addresses. /0 is not allowed.");
+    process.exit(1);
+  }
+  if (cidrs.length === 0) {
+    console.error("[pi-for-excel] ALLOWED_CLIENT_CIDRS was set but contained no valid entries.");
+    process.exit(1);
+  }
+  return cidrs;
+})();
 
 const HOP_BY_HOP_HEADERS = new Set([
   "connection",
@@ -82,14 +106,6 @@ const allowedOrigins = (() => {
 
 function isAllowedOrigin(origin) {
   return typeof origin === "string" && allowedOrigins.has(origin);
-}
-
-function isLoopbackAddress(addr) {
-  if (!addr) return false;
-  if (addr === "::1" || addr === "0:0:0:0:0:0:0:1") return true;
-  if (addr.startsWith("127.")) return true;
-  if (addr.startsWith("::ffff:127.")) return true;
-  return false;
 }
 
 function envFlag(name) {
@@ -258,11 +274,21 @@ function buildOutboundHeaders(inHeaders) {
 
 const handler = async (req, res) => {
   const remote = req.socket?.remoteAddress;
-  if (!isLoopbackAddress(remote)) {
+  if (!isAllowedClientAddress(remote, allowedClientCidrs)) {
     res.statusCode = 403;
     res.setHeader("Content-Type", "text/plain; charset=utf-8");
     res.end("forbidden");
-    console.warn(`[proxy] blocked non-loopback client: ${remote || "unknown"}`);
+    console.warn(`[proxy] blocked disallowed client: ${remote || "unknown"}`);
+    return;
+  }
+
+  // Health endpoint for load balancers / monitoring. Sits after the client
+  // address check but before origin enforcement (health checks send no
+  // Origin header). Never proxies anything.
+  if ((req.url || "").split("?")[0] === "/healthz") {
+    res.statusCode = 200;
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.end("ok");
     return;
   }
 
@@ -427,8 +453,11 @@ const server = (() => {
   }
 
   if (!fs.existsSync(keyPath) || !fs.existsSync(certPath)) {
-    console.error("[pi-for-excel] HTTPS requested but key.pem/cert.pem not found in repo root.");
-    console.error("Generate them with mkcert (see README). Example: mkcert localhost");
+    console.error("[pi-for-excel] HTTPS requested but TLS key/cert not found:");
+    console.error(`  key:  ${keyPath}${fs.existsSync(keyPath) ? "" : "  (missing)"}`);
+    console.error(`  cert: ${certPath}${fs.existsSync(certPath) ? "" : "  (missing)"}`);
+    console.error("For local dev, generate key.pem/cert.pem with mkcert (see README). Example: mkcert localhost");
+    console.error("For central deployments, set TLS_KEY_PATH/TLS_CERT_PATH (see docs/central-proxy.md).");
     process.exit(1);
   }
 
@@ -446,6 +475,13 @@ server.listen(PORT, HOST, () => {
   console.log(`[pi-for-excel] CORS proxy listening on ${scheme}://${HOST}:${PORT}`);
   console.log(`[pi-for-excel] Format: ${scheme}://${HOST}:${PORT}/?url=<target-url>`);
   console.log(`[pi-for-excel] Allowed origins: ${Array.from(allowedOrigins).join(", ")}`);
+
+  if (allowedClientCidrs.length > 0) {
+    console.log(`[pi-for-excel] WARNING: accepting non-loopback clients from: ${allowedClientCidrs.map((c) => c.entry).join(", ")} (ALLOWED_CLIENT_CIDRS)`);
+    console.log("[pi-for-excel] Ensure network-level controls also restrict who can reach this proxy.");
+  } else {
+    console.log("[pi-for-excel] Client policy: loopback only");
+  }
 
   if (allowAllTargetHosts) {
     console.log("[pi-for-excel] WARNING: target host allowlisting disabled (ALLOW_ALL_TARGET_HOSTS=1)");

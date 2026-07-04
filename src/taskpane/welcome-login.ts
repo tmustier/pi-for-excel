@@ -10,7 +10,7 @@ import { WELCOME_LOGIN_OVERLAY_ID } from "../ui/overlay-ids.js";
 import { showToast } from "../ui/toast.js";
 import { setActiveProviders } from "../compat/model-selector-patch.js";
 import {
-  DEFAULT_LOCAL_PROXY_URL,
+  DEFAULT_PROXY_URL,
   PROXY_HELPER_DOCS_URL,
   probeProxyReachability,
   resolveConfiguredProxyUrl,
@@ -32,7 +32,7 @@ async function testLocalHttpsProxy(proxyUrl: string): Promise<boolean> {
 }
 
 export async function showWelcomeLogin(providerKeys: ProviderKeysStore): Promise<void> {
-  const { ALL_PROVIDERS, buildProviderRow } = await import("../ui/provider-login.js");
+  const { VISIBLE_PROVIDERS, buildProviderRow } = await import("../ui/provider-login.js");
 
   // Make OAuth flows usable even before the user can access /settings.
   try {
@@ -138,7 +138,7 @@ export async function showWelcomeLogin(providerKeys: ProviderKeysStore): Promise
 
     const proxyHint = createElement("p", "pi-welcome-proxy__hint");
     const proxyCode = createElement("code");
-    proxyCode.textContent = DEFAULT_LOCAL_PROXY_URL;
+    proxyCode.textContent = DEFAULT_PROXY_URL;
 
     const proxyGuideLink = createElement("a");
     proxyGuideLink.href = PROXY_HELPER_DOCS_URL;
@@ -205,7 +205,7 @@ export async function showWelcomeLogin(providerKeys: ProviderKeysStore): Promise
         proxyUrlEl.value = resolveConfiguredProxyUrl(url);
       } catch {
         proxyEnabledEl.checked = false;
-        proxyUrlEl.value = DEFAULT_LOCAL_PROXY_URL;
+        proxyUrlEl.value = DEFAULT_PROXY_URL;
       }
     };
 
@@ -231,7 +231,7 @@ export async function showWelcomeLogin(providerKeys: ProviderKeysStore): Promise
 
     const expandedRef: { current: HTMLElement | null } = { current: null };
 
-    for (const provider of ALL_PROVIDERS) {
+    for (const provider of VISIBLE_PROVIDERS) {
       const row = buildProviderRow(provider, {
         isActive: false,
         expandedRef,

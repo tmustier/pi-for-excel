@@ -4,7 +4,7 @@
  */
 
 import {
-  DEFAULT_LOCAL_PROXY_URL,
+  DEFAULT_PROXY_URL,
   validateOfficeProxyUrl,
 } from "../auth/proxy-validation.js";
 
@@ -36,7 +36,7 @@ export async function getEnabledProxyBaseUrl(
 
   const proxyUrlRaw = await settings.get("proxy.url");
   const trimmed = typeof proxyUrlRaw === "string" ? proxyUrlRaw.trim() : "";
-  const candidateUrl = trimmed.length > 0 ? trimmed : DEFAULT_LOCAL_PROXY_URL;
+  const candidateUrl = trimmed.length > 0 ? trimmed : DEFAULT_PROXY_URL;
 
   try {
     return validateOfficeProxyUrl(candidateUrl);

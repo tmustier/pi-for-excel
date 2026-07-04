@@ -136,6 +136,8 @@ Typical symptoms:
 - `Load failed`
 - `Failed to fetch`
 
+> **Managed / org rollout?** Instead of a proxy on every machine, IT can host one central proxy for everyone — see [Org-hosted central CORS proxy](./central-proxy.md).
+
 ### What to do
 
 1. Run a local HTTPS proxy on the same machine as Excel (defaults to `https://localhost:3003`):

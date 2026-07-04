@@ -9,7 +9,7 @@
 import { getAppStorage } from "@earendil-works/pi-web-ui/dist/storage/app-storage.js";
 
 import {
-  DEFAULT_LOCAL_PROXY_URL,
+  DEFAULT_PROXY_URL,
   probeProxyReachability,
 } from "../auth/proxy-validation.js";
 import {
@@ -136,7 +136,7 @@ function createProxyStep(options: ProxyStepOptions): HTMLDivElement {
     status.textContent = "Checking helper…";
     status.className = "pi-search-setup__status";
 
-    const probeUrl = options.proxyBaseUrl ?? DEFAULT_LOCAL_PROXY_URL;
+    const probeUrl = options.proxyBaseUrl ?? DEFAULT_PROXY_URL;
 
     void probeProxyReachability(probeUrl, 1500).then(
       (reachable) => {
