@@ -101,9 +101,18 @@ cp manifest.xml ~/Library/Containers/com.microsoft.Excel/Data/Documents/wef/
 ```
 Then open Excel → **Insert** → **My Add-ins** → **Pi for Excel**.
 
-**Windows** ([Microsoft docs](https://learn.microsoft.com/en-us/office/dev/add-ins/testing/sideload-office-add-ins-for-testing)):
+**Windows** ([Microsoft docs](https://learn.microsoft.com/en-us/office/dev/add-ins/testing/create-a-network-shared-folder-catalog-for-task-pane-and-content-add-ins)):
 
-Open Excel → **Insert** → **My Add-ins** → **Upload My Add-in** → select `manifest.xml`.
+Windows desktop Excel can't upload a manifest directly — it installs from a trusted shared-folder catalog:
+
+1. Share a local folder (folder **Properties** → **Sharing** → **Share**) and note its network path.
+2. In Excel: **File** → **Options** → **Trust Center** → **Trust Center Settings** → **Trusted Add-in Catalogs** → add the network path as **Catalog Url**, tick **Show in Menu**, restart Excel.
+3. Copy `manifest.xml` into the shared folder.
+4. **Home** → **Add-ins** → **Advanced** → **SHARED FOLDER** → **Pi for Excel**.
+
+**Excel on the web** ([Microsoft docs](https://learn.microsoft.com/en-us/office/dev/add-ins/testing/sideload-office-add-ins-for-testing)):
+
+**Home** → **Add-ins** → **More Settings** → **Upload My Add-in** → select `manifest.xml`.
 
 The dev manifest points to `https://localhost:3000`. The production manifest (`manifest.prod.xml`) points to the hosted Vercel deployment.
 
