@@ -16,7 +16,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 const HOST = process.env.HOST || "localhost";
-const PORT = Number.parseInt(process.env.PORT || "3000", 10);
+const PORT = Number.parseInt(process.env.PORT || "3141", 10);
 
 const rootDir = path.resolve(process.cwd());
 const distDir = path.join(rootDir, "dist");
