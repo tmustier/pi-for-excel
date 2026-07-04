@@ -289,7 +289,7 @@ export async function showResumeDialog(opts: {
     }
 
     await opts.onOpenInNewTab(sessionData);
-    showToast(`Reopened: ${sessionData.title || "Untitled"}`);
+    showToast(t("resume.toast.reopened", { title: sessionData.title || t("session.untitled") }));
     return true;
   };
 
@@ -369,7 +369,7 @@ export async function showResumeDialog(opts: {
         const linkedWorkbookId = await getSessionWorkbookId(storage.settings, id);
         if (linkedWorkbookId && linkedWorkbookId !== workbookId) {
           const proceed = await requestConfirmationDialog({
-            title: "Resume session from another workbook?",
+            title: t("resume.confirm.anotherWorkbookTitle"),
             message: getCrossWorkbookResumeConfirmMessage(targetMode),
             confirmLabel: "Resume anyway",
             cancelLabel: "Cancel",
@@ -394,7 +394,7 @@ export async function showResumeDialog(opts: {
 
       closeOverlay();
       const resumedMode = targetMode === "replace_current" ? "current tab" : "new tab";
-      showToast(`Resumed in ${resumedMode}: ${sessionData.title || "Untitled"}`);
+      showToast(t("resume.toast.resumedIn", { mode: resumedMode, title: sessionData.title || t("session.untitled") }));
     })();
   });
 

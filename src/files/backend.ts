@@ -146,7 +146,7 @@ function sortEntries(entries: WorkspaceFileEntry[]): WorkspaceFileEntry[] {
 
 export class NativeDirectoryBackend implements WorkspaceBackend {
   readonly kind = "native-directory";
-  readonly label = "Local folder";
+  readonly label = t("files-backend.localFolder");
 
   private readonly root: FileSystemDirectoryHandle;
 
@@ -309,7 +309,7 @@ interface MemoryFileRecord {
 
 export class MemoryBackend implements WorkspaceBackend {
   readonly kind = "memory";
-  readonly label = "Session memory";
+  readonly label = t("files-backend.sessionMemory");
 
   private readonly files = new Map<string, MemoryFileRecord>();
 

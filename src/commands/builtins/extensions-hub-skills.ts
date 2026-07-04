@@ -94,7 +94,7 @@ export async function renderSkillsTab(args: {
     container.replaceChildren();
     const msg = document.createElement("p");
     msg.className = "pi-overlay-hint";
-    msg.textContent = `Failed to load skills: ${err instanceof Error ? err.message : String(err)}`;
+    msg.textContent = t("ext-hub-skills.loadFailed", { error: err instanceof Error ? err.message : String(err) });
     container.appendChild(msg);
     return;
   }
@@ -198,14 +198,14 @@ export async function renderSkillsTab(args: {
   if (snapshot.externalLoadError) {
     const warn = document.createElement("p");
     warn.className = "pi-overlay-hint pi-hub-warn-text";
-    warn.textContent = `External skills load failed: ${snapshot.externalLoadError}`;
+    warn.textContent = t("ext-hub-skills.externalLoadFailed", { error: snapshot.externalLoadError });
     container.appendChild(warn);
   }
 
   if (snapshot.activationLoadError) {
     const warn = document.createElement("p");
     warn.className = "pi-overlay-hint pi-hub-warn-text";
-    warn.textContent = `Skill activation state unavailable: ${snapshot.activationLoadError}`;
+    warn.textContent = t("ext-hub-skills.activationUnavailable", { error: snapshot.activationLoadError });
     container.appendChild(warn);
   }
 
@@ -239,7 +239,7 @@ export async function renderSkillsTab(args: {
           workspace: getFilesWorkspace(),
           markdown: md,
         });
-        showToast(`Saved external skill: ${result.name}`);
+        showToast(t("ext-hub-skills.toast.savedExternal", { name: result.name }));
         textarea.value = "";
         dispatchSkillsChanged({ reason: "catalog" });
       }, "config");

@@ -87,7 +87,7 @@ function renderConnectionCard(args: {
 
     if (fieldPresent) {
       label.textContent = `${field.label} ✓`;
-      label.title = "Saved";
+      label.title = t("ext-hub-extension-connections.saved");
     } else {
       label.textContent = field.label;
     }
@@ -100,7 +100,7 @@ function renderConnectionCard(args: {
   if (snapshot.status === "connected" && snapshot.lastValidatedAt) {
     const meta = document.createElement("div");
     meta.className = "pi-item-card__meta";
-    meta.textContent = `Last validated: ${formatRelativeDate(snapshot.lastValidatedAt)}`;
+    meta.textContent = t("ext-hub-extension-connections.lastValidated", { date: formatRelativeDate(snapshot.lastValidatedAt) });
     card.body.appendChild(meta);
   }
 
@@ -131,9 +131,9 @@ function renderConnectionCard(args: {
           for (const input of inputs.values()) {
             input.value = "";
           }
-          showToast(`Saved ${definition.title} credentials`);
+          showToast(t("ext-hub-extension-connections.toast.saved", { title: definition.title }));
         } catch (err: unknown) {
-          showToast(`Save failed: ${err instanceof Error ? err.message : String(err)}`);
+          showToast(t("ext-hub-extension-connections.toast.saveFailed", { error: err instanceof Error ? err.message : String(err) }));
         }
       })();
     },
@@ -145,9 +145,9 @@ function renderConnectionCard(args: {
       void (async () => {
         try {
           await connectionManager.clearSecretsFromHost(definition.id);
-          showToast(`Cleared ${definition.title} credentials`);
+          showToast(t("ext-hub-extension-connections.toast.cleared", { title: definition.title }));
         } catch (err: unknown) {
-          showToast(`Clear failed: ${err instanceof Error ? err.message : String(err)}`);
+          showToast(t("ext-hub-extension-connections.toast.clearFailed", { error: err instanceof Error ? err.message : String(err) }));
         }
       })();
     },

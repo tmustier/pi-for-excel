@@ -463,7 +463,7 @@ function renderFormatCard(args: {
 
   if (args.onRename) {
     body.appendChild(createLabeledInput({
-      label: "Name",
+      label: t("rules.field.name"),
       value: args.presetName,
       onChange: (value) => {
         args.onRename?.(value);
@@ -474,18 +474,18 @@ function renderFormatCard(args: {
 
   if (args.onDescriptionChange) {
     body.appendChild(createLabeledInput({
-      label: "Description",
+      label: t("rules.field.description"),
       value: args.description ?? "",
       onChange: (value) => {
         args.onDescriptionChange?.(value);
         args.onChange();
       },
-      placeholder: "Optional",
+      placeholder: t("rules.placeholder.optional"),
     }));
   }
 
   const formatInput = createLabeledInput({
-    label: "Format",
+    label: t("rules.field.format"),
     value: args.preset.format,
     onChange: (value) => {
       args.preset.format = value;
@@ -741,7 +741,7 @@ function renderConventionsEditor(
       headerStyle.fontColor = value;
     }),
     createToggleButton({
-      label: "Bold",
+      label: t("rules.field.bold"),
       value: headerBold,
       onChange: (value) => {
         headerStyle.bold = value;
@@ -749,7 +749,7 @@ function renderConventionsEditor(
       },
     }),
     createToggleButton({
-      label: "Wrap text",
+      label: t("rules.field.wrap_text"),
       value: headerWrap,
       onChange: (value) => {
         headerStyle.wrapText = value;
@@ -769,7 +769,7 @@ function renderConventionsEditor(
 
   visualSection.append(
     createLabeledInput({
-      label: "Font name",
+      label: t("rules.field.font_name"),
       value: fontName,
       onChange: (value) => {
         visualDefaults.fontName = value;
@@ -777,7 +777,7 @@ function renderConventionsEditor(
       },
     }),
     createLabeledNumberInput({
-      label: "Font size",
+      label: t("rules.field.font_size"),
       value: fontSize,
       min: 6,
       max: 72,
@@ -849,7 +849,7 @@ export async function showRulesDialog(opts?: {
 
   const workbookTag = document.createElement("div");
   workbookTag.className = "pi-overlay-workbook-tag";
-  workbookTag.textContent = `Workbook: ${workbookLabel}`;
+  workbookTag.textContent = t("rules.workbook_tag", { label: workbookLabel });
 
   const hint = document.createElement("div");
   hint.className = "pi-overlay-hint";

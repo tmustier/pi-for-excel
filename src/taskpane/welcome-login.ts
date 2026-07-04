@@ -173,7 +173,7 @@ export async function showWelcomeLogin(providerKeys: ProviderKeysStore): Promise
 
     const engBtn = createElement("button");
     engBtn.type = "button";
-    engBtn.textContent = "English";
+    engBtn.textContent = t("language.english");
     engBtn.style.cssText = "font-size:11px;padding:2px 8px;border:1px solid #ccc;border-radius:4px;background:var(--pi-bg, #fff);cursor:pointer;";
 
     const zhBtn = createElement("button");

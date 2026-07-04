@@ -263,7 +263,7 @@ export async function buildCustomGatewaySection(
               }
             } catch (error: unknown) {
               const message = error instanceof Error ? error.message : String(error);
-              showToast(`Failed to delete gateway: ${message}`);
+              showToast(t("custom-gateway.toast.deleteFailed", { message }));
             }
           })();
         },

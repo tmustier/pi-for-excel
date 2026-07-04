@@ -19,11 +19,11 @@ import { FileText } from "lucide";
 import { doesUiClaimStreamingEscape } from "../utils/escape-guard.js";
 import { t } from "../language/index.js";
 
-const PLACEHOLDER_HINTS = [
-  t("input.placeholder.ask"),
-  t("input.placeholder.commands"),
-  t("input.placeholder.edit"),
-  t("input.placeholder.summarize"),
+const PLACEHOLDER_HINT_KEYS = [
+  "input.placeholder.ask",
+  "input.placeholder.commands",
+  "input.placeholder.edit",
+  "input.placeholder.summarize",
 ];
 
 @customElement("pi-input")
@@ -145,7 +145,7 @@ export class PiInput extends LitElement {
     // Rotate placeholder hints every 8s (mostly default, occasionally slash hint)
     this._placeholderTimer = setInterval(() => {
       if (this.isStreaming || this._value) return; // don't rotate while typing or streaming
-      this._placeholderIndex = (this._placeholderIndex + 1) % PLACEHOLDER_HINTS.length;
+      this._placeholderIndex = (this._placeholderIndex + 1) % PLACEHOLDER_HINT_KEYS.length;
     }, 8000);
   }
 
@@ -179,7 +179,7 @@ export class PiInput extends LitElement {
         <textarea
           class="pi-input-textarea"
           .value=${this._value}
-          placeholder=${this.isStreaming ? t("input.streaming.placeholder") : PLACEHOLDER_HINTS[this._placeholderIndex]}
+          placeholder=${this.isStreaming ? t("input.streaming.placeholder") : t(PLACEHOLDER_HINT_KEYS[this._placeholderIndex])}
           rows="1"
           aria-label=${t("input.chat.aria")}
           autocomplete="off"

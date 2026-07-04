@@ -37,10 +37,10 @@ export interface ExtensionsHubDependencies {
   onChanged?: () => Promise<void> | void;
 }
 
-const TABS: ReadonlyArray<{ id: ExtensionsHubTab; label: string }> = [
-  { id: "connections", label: t("extensions-hub.tabConnections") },
-  { id: "plugins", label: t("extensions-hub.tabPlugins") },
-  { id: "skills", label: t("extensions-hub.tabSkills") },
+const TABS: ReadonlyArray<{ id: ExtensionsHubTab; labelKey: string }> = [
+  { id: "connections", labelKey: "extensions-hub.tabConnections" },
+  { id: "plugins", labelKey: "extensions-hub.tabPlugins" },
+  { id: "skills", labelKey: "extensions-hub.tabSkills" },
 ];
 
 let openInFlight: Promise<void> | null = null;
@@ -108,7 +108,7 @@ export async function showExtensionsHubDialog(
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "pi-overlay-tab";
-      btn.textContent = tab.label;
+      btn.textContent = t(tab.labelKey);
       btn.dataset.hubTab = tab.id;
       btn.setAttribute("role", "tab");
       btn.setAttribute("aria-selected", "false");
@@ -155,7 +155,7 @@ export async function showExtensionsHubDialog(
         if (deps.onChanged) await deps.onChanged();
         if (successMsg) showToast(successMsg);
       } catch (err: unknown) {
-        showToast(`Extensions: ${err instanceof Error ? err.message : String(err)}`);
+        showToast(t("extensions-hub.toast.error", { error: err instanceof Error ? err.message : String(err) }));
       } finally {
         busy = false;
         if (!disposed) void refreshAll();
@@ -246,7 +246,7 @@ export async function showExtensionsHubDialog(
     try {
       await refreshAll();
     } catch (err: unknown) {
-      showToast(`Extensions: ${err instanceof Error ? err.message : String(err)}`);
+      showToast(t("extensions-hub.toast.error", { error: err instanceof Error ? err.message : String(err) }));
     }
 
     dialog.mount();

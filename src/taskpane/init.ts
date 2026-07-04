@@ -680,7 +680,7 @@ export async function initTaskpane(opts: {
     );
 
     const address = restored.result.address;
-    showToast(`Reverted ${address}`);
+    showToast(t("init.revertedAddress", { address }));
   };
 
   const toRecoveryCheckpointSummary = (
@@ -939,14 +939,14 @@ export async function initTaskpane(opts: {
         getExecutionMode: () => Promise.resolve(getExecutionMode()),
         requestOfficeJsExecuteApproval: (request) => {
           return requestRuntimeToolApproval({
-            title: "Allow direct Office.js execution?",
+            title: t("init.confirm.officeJsTitle"),
             message: buildOfficeJsExecuteApprovalMessage(request),
             confirmLabel: "Allow once",
           });
         },
         requestPythonBridgeApproval: (request) => {
           return requestRuntimeToolApproval({
-            title: "Allow local Python / LibreOffice execution?",
+            title: t("init.confirm.pythonTitle"),
             message: buildPythonBridgeApprovalMessage(
               request.toolName,
               request.bridgeUrl,
@@ -987,7 +987,7 @@ export async function initTaskpane(opts: {
           getExecutionMode: () => Promise.resolve(getExecutionMode()),
           requestMutationApproval: (request) => {
             return requestRuntimeToolApproval({
-              title: "Allow workbook mutation in Safe mode?",
+              title: t("init.confirm.safeModeMutationTitle"),
               message: buildMutationApprovalMessage(request),
               confirmLabel: "Allow once",
             });
@@ -1193,7 +1193,7 @@ export async function initTaskpane(opts: {
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Unknown error";
       console.warn("[pi] Failed to create a new runtime:", error);
-      showToast(`Couldn't open a new tab: ${message}`);
+      showToast(t("init.couldNotOpenNewTab", { message }));
       return null;
     }
   };
@@ -1312,7 +1312,7 @@ export async function initTaskpane(opts: {
       }
 
       await openSessionInNewTab(sessionData);
-      showToast(`Reopened: ${formatSessionTitle(item.title)}`);
+      showToast(t("init.reopened", { title: formatSessionTitle(item.title) }));
       return "reopened";
     } catch {
       showToast(t("init.couldNotReopenSession"));
@@ -1417,7 +1417,7 @@ export async function initTaskpane(opts: {
 
     if (runtime.agent.state.isStreaming) {
       const proceed = await requestConfirmationDialog({
-        title: "Stop and close this tab?",
+        title: t("init.confirm.stopAndCloseTitle"),
         message: "Pi is still responding in this tab. Stop and close it?",
         confirmLabel: "Stop and close",
         cancelLabel: "Keep open",
@@ -1493,7 +1493,7 @@ export async function initTaskpane(opts: {
       return;
     }
 
-    showToast(`Renamed to ${nextTitle}`);
+    showToast(t("init.renamedTo", { title: nextTitle }));
   };
 
   const resolveRuntimeTabTitle = (runtimeId: string, runtime: SessionRuntime): string => {
@@ -1550,7 +1550,7 @@ export async function initTaskpane(opts: {
       targetTitle: duplicateTitle,
     });
 
-    showToast(`Duplicated ${sourceTitle}`);
+    showToast(t("init.duplicated", { title: sourceTitle }));
   };
 
   const closeOtherRuntimes = async (runtimeId: string): Promise<void> => {
@@ -1586,7 +1586,7 @@ export async function initTaskpane(opts: {
     if (!moved) return;
 
     const directionLabel = direction < 0 ? "left" : "right";
-    showToast(`Moved tab ${directionLabel}`, 1200);
+    showToast(t("init.movedTab", { direction: directionLabel }), 1200);
   };
 
   workbookCoordinator.subscribe((event) => {
@@ -1707,7 +1707,7 @@ export async function initTaskpane(opts: {
       targetTitle: modelForkTitle,
     });
 
-    showToast(`Opened ${modelForkTitle} in a new tab`);
+    showToast(t("init.openedInNewTab", { title: modelForkTitle }));
   };
 
   const openModelSelector = (): void => {
@@ -1760,7 +1760,7 @@ export async function initTaskpane(opts: {
         await revertLatestCheckpoint();
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : "Unknown error";
-        showToast(`Revert failed: ${message}`);
+        showToast(t("init.revertFailed", { message }));
       }
     },
     createManualFullBackup: async () => {
@@ -1816,7 +1816,7 @@ export async function initTaskpane(opts: {
     }
 
     if (result === "busy-blocked") {
-      showToast(`Can't run /${name} while Pi is busy`);
+      showToast(t("init.cantRunBusy", { command: name }));
       return;
     }
 
@@ -1894,10 +1894,10 @@ export async function initTaskpane(opts: {
         }
 
         const importedLabel = `${count} file${count === 1 ? "" : "s"}`;
-        showToast(`Imported ${importedLabel} into Files.`);
+        showToast(t("init.importedIntoFiles", { label: importedLabel }));
       })
       .catch((error: unknown) => {
-        showToast(`Import failed: ${error instanceof Error ? error.message : "Unknown error"}`);
+        showToast(t("init.importFailed", { error: error instanceof Error ? error.message : t("init.unknownError") }));
       });
   };
   sidebar.onOpenResumePicker = () => {

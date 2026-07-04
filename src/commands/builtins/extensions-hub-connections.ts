@@ -657,7 +657,7 @@ function renderBridgeCard(args: {
       try {
         normalizedCandidateUrl = validateOfficeProxyUrl(candidateUrl);
       } catch (err: unknown) {
-        showToast(`Invalid URL: ${err instanceof Error ? err.message : String(err)}`);
+        showToast(t("ext-hub-connections.toast.invalidUrl", { error: err instanceof Error ? err.message : String(err) }));
         return;
       }
     }

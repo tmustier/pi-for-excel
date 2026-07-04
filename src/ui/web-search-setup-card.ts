@@ -254,11 +254,11 @@ function createKeyStep(
           return;
         }
 
-        status.textContent = `Key saved. Validation: ${result.message}`;
+        status.textContent = t("web-search-setup.keySavedValidation", { message: result.message });
         status.className = "pi-search-setup__status is-warn";
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
-        status.textContent = `Error: ${message}`;
+        status.textContent = t("web-search-setup.error", { message });
         status.className = "pi-search-setup__status is-error";
       } finally {
         saving = false;
@@ -294,12 +294,12 @@ function buildCardContent(
         }),
         createKeyStep(provider, 2, settings, proxyBaseUrl, markDone),
       );
-      return { title: "Web search needs setup", body };
+      return { title: t("web-search-setup.title.needsSetup"), body };
     }
 
     case "needs_key": {
       body.append(createKeyStep(provider, null, settings, proxyBaseUrl, markDone));
-      return { title: "Web search needs an API key", body };
+      return { title: t("web-search-setup.title.needsApiKey"), body };
     }
 
     case "needs_proxy": {
@@ -308,7 +308,7 @@ function buildCardContent(
         proxyBaseUrl,
         onProxyReady: markDone,
       }));
-      return { title: "Web search can't connect", body };
+      return { title: t("web-search-setup.title.cantConnect"), body };
     }
 
     case "wrong_provider": {
@@ -317,15 +317,15 @@ function buildCardContent(
 
       const hint = document.createElement("p");
       hint.className = "pi-search-setup__text";
-      hint.textContent = `No ${currentInfo.apiKeyLabel} found. You have a ${alternativeInfo.title} key configured.`;
+      hint.textContent = t("web-search-setup.noCurrentKeyHaveAlternative", { current: currentInfo.apiKeyLabel, alternative: alternativeInfo.title });
 
       const switchNote = document.createElement("p");
       switchNote.className = "pi-search-setup__text";
-      switchNote.textContent = `Switch to ${alternativeInfo.title} in /tools, or set up a ${currentInfo.title} key below:`;
+      switchNote.textContent = t("web-search-setup.switchOrSetup", { alternative: alternativeInfo.title, current: currentInfo.title });
 
       body.append(hint, switchNote, createKeyStep(provider, null, settings, proxyBaseUrl, markDone));
 
-      return { title: `No ${currentInfo.apiKeyLabel} found`, body };
+      return { title: t("web-search-setup.title.noKeyFound", { label: currentInfo.apiKeyLabel }), body };
     }
 
     case "generic_error": {
@@ -333,7 +333,7 @@ function buildCardContent(
       message.className = "pi-search-setup__text";
       message.textContent = t("web-search-setup.check-config");
       body.append(message);
-      return { title: "Web search failed", body };
+      return { title: t("web-search-setup.title.failed"), body };
     }
   }
 }

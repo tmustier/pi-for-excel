@@ -2,6 +2,7 @@
  * Pure filtering, search, and sort helpers for recovery overlay.
  */
 
+import { t } from "../../language/index.js";
 import type { RecoveryCheckpointSummary, RecoveryCheckpointToolName } from "./recovery-overlay.js";
 
 // ---------------------------------------------------------------------------
@@ -37,7 +38,7 @@ export function buildToolFilterOptions(
   }
 
   const options: RecoveryToolFilterOption[] = [
-    { value: "all", label: "All actions", count: checkpoints.length },
+    { value: "all", label: t("recovery-filtering.allActions"), count: checkpoints.length },
   ];
 
   for (const [tool, label] of Object.entries(TOOL_FILTER_LABELS)) {
