@@ -18,6 +18,7 @@ import {
 } from "../../extensions/permissions.js";
 import { requestConfirmationDialog } from "../../ui/confirm-dialog.js";
 import { showToast } from "../../ui/toast.js";
+import { t } from "../../language/index.js";
 import {
   createSectionHeader,
   createItemCard,
@@ -116,12 +117,12 @@ export function renderPluginsTab(args: {
 
   // ── Installed section ─────────────────────────
   container.appendChild(createSectionHeader({
-    label: "Installed",
+    label: t("ext-hub-plugins.installed"),
     count: statuses.length,
   }));
 
   if (statuses.length === 0) {
-    container.appendChild(createEmptyInline(lucide(Puzzle), "No plugins installed.\nPi can build plugins, or install one from a URL."));
+    container.appendChild(createEmptyInline(lucide(Puzzle), t("ext-hub-plugins.empty")));
   } else {
     const list = document.createElement("div");
     list.className = "pi-hub-stack";
@@ -135,20 +136,20 @@ export function renderPluginsTab(args: {
   }
 
   // ── Install from URL ───────────────────────────
-  container.appendChild(createSectionHeader({ label: "Install" }));
+  container.appendChild(createSectionHeader({ label: t("ext-hub-plugins.install") }));
 
   const installForm = createAddForm();
   const urlRow = createAddFormRow();
-  const urlInput = createAddFormInput("Paste a plugin URL…");
+  const urlInput = createAddFormInput(t("ext-hub-plugins.pasteUrl"));
   urlRow.append(
     urlInput,
-    createButton("Install", {
+    createButton(t("ext-hub-plugins.installButton"), {
       primary: true,
       compact: true,
       onClick: () => {
         if (isBusy()) return;
         const url = urlInput.value.trim();
-        if (!url) { showToast("Enter a URL first."); return; }
+        if (!url) { showToast(t("extensions-hub-plugins.toast.enterUrl")); return; }
         void installFromUrl(url, manager, onChanged, () => renderPluginsTab(args));
         urlInput.value = "";
       },
@@ -202,13 +203,13 @@ function renderPluginCard(
   // Commands
   if (status.commandNames.length > 0) {
     const cmds = status.commandNames.map((c: string) => `/${c}`).join(", ");
-    card.body.appendChild(createConfigRow("Commands", createConfigValue(cmds)));
+    card.body.appendChild(createConfigRow(t("ext-hub-plugins.commands"), createConfigValue(cmds)));
   }
 
   // Permissions grid
   const allCaps = listAllExtensionCapabilities();
   if (allCaps.length > 0) {
-    card.body.appendChild(createSectionHeader({ label: "Permissions" }));
+    card.body.appendChild(createSectionHeader({ label: t("ext-hub-plugins.permissions") }));
 
     const grid = document.createElement("div");
     grid.className = "pi-item-card__permissions";
@@ -247,7 +248,7 @@ function renderPluginCard(
 
   // Uninstall
   card.body.appendChild(createActionsRow(
-    createButton("Uninstall", {
+    createButton(t("ext-hub-plugins.uninstall"), {
       danger: true,
       compact: true,
       onClick: () => {

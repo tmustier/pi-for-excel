@@ -111,6 +111,7 @@ import {
 import { loadDiscoverableAgentSkillsFromWorkspace } from "../skills/external-store.js";
 import { PI_SKILLS_CHANGED_EVENT } from "../skills/events.js";
 import { createSkillReadCache } from "../skills/read-cache.js";
+import { initLanguage, t } from "../language/index.js";
 import { initAppStorage } from "../storage/init-app-storage.js";
 import { renderError } from "../ui/loading.js";
 import { showFilesWorkspaceDialog } from "../ui/files-dialog.js";
@@ -156,7 +157,7 @@ import { injectStatusBar } from "./status-bar.js";
 import {
   parseStatusContextWarningSeverity,
   STATUS_CONTEXT_DESC_ATTR,
-  STATUS_CONTEXT_POPOVER_FALLBACK_DESCRIPTION,
+  getStatusContextPopoverFallbackDescription,
   STATUS_CONTEXT_TOKENS_ATTR,
   STATUS_CONTEXT_WARNING_ATTR,
   STATUS_CONTEXT_WARNING_SEVERITY_ATTR,
@@ -221,6 +222,14 @@ export async function initTaskpane(opts: {
   // 1. Storage
   const { providerKeys, sessions, settings, customProviders } = initAppStorage();
 
+  // Initialize language from storage
+  try {
+    const lang = await settings.get<string>("language");
+    initLanguage(lang || "en");
+  } catch {
+    initLanguage("en");
+  }
+
   // Seed a predictable proxy default for OAuth flows.
   await ensureDefaultProxyUrl(settings);
 
@@ -256,7 +265,7 @@ export async function initTaskpane(opts: {
       proxyUrl.trim().length > 0 &&
       !isLoopbackProxyUrl(proxyUrl)
     ) {
-      showToast("Security warning: proxy URL is not localhost — it can see your tokens and prompts.");
+      showToast(t("init.securityWarning"));
     }
   } catch {
     // ignore
@@ -392,20 +401,20 @@ export async function initTaskpane(opts: {
   const sidebar = new PiSidebar();
   sidebar.emptyHints = [
     {
-      label: "Explain this workbook",
-      prompt: "Read through the entire workbook — every sheet, its structure, formulas, and named ranges. Then write a clear overview and user manual for this workbook.\nCover: what the workbook does, how it's organized, the logic flow between sheets, where inputs live and where outputs are derived.\nIf it's a model: explain the key assumptions (and where to change them), the calculation logic, and how outputs depend on inputs.\nIf it's data: explain what the data represents, the key fields, any derived columns, and notable patterns or gaps.\nStructure your explanation like documentation — start with a summary, then walk through each sheet's role.",
+      label: t("hint.explain.label"),
+      prompt: t("hint.explain.prompt"),
     },
     {
-      label: "Quality check this workbook",
-      prompt: "Review this workbook for errors and issues across logic, assumptions, and formatting:\n- Logic: broken or circular references, hardcoded numbers inside formulas, inconsistent formula patterns across rows/columns, missing links between sheets, #REF or #VALUE errors.\n- Assumptions: flag any key assumptions (e.g. growth rates, discount rates, margins) — are they reasonable? Are they clearly labelled and easy to find, or buried in formulas?\n- Formatting: inconsistent number formats within columns, missing or misaligned headers, unlabelled input cells, inconsistent decimal places or currency symbols, rows/columns that break the visual pattern.\nSummarize your findings as a prioritized list of recommendations, grouped by severity.",
+      label: t("hint.quality.label"),
+      prompt: t("hint.quality.prompt"),
     },
     {
-      label: "Build my financial model",
-      prompt: "First, read through the entire workbook — every sheet, its structure, formulas, named ranges, and any existing data. Form a clear picture of what's already here and how it's organized.\nIf the workbook is blank or mostly empty: ask me what kind of financial model I need — for example a DCF, LBO, three-statement model, budget, forecast, or comparison — then build it step by step, starting with the assumptions.\nIf there's a partially complete model: explain the current structure, the logic flow, key assumptions, and what's missing or incomplete. Offer to extend or finish it.\nIf there's data but no model: explain what the data represents, suggest what could be modelled from it, and offer to build it.",
+      label: t("hint.financial.label"),
+      prompt: t("hint.financial.prompt"),
     },
     {
-      label: "Format this sheet",
-      prompt: "Review this worksheet and infer the correct format for each cell from context, then apply formatting including:\n- Number formats (currency, percentages, dates, integers vs. decimals)\n- Font colour coding (e.g. blue for inputs, black for formulas)\n- Cell styles for inputs, outputs, and headers\n- Consistent headers and section labels\nEnsure formats are consistent: for example, if all other cells in a column use one decimal place, apply the same. If a row is bold or italicised, extend that to any unformatted cells in the row.\nAfter formatting, read back the sheet and verify your changes look correct.",
+      label: t("hint.format.label"),
+      prompt: t("hint.format.prompt"),
     },
   ];
 
@@ -1145,7 +1154,7 @@ export async function initTaskpane(opts: {
               `Network error (likely CORS). If you're using OAuth, enable /settings → Proxy with ${DEFAULT_PROXY_URL} and retry. Guide: ${PROXY_HELPER_DOCS_URL}`,
             );
           } else {
-            showErrorBanner(errorRoot, `LLM error: ${err}`);
+            showErrorBanner(errorRoot, t("init.llmError", { error: err }));
           }
         }
       } else {
@@ -1243,13 +1252,13 @@ export async function initTaskpane(opts: {
   const replaceActiveRuntimeSession = async (sessionData: SessionData): Promise<void> => {
     const activeRuntime = getActiveRuntime();
     if (!activeRuntime) {
-      showToast("No active session");
+      showToast(t("init.noActiveSession"));
       return;
     }
 
     const busy = activeRuntime.agent.state.isStreaming || activeRuntime.actionQueue.isBusy();
     if (busy) {
-      showToast("Current tab is busy — use open in new tab or wait for it to finish");
+      showToast(t("init.currentTabBusy"));
       return;
     }
 
@@ -1298,7 +1307,7 @@ export async function initTaskpane(opts: {
     try {
       const sessionData = await sessions.loadSession(item.sessionId);
       if (!sessionData) {
-        showToast("Couldn't reopen session");
+        showToast(t("init.couldNotReopenSession"));
         return "missing";
       }
 
@@ -1306,7 +1315,7 @@ export async function initTaskpane(opts: {
       showToast(`Reopened: ${formatSessionTitle(item.title)}`);
       return "reopened";
     } catch {
-      showToast("Couldn't reopen session");
+      showToast(t("init.couldNotReopenSession"));
       return "failed";
     }
   };
@@ -1314,7 +1323,7 @@ export async function initTaskpane(opts: {
   const reopenRecentlyClosedById = async (recentlyClosedId: string): Promise<boolean> => {
     const item = recentlyClosed.removeById(recentlyClosedId);
     if (!item) {
-      showToast("Session is no longer in recently closed");
+      showToast(t("init.sessionNotInRecentlyClosed"));
       return false;
     }
 
@@ -1329,7 +1338,7 @@ export async function initTaskpane(opts: {
   const reopenLastClosed = async (): Promise<void> => {
     const item = recentlyClosed.popMostRecent();
     if (!item) {
-      showToast("No recently closed tab");
+      showToast(t("init.noRecentlyClosedTab"));
       return;
     }
 
@@ -1344,7 +1353,7 @@ export async function initTaskpane(opts: {
     const checkpoint = latest[0];
 
     if (!checkpoint) {
-      showToast("No backups for this workbook yet");
+      showToast(t("init.noBackupsYet"));
       return;
     }
 
@@ -1394,7 +1403,7 @@ export async function initTaskpane(opts: {
     optsForClose?: { showUndoToast?: boolean },
   ): Promise<boolean> => {
     if (runtimeManager.listRuntimes().length <= 1) {
-      showToast("Can't close the last tab");
+      showToast(t("init.cantCloseLastTab"));
       return false;
     }
 
@@ -1402,7 +1411,7 @@ export async function initTaskpane(opts: {
     if (!runtime) return false;
 
     if (runtime.lockState === "holding_lock") {
-      showToast("Wait for workbook changes to finish before closing this tab");
+      showToast(t("init.waitForChangesBeforeClose"));
       return false;
     }
 
@@ -1439,8 +1448,8 @@ export async function initTaskpane(opts: {
     const showUndoToast = optsForClose?.showUndoToast !== false;
     if (showUndoToast) {
       showActionToast({
-        message: `Closed ${closedItem.title}`,
-        actionLabel: "Undo",
+        message: t("init.closedTab", { title: closedItem.title }),
+        actionLabel: t("init.undo"),
         duration: 9000,
         onAction: () => {
           void reopenRecentlyClosedById(closedItem.id);
@@ -1454,12 +1463,12 @@ export async function initTaskpane(opts: {
   const renameRuntimeTab = async (runtimeId: string): Promise<void> => {
     const runtime = runtimeManager.getRuntime(runtimeId);
     if (!runtime) {
-      showToast("Session not found");
+      showToast(t("init.sessionNotFound"));
       return;
     }
 
     if (runtime.agent.state.isStreaming || runtime.actionQueue.isBusy()) {
-      showToast("Wait for this tab to finish before renaming");
+      showToast(t("init.waitBeforeRenaming"));
       return;
     }
 
@@ -1480,7 +1489,7 @@ export async function initTaskpane(opts: {
     document.dispatchEvent(new CustomEvent("pi:status-update"));
 
     if (nextTitle.length === 0) {
-      showToast("Tab name reset");
+      showToast(t("init.tabNameReset"));
       return;
     }
 
@@ -1523,12 +1532,12 @@ export async function initTaskpane(opts: {
   const duplicateRuntimeTab = async (runtimeId: string): Promise<void> => {
     const sourceRuntime = runtimeManager.getRuntime(runtimeId);
     if (!sourceRuntime) {
-      showToast("Session not found");
+      showToast(t("init.sessionNotFound"));
       return;
     }
 
     if (sourceRuntime.agent.state.isStreaming || sourceRuntime.actionQueue.isBusy()) {
-      showToast("Wait for this tab to finish before duplicating");
+      showToast(t("init.waitBeforeDuplicating"));
       return;
     }
 
@@ -1550,7 +1559,7 @@ export async function initTaskpane(opts: {
       .map((tab) => tab.runtimeId);
 
     if (tabsToClose.length === 0) {
-      showToast("No other tabs");
+      showToast(t("init.noOtherTabs"));
       return;
     }
 
@@ -1565,11 +1574,11 @@ export async function initTaskpane(opts: {
     runtimeManager.switchRuntime(runtimeId);
 
     if (closedCount === 0) {
-      showToast("No tabs were closed");
+      showToast(t("init.noTabsWereClosed"));
       return;
     }
 
-    showToast(`Closed ${closedCount} other tab${closedCount === 1 ? "" : "s"}`);
+    showToast(t("init.closedOtherTabs", { count: closedCount }));
   };
 
   const moveRuntimeTab = (runtimeId: string, direction: -1 | 1): void => {
@@ -1664,7 +1673,7 @@ export async function initTaskpane(opts: {
   const applyModelSelection = async (runtimeId: string, nextModel: RuntimeModel): Promise<void> => {
     const runtime = runtimeManager.getRuntime(runtimeId);
     if (!runtime) {
-      showToast("Session not found");
+      showToast(t("init.sessionNotFound"));
       return;
     }
 
@@ -1674,7 +1683,7 @@ export async function initTaskpane(opts: {
     }
 
     if (runtime.agent.state.isStreaming || runtime.actionQueue.isBusy()) {
-      showToast("Wait for this tab to finish before changing models");
+      showToast(t("init.waitBeforeChangingModels"));
       return;
     }
 
@@ -1704,7 +1713,7 @@ export async function initTaskpane(opts: {
   const openModelSelector = (): void => {
     const activeRuntime = getActiveRuntime();
     if (!activeRuntime) {
-      showToast("No active session");
+      showToast(t("init.noActiveSession"));
       return;
     }
 
@@ -1732,7 +1741,7 @@ export async function initTaskpane(opts: {
     renameActiveSession: async (title: string) => {
       const activeRuntime = getActiveRuntime();
       if (!activeRuntime) {
-        showToast("No active session");
+        showToast(t("init.noActiveSession"));
         return;
       }
 
@@ -1788,7 +1797,7 @@ export async function initTaskpane(opts: {
 
     const activeRuntime = getActiveRuntime();
     if (!activeRuntime) {
-      showToast("No active session");
+      showToast(t("init.noActiveSession"));
       return;
     }
 
@@ -1812,7 +1821,7 @@ export async function initTaskpane(opts: {
     }
 
     if (result === "missing-queue") {
-      showToast("No active session");
+      showToast(t("init.noActiveSession"));
     }
   };
   document.addEventListener("pi:command-run", onCommandRun);
@@ -1821,7 +1830,7 @@ export async function initTaskpane(opts: {
     clearErrorBanner(errorRoot);
     const activeRuntime = getActiveRuntime();
     if (!activeRuntime) {
-      showToast("No active session");
+      showToast(t("init.noActiveSession"));
       return;
     }
     activeRuntime.actionQueue.enqueuePrompt(text);
@@ -1880,7 +1889,7 @@ export async function initTaskpane(opts: {
     })
       .then((count) => {
         if (count <= 0) {
-          showToast("No files were imported.");
+          showToast(t("init.noFilesImported"));
           return;
         }
 
@@ -1979,7 +1988,7 @@ export async function initTaskpane(opts: {
     onCloseActiveTab: () => {
       const activeRuntime = getActiveRuntime();
       if (!activeRuntime) {
-        showToast("No active session");
+        showToast(t("init.noActiveSession"));
         return;
       }
 
@@ -2041,7 +2050,7 @@ export async function initTaskpane(opts: {
 
     const activeAgent = getActiveAgent();
     if (!activeAgent) {
-      showToast("No active session");
+      showToast(t("init.noActiveSession"));
       return;
     }
 
@@ -2065,7 +2074,7 @@ export async function initTaskpane(opts: {
     if (!trigger) return;
 
     const description = trigger.getAttribute(STATUS_CONTEXT_DESC_ATTR)
-      ?? STATUS_CONTEXT_POPOVER_FALLBACK_DESCRIPTION;
+      ?? getStatusContextPopoverFallbackDescription();
 
     const tokenDetail = trigger.getAttribute(STATUS_CONTEXT_TOKENS_ATTR) ?? undefined;
 

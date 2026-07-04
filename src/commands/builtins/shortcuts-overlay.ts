@@ -11,6 +11,7 @@ import {
   createOverlayHeader,
 } from "../../ui/overlay-dialog.js";
 import { SHORTCUTS_OVERLAY_ID } from "../../ui/overlay-ids.js";
+import { t } from "../../language/index.js";
 
 // ---------------------------------------------------------------------------
 // Platform detection
@@ -47,44 +48,46 @@ function same(key: string, description: string): ShortcutEntry {
   return { mac: key, win: key, description };
 }
 
-const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
+function getShortcutGroups(): readonly ShortcutGroup[] {
+  return [
   {
-    title: "Chat",
+    title: t("shortcuts.section.chat"),
     shortcuts: [
-      same("Enter", "Send message"),
-      same("Enter (while streaming)", "Interrupt and redirect"),
-      { mac: "⌥ Enter", win: "Alt+Enter", description: "Queue follow-up" },
-      { mac: "⌥ ↑", win: "Alt+↑", description: "Restore queued messages" },
-      { mac: "⇧ Tab", win: "Shift+Tab", description: "Cycle thinking level" },
+      same("Enter", t("shortcuts.desc.send")),
+      same(t("shortcuts.keys.enterStreaming"), t("shortcuts.desc.interrupt")),
+      { mac: "⌥ Enter", win: "Alt+Enter", description: t("shortcuts.desc.queue") },
+      { mac: "⌥ ↑", win: "Alt+↑", description: t("shortcuts.desc.restore_queue") },
+      { mac: "⇧ Tab", win: "Shift+Tab", description: t("shortcuts.desc.cycle_thinking") },
     ],
   },
   {
-    title: "Tabs",
+    title: t("shortcuts.section.tabs"),
     shortcuts: [
-      { mac: "⌘ T", win: "Ctrl+T", description: "New tab" },
-      { mac: "⌘ W", win: "Ctrl+W", description: "Close tab" },
-      { mac: "⌘ ⇧ T", win: "Ctrl+Shift+T", description: "Reopen closed tab" },
-      same("← →", "Switch tabs (exit input first)"),
-      { mac: "⌘ ⇧ [  /  ⌘ ⇧ ]", win: "Ctrl+PgUp / PgDn", description: "Previous / next tab" },
+      { mac: "⌘ T", win: "Ctrl+T", description: t("shortcuts.desc.new_tab") },
+      { mac: "⌘ W", win: "Ctrl+W", description: t("shortcuts.desc.close_tab") },
+      { mac: "⌘ ⇧ T", win: "Ctrl+Shift+T", description: t("shortcuts.desc.reopen_tab") },
+      same("← →", t("shortcuts.desc.switch_tabs")),
+      { mac: "⌘ ⇧ [  /  ⌘ ⇧ ]", win: "Ctrl+PgUp / PgDn", description: t("shortcuts.desc.prev_next_tab") },
     ],
   },
   {
-    title: "Navigation",
+    title: t("shortcuts.section.navigation"),
     shortcuts: [
-      same("/", "Open command menu"),
-      same("↑ ↓", "Navigate menu items"),
-      same("F2", "Focus chat input"),
-      same("F6", "Toggle focus: sheet ↔ sidebar"),
-      { mac: "⇧ F6", win: "Shift+F6", description: "Toggle focus (reverse)" },
+      same("/", t("shortcuts.desc.command_menu")),
+      same("↑ ↓", t("shortcuts.desc.navigate_menu")),
+      same("F2", t("shortcuts.desc.focus_input")),
+      same("F6", t("shortcuts.desc.toggle_focus")),
+      { mac: "⇧ F6", win: "Shift+F6", description: t("shortcuts.desc.toggle_focus_reverse") },
     ],
   },
   {
-    title: "System",
+    title: t("shortcuts.section.system"),
     shortcuts: [
-      same("Esc", "Dismiss overlay / stop generation / exit input"),
+      same("Esc", t("shortcuts.desc.dismiss")),
     ],
   },
-];
+  ];
+}
 
 // ---------------------------------------------------------------------------
 // Overlay
@@ -103,15 +106,15 @@ export function showShortcutsDialog(): void {
 
   const { header } = createOverlayHeader({
     onClose: dialog.close,
-    closeLabel: "Close keyboard shortcuts",
-    title: "Keyboard Shortcuts",
-    subtitle: "Quick reference for chat, tabs, navigation, and system shortcuts.",
+    closeLabel: t("shortcuts.close"),
+    title: t("shortcuts.title"),
+    subtitle: t("shortcuts.subtitle"),
   });
 
   const list = document.createElement("div");
   list.className = "pi-shortcuts-list";
 
-  for (const group of SHORTCUT_GROUPS) {
+  for (const group of getShortcutGroups()) {
     const section = document.createElement("div");
     section.className = "pi-shortcuts-section";
 

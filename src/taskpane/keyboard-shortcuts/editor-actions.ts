@@ -6,6 +6,7 @@ import type { Agent, AgentMessage } from "@earendil-works/pi-agent-core";
 
 import type { PiSidebar } from "../../ui/pi-sidebar.js";
 import { showToast } from "../../ui/toast.js";
+import { t } from "../../language/index.js";
 import { hideCommandMenu } from "../../commands/command-menu.js";
 import { executeSlashCommand } from "../../commands/slash-command-execution.js";
 
@@ -180,7 +181,7 @@ export function handleSlashCommandExecution(args: {
   }
 
   if (result === "missing-queue") {
-    showToast("No active session");
+    showToast(t("editor-actions.toast.noActiveSession"));
     return true;
   }
 

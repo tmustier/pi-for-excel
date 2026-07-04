@@ -62,6 +62,7 @@ import {
   createToggle,
 } from "../../ui/extensions-hub-components.js";
 import { lucide, Search, Terminal, Zap } from "../../ui/lucide-icons.js";
+import { t } from "../../language/index.js";
 import type { ExtensionsHubDependencies } from "./extensions-hub-overlay.js";
 import { renderExtensionConnectionsSection } from "./extensions-hub-extension-connections.js";
 
@@ -97,13 +98,13 @@ function describeWebSearchAvailability(args: {
   }
 
   if (sessionEnabled) {
-    return hasWorkbook ? "Session only" : "Session";
+    return hasWorkbook ? t("ext-hub-connections.scopeSessionOnly") : "Session";
   }
 
-  return hasWorkbook ? "Off in all scopes" : "Off";
+  return hasWorkbook ? t("ext-hub-connections.scopeOff") : "Off";
 }
 
-const BRIDGE_SETUP_HINT = "Open Terminal · paste · press Enter · type y and Enter if prompted · leave open";
+const BRIDGE_SETUP_HINT = t("ext-hub-connections.setupHint");
 
 function selectElementText(element: HTMLElement): void {
   const selection = window.getSelection();
@@ -130,7 +131,7 @@ function createBridgeSetupCommand(command: string): HTMLDivElement {
   copyButton.type = "button";
   copyButton.className = "pi-hub-bridge-setup__copy";
   copyButton.textContent = "📋";
-  copyButton.title = "Copy command";
+  copyButton.title = t("bridge-setup.copyCommandTitle");
   copyButton.addEventListener("click", () => {
     if (!navigator.clipboard?.writeText) {
       selectElementText(code);
@@ -218,8 +219,8 @@ export async function renderConnectionsTab(args: {
   surface.className = "pi-overlay-surface";
 
   const masterToggle = createToggleRow({
-    label: "External tools",
-    sublabel: "Allow Pi to search the web and call external services",
+    label: t("extensions-hub-connections.externalTools"),
+    sublabel: t("ext-hub-connections.allowExternal"),
     checked: externalEnabled,
     onChange: (checked) => {
       void runMutation(
@@ -233,13 +234,13 @@ export async function renderConnectionsTab(args: {
   container.appendChild(surface);
 
   // ── Web search section ────────────────────────
-  container.appendChild(createSectionHeader({ label: "Web search" }));
+  container.appendChild(createSectionHeader({ label: t("extensions-hub-connections.webSearch") }));
 
   const webBadgeText = !webSearchEnabled
-    ? "Off"
+    ? t("extensions-hub-connections.webSearchOff")
     : apiKey
-      ? "Connected"
-      : (isApiKeyRequired(selectedProvider) ? "No API key" : "Ready");
+      ? t("extensions-hub-connections.webSearchConnected")
+      : (isApiKeyRequired(selectedProvider) ? t("extensions-hub-connections.noApiKey") : t("extensions-hub-connections.ready"));
   const webBadgeTone = !webSearchEnabled
     ? "muted"
     : (apiKey || !isApiKeyRequired(selectedProvider) ? "ok" : "warn");
@@ -272,7 +273,7 @@ export async function renderConnectionsTab(args: {
     );
   });
 
-  webCard.body.appendChild(createConfigRow("Provider", providerSelect));
+  webCard.body.appendChild(createConfigRow(t("extensions-hub-connections.providerLabel"), providerSelect));
 
   // API key row
   const apiKeyInput = createConfigInput({
@@ -286,12 +287,12 @@ export async function renderConnectionsTab(args: {
 
   const apiKeyLabel = document.createElement("span");
   apiKeyLabel.className = "pi-item-card__config-label";
-  apiKeyLabel.textContent = "API key";
+  apiKeyLabel.textContent = t("extensions-hub-connections.apiKeyLabel");
 
   const apiKeyControls = document.createElement("div");
   apiKeyControls.className = "pi-hub-inline-row";
 
-  const validateBtn = createButton("Validate", {
+  const validateBtn = createButton(t("extensions-hub-connections.validateButton"), {
     compact: true,
     onClick: () => {
       if (isBusy()) return;
@@ -300,7 +301,7 @@ export async function renderConnectionsTab(args: {
         try {
           const config = await loadWebSearchProviderConfig(settings);
           const testKey = key.length > 0 ? key : (getApiKeyForProvider(config) ?? "");
-          if (!testKey) { showToast("No API key to validate."); return; }
+          if (!testKey) { showToast(t("extensions-hub-connections.toast.noApiKeyToValidate")); return; }
           const proxyBaseUrl = await getEnabledProxyBaseUrl(settings);
           const result = await validateWebSearchApiKey({ provider: selectedProvider, apiKey: testKey, proxyBaseUrl });
           showToast(result.ok ? `✓ ${result.message}` : `✗ ${result.message}`);
@@ -311,12 +312,12 @@ export async function renderConnectionsTab(args: {
     },
   });
 
-  const saveKeyBtn = createButton("Save", {
+  const saveKeyBtn = createButton(t("extensions-hub-connections.saveButton"), {
     primary: true,
     compact: true,
     onClick: () => {
       const key = apiKeyInput.value.trim();
-      if (!key) { showToast("Enter an API key first."); return; }
+      if (!key) { showToast(t("extensions-hub-connections.toast.enterApiKey")); return; }
       const formatWarning = checkApiKeyFormat(selectedProvider, key);
       void runMutation(
         () => saveWebSearchApiKey(settings, selectedProvider, key),
@@ -328,7 +329,7 @@ export async function renderConnectionsTab(args: {
     },
   });
 
-  const clearKeyBtn = createButton("Clear", {
+  const clearKeyBtn = createButton(t("extensions-hub-connections.clearButton"), {
     compact: true,
     onClick: () => {
       void runMutation(
@@ -359,17 +360,17 @@ export async function renderConnectionsTab(args: {
 
   const scopeSummary = document.createElement("summary");
   scopeSummary.className = "pi-hub-advanced-summary";
-  scopeSummary.textContent = "Scope controls";
+  scopeSummary.textContent = t("extensions-hub-connections.scope-controls");
 
   const scopeBody = document.createElement("div");
   scopeBody.className = "pi-hub-advanced-body";
 
   const sessionToggleRow = createToggleRow({
-    label: "Enable for this session",
+    label: t("ext-hub-connections.enableSession"),
     checked: webSearchSessionEnabled,
     onChange: (checked) => {
       if (!sessionId) {
-        showToast("No active session");
+        showToast(t("extensions-hub-connections.toast.noActiveSession"));
         return;
       }
       void runMutation(async () => {
@@ -389,12 +390,12 @@ export async function renderConnectionsTab(args: {
 
   const workbookToggleRow = createToggleRow({
     label: workbookId
-      ? `Enable for workbook (${workbookContext.workbookLabel})`
-      : "Workbook scope unavailable",
+      ? t("ext-hub-connections.enableWorkbook", { label: workbookContext.workbookLabel })
+      : t("ext-hub-connections.scopeUnavailable"),
     checked: webSearchWorkbookEnabled,
     onChange: (checked) => {
       if (!workbookId) {
-        showToast("Workbook scope unavailable");
+        showToast(t("extensions-hub-connections.toast.workbookScopeUnavailable"));
         return;
       }
       void runMutation(async () => {
@@ -429,8 +430,8 @@ export async function renderConnectionsTab(args: {
   const mcpAddVisible = { value: false };
 
   const mcpHeader = createSectionHeader({
-    label: "MCP servers",
-    actionLabel: "+ Add server",
+    label: t("extensions-hub-connections.mcpSection"),
+    actionLabel: t("extensions-hub-connections.addServer"),
     onAction: () => {
       mcpAddVisible.value = !mcpAddVisible.value;
       mcpAddForm.hidden = !mcpAddVisible.value;
@@ -442,7 +443,7 @@ export async function renderConnectionsTab(args: {
   mcpList.className = "pi-hub-stack";
 
   if (mcpServers.length === 0) {
-    mcpList.appendChild(createEmptyInline(lucide(Zap), "No MCP servers configured.\nAdd one to connect external tools."));
+    mcpList.appendChild(createEmptyInline(lucide(Zap), t("ext-hub-connections.noMcpServers")));
   } else {
     for (const server of mcpServers) {
       mcpList.appendChild(renderMcpServerCard(server, settings, isBusy, runMutation));
@@ -451,16 +452,16 @@ export async function renderConnectionsTab(args: {
   container.appendChild(mcpList);
 
   // MCP add form (hidden by default)
-  const nameInput = createAddFormInput("Server name");
-  const urlInput = createAddFormInput("https://server-url/rpc");
-  const tokenInput = createAddFormInput("Bearer token (optional)");
+  const nameInput = createAddFormInput(t("ext-hub-connections.serverNamePlaceholder"));
+  const urlInput = createAddFormInput(t("ext-hub-connections.serverUrlPlaceholder"));
+  const tokenInput = createAddFormInput(t("ext-hub-connections.bearerTokenPlaceholder"));
   tokenInput.type = "password";
 
   const addRow = createAddFormRow();
   addRow.append(nameInput, urlInput);
 
   const tokenRow = createAddFormRow();
-  tokenRow.append(tokenInput, createButton("Add", {
+  tokenRow.append(tokenInput, createButton(t("ext-hub-connections.addButton"), {
     primary: true,
     compact: true,
     onClick: () => {
@@ -489,7 +490,7 @@ export async function renderConnectionsTab(args: {
   const showTmux = true;
 
   if (showPython || showTmux) {
-    container.appendChild(createSectionHeader({ label: "Bridges" }));
+    container.appendChild(createSectionHeader({ label: t("extensions-hub-connections.bridgesSection") }));
 
     const bridgeList = document.createElement("div");
     bridgeList.className = "pi-hub-stack";
@@ -497,8 +498,8 @@ export async function renderConnectionsTab(args: {
     if (showPython) {
       bridgeList.appendChild(renderBridgeCard({
         icon: lucide(Terminal),
-        name: "Python bridge",
-        description: "Execute Python code in a local environment",
+        name: t("ext-hub-connections.pythonName"),
+        description: t("ext-hub-connections.pythonDesc"),
         settingKey: PYTHON_BRIDGE_URL_SETTING_KEY,
         setupCommand: "npx pi-for-excel-python-bridge",
         defaultUrl: DEFAULT_PYTHON_BRIDGE_URL,
@@ -513,8 +514,8 @@ export async function renderConnectionsTab(args: {
     if (showTmux) {
       bridgeList.appendChild(renderBridgeCard({
         icon: lucide(Terminal),
-        name: "tmux bridge",
-        description: "Remote shell sessions via tmux",
+        name: t("ext-hub-connections.tmuxName"),
+        description: t("ext-hub-connections.tmuxDesc"),
         settingKey: TMUX_BRIDGE_URL_SETTING_KEY,
         setupCommand: "npx pi-for-excel-tmux-bridge",
         defaultUrl: DEFAULT_TMUX_BRIDGE_URL,
@@ -538,7 +539,7 @@ function renderMcpServerCard(
   isBusy: () => boolean,
   runMutation: (action: () => Promise<void>, reason: "toggle" | "scope" | "external-toggle" | "config", msg?: string) => Promise<void>,
 ): HTMLElement {
-  const toolLabel = server.enabled ? "Enabled" : "Disabled";
+  const toolLabel = server.enabled ? t("ext-hub-connections.badgeEnabled") : t("ext-hub-connections.badgeDisabled");
   const card = createItemCard({
     icon: lucide(Zap),
     iconColor: "blue",
@@ -552,7 +553,7 @@ function renderMcpServerCard(
   card.body.appendChild(createConfigRow("URL", createConfigValue(server.url)));
 
   // Token
-  const tokenValue = server.token ? maskSecret(server.token) : "(none)";
+  const tokenValue = server.token ? maskSecret(server.token) : t("ext-hub-connections.badgeNoToken");
   card.body.appendChild(createConfigRow("Token", createConfigValue(tokenValue)));
 
   // Enabled toggle
@@ -560,7 +561,7 @@ function renderMcpServerCard(
   enabledRow.className = "pi-item-card__config-row";
   const enabledLabel = document.createElement("span");
   enabledLabel.className = "pi-item-card__config-label";
-  enabledLabel.textContent = "Enabled";
+  enabledLabel.textContent = t("extensions-hub-connections.enabled");
   const enabledToggle = createToggle({
     checked: server.enabled,
     onChange: (checked) => {
@@ -577,7 +578,7 @@ function renderMcpServerCard(
   card.body.appendChild(enabledRow);
 
   // Actions
-  const testBtn = createButton("Test", {
+  const testBtn = createButton(t("ext-hub-connections.testButton"), {
     compact: true,
     onClick: () => {
       if (isBusy()) return;
@@ -593,7 +594,7 @@ function renderMcpServerCard(
     },
   });
 
-  const removeBtn = createButton("Remove", {
+  const removeBtn = createButton(t("ext-hub-connections.removeButton"), {
     danger: true,
     compact: true,
     onClick: () => {
@@ -632,21 +633,21 @@ function renderBridgeCard(args: {
     expandable: true,
     expanded: !args.hasCustomUrl,
     badges: [args.hasCustomUrl
-      ? { text: "Configured", tone: "ok" as const }
-      : { text: "Default URL", tone: "muted" as const },
+      ? { text: t("ext-hub-connections.configured"), tone: "ok" as const }
+      : { text: t("ext-hub-connections.defaultUrl"), tone: "muted" as const },
     ],
   });
 
   const setupLabel = document.createElement("p");
   setupLabel.className = "pi-hub-bridge-setup__label";
-  setupLabel.textContent = "Quick setup";
+  setupLabel.textContent = t("extensions-hub-connections.quick-setup");
   card.body.append(setupLabel, createBridgeSetupCommand(args.setupCommand));
 
   const urlInput = createConfigInput({
     value: args.currentUrl,
     placeholder: args.placeholder,
   });
-  card.body.appendChild(createConfigRow("Bridge URL", urlInput));
+  card.body.appendChild(createConfigRow(t("ext-hub-connections.bridgeUrl"), urlInput));
 
   const saveBridgeUrl = (clear: boolean): void => {
     const candidateUrl = clear ? "" : urlInput.value.trim();
@@ -677,8 +678,8 @@ function renderBridgeCard(args: {
     }, "config", useDefaultUrl ? `${args.name} URL set to default` : `${args.name} URL saved`);
   };
 
-  const saveBtn = createButton("Save", { compact: true, onClick: () => saveBridgeUrl(false) });
-  const clearBtn = createButton("Clear", { compact: true, onClick: () => saveBridgeUrl(true) });
+  const saveBtn = createButton(t("ext-hub-connections.saveButton"), { compact: true, onClick: () => saveBridgeUrl(false) });
+  const clearBtn = createButton(t("ext-hub-connections.clearButton"), { compact: true, onClick: () => saveBridgeUrl(true) });
   card.body.appendChild(createActionsRow(saveBtn, clearBtn));
 
   return card.root;

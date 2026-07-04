@@ -9,6 +9,7 @@ import {
 } from "../../experiments/flags.js";
 import { createToggleRow } from "../../ui/extensions-hub-components.js";
 import { showToast } from "../../ui/toast.js";
+import { t } from "../../language/index.js";
 
 const ADVANCED_SECURITY_FEATURE_IDS = new Set<ExperimentalFeatureSnapshot["id"]>([
   "remote_extension_urls",
@@ -40,7 +41,7 @@ function buildFeatureRow(feature: ExperimentalFeatureSnapshot): HTMLElement {
       const suffix = feature.wiring === "flag-only"
         ? " (flag saved; feature not wired yet)"
         : "";
-      showToast(`${feature.title}: ${checked ? "enabled" : "disabled"}${suffix}`);
+      showToast(`${feature.title}: ${checked ? t("experimental.enabled") : t("experimental.disabled")}${suffix}`);
     },
   });
   toggleRow.root.classList.add("pi-experimental-row__toggle-row");
@@ -62,8 +63,8 @@ function buildFeatureRow(feature: ExperimentalFeatureSnapshot): HTMLElement {
   const readiness = document.createElement("div");
   readiness.className = "pi-experimental-row__readiness";
   readiness.textContent = feature.wiring === "wired"
-    ? "Ready now"
-    : "Flag only for now — this capability is planned but not wired yet.";
+    ? t("experimental.ready")
+    : t("experimental.notWired") + " — this capability is planned but not wired yet.";
 
   row.append(toggleRow.root, meta, warning, readiness);
   return row;
@@ -111,8 +112,8 @@ export function buildExperimentalFeatureContent(): HTMLDivElement {
 
   if (experimentalFeatures.length > 0) {
     content.appendChild(buildFeatureSection({
-      title: "Experimental capabilities",
-      hint: "In-progress features that may evolve quickly.",
+      title: t("experimental.title"),
+      hint: t("experimental.hint"),
       features: experimentalFeatures,
     }));
   }
@@ -121,7 +122,7 @@ export function buildExperimentalFeatureContent(): HTMLDivElement {
 
   if (advancedSecurityFeatures.length > 0) {
     content.appendChild(buildFeatureSection({
-      title: "Advanced / security controls",
+      title: t("experimental.advancedSecurity"),
       hint: "Power-user toggles for extension trust, permissions, and rollback behavior.",
       features: advancedSecurityFeatures,
     }));
@@ -130,7 +131,7 @@ export function buildExperimentalFeatureContent(): HTMLDivElement {
   if (snapshots.length === 0) {
     const empty = document.createElement("p");
     empty.className = "pi-overlay-empty";
-    empty.textContent = "No experimental features are currently available.";
+    empty.textContent = t("experimental.noFeatures");
     content.appendChild(empty);
   }
 
@@ -140,9 +141,7 @@ export function buildExperimentalFeatureContent(): HTMLDivElement {
 export function buildExperimentalFeatureFooter(): HTMLParagraphElement {
   const footer = document.createElement("p");
   footer.className = "pi-experimental-footer";
-  footer.textContent =
-    "Tip: use /experimental on <feature>, /experimental off <feature>, /experimental toggle <feature>, "
-    + "/experimental tmux-bridge-url <url>, /experimental tmux-bridge-token <token>, or /experimental tmux-status.";
+  footer.textContent = t("experimental.tip");
   return footer;
 }
 

@@ -14,6 +14,7 @@ import { installModelSelectorPatch } from "../compat/model-selector-patch.js";
 import { installProcessEnvShim } from "../compat/process-env-shim.js";
 import { renderLoading, renderError } from "../ui/loading.js";
 import { getErrorMessage } from "../utils/errors.js";
+import { t } from "../language/index.js";
 
 import { initTaskpane } from "./init.js";
 
@@ -60,7 +61,7 @@ export function bootstrapTaskpane(): void {
 
     const slowInitTimer = setTimeout(() => {
       if (initComplete) return;
-      console.warn("[pi] Taskpane initialization is taking longer than expected (>12s)");
+      console.warn(t("bootstrap.initTimeoutWarning"));
     }, 12_000);
 
     const hardTimeoutTimer = setTimeout(() => {
@@ -68,7 +69,7 @@ export function bootstrapTaskpane(): void {
       loadingRoot.innerHTML = "";
       showFatalError(
         errorRoot,
-        "Failed to initialize: Taskpane initialization timed out after 60000ms",
+        t("bootstrap.fatalTimeout"),
       );
       console.error("[pi] Init error: Taskpane initialization timed out after 60000ms");
     }, 60_000);
@@ -88,13 +89,13 @@ export function bootstrapTaskpane(): void {
         clearTimeout(slowInitTimer);
         clearTimeout(hardTimeoutTimer);
         loadingRoot.innerHTML = "";
-        showFatalError(errorRoot, `Failed to initialize: ${getErrorMessage(error)}`);
+        showFatalError(errorRoot, t("bootstrap.fatalError", { msg: getErrorMessage(error) }));
         console.error("[pi] Init error:", error);
       });
   };
 
   if (typeof Office === "undefined") {
-    console.warn("[pi] Office.js is unavailable — initializing without Excel");
+    console.warn(t("bootstrap.officeUnavailable"));
     runInit();
     return;
   }

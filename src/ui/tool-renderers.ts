@@ -8,6 +8,7 @@
 import type { ImageContent, TextContent, ToolResultMessage } from "@earendil-works/pi-ai/compat";
 import { registerToolRenderer } from "@earendil-works/pi-web-ui/dist/tools/renderer-registry.js";
 import type { ToolRenderer, ToolRenderResult } from "@earendil-works/pi-web-ui/dist/tools/types.js";
+import { t } from "../language/index.js";
 import { html, type TemplateResult } from "lit";
 import { createRef, ref } from "lit/directives/ref.js";
 import { renderCollapsibleToolCardHeader, renderToolCardHeader } from "./tool-card-header.js";
@@ -734,7 +735,7 @@ function describeToolCall(
     }
     case "get_workbook_overview": {
       const sheet = p.sheet as string | undefined;
-      return { action: "Overview", detail: sheet ?? "" };
+      return { action: t("tools.action.overview"), detail: sheet ?? "" };
     }
 
     // ── Write tools ──

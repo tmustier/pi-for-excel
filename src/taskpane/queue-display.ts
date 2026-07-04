@@ -10,6 +10,7 @@ import type { Agent } from "@earendil-works/pi-agent-core";
 
 import type { PiSidebar } from "../ui/pi-sidebar.js";
 import { extractTextFromContent } from "../utils/content.js";
+import { t } from "../language/index.js";
 
 export type QueuedMessageType = "steer" | "follow-up";
 export type QueuedActionType = "prompt" | "command";
@@ -35,7 +36,7 @@ function renderQueuedItem({ type, text }: QueuedMessageItem): HTMLElement {
   const itemEl = document.createElement("div");
   itemEl.className = "pi-queue__item";
 
-  const label = type === "steer" ? "Steering" : "Follow-up";
+  const label = type === "steer" ? t("queue-display.steerLabel") : t("queue-display.followUpLabel");
   const cls = type === "steer" ? "pi-queue__label--steer" : "pi-queue__label--followup";
 
   const labelEl = document.createElement("span");
@@ -127,7 +128,7 @@ export function createQueueDisplay(opts: {
 
     const hintEl = document.createElement("div");
     hintEl.className = "pi-queue__hint";
-    hintEl.textContent = `↳ ${getQueuedRestoreShortcutHint()} to edit queued messages`;
+    hintEl.textContent = t("queue-display.shortcutHint", { shortcut: getQueuedRestoreShortcutHint() });
     fragment.appendChild(hintEl);
 
     container.replaceChildren(fragment);

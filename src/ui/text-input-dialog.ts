@@ -6,9 +6,11 @@ import {
   createOverlayInput,
 } from "./overlay-dialog.js";
 import { TEXT_INPUT_DIALOG_OVERLAY_ID } from "./overlay-ids.js";
+import { t } from "../language/index.js";
 
-const TEXT_INPUT_UI_UNAVAILABLE_ERROR =
-  "Text input UI is unavailable in this environment.";
+function getTextInputUiUnavailableError(): string {
+  return t("textInput.unavailable");
+}
 
 export interface TextInputDialogOptions {
   title: string;
@@ -32,7 +34,7 @@ function canRenderTextInputDialog(): boolean {
 
 export function requestTextInputDialog(options: TextInputDialogOptions): Promise<string | null> {
   if (!canRenderTextInputDialog()) {
-    return Promise.reject(new Error(TEXT_INPUT_UI_UNAVAILABLE_ERROR));
+    return Promise.reject(new Error(getTextInputUiUnavailableError()));
   }
 
   const overlayId = options.overlayId ?? TEXT_INPUT_DIALOG_OVERLAY_ID;
@@ -63,7 +65,7 @@ export function requestTextInputDialog(options: TextInputDialogOptions): Promise
 
     const { header } = createOverlayHeader({
       onClose: cancel,
-      closeLabel: options.cancelLabel ?? "Cancel",
+      closeLabel: options.cancelLabel ?? t("textInput.cancel"),
       title: options.title,
     });
 
@@ -104,11 +106,11 @@ export function requestTextInputDialog(options: TextInputDialogOptions): Promise
     actions.className = "pi-overlay-actions";
 
     const cancelButton = createOverlayButton({
-      text: options.cancelLabel ?? "Cancel",
+      text: options.cancelLabel ?? t("textInput.cancel"),
     });
 
     const confirmButton = createOverlayButton({
-      text: options.confirmLabel ?? "Save",
+      text: options.confirmLabel ?? t("textInput.save"),
       className: "pi-overlay-btn--primary",
     });
 

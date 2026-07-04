@@ -5,6 +5,7 @@
  * between the web search section and MCP servers.
  */
 
+import { t } from "../../language/index.js";
 import type { ConnectionManager } from "../../connections/manager.js";
 import type { ConnectionDefinition, ConnectionSnapshot, ConnectionStatus } from "../../connections/types.js";
 import {
@@ -119,7 +120,7 @@ function renderConnectionCard(args: {
       }
 
       if (Object.keys(patch).length === 0) {
-        showToast("Enter at least one field to save.");
+        showToast(t("extensions-hub-extension-connections.toast.enterAtLeastOneField"));
         return;
       }
 
@@ -180,11 +181,11 @@ export async function renderExtensionConnectionsSection(args: {
 
   const definitions = connectionManager.listDefinitions();
 
-  container.appendChild(createSectionHeader({ label: "Extension connections" }));
+  container.appendChild(createSectionHeader({ label: t("ext-hub-connections.extConnections") }));
 
   if (definitions.length === 0) {
     container.appendChild(
-      createEmptyInline(lucide(Plug), "Installed extensions haven't registered any connections."),
+      createEmptyInline(lucide(Plug), t("ext-hub-connections.connectionsEmpty")),
     );
     return;
   }

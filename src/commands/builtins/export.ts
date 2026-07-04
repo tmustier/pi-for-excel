@@ -8,6 +8,7 @@ import type { Agent, AgentMessage } from "@earendil-works/pi-agent-core";
 import type { SlashCommand } from "../types.js";
 import type { ActiveAgentProvider } from "./model.js";
 import { showToast } from "../../ui/toast.js";
+import { t } from "../../language/index.js";
 import { createCompactionSummaryMessage } from "../../messages/compaction.js";
 import {
   createArchivedMessagesMessage,
@@ -112,14 +113,15 @@ async function exportWorkbookAuditLog(rawArgs: string): Promise<void> {
 
   if (destination === "clipboard") {
     await navigator.clipboard.writeText(json);
-    showToast(
-      `Audit log copied (${entries.length} entries, ${(json.length / 1024).toFixed(0)}KB)`,
-    );
+    showToast(t("export.toast.audit_copied", {
+      count: String(entries.length),
+      size: (json.length / 1024).toFixed(0),
+    }));
     return;
   }
 
   triggerJsonDownload(`pi-audit-log-${new Date().toISOString().slice(0, 10)}.json`, json);
-  showToast(`Downloaded audit log (${entries.length} entries)`);
+  showToast(t("export.toast.audit_downloaded", { count: String(entries.length) }));
 }
 
 // =============================================================================
@@ -406,7 +408,7 @@ export function createExportCommands(getActiveAgent: ActiveAgentProvider): Slash
   return [
     {
       name: "export",
-      description: "Export JSON (session transcript or audit log)",
+      description: t("command.export.json"),
       source: "builtin",
       execute: async (args: string) => {
         const parts = args.trim().split(/\s+/u).filter((part) => part.length > 0);
@@ -416,20 +418,20 @@ export function createExportCommands(getActiveAgent: ActiveAgentProvider): Slash
           try {
             await exportWorkbookAuditLog(parts.slice(1).join(" "));
           } catch (error: unknown) {
-            showToast(`Audit export failed: ${getErrorMessage(error)}`);
+            showToast(t("export.toast.audit_export_failed", { error: getErrorMessage(error) }));
           }
           return;
         }
 
         const agent = getActiveAgent();
         if (!agent) {
-          showToast("No active session");
+          showToast(t("export.toast.no_session"));
           return;
         }
 
         const msgs = agent.state.messages;
         if (msgs.length === 0) {
-          showToast("No messages to export");
+          showToast(t("export.toast.no_messages"));
           return;
         }
 
@@ -468,17 +470,18 @@ export function createExportCommands(getActiveAgent: ActiveAgentProvider): Slash
         if (destination === "clipboard") {
           try {
             await navigator.clipboard.writeText(json);
-            showToast(
-              `Transcript copied (${msgs.length} messages, ${(json.length / 1024).toFixed(0)}KB)`,
-            );
+            showToast(t("export.toast.transcript_copied", {
+              count: String(msgs.length),
+              size: (json.length / 1024).toFixed(0),
+            }));
           } catch (error: unknown) {
-            showToast(`Copy failed: ${getErrorMessage(error)}`);
+            showToast(t("export.toast.copy_failed", { error: getErrorMessage(error) }));
           }
           return;
         }
 
         triggerJsonDownload(`pi-session-${new Date().toISOString().slice(0, 10)}.json`, json);
-        showToast(`Downloaded transcript (${msgs.length} messages)`);
+        showToast(t("export.toast.transcript_downloaded", { count: String(msgs.length) }));
       },
     },
   ];
@@ -683,12 +686,12 @@ export function createCompactCommands(getActiveAgent: ActiveAgentProvider): Slas
   return [
     {
       name: "compact",
-      description: "Summarize older messages to free context",
+      description: t("command.export.summarize"),
       source: "builtin",
       execute: async (args: string) => {
         const agent = getActiveAgent();
         if (!agent) {
-          showToast("No active session");
+          showToast(t("export.toast.no_session"));
           return;
         }
 
