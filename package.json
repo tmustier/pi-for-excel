@@ -37,6 +37,7 @@
     "@earendil-works/pi-agent-core": "0.80.3",
     "@earendil-works/pi-ai": "0.80.3",
     "@earendil-works/pi-web-ui": "0.75.3",
+    "@mariozechner/mini-lit": "^0.2.0",
     "@sinclair/typebox": "^0.34.49",
     "lit": "^3.3.3",
     "marked": "^18.0.5"
