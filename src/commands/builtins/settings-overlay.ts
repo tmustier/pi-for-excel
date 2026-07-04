@@ -294,10 +294,10 @@ function buildProxySection(
   let urlSaveTimer: ReturnType<typeof setTimeout> | null = null;
 
   const proxyToggle = createToggleRow({
-    label: "Proxy",
+    label: t("settings.section.proxy.label"),
     sublabel: DEFAULT_PROXY_IS_REMOTE
-      ? "Route API calls through your organisation's proxy"
-      : "Route API calls through a local proxy",
+      ? t("settings.section.proxy.sublabel_remote")
+      : t("settings.section.proxy.sublabel"),
     checked: enabled,
     onChange: (checked) => {
       void saveProxyEnabled(checked);
@@ -451,7 +451,9 @@ function buildProxySection(
     t("settings.section.proxy.recommended"),
     " ",
     recommendedUrl,
-    DEFAULT_PROXY_IS_REMOTE ? ". This is your organisation's proxy. " : ". Keep this on localhost. ",
+    DEFAULT_PROXY_IS_REMOTE
+      ? t("settings.section.proxy.org_proxy")
+      : t("settings.section.proxy.keep_localhost"),
     guideLink,
     ".",
   );

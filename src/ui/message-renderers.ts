@@ -75,7 +75,7 @@ registerMessageRenderer("compactionSummary", {
 
     const title = html`
       <span class="pi-tool-card__title">
-        <strong>Summarized ${formatCompactionSummaryExtent(message)}</strong>
+        <strong>${t("message-renderers.summarized", { extent: formatCompactionSummaryExtent(message) })}</strong>
       </span>
     `;
 

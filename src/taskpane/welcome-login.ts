@@ -109,8 +109,8 @@ export async function showWelcomeLogin(providerKeys: ProviderKeysStore): Promise
     const proxyToggle = createElement("button", "pi-welcome-proxy-toggle");
     proxyToggle.type = "button";
     const proxyToggleClosedLabel = DEFAULT_PROXY_IS_REMOTE
-      ? "Having login trouble? Check proxy settings"
-      : "Having login trouble? Configure local proxy";
+      ? t("welcome.proxy.toggle_show_remote")
+      : t("welcome.proxy.toggle_show");
     proxyToggle.textContent = proxyToggleClosedLabel;
     proxyToggle.setAttribute("aria-expanded", "false");
 
@@ -120,7 +120,9 @@ export async function showWelcomeLogin(providerKeys: ProviderKeysStore): Promise
     const proxyTopRow = createElement("div", "pi-welcome-proxy__row");
 
     const proxyTitle = createElement("div", "pi-welcome-proxy__title");
-    proxyTitle.textContent = DEFAULT_PROXY_IS_REMOTE ? "Organisation proxy" : "Local HTTPS proxy";
+    proxyTitle.textContent = DEFAULT_PROXY_IS_REMOTE
+      ? t("welcome.proxy.title_remote")
+      : t("welcome.proxy.title");
 
     const proxyToggleLabel = createElement("label", "pi-welcome-proxy__toggle");
     const proxyEnabledEl = createElement("input", "pi-welcome-proxy__enabled");
@@ -156,8 +158,8 @@ export async function showWelcomeLogin(providerKeys: ProviderKeysStore): Promise
       t("welcome.proxy.hint.prefix"),
       proxyCode,
       DEFAULT_PROXY_IS_REMOTE
-        ? " (your organisation's proxy), then enable this toggle. "
-        : ", run a local HTTPS proxy, then enable this toggle. ",
+        ? t("welcome.proxy.hint.suffix_remote")
+        : t("welcome.proxy.hint.suffix"),
       proxyGuideLink,
       t("welcome.proxy.hint.end"),
     );
