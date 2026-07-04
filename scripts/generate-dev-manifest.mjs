@@ -10,7 +10,7 @@
  *   DEV_HOST=pi-excel.localhost node scripts/generate-dev-manifest.mjs
  *
  * Replaces the default dev base URL (https://localhost:3000) in manifest.xml
- * with the proxy origin and writes manifest.dev.xml (override with OUT).
+ * with the proxy origin and writes manifest.dev.xml (fixed output path).
  * manifest.xml itself stays untouched and nothing is published to public/.
  *
  * Notes:
@@ -122,7 +122,8 @@ if (isCurrentModuleEntrypoint()) {
 
   const repoRoot = path.resolve(process.cwd());
   const inPath = path.join(repoRoot, "manifest.xml");
-  const outPath = path.join(repoRoot, process.env.OUT || "manifest.dev.xml");
+  // Fixed output path by design: this script must never write anywhere else.
+  const outPath = path.join(repoRoot, "manifest.dev.xml");
 
   if (!fs.existsSync(inPath)) {
     fail(`Missing input manifest at ${inPath}`);

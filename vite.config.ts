@@ -1,4 +1,5 @@
 import { defineConfig, type Plugin } from "vite";
+import { resolveDevOrigin } from "./scripts/generate-dev-manifest.mjs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import fs from "fs";
 import path from "path";
@@ -228,31 +229,23 @@ interface DevProxyConfig {
   clientPort: number;
 }
 
-function parseDevProxyUrl(raw: string): DevProxyConfig | null {
-  try {
-    const url = new URL(raw.includes("://") ? raw : `https://${raw}`);
-    if (!url.hostname) return null;
-    return {
-      host: url.hostname,
-      clientPort: url.port ? Number.parseInt(url.port, 10) : 443,
-    };
-  } catch {
-    return null;
-  }
-}
-
 function resolveDevProxy(): DevProxyConfig | null {
   const devHost = process.env.DEV_HOST?.trim();
-  if (devHost) {
-    const parsed = parseDevProxyUrl(devHost);
-    if (!parsed) throw new Error(`[pi-for-excel] Invalid DEV_HOST: ${devHost}`);
-    return parsed;
-  }
-
   const portlessUrl = process.env.PORTLESS_URL?.trim();
-  if (portlessUrl) return parseDevProxyUrl(portlessUrl);
+  if (!devHost && !portlessUrl) return null;
 
-  return null;
+  // Same strict validation as scripts/generate-dev-manifest.mjs (shared
+  // helper): https-only bare origin, no credentials/path/query/hash, and
+  // never the default https://localhost:3000. Invalid values fail loud
+  // instead of silently activating (or silently skipping) proxy mode.
+  const resolved = resolveDevOrigin({
+    env: { DEV_HOST: devHost, PORTLESS_URL: portlessUrl },
+  });
+  const url = new URL(resolved.origin);
+  return {
+    host: url.hostname,
+    clientPort: url.port ? Number.parseInt(url.port, 10) : 443,
+  };
 }
 
 /** Behind the proxy the port comes from PORT (portless-assigned); CLI --port wins over this either way. */
