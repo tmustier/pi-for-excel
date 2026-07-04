@@ -5,6 +5,7 @@
  * Experimental/non-core tools are appended here.
  */
 
+import type { SpreadsheetHostKind } from "../host/index.js";
 import { createCoreTools } from "./registry.js";
 import type { SkillReadCache } from "../skills/read-cache.js";
 import { createTmuxTool } from "./tmux.js";
@@ -19,6 +20,7 @@ import {
 } from "./extensions-manager.js";
 
 export interface CreateAllToolsOptions {
+  hostKind?: SpreadsheetHostKind;
   getExtensionManager?: () => ExtensionsManagerToolRuntime | null;
   getSessionId?: () => string | null;
   skillReadCache?: SkillReadCache;
@@ -29,6 +31,7 @@ export function createAllTools(options: CreateAllToolsOptions = {}) {
 
   return [
     ...createCoreTools({
+      hostKind: options.hostKind,
       skills: {
         getSessionId: options.getSessionId,
         readCache: options.skillReadCache,

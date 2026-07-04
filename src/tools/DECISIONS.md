@@ -2,6 +2,12 @@
 
 Concise record of recent tool behavior choices to avoid regressions. Update this as we tweak tooling.
 
+## WPS Phase 1 registry seam (NEXSELL-370)
+- **Tool list:** keep `CORE_TOOL_NAMES` as the single ordered source of truth and keep core tool schemas/metadata stable across hosts.
+- **WPS Phase 1 behavior:** register the same core tools, but wrap workbook-dependent tools with fail-fast handlers that throw “not yet supported on WPS Spreadsheets” before any Office.js path runs.
+- **Local-only core tools:** `instructions`, `conventions`, and `skills` remain available because they operate on settings/skills storage. Workbook-scoped instructions still require a workbook identity and will report identity unavailable until WPS identity is implemented.
+- **Rationale:** preserving the tool list avoids prompt-cache/schema churn and keeps disclosure/UI mappings deterministic, while honest runtime failures prevent pretending WPS workbook mutation/read support exists before Phase 2.
+
 ## Column width (`format_cells.column_width`)
 - **User-facing unit:** Excel character-width units (same as Excel UI).
 - **Conversion:** assume **Arial 10** and convert to points with `1 char ≈ 7.2 points`.

@@ -17,13 +17,8 @@ import {
   resolveCustomProviderModel,
   type CustomProvidersStoreLike,
 } from "../auth/custom-gateways.js";
+import { getCurrentSpreadsheetHost } from "../host/index.js";
 import { extractTextFromContent } from "../utils/content.js";
-import { getWorkbookContext } from "../workbook/context.js";
-import {
-  getLatestSessionForWorkbook,
-  linkSessionToWorkbook,
-  setLatestSessionForWorkbook,
-} from "../workbook/session-association.js";
 
 export interface SessionPersistenceController {
   getSessionId: () => string;
@@ -151,10 +146,11 @@ export async function setupSessionPersistence(opts: {
   autoRestoreLatest?: boolean;
 }): Promise<SessionPersistenceController> {
   const { agent, sessions, settings } = opts;
+  const spreadsheetHost = getCurrentSpreadsheetHost();
 
   async function resolveWorkbookId(): Promise<string | null> {
     try {
-      const ctx = await getWorkbookContext();
+      const ctx = await spreadsheetHost.getWorkbookContext();
       return ctx.workbookId;
     } catch {
       return null;
@@ -184,8 +180,8 @@ export async function setupSessionPersistence(opts: {
     if (!workbookId) return;
 
     try {
-      await linkSessionToWorkbook(settings, savedSessionId, workbookId);
-      await setLatestSessionForWorkbook(settings, workbookId, savedSessionId);
+      await spreadsheetHost.sessionStorage.linkSessionToWorkbook(settings, savedSessionId, workbookId);
+      await spreadsheetHost.sessionStorage.setLatestSessionForWorkbook(settings, workbookId, savedSessionId);
     } catch (err) {
       console.warn("[pi] Workbook/session association update failed:", err);
     }
@@ -342,7 +338,7 @@ export async function setupSessionPersistence(opts: {
     try {
       const workbookId = await resolveWorkbookId();
       const workbookLatest = workbookId
-        ? await getLatestSessionForWorkbook(settings, workbookId)
+        ? await spreadsheetHost.sessionStorage.getLatestSessionForWorkbook(settings, workbookId)
         : null;
       const globalLatest = workbookId ? null : await sessions.getLatestSessionId();
 

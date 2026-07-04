@@ -125,8 +125,9 @@ import { showActionToast, showToast } from "../ui/toast.js";
 import { PiSidebar } from "../ui/pi-sidebar.js";
 import { createProxyBanner } from "../ui/proxy-banner.js";
 import { setActiveProviders } from "../compat/model-selector-patch.js";
+import { getCurrentSpreadsheetHost } from "../host/index.js";
 import { createWorkbookCoordinator } from "../workbook/coordinator.js";
-import { formatWorkbookLabel, getWorkbookContext } from "../workbook/context.js";
+import { formatWorkbookLabel, type WorkbookContext } from "../workbook/context.js";
 import {
   getManualFullWorkbookBackupStore,
   type ManualFullWorkbookBackup,
@@ -217,6 +218,7 @@ export async function initTaskpane(opts: {
   const { appEl, errorRoot } = opts;
 
   const changeTracker = new ChangeTracker();
+  const spreadsheetHost = getCurrentSpreadsheetHost();
 
   // 1. Storage
   const { providerKeys, sessions, settings, customProviders } = initAppStorage();
@@ -451,9 +453,9 @@ export async function initTaskpane(opts: {
     modelSwitchBehavior = await setStoredModelSwitchBehavior(settings, nextBehavior);
   };
 
-  const resolveWorkbookContext = async (): Promise<Awaited<ReturnType<typeof getWorkbookContext>>> => {
+  const resolveWorkbookContext = async (): Promise<WorkbookContext> => {
     try {
-      return await getWorkbookContext();
+      return await spreadsheetHost.getWorkbookContext();
     } catch {
       return {
         workbookId: null,
@@ -783,7 +785,7 @@ export async function initTaskpane(opts: {
   const refreshCapabilitiesForAllRuntimes = createAsyncCoalescer(runCapabilityRefreshPass);
 
   const reservedToolNames = new Set([
-    ...createAllTools().map((tool) => tool.name),
+    ...createAllTools({ hostKind: spreadsheetHost.kind }).map((tool) => tool.name),
     ...getIntegrationToolNames(),
   ]);
   const connectionManager = new ConnectionManager({ settings });
@@ -921,6 +923,7 @@ export async function initTaskpane(opts: {
       runtimeActiveIntegrationIds.set(runtimeId, activeIntegrationIds);
 
       const coreTools = createAllTools({
+        hostKind: spreadsheetHost.kind,
         getExtensionManager: () => extensionManager,
         getSessionId: () => runtimeAgent?.sessionId ?? runtimeSessionId,
         skillReadCache: runtimeSkillReadCache,

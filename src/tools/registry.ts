@@ -10,6 +10,7 @@
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import type { TSchema } from "typebox";
 
+import type { SpreadsheetHostKind } from "../host/index.js";
 import { createGetWorkbookOverviewTool } from "./get-workbook-overview.js";
 import { createReadRangeTool } from "./read-range.js";
 import { createWriteCellsTool } from "./write-cells.js";
@@ -29,6 +30,8 @@ import {
   createSkillsTool,
   type SkillsToolDependencies,
 } from "./skills.js";
+import { selectCoreToolForHost } from "./host-selection.js";
+import { CORE_TOOL_NAMES, type CoreToolName } from "./names.js";
 
 export { CORE_TOOL_NAMES } from "./names.js";
 export type { CoreToolName } from "./names.js";
@@ -38,27 +41,39 @@ export type { CoreToolName } from "./names.js";
 export type AnyCoreTool = AgentTool<TSchema, unknown>;
 
 export interface CreateCoreToolsOptions {
+  hostKind?: SpreadsheetHostKind;
   skills?: SkillsToolDependencies;
 }
 
-/** Create all core (built-in) Excel tools for the agent. */
+type CoreToolFactory = (options: CreateCoreToolsOptions) => AnyCoreTool;
+
+const CORE_TOOL_FACTORIES = {
+  get_workbook_overview: () => createGetWorkbookOverviewTool(),
+  read_range: () => createReadRangeTool(),
+  write_cells: () => createWriteCellsTool(),
+  fill_formula: () => createFillFormulaTool(),
+  search_workbook: () => createSearchWorkbookTool(),
+  modify_structure: () => createModifyStructureTool(),
+  format_cells: () => createFormatCellsTool(),
+  conditional_format: () => createConditionalFormatTool(),
+  trace_dependencies: () => createTraceDependenciesTool(),
+  explain_formula: () => createExplainFormulaTool(),
+  view_settings: () => createViewSettingsTool(),
+  comments: () => createCommentsTool(),
+  instructions: () => createInstructionsTool(),
+  conventions: () => createConventionsTool(),
+  workbook_history: () => createWorkbookHistoryTool(),
+  skills: (options) => createSkillsTool(options.skills),
+} satisfies Record<CoreToolName, CoreToolFactory>;
+
+export { isCoreToolUnsupportedOnWps } from "./host-selection.js";
+
+/** Create all core (built-in) tools for the agent. */
 export function createCoreTools(options: CreateCoreToolsOptions = {}): AnyCoreTool[] {
-  return [
-    createGetWorkbookOverviewTool(),
-    createReadRangeTool(),
-    createWriteCellsTool(),
-    createFillFormulaTool(),
-    createSearchWorkbookTool(),
-    createModifyStructureTool(),
-    createFormatCellsTool(),
-    createConditionalFormatTool(),
-    createTraceDependenciesTool(),
-    createExplainFormulaTool(),
-    createViewSettingsTool(),
-    createCommentsTool(),
-    createInstructionsTool(),
-    createConventionsTool(),
-    createWorkbookHistoryTool(),
-    createSkillsTool(options.skills),
-  ];
+  const hostKind = options.hostKind ?? "office";
+
+  return CORE_TOOL_NAMES.map((name) => {
+    const tool = CORE_TOOL_FACTORIES[name](options);
+    return selectCoreToolForHost(name, tool, hostKind);
+  });
 }

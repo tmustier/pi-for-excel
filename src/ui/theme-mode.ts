@@ -13,123 +13,34 @@ import {
   isExperimentalFeatureEnabled,
   type ExperimentalFeatureId,
 } from "../experiments/flags.js";
+import {
+  createSpreadsheetHost,
+  detectSpreadsheetHost,
+  getCurrentSpreadsheetHost,
+  type SpreadsheetHost,
+} from "../host/index.js";
 import { isRecord } from "../utils/type-guards.js";
 
 const DARK_MODE_EXPERIMENT_ID: ExperimentalFeatureId = "ui_dark_mode";
 
-interface RgbColor {
-  r: number;
-  g: number;
-  b: number;
+function isDarkModeExperimentEnabled(): boolean {
+  return isExperimentalFeatureEnabled(DARK_MODE_EXPERIMENT_ID);
 }
 
-function parseHexColor(input: string): RgbColor | null {
-  const raw = input.trim();
-  const normalized = raw.startsWith("#") ? raw.slice(1) : raw;
-
-  if (normalized.length === 3) {
-    const r = Number.parseInt(normalized[0].repeat(2), 16);
-    const g = Number.parseInt(normalized[1].repeat(2), 16);
-    const b = Number.parseInt(normalized[2].repeat(2), 16);
-    if (Number.isNaN(r) || Number.isNaN(g) || Number.isNaN(b)) {
-      return null;
-    }
-
-    return { r, g, b };
+function resolveHostThemeDark(): boolean | null {
+  const currentHost = getCurrentSpreadsheetHost();
+  const currentTheme = currentHost.resolveThemeDark();
+  if (currentTheme !== null) {
+    return currentTheme;
   }
 
-  if (normalized.length !== 6) {
-    return null;
-  }
-
-  const r = Number.parseInt(normalized.slice(0, 2), 16);
-  const g = Number.parseInt(normalized.slice(2, 4), 16);
-  const b = Number.parseInt(normalized.slice(4, 6), 16);
-
-  if (Number.isNaN(r) || Number.isNaN(g) || Number.isNaN(b)) {
-    return null;
-  }
-
-  return { r, g, b };
-}
-
-function toLinearSrgb(channel: number): number {
-  const normalized = channel / 255;
-  if (normalized <= 0.04045) {
-    return normalized / 12.92;
-  }
-
-  return ((normalized + 0.055) / 1.055) ** 2.4;
-}
-
-function relativeLuminance(rgb: RgbColor): number {
-  return (
-    0.2126 * toLinearSrgb(rgb.r)
-    + 0.7152 * toLinearSrgb(rgb.g)
-    + 0.0722 * toLinearSrgb(rgb.b)
-  );
-}
-
-function isDarkColor(rgb: RgbColor): boolean {
-  return relativeLuminance(rgb) < 0.35;
-}
-
-function resolveThemeDarkFromColor(input: unknown): boolean | null {
-  if (typeof input !== "string") {
-    return null;
-  }
-
-  const parsed = parseHexColor(input);
-  if (!parsed) {
-    return null;
-  }
-
-  return isDarkColor(parsed);
-}
-
-function resolveOfficeThemeDark(): boolean | null {
-  if (typeof Office === "undefined") {
-    return null;
-  }
-
-  const officeTheme = Office.context?.officeTheme;
-  if (!officeTheme) {
-    return null;
-  }
-
-  if (typeof officeTheme.isDarkTheme === "boolean") {
-    return officeTheme.isDarkTheme;
-  }
-
-  const backgroundCandidates = [
-    officeTheme.bodyBackgroundColor,
-    officeTheme.controlBackgroundColor,
-  ];
-
-  for (const color of backgroundCandidates) {
-    const isDark = resolveThemeDarkFromColor(color);
-    if (isDark !== null) {
-      return isDark;
-    }
-  }
-
-  const foregroundCandidates = [
-    officeTheme.bodyForegroundColor,
-    officeTheme.controlForegroundColor,
-  ];
-
-  for (const color of foregroundCandidates) {
-    const isDark = resolveThemeDarkFromColor(color);
-    if (isDark !== null) {
-      return !isDark;
-    }
+  // Preserve the old Office retry behavior for local browser loads where
+  // Office.js appears after this module is installed but before/on ready.
+  if (currentHost.kind !== "office" && detectSpreadsheetHost() === "office") {
+    return createSpreadsheetHost("office").resolveThemeDark();
   }
 
   return null;
-}
-
-function isDarkModeExperimentEnabled(): boolean {
-  return isExperimentalFeatureEnabled(DARK_MODE_EXPERIMENT_ID);
 }
 
 function resolvePreferredDark(mediaMatches: boolean): boolean {
@@ -137,9 +48,9 @@ function resolvePreferredDark(mediaMatches: boolean): boolean {
     return false;
   }
 
-  const officeDark = resolveOfficeThemeDark();
-  if (officeDark !== null) {
-    return officeDark;
+  const hostDark = resolveHostThemeDark();
+  if (hostDark !== null) {
+    return hostDark;
   }
 
   return mediaMatches;
@@ -161,6 +72,19 @@ function isExperimentalFeatureChangedEvent(
     && typeof detail.enabled === "boolean";
 }
 
+function getOfficeReadyHostForTheme(): SpreadsheetHost | null {
+  const currentHost = getCurrentSpreadsheetHost();
+  if (currentHost.kind === "office") {
+    return currentHost;
+  }
+
+  if (detectSpreadsheetHost() === "office") {
+    return createSpreadsheetHost("office");
+  }
+
+  return null;
+}
+
 export function installThemeModeSync(): () => void {
   if (typeof document === "undefined" || typeof window === "undefined") {
     return () => {};
@@ -177,16 +101,22 @@ export function installThemeModeSync(): () => void {
 
   let disposed = false;
   let officeReadyHooked = false;
+  let officeReadyDispose: (() => void) | null = null;
   let officeRetryTimer: number | null = null;
   let officeRetryStopTimer: number | null = null;
 
   const registerOfficeReadyHook = (): void => {
-    if (officeReadyHooked || typeof Office === "undefined") {
+    if (officeReadyHooked) {
+      return;
+    }
+
+    const officeHost = getOfficeReadyHostForTheme();
+    if (!officeHost) {
       return;
     }
 
     officeReadyHooked = true;
-    void Office.onReady(() => {
+    officeReadyDispose = officeHost.onReady(() => {
       if (disposed) return;
       apply();
     });
@@ -233,38 +163,33 @@ export function installThemeModeSync(): () => void {
     onExperimentalFeatureChange,
   );
 
-  if (typeof media.addEventListener === "function") {
-    media.addEventListener("change", onMediaChange);
-
-    return () => {
-      disposed = true;
-      document.removeEventListener(
-        PI_EXPERIMENTAL_FEATURE_CHANGED_EVENT,
-        onExperimentalFeatureChange,
-      );
-      media.removeEventListener("change", onMediaChange);
-      if (officeRetryTimer !== null) {
-        clearInterval(officeRetryTimer);
-      }
-      if (officeRetryStopTimer !== null) {
-        clearTimeout(officeRetryStopTimer);
-      }
-    };
-  }
-
-  media.addListener(onMediaChange);
-  return () => {
+  const cleanup = (): void => {
     disposed = true;
     document.removeEventListener(
       PI_EXPERIMENTAL_FEATURE_CHANGED_EVENT,
       onExperimentalFeatureChange,
     );
-    media.removeListener(onMediaChange);
+    officeReadyDispose?.();
     if (officeRetryTimer !== null) {
       clearInterval(officeRetryTimer);
     }
     if (officeRetryStopTimer !== null) {
       clearTimeout(officeRetryStopTimer);
     }
+  };
+
+  if (typeof media.addEventListener === "function") {
+    media.addEventListener("change", onMediaChange);
+
+    return () => {
+      cleanup();
+      media.removeEventListener("change", onMediaChange);
+    };
+  }
+
+  media.addListener(onMediaChange);
+  return () => {
+    cleanup();
+    media.removeListener(onMediaChange);
   };
 }
