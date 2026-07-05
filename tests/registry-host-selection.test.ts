@@ -4,6 +4,7 @@ import { test } from "node:test";
 import { Type } from "@sinclair/typebox";
 
 import {
+  WPS_CORE_TOOL_EXECUTE_OVERRIDES,
   composeCoreToolsForHost,
   isCoreToolUnsupportedOnWps,
   selectCoreToolForHost,
@@ -74,7 +75,10 @@ void test("composeCoreToolsForHost keeps metadata stable on WPS and fails fast w
     assert.equal(wpsTool.description, originalTool.description);
     assert.deepEqual(wpsTool.parameters, originalTool.parameters);
 
-    if (isCoreToolUnsupportedOnWps(name)) {
+    if (WPS_CORE_TOOL_EXECUTE_OVERRIDES[name]) {
+      assert.notEqual(wpsTool, originalTool);
+      assert.notEqual(wpsTool.execute, originalTool.execute);
+    } else if (isCoreToolUnsupportedOnWps(name)) {
       assert.notEqual(wpsTool, originalTool);
       await assert.rejects(
         async () => wpsTool.execute("tool-call-1", {}),
@@ -93,7 +97,7 @@ void test("composeCoreToolsForHost keeps metadata stable on WPS and fails fast w
   }
 });
 
-void test("host selection keeps Office tool handlers and wraps WPS workbook tools", async () => {
+void test("host selection keeps Office tool handlers and swaps only execute for WPS overrides", () => {
   const officeTool = createFakeTool("read_range");
   const selectedOfficeTool = selectCoreToolForHost("read_range", officeTool, "office");
   assert.equal(selectedOfficeTool, officeTool);
@@ -106,16 +110,8 @@ void test("host selection keeps Office tool handlers and wraps WPS workbook tool
   assert.equal(wpsTool.name, officeTool.name);
   assert.equal(wpsTool.label, officeTool.label);
   assert.equal(wpsTool.description, officeTool.description);
-
-  await assert.rejects(
-    async () => wpsTool.execute("tool-call-1", { range: "A1" }),
-    (error: unknown) => {
-      assert.ok(error instanceof UnsupportedHostToolError);
-      assert.equal(error.hostKind, "wps");
-      assert.equal(error.toolName, "read_range");
-      return true;
-    },
-  );
+  assert.equal(wpsTool.parameters, officeTool.parameters);
+  assert.notEqual(wpsTool.execute, officeTool.execute);
 });
 
 void test("Office-coupled non-core tools fail fast on WPS and pass through elsewhere", async () => {
@@ -139,8 +135,10 @@ void test("Office-coupled non-core tools fail fast on WPS and pass through elsew
   );
 });
 
-void test("WPS leaves local settings/skills core tools available", () => {
-  assert.equal(isCoreToolUnsupportedOnWps("read_range"), true);
+void test("WPS leaves local settings/skills and Phase 2 override core tools available", () => {
+  assert.equal(isCoreToolUnsupportedOnWps("read_range"), false);
+  assert.equal(isCoreToolUnsupportedOnWps("write_cells"), false);
+  assert.equal(isCoreToolUnsupportedOnWps("get_workbook_overview"), false);
   assert.equal(isCoreToolUnsupportedOnWps("workbook_history"), true);
   assert.equal(isCoreToolUnsupportedOnWps("instructions"), false);
   assert.equal(isCoreToolUnsupportedOnWps("conventions"), false);

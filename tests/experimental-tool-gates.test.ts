@@ -289,6 +289,31 @@ void test("execute_office_js fails closed when confirmation UI is unavailable", 
   assert.equal(executeCount, 0);
 });
 
+
+void test("execute_wps_js uses the same direct-JS approval gate with WPS labeling", async () => {
+  let executeCount = 0;
+
+  const [wpsTool] = await applyExperimentalToolGates([
+    createTestTool("execute_wps_js", () => {
+      executeCount += 1;
+    }),
+  ], {
+    requestOfficeJsExecuteApproval: ({ explanation, code, apiName }) => {
+      assert.equal(explanation, "Inspect WPS workbook");
+      assert.equal(code, "return Application.ActiveWorkbook.Name;");
+      assert.equal(apiName, "WPS JSAPI");
+      return Promise.resolve(true);
+    },
+  });
+
+  await wpsTool.execute("call-wps", {
+    explanation: "Inspect WPS workbook",
+    code: "return Application.ActiveWorkbook.Name;",
+  });
+
+  assert.equal(executeCount, 1);
+});
+
 void test("execute_office_js skips approval in Auto mode for pure Excel API code", async () => {
   let executeCount = 0;
   let approvalCount = 0;

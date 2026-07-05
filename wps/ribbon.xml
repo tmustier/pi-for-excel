@@ -1,0 +1,11 @@
+<customUI xmlns="http://schemas.microsoft.com/office/2006/01/customui" onLoad="OnAddinLoad">
+  <ribbon startFromScratch="false">
+    <tabs>
+      <tab id="PiForWpsTab" label="Pi">
+        <group id="PiForWpsGroup" label="Pi">
+          <button id="PiOpenTaskpaneButton" label="Open Pi" size="large" onAction="OpenPi" />
+        </group>
+      </tab>
+    </tabs>
+  </ribbon>
+</customUI>

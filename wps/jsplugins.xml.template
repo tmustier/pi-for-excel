@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Enterprise/OEM WPS JS add-in list template.
+
+  Replace {{ADDIN_BASE_URL}} with the HTTPS URL that serves the built WPS add-in
+  root containing index.html, ribbon.xml, and main.js.
+  Use this channel only for enterprise/OEM repack deployments where oem.ini can
+  set [Support] JsApiPlugin=true and [Server] JSPluginsServer=<this file URL>.
+-->
+<jsplugins>
+  <jsplugin
+    name="Pi for Excel"
+    type="et"
+    version="0.9.5-pre"
+    url="{{ADDIN_BASE_URL}}/" />
+</jsplugins>

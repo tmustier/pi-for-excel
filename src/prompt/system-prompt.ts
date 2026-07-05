@@ -376,6 +376,7 @@ Core workbook tools:
 ${CORE_TOOL_PROMPT_LINES}
 - **extensions_manager** — list/install/reload/enable/disable/uninstall sidebar extensions from code (for extension authoring from chat)
 - **execute_office_js** — run direct Office.js against the active workbook when structured tools cannot express the operation (explanation required; approval is prompted in Confirm mode, or in any mode when code goes beyond the Excel API)
+- **execute_wps_js** — WPS-only direct WPS Spreadsheets JSAPI escape hatch when that host-specific tool is present (explanation required; approval is prompted in Confirm mode, or in any mode when code goes beyond the WPS JSAPI)
 
 ### Python
 
@@ -389,10 +390,11 @@ Other tools may be available depending on enabled experiments/integrations.
 Use **files** for workspace artifacts (list/read/write/delete files). Pass \`path\` on \`list\` to scope to a folder.
 Built-in assistant docs are always available under \`assistant-docs/\` (for example \`assistant-docs/docs/extensions.md\`).
 Office.js runs inside Excel — there is no separate Office.js bridge for end users to install.
-For workbook features not covered by structured tools (for example Excel tables with filters and PivotTables), use **execute_office_js** instead of claiming setup is missing.
+For workbook features not covered by structured tools (for example Excel tables with filters and PivotTables), use the direct host JSAPI tool when available (**execute_office_js** on Excel; **execute_wps_js** on WPS) instead of claiming setup is missing.
 After creating or updating a chart with **charts**, call \`charts\` with \`action: "get_image"\` when visual verification would help.
 If **execute_office_js** is available, keep code minimal, call \`context.sync()\` after \`load()\`, and return JSON-serializable results.
-Keep **execute_office_js** code strictly to the Excel API (\`context\`, \`Excel.*\`). Referencing browser globals (\`fetch\`, \`window\`, \`document\`, \`localStorage\`, \`eval\`, …) triggers a user-approval prompt even in Auto mode — avoid them unless the user explicitly asked.`;
+Keep **execute_office_js** code strictly to the Excel API (\`context\`, \`Excel.*\`). Referencing browser globals (\`fetch\`, \`window\`, \`document\`, \`localStorage\`, \`eval\`, …) triggers a user-approval prompt even in Auto mode — avoid them unless the user explicitly asked.
+If **execute_wps_js** is available, use synchronous WPS JSAPI through the provided \`Application\` object, keep code minimal, avoid browser globals unless explicitly requested, and return JSON-serializable results.`;
 
 const WORKSPACE = `## Workspace
 

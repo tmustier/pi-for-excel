@@ -12,8 +12,9 @@ export interface WorkbookContext {
   /**
    * A stable, local-only identifier when available.
    *
-   * Current Office strategy:
-   * - if the host document URL exists, normalize it (drop query/hash) and return a SHA-256 hash
+   * Current host strategies:
+   * - Office: normalize the host document URL (drop query/hash) and return a SHA-256 hash
+   * - WPS: normalize ActiveWorkbook.FullName and return a SHA-256 hash with a WPS-specific prefix
    * - otherwise return null (ephemeral/unknown)
    */
   workbookId: string | null;
@@ -22,7 +23,7 @@ export interface WorkbookContext {
   workbookName: string | null;
 
   /** Where the identity came from (useful for debugging / future migration). */
-  source: "document.url" | "unknown";
+  source: "document.url" | "wps.activeWorkbook.fullName" | "unknown";
 }
 
 export function createUnknownWorkbookContext(): WorkbookContext {
@@ -140,5 +141,34 @@ export async function getWorkbookContextFromDocumentUrl(url: string | null): Pro
     workbookId: `url_sha256:${hash}`,
     workbookName: getWorkbookNameFromUrl(url),
     source: "document.url",
+  };
+}
+
+/**
+ * Best-effort workbook context from a WPS ActiveWorkbook.FullName path.
+ *
+ * IMPORTANT: callers should persist only `workbookId` (the hash), never the raw
+ * local path. WPS paths intentionally use their own prefix so they cannot be
+ * confused with Office document URL identities.
+ */
+export async function getWorkbookContextFromWpsFullName(
+  fullName: string | null,
+  workbookName: string | null,
+): Promise<WorkbookContext> {
+  const trimmedFullName = fullName?.trim() ?? "";
+  if (!trimmedFullName) {
+    return {
+      workbookId: null,
+      workbookName,
+      source: "unknown",
+    };
+  }
+
+  const identitySource = normalizeWorkbookIdentitySource(trimmedFullName);
+  const hash = await sha256Hex(identitySource);
+  return {
+    workbookId: `wps_path_sha256:${hash}`,
+    workbookName,
+    source: "wps.activeWorkbook.fullName",
   };
 }

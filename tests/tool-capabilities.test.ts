@@ -49,6 +49,7 @@ void test("UI tool registration derives from centralized UI metadata", async () 
   const uniqueNames = new Set(UI_TOOL_NAMES);
   assert.equal(uniqueNames.size, UI_TOOL_NAMES.length);
   assert.ok(UI_TOOL_NAMES.includes("execute_office_js"));
+  assert.ok(UI_TOOL_NAMES.includes("execute_wps_js"));
 });
 
 void test("UI metadata drives renderer and humanizer tool subsets", () => {

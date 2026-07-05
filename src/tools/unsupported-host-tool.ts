@@ -6,6 +6,12 @@ import type { TSchema } from "typebox";
 import type { SpreadsheetHostKind } from "../host/index.js";
 import { WPS_UNSUPPORTED_PHASE_1_MESSAGE } from "../host/index.js";
 
+const UNSUPPORTED_HOST_TOOL_MARKER = Symbol("pi.unsupportedHostTool");
+
+interface UnsupportedHostToolMarker {
+  readonly [UNSUPPORTED_HOST_TOOL_MARKER]: true;
+}
+
 function unsupportedMessage(hostKind: SpreadsheetHostKind, toolName: string): string {
   if (hostKind === "wps") {
     return `${toolName} is not yet supported on WPS Spreadsheets. ${WPS_UNSUPPORTED_PHASE_1_MESSAGE}`;
@@ -33,14 +39,25 @@ export class UnsupportedHostToolError extends Error {
   }
 }
 
+export function isUnsupportedHostTool(tool: AgentTool<TSchema, unknown>): boolean {
+  return (tool as AgentTool<TSchema, unknown> & Partial<UnsupportedHostToolMarker>)[UNSUPPORTED_HOST_TOOL_MARKER] === true;
+}
+
 export function createUnsupportedHostTool<TParameters extends TSchema, TDetails>(
   tool: AgentTool<TParameters, TDetails>,
   hostKind: SpreadsheetHostKind,
 ): AgentTool<TParameters, TDetails> {
-  return {
+  const unsupportedTool: AgentTool<TParameters, TDetails> = {
     ...tool,
     execute: () => {
       throw new UnsupportedHostToolError(hostKind, tool.name);
     },
   };
+
+  Object.defineProperty(unsupportedTool, UNSUPPORTED_HOST_TOOL_MARKER, {
+    value: true,
+    enumerable: true,
+  });
+
+  return unsupportedTool;
 }

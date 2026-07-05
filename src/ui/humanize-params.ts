@@ -998,7 +998,7 @@ function humanizePythonTransformRange(p: Record<string, unknown>): ParamItem[] {
   return items;
 }
 
-function humanizeExecuteOfficeJs(p: Record<string, unknown>): ParamItem[] {
+function humanizeDirectJs(p: Record<string, unknown>, codeLabel: string): ParamItem[] {
   const items: ParamItem[] = [];
 
   if (p.explanation) {
@@ -1010,13 +1010,22 @@ function humanizeExecuteOfficeJs(p: Record<string, unknown>): ParamItem[] {
     const lines = source.split(/\r?\n/u).length;
     const oneLine = source.replace(/\s+/gu, " ").trim();
     const compact = oneLine.length > 140 ? `${oneLine.slice(0, 137)}…` : oneLine;
-    items.push({ label: l("Office.js"), value: compact.length > 0 ? compact : v("empty") });
+    const label = codeLabel === "WPS JSAPI" ? l("WPS JSAPI") : l("Office.js");
+    items.push({ label, value: compact.length > 0 ? compact : v("empty") });
     if (lines > 1) {
       items.push({ label: l("Code lines"), value: String(lines) });
     }
   }
 
   return items;
+}
+
+function humanizeExecuteOfficeJs(p: Record<string, unknown>): ParamItem[] {
+  return humanizeDirectJs(p, "Office.js");
+}
+
+function humanizeExecuteWpsJs(p: Record<string, unknown>): ParamItem[] {
+  return humanizeDirectJs(p, "WPS JSAPI");
 }
 
 /* ── Shared helpers ─────────────────────────────────────────── */
@@ -1074,6 +1083,7 @@ const EXTRA_HUMANIZERS = {
   files: humanizeFiles,
   python_transform_range: humanizePythonTransformRange,
   execute_office_js: humanizeExecuteOfficeJs,
+  execute_wps_js: humanizeExecuteWpsJs,
 } satisfies Record<AuxiliaryUiToolName, HumanizerFn>;
 
 const HUMANIZERS: Record<string, HumanizerFn> = {

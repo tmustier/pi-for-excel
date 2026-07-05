@@ -942,8 +942,11 @@ export async function initTaskpane(opts: {
       const gatedCoreTools = await applyExperimentalToolGates(coreTools, {
         getExecutionMode: () => Promise.resolve(getExecutionMode()),
         requestOfficeJsExecuteApproval: (request) => {
+          const apiName = request.apiName ?? "Office.js";
           return requestRuntimeToolApproval({
-            title: t("init.confirm.officeJsTitle"),
+            title: apiName === "WPS JSAPI"
+              ? t("init.confirm.wpsJsTitle")
+              : t("init.confirm.officeJsTitle"),
             message: buildOfficeJsExecuteApprovalMessage(request),
             confirmLabel: t("init.confirm.allowOnce"),
           });

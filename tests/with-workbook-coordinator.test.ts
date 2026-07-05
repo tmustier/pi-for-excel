@@ -16,6 +16,10 @@ import type {
   WorkbookOperationContext,
   WorkbookQueueSnapshot,
 } from "../src/workbook/coordinator.ts";
+import {
+  createUnsupportedHostTool,
+  UnsupportedHostToolError,
+} from "../src/tools/unsupported-host-tool.ts";
 
 const GENERIC_PARAMS = Type.Object({});
 
@@ -143,6 +147,58 @@ void test("modify_structure write emits structure-impact mutation event", async 
 
   const firstBlock = result.content[0];
   assert.equal(firstBlock?.type, "text");
+});
+
+void test("unsupported-host tools bypass workbook coordinator and fail fast", async () => {
+  const coordinator = new FakeCoordinator();
+  const mutationEvents: WorkbookMutationEvent[] = [];
+  const invalidatedWorkbookIds: Array<string | null> = [];
+  let approvalCalls = 0;
+  let executeCount = 0;
+
+  const unsupportedTool = createUnsupportedHostTool(
+    makeTool("format_cells", () => {
+      executeCount += 1;
+      return Promise.resolve({
+        content: [{ type: "text", text: "should not execute" }],
+        details: { echo: "format_cells" },
+      });
+    }),
+    "wps",
+  );
+
+  const wrapped = wrapSingleTool({
+    tool: unsupportedTool,
+    coordinator,
+    contextProvider: createContextProvider("wps_path_sha256:safe"),
+    mutationEvents,
+    invalidatedWorkbookIds,
+    executionPolicy: {
+      getExecutionMode: () => Promise.resolve("safe"),
+      requestMutationApproval: () => {
+        approvalCalls += 1;
+        return Promise.resolve(true);
+      },
+    },
+  });
+
+  assert.equal(wrapped, unsupportedTool);
+  await assert.rejects(
+    async () => wrapped.execute("tc-unsupported", { range: "Sheet1!A1", format: { bold: true } }),
+    (error: unknown) => {
+      assert.ok(error instanceof UnsupportedHostToolError);
+      assert.equal(error.toolName, "format_cells");
+      assert.equal(error.hostKind, "wps");
+      return true;
+    },
+  );
+
+  assert.equal(approvalCalls, 0);
+  assert.equal(executeCount, 0);
+  assert.equal(coordinator.readCalls.length, 0);
+  assert.equal(coordinator.writeCalls.length, 0);
+  assert.equal(mutationEvents.length, 0);
+  assert.deepEqual(invalidatedWorkbookIds, []);
 });
 
 void test("safe execution mode blocks mutate calls when approval is denied", async () => {

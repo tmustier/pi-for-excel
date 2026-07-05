@@ -1,5 +1,6 @@
 export const TMUX_TOOL_NAME = "tmux";
 export const EXECUTE_OFFICE_JS_TOOL_NAME = "execute_office_js";
+export const EXECUTE_WPS_JS_TOOL_NAME = "execute_wps_js";
 
 /** Python tools that can run without a native bridge (via Pyodide fallback). */
 export const PYTHON_FALLBACK_TOOL_NAMES = new Set<string>([
@@ -62,6 +63,7 @@ export interface PythonBridgeApprovalRequest {
 export interface OfficeJsExecuteApprovalRequest {
   explanation: string;
   code: string;
+  apiName?: "Office.js" | "WPS JSAPI";
   /**
    * Ambient-authority identifiers detected by the static risk lint
    * (`office-js-risk.ts`). When present, approval is requested even in Auto

@@ -12,6 +12,7 @@ import "@earendil-works/pi-web-ui/app.css";
 import "./ui/theme.css";
 
 import { installBedrockProviderStub } from "./compat/bedrock-provider-stub.js";
+import { installCryptoRandomUuidPatch } from "./compat/crypto-random-uuid.js";
 import { installLitClassFieldShadowingPatch } from "./compat/lit-class-field-shadowing.js";
 import { installMarkedSafetyPatch } from "./compat/marked-safety.js";
 import { installThinkingDurationPatch } from "./compat/thinking-duration.js";
@@ -19,6 +20,7 @@ import { installDialogStyleHooks } from "./ui/dialog-style-hooks.js";
 import { installThemeModeSync } from "./ui/theme-mode.js";
 
 installBedrockProviderStub();
+installCryptoRandomUuidPatch();
 installLitClassFieldShadowingPatch();
 installMarkedSafetyPatch();
 installThinkingDurationPatch();

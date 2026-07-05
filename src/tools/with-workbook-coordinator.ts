@@ -12,6 +12,7 @@ import {
 import type { WorkbookCoordinator, WorkbookOperationContext } from "../workbook/coordinator.js";
 import { getErrorMessage } from "../utils/errors.js";
 import { getToolContextImpact, getToolExecutionMode, type ToolContextImpact } from "./execution-policy.js";
+import { isUnsupportedHostTool } from "./unsupported-host-tool.js";
 
 export interface WorkbookCoordinatorContextProvider {
   getWorkbookId: () => Promise<string | null>;
@@ -210,5 +211,7 @@ export function withWorkbookCoordinator(
   mutationObserver?: WorkbookMutationObserver,
   executionPolicy: WorkbookExecutionPolicy = {},
 ): AgentTool[] {
-  return tools.map((tool) => wrapTool(tool, coordinator, contextProvider, mutationObserver, executionPolicy));
+  return tools.map((tool) => isUnsupportedHostTool(tool)
+    ? tool
+    : wrapTool(tool, coordinator, contextProvider, mutationObserver, executionPolicy));
 }

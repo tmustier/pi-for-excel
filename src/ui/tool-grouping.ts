@@ -16,6 +16,7 @@ const TOOL_GROUP_LABELS: Record<string, string> = {
   view_settings: "view changes",
   charts: "chart operations",
   execute_office_js: "script executions",
+  execute_wps_js: "script executions",
 };
 
 function describeGroup(toolName: string, count: number): string {
