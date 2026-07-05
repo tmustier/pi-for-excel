@@ -2,9 +2,10 @@
 
 [English](./README.md) | 简体中文
 
-> 本文档是简要中文指南，仅涵盖**安装**与**模型配置**。完整功能说明、开发者文档等请参阅[英文版 README](./README.md) 与 [docs/](./docs/README.md) 目录。如中英文内容有出入，以英文文档为准。
->
-> 本文档及产品界面的中文翻译由 AI 生成。如发现译文问题，欢迎提 [Issue](https://github.com/tmustier/pi-for-excel/issues) 指正。
+> [!NOTE]
+> 本简体中文指南由 AI 翻译/生成，可能存在译文问题；如与英文文档不一致，请以英文版为准。欢迎提 [Issue](https://github.com/tmustier/pi-for-excel/issues) 指正。
+
+> 本文档是简要中文指南，仅涵盖 **Microsoft Excel 加载项**的**安装**与**模型配置**。完整功能说明、开发者文档等请参阅[英文版 README](./README.md) 与 [docs/](./docs/README.md) 目录。WPS 表格支持另见英文文档 [docs/wps-support.md](./docs/wps-support.md)。
 
 Pi for Excel 是一款开源、多模型的 Microsoft Excel AI 侧边栏加载项,由 [Pi](https://pi.dev) 驱动。
 
@@ -42,6 +43,8 @@ Pi for Excel 是一款开源、多模型的 Microsoft Excel AI 侧边栏加载�
 ### 2)添加到 Excel
 
 #### Windows
+
+> Windows 桌面版 Excel 的界面会随版本/租户略有差异；以下是 Microsoft Office 加载项侧载路径。如找不到相同按钮，请参见下面的微软官方指南。
 
 1. 打开 Excel
 2. 点击 **插入(Insert)→ 我的加载项(My Add-ins)**
@@ -145,7 +148,7 @@ npx pi-for-excel-proxy
 
 (若未安装 Node.js:`curl -fsSL https://piforexcel.com/proxy | sh`)
 
-然后在 Pi 中打开 `/settings` → **Proxy**,启用代理并填入 `https://localhost:3003`,重试登录。详细说明与排错见[英文安装指南](./docs/install.md#oauth-logins-and-cors-proxy)。API Key 方式一般不需要代理。
+然后在 Pi 中打开 `/settings` → **Proxy**,启用代理并填入代理启动时打印的 HTTPS 地址(通常是 `https://localhost:3003`; 如端口被占用,会显示另一个本地端口),重试登录。详细说明与排错见[英文安装指南](./docs/install.md#oauth-logins-and-cors-proxy)。API Key 方式一般不需要代理。
 
 ---
 
@@ -168,6 +171,7 @@ npx pi-for-excel-proxy
 | [docs/integrations-external-tools.md](./docs/integrations-external-tools.md) | 联网搜索 + MCP 集成配置 |
 | [docs/extensions.md](./docs/extensions.md) | 扩展开发指南 |
 | [docs/security-threat-model.md](./docs/security-threat-model.md) | 安全威胁模型 |
+| [docs/wps-support.md](./docs/wps-support.md) | WPS 表格支持现状与安装路径 |
 
 ## 许可证
 
