@@ -2,6 +2,12 @@
    4. PI-INPUT — textarea card + send button
    ═══════════════════════════════════════════════════════ */
 
+pi-input {
+  display: block;
+  width: 100%;
+  min-width: 0;
+}
+
 .pi-input-card {
   position: relative;
   border-radius: var(--pill-radius);
@@ -126,6 +132,30 @@
 .pi-input-btn--abort:hover {
   background: oklch(0.50 0.22 25);
   transform: scale(1.05);
+}
+
+@media (max-height: 520px) {
+  .pi-input-textarea {
+    min-height: 34px;
+    padding: 8px 46px 8px 36px;
+    line-height: 1.35;
+    max-height: 28vh;
+  }
+
+  .pi-input-btn {
+    bottom: 5px;
+    width: 24px;
+    height: 24px;
+  }
+
+  .pi-input-btn--attach {
+    left: 6px;
+  }
+
+  .pi-input-btn--send,
+  .pi-input-btn--abort {
+    right: 6px;
+  }
 }
 
 
