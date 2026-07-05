@@ -6,6 +6,8 @@ Use the skill when WPS JSAPI, WPS packaging, WPS taskpane loading, auth, workboo
 
 This skill does **not** define one canonical workbook scenario. Agents should choose a minimal test fixture/action for the feature under review and record evidence tied to that feature.
 
+Separate **product-level Pi for Excel proof** from **low-level WPS JSAPI probes**. Product-level proof must use the real Pi taskpane/sidebar, auth/model setup, agent loop, tools/approvals, workbook updates, and final user-visible result. Custom probe taskpanes are useful for isolating WPS APIs, but they are not proof that Pi for Excel works for that feature.
+
 Real WPS verification should include visual proof: at least one screenshot, or a short video / screenshot sequence for timing-sensitive flows. Text logs alone are not enough.
 
 ## Installation

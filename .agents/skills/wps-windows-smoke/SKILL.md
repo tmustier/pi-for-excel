@@ -9,6 +9,11 @@ Use this skill for **feature-specific real WPS Spreadsheets validation** of pi-f
 
 This skill is an environment + workflow harness, **not one fixed smoke test**. Before testing, name the feature or regression under test and choose the smallest WPS workbook action that proves it. Do not use a generic “create and format a table” prompt unless the feature being tested is specifically table-like writing/formatting behavior.
 
+Be explicit about the test level:
+
+- **Product-level Pi for Excel proof** must load the real Pi taskpane (`/src/taskpane.html`) and exercise the actual sidebar/chat UI, auth/model setup, agent loop, tool calls, approvals, workbook updates, and final user-visible result.
+- **Low-level WPS JSAPI probes** may use a custom temporary taskpane/page to isolate WPS host APIs, but they are only host-capability evidence. They do **not** prove that the Pi sidebar, agent, auth, or typed Pi tools work for that feature.
+
 ## What agents get wrong
 
 - Use **China-domestic WPS** (`wps.cn` / `platform.wps.cn`) first. International `wps.com` builds are not the target and may not expose the documented JSAPI/add-in channel.
@@ -108,6 +113,7 @@ PS
 Before launching the full path, write down a compact test plan:
 
 - **Feature/regression under test:** e.g. taskpane boot, provider auth, `execute_wps_js`, `read_range`, an unsupported-tool failure path, a newly implemented WPS tool, or a reported customer issue.
+- **Test level:** product-level Pi sidebar/agent proof, or low-level WPS JSAPI host-capability probe. Do not mix these up in the conclusion.
 - **Build under test:** branch/commit, dev URL, WPS version, and whether using personal publish mode or enterprise `jsplugins.xml` mode.
 - **Fixture:** blank workbook, seeded range, saved workbook path, or exact reproduction file. Keep raw workbook paths and credentials out of logs.
 - **Action:** the exact Pi prompt, tool call, JSAPI snippet, or install/update action that exercises the target feature.
@@ -152,16 +158,17 @@ If the capture is black, the Windows display is probably locked/asleep. Wake/unl
 5. In Windows, open `http://10.0.2.2:3889/publish.html` in Edge and install the WPS add-in. Use this personal publish flow before trying `jsplugins.xml`. If Edge asks to open WPS Office, allow it; if direct service deployment is needed, POST the page's base64 payload to `http://127.0.0.1:58890/deployaddons/runParams` and approve the WPS trust prompt.
 6. Launch direct Spreadsheets (`et.exe`) rather than the WPS home shell if the home/login webview crashes.
 7. Confirm the baseline environment is valid:
-   - taskpane loads from `http://10.0.2.2:3141/src/taskpane.html`
-   - host kind resolves to WPS, not Office/browser
+   - for product-level tests, the taskpane loads the real Pi app from `http://10.0.2.2:3141/src/taskpane.html`
+   - for low-level probes, the taskpane URL is clearly recorded as a custom probe URL and the result is not described as Pi sidebar/agent proof
+   - host kind resolves to WPS, not Office/browser, when the real Pi app is under test
    - the Pi ribbon tab and **Open Pi** button are visible
    - the target add-in build/commit is the one under test
 8. Execute only the feature-specific action from the plan. Examples:
    - **Packaging/install:** reinstall via `publish.html`, inspect WPS publish/install state, verify the Pi ribbon appears after WPS restart.
    - **Taskpane boot:** open **Open Pi**, capture taskpane load/console state, verify no boot-time compatibility error.
    - **Host detection:** ask Pi or inspect logs to verify WPS host selection and workbook context, without mutating the workbook.
-   - **`execute_wps_js`:** run a minimal JSAPI snippet that reads workbook/sheet metadata or performs the specific mutation under test, then verify the returned JSON.
-   - **Workbook tool support:** seed only the range needed, call the relevant tool/prompt, and verify workbook state with WPS UI or `execute_wps_js` readback.
+   - **`execute_wps_js`:** in the real Pi sidebar, run a minimal JSAPI snippet that reads workbook/sheet metadata or performs the specific mutation under test, then verify the returned JSON.
+   - **Workbook tool support:** in the real Pi sidebar, seed only the range needed, call the relevant typed tool/prompt, and verify workbook state with WPS UI or `execute_wps_js` readback.
    - **Unsupported tools:** deliberately invoke the unsupported WPS path and confirm a typed `unsupported_host_tool` error, not an Office.js fallback.
    - **Auth/model flow:** verify provider setup and a small prompt response without exposing tokens or local credential paths.
    - **Regression reproduction:** reproduce the exact issue steps first, then rerun after the fix with the same fixture.

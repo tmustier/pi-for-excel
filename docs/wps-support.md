@@ -30,7 +30,7 @@ Office.js path.
 | `read_range` | Supported | `compact`, `csv`, and `detailed` modes via WPS `Range.Value2`, `Formula`, and `NumberFormat`. If formula/format metadata is unavailable, the result includes an in-band WPS metadata note. |
 | `write_cells` | Supported | Values/formulas, overwrite protection, and read-back verification. **No WPS automatic backup is created**; the result and details report recovery as `not_available`. |
 | `instructions`, `conventions`, `skills` | Supported | Local/settings-backed tools; same behavior as Phase 1. Workbook-scoped instructions require the WPS workbook identity to be available. |
-| `execute_wps_js` | Supported on WPS only | Non-core escape hatch for direct synchronous WPS JSAPI code with `Application` in scope. Uses the same approval gate and JSON serialization policy as `execute_office_js`. Raw WPS JSAPI chart creation has been verified through this host surface, but the typed `charts` tool is still unsupported on WPS. |
+| `execute_wps_js` | Supported on WPS only | Non-core escape hatch for direct synchronous WPS JSAPI code with `Application` in scope. Uses the same approval gate and JSON serialization policy as `execute_office_js`. |
 | `workbook_history` | Fail-fast | WPS workbook backups/snapshots are not implemented. |
 | Other workbook tools (`fill_formula`, `search_workbook`, `modify_structure`, `format_cells`, `conditional_format`, `charts`, `trace_dependencies`, `explain_formula`, `view_settings`, `comments`) | Fail-fast | Not implemented on WPS in Phase 2. |
 | `execute_office_js`, `python_transform_range` | Fail-fast on WPS | These are Office.js/Excel-coupled and remain unavailable on WPS. |
@@ -154,10 +154,12 @@ Evidence artifacts from the first smoke run live outside the repo under
 - `wps-after-format-prompt-settle.png` — first authenticated agent write/formatting
   scenario in WPS.
 - `wps-chart-probe-workbook-chart-only.png` plus
-  `wps-chart-probe-result.json` — raw WPS JSAPI chart creation probe: wrote
-  `A1:B5`, created one embedded chart with `ChartObjects().Add(...)` and
-  `ChartWizard(...)`, and visually confirmed the rendered chart. This does **not**
-  mean the typed Pi `charts` tool is supported on WPS yet.
+  `wps-chart-probe-result.json` — low-level custom-taskpane WPS JSAPI chart
+  creation probe: wrote `A1:B5`, created one embedded chart with
+  `ChartObjects().Add(...)` and `ChartWizard(...)`, and visually confirmed the
+  rendered chart. This proves the WPS host API can create a chart; it does **not**
+  prove the real Pi sidebar/chat, `execute_wps_js`, or typed Pi `charts` tool can
+  create charts on WPS.
 
 ## Open verification gaps
 
