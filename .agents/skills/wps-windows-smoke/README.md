@@ -6,6 +6,8 @@ Use the skill when WPS JSAPI, WPS packaging, WPS taskpane loading, auth, workboo
 
 This skill does **not** define one canonical workbook scenario. Agents should choose a minimal test fixture/action for the feature under review and record evidence tied to that feature.
 
+Real WPS verification should include visual proof: at least one screenshot, or a short video / screenshot sequence for timing-sensitive flows. Text logs alone are not enough.
+
 ## Installation
 
 This is a repo-local Agent Skill. No package install is required beyond the repo's normal dependencies.
@@ -24,4 +26,4 @@ External runtime prerequisites for the workflow:
 - `scripts/wps-win11-vm.sh` — start/stop the VM, wait for WinRM, run guest PowerShell, attach ISOs, install VirtIO NetKVM.
 - `scripts/prepare-wps-plugin.mjs` — build a WPS test add-in from `wps/`, patch URLs for the QEMU guest, generate `publish.html`, and optionally serve it.
 
-Read `SKILL.md` for the operating notes, gotchas, feature-specific test-plan template, and historical first-route evidence.
+Read `SKILL.md` for the operating notes, gotchas, feature-specific test-plan template, screenshot/video proof requirements, and historical first-route evidence.

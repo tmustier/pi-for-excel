@@ -112,9 +112,30 @@ Before launching the full path, write down a compact test plan:
 - **Fixture:** blank workbook, seeded range, saved workbook path, or exact reproduction file. Keep raw workbook paths and credentials out of logs.
 - **Action:** the exact Pi prompt, tool call, JSAPI snippet, or install/update action that exercises the target feature.
 - **Expected result:** what must visibly or programmatically happen in WPS for the test to pass.
-- **Evidence:** screenshots, WinRM command output, taskpane logs, WPS version, publish/install evidence, workbook before/after state, and any failure output.
+- **Evidence:** screenshots/video, WinRM command output, taskpane logs, WPS version, publish/install evidence, workbook before/after state, and any failure output.
 
 Use [`docs/wps-support.md`](../../../docs/wps-support.md) as the current support matrix. If the feature is explicitly unsupported on WPS, a typed `unsupported_host_tool` failure is the correct pass condition.
+
+## Visual proof requirements
+
+Real-client WPS verification must produce at least one visual artifact from the Windows VM. Text logs alone are not enough.
+
+- Capture **before/after screenshots** for workbook mutations, taskpane boot, ribbon/install state, and regressions with visible UI symptoms.
+- Prefer a final screenshot where the relevant UI is unobstructed (close popups/taskpanes if they hide the proof).
+- For flows where timing matters (install prompts, crash/restart loops, modal handoffs), capture a short video or a sequence of screenshots.
+- Store proof artifacts under `~/VMs/wps-win11/` or `/tmp` with descriptive names, and report the paths in the result.
+- Do not commit screenshots/videos that expose tokens, private workbook data, local credentials, or customer data.
+
+Screenshot helper:
+
+```bash
+VM=~/VMs/wps-win11
+VNCDOTOOL="$VM/.venv/bin/vncdotool"
+[ -x "$VNCDOTOOL" ] || VNCDOTOOL="$(command -v vncdotool)"
+"$VNCDOTOOL" -s 127.0.0.1::5907 capture "$VM/<feature>-after.png"
+```
+
+If the capture is black, the Windows display is probably locked/asleep. Wake/unlock the console before treating the capture as evidence; do not rely on a black screenshot.
 
 ## General workflow
 
@@ -144,7 +165,7 @@ Use [`docs/wps-support.md`](../../../docs/wps-support.md) as the current support
    - **Unsupported tools:** deliberately invoke the unsupported WPS path and confirm a typed `unsupported_host_tool` error, not an Office.js fallback.
    - **Auth/model flow:** verify provider setup and a small prompt response without exposing tokens or local credential paths.
    - **Regression reproduction:** reproduce the exact issue steps first, then rerun after the fix with the same fixture.
-9. Capture evidence tied to the target feature. Prefer a screenshot plus a text log/command output. Include residual risks or gaps instead of calling unrelated behavior “covered.”
+9. Capture evidence tied to the target feature. Include at least one screenshot or video plus a text log/command output. Include residual risks or gaps instead of calling unrelated behavior “covered.”
 
 ## Historical evidence from first successful route
 
