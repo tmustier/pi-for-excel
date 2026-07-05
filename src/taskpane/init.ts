@@ -38,6 +38,7 @@ import { runCompactCommand } from "../commands/builtins/export.js";
 import { getFilesWorkspace } from "../files/workspace.js";
 import { ConnectionManager } from "../connections/manager.js";
 import { createAllTools } from "../tools/index.js";
+import type { SpreadsheetHost } from "../host/types.js";
 import { collectRequiredConnectionIds } from "../tools/connection-requirements.js";
 import {
   applyToolOutputTruncation,
@@ -145,6 +146,7 @@ import { resolveRuntimeModelSwap } from "./runtime-model-reconcile.js";
 import { getThinkingLevels, installKeyboardShortcuts } from "./keyboard-shortcuts.js";
 import { createQueueDisplay } from "./queue-display.js";
 import { createActionQueue } from "./action-queue.js";
+import { maybeStartBackgroundVerificationBridge } from "./background-verification-bridge.js";
 import { RecentlyClosedStack, type RecentlyClosedItem } from "./recently-closed.js";
 import { setupSessionPersistence } from "./sessions.js";
 import {
@@ -214,8 +216,10 @@ async function ensureDefaultProxyUrl(settings: ProxySettingsStore): Promise<void
 export async function initTaskpane(opts: {
   appEl: HTMLElement;
   errorRoot: HTMLElement;
+  host?: SpreadsheetHost;
 }): Promise<void> {
   const { appEl, errorRoot } = opts;
+  const host = opts.host;
 
   const changeTracker = new ChangeTracker();
 
@@ -462,7 +466,7 @@ export async function initTaskpane(opts: {
 
   const resolveWorkbookContext = async (): Promise<Awaited<ReturnType<typeof getWorkbookContext>>> => {
     try {
-      return await getWorkbookContext();
+      return host ? await host.getWorkbookContext() : await getWorkbookContext();
     } catch {
       return {
         workbookId: null,
@@ -792,7 +796,7 @@ export async function initTaskpane(opts: {
   const refreshCapabilitiesForAllRuntimes = createAsyncCoalescer(runCapabilityRefreshPass);
 
   const reservedToolNames = new Set([
-    ...createAllTools().map((tool) => tool.name),
+    ...createAllTools({ hostKind: host?.kind }).map((tool) => tool.name),
     ...getIntegrationToolNames(),
   ]);
   const connectionManager = new ConnectionManager({ settings });
@@ -930,6 +934,7 @@ export async function initTaskpane(opts: {
       runtimeActiveIntegrationIds.set(runtimeId, activeIntegrationIds);
 
       const coreTools = createAllTools({
+        hostKind: host?.kind,
         getExtensionManager: () => extensionManager,
         getSessionId: () => runtimeAgent?.sessionId ?? runtimeSessionId,
         skillReadCache: runtimeSkillReadCache,
@@ -2098,6 +2103,16 @@ export async function initTaskpane(opts: {
       },
     });
   };
+
+  // ── Dev-only background verification bridge ──
+  const backgroundVerificationBridge = maybeStartBackgroundVerificationBridge({
+    sidebar,
+    getWorkbookContext: resolveWorkbookContext,
+    getActiveRuntime,
+  });
+  if (backgroundVerificationBridge) {
+    window.addEventListener("pagehide", () => backgroundVerificationBridge.stop(), { once: true });
+  }
 
   // ── Status bar click handlers ──
   document.addEventListener("click", (e) => {
