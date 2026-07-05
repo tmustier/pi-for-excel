@@ -212,6 +212,56 @@
   background: var(--green-alpha-6);
 }
 
+@media (max-height: 520px) {
+  .pi-welcome-lang-bar {
+    padding: 0 0 4px !important;
+  }
+
+  .pi-welcome-logo {
+    display: none;
+  }
+
+  .pi-welcome-title {
+    font-size: var(--text-md);
+    margin-bottom: 2px;
+  }
+
+  .pi-welcome-subtitle {
+    font-size: var(--text-sm);
+    margin-bottom: 6px;
+  }
+
+  .pi-welcome-intro {
+    display: none;
+  }
+
+  .pi-welcome-section-title {
+    margin-bottom: 5px;
+  }
+
+  .pi-welcome-providers {
+    max-height: none;
+    overflow: visible;
+  }
+
+  .pi-welcome-provider {
+    padding: 8px 10px;
+  }
+
+  .pi-login-desc {
+    display: none;
+  }
+
+  .pi-welcome-custom-gateway {
+    padding: 6px 10px;
+  }
+
+  .pi-welcome-proxy-toggle {
+    margin: 6px 0 0;
+    padding: 6px 8px;
+  }
+}
+
 /* Prompt overlay used during OAuth code/device flows */
 .pi-prompt-card {
   text-align: left;
@@ -242,6 +292,37 @@
   font-size: var(--text-sm);
   color: var(--muted-foreground);
   line-height: 1.45;
+}
+
+.pi-prompt-external-url {
+  display: flex;
+  gap: 8px;
+  margin: 0 0 10px;
+}
+
+.pi-prompt-external-url__open,
+.pi-prompt-external-url__copy {
+  flex: 1;
+  padding: 7px 8px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.pi-prompt-external-url__open {
+  border: none;
+  background: var(--pi-green);
+  color: white;
+  font-weight: 600;
+}
+
+.pi-prompt-external-url__copy {
+  border: 1px solid var(--alpha-8);
+  background: var(--alpha-2);
+  color: var(--foreground);
 }
 
 .pi-prompt-input {

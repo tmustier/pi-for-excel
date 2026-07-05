@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { test } from "node:test";
 
 import type { OAuthLoginCallbacks } from "@earendil-works/pi-ai/compat";
 
 import { getOAuthProvider } from "../src/auth/oauth-provider-registry.ts";
+import { sha256ForPkce } from "../src/auth/pkce.ts";
 
 function encodeBase64Url(value: string): string {
   return Buffer.from(value, "utf8")
@@ -26,6 +28,27 @@ function requestUrlToString(url: string | URL | Request): string {
   if (url instanceof URL) return url.toString();
   return url.url;
 }
+
+void test("PKCE SHA-256 falls back when Web Crypto digest is unavailable", async (t) => {
+  const originalCrypto = globalThis.crypto;
+  Object.defineProperty(globalThis, "crypto", {
+    configurable: true,
+    value: { getRandomValues: originalCrypto.getRandomValues.bind(originalCrypto) },
+  });
+
+  t.after(() => {
+    Object.defineProperty(globalThis, "crypto", {
+      configurable: true,
+      value: originalCrypto,
+    });
+  });
+
+  const input = new TextEncoder().encode("wps-http-pkce");
+  const actual = Buffer.from(await sha256ForPkce(input)).toString("hex");
+  const expected = createHash("sha256").update(input).digest("hex");
+
+  assert.equal(actual, expected);
+});
 
 void test("Anthropic OAuth provider uses the browser-safe implementation", async (t) => {
   const originalFetch = globalThis.fetch;

@@ -453,12 +453,40 @@ function promptForSelect(opts: {
   });
 }
 
+async function copyTextToClipboard(text: string): Promise<void> {
+  const clipboard = navigator.clipboard;
+  if (clipboard?.writeText) {
+    try {
+      await clipboard.writeText(text);
+      return;
+    } catch {
+      // Fall through to legacy copy for WebViews/insecure dev origins.
+    }
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.left = "-9999px";
+  textarea.style.top = "0";
+  document.body.append(textarea);
+  textarea.select();
+  const copied = document.execCommand("copy");
+  textarea.remove();
+
+  if (!copied) {
+    throw new Error("Clipboard copy failed");
+  }
+}
+
 function promptForText(opts: {
   title: string;
   message: string;
   placeholder?: string;
   helperText?: string;
   submitLabel?: string;
+  externalUrl?: string;
 }): Promise<string> {
   return new Promise((resolve, reject) => {
     closeOverlayById(PROVIDER_PROMPT_OVERLAY_ID);
@@ -487,6 +515,10 @@ function promptForText(opts: {
     input.autocomplete = "off";
     input.setAttribute("aria-label", opts.title);
 
+    const externalUrlEl = document.createElement("div");
+    externalUrlEl.className = "pi-prompt-external-url";
+    externalUrlEl.hidden = true;
+
     const actions = document.createElement("div");
     actions.className = "pi-prompt-actions";
 
@@ -501,7 +533,7 @@ function promptForText(opts: {
     okBtn.textContent = opts.submitLabel ?? t("provider.prompt.continue");
 
     actions.append(cancelBtn, okBtn);
-    dialog.card.append(titleEl, messageEl, helperEl, input, actions);
+    dialog.card.append(titleEl, messageEl, helperEl, externalUrlEl, input, actions);
 
     if (opts.helperText) {
       helperEl.textContent = opts.helperText;
@@ -510,6 +542,31 @@ function promptForText(opts: {
 
     if (opts.placeholder) {
       input.placeholder = opts.placeholder;
+    }
+
+    if (opts.externalUrl) {
+      const openLink = document.createElement("a");
+      openLink.className = "pi-prompt-external-url__open";
+      openLink.href = opts.externalUrl;
+      openLink.target = "_blank";
+      openLink.rel = "noopener noreferrer";
+      openLink.textContent = t("provider.prompt.openLoginPage");
+
+      const copyBtn = document.createElement("button");
+      copyBtn.type = "button";
+      copyBtn.className = "pi-prompt-external-url__copy";
+      copyBtn.textContent = t("provider.prompt.copyLoginLink");
+      copyBtn.addEventListener("click", () => {
+        void copyTextToClipboard(opts.externalUrl ?? "").then(() => {
+          copyBtn.textContent = t("provider.prompt.copied");
+          setTimeout(() => {
+            copyBtn.textContent = t("provider.prompt.copyLoginLink");
+          }, 1500);
+        });
+      });
+
+      externalUrlEl.append(openLink, copyBtn);
+      externalUrlEl.hidden = false;
     }
 
     let settled = false;
@@ -689,11 +746,13 @@ export function buildProviderRow(
           }
 
           const deviceCodeDialogRef: { close: (() => void) | null } = { close: null };
+          const authUrlRef: { current: string | null } = { current: null };
 
           let cred;
           try {
             cred = await oauthProvider.login({
               onAuth: (info) => {
+                authUrlRef.current = info.url;
                 // Prevent the OAuth page from gaining a handle to the add-in window.
                 const w = window.open(info.url, "_blank", "noopener,noreferrer");
                 if (w) w.opener = null;
@@ -726,6 +785,7 @@ export function buildProviderRow(
                   placeholder: prompt.placeholder || "",
                   helperText,
                   submitLabel: t("provider.prompt.continue"),
+                  externalUrl: authUrlRef.current ?? undefined,
                 });
 
                 if (id === "anthropic") {

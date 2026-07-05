@@ -28,3 +28,19 @@
   overflow: hidden;
 }
 
+@media (max-height: 520px) {
+  .pi-welcome-overlay {
+    align-items: stretch;
+    box-sizing: border-box;
+    padding: 8px;
+  }
+
+  .pi-welcome-card {
+    width: min(340px, 100%);
+    max-height: 100%;
+    padding: 12px 14px;
+    border-radius: var(--radius-lg);
+    overflow-y: auto;
+  }
+}
+
