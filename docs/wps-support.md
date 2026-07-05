@@ -49,7 +49,7 @@ workbook context.
 | Host/distribution | Support stance | Add-in route | Notes |
 |---|---|---|---|
 | Microsoft Excel | Supported | Office Add-in manifest + Office.js | Existing production path. |
-| China WPS personal (`wps.cn`) | Phase 2 backend implemented; real-client smoke pending | `wpsjs publish` flow | Recommended WPS route. Installs write `publish.xml` under `%appdata%/kingsoft/wps/jsaddons` on Windows or `~/.local/share/Kingsoft/wps/jsaddons` on Linux. |
+| China WPS personal (`wps.cn`) | Phase 2 backend implemented; personal publish-mode smoke completed on WPS 12.1.0.26200 | `wpsjs publish` flow | Recommended WPS route. Installs write `publish.xml` under `%appdata%/kingsoft/wps/jsaddons` on Windows or `~/.local/share/Kingsoft/wps/jsaddons` on Linux. |
 | WPS 365 enterprise | Phase 2 backend implemented; enterprise deployment smoke pending | Publish mode or managed `jsplugins.xml` via `oem.ini` | `jsplugins.xml` mode is for enterprise/OEM repack scenarios. |
 | International WPS (`wps.com`) | Unsupported for now | N/A | Public docs and JSAPI/plugin routes differ; do not claim support until verified. |
 | Browser/dev server | Supported for UI testing only | Vite dev server | No workbook API; mirrors existing no-Office fallback. |
@@ -151,8 +151,8 @@ Evidence artifacts from the first smoke run live outside the repo under
 - `wps-click-addin-chevron.png` — Pi tab visible with `Open Pi` button.
 - `wps-taskpane-after-randomuuid-patch.png` — taskpane initialized in WPS after
   the `crypto.randomUUID` compatibility patch.
-- `wps-after-format-prompt-settle.png` — agent-created and formatted worksheet
-  table in WPS.
+- `wps-after-format-prompt-settle.png` — first authenticated agent write/formatting
+  scenario in WPS.
 
 ## Open verification gaps
 
