@@ -19,6 +19,11 @@ import {
 } from "./extensions-manager.js";
 
 export interface CreateAllToolsOptions {
+  /**
+   * Host discriminator for future host-specific tool availability. Currently
+   * accepted for taskpane host abstraction without changing the default tool set.
+   */
+  hostKind?: "office" | "wps" | "browser";
   getExtensionManager?: () => ExtensionsManagerToolRuntime | null;
   getSessionId?: () => string | null;
   skillReadCache?: SkillReadCache;
