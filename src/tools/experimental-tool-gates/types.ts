@@ -62,6 +62,12 @@ export interface PythonBridgeApprovalRequest {
 export interface OfficeJsExecuteApprovalRequest {
   explanation: string;
   code: string;
+  /**
+   * Ambient-authority identifiers detected by the static risk lint
+   * (`office-js-risk.ts`). When present, approval is requested even in Auto
+   * mode and the approval message includes an explicit warning.
+   */
+  riskIdentifiers?: string[];
 }
 
 export interface ExperimentalToolGateDependencies extends

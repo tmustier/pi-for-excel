@@ -6,6 +6,7 @@ import type { SlashCommand } from "../types.js";
 import type { ResumeDialogTarget } from "./resume-target.js";
 import { requestConfirmationDialog } from "../../ui/confirm-dialog.js";
 import { showToast } from "../../ui/toast.js";
+import { t } from "../../language/index.js";
 
 export interface ManualFullBackupSummary {
   id: string;
@@ -30,25 +31,25 @@ export function createSessionIdentityCommands(actions: SessionCommandActions): S
   return [
     {
       name: "name",
-      description: "Name the current chat session",
+      description: t("command.session.name"),
       source: "builtin",
       execute: async (args: string) => {
         const title = args.trim();
         if (!title) {
-          showToast("Usage: /name My Session Name");
+          showToast(t("session.toast.name_usage"));
           return;
         }
 
         await actions.renameActiveSession(title);
-        showToast(`Session named: ${title}`);
+        showToast(t("session.toast.named", { title }));
       },
     },
     {
       name: "share-session",
-      description: "Share session as a link",
+      description: t("command.session.share"),
       source: "builtin",
       execute: () => {
-        showToast("Session sharing coming soon");
+        showToast(t("session.toast.sharing_soon"));
       },
     },
   ];
@@ -80,14 +81,14 @@ function shortBackupId(id: string): string {
 }
 
 function backupUsage(): string {
-  return "Usage: /backup [create|list [limit]|restore [id]|clear]";
+  return t("session.toast.backup_usage");
 }
 
 export function createSessionLifecycleCommands(actions: SessionCommandActions): SlashCommand[] {
   return [
     {
       name: "new",
-      description: "Start a new chat session tab",
+      description: t("command.session.new"),
       source: "builtin",
       execute: async () => {
         await actions.createRuntime();
@@ -95,7 +96,7 @@ export function createSessionLifecycleCommands(actions: SessionCommandActions): 
     },
     {
       name: "resume",
-      description: "Resume a previous session (opens in new tab)",
+      description: t("command.session.resume"),
       source: "builtin",
       execute: async () => {
         await actions.openResumeDialog("new_tab");
@@ -103,7 +104,7 @@ export function createSessionLifecycleCommands(actions: SessionCommandActions): 
     },
     {
       name: "resume-here",
-      description: "Resume a previous session into the current tab",
+      description: t("command.resume_here.desc"),
       source: "builtin",
       execute: async () => {
         await actions.openResumeDialog("replace_current");
@@ -111,7 +112,7 @@ export function createSessionLifecycleCommands(actions: SessionCommandActions): 
     },
     {
       name: "history",
-      description: "Open Backups",
+      description: t("command.session.backups"),
       source: "builtin",
       execute: async () => {
         await actions.openRecoveryDialog();
@@ -119,7 +120,7 @@ export function createSessionLifecycleCommands(actions: SessionCommandActions): 
     },
     {
       name: "backup",
-      description: "Manual full-workbook backup (create/list/restore/clear)",
+      description: t("command.session.backup"),
       source: "builtin",
       execute: async (rawArgs: string) => {
         try {
@@ -136,7 +137,7 @@ export function createSessionLifecycleCommands(actions: SessionCommandActions): 
           if (action === "create") {
             const backup = await actions.createManualFullBackup();
             showToast(
-              `Manual backup created: #${shortBackupId(backup.id)} (${formatBytes(backup.sizeBytes)}).`,
+              t("session.toast.backup_created", { id: shortBackupId(backup.id), size: formatBytes(backup.sizeBytes) }),
             );
             return;
           }
@@ -149,7 +150,7 @@ export function createSessionLifecycleCommands(actions: SessionCommandActions): 
 
             const backups = await actions.listManualFullBackups(limit);
             if (backups.length === 0) {
-              showToast("No manual full-workbook backups for this workbook.");
+              showToast(t("session.toast.no_backups"));
               return;
             }
 
@@ -160,27 +161,27 @@ export function createSessionLifecycleCommands(actions: SessionCommandActions): 
 
             const hasMore = backups.length > 3;
             const previewText = hasMore ? `${preview}, …` : preview;
-            showToast(`Manual backups (${backups.length} shown): ${previewText}`);
+            showToast(t("session.toast.backups_list", { count: String(backups.length), preview: previewText }));
             return;
           }
 
           if (action === "restore") {
             const restored = await actions.restoreManualFullBackup(tailText.length > 0 ? tailText : undefined);
             if (!restored) {
-              showToast("Backup not found for this workbook.");
+              showToast(t("session.toast.backup_not_found"));
               return;
             }
 
-            showToast(`Downloaded backup #${shortBackupId(restored.id)}. Open the file in Excel to restore.`);
+            showToast(t("session.toast.backup_restored", { id: shortBackupId(restored.id) }));
             return;
           }
 
           if (action === "clear") {
             const proceed = await requestConfirmationDialog({
-              title: "Delete all manual full-workbook backups?",
-              message: "This will remove all manual full-workbook backups for the active workbook.",
-              confirmLabel: "Delete all",
-              cancelLabel: "Cancel",
+              title: t("session.confirm.clear_title"),
+              message: t("session.confirm.clear_message"),
+              confirmLabel: t("session.confirm.clear_label"),
+              cancelLabel: t("session.confirm.cancel"),
               confirmButtonTone: "danger",
               restoreFocusOnClose: true,
             });
@@ -189,20 +190,20 @@ export function createSessionLifecycleCommands(actions: SessionCommandActions): 
             }
 
             const removed = await actions.clearManualFullBackups();
-            showToast(`Deleted ${removed} manual backup${removed === 1 ? "" : "s"}.`);
+            showToast(t("session.toast.backups_deleted", { count: String(removed) }));
             return;
           }
 
           showToast(backupUsage());
         } catch (error: unknown) {
-          const message = error instanceof Error ? error.message : "Unknown error";
-          showToast(`Backup command failed: ${message}`);
+          const message = error instanceof Error ? error.message : t("session.backup.unknown_error");
+          showToast(t("session.toast.backup_failed", { message }));
         }
       },
     },
     {
       name: "reopen",
-      description: "Reopen the most recently closed session tab",
+      description: t("command.session.reopen"),
       source: "builtin",
       execute: async () => {
         await actions.reopenLastClosed();
@@ -210,7 +211,7 @@ export function createSessionLifecycleCommands(actions: SessionCommandActions): 
     },
     {
       name: "revert",
-      description: "Revert the latest workbook backup",
+      description: t("command.session.revert"),
       source: "builtin",
       execute: async () => {
         await actions.revertLatestCheckpoint();

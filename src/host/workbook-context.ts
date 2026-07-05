@@ -6,6 +6,8 @@
  * this module so the privacy-preserving semantics stay centralized.
  */
 
+import { t } from "../language/index.js";
+
 export interface WorkbookContext {
   /**
    * A stable, local-only identifier when available.
@@ -92,7 +94,7 @@ export function formatWorkbookLabel(context: WorkbookContext): string {
     return `Workbook (${shortId}…)`;
   }
 
-  return "Current workbook";
+  return t("workbook.currentWorkbook");
 }
 
 function fnv1a32Hex(bytes: Uint8Array): string {

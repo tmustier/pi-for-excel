@@ -20,6 +20,7 @@ import { requestConfirmationDialog } from "../../ui/confirm-dialog.js";
 import { RESUME_OVERLAY_ID } from "../../ui/overlay-ids.js";
 import { showToast } from "../../ui/toast.js";
 import { formatWorkbookLabel, getWorkbookContext } from "../../workbook/context.js";
+import { t } from "../../language/index.js";
 import {
   getSessionWorkbookId,
   partitionSessionIdsByWorkbook,
@@ -46,11 +47,11 @@ function buildResumeListItem(session: SessionMetadata): HTMLButtonElement {
 
   const title = document.createElement("span");
   title.className = "pi-resume-item__title";
-  title.textContent = session.title || "Untitled";
+  title.textContent = session.title || t("resume.defaultTitle");
 
   const meta = document.createElement("span");
   meta.className = "pi-resume-item__meta";
-  meta.textContent = `${session.messageCount || 0} messages · ${formatRelativeDate(session.lastModified)}`;
+  meta.textContent = t("resume.sessionMeta", { count: session.messageCount || 0, date: formatRelativeDate(session.lastModified) });
 
   button.append(title, meta);
   return button;
@@ -65,11 +66,11 @@ function buildRecentlyClosedListItem(item: ResumeRecentlyClosedItem): HTMLButton
 
   const title = document.createElement("span");
   title.className = "pi-resume-item__title";
-  title.textContent = item.title || "Untitled";
+  title.textContent = item.title || t("resume.defaultTitle");
 
   const meta = document.createElement("span");
   meta.className = "pi-resume-item__meta";
-  meta.textContent = `Closed ${formatRelativeDate(item.closedAt)} · Reopens in new tab`;
+  meta.textContent = t("resume.recentlyClosedMeta", { date: formatRelativeDate(item.closedAt) });
 
   button.append(title, meta);
   return button;
@@ -88,7 +89,7 @@ function buildWorkbookFilterRow(opts: {
   checkbox.checked = opts.checked;
 
   const labelText = document.createElement("span");
-  labelText.textContent = "Show sessions from all workbooks";
+  labelText.textContent = t("resume.showAllWorkbooks");
 
   const workbookHint = document.createElement("span");
   workbookHint.className = "pi-resume-workbook-filter__hint";
@@ -121,7 +122,7 @@ export async function showResumeDialog(opts: {
   };
 
   if (allSessions.length === 0 && getRecentlyClosedItems().length === 0) {
-    showToast("No previous sessions");
+    showToast(t("resume.noPreviousSessions"));
     return;
   }
 
@@ -156,9 +157,9 @@ export async function showResumeDialog(opts: {
 
   const { header } = createOverlayHeader({
     onClose: closeOverlay,
-    closeLabel: "Close resume sessions",
-    title: "Resume Session",
-    subtitle: "Pick a session to resume in a new tab or the current one.",
+    closeLabel: t("resume.closeLabel"),
+    title: t("resume.title"),
+    subtitle: t("resume.subtitle"),
   });
 
   const targetControls = document.createElement("div");
@@ -167,12 +168,12 @@ export async function showResumeDialog(opts: {
   const openInNewTabButton = document.createElement("button");
   openInNewTabButton.type = "button";
   openInNewTabButton.className = "pi-overlay-btn pi-overlay-btn--ghost pi-resume-target-btn";
-  openInNewTabButton.textContent = "Open in new tab";
+  openInNewTabButton.textContent = t("resume.openInNewTab");
 
   const replaceCurrentButton = document.createElement("button");
   replaceCurrentButton.type = "button";
   replaceCurrentButton.className = "pi-overlay-btn pi-overlay-btn--ghost pi-resume-target-btn";
-  replaceCurrentButton.textContent = "Replace current";
+  replaceCurrentButton.textContent = t("resume.replaceCurrent");
 
   const targetHint = document.createElement("div");
   targetHint.className = "pi-resume-target-hint";
@@ -186,11 +187,11 @@ export async function showResumeDialog(opts: {
 
   const recentTitle = document.createElement("h3");
   recentTitle.className = "pi-overlay-section-title";
-  recentTitle.textContent = "Recently closed";
+  recentTitle.textContent = t("resume.recentlyClosed");
 
   const recentHint = document.createElement("p");
   recentHint.className = "pi-overlay-hint pi-resume-section-hint";
-  recentHint.textContent = "Reopen a recently closed tab directly in a new tab.";
+  recentHint.textContent = t("resume.recentlyClosedHint");
 
   const recentList = document.createElement("div");
   recentList.className = "pi-resume-list pi-resume-list--recent";
@@ -203,7 +204,7 @@ export async function showResumeDialog(opts: {
 
   const savedTitle = document.createElement("h3");
   savedTitle.className = "pi-overlay-section-title";
-  savedTitle.textContent = "Saved sessions";
+  savedTitle.textContent = t("resume.savedSessions");
 
   const list = document.createElement("div");
   list.className = "pi-resume-list";
@@ -219,7 +220,7 @@ export async function showResumeDialog(opts: {
 
     openInNewTabButton.setAttribute("aria-pressed", String(isNewTab));
     replaceCurrentButton.setAttribute("aria-pressed", String(!isNewTab));
-    targetHint.textContent = `Default action: ${getResumeTargetLabel(selectedTarget)}`;
+    targetHint.textContent = t("resume.defaultActionHint", { action: getResumeTargetLabel(selectedTarget) });
   };
 
   openInNewTabButton.addEventListener("click", () => {
@@ -283,12 +284,12 @@ export async function showResumeDialog(opts: {
 
     const sessionData = await storage.sessions.loadSession(item.sessionId);
     if (!sessionData) {
-      showToast("Couldn't reopen session");
+      showToast(t("resume.couldNotReopen"));
       return false;
     }
 
     await opts.onOpenInNewTab(sessionData);
-    showToast(`Reopened: ${sessionData.title || "Untitled"}`);
+    showToast(t("resume.toast.reopened", { title: sessionData.title || t("session.untitled") }));
     return true;
   };
 
@@ -309,7 +310,7 @@ export async function showResumeDialog(opts: {
     if (sessions.length === 0) {
       const empty = document.createElement("div");
       empty.className = "pi-overlay-empty pi-resume-list-empty";
-      empty.textContent = "No sessions available for this workbook.";
+      empty.textContent = t("resume.noSessionsForWorkbook");
       list.appendChild(empty);
       return;
     }
@@ -340,14 +341,14 @@ export async function showResumeDialog(opts: {
       if (kind === RESUME_ITEM_KIND_RECENTLY_CLOSED) {
         const recentId = item.dataset.recentId;
         if (!recentId) {
-          showToast("Session is no longer in recently closed");
+          showToast(t("resume.sessionNotInRecentlyClosed"));
           renderLists();
           return;
         }
 
         const recentEntry = recentlyClosedById.get(recentId);
         if (!recentEntry) {
-          showToast("Session is no longer in recently closed");
+          showToast(t("resume.sessionNotInRecentlyClosed"));
           renderLists();
           return;
         }
@@ -368,10 +369,10 @@ export async function showResumeDialog(opts: {
         const linkedWorkbookId = await getSessionWorkbookId(storage.settings, id);
         if (linkedWorkbookId && linkedWorkbookId !== workbookId) {
           const proceed = await requestConfirmationDialog({
-            title: "Resume session from another workbook?",
+            title: t("resume.confirm.anotherWorkbookTitle"),
             message: getCrossWorkbookResumeConfirmMessage(targetMode),
-            confirmLabel: "Resume anyway",
-            cancelLabel: "Cancel",
+            confirmLabel: t("resume.confirm.resumeAnyway"),
+            cancelLabel: t("confirm.cancel"),
             restoreFocusOnClose: false,
           });
           if (!proceed) return;
@@ -380,7 +381,7 @@ export async function showResumeDialog(opts: {
 
       const sessionData = await storage.sessions.loadSession(id);
       if (!sessionData) {
-        showToast("Session not found");
+        showToast(t("resume.sessionNotFound"));
         closeOverlay();
         return;
       }
@@ -393,7 +394,7 @@ export async function showResumeDialog(opts: {
 
       closeOverlay();
       const resumedMode = targetMode === "replace_current" ? "current tab" : "new tab";
-      showToast(`Resumed in ${resumedMode}: ${sessionData.title || "Untitled"}`);
+      showToast(t("resume.toast.resumedIn", { mode: resumedMode, title: sessionData.title || t("session.untitled") }));
     })();
   });
 

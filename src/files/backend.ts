@@ -2,6 +2,7 @@
  * Workspace storage backends.
  */
 
+import { t } from "../language/index.js";
 import { base64ToBytes, bytesToBase64, decodeTextUtf8, encodeTextUtf8 } from "./encoding.js";
 import { inferFileKind, inferMimeType } from "./mime.js";
 import { getWorkspaceBaseName, normalizeWorkspacePath, splitWorkspacePath } from "./path.js";
@@ -145,7 +146,7 @@ function sortEntries(entries: WorkspaceFileEntry[]): WorkspaceFileEntry[] {
 
 export class NativeDirectoryBackend implements WorkspaceBackend {
   readonly kind = "native-directory";
-  readonly label = "Local folder";
+  readonly label = t("files-backend.localFolder");
 
   private readonly root: FileSystemDirectoryHandle;
 
@@ -228,7 +229,7 @@ async function getOpfsRoot(): Promise<FileSystemDirectoryHandle> {
 
 export class OpfsBackend implements WorkspaceBackend {
   readonly kind = "opfs";
-  readonly label = "Sandboxed workspace";
+  readonly label = t("files-backend.sandboxedWorkspace");
 
   async listFiles(): Promise<WorkspaceFileEntry[]> {
     const root = await getOpfsRoot();
@@ -308,7 +309,7 @@ interface MemoryFileRecord {
 
 export class MemoryBackend implements WorkspaceBackend {
   readonly kind = "memory";
-  readonly label = "Session memory";
+  readonly label = t("files-backend.sessionMemory");
 
   private readonly files = new Map<string, MemoryFileRecord>();
 

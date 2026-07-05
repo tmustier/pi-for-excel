@@ -34,6 +34,7 @@ import { SETTINGS_OVERLAY_ID } from "../../ui/overlay-ids.js";
 import { VISIBLE_PROVIDERS, buildProviderRow } from "../../ui/provider-login.js";
 import { showToast } from "../../ui/toast.js";
 import { isRecord } from "../../utils/type-guards.js";
+import { t, initLanguage, getLanguage } from "../../language/index.js";
 import {
   buildExperimentalFeatureContent,
   buildExperimentalFeatureFooter,
@@ -87,10 +88,12 @@ interface ResolvedSectionFocus {
   anchor?: SettingsAnchor;
 }
 
-const SETTINGS_TABS: ReadonlyArray<{ id: SettingsPrimaryTab; label: string }> = [
-  { id: "logins", label: "Providers" },
-  { id: "more", label: "More" },
-];
+function getSettingsTabs(): ReadonlyArray<{ id: SettingsPrimaryTab; label: string }> {
+  return [
+  { id: "logins", label: t("settings.tab.providers") },
+  { id: "more", label: t("settings.tab.more") },
+  ];
+}
 
 let settingsDialogOpenInFlight: Promise<void> | null = null;
 let pendingSectionFocus: SettingsOverlaySection | null = null;
@@ -182,9 +185,9 @@ function createSectionShell(titleText: string, anchor: SettingsAnchor, hintText?
 
 async function buildProvidersSection(): Promise<HTMLElement> {
   const shell = createSectionShell(
-    "Providers",
+    t("settings.section.providers"),
     "providers",
-    "Connect providers to use their models.",
+    t("settings.section.providers.hint"),
   );
 
   const providerList = document.createElement("div");
@@ -199,7 +202,7 @@ async function buildProvidersSection(): Promise<HTMLElement> {
   } catch {
     const warning = document.createElement("p");
     warning.className = "pi-overlay-hint pi-overlay-text-warning";
-    warning.textContent = "Saved provider state is temporarily unavailable. You can still connect providers.";
+    warning.textContent = t("settings.warning.provider_state");
     shell.content.appendChild(warning);
   }
 
@@ -211,11 +214,11 @@ async function buildProvidersSection(): Promise<HTMLElement> {
       expandedRef,
       onConnected: (_row: HTMLElement, _id: string, label: string) => {
         document.dispatchEvent(new CustomEvent("pi:providers-changed"));
-        showToast(`${label} connected`);
+        showToast(t("settings.toast.connected", { label }));
       },
       onDisconnected: (_row: HTMLElement, _id: string, label: string) => {
         document.dispatchEvent(new CustomEvent("pi:providers-changed"));
-        showToast(`${label} disconnected`);
+        showToast(t("settings.toast.disconnected", { label }));
       },
     });
 
@@ -248,7 +251,7 @@ function resolveProxyCallout(args: {
     return {
       tone: "info",
       icon: "ℹ",
-      message: "Proxy disabled.",
+      message: t("settings.proxy.disabled"),
     };
   }
 
@@ -256,7 +259,7 @@ function resolveProxyCallout(args: {
     return {
       tone: "success",
       icon: "✓",
-      message: `Proxy connected at ${args.proxyUrl}`,
+      message: t("settings.proxy.connected", { url: args.proxyUrl }),
     };
   }
 
@@ -264,14 +267,14 @@ function resolveProxyCallout(args: {
     return {
       tone: "warn",
       icon: "⚠",
-      message: `Proxy enabled at ${args.proxyUrl}, but it is not reachable right now.`,
+      message: t("settings.section.proxy.not_reachable", { url: args.proxyUrl }),
     };
   }
 
   return {
     tone: "info",
     icon: "…",
-    message: `Checking proxy at ${args.proxyUrl}…`,
+    message: t("settings.section.proxy.checking", { url: args.proxyUrl }),
   };
 }
 
@@ -279,7 +282,7 @@ function buildProxySection(
   settingsStore: SettingsStore,
   registerCleanup?: SettingsCleanupRegistrar,
 ): HTMLElement {
-  const shell = createSectionShell("Proxy", "proxy");
+  const shell = createSectionShell(t("settings.section.proxy"), "proxy");
 
   const card = document.createElement("div");
   card.className = "pi-overlay-surface pi-settings-proxy-card";
@@ -291,10 +294,10 @@ function buildProxySection(
   let urlSaveTimer: ReturnType<typeof setTimeout> | null = null;
 
   const proxyToggle = createToggleRow({
-    label: "Proxy",
+    label: t("settings.section.proxy.label"),
     sublabel: DEFAULT_PROXY_IS_REMOTE
-      ? "Route API calls through your organisation's proxy"
-      : "Route API calls through a local proxy",
+      ? t("settings.section.proxy.sublabel_remote")
+      : t("settings.section.proxy.sublabel"),
     checked: enabled,
     onChange: (checked) => {
       void saveProxyEnabled(checked);
@@ -309,7 +312,7 @@ function buildProxySection(
   proxyUrlInput.classList.add("pi-settings-proxy-url");
   proxyUrlInput.spellcheck = false;
 
-  const proxyUrlRow = createConfigRow("URL", proxyUrlInput);
+  const proxyUrlRow = createConfigRow(t("settings.section.proxy.url"), proxyUrlInput);
   proxyUrlRow.classList.add("pi-settings-proxy-url-row");
 
   const statusHost = document.createElement("div");
@@ -336,11 +339,11 @@ function buildProxySection(
       enabled = !nextEnabled;
       proxyToggle.input.checked = enabled;
       updateStatus();
-      showToast("Failed to save proxy setting.");
+      showToast(t("settings.toast.proxy_save_failed"));
       return;
     }
 
-    showToast(enabled ? "Proxy enabled." : "Proxy disabled.");
+    showToast(enabled ? t("settings.toast.proxy_enabled") : t("settings.toast.proxy_disabled"));
   };
 
   const saveProxyUrl = async (): Promise<void> => {
@@ -351,9 +354,9 @@ function buildProxySection(
     try {
       normalizedUrl = validateOfficeProxyUrl(candidate);
     } catch (error: unknown) {
-      validationError = error instanceof Error ? error.message : "Invalid proxy URL.";
+      validationError = error instanceof Error ? error.message : t("settings.toast.proxy_url_invalid");
       updateStatus();
-      showToast(`Proxy URL not saved: ${validationError}`);
+      showToast(t("settings.toast.proxy_url_not_saved", { error: validationError }));
       return;
     }
 
@@ -368,14 +371,14 @@ function buildProxySection(
     try {
       await settingsStore.set("proxy.url", normalizedUrl);
     } catch {
-      showToast("Failed to save proxy URL.");
+      showToast(t("settings.toast.proxy_url_save_failed"));
       return;
     }
 
     proxyUrl = normalizedUrl;
     proxyUrlInput.value = normalizedUrl;
     updateStatus();
-    showToast("Proxy URL saved.");
+    showToast(t("settings.toast.proxy_url_saved"));
   };
 
   const scheduleProxyUrlSave = (): void => {
@@ -441,12 +444,15 @@ function buildProxySection(
   guideLink.href = PROXY_HELPER_DOCS_URL;
   guideLink.target = "_blank";
   guideLink.rel = "noopener noreferrer";
-  guideLink.textContent = "Install and setup guide";
+  guideLink.textContent = t("settings.section.proxy.guide");
 
   helper.append(
-    "Recommended URL: ",
+    t("settings.section.proxy.recommended"),
+    " ",
     recommendedUrl,
-    DEFAULT_PROXY_IS_REMOTE ? ". This is your organisation's proxy. " : ". Keep this on localhost. ",
+    DEFAULT_PROXY_IS_REMOTE
+      ? t("settings.section.proxy.org_proxy")
+      : t("settings.section.proxy.keep_localhost"),
     guideLink,
     ".",
   );
@@ -476,19 +482,19 @@ function buildProxySection(
 }
 
 function buildExecutionModeSection(registerCleanup?: SettingsCleanupRegistrar): HTMLElement {
-  const shell = createSectionShell("Execution mode", "execution-mode");
+  const shell = createSectionShell(t("settings.section.execution_mode"), "execution-mode");
 
   const card = document.createElement("div");
   card.className = "pi-overlay-surface pi-settings-execution-card";
 
   const autoModeToggle = createToggleRow({
-    label: "Auto mode",
-    sublabel: "Pi applies changes immediately without asking",
+    label: t("settings.section.execution.auto_mode"),
+    sublabel: t("settings.section.execution.auto_sublabel"),
   });
 
   const hint = document.createElement("p");
   hint.className = "pi-overlay-hint pi-settings-execution-hint";
-  hint.textContent = "When off, Pi asks before each change (Confirm mode).";
+  hint.textContent = t("settings.section.execution.confirm_hint");
 
   card.append(autoModeToggle.root, hint);
   shell.content.appendChild(card);
@@ -515,11 +521,11 @@ function buildExecutionModeSection(registerCleanup?: SettingsCleanupRegistrar): 
     void setExecutionMode(nextMode).then(
       () => {
         currentMode = nextMode;
-        showToast(nextMode === "yolo" ? "Auto mode." : "Confirm mode.");
+        showToast(nextMode === "yolo" ? t("settings.toast.auto_mode") : t("settings.toast.confirm_mode"));
       },
       () => {
         autoModeToggle.input.checked = currentMode === "yolo";
-        showToast("Couldn't update execution mode.");
+        showToast(t("settings.toast.execution_failed"));
       },
     ).finally(() => {
       autoModeToggle.input.disabled = false;
@@ -558,22 +564,22 @@ function buildMoreSection(registerCleanup?: SettingsCleanupRegistrar): HTMLEleme
   panel.className = "pi-settings-more";
 
   const advanced = createSectionShell(
-    "Advanced",
+    t("settings.section.advanced"),
     "advanced",
-    "Power-user shortcuts for rules, backups, and keyboard shortcuts.",
+    t("settings.section.advanced.hint"),
   );
 
   const modelSwitchCard = document.createElement("div");
   modelSwitchCard.className = "pi-overlay-surface pi-settings-model-switch-card";
 
   const modelSwitchToggle = createToggleRow({
-    label: "Fork model switch into new tab",
-    sublabel: "For non-empty chats, open a cloned tab instead of switching this tab in place.",
+    label: t("settings.section.advanced.fork_label"),
+    sublabel: t("settings.section.advanced.fork_sublabel"),
   });
 
   const modelSwitchHint = document.createElement("p");
   modelSwitchHint.className = "pi-overlay-hint pi-settings-model-switch-hint";
-  modelSwitchHint.textContent = "Default: switch in place (pi-mono parity).";
+  modelSwitchHint.textContent = t("settings.section.advanced.fork_default");
 
   modelSwitchCard.append(modelSwitchToggle.root, modelSwitchHint);
   advanced.content.appendChild(modelSwitchCard);
@@ -600,13 +606,13 @@ function buildMoreSection(registerCleanup?: SettingsCleanupRegistrar): HTMLEleme
           currentBehavior = nextBehavior;
           showToast(
             nextBehavior === "fork"
-              ? "Model switch will open a new tab for non-empty chats."
-              : "Model switch will stay in the current tab.",
+              ? t("settings.toast.fork_on")
+              : t("settings.toast.fork_off"),
           );
         },
         () => {
           modelSwitchToggle.input.checked = currentBehavior === "fork";
-          showToast("Couldn't update model switch setting.");
+          showToast(t("settings.toast.fork_failed"));
         },
       ).finally(() => {
         modelSwitchToggle.input.disabled = false;
@@ -617,9 +623,9 @@ function buildMoreSection(registerCleanup?: SettingsCleanupRegistrar): HTMLEleme
   const advancedActions = document.createElement("div");
   advancedActions.className = "pi-overlay-actions pi-settings-advanced-actions";
 
-  const rulesButton = createOverlayButton({ text: "Rules & conventions…" });
-  const backupsButton = createOverlayButton({ text: "Backups…" });
-  const shortcutsButton = createOverlayButton({ text: "Keyboard shortcuts…" });
+  const rulesButton = createOverlayButton({ text: t("settings.button.rules") });
+  const backupsButton = createOverlayButton({ text: t("settings.button.backups") });
+  const shortcutsButton = createOverlayButton({ text: t("settings.button.shortcuts") });
 
   rulesButton.disabled = !dependencies.openRulesDialog;
   backupsButton.disabled = !dependencies.openRecoveryDialog;
@@ -638,10 +644,49 @@ function buildMoreSection(registerCleanup?: SettingsCleanupRegistrar): HTMLEleme
   advancedActions.append(rulesButton, backupsButton, shortcutsButton);
   advanced.content.appendChild(advancedActions);
 
+  // Language selector
+  const langCard = document.createElement("div");
+  langCard.className = "pi-overlay-surface pi-settings-model-switch-card";
+
+  const langLabel = document.createElement("div");
+  langLabel.className = "pi-toggle-row__label";
+  langLabel.textContent = t("settings.section.language.label");
+
+  const langSelect = document.createElement("select");
+  langSelect.className = "pi-item-card__config-select";
+  const enOpt = document.createElement("option");
+  enOpt.value = "en";
+  enOpt.textContent = t("settings.section.language.en");
+  const zhOpt = document.createElement("option");
+  zhOpt.value = "zh-CN";
+  // Disclose that the Chinese translation is AI-generated (issue #608).
+  zhOpt.textContent = t("settings.section.language.zh");
+  langSelect.append(enOpt, zhOpt);
+
+  langSelect.value = getLanguage();
+
+  langSelect.addEventListener("change", () => {
+    const newLang = langSelect.value;
+    initLanguage(newLang);
+    void (async () => {
+      try {
+        const storage = getAppStorage();
+        await storage.settings.set("language", newLang);
+        showToast(t("settings.lang.reloading"));
+        setTimeout(() => location.reload(), 1000);
+      } catch {
+        showToast(t("settings.lang.saveFailed"));
+      }
+    })();
+  });
+
+  langCard.append(langLabel, langSelect);
+  advanced.content.appendChild(langCard);
+
   const experimental = createSectionShell(
-    "Experimental",
+    t("settings.section.experimental"),
     "experimental",
-    "Advanced and in-progress capabilities.",
+    t("settings.section.experimental.hint"),
   );
   experimental.content.appendChild(buildExperimentalFeatureContent());
   experimental.content.appendChild(buildExperimentalFeatureFooter());
@@ -688,9 +733,9 @@ export async function showSettingsDialog(options: ShowSettingsDialogOptions = {}
 
     const { header } = createOverlayHeader({
       onClose: dialog.close,
-      closeLabel: "Close settings",
-      title: "Settings",
-      subtitle: "Providers, proxy, and preferences",
+      closeLabel: t("settings.close"),
+      title: t("settings.title"),
+      subtitle: t("settings.subtitle"),
     });
 
     const body = document.createElement("div");
@@ -699,7 +744,7 @@ export async function showSettingsDialog(options: ShowSettingsDialogOptions = {}
     const tabs = document.createElement("div");
     tabs.className = "pi-overlay-tabs";
     tabs.setAttribute("role", "tablist");
-    tabs.setAttribute("aria-label", "Settings tabs");
+    tabs.setAttribute("aria-label", t("settings.tabs.aria"));
 
     const panels = document.createElement("div");
     panels.className = "pi-settings-panels";
@@ -724,7 +769,7 @@ export async function showSettingsDialog(options: ShowSettingsDialogOptions = {}
 
     panels.append(loginsPanel, morePanel);
 
-    for (const tab of SETTINGS_TABS) {
+    for (const tab of getSettingsTabs()) {
       const button = document.createElement("button");
       button.type = "button";
       button.className = "pi-overlay-tab";

@@ -18,6 +18,7 @@ import {
 } from "../../extensions/permissions.js";
 import { requestConfirmationDialog } from "../../ui/confirm-dialog.js";
 import { showToast } from "../../ui/toast.js";
+import { t } from "../../language/index.js";
 import {
   createSectionHeader,
   createItemCard,
@@ -65,15 +66,15 @@ async function confirmEnable(status: ExtensionRuntimeStatus): Promise<boolean> {
   if (risky.length === 0) return true;
 
   return requestConfirmationDialog({
-    title: `Enable plugin "${status.name}"?`,
+    title: t("ext-hub-plugins.confirmEnableTitle", { name: status.name }),
     message: [
-      "Granted higher-risk permissions:",
+      t("ext-hub-plugins.confirm.grantedHighRisk"),
       ...risky.map((c) => `- ${describeExtensionCapability(c)}`),
       "",
-      `Source: ${status.trustLabel}`,
+      t("ext-hub-plugins.confirm.source", { source: status.trustLabel }),
     ].join("\n"),
-    confirmLabel: "Enable",
-    cancelLabel: "Cancel",
+    confirmLabel: t("ext-hub-plugins.enable"),
+    cancelLabel: t("confirm.cancel"),
     confirmButtonTone: "danger",
     restoreFocusOnClose: false,
   });
@@ -82,20 +83,20 @@ async function confirmEnable(status: ExtensionRuntimeStatus): Promise<boolean> {
 async function confirmInstall(name: string, sourceLabel: string, capabilities: readonly ExtensionCapability[]): Promise<boolean> {
   const risky = capabilities.filter((c) => HIGH_RISK_CAPABILITIES.has(c));
   return requestConfirmationDialog({
-    title: `Install plugin "${name}"?`,
+    title: t("ext-hub-plugins.confirmInstallTitle", { name }),
     message: [
-      `Source: ${sourceLabel}`,
+      t("ext-hub-plugins.confirm.source", { source: sourceLabel }),
       "",
-      "Default permissions:",
+      t("ext-hub-plugins.confirm.defaultPermissions"),
       ...(capabilities.length > 0
         ? capabilities.map((c) => `- ${describeExtensionCapability(c)}`)
-        : ["- (none)"]),
+        : [`- ${t("ext-hub-plugins.confirm.none")}`]),
       ...(risky.length > 0
-        ? ["", "Higher-risk:", ...risky.map((c) => `- ${describeExtensionCapability(c)}`)]
+        ? ["", t("ext-hub-plugins.confirm.higherRisk"), ...risky.map((c) => `- ${describeExtensionCapability(c)}`)]
         : []),
     ].join("\n"),
-    confirmLabel: "Install",
-    cancelLabel: "Cancel",
+    confirmLabel: t("ext-hub-plugins.installButton"),
+    cancelLabel: t("confirm.cancel"),
     confirmButtonTone: risky.length > 0 ? "danger" : "primary",
     restoreFocusOnClose: false,
   });
@@ -116,12 +117,12 @@ export function renderPluginsTab(args: {
 
   // ── Installed section ─────────────────────────
   container.appendChild(createSectionHeader({
-    label: "Installed",
+    label: t("ext-hub-plugins.installed"),
     count: statuses.length,
   }));
 
   if (statuses.length === 0) {
-    container.appendChild(createEmptyInline(lucide(Puzzle), "No plugins installed.\nPi can build plugins, or install one from a URL."));
+    container.appendChild(createEmptyInline(lucide(Puzzle), t("ext-hub-plugins.empty")));
   } else {
     const list = document.createElement("div");
     list.className = "pi-hub-stack";
@@ -135,20 +136,20 @@ export function renderPluginsTab(args: {
   }
 
   // ── Install from URL ───────────────────────────
-  container.appendChild(createSectionHeader({ label: "Install" }));
+  container.appendChild(createSectionHeader({ label: t("ext-hub-plugins.install") }));
 
   const installForm = createAddForm();
   const urlRow = createAddFormRow();
-  const urlInput = createAddFormInput("Paste a plugin URL…");
+  const urlInput = createAddFormInput(t("ext-hub-plugins.pasteUrl"));
   urlRow.append(
     urlInput,
-    createButton("Install", {
+    createButton(t("ext-hub-plugins.installButton"), {
       primary: true,
       compact: true,
       onClick: () => {
         if (isBusy()) return;
         const url = urlInput.value.trim();
-        if (!url) { showToast("Enter a URL first."); return; }
+        if (!url) { showToast(t("extensions-hub-plugins.toast.enterUrl")); return; }
         void installFromUrl(url, manager, onChanged, () => renderPluginsTab(args));
         urlInput.value = "";
       },
@@ -180,10 +181,10 @@ function renderPluginCard(
         try {
           await manager.setExtensionEnabled(status.id, checked);
           await onChanged();
-          showToast(`${status.name}: ${checked ? "enabled" : "disabled"}`);
+          showToast(t("ext-hub-plugins.toast.enabledState", { name: status.name, state: t(checked ? "experimental.state.enabled" : "experimental.state.disabled") }));
           refresh();
         } catch (err: unknown) {
-          showToast(`Plugins: ${err instanceof Error ? err.message : String(err)}`);
+          showToast(t("ext-hub-plugins.toast.error", { error: err instanceof Error ? err.message : String(err) }));
           refresh();
         }
       })();
@@ -202,13 +203,13 @@ function renderPluginCard(
   // Commands
   if (status.commandNames.length > 0) {
     const cmds = status.commandNames.map((c: string) => `/${c}`).join(", ");
-    card.body.appendChild(createConfigRow("Commands", createConfigValue(cmds)));
+    card.body.appendChild(createConfigRow(t("ext-hub-plugins.commands"), createConfigValue(cmds)));
   }
 
   // Permissions grid
   const allCaps = listAllExtensionCapabilities();
   if (allCaps.length > 0) {
-    card.body.appendChild(createSectionHeader({ label: "Permissions" }));
+    card.body.appendChild(createSectionHeader({ label: t("ext-hub-plugins.permissions") }));
 
     const grid = document.createElement("div");
     grid.className = "pi-item-card__permissions";
@@ -222,10 +223,10 @@ function renderPluginCard(
           void (async () => {
             try {
               await manager.setExtensionCapability(status.id, cap, checked);
-              showToast(`${status.name}: ${describeExtensionCapability(cap)} ${checked ? "granted" : "revoked"}`);
+              showToast(t("ext-hub-plugins.toast.permissionUpdated", { name: status.name, capability: describeExtensionCapability(cap), state: t(checked ? "ext-hub-plugins.granted" : "ext-hub-plugins.revoked") }));
               refresh();
             } catch (err: unknown) {
-              showToast(`Plugins: ${err instanceof Error ? err.message : String(err)}`);
+              showToast(t("ext-hub-plugins.toast.error", { error: err instanceof Error ? err.message : String(err) }));
               refresh();
             }
           })();
@@ -247,17 +248,17 @@ function renderPluginCard(
 
   // Uninstall
   card.body.appendChild(createActionsRow(
-    createButton("Uninstall", {
+    createButton(t("ext-hub-plugins.uninstall"), {
       danger: true,
       compact: true,
       onClick: () => {
         if (isBusy()) return;
         void (async () => {
           const ok = await requestConfirmationDialog({
-            title: `Uninstall "${status.name}"?`,
-            message: "This removes the plugin and its settings.",
-            confirmLabel: "Uninstall",
-            cancelLabel: "Cancel",
+            title: t("ext-hub-plugins.confirmUninstallTitle", { name: status.name }),
+            message: t("ext-hub-plugins.confirm.uninstallMessage"),
+            confirmLabel: t("ext-hub-plugins.uninstall"),
+            cancelLabel: t("confirm.cancel"),
             confirmButtonTone: "danger",
             restoreFocusOnClose: false,
           });
@@ -265,10 +266,10 @@ function renderPluginCard(
           try {
             await manager.uninstallExtension(status.id);
             await onChanged();
-            showToast(`Uninstalled: ${status.name}`);
+            showToast(t("ext-hub-plugins.toast.uninstalled", { name: status.name }));
             refresh();
           } catch (err: unknown) {
-            showToast(`Plugins: ${err instanceof Error ? err.message : String(err)}`);
+            showToast(t("ext-hub-plugins.toast.error", { error: err instanceof Error ? err.message : String(err) }));
           }
         })();
       },
@@ -299,10 +300,10 @@ async function installFromUrl(
     if (!(await confirmInstall(name, url, caps))) return;
     await manager.installFromUrl(name, url);
     await onChanged();
-    showToast(`Installed: ${name}`);
+    showToast(t("ext-hub-plugins.toast.installed", { name }));
     refresh();
   } catch (err: unknown) {
-    showToast(`Install failed: ${err instanceof Error ? err.message : String(err)}`);
+    showToast(t("ext-hub-plugins.toast.installFailed", { error: err instanceof Error ? err.message : String(err) }));
   }
 }
 

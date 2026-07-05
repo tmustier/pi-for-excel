@@ -2,6 +2,7 @@
  * Shared toast helper used across taskpane and commands.
  */
 
+
 interface ToastElements {
   root: HTMLDivElement;
   message: HTMLSpanElement;

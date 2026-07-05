@@ -4,6 +4,7 @@
 
 import type { Agent } from "@earendil-works/pi-agent-core";
 
+import { t } from "../language/index.js";
 import { showToast } from "../ui/toast.js";
 import { escapeAttr, escapeHtml } from "../utils/html.js";
 import { formatUsageDebug, isDebugEnabled } from "../debug/debug.js";
@@ -13,7 +14,7 @@ import {
   getStatusContextHealth,
   STATUS_CONTEXT_DESC_ATTR,
   STATUS_CONTEXT_TOKENS_ATTR,
-  STATUS_CONTEXT_TOOLTIP_DESCRIPTION,
+  getStatusContextTooltipDescription,
   STATUS_CONTEXT_WARNING_ATTR,
   STATUS_CONTEXT_WARNING_SEVERITY_ATTR,
 } from "./status-context.js";
@@ -58,7 +59,7 @@ function renderStatusBar(
   if (!el) return;
 
   if (!agent) {
-    const emptyMarkup = `<span class="pi-status-ctx">No active session</span>`;
+    const emptyMarkup = `<span class="pi-status-ctx">${t("status.no_session")}</span>`;
     const emptySignature = "no-agent";
     if (el.getAttribute("data-status-signature") !== emptySignature) {
       el.innerHTML = emptyMarkup;
@@ -71,7 +72,7 @@ function renderStatusBar(
 
   // Model alias
   const model = state.model;
-  const modelAlias = model ? (model.name || model.id) : "Select model";
+  const modelAlias = model ? (model.name || model.id) : t("status.select_model");
   const modelAliasEscaped = escapeHtml(modelAlias);
 
   // Context usage
@@ -91,13 +92,13 @@ function renderStatusBar(
 
   // Thinking level
   const thinkingLabels: Record<string, string> = {
-    off: "off", minimal: "min", low: "low", medium: "med", high: "high", xhigh: "max",
+    off: t("status.thinking.off"), minimal: t("status.thinking.min"), low: t("status.thinking.low"), medium: t("status.thinking.medium"), high: t("status.thinking.high"), xhigh: t("status.thinking.max"),
   };
   const thinkingLevel = thinkingLabels[state.thinkingLevel] || state.thinkingLevel;
 
   // Context health: color + tooltip based on usage
-  const ctxDescription = STATUS_CONTEXT_TOOLTIP_DESCRIPTION;
-  const ctxTokenDetail = `${totalTokens.toLocaleString()} / ${contextWindow.toLocaleString()} tokens`;
+  const ctxDescription = getStatusContextTooltipDescription();
+  const ctxTokenDetail = t("status.context.tokens", { used: totalTokens.toLocaleString(), total: contextWindow.toLocaleString() });
 
   const contextHealth = getStatusContextHealth(pct);
   const ctxColor = contextHealth.colorClass;
@@ -125,14 +126,14 @@ function renderStatusBar(
 
   const modeIsAuto = executionMode === "yolo";
   const modeBadgeClass = modeIsAuto ? " pi-status-mode--auto" : " pi-status-mode--confirm";
-  const modeLabel = modeIsAuto ? "auto" : "confirm";
+  const modeLabel = modeIsAuto ? t("status.mode.auto") : t("status.mode.confirm");
   const modeTooltip = modeIsAuto
-    ? "Auto: Pi applies workbook changes immediately. Click to switch to Confirm."
-    : "Confirm: Pi asks before each workbook change. Click to switch to Auto.";
+    ? t("status.mode.auto.tooltip")
+    : t("status.mode.confirm.tooltip");
   const modeBadge = `<button type="button" class="pi-status-mode pi-status-clickable pi-status-tooltip--right${modeBadgeClass}" data-tooltip="${modeTooltip}"><span>${modeLabel}</span><span class="pi-status-affordance" aria-hidden="true">${affordanceChevronSvg}</span></button>`;
 
   const thinkingTooltip = escapeAttr(
-    "How deeply Pi reasons before answering — higher is slower but more thorough. Click to choose, or ⇧Tab to cycle.",
+    t("status.thinking.tooltip"),
   );
 
   const ctxPopoverDesc = escapeAttr(ctxDescription);
@@ -141,13 +142,13 @@ function renderStatusBar(
 
   const nextMarkup = `
     <div class="pi-status-main">
-      <button type="button" class="pi-status-model pi-status-clickable pi-status-tooltip--left" data-tooltip="Switch the AI model for this session.">
+      <button type="button" class="pi-status-model pi-status-clickable pi-status-tooltip--left" data-tooltip="${t("status.model.tooltip")}">
         <span class="pi-status-model__mark">π</span>
         <span class="pi-status-model__name">${modelAliasEscaped}</span>
         ${chevronSvg}
       </button>
-      <button type="button" class="pi-status-thinking pi-status-clickable" data-tooltip="${thinkingTooltip}" aria-label="Thinking level ${thinkingLevel}">${brainSvg} ${thinkingLevel}<span class="pi-status-affordance" aria-hidden="true">${affordanceChevronSvg}</span></button>
-      <button type="button" class="pi-status-ctx pi-status-ctx--trigger pi-status-clickable has-tooltip" ${STATUS_CONTEXT_DESC_ATTR}="${ctxPopoverDesc}" ${STATUS_CONTEXT_TOKENS_ATTR}="${ctxPopoverTokens}" ${STATUS_CONTEXT_WARNING_ATTR}="${ctxPopoverWarnText}" ${STATUS_CONTEXT_WARNING_SEVERITY_ATTR}="${ctxWarningSeverity}" aria-label="Context usage ${pct}% of ${ctxLabel}"><span class="pi-status-ctx__pct ${ctxColor}">${pct}%</span><span class="pi-status-ctx__sep">/</span><span class="pi-status-ctx__limit">${ctxLabel}</span>${usageDebug}<span class="pi-status-affordance" aria-hidden="true">${affordanceChevronSvg}</span><span class="pi-tooltip"><span class="pi-tooltip__desc">${escapeHtml(ctxDescription)}</span><span class="pi-tooltip__tokens">${escapeHtml(ctxTokenDetail)}</span>${ctxWarning}</span></button>
+      <button type="button" class="pi-status-thinking pi-status-clickable" data-tooltip="${thinkingTooltip}" aria-label="${t("status.thinking.aria", { level: thinkingLevel })}">${brainSvg} ${thinkingLevel}<span class="pi-status-affordance" aria-hidden="true">${affordanceChevronSvg}</span></button>
+      <button type="button" class="pi-status-ctx pi-status-ctx--trigger pi-status-clickable has-tooltip" ${STATUS_CONTEXT_DESC_ATTR}="${ctxPopoverDesc}" ${STATUS_CONTEXT_TOKENS_ATTR}="${ctxPopoverTokens}" ${STATUS_CONTEXT_WARNING_ATTR}="${ctxPopoverWarnText}" ${STATUS_CONTEXT_WARNING_SEVERITY_ATTR}="${ctxWarningSeverity}" aria-label="${t("status.context.aria", { pct, label: ctxLabel })}"><span class="pi-status-ctx__pct ${ctxColor}">${pct}%</span><span class="pi-status-ctx__sep">/</span><span class="pi-status-ctx__limit">${ctxLabel}</span>${usageDebug}<span class="pi-status-affordance" aria-hidden="true">${affordanceChevronSvg}</span><span class="pi-tooltip"><span class="pi-tooltip__desc">${escapeHtml(ctxDescription)}</span><span class="pi-tooltip__tokens">${escapeHtml(ctxTokenDetail)}</span>${ctxWarning}</span></button>
       ${lockBadge}
     </div>
     <div class="pi-status-side">
@@ -360,7 +361,7 @@ export function flashThinkingLevel(level: string, color: string): void {
     high: "High",
     xhigh: "Max",
   };
-  showToast(`Thinking: ${labels[level] || level} (next turn)`, 1500);
+  showToast(t("status.thinking.toast", { level: labels[level] || level }), 1500);
 
   const el = document.querySelector<HTMLElement>(".pi-status-thinking");
   if (!el) return;

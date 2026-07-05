@@ -5,6 +5,7 @@
  * between the web search section and MCP servers.
  */
 
+import { t } from "../../language/index.js";
 import type { ConnectionManager } from "../../connections/manager.js";
 import type { ConnectionDefinition, ConnectionSnapshot, ConnectionStatus } from "../../connections/types.js";
 import {
@@ -86,7 +87,7 @@ function renderConnectionCard(args: {
 
     if (fieldPresent) {
       label.textContent = `${field.label} ✓`;
-      label.title = "Saved";
+      label.title = t("ext-hub-extension-connections.saved");
     } else {
       label.textContent = field.label;
     }
@@ -99,14 +100,14 @@ function renderConnectionCard(args: {
   if (snapshot.status === "connected" && snapshot.lastValidatedAt) {
     const meta = document.createElement("div");
     meta.className = "pi-item-card__meta";
-    meta.textContent = `Last validated: ${formatRelativeDate(snapshot.lastValidatedAt)}`;
+    meta.textContent = t("ext-hub-extension-connections.lastValidated", { date: formatRelativeDate(snapshot.lastValidatedAt) });
     card.body.appendChild(meta);
   }
 
   // Actions
   const hasSavedSecrets = Object.values(presence).some(Boolean);
 
-  const saveBtn = createButton("Save", {
+  const saveBtn = createButton(t("ext-hub-extension-connections.save"), {
     primary: true,
     compact: true,
     onClick: () => {
@@ -119,7 +120,7 @@ function renderConnectionCard(args: {
       }
 
       if (Object.keys(patch).length === 0) {
-        showToast("Enter at least one field to save.");
+        showToast(t("extensions-hub-extension-connections.toast.enterAtLeastOneField"));
         return;
       }
 
@@ -130,23 +131,23 @@ function renderConnectionCard(args: {
           for (const input of inputs.values()) {
             input.value = "";
           }
-          showToast(`Saved ${definition.title} credentials`);
+          showToast(t("ext-hub-extension-connections.toast.saved", { title: definition.title }));
         } catch (err: unknown) {
-          showToast(`Save failed: ${err instanceof Error ? err.message : String(err)}`);
+          showToast(t("ext-hub-extension-connections.toast.saveFailed", { error: err instanceof Error ? err.message : String(err) }));
         }
       })();
     },
   });
 
-  const clearBtn = createButton("Clear", {
+  const clearBtn = createButton(t("ext-hub-extension-connections.clear"), {
     compact: true,
     onClick: () => {
       void (async () => {
         try {
           await connectionManager.clearSecretsFromHost(definition.id);
-          showToast(`Cleared ${definition.title} credentials`);
+          showToast(t("ext-hub-extension-connections.toast.cleared", { title: definition.title }));
         } catch (err: unknown) {
-          showToast(`Clear failed: ${err instanceof Error ? err.message : String(err)}`);
+          showToast(t("ext-hub-extension-connections.toast.clearFailed", { error: err instanceof Error ? err.message : String(err) }));
         }
       })();
     },
@@ -180,11 +181,11 @@ export async function renderExtensionConnectionsSection(args: {
 
   const definitions = connectionManager.listDefinitions();
 
-  container.appendChild(createSectionHeader({ label: "Extension connections" }));
+  container.appendChild(createSectionHeader({ label: t("ext-hub-connections.extConnections") }));
 
   if (definitions.length === 0) {
     container.appendChild(
-      createEmptyInline(lucide(Plug), "Installed extensions haven't registered any connections."),
+      createEmptyInline(lucide(Plug), t("ext-hub-connections.connectionsEmpty")),
     );
     return;
   }

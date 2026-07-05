@@ -16,6 +16,7 @@ import {
   resolveSpreadsheetHostForBoot,
   setCurrentSpreadsheetHost,
 } from "../host/index.js";
+import { t } from "../language/index.js";
 import { renderLoading, renderError } from "../ui/loading.js";
 import { getErrorMessage } from "../utils/errors.js";
 
@@ -64,7 +65,7 @@ export function bootstrapTaskpane(): void {
 
     const slowInitTimer = setTimeout(() => {
       if (initComplete) return;
-      console.warn("[pi] Taskpane initialization is taking longer than expected (>12s)");
+      console.warn(t("bootstrap.initTimeoutWarning"));
     }, 12_000);
 
     const hardTimeoutTimer = setTimeout(() => {
@@ -72,7 +73,7 @@ export function bootstrapTaskpane(): void {
       loadingRoot.innerHTML = "";
       showFatalError(
         errorRoot,
-        "Failed to initialize: Taskpane initialization timed out after 60000ms",
+        t("bootstrap.fatalTimeout"),
       );
       console.error("[pi] Init error: Taskpane initialization timed out after 60000ms");
     }, 60_000);
@@ -92,7 +93,7 @@ export function bootstrapTaskpane(): void {
         clearTimeout(slowInitTimer);
         clearTimeout(hardTimeoutTimer);
         loadingRoot.innerHTML = "";
-        showFatalError(errorRoot, `Failed to initialize: ${getErrorMessage(error)}`);
+        showFatalError(errorRoot, t("bootstrap.fatalError", { msg: getErrorMessage(error) }));
         console.error("[pi] Init error:", error);
       });
   };
@@ -112,7 +113,7 @@ export function bootstrapTaskpane(): void {
       } else if (readyInfo.reason === "office-timeout") {
         console.warn("[pi] Office.js not ready after 3s — initializing without Excel");
       } else {
-        console.warn("[pi] Office.js is unavailable — initializing without Excel");
+        console.warn(t("bootstrap.officeUnavailable"));
       }
 
       runInit();

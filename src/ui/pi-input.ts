@@ -17,12 +17,13 @@ import { customElement, property, state, query } from "lit/decorators.js";
 import { FileText } from "lucide";
 
 import { doesUiClaimStreamingEscape } from "../utils/escape-guard.js";
+import { t } from "../language/index.js";
 
-const PLACEHOLDER_HINTS = [
-  "Ask about this workbook…",
-  "Type / for commands…",
-  "Ask Pi to edit this workbook…",
-  "Summarize this workbook…",
+const PLACEHOLDER_HINT_KEYS = [
+  "input.placeholder.ask",
+  "input.placeholder.commands",
+  "input.placeholder.edit",
+  "input.placeholder.summarize",
 ];
 
 @customElement("pi-input")
@@ -144,7 +145,7 @@ export class PiInput extends LitElement {
     // Rotate placeholder hints every 8s (mostly default, occasionally slash hint)
     this._placeholderTimer = setInterval(() => {
       if (this.isStreaming || this._value) return; // don't rotate while typing or streaming
-      this._placeholderIndex = (this._placeholderIndex + 1) % PLACEHOLDER_HINTS.length;
+      this._placeholderIndex = (this._placeholderIndex + 1) % PLACEHOLDER_HINT_KEYS.length;
     }, 8000);
   }
 
@@ -170,34 +171,34 @@ export class PiInput extends LitElement {
           class="pi-input-btn pi-input-btn--attach"
           type="button"
           @click=${this._openFilesWorkspace}
-          aria-label="Browse files"
-          title="Browse files"
+          aria-label=${t("input.attach.aria")}
+          title=${t("input.attach.aria")}
         >
           ${icon(FileText, "sm")}
         </button>
         <textarea
           class="pi-input-textarea"
           .value=${this._value}
-          placeholder=${this.isStreaming ? "Guide response (↵) · New question (⌥↵)" : PLACEHOLDER_HINTS[this._placeholderIndex]}
+          placeholder=${this.isStreaming ? t("input.streaming.placeholder") : t(PLACEHOLDER_HINT_KEYS[this._placeholderIndex])}
           rows="1"
-          aria-label="Chat message"
+          aria-label=${t("input.chat.aria")}
           autocomplete="off"
           @input=${this._onInput}
           @keydown=${this._onKeydown}
         ></textarea>
         ${this._isDragOver
-          ? html`<div class="pi-input-drop-hint">Drop files to import into Files</div>`
+          ? html`<div class="pi-input-drop-hint">${t("input.drop.hint")}</div>`
           : null}
         ${this.isStreaming
           ? html`
-            <button class="pi-input-btn pi-input-btn--abort" @click=${() => this.dispatchEvent(new CustomEvent("pi-abort", { bubbles: true }))} aria-label="Stop">
+            <button class="pi-input-btn pi-input-btn--abort" @click=${() => this.dispatchEvent(new CustomEvent("pi-abort", { bubbles: true }))} aria-label=${t("input.stop.aria")}>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
             </button>`
           : html`
             <button
               class="pi-input-btn pi-input-btn--send ${hasContent ? "" : "is-disabled"}"
               @click=${() => this._send()}
-              aria-label="Send"
+              aria-label=${t("input.send.aria")}
               ?disabled=${!hasContent}
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>

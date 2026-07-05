@@ -37,6 +37,7 @@ import {
 } from "./overlay-dialog.js";
 import { FILES_WORKSPACE_OVERLAY_ID } from "./overlay-ids.js";
 import { showToast } from "./toast.js";
+import { t } from "../language/index.js";
 import type { IconContent } from "./extensions-hub-components.js";
 import {
   lucide,
@@ -97,10 +98,10 @@ function formatRelativeDate(timestamp: number): string {
   const now = Date.now();
   const diff = now - timestamp;
 
-  if (diff < 60_000) return "just now";
-  if (diff < 3_600_000) return `${Math.round(diff / 60_000)}m ago`;
-  if (diff < 86_400_000) return `${Math.round(diff / 3_600_000)}h ago`;
-  if (diff < 604_800_000) return `${Math.round(diff / 86_400_000)}d ago`;
+  if (diff < 60_000) return t("date.justNow");
+  if (diff < 3_600_000) return t("date.minutesAgo", { n: Math.round(diff / 60_000) });
+  if (diff < 86_400_000) return t("date.hoursAgo", { n: Math.round(diff / 3_600_000) });
+  if (diff < 604_800_000) return t("date.daysAgo", { n: Math.round(diff / 86_400_000) });
   return new Date(timestamp).toLocaleDateString();
 }
 
@@ -345,21 +346,21 @@ function createEmptyState(onUpload: () => void): HTMLDivElement {
 
   const title = document.createElement("div");
   title.className = "pi-files-empty__title";
-  title.textContent = "Give Pi more context";
+  title.textContent = t("files-dialog.emptyTitle");
 
   const description = document.createElement("p");
   description.className = "pi-files-empty__desc";
-  description.textContent = "Upload documents, data, or reference material to help Pi give better answers.";
+  description.textContent = t("files-dialog.emptyDescription");
 
   const uploadButton = document.createElement("button");
   uploadButton.type = "button";
   uploadButton.className = "pi-overlay-btn pi-overlay-btn--primary pi-overlay-btn--compact";
-  uploadButton.textContent = "Upload files";
+  uploadButton.textContent = t("files-dialog.uploadButtonText");
   uploadButton.addEventListener("click", onUpload);
 
   const hint = document.createElement("p");
   hint.className = "pi-files-empty__hint";
-  hint.textContent = "Files are stored locally in your browser.";
+  hint.textContent = t("files-dialog.emptyHint");
 
   empty.append(emptyIcon, title, description, uploadButton, hint);
   return empty;
@@ -397,9 +398,9 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
 
   const listHeaderElements = createOverlayHeader({
     onClose: closeOverlay,
-    closeLabel: "Close files",
-    title: "Files",
-    subtitle: "Documents available to Pi",
+    closeLabel: t("files-dialog.closeLabel"),
+    title: t("files-dialog.title"),
+    subtitle: t("files-dialog.subtitle"),
   });
 
   const detailHeader = document.createElement("div");
@@ -412,7 +413,7 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
   const detailBackButton = document.createElement("button");
   detailBackButton.type = "button";
   detailBackButton.className = "pi-files-detail__back";
-  detailBackButton.setAttribute("aria-label", "Back to file list");
+  detailBackButton.setAttribute("aria-label", t("files-dialog.detailBackButton"));
   detailBackButton.textContent = "←";
 
   const detailTitleWrap = document.createElement("div");
@@ -429,7 +430,7 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
 
   const detailCloseButton = createOverlayCloseButton({
     onClose: closeOverlay,
-    label: "Close files",
+    label: t("files-dialog.closeLabel"),
   });
 
   detailHeader.append(detailTitleContainer, detailCloseButton);
@@ -439,12 +440,12 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
 
   const uploadButton = createUploadActionButton({
     icon: lucide(Upload),
-    label: "Upload",
+    label: t("files-dialog.uploadButton"),
   });
 
   const connectFolderButton = createUploadActionButton({
     icon: lucide(FolderOpen),
-    label: "Connect folder",
+    label: t("files-dialog.connectFolderButton"),
   });
   connectFolderButton.hidden = true;
   connectFolderButton.disabled = true;
@@ -471,7 +472,7 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
   const filterInput = document.createElement("input");
   filterInput.type = "text";
   filterInput.className = "pi-files-filter__input";
-  filterInput.placeholder = "Filter files…";
+  filterInput.placeholder = t("files-dialog.placeholder");
   filterInput.addEventListener("input", () => {
     filterText = filterInput.value;
     renderListView();
@@ -608,7 +609,7 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
           element: createBinaryPreview({
             file,
             icon: lucide(Image),
-            label: "Image preview unavailable",
+            label: t("files-dialog.preview.imageUnavailable"),
           }),
           previewTruncated: false,
           objectUrl: null,
@@ -638,7 +639,7 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
         element: createBinaryPreview({
           file,
           icon: lucide(FileText),
-          label: "PDF document",
+          label: t("files-dialog.preview.pdfDocument"),
         }),
         previewTruncated: false,
         objectUrl: null,
@@ -649,7 +650,7 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
       element: createBinaryPreview({
         file,
         icon: lucide(Paperclip),
-        label: "Binary file",
+        label: t("files-dialog.preview.binaryFile"),
       }),
       previewTruncated: false,
       objectUrl: null,
@@ -694,7 +695,7 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
         element: createBinaryPreview({
           file,
           icon: lucide(AlertTriangle),
-          label: `Preview unavailable: ${getErrorMessage(error)}`,
+          label: t("files-dialog.preview.unavailable", { error: getErrorMessage(error) }),
         }),
         previewTruncated: false,
         objectUrl: null,
@@ -891,11 +892,11 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
 
         const title = document.createElement("div");
         title.className = "pi-files-empty__title";
-        title.textContent = "No matching files";
+        title.textContent = t("files-dialog.filterEmptyTitle");
 
         const description = document.createElement("p");
         description.className = "pi-files-empty__desc";
-        description.textContent = "Try a different filter term.";
+        description.textContent = t("files-dialog.filterEmptyDescription");
 
         empty.append(title, description);
         sectionsHost.appendChild(empty);
@@ -960,7 +961,7 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
     footer.textContent = buildFilesDialogStatusMessage({
       totalCount: files.length,
       totalSizeBytes: totalSize,
-      backendLabel: backendStatus?.label ?? "Storage unavailable",
+      backendLabel: backendStatus?.label ?? t("files-dialog.storageUnavailable"),
       nativeDirectoryName: backendStatus?.nativeConnected ? backendStatus.nativeDirectoryName ?? null : null,
     });
   };
@@ -977,14 +978,14 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
 
         const file = findFileByRef(detailFileRef);
         if (!file) {
-          showToast("That file is no longer available.");
+          showToast(t("files-dialog.toast.fileNotAvailable"));
           showListView();
           return;
         }
 
         await renderDetailView(detailFileRef);
       } catch (error: unknown) {
-        showToast(`Could not refresh files: ${getErrorMessage(error)}`);
+        showToast(t("files-dialog.toast.refreshFailed", { error: getErrorMessage(error) }));
       }
     })();
   };
@@ -1006,7 +1007,7 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
     void workspace.connectNativeDirectory({
       audit: DIALOG_AUDIT_CONTEXT,
     }).catch((error: unknown) => {
-      showToast(`Connect folder failed: ${getErrorMessage(error)}`);
+      showToast(t("files-dialog.toast.connectFolderFailed", { error: getErrorMessage(error) }));
     });
   });
 
@@ -1023,10 +1024,10 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
       audit: DIALOG_AUDIT_CONTEXT,
     })
       .then((count) => {
-        showToast(`Imported ${count} file${count === 1 ? "" : "s"}.`);
+        showToast(t("files-dialog.toast.imported", { count, plural: count === 1 ? "" : "s" }));
       })
       .catch((error: unknown) => {
-        showToast(`Upload failed: ${getErrorMessage(error)}`);
+        showToast(t("files-dialog.toast.uploadFailed", { error: getErrorMessage(error) }));
       });
   });
 
@@ -1043,7 +1044,7 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
     renderListView();
     setView("list");
   } catch (error: unknown) {
-    showToast(`Could not load files: ${getErrorMessage(error)}`);
+    showToast(t("files-dialog.toast.loadFailed", { error: getErrorMessage(error) }));
     showListView();
     renderListView();
   }

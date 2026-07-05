@@ -135,7 +135,7 @@ The dev manifest points to `https://localhost:3141`. The production manifest (`m
 | `npm run test:models` | Unit tests — model ordering |
 | `npm run test:context` | Unit tests — tools, context, sessions, extensions, integrations |
 | `npm run test:security` | Security policy tests — proxy, CORS, sandbox, OAuth |
-| `npm run proxy:https` | CORS proxy for OAuth flows (default `https://localhost:3003`) |
+| `npm run proxy:https` | CORS proxy for OAuth flows (default `https://localhost:3003`; auto-picks a random free port if the default is busy) |
 | `npm run validate` | Validate the Office add-in manifest |
 
 ### CORS proxy
@@ -143,8 +143,8 @@ The dev manifest points to `https://localhost:3141`. The production manifest (`m
 Some OAuth token endpoints are blocked by CORS inside Office webviews. If OAuth login fails:
 
 1. User setup command: `npx pi-for-excel-proxy` (or `curl -fsSL https://piforexcel.com/proxy | sh` if Node is missing)
-2. Dev/source setup command: `npm run proxy:https` (defaults to `https://localhost:3003`)
-3. In Pi → `/settings` → **Proxy** → enable and set the URL
+2. Dev/source setup command: `npm run proxy:https` (defaults to `https://localhost:3003`; if 3003 is busy, copy the random port printed in the terminal)
+3. In Pi → `/settings` → **Proxy** → enable and set the printed URL
 4. Retry login
 
 API-key auth generally works without the proxy.

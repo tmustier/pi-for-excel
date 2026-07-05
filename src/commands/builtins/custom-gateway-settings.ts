@@ -19,6 +19,7 @@ import {
 } from "../../ui/extensions-hub-components.js";
 import { createOverlaySectionTitle } from "../../ui/overlay-dialog.js";
 import { showToast } from "../../ui/toast.js";
+import { t } from "../../language/index.js";
 
 interface BuildCustomGatewaySectionOptions {
   onProvidersChanged: () => void;
@@ -62,14 +63,14 @@ function createGatewayCard(args: {
   const actions = document.createElement("div");
   actions.className = "pi-settings-gateway-item__actions";
 
-  const editButton = createButton("Edit", {
+  const editButton = createButton(t("custom-gateway.editButton"), {
     compact: true,
     onClick: () => {
       args.onEdit(args.gateway);
     },
   });
 
-  const deleteButton = createButton("Delete", {
+  const deleteButton = createButton(t("custom-gateway.deleteButton"), {
     compact: true,
     danger: true,
     onClick: () => {
@@ -82,19 +83,19 @@ function createGatewayCard(args: {
 
   const endpoint = document.createElement("p");
   endpoint.className = "pi-settings-gateway-item__meta";
-  endpoint.textContent = `Endpoint: ${args.gateway.endpointUrl}`;
+  endpoint.textContent = t("custom-gateway.gatewayEndpoint", { url: args.gateway.endpointUrl });
 
   const model = document.createElement("p");
   model.className = "pi-settings-gateway-item__meta";
-  model.textContent = `Model: ${args.gateway.modelId}`;
+  model.textContent = t("custom-gateway.gatewayModel", { id: args.gateway.modelId });
 
   const contextWindow = document.createElement("p");
   contextWindow.className = "pi-settings-gateway-item__meta";
-  contextWindow.textContent = `Max context: ${formatTokenCount(args.gateway.contextWindow)}`;
+  contextWindow.textContent = t("custom-gateway.gatewayContextWindow", { tokens: formatTokenCount(args.gateway.contextWindow) });
 
   const keyState = document.createElement("p");
   keyState.className = "pi-settings-gateway-item__meta";
-  keyState.textContent = args.gateway.apiKey.length > 0 ? "API key: configured" : "API key: none";
+  keyState.textContent = args.gateway.apiKey.length > 0 ? t("custom-gateway.gatewayApiKeyConfigured") : t("custom-gateway.gatewayApiKeyNone");
 
   card.append(topRow, endpoint, model, contextWindow, keyState);
   return card;
@@ -107,10 +108,8 @@ export async function buildCustomGatewaySection(
   section.className = "pi-overlay-section pi-settings-section";
   section.dataset.settingsAnchor = "custom-gateways";
 
-  const title = createOverlaySectionTitle("Custom OpenAI-compatible gateways");
-  const hint = createHint(
-    "Use this for company LLM gateways or local OpenAI-compatible servers.",
-  );
+  const title = createOverlaySectionTitle(t("custom-gateway.title"));
+  const hint = createHint(t("custom-gateway.hint"));
 
   const content = document.createElement("div");
   content.className = "pi-settings-section__content";
@@ -119,16 +118,16 @@ export async function buildCustomGatewaySection(
   formCard.className = "pi-overlay-surface pi-settings-gateway-form";
 
   const nameInput = createConfigInput({
-    placeholder: "Gateway name (optional)",
+    placeholder: t("custom-gateway.namePlaceholder"),
   });
 
   const endpointInput = createConfigInput({
-    placeholder: "https://your-gateway.example.com/v1",
+    placeholder: t("custom-gateway.endpointPlaceholder"),
   });
   endpointInput.spellcheck = false;
 
   const modelInput = createConfigInput({
-    placeholder: "model-id",
+    placeholder: t("custom-gateway.modelPlaceholder"),
   });
 
   const contextWindowInput = createConfigInput({
@@ -140,7 +139,7 @@ export async function buildCustomGatewaySection(
   contextWindowInput.inputMode = "numeric";
 
   const apiKeyInput = createConfigInput({
-    placeholder: "API key (optional for local servers)",
+    placeholder: t("custom-gateway.apiKeyPlaceholder"),
     type: "password",
   });
 
@@ -151,12 +150,12 @@ export async function buildCustomGatewaySection(
   const formActions = document.createElement("div");
   formActions.className = "pi-overlay-actions";
 
-  const cancelButton = createButton("Cancel", {
+  const cancelButton = createButton(t("custom-gateway.cancelButton"), {
     compact: true,
   });
   cancelButton.hidden = true;
 
-  const saveButton = createButton("Save gateway", {
+  const saveButton = createButton(t("custom-gateway.saveGateway"), {
     compact: true,
     primary: true,
   });
@@ -164,21 +163,21 @@ export async function buildCustomGatewaySection(
   formActions.append(cancelButton, saveButton);
 
   formCard.append(
-    createConfigRow("Name", nameInput),
-    createConfigRow("Endpoint", endpointInput),
-    createConfigRow("Model", modelInput),
-    createConfigRow("Max context tokens", contextWindowInput),
+    createConfigRow(t("custom-gateway.configLabelName"), nameInput),
+    createConfigRow(t("custom-gateway.configLabelEndpoint"), endpointInput),
+    createConfigRow(t("custom-gateway.configLabelModel"), modelInput),
+    createConfigRow(t("custom-gateway.configLabelContextWindow"), contextWindowInput),
     createHint(
-      "Used for Pi's local context budgeting and auto-compaction. Set this to your gateway model's real context window.",
+      t("custom-gateway.contextWindowHint"),
     ),
-    createConfigRow("API key", apiKeyInput),
+    createConfigRow(t("custom-gateway.configLabelApiKey"), apiKeyInput),
     errorText,
     formActions,
   );
 
   const listTitle = document.createElement("p");
   listTitle.className = "pi-settings-gateway-list__title";
-  listTitle.textContent = "Configured gateways";
+  listTitle.textContent = t("custom-gateway-settings.configured-gateways");
 
   const listHost = document.createElement("div");
   listHost.className = "pi-settings-gateway-list";
@@ -205,7 +204,7 @@ export async function buildCustomGatewaySection(
     contextWindowInput.value = "";
     apiKeyInput.value = "";
     cancelButton.hidden = true;
-    saveButton.textContent = "Save gateway";
+    saveButton.textContent = t("custom-gateway.saveGateway");
     setError(null);
   };
 
@@ -217,7 +216,7 @@ export async function buildCustomGatewaySection(
     contextWindowInput.value = String(gateway.contextWindow);
     apiKeyInput.value = gateway.apiKey;
     cancelButton.hidden = false;
-    saveButton.textContent = "Update gateway";
+    saveButton.textContent = t("custom-gateway-settings.update-gateway");
     setError(null);
     nameInput.focus();
   };
@@ -230,7 +229,7 @@ export async function buildCustomGatewaySection(
     listHost.replaceChildren();
 
     if (gateways.length === 0) {
-      listHost.appendChild(createHint("No custom gateways configured yet."));
+      listHost.appendChild(createHint(t("custom-gateway.noGateways")));
       return;
     }
 
@@ -242,9 +241,9 @@ export async function buildCustomGatewaySection(
           void (async () => {
             try {
               const confirmed = await requestConfirmationDialog({
-                title: "Delete custom gateway?",
-                message: `Delete gateway \"${targetGateway.displayName}\"? This removes its stored API key from this add-in.`,
-                confirmLabel: "Delete",
+                title: t("custom-gateway.deleteConfirmTitle"),
+                message: t("custom-gateway.deleteConfirmMsg", { name: targetGateway.displayName }),
+                confirmLabel: t("custom-gateway.deleteButton"),
                 confirmButtonTone: "danger",
                 restoreFocusOnClose: false,
               });
@@ -257,14 +256,14 @@ export async function buildCustomGatewaySection(
               await reloadGateways();
               renderList();
               options.onProvidersChanged();
-              showToast(`Deleted gateway ${targetGateway.displayName}.`);
+              showToast(t("custom-gateway.deletedGateway", { name: targetGateway.displayName }));
 
               if (editingGatewayId === targetGateway.id) {
                 resetForm();
               }
             } catch (error: unknown) {
               const message = error instanceof Error ? error.message : String(error);
-              showToast(`Failed to delete gateway: ${message}`);
+              showToast(t("custom-gateway.toast.deleteFailed", { message }));
             }
           })();
         },
@@ -302,8 +301,8 @@ export async function buildCustomGatewaySection(
         options.onProvidersChanged();
         showToast(
           editingGatewayId
-            ? `Updated gateway ${saved.displayName}.`
-            : `Saved gateway ${saved.displayName}.`,
+            ? t("custom-gateway.updatedGateway", { name: saved.displayName })
+            : t("custom-gateway.savedGateway", { name: saved.displayName }),
         );
 
         resetForm();

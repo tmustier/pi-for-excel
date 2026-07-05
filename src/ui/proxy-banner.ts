@@ -5,6 +5,7 @@
  * unavailable. Expands inline with quick setup guidance.
  */
 
+import { t } from "../language/index.js";
 import { AlertTriangle, Check, Copy, lucide } from "./lucide-icons.js";
 
 const PROXY_COMMAND = "npx pi-for-excel-proxy";
@@ -43,14 +44,14 @@ export function createProxyBanner(): ProxyBannerHandle {
   warningIcon.setAttribute("aria-hidden", "true");
 
   const textLabel = document.createElement("span");
-  textLabel.textContent = "Proxy not running · some features won't work.";
+  textLabel.textContent = t("proxy-banner.warning");
 
   text.append(warningIcon, textLabel);
 
   const action = document.createElement("button");
   action.type = "button";
   action.className = "pi-proxy-banner__action";
-  action.textContent = "How to fix →";
+  action.textContent = t("proxy-banner.action");
 
   topRow.append(text, action);
 
@@ -60,7 +61,7 @@ export function createProxyBanner(): ProxyBannerHandle {
 
   const detailsIntro = document.createElement("p");
   detailsIntro.className = "pi-proxy-banner__details-text";
-  detailsIntro.textContent = "Run this command in a terminal and keep that window open:";
+  detailsIntro.textContent = t("proxy-banner.intro");
 
   const codeRow = document.createElement("div");
   codeRow.className = "pi-proxy-banner__code";
@@ -76,14 +77,14 @@ export function createProxyBanner(): ProxyBannerHandle {
 
   const renderCopyIcon = (): void => {
     copyButton.replaceChildren(lucide(Copy));
-    copyButton.title = "Copy command";
-    copyButton.setAttribute("aria-label", "Copy command");
+    copyButton.title = t("proxy-banner.copyCommand");
+    copyButton.setAttribute("aria-label", t("proxy-banner.copyCommand"));
   };
 
   const renderCopiedIcon = (): void => {
     copyButton.replaceChildren(lucide(Check));
-    copyButton.title = "Copied";
-    copyButton.setAttribute("aria-label", "Copied");
+    copyButton.title = t("proxy-banner.copied");
+    copyButton.setAttribute("aria-label", t("proxy-banner.copied"));
   };
 
   renderCopyIcon();
@@ -115,14 +116,14 @@ export function createProxyBanner(): ProxyBannerHandle {
 
   const hint = document.createElement("p");
   hint.className = "pi-proxy-banner__hint";
-  hint.textContent = "Open Terminal · paste · press Enter · type y and Enter if prompted · leave open";
+  hint.textContent = t("proxy-banner.hint");
 
   const guideLink = document.createElement("a");
   guideLink.className = "pi-proxy-banner__link";
   guideLink.href = INSTALL_GUIDE_URL;
   guideLink.target = "_blank";
   guideLink.rel = "noopener noreferrer";
-  guideLink.textContent = "No Node.js? See install guide →";
+  guideLink.textContent = t("proxy-banner.guideLink");
 
   details.append(detailsIntro, codeRow, hint, guideLink);
 
@@ -132,7 +133,7 @@ export function createProxyBanner(): ProxyBannerHandle {
     const shouldOpen = details.hidden === true;
     details.hidden = !shouldOpen;
     root.classList.toggle("is-open", shouldOpen);
-    action.textContent = shouldOpen ? "Hide steps" : "How to fix →";
+    action.textContent = shouldOpen ? t("proxy-banner.hideSteps") : t("proxy-banner.action");
   });
 
   root.append(topRow, details);
@@ -144,7 +145,7 @@ export function createProxyBanner(): ProxyBannerHandle {
     if (!shouldShow) {
       details.hidden = true;
       root.classList.remove("is-open");
-      action.textContent = "How to fix →";
+      action.textContent = t("proxy-banner.action");
     }
   };
 

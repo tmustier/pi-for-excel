@@ -14,6 +14,7 @@ import {
   type PythonTransformRangeDetails,
   type TmuxBridgeDetails,
 } from "../tools/tool-details.js";
+import { t } from "../language/index.js";
 import { AlertTriangle, Check, Copy, Terminal, lucide } from "./lucide-icons.js";
 
 export const PYTHON_BRIDGE_SETUP_COMMAND = "npx pi-for-excel-python-bridge";
@@ -66,8 +67,8 @@ function createCopyableCommand(command: string): HTMLDivElement {
   const copyBtn = document.createElement("button");
   copyBtn.type = "button";
   copyBtn.className = "pi-bridge-setup__copy";
-  copyBtn.title = "Copy command";
-  copyBtn.setAttribute("aria-label", "Copy command");
+  copyBtn.title = t("bridge-setup.copyCommandTitle");
+  copyBtn.setAttribute("aria-label", t("bridge-setup.copyCommandTitle"));
   copyBtn.replaceChildren(lucide(Copy));
 
   let resetTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -75,8 +76,8 @@ function createCopyableCommand(command: string): HTMLDivElement {
   copyBtn.addEventListener("click", () => {
     copyToClipboard(command, () => {
       copyBtn.replaceChildren(lucide(Check));
-      copyBtn.title = "Copied";
-      copyBtn.setAttribute("aria-label", "Copied");
+      copyBtn.title = t("bridge-setup.copiedTitle");
+      copyBtn.setAttribute("aria-label", t("bridge-setup.copiedTitle"));
 
       if (resetTimeout !== null) {
         clearTimeout(resetTimeout);
@@ -84,8 +85,8 @@ function createCopyableCommand(command: string): HTMLDivElement {
 
       resetTimeout = setTimeout(() => {
         copyBtn.replaceChildren(lucide(Copy));
-        copyBtn.title = "Copy command";
-        copyBtn.setAttribute("aria-label", "Copy command");
+        copyBtn.title = t("bridge-setup.copyCommandTitle");
+        copyBtn.setAttribute("aria-label", t("bridge-setup.copyCommandTitle"));
         resetTimeout = null;
       }, 1400);
     }, code);
@@ -145,7 +146,7 @@ function toTmuxModel(details: TmuxBridgeDetails): BridgeSetupCardModel | null {
   }
 
   return {
-    title: "Terminal access is not available",
+    title: t("bridge-setup.tmuxTitle"),
     command: TMUX_BRIDGE_SETUP_COMMAND,
     probeUrl: resolveProbeUrl({
       bridgeUrl: details.bridgeUrl,
@@ -172,7 +173,7 @@ function toPythonModel(details: PythonBridgeDetails): BridgeSetupCardModel | nul
   }
 
   const title = details.error === "no_python_runtime"
-    ? "Python is unavailable"
+    ? t("bridge-setup.pythonUnavailable")
     : "Python bridge is unavailable";
 
   return {
@@ -203,7 +204,7 @@ function toLibreOfficeModel(details: LibreOfficeBridgeDetails): BridgeSetupCardM
   }
 
   return {
-    title: "File conversion is unavailable",
+    title: t("bridge-setup.fileConversionUnavailable"),
     command: PYTHON_BRIDGE_SETUP_COMMAND,
     probeUrl: resolveProbeUrl({
       bridgeUrl: details.bridgeUrl,
@@ -230,7 +231,7 @@ function toTransformRangeModel(details: PythonTransformRangeDetails): BridgeSetu
   }
 
   return {
-    title: "Python transform is unavailable",
+    title: t("bridge-setup.pythonTransformUnavailable"),
     command: PYTHON_BRIDGE_SETUP_COMMAND,
     probeUrl: resolveProbeUrl({
       bridgeUrl: details.bridgeUrl,
@@ -315,11 +316,11 @@ export function mountBridgeSetupCard(
 
   const intro = document.createElement("p");
   intro.className = "pi-bridge-setup__text";
-  intro.textContent = "In a terminal, run:";
+  intro.textContent = t("bridge-setup.intro");
 
   const hint = document.createElement("p");
   hint.className = "pi-bridge-setup__hint";
-  hint.textContent = "Keep it running, then try again.";
+  hint.textContent = t("bridge-setup.keepRunning");
 
   const actions = document.createElement("div");
   actions.className = "pi-bridge-setup__actions";
@@ -327,7 +328,7 @@ export function mountBridgeSetupCard(
   const testButton = document.createElement("button");
   testButton.type = "button";
   testButton.className = "pi-bridge-setup__test";
-  testButton.textContent = "Test connection";
+  testButton.textContent = t("bridge-setup.testConnection");
 
   const status = document.createElement("span");
   status.className = "pi-bridge-setup__status";
@@ -338,7 +339,7 @@ export function mountBridgeSetupCard(
 
   if (!model.probeUrl) {
     testButton.disabled = true;
-    status.textContent = "Set a valid bridge URL first, then test again.";
+    status.textContent = t("bridge-setup.setValidUrlFirst");
     status.className = "pi-bridge-setup__status is-warn";
   }
 
@@ -350,29 +351,29 @@ export function mountBridgeSetupCard(
 
     checking = true;
     testButton.disabled = true;
-    testButton.textContent = "Checking…";
-    status.textContent = "Checking bridge…";
+    testButton.textContent = t("bridge-setup.checking");
+    status.textContent = t("bridge-setup.checkingBridge");
     status.className = "pi-bridge-setup__status";
 
     void probeBridge(probeUrl).then(
       (reachable) => {
         if (reachable) {
-          status.textContent = "✓ Bridge detected — ask the assistant to try again.";
+          status.textContent = t("bridge-setup.bridgeDetected");
           status.className = "pi-bridge-setup__status is-ok";
           return;
         }
 
-        status.textContent = "Bridge not detected yet — keep terminal open and try again.";
+        status.textContent = t("bridge-setup.bridgeNotDetected");
         status.className = "pi-bridge-setup__status is-warn";
       },
       () => {
-        status.textContent = "Could not check bridge status right now.";
+        status.textContent = t("bridge-setup.cannotCheckBridge");
         status.className = "pi-bridge-setup__status is-error";
       },
     ).finally(() => {
       checking = false;
       testButton.disabled = false;
-      testButton.textContent = "Test connection";
+      testButton.textContent = t("bridge-setup.testConnection");
     });
   });
 
@@ -384,7 +385,7 @@ export function mountBridgeSetupCard(
   const dismissButton = document.createElement("button");
   dismissButton.type = "button";
   dismissButton.className = "pi-bridge-setup__dismiss";
-  dismissButton.textContent = "Dismiss";
+  dismissButton.textContent = t("bridge-setup.dismiss");
   dismissButton.addEventListener("click", () => {
     card.classList.add("is-dismissed");
     setTimeout(() => card.remove(), 200);

@@ -90,6 +90,40 @@ export interface ViewSettingsDetails {
   recovery?: RecoveryCheckpointDetails;
 }
 
+export interface ChartPositionDetails {
+  top: number;
+  left: number;
+  width: number;
+  height: number;
+}
+
+export interface ChartListItemDetails {
+  name: string;
+  chartType: string;
+  title: string;
+  worksheet: string;
+  position: ChartPositionDetails;
+}
+
+export interface ChartImageDetails {
+  base64: string;
+  mimeType: "image/png";
+  width: number;
+  height: number;
+}
+
+export interface ChartsDetails {
+  kind: "charts";
+  action?: string;
+  name?: string;
+  address?: string;
+  sourceRange?: string;
+  count?: number;
+  charts?: ChartListItemDetails[];
+  image?: ChartImageDetails;
+  recovery?: RecoveryCheckpointDetails;
+}
+
 export type TraceDependenciesMode = "precedents" | "dependents";
 export type TraceDependencySource = "api" | "formula_scan" | "mixed" | "none";
 
@@ -408,6 +442,7 @@ export type ExcelToolDetails =
   | ModifyStructureDetails
   | CommentsDetails
   | ViewSettingsDetails
+  | ChartsDetails
   | TraceDependenciesDetails
   | ExplainFormulaDetails
   | ReadRangeCsvDetails
@@ -724,6 +759,64 @@ export function isViewSettingsDetails(value: unknown): value is ViewSettingsDeta
   return (
     isOptionalString(value.action) &&
     isOptionalString(value.address) &&
+    isOptionalRecoveryCheckpointDetails(value.recovery)
+  );
+}
+
+function isChartPositionDetails(value: unknown): value is ChartPositionDetails {
+  if (!isRecord(value)) return false;
+
+  return (
+    typeof value.top === "number" &&
+    typeof value.left === "number" &&
+    typeof value.width === "number" &&
+    typeof value.height === "number"
+  );
+}
+
+function isChartListItemDetails(value: unknown): value is ChartListItemDetails {
+  if (!isRecord(value)) return false;
+
+  return (
+    typeof value.name === "string" &&
+    typeof value.chartType === "string" &&
+    typeof value.title === "string" &&
+    typeof value.worksheet === "string" &&
+    isChartPositionDetails(value.position)
+  );
+}
+
+function isOptionalChartListItemArray(value: unknown): value is ChartListItemDetails[] | undefined {
+  return value === undefined || (Array.isArray(value) && value.every((item) => isChartListItemDetails(item)));
+}
+
+function isChartImageDetails(value: unknown): value is ChartImageDetails {
+  if (!isRecord(value)) return false;
+
+  return (
+    typeof value.base64 === "string" &&
+    value.mimeType === "image/png" &&
+    typeof value.width === "number" &&
+    typeof value.height === "number"
+  );
+}
+
+function isOptionalChartImageDetails(value: unknown): value is ChartImageDetails | undefined {
+  return value === undefined || isChartImageDetails(value);
+}
+
+export function isChartsDetails(value: unknown): value is ChartsDetails {
+  if (!isRecord(value)) return false;
+  if (value.kind !== "charts") return false;
+
+  return (
+    isOptionalString(value.action) &&
+    isOptionalString(value.name) &&
+    isOptionalString(value.address) &&
+    isOptionalString(value.sourceRange) &&
+    isOptionalNumber(value.count) &&
+    isOptionalChartListItemArray(value.charts) &&
+    isOptionalChartImageDetails(value.image) &&
     isOptionalRecoveryCheckpointDetails(value.recovery)
   );
 }

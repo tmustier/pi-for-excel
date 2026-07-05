@@ -2,6 +2,8 @@
  * Session title helpers for tab labels and close/reopen toasts.
  */
 
+import { t } from "../language/index.js";
+
 export interface ResolveTabTitleArgs {
   hasExplicitTitle: boolean;
   sessionTitle: string;
@@ -25,5 +27,5 @@ export function resolveTabTitle(args: ResolveTabTitleArgs): string {
     }
   }
 
-  return `Chat ${normalizeTabNumber(args.defaultTabNumber)}`;
+  return t("session.tab.default", { number: String(normalizeTabNumber(args.defaultTabNumber)) });
 }

@@ -21,14 +21,18 @@ import {
   writePersistedWorkbookRecoveryPayload,
 } from "./recovery/log-store.js";
 import {
+  applyChartState,
   applyCommentThreadState,
   applyConditionalFormatState,
   applyFormatCellsState,
   applyModifyStructureState,
+  cloneRecoveryChartState,
   cloneRecoveryCommentThreadState,
   cloneRecoveryConditionalFormatRules,
   cloneRecoveryFormatRangeState,
   cloneRecoveryModifyStructureState,
+  type RecoveryChartApplyResult,
+  type RecoveryChartState,
   type RecoveryCommentThreadState,
   type RecoveryConditionalFormatCaptureResult,
   type RecoveryConditionalFormatRule,
@@ -55,6 +59,7 @@ export type WorkbookRecoveryToolName =
   | "format_cells"
   | "conditional_format"
   | "comments"
+  | "charts"
   | "modify_structure"
   | "restore_snapshot";
 
@@ -63,7 +68,8 @@ export type WorkbookRecoverySnapshotKind =
   | "format_cells_state"
   | "modify_structure_state"
   | "conditional_format_rules"
-  | "comment_thread";
+  | "comment_thread"
+  | "chart_state";
 
 export interface WorkbookRecoverySnapshot {
   id: string;
@@ -80,6 +86,7 @@ export interface WorkbookRecoverySnapshot {
   modifyStructureState?: RecoveryModifyStructureState;
   conditionalFormatRules?: RecoveryConditionalFormatRule[];
   commentThreadState?: RecoveryCommentThreadState;
+  chartState?: RecoveryChartState;
   workbookId?: string;
   workbookLabel?: string;
   restoredFromSnapshotId?: string;
@@ -132,6 +139,15 @@ export interface AppendCommentThreadRecoverySnapshotArgs {
   restoredFromSnapshotId?: string;
 }
 
+export interface AppendChartRecoverySnapshotArgs {
+  toolName: WorkbookRecoveryToolName;
+  toolCallId: string;
+  address: string;
+  changedCount?: number;
+  chartState: RecoveryChartState;
+  restoredFromSnapshotId?: string;
+}
+
 export interface RestoreWorkbookRecoverySnapshotResult {
   restoredSnapshotId: string;
   inverseSnapshotId: string | null;
@@ -166,6 +182,10 @@ interface WorkbookRecoveryLogDependencies {
     address: string,
     state: RecoveryCommentThreadState,
   ) => Promise<RecoveryCommentThreadState>;
+  applyChartSnapshot: (
+    address: string,
+    state: RecoveryChartState,
+  ) => Promise<RecoveryChartApplyResult>;
 }
 
 function defaultNow(): number {
@@ -230,6 +250,13 @@ async function defaultApplyCommentThreadSnapshot(
   state: RecoveryCommentThreadState,
 ): Promise<RecoveryCommentThreadState> {
   return applyCommentThreadState(address, state);
+}
+
+async function defaultApplyChartSnapshot(
+  address: string,
+  state: RecoveryChartState,
+): Promise<RecoveryChartApplyResult> {
+  return applyChartState(address, state);
 }
 
 function serializeComparable(raw: unknown): string {
@@ -320,6 +347,8 @@ export class WorkbookRecoveryLog {
         dependencies.applyConditionalFormatSnapshot ?? defaultApplyConditionalFormatSnapshot,
       applyCommentThreadSnapshot:
         dependencies.applyCommentThreadSnapshot ?? defaultApplyCommentThreadSnapshot,
+      applyChartSnapshot:
+        dependencies.applyChartSnapshot ?? defaultApplyChartSnapshot,
     };
   }
 
@@ -531,6 +560,35 @@ export class WorkbookRecoveryLog {
     });
   }
 
+  private async appendChartWithContext(
+    args: AppendChartRecoverySnapshotArgs,
+    workbookContextOverride?: WorkbookContext,
+  ): Promise<WorkbookRecoverySnapshot | null> {
+    const workbookIdentity = await this.resolveWorkbookIdentity(workbookContextOverride);
+    if (!workbookIdentity) return null;
+
+    const changedCount = typeof args.changedCount === "number"
+      ? Math.max(0, Math.floor(args.changedCount))
+      : 1;
+
+    return this.appendSnapshot({
+      id: this.dependencies.createId(),
+      at: this.dependencies.now(),
+      toolName: args.toolName,
+      toolCallId: args.toolCallId,
+      address: args.address,
+      changedCount,
+      cellCount: 1,
+      beforeValues: [],
+      beforeFormulas: [],
+      snapshotKind: "chart_state",
+      chartState: cloneRecoveryChartState(args.chartState),
+      workbookId: workbookIdentity.workbookId,
+      workbookLabel: workbookIdentity.workbookLabel,
+      restoredFromSnapshotId: args.restoredFromSnapshotId,
+    });
+  }
+
   async append(args: AppendWorkbookRecoverySnapshotArgs): Promise<WorkbookRecoverySnapshot | null> {
     await this.ensureLoaded();
     return this.appendRangeWithContext(args);
@@ -562,6 +620,13 @@ export class WorkbookRecoveryLog {
   ): Promise<WorkbookRecoverySnapshot | null> {
     await this.ensureLoaded();
     return this.appendCommentThreadWithContext(args);
+  }
+
+  async appendChart(
+    args: AppendChartRecoverySnapshotArgs,
+  ): Promise<WorkbookRecoverySnapshot | null> {
+    await this.ensureLoaded();
+    return this.appendChartWithContext(args);
   }
 
   async list(opts: { limit?: number; workbookId?: string | null } = {}): Promise<WorkbookRecoverySnapshot[]> {
@@ -652,6 +717,8 @@ export class WorkbookRecoveryLog {
         appendModifyStructureSnapshot: (args, context) => this.appendModifyStructureWithContext(args, context),
         appendConditionalFormatSnapshot: (args, context) => this.appendConditionalFormatWithContext(args, context),
         appendCommentThreadSnapshot: (args, context) => this.appendCommentThreadWithContext(args, context),
+        appendChartSnapshot: (args, context) => this.appendChartWithContext(args, context),
+        applyChartSnapshot: this.dependencies.applyChartSnapshot,
         toRestoreValues,
         countChangedCells,
       },

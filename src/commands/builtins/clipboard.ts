@@ -8,6 +8,7 @@ import type { SlashCommand } from "../types.js";
 import type { ActiveAgentProvider } from "./model.js";
 import { showToast } from "../../ui/toast.js";
 import { extractTextBlocks } from "../../utils/content.js";
+import { t } from "../../language/index.js";
 
 function getLastAssistantText(messages: AgentMessage[]): string | null {
   for (let i = messages.length - 1; i >= 0; i--) {
@@ -28,24 +29,24 @@ export function createClipboardCommands(getActiveAgent: ActiveAgentProvider): Sl
   return [
     {
       name: "copy",
-      description: "Copy last agent message to clipboard",
+      description: t("command.clipboard.desc"),
       source: "builtin",
       execute: () => {
         const agent = resolveAgent(getActiveAgent);
         if (!agent) {
-          showToast("No active session");
+          showToast(t("command.clipboard.no_session"));
           return;
         }
 
         const text = getLastAssistantText(agent.state.messages);
         if (text) {
           void navigator.clipboard.writeText(text).then(() => {
-            showToast("Copied to clipboard");
+            showToast(t("clipboard.copied"));
           });
           return;
         }
 
-        showToast("No agent message to copy");
+        showToast(t("clipboard.noAgentMessage"));
       },
     },
   ];

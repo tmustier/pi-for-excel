@@ -97,8 +97,8 @@ void test("builtins registry wires /addons, /experimental, /extensions, /tools, 
   assert.match(extensionsHubPluginsSource, /manager\.setExtensionCapability\(/);
   assert.match(extensionsHubPluginsSource, /confirmInstall\(/);
   assert.match(extensionsHubPluginsSource, /confirmEnable\(/);
-  assert.match(extensionsHubPluginsSource, /higher-risk permissions/);
-  assert.match(extensionsHubPluginsSource, /createSectionHeader\(\{ label: "Permissions" \}\)/);
+  assert.match(extensionsHubPluginsSource, /ext-hub-plugins\.confirm\.grantedHighRisk/);
+  assert.match(extensionsHubPluginsSource, /createSectionHeader\(\{ label: t\("ext-hub-plugins\.permissions"\) \}\)/);
   assert.match(extensionsHubPluginsSource, /installFromUrl\(/);
 
   const extensionsDocsSource = await readFile(new URL("../docs/extensions.md", import.meta.url), "utf8");
@@ -164,10 +164,10 @@ void test("extensions hub connections tab includes MCP test flow", async () => {
     "utf8",
   );
 
-  assert.match(source, /label: "MCP servers"/);
-  assert.match(source, /\+ Add server/);
-  assert.match(source, /createConfigRow\("Availability"/);
-  assert.match(source, /scopeSummary\.textContent = "Scope controls"/);
+  assert.match(source, /label: t\("extensions-hub-connections\.mcpSection"\)/);
+  assert.match(source, /extensions-hub-connections\.addServer/);
+  assert.match(source, /createConfigRow\(t\("extensions-hub-connections\.availability"\)/);
+  assert.match(source, /scopeSummary\.textContent = t\("extensions-hub-connections\.scope-controls"\)/);
   assert.match(source, /probeMcpServer/);
 });
 
@@ -228,9 +228,9 @@ void test("status bar keeps model, thinking, context, and mode without rules\/pr
 void test("sidebar utilities menu includes extensions label", async () => {
   const sidebarSource = await readFile(new URL("../src/ui/pi-sidebar.ts", import.meta.url), "utf8");
 
-  assert.match(sidebarSource, /aria-label="Settings and tools"/);
-  assert.match(sidebarSource, /\bExtensions\b/);
-  assert.match(sidebarSource, /\bFiles\b/);
+  assert.match(sidebarSource, /aria-label=\$\{t\("sidebar\.utilities\.aria"\)\}/);
+  assert.match(sidebarSource, /sidebar\.menu\.extensions/);
+  assert.match(sidebarSource, /sidebar\.menu\.files/);
   assert.doesNotMatch(sidebarSource, /Extensions…/);
   assert.doesNotMatch(sidebarSource, /Files…/);
   assert.doesNotMatch(sidebarSource, /Add-ons…/);
@@ -258,8 +258,8 @@ void test("extensions hub groups connections, plugins, and skills with tabs", as
     "utf8",
   );
 
-  assert.match(hubSource, /title:\s*"Extensions"/);
-  assert.match(hubSource, /Connections, plugins, and skills that extend Pi/);
+  assert.match(hubSource, /title:\s*t\("extensions-hub\.title"\)/);
+  assert.match(hubSource, /extensions-hub\.subtitle/);
   assert.match(hubSource, /dataset\.hubTab/);
   assert.match(hubSource, /dataset\.hubPanel/);
   assert.match(connectionsSource, /Web search/);
@@ -300,10 +300,10 @@ void test("resume overlay surfaces recently closed tabs and taskpane wires reope
   const resumeSource = await readFile(new URL("../src/commands/builtins/resume-overlay.ts", import.meta.url), "utf8");
   const initSource = await readFile(new URL("../src/taskpane/init.ts", import.meta.url), "utf8");
 
-  assert.match(resumeSource, /Recently closed/);
+  assert.match(resumeSource, /resume\.recentlyClosed/);
   assert.match(resumeSource, /getRecentlyClosedItems\?: \(\) => readonly ResumeRecentlyClosedItem\[]/);
   assert.match(resumeSource, /onReopenRecentlyClosed\?: \(item: ResumeRecentlyClosedItem\) => Promise<boolean>/);
-  assert.match(resumeSource, /REOPENS in new tab/i);
+  assert.match(resumeSource, /resume\.recentlyClosedMeta/);
 
   assert.match(initSource, /getRecentlyClosedItems:\s*\(\)\s*=>\s*recentlyClosed\.snapshot\(\)/);
   assert.match(initSource, /onReopenRecentlyClosed:\s*async \(item\) =>/);
@@ -321,7 +321,7 @@ void test("settings builtins route to unified settings overlay", async () => {
   assert.match(settingsSource, /showSettingsDialog\(\{ section: "logins" \}\)/);
 
   assert.match(settingsSource, /name:\s*"yolo"/);
-  assert.match(settingsSource, /Toggle execution mode \(Auto vs Confirm\)/);
+  assert.match(settingsSource, /command\.settings\.mode/);
   assert.match(settingsSource, /Usage:\s*\/yolo/);
 });
 
@@ -359,12 +359,12 @@ void test("settings overlay serializes open flow and adopts shared proxy + execu
   assert.match(settingsOverlaySource, /settingsDialogOpenInFlight/);
   assert.match(settingsOverlaySource, /pendingSectionFocus/);
   assert.match(settingsOverlaySource, /await settingsDialogOpenInFlight/);
-  assert.match(settingsOverlaySource, /Saved provider state is temporarily unavailable/);
+  assert.match(settingsOverlaySource, /settings\.warning\.provider_state/);
   assert.match(settingsOverlaySource, /createToggleRow/);
   assert.match(settingsOverlaySource, /createConfigRow/);
   assert.match(settingsOverlaySource, /createCallout/);
-  assert.match(settingsOverlaySource, /"Auto mode"/);
-  assert.match(settingsOverlaySource, /"Fork model switch into new tab"/);
+  assert.match(settingsOverlaySource, /settings\.section\.execution\.auto_mode/);
+  assert.match(settingsOverlaySource, /settings\.section\.advanced\.fork_label/);
   assert.doesNotMatch(settingsOverlaySource, /text:\s*"Save"/);
 });
 
@@ -425,8 +425,8 @@ void test("recovery overlay includes manual full-backup action", async () => {
   const overlaySource = await readFile(new URL("../src/commands/builtins/recovery-overlay.ts", import.meta.url), "utf8");
 
   assert.match(overlaySource, /onCreateManualFullBackup\?: \(\) => Promise<ManualFullBackupSummary>/);
-  assert.match(overlaySource, /createButton\("Download backup"/);
-  assert.match(overlaySource, /Backup downloaded:/);
+  assert.match(overlaySource, /createButton\(t\("recovery\.downloadBackup"\)/);
+  assert.match(overlaySource, /recovery\.toast\.backupDownloaded/);
   assert.match(overlaySource, /retentionInput\.max = String\(MAX_RECOVERY_ENTRIES\)/);
 });
 

@@ -27,6 +27,7 @@ import { isWebSearchDetails, type WebSearchDetails } from "../tools/tool-details
 import { validateWebSearchApiKey } from "../tools/web-search.js";
 import { AlertTriangle, Check, Copy, Search, lucide } from "./lucide-icons.js";
 import { showToast } from "./toast.js";
+import { t } from "../language/index.js";
 
 const PROXY_COMMAND = "npx pi-for-excel-proxy";
 
@@ -67,7 +68,7 @@ function createCopyableCommand(command: string): HTMLDivElement {
   const copyBtn = document.createElement("button");
   copyBtn.type = "button";
   copyBtn.className = "pi-search-setup__copy";
-  copyBtn.title = "Copy command";
+  copyBtn.title = t("bridge-setup.copyCommandTitle");
   copyBtn.setAttribute("aria-label", "Copy command");
   copyBtn.replaceChildren(lucide(Copy));
 
@@ -76,7 +77,7 @@ function createCopyableCommand(command: string): HTMLDivElement {
   copyBtn.addEventListener("click", () => {
     copyToClipboard(command, () => {
       copyBtn.replaceChildren(lucide(Check));
-      copyBtn.title = "Copied";
+      copyBtn.title = t("bridge-setup.copiedTitle");
       copyBtn.setAttribute("aria-label", "Copied");
 
       if (resetTimeout !== null) {
@@ -85,7 +86,7 @@ function createCopyableCommand(command: string): HTMLDivElement {
 
       resetTimeout = setTimeout(() => {
         copyBtn.replaceChildren(lucide(Copy));
-        copyBtn.title = "Copy command";
+        copyBtn.title = t("bridge-setup.copyCommandTitle");
         copyBtn.setAttribute("aria-label", "Copy command");
         resetTimeout = null;
       }, 1400);
@@ -103,12 +104,12 @@ function createProxyStep(options: ProxyStepOptions): HTMLDivElement {
   const label = document.createElement("p");
   label.className = "pi-search-setup__step-label";
   label.textContent = options.stepNumber !== null
-    ? `Step ${options.stepNumber} · Start the helper (keep it running):`
-    : "Start the helper (keep it running):";
+    ? t("web-search-setup.stepLabel", { n: String(options.stepNumber) })
+    : t("web-search-setup.startHelper");
 
   const hint = document.createElement("p");
   hint.className = "pi-search-setup__hint";
-  hint.textContent = "Open Terminal · paste · press Enter · wait for \"Proxy listening\"";
+  hint.textContent = t("web-search-setup.helper-instructions");
 
   const actions = document.createElement("div");
   actions.className = "pi-search-setup__actions";
@@ -116,7 +117,7 @@ function createProxyStep(options: ProxyStepOptions): HTMLDivElement {
   const retryBtn = document.createElement("button");
   retryBtn.type = "button";
   retryBtn.className = "pi-search-setup__retry";
-  retryBtn.textContent = "Retry";
+  retryBtn.textContent = t("web-search-setup.retry");
 
   const status = document.createElement("span");
   status.className = "pi-search-setup__status";
@@ -132,8 +133,8 @@ function createProxyStep(options: ProxyStepOptions): HTMLDivElement {
 
     checking = true;
     retryBtn.disabled = true;
-    retryBtn.textContent = "Checking…";
-    status.textContent = "Checking helper…";
+    retryBtn.textContent = t("web-search-setup.checking");
+    status.textContent = t("web-search-setup.checking-helper");
     status.className = "pi-search-setup__status";
 
     const probeUrl = options.proxyBaseUrl ?? DEFAULT_PROXY_URL;
@@ -141,23 +142,23 @@ function createProxyStep(options: ProxyStepOptions): HTMLDivElement {
     void probeProxyReachability(probeUrl, 1500).then(
       (reachable) => {
         if (reachable) {
-          status.textContent = "✓ Helper detected";
+          status.textContent = t("web-search-setup.helperDetected");
           status.className = "pi-search-setup__status is-ok";
           options.onProxyReady?.();
           return;
         }
 
-        status.textContent = "Helper not detected yet — keep terminal open and try again.";
+        status.textContent = t("web-search-setup.helper-not-detected");
         status.className = "pi-search-setup__status is-warn";
       },
       () => {
-        status.textContent = "Could not check helper status right now.";
+        status.textContent = t("web-search-setup.check-failed");
         status.className = "pi-search-setup__status is-error";
       },
     ).finally(() => {
       checking = false;
       retryBtn.disabled = false;
-      retryBtn.textContent = "Retry";
+      retryBtn.textContent = t("web-search-setup.retry");
     });
   });
 
@@ -189,7 +190,7 @@ function createKeyStep(
   signupLink.href = info.signupUrl;
   signupLink.target = "_blank";
   signupLink.rel = "noopener noreferrer";
-  signupLink.textContent = `Get a free key at ${info.signupUrl.replace(/^https?:\/\//u, "")} ↗`;
+  signupLink.textContent = t("web-search-setup.freeKeyLink", { url: info.signupUrl.replace(/^https?:\/\//u, "") });
 
   const inputRow = document.createElement("div");
   inputRow.className = "pi-search-setup__input-row";
@@ -203,7 +204,7 @@ function createKeyStep(
   const saveBtn = document.createElement("button");
   saveBtn.type = "button";
   saveBtn.className = "pi-search-setup__save";
-  saveBtn.textContent = "Save";
+  saveBtn.textContent = t("web-search-setup.save");
 
   const status = document.createElement("span");
   status.className = "pi-search-setup__status";
@@ -219,7 +220,7 @@ function createKeyStep(
 
     const key = input.value.trim();
     if (key.length === 0) {
-      showToast("Enter an API key first.");
+      showToast(t("web-search-setup.toast.enterApiKey"));
       return;
     }
 
@@ -232,7 +233,7 @@ function createKeyStep(
       status.textContent = `⚠️ ${formatWarning} Saving anyway…`;
       status.className = "pi-search-setup__status is-warn";
     } else {
-      status.textContent = "Saving…";
+      status.textContent = t("web-search-setup.saving");
       status.className = "pi-search-setup__status";
     }
 
@@ -240,7 +241,7 @@ function createKeyStep(
       try {
         await saveWebSearchApiKey(settings, provider, key);
 
-        status.textContent = "Validating…";
+        status.textContent = t("web-search-setup.validating");
         status.className = "pi-search-setup__status";
 
         const result = await validateWebSearchApiKey({ provider, apiKey: key, proxyBaseUrl });
@@ -253,11 +254,11 @@ function createKeyStep(
           return;
         }
 
-        status.textContent = `Key saved. Validation: ${result.message}`;
+        status.textContent = t("web-search-setup.keySavedValidation", { message: result.message });
         status.className = "pi-search-setup__status is-warn";
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
-        status.textContent = `Error: ${message}`;
+        status.textContent = t("web-search-setup.error", { message });
         status.className = "pi-search-setup__status is-error";
       } finally {
         saving = false;
@@ -280,7 +281,7 @@ function buildCardContent(
   const { mode, provider, proxyBaseUrl } = context;
 
   const markDone = (): void => {
-    showToast("✓ Web search is ready — ask the assistant to try again.");
+    showToast(t("web-search-setup.toast.ready"));
     onDismiss();
   };
 
@@ -293,12 +294,12 @@ function buildCardContent(
         }),
         createKeyStep(provider, 2, settings, proxyBaseUrl, markDone),
       );
-      return { title: "Web search needs setup", body };
+      return { title: t("web-search-setup.title.needsSetup"), body };
     }
 
     case "needs_key": {
       body.append(createKeyStep(provider, null, settings, proxyBaseUrl, markDone));
-      return { title: "Web search needs an API key", body };
+      return { title: t("web-search-setup.title.needsApiKey"), body };
     }
 
     case "needs_proxy": {
@@ -307,7 +308,7 @@ function buildCardContent(
         proxyBaseUrl,
         onProxyReady: markDone,
       }));
-      return { title: "Web search can't connect", body };
+      return { title: t("web-search-setup.title.cantConnect"), body };
     }
 
     case "wrong_provider": {
@@ -316,23 +317,23 @@ function buildCardContent(
 
       const hint = document.createElement("p");
       hint.className = "pi-search-setup__text";
-      hint.textContent = `No ${currentInfo.apiKeyLabel} found. You have a ${alternativeInfo.title} key configured.`;
+      hint.textContent = t("web-search-setup.noCurrentKeyHaveAlternative", { current: currentInfo.apiKeyLabel, alternative: alternativeInfo.title });
 
       const switchNote = document.createElement("p");
       switchNote.className = "pi-search-setup__text";
-      switchNote.textContent = `Switch to ${alternativeInfo.title} in /tools, or set up a ${currentInfo.title} key below:`;
+      switchNote.textContent = t("web-search-setup.switchOrSetup", { alternative: alternativeInfo.title, current: currentInfo.title });
 
       body.append(hint, switchNote, createKeyStep(provider, null, settings, proxyBaseUrl, markDone));
 
-      return { title: `No ${currentInfo.apiKeyLabel} found`, body };
+      return { title: t("web-search-setup.title.noKeyFound", { label: currentInfo.apiKeyLabel }), body };
     }
 
     case "generic_error": {
       const message = document.createElement("p");
       message.className = "pi-search-setup__text";
-      message.textContent = "Check your API key and proxy configuration in /tools.";
+      message.textContent = t("web-search-setup.check-config");
       body.append(message);
-      return { title: "Web search failed", body };
+      return { title: t("web-search-setup.title.failed"), body };
     }
   }
 }
@@ -361,7 +362,7 @@ export function mountSearchSetupCard(container: HTMLElement, details: WebSearchD
 
   const titleEl = document.createElement("span");
   titleEl.className = "pi-search-setup__title";
-  titleEl.textContent = "Checking search setup…";
+  titleEl.textContent = t("web-search-setup.checking-setup");
 
   header.append(icon, titleEl);
   card.append(header);
@@ -399,7 +400,7 @@ export function mountSearchSetupCard(container: HTMLElement, details: WebSearchD
       const dismissBtn = document.createElement("button");
       dismissBtn.type = "button";
       dismissBtn.className = "pi-search-setup__dismiss";
-      dismissBtn.textContent = "Dismiss";
+      dismissBtn.textContent = t("web-search-setup.dismiss");
       dismissBtn.addEventListener("click", dismiss);
 
       footer.append(dismissBtn);

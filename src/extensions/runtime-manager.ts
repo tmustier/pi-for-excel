@@ -9,6 +9,7 @@
  */
 
 import type { Agent, AgentEvent, AgentTool } from "@earendil-works/pi-agent-core";
+import { t } from "../language/index.js";
 
 import type { ConnectionManager } from "../connections/manager.js";
 import {
@@ -415,7 +416,7 @@ export class ExtensionRuntimeManager {
 
     const apiKey = agent.getApiKey ? await agent.getApiKey(model.provider) : undefined;
     if (!apiKey) {
-      throw new Error(`No API key available for provider "${model.provider}".`);
+      throw new Error(t("runtime.error.noApiKey", { provider: model.provider }));
     }
 
     if (!Array.isArray(request.messages)) {

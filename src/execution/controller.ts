@@ -1,5 +1,6 @@
 /** Runtime controller for persisted execution mode state. */
 
+import { t } from "../language/index.js";
 import {
   dispatchExecutionModeChanged,
   formatExecutionModeLabel,
@@ -43,7 +44,7 @@ export async function createExecutionModeController(
     toggleFromUi: async () => {
       const nextMode = toggleExecutionMode(mode);
       await applyMode(nextMode);
-      options.showToast?.(`${formatExecutionModeLabel(nextMode)} mode.`);
+      options.showToast?.(t("status.mode.toast", { mode: formatExecutionModeLabel(nextMode) }));
     },
   };
 }

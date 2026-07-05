@@ -26,6 +26,7 @@ import { PYTHON_BRIDGE_TOKEN_SETTING_KEY } from "../../tools/python-run.js";
 import { TMUX_BRIDGE_TOKEN_SETTING_KEY } from "../../tools/tmux.js";
 import { isRecord } from "../../utils/type-guards.js";
 import { showToast } from "../../ui/toast.js";
+import { t } from "../../language/index.js";
 import { showExperimentalDialog } from "./experimental-overlay.js";
 
 const ENABLE_ACTIONS = new Set(["enable", "on"]);
@@ -166,23 +167,16 @@ function getLegacyFeatureRedirectMessage(featureArg: string): string | null {
     return null;
   }
 
-  return "External tools (including MCP) are managed in /tools, not /experimental.";
+  return t("experimental.legacy_redirect");
 }
 
 function usageText(): string {
-  return (
-    "Usage: /experimental [list|on|off|toggle] <feature> " +
-    "| /experimental tmux-bridge-url [<url>|show|clear] " +
-    "| /experimental tmux-bridge-token [<token>|show|clear] " +
-    "| /experimental tmux-status " +
-    "| /experimental python-bridge-url [<url>|show|clear] " +
-    "| /experimental python-bridge-token [<token>|show|clear]"
-  );
+  return t("experimental.usage.full");
 }
 
 function featureListText(getFeatureSlugs: () => string[]): string {
   const slugs = getFeatureSlugs();
-  return slugs.length > 0 ? slugs.join(", ") : "(none)";
+  return slugs.length > 0 ? slugs.join(", ") : t("experimental.feature.none");
 }
 
 async function getSettingsStore() {
@@ -422,11 +416,11 @@ async function handleBridgeUrlCommand(
   if (valueTokens.length === 0) {
     const existing = await getValue();
     if (!existing) {
-      showToast(`${bridgeLabel} URL is not set. Example: /experimental ${commandLabel} ${exampleUrl}`);
+      showToast(t("experimental.toast.bridgeUrlMissing", { bridge: bridgeLabel, command: commandLabel, exampleUrl }));
       return;
     }
 
-    showToast(`${bridgeLabel} URL: ${existing}`);
+    showToast(t("experimental.toast.bridgeUrl", { bridge: bridgeLabel, url: existing }));
     return;
   }
 
@@ -434,11 +428,11 @@ async function handleBridgeUrlCommand(
   if (URL_SHOW_ACTIONS.has(firstToken)) {
     const existing = await getValue();
     if (!existing) {
-      showToast(`${bridgeLabel} URL is not set. Example: /experimental ${commandLabel} ${exampleUrl}`);
+      showToast(t("experimental.toast.bridgeUrlMissing", { bridge: bridgeLabel, command: commandLabel, exampleUrl }));
       return;
     }
 
-    showToast(`${bridgeLabel} URL: ${existing}`);
+    showToast(t("experimental.toast.bridgeUrl", { bridge: bridgeLabel, url: existing }));
     return;
   }
 
@@ -448,9 +442,9 @@ async function handleBridgeUrlCommand(
 
     const defaultUrl = defaultBridgeUrlForSetting(configKey);
     if (defaultUrl) {
-      showToast(`${bridgeLabel} URL override cleared. Using default ${defaultUrl}.`);
+      showToast(t("experimental.toast.bridgeUrlOverrideCleared", { bridge: bridgeLabel, defaultUrl }));
     } else {
-      showToast(`${bridgeLabel} URL cleared.`);
+      showToast(t("experimental.toast.bridgeUrlCleared", { bridge: bridgeLabel }));
     }
 
     return;
@@ -460,7 +454,7 @@ async function handleBridgeUrlCommand(
   const normalized = validate(candidateUrl);
   await setValue(normalized);
   notifyConfigChanged(configKey);
-  showToast(`${bridgeLabel} URL set to ${normalized}`);
+  showToast(t("experimental.toast.bridgeUrlSet", { bridge: bridgeLabel, url: normalized }));
 }
 
 async function handleBridgeTokenCommand(
@@ -482,11 +476,11 @@ async function handleBridgeTokenCommand(
   if (valueTokens.length === 0) {
     const existing = await getValue();
     if (!existing) {
-      showToast(`${bridgeLabel} token is not set. Example: /experimental ${commandLabel} <token>`);
+      showToast(t("experimental.toast.bridgeTokenMissing", { bridge: bridgeLabel, command: commandLabel }));
       return;
     }
 
-    showToast(`${bridgeLabel} token: ${maskToken(existing)} (length ${existing.length})`);
+    showToast(t("experimental.toast.bridgeToken", { bridge: bridgeLabel, token: maskToken(existing), length: existing.length }));
     return;
   }
 
@@ -494,18 +488,18 @@ async function handleBridgeTokenCommand(
   if (TOKEN_SHOW_ACTIONS.has(firstToken)) {
     const existing = await getValue();
     if (!existing) {
-      showToast(`${bridgeLabel} token is not set. Example: /experimental ${commandLabel} <token>`);
+      showToast(t("experimental.toast.bridgeTokenMissing", { bridge: bridgeLabel, command: commandLabel }));
       return;
     }
 
-    showToast(`${bridgeLabel} token: ${maskToken(existing)} (length ${existing.length})`);
+    showToast(t("experimental.toast.bridgeToken", { bridge: bridgeLabel, token: maskToken(existing), length: existing.length }));
     return;
   }
 
   if (valueTokens.length === 1 && TOKEN_CLEAR_ACTIONS.has(firstToken)) {
     await clearValue();
     notifyConfigChanged(configKey);
-    showToast(`${bridgeLabel} token cleared.`);
+    showToast(t("experimental.toast.bridgeTokenCleared", { bridge: bridgeLabel }));
     return;
   }
 
@@ -513,7 +507,7 @@ async function handleBridgeTokenCommand(
   const normalized = validate(candidateToken);
   await setValue(normalized);
   notifyConfigChanged(configKey);
-  showToast(`${bridgeLabel} token set (${maskToken(normalized)}).`);
+  showToast(t("experimental.toast.bridgeTokenSet", { bridge: bridgeLabel, token: maskToken(normalized) }));
 }
 
 async function handleTmuxStatusCommand(
@@ -612,7 +606,7 @@ export function createExperimentalCommands(
   return [
     {
       name: "experimental",
-      description: "Manage experimental features",
+      description: t("command.experimental.manage"),
       source: "builtin",
       execute: async (args: string) => {
         try {
@@ -625,7 +619,7 @@ export function createExperimentalCommands(
           const action = tokens[0].toLowerCase();
 
           if (action === "help") {
-            resolved.showToast(`${usageText()} • Features: ${featureListText(resolved.getFeatureSlugs)}`);
+            resolved.showToast(t("experimental.toast.usageFeatures", { usage: usageText(), features: featureListText(resolved.getFeatureSlugs) }));
             return;
           }
 
@@ -636,7 +630,7 @@ export function createExperimentalCommands(
 
           if (TMUX_BRIDGE_URL_ACTIONS.has(action)) {
             await handleBridgeUrlCommand(tokens.slice(1), {
-              bridgeLabel: "Tmux bridge",
+              bridgeLabel: t("experimental.bridge.tmux"),
               commandLabel: "tmux-bridge-url",
               exampleUrl: "https://localhost:3341",
               configKey: TMUX_BRIDGE_URL_SETTING_KEY,
@@ -652,7 +646,7 @@ export function createExperimentalCommands(
 
           if (TMUX_BRIDGE_TOKEN_ACTIONS.has(action)) {
             await handleBridgeTokenCommand(tokens.slice(1), {
-              bridgeLabel: "Tmux bridge",
+              bridgeLabel: t("experimental.bridge.tmux"),
               commandLabel: "tmux-bridge-token",
               configKey: TMUX_BRIDGE_TOKEN_SETTING_KEY,
               getValue: resolved.getTmuxBridgeToken,
@@ -667,7 +661,7 @@ export function createExperimentalCommands(
 
           if (TMUX_STATUS_ACTIONS.has(action)) {
             if (tokens.length > 1) {
-              resolved.showToast("Usage: /experimental tmux-status");
+              resolved.showToast(t("experimental.usage.tmux_status"));
               return;
             }
 
@@ -677,7 +671,7 @@ export function createExperimentalCommands(
 
           if (PYTHON_BRIDGE_URL_ACTIONS.has(action)) {
             await handleBridgeUrlCommand(tokens.slice(1), {
-              bridgeLabel: "Python bridge",
+              bridgeLabel: t("experimental.bridge.python"),
               commandLabel: "python-bridge-url",
               exampleUrl: "https://localhost:3340",
               configKey: PYTHON_BRIDGE_URL_SETTING_KEY,
@@ -693,7 +687,7 @@ export function createExperimentalCommands(
 
           if (PYTHON_BRIDGE_TOKEN_ACTIONS.has(action)) {
             await handleBridgeTokenCommand(tokens.slice(1), {
-              bridgeLabel: "Python bridge",
+              bridgeLabel: t("experimental.bridge.python"),
               commandLabel: "python-bridge-token",
               configKey: PYTHON_BRIDGE_TOKEN_SETTING_KEY,
               getValue: resolved.getPythonBridgeToken,
@@ -718,7 +712,7 @@ export function createExperimentalCommands(
 
           const featureArg = tokens.slice(1).join(" ");
           if (!featureArg) {
-            resolved.showToast(`${usageText()} • Features: ${featureListText(resolved.getFeatureSlugs)}`);
+            resolved.showToast(t("experimental.toast.usageFeatures", { usage: usageText(), features: featureListText(resolved.getFeatureSlugs) }));
             return;
           }
 
@@ -730,9 +724,7 @@ export function createExperimentalCommands(
               return;
             }
 
-            resolved.showToast(
-              `Unknown feature: ${featureArg}. Available: ${featureListText(resolved.getFeatureSlugs)}`,
-            );
+            resolved.showToast(t("experimental.toast.unknownFeature", { feature: featureArg, available: featureListText(resolved.getFeatureSlugs) }));
             return;
           }
 
@@ -749,11 +741,11 @@ export function createExperimentalCommands(
           }
 
           const suffix = feature.wiring === "flag-only"
-            ? " (flag saved; feature not wired yet)"
+            ? t("experimental.toast.flagSavedSuffix")
             : "";
-          resolved.showToast(`${feature.title}: ${enabled ? "enabled" : "disabled"}${suffix}`);
+          resolved.showToast(t("experimental.toast.featureState", { title: feature.title, state: t(enabled ? "experimental.state.enabled" : "experimental.state.disabled"), suffix }));
         } catch (error: unknown) {
-          resolved.showToast(asErrorMessage(error, "Failed to run /experimental command."));
+          resolved.showToast(asErrorMessage(error, t("experimental.toast.runFailed")));
         }
       },
     },

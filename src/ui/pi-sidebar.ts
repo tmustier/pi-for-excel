@@ -27,6 +27,7 @@ import {
   type PayloadShapeSummary,
   type PayloadStats,
 } from "../auth/stream-proxy.js";
+import { t } from "../language/index.js";
 
 export interface EmptyHint {
   /** Short text shown on the button. */
@@ -753,7 +754,7 @@ export class PiSidebar extends LitElement {
             type="button"
             ?hidden=${!this._tabCanScrollLeft}
             @click=${() => this._scrollTabs(-1)}
-            aria-label="Scroll tabs left"
+            aria-label=${t("sidebar.tabs.scroll_left")}
           >
             ‹
           </button>
@@ -779,11 +780,11 @@ export class PiSidebar extends LitElement {
                     }}
                     @keydown=${(event: KeyboardEvent) => this._onSessionTabKeyDown(tab.runtimeId, event)}
                     title=${tab.title}
-                    aria-label=${`Open tab ${tab.title}`}
+                    aria-label=${t("sidebar.tabs.open", { title: tab.title })}
                   >
                     <span class="pi-session-tab__title">${tab.title}</span>
                     ${tab.lockState === "waiting_for_lock"
-                      ? html`<span class="pi-session-tab__lock">lock…</span>`
+                      ? html`<span class="pi-session-tab__lock">${t("sidebar.tabs.lock")}</span>`
                       : nothing}
                     ${tab.isBusy
                       ? html`<span class="pi-session-tab__busy" aria-hidden="true"></span>`
@@ -800,9 +801,9 @@ export class PiSidebar extends LitElement {
                         }}
                         ?disabled=${!canCloseThisTab}
                         title=${tab.lockState === "holding_lock"
-                          ? "Wait for workbook changes to finish"
-                          : "Close tab"}
-                        aria-label="Close tab"
+                          ? t("sidebar.tabs.close.wait")
+                          : t("sidebar.tabs.close")}
+                        aria-label=${t("sidebar.tabs.close")}
                       >
                         ×
                       </button>
@@ -811,14 +812,14 @@ export class PiSidebar extends LitElement {
                 </div>
               `;
             })}
-            <button class="pi-session-tabs__new" @click=${() => this.onCreateTab?.()} aria-label="New tab">+</button>
+            <button class="pi-session-tabs__new" @click=${() => this.onCreateTab?.()} aria-label=${t("sidebar.tabs.new")}>+</button>
           </div>
           <button
             class="pi-session-tabs__scroll pi-session-tabs__scroll--right"
             type="button"
             ?hidden=${!this._tabCanScrollRight}
             @click=${() => this._scrollTabs(1)}
-            aria-label="Scroll tabs right"
+            aria-label=${t("sidebar.tabs.scroll_right")}
           >
             ›
           </button>
@@ -827,8 +828,8 @@ export class PiSidebar extends LitElement {
           <button
             class="pi-utilities-btn"
             @click=${() => this._toggleUtilitiesMenu()}
-            aria-label="Settings and tools"
-            title="Settings and tools"
+            aria-label=${t("sidebar.utilities.aria")}
+            title=${t("sidebar.utilities.aria")}
             aria-haspopup="menu"
             aria-controls=${this._utilitiesMenuId}
             aria-expanded=${this._utilitiesMenuOpen ? "true" : "false"}
@@ -854,7 +855,7 @@ export class PiSidebar extends LitElement {
         class="pi-session-tab-context-menu pi-session-tab-context-menu--floating"
         id=${this._tabContextMenuId}
         role="menu"
-        aria-label=${`Tab actions for ${tab.title}`}
+        aria-label=${t("sidebar.contextmenu.aria", { title: tab.title })}
         style=${this._tabContextMenuPosition
           ? `left:${this._tabContextMenuPosition.x}px;top:${this._tabContextMenuPosition.y}px;`
           : ""}
@@ -869,7 +870,7 @@ export class PiSidebar extends LitElement {
             this.onRenameTab?.(tab.runtimeId);
           }}
         >
-          Rename tab…
+          ${t("sidebar.contextmenu.rename")}
         </button>
         <button
           role="menuitem"
@@ -881,7 +882,7 @@ export class PiSidebar extends LitElement {
             this.onDuplicateTab?.(tab.runtimeId);
           }}
         >
-          Duplicate tab
+          ${t("sidebar.contextmenu.duplicate")}
         </button>
         <button
           role="menuitem"
@@ -893,7 +894,7 @@ export class PiSidebar extends LitElement {
             this.onMoveTabLeft?.(tab.runtimeId);
           }}
         >
-          Move left
+          ${t("sidebar.contextmenu.move_left")}
         </button>
         <button
           role="menuitem"
@@ -905,7 +906,7 @@ export class PiSidebar extends LitElement {
             this.onMoveTabRight?.(tab.runtimeId);
           }}
         >
-          Move right
+          ${t("sidebar.contextmenu.move_right")}
         </button>
         <button
           role="menuitem"
@@ -917,7 +918,7 @@ export class PiSidebar extends LitElement {
             this.onCloseOtherTabs?.(tab.runtimeId);
           }}
         >
-          Close other tabs
+          ${t("sidebar.contextmenu.close_others")}
         </button>
         <div class="pi-session-tab-context-menu__divider" role="separator"></div>
         <button
@@ -930,7 +931,7 @@ export class PiSidebar extends LitElement {
             this.onCloseTab?.(tab.runtimeId);
           }}
         >
-          Close tab
+          ${t("sidebar.contextmenu.close")}
         </button>
       </div>
     `;
@@ -989,36 +990,36 @@ export class PiSidebar extends LitElement {
 
   private _renderUtilitiesMenu() {
     return html`
-      <div class="pi-utilities-menu" id=${this._utilitiesMenuId} role="menu" aria-label="Settings and tools">
+      <div class="pi-utilities-menu" id=${this._utilitiesMenuId} role="menu" aria-label=${t("sidebar.utilities.aria")}>
         <button role="menuitem" class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenSettings?.(); }}>
-          <span class="pi-utilities-menu__item-icon" aria-hidden="true">${icon(Wrench, "sm")}</span> Setup
+          <span class="pi-utilities-menu__item-icon" aria-hidden="true">${icon(Wrench, "sm")}</span> ${t("sidebar.menu.setup")}
         </button>
         <button role="menuitem" class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenExtensions?.(); }}>
-          <span class="pi-utilities-menu__item-icon" aria-hidden="true">${icon(Puzzle, "sm")}</span> Extensions
+          <span class="pi-utilities-menu__item-icon" aria-hidden="true">${icon(Puzzle, "sm")}</span> ${t("sidebar.menu.extensions")}
         </button>
 
         <div class="pi-utilities-menu__divider" role="separator"></div>
 
         <button role="menuitem" class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this._onOpenFilesWorkspace(); }}>
-          <span class="pi-utilities-menu__item-icon" aria-hidden="true">${icon(FileText, "sm")}</span> Files
+          <span class="pi-utilities-menu__item-icon" aria-hidden="true">${icon(FileText, "sm")}</span> ${t("sidebar.menu.files")}
         </button>
         <button role="menuitem" class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenRules?.(); }}>
-          <span class="pi-utilities-menu__item-icon" aria-hidden="true">${icon(Ruler, "sm")}</span> Rules
+          <span class="pi-utilities-menu__item-icon" aria-hidden="true">${icon(Ruler, "sm")}</span> ${t("sidebar.menu.rules")}
         </button>
 
         <div class="pi-utilities-menu__divider" role="separator"></div>
 
         <button role="menuitem" class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenResumePicker?.(); }}>
-          <span class="pi-utilities-menu__item-icon" aria-hidden="true">${icon(RotateCcw, "sm")}</span> Resume session
+          <span class="pi-utilities-menu__item-icon" aria-hidden="true">${icon(RotateCcw, "sm")}</span> ${t("sidebar.menu.resume")}
         </button>
         <button role="menuitem" class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenRecovery?.(); }}>
-          <span class="pi-utilities-menu__item-icon" aria-hidden="true">${icon(Archive, "sm")}</span> Backups
+          <span class="pi-utilities-menu__item-icon" aria-hidden="true">${icon(Archive, "sm")}</span> ${t("sidebar.menu.backups")}
         </button>
 
         <div class="pi-utilities-menu__divider" role="separator"></div>
 
         <button role="menuitem" class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenShortcuts?.(); }}>
-          <span class="pi-utilities-menu__item-icon" aria-hidden="true">${icon(Keyboard, "sm")}</span> Keyboard shortcuts
+          <span class="pi-utilities-menu__item-icon" aria-hidden="true">${icon(Keyboard, "sm")}</span> ${t("sidebar.menu.keyboard_shortcuts")}
         </button>
       </div>
     `;
@@ -1052,9 +1053,9 @@ export class PiSidebar extends LitElement {
 
     if (!latestSnapshot) {
       const hintMd = [
-        "No payload snapshots for this session yet.",
+        t("sidebar.context_pill.no_snapshots"),
         "",
-        "Send a prompt in this tab to capture call-level context details.",
+        t("sidebar.context_pill.hint"),
       ].join("\n");
 
       return html`
@@ -1067,7 +1068,7 @@ export class PiSidebar extends LitElement {
               aria-expanded=${expanded ? "true" : "false"}
               @click=${this._toggleContextPill}
             >
-              <span>Context · no calls yet for this session</span>
+              <span>${t("sidebar.context_pill.no_calls")}</span>
               <span class="pi-context-pill__chevron ${expanded ? "pi-context-pill__chevron--open" : ""}">${icon(ChevronRight, "sm")}</span>
             </button>
             ${expanded ? html`
@@ -1093,13 +1094,13 @@ export class PiSidebar extends LitElement {
     const ctx = expanded ? getLastContext(sessionId) : undefined;
 
     const prefixChangeSummary = latestSnapshot.prefixChanged
-      ? `yes (${formatPrefixChange(latestSnapshot.prefixChangeReasons)})`
-      : "no (stable)";
+      ? t("sidebar.context_pill.yes", { reasons: formatPrefixChange(latestSnapshot.prefixChangeReasons) })
+      : t("sidebar.context_pill.no");
 
     const summaryRows = [
       `| | value |`,
       `|---|---|`,
-      `| Call | #${call}${latestSnapshot.isToolContinuation ? " (continuation)" : " (first)"} |`,
+      `| Call | #${call} (${latestSnapshot.isToolContinuation ? t("sidebar.context_pill.continuation") : t("sidebar.context_pill.first")}) |`,
       `| Prefix changed | ${prefixChangeSummary} |`,
       `| Prefix churn totals | ${this._payloadStats.prefixChanges} calls (model ${this._payloadStats.prefixModelChanges}, system ${this._payloadStats.prefixSystemPromptChanges}, tools ${this._payloadStats.prefixToolChanges}) |`,
       `| System prompt | ${systemChars.toLocaleString()} chars |`,
@@ -1116,11 +1117,11 @@ export class PiSidebar extends LitElement {
       `| call | phase | bundle | tools | prefix | total chars | payload shape |`,
       `|---|---|---|---|---|---|---|`,
       ...sessionSnapshots.slice(-8).reverse().map((snapshot) => {
-        const phase = snapshot.isToolContinuation ? "continuation" : "first";
-        const tools = snapshot.toolsIncluded ? String(snapshot.toolCount) : "stripped";
+        const phase = snapshot.isToolContinuation ? t("sidebar.context_pill.continuation") : t("sidebar.context_pill.first");
+        const tools = snapshot.toolsIncluded ? String(snapshot.toolCount) : t("sidebar.context_pill.stripped");
         const prefix = snapshot.prefixChanged
           ? formatPrefixChange(snapshot.prefixChangeReasons)
-          : "stable";
+          : t("sidebar.context_pill.stable");
         const payloadShape = formatPayloadShape(snapshot.payloadShape);
         return `| #${snapshot.call} | ${phase} | \`${snapshot.toolBundle}\` | ${tools} | ${prefix} | ${snapshot.totalChars.toLocaleString()} | ${payloadShape} |`;
       }),
@@ -1142,7 +1143,7 @@ export class PiSidebar extends LitElement {
     // System prompt rendered as markdown (not in a code fence)
     const systemMd = ctx?.systemPrompt ?? "*(none captured for this call)*";
 
-    const phaseLabel = latestSnapshot.isToolContinuation ? " · continuation" : " · first";
+    const phaseLabel = latestSnapshot.isToolContinuation ? ` · ${t("sidebar.context_pill.continuation")}` : ` · ${t("sidebar.context_pill.first")}`;
 
     return html`
       <div class="px-4">
@@ -1163,18 +1164,18 @@ export class PiSidebar extends LitElement {
                 <markdown-block .content=${summaryMd}></markdown-block>
               </div>
               <div class="pi-context-pill__section">
-                <span class="pi-context-pill__section-label">Recent calls</span>
+                <span class="pi-context-pill__section-label">${t("sidebar.context_pill.recent_calls")}</span>
                 <markdown-block .content=${recentMd}></markdown-block>
               </div>
               <div class="pi-context-pill__section">
                 <div class="pi-context-pill__section-header">
-                  <span class="pi-context-pill__section-label">Tools</span>
-                  ${ctx?.tools ? html`<button class="pi-context-pill__copy" @click=${this._copyToolsJson}>Copy JSON</button>` : nothing}
+                  <span class="pi-context-pill__section-label">${t("sidebar.context_pill.tools")}</span>
+                  ${ctx?.tools ? html`<button class="pi-context-pill__copy" @click=${this._copyToolsJson}>${t("sidebar.context_pill.copy_json")}</button>` : nothing}
                 </div>
                 <markdown-block .content=${toolsTableMd}></markdown-block>
               </div>
               <div class="pi-context-pill__section">
-                <span class="pi-context-pill__section-label">System prompt</span>
+                <span class="pi-context-pill__section-label">${t("sidebar.context_pill.system_prompt")}</span>
                 <markdown-block .content=${systemMd}></markdown-block>
               </div>
             </div>
@@ -1214,13 +1215,13 @@ export class PiSidebar extends LitElement {
         <div class="pi-empty__content">
           <div class="pi-empty__logo">π</div>
           <p class="pi-empty__tagline">
-            Understands and acts in Excel. Remembers how you like things.<br />Builds its own tools.
+            ${t("sidebar.empty.tagline")}
           </p>
           <div class="pi-empty__hints">
             ${this.emptyHints.map((hint) => html`
               <button
                 class="pi-empty__hint"
-                title="Insert into input — edit before sending."
+                title=${t("sidebar.empty.hint.title")}
                 @click=${() => this._applyHintPrompt(hint.prompt)}
               >
                 <span class="pi-empty__hint-label">${hint.label}</span>

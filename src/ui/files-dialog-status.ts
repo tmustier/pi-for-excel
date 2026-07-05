@@ -1,7 +1,8 @@
+import { t } from "../language/index.js";
 import { formatBytes } from "../files/mime.js";
 
 function formatFileCount(totalCount: number): string {
-  return `${totalCount} file${totalCount === 1 ? "" : "s"}`;
+  return t("files-dialog.fileCount", { count: String(totalCount) });
 }
 
 function formatBackendLabel(args: {

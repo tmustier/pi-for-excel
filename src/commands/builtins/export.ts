@@ -8,6 +8,7 @@ import type { Agent, AgentMessage } from "@earendil-works/pi-agent-core";
 import type { SlashCommand } from "../types.js";
 import type { ActiveAgentProvider } from "./model.js";
 import { showToast } from "../../ui/toast.js";
+import { t } from "../../language/index.js";
 import { createCompactionSummaryMessage } from "../../messages/compaction.js";
 import {
   createArchivedMessagesMessage,
@@ -112,14 +113,15 @@ async function exportWorkbookAuditLog(rawArgs: string): Promise<void> {
 
   if (destination === "clipboard") {
     await navigator.clipboard.writeText(json);
-    showToast(
-      `Audit log copied (${entries.length} entries, ${(json.length / 1024).toFixed(0)}KB)`,
-    );
+    showToast(t("export.toast.audit_copied", {
+      count: String(entries.length),
+      size: (json.length / 1024).toFixed(0),
+    }));
     return;
   }
 
   triggerJsonDownload(`pi-audit-log-${new Date().toISOString().slice(0, 10)}.json`, json);
-  showToast(`Downloaded audit log (${entries.length} entries)`);
+  showToast(t("export.toast.audit_downloaded", { count: String(entries.length) }));
 }
 
 // =============================================================================
@@ -406,7 +408,7 @@ export function createExportCommands(getActiveAgent: ActiveAgentProvider): Slash
   return [
     {
       name: "export",
-      description: "Export JSON (session transcript or audit log)",
+      description: t("command.export.json"),
       source: "builtin",
       execute: async (args: string) => {
         const parts = args.trim().split(/\s+/u).filter((part) => part.length > 0);
@@ -416,20 +418,20 @@ export function createExportCommands(getActiveAgent: ActiveAgentProvider): Slash
           try {
             await exportWorkbookAuditLog(parts.slice(1).join(" "));
           } catch (error: unknown) {
-            showToast(`Audit export failed: ${getErrorMessage(error)}`);
+            showToast(t("export.toast.audit_export_failed", { error: getErrorMessage(error) }));
           }
           return;
         }
 
         const agent = getActiveAgent();
         if (!agent) {
-          showToast("No active session");
+          showToast(t("export.toast.no_session"));
           return;
         }
 
         const msgs = agent.state.messages;
         if (msgs.length === 0) {
-          showToast("No messages to export");
+          showToast(t("export.toast.no_messages"));
           return;
         }
 
@@ -468,17 +470,18 @@ export function createExportCommands(getActiveAgent: ActiveAgentProvider): Slash
         if (destination === "clipboard") {
           try {
             await navigator.clipboard.writeText(json);
-            showToast(
-              `Transcript copied (${msgs.length} messages, ${(json.length / 1024).toFixed(0)}KB)`,
-            );
+            showToast(t("export.toast.transcript_copied", {
+              count: String(msgs.length),
+              size: (json.length / 1024).toFixed(0),
+            }));
           } catch (error: unknown) {
-            showToast(`Copy failed: ${getErrorMessage(error)}`);
+            showToast(t("export.toast.copy_failed", { error: getErrorMessage(error) }));
           }
           return;
         }
 
         triggerJsonDownload(`pi-session-${new Date().toISOString().slice(0, 10)}.json`, json);
-        showToast(`Downloaded transcript (${msgs.length} messages)`);
+        showToast(t("export.toast.transcript_downloaded", { count: String(msgs.length) }));
       },
     },
   ];
@@ -499,16 +502,16 @@ export async function runCompactCommand(agent: Agent, args: string): Promise<voi
   } = splitArchivedMessages(allMessages);
 
   if (messagesWithoutArchived.length < 4) {
-    showToast("Too few messages to compact");
+    showToast(t("export.toast.compact.few_messages"));
     return;
   }
 
-  showToast("Compacting to free up context", 60000);
+  showToast(t("export.toast.compact.compacting"), 60000);
 
   const now = Date.now();
   const model = agent.state.model;
   if (!isApiModel(model)) {
-    showToast("No model configured for compaction");
+    showToast(t("export.toast.compact.no_model"));
     return;
   }
 
@@ -519,7 +522,7 @@ export async function runCompactCommand(agent: Agent, args: string): Promise<voi
   // and can crash in browser WebViews due to env key fallbacks using `process`.
   const apiKey = agent.getApiKey ? await agent.getApiKey(model.provider) : undefined;
   if (!apiKey) {
-    showToast(`No API key available for ${model.provider}. Use /login or /settings.`);
+    showToast(t("export.toast.compact.no_api_key", { provider: model.provider }));
     return;
   }
 
@@ -558,7 +561,7 @@ export async function runCompactCommand(agent: Agent, args: string): Promise<voi
     if (memoryCues.cueCount > 0 && !memoryNudgeShown) {
       const cueLabel = memoryCues.cueCount === 1 ? "cue" : "cues";
       showToast(
-        `Compaction reminder: found ${memoryCues.cueCount} memory ${cueLabel} in older messages. Save durable facts to notes/ (rules via instructions) if needed.`,
+        t("export.toast.compact.memory_nudge", { count: memoryCues.cueCount, cue: cueLabel }),
         12000,
       );
       memoryNudgeShown = true;
@@ -601,10 +604,10 @@ export async function runCompactCommand(agent: Agent, args: string): Promise<voi
     const result = await stream.result();
 
     if (result.stopReason === "error") {
-      throw new Error(result.errorMessage || "Compaction failed");
+      throw new Error(result.errorMessage || t("export.toast.compact.failed_error"));
     }
 
-    const summary = extractTextBlocks(result.content).trim() || "Summary unavailable";
+    const summary = extractTextBlocks(result.content).trim() || t("export.toast.compact.summary_unavailable");
 
     return {
       summary,
@@ -645,7 +648,7 @@ export async function runCompactCommand(agent: Agent, args: string): Promise<voi
       if (!isPromptTooLongError(e)) throw e;
 
       // Retry once with more aggressive truncation + keeping a larger recent tail.
-      showToast("Compaction input too large — retrying with stronger truncation", 60000);
+      showToast(t("export.toast.compact.retrying"), 60000);
 
       const keepMoreRecent = Math.min(contextWindow, keepRecentTokens * 2);
       out = await runOnce(aggressiveLimits, keepMoreRecent);
@@ -668,14 +671,14 @@ export async function runCompactCommand(agent: Agent, args: string): Promise<voi
     const iface = document.querySelector<PiSidebar>("pi-sidebar");
     iface?.requestUpdate();
 
-    showToast(`Summarized ${out.summarizedCount} messages`);
+    showToast(t("export.toast.compact.summarized", { count: out.summarizedCount }));
   } catch (e: unknown) {
     const msg = getErrorMessage(e);
     if (msg === "Nothing to compact") {
-      showToast("Nothing to compact");
+      showToast(t("export.toast.compact.nothing"));
       return;
     }
-    showToast(`Compact failed: ${msg}`);
+    showToast(t("export.toast.compact.failed", { msg }));
   }
 }
 
@@ -683,12 +686,12 @@ export function createCompactCommands(getActiveAgent: ActiveAgentProvider): Slas
   return [
     {
       name: "compact",
-      description: "Summarize older messages to free context",
+      description: t("command.export.summarize"),
       source: "builtin",
       execute: async (args: string) => {
         const agent = getActiveAgent();
         if (!agent) {
-          showToast("No active session");
+          showToast(t("export.toast.no_session"));
           return;
         }
 

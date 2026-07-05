@@ -10,6 +10,7 @@ import { getSupportedThinkingLevels } from "@earendil-works/pi-ai/compat";
 import type { PiSidebar } from "../ui/pi-sidebar.js";
 import { moveCursorToEnd } from "../ui/input-focus.js";
 import { isActionToastVisible, showToast } from "../ui/toast.js";
+import { t } from "../language/index.js";
 
 import { doesUiClaimStreamingEscape } from "../utils/escape-guard.js";
 import { blurTextEntryTarget, isTextEntryTarget } from "../utils/text-entry.js";
@@ -332,9 +333,9 @@ export function installKeyboardShortcuts(opts: {
       });
 
       if (restoredCount === 0) {
-        showToast("No queued messages to restore");
+        showToast(t("keyboard-shortcuts.toast.noQueuedMessages"));
       } else {
-        showToast(`Restored ${restoredCount} queued message${restoredCount === 1 ? "" : "s"} to editor`);
+        showToast(t("shortcuts.toast.restoredQueued", { count: restoredCount, plural: restoredCount === 1 ? "" : "s" }));
       }
 
       return true;

@@ -3,6 +3,7 @@
  */
 
 import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
+import { t } from "../language/index.js";
 
 import type { StatusContextWarningSeverity } from "./status-context.js";
 
@@ -33,23 +34,27 @@ interface ContextPopoverOptions {
   onRunCommand: (command: StatusCommandName) => void;
 }
 
-const THINKING_LEVEL_LABELS: Record<ThinkingLevel, string> = {
-  off: "Off",
-  minimal: "Minimal",
-  low: "Low",
-  medium: "Medium",
-  high: "High",
-  xhigh: "Max",
-};
+function getThinkingLevelLabels(): Record<ThinkingLevel, string> {
+  return {
+    off: t("status.thinking.off"),
+    minimal: t("status.thinking.min"),
+    low: t("status.thinking.low"),
+    medium: t("status.thinking.medium"),
+    high: t("status.thinking.high"),
+    xhigh: t("status.thinking.max"),
+  };
+}
 
-const THINKING_LEVEL_HINTS: Record<ThinkingLevel, string> = {
-  off: "Fastest — no reasoning step",
-  minimal: "Quick — light reasoning",
-  low: "Fast — moderate reasoning",
-  medium: "Balanced — solid reasoning",
-  high: "Slow — thorough reasoning",
-  xhigh: "Slowest — deepest reasoning",
-};
+function getThinkingLevelHints(): Record<ThinkingLevel, string> {
+  return {
+    off: t("status.thinking.offHint"),
+    minimal: t("status.thinking.minimalHint"),
+    low: t("status.thinking.lowHint"),
+    medium: t("status.thinking.mediumHint"),
+    high: t("status.thinking.highHint"),
+    xhigh: t("status.thinking.xhighHint"),
+  };
+}
 
 let activePopover: ActivePopoverState | null = null;
 
@@ -183,7 +188,7 @@ export function toggleThinkingPopover(opts: ThinkingPopoverOptions): void {
 
   const title = document.createElement("h3");
   title.className = "pi-status-popover__title";
-  title.textContent = "Thinking level";
+  title.textContent = t("status-popovers.thinkingLevel");
 
   const description = createDescriptionBlock(opts.description);
 
@@ -203,11 +208,11 @@ export function toggleThinkingPopover(opts: ThinkingPopoverOptions): void {
 
     const label = document.createElement("span");
     label.className = "pi-status-popover__item-label";
-    label.textContent = THINKING_LEVEL_LABELS[level];
+    label.textContent = getThinkingLevelLabels()[level];
 
     const hint = document.createElement("span");
     hint.className = "pi-status-popover__item-hint";
-    hint.textContent = THINKING_LEVEL_HINTS[level];
+    hint.textContent = getThinkingLevelHints()[level];
 
     body.append(label, hint);
 
@@ -268,7 +273,7 @@ export function toggleContextPopover(opts: ContextPopoverOptions): void {
 
   const title = document.createElement("h3");
   title.className = "pi-status-popover__title";
-  title.textContent = "Context usage";
+  title.textContent = t("status-popovers.contextUsage");
 
   const description = createDescriptionBlock(opts.description);
 
@@ -294,14 +299,14 @@ export function toggleContextPopover(opts: ContextPopoverOptions): void {
   actions.append(
     createCommandButton({
       command: "compact",
-      title: "Compact conversation",
-      description: "Summarize earlier messages to free space.",
+      title: t("status-popovers.compactTitle"),
+      description: t("status-popovers.compactDesc"),
       onRun: opts.onRunCommand,
     }),
     createCommandButton({
       command: "new",
-      title: "Start new chat",
-      description: "Open a fresh tab with empty context.",
+      title: t("status-popovers.newTitle"),
+      description: t("status-popovers.newDesc"),
       onRun: opts.onRunCommand,
     }),
   );

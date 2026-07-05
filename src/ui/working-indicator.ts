@@ -11,13 +11,16 @@
 import { html, LitElement } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { pickWhimsicalMessage } from "./whimsical-messages.js";
+import { t } from "../language/index.js";
 
-const HINTS: string[] = [
-  "press Esc to stop",
-  "⇧Tab to adjust reasoning depth",
-  "type / to see commands",
-  "⌃O to collapse tool details",
-  "press Enter to redirect Pi",
+// Locale keys — resolved lazily via t() so the active language (set at boot,
+// after module import) is respected. Do NOT call t() at module scope.
+const HINT_KEYS: string[] = [
+  "working.hint.escape",
+  "working.hint.reasoning",
+  "working.hint.commands",
+  "working.hint.collapse",
+  "working.hint.redirect",
 ];
 
 @customElement("pi-working-indicator")
@@ -30,7 +33,7 @@ export class WorkingIndicator extends LitElement {
   /** Optional fixed hint (disables hint rotation). */
   @property({ type: String }) hintText?: string;
 
-  @state() private _whimsical = "Working…";
+  @state() private _whimsical = t("working.default");
   @state() private _hintIndex = 0;
   @state() private _fadingWhimsical = false;
   @state() private _fadingHint = false;
@@ -66,7 +69,7 @@ export class WorkingIndicator extends LitElement {
       this._stopRotation();
       this._fadingWhimsical = false;
       this._fadingHint = false;
-      this._whimsical = this.primaryText || "Working…";
+      this._whimsical = this.primaryText || t("working.default");
       this._hintIndex = 0;
       return;
     }
@@ -75,8 +78,8 @@ export class WorkingIndicator extends LitElement {
     if (this._hintTimer) return;
     this._stopRotation();
     // Reset to initial state — random hint from the start
-    this._whimsical = "Working…";
-    this._hintIndex = Math.floor(Math.random() * HINTS.length);
+    this._whimsical = t("working.default");
+    this._hintIndex = Math.floor(Math.random() * HINT_KEYS.length);
     this._fadingWhimsical = false;
     this._fadingHint = false;
 
@@ -101,7 +104,7 @@ export class WorkingIndicator extends LitElement {
     setTimeout(() => {
       // Random pick, avoiding current
       let next: number;
-      do { next = Math.floor(Math.random() * HINTS.length); } while (next === this._hintIndex && HINTS.length > 1);
+      do { next = Math.floor(Math.random() * HINT_KEYS.length); } while (next === this._hintIndex && HINT_KEYS.length > 1);
       this._hintIndex = next;
       this._fadingHint = false;
     }, 250); // half of the CSS transition duration
@@ -119,7 +122,7 @@ export class WorkingIndicator extends LitElement {
     if (!this.active) return html``;
 
     const left = this.primaryText || this._whimsical;
-    const right = this.hintText || HINTS[this._hintIndex];
+    const right = this.hintText || t(HINT_KEYS[this._hintIndex]);
 
     const fixed = Boolean(this.primaryText || this.hintText);
 

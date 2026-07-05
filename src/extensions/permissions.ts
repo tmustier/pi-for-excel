@@ -4,6 +4,7 @@
  * This module is storage/runtime-facing (no UI strings beyond short labels).
  */
 
+import { t } from "../language/index.js";
 import { classifyExtensionSource } from "../commands/extension-source-policy.js";
 import { isRecord } from "../utils/type-guards.js";
 
@@ -35,241 +36,91 @@ export interface StoredExtensionPermissions {
   downloadFile: boolean;
 }
 
-const EXTENSION_CAPABILITY_DESCRIPTORS = [
-  {
-    capability: "commands.register",
-    permissionKey: "commandsRegister",
-    label: "register commands",
-  },
-  {
-    capability: "tools.register",
-    permissionKey: "toolsRegister",
-    label: "register tools",
-  },
-  {
-    capability: "agent.read",
-    permissionKey: "agentRead",
-    label: "read agent state",
-  },
-  {
-    capability: "agent.events.read",
-    permissionKey: "agentEventsRead",
-    label: "read agent events",
-  },
-  {
-    capability: "ui.overlay",
-    permissionKey: "uiOverlay",
-    label: "show overlays",
-  },
-  {
-    capability: "ui.widget",
-    permissionKey: "uiWidget",
-    label: "show widgets",
-  },
-  {
-    capability: "ui.toast",
-    permissionKey: "uiToast",
-    label: "show toasts",
-  },
-  {
-    capability: "llm.complete",
-    permissionKey: "llmComplete",
-    label: "call LLM completions",
-  },
-  {
-    capability: "http.fetch",
-    permissionKey: "httpFetch",
-    label: "fetch external HTTP resources",
-  },
-  {
-    capability: "storage.readwrite",
-    permissionKey: "storageReadWrite",
-    label: "read/write extension storage",
-  },
-  {
-    capability: "connections.readwrite",
-    permissionKey: "connectionsReadWrite",
-    label: "manage connection definitions and secrets",
-  },
-  {
-    capability: "connections.secrets.read",
-    permissionKey: "connectionsSecretsRead",
-    label: "read raw connection secret values",
-  },
-  {
-    capability: "clipboard.write",
-    permissionKey: "clipboardWrite",
-    label: "write clipboard text",
-  },
-  {
-    capability: "agent.context.write",
-    permissionKey: "agentContextWrite",
-    label: "inject agent context",
-  },
-  {
-    capability: "agent.steer",
-    permissionKey: "agentSteer",
-    label: "steer active agent runs",
-  },
-  {
-    capability: "agent.followup",
-    permissionKey: "agentFollowUp",
-    label: "queue agent follow-up messages",
-  },
-  {
-    capability: "skills.read",
-    permissionKey: "skillsRead",
-    label: "read skill catalog",
-  },
-  {
-    capability: "skills.write",
-    permissionKey: "skillsWrite",
-    label: "install/uninstall external skills",
-  },
-  {
-    capability: "download.file",
-    permissionKey: "downloadFile",
-    label: "trigger file downloads",
-  },
-] as const satisfies ReadonlyArray<{
+interface CapabilityDescriptor {
   capability: string;
   permissionKey: keyof StoredExtensionPermissions;
-  label: string;
-}>;
+  tKey: string;
+}
 
-export type ExtensionCapability = (typeof EXTENSION_CAPABILITY_DESCRIPTORS)[number]["capability"];
+function getCapabilityDescriptors(): readonly CapabilityDescriptor[] {
+  return [
+    { capability: "commands.register",           permissionKey: "commandsRegister",           tKey: "perm.commands.register" },
+    { capability: "tools.register",              permissionKey: "toolsRegister",              tKey: "perm.tools.register" },
+    { capability: "agent.read",                  permissionKey: "agentRead",                  tKey: "perm.agent.read" },
+    { capability: "agent.events.read",           permissionKey: "agentEventsRead",            tKey: "perm.agent.events.read" },
+    { capability: "ui.overlay",                  permissionKey: "uiOverlay",                  tKey: "perm.ui.overlay" },
+    { capability: "ui.widget",                   permissionKey: "uiWidget",                   tKey: "perm.ui.widget" },
+    { capability: "ui.toast",                    permissionKey: "uiToast",                    tKey: "perm.ui.toast" },
+    { capability: "llm.complete",                permissionKey: "llmComplete",                tKey: "perm.llm.complete" },
+    { capability: "http.fetch",                  permissionKey: "httpFetch",                  tKey: "perm.http.fetch" },
+    { capability: "storage.readwrite",           permissionKey: "storageReadWrite",           tKey: "perm.storage.readwrite" },
+    { capability: "connections.readwrite",       permissionKey: "connectionsReadWrite",       tKey: "perm.connections.readwrite" },
+    { capability: "connections.secrets.read",    permissionKey: "connectionsSecretsRead",    tKey: "perm.connections.secrets.read" },
+    { capability: "clipboard.write",             permissionKey: "clipboardWrite",             tKey: "perm.clipboard.write" },
+    { capability: "agent.context.write",         permissionKey: "agentContextWrite",          tKey: "perm.agent.context.write" },
+    { capability: "agent.steer",                 permissionKey: "agentSteer",                 tKey: "perm.agent.steer" },
+    { capability: "agent.followup",              permissionKey: "agentFollowUp",              tKey: "perm.agent.followup" },
+    { capability: "skills.read",                 permissionKey: "skillsRead",                 tKey: "perm.skills.read" },
+    { capability: "skills.write",                permissionKey: "skillsWrite",                tKey: "perm.skills.write" },
+    { capability: "download.file",               permissionKey: "downloadFile",               tKey: "perm.download.file" },
+  ];
+}
 
-export const ALL_EXTENSION_CAPABILITIES: ExtensionCapability[] = EXTENSION_CAPABILITY_DESCRIPTORS.map((descriptor) => {
-  return descriptor.capability;
-});
+export type ExtensionCapability = (ReturnType<typeof getCapabilityDescriptors>)[number]["capability"];
+
+export const ALL_EXTENSION_CAPABILITIES: ExtensionCapability[] = [
+  "commands.register", "tools.register", "agent.read", "agent.events.read",
+  "ui.overlay", "ui.widget", "ui.toast", "llm.complete", "http.fetch",
+  "storage.readwrite", "connections.readwrite", "connections.secrets.read",
+  "clipboard.write", "agent.context.write", "agent.steer", "agent.followup",
+  "skills.read", "skills.write", "download.file",
+];
 
 const TRUSTED_PERMISSIONS: StoredExtensionPermissions = {
-  commandsRegister: true,
-  toolsRegister: true,
-  agentRead: true,
-  agentEventsRead: true,
-  uiOverlay: true,
-  uiWidget: true,
-  uiToast: true,
-  llmComplete: true,
-  httpFetch: true,
-  storageReadWrite: true,
-  connectionsReadWrite: true,
-  connectionsSecretsRead: false,
-  clipboardWrite: true,
-  agentContextWrite: false,
-  agentSteer: false,
-  agentFollowUp: false,
-  skillsRead: true,
-  skillsWrite: false,
-  downloadFile: true,
+  commandsRegister: true, toolsRegister: true, agentRead: true, agentEventsRead: true,
+  uiOverlay: true, uiWidget: true, uiToast: true, llmComplete: true, httpFetch: true,
+  storageReadWrite: true, connectionsReadWrite: true, connectionsSecretsRead: false,
+  clipboardWrite: true, agentContextWrite: false, agentSteer: false, agentFollowUp: false,
+  skillsRead: true, skillsWrite: false, downloadFile: true,
 };
 
 const RESTRICTED_UNTRUSTED_PERMISSIONS: StoredExtensionPermissions = {
-  commandsRegister: true,
-  toolsRegister: false,
-  agentRead: false,
-  agentEventsRead: false,
-  uiOverlay: true,
-  uiWidget: true,
-  uiToast: true,
-  llmComplete: false,
-  httpFetch: false,
-  storageReadWrite: true,
-  connectionsReadWrite: false,
-  connectionsSecretsRead: false,
-  clipboardWrite: true,
-  agentContextWrite: false,
-  agentSteer: false,
-  agentFollowUp: false,
-  skillsRead: true,
-  skillsWrite: false,
-  downloadFile: true,
+  commandsRegister: true, toolsRegister: false, agentRead: false, agentEventsRead: false,
+  uiOverlay: true, uiWidget: true, uiToast: true, llmComplete: false, httpFetch: false,
+  storageReadWrite: true, connectionsReadWrite: false, connectionsSecretsRead: false,
+  clipboardWrite: true, agentContextWrite: false, agentSteer: false, agentFollowUp: false,
+  skillsRead: true, skillsWrite: false, downloadFile: true,
 };
 
-const TRUST_LABELS: Record<StoredExtensionTrust, string> = {
-  builtin: "builtin",
-  "local-module": "local module",
-  "inline-code": "inline code",
-  "remote-url": "remote URL",
-};
-
-function getCapabilityDescriptor(capability: ExtensionCapability): (typeof EXTENSION_CAPABILITY_DESCRIPTORS)[number] {
-  const descriptor = EXTENSION_CAPABILITY_DESCRIPTORS.find((entry) => entry.capability === capability);
+function getCapabilityDescriptor(capability: ExtensionCapability): CapabilityDescriptor {
+  const descriptor = getCapabilityDescriptors().find((entry) => entry.capability === capability);
   if (!descriptor) {
     throw new Error(`Unknown extension capability: ${capability}`);
   }
-
   return descriptor;
 }
 
 function clonePermissions(source: StoredExtensionPermissions): StoredExtensionPermissions {
-  return {
-    commandsRegister: source.commandsRegister,
-    toolsRegister: source.toolsRegister,
-    agentRead: source.agentRead,
-    agentEventsRead: source.agentEventsRead,
-    uiOverlay: source.uiOverlay,
-    uiWidget: source.uiWidget,
-    uiToast: source.uiToast,
-    llmComplete: source.llmComplete,
-    httpFetch: source.httpFetch,
-    storageReadWrite: source.storageReadWrite,
-    connectionsReadWrite: source.connectionsReadWrite,
-    connectionsSecretsRead: source.connectionsSecretsRead,
-    clipboardWrite: source.clipboardWrite,
-    agentContextWrite: source.agentContextWrite,
-    agentSteer: source.agentSteer,
-    agentFollowUp: source.agentFollowUp,
-    skillsRead: source.skillsRead,
-    skillsWrite: source.skillsWrite,
-    downloadFile: source.downloadFile,
-  };
-}
-
-function normalizeBooleanOrFallback(value: unknown, fallback: boolean): boolean {
-  return typeof value === "boolean" ? value : fallback;
+  return { ...source };
 }
 
 export function deriveStoredExtensionTrust(entryId: string, source: ExtensionSourceLike): StoredExtensionTrust {
-  if (source.kind === "inline") {
-    return "inline-code";
-  }
-
+  if (source.kind === "inline") return "inline-code";
   const sourceKind = classifyExtensionSource(source.specifier);
-  if (sourceKind === "remote-url") {
-    return "remote-url";
-  }
-
-  if (sourceKind === "blob-url") {
-    return "inline-code";
-  }
-
-  if (entryId === "builtin.snake" || entryId.startsWith("builtin.")) {
-    return "builtin";
-  }
-
+  if (sourceKind === "remote-url") return "remote-url";
+  if (sourceKind === "blob-url") return "inline-code";
+  if (entryId === "builtin.snake" || entryId.startsWith("builtin.")) return "builtin";
   return "local-module";
 }
 
 export function getDefaultPermissionsForTrust(trust: StoredExtensionTrust): StoredExtensionPermissions {
-  if (trust === "builtin" || trust === "local-module") {
-    return clonePermissions(TRUSTED_PERMISSIONS);
-  }
-
+  if (trust === "builtin" || trust === "local-module") return clonePermissions(TRUSTED_PERMISSIONS);
   return clonePermissions(RESTRICTED_UNTRUSTED_PERMISSIONS);
 }
 
-export function normalizeStoredExtensionPermissions(
-  raw: unknown,
-  trust: StoredExtensionTrust,
-): StoredExtensionPermissions {
+export function normalizeStoredExtensionPermissions(raw: unknown, trust: StoredExtensionTrust): StoredExtensionPermissions {
   const defaults = getDefaultPermissionsForTrust(trust);
-
-  if (!isRecord(raw)) {
-    return defaults;
-  }
-
+  if (!isRecord(raw)) return defaults;
   return {
     commandsRegister: normalizeBooleanOrFallback(raw.commandsRegister, defaults.commandsRegister),
     toolsRegister: normalizeBooleanOrFallback(raw.toolsRegister, defaults.toolsRegister),
@@ -293,43 +144,35 @@ export function normalizeStoredExtensionPermissions(
   };
 }
 
-export function isExtensionCapabilityAllowed(
-  permissions: StoredExtensionPermissions,
-  capability: ExtensionCapability,
-): boolean {
+export function isExtensionCapabilityAllowed(permissions: StoredExtensionPermissions, capability: ExtensionCapability): boolean {
   const descriptor = getCapabilityDescriptor(capability);
   return permissions[descriptor.permissionKey];
 }
 
-export function setExtensionCapabilityAllowed(
-  permissions: StoredExtensionPermissions,
-  capability: ExtensionCapability,
-  allowed: boolean,
-): StoredExtensionPermissions {
+export function setExtensionCapabilityAllowed(permissions: StoredExtensionPermissions, capability: ExtensionCapability, allowed: boolean): StoredExtensionPermissions {
   const descriptor = getCapabilityDescriptor(capability);
-  return {
-    ...permissions,
-    [descriptor.permissionKey]: allowed,
-  };
+  return { ...permissions, [descriptor.permissionKey]: allowed };
 }
 
 export function describeStoredExtensionTrust(trust: StoredExtensionTrust): string {
-  return TRUST_LABELS[trust];
+  return t("perm.trust." + trust);
 }
 
 export function describeExtensionCapability(capability: ExtensionCapability): string {
   const descriptor = getCapabilityDescriptor(capability);
-  return descriptor.label;
+  return t(descriptor.tKey);
 }
 
 export function listAllExtensionCapabilities(): ExtensionCapability[] {
   return [...ALL_EXTENSION_CAPABILITIES];
 }
 
-export function listGrantedExtensionCapabilities(
-  permissions: StoredExtensionPermissions,
-): ExtensionCapability[] {
-  return EXTENSION_CAPABILITY_DESCRIPTORS
+export function listGrantedExtensionCapabilities(permissions: StoredExtensionPermissions): ExtensionCapability[] {
+  return getCapabilityDescriptors()
     .filter((descriptor) => permissions[descriptor.permissionKey])
     .map((descriptor) => descriptor.capability);
+}
+
+function normalizeBooleanOrFallback(value: unknown, fallback: boolean): boolean {
+  return typeof value === "boolean" ? value : fallback;
 }

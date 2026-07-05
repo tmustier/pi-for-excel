@@ -8,6 +8,7 @@
  * Pushes rich structural metadata (headers, named ranges, tables) — not just sheet names + dimensions.
  */
 
+import { t } from "../language/index.js";
 import { Type, type Static } from "@sinclair/typebox";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { excelRun, colToLetter } from "../excel/helpers.js";
@@ -29,7 +30,7 @@ type Params = Static<typeof schema>;
 export function createGetWorkbookOverviewTool(): AgentTool<typeof schema> {
   return {
     name: "get_workbook_overview",
-    label: "Workbook Overview",
+    label: t("tools.workbookOverview"),
     description:
       "Get a structural overview of the workbook: sheet names, dimensions, " +
       "header rows, named ranges, tables, and object counts. Use this at the start of a " +

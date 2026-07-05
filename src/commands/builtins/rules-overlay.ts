@@ -36,6 +36,7 @@ import {
   createOverlayHeader,
 } from "../../ui/overlay-dialog.js";
 import { RULES_OVERLAY_ID } from "../../ui/overlay-ids.js";
+import { t } from "../../language/index.js";
 import { showToast } from "../../ui/toast.js";
 import { formatWorkbookLabel, getWorkbookContext } from "../../workbook/context.js";
 
@@ -49,6 +50,11 @@ const BUILTIN_PRESET_NAMES: NumberPreset[] = [
   "ratio",
   "text",
 ];
+
+function getPresetLabel(presetName: string): string {
+  const key = `rules.preset.${presetName}` as const;
+  return t(key);
+}
 
 function setActiveTab(
   tabButtons: Record<RulesTab, HTMLButtonElement>,
@@ -68,7 +74,7 @@ function setActiveTab(
 }
 
 function formatCounterLabel(chars: number, limit: number): string {
-  return `${chars.toLocaleString()} / ${limit.toLocaleString()} chars`;
+  return t("rules.charsCount", { chars: chars.toLocaleString(), limit: limit.toLocaleString() });
 }
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -183,15 +189,15 @@ function createHeaderPreview(
       const line1 = document.createElementNS(SVG_NS, "tspan");
       line1.setAttribute("x", String(x + 8));
       line1.setAttribute("dy", "0");
-      line1.textContent = "Cost of Goods";
+      line1.textContent = t("rules-overlay.cost-of-goods");
       const line2 = document.createElementNS(SVG_NS, "tspan");
       line2.setAttribute("x", String(x + 8));
       line2.setAttribute("dy", "14");
-      line2.textContent = "Sold";
+      line2.textContent = t("rules-overlay.sold");
       text.append(line1, line2);
     } else {
       text.setAttribute("y", "30");
-      text.textContent = label === "Cost of Goods Sold" ? "Cost of Goods…" : label;
+      text.textContent = label === "Cost of Goods Sold" ? t("rules-overlay.cost-of-goods-ellipsis") : label;
     }
 
     svg.append(rect, text);
@@ -457,7 +463,7 @@ function renderFormatCard(args: {
 
   if (args.onRename) {
     body.appendChild(createLabeledInput({
-      label: "Name",
+      label: t("rules.field.name"),
       value: args.presetName,
       onChange: (value) => {
         args.onRename?.(value);
@@ -468,18 +474,18 @@ function renderFormatCard(args: {
 
   if (args.onDescriptionChange) {
     body.appendChild(createLabeledInput({
-      label: "Description",
+      label: t("rules.field.description"),
       value: args.description ?? "",
       onChange: (value) => {
         args.onDescriptionChange?.(value);
         args.onChange();
       },
-      placeholder: "Optional",
+      placeholder: t("rules.placeholder.optional"),
     }));
   }
 
   const formatInput = createLabeledInput({
-    label: "Format",
+    label: t("rules.field.format"),
     value: args.preset.format,
     onChange: (value) => {
       args.preset.format = value;
@@ -570,7 +576,7 @@ function renderFormatCard(args: {
     const builtinPresetName = args.presetName;
     const restore = el("button", "pi-conventions-link-btn");
     restore.type = "button";
-    restore.textContent = "Custom format — use quick options to reset";
+    restore.textContent = t("rules-overlay.custom-format-tip");
     restore.addEventListener("click", () => {
       const builtDefault = DEFAULT_PRESET_FORMATS[builtinPresetName];
       args.preset.builderParams = {
@@ -585,7 +591,7 @@ function renderFormatCard(args: {
   if (args.onRemove) {
     const removeButton = el("button", "pi-conventions-link-btn pi-conventions-link-btn--danger");
     removeButton.type = "button";
-    removeButton.textContent = "Remove preset";
+    removeButton.textContent = t("rules-overlay.remove-preset");
     removeButton.addEventListener("click", () => {
       args.onRemove?.();
       args.onChange();
@@ -608,7 +614,7 @@ function renderConventionsEditor(
 
   const formatsSection = el("section", "pi-conventions-section");
   const formatsTitle = el("h3", "pi-conventions-section-title");
-  formatsTitle.textContent = "Number formats";
+  formatsTitle.textContent = t("rules-overlay.number-formats");
   formatsSection.append(formatsTitle);
 
   const presetFormats = getPresetSection(draft);
@@ -622,7 +628,7 @@ function renderConventionsEditor(
     presetFormats[presetName] = preset;
 
     formatsSection.appendChild(renderFormatCard({
-      title: presetName,
+      title: getPresetLabel(presetName),
       presetName,
       preset,
       onChange: requestRerender,
@@ -654,7 +660,7 @@ function renderConventionsEditor(
 
   const addCustomButton = el("button", "pi-overlay-btn pi-overlay-btn--ghost");
   addCustomButton.type = "button";
-  addCustomButton.textContent = "Add custom format";
+  addCustomButton.textContent = t("rules-overlay.add-custom-format");
   addCustomButton.addEventListener("click", () => {
     addCustomPreset(draft);
     requestRerender();
@@ -663,7 +669,7 @@ function renderConventionsEditor(
 
   const colorsSection = el("section", "pi-conventions-section");
   const colorsTitle = el("h3", "pi-conventions-section-title");
-  colorsTitle.textContent = "Colors (font color)";
+  colorsTitle.textContent = t("rules-overlay.colors-font-color");
   colorsSection.append(colorsTitle);
 
   const colorConventions = getColorConventions(draft);
@@ -708,7 +714,7 @@ function renderConventionsEditor(
 
   const headerSection = el("section", "pi-conventions-section");
   const headerTitle = el("h3", "pi-conventions-section-title");
-  headerTitle.textContent = "Header style";
+  headerTitle.textContent = t("rules-overlay.header-style");
   headerSection.append(headerTitle);
 
   const headerStyle = getHeaderStyle(draft);
@@ -735,7 +741,7 @@ function renderConventionsEditor(
       headerStyle.fontColor = value;
     }),
     createToggleButton({
-      label: "Bold",
+      label: t("rules.field.bold"),
       value: headerBold,
       onChange: (value) => {
         headerStyle.bold = value;
@@ -743,7 +749,7 @@ function renderConventionsEditor(
       },
     }),
     createToggleButton({
-      label: "Wrap text",
+      label: t("rules.field.wrap_text"),
       value: headerWrap,
       onChange: (value) => {
         headerStyle.wrapText = value;
@@ -754,7 +760,7 @@ function renderConventionsEditor(
 
   const visualSection = el("section", "pi-conventions-section");
   const visualTitle = el("h3", "pi-conventions-section-title");
-  visualTitle.textContent = "Default font";
+  visualTitle.textContent = t("rules-overlay.default-font");
   visualSection.append(visualTitle);
 
   const visualDefaults = getVisualDefaults(draft);
@@ -763,7 +769,7 @@ function renderConventionsEditor(
 
   visualSection.append(
     createLabeledInput({
-      label: "Font name",
+      label: t("rules.field.font_name"),
       value: fontName,
       onChange: (value) => {
         visualDefaults.fontName = value;
@@ -771,7 +777,7 @@ function renderConventionsEditor(
       },
     }),
     createLabeledNumberInput({
-      label: "Font size",
+      label: t("rules.field.font_size"),
       value: fontSize,
       min: 6,
       max: 72,
@@ -812,9 +818,9 @@ export async function showRulesDialog(opts?: {
 
   const { header } = createOverlayHeader({
     onClose: closeOverlay,
-    closeLabel: "Close rules",
-    title: "Rules",
-    subtitle: "Set guidance for all files, this workbook, and formatting conventions.",
+    closeLabel: t("rules.close"),
+    title: t("rules.title"),
+    subtitle: t("rules.subtitle"),
   });
 
   const tabs = document.createElement("div");
@@ -823,19 +829,19 @@ export async function showRulesDialog(opts?: {
 
   const userTab = document.createElement("button");
   userTab.type = "button";
-  userTab.textContent = "All my files";
+  userTab.textContent = t("rules-overlay.all-my-files");
   userTab.className = "pi-overlay-tab";
   userTab.setAttribute("role", "tab");
 
   const workbookTab = document.createElement("button");
   workbookTab.type = "button";
-  workbookTab.textContent = "This file";
+  workbookTab.textContent = t("rules-overlay.this-file");
   workbookTab.className = "pi-overlay-tab";
   workbookTab.setAttribute("role", "tab");
 
   const conventionsTab = document.createElement("button");
   conventionsTab.type = "button";
-  conventionsTab.textContent = "Formats";
+  conventionsTab.textContent = t("rules-overlay.formats");
   conventionsTab.className = "pi-overlay-tab";
   conventionsTab.setAttribute("role", "tab");
 
@@ -843,7 +849,7 @@ export async function showRulesDialog(opts?: {
 
   const workbookTag = document.createElement("div");
   workbookTag.className = "pi-overlay-workbook-tag";
-  workbookTag.textContent = `Workbook: ${workbookLabel}`;
+  workbookTag.textContent = t("rules.workbook_tag", { label: workbookLabel });
 
   const hint = document.createElement("div");
   hint.className = "pi-overlay-hint";
@@ -869,12 +875,12 @@ export async function showRulesDialog(opts?: {
 
   const cancelBtn = document.createElement("button");
   cancelBtn.type = "button";
-  cancelBtn.textContent = "Cancel";
+  cancelBtn.textContent = t("rules-overlay.cancel");
   cancelBtn.className = "pi-overlay-btn pi-overlay-btn--ghost";
 
   const saveBtn = document.createElement("button");
   saveBtn.type = "button";
-  saveBtn.textContent = "Save";
+  saveBtn.textContent = t("rules-overlay.save");
   saveBtn.className = "pi-overlay-btn pi-overlay-btn--primary";
 
   actions.append(cancelBtn, saveBtn);
@@ -902,14 +908,14 @@ export async function showRulesDialog(opts?: {
     if (activeTab === "user") {
       textarea.value = userDraft;
       textarea.placeholder =
-        "Your preferences and habits, e.g.\n• Always use EUR for currencies\n• Format dates as dd-mmm-yyyy\n• Check circular references after writes";
+                t("rules.placeholder.user");
 
       const count = userDraft.length;
       counter.textContent = formatCounterLabel(count, USER_RULES_SOFT_LIMIT);
       counter.classList.toggle("is-warning", count > USER_RULES_SOFT_LIMIT);
 
       hint.textContent =
-        "Guidance given to Pi in all your conversations. Pi can also update these when you tell it your preferences — e.g. \"always use EUR\".";
+        t("rules.guidance.default");
       workbookTag.hidden = true;
       return;
     }
@@ -917,22 +923,22 @@ export async function showRulesDialog(opts?: {
     if (activeTab === "workbook") {
       textarea.value = workbookDraft;
       textarea.placeholder =
-        "Notes about this workbook's structure, e.g.\n• DCF model for Acme Corp, FY2025\n• Revenue assumptions in Inputs!B5:B15\n• Don't modify the Summary sheet";
+                t("rules.placeholder.workbook");
 
       const count = workbookDraft.length;
       counter.textContent = formatCounterLabel(count, WORKBOOK_RULES_SOFT_LIMIT);
       counter.classList.toggle("is-warning", count > WORKBOOK_RULES_SOFT_LIMIT);
 
       hint.textContent = !workbookId
-        ? "Can't identify this workbook right now — try saving the file first."
-        : "Guidance given to Pi only when it reads this file.";
+        ? t("rules.hint.workbook.no_id")
+        : t("rules.guidance.workbook");
 
       workbookTag.hidden = false;
       return;
     }
 
     workbookTag.hidden = true;
-    hint.textContent = "Set preset formats, font colors, header style, and default font.";
+    hint.textContent = t("rules-overlay.hint-formats");
     rerenderConventions();
   };
 
@@ -993,7 +999,7 @@ export async function showRulesDialog(opts?: {
         await opts.onSaved();
       }
 
-      showToast("Rules saved");
+      showToast(t("rules.toast.saved"));
       closeOverlay();
     })();
   });

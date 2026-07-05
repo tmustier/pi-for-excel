@@ -7,6 +7,7 @@ import { formatExecutionModeLabel, toggleExecutionMode } from "../../execution/m
 import { showToast } from "../../ui/toast.js";
 import type { SlashCommand } from "../types.js";
 import { showSettingsDialog } from "./overlays.js";
+import { t } from "../../language/index.js";
 
 export interface SettingsCommandActions {
   openInstructionsEditor: () => Promise<void>;
@@ -53,7 +54,7 @@ export function createSettingsCommands(actions: SettingsCommandActions): SlashCo
   return [
     {
       name: "settings",
-      description: "Settings (providers and advanced options)",
+      description: t("command.settings.desc"),
       source: "builtin",
       execute: () => {
         void showSettingsDialog();
@@ -61,7 +62,7 @@ export function createSettingsCommands(actions: SettingsCommandActions): SlashCo
     },
     {
       name: "login",
-      description: "Open provider settings",
+      description: t("command.settings.providers"),
       source: "builtin",
       execute: async () => {
         await showSettingsDialog({ section: "logins" });
@@ -69,7 +70,7 @@ export function createSettingsCommands(actions: SettingsCommandActions): SlashCo
     },
     {
       name: "yolo",
-      description: "Toggle execution mode (Auto vs Confirm)",
+      description: t("command.settings.mode"),
       source: "builtin",
       execute: async (args: string) => {
         const command = parseExecutionModeArg(args);
@@ -99,7 +100,7 @@ export function createSettingsCommands(actions: SettingsCommandActions): SlashCo
     },
     {
       name: "rules",
-      description: "Edit rules for Pi (all files + this file)",
+      description: t("command.settings.rules"),
       source: "builtin",
       execute: async () => {
         await actions.openInstructionsEditor();

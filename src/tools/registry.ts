@@ -19,6 +19,7 @@ import { createSearchWorkbookTool } from "./search-workbook.js";
 import { createModifyStructureTool } from "./modify-structure.js";
 import { createFormatCellsTool } from "./format-cells.js";
 import { createConditionalFormatTool } from "./conditional-format.js";
+import { createChartsTool } from "./charts.js";
 import { createTraceDependenciesTool } from "./trace-dependencies.js";
 import { createExplainFormulaTool } from "./explain-formula.js";
 import { createViewSettingsTool } from "./view-settings.js";
@@ -56,6 +57,7 @@ const CORE_TOOL_FACTORIES = {
   modify_structure: () => createModifyStructureTool(),
   format_cells: () => createFormatCellsTool(),
   conditional_format: () => createConditionalFormatTool(),
+  charts: () => createChartsTool(),
   trace_dependencies: () => createTraceDependenciesTool(),
   explain_formula: () => createExplainFormulaTool(),
   view_settings: () => createViewSettingsTool(),

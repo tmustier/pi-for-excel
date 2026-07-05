@@ -4,18 +4,20 @@
 
 export type ResumeDialogTarget = "new_tab" | "replace_current";
 
+import { t } from "../../language/index.js";
+
 export function getResumeTargetLabel(target: ResumeDialogTarget): string {
   if (target === "replace_current") {
-    return "Replace current tab";
+    return t("resume.replaceCurrent");
   }
 
-  return "Open in new tab";
+  return t("resume.openInNewTab");
 }
 
 export function getCrossWorkbookResumeConfirmMessage(target: ResumeDialogTarget): string {
   if (target === "replace_current") {
-    return "This session was created for a different workbook. Resume anyway and replace the current chat?";
+    return t("resume.crossWorkbookReplace");
   }
 
-  return "This session was created for a different workbook. Resume anyway in a new tab?";
+  return t("resume.crossWorkbookNewTab");
 }

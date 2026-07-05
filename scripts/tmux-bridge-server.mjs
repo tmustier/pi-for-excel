@@ -994,6 +994,9 @@ server.listen(PORT, HOST, () => {
 
   if (authToken) {
     console.log("[pi-for-excel] auth: bearer token required for POST /v1/tmux");
+  } else {
+    console.warn("[pi-for-excel] auth: no bearer token configured — any local process on this machine can drive this bridge.");
+    console.warn("[pi-for-excel] recommended: set TMUX_BRIDGE_TOKEN=<secret> and mirror it in Pi via /experimental tmux-bridge-token <secret>");
   }
 
   if (backend.mode === "tmux") {

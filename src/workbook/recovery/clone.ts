@@ -1,6 +1,7 @@
 /** Clone helpers for recovery state snapshots. */
 
 import type {
+  RecoveryChartState,
   RecoveryCommentThreadState,
   RecoveryConditionalColorScaleCriterion,
   RecoveryConditionalColorScaleState,
@@ -127,6 +128,29 @@ export function cloneRecoveryCommentThreadState(state: RecoveryCommentThreadStat
     content: state.content,
     resolved: state.resolved,
     replies: [...state.replies],
+  };
+}
+
+export function cloneRecoveryChartState(state: RecoveryChartState): RecoveryChartState {
+  if (state.kind === "chart_absent") {
+    return {
+      kind: "chart_absent",
+      sheetName: state.sheetName,
+      name: state.name,
+      chartId: state.chartId,
+    };
+  }
+
+  return {
+    kind: "chart_present",
+    sheetName: state.sheetName,
+    name: state.name,
+    chartType: state.chartType,
+    title: { ...state.title },
+    legend: { ...state.legend },
+    xAxisTitle: state.xAxisTitle ? { ...state.xAxisTitle } : undefined,
+    yAxisTitle: state.yAxisTitle ? { ...state.yAxisTitle } : undefined,
+    position: { ...state.position },
   };
 }
 

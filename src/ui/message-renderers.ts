@@ -9,6 +9,7 @@ import { html } from "lit";
 import { createRef, ref } from "lit/directives/ref.js";
 import { registerMessageRenderer } from "@earendil-works/pi-web-ui/dist/components/message-renderer-registry.js";
 import { renderCollapsibleToolCardHeader } from "./tool-card-header.js";
+import { t } from "../language/index.js";
 
 import { formatCompactionSummaryExtent, type CompactionSummaryMessage } from "../messages/compaction.js";
 import type { ArchivedMessagesMessage } from "../messages/archived-history.js";
@@ -25,7 +26,7 @@ registerMessageRenderer("archivedMessages", {
 
     const title = html`
       <span class="pi-tool-card__title">
-        <strong>Show earlier messages</strong>
+        <strong>${t("message-renderers.showEarlier")}</strong>
         <span class="pi-tool-card__detail-text">${message.archivedChatMessageCount} chat message${message.archivedChatMessageCount === 1 ? "" : "s"}</span>
       </span>
     `;
@@ -47,9 +48,9 @@ registerMessageRenderer("archivedMessages", {
               </div>
 
               <div class="pi-tool-card__section">
-                <div class="pi-tool-card__section-label">Archived history (UI only)</div>
+                <div class="pi-tool-card__section-label">${t("message-renderers.archived")}</div>
                 ${message.archivedMessages.length === 0
-                  ? html`<div class="pi-tool-card__plain-text">(no archived messages)</div>`
+                  ? html`<div class="pi-tool-card__plain-text">${t("message-renderers.noArchived")}</div>`
                   : html`
                     <message-list
                       .messages=${message.archivedMessages}
@@ -74,7 +75,7 @@ registerMessageRenderer("compactionSummary", {
 
     const title = html`
       <span class="pi-tool-card__title">
-        <strong>Summarized ${formatCompactionSummaryExtent(message)}</strong>
+        <strong>${t("message-renderers.summarized", { extent: formatCompactionSummaryExtent(message) })}</strong>
       </span>
     `;
 
@@ -95,9 +96,9 @@ registerMessageRenderer("compactionSummary", {
               </div>
 
               <div class="pi-tool-card__section">
-                <div class="pi-tool-card__section-label">Summary</div>
+                <div class="pi-tool-card__section-label">${t("message-renderers.summaryLabel")}</div>
                 <div class="pi-tool-card__markdown">
-                  <markdown-block .content=${message.summary || "(no summary)"}></markdown-block>
+                  <markdown-block .content=${message.summary || t("message-renderers.noSummary")}></markdown-block>
                 </div>
               </div>
             </div>

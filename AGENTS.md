@@ -23,6 +23,20 @@ Notes for agents working in this repo.
   - `src/context/tool-disclosure.ts`
   - `src/prompt/system-prompt.ts` (if documented tool list changes)
 
+### UI i18n (`t()` layer)
+- All user-visible UI strings go through `t()` from `src/language/index.ts`.
+  `en.json` is the source of truth (values must exactly match the intended
+  English UI); `zh-CN.json` mirrors the key set. Parity + usage enforced by
+  `tests/i18n-locales.test.ts` (runs in `test:context`).
+- **Never call `t()` at module scope** — language is set at boot, after module
+  import; module-scope calls freeze to English. Store keys and resolve lazily
+  (see `src/ui/whimsical-messages.ts`).
+- **Never route agent-facing strings through `t()`**: system prompt, tool
+  names/descriptions/schemas, context injection, compaction prompts. Tool
+  `label` is UI-only and safe. See prompt-caching notes below.
+- zh-CN is AI-generated; keep the "AI 翻译" marker on the language option
+  (`settings.section.language.zh`).
+
 ### Tool results (`ToolResultMessage.details`)
 - Keep human-readable output in `result.content`.
 - Put stable machine metadata in `result.details`.

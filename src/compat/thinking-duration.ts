@@ -4,7 +4,7 @@
  * Upstream thinking-block currently leaves completed labels as "Thinking…".
  * We patch finished blocks to:
  * - "Thought for Xs" / "Thought for Xm Xs" when timing is available
- * - "Thought" fallback for restored history with no timing data
+ * - t("compat.thought") fallback for restored history with no timing data
  */
 
 interface ThinkingBlockState {
@@ -12,6 +12,8 @@ interface ThinkingBlockState {
   wasStreaming: boolean;
   completedLabel: string | null;
 }
+
+import { t } from "../language/index.js";
 
 const stateByBlock = new WeakMap<HTMLElement, ThinkingBlockState>();
 
@@ -111,7 +113,7 @@ function syncThinkingBlockLabel(block: HTMLElement): void {
     } else {
       const currentText = labelEl.textContent?.trim() ?? "";
       if (looksLikeThinkingLabel(currentText)) {
-        nextLabel = "Thought";
+        nextLabel = t("compat.thought");
         state.completedLabel = nextLabel;
       }
     }

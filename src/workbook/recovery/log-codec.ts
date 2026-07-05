@@ -4,11 +4,13 @@
 
 import { isRecord } from "../../utils/type-guards.js";
 import {
+  cloneRecoveryChartState,
   cloneRecoveryCommentThreadState,
   cloneRecoveryConditionalFormatRules,
   cloneRecoveryFormatRangeState,
   cloneRecoveryModifyStructureState,
   isRecoveryConditionalFormatRule,
+  type RecoveryChartState,
   type RecoveryCommentThreadState,
   type RecoveryConditionalFormatRule,
   type RecoveryFormatBorderState,
@@ -28,9 +30,22 @@ export interface ParsePersistedSnapshotsOptions {
   maxEntries: number;
 }
 
+/**
+ * Persisted snapshot shape. Chart-state snapshots are stored without the range
+ * grids so that codecs predating "chart_state" fail their range_values grid
+ * check and drop the entry, instead of misreading it as an empty range backup
+ * after a version downgrade.
+ */
+export type PersistedWorkbookRecoverySnapshot =
+  & Omit<WorkbookRecoverySnapshot, "beforeValues" | "beforeFormulas">
+  & {
+    beforeValues?: unknown[][];
+    beforeFormulas?: unknown[][];
+  };
+
 export interface PersistedWorkbookRecoveryPayload {
   version: 1;
-  snapshots: WorkbookRecoverySnapshot[];
+  snapshots: PersistedWorkbookRecoverySnapshot[];
 }
 
 function defaultCreateId(): string {
@@ -54,6 +69,7 @@ function isWorkbookRecoveryToolName(value: unknown): value is WorkbookRecoveryTo
     value === "format_cells" ||
     value === "conditional_format" ||
     value === "comments" ||
+    value === "charts" ||
     value === "modify_structure" ||
     value === "restore_snapshot"
   );
@@ -66,6 +82,7 @@ function isGrid(value: unknown): value is unknown[][] {
 function parseWorkbookRecoverySnapshotKind(value: unknown): WorkbookRecoverySnapshotKind {
   return value === "conditional_format_rules" ||
       value === "comment_thread" ||
+      value === "chart_state" ||
       value === "format_cells_state" ||
       value === "modify_structure_state" ||
       value === "range_values"
@@ -297,6 +314,53 @@ function isRecoveryCommentThreadState(value: unknown): value is RecoveryCommentT
   return value.replies.every((reply) => typeof reply === "string");
 }
 
+function isRecoveryChartTitleState(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  return typeof value.text === "string" && typeof value.visible === "boolean";
+}
+
+function isRecoveryChartLegendState(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  return typeof value.position === "string" && typeof value.visible === "boolean";
+}
+
+function isRecoveryChartPositionState(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  return (
+    typeof value.top === "number" &&
+    typeof value.left === "number" &&
+    typeof value.width === "number" &&
+    typeof value.height === "number"
+  );
+}
+
+function isRecoveryChartState(value: unknown): value is RecoveryChartState {
+  if (!isRecord(value)) return false;
+
+  if (value.kind === "chart_absent") {
+    return (
+      typeof value.sheetName === "string" &&
+      typeof value.name === "string" &&
+      (value.chartId === undefined || typeof value.chartId === "string")
+    );
+  }
+
+  if (value.kind === "chart_present") {
+    return (
+      typeof value.sheetName === "string" &&
+      typeof value.name === "string" &&
+      typeof value.chartType === "string" &&
+      isRecoveryChartTitleState(value.title) &&
+      isRecoveryChartLegendState(value.legend) &&
+      (value.xAxisTitle === undefined || isRecoveryChartTitleState(value.xAxisTitle)) &&
+      (value.yAxisTitle === undefined || isRecoveryChartTitleState(value.yAxisTitle)) &&
+      isRecoveryChartPositionState(value.position)
+    );
+  }
+
+  return false;
+}
+
 function parseWorkbookRecoverySnapshot(value: unknown): WorkbookRecoverySnapshot | null {
   if (!isRecord(value)) return null;
 
@@ -341,6 +405,10 @@ function parseWorkbookRecoverySnapshot(value: unknown): WorkbookRecoverySnapshot
     ? cloneRecoveryCommentThreadState(value.commentThreadState)
     : undefined;
 
+  const chartState = isRecoveryChartState(value.chartState)
+    ? cloneRecoveryChartState(value.chartState)
+    : undefined;
+
   if (snapshotKind === "format_cells_state" && !formatRangeState) {
     return null;
   }
@@ -354,6 +422,10 @@ function parseWorkbookRecoverySnapshot(value: unknown): WorkbookRecoverySnapshot
   }
 
   if (snapshotKind === "comment_thread" && !commentThreadState) {
+    return null;
+  }
+
+  if (snapshotKind === "chart_state" && !chartState) {
     return null;
   }
 
@@ -411,6 +483,10 @@ function parseWorkbookRecoverySnapshot(value: unknown): WorkbookRecoverySnapshot
     snapshot.commentThreadState = commentThreadState;
   }
 
+  if (snapshotKind === "chart_state" && chartState) {
+    snapshot.chartState = cloneRecoveryChartState(chartState);
+  }
+
   return snapshot;
 }
 
@@ -440,11 +516,20 @@ export function parsePersistedSnapshots(
     .slice(0, maxEntries);
 }
 
+function toPersistedSnapshot(snapshot: WorkbookRecoverySnapshot): PersistedWorkbookRecoverySnapshot {
+  if (snapshot.snapshotKind !== "chart_state") {
+    return snapshot;
+  }
+
+  const { beforeValues: _beforeValues, beforeFormulas: _beforeFormulas, ...rest } = snapshot;
+  return rest;
+}
+
 export function createPersistedWorkbookRecoveryPayload(
   snapshots: WorkbookRecoverySnapshot[],
 ): PersistedWorkbookRecoveryPayload {
   return {
     version: 1,
-    snapshots,
+    snapshots: snapshots.map(toPersistedSnapshot),
   };
 }
