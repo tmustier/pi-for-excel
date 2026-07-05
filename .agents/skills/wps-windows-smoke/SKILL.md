@@ -28,6 +28,10 @@ Be explicit about the test level:
 - Real WPS requests add-in-root `/index.html`; it must load `main.js`. Do not assume `wpsjs publish` or WPS generates this entrypoint.
 - WPS's publish-page validator expects `ribbon.xml` to start with `<customUI`; an XML declaration prefix can make the row show `无效` even when WPS can fetch the file.
 - WPS 12.1.0.26200 embeds a WebView with `crypto.getRandomValues` but no `crypto.randomUUID`; keep the app bootstrap compatibility patch installed.
+- If `key.pem`/`cert.pem` exist in the repo root, Vite serves HTTPS. The WPS harness examples use plain HTTP (`http://10.0.2.2:3141/...`); use an isolated worktree without those certs, or deliberately test an HTTPS WPS URL with certificate trust handled and record that choice.
+- For product-level chat proof, verify the prompt is visibly in the real bottom composer before sending. It is easy in the cramped WPS pane to type into the formula bar, a suggestion card, or the model/thinking selector instead.
+- The dev `/__pi-auth` restore path proves credential reuse from Pi's local auth file; it is **not** the same as proving a fresh browser OAuth login from a clean WPS profile.
+- The existing `background-verify` bridge is loopback/HTTPS-oriented for local Excel taskpanes; do not assume it can drive a WPS guest taskpane over `10.0.2.2` until a WPS-compatible mode is added.
 - Do **not** turn historical evidence into the canonical test. The first successful run used a table prompt, but future runs should test the feature actually under review.
 
 ## Local VM conventions
@@ -141,7 +145,7 @@ VNCDOTOOL="$VM/.venv/bin/vncdotool"
 "$VNCDOTOOL" -s 127.0.0.1::5907 capture "$VM/<feature>-after.png"
 ```
 
-If the capture is black, the Windows display is probably locked/asleep. Wake/unlock the console before treating the capture as evidence; do not rely on a black screenshot.
+If the capture is black, the Windows display is probably locked/asleep. Wake/unlock the console before treating the capture as evidence; do not rely on a black screenshot. VNC password entry is fragile with keyboard layout differences; if you temporarily enable auto-logon through WinRM on the disposable VM, remove `DefaultPassword`/`ForceAutoLogon` and set `AutoAdminLogon=0` during cleanup.
 
 ## General workflow
 
@@ -170,9 +174,9 @@ If the capture is black, the Windows display is probably locked/asleep. Wake/unl
    - **`execute_wps_js`:** in the real Pi sidebar, run a minimal JSAPI snippet that reads workbook/sheet metadata or performs the specific mutation under test, then verify the returned JSON.
    - **Workbook tool support:** in the real Pi sidebar, seed only the range needed, call the relevant typed tool/prompt, and verify workbook state with WPS UI or `execute_wps_js` readback.
    - **Unsupported tools:** deliberately invoke the unsupported WPS path and confirm a typed `unsupported_host_tool` error, not an Office.js fallback.
-   - **Auth/model flow:** verify provider setup and a small prompt response without exposing tokens or local credential paths.
+   - **Auth/model flow:** verify provider setup and a small prompt response without exposing tokens or local credential paths. State whether this was a fresh OAuth login or dev auth restore via `/__pi-auth`.
    - **Regression reproduction:** reproduce the exact issue steps first, then rerun after the fix with the same fixture.
-9. Capture evidence tied to the target feature. Include at least one screenshot or video plus a text log/command output. Include residual risks or gaps instead of calling unrelated behavior “covered.”
+9. Capture evidence tied to the target feature. Include at least one screenshot or video plus a text log/command output. For chat-driven writes, capture both the prompt visible in the real composer and the final selected cell/formula bar. Include residual risks or gaps instead of calling unrelated behavior “covered.”
 
 ## Historical evidence from first successful route
 
