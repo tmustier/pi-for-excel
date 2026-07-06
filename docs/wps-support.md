@@ -181,6 +181,9 @@ Strict product-level proof is blocked in the current personal WPS
 
 - A real local publish-page install can show and approve the WPS trust modal.
   It writes `publish.xml` and `authwebsite.xml` for `http://127.0.0.1:3889`.
+- Logging into a WPS account in the VM is not sufficient. After logged-in
+  publish install, WPS still wrote `authaddin.json` with `enable:false` and the
+  publish page reported the add-in as `异常` (abnormal) after launch.
 - On WPS launch, the client fetches `ribbon.xml`; when `authaddin.json` is left
   untouched WPS may write `enable:false` and avoid loading the full add-in.
 - Forcing `authaddin.json` to `enable:true` is not a valid product proof. In
@@ -190,20 +193,24 @@ Strict product-level proof is blocked in the current personal WPS
   (`pi.svg` fetched), while `onAction` does not fire.
 - The same block reproduces with a minimal official-style ET add-in containing
   only `index.html`, `main.js`, `ribbon.xml`, `OnAddinLoad`, and an `OnAction`
-  that calls `alert('MIN_ACTION_FIRED')`. This rules out Pi taskpane code,
-  provider/auth code, and nested `js/ribbon.js` as the cause.
+  that calls `alert('MIN_ACTION_FIRED')`. After logged-in trust install, the
+  minimal add-in still regenerated `enable:false`; forcing it to `true` loaded
+  `manifest.xml`/`ribbon.xml`/`index.html`/`main.js` but recreated
+  `jsaddinblockhost.ini`. This rules out Pi taskpane code, provider/auth code,
+  nested `js/ribbon.js`, and unauthenticated WPS visitor mode as the sole cause.
 
 Do not claim product-complete WPS support until this trust/action blocker is
-resolved through a supported WPS account, enterprise-managed deployment, WPS
-365 configuration, or another WPS-supported approval path.
+resolved through enterprise-managed deployment, WPS 365 configuration, or
+another WPS-supported approval path beyond ordinary personal-account login.
 
 ## Open verification gaps
 
 - Enterprise/OEM `jsplugins.xml` deployment remains unsmoked on a managed WPS
   build; personal WPS 12.1.0.16910+ should use publish mode.
-- China WPS personal visitor-mode/account requirements for third-party JS
-  add-in actions remain unresolved. The current VM shows a visitor-mode login
-  banner while actions are suppressed.
+- China WPS personal account login alone does not unlock third-party JS add-in
+  actions in the current VM. Visitor mode is no longer the only plausible cause;
+  enterprise/WPS 365 policy or another WPS-supported approval path likely needs
+  testing.
 - The WPS taskpane docs currently document `Application.CreateTaskpane(url)`;
   the skeleton also tries the `wps.CreateTaskPane(url)` form referenced in WPS
   add-in guidance for compatibility.
