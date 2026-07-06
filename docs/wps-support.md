@@ -198,10 +198,35 @@ Strict product-level proof is blocked in the current personal WPS
   `manifest.xml`/`ribbon.xml`/`index.html`/`main.js` but recreated
   `jsaddinblockhost.ini`. This rules out Pi taskpane code, provider/auth code,
   nested `js/ribbon.js`, and unauthenticated WPS visitor mode as the sole cause.
+- The block also reproduces with a clean current official ET template built from
+  `wpsjs@2.2.3` (including generated `functions.json`). After logged-in trust
+  install, a first WPS Spreadsheets launch fetched `ribbon.xml` only, wrote
+  `authaddin.json` with `enable:false`, and recreated `jsaddinblockhost.ini`.
+  This further points to WPS host/version/config state rather than Pi packaging.
+- Public WPS documentation and forum research match this risk profile:
+  - WPS personal `>= 12.1.0.16910` intentionally restricts the old
+    `oem.ini`/`jsplugins.xml` path; personal installs are expected to use
+    `wpsjs publish` instead.
+  - WPS' own docs link a signed `oem.ini` replacement and a `清理替换失败标记.bat`
+    helper for older/un-upgraded tooling, which implies WPS maintains protected
+    config/failure-marker state. Hand-appending `[Support] JsApiPlugin=true` to
+    `cfgs/oem.ini` is not enough proof because WPS signs/verifies profile files.
+  - WPS community threads report publish-page instability around the local
+    `127.0.0.1:58890` relay, browser Private Network Access/CORS, and newer WPS
+    versions showing `无效`/`异常` even when files are browser-accessible.
+  - A WPS staff post documents a recent add-in regression in x86/x64 builds
+    (`12.1.0.23542` / `12.1.0.23539`) where `async` ribbon callbacks prevented
+    custom ribbon display. Pi's WPS callbacks are not `async`, but the thread is
+    evidence that current WPS add-in loading has version-sensitive host bugs.
+  - Another community thread reports WPS auto-upgrade breaking add-ins and says
+    using the 32-bit WPS build worked better than 64-bit; the current harness is
+    Windows ARM / `win-arm64ec`, so architecture-specific add-in host behavior is
+    now a prime suspect.
 
 Do not claim product-complete WPS support until this trust/action blocker is
-resolved through enterprise-managed deployment, WPS 365 configuration, or
-another WPS-supported approval path beyond ordinary personal-account login.
+resolved on a WPS build/architecture that WPS' JS add-in host actually supports,
+through enterprise-managed deployment/WPS 365 configuration, a signed official
+WPS config path, or vendor guidance beyond ordinary personal-account login.
 
 ## Open verification gaps
 
@@ -209,8 +234,8 @@ another WPS-supported approval path beyond ordinary personal-account login.
   build; personal WPS 12.1.0.16910+ should use publish mode.
 - China WPS personal account login alone does not unlock third-party JS add-in
   actions in the current VM. Visitor mode is no longer the only plausible cause;
-  enterprise/WPS 365 policy or another WPS-supported approval path likely needs
-  testing.
+  enterprise/WPS 365 policy, signed WPS config state, a non-ARM/non-64-bit WPS
+  build, or another WPS-supported approval path likely needs testing.
 - The WPS taskpane docs currently document `Application.CreateTaskpane(url)`;
   the skeleton also tries the `wps.CreateTaskPane(url)` form referenced in WPS
   add-in guidance for compatibility.
