@@ -3,7 +3,7 @@
     <tabs>
       <tab id="PiForWpsTab" label="Pi">
         <group id="PiForWpsGroup" label="Pi">
-          <button id="PiOpenTaskpaneButton" label="Open Pi" size="large" onAction="OpenPi" />
+          <button id="PiOpenTaskpaneButton" label="Open Pi" size="large" onAction="OnAction" enabled="true" getImage="GetImage" visible="true" />
         </group>
       </tab>
     </tabs>

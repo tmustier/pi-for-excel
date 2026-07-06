@@ -7,7 +7,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { DEFAULT_LOCAL_PROXY_URL, resolveDefaultProxyUrl } from "../src/auth/proxy-validation.ts";
+import {
+  DEFAULT_LOCAL_PROXY_URL,
+  WPS_DEV_HOST_GATEWAY_PROXY_URL,
+  resolveDefaultProxyUrl,
+  resolveRuntimeDefaultProxyUrl,
+} from "../src/auth/proxy-validation.ts";
 import { filterProvidersByAllowlist, resolveAllowedProviderIds } from "../src/ui/provider-allowlist.ts";
 
 void test("resolveDefaultProxyUrl falls back to local default when unset", () => {
@@ -32,6 +37,21 @@ void test("resolveDefaultProxyUrl refuses http (mixed content) and garbage", () 
   assert.equal(resolveDefaultProxyUrl("http://pi-proxy.example.com:3003"), DEFAULT_LOCAL_PROXY_URL);
   assert.equal(resolveDefaultProxyUrl("pi-proxy.example.com"), DEFAULT_LOCAL_PROXY_URL);
   assert.equal(resolveDefaultProxyUrl("https://"), DEFAULT_LOCAL_PROXY_URL);
+});
+
+void test("resolveRuntimeDefaultProxyUrl uses host-gateway proxy for WPS HTTP harness", () => {
+  assert.equal(
+    resolveRuntimeDefaultProxyUrl({ hostKind: "wps", location: { protocol: "http:", hostname: "10.0.2.2" } }),
+    WPS_DEV_HOST_GATEWAY_PROXY_URL,
+  );
+  assert.equal(
+    resolveRuntimeDefaultProxyUrl({ hostKind: "office", location: { protocol: "http:", hostname: "10.0.2.2" } }),
+    DEFAULT_LOCAL_PROXY_URL,
+  );
+  assert.equal(
+    resolveRuntimeDefaultProxyUrl({ hostKind: "wps", location: { protocol: "https:", hostname: "10.0.2.2" } }),
+    DEFAULT_LOCAL_PROXY_URL,
+  );
 });
 
 const PROVIDERS = [
