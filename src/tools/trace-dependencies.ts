@@ -91,8 +91,8 @@ async function loadLeafNode(
   sheet.load("name");
   await context.sync();
 
-  const rawFmt: unknown = range.numberFormat[0][0];
-  const rawFormula: unknown = range.formulas[0][0];
+  const rawFmt: DynamicValue = range.numberFormat[0][0];
+  const rawFormula: DynamicValue = range.formulas[0][0];
 
   return {
     address: qualifiedAddress(sheet.name, range.address),
@@ -193,7 +193,7 @@ async function buildDependentFormulaCandidates(
   const formulaCandidates: FormulaDependentCandidate[] = [];
 
   for (const loaded of loadedRanges) {
-    const formulasGrid: unknown = loaded.range.formulas;
+    const formulasGrid: DynamicValue = loaded.range.formulas;
     if (!Array.isArray(formulasGrid)) continue;
 
     for (const [rowIndex, rowValue] of formulasGrid.entries()) {
@@ -339,7 +339,7 @@ async function traceCell(
   await context.sync();
 
   const fullAddr = qualifiedAddress(sheet.name, range.address);
-  const rawFmt: unknown = range.numberFormat[0][0];
+  const rawFmt: DynamicValue = range.numberFormat[0][0];
   const numberFormat = typeof rawFmt === "string" && rawFmt !== "" ? rawFmt : undefined;
 
   if (visited.has(fullAddr)) {
@@ -353,8 +353,8 @@ async function traceCell(
   }
   visited.add(fullAddr);
 
-  const rawFormula: unknown = range.formulas[0][0];
-  const value: unknown = range.values[0][0];
+  const rawFormula: DynamicValue = range.formulas[0][0];
+  const value: DynamicValue = range.values[0][0];
   const formula = typeof rawFormula === "string" && rawFormula.startsWith("=")
     ? rawFormula
     : undefined;
@@ -490,7 +490,7 @@ export function createTraceDependenciesTool(): AgentTool<typeof schema> {
             truncated: traceState.truncated,
           },
         };
-      } catch (e: unknown) {
+      } catch (e) {
         return {
           content: [{ type: "text", text: `Error tracing dependencies: ${getErrorMessage(e)}` }],
           details: undefined,

@@ -1,3 +1,7 @@
+function isSkillsActivationStorePayloadShape(value: DynamicValue): value is DynamicObject {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 /**
  * Agent Skill activation persistence.
  *
@@ -5,16 +9,15 @@
  */
 
 import type { AgentSkillDefinition } from "./types.js";
-import { isRecord } from "../utils/type-guards.js";
 
 export const SKILL_ACTIVATION_STORAGE_KEY = "skills.activation.v1";
 
 export interface SkillActivationSettingsStore {
-  get: (key: string) => Promise<unknown>;
+  get: (key: string) => Promise<DynamicValue>;
 }
 
 export interface SkillActivationMutableSettingsStore extends SkillActivationSettingsStore {
-  set: (key: string, value: unknown) => Promise<void>;
+  set: (key: string, value: DynamicValue) => Promise<void>;
 }
 
 interface StoredSkillActivationDocument {
@@ -31,7 +34,7 @@ function normalizeSkillName(name: string): string {
   return normalized;
 }
 
-function normalizeSkillNamesList(raw: unknown): string[] {
+function normalizeSkillNamesList(raw: DynamicValue): string[] {
   if (!Array.isArray(raw)) {
     return [];
   }
@@ -54,12 +57,12 @@ function normalizeSkillNamesList(raw: unknown): string[] {
   return Array.from(normalized).sort((left, right) => left.localeCompare(right));
 }
 
-function parseStoredDisabledSkillNames(raw: unknown): string[] {
+function parseStoredDisabledSkillNames(raw: DynamicValue): string[] {
   if (Array.isArray(raw)) {
     return normalizeSkillNamesList(raw);
   }
 
-  if (!isRecord(raw) || raw.version !== 1) {
+  if (!isSkillsActivationStorePayloadShape(raw) || raw.version !== 1) {
     return [];
   }
 

@@ -39,7 +39,7 @@ export type { CoreToolName } from "./names.js";
 
 // We intentionally erase per-tool parameter typing at the list boundary.
 // Each tool still validates its own schema at runtime.
-export type AnyCoreTool = AgentTool<TSchema, unknown>;
+export type AnyCoreTool = AgentTool<TSchema, DynamicValue>;
 
 export interface CreateCoreToolsOptions {
   hostKind?: SpreadsheetHostKind;

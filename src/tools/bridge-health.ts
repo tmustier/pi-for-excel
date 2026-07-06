@@ -1,3 +1,7 @@
+function isToolsBridgeHealthPayloadShape(value: DynamicValue): value is DynamicObject {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 /**
  * Bridge health probing for system prompt Local Services section.
  *
@@ -9,7 +13,6 @@
  * status (python version, libreoffice availability, tmux sessions).
  */
 
-import { isRecord } from "../utils/type-guards.js";
 
 import {
   fetchBridgeHealthJson,
@@ -57,7 +60,7 @@ export type LocalServiceEntry = PythonServiceEntry | TmuxServiceEntry;
 export interface BridgeHealthDependencies {
   getPythonBridgeUrl?: () => Promise<string | undefined>;
   getTmuxBridgeUrl?: () => Promise<string | undefined>;
-  fetchHealth?: (url: string) => Promise<unknown>;
+  fetchHealth?: (url: string) => Promise<DynamicValue>;
 }
 
 // ---------------------------------------------------------------------------
@@ -78,7 +81,7 @@ function parseLibreofficeVersion(rawVersion: string | undefined): string | undef
   return matched?.[0];
 }
 
-function parsePythonHealth(payload: unknown): PythonServiceEntry {
+function parsePythonHealth(payload: DynamicValue): PythonServiceEntry {
   const base: PythonServiceEntry = {
     name: "python",
     displayName: "Python (native)",
@@ -86,16 +89,16 @@ function parsePythonHealth(payload: unknown): PythonServiceEntry {
     skillName: "python-bridge",
   };
 
-  if (!isRecord(payload)) return base;
+  if (!isToolsBridgeHealthPayloadShape(payload)) return base;
   if (payload.ok !== true) return base;
 
   // Extract python version
-  const python = isRecord(payload.python) ? payload.python : undefined;
+  const python = isToolsBridgeHealthPayloadShape(payload.python) ? payload.python : undefined;
   const pythonAvailable = python?.available === true;
   const pythonVersion = typeof python?.version === "string" ? python.version : undefined;
 
   // Extract libreoffice availability/version
-  const libreoffice = isRecord(payload.libreoffice) ? payload.libreoffice : undefined;
+  const libreoffice = isToolsBridgeHealthPayloadShape(payload.libreoffice) ? payload.libreoffice : undefined;
   const libreofficeAvailable = libreoffice?.available === true;
   const libreofficeVersionRaw = typeof libreoffice?.version === "string" ? libreoffice.version : undefined;
   const libreofficeVersion = parseLibreofficeVersion(libreofficeVersionRaw);
@@ -117,7 +120,7 @@ function parsePythonHealth(payload: unknown): PythonServiceEntry {
   };
 }
 
-function parseTmuxHealth(payload: unknown): TmuxServiceEntry {
+function parseTmuxHealth(payload: DynamicValue): TmuxServiceEntry {
   const base: TmuxServiceEntry = {
     name: "tmux",
     displayName: "Terminal (tmux)",
@@ -125,7 +128,7 @@ function parseTmuxHealth(payload: unknown): TmuxServiceEntry {
     skillName: "tmux-bridge",
   };
 
-  if (!isRecord(payload)) return base;
+  if (!isToolsBridgeHealthPayloadShape(payload)) return base;
   if (payload.ok !== true) return base;
 
   const tmuxVersion = typeof payload.tmuxVersion === "string" ? payload.tmuxVersion : undefined;

@@ -154,7 +154,7 @@ export function cloneRecoveryChartState(state: RecoveryChartState): RecoveryChar
   };
 }
 
-function cloneUnknownGrid(grid: readonly unknown[][]): unknown[][] {
+function cloneUnknownGrid(grid: readonly DynamicValue[][]): DynamicValue[][] {
   return grid.map((row) => [...row]);
 }
 

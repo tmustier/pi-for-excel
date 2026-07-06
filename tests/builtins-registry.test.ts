@@ -16,27 +16,27 @@ import {
 } from "../src/extensions/permissions.ts";
 
 class MemorySettingsStore {
-  private readonly values = new Map<string, unknown>();
+  private readonly values = new Map<string, DynamicValue>();
 
-  get(key: string): Promise<unknown> {
+  get(key: string): Promise<DynamicValue> {
     return Promise.resolve(this.values.has(key) ? this.values.get(key) ?? null : null);
   }
 
-  set(key: string, value: unknown): Promise<void> {
+  set(key: string, value: DynamicValue): Promise<void> {
     this.values.set(key, value);
     return Promise.resolve();
   }
 
-  readRaw(key: string): unknown {
+  readRaw(key: string): DynamicValue {
     return this.values.has(key) ? this.values.get(key) ?? null : null;
   }
 
-  writeRaw(key: string, value: unknown): void {
+  writeRaw(key: string, value: DynamicValue): void {
     this.values.set(key, value);
   }
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+function isBuiltinsRegistryTestPayloadShape(value: DynamicValue): value is DynamicObject {
   return typeof value === "object" && value !== null;
 }
 
@@ -516,8 +516,8 @@ void test("extension registry migrates legacy v1 entries to v2 permissions", asy
   assert.equal(entries[0].permissions.agentRead, false);
 
   const migrated = settings.readRaw(EXTENSIONS_REGISTRY_STORAGE_KEY);
-  assert.ok(isRecord(migrated));
-  if (!isRecord(migrated)) {
+  assert.ok(isBuiltinsRegistryTestPayloadShape(migrated));
+  if (!isBuiltinsRegistryTestPayloadShape(migrated)) {
     return;
   }
 

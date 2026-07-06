@@ -1,3 +1,7 @@
+function isToolsToolDetailsPayloadShape(value: DynamicValue): value is DynamicObject {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 /**
  * Structured tool result metadata for the UI.
  *
@@ -7,7 +11,6 @@
 
 import type { WorkbookCellChangeSummary } from "../audit/cell-diff.js";
 import type { ConnectionToolErrorDetails } from "../connections/types.js";
-import { isRecord } from "../utils/type-guards.js";
 
 export interface RecoveryCheckpointDetails {
   status: "checkpoint_created" | "not_available";
@@ -129,7 +132,7 @@ export type TraceDependencySource = "api" | "formula_scan" | "mixed" | "none";
 
 export interface DepNodeDetail {
   address: string;
-  value: unknown;
+  value: DynamicValue;
   /** Excel number format string, e.g. "0.00%", "#,##0", "$#,##0.00". */
   numberFormat?: string;
   formula?: string;
@@ -172,7 +175,7 @@ export interface ReadRangeCsvDetails {
   /** 1-indexed starting row */
   startRow: number;
   /** Raw values grid from Excel */
-  values: unknown[][];
+  values: DynamicValue[][];
   /** Pre-serialized CSV string for the copy button */
   csv: string;
 }
@@ -469,12 +472,12 @@ export type BridgeGateErrorDetails =
     error: string;
   });
 
-function isOptionalString(value: unknown): value is string | undefined {
+function isOptionalString(value: DynamicValue): value is string | undefined {
   return value === undefined || typeof value === "string";
 }
 
-function isWebSearchFallbackDetails(value: unknown): value is WebSearchFallbackDetails {
-  if (!isRecord(value)) return false;
+function isWebSearchFallbackDetails(value: DynamicValue): value is WebSearchFallbackDetails {
+  if (!isToolsToolDetailsPayloadShape(value)) return false;
 
   return (
     typeof value.fromProvider === "string" &&
@@ -483,38 +486,38 @@ function isWebSearchFallbackDetails(value: unknown): value is WebSearchFallbackD
   );
 }
 
-function isOptionalWebSearchFallbackDetails(value: unknown): value is WebSearchFallbackDetails | undefined {
+function isOptionalWebSearchFallbackDetails(value: DynamicValue): value is WebSearchFallbackDetails | undefined {
   return value === undefined || isWebSearchFallbackDetails(value);
 }
 
-function isOptionalNumber(value: unknown): value is number | undefined {
+function isOptionalNumber(value: DynamicValue): value is number | undefined {
   return value === undefined || typeof value === "number";
 }
 
-function isOptionalBoolean(value: unknown): value is boolean | undefined {
+function isOptionalBoolean(value: DynamicValue): value is boolean | undefined {
   return value === undefined || typeof value === "boolean";
 }
 
-function isBridgeGateReason(value: unknown): value is BridgeGateReason {
+function isBridgeGateReason(value: DynamicValue): value is BridgeGateReason {
   return value === "missing_bridge_url"
     || value === "invalid_bridge_url"
     || value === "bridge_unreachable";
 }
 
-function isOptionalBridgeGateReason(value: unknown): value is BridgeGateReason | undefined {
+function isOptionalBridgeGateReason(value: DynamicValue): value is BridgeGateReason | undefined {
   return value === undefined || isBridgeGateReason(value);
 }
 
-function isToolOutputTruncationStrategy(value: unknown): value is ToolOutputTruncationStrategy {
+function isToolOutputTruncationStrategy(value: DynamicValue): value is ToolOutputTruncationStrategy {
   return value === "head" || value === "tail";
 }
 
-function isToolOutputTruncationReason(value: unknown): value is ToolOutputTruncationReason {
+function isToolOutputTruncationReason(value: DynamicValue): value is ToolOutputTruncationReason {
   return value === "lines" || value === "bytes" || value === null;
 }
 
-export function isToolOutputTruncationDetails(value: unknown): value is ToolOutputTruncationDetails {
-  if (!isRecord(value)) return false;
+export function isToolOutputTruncationDetails(value: DynamicValue): value is ToolOutputTruncationDetails {
+  if (!isToolsToolDetailsPayloadShape(value)) return false;
 
   return (
     value.version === 1 &&
@@ -531,36 +534,36 @@ export function isToolOutputTruncationDetails(value: unknown): value is ToolOutp
   );
 }
 
-export function getToolOutputTruncationDetails(details: unknown): ToolOutputTruncationDetails | undefined {
-  if (!isRecord(details)) return undefined;
+export function getToolOutputTruncationDetails(details: DynamicValue): ToolOutputTruncationDetails | undefined {
+  if (!isToolsToolDetailsPayloadShape(details)) return undefined;
   const value = details.outputTruncation;
   return isToolOutputTruncationDetails(value)
     ? value
     : undefined;
 }
 
-function isOptionalTraceDependenciesMode(value: unknown): value is TraceDependenciesMode | undefined {
+function isOptionalTraceDependenciesMode(value: DynamicValue): value is TraceDependenciesMode | undefined {
   return value === undefined || value === "precedents" || value === "dependents";
 }
 
-function isOptionalTraceDependencySource(value: unknown): value is TraceDependencySource | undefined {
+function isOptionalTraceDependencySource(value: DynamicValue): value is TraceDependencySource | undefined {
   return value === undefined || value === "api" || value === "formula_scan" || value === "mixed" || value === "none";
 }
 
-function isOptionalStringArray(value: unknown): value is string[] | undefined {
+function isOptionalStringArray(value: DynamicValue): value is string[] | undefined {
   return value === undefined || (Array.isArray(value) && value.every((item) => typeof item === "string"));
 }
 
-function isStringArray(value: unknown): value is string[] {
+function isStringArray(value: DynamicValue): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === "string");
 }
 
-function isSkillsSourceKind(value: unknown): value is SkillsSourceKind {
+function isSkillsSourceKind(value: DynamicValue): value is SkillsSourceKind {
   return value === "bundled" || value === "external";
 }
 
-function isSkillsListEntryDetails(value: unknown): value is SkillsListEntryDetails {
-  if (!isRecord(value)) return false;
+function isSkillsListEntryDetails(value: DynamicValue): value is SkillsListEntryDetails {
+  if (!isToolsToolDetailsPayloadShape(value)) return false;
 
   return (
     typeof value.name === "string" &&
@@ -569,8 +572,8 @@ function isSkillsListEntryDetails(value: unknown): value is SkillsListEntryDetai
   );
 }
 
-function isRecoveryCheckpointDetails(value: unknown): value is RecoveryCheckpointDetails {
-  if (!isRecord(value)) return false;
+function isRecoveryCheckpointDetails(value: DynamicValue): value is RecoveryCheckpointDetails {
+  if (!isToolsToolDetailsPayloadShape(value)) return false;
 
   const status = value.status;
   if (status !== "checkpoint_created" && status !== "not_available") return false;
@@ -581,12 +584,12 @@ function isRecoveryCheckpointDetails(value: unknown): value is RecoveryCheckpoin
   );
 }
 
-function isOptionalRecoveryCheckpointDetails(value: unknown): value is RecoveryCheckpointDetails | undefined {
+function isOptionalRecoveryCheckpointDetails(value: DynamicValue): value is RecoveryCheckpointDetails | undefined {
   return value === undefined || isRecoveryCheckpointDetails(value);
 }
 
-function isWorkbookCellChange(value: unknown): value is WorkbookCellChangeSummary["sample"][number] {
-  if (!isRecord(value)) return false;
+function isWorkbookCellChange(value: DynamicValue): value is WorkbookCellChangeSummary["sample"][number] {
+  if (!isToolsToolDetailsPayloadShape(value)) return false;
 
   const beforeFormula = value.beforeFormula;
   const afterFormula = value.afterFormula;
@@ -600,8 +603,8 @@ function isWorkbookCellChange(value: unknown): value is WorkbookCellChangeSummar
   );
 }
 
-function isWorkbookCellChangeSummary(value: unknown): value is WorkbookCellChangeSummary {
-  if (!isRecord(value)) return false;
+function isWorkbookCellChangeSummary(value: DynamicValue): value is WorkbookCellChangeSummary {
+  if (!isToolsToolDetailsPayloadShape(value)) return false;
 
   return (
     typeof value.changedCount === "number" &&
@@ -611,12 +614,12 @@ function isWorkbookCellChangeSummary(value: unknown): value is WorkbookCellChang
   );
 }
 
-function isOptionalWorkbookCellChangeSummary(value: unknown): value is WorkbookCellChangeSummary | undefined {
+function isOptionalWorkbookCellChangeSummary(value: DynamicValue): value is WorkbookCellChangeSummary | undefined {
   return value === undefined || isWorkbookCellChangeSummary(value);
 }
 
-function isWorkbookHistorySnapshotSummary(value: unknown): value is WorkbookHistorySnapshotSummary {
-  if (!isRecord(value)) return false;
+function isWorkbookHistorySnapshotSummary(value: DynamicValue): value is WorkbookHistorySnapshotSummary {
+  if (!isToolsToolDetailsPayloadShape(value)) return false;
 
   return (
     typeof value.id === "string" &&
@@ -629,25 +632,25 @@ function isWorkbookHistorySnapshotSummary(value: unknown): value is WorkbookHist
 }
 
 function isOptionalWorkbookHistorySnapshotSummaryArray(
-  value: unknown,
+  value: DynamicValue,
 ): value is WorkbookHistorySnapshotSummary[] | undefined {
   return value === undefined || (Array.isArray(value) && value.every((item) => isWorkbookHistorySnapshotSummary(item)));
 }
 
-function isFilesWorkspaceBackendKind(value: unknown): value is FilesWorkspaceBackendKind {
+function isFilesWorkspaceBackendKind(value: DynamicValue): value is FilesWorkspaceBackendKind {
   return value === "native-directory" || value === "opfs" || value === "memory";
 }
 
-function isFilesSourceKind(value: unknown): value is FilesSourceKind {
+function isFilesSourceKind(value: DynamicValue): value is FilesSourceKind {
   return value === "workspace" || value === "builtin-doc";
 }
 
-function isOptionalFilesSourceKind(value: unknown): value is FilesSourceKind | undefined {
+function isOptionalFilesSourceKind(value: DynamicValue): value is FilesSourceKind | undefined {
   return value === undefined || isFilesSourceKind(value);
 }
 
-function isFilesWorkbookTagDetails(value: unknown): value is FilesWorkbookTagDetails {
-  if (!isRecord(value)) return false;
+function isFilesWorkbookTagDetails(value: DynamicValue): value is FilesWorkbookTagDetails {
+  if (!isToolsToolDetailsPayloadShape(value)) return false;
 
   return (
     typeof value.workbookId === "string" &&
@@ -656,12 +659,12 @@ function isFilesWorkbookTagDetails(value: unknown): value is FilesWorkbookTagDet
   );
 }
 
-function isOptionalFilesWorkbookTagDetails(value: unknown): value is FilesWorkbookTagDetails | undefined {
+function isOptionalFilesWorkbookTagDetails(value: DynamicValue): value is FilesWorkbookTagDetails | undefined {
   return value === undefined || isFilesWorkbookTagDetails(value);
 }
 
-function isFilesListItemDetails(value: unknown): value is FilesListItemDetails {
-  if (!isRecord(value)) return false;
+function isFilesListItemDetails(value: DynamicValue): value is FilesListItemDetails {
+  if (!isToolsToolDetailsPayloadShape(value)) return false;
 
   return (
     typeof value.path === "string" &&
@@ -675,8 +678,8 @@ function isFilesListItemDetails(value: unknown): value is FilesListItemDetails {
   );
 }
 
-export function isWriteCellsDetails(value: unknown): value is WriteCellsDetails {
-  if (!isRecord(value)) return false;
+export function isWriteCellsDetails(value: DynamicValue): value is WriteCellsDetails {
+  if (!isToolsToolDetailsPayloadShape(value)) return false;
 
   if (value.kind !== "write_cells") return false;
   if (typeof value.blocked !== "boolean") return false;
@@ -690,8 +693,8 @@ export function isWriteCellsDetails(value: unknown): value is WriteCellsDetails 
   );
 }
 
-export function isFillFormulaDetails(value: unknown): value is FillFormulaDetails {
-  if (!isRecord(value)) return false;
+export function isFillFormulaDetails(value: DynamicValue): value is FillFormulaDetails {
+  if (!isToolsToolDetailsPayloadShape(value)) return false;
 
   if (value.kind !== "fill_formula") return false;
   if (typeof value.blocked !== "boolean") return false;
@@ -705,8 +708,8 @@ export function isFillFormulaDetails(value: unknown): value is FillFormulaDetail
   );
 }
 
-export function isFormatCellsDetails(value: unknown): value is FormatCellsDetails {
-  if (!isRecord(value)) return false;
+export function isFormatCellsDetails(value: DynamicValue): value is FormatCellsDetails {
+  if (!isToolsToolDetailsPayloadShape(value)) return false;
 
   if (value.kind !== "format_cells") return false;
 
@@ -717,8 +720,8 @@ export function isFormatCellsDetails(value: unknown): value is FormatCellsDetail
   );
 }
 
-export function isConditionalFormatDetails(value: unknown): value is ConditionalFormatDetails {
-  if (!isRecord(value)) return false;
+export function isConditionalFormatDetails(value: DynamicValue): value is ConditionalFormatDetails {
+  if (!isToolsToolDetailsPayloadShape(value)) return false;
   if (value.kind !== "conditional_format") return false;
 
   const action = value.action;
@@ -731,8 +734,8 @@ export function isConditionalFormatDetails(value: unknown): value is Conditional
   );
 }
 
-export function isModifyStructureDetails(value: unknown): value is ModifyStructureDetails {
-  if (!isRecord(value)) return false;
+export function isModifyStructureDetails(value: DynamicValue): value is ModifyStructureDetails {
+  if (!isToolsToolDetailsPayloadShape(value)) return false;
   if (value.kind !== "modify_structure") return false;
 
   return (
@@ -741,8 +744,8 @@ export function isModifyStructureDetails(value: unknown): value is ModifyStructu
   );
 }
 
-export function isCommentsDetails(value: unknown): value is CommentsDetails {
-  if (!isRecord(value)) return false;
+export function isCommentsDetails(value: DynamicValue): value is CommentsDetails {
+  if (!isToolsToolDetailsPayloadShape(value)) return false;
   if (value.kind !== "comments") return false;
 
   return (
@@ -752,8 +755,8 @@ export function isCommentsDetails(value: unknown): value is CommentsDetails {
   );
 }
 
-export function isViewSettingsDetails(value: unknown): value is ViewSettingsDetails {
-  if (!isRecord(value)) return false;
+export function isViewSettingsDetails(value: DynamicValue): value is ViewSettingsDetails {
+  if (!isToolsToolDetailsPayloadShape(value)) return false;
   if (value.kind !== "view_settings") return false;
 
   return (
@@ -763,8 +766,8 @@ export function isViewSettingsDetails(value: unknown): value is ViewSettingsDeta
   );
 }
 
-function isChartPositionDetails(value: unknown): value is ChartPositionDetails {
-  if (!isRecord(value)) return false;
+function isChartPositionDetails(value: DynamicValue): value is ChartPositionDetails {
+  if (!isToolsToolDetailsPayloadShape(value)) return false;
 
   return (
     typeof value.top === "number" &&
@@ -774,8 +777,8 @@ function isChartPositionDetails(value: unknown): value is ChartPositionDetails {
   );
 }
 
-function isChartListItemDetails(value: unknown): value is ChartListItemDetails {
-  if (!isRecord(value)) return false;
+function isChartListItemDetails(value: DynamicValue): value is ChartListItemDetails {
+  if (!isToolsToolDetailsPayloadShape(value)) return false;
 
   return (
     typeof value.name === "string" &&
@@ -786,12 +789,12 @@ function isChartListItemDetails(value: unknown): value is ChartListItemDetails {
   );
 }
 
-function isOptionalChartListItemArray(value: unknown): value is ChartListItemDetails[] | undefined {
+function isOptionalChartListItemArray(value: DynamicValue): value is ChartListItemDetails[] | undefined {
   return value === undefined || (Array.isArray(value) && value.every((item) => isChartListItemDetails(item)));
 }
 
-function isChartImageDetails(value: unknown): value is ChartImageDetails {
-  if (!isRecord(value)) return false;
+function isChartImageDetails(value: DynamicValue): value is ChartImageDetails {
+  if (!isToolsToolDetailsPayloadShape(value)) return false;
 
   return (
     typeof value.base64 === "string" &&
@@ -801,12 +804,12 @@ function isChartImageDetails(value: unknown): value is ChartImageDetails {
   );
 }
 
-function isOptionalChartImageDetails(value: unknown): value is ChartImageDetails | undefined {
+function isOptionalChartImageDetails(value: DynamicValue): value is ChartImageDetails | undefined {
   return value === undefined || isChartImageDetails(value);
 }
 
-export function isChartsDetails(value: unknown): value is ChartsDetails {
-  if (!isRecord(value)) return false;
+export function isChartsDetails(value: DynamicValue): value is ChartsDetails {
+  if (!isToolsToolDetailsPayloadShape(value)) return false;
   if (value.kind !== "charts") return false;
 
   return (
@@ -821,8 +824,8 @@ export function isChartsDetails(value: unknown): value is ChartsDetails {
   );
 }
 
-export function isReadRangeCsvDetails(value: unknown): value is ReadRangeCsvDetails {
-  if (!isRecord(value)) return false;
+export function isReadRangeCsvDetails(value: DynamicValue): value is ReadRangeCsvDetails {
+  if (!isToolsToolDetailsPayloadShape(value)) return false;
   if (value.kind !== "read_range_csv") return false;
   return (
     typeof value.startCol === "number" &&
@@ -832,10 +835,10 @@ export function isReadRangeCsvDetails(value: unknown): value is ReadRangeCsvDeta
   );
 }
 
-export function isTraceDependenciesDetails(value: unknown): value is TraceDependenciesDetails {
-  if (!isRecord(value)) return false;
+export function isTraceDependenciesDetails(value: DynamicValue): value is TraceDependenciesDetails {
+  if (!isToolsToolDetailsPayloadShape(value)) return false;
   if (value.kind !== "trace_dependencies") return false;
-  if (!isRecord(value.root)) return false;
+  if (!isToolsToolDetailsPayloadShape(value.root)) return false;
 
   const root = value.root;
   if (!(typeof root.address === "string" && Array.isArray(root.precedents))) return false;
@@ -850,8 +853,8 @@ export function isTraceDependenciesDetails(value: unknown): value is TraceDepend
   );
 }
 
-function isExplainFormulaReferenceDetail(value: unknown): value is ExplainFormulaReferenceDetail {
-  if (!isRecord(value)) return false;
+function isExplainFormulaReferenceDetail(value: DynamicValue): value is ExplainFormulaReferenceDetail {
+  if (!isToolsToolDetailsPayloadShape(value)) return false;
 
   return (
     typeof value.address === "string" &&
@@ -860,8 +863,8 @@ function isExplainFormulaReferenceDetail(value: unknown): value is ExplainFormul
   );
 }
 
-export function isExplainFormulaDetails(value: unknown): value is ExplainFormulaDetails {
-  if (!isRecord(value)) return false;
+export function isExplainFormulaDetails(value: DynamicValue): value is ExplainFormulaDetails {
+  if (!isToolsToolDetailsPayloadShape(value)) return false;
   if (value.kind !== "explain_formula") return false;
 
   return (
@@ -876,8 +879,8 @@ export function isExplainFormulaDetails(value: unknown): value is ExplainFormula
   );
 }
 
-export function isTmuxBridgeDetails(value: unknown): value is TmuxBridgeDetails {
-  if (!isRecord(value)) return false;
+export function isTmuxBridgeDetails(value: DynamicValue): value is TmuxBridgeDetails {
+  if (!isToolsToolDetailsPayloadShape(value)) return false;
   if (value.kind !== "tmux_bridge") return false;
 
   return (
@@ -893,8 +896,8 @@ export function isTmuxBridgeDetails(value: unknown): value is TmuxBridgeDetails 
   );
 }
 
-export function isPythonBridgeDetails(value: unknown): value is PythonBridgeDetails {
-  if (!isRecord(value)) return false;
+export function isPythonBridgeDetails(value: DynamicValue): value is PythonBridgeDetails {
+  if (!isToolsToolDetailsPayloadShape(value)) return false;
   if (value.kind !== "python_bridge") return false;
 
   const truncated = value.truncated;
@@ -914,8 +917,8 @@ export function isPythonBridgeDetails(value: unknown): value is PythonBridgeDeta
   );
 }
 
-export function isLibreOfficeBridgeDetails(value: unknown): value is LibreOfficeBridgeDetails {
-  if (!isRecord(value)) return false;
+export function isLibreOfficeBridgeDetails(value: DynamicValue): value is LibreOfficeBridgeDetails {
+  if (!isToolsToolDetailsPayloadShape(value)) return false;
   if (value.kind !== "libreoffice_bridge") return false;
 
   return (
@@ -933,7 +936,7 @@ export function isLibreOfficeBridgeDetails(value: unknown): value is LibreOffice
   );
 }
 
-export function isBridgeGateError(value: unknown): value is BridgeGateErrorDetails {
+export function isBridgeGateError(value: DynamicValue): value is BridgeGateErrorDetails {
   if (isTmuxBridgeDetails(value)) {
     return value.ok === false
       && isBridgeGateReason(value.gateReason)
@@ -962,8 +965,8 @@ export function isBridgeGateError(value: unknown): value is BridgeGateErrorDetai
   return false;
 }
 
-export function isPythonTransformRangeDetails(value: unknown): value is PythonTransformRangeDetails {
-  if (!isRecord(value)) return false;
+export function isPythonTransformRangeDetails(value: DynamicValue): value is PythonTransformRangeDetails {
+  if (!isToolsToolDetailsPayloadShape(value)) return false;
   if (value.kind !== "python_transform_range") return false;
 
   return (
@@ -983,8 +986,8 @@ export function isPythonTransformRangeDetails(value: unknown): value is PythonTr
   );
 }
 
-export function isWorkbookHistoryDetails(value: unknown): value is WorkbookHistoryDetails {
-  if (!isRecord(value)) return false;
+export function isWorkbookHistoryDetails(value: DynamicValue): value is WorkbookHistoryDetails {
+  if (!isToolsToolDetailsPayloadShape(value)) return false;
   if (value.kind !== "workbook_history") return false;
 
   const action = value.action;
@@ -1004,8 +1007,8 @@ export function isWorkbookHistoryDetails(value: unknown): value is WorkbookHisto
   );
 }
 
-export function isSkillsListDetails(value: unknown): value is SkillsListDetails {
-  if (!isRecord(value)) return false;
+export function isSkillsListDetails(value: DynamicValue): value is SkillsListDetails {
+  if (!isToolsToolDetailsPayloadShape(value)) return false;
   if (value.kind !== "skills_list") return false;
 
   return (
@@ -1017,8 +1020,8 @@ export function isSkillsListDetails(value: unknown): value is SkillsListDetails 
   );
 }
 
-export function isSkillsReadDetails(value: unknown): value is SkillsReadDetails {
-  if (!isRecord(value)) return false;
+export function isSkillsReadDetails(value: DynamicValue): value is SkillsReadDetails {
+  if (!isToolsToolDetailsPayloadShape(value)) return false;
   if (value.kind !== "skills_read") return false;
 
   return (
@@ -1032,8 +1035,8 @@ export function isSkillsReadDetails(value: unknown): value is SkillsReadDetails 
   );
 }
 
-export function isSkillsInstallDetails(value: unknown): value is SkillsInstallDetails {
-  if (!isRecord(value)) return false;
+export function isSkillsInstallDetails(value: DynamicValue): value is SkillsInstallDetails {
+  if (!isToolsToolDetailsPayloadShape(value)) return false;
   if (value.kind !== "skills_install") return false;
 
   return (
@@ -1042,8 +1045,8 @@ export function isSkillsInstallDetails(value: unknown): value is SkillsInstallDe
   );
 }
 
-export function isSkillsUninstallDetails(value: unknown): value is SkillsUninstallDetails {
-  if (!isRecord(value)) return false;
+export function isSkillsUninstallDetails(value: DynamicValue): value is SkillsUninstallDetails {
+  if (!isToolsToolDetailsPayloadShape(value)) return false;
   if (value.kind !== "skills_uninstall") return false;
 
   return (
@@ -1052,8 +1055,8 @@ export function isSkillsUninstallDetails(value: unknown): value is SkillsUninsta
   );
 }
 
-export function isSkillsErrorDetails(value: unknown): value is SkillsErrorDetails {
-  if (!isRecord(value)) return false;
+export function isSkillsErrorDetails(value: DynamicValue): value is SkillsErrorDetails {
+  if (!isToolsToolDetailsPayloadShape(value)) return false;
   if (value.kind !== "skills_error") return false;
 
   const action = value.action;
@@ -1067,8 +1070,8 @@ export function isSkillsErrorDetails(value: unknown): value is SkillsErrorDetail
   );
 }
 
-export function isWebSearchDetails(value: unknown): value is WebSearchDetails {
-  if (!isRecord(value)) return false;
+export function isWebSearchDetails(value: DynamicValue): value is WebSearchDetails {
+  if (!isToolsToolDetailsPayloadShape(value)) return false;
   if (value.kind !== "web_search") return false;
 
   return (
@@ -1088,8 +1091,8 @@ export function isWebSearchDetails(value: unknown): value is WebSearchDetails {
   );
 }
 
-export function isFetchPageDetails(value: unknown): value is FetchPageDetails {
-  if (!isRecord(value)) return false;
+export function isFetchPageDetails(value: DynamicValue): value is FetchPageDetails {
+  if (!isToolsToolDetailsPayloadShape(value)) return false;
   if (value.kind !== "fetch_page") return false;
 
   return (
@@ -1106,8 +1109,8 @@ export function isFetchPageDetails(value: unknown): value is FetchPageDetails {
   );
 }
 
-export function isMcpGatewayDetails(value: unknown): value is McpGatewayDetails {
-  if (!isRecord(value)) return false;
+export function isMcpGatewayDetails(value: DynamicValue): value is McpGatewayDetails {
+  if (!isToolsToolDetailsPayloadShape(value)) return false;
   if (value.kind !== "mcp_gateway") return false;
 
   return (
@@ -1123,14 +1126,14 @@ export function isMcpGatewayDetails(value: unknown): value is McpGatewayDetails 
   );
 }
 
-function isConnectionToolErrorCode(value: unknown): value is ConnectionToolErrorDetails["errorCode"] {
+function isConnectionToolErrorCode(value: DynamicValue): value is ConnectionToolErrorDetails["errorCode"] {
   return value === "missing_connection"
     || value === "invalid_connection"
     || value === "connection_auth_failed";
 }
 
-export function isConnectionToolErrorDetails(value: unknown): value is ConnectionToolErrorDetails {
-  if (!isRecord(value)) return false;
+export function isConnectionToolErrorDetails(value: DynamicValue): value is ConnectionToolErrorDetails {
+  if (!isToolsToolDetailsPayloadShape(value)) return false;
   if (value.kind !== "connection_error") return false;
 
   const reason = value.reason;
@@ -1146,8 +1149,8 @@ export function isConnectionToolErrorDetails(value: unknown): value is Connectio
   );
 }
 
-export function isFilesListDetails(value: unknown): value is FilesListDetails {
-  if (!isRecord(value)) return false;
+export function isFilesListDetails(value: DynamicValue): value is FilesListDetails {
+  if (!isToolsToolDetailsPayloadShape(value)) return false;
   if (value.kind !== "files_list") return false;
 
   return (
@@ -1158,8 +1161,8 @@ export function isFilesListDetails(value: unknown): value is FilesListDetails {
   );
 }
 
-export function isFilesReadDetails(value: unknown): value is FilesReadDetails {
-  if (!isRecord(value)) return false;
+export function isFilesReadDetails(value: DynamicValue): value is FilesReadDetails {
+  if (!isToolsToolDetailsPayloadShape(value)) return false;
   if (value.kind !== "files_read") return false;
 
   return (
@@ -1176,8 +1179,8 @@ export function isFilesReadDetails(value: unknown): value is FilesReadDetails {
   );
 }
 
-export function isFilesWriteDetails(value: unknown): value is FilesWriteDetails {
-  if (!isRecord(value)) return false;
+export function isFilesWriteDetails(value: DynamicValue): value is FilesWriteDetails {
+  if (!isToolsToolDetailsPayloadShape(value)) return false;
   if (value.kind !== "files_write") return false;
 
   return (
@@ -1189,8 +1192,8 @@ export function isFilesWriteDetails(value: unknown): value is FilesWriteDetails 
   );
 }
 
-export function isFilesDeleteDetails(value: unknown): value is FilesDeleteDetails {
-  if (!isRecord(value)) return false;
+export function isFilesDeleteDetails(value: DynamicValue): value is FilesDeleteDetails {
+  if (!isToolsToolDetailsPayloadShape(value)) return false;
   if (value.kind !== "files_delete") return false;
 
   return (

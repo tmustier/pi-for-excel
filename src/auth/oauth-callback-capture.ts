@@ -34,13 +34,13 @@ interface PollOptions {
 const DEFAULT_TIMEOUT_MS = 2 * 60 * 1000;
 const DEFAULT_INTERVAL_MS = 750;
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+function isAuthOauthCallbackCapturePayloadShape(value: DynamicValue): value is DynamicObject {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function isOAuthCallbackCapture(value: unknown): value is OAuthCallbackCapture {
+function isOAuthCallbackCapture(value: DynamicValue): value is OAuthCallbackCapture {
   return (
-    isRecord(value) &&
+    isAuthOauthCallbackCapturePayloadShape(value) &&
     value.status === "ready" &&
     typeof value.providerId === "string" &&
     typeof value.code === "string" &&
@@ -145,14 +145,14 @@ export async function pollOAuthCallbackCapture(
       }
 
       if (response.ok) {
-        const payload: unknown = await response.json();
+        const payload: DynamicValue = await response.json();
         if (isOAuthCallbackCapture(payload)) {
           return payload.providerId === options.providerId && payload.state === options.state
             ? payload
             : null;
         }
 
-        if (!isRecord(payload) || payload.status !== "pending") {
+        if (!isAuthOauthCallbackCapturePayloadShape(payload) || payload.status !== "pending") {
           return null;
         }
       }

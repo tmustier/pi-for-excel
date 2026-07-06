@@ -105,7 +105,7 @@ void test("python_transform_range reads source, runs python, and writes transfor
   let capturedBridgeConfig: PythonBridgeConfig | null = null;
   let capturedWriteRequest: {
     outputStartCell: string;
-    values: unknown[][];
+    values: DynamicValue[][];
     allowOverwrite: boolean;
   } | null = null;
 

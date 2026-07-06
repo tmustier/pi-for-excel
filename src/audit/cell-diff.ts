@@ -24,10 +24,10 @@ export interface WorkbookCellChangeSummary {
 export interface BuildWorkbookCellChangeSummaryArgs {
   sheetName: string;
   startCell: string;
-  beforeValues: unknown[][];
-  beforeFormulas: unknown[][];
-  afterValues: unknown[][];
-  afterFormulas: unknown[][];
+  beforeValues: DynamicValue[][];
+  beforeFormulas: DynamicValue[][];
+  afterValues: DynamicValue[][];
+  afterFormulas: DynamicValue[][];
   sampleLimit?: number;
   previewChars?: number;
 }
@@ -38,7 +38,7 @@ function clampPositiveInteger(value: number | undefined, fallback: number): numb
   return rounded > 0 ? rounded : fallback;
 }
 
-function normalizeFormula(raw: unknown): string | undefined {
+function normalizeFormula(raw: DynamicValue): string | undefined {
   if (typeof raw !== "string") return undefined;
 
   const trimmed = raw.trim();
@@ -46,7 +46,7 @@ function normalizeFormula(raw: unknown): string | undefined {
   return trimmed;
 }
 
-function serializeComparable(raw: unknown): string {
+function serializeComparable(raw: DynamicValue): string {
   if (raw === null || raw === undefined || raw === "") return "";
 
   if (typeof raw === "string") return raw;
@@ -63,7 +63,7 @@ function serializeComparable(raw: unknown): string {
   }
 }
 
-function toPreview(raw: unknown, maxChars: number): string {
+function toPreview(raw: DynamicValue, maxChars: number): string {
   const text = serializeComparable(raw);
   if (text.length <= maxChars) return text;
   return `${text.slice(0, maxChars - 1)}…`;
@@ -74,13 +74,13 @@ function cellAtOffset(startCell: string, rowOffset: number, colOffset: number): 
   return cellAddress(start.col + colOffset, start.row + rowOffset);
 }
 
-function valueAt(grid: unknown[][], row: number, col: number): unknown {
+function valueAt(grid: DynamicValue[][], row: number, col: number): DynamicValue {
   const rowValues = grid[row];
   if (!Array.isArray(rowValues)) return undefined;
   return rowValues[col];
 }
 
-function rowWidth(grid: unknown[][], row: number): number {
+function rowWidth(grid: DynamicValue[][], row: number): number {
   const rowValues = grid[row];
   return Array.isArray(rowValues) ? rowValues.length : 0;
 }

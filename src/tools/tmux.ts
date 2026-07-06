@@ -1,3 +1,7 @@
+function isToolsTmuxPayloadShape(value: DynamicValue): value is DynamicObject {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 /**
  * tmux — Experimental local tmux bridge adapter.
  *
@@ -14,7 +18,6 @@ import { Type, type Static, type TSchema } from "@sinclair/typebox";
 
 import { validateOfficeProxyUrl } from "../auth/proxy-validation.js";
 import { getErrorMessage } from "../utils/errors.js";
-import { isRecord } from "../utils/type-guards.js";
 import {
   extractBridgeErrorMessage,
   isAbortError,
@@ -47,7 +50,7 @@ type TmuxAction = (typeof TMUX_ACTIONS)[number];
 
 const TMUX_ACTION_SET = new Set<string>(TMUX_ACTIONS);
 
-function isTmuxAction(value: unknown): value is TmuxAction {
+function isTmuxAction(value: DynamicValue): value is TmuxAction {
   return typeof value === "string" && TMUX_ACTION_SET.has(value);
 }
 
@@ -145,7 +148,7 @@ export interface TmuxBridgeResponse {
   sessions?: string[];
   output?: string;
   error?: string;
-  metadata?: Record<string, unknown>;
+  metadata?: DynamicObject;
 }
 
 export interface TmuxToolDetails {
@@ -187,19 +190,19 @@ function cleanOptionalStringArray(values: string[] | undefined): string[] | unde
   return cleaned.length > 0 ? cleaned : undefined;
 }
 
-function toOptionalBoolean(value: unknown): boolean | undefined {
+function toOptionalBoolean(value: DynamicValue): boolean | undefined {
   return typeof value === "boolean" ? value : undefined;
 }
 
-function toOptionalInteger(value: unknown): number | undefined {
+function toOptionalInteger(value: DynamicValue): number | undefined {
   if (typeof value !== "number") return undefined;
   if (!Number.isFinite(value)) return undefined;
   if (!Number.isInteger(value)) return undefined;
   return value;
 }
 
-function parseParams(raw: unknown): Params {
-  if (!isRecord(raw)) {
+function parseParams(raw: DynamicValue): Params {
+  if (!isToolsTmuxPayloadShape(raw)) {
     throw new Error("Invalid tmux params: expected an object.");
   }
 
@@ -306,7 +309,7 @@ function toBridgeRequest(params: Params): TmuxBridgeRequest {
   };
 }
 
-function parseStringArray(value: unknown): string[] | undefined {
+function parseStringArray(value: DynamicValue): string[] | undefined {
   if (!Array.isArray(value)) return undefined;
 
   const out: string[] = [];
@@ -319,8 +322,8 @@ function parseStringArray(value: unknown): string[] | undefined {
   return out.length > 0 ? out : [];
 }
 
-function parseBridgeResponse(value: unknown, fallbackAction: TmuxAction): TmuxBridgeResponse {
-  if (!isRecord(value)) {
+function parseBridgeResponse(value: DynamicValue, fallbackAction: TmuxAction): TmuxBridgeResponse {
+  if (!isToolsTmuxPayloadShape(value)) {
     return {
       ok: true,
       action: fallbackAction,
@@ -333,7 +336,7 @@ function parseBridgeResponse(value: unknown, fallbackAction: TmuxAction): TmuxBr
   const sessions = parseStringArray(value.sessions);
   const output = typeof value.output === "string" ? value.output : undefined;
   const error = typeof value.error === "string" ? value.error : undefined;
-  const metadata = isRecord(value.metadata) ? value.metadata : undefined;
+  const metadata = isToolsTmuxPayloadShape(value.metadata) ? value.metadata : undefined;
 
   return {
     ok,
@@ -463,7 +466,7 @@ async function defaultCallBridge(
     }
 
     return parsed;
-  } catch (error: unknown) {
+  } catch (error) {
     if (isAbortError(error)) {
       if (signal?.aborted) {
         throw new Error("Aborted");
@@ -597,7 +600,7 @@ export function createTmuxTool(
     parameters: schema,
     execute: async (
       _toolCallId: string,
-      rawParams: unknown,
+      rawParams: DynamicValue,
       signal: AbortSignal | undefined,
     ): Promise<AgentToolResult<TmuxToolDetails>> => {
       let params: Params | null = null;
@@ -645,11 +648,11 @@ export function createTmuxTool(
             outputPreview: buildOutputPreview(response.output),
           },
         };
-      } catch (error: unknown) {
+      } catch (error) {
         const message = getErrorMessage(error);
         const fallbackAction =
           params?.action ??
-          (isRecord(rawParams) && isTmuxAction(rawParams.action)
+          (isToolsTmuxPayloadShape(rawParams) && isTmuxAction(rawParams.action)
             ? rawParams.action
             : "list_sessions");
         const skillHint = shouldAttachTmuxBridgeSkillHint(message)

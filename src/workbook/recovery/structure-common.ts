@@ -8,7 +8,7 @@ import type {
 } from "./types.js";
 
 export interface SyncContext {
-  sync(): Promise<unknown>;
+  sync(): Promise<DynamicValue>;
 }
 
 export interface LoadableNullObject {
@@ -20,8 +20,8 @@ export interface UsedRangeSnapshot extends LoadableNullObject {
   address: string;
   rowCount: number;
   columnCount: number;
-  values: unknown[][];
-  formulas: unknown[][];
+  values: DynamicValue[][];
+  formulas: DynamicValue[][];
 }
 
 export interface UsedRangeSource {
@@ -53,7 +53,7 @@ export type StructureValueDataCaptureResult =
     cellCount: number;
   };
 
-export function isRecoverySheetVisibility(value: unknown): value is RecoverySheetVisibility {
+export function isRecoverySheetVisibility(value: DynamicValue): value is RecoverySheetVisibility {
   return value === "Visible" || value === "Hidden" || value === "VeryHidden";
 }
 

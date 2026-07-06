@@ -1,3 +1,7 @@
+function isExtensionsSandboxUiPayloadShape(value: DynamicValue): value is DynamicObject {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 /**
  * Safe UI projection primitives for sandboxed extensions.
  *
@@ -5,7 +9,6 @@
  * Host runtime normalizes and renders that tree without using innerHTML.
  */
 
-import { isRecord } from "../utils/type-guards.js";
 
 export interface SandboxUiTextNode {
   kind: "text";
@@ -49,7 +52,7 @@ const MAX_NODES = 300;
 const MAX_DEPTH = 12;
 const MAX_CLASS_TOKENS = 8;
 
-function normalizeText(value: unknown): string {
+function normalizeText(value: DynamicValue): string {
   if (typeof value !== "string") {
     return "";
   }
@@ -61,7 +64,7 @@ function normalizeText(value: unknown): string {
   return value.slice(0, MAX_TEXT_LENGTH);
 }
 
-function normalizeTag(value: unknown): string {
+function normalizeTag(value: DynamicValue): string {
   if (typeof value !== "string") {
     return "div";
   }
@@ -74,7 +77,7 @@ function normalizeTag(value: unknown): string {
   return lowered;
 }
 
-function normalizeClassName(value: unknown): string | undefined {
+function normalizeClassName(value: DynamicValue): string | undefined {
   if (typeof value !== "string") {
     return undefined;
   }
@@ -92,7 +95,7 @@ function normalizeClassName(value: unknown): string | undefined {
   return tokens.join(" ");
 }
 
-function normalizeActionId(value: unknown): string | undefined {
+function normalizeActionId(value: DynamicValue): string | undefined {
   if (typeof value !== "string") {
     return undefined;
   }
@@ -109,12 +112,12 @@ interface NormalizeState {
   remainingNodes: number;
 }
 
-function normalizeNode(raw: unknown, depth: number, state: NormalizeState): SandboxUiNode | null {
+function normalizeNode(raw: DynamicValue, depth: number, state: NormalizeState): SandboxUiNode | null {
   if (state.remainingNodes <= 0) {
     return null;
   }
 
-  if (!isRecord(raw)) {
+  if (!isExtensionsSandboxUiPayloadShape(raw)) {
     return null;
   }
 
@@ -161,7 +164,7 @@ function normalizeNode(raw: unknown, depth: number, state: NormalizeState): Sand
   };
 }
 
-export function normalizeSandboxUiNode(raw: unknown): SandboxUiNode {
+export function normalizeSandboxUiNode(raw: DynamicValue): SandboxUiNode {
   const state: NormalizeState = {
     remainingNodes: MAX_NODES,
   };

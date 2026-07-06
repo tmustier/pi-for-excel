@@ -1,3 +1,7 @@
+function isToolsExecuteWpsJsPayloadShape(value: DynamicValue): value is DynamicObject {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 /**
  * execute_wps_js — run direct WPS ET JSAPI code with explicit user intent.
  *
@@ -15,7 +19,6 @@ import {
   type WpsGlobal,
 } from "../host/wps/jsapi.js";
 import { getErrorMessage } from "../utils/errors.js";
-import { isRecord } from "../utils/type-guards.js";
 
 const MAX_CODE_CHARS = 20_000;
 const MAX_EXPLANATION_CHARS = 50;
@@ -39,10 +42,10 @@ const schema = Type.Object({
 
 type Params = Static<typeof schema>;
 
-type ExecuteWpsJsRunner = (Application: WpsEtApplication, wps: WpsGlobal | null) => unknown;
+type ExecuteWpsJsRunner = (Application: WpsEtApplication, wps: WpsGlobal | null) => DynamicValue;
 
 interface ExecuteWpsJsToolDependencies {
-  runCode: (code: string) => Promise<unknown>;
+  runCode: (code: string) => Promise<DynamicValue>;
 }
 
 function normalizeExplanation(explanation: string): string {
@@ -75,9 +78,9 @@ function normalizeCode(code: string): string {
   return trimmed;
 }
 
-type WpsJsRunnerCandidate = (Application: WpsEtApplication, wps: WpsGlobal | null) => unknown;
+type WpsJsRunnerCandidate = (Application: WpsEtApplication, wps: WpsGlobal | null) => DynamicValue;
 
-function isWpsJsRunnerCandidate(value: unknown): value is WpsJsRunnerCandidate {
+function isWpsJsRunnerCandidate(value: DynamicValue): value is WpsJsRunnerCandidate {
   return typeof value === "function";
 }
 
@@ -92,8 +95,8 @@ async function loadWpsJsRunner(code: string): Promise<ExecuteWpsJsRunner> {
   const blobUrl = URL.createObjectURL(blob);
 
   try {
-    const moduleNamespace: unknown = await import(/* @vite-ignore */ blobUrl);
-    if (!isRecord(moduleNamespace)) {
+    const moduleNamespace: DynamicValue = await import(/* @vite-ignore */ blobUrl);
+    if (!isToolsExecuteWpsJsPayloadShape(moduleNamespace)) {
       throw new Error("Compiled WPS JSAPI module did not export a valid function.");
     }
 
@@ -102,15 +105,15 @@ async function loadWpsJsRunner(code: string): Promise<ExecuteWpsJsRunner> {
       throw new Error("Compiled WPS JSAPI module must export a default function.");
     }
 
-    return (Application: WpsEtApplication, wps: WpsGlobal | null): unknown => maybeRunner(Application, wps);
-  } catch (error: unknown) {
+    return (Application: WpsEtApplication, wps: WpsGlobal | null): DynamicValue => maybeRunner(Application, wps);
+  } catch (error) {
     throw new Error(`Invalid WPS JSAPI code: ${getErrorMessage(error)}`);
   } finally {
     URL.revokeObjectURL(blobUrl);
   }
 }
 
-async function defaultRunCode(code: string): Promise<unknown> {
+async function defaultRunCode(code: string): Promise<DynamicValue> {
   const app = getWpsEtApplication();
   if (!app) {
     throw new Error("WPS ET Application is unavailable.");
@@ -120,7 +123,7 @@ async function defaultRunCode(code: string): Promise<unknown> {
   return runner(app, getWpsGlobalForTaskPane());
 }
 
-function jsonSafeReplacer(_key: string, value: unknown): unknown {
+function jsonSafeReplacer(_key: string, value: DynamicValue): DynamicValue {
   if (typeof value === "bigint") {
     return value.toString();
   }
@@ -128,13 +131,13 @@ function jsonSafeReplacer(_key: string, value: unknown): unknown {
   return value;
 }
 
-function serializeResult(result: unknown): { text: string; truncated: boolean } {
+function serializeResult(result: DynamicValue): { text: string; truncated: boolean } {
   let serialized: string;
 
   try {
     const maybeSerialized = JSON.stringify(result, jsonSafeReplacer, 2);
     serialized = maybeSerialized ?? "null";
-  } catch (error: unknown) {
+  } catch (error) {
     throw new Error(`Result is not JSON-serializable: ${getErrorMessage(error)}`);
   }
 
@@ -196,7 +199,7 @@ export function createExecuteWpsJsTool(
           }],
           details: undefined,
         };
-      } catch (error: unknown) {
+      } catch (error) {
         const message = getErrorMessage(error);
 
         return {

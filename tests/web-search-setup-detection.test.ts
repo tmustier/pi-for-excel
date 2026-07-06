@@ -12,14 +12,14 @@ import {
 } from "../src/tools/web-search-config.ts";
 
 class MemorySettingsStore implements WebSearchConfigStore {
-  private readonly values = new Map<string, unknown>();
+  private readonly values = new Map<string, DynamicValue>();
 
-  get(key: string): Promise<unknown> {
+  get(key: string): Promise<DynamicValue> {
     const value = this.values.has(key) ? this.values.get(key) ?? null : null;
     return Promise.resolve(value);
   }
 
-  set(key: string, value: unknown): Promise<void> {
+  set(key: string, value: DynamicValue): Promise<void> {
     this.values.set(key, value);
     return Promise.resolve();
   }

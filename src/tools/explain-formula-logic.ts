@@ -29,7 +29,7 @@ function truncate(value: string, maxChars: number): string {
   return `${value.slice(0, Math.max(maxChars - 1, 1))}…`;
 }
 
-export function previewCellValue(value: unknown): string {
+export function previewCellValue(value: DynamicValue): string {
   if (value === null || value === undefined || value === "") {
     return "(blank)";
   }

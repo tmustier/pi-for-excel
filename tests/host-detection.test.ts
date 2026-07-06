@@ -10,11 +10,11 @@ import {
 type GlobalKey = "Office" | "wps" | "Application";
 type MaybePromise<T> = T | Promise<T>;
 
-function readGlobal(key: string): unknown {
-  return Reflect.get(globalThis, key) as unknown;
+function readGlobal(key: string): DynamicValue {
+  return Reflect.get(globalThis, key) as DynamicValue;
 }
 
-function writeGlobal(key: string, value: unknown): void {
+function writeGlobal(key: string, value: DynamicValue): void {
   Reflect.set(globalThis, key, value);
 }
 
@@ -22,7 +22,7 @@ function deleteGlobal(key: string): void {
   Reflect.deleteProperty(globalThis, key);
 }
 
-async function withGlobal<T>(key: GlobalKey, value: unknown, fn: () => MaybePromise<T>): Promise<T> {
+async function withGlobal<T>(key: GlobalKey, value: DynamicValue, fn: () => MaybePromise<T>): Promise<T> {
   const hadValue = Reflect.has(globalThis, key);
   const previousValue = readGlobal(key);
   writeGlobal(key, value);

@@ -1,3 +1,7 @@
+function isTaskpaneInitPayloadShape(value: DynamicValue): value is DynamicObject {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 /**
  * Taskpane initialization.
  *
@@ -185,7 +189,6 @@ import {
   normalizeRuntimeTools,
 } from "./runtime-utils.js";
 import { doesOverlayClaimEscape } from "../utils/escape-guard.js";
-import { isRecord } from "../utils/type-guards.js";
 
 function showErrorBanner(errorRoot: HTMLElement, message: string): void {
   render(renderError(message), errorRoot);
@@ -197,7 +200,7 @@ function clearErrorBanner(errorRoot: HTMLElement): void {
 
 interface ProxySettingsStore {
   get<T>(key: string): Promise<T | null>;
-  set(key: string, value: unknown): Promise<void>;
+  set(key: string, value: DynamicValue): Promise<void>;
 }
 
 async function ensureDefaultProxyUrl(settings: ProxySettingsStore): Promise<void> {
@@ -239,14 +242,14 @@ export async function initTaskpane(opts: {
   // Migrate legacy web-search API keys to the connection store schema.
   try {
     await migrateLegacyWebSearchApiKeysToConnectionStore(settings);
-  } catch (error: unknown) {
+  } catch (error) {
     console.warn("[pi] Failed to migrate legacy web-search API keys:", error);
   }
 
   // Migrate legacy MCP bearer tokens to the connection store schema.
   try {
     await migrateLegacyMcpTokensToConnectionStore(settings);
-  } catch (error: unknown) {
+  } catch (error) {
     console.warn("[pi] Failed to migrate legacy MCP bearer tokens:", error);
   }
 
@@ -291,7 +294,7 @@ export async function initTaskpane(opts: {
       for (const provider of configuredBuiltInProviders) {
         combinedProviders.add(provider);
       }
-    } catch (error: unknown) {
+    } catch (error) {
       console.warn("[auth] Built-in provider lookup failed:", error);
     }
 
@@ -306,7 +309,7 @@ export async function initTaskpane(opts: {
       for (const provider of customInfo.providerNames) {
         combinedProviders.add(provider);
       }
-    } catch (error: unknown) {
+    } catch (error) {
       console.warn("[auth] Custom provider lookup failed:", error);
     }
 
@@ -325,7 +328,7 @@ export async function initTaskpane(opts: {
       .then(() => {
         onProvidersChanged?.();
       })
-      .catch((error: unknown) => {
+      .catch((error: DynamicValue) => {
         console.warn("[auth] Provider refresh after settings change failed:", error);
       });
   });
@@ -343,28 +346,28 @@ export async function initTaskpane(opts: {
           // providers (#553) — mirrors the pi:providers-changed path.
           onProvidersChanged?.();
         })
-        .catch((error: unknown) => {
+        .catch((error: DynamicValue) => {
           console.warn("[auth] Provider refresh after credential restore failed:", error);
         });
     })
-    .catch((error: unknown) => {
+    .catch((error: DynamicValue) => {
       console.warn("[auth] Credential restore failed:", error);
     });
 
   try {
     await awaitWithTimeout("Credential restore", 6000, credentialRestorePromise);
-  } catch (error: unknown) {
+  } catch (error) {
     console.warn("[auth] Credential restore skipped:", error);
   }
 
   try {
     await awaitWithTimeout("Provider lookup", 3500, refreshConfiguredProviders());
-  } catch (error: unknown) {
+  } catch (error) {
     console.warn("[auth] Provider lookup failed during startup:", error);
   }
 
   if (availableProviders.length === 0) {
-    void showWelcomeLogin(providerKeys).catch((error: unknown) => {
+    void showWelcomeLogin(providerKeys).catch((error: DynamicValue) => {
       console.warn("[auth] Failed to open welcome login:", error);
     });
   }
@@ -503,7 +506,7 @@ export async function initTaskpane(opts: {
     try {
       const discoverableSkills = await loadDiscoverableAgentSkillsFromWorkspace(getFilesWorkspace());
       mergedSkills = mergeAgentSkillDefinitions(bundledSkills, discoverableSkills);
-    } catch (error: unknown) {
+    } catch (error) {
       console.warn("[skills] Failed to load discoverable workspace skills:", error);
     }
 
@@ -514,7 +517,7 @@ export async function initTaskpane(opts: {
         disabledSkillNames,
       });
       return buildAgentSkillPromptEntries(enabledSkills);
-    } catch (error: unknown) {
+    } catch (error) {
       console.warn("[skills] Failed to load skill activation state:", error);
       return buildAgentSkillPromptEntries(mergedSkills);
     }
@@ -784,7 +787,7 @@ export async function initTaskpane(opts: {
 
       try {
         await refresh();
-      } catch (error: unknown) {
+      } catch (error) {
         console.warn("[pi] Failed to refresh runtime capabilities:", error);
       }
     }
@@ -874,7 +877,7 @@ export async function initTaskpane(opts: {
       localServicesSnapshot = result;
       void refreshCapabilitiesForAllRuntimes();
     },
-    (error: unknown) => { console.warn("[pi] Local services probe failed:", error); },
+    (error: DynamicValue) => { console.warn("[pi] Local services probe failed:", error); },
   );
 
   const normalizeApprovalMessage = (title: string, message: string): string => {
@@ -1197,7 +1200,7 @@ export async function initTaskpane(opts: {
   const createRuntimeFromUi = async (): Promise<SessionRuntime | null> => {
     try {
       return await createRuntime({ activate: true, autoRestoreLatest: false });
-    } catch (error: unknown) {
+    } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";
       console.warn("[pi] Failed to create a new runtime:", error);
       showToast(t("init.couldNotOpenNewTab", { message }));
@@ -1730,7 +1733,7 @@ export async function initTaskpane(opts: {
     void (async () => {
       try {
         await refreshConfiguredProviders();
-      } catch (error: unknown) {
+      } catch (error) {
         console.warn("[auth] Failed to refresh providers before opening model selector:", error);
       }
 
@@ -1765,7 +1768,7 @@ export async function initTaskpane(opts: {
     revertLatestCheckpoint: async () => {
       try {
         await revertLatestCheckpoint();
-      } catch (error: unknown) {
+      } catch (error) {
         const message = error instanceof Error ? error.message : "Unknown error";
         showToast(t("init.revertFailed", { message }));
       }
@@ -1796,7 +1799,7 @@ export async function initTaskpane(opts: {
   // Slash commands chosen from the popup menu dispatch this event.
   const onCommandRun: EventListener = (event) => {
     if (!(event instanceof CustomEvent)) return;
-    if (!isRecord(event.detail)) return;
+    if (!isTaskpaneInitPayloadShape(event.detail)) return;
 
     const name = typeof event.detail.name === "string" ? event.detail.name : "";
     const args = typeof event.detail.args === "string" ? event.detail.args : "";
@@ -1903,7 +1906,7 @@ export async function initTaskpane(opts: {
         const importedLabel = `${count} file${count === 1 ? "" : "s"}`;
         showToast(t("init.importedIntoFiles", { label: importedLabel }));
       })
-      .catch((error: unknown) => {
+      .catch((error: DynamicValue) => {
         showToast(t("init.importFailed", { error: error instanceof Error ? error.message : t("init.unknownError") }));
       });
   };
@@ -1954,8 +1957,8 @@ export async function initTaskpane(opts: {
 
       document.addEventListener("pi:proxy-state-changed", (event: Event) => {
         if (!(event instanceof CustomEvent)) return;
-        const detail: unknown = event.detail;
-        if (!isRecord(detail)) return;
+        const detail: DynamicValue = event.detail;
+        if (!isTaskpaneInitPayloadShape(detail)) return;
         const state = detail.state;
         if (state === "detected" || state === "not-detected" || state === "unknown") {
           proxyBanner.update(state);
@@ -1970,13 +1973,13 @@ export async function initTaskpane(opts: {
   // is still in-flight, and let extensions finish loading in the background.
   const extensionInitialization = extensionManager.initialize();
 
-  void extensionInitialization.catch((error: unknown) => {
+  void extensionInitialization.catch((error: DynamicValue) => {
     console.warn("[pi] Extension initialization failed:", error);
   });
 
   try {
     await awaitWithTimeout("Extension initialization", 5000, extensionInitialization);
-  } catch (error: unknown) {
+  } catch (error) {
     console.warn("[pi] Extension initialization did not complete during startup:", error);
   }
 

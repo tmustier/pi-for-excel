@@ -12,7 +12,7 @@
 // Worker globals — declared locally to avoid tsconfig lib conflicts
 declare const self: {
   addEventListener(type: "message", listener: (event: MessageEvent) => void): void;
-  postMessage(message: unknown): void;
+  postMessage(message: DynamicValue): void;
 };
 
 export interface PyodideWorkerRequest {
@@ -36,14 +36,14 @@ export interface PyodideWorkerResponse {
 
 // Pyodide types (minimal subset for the worker)
 interface PyodideInterface {
-  runPythonAsync(code: string): Promise<unknown>;
+  runPythonAsync(code: string): Promise<DynamicValue>;
   loadPackage(names: string | string[]): Promise<void>;
   globals: {
-    set(name: string, value: unknown): void;
-    get(name: string): unknown;
+    set(name: string, value: DynamicValue): void;
+    get(name: string): DynamicValue;
     delete(name: string): void;
   };
-  toPy(value: unknown): unknown;
+  toPy(value: DynamicValue): DynamicValue;
   version: string;
   FS: {
     writeFile(path: string, data: string | Uint8Array): void;
@@ -79,7 +79,7 @@ async function ensurePyodide(): Promise<PyodideInterface> {
 
       pyodide = instance;
       return instance;
-    } catch (error: unknown) {
+    } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       throw new Error(
         "Failed to load Pyodide from jsDelivr. " +
@@ -220,7 +220,7 @@ result = None
 
   try {
     await py.runPythonAsync(request.code);
-  } catch (error: unknown) {
+  } catch (error) {
     // Restore stdout/stderr before returning
     await py.runPythonAsync(`
 __sys__.stdout = __sys__.__stdout__
@@ -307,7 +307,7 @@ self.addEventListener("message", (event: MessageEvent<PyodideWorkerRequest>) => 
 
   void handleRun(request).then(
     (response) => self.postMessage(response),
-    (error: unknown) => {
+    (error: DynamicValue) => {
       const message = error instanceof Error ? error.message : String(error);
       const response: PyodideWorkerResponse = {
         id: request.id,

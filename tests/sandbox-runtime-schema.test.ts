@@ -8,7 +8,10 @@ import {
   parseSandboxHttpRequestOptions,
   parseSandboxLlmCompletionRequest,
 } from "../src/extensions/sandbox/runtime-helpers.ts";
-import { isRecord } from "../src/utils/type-guards.ts";
+function isSandboxRuntimeSchemaTestPayloadShape(value: DynamicValue): value is DynamicObject {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 
 void test("normalizeSandboxToolParameters keeps TypeBox schema unchanged", () => {
   const schema = Type.Object({
@@ -33,7 +36,7 @@ void test("normalizeSandboxToolParameters accepts plain JSON schema objects", ()
 
   const normalized = normalizeSandboxToolParameters(rawSchema);
 
-  assert.ok(isRecord(normalized));
+  assert.ok(isSandboxRuntimeSchemaTestPayloadShape(normalized));
   assert.equal(normalized.type, "object");
   assert.ok(Array.isArray(normalized.required));
   assert.equal(normalized.additionalProperties, false);

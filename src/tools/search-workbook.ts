@@ -55,7 +55,7 @@ type Params = Static<typeof schema>;
 interface SearchMatch {
   sheet: string;
   address: string;
-  value: unknown;
+  value: DynamicValue;
   formula?: string;
   context?: string;
 }
@@ -87,7 +87,7 @@ export function createSearchWorkbookTool(): AgentTool<typeof schema> {
         if (useRegex) {
           try {
             regex = new RegExp(query, "i");
-          } catch (e: unknown) {
+          } catch (e) {
             return {
               content: [{ type: "text", text: `Invalid regex "${query}": ${getErrorMessage(e)}` }],
               details: undefined,
@@ -130,8 +130,8 @@ export function createSearchWorkbookTool(): AgentTool<typeof schema> {
 
             for (let r = 0; r < values.length; r++) {
               for (let c = 0; c < values[r].length; c++) {
-                const value: unknown = values[r][c];
-                const formula: unknown = formulas[r][c];
+                const value: DynamicValue = values[r][c];
+                const formula: DynamicValue = formulas[r][c];
 
                 let match = false;
                 if (searchFormulas) {
@@ -175,7 +175,7 @@ export function createSearchWorkbookTool(): AgentTool<typeof schema> {
                     for (let ri = rStart; ri <= rEnd; ri++) {
                       const cells: string[] = [String(start.row + ri)];
                       for (let ci = cStart; ci <= cEnd; ci++) {
-                        const v: unknown = values[ri][ci];
+                        const v: DynamicValue = values[ri][ci];
                         let s = v === null || v === undefined || v === "" ? "" : typeof v === "string" ? v : typeof v === "number" || typeof v === "boolean" ? String(v) : JSON.stringify(v);
                         if (s.length > 20) s = s.substring(0, 20) + "…";
                         s = s.replace(/\|/g, "\\|");
@@ -237,7 +237,7 @@ export function createSearchWorkbookTool(): AgentTool<typeof schema> {
           content: [{ type: "text", text: lines.join("\n") }],
           details: undefined,
         };
-      } catch (e: unknown) {
+      } catch (e) {
         return {
           content: [{ type: "text", text: `Error searching: ${getErrorMessage(e)}` }],
           details: undefined,

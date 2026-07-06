@@ -60,7 +60,7 @@ export class ChangeTracker {
       });
       this.registered = true;
       console.log("[change-tracker] Listening for changes");
-    } catch (e: unknown) {
+    } catch (e) {
       console.warn("[change-tracker] Failed to register:", getErrorMessage(e));
     }
   }

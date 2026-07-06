@@ -1,3 +1,7 @@
+function isToolsWebSearchPayloadShape(value: DynamicValue): value is DynamicObject {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 /**
  * web_search — external web search (Jina/Serper/Tavily/Brave).
  */
@@ -11,7 +15,6 @@ import {
   getHttpErrorReason,
   runWithTimeoutAbort,
 } from "../utils/network.js";
-import { isRecord } from "../utils/type-guards.js";
 import {
   buildProxyDownErrorMessage,
   getEnabledProxyBaseUrl,
@@ -152,13 +155,13 @@ export interface WebSearchApiKeyValidationResult {
   resultCount?: number;
 }
 
-function normalizeOptionalString(value: unknown): string | undefined {
+function normalizeOptionalString(value: DynamicValue): string | undefined {
   if (typeof value !== "string") return undefined;
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
-function parseSites(value: unknown): string[] {
+function parseSites(value: DynamicValue): string[] {
   if (typeof value === "string") {
     const trimmed = value.trim();
     return trimmed.length > 0 ? [trimmed] : [];
@@ -181,8 +184,8 @@ function isRecencyValue(value: string): value is RecencyValue {
   return value === "day" || value === "week" || value === "month" || value === "year";
 }
 
-function parseParams(raw: unknown): Params {
-  if (!isRecord(raw)) {
+function parseParams(raw: DynamicValue): Params {
+  if (!isToolsWebSearchPayloadShape(raw)) {
     throw new Error("Invalid web_search params: expected an object.");
   }
 
@@ -279,7 +282,7 @@ function buildProviderRequest(
   const maxResults = params.max_results ?? 5;
 
   if (provider === "jina") {
-    const body: Record<string, unknown> = {
+    const body: DynamicObject = {
       q: sentQuery,
     };
 
@@ -327,7 +330,7 @@ function buildProviderRequest(
   }
 
   if (provider === "serper") {
-    const body: Record<string, unknown> = {
+    const body: DynamicObject = {
       q: sentQuery,
       num: maxResults,
     };
@@ -352,7 +355,7 @@ function buildProviderRequest(
   }
 
   if (provider === "firecrawl") {
-    const body: Record<string, unknown> = {
+    const body: DynamicObject = {
       query: sentQuery,
       limit: maxResults,
     };
@@ -376,7 +379,7 @@ function buildProviderRequest(
     };
   }
 
-  const tavilyBody: Record<string, unknown> = {
+  const tavilyBody: DynamicObject = {
     api_key: apiKey,
     query: sentQuery,
     max_results: maxResults,
@@ -405,11 +408,11 @@ interface HitParsingShape {
   snippetKeys: readonly string[];
 }
 
-function readArrayPath(payload: unknown, path: readonly string[]): unknown[] {
-  let cursor: unknown = payload;
+function readArrayPath(payload: DynamicValue, path: readonly string[]): DynamicValue[] {
+  let cursor: DynamicValue = payload;
 
   for (const key of path) {
-    if (!isRecord(cursor)) {
+    if (!isToolsWebSearchPayloadShape(cursor)) {
       return [];
     }
 
@@ -419,11 +422,11 @@ function readArrayPath(payload: unknown, path: readonly string[]): unknown[] {
   return Array.isArray(cursor) ? cursor : [];
 }
 
-function parseHitsFromEntries(entries: readonly unknown[], shape: HitParsingShape): WebSearchHit[] {
+function parseHitsFromEntries(entries: readonly DynamicValue[], shape: HitParsingShape): WebSearchHit[] {
   const hits: WebSearchHit[] = [];
 
   for (const entry of entries) {
-    if (!isRecord(entry)) continue;
+    if (!isToolsWebSearchPayloadShape(entry)) continue;
 
     const title = normalizeOptionalString(entry[shape.titleKey]);
     const url = normalizeOptionalString(entry[shape.urlKey]);
@@ -448,7 +451,7 @@ function parseHitsFromEntries(entries: readonly unknown[], shape: HitParsingShap
   return hits;
 }
 
-function parseBraveHits(payload: unknown): WebSearchHit[] {
+function parseBraveHits(payload: DynamicValue): WebSearchHit[] {
   return parseHitsFromEntries(
     readArrayPath(payload, ["web", "results"]),
     {
@@ -459,7 +462,7 @@ function parseBraveHits(payload: unknown): WebSearchHit[] {
   );
 }
 
-function parseSerperHits(payload: unknown): WebSearchHit[] {
+function parseSerperHits(payload: DynamicValue): WebSearchHit[] {
   return parseHitsFromEntries(
     readArrayPath(payload, ["organic"]),
     {
@@ -470,7 +473,7 @@ function parseSerperHits(payload: unknown): WebSearchHit[] {
   );
 }
 
-function parseTavilyHits(payload: unknown): WebSearchHit[] {
+function parseTavilyHits(payload: DynamicValue): WebSearchHit[] {
   return parseHitsFromEntries(
     readArrayPath(payload, ["results"]),
     {
@@ -481,7 +484,7 @@ function parseTavilyHits(payload: unknown): WebSearchHit[] {
   );
 }
 
-function parseJinaHits(payload: unknown): WebSearchHit[] {
+function parseJinaHits(payload: DynamicValue): WebSearchHit[] {
   return parseHitsFromEntries(
     readArrayPath(payload, ["data"]),
     {
@@ -492,7 +495,7 @@ function parseJinaHits(payload: unknown): WebSearchHit[] {
   );
 }
 
-function parseFirecrawlHits(payload: unknown): WebSearchHit[] {
+function parseFirecrawlHits(payload: DynamicValue): WebSearchHit[] {
   return parseHitsFromEntries(
     readArrayPath(payload, ["data", "web"]),
     {
@@ -503,7 +506,7 @@ function parseFirecrawlHits(payload: unknown): WebSearchHit[] {
   );
 }
 
-const SEARCH_HIT_PARSERS: Record<WebSearchProvider, (payload: unknown) => WebSearchHit[]> = {
+const SEARCH_HIT_PARSERS: Record<WebSearchProvider, (payload: DynamicValue) => WebSearchHit[]> = {
   jina: parseJinaHits,
   firecrawl: parseFirecrawlHits,
   brave: parseBraveHits,
@@ -511,7 +514,7 @@ const SEARCH_HIT_PARSERS: Record<WebSearchProvider, (payload: unknown) => WebSea
   tavily: parseTavilyHits,
 };
 
-function parseSearchHits(provider: WebSearchProvider, payload: unknown, maxResults?: number): WebSearchHit[] {
+function parseSearchHits(provider: WebSearchProvider, payload: DynamicValue, maxResults?: number): WebSearchHit[] {
   const hits = SEARCH_HIT_PARSERS[provider](payload);
   if (typeof maxResults === "number" && hits.length > maxResults) {
     return hits.slice(0, maxResults);
@@ -519,7 +522,7 @@ function parseSearchHits(provider: WebSearchProvider, payload: unknown, maxResul
   return hits;
 }
 
-function shouldFallbackToJina(provider: WebSearchProvider, error: unknown): boolean {
+function shouldFallbackToJina(provider: WebSearchProvider, error: DynamicValue): boolean {
   if (provider === "jina") return false;
 
   if (error instanceof WebSearchExecutionError) {
@@ -682,7 +685,7 @@ async function defaultExecuteSearch(
           });
         }
 
-        let payload: unknown = null;
+        let payload: DynamicValue = null;
         try {
           payload = JSON.parse(text);
         } catch {
@@ -699,7 +702,7 @@ async function defaultExecuteSearch(
         };
       },
     });
-  } catch (error: unknown) {
+  } catch (error) {
     if (error instanceof WebSearchExecutionError) {
       throw error;
     }
@@ -759,7 +762,7 @@ export async function validateWebSearchApiKey(args: {
       proxyBaseUrl: result.proxyBaseUrl,
       resultCount: result.hits.length,
     };
-  } catch (error: unknown) {
+  } catch (error) {
     return {
       ok: false,
       provider,
@@ -782,7 +785,7 @@ export function createWebSearchTool(
     parameters: schema,
     execute: async (
       _toolCallId: string,
-      rawParams: unknown,
+      rawParams: DynamicValue,
       signal: AbortSignal | undefined,
     ): Promise<AgentToolResult<WebSearchToolDetails>> => {
       let params: Params | null = null;
@@ -827,7 +830,7 @@ export function createWebSearchTool(
           }
 
           result = await runSearch(configuredProvider, configuredApiKey);
-        } catch (error: unknown) {
+        } catch (error) {
           if (!fallbackJinaApiKey || !shouldFallbackToJina(configuredProvider, error)) {
             throw error;
           }
@@ -841,7 +844,7 @@ export function createWebSearchTool(
           try {
             result = await runSearch("jina", fallbackJinaApiKey);
             effectiveProvider = "jina";
-          } catch (fallbackError: unknown) {
+          } catch (fallbackError) {
             const primaryMessage = getErrorMessage(error);
             const fallbackMessage = getErrorMessage(fallbackError);
             throw new Error(`${primaryMessage}; fallback to Jina Search also failed: ${fallbackMessage}`);
@@ -873,14 +876,14 @@ export function createWebSearchTool(
             fallback,
           },
         };
-      } catch (error: unknown) {
+      } catch (error) {
         const message = getErrorMessage(error);
         const proxyDown = isLikelyProxyConnectionError(message, usedProxyBaseUrl);
         const displayMessage = proxyDown
           ? buildProxyDownErrorMessage("Web search", message)
           : `Error: ${message}`;
         const fallbackQuery = params?.query
-          ?? (isRecord(rawParams) && typeof rawParams.query === "string" ? rawParams.query : "");
+          ?? (isToolsWebSearchPayloadShape(rawParams) && typeof rawParams.query === "string" ? rawParams.query : "");
 
         return {
           content: [{ type: "text", text: displayMessage }],

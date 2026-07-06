@@ -5,14 +5,14 @@
  */
 
 type ToolRenderResult = {
-  content: unknown;
+  content: DynamicValue;
   isCustom: boolean;
 };
 
 export class ArtifactsToolRenderer {
-  constructor(_panel: unknown) {}
+  constructor(_panel: DynamicValue) {}
 
-  render(_params: unknown, _result: unknown, _isStreaming: boolean): ToolRenderResult {
+  render(_params: DynamicValue, _result: DynamicValue, _isStreaming: boolean): ToolRenderResult {
     return { content: null, isCustom: false };
   }
 }

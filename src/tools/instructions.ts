@@ -143,7 +143,7 @@ export function createInstructionsTool(): AgentTool<typeof schema, undefined> {
           ],
           details: undefined,
         };
-      } catch (error: unknown) {
+      } catch (error) {
         return {
           content: [{ type: "text", text: `Error updating rules: ${getErrorMessage(error)}` }],
           details: undefined,

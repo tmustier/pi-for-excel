@@ -9,14 +9,14 @@ type ArtifactsTool = {
   label: string;
   name: "artifacts";
   description: string;
-  parameters: unknown;
-  execute: (...args: unknown[]) => Promise<never>;
+  parameters: DynamicValue;
+  execute: (...args: DynamicValue[]) => Promise<never>;
 };
 
 export class ArtifactsPanel extends HTMLElement {
   // API surface used by pi-web-ui's ChatPanel (if it ever gets used here).
-  agent: unknown;
-  sandboxUrlProvider: unknown;
+  agent: DynamicValue;
+  sandboxUrlProvider: DynamicValue;
 
   onArtifactsChange: (() => void) | undefined;
   onClose: (() => void) | undefined;
@@ -25,7 +25,7 @@ export class ArtifactsPanel extends HTMLElement {
   collapsed = false;
   overlay = false;
 
-  artifacts: Map<string, unknown> = new Map();
+  artifacts: Map<string, DynamicValue> = new Map();
 
   tool: ArtifactsTool;
 
@@ -40,7 +40,7 @@ export class ArtifactsPanel extends HTMLElement {
     };
   }
 
-  async reconstructFromMessages(_messages: unknown): Promise<void> {
+  async reconstructFromMessages(_messages: DynamicValue): Promise<void> {
     // no-op
   }
 }

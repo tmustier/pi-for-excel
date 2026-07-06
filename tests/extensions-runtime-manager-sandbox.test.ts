@@ -27,18 +27,18 @@ import {
 } from "../src/extensions/permissions.ts";
 
 class MemorySettingsStore {
-  private readonly values = new Map<string, unknown>();
+  private readonly values = new Map<string, DynamicValue>();
 
-  get(key: string): Promise<unknown> {
+  get(key: string): Promise<DynamicValue> {
     return Promise.resolve(this.values.has(key) ? this.values.get(key) ?? null : null);
   }
 
-  set(key: string, value: unknown): Promise<void> {
+  set(key: string, value: DynamicValue): Promise<void> {
     this.values.set(key, value);
     return Promise.resolve();
   }
 
-  writeRaw(key: string, value: unknown): void {
+  writeRaw(key: string, value: DynamicValue): void {
     this.values.set(key, value);
   }
 }
@@ -50,7 +50,7 @@ class FailingConnectionStoreSettings extends MemorySettingsStore {
     this.failNextConnectionStoreWrite = true;
   }
 
-  override set(key: string, value: unknown): Promise<void> {
+  override set(key: string, value: DynamicValue): Promise<void> {
     if (this.failNextConnectionStoreWrite && key === CONNECTION_STORE_KEY) {
       this.failNextConnectionStoreWrite = false;
       return Promise.reject(new Error("simulated connection store failure"));
@@ -116,7 +116,7 @@ function createStoredEntry(input: {
   trust: StoredExtensionTrust;
   enabled?: boolean;
   permissions?: StoredExtensionPermissions;
-}): Record<string, unknown> {
+}): DynamicObject {
   const now = new Date().toISOString();
   const source = input.trust === "inline-code"
     ? {
@@ -687,14 +687,14 @@ void test("sandbox srcdoc builder emits expected bridge hooks and config", () =>
 });
 
 void test("sandbox protocol helpers validate envelope shapes and escape inline script payloads", () => {
-  const validBootstrap: unknown = {
+  const validBootstrap: DynamicValue = {
     channel: SANDBOX_CHANNEL,
     instanceId: "ext.inline.proto",
     direction: "host_to_sandbox",
     kind: SANDBOX_BOOTSTRAP_KIND,
   };
 
-  const validRequest: unknown = {
+  const validRequest: DynamicValue = {
     channel: SANDBOX_CHANNEL,
     instanceId: "ext.inline.proto",
     direction: "sandbox_to_host",
@@ -703,7 +703,7 @@ void test("sandbox protocol helpers validate envelope shapes and escape inline s
     method: "register_tool",
   };
 
-  const invalidDirection: unknown = {
+  const invalidDirection: DynamicValue = {
     channel: SANDBOX_CHANNEL,
     instanceId: "ext.inline.proto",
     direction: "sideways",
@@ -712,7 +712,7 @@ void test("sandbox protocol helpers validate envelope shapes and escape inline s
     method: "register_tool",
   };
 
-  const invalidKind: unknown = {
+  const invalidKind: DynamicValue = {
     channel: SANDBOX_CHANNEL,
     instanceId: "ext.inline.proto",
     direction: "sandbox_to_host",

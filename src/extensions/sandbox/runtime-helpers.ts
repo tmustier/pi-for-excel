@@ -2,11 +2,14 @@ import type { AgentToolResult } from "@earendil-works/pi-agent-core";
 import { Kind, Type, type TSchema } from "@sinclair/typebox";
 
 import type { HttpRequestOptions, LlmCompletionRequest } from "../../commands/extension-api.js";
-import { isRecord } from "../../utils/type-guards.js";
+
+function isExtensionsSandboxRuntimeHelpersPayloadShape(value: DynamicValue): value is DynamicObject {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
 
 type WidgetPlacement = "above-input" | "below-input";
 
-export function getErrorMessage(error: unknown): string {
+export function getErrorMessage(error: DynamicValue): string {
   if (error instanceof Error && error.message.trim().length > 0) {
     return error.message;
   }
@@ -14,7 +17,7 @@ export function getErrorMessage(error: unknown): string {
   return String(error);
 }
 
-export function sanitizeText(value: unknown): string {
+export function sanitizeText(value: DynamicValue): string {
   if (typeof value !== "string") {
     return "";
   }
@@ -22,7 +25,7 @@ export function sanitizeText(value: unknown): string {
   return value;
 }
 
-export function asNonEmptyString(value: unknown, field: string): string {
+export function asNonEmptyString(value: DynamicValue, field: string): string {
   if (typeof value !== "string" || value.trim().length === 0) {
     throw new Error(`${field} must be a non-empty string.`);
   }
@@ -30,15 +33,15 @@ export function asNonEmptyString(value: unknown, field: string): string {
   return value.trim();
 }
 
-export function asRecord(value: unknown, field: string): Record<string, unknown> {
-  if (!isRecord(value)) {
+export function asSandboxPayload(value: DynamicValue, field: string): DynamicObject {
+  if (!isExtensionsSandboxRuntimeHelpersPayloadShape(value)) {
     throw new Error(`${field} must be an object.`);
   }
 
   return value;
 }
 
-export function asFiniteNumberOrNull(value: unknown): number | null {
+export function asFiniteNumberOrNull(value: DynamicValue): number | null {
   if (typeof value !== "number" || Number.isNaN(value) || !Number.isFinite(value)) {
     return null;
   }
@@ -46,7 +49,7 @@ export function asFiniteNumberOrNull(value: unknown): number | null {
   return value;
 }
 
-export function asFiniteNumberOrNullOrUndefined(value: unknown): number | null | undefined {
+export function asFiniteNumberOrNullOrUndefined(value: DynamicValue): number | null | undefined {
   if (value === undefined) {
     return undefined;
   }
@@ -62,7 +65,7 @@ export function asFiniteNumberOrNullOrUndefined(value: unknown): number | null |
   return value;
 }
 
-export function asWidgetPlacementOrUndefined(value: unknown): WidgetPlacement | undefined {
+export function asWidgetPlacementOrUndefined(value: DynamicValue): WidgetPlacement | undefined {
   if (value === "above-input" || value === "below-input") {
     return value;
   }
@@ -70,12 +73,12 @@ export function asWidgetPlacementOrUndefined(value: unknown): WidgetPlacement | 
   return undefined;
 }
 
-export function asBooleanOrUndefined(value: unknown): boolean | undefined {
+export function asBooleanOrUndefined(value: DynamicValue): boolean | undefined {
   return typeof value === "boolean" ? value : undefined;
 }
 
-export function parseSandboxLlmCompletionRequest(requestRaw: unknown): LlmCompletionRequest {
-  if (!isRecord(requestRaw)) {
+export function parseSandboxLlmCompletionRequest(requestRaw: DynamicValue): LlmCompletionRequest {
+  if (!isExtensionsSandboxRuntimeHelpersPayloadShape(requestRaw)) {
     throw new Error("llm_complete request must be an object.");
   }
 
@@ -86,7 +89,7 @@ export function parseSandboxLlmCompletionRequest(requestRaw: unknown): LlmComple
 
   const messages: LlmCompletionRequest["messages"] = [];
   for (const value of messagesRaw) {
-    if (!isRecord(value)) {
+    if (!isExtensionsSandboxRuntimeHelpersPayloadShape(value)) {
       throw new Error("llm_complete messages entries must be objects.");
     }
 
@@ -107,7 +110,7 @@ export function parseSandboxLlmCompletionRequest(requestRaw: unknown): LlmComple
   };
 }
 
-function asHttpMethodOrUndefined(value: unknown): HttpRequestOptions["method"] | undefined {
+function asHttpMethodOrUndefined(value: DynamicValue): HttpRequestOptions["method"] | undefined {
   return value === "GET"
     || value === "POST"
     || value === "PUT"
@@ -118,14 +121,14 @@ function asHttpMethodOrUndefined(value: unknown): HttpRequestOptions["method"] |
     : undefined;
 }
 
-export function parseSandboxHttpRequestOptions(optionsRaw: unknown): HttpRequestOptions | undefined {
-  if (!isRecord(optionsRaw)) {
+export function parseSandboxHttpRequestOptions(optionsRaw: DynamicValue): HttpRequestOptions | undefined {
+  if (!isExtensionsSandboxRuntimeHelpersPayloadShape(optionsRaw)) {
     return undefined;
   }
 
   const headersRaw = optionsRaw.headers;
   let headers: Record<string, string> | undefined;
-  if (isRecord(headersRaw)) {
+  if (isExtensionsSandboxRuntimeHelpersPayloadShape(headersRaw)) {
     headers = {};
     for (const [key, value] of Object.entries(headersRaw)) {
       if (typeof value === "string") {
@@ -147,28 +150,28 @@ export function parseSandboxHttpRequestOptions(optionsRaw: unknown): HttpRequest
   };
 }
 
-function isTypeBoxSchema(value: unknown): value is TSchema {
-  return isRecord(value) && Kind in value;
+function isTypeBoxSchema(value: DynamicValue): value is TSchema {
+  return isExtensionsSandboxRuntimeHelpersPayloadShape(value) && Kind in value;
 }
 
-export function normalizeSandboxToolParameters(raw: unknown): TSchema {
+export function normalizeSandboxToolParameters(raw: DynamicValue): TSchema {
   if (isTypeBoxSchema(raw)) {
     return raw;
   }
 
-  if (!isRecord(raw)) {
+  if (!isExtensionsSandboxRuntimeHelpersPayloadShape(raw)) {
     throw new Error("register_tool parameters must be an object schema.");
   }
 
-  return Type.Unsafe<unknown>(raw);
+  return Type.Unsafe<DynamicValue>(raw);
 }
 
-export function normalizeSandboxToolResult(raw: unknown): AgentToolResult<unknown> {
+export function normalizeSandboxToolResult(raw: DynamicValue): AgentToolResult<DynamicValue> {
   const content: Array<{ type: "text"; text: string }> = [];
 
-  if (isRecord(raw) && Array.isArray(raw.content)) {
+  if (isExtensionsSandboxRuntimeHelpersPayloadShape(raw) && Array.isArray(raw.content)) {
     for (const item of raw.content) {
-      if (!isRecord(item)) {
+      if (!isExtensionsSandboxRuntimeHelpersPayloadShape(item)) {
         continue;
       }
 
@@ -188,7 +191,7 @@ export function normalizeSandboxToolResult(raw: unknown): AgentToolResult<unknow
   }
 
   if (content.length === 0) {
-    const fallbackText = isRecord(raw) && Array.isArray(raw.content)
+    const fallbackText = isExtensionsSandboxRuntimeHelpersPayloadShape(raw) && Array.isArray(raw.content)
       ? "Sandbox tool returned non-text content; showing serialized payload instead."
       : "Sandbox tool returned an invalid payload; showing serialized payload instead.";
 
@@ -198,7 +201,7 @@ export function normalizeSandboxToolResult(raw: unknown): AgentToolResult<unknow
     });
   }
 
-  const details = isRecord(raw) && Object.prototype.hasOwnProperty.call(raw, "details")
+  const details = isExtensionsSandboxRuntimeHelpersPayloadShape(raw) && Object.prototype.hasOwnProperty.call(raw, "details")
     ? raw.details
     : undefined;
 

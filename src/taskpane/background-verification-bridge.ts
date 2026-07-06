@@ -29,7 +29,7 @@ type BridgeCommandType =
 interface BridgeCommand {
   id?: string;
   type: BridgeCommandType;
-  payload?: unknown;
+  payload?: DynamicValue;
 }
 
 interface PollResponse extends BridgeCommand {
@@ -47,7 +47,7 @@ interface BridgeOptions {
 }
 
 interface JsonRecord {
-  [key: string]: unknown;
+  [key: string]: DynamicValue;
 }
 
 interface BridgeStopHandle {
@@ -57,41 +57,41 @@ interface BridgeStopHandle {
 const DEFAULT_POLL_DELAY_MS = 750;
 
 function envValue(name: keyof ImportMetaEnv): string {
-  const value: unknown = import.meta.env[name];
+  const value: DynamicValue = import.meta.env[name];
   return typeof value === "string" ? value.trim() : "";
 }
 
-function isRecord(value: unknown): value is JsonRecord {
+function isTaskpaneBackgroundVerificationBridgePayloadShape(value: DynamicValue): value is JsonRecord {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function stringField(value: unknown, key: string): string | undefined {
-  if (!isRecord(value)) return undefined;
+function stringField(value: DynamicValue, key: string): string | undefined {
+  if (!isTaskpaneBackgroundVerificationBridgePayloadShape(value)) return undefined;
   const field = value[key];
   return typeof field === "string" && field.trim().length > 0 ? field.trim() : undefined;
 }
 
-function booleanField(value: unknown, key: string): boolean | undefined {
-  if (!isRecord(value)) return undefined;
+function booleanField(value: DynamicValue, key: string): boolean | undefined {
+  if (!isTaskpaneBackgroundVerificationBridgePayloadShape(value)) return undefined;
   const field = value[key];
   return typeof field === "boolean" ? field : undefined;
 }
 
-function numberField(value: unknown, key: string): number | undefined {
-  if (!isRecord(value)) return undefined;
+function numberField(value: DynamicValue, key: string): number | undefined {
+  if (!isTaskpaneBackgroundVerificationBridgePayloadShape(value)) return undefined;
   const field = value[key];
   return typeof field === "number" && Number.isFinite(field) ? field : undefined;
 }
 
-function isUnknownArray(value: unknown): value is readonly unknown[] {
+function isUnknownArray(value: DynamicValue): value is readonly DynamicValue[] {
   return Array.isArray(value);
 }
 
-function matrixField(value: unknown, key: string): unknown[][] | undefined {
-  if (!isRecord(value)) return undefined;
+function matrixField(value: DynamicValue, key: string): DynamicValue[][] | undefined {
+  if (!isTaskpaneBackgroundVerificationBridgePayloadShape(value)) return undefined;
   const field = value[key];
   if (!isUnknownArray(field) || field.length === 0) return undefined;
-  const rows: unknown[][] = [];
+  const rows: DynamicValue[][] = [];
   let width: number | null = null;
   for (const row of field) {
     if (!isUnknownArray(row) || row.length === 0) return undefined;
@@ -128,7 +128,7 @@ async function postJson<T>(url: string, body: JsonRecord, signal: AbortSignal): 
     body: JSON.stringify(body),
     signal,
   });
-  const parsed = await response.json() as unknown;
+  const parsed = await response.json() as DynamicValue;
   if (!response.ok) {
     const message = stringField(parsed, "error") ?? `HTTP ${response.status}`;
     throw new Error(message);
@@ -140,7 +140,7 @@ function assertNever(value: never): never {
   throw new Error(`Unknown background verification command: ${String(value)}`);
 }
 
-function serializeError(error: unknown): JsonRecord {
+function serializeError(error: DynamicValue): JsonRecord {
   if (error instanceof Error) {
     return {
       name: error.name,
@@ -196,7 +196,7 @@ async function waitForRuntimeIdle(
   };
 }
 
-async function submitPrompt(payload: unknown, options: BridgeOptions): Promise<JsonRecord> {
+async function submitPrompt(payload: DynamicValue, options: BridgeOptions): Promise<JsonRecord> {
   const text = stringField(payload, "text");
   if (!text) throw new Error("submitPrompt requires payload.text");
 
@@ -293,7 +293,7 @@ async function readRange(address: string): Promise<JsonRecord> {
   });
 }
 
-async function writeRange(address: string, values: unknown[][], formulas?: unknown[][], numberFormat?: unknown[][]): Promise<JsonRecord> {
+async function writeRange(address: string, values: DynamicValue[][], formulas?: DynamicValue[][], numberFormat?: DynamicValue[][]): Promise<JsonRecord> {
   if (typeof Excel === "undefined") {
     throw new Error("Excel global is unavailable; the taskpane is not running inside the Excel host.");
   }
@@ -325,7 +325,7 @@ async function writeRange(address: string, values: unknown[][], formulas?: unkno
   });
 }
 
-function clearApplyToFromPayload(payload: unknown): Excel.ClearApplyTo {
+function clearApplyToFromPayload(payload: DynamicValue): Excel.ClearApplyTo {
   const applyTo = stringField(payload, "applyTo") ?? "contents";
   switch (applyTo) {
     case "all":
@@ -367,7 +367,7 @@ async function clearRange(address: string, applyTo: Excel.ClearApplyTo): Promise
   });
 }
 
-async function workbookWriteProbe(payload: unknown): Promise<JsonRecord> {
+async function workbookWriteProbe(payload: DynamicValue): Promise<JsonRecord> {
   if (typeof Excel === "undefined") {
     throw new Error("Excel global is unavailable; the taskpane is not running inside the Excel host.");
   }
@@ -411,8 +411,8 @@ async function workbookWriteProbe(payload: unknown): Promise<JsonRecord> {
       await context.sync();
       cleanup = { action: "delete-created-sheet", restored: true };
     } else if (!createdSheet && !keepSheet) {
-      target.formulas = before.formulas as unknown[][];
-      target.numberFormat = before.numberFormat as unknown[][];
+      target.formulas = before.formulas as DynamicValue[][];
+      target.numberFormat = before.numberFormat as DynamicValue[][];
       await context.sync();
       cleanup = { action: "restore-existing-range", restored: true };
     } else {
@@ -491,7 +491,7 @@ async function listCharts(): Promise<JsonRecord> {
   });
 }
 
-async function executeCommand(command: BridgeCommand, options: BridgeOptions): Promise<unknown> {
+async function executeCommand(command: BridgeCommand, options: BridgeOptions): Promise<DynamicValue> {
   switch (command.type) {
     case "noop":
       return { ok: true };

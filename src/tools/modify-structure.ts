@@ -527,7 +527,7 @@ export function createModifyStructureTool(): AgentTool<typeof schema, ModifyStru
         });
 
         return toolResult;
-      } catch (e: unknown) {
+      } catch (e) {
         const message = getErrorMessage(e);
 
         await finalizeMutationOperation(mutationFinalizeDependencies, {

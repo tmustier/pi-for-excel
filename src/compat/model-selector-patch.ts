@@ -46,7 +46,7 @@ export function installModelSelectorPatch(): void {
   if (_installed) return;
   _installed = true;
 
-  const modelSelectorProto = ModelSelector.prototype as unknown as Partial<ModelSelectorPrivate>;
+  const modelSelectorProto = ModelSelector.prototype as DynamicValue as Partial<ModelSelectorPrivate>;
   const orig = modelSelectorProto.getFilteredModels;
 
   if (typeof orig !== "function") {

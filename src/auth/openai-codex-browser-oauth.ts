@@ -40,7 +40,7 @@ type VersionedOpenAICodexCredentials = OAuthCredentials & {
   scopes?: string;
 };
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+function isOpenaiCodexBrowserOauthPayloadShape(value: DynamicValue): value is DynamicObject {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -89,8 +89,8 @@ function parseAuthorizationInput(input: string): ParsedAuthorizationInput {
   return { code: value };
 }
 
-function parseTokenPayload(payload: unknown): TokenPayload | null {
-  if (!isRecord(payload)) {
+function parseTokenPayload(payload: DynamicValue): TokenPayload | null {
+  if (!isOpenaiCodexBrowserOauthPayloadShape(payload)) {
     return null;
   }
 
@@ -176,7 +176,7 @@ function decodeBase64Url(encoded: string): string {
   return atob(padded);
 }
 
-function decodeJwtPayload(token: string): Record<string, unknown> | null {
+function decodeJwtPayload(token: string): DynamicObject | null {
   try {
     const parts = token.split(".");
     if (parts.length !== 3) {
@@ -185,9 +185,9 @@ function decodeJwtPayload(token: string): Record<string, unknown> | null {
 
     const payloadSegment = parts[1] ?? "";
     const decoded = decodeBase64Url(payloadSegment);
-    const parsed: unknown = JSON.parse(decoded);
+    const parsed: DynamicValue = JSON.parse(decoded);
 
-    if (!isRecord(parsed)) {
+    if (!isOpenaiCodexBrowserOauthPayloadShape(parsed)) {
       return null;
     }
 
@@ -204,7 +204,7 @@ function getAccountId(accessToken: string): string | null {
   }
 
   const authClaim = payload[JWT_CLAIM_PATH];
-  if (!isRecord(authClaim)) {
+  if (!isOpenaiCodexBrowserOauthPayloadShape(authClaim)) {
     return null;
   }
 
@@ -216,7 +216,7 @@ function getAccountId(accessToken: string): string | null {
   return accountId;
 }
 
-export function isOpenAICodexCredentialRefreshRequired(error: unknown): boolean {
+export function isOpenAICodexCredentialRefreshRequired(error: DynamicValue): boolean {
   return error instanceof Error && error.message.includes(STALE_CREDENTIAL_ERROR);
 }
 
@@ -233,7 +233,7 @@ const REQUIRED_SCOPES = SCOPE.split(" ");
  * sourced Codex credential would be rejected as stale even when the
  * underlying grant already includes the connector scopes.
  */
-function accessTokenHasRequiredScopes(accessToken: unknown): boolean {
+function accessTokenHasRequiredScopes(accessToken: DynamicValue): boolean {
   if (typeof accessToken !== "string") {
     return false;
   }

@@ -5,6 +5,6 @@
  * Pi for Excel currently does not support attachments in the sidebar UI.
  */
 
-export function loadAttachment(_source: unknown, _fileName?: string): Promise<never> {
+export function loadAttachment(_source: DynamicValue, _fileName?: string): Promise<never> {
   return Promise.reject(new Error("Attachments are not supported in this build"));
 }

@@ -132,7 +132,7 @@ async function loadSkillDefinitionsFromFiles(args: {
         mode: "text",
         maxChars: MAX_EXTERNAL_SKILL_MARKDOWN_CHARS,
       });
-    } catch (error: unknown) {
+    } catch (error) {
       console.warn(`[skills] Failed reading ${args.invalidWarningLabel}: ${file.path}`, error);
       continue;
     }

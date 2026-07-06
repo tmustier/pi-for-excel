@@ -820,7 +820,7 @@ export function createChartsTool(
         if (params.action === "update") {
           try {
             beforeChartState = await resolvedDependencies.captureChartPresent(requireName(params), params.sheet);
-          } catch (error: unknown) {
+          } catch (error) {
             captureError = `Chart backup capture failed: ${getErrorMessage(error)}`;
           }
         }
@@ -858,7 +858,7 @@ export function createChartsTool(
         }
 
         return result.result;
-      } catch (error: unknown) {
+      } catch (error) {
         const message = getErrorMessage(error);
 
         if (isMutation) {

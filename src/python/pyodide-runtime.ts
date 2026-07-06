@@ -150,7 +150,7 @@ export async function callPyodideRuntime(
         runTimeMs: workerResponse.runTimeMs,
       },
     };
-  } catch (error: unknown) {
+  } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return {
       ok: false,

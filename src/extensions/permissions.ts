@@ -1,3 +1,7 @@
+function isExtensionsPermissionsPayloadShape(value: DynamicValue): value is DynamicObject {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 /**
  * Extension trust + capability permissions.
  *
@@ -6,7 +10,6 @@
 
 import { t } from "../language/index.js";
 import { classifyExtensionSource } from "../commands/extension-source-policy.js";
-import { isRecord } from "../utils/type-guards.js";
 
 export type StoredExtensionTrust = "builtin" | "local-module" | "inline-code" | "remote-url";
 
@@ -118,9 +121,9 @@ export function getDefaultPermissionsForTrust(trust: StoredExtensionTrust): Stor
   return clonePermissions(RESTRICTED_UNTRUSTED_PERMISSIONS);
 }
 
-export function normalizeStoredExtensionPermissions(raw: unknown, trust: StoredExtensionTrust): StoredExtensionPermissions {
+export function normalizeStoredExtensionPermissions(raw: DynamicValue, trust: StoredExtensionTrust): StoredExtensionPermissions {
   const defaults = getDefaultPermissionsForTrust(trust);
-  if (!isRecord(raw)) return defaults;
+  if (!isExtensionsPermissionsPayloadShape(raw)) return defaults;
   return {
     commandsRegister: normalizeBooleanOrFallback(raw.commandsRegister, defaults.commandsRegister),
     toolsRegister: normalizeBooleanOrFallback(raw.toolsRegister, defaults.toolsRegister),
@@ -173,6 +176,6 @@ export function listGrantedExtensionCapabilities(permissions: StoredExtensionPer
     .map((descriptor) => descriptor.capability);
 }
 
-function normalizeBooleanOrFallback(value: unknown, fallback: boolean): boolean {
+function normalizeBooleanOrFallback(value: DynamicValue, fallback: boolean): boolean {
   return typeof value === "boolean" ? value : fallback;
 }

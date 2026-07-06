@@ -195,7 +195,7 @@ export function createSessionLifecycleCommands(actions: SessionCommandActions): 
           }
 
           showToast(backupUsage());
-        } catch (error: unknown) {
+        } catch (error) {
           const message = error instanceof Error ? error.message : t("session.backup.unknown_error");
           showToast(t("session.toast.backup_failed", { message }));
         }

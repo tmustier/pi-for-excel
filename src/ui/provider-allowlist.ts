@@ -14,7 +14,7 @@
  * Parse a raw allowlist value into a set of provider ids.
  * Returns null when no restriction is configured.
  */
-export function resolveAllowedProviderIds(raw: unknown): Set<string> | null {
+export function resolveAllowedProviderIds(raw: DynamicValue): Set<string> | null {
   if (typeof raw !== "string") return null;
 
   const ids = raw

@@ -6,14 +6,17 @@ import {
   getHttpErrorReason,
   runWithTimeoutAbort,
 } from "../../utils/network.js";
-import { isRecord } from "../../utils/type-guards.js";
+function isExtensionsHubMcpProbePayloadShape(value: DynamicValue): value is DynamicObject {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 
 const MCP_PROBE_TIMEOUT_MS = 8_000;
 const MCP_PROTOCOL_VERSION = "2025-03-26";
 
-function parseToolCountFromListResponse(value: unknown): number {
-  if (!isRecord(value)) return 0;
-  if (!isRecord(value.result)) return 0;
+function parseToolCountFromListResponse(value: DynamicValue): number {
+  if (!isExtensionsHubMcpProbePayloadShape(value)) return 0;
+  if (!isExtensionsHubMcpProbePayloadShape(value.result)) return 0;
   const tools = value.result.tools;
   return Array.isArray(tools) ? tools.length : 0;
 }
@@ -21,10 +24,10 @@ function parseToolCountFromListResponse(value: unknown): number {
 async function postJsonRpc(args: {
   server: McpServerConfig;
   method: string;
-  params?: unknown;
+  params?: DynamicValue;
   settings: IntegrationSettingsStore;
   expectResponse?: boolean;
-}): Promise<{ response: unknown; proxied: boolean; proxyBaseUrl?: string } | null> {
+}): Promise<{ response: DynamicValue; proxied: boolean; proxyBaseUrl?: string } | null> {
   const { server, method, params, settings, expectResponse = true } = args;
 
   const proxyBaseUrl = await getEnabledProxyBaseUrl(settings);
@@ -33,7 +36,7 @@ async function postJsonRpc(args: {
     proxyBaseUrl,
   });
 
-  const body: Record<string, unknown> = {
+  const body: DynamicObject = {
     jsonrpc: "2.0",
     method,
   };
@@ -82,7 +85,7 @@ async function postJsonRpc(args: {
       }
 
       const text = await response.text();
-      const payload: unknown = text.trim().length > 0 ? JSON.parse(text) : null;
+      const payload: DynamicValue = text.trim().length > 0 ? JSON.parse(text) : null;
 
       return {
         response: payload,

@@ -238,7 +238,7 @@ export function createCommentsTool(
         });
 
         return output;
-      } catch (e: unknown) {
+      } catch (e) {
         const message = getErrorMessage(e);
 
         if (isMutation) {

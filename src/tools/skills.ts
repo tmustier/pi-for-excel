@@ -82,7 +82,7 @@ async function defaultLoadDisabledSkillNames(): Promise<Set<string>> {
     ]);
 
     return loadDisabledSkillNamesFromSettings(getAppStorage().settings);
-  } catch (error: unknown) {
+  } catch (error) {
     console.warn("[skills] Failed to load skill activation state for tool:", error);
     return new Set();
   }
@@ -373,7 +373,7 @@ export function createSkillsTool(
               location: installed.location,
             }),
           };
-        } catch (error: unknown) {
+        } catch (error) {
           const reason = error instanceof Error ? error.message : String(error);
           const message = `Failed to install skill \`${requestedName}\`: ${reason}`;
           return {
@@ -409,7 +409,7 @@ export function createSkillsTool(
               removed,
             }),
           };
-        } catch (error: unknown) {
+        } catch (error) {
           const reason = error instanceof Error ? error.message : String(error);
           const message = `Failed to uninstall skill \`${requestedName}\`: ${reason}`;
           return {

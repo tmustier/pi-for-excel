@@ -1,6 +1,9 @@
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 
-import { isRecord } from "../utils/type-guards.js";
+
+function isTaskpaneRuntimeUtilsPayloadShape(value: DynamicValue): value is DynamicObject {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
 
 const FNV_OFFSET_BASIS = 0x811c9dc5;
 const FNV_PRIME = 0x01000193;
@@ -16,7 +19,7 @@ function hashString(value: string): string {
   return hash.toString(16).padStart(8, "0");
 }
 
-function serializeToolParameters(parameters: unknown): string {
+function serializeToolParameters(parameters: DynamicValue): string {
   try {
     const serialized = JSON.stringify(parameters);
     return serialized ?? "null";
@@ -66,8 +69,8 @@ export function shouldApplyRuntimeToolUpdate(args: {
   return args.previousExtensionToolRevision !== args.nextExtensionToolRevision;
 }
 
-export function isRuntimeAgentTool(value: unknown): value is AgentTool {
-  if (!isRecord(value)) return false;
+export function isRuntimeAgentTool(value: DynamicValue): value is AgentTool {
+  if (!isTaskpaneRuntimeUtilsPayloadShape(value)) return false;
 
   return typeof value.name === "string"
     && typeof value.label === "string"
@@ -76,7 +79,7 @@ export function isRuntimeAgentTool(value: unknown): value is AgentTool {
     && typeof value.execute === "function";
 }
 
-export function normalizeRuntimeTools(candidates: readonly unknown[]): AgentTool[] {
+export function normalizeRuntimeTools(candidates: readonly DynamicValue[]): AgentTool[] {
   const seen = new Set<string>();
   const out: AgentTool[] = [];
 

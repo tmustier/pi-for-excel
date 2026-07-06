@@ -42,8 +42,8 @@ async function getEnabledProxyUrl(): Promise<string | undefined> {
 
   proxyCache.checkedAt = now;
 
-  let enabled: unknown;
-  let url: unknown;
+  let enabled: DynamicValue;
+  let url: DynamicValue;
 
   try {
     const storage = getAppStorage();

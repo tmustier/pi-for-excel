@@ -308,7 +308,7 @@ export async function renderConnectionsTab(args: {
           const proxyBaseUrl = await getEnabledProxyBaseUrl(settings);
           const result = await validateWebSearchApiKey({ provider: selectedProvider, apiKey: testKey, proxyBaseUrl });
           showToast(t(result.ok ? "extensions-hub-connections.toast.validationOk" : "extensions-hub-connections.toast.validationFailed", { message: result.message }));
-        } catch (err: unknown) {
+        } catch (err) {
           showToast(t("extensions-hub-connections.toast.validationError", { error: err instanceof Error ? err.message : String(err) }));
         }
       })();
@@ -592,7 +592,7 @@ function renderMcpServerCard(
             ? t("extensions-hub-connections.transport.proxy")
             : t("extensions-hub-connections.transport.direct");
           showToast(t("extensions-hub-connections.toast.serverReachable", { name: server.name, count: result.toolCount, plural: result.toolCount === 1 ? "" : "s", transport }));
-        } catch (err: unknown) {
+        } catch (err) {
           showToast(t("extensions-hub-connections.toast.serverError", { name: server.name, error: err instanceof Error ? err.message : String(err) }));
         }
       })();
@@ -661,7 +661,7 @@ function renderBridgeCard(args: {
     if (candidateUrl.length > 0) {
       try {
         normalizedCandidateUrl = validateOfficeProxyUrl(candidateUrl);
-      } catch (err: unknown) {
+      } catch (err) {
         showToast(t("ext-hub-connections.toast.invalidUrl", { error: err instanceof Error ? err.message : String(err) }));
         return;
       }

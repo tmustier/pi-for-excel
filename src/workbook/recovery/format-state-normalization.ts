@@ -38,7 +38,7 @@ const RECOVERY_UNDERLINE_STYLES: readonly RecoveryUnderlineStyle[] = [
   "DoubleAccountant",
 ];
 
-export function isRecoveryUnderlineStyle(value: unknown): value is RecoveryUnderlineStyle {
+export function isRecoveryUnderlineStyle(value: DynamicValue): value is RecoveryUnderlineStyle {
   if (typeof value !== "string") return false;
 
   for (const candidate of RECOVERY_UNDERLINE_STYLES) {
@@ -69,7 +69,7 @@ const RECOVERY_HORIZONTAL_ALIGNMENTS: readonly RecoveryHorizontalAlignment[] = [
   "Distributed",
 ];
 
-export function isRecoveryHorizontalAlignment(value: unknown): value is RecoveryHorizontalAlignment {
+export function isRecoveryHorizontalAlignment(value: DynamicValue): value is RecoveryHorizontalAlignment {
   if (typeof value !== "string") return false;
 
   for (const candidate of RECOVERY_HORIZONTAL_ALIGNMENTS) {
@@ -89,7 +89,7 @@ const RECOVERY_VERTICAL_ALIGNMENTS: readonly RecoveryVerticalAlignment[] = [
   "Distributed",
 ];
 
-export function isRecoveryVerticalAlignment(value: unknown): value is RecoveryVerticalAlignment {
+export function isRecoveryVerticalAlignment(value: DynamicValue): value is RecoveryVerticalAlignment {
   if (typeof value !== "string") return false;
 
   for (const candidate of RECOVERY_VERTICAL_ALIGNMENTS) {
@@ -120,7 +120,7 @@ const RECOVERY_RANGE_BORDER_STYLES: readonly RecoveryRangeBorderStyle[] = [
   "SlantDashDot",
 ];
 
-function isRecoveryRangeBorderStyle(value: unknown): value is RecoveryRangeBorderStyle {
+function isRecoveryRangeBorderStyle(value: DynamicValue): value is RecoveryRangeBorderStyle {
   if (typeof value !== "string") return false;
 
   for (const candidate of RECOVERY_RANGE_BORDER_STYLES) {
@@ -139,7 +139,7 @@ const RECOVERY_RANGE_BORDER_WEIGHTS: readonly RecoveryRangeBorderWeight[] = [
   "Thick",
 ];
 
-function isRecoveryRangeBorderWeight(value: unknown): value is RecoveryRangeBorderWeight {
+function isRecoveryRangeBorderWeight(value: DynamicValue): value is RecoveryRangeBorderWeight {
   if (typeof value !== "string") return false;
 
   for (const candidate of RECOVERY_RANGE_BORDER_WEIGHTS) {
@@ -149,15 +149,15 @@ function isRecoveryRangeBorderWeight(value: unknown): value is RecoveryRangeBord
   return false;
 }
 
-export function normalizeOptionalString(value: unknown): string | undefined {
+export function normalizeOptionalString(value: DynamicValue): string | undefined {
   return typeof value === "string" ? value : undefined;
 }
 
-export function normalizeOptionalBoolean(value: unknown): boolean | undefined {
+export function normalizeOptionalBoolean(value: DynamicValue): boolean | undefined {
   return typeof value === "boolean" ? value : undefined;
 }
 
-export function normalizeOptionalNumber(value: unknown): number | undefined {
+export function normalizeOptionalNumber(value: DynamicValue): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 

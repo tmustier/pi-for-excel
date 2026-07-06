@@ -345,7 +345,7 @@ export function createConventionsTool(): AgentTool<typeof schema, undefined> {
           }],
           details: undefined,
         };
-      } catch (error: unknown) {
+      } catch (error) {
         return {
           content: [{ type: "text", text: `Error updating conventions: ${getErrorMessage(error)}` }],
           details: undefined,

@@ -27,7 +27,7 @@ interface ToolResultPayloadStats {
   imageCount: number;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+function isMessagesToolResultShapingPayloadShape(value: DynamicValue): value is DynamicObject {
   return typeof value === "object" && value !== null;
 }
 
@@ -35,13 +35,13 @@ function isToolResultMessage(message: AgentMessage): message is ToolResultMessag
   return message.role === "toolResult";
 }
 
-function isTextBlock(block: unknown): block is TextBlock {
-  return isRecord(block) && block.type === "text" && typeof block.text === "string";
+function isTextBlock(block: DynamicValue): block is TextBlock {
+  return isMessagesToolResultShapingPayloadShape(block) && block.type === "text" && typeof block.text === "string";
 }
 
-function isImageBlock(block: unknown): block is ImageBlock {
+function isImageBlock(block: DynamicValue): block is ImageBlock {
   return (
-    isRecord(block) &&
+    isMessagesToolResultShapingPayloadShape(block) &&
     block.type === "image" &&
     typeof block.data === "string" &&
     typeof block.mimeType === "string"
@@ -87,7 +87,7 @@ function buildRecentIndexSet(indices: readonly number[], keep: number): Set<numb
 }
 
 function normalizeToolResultContent(message: ToolResultMessage): ToolResultMessage["content"] {
-  const rawContent: unknown = message.content;
+  const rawContent: DynamicValue = message.content;
 
   // Backwards compatibility: older persisted sessions may still carry string
   // tool-result payloads.

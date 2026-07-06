@@ -18,10 +18,10 @@ type EmptyParams = Static<typeof emptySchema>;
 function createTextTool(args: {
   name: string;
   text: string;
-  details?: unknown;
+  details?: DynamicValue;
   onUpdateText?: string;
   imageData?: string;
-}): AgentTool<typeof emptySchema, unknown> {
+}): AgentTool<typeof emptySchema, DynamicValue> {
   return {
     name: args.name,
     label: args.name,
@@ -31,7 +31,7 @@ function createTextTool(args: {
       _toolCallId: string,
       _params: EmptyParams,
       _signal?: AbortSignal,
-      onUpdate?: (partial: { content: Array<{ type: "text"; text: string }>; details: unknown }) => void,
+      onUpdate?: (partial: { content: Array<{ type: "text"; text: string }>; details: DynamicValue }) => void,
     ) => {
       if (args.onUpdateText && onUpdate) {
         onUpdate({
@@ -40,7 +40,7 @@ function createTextTool(args: {
         });
       }
 
-      const content: AgentToolResult<unknown>["content"] = [{ type: "text", text: args.text }];
+      const content: AgentToolResult<DynamicValue>["content"] = [{ type: "text", text: args.text }];
       if (args.imageData) {
         content.push({ type: "image", data: args.imageData, mimeType: "image/png" });
       }

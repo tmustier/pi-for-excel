@@ -21,7 +21,7 @@ let patchInstalled = false;
 let observer: MutationObserver | null = null;
 let rafId: number | null = null;
 
-function isHTMLElement(value: unknown): value is HTMLElement {
+function isHTMLElement(value: DynamicValue): value is HTMLElement {
   return value instanceof HTMLElement;
 }
 

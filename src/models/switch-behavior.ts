@@ -11,15 +11,15 @@ export const MODEL_SWITCH_BEHAVIOR_SETTING_KEY = "model.switch.behavior.v1";
 export type ModelSwitchBehavior = "inPlace" | "fork";
 
 export interface ModelSwitchBehaviorStore {
-  get: (key: string) => Promise<unknown>;
-  set: (key: string, value: unknown) => Promise<void>;
+  get: (key: string) => Promise<DynamicValue>;
+  set: (key: string, value: DynamicValue) => Promise<void>;
 }
 
-export function isModelSwitchBehavior(value: unknown): value is ModelSwitchBehavior {
+export function isModelSwitchBehavior(value: DynamicValue): value is ModelSwitchBehavior {
   return value === "inPlace" || value === "fork";
 }
 
-export function normalizeModelSwitchBehavior(value: unknown): ModelSwitchBehavior {
+export function normalizeModelSwitchBehavior(value: DynamicValue): ModelSwitchBehavior {
   return isModelSwitchBehavior(value) ? value : "inPlace";
 }
 

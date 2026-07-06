@@ -24,7 +24,7 @@ function hashString(value: string): string {
   return hash.toString(16).padStart(8, "0");
 }
 
-function serializeToolParameters(parameters: unknown): string {
+function serializeToolParameters(parameters: DynamicValue): string {
   try {
     const serialized = JSON.stringify(parameters);
     return serialized ?? "null";

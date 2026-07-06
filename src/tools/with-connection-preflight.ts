@@ -4,15 +4,18 @@ import {
   ConnectionManager,
   looksLikeConnectionAuthFailure,
 } from "../connections/manager.js";
+function isToolsWithConnectionPreflightPayloadShape(value: DynamicValue): value is DynamicObject {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 import type {
   ConnectionSnapshot,
   ConnectionToolErrorCode,
   ConnectionToolErrorDetails,
 } from "../connections/types.js";
-import { isRecord } from "../utils/type-guards.js";
 import { getToolRequiredConnectionIds } from "./connection-requirements.js";
 
-function normalizeErrorMessage(error: unknown): string {
+function normalizeErrorMessage(error: DynamicValue): string {
   if (error instanceof Error && error.message.trim().length > 0) {
     return error.message;
   }
@@ -38,8 +41,8 @@ function containsToken(haystack: string, token: string): boolean {
   return boundaryPattern.test(haystack);
 }
 
-function extractExplicitConnectionId(error: unknown): string | undefined {
-  if (!isRecord(error)) {
+function extractExplicitConnectionId(error: DynamicValue): string | undefined {
+  if (!isToolsWithConnectionPreflightPayloadShape(error)) {
     return undefined;
   }
 
@@ -49,7 +52,7 @@ function extractExplicitConnectionId(error: unknown): string | undefined {
   }
 
   const details = error.details;
-  if (!isRecord(details)) {
+  if (!isToolsWithConnectionPreflightPayloadShape(details)) {
     return undefined;
   }
 
@@ -81,7 +84,7 @@ function snapshotMatchesAuthFailure(snapshot: ConnectionSnapshot, normalizedErro
 
 function resolveAuthFailureSnapshot(args: {
   snapshots: readonly ConnectionSnapshot[];
-  error: unknown;
+  error: DynamicValue;
   errorMessage: string;
 }): ConnectionSnapshot | null {
   if (args.snapshots.length === 0) {
@@ -210,7 +213,7 @@ function wrapTool(tool: AgentTool, connectionManager: ConnectionManager): AgentT
 
       try {
         return await tool.execute(toolCallId, params, signal, onUpdate);
-      } catch (error: unknown) {
+      } catch (error) {
         const errorMessage = normalizeErrorMessage(error);
 
         if (looksLikeConnectionAuthFailure(errorMessage)) {

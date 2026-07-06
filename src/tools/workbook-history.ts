@@ -275,7 +275,7 @@ export function createWorkbookHistoryTool(
             deletedCount: removed,
           },
         };
-      } catch (error: unknown) {
+      } catch (error) {
         const message = getErrorMessage(error);
 
         if (action === "restore") {

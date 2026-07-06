@@ -4,18 +4,18 @@ export const RECOVERY_SETTING_KEY = "workbook.recovery-snapshots.v1";
 
 export interface InMemorySettingsStore {
   get<T>(key: string): Promise<T | null>;
-  set(key: string, value: unknown): Promise<void>;
+  set(key: string, value: DynamicValue): Promise<void>;
 }
 
 export function createInMemorySettingsStore(): InMemorySettingsStore {
-  const values = new Map<string, unknown>();
+  const values = new Map<string, DynamicValue>();
 
   return {
     get: <T>(key: string): Promise<T | null> => {
       const value = values.get(key);
       return Promise.resolve(value === undefined ? null : value as T);
     },
-    set: (key: string, value: unknown): Promise<void> => {
+    set: (key: string, value: DynamicValue): Promise<void> => {
       values.set(key, value);
       return Promise.resolve();
     },
@@ -32,6 +32,6 @@ export function findSnapshotById(snapshots: WorkbookRecoverySnapshot[], id: stri
   return null;
 }
 
-export function withoutUndefined(value: unknown): unknown {
+export function withoutUndefined(value: DynamicValue): DynamicValue {
   return JSON.parse(JSON.stringify(value));
 }

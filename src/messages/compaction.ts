@@ -41,7 +41,7 @@ export function formatCompactionSummaryExtent(msg: CompactionSummaryMessage): st
     return t(key, { count: msg.tokensBefore.toLocaleString() });
   }
 
-  const legacyMessageCount = (msg as { messageCountBefore?: unknown }).messageCountBefore;
+  const legacyMessageCount = (msg as { messageCountBefore?: DynamicValue }).messageCountBefore;
   if (typeof legacyMessageCount === "number") {
     const key = legacyMessageCount === 1 ? "compaction.extent.message" : "compaction.extent.messages";
     return t(key, { count: legacyMessageCount.toLocaleString() });

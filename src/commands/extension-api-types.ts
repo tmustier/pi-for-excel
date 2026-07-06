@@ -27,7 +27,7 @@ export interface ExtensionCommand {
 
 export type ExtensionCleanup = () => void | Promise<void>;
 
-export interface ExtensionToolDefinition<TParameters extends TSchema = TSchema, TDetails = unknown> {
+export interface ExtensionToolDefinition<TParameters extends TSchema = TSchema, TDetails = DynamicValue> {
   description: string;
   parameters: TParameters;
   label?: string;
@@ -160,8 +160,8 @@ export interface HttpAPI {
 }
 
 export interface StorageAPI {
-  get(key: string): Promise<unknown>;
-  set(key: string, value: unknown): Promise<void>;
+  get(key: string): Promise<DynamicValue>;
+  set(key: string, value: DynamicValue): Promise<void>;
   delete(key: string): Promise<void>;
   keys(): Promise<string[]>;
 }
@@ -245,8 +245,8 @@ export interface CreateExtensionAPIOptions {
   subscribeAgentEvents?: (handler: (ev: AgentEvent) => void) => () => void;
   llmComplete?: (request: LlmCompletionRequest) => Promise<LlmCompletionResult>;
   httpFetch?: (url: string, options?: HttpRequestOptions) => Promise<HttpResponse>;
-  storageGet?: (key: string) => Promise<unknown>;
-  storageSet?: (key: string, value: unknown) => Promise<void>;
+  storageGet?: (key: string) => Promise<DynamicValue>;
+  storageSet?: (key: string, value: DynamicValue) => Promise<void>;
   storageDelete?: (key: string) => Promise<void>;
   storageKeys?: () => Promise<string[]>;
   clipboardWriteText?: (text: string) => Promise<void>;

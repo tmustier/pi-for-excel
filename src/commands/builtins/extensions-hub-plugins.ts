@@ -183,7 +183,7 @@ function renderPluginCard(
           await onChanged();
           showToast(t("ext-hub-plugins.toast.enabledState", { name: status.name, state: t(checked ? "experimental.state.enabled" : "experimental.state.disabled") }));
           refresh();
-        } catch (err: unknown) {
+        } catch (err) {
           showToast(t("ext-hub-plugins.toast.error", { error: err instanceof Error ? err.message : String(err) }));
           refresh();
         }
@@ -225,7 +225,7 @@ function renderPluginCard(
               await manager.setExtensionCapability(status.id, cap, checked);
               showToast(t("ext-hub-plugins.toast.permissionUpdated", { name: status.name, capability: describeExtensionCapability(cap), state: t(checked ? "ext-hub-plugins.granted" : "ext-hub-plugins.revoked") }));
               refresh();
-            } catch (err: unknown) {
+            } catch (err) {
               showToast(t("ext-hub-plugins.toast.error", { error: err instanceof Error ? err.message : String(err) }));
               refresh();
             }
@@ -268,7 +268,7 @@ function renderPluginCard(
             await onChanged();
             showToast(t("ext-hub-plugins.toast.uninstalled", { name: status.name }));
             refresh();
-          } catch (err: unknown) {
+          } catch (err) {
             showToast(t("ext-hub-plugins.toast.error", { error: err instanceof Error ? err.message : String(err) }));
           }
         })();
@@ -302,7 +302,7 @@ async function installFromUrl(
     await onChanged();
     showToast(t("ext-hub-plugins.toast.installed", { name }));
     refresh();
-  } catch (err: unknown) {
+  } catch (err) {
     showToast(t("ext-hub-plugins.toast.installFailed", { error: err instanceof Error ? err.message : String(err) }));
   }
 }

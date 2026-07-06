@@ -15,11 +15,11 @@ import type {
   WorkspaceSnapshot,
 } from "../src/files/types.ts";
 
-function getOfficeGlobal(): unknown {
+function getOfficeGlobal(): DynamicValue {
   return Reflect.get(globalThis, "Office");
 }
 
-function setOfficeGlobal(value: unknown): void {
+function setOfficeGlobal(value: DynamicValue): void {
   Reflect.set(globalThis, "Office", value);
 }
 

@@ -136,7 +136,7 @@ export function createConditionalFormatTool(): AgentTool<typeof schema, Conditio
         }
 
         return await addFormat(toolCallId, params);
-      } catch (e: unknown) {
+      } catch (e) {
         const message = getErrorMessage(e);
 
         await finalizeMutationOperation(mutationFinalizeDependencies, {

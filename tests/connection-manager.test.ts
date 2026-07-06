@@ -7,11 +7,11 @@ import type { ConnectionDefinition } from "../src/connections/types.ts";
 // ── In-memory settings store ────────────────────────
 
 function createMemorySettings(): {
-  get(key: string): Promise<unknown>;
-  set(key: string, value: unknown): Promise<void>;
+  get(key: string): Promise<DynamicValue>;
+  set(key: string, value: DynamicValue): Promise<void>;
   delete(key: string): Promise<void>;
 } {
-  const data = new Map<string, unknown>();
+  const data = new Map<string, DynamicValue>();
   return {
     get: (key) => Promise.resolve(data.get(key)),
     set: (key, value) => { data.set(key, value); return Promise.resolve(); },

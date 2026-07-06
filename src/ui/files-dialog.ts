@@ -690,7 +690,7 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
     let previewResult: DetailPreviewResult;
     try {
       previewResult = await buildDetailPreview(file);
-    } catch (error: unknown) {
+    } catch (error) {
       previewResult = {
         element: createBinaryPreview({
           file,
@@ -984,7 +984,7 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
         }
 
         await renderDetailView(detailFileRef);
-      } catch (error: unknown) {
+      } catch (error) {
         showToast(t("files-dialog.toast.refreshFailed", { error: getErrorMessage(error) }));
       }
     })();
@@ -1006,7 +1006,7 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
 
     void workspace.connectNativeDirectory({
       audit: DIALOG_AUDIT_CONTEXT,
-    }).catch((error: unknown) => {
+    }).catch((error: DynamicValue) => {
       showToast(t("files-dialog.toast.connectFolderFailed", { error: getErrorMessage(error) }));
     });
   });
@@ -1026,7 +1026,7 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
       .then((count) => {
         showToast(t("files-dialog.toast.imported", { count, plural: count === 1 ? "" : "s" }));
       })
-      .catch((error: unknown) => {
+      .catch((error: DynamicValue) => {
         showToast(t("files-dialog.toast.uploadFailed", { error: getErrorMessage(error) }));
       });
   });
@@ -1043,7 +1043,7 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
     await refreshWorkspaceState();
     renderListView();
     setView("list");
-  } catch (error: unknown) {
+  } catch (error) {
     showToast(t("files-dialog.toast.loadFailed", { error: getErrorMessage(error) }));
     showListView();
     renderListView();

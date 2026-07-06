@@ -3,9 +3,12 @@ import type {
   AgentToolResult,
   AgentToolUpdateCallback,
 } from "@earendil-works/pi-agent-core";
+function isToolsOutputTruncationPayloadShape(value: DynamicValue): value is DynamicObject {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 import type { ImageContent, TextContent } from "@earendil-works/pi-ai/compat";
 
-import { isRecord } from "../utils/type-guards.js";
 import type {
   ToolOutputTruncationDetails,
   ToolOutputTruncationReason,
@@ -261,10 +264,10 @@ function buildTruncationNotice(truncation: ToolOutputTruncationDetails): string 
 }
 
 function mergeTruncationIntoDetails(
-  details: unknown,
+  details: DynamicValue,
   truncation: ToolOutputTruncationDetails,
-): unknown {
-  if (isRecord(details)) {
+): DynamicValue {
+  if (isToolsOutputTruncationPayloadShape(details)) {
     return {
       ...details,
       outputTruncation: truncation,
@@ -313,11 +316,11 @@ function computeTruncation(
 }
 
 function buildTruncatedResult(args: {
-  result: AgentToolResult<unknown>;
+  result: AgentToolResult<DynamicValue>;
   computed: TruncationComputation;
   nonTextBlocks: ImageContent[];
   truncation: ToolOutputTruncationDetails;
-}): AgentToolResult<unknown> {
+}): AgentToolResult<DynamicValue> {
   const notice = buildTruncationNotice(args.truncation);
   const textWithNotice = args.computed.output.trim().length > 0
     ? `${args.computed.output}\n\n${notice}`
@@ -336,10 +339,10 @@ function buildTruncatedResult(args: {
 }
 
 function applyTruncationSync(
-  result: AgentToolResult<unknown>,
+  result: AgentToolResult<DynamicValue>,
   strategy: ToolOutputTruncationStrategy,
   limits: ToolOutputTruncationLimits,
-): AgentToolResult<unknown> {
+): AgentToolResult<DynamicValue> {
   const { text, textBlockCount, nonTextBlocks } = splitToolResultContent(result.content);
   if (textBlockCount === 0) {
     return result;
@@ -372,7 +375,7 @@ function applyTruncationSync(
 }
 
 async function applyTruncationFinal(
-  result: AgentToolResult<unknown>,
+  result: AgentToolResult<DynamicValue>,
   args: {
     toolName: string;
     toolCallId: string;
@@ -380,7 +383,7 @@ async function applyTruncationFinal(
     limits: ToolOutputTruncationLimits;
     saveTruncatedOutput?: (args: ToolOutputTruncationStoreArgs) => Promise<string | undefined>;
   },
-): Promise<AgentToolResult<unknown>> {
+): Promise<AgentToolResult<DynamicValue>> {
   const { text, textBlockCount, nonTextBlocks } = splitToolResultContent(result.content);
   if (textBlockCount === 0) {
     return result;
@@ -442,7 +445,7 @@ function wrapToolWithOutputTruncation(
       const strategy = options.strategyForTool(tool.name);
       const limits = options.resolveLimits();
 
-      const wrappedOnUpdate: AgentToolUpdateCallback<unknown> | undefined = onUpdate
+      const wrappedOnUpdate: AgentToolUpdateCallback<DynamicValue> | undefined = onUpdate
         ? (partialResult) => {
           onUpdate(applyTruncationSync(partialResult, strategy, limits));
         }

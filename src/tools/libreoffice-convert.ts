@@ -1,3 +1,7 @@
+function isToolsLibreofficeConvertPayloadShape(value: DynamicValue): value is DynamicObject {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 /**
  * libreoffice_convert — Experimental local LibreOffice bridge adapter.
  *
@@ -10,7 +14,6 @@ import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { Type, type TSchema } from "@sinclair/typebox";
 
 import { getErrorMessage } from "../utils/errors.js";
-import { isRecord } from "../utils/type-guards.js";
 import {
   extractBridgeErrorMessage,
   isAbortError,
@@ -29,7 +32,7 @@ type LibreOfficeTargetFormat = (typeof TARGET_FORMATS)[number];
 
 const TARGET_FORMAT_SET = new Set<string>(TARGET_FORMATS);
 
-function isTargetFormat(value: unknown): value is LibreOfficeTargetFormat {
+function isTargetFormat(value: DynamicValue): value is LibreOfficeTargetFormat {
   return typeof value === "string" && TARGET_FORMAT_SET.has(value);
 }
 
@@ -90,7 +93,7 @@ export interface LibreOfficeConvertResponse {
   bytes?: number;
   converter?: string;
   error?: string;
-  metadata?: Record<string, unknown>;
+  metadata?: DynamicObject;
 }
 
 export interface LibreOfficeConvertToolDetails {
@@ -117,8 +120,8 @@ export interface LibreOfficeConvertToolDependencies {
   ) => Promise<LibreOfficeConvertResponse>;
 }
 
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return isRecord(value) && !Array.isArray(value);
+function isLibreOfficeBridgePayloadShape(value: DynamicValue): value is DynamicObject {
+  return isToolsLibreofficeConvertPayloadShape(value) && !Array.isArray(value);
 }
 
 function cleanOptionalString(value: string | undefined): string | undefined {
@@ -128,7 +131,7 @@ function cleanOptionalString(value: string | undefined): string | undefined {
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
-function toOptionalInteger(value: unknown): number | undefined {
+function toOptionalInteger(value: DynamicValue): number | undefined {
   if (typeof value !== "number") return undefined;
   if (!Number.isFinite(value)) return undefined;
   if (!Number.isInteger(value)) return undefined;
@@ -142,8 +145,8 @@ function isAbsolutePath(value: string): boolean {
   return false;
 }
 
-function parseParams(raw: unknown): Params {
-  if (!isPlainObject(raw)) {
+function parseParams(raw: DynamicValue): Params {
+  if (!isLibreOfficeBridgePayloadShape(raw)) {
     throw new Error("Invalid libreoffice_convert params: expected an object.");
   }
 
@@ -204,8 +207,8 @@ function toBridgeRequest(params: Params): LibreOfficeConvertRequest {
   };
 }
 
-function parseBridgeResponse(value: unknown): LibreOfficeConvertResponse {
-  if (!isPlainObject(value)) {
+function parseBridgeResponse(value: DynamicValue): LibreOfficeConvertResponse {
+  if (!isLibreOfficeBridgePayloadShape(value)) {
     return {
       ok: true,
       action: "convert",
@@ -219,7 +222,7 @@ function parseBridgeResponse(value: unknown): LibreOfficeConvertResponse {
   const bytes = typeof value.bytes === "number" ? value.bytes : undefined;
   const converter = typeof value.converter === "string" ? value.converter : undefined;
   const error = typeof value.error === "string" ? value.error : undefined;
-  const metadata = isPlainObject(value.metadata) ? value.metadata : undefined;
+  const metadata = isLibreOfficeBridgePayloadShape(value.metadata) ? value.metadata : undefined;
 
   return {
     ok,
@@ -308,7 +311,7 @@ async function defaultCallBridge(
     }
 
     return parsed;
-  } catch (error: unknown) {
+  } catch (error) {
     if (isAbortError(error)) {
       if (signal?.aborted) {
         throw new Error("Aborted");
@@ -389,7 +392,7 @@ export function createLibreOfficeConvertTool(
     parameters: schema,
     execute: async (
       _toolCallId: string,
-      rawParams: unknown,
+      rawParams: DynamicValue,
       signal: AbortSignal | undefined,
     ): Promise<AgentToolResult<LibreOfficeConvertToolDetails>> => {
       try {
@@ -435,7 +438,7 @@ export function createLibreOfficeConvertTool(
             converter: response.converter,
           },
         };
-      } catch (error: unknown) {
+      } catch (error) {
         const message = getErrorMessage(error);
         const skillHint = shouldAttachPythonBridgeSkillHint(message)
           ? "python-bridge"

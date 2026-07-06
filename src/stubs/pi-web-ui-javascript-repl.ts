@@ -8,8 +8,8 @@ type JavaScriptReplTool = {
   label: string;
   name: "javascript_repl";
   description: string;
-  parameters: unknown;
-  execute: (...args: unknown[]) => Promise<never>;
+  parameters: DynamicValue;
+  execute: (...args: DynamicValue[]) => Promise<never>;
 };
 
 export function createJavaScriptReplTool(): JavaScriptReplTool {

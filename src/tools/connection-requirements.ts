@@ -9,7 +9,7 @@ function normalizeConnectionId(rawValue: string): string {
   return normalized;
 }
 
-function normalizeRawRequirementList(rawValue: unknown): string[] {
+function normalizeRawRequirementList(rawValue: DynamicValue): string[] {
   if (rawValue === undefined || rawValue === null) {
     return [];
   }
@@ -35,7 +35,7 @@ function normalizeRawRequirementList(rawValue: unknown): string[] {
 }
 
 export function getToolRequiredConnectionIds(tool: AgentTool): string[] {
-  const rawRequirement: unknown = Reflect.get(tool, "requiresConnection");
+  const rawRequirement: DynamicValue = Reflect.get(tool, "requiresConnection");
   const normalized = normalizeRawRequirementList(rawRequirement);
   return Array.from(new Set(normalized));
 }

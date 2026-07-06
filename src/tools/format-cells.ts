@@ -304,7 +304,7 @@ export function createFormatCellsTool(): AgentTool<typeof schema, FormatCellsDet
               checkpointPlan.selection,
               { maxCellCount: MAX_RECOVERY_CELLS },
             );
-          } catch (captureError: unknown) {
+          } catch (captureError) {
             checkpointCapture = {
               supported: false,
               reason: `Format backup capture failed: ${getErrorMessage(captureError)}`,
@@ -569,7 +569,7 @@ export function createFormatCellsTool(): AgentTool<typeof schema, FormatCellsDet
         });
 
         return toolResult;
-      } catch (e: unknown) {
+      } catch (e) {
         const message = getErrorMessage(e);
 
         await finalizeMutationOperation(mutationFinalizeDependencies, {

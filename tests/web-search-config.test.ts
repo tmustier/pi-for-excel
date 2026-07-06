@@ -18,17 +18,20 @@ import {
   WEB_SEARCH_BRAVE_API_KEY_SETTING_KEY,
   type WebSearchConfigStore,
 } from "../src/tools/web-search-config.ts";
+function isWebSearchConfigTestPayloadShape(value: DynamicValue): value is DynamicObject {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 import { CONNECTION_STORE_KEY } from "../src/connections/store.ts";
-import { isRecord } from "../src/utils/type-guards.ts";
 
 class MemorySettingsStore implements WebSearchConfigStore {
-  private readonly values = new Map<string, unknown>();
+  private readonly values = new Map<string, DynamicValue>();
 
-  get(key: string): Promise<unknown> {
+  get(key: string): Promise<DynamicValue> {
     return Promise.resolve(this.values.has(key) ? this.values.get(key) ?? null : null);
   }
 
-  set(key: string, value: unknown): Promise<void> {
+  set(key: string, value: DynamicValue): Promise<void> {
     this.values.set(key, value);
     return Promise.resolve();
   }
@@ -38,7 +41,7 @@ class MemorySettingsStore implements WebSearchConfigStore {
     return Promise.resolve();
   }
 
-  peek(key: string): unknown {
+  peek(key: string): DynamicValue {
     return this.values.get(key);
   }
 }
@@ -47,16 +50,16 @@ function readConnectionStoreSecrets(
   settings: MemorySettingsStore,
 ): Record<string, string> | undefined {
   const raw = settings.peek(CONNECTION_STORE_KEY);
-  if (!isRecord(raw)) return undefined;
+  if (!isWebSearchConfigTestPayloadShape(raw)) return undefined;
 
   const rawItems = raw.items;
-  if (!isRecord(rawItems)) return undefined;
+  if (!isWebSearchConfigTestPayloadShape(rawItems)) return undefined;
 
   const rawRecord = rawItems[WEB_SEARCH_CONNECTION_ID];
-  if (!isRecord(rawRecord)) return undefined;
+  if (!isWebSearchConfigTestPayloadShape(rawRecord)) return undefined;
 
   const rawSecrets = rawRecord.secrets;
-  if (!isRecord(rawSecrets)) return undefined;
+  if (!isWebSearchConfigTestPayloadShape(rawSecrets)) return undefined;
 
   const secrets: Record<string, string> = {};
   for (const [key, value] of Object.entries(rawSecrets)) {

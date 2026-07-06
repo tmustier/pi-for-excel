@@ -190,7 +190,7 @@ export function createViewSettingsTool(
         });
 
         return output;
-      } catch (e: unknown) {
+      } catch (e) {
         const message = getErrorMessage(e);
         const outputAddress = params.range ?? params.sheet;
 

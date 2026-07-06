@@ -15,7 +15,7 @@
 
 import { ReactiveElement } from "lit";
 
-type PerformUpdateFn = (this: ReactiveElement) => unknown;
+type PerformUpdateFn = (this: ReactiveElement) => DynamicValue;
 
 type ReactiveElementProto = {
   performUpdate: PerformUpdateFn;
@@ -27,13 +27,13 @@ export function installLitClassFieldShadowingPatch(): void {
   if (_installed) return;
   _installed = true;
 
-  const reactiveProto = ReactiveElement.prototype as unknown as ReactiveElementProto;
+  const reactiveProto = ReactiveElement.prototype as DynamicValue as ReactiveElementProto;
   const orig = reactiveProto.performUpdate;
 
   reactiveProto.performUpdate = function (this: ReactiveElement) {
     if (!this.hasUpdated) {
-      const proto = Object.getPrototypeOf(this) as Record<string, unknown>;
-      const self = this as unknown as Record<string, unknown>;
+      const proto = Object.getPrototypeOf(this) as DynamicObject;
+      const self = this as DynamicValue as DynamicObject;
 
       for (const key of Object.getOwnPropertyNames(this)) {
         if (

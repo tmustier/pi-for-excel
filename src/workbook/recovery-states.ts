@@ -293,8 +293,8 @@ export interface RecoveryStructureValueRangeState {
   address: string;
   rowCount: number;
   columnCount: number;
-  values: unknown[][];
-  formulas: unknown[][];
+  values: DynamicValue[][];
+  formulas: DynamicValue[][];
 }
 
 export interface RecoverySheetAbsentState {

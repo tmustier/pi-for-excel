@@ -12,13 +12,13 @@ import {
 import type { StoredExtensionEntry } from "../src/extensions/store.ts";
 
 class MemorySettingsStore {
-  private readonly values = new Map<string, unknown>();
+  private readonly values = new Map<string, DynamicValue>();
 
-  get(key: string): Promise<unknown> {
+  get(key: string): Promise<DynamicValue> {
     return Promise.resolve(this.values.get(key));
   }
 
-  set(key: string, value: unknown): Promise<void> {
+  set(key: string, value: DynamicValue): Promise<void> {
     this.values.set(key, value);
     return Promise.resolve();
   }
@@ -95,7 +95,7 @@ void test("injectContext appends a message and triggers host sync hook", async (
     state: { messages },
     steer: () => {},
     followUp: () => {},
-  } as unknown as Agent;
+  } as DynamicValue as Agent;
 
   const bridge = buildBridge({
     entry,

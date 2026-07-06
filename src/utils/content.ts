@@ -1,3 +1,7 @@
+function isUtilsContentPayloadShape(value: DynamicValue): value is DynamicObject {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 /**
  * Helpers for working with pi-ai content blocks.
  *
@@ -8,26 +12,25 @@
 
 import type { TextContent, ToolCall } from "@earendil-works/pi-ai/compat";
 
-import { isRecord } from "./type-guards.js";
 
-export function isTextBlock(block: unknown): block is TextContent {
+export function isTextBlock(block: DynamicValue): block is TextContent {
   return (
-    isRecord(block) &&
-    (block as { type?: unknown }).type === "text" &&
-    typeof (block as { text?: unknown }).text === "string"
+    isUtilsContentPayloadShape(block) &&
+    (block as { type?: DynamicValue }).type === "text" &&
+    typeof (block as { text?: DynamicValue }).text === "string"
   );
 }
 
-function isToolCallBlock(block: unknown): block is ToolCall {
+function isToolCallBlock(block: DynamicValue): block is ToolCall {
   return (
-    isRecord(block) &&
-    (block as { type?: unknown }).type === "toolCall" &&
-    typeof (block as { name?: unknown }).name === "string" &&
-    isRecord((block as { arguments?: unknown }).arguments)
+    isUtilsContentPayloadShape(block) &&
+    (block as { type?: DynamicValue }).type === "toolCall" &&
+    typeof (block as { name?: DynamicValue }).name === "string" &&
+    isUtilsContentPayloadShape((block as { arguments?: DynamicValue }).arguments)
   );
 }
 
-export function extractTextBlocks(content: unknown, separator = "\n"): string {
+export function extractTextBlocks(content: DynamicValue, separator = "\n"): string {
   if (typeof content === "string") return content;
   if (!Array.isArray(content)) return "";
 
@@ -38,7 +41,7 @@ export function extractTextBlocks(content: unknown, separator = "\n"): string {
 }
 
 /** Convenience helper: extract text blocks and join without separators. */
-export function extractTextFromContent(content: unknown): string {
+export function extractTextFromContent(content: DynamicValue): string {
   return extractTextBlocks(content, "");
 }
 
@@ -48,7 +51,7 @@ export type TranscriptSummaryLimits = {
 };
 
 export function summarizeContentForTranscript(
-  content: unknown,
+  content: DynamicValue,
   limits: TranscriptSummaryLimits = { toolInput: 200, toolResult: 500 },
 ): string {
   if (typeof content === "string") return content;
@@ -69,19 +72,19 @@ export function summarizeContentForTranscript(
       }
 
       // Backwards compatibility: Anthropic-style tool blocks
-      if (isRecord(b) && (b as { type?: unknown }).type === "tool_use") {
-        const name = typeof (b as { name?: unknown }).name === "string" ? (b as { name: string }).name : "tool";
-        const input = JSON.stringify((b as { input?: unknown }).input);
+      if (isUtilsContentPayloadShape(b) && (b as { type?: DynamicValue }).type === "tool_use") {
+        const name = typeof (b as { name?: DynamicValue }).name === "string" ? (b as { name: string }).name : "tool";
+        const input = JSON.stringify((b as { input?: DynamicValue }).input);
         const snippet =
           input.length > limits.toolInput ? input.slice(0, limits.toolInput) : input;
         return `[tool_use: ${name}(${snippet})]`;
       }
 
-      if (isRecord(b) && (b as { type?: unknown }).type === "tool_result") {
+      if (isUtilsContentPayloadShape(b) && (b as { type?: DynamicValue }).type === "tool_result") {
         const raw =
-          typeof (b as { content?: unknown }).content === "string"
+          typeof (b as { content?: DynamicValue }).content === "string"
             ? (b as { content: string }).content
-            : JSON.stringify((b as { content?: unknown }).content);
+            : JSON.stringify((b as { content?: DynamicValue }).content);
         const snippet =
           raw.length > limits.toolResult
             ? raw.slice(0, limits.toolResult)
@@ -89,7 +92,7 @@ export function summarizeContentForTranscript(
         return `[tool_result: ${snippet}]`;
       }
 
-      if (isRecord(b) && typeof (b as { type?: unknown }).type === "string") {
+      if (isUtilsContentPayloadShape(b) && typeof (b as { type?: DynamicValue }).type === "string") {
         return `[${(b as { type: string }).type}]`;
       }
 

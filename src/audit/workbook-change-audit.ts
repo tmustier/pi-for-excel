@@ -1,3 +1,7 @@
+function isAuditWorkbookChangeAuditPayloadShape(value: DynamicValue): value is DynamicObject {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 /**
  * Workbook mutation audit log (local, persisted in SettingsStore when available).
  */
@@ -8,7 +12,6 @@ import {
   normalizeExecutionMode,
   type ExecutionMode,
 } from "../execution/mode.js";
-import { isRecord } from "../utils/type-guards.js";
 import type { WorkbookCellChange } from "./cell-diff.js";
 
 const AUDIT_SETTING_KEY = "workbook.change-audit.v1";
@@ -57,7 +60,7 @@ export interface AppendWorkbookChangeAuditEntryArgs {
 
 interface SettingsStoreLike {
   get<T>(key: string): Promise<T | null>;
-  set(key: string, value: unknown): Promise<void>;
+  set(key: string, value: DynamicValue): Promise<void>;
   delete(key: string): Promise<void>;
 }
 
@@ -90,8 +93,8 @@ function defaultCreateId(): string {
   return `change_${Date.now().toString(36)}_${randomChunk}`;
 }
 
-function isSettingsStoreLike(value: unknown): value is SettingsStoreLike {
-  if (!isRecord(value)) return false;
+function isSettingsStoreLike(value: DynamicValue): value is SettingsStoreLike {
+  if (!isAuditWorkbookChangeAuditPayloadShape(value)) return false;
 
   return (
     typeof value.get === "function" &&
@@ -104,14 +107,14 @@ async function defaultGetSettingsStore(): Promise<SettingsStoreLike | null> {
   try {
     const storageModule = await import("@earendil-works/pi-web-ui/dist/storage/app-storage.js");
     const appStorage = storageModule.getAppStorage();
-    const settings = isRecord(appStorage) ? appStorage.settings : null;
+    const settings = isAuditWorkbookChangeAuditPayloadShape(appStorage) ? appStorage.settings : null;
     return isSettingsStoreLike(settings) ? settings : null;
   } catch {
     return null;
   }
 }
 
-function isWorkbookAuditToolName(value: unknown): value is WorkbookAuditToolName {
+function isWorkbookAuditToolName(value: DynamicValue): value is WorkbookAuditToolName {
   return (
     value === "write_cells" ||
     value === "fill_formula" ||
@@ -127,8 +130,8 @@ function isWorkbookAuditToolName(value: unknown): value is WorkbookAuditToolName
   );
 }
 
-function isWorkbookCellChange(value: unknown): value is WorkbookCellChange {
-  if (!isRecord(value)) return false;
+function isWorkbookCellChange(value: DynamicValue): value is WorkbookCellChange {
+  if (!isAuditWorkbookChangeAuditPayloadShape(value)) return false;
 
   const beforeFormula = value.beforeFormula;
   const afterFormula = value.afterFormula;
@@ -142,8 +145,8 @@ function isWorkbookCellChange(value: unknown): value is WorkbookCellChange {
   );
 }
 
-function parseAuditEntry(value: unknown): WorkbookChangeAuditEntry | null {
-  if (!isRecord(value)) return null;
+function parseAuditEntry(value: DynamicValue): WorkbookChangeAuditEntry | null {
+  if (!isAuditWorkbookChangeAuditPayloadShape(value)) return null;
 
   if (!isWorkbookAuditToolName(value.toolName)) return null;
   if (typeof value.toolCallId !== "string") return null;
@@ -173,8 +176,8 @@ function parseAuditEntry(value: unknown): WorkbookChangeAuditEntry | null {
   };
 }
 
-function parsePersistedEntries(payload: unknown): WorkbookChangeAuditEntry[] {
-  if (!isRecord(payload)) return [];
+function parsePersistedEntries(payload: DynamicValue): WorkbookChangeAuditEntry[] {
+  if (!isAuditWorkbookChangeAuditPayloadShape(payload)) return [];
 
   const entriesRaw = payload.entries;
   if (!Array.isArray(entriesRaw)) return [];
@@ -222,7 +225,7 @@ export class WorkbookChangeAuditLog {
     if (!settings) return;
 
     try {
-      const payload = await settings.get<unknown>(AUDIT_SETTING_KEY);
+      const payload = await settings.get<DynamicValue>(AUDIT_SETTING_KEY);
       this.entries = parsePersistedEntries(payload);
     } catch {
       this.entries = [];
@@ -266,7 +269,7 @@ export class WorkbookChangeAuditLog {
       try {
         const settings = await this.dependencies.getSettingsStore();
         if (settings) {
-          const stored = await settings.get<unknown>(EXECUTION_MODE_SETTING_KEY);
+          const stored = await settings.get<DynamicValue>(EXECUTION_MODE_SETTING_KEY);
           executionMode = normalizeExecutionMode(stored);
         }
       } catch {

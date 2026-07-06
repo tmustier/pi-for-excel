@@ -14,7 +14,7 @@ import { isExcelError } from "../utils/format.js";
 
 /* ── Value formatting ───────────────────────────────────────── */
 
-function fmtCell(v: unknown): string {
+function fmtCell(v: DynamicValue): string {
   if (v === null || v === undefined || v === "") return "";
   if (typeof v === "string") return v;
   if (typeof v === "number" || typeof v === "boolean") return String(v);

@@ -6,7 +6,7 @@ import { resolveVercelIgnoreCommandExitCode } from "../scripts/vercel-ignore-com
 
 const EXPECTED_IGNORE_COMMAND = "node scripts/vercel-ignore-command.mjs";
 
-function isRecord(value) {
+function isVercelIgnoreCommandTestPayloadShape(value) {
   return typeof value === "object" && value !== null;
 }
 
@@ -14,7 +14,7 @@ async function readIgnoreCommand() {
   const raw = await readFile(new URL("../vercel.json", import.meta.url), "utf8");
   const parsed = JSON.parse(raw);
 
-  if (!isRecord(parsed) || typeof parsed.ignoreCommand !== "string") {
+  if (!isVercelIgnoreCommandTestPayloadShape(parsed) || typeof parsed.ignoreCommand !== "string") {
     throw new Error("vercel.json is missing a string ignoreCommand");
   }
 

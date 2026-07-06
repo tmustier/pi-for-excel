@@ -14,7 +14,7 @@ export const DEFAULT_LOCAL_PROXY_URL = "https://localhost:3003";
  * https:// URL — http would be blocked as mixed content in Office webviews,
  * so we refuse it here rather than baking in a broken default.
  */
-export function resolveDefaultProxyUrl(raw: unknown): string {
+export function resolveDefaultProxyUrl(raw: DynamicValue): string {
   if (typeof raw !== "string") return DEFAULT_LOCAL_PROXY_URL;
   const candidate = normalizeProxyUrl(raw);
   if (candidate.length === 0) return DEFAULT_LOCAL_PROXY_URL;
@@ -69,7 +69,7 @@ export function normalizeProxyUrl(url: string): string {
 /**
  * Resolve a user-configured proxy URL with sane defaults.
  */
-export function resolveConfiguredProxyUrl(rawUrl: unknown): string {
+export function resolveConfiguredProxyUrl(rawUrl: DynamicValue): string {
   const trimmed = typeof rawUrl === "string" ? rawUrl.trim() : "";
   const candidate = trimmed.length > 0 ? trimmed : DEFAULT_PROXY_URL;
   return normalizeProxyUrl(candidate);

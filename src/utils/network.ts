@@ -1,4 +1,4 @@
-export function isAbortError(error: unknown): boolean {
+export function isAbortError(error: DynamicValue): boolean {
   if (error instanceof DOMException) {
     return error.name === "AbortError";
   }
@@ -43,7 +43,7 @@ export async function runWithTimeoutAbort<TResult>(args: {
     }
   }
 
-  let rejectAbort: ((reason?: unknown) => void) | null = null;
+  let rejectAbort: ((reason?: DynamicValue) => void) | null = null;
   const abortPromise = new Promise<never>((_resolve, reject) => {
     rejectAbort = reject;
   });
@@ -63,7 +63,7 @@ export async function runWithTimeoutAbort<TResult>(args: {
   try {
     const runPromise = args.run(controller.signal);
     return await Promise.race([runPromise, abortPromise]);
-  } catch (error: unknown) {
+  } catch (error) {
     if (isAbortError(error)) {
       if (callerSignal?.aborted) {
         throw new Error("Aborted");

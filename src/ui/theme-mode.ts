@@ -1,3 +1,7 @@
+function isUiThemeModePayloadShape(value: DynamicValue): value is DynamicObject {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 /**
  * Dark/light mode synchronization.
  *
@@ -19,7 +23,6 @@ import {
   getCurrentSpreadsheetHost,
   type SpreadsheetHost,
 } from "../host/index.js";
-import { isRecord } from "../utils/type-guards.js";
 
 const DARK_MODE_EXPERIMENT_ID: ExperimentalFeatureId = "ui_dark_mode";
 
@@ -63,8 +66,8 @@ function isExperimentalFeatureChangedEvent(
     return false;
   }
 
-  const detail: unknown = event.detail;
-  if (!isRecord(detail)) {
+  const detail: DynamicValue = event.detail;
+  if (!isUiThemeModePayloadShape(detail)) {
     return false;
   }
 

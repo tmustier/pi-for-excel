@@ -1,6 +1,9 @@
+function isHostOfficeThemePayloadShape(value: DynamicValue): value is DynamicObject {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 /** Office theme detection helpers used by OfficeHost. */
 
-import { isRecord } from "../utils/type-guards.js";
 
 interface RgbColor {
   r: number;
@@ -59,7 +62,7 @@ function isDarkColor(rgb: RgbColor): boolean {
   return relativeLuminance(rgb) < 0.35;
 }
 
-function resolveThemeDarkFromColor(input: unknown): boolean | null {
+function resolveThemeDarkFromColor(input: DynamicValue): boolean | null {
   if (typeof input !== "string") {
     return null;
   }
@@ -74,17 +77,17 @@ function resolveThemeDarkFromColor(input: unknown): boolean | null {
 
 export function resolveOfficeThemeDark(): boolean | null {
   const officeRoot = Reflect.get(globalThis, "Office");
-  if (!isRecord(officeRoot)) {
+  if (!isHostOfficeThemePayloadShape(officeRoot)) {
     return null;
   }
 
   const context = officeRoot.context;
-  if (!isRecord(context)) {
+  if (!isHostOfficeThemePayloadShape(context)) {
     return null;
   }
 
   const officeTheme = context.officeTheme;
-  if (!isRecord(officeTheme)) {
+  if (!isHostOfficeThemePayloadShape(officeTheme)) {
     return null;
   }
 

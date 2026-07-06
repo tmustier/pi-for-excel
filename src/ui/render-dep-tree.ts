@@ -113,7 +113,7 @@ function formatNumber(n: number): string {
 /* ── Value display ──────────────────────────────────────────── */
 
 /** Format a cell value for display, using Excel number format when available. */
-function fmtValue(value: unknown, numberFormat?: string): string {
+function fmtValue(value: DynamicValue, numberFormat?: string): string {
   if (value === "" || value === null || value === undefined) return "";
   if (typeof value === "number") {
     return numberFormat && numberFormat !== "General"

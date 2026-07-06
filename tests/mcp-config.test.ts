@@ -13,18 +13,18 @@ import {
 } from "../src/tools/mcp-config.ts";
 
 class MemorySettingsStore {
-  protected readonly values = new Map<string, unknown>();
+  protected readonly values = new Map<string, DynamicValue>();
 
-  get(key: string): Promise<unknown> {
+  get(key: string): Promise<DynamicValue> {
     return Promise.resolve(this.values.has(key) ? this.values.get(key) ?? null : null);
   }
 
-  set(key: string, value: unknown): Promise<void> {
+  set(key: string, value: DynamicValue): Promise<void> {
     this.values.set(key, value);
     return Promise.resolve();
   }
 
-  peek(key: string): unknown {
+  peek(key: string): DynamicValue {
     return this.values.get(key);
   }
 }
@@ -32,7 +32,7 @@ class MemorySettingsStore {
 class FailingConnectionStoreSettings extends MemorySettingsStore {
   private failConnectionStoreWrite = true;
 
-  override set(key: string, value: unknown): Promise<void> {
+  override set(key: string, value: DynamicValue): Promise<void> {
     if (this.failConnectionStoreWrite && key === CONNECTION_STORE_KEY) {
       this.failConnectionStoreWrite = false;
       return Promise.reject(new Error("simulated connection store failure"));
@@ -49,7 +49,7 @@ class FailingServerSettings extends MemorySettingsStore {
     this.failServerDocumentWrite = true;
   }
 
-  override set(key: string, value: unknown): Promise<void> {
+  override set(key: string, value: DynamicValue): Promise<void> {
     if (this.failServerDocumentWrite && key === MCP_SERVERS_SETTING_KEY) {
       this.failServerDocumentWrite = false;
       return Promise.reject(new Error("simulated mcp.servers write failure"));
@@ -60,7 +60,7 @@ class FailingServerSettings extends MemorySettingsStore {
 }
 
 class ConcurrentServerFailureSettings extends MemorySettingsStore {
-  private firstServerWriteReject: ((reason?: unknown) => void) | null = null;
+  private firstServerWriteReject: ((reason?: DynamicValue) => void) | null = null;
   private firstServerWriteStartedResolve: (() => void) | null = null;
   private readonly firstServerWriteStarted: Promise<void>;
   private shouldInterceptServerWrite = false;
@@ -90,7 +90,7 @@ class ConcurrentServerFailureSettings extends MemorySettingsStore {
     reject(new Error("simulated concurrent mcp.servers write failure"));
   }
 
-  override set(key: string, value: unknown): Promise<void> {
+  override set(key: string, value: DynamicValue): Promise<void> {
     if (key === MCP_SERVERS_SETTING_KEY && this.shouldInterceptServerWrite) {
       this.shouldInterceptServerWrite = false;
 
@@ -109,22 +109,22 @@ class ConcurrentServerFailureSettings extends MemorySettingsStore {
   }
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+function isMcpConfigTestPayloadShape(value: DynamicValue): value is DynamicObject {
   return typeof value === "object" && value !== null;
 }
 
 function readConnectionStoreTokenMap(settings: MemorySettingsStore): Record<string, string> | undefined {
   const rawStore = settings.peek(CONNECTION_STORE_KEY);
-  if (!isRecord(rawStore)) return undefined;
+  if (!isMcpConfigTestPayloadShape(rawStore)) return undefined;
 
   const rawItems = rawStore.items;
-  if (!isRecord(rawItems)) return undefined;
+  if (!isMcpConfigTestPayloadShape(rawItems)) return undefined;
 
   const rawRecord = rawItems[MCP_SERVER_TOKENS_CONNECTION_ID];
-  if (!isRecord(rawRecord)) return undefined;
+  if (!isMcpConfigTestPayloadShape(rawRecord)) return undefined;
 
   const rawSecrets = rawRecord.secrets;
-  if (!isRecord(rawSecrets)) return undefined;
+  if (!isMcpConfigTestPayloadShape(rawSecrets)) return undefined;
 
   const tokens: Record<string, string> = {};
   for (const [serverId, token] of Object.entries(rawSecrets)) {
@@ -135,14 +135,14 @@ function readConnectionStoreTokenMap(settings: MemorySettingsStore): Record<stri
   return tokens;
 }
 
-function readStoredServerEntries(settings: MemorySettingsStore): Array<Record<string, unknown>> {
+function readStoredServerEntries(settings: MemorySettingsStore): DynamicObject[] {
   const rawDoc = settings.peek(MCP_SERVERS_SETTING_KEY);
-  if (!isRecord(rawDoc)) return [];
+  if (!isMcpConfigTestPayloadShape(rawDoc)) return [];
 
   const rawServers = rawDoc.servers;
   if (!Array.isArray(rawServers)) return [];
 
-  return rawServers.filter(isRecord);
+  return rawServers.filter(isMcpConfigTestPayloadShape);
 }
 
 void test("validateMcpServerUrl accepts http(s) and rejects invalid schemes", () => {

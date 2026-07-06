@@ -34,7 +34,7 @@ export interface WorkbookMutationObserver {
 export interface MutationApprovalRequest {
   executionMode: ExecutionMode;
   toolName: string;
-  params: unknown;
+  params: DynamicValue;
 }
 
 export interface WorkbookExecutionPolicy {
@@ -67,19 +67,19 @@ function throwIfAborted(signal: AbortSignal | undefined): void {
   throw new Error("Aborted");
 }
 
-function isRecordObject(value: unknown): value is Record<string, unknown> {
+function isWorkbookCoordinatorParamsShape(value: DynamicValue): value is DynamicObject {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function getActionParam(params: unknown): string | null {
-  if (!isRecordObject(params)) return null;
+function getActionParam(params: DynamicValue): string | null {
+  if (!isWorkbookCoordinatorParamsShape(params)) return null;
 
   const action = params.action;
   return typeof action === "string" && action.trim().length > 0 ? action.trim() : null;
 }
 
-function getRangeParam(params: unknown): string | null {
-  if (!isRecordObject(params)) return null;
+function getRangeParam(params: DynamicValue): string | null {
+  if (!isWorkbookCoordinatorParamsShape(params)) return null;
 
   const range = params.range;
   return typeof range === "string" && range.trim().length > 0 ? range.trim() : null;
@@ -118,7 +118,7 @@ function defaultRequestMutationApproval(_request: MutationApprovalRequest): Prom
 async function requireMutationApprovalIfNeeded(args: {
   policy: WorkbookExecutionPolicy;
   toolName: string;
-  params: unknown;
+  params: DynamicValue;
 }): Promise<void> {
   const getExecutionMode = args.policy.getExecutionMode ?? defaultGetExecutionMode;
   const executionMode = await getExecutionMode();
@@ -194,7 +194,7 @@ function wrapTool<TParameters extends TSchema, TDetails>(
             impact,
             revision: out.revision,
           });
-        } catch (error: unknown) {
+        } catch (error) {
           console.warn("[pi] Workbook mutation observer failed:", getErrorMessage(error));
         }
       }

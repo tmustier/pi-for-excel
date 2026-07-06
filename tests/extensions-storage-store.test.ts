@@ -10,13 +10,13 @@ import {
 } from "../src/extensions/storage-store.ts";
 
 class MemorySettingsStore {
-  private readonly store = new Map<string, unknown>();
+  private readonly store = new Map<string, DynamicValue>();
 
-  get(key: string): Promise<unknown> {
+  get(key: string): Promise<DynamicValue> {
     return Promise.resolve(this.store.get(key));
   }
 
-  set(key: string, value: unknown): Promise<void> {
+  set(key: string, value: DynamicValue): Promise<void> {
     this.store.set(key, value);
     return Promise.resolve();
   }

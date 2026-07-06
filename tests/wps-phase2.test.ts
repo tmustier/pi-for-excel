@@ -44,11 +44,11 @@ function colCount(rect: Rect): number {
   return Math.abs(rect.end.col - rect.start.col) + 1;
 }
 
-function makeGrid(rows: number, cols: number, fill: unknown): unknown[][] {
+function makeGrid(rows: number, cols: number, fill: DynamicValue): DynamicValue[][] {
   return Array.from({ length: rows }, () => Array.from({ length: cols }, () => fill));
 }
 
-function isGrid(value: unknown): value is unknown[][] {
+function isGrid(value: DynamicValue): value is DynamicValue[][] {
   return Array.isArray(value) && value.every((row) => Array.isArray(row));
 }
 
@@ -67,27 +67,27 @@ class FakeRange implements WpsEtRange {
     this.Columns = { Count: colCount(rect) };
   }
 
-  get Value2(): unknown[][] {
+  get Value2(): DynamicValue[][] {
     return this.sheet.readGrid(this.rect, "values");
   }
 
-  set Value2(values: unknown) {
+  set Value2(values: DynamicValue) {
     this.sheet.writeValues(this.rect, values);
   }
 
-  get Formula(): unknown[][] {
+  get Formula(): DynamicValue[][] {
     return this.sheet.readGrid(this.rect, "formulas");
   }
 
-  set Formula(values: unknown) {
+  set Formula(values: DynamicValue) {
     this.sheet.writeFormulas(this.rect, values);
   }
 
-  get NumberFormat(): unknown[][] {
+  get NumberFormat(): DynamicValue[][] {
     return this.sheet.readGrid(this.rect, "formats");
   }
 
-  Value(_rangeValueDataType?: unknown, value?: unknown): unknown {
+  Value(_rangeValueDataType?: DynamicValue, value?: DynamicValue): DynamicValue {
     if (arguments.length >= 2) {
       this.Value2 = value;
       return undefined;
@@ -98,19 +98,19 @@ class FakeRange implements WpsEtRange {
 
 class FakeWorksheet implements WpsEtWorksheet {
   readonly Name: string;
-  readonly Visible: unknown;
+  readonly Visible: DynamicValue;
 
-  private readonly values: unknown[][];
-  private readonly formulas: unknown[][];
-  private readonly formats: unknown[][];
+  private readonly values: DynamicValue[][];
+  private readonly formulas: DynamicValue[][];
+  private readonly formats: DynamicValue[][];
   private usedAddress: string;
 
   constructor(args: {
     name: string;
-    values: unknown[][];
-    formulas?: unknown[][];
-    formats?: unknown[][];
-    visible?: unknown;
+    values: DynamicValue[][];
+    formulas?: DynamicValue[][];
+    formats?: DynamicValue[][];
+    visible?: DynamicValue;
     usedAddress?: string;
   }) {
     this.Name = args.name;
@@ -129,11 +129,11 @@ class FakeWorksheet implements WpsEtWorksheet {
     return new FakeRange(this, parseRangeAddress(address));
   }
 
-  readGrid(rect: Rect, kind: "values" | "formulas" | "formats"): unknown[][] {
+  readGrid(rect: Rect, kind: "values" | "formulas" | "formats"): DynamicValue[][] {
     const source = kind === "values" ? this.values : kind === "formulas" ? this.formulas : this.formats;
-    const rows: unknown[][] = [];
+    const rows: DynamicValue[][] = [];
     for (let row = rect.start.row; row <= rect.end.row; row += 1) {
-      const renderedRow: unknown[] = [];
+      const renderedRow: DynamicValue[] = [];
       for (let col = rect.start.col; col <= rect.end.col; col += 1) {
         renderedRow.push(source[row - 1]?.[col] ?? (kind === "formats" ? "General" : ""));
       }
@@ -142,17 +142,17 @@ class FakeWorksheet implements WpsEtWorksheet {
     return rows;
   }
 
-  writeValues(rect: Rect, rawValues: unknown): void {
+  writeValues(rect: Rect, rawValues: DynamicValue): void {
     const values = isGrid(rawValues) ? rawValues : [[rawValues]];
     this.writeGrid(rect, values, false);
   }
 
-  writeFormulas(rect: Rect, rawValues: unknown): void {
+  writeFormulas(rect: Rect, rawValues: DynamicValue): void {
     const values = isGrid(rawValues) ? rawValues : [[rawValues]];
     this.writeGrid(rect, values, true);
   }
 
-  private writeGrid(rect: Rect, values: unknown[][], formulasMayBePresent: boolean): void {
+  private writeGrid(rect: Rect, values: DynamicValue[][], formulasMayBePresent: boolean): void {
     for (let row = 0; row < rowCount(rect); row += 1) {
       for (let col = 0; col < colCount(rect); col += 1) {
         const sheetRow = rect.start.row - 1 + row;
@@ -255,9 +255,9 @@ function createFakeWpsApplication(): WpsEtApplication {
 
 function installFakeWps(app: WpsEtApplication): () => void {
   const hadApplication = Reflect.has(globalThis, "Application");
-  const previousApplication: unknown = Reflect.get(globalThis, "Application");
+  const previousApplication: DynamicValue = Reflect.get(globalThis, "Application");
   const hadWps = Reflect.has(globalThis, "wps");
-  const previousWps: unknown = Reflect.get(globalThis, "wps");
+  const previousWps: DynamicValue = Reflect.get(globalThis, "wps");
 
   Reflect.set(globalThis, "Application", app);
   Reflect.set(globalThis, "wps", { EtApplication: () => app });
@@ -429,7 +429,7 @@ void test("WPS host wiring keeps core metadata stable and registers execute_wps_
   const unsupported = selectCoreToolForHost("fill_formula", fillFormulaLikeTool, "wps");
   await assert.rejects(
     async () => unsupported.execute("tool-call-unsupported", {}),
-    (error: unknown) => {
+    (error: DynamicValue) => {
       assert.ok(error instanceof UnsupportedHostToolError);
       assert.equal(error.toolName, "fill_formula");
       return true;

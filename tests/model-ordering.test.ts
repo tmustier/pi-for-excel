@@ -392,7 +392,7 @@ void test("browser oauth providers include OpenAI + Google OAuth providers", () 
 });
 
 void test("process-env shim adds process.env for browser-like runtimes", () => {
-  const runtime: { process?: unknown } = {};
+  const runtime: { process?: DynamicValue } = {};
   installProcessEnvShim(runtime);
 
   assert.ok(runtime.process && typeof runtime.process === "object" && !Array.isArray(runtime.process));

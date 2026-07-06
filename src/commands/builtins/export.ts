@@ -1,3 +1,7 @@
+function isCommandsBuiltinsExportPayloadShape(value: DynamicValue): value is DynamicObject {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 /**
  * Builtin export/compaction commands.
  */
@@ -16,7 +20,6 @@ import {
 } from "../../messages/archived-history.js";
 import { getErrorMessage } from "../../utils/errors.js";
 import { extractTextBlocks, summarizeContentForTranscript } from "../../utils/content.js";
-import { isRecord } from "../../utils/type-guards.js";
 import type { PiSidebar } from "../../ui/pi-sidebar.js";
 import { getWorkbookChangeAuditLog } from "../../audit/workbook-change-audit.js";
 import { effectiveKeepRecentTokens, effectiveReserveTokens } from "../../compaction/defaults.js";
@@ -33,8 +36,8 @@ type TranscriptEntry = {
   stopReason?: StopReason;
 };
 
-function isApiModel(model: unknown): model is Model<Api> {
-  if (!isRecord(model)) return false;
+function isApiModel(model: DynamicValue): model is Model<Api> {
+  if (!isCommandsBuiltinsExportPayloadShape(model)) return false;
 
   return (
     typeof model.id === "string" &&
@@ -44,8 +47,8 @@ function isApiModel(model: unknown): model is Model<Api> {
   );
 }
 
-function hasContent(message: AgentMessage): message is AgentMessage & { content: unknown } {
-  return isRecord(message) && "content" in message;
+function hasContent(message: AgentMessage): message is AgentMessage & { content: DynamicValue } {
+  return isCommandsBuiltinsExportPayloadShape(message) && "content" in message;
 }
 
 function messageToTranscriptText(message: AgentMessage): string {
@@ -395,7 +398,7 @@ function buildSummarizationPrompt(args: {
   return prompt;
 }
 
-function isPromptTooLongError(err: unknown): boolean {
+function isPromptTooLongError(err: DynamicValue): boolean {
   const msg = getErrorMessage(err).toLowerCase();
   return (
     msg.includes("prompt is too long") ||
@@ -417,7 +420,7 @@ export function createExportCommands(getActiveAgent: ActiveAgentProvider): Slash
         if (mode === "audit" || mode === "audit-log") {
           try {
             await exportWorkbookAuditLog(parts.slice(1).join(" "));
-          } catch (error: unknown) {
+          } catch (error) {
             showToast(t("export.toast.audit_export_failed", { error: getErrorMessage(error) }));
           }
           return;
@@ -474,7 +477,7 @@ export function createExportCommands(getActiveAgent: ActiveAgentProvider): Slash
               count: String(msgs.length),
               size: (json.length / 1024).toFixed(0),
             }));
-          } catch (error: unknown) {
+          } catch (error) {
             showToast(t("export.toast.copy_failed", { error: getErrorMessage(error) }));
           }
           return;
@@ -644,7 +647,7 @@ export async function runCompactCommand(agent: Agent, args: string): Promise<voi
 
     try {
       out = await runOnce(defaultLimits);
-    } catch (e: unknown) {
+    } catch (e) {
       if (!isPromptTooLongError(e)) throw e;
 
       // Retry once with more aggressive truncation + keeping a larger recent tail.
@@ -672,7 +675,7 @@ export async function runCompactCommand(agent: Agent, args: string): Promise<voi
     iface?.requestUpdate();
 
     showToast(t("export.toast.compact.summarized", { count: out.summarizedCount }));
-  } catch (e: unknown) {
+  } catch (e) {
     const msg = getErrorMessage(e);
     if (msg === "Nothing to compact") {
       showToast(t("export.toast.compact.nothing"));

@@ -5,17 +5,20 @@ import type {
   Model,
   Usage,
 } from "@earendil-works/pi-ai/compat";
+function isExtensionsRuntimeManagerHelpersPayloadShape(value: DynamicValue): value is DynamicObject {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 import { getModels, getProviders } from "@earendil-works/pi-ai/compat";
 
 import type { HttpRequestOptions } from "../commands/extension-api.js";
-import { isRecord } from "../utils/type-guards.js";
 import type { StoredExtensionSource } from "./store.js";
 
 const DEFAULT_EXTENSION_HTTP_TIMEOUT_MS = 15_000;
 const MAX_EXTENSION_HTTP_TIMEOUT_MS = 30_000;
 const MAX_EXTENSION_HTTP_BODY_BYTES = 1_000_000;
 
-export function getRuntimeManagerErrorMessage(error: unknown): string {
+export function getRuntimeManagerErrorMessage(error: DynamicValue): string {
   if (error instanceof Error && error.message.trim().length > 0) {
     return error.message;
   }
@@ -23,8 +26,8 @@ export function getRuntimeManagerErrorMessage(error: unknown): string {
   return String(error);
 }
 
-export function isApiModel(model: unknown): model is Model<Api> {
-  if (!isRecord(model)) {
+export function isApiModel(model: DynamicValue): model is Model<Api> {
+  if (!isExtensionsRuntimeManagerHelpersPayloadShape(model)) {
     return false;
   }
 

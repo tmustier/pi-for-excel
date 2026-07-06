@@ -73,18 +73,18 @@ export interface FetchPageToolDependencies {
   now?: () => number;
 }
 
-function normalizeOptionalString(value: unknown): string | undefined {
+function normalizeOptionalString(value: DynamicValue): string | undefined {
   if (typeof value !== "string") return undefined;
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
-function parseParams(raw: unknown): Params {
+function parseParams(raw: DynamicValue): Params {
   if (!raw || typeof raw !== "object") {
     throw new Error("Invalid fetch_page params: expected an object.");
   }
 
-  const params = raw as Record<string, unknown>;
+  const params = raw as DynamicObject;
   const url = normalizeOptionalString(params.url);
   if (!url) {
     throw new Error("fetch_page requires a non-empty url.");
@@ -339,7 +339,7 @@ export function createFetchPageTool(
     parameters: schema,
     execute: async (
       _toolCallId: string,
-      rawParams: unknown,
+      rawParams: DynamicValue,
       signal: AbortSignal | undefined,
     ): Promise<AgentToolResult<FetchPageToolDetails>> => {
       let targetUrl = "";
@@ -401,7 +401,7 @@ export function createFetchPageTool(
             contentType: response.contentType,
           },
         };
-      } catch (error: unknown) {
+      } catch (error) {
         const message = getErrorMessage(error);
         const proxyDown = isLikelyProxyConnectionError(message, usedProxyBaseUrl);
         const displayMessage = proxyDown

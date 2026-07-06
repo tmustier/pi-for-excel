@@ -38,9 +38,9 @@ function readState(): DebugState {
 
   // Backwards/forward compatibility for potential JSON expansion.
   try {
-    const parsed = JSON.parse(raw) as unknown;
+    const parsed = JSON.parse(raw) as DynamicValue;
     if (typeof parsed === "object" && parsed !== null && "enabled" in parsed) {
-      const enabled = (parsed as { enabled?: unknown }).enabled;
+      const enabled = (parsed as { enabled?: DynamicValue }).enabled;
       return { enabled: enabled === true };
     }
   } catch {

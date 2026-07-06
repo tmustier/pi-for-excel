@@ -14,8 +14,8 @@ type ExtractDocumentTool = {
   label: string;
   name: "extract_document";
   description: string;
-  parameters: unknown;
-  execute: (...args: unknown[]) => Promise<never>;
+  parameters: DynamicValue;
+  execute: (...args: DynamicValue[]) => Promise<never>;
 };
 
 export function createExtractDocumentTool(): ExtractDocumentTool {

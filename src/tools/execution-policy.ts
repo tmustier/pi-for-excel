@@ -43,42 +43,42 @@ const ALWAYS_MUTATE_TOOLS = new Set<string>([
   "execute_wps_js",
 ]);
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+function isToolsExecutionPolicyPayloadShape(value: DynamicValue): value is DynamicObject {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-function getActionParam(params: unknown): string | null {
-  if (!isRecord(params)) return null;
+function getActionParam(params: DynamicValue): string | null {
+  if (!isToolsExecutionPolicyPayloadShape(params)) return null;
   const action = params.action;
   return typeof action === "string" ? action : null;
 }
 
-function classifyViewSettings(params: unknown): ToolExecutionMode {
+function classifyViewSettings(params: DynamicValue): ToolExecutionMode {
   const action = getActionParam(params);
   return action === "get" ? "read" : "mutate";
 }
 
-function classifyComments(params: unknown): ToolExecutionMode {
+function classifyComments(params: DynamicValue): ToolExecutionMode {
   const action = getActionParam(params);
   return action === "read" ? "read" : "mutate";
 }
 
-function classifyCharts(params: unknown): ToolExecutionMode {
+function classifyCharts(params: DynamicValue): ToolExecutionMode {
   const action = getActionParam(params);
   return action === "list" || action === "get_image" ? "read" : "mutate";
 }
 
-function classifyWorkbookHistory(params: unknown): ToolExecutionMode {
+function classifyWorkbookHistory(params: DynamicValue): ToolExecutionMode {
   const action = getActionParam(params);
   return action === "restore" ? "mutate" : "read";
 }
 
-function isViewSettingsStructureAction(params: unknown): boolean {
+function isViewSettingsStructureAction(params: DynamicValue): boolean {
   const action = getActionParam(params);
   return action === "hide_sheet" || action === "show_sheet" || action === "very_hide_sheet";
 }
 
-function isChartsStructureAction(params: unknown): boolean {
+function isChartsStructureAction(params: DynamicValue): boolean {
   const action = getActionParam(params);
   return action === "create" || action === "delete";
 }
@@ -88,7 +88,7 @@ function isChartsStructureAction(params: unknown): boolean {
  *
  * Unknown tools default to `mutate` as a safe fallback.
  */
-export function getToolExecutionMode(toolName: string, params: unknown): ToolExecutionMode {
+export function getToolExecutionMode(toolName: string, params: DynamicValue): ToolExecutionMode {
   if (ALWAYS_READ_TOOLS.has(toolName)) return "read";
   if (ALWAYS_MUTATE_TOOLS.has(toolName)) return "mutate";
 
@@ -118,7 +118,7 @@ export function getToolExecutionMode(toolName: string, params: unknown): ToolExe
  * - only clearly structural mutations trigger workbook blueprint invalidation
  * - data/format/comment/view mutations are treated as content-only
  */
-export function getToolContextImpact(toolName: string, params: unknown): ToolContextImpact {
+export function getToolContextImpact(toolName: string, params: DynamicValue): ToolContextImpact {
   const mode = getToolExecutionMode(toolName, params);
   if (mode === "read") return "none";
 

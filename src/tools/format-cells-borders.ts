@@ -45,7 +45,7 @@ const ALL_BORDER_EDGES: BorderEdgeIndex[] = [
   "InsideVertical",
 ];
 
-function normalizeBorderWeight(value: unknown, fieldName: string): BorderWeight | undefined {
+function normalizeBorderWeight(value: DynamicValue, fieldName: string): BorderWeight | undefined {
   if (value === undefined) {
     return undefined;
   }
@@ -64,11 +64,11 @@ function normalizeBorderWeight(value: unknown, fieldName: string): BorderWeight 
 }
 
 export function normalizeBorderParams(params: {
-  borders?: unknown;
-  border_top?: unknown;
-  border_bottom?: unknown;
-  border_left?: unknown;
-  border_right?: unknown;
+  borders?: DynamicValue;
+  border_top?: DynamicValue;
+  border_bottom?: DynamicValue;
+  border_left?: DynamicValue;
+  border_right?: DynamicValue;
 }): NormalizedBorderParams {
   return {
     shorthand: normalizeBorderWeight(params.borders, "borders"),

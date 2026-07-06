@@ -64,19 +64,19 @@ type CodeAssistHeaders = {
   "Client-Metadata"?: string;
 };
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+function isAuthGoogleBrowserOauthPayloadShape(value: DynamicValue): value is DynamicObject {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function getProjectId(data: unknown): string | undefined {
-  if (!isRecord(data)) return undefined;
+function getProjectId(data: DynamicValue): string | undefined {
+  if (!isAuthGoogleBrowserOauthPayloadShape(data)) return undefined;
 
   const direct = data.cloudaicompanionProject;
   if (typeof direct === "string" && direct.trim().length > 0) {
     return direct;
   }
 
-  if (isRecord(direct)) {
+  if (isAuthGoogleBrowserOauthPayloadShape(direct)) {
     const nestedId = direct.id;
     if (typeof nestedId === "string" && nestedId.trim().length > 0) {
       return nestedId;
@@ -86,15 +86,15 @@ function getProjectId(data: unknown): string | undefined {
   return undefined;
 }
 
-function getDefaultTierId(data: unknown): string {
-  if (!isRecord(data)) return TIER_LEGACY;
+function getDefaultTierId(data: DynamicValue): string {
+  if (!isAuthGoogleBrowserOauthPayloadShape(data)) return TIER_LEGACY;
 
   const allowedTiers = data.allowedTiers;
   if (!Array.isArray(allowedTiers)) return TIER_LEGACY;
 
   let fallbackTier: string | undefined;
   for (const tier of allowedTiers) {
-    if (!isRecord(tier)) continue;
+    if (!isAuthGoogleBrowserOauthPayloadShape(tier)) continue;
 
     const tierId = tier.id;
     const isDefault = tier.isDefault;
@@ -111,22 +111,22 @@ function getDefaultTierId(data: unknown): string {
   return fallbackTier ?? TIER_LEGACY;
 }
 
-function hasCurrentTier(data: unknown): boolean {
-  if (!isRecord(data)) return false;
-  return isRecord(data.currentTier);
+function hasCurrentTier(data: DynamicValue): boolean {
+  if (!isAuthGoogleBrowserOauthPayloadShape(data)) return false;
+  return isAuthGoogleBrowserOauthPayloadShape(data.currentTier);
 }
 
-function isVpcScAffectedUser(payload: unknown): boolean {
-  if (!isRecord(payload)) return false;
+function isVpcScAffectedUser(payload: DynamicValue): boolean {
+  if (!isAuthGoogleBrowserOauthPayloadShape(payload)) return false;
 
   const error = payload.error;
-  if (!isRecord(error)) return false;
+  if (!isAuthGoogleBrowserOauthPayloadShape(error)) return false;
 
   const details = error.details;
   if (!Array.isArray(details)) return false;
 
   for (const detail of details) {
-    if (!isRecord(detail)) continue;
+    if (!isAuthGoogleBrowserOauthPayloadShape(detail)) continue;
     if (detail.reason === "SECURITY_POLICY_VIOLATED") {
       return true;
     }
@@ -174,7 +174,7 @@ async function pollOnboardingOperation(
   operationName: string,
   headers: CodeAssistHeaders,
   onProgress?: (message: string) => void,
-): Promise<unknown> {
+): Promise<DynamicValue> {
   let attempt = 0;
 
   while (true) {
@@ -192,8 +192,8 @@ async function pollOnboardingOperation(
       throw new Error(`Failed to poll Google onboarding operation: ${response.status} ${response.statusText}`);
     }
 
-    const payload: unknown = await response.json();
-    if (!isRecord(payload)) {
+    const payload: DynamicValue = await response.json();
+    if (!isAuthGoogleBrowserOauthPayloadShape(payload)) {
       throw new Error("Google onboarding returned an invalid response payload");
     }
 
@@ -225,9 +225,9 @@ async function discoverGeminiCliProject(
     }),
   });
 
-  let loadData: unknown;
+  let loadData: DynamicValue;
   if (!loadResponse.ok) {
-    let errorPayload: unknown;
+    let errorPayload: DynamicValue;
     try {
       errorPayload = await loadResponse.clone().json();
     } catch {
@@ -261,7 +261,7 @@ async function discoverGeminiCliProject(
 
   callbacks.onProgress?.("Provisioning Cloud Code Assist project…");
 
-  const onboardBody: Record<string, unknown> = {
+  const onboardBody: DynamicObject = {
     tierId,
     metadata: {
       ideType: "IDE_UNSPECIFIED",
@@ -273,7 +273,7 @@ async function discoverGeminiCliProject(
   if (projectId) {
     onboardBody.cloudaicompanionProject = projectId;
     const metadata = onboardBody.metadata;
-    if (isRecord(metadata)) {
+    if (isAuthGoogleBrowserOauthPayloadShape(metadata)) {
       metadata.duetProject = projectId;
     }
   }
@@ -291,8 +291,8 @@ async function discoverGeminiCliProject(
     );
   }
 
-  let onboardingData: unknown = await onboardResponse.json();
-  if (isRecord(onboardingData) && onboardingData.done !== true) {
+  let onboardingData: DynamicValue = await onboardResponse.json();
+  if (isAuthGoogleBrowserOauthPayloadShape(onboardingData) && onboardingData.done !== true) {
     const operationName = onboardingData.name;
     if (typeof operationName === "string" && operationName.trim().length > 0) {
       onboardingData = await pollOnboardingOperation(operationName, headers, callbacks.onProgress);
@@ -300,7 +300,7 @@ async function discoverGeminiCliProject(
   }
 
   const onboardedProjectId =
-    isRecord(onboardingData) && isRecord(onboardingData.response)
+    isAuthGoogleBrowserOauthPayloadShape(onboardingData) && isAuthGoogleBrowserOauthPayloadShape(onboardingData.response)
       ? getProjectId(onboardingData.response)
       : undefined;
 
@@ -341,7 +341,7 @@ async function discoverAntigravityProject(
         continue;
       }
 
-      const payload: unknown = await response.json();
+      const payload: DynamicValue = await response.json();
       const projectId = getProjectId(payload);
       if (projectId) {
         return projectId;

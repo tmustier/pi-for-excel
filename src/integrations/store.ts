@@ -16,8 +16,8 @@ import { getDefaultEnabledIntegrationIds } from "./catalog.js";
 export type IntegrationScope = "session" | "workbook";
 
 export interface IntegrationSettingsStore {
-  get(key: string): Promise<unknown>;
-  set(key: string, value: unknown): Promise<void>;
+  get(key: string): Promise<DynamicValue>;
+  set(key: string, value: DynamicValue): Promise<void>;
 }
 
 export interface SessionIntegrationIdsOptions {
@@ -41,7 +41,7 @@ export function workbookIntegrationsKey(workbookId: string): string {
   return `${WORKBOOK_INTEGRATIONS_PREFIX}${workbookId}`;
 }
 
-function normalizeStringArray(value: unknown): string[] {
+function normalizeStringArray(value: DynamicValue): string[] {
   if (Array.isArray(value)) {
     const out: string[] = [];
     for (const item of value) {
@@ -63,7 +63,7 @@ function normalizeStringArray(value: unknown): string[] {
   return [];
 }
 
-export function normalizeIntegrationIds(raw: unknown, knownIntegrationIds: readonly string[]): string[] {
+export function normalizeIntegrationIds(raw: DynamicValue, knownIntegrationIds: readonly string[]): string[] {
   const known = new Set<string>(knownIntegrationIds);
   const requested = normalizeStringArray(raw);
 
@@ -215,7 +215,7 @@ export async function resolveConfiguredIntegrationIds(args: {
   return ordered;
 }
 
-function parseStoredBoolean(value: unknown): boolean {
+function parseStoredBoolean(value: DynamicValue): boolean {
   if (typeof value === "boolean") return value;
   if (typeof value === "number") return value !== 0;
   if (typeof value === "string") {

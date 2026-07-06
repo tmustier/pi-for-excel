@@ -8,7 +8,7 @@ export const RETENTION_LIMIT_SETTING_KEY = "workbook.recovery.retentionLimit.v1"
 export const MIN_RETENTION_LIMIT = 5;
 
 /** Clamp a user-provided retention limit to valid bounds. */
-export function clampRetentionLimit(raw: unknown): number {
+export function clampRetentionLimit(raw: DynamicValue): number {
   if (typeof raw !== "number" || !Number.isFinite(raw)) return MAX_RECOVERY_ENTRIES;
   const rounded = Math.floor(raw);
   if (rounded < MIN_RETENTION_LIMIT) return MIN_RETENTION_LIMIT;

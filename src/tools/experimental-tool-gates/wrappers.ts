@@ -29,11 +29,11 @@ import type {
 } from "../tool-details.js";
 import { isUnsupportedHostTool } from "../unsupported-host-tool.js";
 
-function isRecordObject(value: unknown): value is Record<string, unknown> {
+function isExperimentalGateParamsShape(value: DynamicValue): value is DynamicObject {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function getRecordValue(record: Record<string, unknown>, key: string): string | undefined {
+function getGateParamString(record: DynamicObject, key: string): string | undefined {
   const value = record[key];
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
 }
@@ -46,8 +46,8 @@ function throwIfAborted(signal: AbortSignal | undefined): void {
   throw new Error("Aborted");
 }
 
-function getTmuxActionFromParams(params: unknown): string {
-  if (!isRecordObject(params)) {
+function getTmuxActionFromParams(params: DynamicValue): string {
+  if (!isExperimentalGateParamsShape(params)) {
     return "list_sessions";
   }
 
@@ -70,7 +70,7 @@ function buildGateErrorText(message: string, skillName: string): string {
 function buildTmuxGateErrorResult(args: {
   reason: TmuxBridgeGateReason;
   bridgeUrl?: string;
-  params: unknown;
+  params: DynamicValue;
 }): AgentToolResult<TmuxBridgeDetails> {
   const message = buildTmuxBridgeGateErrorMessage(args.reason);
 
@@ -163,26 +163,26 @@ function buildLibreOfficeGateErrorResult(args: {
 export function buildPythonBridgeApprovalMessage(
   toolName: string,
   bridgeUrl: string,
-  params: unknown,
+  params: DynamicValue,
 ): string {
   const title = "Allow local Python / LibreOffice execution?";
 
-  if (isRecordObject(params)) {
+  if (isExperimentalGateParamsShape(params)) {
     if (toolName === "python_run") {
-      const code = getRecordValue(params, "code") ?? "(no code)";
+      const code = getGateParamString(params, "code") ?? "(no code)";
       const previewLine = code.split("\n")[0] ?? code;
       return `${title}\n\nTool: python_run\nBridge: ${bridgeUrl}\nCode preview: ${previewLine}`;
     }
 
     if (toolName === "libreoffice_convert") {
-      const inputPath = getRecordValue(params, "input_path") ?? "(unknown input)";
-      const targetFormat = getRecordValue(params, "target_format") ?? "(unknown format)";
+      const inputPath = getGateParamString(params, "input_path") ?? "(unknown input)";
+      const targetFormat = getGateParamString(params, "target_format") ?? "(unknown format)";
       return `${title}\n\nTool: libreoffice_convert\nBridge: ${bridgeUrl}\nInput: ${inputPath}\nTarget: ${targetFormat.toUpperCase()}`;
     }
 
     if (toolName === "python_transform_range") {
-      const range = getRecordValue(params, "range") ?? "(unknown range)";
-      const output = getRecordValue(params, "output_start_cell") ?? "(source top-left)";
+      const range = getGateParamString(params, "range") ?? "(unknown range)";
+      const output = getGateParamString(params, "output_start_cell") ?? "(source top-left)";
       return `${title}\n\nTool: python_transform_range\nBridge: ${bridgeUrl}\nRange: ${range}\nOutput start: ${output}`;
     }
   }
@@ -240,10 +240,10 @@ function defaultRequestOfficeJsExecuteApproval(
 }
 
 function getDirectJsExecuteApprovalRequest(
-  params: unknown,
+  params: DynamicValue,
   apiName: "Office.js" | "WPS JSAPI",
 ): OfficeJsExecuteApprovalRequest {
-  if (!isRecordObject(params)) {
+  if (!isExperimentalGateParamsShape(params)) {
     return {
       explanation: "",
       code: "",
@@ -333,7 +333,7 @@ function wrapDirectWorkbookJsToolWithHardGate(
 
 function createPythonBridgeApprover(
   dependencies: ExperimentalToolGateDependencies,
-): (toolName: string, bridgeUrl: string, params: unknown) => Promise<void> {
+): (toolName: string, bridgeUrl: string, params: DynamicValue) => Promise<void> {
   const requestApproval = dependencies.requestPythonBridgeApproval ?? defaultRequestPythonBridgeApproval;
   const getApprovedBridgeUrl =
     dependencies.getApprovedPythonBridgeUrl
@@ -342,7 +342,7 @@ function createPythonBridgeApprover(
     dependencies.setApprovedPythonBridgeUrl
     ?? defaultSetApprovedPythonBridgeUrl;
 
-  return async (toolName: string, bridgeUrl: string, params: unknown): Promise<void> => {
+  return async (toolName: string, bridgeUrl: string, params: DynamicValue): Promise<void> => {
     const cachedApprovalUrl = await getApprovedBridgeUrl();
     if (cachedApprovalUrl === bridgeUrl) {
       return;

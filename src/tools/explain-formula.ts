@@ -100,7 +100,7 @@ export function createExplainFormulaTool(): AgentTool<typeof schema, ExplainForm
 
           const resolvedCell = qualifiedAddress(sheet.name, range.address);
           const valuePreview = previewCellValue(range.values[0][0]);
-          const rawFormula: unknown = range.formulas[0][0];
+          const rawFormula: DynamicValue = range.formulas[0][0];
           const formula = typeof rawFormula === "string" && rawFormula.startsWith("=")
             ? rawFormula
             : undefined;
@@ -139,7 +139,7 @@ export function createExplainFormulaTool(): AgentTool<typeof schema, ExplainForm
 
           const referenceDetails: ExplainFormulaReferenceDetail[] = loadedReferences.map((reference) => {
             const preview = previewCellValue(reference.range.values[0][0]);
-            const rawRefFormula: unknown = reference.range.formulas[0][0];
+            const rawRefFormula: DynamicValue = reference.range.formulas[0][0];
 
             return {
               address: reference.address,
@@ -208,7 +208,7 @@ export function createExplainFormulaTool(): AgentTool<typeof schema, ExplainForm
           content: [{ type: "text", text: lines.join("\n") }],
           details,
         };
-      } catch (error: unknown) {
+      } catch (error) {
         return {
           content: [{ type: "text", text: `Error explaining formula: ${getErrorMessage(error)}` }],
           details: {

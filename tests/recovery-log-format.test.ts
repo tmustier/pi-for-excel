@@ -588,7 +588,7 @@ void test("restore applies conditional-format checkpoints and creates inverse ch
   };
 
   let appliedAddress = "";
-  const appliedRules: unknown[] = [];
+  const appliedRules: DynamicValue[] = [];
 
   const log = new WorkbookRecoveryLog({
     getSettingsStore: () => Promise.resolve(settingsStore),

@@ -1,3 +1,7 @@
+function isAuthOauthStoragePayloadShape(value: DynamicValue): value is DynamicObject {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 /**
  * OAuth credential persistence for in-browser OAuth flows.
  *
@@ -11,11 +15,10 @@
 import type { OAuthCredentials } from "@earendil-works/pi-ai/compat";
 import type { SettingsStore } from "@earendil-works/pi-web-ui/dist/storage/stores/settings-store.js";
 
-import { isRecord } from "../utils/type-guards.js";
 
-export function isOAuthCredentials(value: unknown): value is OAuthCredentials {
+export function isOAuthCredentials(value: DynamicValue): value is OAuthCredentials {
   return (
-    isRecord(value) &&
+    isAuthOauthStoragePayloadShape(value) &&
     typeof value.refresh === "string" &&
     typeof value.access === "string" &&
     typeof value.expires === "number"
@@ -34,7 +37,7 @@ export async function loadOAuthCredentials(
   providerId: string,
 ): Promise<OAuthCredentials | null> {
   try {
-    const stored: unknown = await settings.get(oauthSettingsKey(providerId));
+    const stored: DynamicValue = await settings.get(oauthSettingsKey(providerId));
     return isOAuthCredentials(stored) ? stored : null;
   } catch {
     return null;

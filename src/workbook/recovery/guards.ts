@@ -1,6 +1,9 @@
+function isWorkbookRecoveryGuardsPayloadShape(value: DynamicValue): value is DynamicObject {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 /** Runtime guards for persisted recovery payloads. */
 
-import { isRecord } from "../../utils/type-guards.js";
 import type {
   RecoveryConditionalCellValueOperator,
   RecoveryConditionalColorCriterionType,
@@ -143,7 +146,7 @@ const SUPPORTED_ICON_SETS: readonly RecoveryConditionalIconSet[] = [
   "FiveBoxes",
 ];
 
-function isRecoveryConditionalCellValueOperator(value: unknown): value is RecoveryConditionalCellValueOperator {
+function isRecoveryConditionalCellValueOperator(value: DynamicValue): value is RecoveryConditionalCellValueOperator {
   if (typeof value !== "string") return false;
 
   for (const operator of SUPPORTED_CELL_VALUE_OPERATORS) {
@@ -155,7 +158,7 @@ function isRecoveryConditionalCellValueOperator(value: unknown): value is Recove
   return false;
 }
 
-function isRecoveryConditionalTextOperator(value: unknown): value is RecoveryConditionalTextOperator {
+function isRecoveryConditionalTextOperator(value: DynamicValue): value is RecoveryConditionalTextOperator {
   if (typeof value !== "string") return false;
 
   for (const operator of SUPPORTED_TEXT_OPERATORS) {
@@ -167,7 +170,7 @@ function isRecoveryConditionalTextOperator(value: unknown): value is RecoveryCon
   return false;
 }
 
-function isRecoveryConditionalTopBottomCriterionType(value: unknown): value is RecoveryConditionalTopBottomCriterionType {
+function isRecoveryConditionalTopBottomCriterionType(value: DynamicValue): value is RecoveryConditionalTopBottomCriterionType {
   if (typeof value !== "string") return false;
 
   for (const type of SUPPORTED_TOP_BOTTOM_TYPES) {
@@ -179,7 +182,7 @@ function isRecoveryConditionalTopBottomCriterionType(value: unknown): value is R
   return false;
 }
 
-function isRecoveryConditionalPresetCriterion(value: unknown): value is RecoveryConditionalPresetCriterion {
+function isRecoveryConditionalPresetCriterion(value: DynamicValue): value is RecoveryConditionalPresetCriterion {
   if (typeof value !== "string") return false;
 
   for (const criterion of SUPPORTED_PRESET_CRITERIA) {
@@ -191,7 +194,7 @@ function isRecoveryConditionalPresetCriterion(value: unknown): value is Recovery
   return false;
 }
 
-function isRecoveryConditionalDataBarAxisFormat(value: unknown): value is RecoveryConditionalDataBarAxisFormat {
+function isRecoveryConditionalDataBarAxisFormat(value: DynamicValue): value is RecoveryConditionalDataBarAxisFormat {
   if (typeof value !== "string") return false;
 
   for (const axisFormat of SUPPORTED_DATA_BAR_AXIS_FORMATS) {
@@ -203,7 +206,7 @@ function isRecoveryConditionalDataBarAxisFormat(value: unknown): value is Recove
   return false;
 }
 
-function isRecoveryConditionalDataBarDirection(value: unknown): value is RecoveryConditionalDataBarDirection {
+function isRecoveryConditionalDataBarDirection(value: DynamicValue): value is RecoveryConditionalDataBarDirection {
   if (typeof value !== "string") return false;
 
   for (const direction of SUPPORTED_DATA_BAR_DIRECTIONS) {
@@ -215,7 +218,7 @@ function isRecoveryConditionalDataBarDirection(value: unknown): value is Recover
   return false;
 }
 
-function isRecoveryConditionalDataBarRuleType(value: unknown): value is RecoveryConditionalDataBarRuleType {
+function isRecoveryConditionalDataBarRuleType(value: DynamicValue): value is RecoveryConditionalDataBarRuleType {
   if (typeof value !== "string") return false;
 
   for (const type of SUPPORTED_DATA_BAR_RULE_TYPES) {
@@ -227,7 +230,7 @@ function isRecoveryConditionalDataBarRuleType(value: unknown): value is Recovery
   return false;
 }
 
-function isRecoveryConditionalColorCriterionType(value: unknown): value is RecoveryConditionalColorCriterionType {
+function isRecoveryConditionalColorCriterionType(value: DynamicValue): value is RecoveryConditionalColorCriterionType {
   if (typeof value !== "string") return false;
 
   for (const type of SUPPORTED_COLOR_CRITERION_TYPES) {
@@ -239,7 +242,7 @@ function isRecoveryConditionalColorCriterionType(value: unknown): value is Recov
   return false;
 }
 
-function isRecoveryConditionalIconCriterionType(value: unknown): value is RecoveryConditionalIconCriterionType {
+function isRecoveryConditionalIconCriterionType(value: DynamicValue): value is RecoveryConditionalIconCriterionType {
   if (typeof value !== "string") return false;
 
   for (const type of SUPPORTED_ICON_CRITERION_TYPES) {
@@ -251,7 +254,7 @@ function isRecoveryConditionalIconCriterionType(value: unknown): value is Recove
   return false;
 }
 
-function isRecoveryConditionalIconCriterionOperator(value: unknown): value is RecoveryConditionalIconCriterionOperator {
+function isRecoveryConditionalIconCriterionOperator(value: DynamicValue): value is RecoveryConditionalIconCriterionOperator {
   if (typeof value !== "string") return false;
 
   for (const operator of SUPPORTED_ICON_CRITERION_OPERATORS) {
@@ -263,7 +266,7 @@ function isRecoveryConditionalIconCriterionOperator(value: unknown): value is Re
   return false;
 }
 
-function isRecoveryConditionalIconSet(value: unknown): value is RecoveryConditionalIconSet {
+function isRecoveryConditionalIconSet(value: DynamicValue): value is RecoveryConditionalIconSet {
   if (typeof value !== "string") return false;
 
   for (const style of SUPPORTED_ICON_SETS) {
@@ -275,15 +278,15 @@ function isRecoveryConditionalIconSet(value: unknown): value is RecoveryConditio
   return false;
 }
 
-function isRecoveryConditionalDataBarRule(value: unknown): value is RecoveryConditionalDataBarRule {
-  if (!isRecord(value)) return false;
+function isRecoveryConditionalDataBarRule(value: DynamicValue): value is RecoveryConditionalDataBarRule {
+  if (!isWorkbookRecoveryGuardsPayloadShape(value)) return false;
   if (!isRecoveryConditionalDataBarRuleType(value.type)) return false;
   if (value.formula !== undefined && typeof value.formula !== "string") return false;
   return true;
 }
 
-function isRecoveryConditionalDataBarState(value: unknown): value is RecoveryConditionalDataBarState {
-  if (!isRecord(value)) return false;
+function isRecoveryConditionalDataBarState(value: DynamicValue): value is RecoveryConditionalDataBarState {
+  if (!isWorkbookRecoveryGuardsPayloadShape(value)) return false;
   if (!isRecoveryConditionalDataBarAxisFormat(value.axisFormat)) return false;
   if (!isRecoveryConditionalDataBarDirection(value.barDirection)) return false;
   if (typeof value.showDataBarOnly !== "boolean") return false;
@@ -300,30 +303,30 @@ function isRecoveryConditionalDataBarState(value: unknown): value is RecoveryCon
   return true;
 }
 
-function isRecoveryConditionalColorScaleCriterion(value: unknown): value is RecoveryConditionalColorScaleCriterion {
-  if (!isRecord(value)) return false;
+function isRecoveryConditionalColorScaleCriterion(value: DynamicValue): value is RecoveryConditionalColorScaleCriterion {
+  if (!isWorkbookRecoveryGuardsPayloadShape(value)) return false;
   if (!isRecoveryConditionalColorCriterionType(value.type)) return false;
   if (value.formula !== undefined && typeof value.formula !== "string") return false;
   if (value.color !== undefined && typeof value.color !== "string") return false;
   return true;
 }
 
-function isRecoveryConditionalColorScaleState(value: unknown): value is RecoveryConditionalColorScaleState {
-  if (!isRecord(value)) return false;
+function isRecoveryConditionalColorScaleState(value: DynamicValue): value is RecoveryConditionalColorScaleState {
+  if (!isWorkbookRecoveryGuardsPayloadShape(value)) return false;
   if (!isRecoveryConditionalColorScaleCriterion(value.minimum)) return false;
   if (!isRecoveryConditionalColorScaleCriterion(value.maximum)) return false;
   if (value.midpoint !== undefined && !isRecoveryConditionalColorScaleCriterion(value.midpoint)) return false;
   return true;
 }
 
-function isRecoveryConditionalIcon(value: unknown): value is RecoveryConditionalIcon {
-  if (!isRecord(value)) return false;
+function isRecoveryConditionalIcon(value: DynamicValue): value is RecoveryConditionalIcon {
+  if (!isWorkbookRecoveryGuardsPayloadShape(value)) return false;
   if (!isRecoveryConditionalIconSet(value.set)) return false;
   return typeof value.index === "number" && Number.isFinite(value.index);
 }
 
-function isRecoveryConditionalIconCriterion(value: unknown): value is RecoveryConditionalIconCriterion {
-  if (!isRecord(value)) return false;
+function isRecoveryConditionalIconCriterion(value: DynamicValue): value is RecoveryConditionalIconCriterion {
+  if (!isWorkbookRecoveryGuardsPayloadShape(value)) return false;
   if (!isRecoveryConditionalIconCriterionType(value.type)) return false;
   if (!isRecoveryConditionalIconCriterionOperator(value.operator)) return false;
   if (typeof value.formula !== "string") return false;
@@ -331,8 +334,8 @@ function isRecoveryConditionalIconCriterion(value: unknown): value is RecoveryCo
   return true;
 }
 
-function isRecoveryConditionalIconSetState(value: unknown): value is RecoveryConditionalIconSetState {
-  if (!isRecord(value)) return false;
+function isRecoveryConditionalIconSetState(value: DynamicValue): value is RecoveryConditionalIconSetState {
+  if (!isWorkbookRecoveryGuardsPayloadShape(value)) return false;
   if (!isRecoveryConditionalIconSet(value.style)) return false;
   if (typeof value.reverseIconOrder !== "boolean") return false;
   if (typeof value.showIconOnly !== "boolean") return false;
@@ -341,8 +344,8 @@ function isRecoveryConditionalIconSetState(value: unknown): value is RecoveryCon
   return true;
 }
 
-export function isRecoveryConditionalFormatRule(value: unknown): value is RecoveryConditionalFormatRule {
-  if (!isRecord(value)) return false;
+export function isRecoveryConditionalFormatRule(value: DynamicValue): value is RecoveryConditionalFormatRule {
+  if (!isWorkbookRecoveryGuardsPayloadShape(value)) return false;
 
   if (value.stopIfTrue !== undefined && typeof value.stopIfTrue !== "boolean") return false;
   if (value.formula !== undefined && typeof value.formula !== "string") return false;

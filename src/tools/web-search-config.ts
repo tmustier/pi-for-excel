@@ -5,7 +5,7 @@
 const CONNECTION_STORE_KEY = "connections.store.v1";
 const CONNECTION_STORE_VERSION = 1;
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+function isToolsWebSearchConfigPayloadShape(value: DynamicValue): value is DynamicObject {
   return typeof value === "object" && value !== null;
 }
 
@@ -109,11 +109,11 @@ const WEB_SEARCH_CONNECTION_SECRET_FIELD_BY_PROVIDER: Record<WebSearchProvider, 
 };
 
 export interface WebSearchConfigReader {
-  get(key: string): Promise<unknown>;
+  get(key: string): Promise<DynamicValue>;
 }
 
 export interface WebSearchConfigStore extends WebSearchConfigReader {
-  set(key: string, value: unknown): Promise<void>;
+  set(key: string, value: DynamicValue): Promise<void>;
   delete?(key: string): Promise<void>;
 }
 
@@ -122,13 +122,13 @@ export interface WebSearchProviderConfig {
   apiKeys: Partial<Record<WebSearchProvider, string>>;
 }
 
-function normalizeOptionalString(value: unknown): string | undefined {
+function normalizeOptionalString(value: DynamicValue): string | undefined {
   if (typeof value !== "string") return undefined;
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
-function parseProvider(value: unknown): WebSearchProvider | undefined {
+function parseProvider(value: DynamicValue): WebSearchProvider | undefined {
   if (value === "jina" || value === "firecrawl" || value === "serper" || value === "tavily" || value === "brave") {
     return value;
   }
@@ -169,16 +169,16 @@ async function loadConnectionStoreWebSearchApiKeys(
   settings: WebSearchConfigReader,
 ): Promise<Partial<Record<WebSearchProvider, string>>> {
   const rawStore = await settings.get(CONNECTION_STORE_KEY);
-  if (!isRecord(rawStore)) return createEmptyApiKeyMap();
+  if (!isToolsWebSearchConfigPayloadShape(rawStore)) return createEmptyApiKeyMap();
 
   const rawItems = rawStore.items;
-  if (!isRecord(rawItems)) return createEmptyApiKeyMap();
+  if (!isToolsWebSearchConfigPayloadShape(rawItems)) return createEmptyApiKeyMap();
 
   const rawRecord = rawItems[WEB_SEARCH_CONNECTION_ID];
-  if (!isRecord(rawRecord)) return createEmptyApiKeyMap();
+  if (!isToolsWebSearchConfigPayloadShape(rawRecord)) return createEmptyApiKeyMap();
 
   const rawSecrets = rawRecord.secrets;
-  if (!isRecord(rawSecrets)) return createEmptyApiKeyMap();
+  if (!isToolsWebSearchConfigPayloadShape(rawSecrets)) return createEmptyApiKeyMap();
 
   const apiKeys = createEmptyApiKeyMap();
 
@@ -215,19 +215,19 @@ async function loadConnectionStoreItems(
   settings: WebSearchConfigStore,
 ): Promise<Record<string, StoredConnectionRecord>> {
   const raw = await settings.get(CONNECTION_STORE_KEY);
-  if (!isRecord(raw)) return {};
+  if (!isToolsWebSearchConfigPayloadShape(raw)) return {};
 
   const rawItems = raw.items;
-  if (!isRecord(rawItems)) return {};
+  if (!isToolsWebSearchConfigPayloadShape(rawItems)) return {};
 
   const items: Record<string, StoredConnectionRecord> = {};
 
   for (const [connectionId, rawRecord] of Object.entries(rawItems)) {
-    if (!isRecord(rawRecord)) continue;
+    if (!isToolsWebSearchConfigPayloadShape(rawRecord)) continue;
 
     const rawSecrets = rawRecord.secrets;
     const secrets: Record<string, string> = {};
-    if (isRecord(rawSecrets)) {
+    if (isToolsWebSearchConfigPayloadShape(rawSecrets)) {
       for (const [fieldId, value] of Object.entries(rawSecrets)) {
         const normalized = normalizeOptionalString(value);
         if (!normalized) continue;

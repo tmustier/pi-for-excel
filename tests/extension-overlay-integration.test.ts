@@ -22,11 +22,11 @@ import { EXTENSION_OVERLAY_ID } from "../src/ui/overlay-ids.ts";
 import { installFakeDom } from "./fake-dom.test.ts";
 
 class MemorySettingsStore implements ExtensionSettingsStore {
-  get(_key: string): Promise<unknown> {
+  get(_key: string): Promise<DynamicValue> {
     return Promise.resolve(null);
   }
 
-  set(_key: string, _value: unknown): Promise<void> {
+  set(_key: string, _value: DynamicValue): Promise<void> {
     return Promise.resolve();
   }
 }

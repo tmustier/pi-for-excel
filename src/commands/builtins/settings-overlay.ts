@@ -1,3 +1,7 @@
+function isCommandsBuiltinsSettingsOverlayPayloadShape(value: DynamicValue): value is DynamicObject {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 /**
  * Unified settings overlay.
  *
@@ -33,7 +37,6 @@ import {
 import { SETTINGS_OVERLAY_ID } from "../../ui/overlay-ids.js";
 import { VISIBLE_PROVIDERS, buildProviderRow } from "../../ui/provider-login.js";
 import { showToast } from "../../ui/toast.js";
-import { isRecord } from "../../utils/type-guards.js";
 import { t, initLanguage, getLanguage } from "../../language/index.js";
 import {
   buildExperimentalFeatureContent,
@@ -70,7 +73,7 @@ export interface ShowSettingsDialogOptions {
 
 interface SettingsStore {
   get<T>(key: string): Promise<T | null>;
-  set(key: string, value: unknown): Promise<void>;
+  set(key: string, value: DynamicValue): Promise<void>;
 }
 
 interface SettingsDialogDependencies {
@@ -353,7 +356,7 @@ function buildProxySection(
     let normalizedUrl: string;
     try {
       normalizedUrl = validateOfficeProxyUrl(candidate);
-    } catch (error: unknown) {
+    } catch (error) {
       validationError = error instanceof Error ? error.message : t("settings.toast.proxy_url_invalid");
       updateStatus();
       showToast(t("settings.toast.proxy_url_not_saved", { error: validationError }));
@@ -416,8 +419,8 @@ function buildProxySection(
   const onProxyStateChanged = (event: Event): void => {
     if (!(event instanceof CustomEvent)) return;
 
-    const detail: unknown = event.detail;
-    if (!isRecord(detail)) return;
+    const detail: DynamicValue = event.detail;
+    if (!isCommandsBuiltinsSettingsOverlayPayloadShape(detail)) return;
 
     const state = detail.state;
     if (state === "detected" || state === "not-detected" || state === "unknown") {
@@ -537,8 +540,8 @@ function buildExecutionModeSection(registerCleanup?: SettingsCleanupRegistrar): 
       return;
     }
 
-    const detail: unknown = event.detail;
-    if (!isRecord(detail)) {
+    const detail: DynamicValue = event.detail;
+    if (!isCommandsBuiltinsSettingsOverlayPayloadShape(detail)) {
       return;
     }
 

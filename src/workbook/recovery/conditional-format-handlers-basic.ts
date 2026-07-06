@@ -1,6 +1,9 @@
+function isConditionalFormatHandlersBasicPayloadShape(value: DynamicValue): value is DynamicObject {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 /** Basic conditional-format rule handlers shared by recovery capture/apply flow. */
 
-import { isRecord } from "../../utils/type-guards.js";
 import {
   isRecoveryConditionalCellValueOperator,
   isRecoveryConditionalPresetCriterion,
@@ -134,7 +137,7 @@ export const BASIC_CONDITIONAL_FORMAT_RULE_HANDLERS = {
     },
     capture(conditionalFormat, captureContext) {
       const ruleData = conditionalFormat.cellValue.rule;
-      const operator = isRecord(ruleData) ? ruleData.operator : undefined;
+      const operator = isConditionalFormatHandlersBasicPayloadShape(ruleData) ? ruleData.operator : undefined;
 
       if (!isRecoveryConditionalCellValueOperator(operator)) {
         return {
@@ -143,8 +146,8 @@ export const BASIC_CONDITIONAL_FORMAT_RULE_HANDLERS = {
         };
       }
 
-      const formula1 = isRecord(ruleData) ? ruleData.formula1 : undefined;
-      const formula2 = isRecord(ruleData) ? ruleData.formula2 : undefined;
+      const formula1 = isConditionalFormatHandlersBasicPayloadShape(ruleData) ? ruleData.formula1 : undefined;
+      const formula2 = isConditionalFormatHandlersBasicPayloadShape(ruleData) ? ruleData.formula2 : undefined;
 
       if (typeof formula1 !== "string") {
         return {
@@ -199,7 +202,7 @@ export const BASIC_CONDITIONAL_FORMAT_RULE_HANDLERS = {
     },
     capture(conditionalFormat, captureContext) {
       const ruleData = conditionalFormat.textComparison.rule;
-      const operator = isRecord(ruleData) ? ruleData.operator : undefined;
+      const operator = isConditionalFormatHandlersBasicPayloadShape(ruleData) ? ruleData.operator : undefined;
 
       if (!isRecoveryConditionalTextOperator(operator)) {
         return {
@@ -208,7 +211,7 @@ export const BASIC_CONDITIONAL_FORMAT_RULE_HANDLERS = {
         };
       }
 
-      const text = isRecord(ruleData) ? ruleData.text : undefined;
+      const text = isConditionalFormatHandlersBasicPayloadShape(ruleData) ? ruleData.text : undefined;
       if (typeof text !== "string") {
         return {
           supported: false,
@@ -257,8 +260,8 @@ export const BASIC_CONDITIONAL_FORMAT_RULE_HANDLERS = {
     },
     capture(conditionalFormat, captureContext) {
       const ruleData = conditionalFormat.topBottom.rule;
-      const topBottomType = isRecord(ruleData) ? ruleData.type : undefined;
-      const rank = isRecord(ruleData) ? ruleData.rank : undefined;
+      const topBottomType = isConditionalFormatHandlersBasicPayloadShape(ruleData) ? ruleData.type : undefined;
+      const rank = isConditionalFormatHandlersBasicPayloadShape(ruleData) ? ruleData.rank : undefined;
 
       if (!isRecoveryConditionalTopBottomCriterionType(topBottomType)) {
         return {
@@ -315,7 +318,7 @@ export const BASIC_CONDITIONAL_FORMAT_RULE_HANDLERS = {
     },
     capture(conditionalFormat, captureContext) {
       const ruleData = conditionalFormat.preset.rule;
-      const criterion = isRecord(ruleData) ? ruleData.criterion : undefined;
+      const criterion = isConditionalFormatHandlersBasicPayloadShape(ruleData) ? ruleData.criterion : undefined;
 
       if (!isRecoveryConditionalPresetCriterion(criterion)) {
         return {

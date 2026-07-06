@@ -12,7 +12,7 @@ import {
   executeWpsWriteCells,
 } from "./wps/workbook-tools.js";
 
-export type AnyHostSelectableTool = AgentTool<TSchema, unknown>;
+export type AnyHostSelectableTool = AgentTool<TSchema, DynamicValue>;
 
 const WPS_SUPPORTED_LOCAL_CORE_TOOL_NAMES = new Set<CoreToolName>([
   "instructions",

@@ -123,7 +123,7 @@ export function cellAtOffset(rangeStart: string, rowOffset: number, colOffset: n
 // Guarded API calls
 // ============================================================================
 
-function isOfficeItemNotFound(error: unknown): boolean {
+function isOfficeItemNotFound(error: DynamicValue): boolean {
   if (typeof error !== "object" || error === null) return false;
 
   if ("code" in error && typeof error.code === "string") {
@@ -157,7 +157,7 @@ export async function getDirectPrecedentsSafe(
     // a comma-separated list of address blocks.
     return precedents.addresses
       .map((s) => s.split(",").map((x) => x.trim()).filter(Boolean));
-  } catch (error: unknown) {
+  } catch (error) {
     if (isOfficeItemNotFound(error)) {
       return [];
     }
@@ -183,7 +183,7 @@ export async function getDirectDependentsSafe(
     await context.sync();
     return dependents.addresses
       .map((s) => s.split(",").map((x) => x.trim()).filter(Boolean));
-  } catch (error: unknown) {
+  } catch (error) {
     if (isOfficeItemNotFound(error)) {
       return [];
     }
@@ -192,7 +192,7 @@ export async function getDirectDependentsSafe(
 }
 
 /** Pad a 2D array so all rows have the same length */
-export function padValues(values: unknown[][]): { padded: unknown[][]; rows: number; cols: number } {
+export function padValues(values: DynamicValue[][]): { padded: DynamicValue[][]; rows: number; cols: number } {
   const rows = values.length;
   const cols = Math.max(...values.map((r) => r.length));
   const padded = values.map((row) => {

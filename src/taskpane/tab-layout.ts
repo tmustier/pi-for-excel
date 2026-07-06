@@ -1,3 +1,7 @@
+function isTaskpaneTabLayoutPayloadShape(value: DynamicValue): value is DynamicObject {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 /**
  * Persistence for open session tabs per workbook.
  *
@@ -7,7 +11,6 @@
 
 import type { SettingsStore } from "@earendil-works/pi-web-ui";
 
-import { isRecord } from "../utils/type-guards.js";
 
 const WORKBOOK_TAB_LAYOUT_PREFIX = "workbook.tabLayout.v1.";
 const GLOBAL_WORKBOOK_LAYOUT_KEY = "__global__";
@@ -17,13 +20,13 @@ export interface WorkbookTabLayout {
   activeSessionId: string | null;
 }
 
-function normalizeSessionId(value: unknown): string | null {
+function normalizeSessionId(value: DynamicValue): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
 }
 
-function isSessionIdList(value: unknown): value is unknown[] {
+function isSessionIdList(value: DynamicValue): value is DynamicValue[] {
   return Array.isArray(value);
 }
 
@@ -55,8 +58,8 @@ export function normalizeWorkbookTabLayout(layout: WorkbookTabLayout): WorkbookT
   };
 }
 
-export function parseWorkbookTabLayout(value: unknown): WorkbookTabLayout | null {
-  if (!isRecord(value)) return null;
+export function parseWorkbookTabLayout(value: DynamicValue): WorkbookTabLayout | null {
+  if (!isTaskpaneTabLayoutPayloadShape(value)) return null;
 
   const rawSessionIds = value.sessionIds;
   if (!isSessionIdList(rawSessionIds)) return null;

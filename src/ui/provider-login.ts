@@ -671,7 +671,7 @@ function promptForText(opts: {
           input.value = capture.url;
           submit();
         },
-        (error: unknown) => {
+        (error: DynamicValue) => {
           if (settled) return;
           if (error instanceof Error && error.name === "AbortError") return;
           captureStatusEl.textContent = t("provider.oauth.capture_fallback");
@@ -879,7 +879,7 @@ export function buildProviderRow(
           onConnected(row, id, label);
           detail.hidden = true;
           expandedRef.current = null;
-        } catch (err: unknown) {
+        } catch (err) {
           if (err instanceof PromptCancelledError) {
             // User cancelled the prompt; leave UI unchanged.
             return;
@@ -929,7 +929,7 @@ export function buildProviderRow(
           setConnectedState(false);
           keyInput.value = "";
           onDisconnected?.(row, id, label);
-        } catch (err: unknown) {
+        } catch (err) {
           const msg = getErrorMessage(err);
           errorEl.textContent = msg ? t("provider.disconnect_failed_msg", { msg }) : t("provider.disconnect_failed");
           errorEl.hidden = false;
@@ -964,7 +964,7 @@ export function buildProviderRow(
       onConnected(row, id, label);
       detail.hidden = true;
       expandedRef.current = null;
-    } catch (err: unknown) {
+    } catch (err) {
       const msg = getErrorMessage(err);
       errorEl.textContent = msg ? t("provider.save_failed_msg", { msg }) : t("provider.save_failed");
       errorEl.hidden = false;

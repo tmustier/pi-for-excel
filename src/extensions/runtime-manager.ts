@@ -376,7 +376,7 @@ export class ExtensionRuntimeManager {
     for (const listener of this.listeners) {
       try {
         listener();
-      } catch (error: unknown) {
+      } catch (error) {
         console.warn("[pi] Extension manager listener failed:", getRuntimeManagerErrorMessage(error));
       }
     }
@@ -501,7 +501,7 @@ export class ExtensionRuntimeManager {
         headers,
         body: responseBody,
       };
-    } catch (error: unknown) {
+    } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") {
         throw new Error(`HTTP request timed out after ${normalizedOptions.timeoutMs}ms.`);
       }
@@ -579,7 +579,7 @@ export class ExtensionRuntimeManager {
     try {
       await this.activateEntry(entry);
       this.lastErrors.delete(entry.id);
-    } catch (error: unknown) {
+    } catch (error) {
       const message = getRuntimeManagerErrorMessage(error);
       this.lastErrors.set(entry.id, message);
       console.warn(`[pi] Failed to load extension "${entry.name}": ${message}`);
@@ -611,7 +611,7 @@ export class ExtensionRuntimeManager {
       for (const connectionId of requiredConnectionIds) {
         try {
           this.connectionManager.assertConnectionOwnedBy(entry.id, connectionId);
-        } catch (error: unknown) {
+        } catch (error) {
           const message = getRuntimeManagerErrorMessage(error);
           throw new Error(`Tool "${toolName}" requires an invalid connection "${connectionId}": ${message}`);
         }
@@ -625,7 +625,7 @@ export class ExtensionRuntimeManager {
     };
 
     const refreshToolsForDynamicChange = (): void => {
-      void this.refreshRuntimeTools().catch((error: unknown) => {
+      void this.refreshRuntimeTools().catch((error: DynamicValue) => {
         console.warn(`[pi] Failed to refresh tools after extension tool update: ${getRuntimeManagerErrorMessage(error)}`);
       });
     };
@@ -677,7 +677,7 @@ export class ExtensionRuntimeManager {
         execute: async (toolCallId, params, signal, onUpdate) => {
           try {
             return await tool.execute(toolCallId, params, signal, onUpdate);
-          } catch (error: unknown) {
+          } catch (error) {
             const message = getRuntimeManagerErrorMessage(error);
             throw new Error(
               `[Extension ${entry.name}] Tool "${tool.name}" failed: ${message}`,
@@ -830,10 +830,10 @@ export class ExtensionRuntimeManager {
       if (toolsChangedDuringActivation) {
         await this.refreshRuntimeTools();
       }
-    } catch (error: unknown) {
+    } catch (error) {
       try {
         await this.cleanupState(state);
-      } catch (cleanupError: unknown) {
+      } catch (cleanupError) {
         console.warn(
           `[pi] Extension cleanup after failed activation also failed: ${getRuntimeManagerErrorMessage(cleanupError)}`,
         );
@@ -859,21 +859,21 @@ export class ExtensionRuntimeManager {
     if (state.handle) {
       try {
         await state.handle.deactivate();
-      } catch (error: unknown) {
+      } catch (error) {
         failures.push(getRuntimeManagerErrorMessage(error));
       }
     }
 
     try {
       clearExtensionWidgets(state.entryId);
-    } catch (error: unknown) {
+    } catch (error) {
       failures.push(getRuntimeManagerErrorMessage(error));
     }
 
     for (const unsubscribe of state.eventUnsubscribers) {
       try {
         unsubscribe();
-      } catch (error: unknown) {
+      } catch (error) {
         failures.push(getRuntimeManagerErrorMessage(error));
       }
     }
@@ -906,7 +906,7 @@ export class ExtensionRuntimeManager {
 
     try {
       this.connectionManager.unregisterDefinitionsByOwner(state.entryId);
-    } catch (error: unknown) {
+    } catch (error) {
       failures.push(getRuntimeManagerErrorMessage(error));
     }
 
@@ -918,7 +918,7 @@ export class ExtensionRuntimeManager {
     if (toolsChanged) {
       try {
         await this.refreshRuntimeTools();
-      } catch (error: unknown) {
+      } catch (error) {
         failures.push(getRuntimeManagerErrorMessage(error));
       }
     }

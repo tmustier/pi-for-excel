@@ -1,3 +1,7 @@
+function isToolsPythonTransformRangePayloadShape(value: DynamicValue): value is DynamicObject {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 /**
  * python_transform_range — Read a range, run Python transform, write results back.
  *
@@ -25,7 +29,6 @@ import { dispatchWorkbookSnapshotCreated } from "../workbook/recovery-events.js"
 import { getWorkbookRecoveryLog, MAX_RECOVERY_CELLS } from "../workbook/recovery-log.js";
 import { getErrorMessage } from "../utils/errors.js";
 import { findErrors } from "../utils/format.js";
-import { isRecord } from "../utils/type-guards.js";
 import {
   callDefaultPythonBridge,
   getDefaultPythonBridgeConfig,
@@ -79,12 +82,12 @@ interface InputRangeSnapshot {
   sheetName: string;
   /** Sheet-local address, e.g. A1:C10 */
   address: string;
-  values: unknown[][];
+  values: DynamicValue[][];
 }
 
 interface WriteOutputRequest {
   outputStartCell: string;
-  values: unknown[][];
+  values: DynamicValue[][];
   allowOverwrite: boolean;
 }
 
@@ -100,10 +103,10 @@ type WriteOutputResult =
     rowsWritten: number;
     colsWritten: number;
     formulaErrorCount: number;
-    beforeValues?: unknown[][];
-    beforeFormulas?: unknown[][];
-    readBackValues?: unknown[][];
-    readBackFormulas?: unknown[][];
+    beforeValues?: DynamicValue[][];
+    beforeFormulas?: DynamicValue[][];
+    readBackValues?: DynamicValue[][];
+    readBackFormulas?: DynamicValue[][];
     outputStartCell?: string;
     outputSheetName?: string;
   };
@@ -137,15 +140,15 @@ function cleanOptionalString(value: string | undefined): string | undefined {
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
-function toOptionalInteger(value: unknown): number | undefined {
+function toOptionalInteger(value: DynamicValue): number | undefined {
   if (typeof value !== "number") return undefined;
   if (!Number.isFinite(value)) return undefined;
   if (!Number.isInteger(value)) return undefined;
   return value;
 }
 
-function parseParams(raw: unknown): Params {
-  if (!isRecord(raw) || Array.isArray(raw)) {
+function parseParams(raw: DynamicValue): Params {
+  if (!isToolsPythonTransformRangePayloadShape(raw) || Array.isArray(raw)) {
     throw new Error("Invalid python_transform_range params: expected an object.");
   }
 
@@ -241,8 +244,8 @@ async function defaultWriteOutputValues(request: WriteOutputRequest): Promise<Wr
     const outputCellCount = rows * cols;
     const shouldLoadBeforeState = !request.allowOverwrite || outputCellCount <= MAX_RECOVERY_CELLS;
 
-    let beforeValues: unknown[][] | undefined;
-    let beforeFormulas: unknown[][] | undefined;
+    let beforeValues: DynamicValue[][] | undefined;
+    let beforeFormulas: DynamicValue[][] | undefined;
 
     if (shouldLoadBeforeState) {
       targetRange.load("values,formulas");
@@ -292,15 +295,15 @@ async function defaultWriteOutputValues(request: WriteOutputRequest): Promise<Wr
   });
 }
 
-function isRecordButNotArray(value: unknown): value is Record<string, unknown> {
-  return isRecord(value) && !Array.isArray(value);
+function isPythonTransformPayloadShape(value: DynamicValue): value is DynamicObject {
+  return isToolsPythonTransformRangePayloadShape(value) && !Array.isArray(value);
 }
 
-function normalizeTo2dValues(value: unknown): unknown[][] | null {
+function normalizeTo2dValues(value: DynamicValue): DynamicValue[][] | null {
   if (Array.isArray(value)) {
     if (value.length === 0) return [];
 
-    const rows: unknown[][] = [];
+    const rows: DynamicValue[][] = [];
     let allRows = true;
 
     for (const item of value) {
@@ -309,7 +312,7 @@ function normalizeTo2dValues(value: unknown): unknown[][] | null {
         break;
       }
 
-      const row: unknown[] = [];
+      const row: DynamicValue[] = [];
       for (const cell of item) {
         row.push(cell);
       }
@@ -323,7 +326,7 @@ function normalizeTo2dValues(value: unknown): unknown[][] | null {
     return [value];
   }
 
-  if (isRecordButNotArray(value)) {
+  if (isPythonTransformPayloadShape(value)) {
     const valuesCandidate = value.values;
     if (valuesCandidate !== undefined) {
       return normalizeTo2dValues(valuesCandidate);
@@ -340,7 +343,7 @@ function normalizeTo2dValues(value: unknown): unknown[][] | null {
   return [[value]];
 }
 
-function parseBridgeResultJson(resultJson: string | undefined): unknown[][] {
+function parseBridgeResultJson(resultJson: string | undefined): DynamicValue[][] {
   const trimmed = resultJson?.trim();
   if (!trimmed) {
     throw new Error(
@@ -348,7 +351,7 @@ function parseBridgeResultJson(resultJson: string | undefined): unknown[][] {
     );
   }
 
-  let parsed: unknown;
+  let parsed: DynamicValue;
   try {
     parsed = JSON.parse(trimmed);
   } catch {
@@ -428,7 +431,7 @@ export function createPythonTransformRangeTool(
     parameters: schema,
     execute: async (
       toolCallId: string,
-      rawParams: unknown,
+      rawParams: DynamicValue,
       signal: AbortSignal | undefined,
     ): Promise<AgentToolResult<PythonTransformRangeDetails>> => {
       try {
@@ -460,7 +463,7 @@ export function createPythonTransformRangeTool(
           try {
             bridgeResponse = await callBridge(bridgeRequest, bridgeConfig, signal);
             bridgeUrlUsed = bridgeConfig.url;
-          } catch (error: unknown) {
+          } catch (error) {
             if (!shouldFallbackToPyodideAfterBridgeError(error, bridgeConfig)) {
               throw error;
             }
@@ -634,7 +637,7 @@ export function createPythonTransformRangeTool(
         });
 
         return successResult;
-      } catch (error: unknown) {
+      } catch (error) {
         const message = getErrorMessage(error);
         const skillHint = shouldAttachPythonBridgeSkillHint(message)
           ? "python-bridge"

@@ -19,12 +19,12 @@ import type { WorkbookRecoverySnapshot } from "../src/workbook/recovery-log.ts";
 
 interface InMemorySettingsStore {
   get<T>(key: string): Promise<T | null>;
-  set(key: string, value: unknown): Promise<void>;
+  set(key: string, value: DynamicValue): Promise<void>;
   delete(key: string): Promise<void>;
 }
 
 function createInMemorySettingsStore(): InMemorySettingsStore {
-  const values = new Map<string, unknown>();
+  const values = new Map<string, DynamicValue>();
 
   return {
     get: <T>(key: string): Promise<T | null> => {
@@ -35,7 +35,7 @@ function createInMemorySettingsStore(): InMemorySettingsStore {
 
       return Promise.resolve(value as T);
     },
-    set: (key: string, value: unknown): Promise<void> => {
+    set: (key: string, value: DynamicValue): Promise<void> => {
       values.set(key, value);
       return Promise.resolve();
     },
@@ -46,16 +46,16 @@ function createInMemorySettingsStore(): InMemorySettingsStore {
   };
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+function isWorkbookChangeAuditTestPayloadShape(value: DynamicValue): value is DynamicObject {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-function isUnknownArray(value: unknown): value is unknown[] {
+function isUnknownArray(value: DynamicValue): value is DynamicValue[] {
   return Array.isArray(value);
 }
 
-function firstText(result: unknown): string {
-  if (!isRecord(result)) {
+function firstText(result: DynamicValue): string {
+  if (!isWorkbookChangeAuditTestPayloadShape(result)) {
     throw new Error("Expected tool result object");
   }
 
@@ -65,20 +65,20 @@ function firstText(result: unknown): string {
   }
 
   const first = content[0];
-  if (!isRecord(first) || first.type !== "text" || typeof first.text !== "string") {
+  if (!isWorkbookChangeAuditTestPayloadShape(first) || first.type !== "text" || typeof first.text !== "string") {
     throw new Error("Expected first content block to be text");
   }
 
   return first.text;
 }
 
-function viewSettingsDetails(result: unknown): Record<string, unknown> {
-  if (!isRecord(result)) {
+function viewSettingsDetails(result: DynamicValue): DynamicObject {
+  if (!isWorkbookChangeAuditTestPayloadShape(result)) {
     throw new Error("Expected tool result object");
   }
 
   const details = result.details;
-  if (!isRecord(details)) {
+  if (!isWorkbookChangeAuditTestPayloadShape(details)) {
     throw new Error("Expected tool result details object");
   }
 
@@ -360,9 +360,9 @@ void test("comments tool appends audit entries for mutating actions", async () =
   });
 
   assert.match(firstText(result), /Updated comment/u);
-  if (isRecord(result.details)) {
+  if (isWorkbookChangeAuditTestPayloadShape(result.details)) {
     assert.equal(result.details.kind, "comments");
-    if (isRecord(result.details.recovery)) {
+    if (isWorkbookChangeAuditTestPayloadShape(result.details.recovery)) {
       assert.equal(result.details.recovery.status, "checkpoint_created");
     } else {
       throw new Error("Expected recovery metadata for comments mutation");
@@ -427,7 +427,7 @@ void test("view_settings tool appends audit entries for mutate success and failu
   assert.equal(successDetails.action, "activate");
   assert.equal(successDetails.address, "Sheet2");
   assert.equal(
-    isRecord(successDetails.recovery) ? successDetails.recovery.status : undefined,
+    isWorkbookChangeAuditTestPayloadShape(successDetails.recovery) ? successDetails.recovery.status : undefined,
     "not_available",
   );
 
@@ -453,7 +453,7 @@ void test("view_settings tool appends audit entries for mutate success and failu
   assert.equal(errorDetails.action, "activate");
   assert.equal(errorDetails.address, undefined);
   assert.equal(
-    isRecord(errorDetails.recovery) ? errorDetails.recovery.status : undefined,
+    isWorkbookChangeAuditTestPayloadShape(errorDetails.recovery) ? errorDetails.recovery.status : undefined,
     "not_available",
   );
 });

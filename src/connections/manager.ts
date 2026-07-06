@@ -313,7 +313,7 @@ export class ConnectionManager {
     for (const listener of this.listeners) {
       try {
         listener();
-      } catch (error: unknown) {
+      } catch (error) {
         console.warn("[pi] Connection manager listener failed:", error);
       }
     }

@@ -33,7 +33,7 @@ export type GoogleOAuthFlowConfig = {
   ) => Promise<string>;
 };
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+function isGoogleBrowserOauthCorePayloadShape(value: DynamicValue): value is DynamicObject {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -80,10 +80,10 @@ function parseAuthorizationInput(input: string): ParsedAuthorizationInput {
 }
 
 function parseTokenPayload(
-  payload: unknown,
+  payload: DynamicValue,
   fallbackRefreshToken?: string,
 ): GoogleTokenPayload | null {
-  if (!isRecord(payload)) {
+  if (!isGoogleBrowserOauthCorePayloadShape(payload)) {
     return null;
   }
 
@@ -187,8 +187,8 @@ async function getUserEmail(accessToken: string): Promise<string | undefined> {
       return undefined;
     }
 
-    const payload: unknown = await response.json();
-    if (!isRecord(payload)) {
+    const payload: DynamicValue = await response.json();
+    if (!isGoogleBrowserOauthCorePayloadShape(payload)) {
       return undefined;
     }
 

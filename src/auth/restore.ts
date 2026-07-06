@@ -1,3 +1,7 @@
+function isAuthRestorePayloadShape(value: DynamicValue): value is DynamicObject {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 /**
  * Auto-restore auth credentials from pi's auth.json (dev) or browser storage (OAuth).
  *
@@ -16,7 +20,6 @@ import { isOpenAICodexCredentialRefreshRequired } from "./openai-codex-browser-o
 import { mapToApiProvider, BROWSER_OAUTH_PROVIDERS } from "./provider-map.js";
 import { getOAuthProvider } from "./oauth-provider-registry.js";
 import { getErrorMessage } from "../utils/errors.js";
-import { isRecord } from "../utils/type-guards.js";
 
 type GetOAuthProvider = (id: string) => OAuthProviderInterface | undefined;
 
@@ -29,18 +32,18 @@ type OAuthCredential = OAuthCredentials & {
   type: "oauth";
 };
 
-function isApiKeyCredential(value: unknown): value is ApiKeyCredential {
+function isApiKeyCredential(value: DynamicValue): value is ApiKeyCredential {
   return (
-    isRecord(value) &&
+    isAuthRestorePayloadShape(value) &&
     value.type === "api_key" &&
     typeof value.key === "string" &&
     value.key.trim().length > 0
   );
 }
 
-function isOAuthCredential(value: unknown): value is OAuthCredential {
+function isOAuthCredential(value: DynamicValue): value is OAuthCredential {
   return (
-    isRecord(value) &&
+    isAuthRestorePayloadShape(value) &&
     value.type === "oauth" &&
     typeof value.refresh === "string" &&
     typeof value.access === "string" &&
@@ -73,8 +76,8 @@ async function restoreFromPiAuth(
     const res = await originalFetch("/__pi-auth");
     if (!res.ok) return false;
 
-    const authData: unknown = await res.json();
-    if (!isRecord(authData)) return false;
+    const authData: DynamicValue = await res.json();
+    if (!isAuthRestorePayloadShape(authData)) return false;
 
     console.log(`[auth] Found pi auth.json with ${Object.keys(authData).length} provider(s)`);
 
@@ -103,7 +106,7 @@ async function restoreFromPiAuth(
             const refreshed = await provider.refreshToken(cred);
             await providerKeys.set(apiProvider, provider.getApiKey(refreshed));
             console.log(`[auth] ${providerId}: token refreshed`);
-          } catch (e: unknown) {
+          } catch (e) {
             console.warn(`[auth] ${providerId}: refresh failed (${getErrorMessage(e)})`);
           }
         } else {
@@ -111,7 +114,7 @@ async function restoreFromPiAuth(
           const hours = Math.round((cred.expires - Date.now()) / 3600000);
           console.log(`[auth] ${providerId}: OAuth token loaded (expires in ${hours}h)`);
         }
-      } catch (e: unknown) {
+      } catch (e) {
         console.warn(`[auth] ${providerId}: failed (${getErrorMessage(e)})`);
       }
     }
@@ -152,7 +155,7 @@ async function restoreFromBrowserOAuthStorage(
           await saveOAuthCredentials(settings, providerId, refreshed);
           await providerKeys.set(apiProvider, provider.getApiKey(refreshed));
           console.log(`[auth] ${provider.name}: token refreshed from IndexedDB`);
-        } catch (e: unknown) {
+        } catch (e) {
           if (providerId === "openai-codex" && isOpenAICodexCredentialRefreshRequired(e)) {
             await clearBrowserOAuthProvider(providerKeys, settings, providerId);
             console.warn(`[auth] ${provider.name}: stored OAuth grant is stale; cleared credentials, please login again`);
@@ -164,7 +167,7 @@ async function restoreFromBrowserOAuthStorage(
         await providerKeys.set(apiProvider, provider.getApiKey(credentials));
         console.log(`[auth] ${provider.name}: session restored from IndexedDB`);
       }
-    } catch (e: unknown) {
+    } catch (e) {
       if (providerId === "openai-codex" && isOpenAICodexCredentialRefreshRequired(e)) {
         await clearBrowserOAuthProvider(providerKeys, settings, providerId);
         console.warn("[auth] OpenAI (ChatGPT Plus/Pro): stored OAuth grant is stale; cleared credentials, please login again");

@@ -57,13 +57,13 @@ async function buildSnapshot(settings: SkillActivationMutableSettingsStore): Pro
 
   try {
     external = await loadExternalAgentSkillsFromWorkspace(getFilesWorkspace());
-  } catch (err: unknown) {
+  } catch (err) {
     externalLoadError = err instanceof Error ? err.message : "Unknown error";
   }
 
   try {
     disabledNames = await loadDisabledSkillNamesFromSettings(settings);
-  } catch (err: unknown) {
+  } catch (err) {
     activationLoadError = err instanceof Error ? err.message : "Unknown error";
   }
 
@@ -90,7 +90,7 @@ export async function renderSkillsTab(args: {
   let snapshot: SkillsSnapshot;
   try {
     snapshot = await buildSnapshot(settings);
-  } catch (err: unknown) {
+  } catch (err) {
     container.replaceChildren();
     const msg = document.createElement("p");
     msg.className = "pi-overlay-hint";

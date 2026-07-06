@@ -133,7 +133,7 @@ class HttpError extends Error {
   }
 }
 
-function isRecord(value) {
+function isTmuxBridgeServerPayloadShape(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -352,7 +352,7 @@ function normalizeWaitFor(value) {
 }
 
 function parseTmuxRequest(payload) {
-  if (!isRecord(payload)) {
+  if (!isTmuxBridgeServerPayloadShape(payload)) {
     throw new HttpError(400, "Request body must be a JSON object.");
   }
 

@@ -42,7 +42,7 @@ function createTestTool(
 }
 
 function assertTmuxGateError(
-  details: unknown,
+  details: DynamicValue,
   reason: "missing_bridge_url" | "bridge_unreachable",
 ): void {
   assert.ok(isTmuxBridgeDetails(details));
@@ -51,14 +51,14 @@ function assertTmuxGateError(
   assert.equal(details.skillHint, "tmux-bridge");
 }
 
-function assertPythonGateError(details: unknown): void {
+function assertPythonGateError(details: DynamicValue): void {
   assert.ok(isPythonBridgeDetails(details));
   assert.equal(details.ok, false);
   assert.equal(details.gateReason, "bridge_unreachable");
   assert.equal(details.skillHint, "python-bridge");
 }
 
-function assertPythonTransformRangeGateError(details: unknown): void {
+function assertPythonTransformRangeGateError(details: DynamicValue): void {
   assert.ok(isPythonTransformRangeDetails(details));
   assert.equal(details.blocked, false);
   assert.equal(details.gateReason, "bridge_unreachable");
@@ -67,7 +67,7 @@ function assertPythonTransformRangeGateError(details: unknown): void {
 }
 
 function assertLibreOfficeGateError(
-  details: unknown,
+  details: DynamicValue,
   reason: "missing_bridge_url" | "bridge_unreachable",
 ): void {
   assert.ok(isLibreOfficeBridgeDetails(details));
@@ -104,7 +104,7 @@ void test("keeps tmux tool registered and returns structured gate errors", async
   assert.match(text, /default URL|URL override/i);
   assert.match(text, /Skill: tmux-bridge/i);
 
-  const resultDetails: unknown = result.details;
+  const resultDetails: DynamicValue = result.details;
   assertTmuxGateError(resultDetails, "missing_bridge_url");
   assert.ok(isTmuxBridgeDetails(resultDetails));
   assert.equal(resultDetails.action, "capture_pane");
@@ -140,7 +140,7 @@ void test("tmux hard gate re-checks execution on every call", async () => {
   assert.match(missingText, /Terminal access is not available/i);
   assert.match(missingText, /default URL|URL override/i);
   assert.match(missingText, /Skill: tmux-bridge/i);
-  const missingDetails: unknown = missingResult.details;
+  const missingDetails: DynamicValue = missingResult.details;
   assertTmuxGateError(missingDetails, "missing_bridge_url");
   assert.equal(executeCount, 1);
 
@@ -153,7 +153,7 @@ void test("tmux hard gate re-checks execution on every call", async () => {
   assert.match(unreachableText, /Terminal access is not available/i);
   assert.match(unreachableText, /not reachable/i);
   assert.match(unreachableText, /Skill: tmux-bridge/i);
-  const unreachableDetails: unknown = unreachableResult.details;
+  const unreachableDetails: DynamicValue = unreachableResult.details;
   assertTmuxGateError(unreachableDetails, "bridge_unreachable");
   assert.equal(executeCount, 1);
 });
@@ -475,7 +475,7 @@ void test("python fallback tools return structured gate errors when configured b
   assert.match(text, /not reachable/i);
   assert.match(text, /Skill: python-bridge/i);
 
-  const resultDetails: unknown = result.details;
+  const resultDetails: DynamicValue = result.details;
   assertPythonGateError(resultDetails);
 
   assert.equal(executeCount, 0);
@@ -503,7 +503,7 @@ void test("python_transform_range gate errors keep transform detail kind", async
   assert.match(text, /not reachable/i);
   assert.match(text, /Skill: python-bridge/i);
 
-  const details: unknown = result.details;
+  const details: DynamicValue = result.details;
   assertPythonTransformRangeGateError(details);
   assert.equal(isBridgeGateError(details), true);
 
@@ -532,7 +532,7 @@ void test("libreoffice_convert still requires configured + reachable bridge", as
   assert.match(missingText, /default URL|URL override|not configured/i);
   assert.match(missingText, /Skill: python-bridge/i);
 
-  const missingDetails: unknown = missingResult.details;
+  const missingDetails: DynamicValue = missingResult.details;
   assertLibreOfficeGateError(missingDetails, "missing_bridge_url");
 
   const [toolWhenUnreachable] = await applyExperimentalToolGates([
@@ -554,7 +554,7 @@ void test("libreoffice_convert still requires configured + reachable bridge", as
   assert.match(unreachableText, /not reachable/i);
   assert.match(unreachableText, /Skill: python-bridge/i);
 
-  const unreachableDetails: unknown = unreachableResult.details;
+  const unreachableDetails: DynamicValue = unreachableResult.details;
   assertLibreOfficeGateError(unreachableDetails, "bridge_unreachable");
 
   assert.equal(executeCount, 0);

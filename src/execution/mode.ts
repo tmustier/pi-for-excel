@@ -15,17 +15,17 @@ export const PI_EXECUTION_MODE_CHANGED_EVENT = "pi:execution-mode-changed";
 export type ExecutionMode = "yolo" | "safe";
 
 export interface ExecutionModeStore {
-  get: (key: string) => Promise<unknown>;
-  set: (key: string, value: unknown) => Promise<void>;
+  get: (key: string) => Promise<DynamicValue>;
+  set: (key: string, value: DynamicValue) => Promise<void>;
 }
 
 const EXECUTION_MODE_VALUES = new Set<ExecutionMode>(["yolo", "safe"]);
 
-export function isExecutionMode(value: unknown): value is ExecutionMode {
+export function isExecutionMode(value: DynamicValue): value is ExecutionMode {
   return typeof value === "string" && EXECUTION_MODE_VALUES.has(value as ExecutionMode);
 }
 
-export function normalizeExecutionMode(value: unknown): ExecutionMode {
+export function normalizeExecutionMode(value: DynamicValue): ExecutionMode {
   return isExecutionMode(value) ? value : "yolo";
 }
 

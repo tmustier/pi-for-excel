@@ -1,3 +1,7 @@
+function isToolsMcpPayloadShape(value: DynamicValue): value is DynamicObject {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 /**
  * mcp — Model Context Protocol gateway for configured HTTP servers.
  */
@@ -12,7 +16,6 @@ import {
   getHttpErrorReason,
   runWithTimeoutAbort,
 } from "../utils/network.js";
-import { isRecord } from "../utils/type-guards.js";
 import type { ProxyAwareSettingsStore } from "./external-fetch.js";
 import {
   buildProxyDownErrorMessage,
@@ -60,7 +63,7 @@ interface McpToolDescriptor {
   serverUrl: string;
   name: string;
   description?: string;
-  inputSchema?: unknown;
+  inputSchema?: DynamicValue;
 }
 
 interface ServerToolList {
@@ -71,7 +74,7 @@ interface ServerToolList {
 }
 
 interface RpcCallResult {
-  result: unknown;
+  result: DynamicValue;
   proxied: boolean;
   proxyBaseUrl?: string;
 }
@@ -100,21 +103,21 @@ export interface McpToolDependencies {
   callJsonRpc?: (args: {
     server: McpServerConfig;
     method: string;
-    params?: unknown;
+    params?: DynamicValue;
     signal: AbortSignal | undefined;
     proxyBaseUrl?: string;
     expectResponse?: boolean;
   }) => Promise<RpcCallResult | null>;
 }
 
-function normalizeOptionalString(value: unknown): string | undefined {
+function normalizeOptionalString(value: DynamicValue): string | undefined {
   if (typeof value !== "string") return undefined;
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
-function parseParams(raw: unknown): Params {
-  if (!isRecord(raw)) {
+function parseParams(raw: DynamicValue): Params {
+  if (!isToolsMcpPayloadShape(raw)) {
     return {};
   }
 
@@ -164,9 +167,9 @@ function matchesServerToken(tool: McpToolDescriptor, token: string): boolean {
   );
 }
 
-function parseToolListResult(server: McpServerConfig, value: unknown): McpToolDescriptor[] {
-  if (!isRecord(value)) return [];
-  if (!isRecord(value.result)) return [];
+function parseToolListResult(server: McpServerConfig, value: DynamicValue): McpToolDescriptor[] {
+  if (!isToolsMcpPayloadShape(value)) return [];
+  if (!isToolsMcpPayloadShape(value.result)) return [];
   const result = value.result;
 
   const tools = result.tools;
@@ -175,7 +178,7 @@ function parseToolListResult(server: McpServerConfig, value: unknown): McpToolDe
   const out: McpToolDescriptor[] = [];
 
   for (const item of tools) {
-    if (!isRecord(item)) continue;
+    if (!isToolsMcpPayloadShape(item)) continue;
 
     const name = normalizeOptionalString(item.name);
     if (!name) continue;
@@ -193,10 +196,10 @@ function parseToolListResult(server: McpServerConfig, value: unknown): McpToolDe
   return out;
 }
 
-function parseJsonRpcError(value: unknown): string | null {
-  if (!isRecord(value)) return null;
+function parseJsonRpcError(value: DynamicValue): string | null {
+  if (!isToolsMcpPayloadShape(value)) return null;
 
-  if (isRecord(value.error)) {
+  if (isToolsMcpPayloadShape(value.error)) {
     const errorMessage = normalizeOptionalString(value.error.message);
     if (errorMessage) return errorMessage;
   }
@@ -205,12 +208,12 @@ function parseJsonRpcError(value: unknown): string | null {
   return text ?? null;
 }
 
-function extractTextContentBlocks(value: unknown): string[] {
+function extractTextContentBlocks(value: DynamicValue): string[] {
   if (!Array.isArray(value)) return [];
 
   const lines: string[] = [];
   for (const item of value) {
-    if (!isRecord(item)) continue;
+    if (!isToolsMcpPayloadShape(item)) continue;
     if (item.type !== "text") continue;
     const text = normalizeOptionalString(item.text);
     if (!text) continue;
@@ -220,7 +223,7 @@ function extractTextContentBlocks(value: unknown): string[] {
   return lines;
 }
 
-function formatJson(value: unknown): string {
+function formatJson(value: DynamicValue): string {
   try {
     return JSON.stringify(value, null, 2);
   } catch {
@@ -228,7 +231,7 @@ function formatJson(value: unknown): string {
   }
 }
 
-function parseCallArgs(rawArgs: string | undefined): unknown {
+function parseCallArgs(rawArgs: string | undefined): DynamicValue {
   if (!rawArgs) return {};
 
   try {
@@ -312,7 +315,7 @@ async function defaultGetRuntimeConfig(): Promise<McpRuntimeConfig> {
 async function defaultCallJsonRpc(args: {
   server: McpServerConfig;
   method: string;
-  params?: unknown;
+  params?: DynamicValue;
   signal: AbortSignal | undefined;
   proxyBaseUrl?: string;
   expectResponse?: boolean;
@@ -333,7 +336,7 @@ async function defaultCallJsonRpc(args: {
     headers.Authorization = `Bearer ${server.token}`;
   }
 
-  const requestBody: Record<string, unknown> = {
+  const requestBody: DynamicObject = {
     jsonrpc: "2.0",
     method,
   };
@@ -373,14 +376,14 @@ async function defaultCallJsonRpc(args: {
       }
 
       const body = await response.text();
-      const payload: unknown = body.trim().length > 0 ? JSON.parse(body) : null;
+      const payload: DynamicValue = body.trim().length > 0 ? JSON.parse(body) : null;
 
       const rpcError = parseJsonRpcError(payload);
       if (rpcError) {
         throw new Error(rpcError);
       }
 
-      if (!isRecord(payload)) {
+      if (!isToolsMcpPayloadShape(payload)) {
         throw new Error("Invalid MCP JSON-RPC response.");
       }
 
@@ -491,7 +494,7 @@ export function createMcpTool(
     parameters: schema,
     execute: async (
       _toolCallId: string,
-      rawParams: unknown,
+      rawParams: DynamicValue,
       signal: AbortSignal | undefined,
     ): Promise<AgentToolResult<McpGatewayDetails>> => {
       const params = parseParams(rawParams);
@@ -599,7 +602,7 @@ export function createMcpTool(
           const payload = callResult.result;
           let resultText = "";
 
-          if (isRecord(payload) && isRecord(payload.result)) {
+          if (isToolsMcpPayloadShape(payload) && isToolsMcpPayloadShape(payload.result)) {
             const rpcResult = payload.result;
             const contentBlocks = extractTextContentBlocks(rpcResult.content);
             if (contentBlocks.length > 0) {
@@ -777,7 +780,7 @@ export function createMcpTool(
             resultPreview: firstLine(statusText),
           },
         };
-      } catch (error: unknown) {
+      } catch (error) {
         const message = getErrorMessage(error);
         const proxyDown = isLikelyProxyConnectionError(message, usedProxyBaseUrl);
         const displayMessage = proxyDown

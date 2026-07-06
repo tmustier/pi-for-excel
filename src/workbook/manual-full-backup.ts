@@ -17,17 +17,17 @@ const DEFAULT_SLICE_SIZE_BYTES = 1_048_576; // 1 MB
 const DEFAULT_LIST_LIMIT = 20;
 
 interface OfficeAsyncErrorLike {
-  message?: unknown;
+  message?: DynamicValue;
 }
 
 interface OfficeAsyncResultLike<T> {
-  status?: unknown;
+  status?: DynamicValue;
   value?: T;
   error?: OfficeAsyncErrorLike;
 }
 
 interface OfficeSliceLike {
-  data: unknown;
+  data: DynamicValue;
 }
 
 interface OfficeFileLike {
@@ -86,19 +86,19 @@ function defaultCreateSuffix(): string {
     .slice(0, 8);
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+function isWorkbookManualFullBackupPayloadShape(value: DynamicValue): value is DynamicObject {
   return typeof value === "object" && value !== null;
 }
 
 function getOfficeDocument(): OfficeDocumentLike | null {
   const officeRoot = Reflect.get(globalThis, "Office");
-  if (!isRecord(officeRoot)) return null;
+  if (!isWorkbookManualFullBackupPayloadShape(officeRoot)) return null;
 
   const context = officeRoot.context;
-  if (!isRecord(context)) return null;
+  if (!isWorkbookManualFullBackupPayloadShape(context)) return null;
 
   const document = context.document;
-  if (!isRecord(document)) return null;
+  if (!isWorkbookManualFullBackupPayloadShape(document)) return null;
 
   const getFileAsync = document.getFileAsync;
   if (typeof getFileAsync !== "function") return null;
@@ -114,7 +114,7 @@ function getOfficeDocument(): OfficeDocumentLike | null {
   };
 }
 
-function toError(error: unknown): Error {
+function toError(error: DynamicValue): Error {
   if (error instanceof Error) {
     return error;
   }
@@ -122,7 +122,7 @@ function toError(error: unknown): Error {
   return new Error(typeof error === "string" ? error : "Unknown error");
 }
 
-function formatOfficeAsyncError(result: OfficeAsyncResultLike<unknown>): string {
+function formatOfficeAsyncError(result: OfficeAsyncResultLike<DynamicValue>): string {
   const maybeMessage = result.error?.message;
   if (typeof maybeMessage === "string" && maybeMessage.trim().length > 0) {
     return maybeMessage.trim();
@@ -157,11 +157,11 @@ async function openCompressedWorkbookFile(sliceSize: number): Promise<OfficeFile
       document.getFileAsync("compressed", { sliceSize }, (result) => {
         try {
           resolve(assertSucceeded(result));
-        } catch (error: unknown) {
+        } catch (error) {
           reject(toError(error));
         }
       });
-    } catch (error: unknown) {
+    } catch (error) {
       reject(toError(error));
     }
   });
@@ -183,17 +183,17 @@ async function readSlice(file: OfficeFileLike, index: number): Promise<OfficeSli
       file.getSliceAsync(index, (result) => {
         try {
           resolve(assertSucceeded(result));
-        } catch (error: unknown) {
+        } catch (error) {
           reject(toError(error));
         }
       });
-    } catch (error: unknown) {
+    } catch (error) {
       reject(toError(error));
     }
   });
 }
 
-function normalizeSliceData(data: unknown): Uint8Array {
+function normalizeSliceData(data: DynamicValue): Uint8Array {
   if (data instanceof Uint8Array) {
     return data;
   }
@@ -207,7 +207,7 @@ function normalizeSliceData(data: unknown): Uint8Array {
   }
 
   if (Array.isArray(data)) {
-    const items = Array.from<unknown>(data);
+    const items = Array.from<DynamicValue>(data);
     const bytes = new Uint8Array(items.length);
 
     for (let index = 0; index < items.length; index += 1) {

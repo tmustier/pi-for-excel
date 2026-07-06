@@ -10,14 +10,14 @@ import {
 } from "../src/tools/external-fetch.ts";
 
 class MemorySettingsStore implements ProxyAwareSettingsStore {
-  private readonly values = new Map<string, unknown>();
+  private readonly values = new Map<string, DynamicValue>();
 
-  get(key: string): Promise<unknown> {
+  get(key: string): Promise<DynamicValue> {
     const value = this.values.has(key) ? this.values.get(key) ?? null : null;
     return Promise.resolve(value);
   }
 
-  set(key: string, value: unknown): void {
+  set(key: string, value: DynamicValue): void {
     this.values.set(key, value);
   }
 }

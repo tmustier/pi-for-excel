@@ -37,15 +37,15 @@ function v(key: string, vars?: Record<string, string | number>): string {
   return t(`humanize.value.${key}`, vars);
 }
 
-function safe(params: unknown): Record<string, unknown> {
+function safe(params: DynamicValue): DynamicObject {
   if (!params) return {};
   if (typeof params === "object" && params !== null)
-    return params as Record<string, unknown>;
+    return params as DynamicObject;
   if (typeof params === "string") {
     try {
-      const p: unknown = JSON.parse(params);
+      const p: DynamicValue = JSON.parse(params);
       return typeof p === "object" && p !== null
-        ? (p as Record<string, unknown>)
+        ? (p as DynamicObject)
         : {};
     } catch {
       return {};
@@ -55,7 +55,7 @@ function safe(params: unknown): Record<string, unknown> {
 }
 
 /** Safely convert an unknown value to string. */
-function str(v: unknown): string {
+function str(v: DynamicValue): string {
   if (v === null || v === undefined) return "";
   if (typeof v === "string") return v;
   if (typeof v === "number" || typeof v === "boolean") return String(v);
@@ -63,7 +63,7 @@ function str(v: unknown): string {
 }
 
 /** Safely read a number, returning undefined if not a number. */
-function num(v: unknown): number | undefined {
+function num(v: DynamicValue): number | undefined {
   if (typeof v === "number") return v;
   if (typeof v === "string") {
     const n = Number(v);
@@ -148,7 +148,7 @@ function formatRangeForDisplay(range: string, maxShow = 3): RangeDisplayResult {
 }
 
 /** Format a cell value for preview. */
-function fmtCell(v: unknown): string {
+function fmtCell(v: DynamicValue): string {
   if (v === null || v === undefined || v === "") return "";
   if (typeof v === "string") return v.length > 18 ? v.substring(0, 18) + "…" : v;
   if (typeof v === "number" || typeof v === "boolean") return String(v);
@@ -159,7 +159,7 @@ function fmtCell(v: unknown): string {
  * Render a mini data-preview table for write_cells values.
  * Shows up to 3 rows × 6 columns, with truncation indicators.
  */
-function renderDataPreview(values: unknown[][]): TemplateResult {
+function renderDataPreview(values: DynamicValue[][]): TemplateResult {
   const MAX_ROWS = 3;
   const MAX_COLS = 6;
   const totalRows = values.length;
@@ -224,7 +224,7 @@ function renderParamList(items: ParamItem[]): TemplateResult {
 
 /* ── Per-tool humanizers ────────────────────────────────────── */
 
-function humanizeFormatCells(p: Record<string, unknown>): ParamItem[] {
+function humanizeFormatCells(p: DynamicObject): ParamItem[] {
   const items: ParamItem[] = [];
 
   // Range (with sheet grouping)
@@ -237,7 +237,7 @@ function humanizeFormatCells(p: Record<string, unknown>): ParamItem[] {
   // Named styles
   if (p.style) {
     const names = Array.isArray(p.style)
-      ? (p.style as unknown[]).map(str)
+      ? (p.style as DynamicValue[]).map(str)
       : [str(p.style)];
     items.push({ label: l("Style"), value: names.join(" + ") });
   }
@@ -311,7 +311,7 @@ function humanizeFormatCells(p: Record<string, unknown>): ParamItem[] {
   return items;
 }
 
-function humanizeWriteCells(p: Record<string, unknown>): ParamItem[] {
+function humanizeWriteCells(p: DynamicObject): ParamItem[] {
   const items: ParamItem[] = [];
 
   if (p.start_cell) {
@@ -320,7 +320,7 @@ function humanizeWriteCells(p: Record<string, unknown>): ParamItem[] {
 
   const rawValues = p.values;
   if (Array.isArray(rawValues) && rawValues.length > 0) {
-    const values = rawValues as unknown[][];
+    const values = rawValues as DynamicValue[][];
     const rows = values.length;
     const cols = Math.max(...values.map((r) => (Array.isArray(r) ? r.length : 0)));
     items.push({
@@ -337,7 +337,7 @@ function humanizeWriteCells(p: Record<string, unknown>): ParamItem[] {
   return items;
 }
 
-function humanizeReadRange(p: Record<string, unknown>): ParamItem[] {
+function humanizeReadRange(p: DynamicObject): ParamItem[] {
   const items: ParamItem[] = [];
 
   if (p.range) {
@@ -352,7 +352,7 @@ function humanizeReadRange(p: Record<string, unknown>): ParamItem[] {
   return items;
 }
 
-function humanizeFillFormula(p: Record<string, unknown>): ParamItem[] {
+function humanizeFillFormula(p: DynamicObject): ParamItem[] {
   const items: ParamItem[] = [];
 
   if (p.range) {
@@ -370,7 +370,7 @@ function humanizeFillFormula(p: Record<string, unknown>): ParamItem[] {
   return items;
 }
 
-function humanizeSearchWorkbook(p: Record<string, unknown>): ParamItem[] {
+function humanizeSearchWorkbook(p: DynamicObject): ParamItem[] {
   const items: ParamItem[] = [];
 
   if (p.query) {
@@ -400,7 +400,7 @@ function humanizeSearchWorkbook(p: Record<string, unknown>): ParamItem[] {
   return items;
 }
 
-function humanizeModifyStructure(p: Record<string, unknown>): ParamItem[] {
+function humanizeModifyStructure(p: DynamicObject): ParamItem[] {
   const items: ParamItem[] = [];
   const action = str(p.action);
   const count = num(p.count) ?? 1;
@@ -483,7 +483,7 @@ function humanizeModifyStructure(p: Record<string, unknown>): ParamItem[] {
   return items;
 }
 
-function humanizeConditionalFormat(p: Record<string, unknown>): ParamItem[] {
+function humanizeConditionalFormat(p: DynamicObject): ParamItem[] {
   const items: ParamItem[] = [];
 
   // Action
@@ -524,7 +524,7 @@ function humanizeConditionalFormat(p: Record<string, unknown>): ParamItem[] {
   return items;
 }
 
-function humanizeTraceDependencies(p: Record<string, unknown>): ParamItem[] {
+function humanizeTraceDependencies(p: DynamicObject): ParamItem[] {
   const items: ParamItem[] = [];
 
   if (p.cell) {
@@ -549,7 +549,7 @@ function humanizeTraceDependencies(p: Record<string, unknown>): ParamItem[] {
   return items;
 }
 
-function humanizeExplainFormula(p: Record<string, unknown>): ParamItem[] {
+function humanizeExplainFormula(p: DynamicObject): ParamItem[] {
   const items: ParamItem[] = [];
 
   if (p.cell) {
@@ -564,7 +564,7 @@ function humanizeExplainFormula(p: Record<string, unknown>): ParamItem[] {
   return items;
 }
 
-function humanizeCharts(p: Record<string, unknown>): ParamItem[] {
+function humanizeCharts(p: DynamicObject): ParamItem[] {
   const items: ParamItem[] = [];
   const action = str(p.action);
 
@@ -624,7 +624,7 @@ function humanizeCharts(p: Record<string, unknown>): ParamItem[] {
   return items;
 }
 
-function humanizeComments(p: Record<string, unknown>): ParamItem[] {
+function humanizeComments(p: DynamicObject): ParamItem[] {
   const items: ParamItem[] = [];
 
   if (p.action) {
@@ -644,7 +644,7 @@ function humanizeComments(p: Record<string, unknown>): ParamItem[] {
   return items;
 }
 
-function humanizeViewSettings(p: Record<string, unknown>): ParamItem[] {
+function humanizeViewSettings(p: DynamicObject): ParamItem[] {
   const items: ParamItem[] = [];
   const action = str(p.action);
   const count = num(p.count);
@@ -733,7 +733,7 @@ function humanizeViewSettings(p: Record<string, unknown>): ParamItem[] {
   return items;
 }
 
-function humanizeGetWorkbookOverview(p: Record<string, unknown>): ParamItem[] {
+function humanizeGetWorkbookOverview(p: DynamicObject): ParamItem[] {
   const items: ParamItem[] = [];
 
   if (p.sheet) {
@@ -745,7 +745,7 @@ function humanizeGetWorkbookOverview(p: Record<string, unknown>): ParamItem[] {
   return items;
 }
 
-function humanizeInstructions(p: Record<string, unknown>): ParamItem[] {
+function humanizeInstructions(p: DynamicObject): ParamItem[] {
   const items: ParamItem[] = [];
 
   if (p.level) {
@@ -765,7 +765,7 @@ function humanizeInstructions(p: Record<string, unknown>): ParamItem[] {
   return items;
 }
 
-function humanizeConventions(p: Record<string, unknown>): ParamItem[] {
+function humanizeConventions(p: DynamicObject): ParamItem[] {
   const items: ParamItem[] = [];
   const action = str(p.action || "get");
 
@@ -811,7 +811,7 @@ function humanizeConventions(p: Record<string, unknown>): ParamItem[] {
   return items;
 }
 
-function humanizeWorkbookHistory(p: Record<string, unknown>): ParamItem[] {
+function humanizeWorkbookHistory(p: DynamicObject): ParamItem[] {
   const items: ParamItem[] = [];
   const action = str(p.action || "list");
 
@@ -829,7 +829,7 @@ function humanizeWorkbookHistory(p: Record<string, unknown>): ParamItem[] {
   return items;
 }
 
-function humanizeSkills(p: Record<string, unknown>): ParamItem[] {
+function humanizeSkills(p: DynamicObject): ParamItem[] {
   const items: ParamItem[] = [];
   const action = str(p.action || "list");
 
@@ -851,7 +851,7 @@ function humanizeSkills(p: Record<string, unknown>): ParamItem[] {
   return items;
 }
 
-function humanizeWebSearch(p: Record<string, unknown>): ParamItem[] {
+function humanizeWebSearch(p: DynamicObject): ParamItem[] {
   const items: ParamItem[] = [];
 
   if (p.query) {
@@ -879,7 +879,7 @@ function humanizeWebSearch(p: Record<string, unknown>): ParamItem[] {
   return items;
 }
 
-function humanizeFetchPage(p: Record<string, unknown>): ParamItem[] {
+function humanizeFetchPage(p: DynamicObject): ParamItem[] {
   const items: ParamItem[] = [];
 
   if (p.url) {
@@ -894,7 +894,7 @@ function humanizeFetchPage(p: Record<string, unknown>): ParamItem[] {
   return items;
 }
 
-function humanizeMcp(p: Record<string, unknown>): ParamItem[] {
+function humanizeMcp(p: DynamicObject): ParamItem[] {
   const items: ParamItem[] = [];
 
   if (p.tool) {
@@ -925,7 +925,7 @@ function humanizeMcp(p: Record<string, unknown>): ParamItem[] {
   return items;
 }
 
-function humanizeFiles(p: Record<string, unknown>): ParamItem[] {
+function humanizeFiles(p: DynamicObject): ParamItem[] {
   const items: ParamItem[] = [];
   const action = str(p.action);
 
@@ -963,7 +963,7 @@ function humanizeFiles(p: Record<string, unknown>): ParamItem[] {
   return items;
 }
 
-function humanizePythonTransformRange(p: Record<string, unknown>): ParamItem[] {
+function humanizePythonTransformRange(p: DynamicObject): ParamItem[] {
   const items: ParamItem[] = [];
 
   if (p.range) {
@@ -998,7 +998,7 @@ function humanizePythonTransformRange(p: Record<string, unknown>): ParamItem[] {
   return items;
 }
 
-function humanizeDirectJs(p: Record<string, unknown>, codeLabel: string): ParamItem[] {
+function humanizeDirectJs(p: DynamicObject, codeLabel: string): ParamItem[] {
   const items: ParamItem[] = [];
 
   if (p.explanation) {
@@ -1020,11 +1020,11 @@ function humanizeDirectJs(p: Record<string, unknown>, codeLabel: string): ParamI
   return items;
 }
 
-function humanizeExecuteOfficeJs(p: Record<string, unknown>): ParamItem[] {
+function humanizeExecuteOfficeJs(p: DynamicObject): ParamItem[] {
   return humanizeDirectJs(p, "Office.js");
 }
 
-function humanizeExecuteWpsJs(p: Record<string, unknown>): ParamItem[] {
+function humanizeExecuteWpsJs(p: DynamicObject): ParamItem[] {
   return humanizeDirectJs(p, "WPS JSAPI");
 }
 
@@ -1054,7 +1054,7 @@ function humanizeOperator(op: string): string {
 
 /* ── Registry ───────────────────────────────────────────────── */
 
-type HumanizerFn = (p: Record<string, unknown>) => ParamItem[];
+type HumanizerFn = (p: DynamicObject) => ParamItem[];
 
 const CORE_HUMANIZERS = {
   format_cells: humanizeFormatCells,
@@ -1101,7 +1101,7 @@ const HUMANIZABLE_TOOL_NAME_SET = new Set<string>(TOOL_NAMES_WITH_HUMANIZER);
  */
 export function humanizeToolInput(
   toolName: string,
-  params: unknown,
+  params: DynamicValue,
 ): TemplateResult | null {
   if (!HUMANIZABLE_TOOL_NAME_SET.has(toolName)) return null;
 

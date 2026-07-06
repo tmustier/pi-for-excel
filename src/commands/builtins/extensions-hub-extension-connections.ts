@@ -132,7 +132,7 @@ function renderConnectionCard(args: {
             input.value = "";
           }
           showToast(t("ext-hub-extension-connections.toast.saved", { title: definition.title }));
-        } catch (err: unknown) {
+        } catch (err) {
           showToast(t("ext-hub-extension-connections.toast.saveFailed", { error: err instanceof Error ? err.message : String(err) }));
         }
       })();
@@ -146,7 +146,7 @@ function renderConnectionCard(args: {
         try {
           await connectionManager.clearSecretsFromHost(definition.id);
           showToast(t("ext-hub-extension-connections.toast.cleared", { title: definition.title }));
-        } catch (err: unknown) {
+        } catch (err) {
           showToast(t("ext-hub-extension-connections.toast.clearFailed", { error: err instanceof Error ? err.message : String(err) }));
         }
       })();

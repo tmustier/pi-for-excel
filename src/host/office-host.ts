@@ -1,6 +1,9 @@
+function isHostOfficeHostPayloadShape(value: DynamicValue): value is DynamicObject {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 /** Office.js-backed host implementation. */
 
-import { isRecord } from "../utils/type-guards.js";
 import { settingsBackedSessionStorage } from "./session-storage.js";
 import { resolveOfficeThemeDark } from "./office-theme.js";
 import {
@@ -17,13 +20,13 @@ import type {
 function getOfficeDocumentUrl(): string | null {
   try {
     const office = Reflect.get(globalThis, "Office");
-    if (!isRecord(office)) return null;
+    if (!isHostOfficeHostPayloadShape(office)) return null;
 
     const ctx = office.context;
-    if (!isRecord(ctx)) return null;
+    if (!isHostOfficeHostPayloadShape(ctx)) return null;
 
     const doc = ctx.document;
-    if (!isRecord(doc)) return null;
+    if (!isHostOfficeHostPayloadShape(doc)) return null;
 
     const url = doc.url;
     return typeof url === "string" && url.trim().length > 0 ? url : null;
@@ -32,7 +35,7 @@ function getOfficeDocumentUrl(): string | null {
   }
 }
 
-function nativeValueToString(value: unknown): string | null {
+function nativeValueToString(value: DynamicValue): string | null {
   if (typeof value === "string" && value.trim().length > 0) {
     return value;
   }
@@ -40,13 +43,13 @@ function nativeValueToString(value: unknown): string | null {
   return null;
 }
 
-function toError(error: unknown): Error {
+function toError(error: DynamicValue): Error {
   return error instanceof Error ? error : new Error("Office.onReady failed.");
 }
 
 interface OfficeReadyInfoLike {
-  host?: unknown;
-  platform?: unknown;
+  host?: DynamicValue;
+  platform?: DynamicValue;
 }
 
 function fromOfficeReadyInfo(info: OfficeReadyInfoLike): SpreadsheetHostReadyInfo {
@@ -74,10 +77,10 @@ export class OfficeHost implements SpreadsheetHost {
           resolve(fromOfficeReadyInfo(info));
         });
 
-        void readyPromise.catch((error: unknown) => {
+        void readyPromise.catch((error: DynamicValue) => {
           reject(error instanceof Error ? error : new Error("Office.onReady failed."));
         });
-      } catch (error: unknown) {
+      } catch (error) {
         reject(toError(error));
       }
     });
@@ -95,12 +98,12 @@ export class OfficeHost implements SpreadsheetHost {
         callback(fromOfficeReadyInfo(info));
       });
 
-      void readyPromise.catch((error: unknown) => {
+      void readyPromise.catch((error: DynamicValue) => {
         if (!disposed) {
           console.warn("[pi] Office.onReady hook failed:", error);
         }
       });
-    } catch (error: unknown) {
+    } catch (error) {
       console.warn("[pi] Office.onReady hook failed:", error);
     }
 

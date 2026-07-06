@@ -1,3 +1,7 @@
+function isExtensionsSandboxRuntimePayloadShape(value: DynamicValue): value is DynamicObject {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 /**
  * Sandboxed extension runtime host (iframe + postMessage RPC).
  *
@@ -50,7 +54,7 @@ import {
   asFiniteNumberOrNull,
   asFiniteNumberOrNullOrUndefined,
   asNonEmptyString,
-  asRecord,
+  asSandboxPayload,
   asWidgetPlacementOrUndefined,
   getErrorMessage,
   normalizeSandboxToolParameters,
@@ -59,7 +63,6 @@ import {
   parseSandboxLlmCompletionRequest,
   sanitizeText,
 } from "./sandbox/runtime-helpers.js";
-import { isRecord } from "../utils/type-guards.js";
 
 export { normalizeSandboxToolParameters } from "./sandbox/runtime-helpers.js";
 
@@ -82,13 +85,13 @@ export interface SandboxActivationOptions {
   extensionName: string;
   source: SandboxExtensionSource;
   registerCommand: (name: string, cmd: ExtensionCommand) => void;
-  registerTool: (tool: AgentTool<TSchema, unknown>) => void;
+  registerTool: (tool: AgentTool<TSchema, DynamicValue>) => void;
   unregisterTool: (name: string) => void;
   subscribeAgentEvents: (handler: (event: AgentEvent) => void) => () => void;
   llmComplete: (request: LlmCompletionRequest) => Promise<LlmCompletionResult>;
   httpFetch: (url: string, options?: HttpRequestOptions) => Promise<HttpResponse>;
-  storageGet: (key: string) => Promise<unknown>;
-  storageSet: (key: string, value: unknown) => Promise<void>;
+  storageGet: (key: string) => Promise<DynamicValue>;
+  storageSet: (key: string, value: DynamicValue) => Promise<void>;
   storageDelete: (key: string) => Promise<void>;
   storageKeys: () => Promise<string[]>;
   clipboardWriteText: (text: string) => Promise<void>;
@@ -118,12 +121,12 @@ export interface SandboxActivationOptions {
 }
 
 interface SandboxPendingRequest {
-  resolve: (value: unknown) => void;
-  reject: (reason: unknown) => void;
+  resolve: (value: DynamicValue) => void;
+  reject: (reason: DynamicValue) => void;
   timeoutId: ReturnType<typeof setTimeout>;
 }
 
-function parseConnectionStatus(value: unknown): ConnectionStatus {
+function parseConnectionStatus(value: DynamicValue): ConnectionStatus {
   if (value === "connected" || value === "missing" || value === "invalid" || value === "error") {
     return value;
   }
@@ -131,8 +134,8 @@ function parseConnectionStatus(value: unknown): ConnectionStatus {
   throw new Error("Invalid connection status.");
 }
 
-function parseConnectionSecrets(value: unknown): Record<string, string> {
-  const payload = asRecord(value, "connection secrets");
+function parseConnectionSecrets(value: DynamicValue): Record<string, string> {
+  const payload = asSandboxPayload(value, "connection secrets");
   const secrets: Record<string, string> = {};
 
   for (const [fieldId, rawSecret] of Object.entries(payload)) {
@@ -146,12 +149,12 @@ function parseConnectionSecrets(value: unknown): Record<string, string> {
   return secrets;
 }
 
-function parseConnectionHttpAuth(value: unknown): ExtensionConnectionDefinition["httpAuth"] {
+function parseConnectionHttpAuth(value: DynamicValue): ExtensionConnectionDefinition["httpAuth"] {
   if (value === undefined || value === null) {
     return undefined;
   }
 
-  const payload = asRecord(value, "connection definition httpAuth");
+  const payload = asSandboxPayload(value, "connection definition httpAuth");
 
   if (payload.placement !== "header") {
     throw new Error("connection definition httpAuth.placement must be \"header\".");
@@ -190,8 +193,8 @@ function parseConnectionHttpAuth(value: unknown): ExtensionConnectionDefinition[
   };
 }
 
-function parseConnectionDefinition(value: unknown): ExtensionConnectionDefinition {
-  const payload = asRecord(value, "connection definition");
+function parseConnectionDefinition(value: DynamicValue): ExtensionConnectionDefinition {
+  const payload = asSandboxPayload(value, "connection definition");
   const title = asNonEmptyString(payload.title, "title");
   const id = asNonEmptyString(payload.id, "id");
   const capability = asNonEmptyString(payload.capability, "capability");
@@ -211,7 +214,7 @@ function parseConnectionDefinition(value: unknown): ExtensionConnectionDefinitio
   }
 
   const secretFields = payload.secretFields.map((fieldRaw, index) => {
-    const field = asRecord(fieldRaw, `secretFields[${index}]`);
+    const field = asSandboxPayload(fieldRaw, `secretFields[${index}]`);
     const fieldId = asNonEmptyString(field.id, `secretFields[${index}].id`);
     const label = asNonEmptyString(field.label, `secretFields[${index}].label`);
     const required = field.required;
@@ -262,13 +265,13 @@ class SandboxRuntimeHost {
     this.bootstrapSandboxPort();
   };
 
-  private readonly onPortMessage = (event: MessageEvent<unknown>) => {
+  private readonly onPortMessage = (event: MessageEvent<DynamicValue>) => {
     this.handlePortMessage(event);
   };
 
   private readonly readyPromise: Promise<void>;
   private resolveReady: (() => void) | null = null;
-  private rejectReady: ((reason: unknown) => void) | null = null;
+  private rejectReady: ((reason: DynamicValue) => void) | null = null;
 
   private nextRequestId = 1;
   private disposed = false;
@@ -329,7 +332,7 @@ class SandboxRuntimeHost {
     if (gracefulDeactivate) {
       try {
         await this.callSandbox("deactivate", {}, { allowWhenDisposed: true });
-      } catch (error: unknown) {
+      } catch (error) {
         console.warn(`[pi] Sandbox deactivate failed: ${getErrorMessage(error)}`);
       }
     }
@@ -397,7 +400,7 @@ class SandboxRuntimeHost {
       // must use a wildcard target. All subsequent sandbox RPC stays on the
       // dedicated MessagePort instead of window.postMessage.
       targetWindow.postMessage(bootstrap, "*", [channel.port2]);
-    } catch (error: unknown) {
+    } catch (error) {
       port.removeEventListener("message", this.onPortMessage);
       port.close();
       this.port = null;
@@ -417,11 +420,11 @@ class SandboxRuntimeHost {
 
   private async callSandbox(
     method: string,
-    params: unknown,
+    params: DynamicValue,
     options?: {
       allowWhenDisposed?: boolean;
     },
-  ): Promise<unknown> {
+  ): Promise<DynamicValue> {
     if (this.disposed && !options?.allowWhenDisposed) {
       throw new Error("Sandbox runtime is already disposed.");
     }
@@ -429,7 +432,7 @@ class SandboxRuntimeHost {
     const requestId = `req-${this.nextRequestId}`;
     this.nextRequestId += 1;
 
-    return new Promise<unknown>((resolve, reject) => {
+    return new Promise<DynamicValue>((resolve, reject) => {
       const timeoutId = setTimeout(() => {
         this.pendingRequests.delete(requestId);
         reject(new Error(`Sandbox request timed out: ${method}`));
@@ -458,7 +461,7 @@ class SandboxRuntimeHost {
   private sendResponse(
     requestId: string,
     ok: boolean,
-    payload: unknown,
+    payload: DynamicValue,
   ): void {
     if (!this.port) {
       return;
@@ -482,7 +485,7 @@ class SandboxRuntimeHost {
     this.port.postMessage(envelope);
   }
 
-  private sendEvent(eventName: string, data: unknown): void {
+  private sendEvent(eventName: string, data: DynamicValue): void {
     if (!this.port) {
       return;
     }
@@ -520,12 +523,12 @@ class SandboxRuntimeHost {
 
   private dispatchSandboxUiAction(actionId: string): void {
     void this.callSandbox("ui_action", { actionId })
-      .catch((error: unknown) => {
+      .catch((error: DynamicValue) => {
         console.warn(`[pi] Sandbox UI action failed: ${getErrorMessage(error)}`);
       });
   }
 
-  private handlePortMessage(event: MessageEvent<unknown>): void {
+  private handlePortMessage(event: MessageEvent<DynamicValue>): void {
     const envelope = event.data;
     if (!isSandboxEnvelope(envelope)) {
       return;
@@ -566,7 +569,7 @@ class SandboxRuntimeHost {
       }
 
       if (envelope.event === "error") {
-        const payload = isRecord(envelope.data) ? envelope.data : null;
+        const payload = isExtensionsSandboxRuntimePayloadShape(envelope.data) ? envelope.data : null;
         const message = payload && typeof payload.message === "string"
           ? payload.message
           : "Sandbox bootstrap failed.";
@@ -598,7 +601,7 @@ class SandboxRuntimeHost {
         case "register_command": {
           this.assertCapability("commands.register");
 
-          const payload = asRecord(params, "register_command params");
+          const payload = asSandboxPayload(params, "register_command params");
           const commandId = asNonEmptyString(payload.commandId, "commandId");
           const name = asNonEmptyString(payload.name, "name");
           const description = typeof payload.description === "string" ? payload.description : "";
@@ -622,7 +625,7 @@ class SandboxRuntimeHost {
         case "register_tool": {
           this.assertCapability("tools.register");
 
-          const payload = asRecord(params, "register_tool params");
+          const payload = asSandboxPayload(params, "register_tool params");
           const toolId = asNonEmptyString(payload.toolId, "toolId");
           const name = asNonEmptyString(payload.name, "name");
           const label = typeof payload.label === "string" && payload.label.trim().length > 0
@@ -662,15 +665,15 @@ class SandboxRuntimeHost {
               : undefined;
           }
 
-          const tool: AgentTool<TSchema, unknown> = {
+          const tool: AgentTool<TSchema, DynamicValue> = {
             name,
             label,
             description,
             parameters,
             execute: async (
               _toolCallId: string,
-              toolParams: unknown,
-            ): Promise<AgentToolResult<unknown>> => {
+              toolParams: DynamicValue,
+            ): Promise<AgentToolResult<DynamicValue>> => {
               const result = await this.callSandbox("invoke_tool", {
                 toolId,
                 params: toolParams,
@@ -692,7 +695,7 @@ class SandboxRuntimeHost {
         case "unregister_tool": {
           this.assertCapability("tools.register");
 
-          const payload = asRecord(params, "unregister_tool params");
+          const payload = asSandboxPayload(params, "unregister_tool params");
           const name = asNonEmptyString(payload.name, "name");
           this.options.unregisterTool(name);
 
@@ -703,7 +706,7 @@ class SandboxRuntimeHost {
         case "llm_complete": {
           this.assertCapability("llm.complete");
 
-          const payload = asRecord(params, "llm_complete params");
+          const payload = asSandboxPayload(params, "llm_complete params");
           const completionRequest = parseSandboxLlmCompletionRequest(payload.request);
           const result = await this.options.llmComplete(completionRequest);
           this.sendResponse(requestId, true, result);
@@ -713,7 +716,7 @@ class SandboxRuntimeHost {
         case "http_fetch": {
           this.assertCapability("http.fetch");
 
-          const payload = asRecord(params, "http_fetch params");
+          const payload = asSandboxPayload(params, "http_fetch params");
           const url = asNonEmptyString(payload.url, "url");
           const options = parseSandboxHttpRequestOptions(payload.options);
           const response = await this.options.httpFetch(url, options);
@@ -724,7 +727,7 @@ class SandboxRuntimeHost {
         case "storage_get": {
           this.assertCapability("storage.readwrite");
 
-          const payload = asRecord(params, "storage_get params");
+          const payload = asSandboxPayload(params, "storage_get params");
           const key = asNonEmptyString(payload.key, "key");
           const value = await this.options.storageGet(key);
           this.sendResponse(requestId, true, value);
@@ -734,7 +737,7 @@ class SandboxRuntimeHost {
         case "storage_set": {
           this.assertCapability("storage.readwrite");
 
-          const payload = asRecord(params, "storage_set params");
+          const payload = asSandboxPayload(params, "storage_set params");
           const key = asNonEmptyString(payload.key, "key");
           await this.options.storageSet(key, payload.value);
           this.sendResponse(requestId, true, null);
@@ -744,7 +747,7 @@ class SandboxRuntimeHost {
         case "storage_delete": {
           this.assertCapability("storage.readwrite");
 
-          const payload = asRecord(params, "storage_delete params");
+          const payload = asSandboxPayload(params, "storage_delete params");
           const key = asNonEmptyString(payload.key, "key");
           await this.options.storageDelete(key);
           this.sendResponse(requestId, true, null);
@@ -761,7 +764,7 @@ class SandboxRuntimeHost {
         case "clipboard_write_text": {
           this.assertCapability("clipboard.write");
 
-          const payload = asRecord(params, "clipboard_write_text params");
+          const payload = asSandboxPayload(params, "clipboard_write_text params");
           const text = sanitizeText(payload.text);
           await this.options.clipboardWriteText(text);
           this.sendResponse(requestId, true, null);
@@ -771,7 +774,7 @@ class SandboxRuntimeHost {
         case "agent_inject_context": {
           this.assertCapability("agent.context.write");
 
-          const payload = asRecord(params, "agent_inject_context params");
+          const payload = asSandboxPayload(params, "agent_inject_context params");
           const content = asNonEmptyString(payload.content, "content");
           this.options.injectAgentContext(content);
           this.sendResponse(requestId, true, null);
@@ -781,7 +784,7 @@ class SandboxRuntimeHost {
         case "agent_steer": {
           this.assertCapability("agent.steer");
 
-          const payload = asRecord(params, "agent_steer params");
+          const payload = asSandboxPayload(params, "agent_steer params");
           const content = asNonEmptyString(payload.content, "content");
           this.options.steerAgent(content);
           this.sendResponse(requestId, true, null);
@@ -791,7 +794,7 @@ class SandboxRuntimeHost {
         case "agent_follow_up": {
           this.assertCapability("agent.followup");
 
-          const payload = asRecord(params, "agent_follow_up params");
+          const payload = asSandboxPayload(params, "agent_follow_up params");
           const content = asNonEmptyString(payload.content, "content");
           this.options.followUpAgent(content);
           this.sendResponse(requestId, true, null);
@@ -808,7 +811,7 @@ class SandboxRuntimeHost {
         case "skills_read": {
           this.assertCapability("skills.read");
 
-          const payload = asRecord(params, "skills_read params");
+          const payload = asSandboxPayload(params, "skills_read params");
           const name = asNonEmptyString(payload.name, "name");
           const markdown = await this.options.readSkill(name);
           this.sendResponse(requestId, true, markdown);
@@ -818,7 +821,7 @@ class SandboxRuntimeHost {
         case "skills_install": {
           this.assertCapability("skills.write");
 
-          const payload = asRecord(params, "skills_install params");
+          const payload = asSandboxPayload(params, "skills_install params");
           const name = asNonEmptyString(payload.name, "name");
           const markdown = asNonEmptyString(payload.markdown, "markdown");
           await this.options.installSkill(name, markdown);
@@ -829,7 +832,7 @@ class SandboxRuntimeHost {
         case "skills_uninstall": {
           this.assertCapability("skills.write");
 
-          const payload = asRecord(params, "skills_uninstall params");
+          const payload = asSandboxPayload(params, "skills_uninstall params");
           const name = asNonEmptyString(payload.name, "name");
           await this.options.uninstallSkill(name);
           this.sendResponse(requestId, true, null);
@@ -839,7 +842,7 @@ class SandboxRuntimeHost {
         case "download_file": {
           this.assertCapability("download.file");
 
-          const payload = asRecord(params, "download_file params");
+          const payload = asSandboxPayload(params, "download_file params");
           const filename = asNonEmptyString(payload.filename, "filename");
           if (typeof payload.content !== "string") {
             throw new Error("download_file content must be a string.");
@@ -856,7 +859,7 @@ class SandboxRuntimeHost {
         case "connections_register": {
           this.assertCapability("connections.readwrite");
 
-          const payload = asRecord(params, "connections_register params");
+          const payload = asSandboxPayload(params, "connections_register params");
           const definition = parseConnectionDefinition(payload.definition);
           const connectionId = this.options.registerConnection(definition);
           this.sendResponse(requestId, true, { connectionId });
@@ -866,7 +869,7 @@ class SandboxRuntimeHost {
         case "connections_unregister": {
           this.assertCapability("connections.readwrite");
 
-          const payload = asRecord(params, "connections_unregister params");
+          const payload = asSandboxPayload(params, "connections_unregister params");
           const connectionId = asNonEmptyString(payload.connectionId, "connectionId");
           this.options.unregisterConnection(connectionId);
           this.sendResponse(requestId, true, null);
@@ -883,7 +886,7 @@ class SandboxRuntimeHost {
         case "connections_get": {
           this.assertCapability("connections.readwrite");
 
-          const payload = asRecord(params, "connections_get params");
+          const payload = asSandboxPayload(params, "connections_get params");
           const connectionId = asNonEmptyString(payload.connectionId, "connectionId");
           const state = await this.options.getConnection(connectionId);
           this.sendResponse(requestId, true, state);
@@ -893,7 +896,7 @@ class SandboxRuntimeHost {
         case "connections_get_secrets": {
           this.assertCapability("connections.secrets.read");
 
-          const payload = asRecord(params, "connections_get_secrets params");
+          const payload = asSandboxPayload(params, "connections_get_secrets params");
           const connectionId = asNonEmptyString(payload.connectionId, "connectionId");
           const secrets = await this.options.getConnectionSecrets(connectionId);
           this.sendResponse(requestId, true, secrets);
@@ -903,7 +906,7 @@ class SandboxRuntimeHost {
         case "connections_set_secrets": {
           this.assertCapability("connections.readwrite");
 
-          const payload = asRecord(params, "connections_set_secrets params");
+          const payload = asSandboxPayload(params, "connections_set_secrets params");
           const connectionId = asNonEmptyString(payload.connectionId, "connectionId");
           const secrets = parseConnectionSecrets(payload.secrets);
           await this.options.setConnectionSecrets(connectionId, secrets);
@@ -914,7 +917,7 @@ class SandboxRuntimeHost {
         case "connections_clear_secrets": {
           this.assertCapability("connections.readwrite");
 
-          const payload = asRecord(params, "connections_clear_secrets params");
+          const payload = asSandboxPayload(params, "connections_clear_secrets params");
           const connectionId = asNonEmptyString(payload.connectionId, "connectionId");
           await this.options.clearConnectionSecrets(connectionId);
           this.sendResponse(requestId, true, null);
@@ -924,7 +927,7 @@ class SandboxRuntimeHost {
         case "connections_mark_validated": {
           this.assertCapability("connections.readwrite");
 
-          const payload = asRecord(params, "connections_mark_validated params");
+          const payload = asSandboxPayload(params, "connections_mark_validated params");
           const connectionId = asNonEmptyString(payload.connectionId, "connectionId");
           await this.options.markConnectionValidated(connectionId);
           this.sendResponse(requestId, true, null);
@@ -934,7 +937,7 @@ class SandboxRuntimeHost {
         case "connections_mark_invalid": {
           this.assertCapability("connections.readwrite");
 
-          const payload = asRecord(params, "connections_mark_invalid params");
+          const payload = asSandboxPayload(params, "connections_mark_invalid params");
           const connectionId = asNonEmptyString(payload.connectionId, "connectionId");
           const reason = asNonEmptyString(payload.reason, "reason");
           await this.options.markConnectionInvalid(connectionId, reason);
@@ -945,7 +948,7 @@ class SandboxRuntimeHost {
         case "connections_mark_status": {
           this.assertCapability("connections.readwrite");
 
-          const payload = asRecord(params, "connections_mark_status params");
+          const payload = asSandboxPayload(params, "connections_mark_status params");
           const connectionId = asNonEmptyString(payload.connectionId, "connectionId");
           const status = parseConnectionStatus(payload.status);
           const reason = typeof payload.reason === "string" && payload.reason.trim().length > 0
@@ -960,7 +963,7 @@ class SandboxRuntimeHost {
         case "toast": {
           this.assertCapability("ui.toast");
 
-          const payload = asRecord(params, "toast params");
+          const payload = asSandboxPayload(params, "toast params");
           const message = sanitizeText(payload.message);
           this.options.toast(message);
           this.sendResponse(requestId, true, null);
@@ -970,7 +973,7 @@ class SandboxRuntimeHost {
         case "overlay_show": {
           this.assertCapability("ui.overlay");
 
-          const payload = asRecord(params, "overlay_show params");
+          const payload = asSandboxPayload(params, "overlay_show params");
           const tree = normalizeSandboxUiNode(payload.tree);
           const actionIds = showOverlayNode(tree, (actionId) => {
             if (!this.overlayActionIds.has(actionId)) {
@@ -989,7 +992,7 @@ class SandboxRuntimeHost {
         case "overlay_show_text": {
           this.assertCapability("ui.overlay");
 
-          const payload = asRecord(params, "overlay_show_text params");
+          const payload = asSandboxPayload(params, "overlay_show_text params");
           const fallbackNode = createTextOnlyUiNode(sanitizeText(payload.text));
           const actionIds = showOverlayNode(fallbackNode, () => {
             // legacy text-only path has no actions
@@ -1012,7 +1015,7 @@ class SandboxRuntimeHost {
         case "widget_show": {
           this.assertCapability("ui.widget");
 
-          const payload = asRecord(params, "widget_show params");
+          const payload = asSandboxPayload(params, "widget_show params");
           const tree = normalizeSandboxUiNode(payload.tree);
 
           if (this.widgetApiV2Enabled) {
@@ -1053,7 +1056,7 @@ class SandboxRuntimeHost {
         case "widget_show_text": {
           this.assertCapability("ui.widget");
 
-          const payload = asRecord(params, "widget_show_text params");
+          const payload = asSandboxPayload(params, "widget_show_text params");
           const fallbackNode = createTextOnlyUiNode(sanitizeText(payload.text));
 
           if (this.widgetApiV2Enabled) {
@@ -1101,7 +1104,7 @@ class SandboxRuntimeHost {
             throw new Error("Widget API v2 is disabled. Enable /experimental on extension-widget-v2.");
           }
 
-          const payload = asRecord(params, "widget_upsert params");
+          const payload = asSandboxPayload(params, "widget_upsert params");
           const widgetId = asNonEmptyString(payload.widgetId, "widgetId");
           const tree = normalizeSandboxUiNode(payload.tree);
           const title = typeof payload.title === "string" ? payload.title : undefined;
@@ -1144,7 +1147,7 @@ class SandboxRuntimeHost {
             throw new Error("Widget API v2 is disabled. Enable /experimental on extension-widget-v2.");
           }
 
-          const payload = asRecord(params, "widget_remove params");
+          const payload = asSandboxPayload(params, "widget_remove params");
           const widgetId = asNonEmptyString(payload.widgetId, "widgetId");
           this.clearWidgetActionIds(widgetId);
           removeExtensionWidget(this.widgetOwnerId, widgetId);
@@ -1168,7 +1171,7 @@ class SandboxRuntimeHost {
         case "subscribe_agent_events": {
           this.assertCapability("agent.events.read");
 
-          const payload = asRecord(params, "subscribe_agent_events params");
+          const payload = asSandboxPayload(params, "subscribe_agent_events params");
           const subscriptionId = asNonEmptyString(payload.subscriptionId, "subscriptionId");
 
           if (!this.eventSubscriptions.has(subscriptionId)) {
@@ -1187,7 +1190,7 @@ class SandboxRuntimeHost {
         }
 
         case "unsubscribe_agent_events": {
-          const payload = asRecord(params, "unsubscribe_agent_events params");
+          const payload = asSandboxPayload(params, "unsubscribe_agent_events params");
           const subscriptionId = asNonEmptyString(payload.subscriptionId, "subscriptionId");
 
           const unsubscribe = this.eventSubscriptions.get(subscriptionId);
@@ -1203,7 +1206,7 @@ class SandboxRuntimeHost {
         default:
           throw new Error(`Unsupported sandbox request method: ${method}`);
       }
-    } catch (error: unknown) {
+    } catch (error) {
       this.sendResponse(requestId, false, getErrorMessage(error));
     }
   }
@@ -1220,7 +1223,7 @@ export async function activateExtensionInSandbox(
 
   try {
     await host.waitUntilReady();
-  } catch (error: unknown) {
+  } catch (error) {
     await host.dispose(false);
     throw error;
   }

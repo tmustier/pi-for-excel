@@ -54,7 +54,7 @@ void test("web_search does NOT fall back to Jina when no Jina API key is configu
 
   assert.match(text, /Error:.*API key.*missing/i);
 
-  const details = result.details as { ok?: boolean; provider?: string; fallback?: unknown };
+  const details = result.details as { ok?: boolean; provider?: string; fallback?: DynamicValue };
   assert.equal(details.ok, false);
   assert.equal(details.provider, "serper");
   assert.equal(details.fallback, undefined);
@@ -207,7 +207,7 @@ void test("web_search does not fall back for malformed-provider requests", async
   assert.match(text, /400/i);
   assert.doesNotMatch(text, /used Jina Search/i);
 
-  const details = result.details as { ok?: boolean; provider?: string; fallback?: unknown };
+  const details = result.details as { ok?: boolean; provider?: string; fallback?: DynamicValue };
   assert.equal(details.ok, false);
   assert.equal(details.provider, "serper");
   assert.equal(details.fallback, undefined);

@@ -1,3 +1,7 @@
+function isHostWpsJsapiPayloadShape(value: DynamicValue): value is DynamicObject {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 /**
  * Typed, lazy WPS ET (Spreadsheets) JSAPI facade.
  *
@@ -7,54 +11,53 @@
  * load time.
  */
 
-import { isRecord } from "../../utils/type-guards.js";
 
 export interface WpsCountedCollection {
-  Count?: unknown;
-  count?: unknown;
-  Item?: (key: string | number) => unknown;
+  Count?: DynamicValue;
+  count?: DynamicValue;
+  Item?: (key: string | number) => DynamicValue;
 }
 
 export interface WpsRowsOrColumns {
-  Count?: unknown;
-  count?: unknown;
+  Count?: DynamicValue;
+  count?: DynamicValue;
 }
 
 export interface WpsEtRange {
-  Address?: unknown;
-  Value2?: unknown;
-  Value?: (rangeValueDataType?: unknown, value?: unknown) => unknown;
-  Formula?: unknown;
-  NumberFormat?: unknown;
+  Address?: DynamicValue;
+  Value2?: DynamicValue;
+  Value?: (rangeValueDataType?: DynamicValue, value?: DynamicValue) => DynamicValue;
+  Formula?: DynamicValue;
+  NumberFormat?: DynamicValue;
   Rows?: WpsRowsOrColumns;
   Columns?: WpsRowsOrColumns;
-  Row?: unknown;
-  Column?: unknown;
-  MergeCells?: unknown;
+  Row?: DynamicValue;
+  Column?: DynamicValue;
+  MergeCells?: DynamicValue;
 }
 
 export interface WpsEtWorksheet {
-  Name?: unknown;
-  name?: unknown;
-  Visible?: unknown;
-  visible?: unknown;
+  Name?: DynamicValue;
+  name?: DynamicValue;
+  Visible?: DynamicValue;
+  visible?: DynamicValue;
   UsedRange?: WpsEtRange | null;
   Range?: (address: string) => WpsEtRange;
 }
 
 export interface WpsEtWorkbook {
-  Name?: unknown;
-  name?: unknown;
-  FullName?: unknown;
-  fullName?: unknown;
+  Name?: DynamicValue;
+  name?: DynamicValue;
+  FullName?: DynamicValue;
+  fullName?: DynamicValue;
   Sheets?: WpsCountedCollection;
   Worksheets?: WpsCountedCollection;
 }
 
 export interface WpsPluginStorage {
-  length?: unknown;
-  getItem?: (key: string) => unknown;
-  setItem?: (key: string, value: unknown) => void;
+  length?: DynamicValue;
+  getItem?: (key: string) => DynamicValue;
+  setItem?: (key: string, value: DynamicValue) => void;
   removeItem?: (key: string) => void;
   clear?: () => void;
   key?: (index: number) => string | null;
@@ -62,13 +65,13 @@ export interface WpsPluginStorage {
 }
 
 export interface WpsTaskPane {
-  ID?: unknown;
-  Visible?: unknown;
-  Width?: unknown;
-  Height?: unknown;
-  DockPosition?: unknown;
-  Navigate?: (url: string) => unknown;
-  Delete?: () => unknown;
+  ID?: DynamicValue;
+  Visible?: DynamicValue;
+  Width?: DynamicValue;
+  Height?: DynamicValue;
+  DockPosition?: DynamicValue;
+  Navigate?: (url: string) => DynamicValue;
+  Delete?: () => DynamicValue;
 }
 
 export interface WpsEtApplication {
@@ -84,23 +87,23 @@ export interface WpsEtApplication {
 }
 
 export interface WpsGlobal {
-  EtApplication?: () => unknown;
+  EtApplication?: () => DynamicValue;
   CreateTaskPane?: (url: string) => WpsTaskPane;
   CreateTaskpane?: (url: string) => WpsTaskPane;
   PluginStorage?: WpsPluginStorage;
 }
 
-function asWpsEtApplication(value: unknown): WpsEtApplication | null {
-  return isRecord(value) ? value : null;
+function asWpsEtApplication(value: DynamicValue): WpsEtApplication | null {
+  return isHostWpsJsapiPayloadShape(value) ? value : null;
 }
 
-function getGlobalMember(key: string): unknown {
+function getGlobalMember(key: string): DynamicValue {
   return Reflect.get(globalThis, key);
 }
 
 function getWpsGlobal(): WpsGlobal | null {
   const candidate = getGlobalMember("wps");
-  return isRecord(candidate) ? candidate : null;
+  return isHostWpsJsapiPayloadShape(candidate) ? candidate : null;
 }
 
 /** Resolve the active WPS ET Application lazily at call time. */

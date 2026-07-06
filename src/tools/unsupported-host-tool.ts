@@ -39,8 +39,8 @@ export class UnsupportedHostToolError extends Error {
   }
 }
 
-export function isUnsupportedHostTool(tool: AgentTool<TSchema, unknown>): boolean {
-  return (tool as AgentTool<TSchema, unknown> & Partial<UnsupportedHostToolMarker>)[UNSUPPORTED_HOST_TOOL_MARKER] === true;
+export function isUnsupportedHostTool(tool: AgentTool<TSchema, DynamicValue>): boolean {
+  return (tool as AgentTool<TSchema, DynamicValue> & Partial<UnsupportedHostToolMarker>)[UNSUPPORTED_HOST_TOOL_MARKER] === true;
 }
 
 export function createUnsupportedHostTool<TParameters extends TSchema, TDetails>(

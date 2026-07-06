@@ -57,7 +57,7 @@ void test("execute_office_js blocks nested Excel.run usage", async () => {
 });
 
 void test("execute_office_js reports non-serializable result payloads", async () => {
-  const circular: { self?: unknown } = {};
+  const circular: { self?: DynamicValue } = {};
   circular.self = circular;
 
   const tool = createExecuteOfficeJsTool({

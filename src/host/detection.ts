@@ -2,11 +2,11 @@
 
 import type { SpreadsheetHostKind } from "./types.js";
 
-function getGlobalMember(scope: object, key: string): unknown {
+function getGlobalMember(scope: object, key: string): DynamicValue {
   return Reflect.get(scope, key);
 }
 
-function hasObjectOrFunction(value: unknown): boolean {
+function hasObjectOrFunction(value: DynamicValue): boolean {
   return (typeof value === "object" && value !== null) || typeof value === "function";
 }
 

@@ -1,3 +1,7 @@
+function isCommandsBuiltinsExperimentalPayloadShape(value: DynamicValue): value is DynamicObject {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 /**
  * Builtin command for managing experimental feature flags.
  */
@@ -24,7 +28,6 @@ import {
 } from "../../tools/experimental-tool-gates.js";
 import { PYTHON_BRIDGE_TOKEN_SETTING_KEY } from "../../tools/python-run.js";
 import { TMUX_BRIDGE_TOKEN_SETTING_KEY } from "../../tools/tmux.js";
-import { isRecord } from "../../utils/type-guards.js";
 import { showToast } from "../../ui/toast.js";
 import { t } from "../../language/index.js";
 import { showExperimentalDialog } from "./experimental-overlay.js";
@@ -253,13 +256,13 @@ function maskToken(token: string): string {
   return `${token.slice(0, 4)}${"*".repeat(hiddenLength)}${token.slice(-2)}`;
 }
 
-function normalizeOptionalString(value: unknown): string | undefined {
+function normalizeOptionalString(value: DynamicValue): string | undefined {
   if (typeof value !== "string") return undefined;
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
-function normalizeOptionalInteger(value: unknown): number | undefined {
+function normalizeOptionalInteger(value: DynamicValue): number | undefined {
   if (typeof value !== "number" || !Number.isInteger(value)) {
     return undefined;
   }
@@ -267,7 +270,7 @@ function normalizeOptionalInteger(value: unknown): number | undefined {
   return value;
 }
 
-function tryParseJson(text: string): unknown {
+function tryParseJson(text: string): DynamicValue {
   const trimmed = text.trim();
   if (trimmed.length === 0) return null;
 
@@ -340,7 +343,7 @@ function resolveDependencies(
   };
 }
 
-function asErrorMessage(error: unknown, fallback: string): string {
+function asErrorMessage(error: DynamicValue, fallback: string): string {
   if (error instanceof Error && error.message.trim().length > 0) {
     return error.message;
   }
@@ -369,7 +372,7 @@ async function defaultProbeTmuxBridgeHealth(bridgeUrl: string): Promise<TmuxBrid
     let sessions: number | undefined;
     let error: string | undefined;
 
-    if (isRecord(parsed)) {
+    if (isCommandsBuiltinsExperimentalPayloadShape(parsed)) {
       mode = normalizeOptionalString(parsed.mode);
       backend = normalizeOptionalString(parsed.backend);
       sessions = normalizeOptionalInteger(parsed.sessions);
@@ -386,7 +389,7 @@ async function defaultProbeTmuxBridgeHealth(bridgeUrl: string): Promise<TmuxBrid
       sessions,
       error,
     };
-  } catch (error: unknown) {
+  } catch (error) {
     return {
       reachable: false,
       error: asErrorMessage(error, "Health check failed."),
@@ -522,7 +525,7 @@ async function handleTmuxStatusCommand(
   if (configuredBridgeUrl) {
     try {
       normalizedBridgeUrl = dependencies.validateTmuxBridgeUrl(configuredBridgeUrl);
-    } catch (error: unknown) {
+    } catch (error) {
       bridgeUrlValidationError = asErrorMessage(error, "invalid bridge URL");
     }
   }
@@ -744,7 +747,7 @@ export function createExperimentalCommands(
             ? t("experimental.toast.flagSavedSuffix")
             : "";
           resolved.showToast(t("experimental.toast.featureState", { title: feature.title, state: t(enabled ? "experimental.state.enabled" : "experimental.state.disabled"), suffix }));
-        } catch (error: unknown) {
+        } catch (error) {
           resolved.showToast(asErrorMessage(error, t("experimental.toast.runFailed")));
         }
       },

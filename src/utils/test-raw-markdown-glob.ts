@@ -10,12 +10,12 @@ interface RawMarkdownGlobLoader {
   (pattern: string, importerUrl: string): Record<string, string>;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+function isTestRawMarkdownGlobPayloadShape(value: DynamicValue): value is DynamicObject {
   return typeof value === "object" && value !== null;
 }
 
-function isRawMarkdownRecord(value: unknown): value is Record<string, string> {
-  if (!isRecord(value)) {
+function isRawMarkdownMap(value: DynamicValue): value is Record<string, string> {
+  if (!isTestRawMarkdownGlobPayloadShape(value)) {
     return false;
   }
 
@@ -48,7 +48,7 @@ export function loadRawMarkdownFromTestGlob(pattern: string, importerUrl: string
   }
 
   const loaded = loader(pattern, importerUrl);
-  if (!isRawMarkdownRecord(loaded)) {
+  if (!isRawMarkdownMap(loaded)) {
     return {};
   }
 

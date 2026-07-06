@@ -97,14 +97,14 @@ void test("restore applies checkpoint values and creates inverse checkpoint", as
   };
 
   let appliedAddress = "";
-  let appliedValues: unknown[][] = [];
+  let appliedValues: DynamicValue[][] = [];
 
   const log = new WorkbookRecoveryLog({
     getSettingsStore: () => Promise.resolve(settingsStore),
     getWorkbookContext: () => Promise.resolve(workbookContext),
     now: () => 1700000001000,
     createId,
-    applySnapshot: (address: string, values: unknown[][]) => {
+    applySnapshot: (address: string, values: DynamicValue[][]) => {
       appliedAddress = address;
       appliedValues = values;
       return Promise.resolve({
@@ -159,7 +159,7 @@ void test("restore applies comment-thread checkpoints and creates inverse checkp
   };
 
   let appliedAddress = "";
-  let appliedState: unknown = null;
+  let appliedState: DynamicValue = null;
 
   const log = new WorkbookRecoveryLog({
     getSettingsStore: () => Promise.resolve(settingsStore),

@@ -1,6 +1,9 @@
-import { isRecord } from "../utils/type-guards.js";
+function isToolsBridgeHttpUtilsPayloadShape(value: DynamicValue): value is DynamicObject {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
 
-export function tryParseBridgeJson(text: string): unknown {
+
+export function tryParseBridgeJson(text: string): DynamicValue {
   const trimmed = text.trim();
   if (trimmed.length === 0) return null;
 
@@ -11,8 +14,8 @@ export function tryParseBridgeJson(text: string): unknown {
   }
 }
 
-export function extractBridgeErrorMessage(value: unknown): string | null {
-  if (isRecord(value) && typeof value.error === "string") {
+export function extractBridgeErrorMessage(value: DynamicValue): string | null {
+  if (isToolsBridgeHttpUtilsPayloadShape(value) && typeof value.error === "string") {
     return value.error;
   }
 
@@ -28,7 +31,7 @@ export function joinBridgeUrl(baseUrl: string, path: string): string {
   return `${baseUrl.replace(/\/+$/, "")}${path}`;
 }
 
-export function isAbortError(error: unknown): boolean {
+export function isAbortError(error: DynamicValue): boolean {
   if (error instanceof DOMException) {
     return error.name === "AbortError";
   }

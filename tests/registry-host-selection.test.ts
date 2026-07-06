@@ -82,7 +82,7 @@ void test("composeCoreToolsForHost keeps metadata stable on WPS and fails fast w
       assert.notEqual(wpsTool, originalTool);
       await assert.rejects(
         async () => wpsTool.execute("tool-call-1", {}),
-        (error: unknown) => {
+        (error: DynamicValue) => {
           assert.ok(error instanceof UnsupportedHostToolError);
           assert.equal(error.code, "unsupported_host_tool");
           assert.equal(error.hostKind, "wps");
@@ -126,7 +126,7 @@ void test("Office-coupled non-core tools fail fast on WPS and pass through elsew
 
   await assert.rejects(
     async () => wpsTool.execute("tool-call-1", {}),
-    (error: unknown) => {
+    (error: DynamicValue) => {
       assert.ok(error instanceof UnsupportedHostToolError);
       assert.equal(error.hostKind, "wps");
       assert.equal(error.toolName, "execute_office_js");

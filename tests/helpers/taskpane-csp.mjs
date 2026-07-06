@@ -1,13 +1,13 @@
 import { readFile } from "node:fs/promises";
 
-function isRecord(value) {
+function isHelpersTaskpaneCspPayloadShape(value) {
   return typeof value === "object" && value !== null;
 }
 
 export async function readTaskpaneCspDirectiveTokens(directiveName) {
   const raw = await readFile(new URL("../../vercel.json", import.meta.url), "utf8");
   const parsed = JSON.parse(raw);
-  if (!isRecord(parsed)) {
+  if (!isHelpersTaskpaneCspPayloadShape(parsed)) {
     throw new Error("Invalid vercel.json root structure");
   }
 
@@ -16,8 +16,8 @@ export async function readTaskpaneCspDirectiveTokens(directiveName) {
     throw new Error("vercel.json is missing top-level headers array");
   }
 
-  const taskpaneEntry = headersRaw.find((entry) => isRecord(entry) && entry.source === "/src/taskpane.html");
-  if (!isRecord(taskpaneEntry)) {
+  const taskpaneEntry = headersRaw.find((entry) => isHelpersTaskpaneCspPayloadShape(entry) && entry.source === "/src/taskpane.html");
+  if (!isHelpersTaskpaneCspPayloadShape(taskpaneEntry)) {
     throw new Error("vercel.json is missing /src/taskpane.html header configuration");
   }
 
@@ -26,8 +26,8 @@ export async function readTaskpaneCspDirectiveTokens(directiveName) {
     throw new Error("/src/taskpane.html entry has no headers array");
   }
 
-  const cspEntry = headerListRaw.find((entry) => isRecord(entry) && entry.key === "Content-Security-Policy");
-  if (!isRecord(cspEntry) || typeof cspEntry.value !== "string") {
+  const cspEntry = headerListRaw.find((entry) => isHelpersTaskpaneCspPayloadShape(entry) && entry.key === "Content-Security-Policy");
+  if (!isHelpersTaskpaneCspPayloadShape(cspEntry) || typeof cspEntry.value !== "string") {
     throw new Error("Missing Content-Security-Policy value for /src/taskpane.html");
   }
 

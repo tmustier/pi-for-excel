@@ -9,7 +9,7 @@ import {
 } from "../auth/proxy-validation.js";
 
 export interface ProxyAwareSettingsStore {
-  get(key: string): Promise<unknown>;
+  get(key: string): Promise<DynamicValue>;
 }
 
 export interface ResolvedOutboundRequest {
@@ -18,7 +18,7 @@ export interface ResolvedOutboundRequest {
   proxyBaseUrl?: string;
 }
 
-function parseEnabledFlag(value: unknown): boolean {
+function parseEnabledFlag(value: DynamicValue): boolean {
   if (typeof value === "boolean") return value;
   if (typeof value === "string") {
     const normalized = value.trim().toLowerCase();

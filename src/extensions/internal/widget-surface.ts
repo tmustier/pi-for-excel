@@ -57,7 +57,7 @@ function toWidgetKey(ownerId: string, id: string): string {
   return `${ownerId}::${id}`;
 }
 
-function isFiniteNumber(value: unknown): value is number {
+function isFiniteNumber(value: DynamicValue): value is number {
   return typeof value === "number" && !Number.isNaN(value) && Number.isFinite(value);
 }
 

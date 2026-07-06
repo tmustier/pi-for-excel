@@ -241,7 +241,7 @@ function toTransformRangeModel(details: PythonTransformRangeDetails): BridgeSetu
   };
 }
 
-export function resolveBridgeSetupCardModel(details: unknown): BridgeSetupCardModel | null {
+export function resolveBridgeSetupCardModel(details: DynamicValue): BridgeSetupCardModel | null {
   if (isTmuxBridgeDetails(details)) {
     return toTmuxModel(details);
   }
@@ -261,12 +261,12 @@ export function resolveBridgeSetupCardModel(details: unknown): BridgeSetupCardMo
   return null;
 }
 
-export function shouldShowBridgeSetupCard(details: unknown): details is BridgeSetupCardDetails {
+export function shouldShowBridgeSetupCard(details: DynamicValue): details is BridgeSetupCardDetails {
   return resolveBridgeSetupCardModel(details) !== null;
 }
 
 export async function testBridgeSetupConnection(
-  details: unknown,
+  details: DynamicValue,
   probeBridge: (bridgeUrl: string) => Promise<boolean> = probeBridgeHealth,
 ): Promise<boolean> {
   const model = resolveBridgeSetupCardModel(details);

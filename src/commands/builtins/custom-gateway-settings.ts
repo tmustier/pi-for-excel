@@ -261,7 +261,7 @@ export async function buildCustomGatewaySection(
               if (editingGatewayId === targetGateway.id) {
                 resetForm();
               }
-            } catch (error: unknown) {
+            } catch (error) {
               const message = error instanceof Error ? error.message : String(error);
               showToast(t("custom-gateway.toast.deleteFailed", { message }));
             }
@@ -306,7 +306,7 @@ export async function buildCustomGatewaySection(
         );
 
         resetForm();
-      } catch (error: unknown) {
+      } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         setError(message);
       } finally {

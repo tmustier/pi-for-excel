@@ -196,7 +196,7 @@ export async function showRecoveryDialog(opts: {
           const backup = await createManualFullBackup();
           showToast(t("recovery.toast.backupDownloaded", { id: shortId(backup.id), size: formatBytes(backup.sizeBytes) }));
           renderList();
-        } catch (error: unknown) {
+        } catch (error) {
           const message = error instanceof Error ? error.message : "Unknown error";
           showToast(t("recovery.toast.backupFailed", { message }));
           statusText.textContent = t("recovery.backupFailed");
@@ -217,7 +217,7 @@ export async function showRecoveryDialog(opts: {
         statusText.textContent = t("recovery.refreshing");
         try {
           await reload();
-        } catch (error: unknown) {
+        } catch (error) {
           const message = error instanceof Error ? error.message : "Unknown error";
           showToast(t("recovery.toast.refreshFailed", { message }));
           statusText.textContent = t("recovery.refreshFailed");
@@ -249,7 +249,7 @@ export async function showRecoveryDialog(opts: {
           const removed = await opts.onClear();
           showToast(t("recovery.toast.cleared", { count: removed, plural: removed === 1 ? "" : "s" }));
           await reload();
-        } catch (error: unknown) {
+        } catch (error) {
           const message = error instanceof Error ? error.message : "Unknown error";
           showToast(t("recovery.toast.clearFailed", { message }));
           statusText.textContent = t("recovery.clearFailed");
@@ -312,7 +312,7 @@ export async function showRecoveryDialog(opts: {
         try {
           await setConfig({ maxSnapshots: value });
           showToast(t("recovery.toast.retentionSet", { count: value }));
-        } catch (error: unknown) {
+        } catch (error) {
           const message = error instanceof Error ? error.message : "Unknown error";
           showToast(t("recovery.toast.retentionSaveFailed", { message }));
         } finally {
@@ -439,7 +439,7 @@ export async function showRecoveryDialog(opts: {
               await opts.onRestore(checkpoint.id);
               allCheckpoints = await opts.loadCheckpoints();
               renderList();
-            } catch (error: unknown) {
+            } catch (error) {
               const message = error instanceof Error ? error.message : "Unknown error";
               showToast(t("recovery.toast.restoreFailed", { message }));
               statusText.textContent = t("recovery.restoreFailed");
@@ -474,7 +474,7 @@ export async function showRecoveryDialog(opts: {
               }
               allCheckpoints = await opts.loadCheckpoints();
               renderList();
-            } catch (error: unknown) {
+            } catch (error) {
               const message = error instanceof Error ? error.message : "Unknown error";
               showToast(t("recovery.toast.deleteFailed", { message }));
               statusText.textContent = t("recovery.deleteFailed");
@@ -559,7 +559,7 @@ export async function showRecoveryDialog(opts: {
     }
 
     await reload();
-  } catch (error: unknown) {
+  } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     showToast(t("recovery.toast.loadFailed", { message }));
     statusText.textContent = t("recovery.loadFailed");

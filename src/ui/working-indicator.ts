@@ -51,7 +51,7 @@ export class WorkingIndicator extends LitElement {
     if (this.active) this._startRotation();
   }
 
-  override updated(changed: Map<string, unknown>) {
+  override updated(changed: Map<string, DynamicValue>) {
     if (changed.has("active") || changed.has("primaryText") || changed.has("hintText")) {
       if (this.active) this._startRotation();
       else this._stopRotation();

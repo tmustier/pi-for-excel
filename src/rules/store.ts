@@ -19,11 +19,11 @@ export type RuleLevel = "user" | "workbook";
 export type RuleAction = "append" | "replace";
 
 export interface RulesStore {
-  get: (key: string) => Promise<unknown>;
-  set: (key: string, value: unknown) => Promise<void>;
+  get: (key: string) => Promise<DynamicValue>;
+  set: (key: string, value: DynamicValue) => Promise<void>;
 }
 
-function normalizeStoredText(value: unknown): string | null {
+function normalizeStoredText(value: DynamicValue): string | null {
   if (typeof value !== "string") return null;
 
   const trimmed = value.trim();

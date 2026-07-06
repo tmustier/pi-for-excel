@@ -154,7 +154,7 @@ export async function showExtensionsHubDialog(
         dispatchIntegrationsChanged({ reason });
         if (deps.onChanged) await deps.onChanged();
         if (successMsg) showToast(successMsg);
-      } catch (err: unknown) {
+      } catch (err) {
         showToast(t("extensions-hub.toast.error", { error: err instanceof Error ? err.message : String(err) }));
       } finally {
         busy = false;
@@ -245,7 +245,7 @@ export async function showExtensionsHubDialog(
     // ── Mount & initial render ─────────────────────
     try {
       await refreshAll();
-    } catch (err: unknown) {
+    } catch (err) {
       showToast(t("extensions-hub.toast.error", { error: err instanceof Error ? err.message : String(err) }));
     }
 

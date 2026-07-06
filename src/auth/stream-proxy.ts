@@ -264,11 +264,11 @@ function getSessionId(options: StreamOptions | undefined): string | undefined {
   return sessionId;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+function isAuthStreamProxyPayloadShape(value: DynamicValue): value is DynamicObject {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function summarizePayloadShape(payload: unknown): PayloadShapeSummary {
+function summarizePayloadShape(payload: DynamicValue): PayloadShapeSummary {
   if (payload === null) {
     return {
       rootType: "null",
@@ -286,7 +286,7 @@ function summarizePayloadShape(payload: unknown): PayloadShapeSummary {
     };
   }
 
-  if (!isRecord(payload)) {
+  if (!isAuthStreamProxyPayloadShape(payload)) {
     return {
       rootType: "primitive",
       topLevelKeys: [],
@@ -332,7 +332,7 @@ function setSessionContext(sessionId: string, context: Context): void {
   }
 }
 
-function upsertPayloadShape(call: number, payload: unknown): void {
+function upsertPayloadShape(call: number, payload: DynamicValue): void {
   let index = -1;
   for (let i = payloadSnapshots.length - 1; i >= 0; i -= 1) {
     if (payloadSnapshots[i].call === call) {

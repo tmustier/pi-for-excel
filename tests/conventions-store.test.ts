@@ -18,16 +18,16 @@ import {
 import type { StoredConventions } from "../src/conventions/types.ts";
 
 function createFakeStore(): {
-  get: (key: string) => Promise<unknown>;
-  set: (key: string, value: unknown) => Promise<void>;
-  data: Map<string, unknown>;
+  get: (key: string) => Promise<DynamicValue>;
+  set: (key: string, value: DynamicValue) => Promise<void>;
+  data: Map<string, DynamicValue>;
 } {
-  const data = new Map<string, unknown>();
+  const data = new Map<string, DynamicValue>();
 
   return {
     data,
     get: (key: string) => Promise.resolve(data.get(key)),
-    set: (key: string, value: unknown) => {
+    set: (key: string, value: DynamicValue) => {
       data.set(key, value);
       return Promise.resolve();
     },

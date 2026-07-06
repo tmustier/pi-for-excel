@@ -40,7 +40,7 @@ type PersistedSessionModel = SessionData["model"];
 
 type UserLikeMessage = AgentMessage & {
   role: "user" | "user-with-attachments";
-  content: unknown;
+  content: DynamicValue;
 };
 
 /**

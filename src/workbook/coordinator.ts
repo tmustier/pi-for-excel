@@ -75,7 +75,7 @@ interface WorkbookQueueState {
 
 const UNKNOWN_WORKBOOK = "workbook:unknown";
 
-function toError(error: unknown): Error {
+function toError(error: DynamicValue): Error {
   if (error instanceof Error) return error;
   return new Error(getErrorMessage(error));
 }
@@ -129,7 +129,7 @@ export function createWorkbookCoordinator(): WorkbookCoordinator {
         revision: getRevision(ctx.workbookId),
       });
       return result;
-    } catch (error: unknown) {
+    } catch (error) {
       emit({
         type: "failed",
         operationType: "read",
@@ -189,7 +189,7 @@ export function createWorkbookCoordinator(): WorkbookCoordinator {
               revision: state.revision,
             });
             resolve({ result, revision: state.revision });
-          } catch (error: unknown) {
+          } catch (error) {
             emit({
               type: "failed",
               operationType: "write",

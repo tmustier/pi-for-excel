@@ -1,8 +1,11 @@
+function isWorkbookRecoveryLogStorePayloadShape(value: DynamicValue): value is DynamicObject {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 /**
  * Persistence helpers for workbook recovery snapshots.
  */
 
-import { isRecord } from "../../utils/type-guards.js";
 import {
   clampRetentionLimit,
   MAX_RECOVERY_ENTRIES,
@@ -13,11 +16,11 @@ export const RECOVERY_SETTING_KEY = "workbook.recovery-snapshots.v1";
 
 export interface SettingsStoreLike {
   get<T>(key: string): Promise<T | null>;
-  set(key: string, value: unknown): Promise<void>;
+  set(key: string, value: DynamicValue): Promise<void>;
 }
 
-function isSettingsStoreLike(value: unknown): value is SettingsStoreLike {
-  if (!isRecord(value)) return false;
+function isSettingsStoreLike(value: DynamicValue): value is SettingsStoreLike {
+  if (!isWorkbookRecoveryLogStorePayloadShape(value)) return false;
 
   return (
     typeof value.get === "function" &&
@@ -29,7 +32,7 @@ export async function defaultGetSettingsStore(): Promise<SettingsStoreLike | nul
   try {
     const storageModule = await import("@earendil-works/pi-web-ui/dist/storage/app-storage.js");
     const appStorage = storageModule.getAppStorage();
-    const settings = isRecord(appStorage) ? appStorage.settings : null;
+    const settings = isWorkbookRecoveryLogStorePayloadShape(appStorage) ? appStorage.settings : null;
     return isSettingsStoreLike(settings) ? settings : null;
   } catch {
     return null;
@@ -38,13 +41,13 @@ export async function defaultGetSettingsStore(): Promise<SettingsStoreLike | nul
 
 export async function readPersistedWorkbookRecoveryPayload(
   settings: SettingsStoreLike | null,
-): Promise<unknown> {
+): Promise<DynamicValue> {
   if (!settings) {
     return null;
   }
 
   try {
-    return await settings.get<unknown>(RECOVERY_SETTING_KEY);
+    return await settings.get<DynamicValue>(RECOVERY_SETTING_KEY);
   } catch {
     return null;
   }
@@ -52,7 +55,7 @@ export async function readPersistedWorkbookRecoveryPayload(
 
 export async function writePersistedWorkbookRecoveryPayload(
   settings: SettingsStoreLike | null,
-  payload: unknown,
+  payload: DynamicValue,
 ): Promise<void> {
   if (!settings) {
     return;
@@ -74,7 +77,7 @@ export async function readRetentionLimit(): Promise<number> {
   if (!settings) return MAX_RECOVERY_ENTRIES;
 
   try {
-    const raw = await settings.get<unknown>(RETENTION_LIMIT_SETTING_KEY);
+    const raw = await settings.get<DynamicValue>(RETENTION_LIMIT_SETTING_KEY);
     return clampRetentionLimit(raw);
   } catch {
     return MAX_RECOVERY_ENTRIES;

@@ -256,7 +256,7 @@ function createKeyStep(
 
         status.textContent = t("web-search-setup.keySavedValidation", { message: result.message });
         status.className = "pi-search-setup__status is-warn";
-      } catch (error: unknown) {
+      } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         status.textContent = t("web-search-setup.error", { message });
         status.className = "pi-search-setup__status is-error";
@@ -415,6 +415,6 @@ export function mountSearchSetupCard(container: HTMLElement, details: WebSearchD
  * Returns true when the details indicate a web search failure that should
  * show the inline setup card.
  */
-export function shouldShowSearchSetupCard(details: unknown): details is WebSearchDetails {
+export function shouldShowSearchSetupCard(details: DynamicValue): details is WebSearchDetails {
   return isWebSearchDetails(details) && details.ok === false;
 }

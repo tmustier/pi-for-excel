@@ -47,9 +47,9 @@ interface ReadRangeResult {
   address: string;
   rows: number;
   cols: number;
-  values: unknown[][];
-  formulas: unknown[][];
-  numberFormats: unknown[][];
+  values: DynamicValue[][];
+  formulas: DynamicValue[][];
+  numberFormats: DynamicValue[][];
   comments: CommentSummary[];
 }
 
@@ -145,7 +145,7 @@ export function createReadRangeTool(): AgentTool<typeof schema> {
 
           return formatDetailed(fullAddress, result, startCell, resolvedLabels);
         }
-      } catch (e: unknown) {
+      } catch (e) {
         return {
           content: [{ type: "text", text: `Error reading "${params.range}": ${getErrorMessage(e)}` }],
           details: undefined,
@@ -170,7 +170,7 @@ function isCellInRange(cellAddr: string, rangeAddr: string): boolean {
   );
 }
 
-function hasAnyNonEmptyCell(values: unknown[][]): boolean {
+function hasAnyNonEmptyCell(values: DynamicValue[][]): boolean {
   for (const row of values) {
     for (const v of row) {
       if (v !== null && v !== undefined && v !== "") return true;
@@ -179,21 +179,21 @@ function hasAnyNonEmptyCell(values: unknown[][]): boolean {
   return false;
 }
 
-function formatAsExcelMarkdownTable(values: unknown[][], startCell: string): string {
+function formatAsExcelMarkdownTable(values: DynamicValue[][], startCell: string): string {
   if (!values || values.length === 0) return "(empty)";
 
   const start = parseCell(startCell);
   const numCols = Math.max(...values.map((r) => r.length));
 
-  const header: unknown[] = [""];
+  const header: DynamicValue[] = [""];
   for (let c = 0; c < numCols; c++) {
     header.push(colToLetter(start.col + c));
   }
 
-  const rows: unknown[][] = [header];
+  const rows: DynamicValue[][] = [header];
 
   for (let r = 0; r < values.length; r++) {
-    const row: unknown[] = [start.row + r, ...values[r]];
+    const row: DynamicValue[] = [start.row + r, ...values[r]];
     while (row.length < numCols + 1) row.push("");
     rows.push(row);
   }
@@ -324,7 +324,7 @@ function formatDetailed(
 
 /* ── CSV helpers (migrated from get-range-as-csv) ──────────────────── */
 
-function toCsvField(value: unknown): string {
+function toCsvField(value: DynamicValue): string {
   if (value === null || value === undefined) return "";
   if (typeof value === "string") return value.includes(",") || value.includes('"') || value.includes("\n") || value.includes("\r") ? `"${value.replace(/"/g, '""')}"` : value;
   const str = typeof value === "number" || typeof value === "boolean" ? String(value) : JSON.stringify(value);
@@ -334,7 +334,7 @@ function toCsvField(value: unknown): string {
   return str;
 }
 
-function valuesToCsv(values: unknown[][]): string {
+function valuesToCsv(values: DynamicValue[][]): string {
   if (!values || values.length === 0) return "";
   return values
     .map((row) => row.map((v) => toCsvField(v)).join(","))
