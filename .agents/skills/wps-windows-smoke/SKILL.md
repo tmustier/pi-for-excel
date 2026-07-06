@@ -21,9 +21,9 @@ Be explicit about the test level:
 - Initial Windows ARM networking may look fine from QEMU but fail in the guest. Inbox `e1000e`/USB NICs did not give reliable internet; stage `NetKVM\w11\ARM64\netkvm.inf` from `virtio-win.iso`, then switch QEMU to `virtio-net-pci`.
 - Do **not** mount helper/payload/driver ISOs at boot once Windows is installed if EFI starts mapping only the USB device. Boot minimal, then hot-attach ISOs after Windows is up.
 - If EFI drops to shell, boot Windows with `FS0:\EFI\Microsoft\Boot\bootmgfw.efi` (sometimes partition numbers shift; inspect the mapping table).
-- With QEMU user networking, the Windows guest reaches the macOS host at `10.0.2.2`; do not use `localhost` for taskpane/plugin URLs inside WPS.
+- With QEMU user networking, the Windows guest reaches the macOS host at `10.0.2.2`; do not use guest `localhost` for the real taskpane URL. Exception: for the WPS **publish/install page and add-in root** in personal publish-mode tests, prefer guest `http://127.0.0.1:3889/` backed by a Windows `netsh portproxy` to `10.0.2.2:3889`. Edge pages loaded from `10.0.2.2` may not be able to talk to WPS' local relay at `127.0.0.1:58890`, while pages loaded from guest-localhost can show the real WPS trust prompt. Keep `/src/taskpane.html` on `http://10.0.2.2:3141` so the `/__pi-auth` guest-blocking boundary is still tested.
 - Once VirtIO networking works, prefer **WinRM** for all guest commands. VNC typing is fragile, especially with UK keyboard punctuation and passwords containing symbols.
-- WPS personal builds `>= 12.1.0.16910` restrict the enterprise/local `jsplugins.xml`/`oem.ini` path. If a direct `jsplugins.xml` registration silently does nothing, use the **`wpsjs publish` publish-page flow** rather than burning time.
+- WPS personal builds `>= 12.1.0.16910` restrict the enterprise/local `jsplugins.xml`/`oem.ini` path. If a direct `jsplugins.xml` registration silently does nothing, use the **`wpsjs publish` publish-page flow** rather than burning time. Do not hand-edit `authaddin.json` as proof: WPS may regenerate `enable:false`, or if forced to `true` may create `%APPDATA%\Kingsoft\wps\jsaddons\jsaddinblockhost.ini` and suppress ribbon actions. The real trust path is the WPS modal headed `是否信任并安装第三方WPS加载项 ...`.
 - WPS template callback spelling is `OnAddinLoad`; keep the repo's `OnAddInLoad` alias too so either ribbon spelling works.
 - Real WPS requests add-in-root `/index.html`; it must load `main.js`. Do not assume `wpsjs publish` or WPS generates this entrypoint.
 - WPS's publish-page validator expects `ribbon.xml` to start with `<customUI`; an XML declaration prefix can make the row show `无效` even when WPS can fetch the file.
@@ -90,7 +90,7 @@ npm run dev > /tmp/pi-for-excel-wps-vite.log 2>&1 &
 
 .agents/skills/wps-windows-smoke/scripts/prepare-wps-plugin.mjs \
   --taskpane-url http://10.0.2.2:3141/src/taskpane.html \
-  --plugin-url http://10.0.2.2:3889/ \
+  --plugin-url http://127.0.0.1:3889/ \
   --publish \
   --serve 3889
 ```
@@ -104,7 +104,8 @@ $ProgressPreference = 'SilentlyContinue'
   'http://10.0.2.2:3141/src/taskpane.html',
   'http://10.0.2.2:3889/ribbon.xml',
   'http://10.0.2.2:3889/main.js',
-  'http://10.0.2.2:3889/publish.html'
+  'http://10.0.2.2:3889/publish.html',
+  'http://127.0.0.1:3889/publish.html'
 ) | ForEach-Object {
   $r = Invoke-WebRequest -UseBasicParsing -Uri $_ -TimeoutSec 10
   "$($_) -> $($r.StatusCode) $($r.Content.Length)"
@@ -158,16 +159,21 @@ If the capture is black, the Windows display is probably locked/asleep. Wake/unl
    ```
 2. Write the feature-specific test plan above. Avoid broad “prove everything” prompts.
 3. Start pi-for-excel dev server on macOS (`npm run dev`); Vite binds `::`/3141 by default.
-4. Generate and serve the WPS test add-in with `prepare-wps-plugin.mjs --publish --serve`.
-5. In Windows, open `http://10.0.2.2:3889/publish.html` in Edge and install the WPS add-in. Use this personal publish flow before trying `jsplugins.xml`. If Edge asks to open WPS Office, allow it; if direct service deployment is needed, POST the page's base64 payload to `http://127.0.0.1:58890/deployaddons/runParams` and approve the WPS trust prompt.
-6. Launch direct Spreadsheets (`et.exe`) rather than the WPS home shell if the home/login webview crashes.
-7. Confirm the baseline environment is valid:
+4. Generate and serve the WPS test add-in with `prepare-wps-plugin.mjs --publish --serve`. For personal publish-mode VM work, set `--plugin-url http://127.0.0.1:3889/` and configure Windows portproxy:
+   ```powershell
+   netsh interface portproxy delete v4tov4 listenaddress=127.0.0.1 listenport=3889 2>$null
+   netsh interface portproxy add v4tov4 listenaddress=127.0.0.1 listenport=3889 connectaddress=10.0.2.2 connectport=3889
+   ```
+5. In Windows, open `http://127.0.0.1:3889/publish.html` in Edge and install the WPS add-in. Use this personal publish flow before trying `jsplugins.xml`. If Edge asks to open WPS Office, allow it, refresh the page after the relay starts if rows do not populate, click the `PiForExcelSmokePublish` install row, then approve the WPS trust modal (`信任并安装`). Do **not** treat a direct WinRM POST to `http://127.0.0.1:58890/deployaddons/runParams` as equivalent; it can hang/skip the user trust path and does not prove product installability.
+6. After install, verify `publish.xml` and `authwebsite.xml` contain the same origin (`http://127.0.0.1:3889`). If WPS later writes `authaddin.json` with `enable:false`, or creates `jsaddinblockhost.ini` after a forced edit, record that as the current WPS trust/action blocker rather than manually overriding it in a proof run.
+7. Launch direct Spreadsheets (`et.exe`) rather than the WPS home shell if the home/login webview crashes.
+8. Confirm the baseline environment is valid:
    - for product-level tests, the taskpane loads the real Pi app from `http://10.0.2.2:3141/src/taskpane.html`
    - for low-level probes, the taskpane URL is clearly recorded as a custom probe URL and the result is not described as Pi sidebar/agent proof
    - host kind resolves to WPS, not Office/browser, when the real Pi app is under test
    - the Pi ribbon tab and **Open Pi** button are visible
    - the target add-in build/commit is the one under test
-8. Execute only the feature-specific action from the plan. Examples:
+9. Execute only the feature-specific action from the plan. Examples:
    - **Packaging/install:** reinstall via `publish.html`, inspect WPS publish/install state, verify the Pi ribbon appears after WPS restart.
    - **Taskpane boot:** open **Open Pi**, capture taskpane load/console state, verify no boot-time compatibility error.
    - **Host detection:** ask Pi or inspect logs to verify WPS host selection and workbook context, without mutating the workbook.
@@ -176,7 +182,7 @@ If the capture is black, the Windows display is probably locked/asleep. Wake/unl
    - **Unsupported tools:** deliberately invoke the unsupported WPS path and confirm a typed `unsupported_host_tool` error, not an Office.js fallback.
    - **Auth/model flow:** verify provider setup and a small prompt response without exposing tokens or local credential paths. State whether this was a fresh OAuth login or dev auth restore via `/__pi-auth`.
    - **Regression reproduction:** reproduce the exact issue steps first, then rerun after the fix with the same fixture.
-9. Capture evidence tied to the target feature. Include at least one screenshot or video plus a text log/command output. For chat-driven writes, capture both the prompt visible in the real composer and the final selected cell/formula bar. Include residual risks or gaps instead of calling unrelated behavior “covered.”
+10. Capture evidence tied to the target feature. Include at least one screenshot or video plus a text log/command output. For chat-driven writes, capture both the prompt visible in the real composer and the final selected cell/formula bar. Include residual risks or gaps instead of calling unrelated behavior “covered.”
 
 ## Historical evidence from first successful route
 

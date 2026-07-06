@@ -13,7 +13,11 @@ is separately verified.
   path for workbook identity, theme, packaging, and all workbook tools.
 - **WPS Spreadsheets:** detected at boot via the `wps` / `Application` JSAPI
   globals. Phase 2 implements privacy-preserving workbook identity plus a
-  vertical slice of workbook tools against the synchronous WPS ET JSAPI.
+  vertical slice of workbook tools against the synchronous WPS ET JSAPI. A
+  stricter product proof through the real `/src/taskpane.html` sidebar remains
+  open: WPS personal 12.1.0.26200 can install and fetch the add-in, but may
+  suppress ribbon actions after trust/install (see "Current product-proof
+  blocker" below).
 - **Browser:** existing local-dev/UI-gallery fallback, used only when Office.js
   is absent. No workbook API is available.
 
@@ -49,7 +53,7 @@ workbook context.
 | Host/distribution | Support stance | Add-in route | Notes |
 |---|---|---|---|
 | Microsoft Excel | Supported | Office Add-in manifest + Office.js | Existing production path. |
-| China WPS personal (`wps.cn`) | Phase 2 backend implemented; personal publish-mode smoke completed on WPS 12.1.0.26200 | `wpsjs publish` flow | Recommended WPS route. Installs write `publish.xml` under `%appdata%/kingsoft/wps/jsaddons` on Windows or `~/.local/share/Kingsoft/wps/jsaddons` on Linux. |
+| China WPS personal (`wps.cn`) | Phase 2 backend implemented; strict product proof blocked on ribbon-action trust state in WPS 12.1.0.26200 | `wpsjs publish` flow | Recommended WPS route. Installs write `publish.xml` under `%appdata%/kingsoft/wps/jsaddons` on Windows or `~/.local/share/Kingsoft/wps/jsaddons` on Linux. In the QEMU harness, use a guest-localhost publish/add-in URL (`http://127.0.0.1:3889/`) plus portproxy to the macOS host; keep the taskpane URL on `http://10.0.2.2:3141/src/taskpane.html`. |
 | WPS 365 enterprise | Phase 2 backend implemented; enterprise deployment smoke pending | Publish mode or managed `jsplugins.xml` via `oem.ini` | `jsplugins.xml` mode is for enterprise/OEM repack scenarios. |
 | International WPS (`wps.com`) | Unsupported for now | N/A | Public docs and JSAPI/plugin routes differ; do not claim support until verified. |
 | Browser/dev server | Supported for UI testing only | Vite dev server | No workbook API; mirrors existing no-Office fallback. |
@@ -118,6 +122,15 @@ For packaging, set/replace `PI_WPS_TASKPANE_URL` (or patch the constant in
    - Linux: `~/.local/share/Kingsoft/wps/jsaddons`
 6. Restart WPS and open Spreadsheets (ET). The Pi tab should expose **Open Pi**.
 
+For the local Windows/QEMU harness, load `publish.html` from guest-localhost
+(`http://127.0.0.1:3889/publish.html`) via a Windows `netsh portproxy` to the
+macOS plugin server. This lets Edge talk to WPS' relay server at
+`127.0.0.1:58890` and surfaces the real WPS trust dialog
+(`信任并安装`). Loading the publish page from `http://10.0.2.2:3889` can leave the
+page unable to populate install rows or can skip the browser-local relay path.
+The installed add-in root should also be `http://127.0.0.1:3889/` in this
+harness; the Pi taskpane URL remains `http://10.0.2.2:3141/src/taskpane.html`.
+
 ### 2. `jsplugins.xml` mode (enterprise/OEM repack only)
 
 Use only where the organization controls WPS packaging/configuration. Since WPS
@@ -161,10 +174,32 @@ Evidence artifacts from the first smoke run live outside the repo under
   prove the real Pi sidebar/chat, `execute_wps_js`, or typed Pi `charts` tool can
   create charts on WPS.
 
+## Current product-proof blocker
+
+Strict product-level proof is blocked in the current personal WPS
+12.1.0.26200 VM by WPS' post-install trust/action state:
+
+- A real local publish-page install can show and approve the WPS trust modal.
+  It writes `publish.xml` and `authwebsite.xml` for `http://127.0.0.1:3889`.
+- On WPS launch, the client fetches `ribbon.xml`; when `authaddin.json` is left
+  untouched WPS may write `enable:false` and avoid loading the full add-in.
+- Forcing `authaddin.json` to `enable:true` is not a valid product proof. In
+  the current VM it loads `manifest.xml`, `index.html`, `main.js`, and
+  `js/ribbon.js`, but WPS then creates `jsaddinblockhost.ini`; the Pi tab/button
+  becomes visible with a grey/inert **Open Pi** action. `GetImage` can run
+  (`pi.svg` fetched), while `onAction` does not fire.
+
+Do not claim product-complete WPS support until this trust/action blocker is
+resolved through a supported WPS account, enterprise-managed deployment, WPS
+365 configuration, or another WPS-supported approval path.
+
 ## Open verification gaps
 
 - Enterprise/OEM `jsplugins.xml` deployment remains unsmoked on a managed WPS
   build; personal WPS 12.1.0.16910+ should use publish mode.
+- China WPS personal visitor-mode/account requirements for third-party JS
+  add-in actions remain unresolved. The current VM shows a visitor-mode login
+  banner while actions are suppressed.
 - The WPS taskpane docs currently document `Application.CreateTaskpane(url)`;
   the skeleton also tries the `wps.CreateTaskPane(url)` form referenced in WPS
   add-in guidance for compatibility.
