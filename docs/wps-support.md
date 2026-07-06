@@ -188,6 +188,10 @@ Strict product-level proof is blocked in the current personal WPS
   `js/ribbon.js`, but WPS then creates `jsaddinblockhost.ini`; the Pi tab/button
   becomes visible with a grey/inert **Open Pi** action. `GetImage` can run
   (`pi.svg` fetched), while `onAction` does not fire.
+- The same block reproduces with a minimal official-style ET add-in containing
+  only `index.html`, `main.js`, `ribbon.xml`, `OnAddinLoad`, and an `OnAction`
+  that calls `alert('MIN_ACTION_FIRED')`. This rules out Pi taskpane code,
+  provider/auth code, and nested `js/ribbon.js` as the cause.
 
 Do not claim product-complete WPS support until this trust/action blocker is
 resolved through a supported WPS account, enterprise-managed deployment, WPS
