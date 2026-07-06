@@ -4,8 +4,9 @@
  * `@earendil-works/pi-ai` ships an OpenAI Codex OAuth provider that relies on a
  * local Node callback server, which cannot run inside Office webviews.
  *
- * This implementation keeps the same OAuth endpoints/client config, but uses a
- * manual paste flow (redirect URL or code#state) so login works in-browser.
+ * This implementation keeps the same OAuth endpoints/client config, then accepts
+ * either an auto-captured local callback URL from the proxy helper or a manual
+ * paste fallback (redirect URL or code#state) so login works in-browser.
  */
 
 import type {
@@ -315,8 +316,8 @@ export async function loginOpenAICodexInBrowser(
   callbacks.onAuth({
     url: flow.url,
     instructions:
-      "After login, your browser will show a page that says \"can't be reached\" \u2014 that's expected! " +
-      "Copy the full URL from the browser address bar and paste it back in Pi for Excel.",
+      "After login, Pi for Excel will try to capture the localhost callback automatically if the local proxy is running. " +
+      "If it does not continue, copy the full callback URL from the browser address bar and paste it back in Pi for Excel.",
   });
 
   if (callbacks.signal?.aborted) {

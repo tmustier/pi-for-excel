@@ -55,6 +55,7 @@ async function startProxy(extraEnv = {}) {
       HOST: "127.0.0.1",
       PORT: String(port),
       ALLOWED_ORIGINS: ORIGIN,
+      OAUTH_CALLBACK_SERVER: "0",
       ...extraEnv,
     },
     stdio: ["ignore", "pipe", "pipe"],
@@ -108,6 +109,7 @@ async function startProxyOnDefaultPort(extraEnv = {}) {
   Object.assign(env, {
     HOST: "127.0.0.1",
     ALLOWED_ORIGINS: ORIGIN,
+    OAUTH_CALLBACK_SERVER: "0",
     ...extraEnv,
   });
 
@@ -162,6 +164,24 @@ async function startProxyOnDefaultPort(extraEnv = {}) {
     stop: () => stopChild(child),
     getLogs: () => ({ stdout, stderr }),
   };
+}
+
+async function waitForHttpStatus(url, expectedStatus) {
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    try {
+      const response = await fetch(url);
+      if (response.status === expectedStatus) {
+        await response.body?.cancel();
+        return;
+      }
+    } catch {
+      // Server may not be listening yet.
+    }
+
+    await delay(50);
+  }
+
+  throw new Error(`Timed out waiting for ${url} to return ${expectedStatus}`);
 }
 
 async function startMockTarget(responseText = "ok", extraHeaders = {}) {
@@ -395,6 +415,97 @@ test("proxy blocks requests without an allowed Origin header", async (t) => {
     headers: { Origin: "https://evil.example.com" },
   });
   assert.equal(badOrigin.status, 403);
+});
+
+test("proxy captures OAuth callbacks for supported localhost providers", async (t) => {
+  const callbackPorts = {
+    openai: await getFreePort(),
+    anthropic: await getFreePort(),
+    gemini: await getFreePort(),
+    antigravity: await getFreePort(),
+  };
+  const proxy = await startProxy({
+    OAUTH_CALLBACK_SERVER: "1",
+    OAUTH_CALLBACK_HOST: "127.0.0.1",
+    OPENAI_OAUTH_CALLBACK_PORT: String(callbackPorts.openai),
+    ANTHROPIC_OAUTH_CALLBACK_PORT: String(callbackPorts.anthropic),
+    GOOGLE_GEMINI_CLI_OAUTH_CALLBACK_PORT: String(callbackPorts.gemini),
+    GOOGLE_ANTIGRAVITY_OAUTH_CALLBACK_PORT: String(callbackPorts.antigravity),
+  });
+  t.after(async () => {
+    await proxy.stop();
+  });
+
+  const cases = [
+    {
+      id: "openai-codex",
+      label: "OpenAI ChatGPT",
+      port: callbackPorts.openai,
+      path: "/auth/callback",
+      state: "openai_state-123",
+      code: "openai-code-secret",
+    },
+    {
+      id: "anthropic",
+      label: "Anthropic",
+      port: callbackPorts.anthropic,
+      path: "/callback",
+      state: "anthropic_state-123",
+      code: "anthropic-code-secret",
+    },
+    {
+      id: "google-gemini-cli",
+      label: "Google Code Assist",
+      port: callbackPorts.gemini,
+      path: "/oauth2callback",
+      state: "gemini_state-123",
+      code: "gemini-code-secret",
+    },
+    {
+      id: "google-antigravity",
+      label: "Google Antigravity",
+      port: callbackPorts.antigravity,
+      path: "/oauth-callback",
+      state: "antigravity_state-123",
+      code: "antigravity-code-secret",
+    },
+  ];
+
+  await Promise.all(cases.map((entry) => waitForHttpStatus(`http://127.0.0.1:${entry.port}/not-found`, 404)));
+
+  for (const entry of cases) {
+    const callbackUrl =
+      `http://127.0.0.1:${entry.port}${entry.path}?` +
+      `code=${encodeURIComponent(entry.code)}&state=${encodeURIComponent(entry.state)}`;
+    const callbackResponse = await fetch(callbackUrl);
+    assert.equal(callbackResponse.status, 200);
+    assert.match(await callbackResponse.text(), new RegExp(`${entry.label} login captured`));
+
+    const pollResponse = await fetch(
+      `http://127.0.0.1:${proxy.port}/oauth/callback/${entry.id}?state=${encodeURIComponent(entry.state)}`,
+      { headers: { Origin: ORIGIN } },
+    );
+    assert.equal(pollResponse.status, 200);
+
+    const payload = await pollResponse.json();
+    assert.equal(payload.status, "ready");
+    assert.equal(payload.providerId, entry.id);
+    assert.equal(payload.code, entry.code);
+    assert.equal(payload.state, entry.state);
+    assert.equal(payload.url, callbackUrl);
+    assert.equal(typeof payload.receivedAt, "number");
+  }
+
+  const noOrigin = await fetch(
+    `http://127.0.0.1:${proxy.port}/oauth/callback/openai-codex?state=${encodeURIComponent(cases[0].state)}`,
+  );
+  assert.equal(noOrigin.status, 403);
+
+  const unsupportedProvider = await fetch(
+    `http://127.0.0.1:${proxy.port}/oauth/callback/github-copilot?state=device-code-flow`,
+    { headers: { Origin: ORIGIN } },
+  );
+  assert.equal(unsupportedProvider.status, 404);
 });
 
 test("proxy /healthz responds without an Origin header and never proxies", async (t) => {

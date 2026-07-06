@@ -3,7 +3,8 @@
  *
  * pi-ai's built-in Anthropic OAuth provider starts a Node callback server, which
  * is not available inside the Office taskpane WebView. This mirrors the same
- * authorization-code + PKCE flow but uses the existing manual paste prompt.
+ * authorization-code + PKCE flow and accepts either a proxy-captured callback
+ * URL or the existing manual paste fallback.
  */
 
 import type {
@@ -154,7 +155,8 @@ export async function loginAnthropicInBrowser(callbacks: OAuthLoginCallbacks): P
   callbacks.onAuth({
     url: flow.url,
     instructions:
-      "Complete login in your browser. If the browser cannot reach localhost, copy the final redirect URL and paste it back in Pi for Excel.",
+      "After login, Pi for Excel will try to capture the localhost callback automatically if the local proxy is running. " +
+      "If it does not continue, copy the full callback URL from the browser address bar and paste it back in Pi for Excel.",
   });
 
   if (callbacks.signal?.aborted) {

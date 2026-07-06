@@ -34,6 +34,7 @@ node scripts/cors-proxy-server.mjs --https
 | `ALLOWED_TARGET_HOSTS` | built-in provider allowlist | Comma-separated hosts the proxy may forward to. For a locked-down org, set exactly the hosts of your approved providers, e.g. `api.deepseek.com` or an internal gateway host. **When explicitly set, this allowlist also applies to loopback/private targets** — the override flags below cannot bypass it. |
 | `ALLOW_PRIVATE_TARGETS=1` | off | Required only if a target is a private/internal address (e.g. an on-prem LLM gateway at `10.x.x.x`). With an explicit `ALLOWED_TARGET_HOSTS`, the private IP or gateway hostname must **also** be listed there (e.g. `ALLOWED_TARGET_HOSTS=api.deepseek.com,10.97.193.77`) — other private addresses stay blocked. Without an explicit allowlist (legacy local behavior), this flag allows *any* private target: never run that combination on a shared proxy. |
 | `STRICT_TARGET_RESOLUTION=1` | off | Reject targets whose DNS doesn't resolve. Recommended on servers. |
+| `OAUTH_CALLBACK_SERVER=0` | on | Disable the local OAuth callback listeners (ChatGPT, Anthropic, and Google localhost redirect ports). These listeners are useful for per-user local proxies, but central proxies should usually disable them because users' browsers redirect to their own localhost, not the central server. |
 
 Do **not** set `ALLOW_ALL_TARGET_HOSTS=1` on a shared proxy.
 
@@ -50,6 +51,7 @@ ALLOWED_ORIGINS=https://pi-excel.example.com \
 ALLOWED_TARGET_HOSTS=api.deepseek.com,internal-llm.example.com \
 ALLOW_PRIVATE_TARGETS=1 \
 STRICT_TARGET_RESOLUTION=1 \
+OAUTH_CALLBACK_SERVER=0 \
 node scripts/cors-proxy-server.mjs
 ```
 

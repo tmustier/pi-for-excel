@@ -9,6 +9,7 @@
 
 import { getAppStorage } from "@earendil-works/pi-web-ui/dist/storage/app-storage.js";
 import { isCorsError } from "@earendil-works/pi-web-ui/dist/utils/proxy-utils.js";
+import { pollOAuthCallbackCapture } from "../auth/oauth-callback-capture.js";
 import { getOAuthProvider } from "../auth/oauth-provider-registry.js";
 import { clearOAuthCredentials, saveOAuthCredentials } from "../auth/oauth-storage.js";
 import {
@@ -191,6 +192,13 @@ const OAUTH_IDS_NEEDING_PROXY = new Set([
   "github-copilot",
 ]);
 
+const OAUTH_CALLBACK_CAPTURE_IDS = new Set([
+  "anthropic",
+  "openai-codex",
+  "google-gemini-cli",
+  "google-antigravity",
+]);
+
 export interface ProviderDef {
   id: string;
   label: string;
@@ -200,7 +208,7 @@ export interface ProviderDef {
 
 export const ALL_PROVIDERS: ProviderDef[] = [
   // OAuth providers first (subscription / account-based flows)
-  // Only list flows that are supported in-browser (PKCE/manual paste, no local callback server).
+  // Only list flows that are supported in-browser (PKCE with proxy-assisted or manual callback handling).
   // desc holds a locale key (resolved via t() at render time in buildProviderRow).
   { id: "anthropic",          label: /* brand */ "Anthropic",                oauth: "anthropic",          desc: "provider.desc.claude" },
   { id: "openai-codex",       label: /* brand */ "OpenAI (ChatGPT)",         oauth: "openai-codex",       desc: "provider.desc.openai_sub" },
@@ -282,6 +290,7 @@ function looksLikeOAuthRedirectInput(value: string): boolean {
     value.includes("#")
     || value.includes("code=")
     || lower.startsWith("http://localhost:1455/")
+    || lower.startsWith("http://localhost:53692/")
     || lower.startsWith("http://localhost:8085/")
     || lower.startsWith("http://localhost:51121/")
     || lower.startsWith("https://auth.openai.com/")
@@ -289,6 +298,17 @@ function looksLikeOAuthRedirectInput(value: string): boolean {
     || lower.includes("oauth2callback")
     || lower.includes("oauth-callback")
   );
+}
+
+function getOAuthStateFromAuthUrl(authUrl: string | null): string | undefined {
+  if (!authUrl) return undefined;
+
+  try {
+    const state = new URL(authUrl).searchParams.get("state");
+    return state && state.length > 0 ? state : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function normalizeApiKeyForProvider(
@@ -487,6 +507,10 @@ function promptForText(opts: {
   helperText?: string;
   submitLabel?: string;
   externalUrl?: string;
+  autoCapture?: {
+    providerId: string;
+    state: string;
+  };
 }): Promise<string> {
   return new Promise((resolve, reject) => {
     closeOverlayById(PROVIDER_PROMPT_OVERLAY_ID);
@@ -508,6 +532,10 @@ function promptForText(opts: {
     const helperEl = document.createElement("p");
     helperEl.className = "pi-prompt-helper";
     helperEl.hidden = true;
+
+    const captureStatusEl = document.createElement("p");
+    captureStatusEl.className = "pi-prompt-helper";
+    captureStatusEl.hidden = true;
 
     const input = document.createElement("input");
     input.className = "pi-prompt-input";
@@ -533,7 +561,7 @@ function promptForText(opts: {
     okBtn.textContent = opts.submitLabel ?? t("provider.prompt.continue");
 
     actions.append(cancelBtn, okBtn);
-    dialog.card.append(titleEl, messageEl, helperEl, externalUrlEl, input, actions);
+    dialog.card.append(titleEl, messageEl, helperEl, externalUrlEl, captureStatusEl, input, actions);
 
     if (opts.helperText) {
       helperEl.textContent = opts.helperText;
@@ -570,12 +598,14 @@ function promptForText(opts: {
     }
 
     let settled = false;
+    let captureAbortController: AbortController | undefined;
 
     const submit = (): void => {
       if (settled) {
         return;
       }
 
+      captureAbortController?.abort();
       settled = true;
       const value = input.value.trim();
       dialog.close();
@@ -587,6 +617,7 @@ function promptForText(opts: {
         return;
       }
 
+      captureAbortController?.abort();
       settled = true;
       dialog.close();
       reject(new PromptCancelledError());
@@ -609,6 +640,7 @@ function promptForText(opts: {
       cancelBtn.removeEventListener("click", cancel);
       okBtn.removeEventListener("click", submit);
       input.removeEventListener("keydown", onInputKeyDown);
+      captureAbortController?.abort();
 
       if (!settled) {
         settled = true;
@@ -617,6 +649,36 @@ function promptForText(opts: {
     });
 
     dialog.mount();
+
+    if (opts.autoCapture) {
+      captureStatusEl.textContent = t("provider.oauth.capture_waiting");
+      captureStatusEl.hidden = false;
+      captureAbortController = new AbortController();
+
+      void pollOAuthCallbackCapture({
+        providerId: opts.autoCapture.providerId,
+        state: opts.autoCapture.state,
+        signal: captureAbortController.signal,
+      }).then(
+        (capture) => {
+          if (settled) return;
+          if (!capture) {
+            captureStatusEl.textContent = t("provider.oauth.capture_fallback");
+            return;
+          }
+
+          captureStatusEl.textContent = t("provider.oauth.capture_captured");
+          input.value = capture.url;
+          submit();
+        },
+        (error: unknown) => {
+          if (settled) return;
+          if (error instanceof Error && error.name === "AbortError") return;
+          captureStatusEl.textContent = t("provider.oauth.capture_fallback");
+        },
+      );
+    }
+
     requestAnimationFrame(() => input.focus());
   });
 }
@@ -779,6 +841,13 @@ export function buildProviderRow(
                       ? t("provider.oauth.helper.google")
                       : undefined;
 
+                const oauthCallbackProviderId = oauth && OAUTH_CALLBACK_CAPTURE_IDS.has(oauth)
+                  ? oauth
+                  : undefined;
+                const oauthCallbackState = oauthCallbackProviderId
+                  ? getOAuthStateFromAuthUrl(authUrlRef.current)
+                  : undefined;
+
                 const value = await promptForText({
                   title: t("provider.login_with", { label }),
                   message: prompt.message,
@@ -786,6 +855,9 @@ export function buildProviderRow(
                   helperText,
                   submitLabel: t("provider.prompt.continue"),
                   externalUrl: authUrlRef.current ?? undefined,
+                  autoCapture: oauthCallbackProviderId && oauthCallbackState
+                    ? { providerId: oauthCallbackProviderId, state: oauthCallbackState }
+                    : undefined,
                 });
 
                 if (id === "anthropic") {

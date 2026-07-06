@@ -122,7 +122,8 @@ Notes:
 1. In `/login`, click **Login with …**
 2. Complete login in the browser window that opens
 3. Return to Excel and complete any prompt shown
-   - For OpenAI + Google OAuth flows, your browser will land on a page that says **"can't be reached"** — that's normal! Copy the full URL from the browser address bar and paste it when prompted in Pi for Excel
+   - With the local proxy running, ChatGPT, Anthropic, and Google OAuth should continue automatically after the browser redirects to localhost.
+   - If automatic capture is unavailable, your browser may land on a page that says **"can't be reached"** — that's normal! Copy the full URL from the browser address bar and paste it when prompted in Pi for Excel.
    - Some Google workspace tiers may also ask for a Google Cloud project ID during setup
 
 If login fails with a CORS/network error, follow the next section.
@@ -180,6 +181,7 @@ curl -k -i -s \
 Notes:
 - Keep the proxy URL on **HTTPS** (`https://...`), not HTTP.
 - API-key providers generally work without proxy.
+- The local proxy also starts loopback-only callback listeners for browser OAuth flows so ChatGPT (`http://localhost:1455/auth/callback`), Anthropic (`http://localhost:53692/callback`), Google Code Assist (`http://localhost:8085/oauth2callback`), and Google Antigravity (`http://localhost:51121/oauth-callback`) can capture browser callbacks automatically. If a port is busy, the affected login still works via the manual URL paste fallback.
 - If port `3003` is busy, `npx pi-for-excel-proxy` automatically chooses a random free port. Copy the printed `https://localhost:<port>` URL into `/settings` → **Proxy**.
 - To force a specific port, set `PORT` and use that same URL in settings:
 

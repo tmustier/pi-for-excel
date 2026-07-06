@@ -63,6 +63,39 @@ function parsePort(rawPort) {
 
 const PORT = hasExplicitPort ? parsePort(process.env.PORT) : DEFAULT_PORT;
 
+const OAUTH_CALLBACK_HOST = process.env.OAUTH_CALLBACK_HOST || "localhost";
+const OAUTH_CALLBACK_SERVER_ENABLED = !["0", "false", "no"].includes(
+  (process.env.OAUTH_CALLBACK_SERVER || "").trim().toLowerCase(),
+);
+const OAUTH_CALLBACK_CAPTURE_TTL_MS = 10 * 60 * 1000;
+const MAX_OAUTH_CALLBACK_CAPTURES = 32;
+const OAUTH_CALLBACK_PROVIDER_CONFIGS = [
+  {
+    providerId: "openai-codex",
+    label: "OpenAI ChatGPT",
+    path: "/auth/callback",
+    port: parsePort(process.env.OPENAI_OAUTH_CALLBACK_PORT || "1455"),
+  },
+  {
+    providerId: "anthropic",
+    label: "Anthropic",
+    path: "/callback",
+    port: parsePort(process.env.ANTHROPIC_OAUTH_CALLBACK_PORT || "53692"),
+  },
+  {
+    providerId: "google-gemini-cli",
+    label: "Google Code Assist",
+    path: "/oauth2callback",
+    port: parsePort(process.env.GOOGLE_GEMINI_CLI_OAUTH_CALLBACK_PORT || "8085"),
+  },
+  {
+    providerId: "google-antigravity",
+    label: "Google Antigravity",
+    path: "/oauth-callback",
+    port: parsePort(process.env.GOOGLE_ANTIGRAVITY_OAUTH_CALLBACK_PORT || "51121"),
+  },
+];
+
 const rootDir = path.resolve(process.cwd());
 // Central deployments (docs/central-proxy.md) can point at org-issued certs.
 const keyPath = process.env.TLS_KEY_PATH || path.join(rootDir, "key.pem");
@@ -245,6 +278,207 @@ function rejectWithReason(res, reason) {
   res.end(`${reason}: ${msg}`);
 }
 
+const oauthCallbackCaptures = new Map();
+
+function findOAuthCallbackProvider(providerId) {
+  return OAUTH_CALLBACK_PROVIDER_CONFIGS.find((config) => config.providerId === providerId);
+}
+
+function oauthCallbackKey(providerId, state) {
+  return `${providerId}:${state}`;
+}
+
+function pruneOAuthCallbackCaptures(now = Date.now()) {
+  for (const [key, capture] of oauthCallbackCaptures.entries()) {
+    if (now - capture.receivedAt > OAUTH_CALLBACK_CAPTURE_TTL_MS) {
+      oauthCallbackCaptures.delete(key);
+    }
+  }
+
+  while (oauthCallbackCaptures.size > MAX_OAUTH_CALLBACK_CAPTURES) {
+    const oldestKey = oauthCallbackCaptures.keys().next().value;
+    if (typeof oldestKey !== "string") break;
+    oauthCallbackCaptures.delete(oldestKey);
+  }
+}
+
+function isSafeOAuthState(state) {
+  return typeof state === "string"
+    && state.length > 0
+    && state.length <= 512
+    && /^[A-Za-z0-9._~-]+$/.test(state);
+}
+
+function htmlEscape(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function sendJson(res, statusCode, payload) {
+  res.statusCode = statusCode;
+  res.setHeader("Content-Type", "application/json; charset=utf-8");
+  res.end(JSON.stringify(payload));
+}
+
+function storeOAuthCallbackCapture(config, callbackUrl) {
+  const code = callbackUrl.searchParams.get("code");
+  const state = callbackUrl.searchParams.get("state");
+
+  if (!code || !state || !isSafeOAuthState(state)) {
+    return null;
+  }
+
+  pruneOAuthCallbackCaptures();
+
+  const capture = {
+    providerId: config.providerId,
+    code,
+    state,
+    url: callbackUrl.toString(),
+    receivedAt: Date.now(),
+  };
+
+  oauthCallbackCaptures.set(oauthCallbackKey(capture.providerId, state), capture);
+  return capture;
+}
+
+function buildOAuthCallbackHtml(config, capture) {
+  const fallbackUrl = capture?.url || "";
+  const title = capture ? `${config.label} login captured` : `${config.label} login callback was incomplete`;
+  const lead = capture
+    ? "You can return to Pi for Excel. The add-in should continue automatically in a moment."
+    : "Pi for Excel could not find an authorization code in this callback. Return to Pi for Excel and try logging in again.";
+  const closeHint = "This browser tab can be closed.";
+  const fallbackBlock = capture
+    ? `<details><summary>If Pi for Excel did not continue automatically</summary><p>Copy this callback URL and paste it into Pi for Excel:</p><code>${htmlEscape(fallbackUrl)}</code></details>`
+    : "";
+
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pi for Excel login captured</title>
+<style>
+  body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #f8faf8; color: #17211b; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  main { width: min(560px, calc(100vw - 32px)); padding: 28px; border: 1px solid #dfe7df; border-radius: 18px; background: white; box-shadow: 0 18px 55px rgba(15, 23, 18, 0.12); }
+  h1 { margin: 0 0 10px; font-size: 22px; }
+  p { margin: 0 0 14px; line-height: 1.5; color: #425148; }
+  details { margin-top: 18px; }
+  summary { cursor: pointer; color: #1d6f42; font-weight: 600; }
+  code { display: block; margin-top: 10px; padding: 10px; overflow-wrap: anywhere; border-radius: 10px; background: #f3f6f3; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>${htmlEscape(title)}</h1>
+  <p>${htmlEscape(lead)}</p>
+  <p>${htmlEscape(closeHint)}</p>
+  ${fallbackBlock}
+</main>
+<script>
+  try { window.history.replaceState(null, "", "${config.path}/complete"); } catch (_) {}
+</script>
+</body>
+</html>`;
+}
+
+function handleOAuthProviderCallbackRequest(configs, port, req, res) {
+  const remote = req.socket?.remoteAddress;
+  if (!isAllowedClientAddress(remote, [])) {
+    res.statusCode = 403;
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.end("forbidden");
+    console.warn(`[oauth-callback] blocked non-loopback client: ${remote || "unknown"}`);
+    return;
+  }
+
+  const rawUrl = req.url || "/";
+  let callbackUrl;
+  try {
+    callbackUrl = new URL(rawUrl, `http://${OAUTH_CALLBACK_HOST}:${port}`);
+  } catch {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.end("Invalid callback URL");
+    return;
+  }
+
+  const config = configs.find((candidate) => candidate.path === callbackUrl.pathname);
+  if (!config) {
+    res.statusCode = 404;
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.end("Not found");
+    return;
+  }
+
+  const capture = storeOAuthCallbackCapture(config, callbackUrl);
+  if (!capture) {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.end(buildOAuthCallbackHtml(config, null));
+    return;
+  }
+
+  res.statusCode = 200;
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.end(buildOAuthCallbackHtml(config, capture));
+}
+
+function isOAuthCallbackApiPath(pathname) {
+  return pathname.startsWith("/oauth/callback/");
+}
+
+function handleOAuthCallbackApiRequest(rawUrl, res) {
+  let requestUrl;
+  try {
+    requestUrl = new URL(rawUrl, "http://proxy.local");
+  } catch {
+    sendJson(res, 400, { status: "error", error: "invalid_request_url" });
+    return;
+  }
+
+  let providerId;
+  try {
+    providerId = decodeURIComponent(requestUrl.pathname.slice("/oauth/callback/".length));
+  } catch {
+    sendJson(res, 400, { status: "error", error: "invalid_provider" });
+    return;
+  }
+
+  if (!findOAuthCallbackProvider(providerId)) {
+    sendJson(res, 404, { status: "error", error: "unsupported_provider" });
+    return;
+  }
+
+  const state = requestUrl.searchParams.get("state") || "";
+  if (!isSafeOAuthState(state)) {
+    sendJson(res, 400, { status: "error", error: "invalid_state" });
+    return;
+  }
+
+  pruneOAuthCallbackCaptures();
+
+  const capture = oauthCallbackCaptures.get(oauthCallbackKey(providerId, state));
+  if (!capture) {
+    sendJson(res, 200, { status: "pending" });
+    return;
+  }
+
+  sendJson(res, 200, {
+    status: "ready",
+    providerId: capture.providerId,
+    code: capture.code,
+    state: capture.state,
+    url: capture.url,
+    receivedAt: capture.receivedAt,
+  });
+}
+
 function extractTargetUrl(rawUrl) {
   // rawUrl looks like: /?url=https%3A%2F%2Fapi.example.com/path
   // NOTE: some callers append path segments after the encoded baseUrl,
@@ -334,6 +568,12 @@ const handler = async (req, res) => {
   }
 
   const rawUrl = req.url || "/";
+  const requestPathname = rawUrl.split("?")[0] || "/";
+  if (isOAuthCallbackApiPath(requestPathname)) {
+    handleOAuthCallbackApiRequest(rawUrl, res);
+    return;
+  }
+
   const target = extractTargetUrl(rawUrl);
   if (!target) {
     res.statusCode = 400;
@@ -546,6 +786,59 @@ function logStartup(listeningPort) {
   }
 }
 
+function groupOAuthCallbackProvidersByPort() {
+  const byPort = new Map();
+  for (const config of OAUTH_CALLBACK_PROVIDER_CONFIGS) {
+    const existing = byPort.get(config.port);
+    if (existing) {
+      existing.push(config);
+    } else {
+      byPort.set(config.port, [config]);
+    }
+  }
+  return byPort;
+}
+
+const oauthCallbackServers = OAUTH_CALLBACK_SERVER_ENABLED
+  ? Array.from(groupOAuthCallbackProvidersByPort(), ([port, configs]) => ({
+      port,
+      configs,
+      server: http.createServer((req, res) => handleOAuthProviderCallbackRequest(configs, port, req, res)),
+    }))
+  : [];
+
+function listenOAuthCallbackServer(entry) {
+  let cleanedUp = false;
+  const cleanup = () => {
+    if (cleanedUp) return;
+    cleanedUp = true;
+    entry.server.off("error", onError);
+    entry.server.off("listening", onListening);
+  };
+
+  const onError = (err) => {
+    cleanup();
+    const code = typeof err?.code === "string" ? err.code : "listen_error";
+    console.warn(`[pi-for-excel] OAuth callback capture listener unavailable (${code}).`);
+    console.warn("[pi-for-excel] Affected OAuth logins will still work with manual callback URL paste.");
+  };
+
+  const onListening = () => {
+    cleanup();
+    console.log("[pi-for-excel] OAuth callback capture listener started.");
+  };
+
+  entry.server.once("error", onError);
+  entry.server.once("listening", onListening);
+  entry.server.listen(entry.port, OAUTH_CALLBACK_HOST);
+}
+
+function listenOAuthCallbackServers() {
+  for (const entry of oauthCallbackServers) {
+    listenOAuthCallbackServer(entry);
+  }
+}
+
 function listen(port) {
   let cleanedUp = false;
   const cleanup = () => {
@@ -583,3 +876,4 @@ function listen(port) {
 }
 
 listen(PORT);
+listenOAuthCallbackServers();

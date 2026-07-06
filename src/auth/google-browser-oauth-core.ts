@@ -226,8 +226,8 @@ async function loginGoogleOAuth(
   callbacks.onAuth({
     url: authUrl.toString(),
     instructions:
-      "After sign-in, your browser will show a page that says \"can't be reached\" \u2014 that's expected! " +
-      "Copy the full URL from the browser address bar and paste it back in Pi for Excel.",
+      "After sign-in, Pi for Excel will try to capture the localhost callback automatically if the local proxy is running. " +
+      "If it does not continue, copy the full callback URL from the browser address bar and paste it back in Pi for Excel.",
   });
 
   if (callbacks.signal?.aborted) {
