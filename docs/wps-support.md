@@ -209,6 +209,12 @@ Strict product-level proof is blocked in the current personal WPS
   does not unblock runtime loading: first WPS launch writes `authaddin.json`
   with `enable:false`, and opening a real blank spreadsheet recreates
   `jsaddinblockhost.ini`. This removes portproxy as the primary root cause.
+- Moving the current user's WPS profile aside (`%APPDATA%\\Kingsoft\\wps`) and
+  repeating the same Windows-local official sample install from a fresh WPS
+  profile still reproduces the blocker: trust install writes clean
+  `publish.xml`/`authwebsite.xml`, first ET launch writes `authaddin.enable=false`,
+  and opening a blank spreadsheet recreates `jsaddinblockhost.ini`. This removes
+  sticky per-user profile state as the primary root cause.
 - Public WPS documentation and forum research match this risk profile:
   - WPS personal `>= 12.1.0.16910` intentionally restricts the old
     `oem.ini`/`jsplugins.xml` path; personal installs are expected to use
