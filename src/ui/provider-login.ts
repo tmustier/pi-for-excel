@@ -22,6 +22,7 @@ import {
 import { PROVIDER_PROMPT_OVERLAY_ID, PROXY_GATE_OVERLAY_ID } from "./overlay-ids.js";
 import { closeOverlayById, createOverlayDialog } from "./overlay-dialog.js";
 import { getErrorMessage } from "../utils/errors.js";
+import { escapeAttr, escapeHtml, setSafeInnerHTML } from "../utils/html.js";
 import { t } from "../language/index.js";
 import { filterProvidersByAllowlist, resolveAllowedProviderIds } from "./provider-allowlist.js";
 
@@ -101,9 +102,12 @@ function showProxyGateDialog(): Promise<boolean> {
       codeRow.style.display = "none";
       hint.textContent = t("provider.proxy_gate.hint_remote", { url: DEFAULT_PROXY_URL });
     } else {
-      hint.innerHTML =
-        `${t("provider.proxy_gate.hint_html")} ` +
-        `<a href="${PROXY_HELPER_DOCS_URL}" target="_blank" rel="noopener noreferrer">${t("provider.proxy_gate.guide")}</a>`;
+      setSafeInnerHTML(
+        hint,
+        `${escapeHtml(t("provider.proxy_gate.hint_html"))} ` +
+          `<a href="${escapeAttr(PROXY_HELPER_DOCS_URL)}" target="_blank" rel="noopener noreferrer">${escapeHtml(t("provider.proxy_gate.guide"))}</a>`,
+        "proxy gate helper link markup with escaped localized text",
+      );
     }
 
     const actions = document.createElement("div");
@@ -160,9 +164,12 @@ function showProxyGateDialog(): Promise<boolean> {
         if (DEFAULT_PROXY_IS_REMOTE) {
           hint.textContent = t("provider.proxy_gate.not_detected_remote", { url: DEFAULT_PROXY_URL });
         } else {
-          hint.innerHTML =
-            `${t("provider.proxy_gate.not_detected_html")} ` +
-            `<a href="${PROXY_HELPER_DOCS_URL}" target="_blank" rel="noopener noreferrer">${t("provider.proxy_gate.guide")}</a>`;
+          setSafeInnerHTML(
+            hint,
+            `${escapeHtml(t("provider.proxy_gate.not_detected_html"))} ` +
+              `<a href="${escapeAttr(PROXY_HELPER_DOCS_URL)}" target="_blank" rel="noopener noreferrer">${escapeHtml(t("provider.proxy_gate.guide"))}</a>`,
+            "proxy retry helper link markup with escaped localized text",
+          );
         }
       })();
     };
@@ -708,33 +715,42 @@ export function buildProviderRow(
 
   const row = document.createElement("div");
   row.className = "pi-login-row";
-  row.innerHTML = `
+  const labelText = escapeHtml(label);
+  const descriptionMarkup = desc ? `<span class="pi-login-desc">${escapeHtml(t(desc))}</span>` : "";
+  const oauthMarkup = oauth
+    ? `
+        <button class="pi-login-oauth">${escapeHtml(t("provider.login_with", { label }))}</button>
+        <div class="pi-login-divider">
+          <div class="pi-login-divider__line"></div>
+          <span class="pi-login-divider__text">${escapeHtml(t("provider.or_api_key"))}</span>
+          <div class="pi-login-divider__line"></div>
+        </div>
+      `
+    : "";
+  setSafeInnerHTML(
+    row,
+    `
     <button class="pi-welcome-provider pi-login-trigger">
       <span class="pi-login-meta">
-        <span class="pi-login-label">${label}</span>
-        ${desc ? `<span class="pi-login-desc">${t(desc)}</span>` : ""}
+        <span class="pi-login-label">${labelText}</span>
+        ${descriptionMarkup}
       </span>
       <span class="pi-login-status ${isActive ? "is-connected" : ""}">
-        ${isActive ? t("provider.connected") : t("provider.set_up")}
+        ${escapeHtml(isActive ? t("provider.connected") : t("provider.set_up"))}
       </span>
     </button>
     <div class="pi-login-detail" hidden>
-      <button class="pi-login-disconnect" type="button" ${isActive ? "" : "hidden"}>${t("provider.disconnect", { label })}</button>
-      ${oauth ? `
-        <button class="pi-login-oauth">${t("provider.login_with", { label })}</button>
-        <div class="pi-login-divider">
-          <div class="pi-login-divider__line"></div>
-          <span class="pi-login-divider__text">${t("provider.or_api_key")}</span>
-          <div class="pi-login-divider__line"></div>
-        </div>
-      ` : ""}
+      <button class="pi-login-disconnect" type="button" ${isActive ? "" : "hidden"}>${escapeHtml(t("provider.disconnect", { label }))}</button>
+      ${oauthMarkup}
       <div class="pi-login-key-row">
-        <input class="pi-login-key" type="password" placeholder="${keyPlaceholder}" aria-label="${t("provider.keyAria", { label })}" autocomplete="off" spellcheck="false" />
-        <button class="pi-login-save">${t("provider.save")}</button>
+        <input class="pi-login-key" type="password" placeholder="${escapeAttr(keyPlaceholder)}" aria-label="${escapeAttr(t("provider.keyAria", { label }))}" autocomplete="off" spellcheck="false" />
+        <button class="pi-login-save">${escapeHtml(t("provider.save"))}</button>
       </div>
       <p class="pi-login-error" hidden></p>
     </div>
-  `;
+  `,
+    "provider login row template with escaped provider and localized text",
+  );
 
   const headerBtn = row.querySelector<HTMLButtonElement>(".pi-welcome-provider");
   if (!headerBtn) {
@@ -894,11 +910,14 @@ export function buildProviderRow(
             if (DEFAULT_PROXY_IS_REMOTE) {
               errorEl.textContent = t("provider.cors_error_remote", { url: DEFAULT_PROXY_URL });
             } else {
-              errorEl.innerHTML =
-                `${t("provider.cors_error")} <code style="padding:2px 5px;border-radius:4px;` +
-                "background:var(--pi-code-bg, #1e1e1e);color:var(--pi-code-fg, #d4d4d4)\">" +
-                `npx pi-for-excel-proxy</code>${t("provider.cors_error.retry")} ` +
-                `<a href="${PROXY_HELPER_DOCS_URL}" target="_blank" rel="noopener noreferrer">${t("provider.proxy_gate.guide")}</a>`;
+              setSafeInnerHTML(
+                errorEl,
+                `${escapeHtml(t("provider.cors_error"))} <code style="padding:2px 5px;border-radius:4px;` +
+                  "background:var(--pi-code-bg, #1e1e1e);color:var(--pi-code-fg, #d4d4d4)\">" +
+                  `npx pi-for-excel-proxy</code>${escapeHtml(t("provider.cors_error.retry"))} ` +
+                  `<a href="${escapeAttr(PROXY_HELPER_DOCS_URL)}" target="_blank" rel="noopener noreferrer">${escapeHtml(t("provider.proxy_gate.guide"))}</a>`,
+                "provider CORS helper error markup with escaped localized text",
+              );
             }
           } else {
             errorEl.textContent = msg || t("provider.login_failed");

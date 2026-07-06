@@ -23,10 +23,10 @@ const hooksPath = tryExec("git config --get core.hooksPath") ?? "";
 
 if (!hooksPath) {
   exec("git config core.hooksPath .githooks");
-  // eslint-disable-next-line no-console
+  // eslint-disable-next-line no-console -- setup script must report hook installation status
   console.log("Configured git core.hooksPath = .githooks");
 } else if (hooksPath !== ".githooks") {
-  // eslint-disable-next-line no-console
+  // eslint-disable-next-line no-console -- setup script must report existing hook configuration
   console.log(
     `git core.hooksPath already set to \"${hooksPath}\"; leaving unchanged (repo expects .githooks).`,
   );

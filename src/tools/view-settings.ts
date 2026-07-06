@@ -24,11 +24,10 @@ import type { ViewSettingsDetails } from "./tool-details.js";
 
 function StringEnum<T extends string[]>(values: [...T], opts?: { description?: string }) {
   return Type.Union(
-    values.map((v) => Type.Literal(v)),
+    values.map((value) => Type.Literal(value)),
     opts,
   );
 }
-
 const schema = Type.Object({
   action: StringEnum(
     [

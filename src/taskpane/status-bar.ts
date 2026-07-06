@@ -6,7 +6,7 @@ import type { Agent } from "@earendil-works/pi-agent-core";
 
 import { t } from "../language/index.js";
 import { showToast } from "../ui/toast.js";
-import { escapeAttr, escapeHtml } from "../utils/html.js";
+import { escapeAttr, escapeHtml, setSafeInnerHTML } from "../utils/html.js";
 import { formatUsageDebug, isDebugEnabled } from "../debug/debug.js";
 import { estimateContextTokens } from "../utils/context-tokens.js";
 import type { ExecutionMode } from "../execution/mode.js";
@@ -59,10 +59,10 @@ function renderStatusBar(
   if (!el) return;
 
   if (!agent) {
-    const emptyMarkup = `<span class="pi-status-ctx">${t("status.no_session")}</span>`;
+    const emptyMarkup = `<span class="pi-status-ctx">${escapeHtml(t("status.no_session"))}</span>`;
     const emptySignature = "no-agent";
     if (el.getAttribute("data-status-signature") !== emptySignature) {
-      el.innerHTML = emptyMarkup;
+      setSafeInnerHTML(el, emptyMarkup, "status bar empty-state markup with escaped locale text");
       el.setAttribute("data-status-signature", emptySignature);
     }
     return;
@@ -130,7 +130,7 @@ function renderStatusBar(
   const modeTooltip = modeIsAuto
     ? t("status.mode.auto.tooltip")
     : t("status.mode.confirm.tooltip");
-  const modeBadge = `<button type="button" class="pi-status-mode pi-status-clickable pi-status-tooltip--right${modeBadgeClass}" data-tooltip="${modeTooltip}"><span>${modeLabel}</span><span class="pi-status-affordance" aria-hidden="true">${affordanceChevronSvg}</span></button>`;
+  const modeBadge = `<button type="button" class="pi-status-mode pi-status-clickable pi-status-tooltip--right${modeBadgeClass}" data-tooltip="${escapeAttr(modeTooltip)}"><span>${escapeHtml(modeLabel)}</span><span class="pi-status-affordance" aria-hidden="true">${affordanceChevronSvg}</span></button>`;
 
   const thinkingTooltip = escapeAttr(
     t("status.thinking.tooltip"),
@@ -142,13 +142,13 @@ function renderStatusBar(
 
   const nextMarkup = `
     <div class="pi-status-main">
-      <button type="button" class="pi-status-model pi-status-clickable pi-status-tooltip--left" data-tooltip="${t("status.model.tooltip")}">
+      <button type="button" class="pi-status-model pi-status-clickable pi-status-tooltip--left" data-tooltip="${escapeAttr(t("status.model.tooltip"))}">
         <span class="pi-status-model__mark">π</span>
         <span class="pi-status-model__name">${modelAliasEscaped}</span>
         ${chevronSvg}
       </button>
-      <button type="button" class="pi-status-thinking pi-status-clickable" data-tooltip="${thinkingTooltip}" aria-label="${t("status.thinking.aria", { level: thinkingLevel })}">${brainSvg} ${thinkingLevel}<span class="pi-status-affordance" aria-hidden="true">${affordanceChevronSvg}</span></button>
-      <button type="button" class="pi-status-ctx pi-status-ctx--trigger pi-status-clickable has-tooltip" ${STATUS_CONTEXT_DESC_ATTR}="${ctxPopoverDesc}" ${STATUS_CONTEXT_TOKENS_ATTR}="${ctxPopoverTokens}" ${STATUS_CONTEXT_WARNING_ATTR}="${ctxPopoverWarnText}" ${STATUS_CONTEXT_WARNING_SEVERITY_ATTR}="${ctxWarningSeverity}" aria-label="${t("status.context.aria", { pct, label: ctxLabel })}"><span class="pi-status-ctx__pct ${ctxColor}">${pct}%</span><span class="pi-status-ctx__sep">/</span><span class="pi-status-ctx__limit">${ctxLabel}</span>${usageDebug}<span class="pi-status-affordance" aria-hidden="true">${affordanceChevronSvg}</span><span class="pi-tooltip"><span class="pi-tooltip__desc">${escapeHtml(ctxDescription)}</span><span class="pi-tooltip__tokens">${escapeHtml(ctxTokenDetail)}</span>${ctxWarning}</span></button>
+      <button type="button" class="pi-status-thinking pi-status-clickable" data-tooltip="${thinkingTooltip}" aria-label="${escapeAttr(t("status.thinking.aria", { level: thinkingLevel }))}">${brainSvg} ${escapeHtml(thinkingLevel)}<span class="pi-status-affordance" aria-hidden="true">${affordanceChevronSvg}</span></button>
+      <button type="button" class="pi-status-ctx pi-status-ctx--trigger pi-status-clickable has-tooltip" ${STATUS_CONTEXT_DESC_ATTR}="${ctxPopoverDesc}" ${STATUS_CONTEXT_TOKENS_ATTR}="${ctxPopoverTokens}" ${STATUS_CONTEXT_WARNING_ATTR}="${ctxPopoverWarnText}" ${STATUS_CONTEXT_WARNING_SEVERITY_ATTR}="${ctxWarningSeverity}" aria-label="${escapeAttr(t("status.context.aria", { pct, label: ctxLabel }))}"><span class="pi-status-ctx__pct ${ctxColor}">${pct}%</span><span class="pi-status-ctx__sep">/</span><span class="pi-status-ctx__limit">${ctxLabel}</span>${usageDebug}<span class="pi-status-affordance" aria-hidden="true">${affordanceChevronSvg}</span><span class="pi-tooltip"><span class="pi-tooltip__desc">${escapeHtml(ctxDescription)}</span><span class="pi-tooltip__tokens">${escapeHtml(ctxTokenDetail)}</span>${ctxWarning}</span></button>
       ${lockBadge}
     </div>
     <div class="pi-status-side">
@@ -175,7 +175,7 @@ function renderStatusBar(
     return;
   }
 
-  el.innerHTML = nextMarkup;
+  setSafeInnerHTML(el, nextMarkup, "status bar markup with escaped model and localized text");
   el.setAttribute("data-status-signature", renderSignature);
   adjustContextTooltipAlignment(el);
 }

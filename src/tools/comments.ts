@@ -33,11 +33,10 @@ import type { MutationFinalizeDependencies } from "./mutation/types.js";
 
 function StringEnum<T extends string[]>(values: [...T], opts?: { description?: string }) {
   return Type.Union(
-    values.map((v) => Type.Literal(v)),
+    values.map((value) => Type.Literal(value)),
     opts,
   );
 }
-
 /** Check if a cell (already stripped of sheet prefix) falls within a range address. */
 function isCellInRange(cellAddr: string, rangeAddr: string): boolean {
   const clean = rangeAddr.includes("!") ? rangeAddr.split("!")[1] : rangeAddr;
@@ -64,8 +63,6 @@ function requireContent(content: string | undefined, action: string): string {
   }
   return content;
 }
-
-// ── Schema ───────────────────────────────────────────────────────────
 
 const schema = Type.Object({
   action: StringEnum(

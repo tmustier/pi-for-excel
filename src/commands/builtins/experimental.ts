@@ -29,6 +29,8 @@ import {
 import { PYTHON_BRIDGE_TOKEN_SETTING_KEY } from "../../tools/python-run.js";
 import { TMUX_BRIDGE_TOKEN_SETTING_KEY } from "../../tools/tmux.js";
 import { showToast } from "../../ui/toast.js";
+import type { SettingsStore } from "@earendil-works/pi-web-ui/dist/storage/stores/settings-store.js";
+
 import { t } from "../../language/index.js";
 import { showExperimentalDialog } from "./experimental-overlay.js";
 
@@ -182,7 +184,7 @@ function featureListText(getFeatureSlugs: () => string[]): string {
   return slugs.length > 0 ? slugs.join(", ") : t("experimental.feature.none");
 }
 
-async function getSettingsStore() {
+async function getSettingsStore(): Promise<SettingsStore> {
   const storageModule = await import("@earendil-works/pi-web-ui/dist/storage/app-storage.js");
   return storageModule.getAppStorage().settings;
 }

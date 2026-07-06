@@ -59,9 +59,11 @@ const firecrawlRecencyToTbs: Record<RecencyValue, string> = {
 };
 
 function StringEnum<T extends string[]>(values: [...T], opts?: { description?: string }) {
-  return Type.Union(values.map((value) => Type.Literal(value)), opts);
+  return Type.Union(
+    values.map((value) => Type.Literal(value)),
+    opts,
+  );
 }
-
 const schema = Type.Object({
   query: Type.String({
     minLength: 1,

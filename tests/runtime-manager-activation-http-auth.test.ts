@@ -91,11 +91,12 @@ void test("injectContext appends a message and triggers host sync hook", async (
   const messages: Agent["state"]["messages"] = [];
   let syncCalls = 0;
 
-  const agent = {
+  const agentStub: DynamicValue = {
     state: { messages },
     steer: () => {},
     followUp: () => {},
-  } as DynamicValue as Agent;
+  };
+  const agent = agentStub as Agent;
 
   const bridge = buildBridge({
     entry,

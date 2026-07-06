@@ -18,6 +18,9 @@ const BAN_GENERIC_OBJECT_GUARD_SELECTORS = [
 
 export default tseslint.config(
   {
+    linterOptions: {
+      reportUnusedDisableDirectives: "error",
+    },
     ignores: [
       "dist/**",
       "node_modules/**",
@@ -53,15 +56,15 @@ export default tseslint.config(
         },
       ],
 
-      // Any defeats type checking. Warn for now; tighten to "error" once clean.
-      "@typescript-eslint/no-explicit-any": "warn",
+      // Any defeats type checking.
+      "@typescript-eslint/no-explicit-any": "error",
 
       // Non-null assertion is a common escape hatch; prefer runtime checks.
-      "@typescript-eslint/no-non-null-assertion": "warn",
+      "@typescript-eslint/no-non-null-assertion": "error",
 
       // Type assertions should be rare; prefer narrowing/guards.
       "@typescript-eslint/consistent-type-assertions": [
-        "warn",
+        "error",
         {
           assertionStyle: "as",
           objectLiteralTypeAssertions: "never",

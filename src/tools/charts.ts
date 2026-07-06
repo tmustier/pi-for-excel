@@ -35,7 +35,6 @@ function StringEnum<T extends string[]>(values: [...T], opts?: { description?: s
     opts,
   );
 }
-
 const CHART_ACTIONS = ["list", "create", "update", "delete", "get_image"] as const;
 const FRIENDLY_CHART_TYPES = [
   "column",

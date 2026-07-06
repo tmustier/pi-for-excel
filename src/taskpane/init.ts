@@ -424,7 +424,7 @@ export async function initTaskpane(opts: {
     },
   ];
 
-  appEl.innerHTML = "";
+  appEl.replaceChildren();
   appEl.appendChild(sidebar);
 
   let rulesActive = false;

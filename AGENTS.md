@@ -5,6 +5,7 @@
 Notes for agents working in this repo.
 
 ## Read before changing behavior
+- Agent coding standards: `docs/coding-standards.md`
 - Tool behavior rules: `src/tools/DECISIONS.md`
 - UI/CSS architecture: `src/ui/README.md` (Tailwind v4 `@layer` gotcha)
 - Upstream divergences: `docs/upstream-divergences.md` (read before adding new divergences)
@@ -73,8 +74,10 @@ Notes for agents working in this repo.
 ## TypeScript policy
 - No `// @ts-ignore`.
 - If unavoidable: `// @ts-expect-error -- <reason>` with a real reason.
-- Avoid explicit `any` / `as any`; prefer specific types, unions, generics, or `unknown` + narrowing.
-- Avoid non-null assertions where practical; use guards/early throws.
+- No explicit `any`, `as any`, non-null assertions, or direct `unknown` syntax.
+- Use `DynamicValue` only at true external/runtime boundaries, then parse/refine into concrete domain types before values flow inward.
+- Do not add generic object/record guards (`isRecord`, `isObjectValue`, `isPlainObject`, etc.); write concrete parsers or domain-specific predicates instead.
+- Type assertions and lint suppressions must stay local and explain the safety invariant.
 
 ## Verification
 - `npm run check`
@@ -125,7 +128,7 @@ When to add new gallery sections:
 - Before/after comparison → screenshot before change, make edit, screenshot again
 
 ## Pre-commit
-- `.githooks/pre-commit` runs `npm run lint` + `npm run typecheck`.
+- `.githooks/pre-commit` runs `npm run check`.
 - Bypass only when needed: `git commit --no-verify`.
 
 ## Excel sideloaded manifest gotcha (macOS)

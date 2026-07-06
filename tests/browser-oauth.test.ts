@@ -29,6 +29,13 @@ function requestUrlToString(url: string | URL | Request): string {
   return url.url;
 }
 
+function parseRequestBody(raw: DynamicValue): DynamicObject {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+    throw new Error("request body must be an object");
+  }
+  return raw as DynamicObject;
+}
+
 void test("PKCE SHA-256 falls back when Web Crypto digest is unavailable", async (t) => {
   const originalCrypto = globalThis.crypto;
   Object.defineProperty(globalThis, "crypto", {
@@ -92,7 +99,7 @@ void test("Anthropic OAuth provider uses the browser-safe implementation", async
 
   assert.equal(requests.length, 1);
   assert.equal(requests[0]?.url, "https://platform.claude.com/v1/oauth/token");
-  const body = JSON.parse(String(requests[0]?.body)) as DynamicObject;
+  const body = parseRequestBody(JSON.parse(String(requests[0]?.body)) as DynamicValue);
   assert.equal(body.grant_type, "authorization_code");
   assert.equal(body.code, "anthropic-code");
   assert.equal(body.state, new URL(authUrl).searchParams.get("state"));

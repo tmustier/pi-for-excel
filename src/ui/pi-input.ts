@@ -56,7 +56,7 @@ export class PiInput extends LitElement {
     }
   }
 
-  focus(): void { this._textarea?.focus(); }
+  override focus(): void { this._textarea?.focus(); }
 
   protected override createRenderRoot() { return this; }
 

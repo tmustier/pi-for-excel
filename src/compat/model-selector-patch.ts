@@ -25,7 +25,7 @@ import {
 
 let _activeProviders: Set<string> | null = null;
 
-export function setActiveProviders(providers: Set<string>) {
+export function setActiveProviders(providers: Set<string>): void {
   _activeProviders = providers;
 }
 

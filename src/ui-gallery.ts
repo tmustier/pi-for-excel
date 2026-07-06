@@ -17,6 +17,8 @@ import "./boot.js";
 // Register web components we render
 import "./ui/register-components.js";
 
+import { escapeHtml, setSafeInnerHTML } from "./utils/html.js";
+
 const galleryRoot = document.getElementById("gallery-root");
 if (!galleryRoot) throw new Error("Missing #gallery-root");
 const root: HTMLElement = galleryRoot;
@@ -137,7 +139,11 @@ function createMockToolCard(state: string, action: string, detail: string): HTML
 
   const title = document.createElement("span");
   title.className = "pi-tool-card__title";
-  title.innerHTML = `<strong>${action}</strong> <span class="pi-tool-card__detail-text">${detail}</span>`;
+  setSafeInnerHTML(
+    title,
+    `<strong>${escapeHtml(action)}</strong> <span class="pi-tool-card__detail-text">${escapeHtml(detail)}</span>`,
+    "UI gallery mock tool-card markup with escaped demo labels",
+  );
 
   main.appendChild(title);
   toggle.appendChild(main);
@@ -174,7 +180,9 @@ const diffSection = section("diff-table", "Cell Changes Diff Table");
 
 const diffWrap = document.createElement("div");
 diffWrap.className = "pi-tool-card__section";
-diffWrap.innerHTML = `
+setSafeInnerHTML(
+  diffWrap,
+  `
   <div class="pi-tool-card__section-label">Changes (9)</div>
   <div class="pi-tool-card__diff">
     <table class="pi-tool-card__diff-table">
@@ -218,7 +226,9 @@ diffWrap.innerHTML = `
       </tbody>
     </table>
   </div>
-`;
+`,
+  "static UI gallery diff-table fixture markup",
+);
 diffSection.appendChild(diffWrap);
 
 /* ── 6. Text Preview (file detail) ───────────────────── */

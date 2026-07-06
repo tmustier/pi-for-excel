@@ -11,7 +11,7 @@ export interface SkillSummaryItem {
   sourceKind: string;
 }
 
-async function loadMergedSkills() {
+async function loadMergedSkills(): Promise<ReturnType<typeof mergeAgentSkillDefinitions>> {
   const bundled = listAgentSkills();
   const external = await loadExternalAgentSkills();
   return mergeAgentSkillDefinitions(bundled, external);

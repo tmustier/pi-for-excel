@@ -6,6 +6,8 @@
  * tab builders compose them and wire event listeners.
  */
 
+import { setSafeInnerHTML } from "../utils/html.js";
+
 // ── Icon type (emoji string or pre-built SVG element) ───
 
 /** Accepts either an emoji string or a pre-built SVG/HTMLElement. */
@@ -231,7 +233,7 @@ export function createItemCard(opts: ItemCardOptions): ItemCardResult {
 
   if (opts.expandable) {
     const chevron = document.createElement("span");
-    chevron.innerHTML = CHEVRON_SVG;
+    setSafeInnerHTML(chevron, CHEVRON_SVG, "trusted static chevron SVG constant");
     // The SVG is the first child, extract it
     const svg = chevron.firstElementChild;
     if (svg) right.appendChild(svg);

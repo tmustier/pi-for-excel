@@ -72,7 +72,7 @@ Pi for Excel is an AI agent that lives inside Excel. It reads your workbook, mak
 
 ### Prerequisites
 
-- **Node.js ≥ 20**
+- **Node.js ≥ 22.19.0** (or ≥24), matching `package.json` engines
 - **mkcert** — for local HTTPS (required by Office.js)
 
 ### Setup

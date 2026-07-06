@@ -25,7 +25,7 @@
     "check:builtins-inline-style": "node scripts/check-builtins-inline-style.mjs",
     "check:landing-connect-copy": "node scripts/check-landing-connect-copy.mjs",
     "check:pi-lockstep": "node scripts/check-pi-deps-lockstep.mjs",
-    "check": "npm run check:css-theme && npm run check:theme-utility-overrides && npm run check:builtins-inline-style && npm run check:landing-connect-copy && npm run check:pi-lockstep && npm run lint && npm run typecheck",
+    "check": "npm run check:css-theme && npm run check:theme-utility-overrides && npm run check:builtins-inline-style && npm run check:landing-connect-copy && npm run check:pi-lockstep && npm run check:boundary-casts && npm run check:eslint-comments && npm run check:innerhtml && npm run check:return-types && npm run lint && npm run typecheck",
     "lint": "eslint \"*.ts\" \"src/**/*.ts\" \"tests/**/*.ts\"",
     "lint:fix": "eslint \"*.ts\" \"src/**/*.ts\" \"tests/**/*.ts\" --fix",
     "test:models": "node --test --experimental-strip-types --import ./scripts/register-test-ts-loader.mjs tests/model-ordering.test.ts tests/runtime-model-reconcile.test.ts",
@@ -35,7 +35,12 @@
     "test:security": "node --test --experimental-strip-types --import ./scripts/register-test-ts-loader.mjs tests/browser-oauth.test.ts tests/proxy-target-policy.test.mjs tests/proxy-client-policy.test.mjs tests/cors-proxy-server.security.test.mjs tests/org-deployment-config.test.ts tests/tmux-bridge-server.test.mjs tests/python-bridge-server.test.mjs tests/background-verify-bridge-server.test.mjs tests/extension-source-policy.test.ts tests/marked-safety-policy.test.ts tests/oauth-storage-security.test.ts tests/web-search-provider-hosts.test.mjs tests/taskpane-csp.test.mjs tests/vercel-ignore-command.test.mjs",
     "validate": "node scripts/validate-manifest.mjs manifest.xml",
     "sideload": "npx office-addin-debugging start manifest.xml desktop --app excel",
-    "prepare": "node scripts/install-githooks.mjs"
+    "prepare": "node scripts/install-githooks.mjs",
+    "check:boundary-casts": "node scripts/check-boundary-casts.mjs",
+    "check:eslint-comments": "node scripts/check-eslint-disable-comments.mjs",
+    "check:innerhtml": "node scripts/check-innerhtml-usage.mjs",
+    "test": "npm run test:models && npm run test:context && npm run test:security && npm run test:manifest",
+    "check:return-types": "node scripts/check-top-level-return-types.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.110.0",

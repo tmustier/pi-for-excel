@@ -6,7 +6,7 @@
  */
 
 import type { SpreadsheetHostKind } from "../host/index.js";
-import { createCoreTools } from "./registry.js";
+import { createCoreTools, type AnyCoreTool } from "./registry.js";
 import { selectOfficeCoupledToolForHost } from "./host-selection.js";
 import type { SkillReadCache } from "../skills/read-cache.js";
 import { createTmuxTool } from "./tmux.js";
@@ -28,7 +28,7 @@ export interface CreateAllToolsOptions {
   skillReadCache?: SkillReadCache;
 }
 
-export function createAllTools(options: CreateAllToolsOptions = {}) {
+export function createAllTools(options: CreateAllToolsOptions = {}): AnyCoreTool[] {
   const getExtensionManager = options.getExtensionManager ?? (() => null);
   const hostKind = options.hostKind ?? "office";
 

@@ -1,8 +1,5 @@
 #!/bin/sh
 set -e
 
-printf "%s\n" "[pre-commit] npm run lint"
-npm run -s lint
-
-printf "%s\n" "[pre-commit] npm run typecheck"
-npm run -s typecheck
+printf "%s\n" "[pre-commit] npm run check"
+npm run -s check

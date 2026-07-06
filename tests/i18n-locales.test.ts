@@ -7,8 +7,24 @@ import { fileURLToPath } from "node:url";
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const localesDir = join(root, "src", "language", "locales");
 
-const en = JSON.parse(readFileSync(join(localesDir, "en.json"), "utf8")) as Record<string, string>;
-const zh = JSON.parse(readFileSync(join(localesDir, "zh-CN.json"), "utf8")) as Record<string, string>;
+function parseLocaleJson(raw: DynamicValue, label: string): Record<string, string> {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+    throw new Error(`${label} locale must be an object`);
+  }
+
+  const rawObject = raw as DynamicObject;
+  const parsed: Record<string, string> = {};
+  for (const [key, value] of Object.entries(rawObject)) {
+    if (typeof value !== "string") {
+      throw new Error(`${label} locale value for ${key} must be a string`);
+    }
+    parsed[key] = value;
+  }
+  return parsed;
+}
+
+const en = parseLocaleJson(JSON.parse(readFileSync(join(localesDir, "en.json"), "utf8")) as DynamicValue, "en");
+const zh = parseLocaleJson(JSON.parse(readFileSync(join(localesDir, "zh-CN.json"), "utf8")) as DynamicValue, "zh-CN");
 
 function placeholders(value: string): Set<string> {
   const found = new Set<string>();

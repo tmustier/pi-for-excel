@@ -42,7 +42,6 @@ function stringEnum<T extends readonly string[]>(values: T, description: string)
     { description },
   );
 }
-
 const schema = Type.Object({
   input_path: Type.String({
     minLength: 1,

@@ -70,7 +70,7 @@ export function bootstrapTaskpane(): void {
 
     const hardTimeoutTimer = setTimeout(() => {
       if (!markInitComplete()) return;
-      loadingRoot.innerHTML = "";
+      loadingRoot.replaceChildren();
       showFatalError(
         errorRoot,
         t("bootstrap.fatalTimeout"),
@@ -92,7 +92,7 @@ export function bootstrapTaskpane(): void {
 
         clearTimeout(slowInitTimer);
         clearTimeout(hardTimeoutTimer);
-        loadingRoot.innerHTML = "";
+        loadingRoot.replaceChildren();
         showFatalError(errorRoot, t("bootstrap.fatalError", { msg: getErrorMessage(error) }));
         console.error("[pi] Init error:", error);
       });

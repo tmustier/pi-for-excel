@@ -5,6 +5,6 @@
  * Since Ajv itself is stubbed out (see ./ajv.ts), this is a no-op.
  */
 
-export default function addFormats() {
+export default function addFormats(): void {
   // no-op — Ajv is stubbed, so there's nothing to register formats on.
 }

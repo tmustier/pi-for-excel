@@ -4,6 +4,7 @@
  */
 
 import type { ExcelExtensionAPI } from "../commands/extension-api.js";
+import { setSafeInnerHTML } from "../utils/html.js";
 
 const CELL = 14;
 const COLS = 22;
@@ -13,7 +14,7 @@ const TICK = 110;
 type Dir = "up" | "down" | "left" | "right";
 type Pt = { x: number; y: number };
 
-export function activate(api: ExcelExtensionAPI) {
+export function activate(api: ExcelExtensionAPI): void {
   api.registerCommand("snake", {
     description: "Play Snake! 🐍",
     busyAllowed: true,
@@ -27,7 +28,11 @@ export function activate(api: ExcelExtensionAPI) {
 
       const header = document.createElement("div");
       header.style.cssText = "font-family: var(--font-mono); font-size: 10.5px; color: var(--muted-foreground); width: 100%; display: flex; justify-content: space-between;";
-      header.innerHTML = `<span>Score: 0</span><span style="opacity: 0.5">arrows · esc quit</span>`;
+      setSafeInnerHTML(
+        header,
+        `<span>Score: 0</span><span style="opacity: 0.5">arrows · esc quit</span>`,
+        "static Snake widget header markup",
+      );
       el.appendChild(header);
 
       const canvas = document.createElement("canvas");
@@ -59,7 +64,7 @@ export function activate(api: ExcelExtensionAPI) {
         return f;
       }
 
-      function draw() {
+      function draw(): void {
         ctx2d.fillStyle = "#f8f8f6";
         ctx2d.fillRect(0, 0, logicalW, logicalH);
 
@@ -95,13 +100,17 @@ export function activate(api: ExcelExtensionAPI) {
         }
       }
 
-      function updateHeader() {
-        header.innerHTML = gameOver
-          ? `<span>Game Over! ${score}</span><span style="opacity: 0.5">R restart · esc quit</span>`
-          : `<span>Score: ${score}</span><span style="opacity: 0.5">arrows · esc quit</span>`;
+      function updateHeader(): void {
+        setSafeInnerHTML(
+          header,
+          gameOver
+            ? `<span>Game Over! ${score}</span><span style="opacity: 0.5">R restart · esc quit</span>`
+            : `<span>Score: ${score}</span><span style="opacity: 0.5">arrows · esc quit</span>`,
+          "Snake header markup contains only numeric score and static labels",
+        );
       }
 
-      function tick() {
+      function tick(): void {
         if (gameOver) return;
         dir = nextDir;
         const head = snake[0];

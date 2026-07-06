@@ -29,6 +29,11 @@ import {
 import { normalizeProxyUrl, validateOfficeProxyUrl } from "./proxy-validation.js";
 
 export type GetProxyUrl = () => Promise<string | undefined>;
+type OfficeStreamFn = (
+  model: Model<Api>,
+  context: Context,
+  options?: StreamOptions,
+) => Promise<Awaited<ReturnType<typeof streamSimple>>>;
 
 function shouldProxyProvider(provider: string, apiKey?: string): boolean {
   const p = provider.toLowerCase();
@@ -454,7 +459,7 @@ function withPayloadHook(
 /**
  * Create a StreamFn compatible with Agent that proxies provider base URLs when needed.
  */
-export function createOfficeStreamFn(getProxyUrl: GetProxyUrl) {
+export function createOfficeStreamFn(getProxyUrl: GetProxyUrl): OfficeStreamFn {
   return async (model: Model<Api>, context: Context, options?: StreamOptions) => {
     const continuation = isToolContinuation(context.messages);
 

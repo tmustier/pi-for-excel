@@ -20,6 +20,7 @@ This folder contains **current** docs that should match shipped behavior.
 - [WPS Spreadsheets support plan](./wps-support.md)
 
 ## Architecture & policy
+- [Coding standards for agents](./coding-standards.md)
 - [Upstream divergences from pi-mono](./upstream-divergences.md)
 - [Context management policy (cache-safe)](./context-management-policy.md)
 - [Cache observability baselines](./cache-observability-baselines.md)

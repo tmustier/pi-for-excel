@@ -60,7 +60,6 @@ function StringEnum<T extends string[]>(values: [...T], opts?: { description?: s
     opts,
   );
 }
-
 const schema = Type.Object({
   action: StringEnum([...TMUX_ACTIONS], {
     description:

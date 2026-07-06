@@ -31,11 +31,10 @@ import type { MutationFinalizeDependencies } from "./mutation/types.js";
 // Helper for string enum (TypeBox doesn't have a built-in StringEnum)
 function StringEnum<T extends string[]>(values: [...T], opts?: { description?: string }) {
   return Type.Union(
-    values.map((v) => Type.Literal(v)),
+    values.map((value) => Type.Literal(value)),
     opts,
   );
 }
-
 const schema = Type.Object({
   action: StringEnum(
     [
