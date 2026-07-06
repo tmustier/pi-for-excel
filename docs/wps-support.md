@@ -203,6 +203,12 @@ Strict product-level proof is blocked in the current personal WPS
   install, a first WPS Spreadsheets launch fetched `ribbon.xml` only, wrote
   `authaddin.json` with `enable:false`, and recreated `jsaddinblockhost.ini`.
   This further points to WPS host/version/config state rather than Pi packaging.
+- Serving the clean official `wpsjs@2.2.3` ET sample directly from inside the
+  Windows guest (`http://127.0.0.1:3891/`, no macOS portproxy, fresh add-in
+  name/origin) makes the publish page validate the row as `正常`, but it still
+  does not unblock runtime loading: first WPS launch writes `authaddin.json`
+  with `enable:false`, and opening a real blank spreadsheet recreates
+  `jsaddinblockhost.ini`. This removes portproxy as the primary root cause.
 - Public WPS documentation and forum research match this risk profile:
   - WPS personal `>= 12.1.0.16910` intentionally restricts the old
     `oem.ini`/`jsplugins.xml` path; personal installs are expected to use
