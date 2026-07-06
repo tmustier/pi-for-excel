@@ -83,7 +83,7 @@ function buildTmuxGateErrorResult(args: {
       kind: "tmux_bridge",
       ok: false,
       action: getTmuxActionFromParams(args.params),
-      bridgeUrl: args.bridgeUrl,
+      ...(args.bridgeUrl !== undefined ? { bridgeUrl: args.bridgeUrl } : {}),
       error: message,
       gateReason: args.reason,
       skillHint: "tmux-bridge",
@@ -107,7 +107,7 @@ function buildPythonGateErrorResult(args: {
       kind: "python_bridge",
       ok: false,
       action: getPythonActionForTool(args.toolName),
-      bridgeUrl: args.bridgeUrl,
+      ...(args.bridgeUrl !== undefined ? { bridgeUrl: args.bridgeUrl } : {}),
       error: message,
       gateReason: args.reason,
       skillHint: "python-bridge",
@@ -129,7 +129,7 @@ function buildPythonTransformRangeGateErrorResult(args: {
     details: {
       kind: "python_transform_range",
       blocked: false,
-      bridgeUrl: args.bridgeUrl,
+      ...(args.bridgeUrl !== undefined ? { bridgeUrl: args.bridgeUrl } : {}),
       error: message,
       gateReason: args.reason,
       skillHint: "python-bridge",
@@ -152,7 +152,7 @@ function buildLibreOfficeGateErrorResult(args: {
       kind: "libreoffice_bridge",
       ok: false,
       action: "convert",
-      bridgeUrl: args.bridgeUrl,
+      ...(args.bridgeUrl !== undefined ? { bridgeUrl: args.bridgeUrl } : {}),
       error: message,
       gateReason: args.reason,
       skillHint: "python-bridge",
@@ -280,7 +280,7 @@ function wrapTmuxToolWithHardGate(
         const reason = gate.reason ?? "bridge_unreachable";
         return buildTmuxGateErrorResult({
           reason,
-          bridgeUrl: gate.bridgeUrl,
+          ...(gate.bridgeUrl !== undefined ? { bridgeUrl: gate.bridgeUrl } : {}),
           params,
         });
       }
@@ -399,13 +399,13 @@ function wrapPythonToolWithOptionalBridgeApproval(
           if (tool.name === "python_transform_range") {
             return buildPythonTransformRangeGateErrorResult({
               reason,
-              bridgeUrl: gate.bridgeUrl,
+              ...(gate.bridgeUrl !== undefined ? { bridgeUrl: gate.bridgeUrl } : {}),
             });
           }
 
           return buildPythonGateErrorResult({
             reason,
-            bridgeUrl: gate.bridgeUrl,
+            ...(gate.bridgeUrl !== undefined ? { bridgeUrl: gate.bridgeUrl } : {}),
             toolName: tool.name,
           });
         }
@@ -436,7 +436,7 @@ function wrapPythonBridgeOnlyToolWithApprovalGate(
         const reason = gate.reason ?? "bridge_unreachable";
         return buildLibreOfficeGateErrorResult({
           reason,
-          bridgeUrl: gate.bridgeUrl,
+          ...(gate.bridgeUrl !== undefined ? { bridgeUrl: gate.bridgeUrl } : {}),
         });
       }
 

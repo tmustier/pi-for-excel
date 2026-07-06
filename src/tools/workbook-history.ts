@@ -222,7 +222,7 @@ export function createWorkbookHistoryTool(
               action: "restore",
               snapshotId,
               restoredSnapshotId: restored.restoredSnapshotId,
-              inverseSnapshotId: restored.inverseSnapshotId ?? undefined,
+              ...(typeof restored.inverseSnapshotId === "string" ? { inverseSnapshotId: restored.inverseSnapshotId } : {}),
               address: restored.address,
               changedCount: restored.changedCount,
             },

@@ -100,16 +100,14 @@ The `check:innerhtml` script keeps raw `.innerHTML` out of application code.
 - Keep prompt-cache-sensitive prefixes stable: deterministic tool order, stable schemas, no timestamps/random IDs in system prompt metadata.
 - Document new recurring rules here first, then promote repeated violations into deterministic checks.
 
-## Staged strictness ratchets
+## Active strictness ratchets
 
-These are desirable but intentionally not enabled in this pass because they require broad semantic cleanup across existing code:
+The repo enables both `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes`.
 
-- `noUncheckedIndexedAccess`
-- `exactOptionalPropertyTypes`
+- Indexed access must be proven with bounds/key checks, iteration patterns (`entries`, `for...of`), or domain-specific fallbacks. Do not silence it with non-null assertions.
+- Optional fields should be omitted when absent. Only model `prop: T | undefined` when the runtime contract intentionally distinguishes “present with undefined” from “not present”.
 
-Do not opportunistically flip them in an unrelated PR. When enabling either, fix the resulting call sites by preserving absence-vs-undefined semantics and by narrowing indexed access rather than adding non-null assertions.
-
-`ts-reset` is also not currently used: this repo instead forces decoded JSON/fetch payloads through the explicit `DynamicValue` boundary and deterministic boundary-cast checks.
+`ts-reset` is not currently used: this repo instead forces decoded JSON/fetch payloads through the explicit `DynamicValue` boundary and deterministic boundary-cast checks.
 
 ## PR checklist
 

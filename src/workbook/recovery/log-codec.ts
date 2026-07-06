@@ -465,10 +465,13 @@ function parseWorkbookRecoverySnapshot(value: DynamicValue): WorkbookRecoverySna
     beforeValues,
     beforeFormulas,
     snapshotKind,
-    workbookId: typeof value.workbookId === "string" ? value.workbookId : undefined,
-    workbookLabel: typeof value.workbookLabel === "string" ? value.workbookLabel : undefined,
-    restoredFromSnapshotId: typeof value.restoredFromSnapshotId === "string" ? value.restoredFromSnapshotId : undefined,
   };
+
+  if (typeof value.workbookId === "string") snapshot.workbookId = value.workbookId;
+  if (typeof value.workbookLabel === "string") snapshot.workbookLabel = value.workbookLabel;
+  if (typeof value.restoredFromSnapshotId === "string") {
+    snapshot.restoredFromSnapshotId = value.restoredFromSnapshotId;
+  }
 
   if (snapshotKind === "format_cells_state" && formatRangeState) {
     snapshot.formatRangeState = cloneRecoveryFormatRangeState(formatRangeState);
@@ -482,7 +485,7 @@ function parseWorkbookRecoverySnapshot(value: DynamicValue): WorkbookRecoverySna
     snapshot.conditionalFormatRules = cloneRecoveryConditionalFormatRules(conditionalFormatRules);
   }
 
-  if (snapshotKind === "comment_thread") {
+  if (snapshotKind === "comment_thread" && commentThreadState) {
     snapshot.commentThreadState = commentThreadState;
   }
 

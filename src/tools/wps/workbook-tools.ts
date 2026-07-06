@@ -213,10 +213,13 @@ function parseRectangularAddress(address: string): { rows: number; cols: number 
 
   const parts = clean.includes(":") ? clean.split(":") : [clean, clean];
   if (parts.length !== 2) return null;
+  const startPart = parts[0];
+  const endPart = parts[1];
+  if (startPart === undefined || endPart === undefined) return null;
 
   try {
-    const start = parseCell(parts[0]);
-    const end = parseCell(parts[1]);
+    const start = parseCell(startPart);
+    const end = parseCell(endPart);
     return {
       rows: Math.abs(end.row - start.row) + 1,
       cols: Math.abs(end.col - start.col) + 1,
@@ -412,7 +415,7 @@ function parseReadRangeParams(raw: DynamicValue): ReadRangeParams {
 
   return {
     range: candidate.range,
-    mode: candidate.mode,
+    ...(candidate.mode !== undefined ? { mode: candidate.mode } : {}),
   };
 }
 
@@ -578,7 +581,8 @@ function formatAsExcelMarkdownTable(values: DynamicValue[][], startCell: string)
 
   const rows: DynamicValue[][] = [header];
   for (let row = 0; row < values.length; row += 1) {
-    const renderedRow: DynamicValue[] = [start.row + row, ...values[row]];
+    const valueRow = values[row] ?? [];
+    const renderedRow: DynamicValue[] = [start.row + row, ...valueRow];
     while (renderedRow.length < numCols + 1) renderedRow.push("");
     rows.push(renderedRow);
   }
@@ -665,8 +669,9 @@ function formatWpsDetailedOutput(
   const formatMap = new Map<string, string[]>();
   const start = parseCell(startCell);
   for (let row = 0; row < snapshot.numberFormats.length; row += 1) {
-    for (let col = 0; col < snapshot.numberFormats[row].length; col += 1) {
-      const format = snapshot.numberFormats[row][col];
+    const numberFormatRow = snapshot.numberFormats[row] ?? [];
+    for (let col = 0; col < numberFormatRow.length; col += 1) {
+      const format = numberFormatRow[col];
       if (typeof format === "string" && format !== "" && format !== "General") {
         const addressForCell = `${colToLetter(start.col + col)}${start.row + row}`;
         const existing = formatMap.get(format) ?? [];
@@ -752,8 +757,9 @@ function findInvalidFormulas(values: DynamicValue[][], startCell: string): Inval
   const invalid: InvalidFormula[] = [];
 
   for (let row = 0; row < values.length; row += 1) {
-    for (let col = 0; col < values[row].length; col += 1) {
-      const value = values[row][col];
+    const valueRow = values[row] ?? [];
+    for (let col = 0; col < valueRow.length; col += 1) {
+      const value = valueRow[col];
       if (typeof value === "string" && value.startsWith("=")) {
         const reason = validateFormula(value);
         if (reason) {
@@ -967,8 +973,9 @@ function formatWpsSuccessWrite(
       const errorCell = parseCell(error.address);
       const row = errorCell.row - start.row;
       const col = errorCell.col - start.col;
-      if (row >= 0 && col >= 0 && row < result.readBackFormulas.length && col < result.readBackFormulas[row].length) {
-        const formula = result.readBackFormulas[row][col];
+      const formulaRow = result.readBackFormulas[row];
+      if (row >= 0 && col >= 0 && formulaRow !== undefined && col < formulaRow.length) {
+        const formula = formulaRow[col];
         if (typeof formula === "string") error.formula = formula;
       }
     }

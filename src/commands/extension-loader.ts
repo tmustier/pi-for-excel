@@ -98,6 +98,10 @@ export function createLoadedExtensionHandle(
 
       for (let i = cleanups.length - 1; i >= 0; i -= 1) {
         const cleanup = cleanups[i];
+        if (!cleanup) {
+          continue;
+        }
+
         try {
           await cleanup();
         } catch (error) {

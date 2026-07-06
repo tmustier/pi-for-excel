@@ -188,7 +188,10 @@ export async function setupSessionPersistence(opts: {
   }
 
   async function saveSession(optsForSave?: { force?: boolean }): Promise<void> {
-    if (!shouldPersistSession({ firstAssistantSeen, force: optsForSave?.force })) return;
+    if (!shouldPersistSession({
+      firstAssistantSeen,
+      ...(optsForSave?.force !== undefined ? { force: optsForSave.force } : {}),
+    })) return;
 
     try {
       const now = new Date().toISOString();
@@ -323,7 +326,7 @@ export async function setupSessionPersistence(opts: {
     if (sessionData.model) {
       agent.state.model = await refreshPersistedModel({
         persisted: sessionData.model,
-        customProvidersStore: opts.customProvidersStore,
+        ...(opts.customProvidersStore !== undefined ? { customProvidersStore: opts.customProvidersStore } : {}),
       });
     }
     if (sessionData.thinkingLevel) {

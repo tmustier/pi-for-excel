@@ -73,11 +73,11 @@ function normalizeConfig(config: Partial<ToolResultShapingConfig> | undefined): 
 
 function collectToolResultIndices(messages: readonly AgentMessage[]): number[] {
   const indices: number[] = [];
-  for (let i = 0; i < messages.length; i += 1) {
-    if (messages[i].role === "toolResult") {
-      indices.push(i);
+  messages.forEach((message, index) => {
+    if (message.role === "toolResult") {
+      indices.push(index);
     }
-  }
+  });
   return indices;
 }
 

@@ -186,7 +186,7 @@ export function cycleThinkingLevel(agent: Agent): ThinkingLevel {
   const levels = getThinkingLevels(agent);
   const current = agent.state.thinkingLevel;
   const idx = levels.indexOf(current);
-  const next = levels[(idx >= 0 ? idx + 1 : 0) % levels.length];
+  const next = levels[(idx >= 0 ? idx + 1 : 0) % levels.length] ?? "off";
 
   agent.state.thinkingLevel = next;
   updateStatusBarForAgent(agent);

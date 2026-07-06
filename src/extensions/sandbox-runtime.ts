@@ -231,7 +231,7 @@ function parseConnectionDefinition(value: DynamicValue): ExtensionConnectionDefi
       id: fieldId,
       label,
       required,
-      maskInUi,
+      ...(maskInUi !== undefined ? { maskInUi } : {}),
     };
   });
 
@@ -248,8 +248,8 @@ function parseConnectionDefinition(value: DynamicValue): ExtensionConnectionDefi
     capability,
     authKind: authKindRaw,
     secretFields,
-    httpAuth,
-    setupHint,
+    ...(httpAuth !== undefined ? { httpAuth } : {}),
+    ...(setupHint !== undefined ? { setupHint } : {}),
   };
 }
 
@@ -1127,13 +1127,13 @@ class SandboxRuntimeHost {
 
               this.dispatchSandboxUiAction(actionId);
             },
-            title,
-            placement,
-            order: order ?? undefined,
-            collapsible,
-            collapsed,
-            minHeightPx,
-            maxHeightPx,
+            ...(title !== undefined ? { title } : {}),
+            ...(placement !== undefined ? { placement } : {}),
+            ...(order !== null ? { order } : {}),
+            ...(collapsible !== undefined ? { collapsible } : {}),
+            ...(collapsed !== undefined ? { collapsed } : {}),
+            ...(minHeightPx !== undefined ? { minHeightPx } : {}),
+            ...(maxHeightPx !== undefined ? { maxHeightPx } : {}),
           });
 
           this.replaceWidgetActionIds(widgetId, actionIds);

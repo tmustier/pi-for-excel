@@ -25,7 +25,7 @@ let lastNavTime = 0;
  */
 function firstSubRange(address: string): string {
   const parsed = parseRangeRef(address);
-  const first = parsed.address.split(",")[0].trim();
+  const first = (parsed.address.split(",")[0] ?? parsed.address).trim();
   return parsed.sheet ? `${parsed.sheet}!${first}` : first;
 }
 

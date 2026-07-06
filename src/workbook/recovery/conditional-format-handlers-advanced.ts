@@ -1,6 +1,9 @@
 /** Advanced conditional-format handlers for data bars, color scales, and icon sets. */
 
-import type { ConditionalFormatRuleHandler } from "./conditional-format-handlers-basic.js";
+import {
+  attachConditionalFormatCaptureContext,
+  type ConditionalFormatRuleHandler,
+} from "./conditional-format-handlers-basic.js";
 import {
   captureColorScaleCriterion,
   captureDataBarRule,
@@ -117,28 +120,38 @@ export const ADVANCED_CONDITIONAL_FORMAT_RULE_HANDLERS = {
         };
       }
 
+      const dataBarState: NonNullable<RecoveryConditionalFormatRule["dataBar"]> = {
+        axisFormat,
+        barDirection,
+        showDataBarOnly,
+        lowerBoundRule,
+        upperBoundRule,
+        positiveFillColor,
+        positiveGradientFill,
+        negativeFillColor,
+        negativeMatchPositiveFillColor,
+        negativeMatchPositiveBorderColor,
+      };
+
+      const axisColor = normalizeOptionalString(dataBar.axisColor);
+      if (axisColor !== undefined) {
+        dataBarState.axisColor = axisColor;
+      }
+      const positiveBorderColor = normalizeOptionalString(dataBar.positiveFormat.borderColor);
+      if (positiveBorderColor !== undefined) {
+        dataBarState.positiveBorderColor = positiveBorderColor;
+      }
+      const negativeBorderColor = normalizeOptionalString(dataBar.negativeFormat.borderColor);
+      if (negativeBorderColor !== undefined) {
+        dataBarState.negativeBorderColor = negativeBorderColor;
+      }
+
       return {
         supported: true,
-        rule: {
+        rule: attachConditionalFormatCaptureContext({
           type: "data_bar",
-          stopIfTrue: captureContext.stopIfTrue,
-          appliesToAddress: captureContext.appliesToAddress,
-          dataBar: {
-            axisColor: normalizeOptionalString(dataBar.axisColor),
-            axisFormat,
-            barDirection,
-            showDataBarOnly,
-            lowerBoundRule,
-            upperBoundRule,
-            positiveFillColor,
-            positiveBorderColor: normalizeOptionalString(dataBar.positiveFormat.borderColor),
-            positiveGradientFill,
-            negativeFillColor,
-            negativeBorderColor: normalizeOptionalString(dataBar.negativeFormat.borderColor),
-            negativeMatchPositiveFillColor,
-            negativeMatchPositiveBorderColor,
-          },
-        },
+          dataBar: dataBarState,
+        }, captureContext),
       };
     },
     apply(range, targetAddress, rule) {
@@ -217,18 +230,20 @@ export const ADVANCED_CONDITIONAL_FORMAT_RULE_HANDLERS = {
         midpoint = capturedMidpoint;
       }
 
+      const colorScale: NonNullable<RecoveryConditionalFormatRule["colorScale"]> = {
+        minimum,
+        maximum,
+      };
+      if (midpoint !== undefined) {
+        colorScale.midpoint = midpoint;
+      }
+
       return {
         supported: true,
-        rule: {
+        rule: attachConditionalFormatCaptureContext({
           type: "color_scale",
-          stopIfTrue: captureContext.stopIfTrue,
-          appliesToAddress: captureContext.appliesToAddress,
-          colorScale: {
-            minimum,
-            midpoint,
-            maximum,
-          },
-        },
+          colorScale,
+        }, captureContext),
       };
     },
     apply(range, targetAddress, rule) {
@@ -309,17 +324,15 @@ export const ADVANCED_CONDITIONAL_FORMAT_RULE_HANDLERS = {
 
       return {
         supported: true,
-        rule: {
+        rule: attachConditionalFormatCaptureContext({
           type: "icon_set",
-          stopIfTrue: captureContext.stopIfTrue,
-          appliesToAddress: captureContext.appliesToAddress,
           iconSet: {
             style,
             reverseIconOrder,
             showIconOnly,
             criteria,
           },
-        },
+        }, captureContext),
       };
     },
     apply(range, targetAddress, rule) {

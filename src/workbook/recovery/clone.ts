@@ -20,48 +20,74 @@ import type {
 } from "./types.js";
 
 function cloneRecoveryConditionalDataBarRule(rule: RecoveryConditionalDataBarRule): RecoveryConditionalDataBarRule {
-  return {
+  const cloned: RecoveryConditionalDataBarRule = {
     type: rule.type,
-    formula: rule.formula,
   };
+
+  if (rule.formula !== undefined) {
+    cloned.formula = rule.formula;
+  }
+
+  return cloned;
 }
 
 function cloneRecoveryConditionalDataBarState(state: RecoveryConditionalDataBarState): RecoveryConditionalDataBarState {
-  return {
-    axisColor: state.axisColor,
+  const cloned: RecoveryConditionalDataBarState = {
     axisFormat: state.axisFormat,
     barDirection: state.barDirection,
     showDataBarOnly: state.showDataBarOnly,
     lowerBoundRule: cloneRecoveryConditionalDataBarRule(state.lowerBoundRule),
     upperBoundRule: cloneRecoveryConditionalDataBarRule(state.upperBoundRule),
     positiveFillColor: state.positiveFillColor,
-    positiveBorderColor: state.positiveBorderColor,
     positiveGradientFill: state.positiveGradientFill,
     negativeFillColor: state.negativeFillColor,
-    negativeBorderColor: state.negativeBorderColor,
     negativeMatchPositiveFillColor: state.negativeMatchPositiveFillColor,
     negativeMatchPositiveBorderColor: state.negativeMatchPositiveBorderColor,
   };
+
+  if (state.axisColor !== undefined) {
+    cloned.axisColor = state.axisColor;
+  }
+  if (state.positiveBorderColor !== undefined) {
+    cloned.positiveBorderColor = state.positiveBorderColor;
+  }
+  if (state.negativeBorderColor !== undefined) {
+    cloned.negativeBorderColor = state.negativeBorderColor;
+  }
+
+  return cloned;
 }
 
 function cloneRecoveryConditionalColorScaleCriterion(
   criterion: RecoveryConditionalColorScaleCriterion,
 ): RecoveryConditionalColorScaleCriterion {
-  return {
+  const cloned: RecoveryConditionalColorScaleCriterion = {
     type: criterion.type,
-    formula: criterion.formula,
-    color: criterion.color,
   };
+
+  if (criterion.formula !== undefined) {
+    cloned.formula = criterion.formula;
+  }
+  if (criterion.color !== undefined) {
+    cloned.color = criterion.color;
+  }
+
+  return cloned;
 }
 
 function cloneRecoveryConditionalColorScaleState(
   state: RecoveryConditionalColorScaleState,
 ): RecoveryConditionalColorScaleState {
-  return {
+  const cloned: RecoveryConditionalColorScaleState = {
     minimum: cloneRecoveryConditionalColorScaleCriterion(state.minimum),
-    midpoint: state.midpoint ? cloneRecoveryConditionalColorScaleCriterion(state.midpoint) : undefined,
     maximum: cloneRecoveryConditionalColorScaleCriterion(state.maximum),
   };
+
+  if (state.midpoint) {
+    cloned.midpoint = cloneRecoveryConditionalColorScaleCriterion(state.midpoint);
+  }
+
+  return cloned;
 }
 
 function cloneRecoveryConditionalIcon(icon: RecoveryConditionalIcon): RecoveryConditionalIcon {
@@ -74,12 +100,17 @@ function cloneRecoveryConditionalIcon(icon: RecoveryConditionalIcon): RecoveryCo
 function cloneRecoveryConditionalIconCriterion(
   criterion: RecoveryConditionalIconCriterion,
 ): RecoveryConditionalIconCriterion {
-  return {
+  const cloned: RecoveryConditionalIconCriterion = {
     type: criterion.type,
     operator: criterion.operator,
     formula: criterion.formula,
-    customIcon: criterion.customIcon ? cloneRecoveryConditionalIcon(criterion.customIcon) : undefined,
   };
+
+  if (criterion.customIcon) {
+    cloned.customIcon = cloneRecoveryConditionalIcon(criterion.customIcon);
+  }
+
+  return cloned;
 }
 
 function cloneRecoveryConditionalIconSetState(state: RecoveryConditionalIconSetState): RecoveryConditionalIconSetState {
@@ -92,28 +123,31 @@ function cloneRecoveryConditionalIconSetState(state: RecoveryConditionalIconSetS
 }
 
 function cloneRecoveryConditionalFormatRule(rule: RecoveryConditionalFormatRule): RecoveryConditionalFormatRule {
-  return {
+  const cloned: RecoveryConditionalFormatRule = {
     type: rule.type,
-    stopIfTrue: rule.stopIfTrue,
-    formula: rule.formula,
-    operator: rule.operator,
-    formula1: rule.formula1,
-    formula2: rule.formula2,
-    textOperator: rule.textOperator,
-    text: rule.text,
-    topBottomType: rule.topBottomType,
-    rank: rule.rank,
-    presetCriterion: rule.presetCriterion,
-    dataBar: rule.dataBar ? cloneRecoveryConditionalDataBarState(rule.dataBar) : undefined,
-    colorScale: rule.colorScale ? cloneRecoveryConditionalColorScaleState(rule.colorScale) : undefined,
-    iconSet: rule.iconSet ? cloneRecoveryConditionalIconSetState(rule.iconSet) : undefined,
-    fillColor: rule.fillColor,
-    fontColor: rule.fontColor,
-    bold: rule.bold,
-    italic: rule.italic,
-    underline: rule.underline,
-    appliesToAddress: rule.appliesToAddress,
   };
+
+  if (rule.stopIfTrue !== undefined) cloned.stopIfTrue = rule.stopIfTrue;
+  if (rule.formula !== undefined) cloned.formula = rule.formula;
+  if (rule.operator !== undefined) cloned.operator = rule.operator;
+  if (rule.formula1 !== undefined) cloned.formula1 = rule.formula1;
+  if (rule.formula2 !== undefined) cloned.formula2 = rule.formula2;
+  if (rule.textOperator !== undefined) cloned.textOperator = rule.textOperator;
+  if (rule.text !== undefined) cloned.text = rule.text;
+  if (rule.topBottomType !== undefined) cloned.topBottomType = rule.topBottomType;
+  if (rule.rank !== undefined) cloned.rank = rule.rank;
+  if (rule.presetCriterion !== undefined) cloned.presetCriterion = rule.presetCriterion;
+  if (rule.dataBar) cloned.dataBar = cloneRecoveryConditionalDataBarState(rule.dataBar);
+  if (rule.colorScale) cloned.colorScale = cloneRecoveryConditionalColorScaleState(rule.colorScale);
+  if (rule.iconSet) cloned.iconSet = cloneRecoveryConditionalIconSetState(rule.iconSet);
+  if (rule.fillColor !== undefined) cloned.fillColor = rule.fillColor;
+  if (rule.fontColor !== undefined) cloned.fontColor = rule.fontColor;
+  if (rule.bold !== undefined) cloned.bold = rule.bold;
+  if (rule.italic !== undefined) cloned.italic = rule.italic;
+  if (rule.underline !== undefined) cloned.underline = rule.underline;
+  if (rule.appliesToAddress !== undefined) cloned.appliesToAddress = rule.appliesToAddress;
+
+  return cloned;
 }
 
 export function cloneRecoveryConditionalFormatRules(
@@ -133,25 +167,35 @@ export function cloneRecoveryCommentThreadState(state: RecoveryCommentThreadStat
 
 export function cloneRecoveryChartState(state: RecoveryChartState): RecoveryChartState {
   if (state.kind === "chart_absent") {
-    return {
+    const cloned: RecoveryChartState = {
       kind: "chart_absent",
       sheetName: state.sheetName,
       name: state.name,
-      chartId: state.chartId,
     };
+    if (state.chartId !== undefined) {
+      cloned.chartId = state.chartId;
+    }
+    return cloned;
   }
 
-  return {
+  const cloned: RecoveryChartState = {
     kind: "chart_present",
     sheetName: state.sheetName,
     name: state.name,
     chartType: state.chartType,
     title: { ...state.title },
     legend: { ...state.legend },
-    xAxisTitle: state.xAxisTitle ? { ...state.xAxisTitle } : undefined,
-    yAxisTitle: state.yAxisTitle ? { ...state.yAxisTitle } : undefined,
     position: { ...state.position },
   };
+
+  if (state.xAxisTitle) {
+    cloned.xAxisTitle = { ...state.xAxisTitle };
+  }
+  if (state.yAxisTitle) {
+    cloned.yAxisTitle = { ...state.yAxisTitle };
+  }
+
+  return cloned;
 }
 
 function cloneUnknownGrid(grid: readonly DynamicValue[][]): DynamicValue[][] {
@@ -240,36 +284,41 @@ export function cloneRecoveryModifyStructureState(state: RecoveryModifyStructure
 }
 
 export function cloneRecoveryFormatSelection(selection: RecoveryFormatSelection): RecoveryFormatSelection {
-  return {
-    numberFormat: selection.numberFormat,
-    fillColor: selection.fillColor,
-    fontColor: selection.fontColor,
-    bold: selection.bold,
-    italic: selection.italic,
-    underlineStyle: selection.underlineStyle,
-    fontName: selection.fontName,
-    fontSize: selection.fontSize,
-    horizontalAlignment: selection.horizontalAlignment,
-    verticalAlignment: selection.verticalAlignment,
-    wrapText: selection.wrapText,
-    columnWidth: selection.columnWidth,
-    rowHeight: selection.rowHeight,
-    mergedAreas: selection.mergedAreas,
-    borderTop: selection.borderTop,
-    borderBottom: selection.borderBottom,
-    borderLeft: selection.borderLeft,
-    borderRight: selection.borderRight,
-    borderInsideHorizontal: selection.borderInsideHorizontal,
-    borderInsideVertical: selection.borderInsideVertical,
-  };
+  const cloned: RecoveryFormatSelection = {};
+
+  if (selection.numberFormat !== undefined) cloned.numberFormat = selection.numberFormat;
+  if (selection.fillColor !== undefined) cloned.fillColor = selection.fillColor;
+  if (selection.fontColor !== undefined) cloned.fontColor = selection.fontColor;
+  if (selection.bold !== undefined) cloned.bold = selection.bold;
+  if (selection.italic !== undefined) cloned.italic = selection.italic;
+  if (selection.underlineStyle !== undefined) cloned.underlineStyle = selection.underlineStyle;
+  if (selection.fontName !== undefined) cloned.fontName = selection.fontName;
+  if (selection.fontSize !== undefined) cloned.fontSize = selection.fontSize;
+  if (selection.horizontalAlignment !== undefined) cloned.horizontalAlignment = selection.horizontalAlignment;
+  if (selection.verticalAlignment !== undefined) cloned.verticalAlignment = selection.verticalAlignment;
+  if (selection.wrapText !== undefined) cloned.wrapText = selection.wrapText;
+  if (selection.columnWidth !== undefined) cloned.columnWidth = selection.columnWidth;
+  if (selection.rowHeight !== undefined) cloned.rowHeight = selection.rowHeight;
+  if (selection.mergedAreas !== undefined) cloned.mergedAreas = selection.mergedAreas;
+  if (selection.borderTop !== undefined) cloned.borderTop = selection.borderTop;
+  if (selection.borderBottom !== undefined) cloned.borderBottom = selection.borderBottom;
+  if (selection.borderLeft !== undefined) cloned.borderLeft = selection.borderLeft;
+  if (selection.borderRight !== undefined) cloned.borderRight = selection.borderRight;
+  if (selection.borderInsideHorizontal !== undefined) cloned.borderInsideHorizontal = selection.borderInsideHorizontal;
+  if (selection.borderInsideVertical !== undefined) cloned.borderInsideVertical = selection.borderInsideVertical;
+
+  return cloned;
 }
 
 function cloneRecoveryFormatBorderState(state: RecoveryFormatBorderState): RecoveryFormatBorderState {
-  return {
+  const cloned: RecoveryFormatBorderState = {
     style: state.style,
-    weight: state.weight,
-    color: state.color,
   };
+
+  if (state.weight !== undefined) cloned.weight = state.weight;
+  if (state.color !== undefined) cloned.color = state.color;
+
+  return cloned;
 }
 
 export function cloneStringGrid(grid: readonly string[][]): string[][] {
@@ -277,35 +326,38 @@ export function cloneStringGrid(grid: readonly string[][]): string[][] {
 }
 
 function cloneRecoveryFormatAreaState(area: RecoveryFormatAreaState): RecoveryFormatAreaState {
-  return {
+  const cloned: RecoveryFormatAreaState = {
     address: area.address,
     rowCount: area.rowCount,
     columnCount: area.columnCount,
-    numberFormat: area.numberFormat ? cloneStringGrid(area.numberFormat) : undefined,
-    fillColor: area.fillColor,
-    fontColor: area.fontColor,
-    bold: area.bold,
-    italic: area.italic,
-    underlineStyle: area.underlineStyle,
-    fontName: area.fontName,
-    fontSize: area.fontSize,
-    horizontalAlignment: area.horizontalAlignment,
-    verticalAlignment: area.verticalAlignment,
-    wrapText: area.wrapText,
-    columnWidths: area.columnWidths ? [...area.columnWidths] : undefined,
-    rowHeights: area.rowHeights ? [...area.rowHeights] : undefined,
-    mergedAreas: area.mergedAreas ? [...area.mergedAreas] : undefined,
-    borderTop: area.borderTop ? cloneRecoveryFormatBorderState(area.borderTop) : undefined,
-    borderBottom: area.borderBottom ? cloneRecoveryFormatBorderState(area.borderBottom) : undefined,
-    borderLeft: area.borderLeft ? cloneRecoveryFormatBorderState(area.borderLeft) : undefined,
-    borderRight: area.borderRight ? cloneRecoveryFormatBorderState(area.borderRight) : undefined,
-    borderInsideHorizontal: area.borderInsideHorizontal
-      ? cloneRecoveryFormatBorderState(area.borderInsideHorizontal)
-      : undefined,
-    borderInsideVertical: area.borderInsideVertical
-      ? cloneRecoveryFormatBorderState(area.borderInsideVertical)
-      : undefined,
   };
+
+  if (area.numberFormat) cloned.numberFormat = cloneStringGrid(area.numberFormat);
+  if (area.fillColor !== undefined) cloned.fillColor = area.fillColor;
+  if (area.fontColor !== undefined) cloned.fontColor = area.fontColor;
+  if (area.bold !== undefined) cloned.bold = area.bold;
+  if (area.italic !== undefined) cloned.italic = area.italic;
+  if (area.underlineStyle !== undefined) cloned.underlineStyle = area.underlineStyle;
+  if (area.fontName !== undefined) cloned.fontName = area.fontName;
+  if (area.fontSize !== undefined) cloned.fontSize = area.fontSize;
+  if (area.horizontalAlignment !== undefined) cloned.horizontalAlignment = area.horizontalAlignment;
+  if (area.verticalAlignment !== undefined) cloned.verticalAlignment = area.verticalAlignment;
+  if (area.wrapText !== undefined) cloned.wrapText = area.wrapText;
+  if (area.columnWidths) cloned.columnWidths = [...area.columnWidths];
+  if (area.rowHeights) cloned.rowHeights = [...area.rowHeights];
+  if (area.mergedAreas) cloned.mergedAreas = [...area.mergedAreas];
+  if (area.borderTop) cloned.borderTop = cloneRecoveryFormatBorderState(area.borderTop);
+  if (area.borderBottom) cloned.borderBottom = cloneRecoveryFormatBorderState(area.borderBottom);
+  if (area.borderLeft) cloned.borderLeft = cloneRecoveryFormatBorderState(area.borderLeft);
+  if (area.borderRight) cloned.borderRight = cloneRecoveryFormatBorderState(area.borderRight);
+  if (area.borderInsideHorizontal) {
+    cloned.borderInsideHorizontal = cloneRecoveryFormatBorderState(area.borderInsideHorizontal);
+  }
+  if (area.borderInsideVertical) {
+    cloned.borderInsideVertical = cloneRecoveryFormatBorderState(area.borderInsideVertical);
+  }
+
+  return cloned;
 }
 
 export function cloneRecoveryFormatRangeState(state: RecoveryFormatRangeState): RecoveryFormatRangeState {

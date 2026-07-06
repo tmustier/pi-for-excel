@@ -131,11 +131,14 @@ export async function pollOAuthCallbackCapture(
     throwIfAborted(options.signal);
 
     try {
-      const response = await fetch(pollUrl, {
+      const requestInit: RequestInit = {
         method: "GET",
         headers: { Accept: "application/json" },
-        signal: options.signal,
-      });
+      };
+      if (options.signal !== undefined) {
+        requestInit.signal = options.signal;
+      }
+      const response = await fetch(pollUrl, requestInit);
 
       // 4xx usually means the user is running an older proxy helper, a remote
       // proxy, or a proxy with an origin policy that cannot serve callback

@@ -163,6 +163,44 @@ function normalizeOptionalString(value: DynamicValue): string | undefined {
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
+function proxyBaseUrlArg(proxyBaseUrl: string | undefined): { proxyBaseUrl?: string } {
+  return proxyBaseUrl === undefined ? {} : { proxyBaseUrl };
+}
+
+function createWebSearchDetails(args: {
+  ok: boolean;
+  provider: WebSearchProvider;
+  query: string;
+  sentQuery: string;
+  maxResults: number;
+  recency?: RecencyValue | undefined;
+  siteFilters?: string[] | undefined;
+  resultCount?: number | undefined;
+  proxied?: boolean | undefined;
+  proxyBaseUrl?: string | undefined;
+  fallback?: WebSearchFallbackInfo | undefined;
+  error?: string | undefined;
+  proxyDown?: boolean | undefined;
+}): WebSearchToolDetails {
+  const details: WebSearchToolDetails = {
+    kind: "web_search",
+    ok: args.ok,
+    provider: args.provider,
+    query: args.query,
+    sentQuery: args.sentQuery,
+    maxResults: args.maxResults,
+  };
+  if (args.recency !== undefined) details.recency = args.recency;
+  if (args.siteFilters !== undefined) details.siteFilters = args.siteFilters;
+  if (args.resultCount !== undefined) details.resultCount = args.resultCount;
+  if (args.proxied !== undefined) details.proxied = args.proxied;
+  if (args.proxyBaseUrl !== undefined) details.proxyBaseUrl = args.proxyBaseUrl;
+  if (args.fallback !== undefined) details.fallback = args.fallback;
+  if (args.error !== undefined) details.error = args.error;
+  if (args.proxyDown !== undefined) details.proxyDown = args.proxyDown;
+  return details;
+}
+
 function parseSites(value: DynamicValue): string[] {
   if (typeof value === "string") {
     const trimmed = value.trim();
@@ -261,7 +299,9 @@ class WebSearchExecutionError extends Error {
     this.name = "WebSearchExecutionError";
     this.provider = args.provider;
     this.kind = args.kind;
-    this.statusCode = args.statusCode;
+    if (args.statusCode !== undefined) {
+      this.statusCode = args.statusCode;
+    }
   }
 }
 
@@ -622,10 +662,8 @@ function buildResultMarkdown(args: {
   }
 
   lines.push("Results:");
-  for (let i = 0; i < hits.length; i += 1) {
-    const hit = hits[i];
-    const index = i + 1;
-    lines.push(`[${index}] [${hit.title}](${hit.url})`);
+  for (const [index, hit] of hits.entries()) {
+    lines.push(`[${index + 1}] [${hit.title}](${hit.url})`);
     if (hit.snippet.trim().length > 0) {
       lines.push(`    ${hit.snippet}`);
     }
@@ -643,12 +681,21 @@ async function defaultGetConfig(): Promise<WebSearchToolConfig> {
     getEnabledProxyBaseUrl(settings),
   ]);
 
-  return {
+  const config: WebSearchToolConfig = {
     provider: providerConfig.provider,
-    apiKey: getApiKeyForProvider(providerConfig),
-    jinaApiKey: getApiKeyForProvider(providerConfig, "jina"),
-    proxyBaseUrl,
   };
+  const apiKey = getApiKeyForProvider(providerConfig);
+  if (apiKey !== undefined) {
+    config.apiKey = apiKey;
+  }
+  const jinaApiKey = getApiKeyForProvider(providerConfig, "jina");
+  if (jinaApiKey !== undefined) {
+    config.jinaApiKey = jinaApiKey;
+  }
+  if (proxyBaseUrl !== undefined) {
+    config.proxyBaseUrl = proxyBaseUrl;
+  }
+  return config;
 }
 
 async function defaultExecuteSearch(
@@ -659,7 +706,7 @@ async function defaultExecuteSearch(
   const request = buildProviderRequest(params, config.provider, config.apiKey);
   const resolved = resolveOutboundRequestUrl({
     targetUrl: request.targetUrl,
-    proxyBaseUrl: config.proxyBaseUrl,
+    ...proxyBaseUrlArg(config.proxyBaseUrl),
   });
 
   try {
@@ -668,12 +715,16 @@ async function defaultExecuteSearch(
       timeoutMs: WEB_SEARCH_TIMEOUT_MS,
       timeoutErrorMessage: `web_search timed out after ${WEB_SEARCH_TIMEOUT_MS}ms.`,
       run: async (requestSignal) => {
-        const response = await fetch(resolved.requestUrl, {
+        const requestInit: RequestInit = {
           method: request.requestInit.method,
           headers: request.requestInit.headers,
-          body: request.requestInit.body,
           signal: requestSignal,
-        });
+        };
+        if (request.requestInit.body !== undefined) {
+          requestInit.body = request.requestInit.body;
+        }
+
+        const response = await fetch(resolved.requestUrl, requestInit);
 
         const text = await response.text();
 
@@ -700,7 +751,7 @@ async function defaultExecuteSearch(
           hits,
           sentQuery: request.sentQuery,
           proxied: resolved.proxied,
-          proxyBaseUrl: resolved.proxyBaseUrl,
+          ...proxyBaseUrlArg(resolved.proxyBaseUrl),
         };
       },
     });
@@ -749,7 +800,7 @@ export async function validateWebSearchApiKey(args: {
       {
         provider,
         apiKey: normalizedApiKey,
-        proxyBaseUrl: args.proxyBaseUrl,
+        ...proxyBaseUrlArg(args.proxyBaseUrl),
       },
       args.signal,
     );
@@ -761,7 +812,7 @@ export async function validateWebSearchApiKey(args: {
       provider,
       message: `${providerInfo(provider).title} key is valid (${result.hits.length} result${result.hits.length === 1 ? "" : "s"}, ${transport}).`,
       proxied: result.proxied,
-      proxyBaseUrl: result.proxyBaseUrl,
+      ...proxyBaseUrlArg(result.proxyBaseUrl),
       resultCount: result.hits.length,
     };
   } catch (error) {
@@ -813,7 +864,7 @@ export function createWebSearchTool(
           {
             provider,
             apiKey,
-            proxyBaseUrl: config.proxyBaseUrl,
+            ...proxyBaseUrlArg(config.proxyBaseUrl),
           },
           signal,
         );
@@ -860,11 +911,10 @@ export function createWebSearchTool(
             sentQuery: result.sentQuery,
             hits: result.hits,
             proxied: result.proxied,
-            proxyBaseUrl: result.proxyBaseUrl,
-            fallback,
+            ...proxyBaseUrlArg(result.proxyBaseUrl),
+            ...(fallback === undefined ? {} : { fallback }),
           }) }],
-          details: {
-            kind: "web_search",
+          details: createWebSearchDetails({
             ok: true,
             provider: effectiveProvider,
             query: parsedParams.query,
@@ -876,7 +926,7 @@ export function createWebSearchTool(
             proxied: result.proxied,
             proxyBaseUrl: result.proxyBaseUrl,
             fallback,
-          },
+          }),
         };
       } catch (error) {
         const message = getErrorMessage(error);
@@ -889,8 +939,7 @@ export function createWebSearchTool(
 
         return {
           content: [{ type: "text", text: displayMessage }],
-          details: {
-            kind: "web_search",
+          details: createWebSearchDetails({
             ok: false,
             provider: configuredProvider,
             query: fallbackQuery,
@@ -898,7 +947,7 @@ export function createWebSearchTool(
             maxResults: params?.max_results ?? 5,
             error: message,
             proxyDown,
-          },
+          }),
         };
       }
     },

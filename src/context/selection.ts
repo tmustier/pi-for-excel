@@ -80,8 +80,9 @@ export async function readSelectionContext(): Promise<SelectionContext | null> {
       lines.push(formatAsMarkdownTable(contextRange.values));
 
       // Selection's own formulas
-      const selLocalAddress = sel.address.includes("!") ? sel.address.split("!")[1] : sel.address;
-      const selFormulas = extractFormulas(sel.formulas, selLocalAddress.split(":")[0]);
+      const selLocalAddress = sel.address.includes("!") ? (sel.address.split("!")[1] ?? sel.address) : sel.address;
+      const selStartAddress = selLocalAddress.split(":")[0] ?? selLocalAddress;
+      const selFormulas = extractFormulas(sel.formulas, selStartAddress);
       if (selFormulas.length > 0) {
         lines.push("");
         lines.push(`**Selected formulas:** ${selFormulas.join(", ")}`);

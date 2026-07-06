@@ -198,12 +198,15 @@ function toFileUrl(path: string): string {
 
   const win = /^([A-Za-z]):\\(.*)$/.exec(path);
   if (win) {
-    const drive = win[1].toUpperCase();
-    const rest = win[2]
-      .split("\\")
-      .map((seg) => encodeURIComponent(seg))
-      .join("/");
-    return `file:///${drive}:/${rest}`;
+    const drive = win[1];
+    const restPath = win[2];
+    if (drive && restPath !== undefined) {
+      const rest = restPath
+        .split("\\")
+        .map((seg) => encodeURIComponent(seg))
+        .join("/");
+      return `file:///${drive.toUpperCase()}:/${rest}`;
+    }
   }
 
   const encoded = path
@@ -345,6 +348,28 @@ function optionalString(value: DynamicValue): string | undefined {
   return typeof value === "string" && value.trim().length > 0 ? value : undefined;
 }
 
+function createChangeExplanationInput(args: {
+  toolName: SupportedToolName;
+  blocked: boolean;
+  changedCount?: number | undefined;
+  summary?: string | undefined;
+  error?: string | undefined;
+  inputAddress?: string | undefined;
+  outputAddress?: string | undefined;
+  changes?: ChangeExplanationInput["changes"] | undefined;
+}): ChangeExplanationInput {
+  return {
+    toolName: args.toolName,
+    blocked: args.blocked,
+    ...(args.changedCount !== undefined ? { changedCount: args.changedCount } : {}),
+    ...(args.summary !== undefined ? { summary: args.summary } : {}),
+    ...(args.error !== undefined ? { error: args.error } : {}),
+    ...(args.inputAddress !== undefined ? { inputAddress: args.inputAddress } : {}),
+    ...(args.outputAddress !== undefined ? { outputAddress: args.outputAddress } : {}),
+    ...(args.changes !== undefined ? { changes: args.changes } : {}),
+  };
+}
+
 function extractResultError(resultText: string | undefined): string | undefined {
   if (!resultText) return undefined;
 
@@ -378,7 +403,7 @@ function buildChangeExplanationInputForTool(
   const blockedFromText = Boolean(resultText && isBlocked(resultText));
 
   if (isWriteCellsDetails(details)) {
-    return {
+    return createChangeExplanationInput({
       toolName,
       blocked: details.blocked,
       changedCount: details.changes?.changedCount,
@@ -386,11 +411,11 @@ function buildChangeExplanationInputForTool(
       error,
       outputAddress: details.address ?? startCell,
       changes: details.changes,
-    };
+    });
   }
 
   if (isFillFormulaDetails(details)) {
-    return {
+    return createChangeExplanationInput({
       toolName,
       blocked: details.blocked,
       changedCount: details.changes?.changedCount,
@@ -398,11 +423,11 @@ function buildChangeExplanationInputForTool(
       error,
       outputAddress: details.address ?? range,
       changes: details.changes,
-    };
+    });
   }
 
   if (isPythonTransformRangeDetails(details)) {
-    return {
+    return createChangeExplanationInput({
       toolName,
       blocked: details.blocked || blockedFromText,
       changedCount: details.changes?.changedCount,
@@ -411,95 +436,95 @@ function buildChangeExplanationInputForTool(
       inputAddress: details.inputAddress,
       outputAddress: details.outputAddress,
       changes: details.changes,
-    };
+    });
   }
 
   if (isWorkbookHistoryDetails(details) && details.action === "restore") {
     const historyError = optionalString(details.error);
-    return {
+    return createChangeExplanationInput({
       toolName,
       blocked: blockedFromText || Boolean(historyError),
       changedCount: details.changedCount,
       summary,
       error: historyError ?? error,
       outputAddress: details.address,
-    };
+    });
   }
 
   if (toolName === "format_cells") {
     const detailsAddress = isFormatCellsDetails(details) ? details.address : undefined;
-    return {
+    return createChangeExplanationInput({
       toolName,
       blocked: blockedFromText,
       summary,
       error,
       outputAddress: detailsAddress ?? range,
-    };
+    });
   }
 
   if (toolName === "conditional_format") {
-    return {
+    return createChangeExplanationInput({
       toolName,
       blocked: blockedFromText,
       summary,
       error,
       outputAddress: range,
-    };
+    });
   }
 
   if (toolName === "modify_structure") {
-    return {
+    return createChangeExplanationInput({
       toolName,
       blocked: blockedFromText,
       summary,
       error,
       outputAddress: range ?? sheet,
-    };
+    });
   }
 
   if (toolName === "comments") {
-    return {
+    return createChangeExplanationInput({
       toolName,
       blocked: blockedFromText,
       changedCount: blockedFromText ? 0 : 1,
       summary,
       error,
       outputAddress: range,
-    };
+    });
   }
 
   if (toolName === "view_settings") {
     const outputAddress = range ?? sheet;
-    return {
+    return createChangeExplanationInput({
       toolName,
       blocked: blockedFromText,
       changedCount: blockedFromText ? 0 : 1,
       summary,
       error,
       outputAddress,
-    };
+    });
   }
 
   if (toolName === "charts") {
     const detailsAddress = isChartsDetails(details) ? details.address : undefined;
     const detailsSource = isChartsDetails(details) ? details.sourceRange : undefined;
-    return {
+    return createChangeExplanationInput({
       toolName,
       blocked: blockedFromText,
       changedCount: blockedFromText ? 0 : 1,
       summary,
       error,
       outputAddress: detailsAddress ?? detailsSource ?? range,
-    };
+    });
   }
 
   if (toolName === "workbook_history" && action === "restore") {
-    return {
+    return createChangeExplanationInput({
       toolName,
       blocked: blockedFromText,
       summary,
       error,
-    };
+    });
   }
 
   return null;
@@ -569,7 +594,7 @@ function compactRange(range: string): string {
       : { sheet: "", addr: p };
   });
 
-  const first = parsed[0].sheet;
+  const first = parsed[0]?.sheet;
   if (first && parsed.every((p) => p.sheet === first)) {
     return `${first}!${parsed.map((p) => p.addr).join(",")}`;
   }
@@ -600,13 +625,13 @@ function compactRangesInMarkdown(text: string): string {
 function extractWrittenAddress(text: string): string | null {
   // "Written to **Sheet1!A1:C10** (…)" or "Filled formula across **Sheet1!A1:B20** (…)"
   const m = /(?:Written to|Filled formula across)\s+\*\*([^*]+)\*\*/.exec(text);
-  return m ? m[1] : null;
+  return m?.[1] ?? null;
 }
 
 /** Count formula errors mentioned in tool result text. */
 function countResultErrors(text: string): number {
   const m = /(\d+)\s+formula error/i.exec(text);
-  return m ? parseInt(m[1], 10) : 0;
+  return m?.[1] ? parseInt(m[1], 10) : 0;
 }
 
 /** True when result text starts with the blocked sentinel. */
@@ -738,6 +763,10 @@ interface ToolDesc {
   address?: string;
 }
 
+function toolDescWithAddress(action: string, detail: string, address: string | undefined): ToolDesc {
+  return address !== undefined ? { action, detail, address } : { action, detail };
+}
+
 /** Split a result-text summary line into action (first word) + rest. */
 function splitFirstWord(text: string): ToolDesc {
   const i = text.indexOf(" ");
@@ -762,7 +791,7 @@ function describeToolCall(
     case "read_range": {
       const mode = p.mode as string | undefined;
       const label = mode === "csv" ? "Export" : "Read";
-      return { action: label, detail: range ? compactRange(range) + (mode === "csv" ? " (CSV)" : "") : "range", address: range };
+      return toolDescWithAddress(label, range ? compactRange(range) + (mode === "csv" ? " (CSV)" : "") : "range", range);
     }
     case "get_workbook_overview": {
       const sheet = p.sheet as string | undefined;
@@ -775,26 +804,26 @@ function describeToolCall(
 
       if (isWriteCellsDetails(details) && details.address) {
         const action = details.blocked ? "Write" : "Edit";
-        return { action, detail: details.address + b, address: details.address };
+        return toolDescWithAddress(action, details.address + b, details.address);
       }
 
       const addr = resultText ? extractWrittenAddress(resultText) : null;
       return addr
-        ? { action: "Edit", detail: addr + b, address: addr }
-        : { action: "Write", detail: (startCell ?? "cells") + b, address: startCell };
+        ? toolDescWithAddress("Edit", addr + b, addr)
+        : toolDescWithAddress("Write", (startCell ?? "cells") + b, startCell);
     }
     case "fill_formula": {
       const b = badge(toolName, resultText, details);
 
       if (isFillFormulaDetails(details) && details.address) {
         const action = details.blocked ? "Fill" : "Filled";
-        return { action, detail: details.address + b, address: details.address };
+        return toolDescWithAddress(action, details.address + b, details.address);
       }
 
       const addr = resultText ? extractWrittenAddress(resultText) : null;
       return addr
-        ? { action: "Filled", detail: addr + b, address: addr }
-        : { action: "Fill", detail: (range ? compactRange(range) : "formula") + b, address: range };
+        ? toolDescWithAddress("Filled", addr + b, addr)
+        : toolDescWithAddress("Fill", (range ? compactRange(range) : "formula") + b, range);
     }
     case "python_transform_range": {
       const b = badge(toolName, resultText, details);
@@ -804,17 +833,13 @@ function describeToolCall(
         if (address) {
           const hasError = typeof details.error === "string" && details.error.length > 0;
           const action = details.blocked || hasError ? "Transform" : "Transformed";
-          return { action, detail: address + b, address };
+          return toolDescWithAddress(action, address + b, address);
         }
       }
 
       const outputStart = p.output_start_cell as string | undefined;
       const fallbackAddress = outputStart ?? range;
-      return {
-        action: "Transform",
-        detail: (fallbackAddress ?? "range") + b,
-        address: fallbackAddress,
-      };
+      return toolDescWithAddress("Transform", (fallbackAddress ?? "range") + b, fallbackAddress);
     }
 
     // ── Format tools ──
@@ -822,19 +847,11 @@ function describeToolCall(
       const addr = isFormatCellsDetails(details) ? details.address : undefined;
       const resolved = addr ?? range;
       const recovery = recoveryBadgeForDetails(details);
-      return {
-        action: "Format",
-        detail: (resolved ? compactRange(resolved) : "cells") + recovery,
-        address: resolved,
-      };
+      return toolDescWithAddress("Format", (resolved ? compactRange(resolved) : "cells") + recovery, resolved);
     }
     case "conditional_format": {
       const recovery = recoveryBadgeForDetails(details);
-      return {
-        action: "Cond. format",
-        detail: (range ? compactRange(range) : "cells") + recovery,
-        address: range,
-      };
+      return toolDescWithAddress("Cond. format", (range ? compactRange(range) : "cells") + recovery, range);
     }
 
     // ── Result-text tools (split first word as action) ──
@@ -866,19 +883,15 @@ function describeToolCall(
     case "trace_dependencies": {
       const cell = (p.cell ?? p.range) as string | undefined;
       const mode = p.mode === "dependents" ? "dependents" : "precedents";
-      return {
-        action: mode === "dependents" ? "Trace dependents" : "Trace precedents",
-        detail: cell ?? mode,
-        address: cell,
-      };
+      return toolDescWithAddress(
+        mode === "dependents" ? "Trace dependents" : "Trace precedents",
+        cell ?? mode,
+        cell,
+      );
     }
     case "explain_formula": {
       const cell = p.cell as string | undefined;
-      return {
-        action: "Explain formula",
-        detail: cell ?? "cell",
-        address: cell,
-      };
+      return toolDescWithAddress("Explain formula", cell ?? "cell", cell);
     }
     case "charts": {
       const op = p.action as string | undefined;
@@ -894,19 +907,19 @@ function describeToolCall(
       }
 
       if (op === "create") {
-        return {
-          action: "Chart",
-          detail: `'${chartName ?? "new"}' created${source ? ` — ${compactRange(source)}` : ""}${recovery}`,
-          address: source,
-        };
+        return toolDescWithAddress(
+          "Chart",
+          `'${chartName ?? "new"}' created${source ? ` — ${compactRange(source)}` : ""}${recovery}`,
+          source,
+        );
       }
 
       if (op === "update") {
-        return {
-          action: "Chart",
-          detail: `'${chartName ?? "chart"}' updated${source ? ` — ${compactRange(source)}` : ""}${recovery}`,
-          address: source,
-        };
+        return toolDescWithAddress(
+          "Chart",
+          `'${chartName ?? "chart"}' updated${source ? ` — ${compactRange(source)}` : ""}${recovery}`,
+          source,
+        );
       }
 
       if (op === "delete") {
@@ -935,21 +948,21 @@ function describeToolCall(
 
       switch (op) {
         case "read":
-          return { action: "Comments", detail: addr, address: range };
+          return toolDescWithAddress("Comments", addr, range);
         case "add":
-          return { action: "Add", detail: `comment ${addr}${recovery}`, address: range };
+          return toolDescWithAddress("Add", `comment ${addr}${recovery}`, range);
         case "update":
-          return { action: "Update", detail: `comment ${addr}${recovery}`, address: range };
+          return toolDescWithAddress("Update", `comment ${addr}${recovery}`, range);
         case "reply":
-          return { action: "Reply", detail: `${addr}${recovery}`, address: range };
+          return toolDescWithAddress("Reply", `${addr}${recovery}`, range);
         case "delete":
-          return { action: "Delete", detail: `comment ${addr}${recovery}`, address: range };
+          return toolDescWithAddress("Delete", `comment ${addr}${recovery}`, range);
         case "resolve":
-          return { action: "Resolve", detail: `${addr}${recovery}`, address: range };
+          return toolDescWithAddress("Resolve", `${addr}${recovery}`, range);
         case "reopen":
-          return { action: "Reopen", detail: `${addr}${recovery}`, address: range };
+          return toolDescWithAddress("Reopen", `${addr}${recovery}`, range);
         default:
-          return { action: "Comment", detail: `${addr}${recovery}`, address: range };
+          return toolDescWithAddress("Comment", `${addr}${recovery}`, range);
       }
     }
     case "view_settings": {
@@ -971,11 +984,7 @@ function describeToolCall(
 
       if (op === "freeze_at") {
         const freezeTarget = qualifiedRange ?? targetSheetLabel;
-        return {
-          action: "Freeze",
-          detail: `${compactRange(freezeTarget)}${recovery}`,
-          address: qualifiedRange,
-        };
+        return toolDescWithAddress("Freeze", `${compactRange(freezeTarget)}${recovery}`, qualifiedRange);
       }
 
       if (op.startsWith("hide_") || op.startsWith("show_")) {

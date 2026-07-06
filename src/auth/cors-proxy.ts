@@ -30,7 +30,6 @@ type ProxySettingsCache = {
 const proxyCache: ProxySettingsCache = {
   checkedAt: 0,
   enabled: false,
-  url: undefined,
 };
 
 async function getEnabledProxyUrl(): Promise<string | undefined> {
@@ -51,13 +50,13 @@ async function getEnabledProxyUrl(): Promise<string | undefined> {
     url = await storage.settings.get("proxy.url");
   } catch {
     proxyCache.enabled = false;
-    proxyCache.url = undefined;
+    delete proxyCache.url;
     return undefined;
   }
 
   proxyCache.enabled = Boolean(enabled);
   if (!proxyCache.enabled) {
-    proxyCache.url = undefined;
+    delete proxyCache.url;
     return undefined;
   }
 

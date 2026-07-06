@@ -285,7 +285,8 @@ function normalizeAnthropicAuthorizationInput(input: string): string {
   // Accept whitespace-separated values (code state)
   if (!value.includes("#")) {
     const parts = value.split(/\s+/).filter(Boolean);
-    if (parts.length >= 2) return `${parts[0]}#${parts[1]}`;
+    const [code, state] = parts;
+    if (code !== undefined && state !== undefined) return `${code}#${state}`;
   }
 
   return value;
@@ -868,12 +869,12 @@ export function buildProviderRow(
                   title: t("provider.login_with", { label }),
                   message: prompt.message,
                   placeholder: prompt.placeholder || "",
-                  helperText,
+                  ...(helperText !== undefined ? { helperText } : {}),
                   submitLabel: t("provider.prompt.continue"),
-                  externalUrl: authUrlRef.current ?? undefined,
-                  autoCapture: oauthCallbackProviderId && oauthCallbackState
-                    ? { providerId: oauthCallbackProviderId, state: oauthCallbackState }
-                    : undefined,
+                  ...(authUrlRef.current !== null ? { externalUrl: authUrlRef.current } : {}),
+                  ...(oauthCallbackProviderId && oauthCallbackState
+                    ? { autoCapture: { providerId: oauthCallbackProviderId, state: oauthCallbackState } }
+                    : {}),
                 });
 
                 if (id === "anthropic") {

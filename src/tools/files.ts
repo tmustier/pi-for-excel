@@ -200,16 +200,19 @@ export function createFilesTool(): AgentTool<typeof schema, FilesToolDetails> {
           kind: "files_list",
           backend: backend.kind,
           count: files.length,
-          files: files.map((file) => ({
-            path: file.path,
-            size: file.size,
-            mimeType: file.mimeType,
-            fileKind: file.kind,
-            modifiedAt: file.modifiedAt,
-            sourceKind: file.sourceKind,
-            readOnly: file.readOnly,
-            workbookTag: mapWorkbookTag(file.workbookTag),
-          })),
+          files: files.map((file) => {
+            const workbookTag = mapWorkbookTag(file.workbookTag);
+            return {
+              path: file.path,
+              size: file.size,
+              mimeType: file.mimeType,
+              fileKind: file.kind,
+              modifiedAt: file.modifiedAt,
+              sourceKind: file.sourceKind,
+              readOnly: file.readOnly,
+              ...(workbookTag !== undefined ? { workbookTag } : {}),
+            };
+          }),
         };
 
         return {
@@ -217,7 +220,7 @@ export function createFilesTool(): AgentTool<typeof schema, FilesToolDetails> {
             type: "text",
             text: renderListMarkdown({
               backendLabel: backend.label,
-              folderFilter: params.path?.trim(),
+              ...(params.path?.trim() !== undefined ? { folderFilter: params.path.trim() } : {}),
               totalCount: allFiles.length,
               files: files.map((file) => ({
                 path: file.path,
@@ -226,7 +229,9 @@ export function createFilesTool(): AgentTool<typeof schema, FilesToolDetails> {
                 mimeType: file.mimeType,
                 sourceKind: file.sourceKind,
                 readOnly: file.readOnly,
-                workbookLabel: file.workbookTag?.workbookLabel,
+                ...(file.workbookTag?.workbookLabel !== undefined
+                  ? { workbookLabel: file.workbookTag.workbookLabel }
+                  : {}),
               })),
             }),
           }],
@@ -241,12 +246,13 @@ export function createFilesTool(): AgentTool<typeof schema, FilesToolDetails> {
 
         const readResult = await workspace.readFile(path, {
           mode,
-          maxChars,
+          ...(maxChars !== undefined ? { maxChars } : {}),
           audit: TOOL_AUDIT_CONTEXT,
         });
 
         const outputMode: "text" | "base64" = readResult.text !== undefined ? "text" : "base64";
         const output = readResult.text ?? readResult.base64 ?? "";
+        const workbookTag = mapWorkbookTag(readResult.workbookTag);
         const details: FilesReadDetails = {
           kind: "files_read",
           backend: backend.kind,
@@ -258,7 +264,7 @@ export function createFilesTool(): AgentTool<typeof schema, FilesToolDetails> {
           sourceKind: readResult.sourceKind,
           readOnly: readResult.readOnly,
           truncated: readResult.truncated === true,
-          workbookTag: mapWorkbookTag(readResult.workbookTag),
+          ...(workbookTag !== undefined ? { workbookTag } : {}),
         };
 
         return {
@@ -273,7 +279,9 @@ export function createFilesTool(): AgentTool<typeof schema, FilesToolDetails> {
               truncated: readResult.truncated === true,
               sourceKind: readResult.sourceKind,
               readOnly: readResult.readOnly,
-              workbookLabel: readResult.workbookTag?.workbookLabel,
+              ...(readResult.workbookTag?.workbookLabel !== undefined
+                ? { workbookLabel: readResult.workbookTag.workbookLabel }
+                : {}),
             }),
           }],
           details,
@@ -299,13 +307,14 @@ export function createFilesTool(): AgentTool<typeof schema, FilesToolDetails> {
         const filesAfterWrite = await workspace.listFiles();
         const writtenFile = filesAfterWrite.find((file) => file.path === normalizedPath);
 
+        const workbookTag = mapWorkbookTag(writtenFile?.workbookTag);
         const details: FilesWriteDetails = {
           kind: "files_write",
           backend: backend.kind,
           path: normalizedPath,
           encoding,
           chars: content.length,
-          workbookTag: mapWorkbookTag(writtenFile?.workbookTag),
+          ...(workbookTag !== undefined ? { workbookTag } : {}),
         };
 
         return {
@@ -326,11 +335,12 @@ export function createFilesTool(): AgentTool<typeof schema, FilesToolDetails> {
         audit: TOOL_AUDIT_CONTEXT,
       });
 
+      const workbookTag = mapWorkbookTag(deletedFile?.workbookTag);
       const details: FilesDeleteDetails = {
         kind: "files_delete",
         backend: backend.kind,
         path: normalizedPath,
-        workbookTag: mapWorkbookTag(deletedFile?.workbookTag),
+        ...(workbookTag !== undefined ? { workbookTag } : {}),
       };
 
       return {

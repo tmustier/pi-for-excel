@@ -99,8 +99,8 @@ export function createExplainFormulaTool(): AgentTool<typeof schema, ExplainForm
           await context.sync();
 
           const resolvedCell = qualifiedAddress(sheet.name, range.address);
-          const valuePreview = previewCellValue(range.values[0][0]);
-          const rawFormula: DynamicValue = range.formulas[0][0];
+          const valuePreview = previewCellValue(range.values[0]?.[0]);
+          const rawFormula: DynamicValue = range.formulas[0]?.[0];
           const formula = typeof rawFormula === "string" && rawFormula.startsWith("=")
             ? rawFormula
             : undefined;
@@ -138,15 +138,16 @@ export function createExplainFormulaTool(): AgentTool<typeof schema, ExplainForm
           }
 
           const referenceDetails: ExplainFormulaReferenceDetail[] = loadedReferences.map((reference) => {
-            const preview = previewCellValue(reference.range.values[0][0]);
-            const rawRefFormula: DynamicValue = reference.range.formulas[0][0];
+            const preview = previewCellValue(reference.range.values[0]?.[0]);
+            const rawRefFormula: DynamicValue = reference.range.formulas[0]?.[0];
+            const formulaPreview = typeof rawRefFormula === "string" && rawRefFormula.startsWith("=")
+              ? rawRefFormula
+              : undefined;
 
             return {
               address: reference.address,
               valuePreview: preview,
-              formulaPreview: typeof rawRefFormula === "string" && rawRefFormula.startsWith("=")
-                ? rawRefFormula
-                : undefined,
+              ...(formulaPreview !== undefined ? { formulaPreview } : {}),
             };
           });
 

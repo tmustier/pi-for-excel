@@ -129,13 +129,13 @@ export function upsertSandboxWidgetNode(options: SandboxWidgetUpsertOptions): Se
     ownerId: options.ownerId,
     id: options.widgetId,
     element: body,
-    title: options.title,
-    placement: options.placement,
-    order: options.order,
-    collapsible: options.collapsible,
-    collapsed: options.collapsed,
-    minHeightPx: options.minHeightPx,
-    maxHeightPx: options.maxHeightPx,
+    ...(options.title !== undefined ? { title: options.title } : {}),
+    ...(options.placement !== undefined ? { placement: options.placement } : {}),
+    ...(options.order !== undefined ? { order: options.order } : {}),
+    ...(options.collapsible !== undefined ? { collapsible: options.collapsible } : {}),
+    ...(options.collapsed !== undefined ? { collapsed: options.collapsed } : {}),
+    ...(options.minHeightPx !== undefined ? { minHeightPx: options.minHeightPx } : {}),
+    ...(options.maxHeightPx !== undefined ? { maxHeightPx: options.maxHeightPx } : {}),
   });
 
   return new Set(collectSandboxUiActionIds(options.node));

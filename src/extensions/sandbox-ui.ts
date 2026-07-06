@@ -158,8 +158,8 @@ function normalizeNode(raw: DynamicValue, depth: number, state: NormalizeState):
   return {
     kind: "element",
     tag,
-    className,
-    actionId,
+    ...(className !== undefined ? { className } : {}),
+    ...(actionId !== undefined ? { actionId } : {}),
     children,
   };
 }

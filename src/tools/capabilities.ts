@@ -240,7 +240,8 @@ export function chooseToolDisclosureBundle(prompt: string): ActiveToolDisclosure
   // across categories. Fall back to full for the first call so continuation
   // stripping doesn't block capabilities in the same turn.
   if (matchedBundles.length > 1) return "full";
-  if (matchedBundles.length === 1) return matchedBundles[0];
+  const [matchedBundle] = matchedBundles;
+  if (matchedBundle !== undefined) return matchedBundle;
   return "core";
 }
 

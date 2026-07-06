@@ -134,8 +134,8 @@ export function buildWorkbookCellChangeSummary(
         address: qualifiedAddress(args.sheetName, localAddress),
         beforeValue: toPreview(beforeValueRaw, previewChars),
         afterValue: toPreview(afterValueRaw, previewChars),
-        beforeFormula,
-        afterFormula,
+        ...(beforeFormula === undefined ? {} : { beforeFormula }),
+        ...(afterFormula === undefined ? {} : { afterFormula }),
       });
     }
   }

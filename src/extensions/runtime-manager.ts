@@ -154,7 +154,7 @@ export class ExtensionRuntimeManager {
   private readonly getActiveAgent: () => Agent | null;
   private readonly refreshRuntimeTools: () => Promise<void>;
   private readonly reservedToolNames: ReadonlySet<string>;
-  private readonly afterInjectAgentContext?: () => Promise<void> | void;
+  private readonly afterInjectAgentContext: (() => Promise<void> | void) | undefined;
   private readonly loadExtensionFromSource: typeof loadExtension;
   private readonly activateInSandbox: typeof activateExtensionInSandbox;
   private readonly showToastMessage: typeof showToast;
@@ -411,7 +411,7 @@ export class ExtensionRuntimeManager {
 
     const model = resolveModelForCompletion({
       fallbackModel: agent.state.model,
-      requestedModel: request.model,
+      ...(request.model !== undefined ? { requestedModel: request.model } : {}),
     });
 
     const apiKey = agent.getApiKey ? await agent.getApiKey(model.provider) : undefined;
@@ -426,7 +426,7 @@ export class ExtensionRuntimeManager {
     const stream = await agent.streamFn(
       model,
       {
-        systemPrompt: request.systemPrompt,
+        ...(request.systemPrompt !== undefined ? { systemPrompt: request.systemPrompt } : {}),
         messages: parseLlmMessages(request.messages, model),
       },
       {
@@ -435,7 +435,7 @@ export class ExtensionRuntimeManager {
           agentSessionId: agent.sessionId,
           extensionId: entry.id,
         }),
-        maxTokens: request.maxTokens,
+        ...(request.maxTokens !== undefined ? { maxTokens: request.maxTokens } : {}),
       },
     );
 
@@ -475,19 +475,21 @@ export class ExtensionRuntimeManager {
     const proxyBaseUrl = await getEnabledProxyBaseUrl(this.settings);
     const resolved = resolveOutboundRequestUrl({
       targetUrl: parsedUrl.toString(),
-      proxyBaseUrl,
+      ...(proxyBaseUrl !== undefined ? { proxyBaseUrl } : {}),
     });
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), normalizedOptions.timeoutMs);
 
     try {
-      const response = await fetch(resolved.requestUrl, {
+      const requestInit: RequestInit = {
         method: normalizedOptions.method,
         headers: normalizedOptions.headers,
-        body: normalizedOptions.body,
         signal: controller.signal,
-      });
+        ...(normalizedOptions.body !== undefined ? { body: normalizedOptions.body } : {}),
+      };
+
+      const response = await fetch(resolved.requestUrl, requestInit);
 
       const responseBody = await readLimitedResponseBody(response);
       const headers: Record<string, string> = {};
@@ -765,7 +767,9 @@ export class ExtensionRuntimeManager {
       settings: this.settings,
       connectionManager: this.connectionManager,
       getRequiredActiveAgent: () => this.getRequiredActiveAgent(),
-      afterInjectAgentContext: this.afterInjectAgentContext,
+      ...(this.afterInjectAgentContext !== undefined
+        ? { afterInjectAgentContext: this.afterInjectAgentContext }
+        : {}),
       runExtensionLlmCompletion: (request) => this.runExtensionLlmCompletion(entry, request),
       runExtensionHttpFetch: (url, options) => this.runExtensionHttpFetch(url, options),
       writeExtensionClipboard: (text) => this.writeExtensionClipboard(text),

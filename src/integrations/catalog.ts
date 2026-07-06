@@ -98,13 +98,14 @@ export function buildIntegrationPromptEntries(integrationIds: readonly string[])
     const definition = getIntegrationDefinition(integrationId);
     if (!definition) continue;
 
-    entries.push({
+    const entry: IntegrationPromptEntry = {
       id: definition.id,
       title: definition.title,
       instructions: definition.instructions,
-      agentSkillName: definition.agentSkillName,
-      warning: definition.warning,
-    });
+    };
+    if (definition.agentSkillName !== undefined) entry.agentSkillName = definition.agentSkillName;
+    if (definition.warning !== undefined) entry.warning = definition.warning;
+    entries.push(entry);
   }
 
   return entries;

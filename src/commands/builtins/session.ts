@@ -73,7 +73,8 @@ function formatBytes(bytes: number): string {
     unitIndex += 1;
   }
 
-  return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[unitIndex]}`;
+  const unit = units[unitIndex] ?? "GB";
+  return `${value.toFixed(value >= 10 ? 0 : 1)} ${unit}`;
 }
 
 function shortBackupId(id: string): string {

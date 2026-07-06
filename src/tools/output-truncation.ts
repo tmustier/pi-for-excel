@@ -107,6 +107,9 @@ function truncateHead(text: string, limits: ToolOutputTruncationLimits): Truncat
 
   for (let i = 0; i < lines.length && i < limits.maxLines; i += 1) {
     const line = lines[i];
+    if (line === undefined) {
+      continue;
+    }
     const lineBytes = utf8ByteLength(line) + (i > 0 ? 1 : 0);
     if (outputBytes + lineBytes > limits.maxBytes) {
       truncatedBy = "bytes";
@@ -184,6 +187,9 @@ function truncateTail(text: string, limits: ToolOutputTruncationLimits): Truncat
 
   for (let i = lines.length - 1; i >= 0 && selected.length < limits.maxLines; i -= 1) {
     const line = lines[i];
+    if (line === undefined) {
+      continue;
+    }
     const lineBytes = utf8ByteLength(line) + (selected.length > 0 ? 1 : 0);
 
     if (outputBytes + lineBytes > limits.maxBytes) {
@@ -457,7 +463,7 @@ function wrapToolWithOutputTruncation(
         toolCallId,
         strategy,
         limits,
-        saveTruncatedOutput: options.saveTruncatedOutput,
+        ...(options.saveTruncatedOutput !== undefined ? { saveTruncatedOutput: options.saveTruncatedOutput } : {}),
       });
     },
   };
@@ -476,7 +482,7 @@ export function applyToolOutputTruncation(
   return tools.map((tool) => wrapToolWithOutputTruncation(tool, {
     strategyForTool,
     resolveLimits,
-    saveTruncatedOutput: options.saveTruncatedOutput,
+    ...(options.saveTruncatedOutput !== undefined ? { saveTruncatedOutput: options.saveTruncatedOutput } : {}),
   }));
 }
 

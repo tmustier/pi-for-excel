@@ -2,9 +2,38 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
-import type { ToolResultMessage, UserMessage } from "@earendil-works/pi-ai/compat";
 
 import { shapeToolResultsForLlm } from "../src/messages/tool-result-shaping.ts";
+
+type ToolResultMessage = Extract<AgentMessage, { role: "toolResult" }>;
+type UserMessage = Extract<AgentMessage, { role: "user" }>;
+type TextBlock = Extract<ToolResultMessage["content"][number], { type: "text" }>;
+
+function isToolResultMessage(message: AgentMessage | undefined): message is ToolResultMessage {
+  return message?.role === "toolResult";
+}
+
+function getToolResultMessage(messages: readonly AgentMessage[], index: number): ToolResultMessage {
+  const message = messages[index];
+  if (!isToolResultMessage(message)) {
+    throw new Error(`Expected tool result message at index ${index}.`);
+  }
+
+  return message;
+}
+
+function isTextBlock(block: ToolResultMessage["content"][number]): block is TextBlock {
+  return block.type === "text";
+}
+
+function getTextBlock(message: ToolResultMessage): TextBlock {
+  const block = message.content.find(isTextBlock);
+  if (!block) {
+    throw new Error("Expected text block in tool result message.");
+  }
+
+  return block;
+}
 
 function createUser(text: string, timestamp: number): UserMessage {
   return {
@@ -74,20 +103,15 @@ void test("compacts older large tool results but preserves recent ones", () => {
     previewChars: 40,
   });
 
-  const shapedOlder = shaped[1];
-  assert.equal(shapedOlder.role, "toolResult");
-  const olderText = shapedOlder.content.find((block) => block.type === "text");
-  assert.ok(olderText);
+  const shapedOlder = getToolResultMessage(shaped, 1);
+  const olderText = getTextBlock(shapedOlder);
   assert.ok(olderText.text.startsWith("[Compacted tool result] read_range"));
 
-  const shapedRecent = shaped[2];
-  assert.equal(shapedRecent.role, "toolResult");
-  const recentText = shapedRecent.content.find((block) => block.type === "text");
-  assert.ok(recentText);
+  const shapedRecent = getToolResultMessage(shaped, 2);
+  const recentText = getTextBlock(shapedRecent);
   assert.equal(recentText.text, long);
 
-  const originalOlderText = older.content.find((block) => block.type === "text");
-  assert.ok(originalOlderText);
+  const originalOlderText = getTextBlock(older);
   assert.equal(originalOlderText.text, long);
 });
 
@@ -112,10 +136,8 @@ void test("keeps older small tool results intact", () => {
     previewChars: 40,
   });
 
-  const shapedOlder = shaped[0];
-  assert.equal(shapedOlder.role, "toolResult");
-  const olderText = shapedOlder.content.find((block) => block.type === "text");
-  assert.ok(olderText);
+  const shapedOlder = getToolResultMessage(shaped, 0);
+  const olderText = getTextBlock(shapedOlder);
   assert.equal(olderText.text, "short");
 });
 
@@ -143,10 +165,8 @@ void test("compacts older legacy string tool-result payloads", () => {
     previewChars: 40,
   });
 
-  const shapedOlder = shaped[0];
-  assert.equal(shapedOlder.role, "toolResult");
-  const olderText = shapedOlder.content.find((block) => block.type === "text");
-  assert.ok(olderText);
+  const shapedOlder = getToolResultMessage(shaped, 0);
+  const olderText = getTextBlock(shapedOlder);
   assert.match(olderText.text, /^\[Compacted tool result\]/);
 });
 
@@ -172,10 +192,8 @@ void test("compacts older image tool results even with small text", () => {
     previewChars: 40,
   });
 
-  const shapedOlder = shaped[0];
-  assert.equal(shapedOlder.role, "toolResult");
+  const shapedOlder = getToolResultMessage(shaped, 0);
   assert.equal(shapedOlder.content.length, 1);
-  const onlyBlock = shapedOlder.content[0];
-  assert.equal(onlyBlock.type, "text");
+  const onlyBlock = getTextBlock(shapedOlder);
   assert.match(onlyBlock.text, /image block/);
 });

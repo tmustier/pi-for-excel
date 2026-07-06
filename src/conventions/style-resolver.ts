@@ -74,9 +74,11 @@ export function resolveStyles(
             merged.numberFormatDp ?? builderParams?.dp,
             merged.currencySymbol ?? builderParams?.currencySymbol,
             resolveBuilderConventions({
-              negativeStyle: builderParams?.negativeStyle,
-              zeroStyle: builderParams?.zeroStyle,
-              thousandsSeparator: builderParams?.thousandsSeparator,
+              ...(builderParams?.negativeStyle !== undefined ? { negativeStyle: builderParams.negativeStyle } : {}),
+              ...(builderParams?.zeroStyle !== undefined ? { zeroStyle: builderParams.zeroStyle } : {}),
+              ...(builderParams?.thousandsSeparator !== undefined
+                ? { thousandsSeparator: builderParams.thousandsSeparator }
+                : {}),
             }),
           );
 
@@ -111,7 +113,12 @@ export function resolveStyles(
     }
   }
 
-  return { properties: merged, excelNumberFormat, warnings };
+  const resolved: ResolvedCellStyle = { properties: merged, warnings };
+  if (excelNumberFormat !== undefined) {
+    resolved.excelNumberFormat = excelNumberFormat;
+  }
+
+  return resolved;
 }
 
 function mergeCellStyle(target: CellStyle, source: Partial<CellStyle>): void {

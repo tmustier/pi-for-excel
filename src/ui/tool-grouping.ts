@@ -138,6 +138,12 @@ export function initToolGrouping(root: HTMLElement): () => void {
 
       if (currentRun.length > 0) {
         const prev = currentRun[currentRun.length - 1];
+        if (!prev) {
+          currentRun = [el];
+          currentToolName = toolName;
+          continue;
+        }
+
         const prevCard = prev.querySelector(".pi-tool-card");
         const prevName = prevCard?.getAttribute("data-tool-name");
 
@@ -158,6 +164,10 @@ export function initToolGrouping(root: HTMLElement): () => void {
     // Wrap each run in a container element with a collapsible header.
     for (const run of runs) {
       const leader = run.elements[0];
+      if (!leader) {
+        continue;
+      }
+
       const members = run.elements.slice(1);
       const count = run.elements.length;
 

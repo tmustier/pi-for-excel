@@ -50,13 +50,39 @@ function captureRuleFormatting(format: Excel.ConditionalRangeFormat): {
   italic?: boolean;
   underline?: boolean;
 } {
-  return {
-    fillColor: normalizeOptionalString(format.fill.color),
-    fontColor: normalizeOptionalString(format.font.color),
-    bold: normalizeOptionalBoolean(format.font.bold),
-    italic: normalizeOptionalBoolean(format.font.italic),
-    underline: normalizeUnderline(format.font.underline),
-  };
+  const formatting: {
+    fillColor?: string;
+    fontColor?: string;
+    bold?: boolean;
+    italic?: boolean;
+    underline?: boolean;
+  } = {};
+
+  const fillColor = normalizeOptionalString(format.fill.color);
+  if (fillColor !== undefined) formatting.fillColor = fillColor;
+  const fontColor = normalizeOptionalString(format.font.color);
+  if (fontColor !== undefined) formatting.fontColor = fontColor;
+  const bold = normalizeOptionalBoolean(format.font.bold);
+  if (bold !== undefined) formatting.bold = bold;
+  const italic = normalizeOptionalBoolean(format.font.italic);
+  if (italic !== undefined) formatting.italic = italic;
+  const underline = normalizeUnderline(format.font.underline);
+  if (underline !== undefined) formatting.underline = underline;
+
+  return formatting;
+}
+
+export function attachConditionalFormatCaptureContext(
+  rule: RecoveryConditionalFormatRule,
+  captureContext: ConditionalFormatRuleCaptureContext,
+): RecoveryConditionalFormatRule {
+  if (captureContext.stopIfTrue !== undefined) {
+    rule.stopIfTrue = captureContext.stopIfTrue;
+  }
+  if (captureContext.appliesToAddress !== undefined) {
+    rule.appliesToAddress = captureContext.appliesToAddress;
+  }
+  return rule;
 }
 
 function applyRuleFormatting(format: Excel.ConditionalRangeFormat, rule: RecoveryConditionalFormatRule): void {
@@ -104,13 +130,11 @@ export const BASIC_CONDITIONAL_FORMAT_RULE_HANDLERS = {
 
       return {
         supported: true,
-        rule: {
+        rule: attachConditionalFormatCaptureContext({
           type: "custom",
-          stopIfTrue: captureContext.stopIfTrue,
           formula,
-          appliesToAddress: captureContext.appliesToAddress,
           ...captureRuleFormatting(conditionalFormat.custom.format),
-        },
+        }, captureContext),
       };
     },
     apply(range, targetAddress, rule) {
@@ -158,15 +182,13 @@ export const BASIC_CONDITIONAL_FORMAT_RULE_HANDLERS = {
 
       return {
         supported: true,
-        rule: {
+        rule: attachConditionalFormatCaptureContext({
           type: "cell_value",
-          stopIfTrue: captureContext.stopIfTrue,
           operator,
           formula1,
-          formula2: typeof formula2 === "string" ? formula2 : undefined,
-          appliesToAddress: captureContext.appliesToAddress,
+          ...(typeof formula2 === "string" ? { formula2 } : {}),
           ...captureRuleFormatting(conditionalFormat.cellValue.format),
-        },
+        }, captureContext),
       };
     },
     apply(range, targetAddress, rule) {
@@ -221,14 +243,12 @@ export const BASIC_CONDITIONAL_FORMAT_RULE_HANDLERS = {
 
       return {
         supported: true,
-        rule: {
+        rule: attachConditionalFormatCaptureContext({
           type: "text_comparison",
-          stopIfTrue: captureContext.stopIfTrue,
           textOperator: operator,
           text,
-          appliesToAddress: captureContext.appliesToAddress,
           ...captureRuleFormatting(conditionalFormat.textComparison.format),
-        },
+        }, captureContext),
       };
     },
     apply(range, targetAddress, rule) {
@@ -279,14 +299,12 @@ export const BASIC_CONDITIONAL_FORMAT_RULE_HANDLERS = {
 
       return {
         supported: true,
-        rule: {
+        rule: attachConditionalFormatCaptureContext({
           type: "top_bottom",
-          stopIfTrue: captureContext.stopIfTrue,
           topBottomType,
           rank,
-          appliesToAddress: captureContext.appliesToAddress,
           ...captureRuleFormatting(conditionalFormat.topBottom.format),
-        },
+        }, captureContext),
       };
     },
     apply(range, targetAddress, rule) {
@@ -329,13 +347,11 @@ export const BASIC_CONDITIONAL_FORMAT_RULE_HANDLERS = {
 
       return {
         supported: true,
-        rule: {
+        rule: attachConditionalFormatCaptureContext({
           type: "preset_criteria",
-          stopIfTrue: captureContext.stopIfTrue,
           presetCriterion: criterion,
-          appliesToAddress: captureContext.appliesToAddress,
           ...captureRuleFormatting(conditionalFormat.preset.format),
-        },
+        }, captureContext),
       };
     },
     apply(range, targetAddress, rule) {

@@ -517,15 +517,13 @@ function applyFormatRangeStateToArea(range: Excel.Range, state: RecoveryFormatAr
   }
 
   if (Array.isArray(state.columnWidths)) {
-    for (let columnIndex = 0; columnIndex < state.columnWidths.length; columnIndex += 1) {
-      const width = state.columnWidths[columnIndex];
+    for (const [columnIndex, width] of state.columnWidths.entries()) {
       range.getColumn(columnIndex).format.columnWidth = width;
     }
   }
 
   if (Array.isArray(state.rowHeights)) {
-    for (let rowIndex = 0; rowIndex < state.rowHeights.length; rowIndex += 1) {
-      const height = state.rowHeights[rowIndex];
+    for (const [rowIndex, height] of state.rowHeights.entries()) {
       range.getRow(rowIndex).format.rowHeight = height;
     }
   }

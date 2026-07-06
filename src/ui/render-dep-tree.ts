@@ -41,8 +41,11 @@ function extractCurrency(section: string): string | null {
   // Locale-prefixed: [$€-407], [$$-409], etc.
   const locale = section.match(/\[\$([^\]-]+)/);
   if (locale) {
-    const sym = locale[1].replace(/-.*/, "").trim();
-    if (sym.length > 0) return sym;
+    const localeSymbol = locale[1];
+    if (localeSymbol) {
+      const sym = localeSymbol.replace(/-.*/, "").trim();
+      if (sym.length > 0) return sym;
+    }
   }
   return null;
 }
@@ -54,7 +57,7 @@ function extractCurrency(section: string): string | null {
  */
 function applyNumberFormat(value: number, fmt: string): string {
   // Use the positive section (first section before ";")
-  const section = fmt.split(";")[0];
+  const section = fmt.split(";")[0] ?? fmt;
 
   // ── Percentage ────────────────────────────────────────
   if (section.includes("%")) {

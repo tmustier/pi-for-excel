@@ -28,7 +28,7 @@ export function buildFilesDialogStatusMessage(args: {
     formatBytes(args.totalSizeBytes),
     formatBackendLabel({
       backendLabel: args.backendLabel,
-      nativeDirectoryName: args.nativeDirectoryName,
+      ...(args.nativeDirectoryName !== undefined ? { nativeDirectoryName: args.nativeDirectoryName } : {}),
     }),
   ].join(" · ");
 }

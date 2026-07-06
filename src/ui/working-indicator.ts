@@ -23,6 +23,10 @@ const HINT_KEYS: string[] = [
   "working.hint.redirect",
 ];
 
+function getHintKey(index: number): string {
+  return HINT_KEYS[index] ?? HINT_KEYS[0] ?? "working.hint.escape";
+}
+
 @customElement("pi-working-indicator")
 export class WorkingIndicator extends LitElement {
   @property({ type: Boolean }) active = false;
@@ -38,9 +42,9 @@ export class WorkingIndicator extends LitElement {
   @state() private _fadingWhimsical = false;
   @state() private _fadingHint = false;
 
-  private _whimsicalTimer?: ReturnType<typeof setInterval>;
-  private _hintTimer?: ReturnType<typeof setInterval>;
-  private _staggerTimeout?: ReturnType<typeof setTimeout>;
+  private _whimsicalTimer: ReturnType<typeof setInterval> | undefined;
+  private _hintTimer: ReturnType<typeof setInterval> | undefined;
+  private _staggerTimeout: ReturnType<typeof setTimeout> | undefined;
 
   protected override createRenderRoot() { return this; }
 
@@ -122,7 +126,7 @@ export class WorkingIndicator extends LitElement {
     if (!this.active) return html``;
 
     const left = this.primaryText || this._whimsical;
-    const right = this.hintText || t(HINT_KEYS[this._hintIndex]);
+    const right = this.hintText || t(getHintKey(this._hintIndex));
 
     const fixed = Boolean(this.primaryText || this.hintText);
 

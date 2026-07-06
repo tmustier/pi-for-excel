@@ -33,7 +33,7 @@ async function postJsonRpc(args: {
   const proxyBaseUrl = await getEnabledProxyBaseUrl(settings);
   const resolved = resolveOutboundRequestUrl({
     targetUrl: server.url,
-    proxyBaseUrl,
+    ...(proxyBaseUrl !== undefined ? { proxyBaseUrl } : {}),
   });
 
   const body: DynamicObject = {
@@ -80,7 +80,7 @@ async function postJsonRpc(args: {
         return {
           response: null,
           proxied: resolved.proxied,
-          proxyBaseUrl: resolved.proxyBaseUrl,
+          ...(resolved.proxyBaseUrl !== undefined ? { proxyBaseUrl: resolved.proxyBaseUrl } : {}),
         };
       }
 
@@ -90,7 +90,7 @@ async function postJsonRpc(args: {
       return {
         response: payload,
         proxied: resolved.proxied,
-        proxyBaseUrl: resolved.proxyBaseUrl,
+        ...(resolved.proxyBaseUrl !== undefined ? { proxyBaseUrl: resolved.proxyBaseUrl } : {}),
       };
     },
   });
@@ -135,6 +135,6 @@ export async function probeMcpServer(
   return {
     toolCount: parseToolCountFromListResponse(list.response),
     proxied: list.proxied,
-    proxyBaseUrl: list.proxyBaseUrl,
+    ...(list.proxyBaseUrl !== undefined ? { proxyBaseUrl: list.proxyBaseUrl } : {}),
   };
 }

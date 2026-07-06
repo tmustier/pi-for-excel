@@ -170,11 +170,19 @@ export function captureBorderState(border: Excel.RangeBorder): RecoveryFormatBor
   const weightRaw = border.weight;
   const colorRaw = border.color;
 
-  return {
+  const state: RecoveryFormatBorderState = {
     style: styleRaw,
-    weight: isRecoveryRangeBorderWeight(weightRaw) ? weightRaw : undefined,
-    color: normalizeOptionalString(colorRaw),
   };
+
+  if (isRecoveryRangeBorderWeight(weightRaw)) {
+    state.weight = weightRaw;
+  }
+  const color = normalizeOptionalString(colorRaw);
+  if (color !== undefined) {
+    state.color = color;
+  }
+
+  return state;
 }
 
 export function applyBorderState(border: Excel.RangeBorder, state: RecoveryFormatBorderState): void {

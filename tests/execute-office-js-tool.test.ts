@@ -82,10 +82,6 @@ void test("format_cells border shorthand none is normalized and clears all edges
 
   assert.deepEqual(borderParams, {
     shorthand: "none",
-    top: undefined,
-    bottom: undefined,
-    left: undefined,
-    right: undefined,
   });
 
   assert.deepEqual(instructions, {

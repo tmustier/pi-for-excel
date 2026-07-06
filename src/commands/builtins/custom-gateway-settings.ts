@@ -288,12 +288,12 @@ export async function buildCustomGatewaySection(
           : undefined;
 
         const saved = await saveOpenAiGatewayConfig(getAppStorage().customProviders, {
-          id: editingGatewayId ?? undefined,
+          ...(editingGatewayId ? { id: editingGatewayId } : {}),
           displayName: nameInput.value,
           endpointUrl: endpointInput.value,
           modelId: modelInput.value,
           apiKey: apiKeyInput.value,
-          contextWindow,
+          ...(contextWindow !== undefined ? { contextWindow } : {}),
         });
 
         await reloadGateways();

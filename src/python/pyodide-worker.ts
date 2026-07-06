@@ -109,14 +109,20 @@ function detectImports(code: string): string[] {
     // import foo / import foo.bar
     const importMatch = /^import\s+([\w.]+)/.exec(trimmed);
     if (importMatch) {
-      const topLevel = importMatch[1].split(".")[0];
-      if (topLevel) imports.add(topLevel);
+      const importName = importMatch[1];
+      if (importName) {
+        const topLevel = importName.split(".")[0];
+        if (topLevel) imports.add(topLevel);
+      }
     }
     // from foo import bar / from foo.bar import baz
     const fromMatch = /^from\s+([\w.]+)\s+import/.exec(trimmed);
     if (fromMatch) {
-      const topLevel = fromMatch[1].split(".")[0];
-      if (topLevel) imports.add(topLevel);
+      const importName = fromMatch[1];
+      if (importName) {
+        const topLevel = importName.split(".")[0];
+        if (topLevel) imports.add(topLevel);
+      }
     }
   }
 
@@ -239,15 +245,16 @@ __sys__.stderr = __sys__.__stderr__
     } catch { /* ignore */ }
 
     const message = error instanceof Error ? error.message : String(error);
-    return {
+    const response: PyodideWorkerResponse = {
       id: request.id,
       ok: false,
-      stdout: stdout || undefined,
-      stderr: stderr || undefined,
       error: message,
       loadTimeMs,
       runTimeMs: Math.round(performance.now() - runStart),
     };
+    if (stdout.length > 0) response.stdout = stdout;
+    if (stderr.length > 0) response.stderr = stderr;
+    return response;
   }
 
   const runTimeMs = Math.round(performance.now() - runStart);
@@ -291,15 +298,16 @@ __sys__.stderr = __sys__.__stderr__
     py.globals.delete("__result_json__");
   } catch { /* ignore */ }
 
-  return {
+  const response: PyodideWorkerResponse = {
     id: request.id,
     ok: true,
-    stdout: stdout || undefined,
-    stderr: stderr || undefined,
-    resultJson,
     loadTimeMs,
     runTimeMs,
   };
+  if (stdout.length > 0) response.stdout = stdout;
+  if (stderr.length > 0) response.stderr = stderr;
+  if (resultJson !== undefined) response.resultJson = resultJson;
+  return response;
 }
 
 self.addEventListener("message", (event: MessageEvent<PyodideWorkerRequest>) => {

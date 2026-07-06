@@ -285,8 +285,8 @@ async function defaultWriteOutputValues(request: WriteOutputRequest): Promise<Wr
       rowsWritten: rows,
       colsWritten: cols,
       formulaErrorCount: formulaErrors.length,
-      beforeValues,
-      beforeFormulas,
+      ...(beforeValues !== undefined ? { beforeValues } : {}),
+      ...(beforeFormulas !== undefined ? { beforeFormulas } : {}),
       readBackValues: verify.values,
       readBackFormulas: verify.formulas,
       outputStartCell: startCell,
@@ -441,8 +441,9 @@ export function createPythonTransformRangeTool(
         const input = await readInputRange(params.range);
         const sourceAddress = qualifiedAddress(input.sheetName, input.address);
 
-        const outputStartCell = cleanOptionalString(params.output_start_cell)
-          ? toSheetQualifiedCell(input.sheetName, cleanOptionalString(params.output_start_cell) ?? "")
+        const requestedOutputStartCell = cleanOptionalString(params.output_start_cell);
+        const outputStartCell = requestedOutputStartCell !== undefined
+          ? toSheetQualifiedCell(input.sheetName, requestedOutputStartCell)
           : defaultOutputStartCell(input);
 
         const bridgeConfig = await getBridgeConfig();
@@ -453,7 +454,7 @@ export function createPythonTransformRangeTool(
             range: sourceAddress,
             values: input.values,
           }),
-          timeout_ms: params.timeout_ms,
+          ...(params.timeout_ms !== undefined ? { timeout_ms: params.timeout_ms } : {}),
         };
 
         let bridgeResponse: PythonBridgeResponse | null = null;
@@ -532,7 +533,7 @@ export function createPythonTransformRangeTool(
               blocked: true,
               inputAddress: sourceAddress,
               outputAddress: writeResult.outputAddress,
-              bridgeUrl: bridgeUrlUsed,
+              ...(bridgeUrlUsed !== undefined ? { bridgeUrl: bridgeUrlUsed } : {}),
               existingCount: writeResult.existingCount,
             },
           };
@@ -586,11 +587,11 @@ export function createPythonTransformRangeTool(
             blocked: false,
             inputAddress: sourceAddress,
             outputAddress: writeResult.outputAddress,
-            bridgeUrl: bridgeUrlUsed,
+            ...(bridgeUrlUsed !== undefined ? { bridgeUrl: bridgeUrlUsed } : {}),
             rowsWritten: writeResult.rowsWritten,
             colsWritten: writeResult.colsWritten,
             formulaErrorCount: writeResult.formulaErrorCount,
-            changes,
+            ...(changes !== undefined ? { changes } : {}),
           },
         };
 
@@ -654,7 +655,7 @@ export function createPythonTransformRangeTool(
             kind: "python_transform_range",
             blocked: false,
             error: message,
-            skillHint,
+            ...(skillHint !== undefined ? { skillHint } : {}),
           },
         };
       }

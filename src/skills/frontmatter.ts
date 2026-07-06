@@ -56,7 +56,11 @@ export function parseSkillDocument(markdown: string): ParsedSkillDocument | null
   const match = FRONTMATTER_RE.exec(markdown);
   if (!match) return null;
 
-  const frontmatterValues = parseTopLevelFrontmatter(match[1]);
+  const fullMatch = match[0];
+  const frontmatterBlock = match[1];
+  if (frontmatterBlock === undefined) return null;
+
+  const frontmatterValues = parseTopLevelFrontmatter(frontmatterBlock);
   const name = frontmatterValues.name?.trim() ?? "";
   const description = frontmatterValues.description?.trim() ?? "";
 
@@ -65,13 +69,13 @@ export function parseSkillDocument(markdown: string): ParsedSkillDocument | null
   }
 
   const compatibility = frontmatterValues.compatibility?.trim();
-  const body = markdown.slice(match[0].length).trimStart();
+  const body = markdown.slice(fullMatch.length).trimStart();
 
   return {
     frontmatter: {
       name,
       description,
-      compatibility: compatibility && compatibility.length > 0 ? compatibility : undefined,
+      ...(compatibility && compatibility.length > 0 ? { compatibility } : {}),
     },
     body,
   };

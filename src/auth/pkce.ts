@@ -42,6 +42,22 @@ function rightRotate(value: number, bits: number): number {
   return (value >>> bits) | (value << (32 - bits));
 }
 
+function readPkceByte(bytes: Uint8Array, index: number): number {
+  const value = bytes[index];
+  if (value === undefined) {
+    throw new Error("PKCE SHA-256 byte index out of bounds");
+  }
+  return value;
+}
+
+function readSha256Word(words: Uint32Array, index: number): number {
+  const value = words[index];
+  if (value === undefined) {
+    throw new Error("PKCE SHA-256 word index out of bounds");
+  }
+  return value;
+}
+
 function sha256Fallback(bytes: Uint8Array): Uint8Array {
   const paddedLength = Math.ceil((bytes.length + 9) / 64) * 64;
   const padded = new Uint8Array(paddedLength);
@@ -67,32 +83,34 @@ function sha256Fallback(bytes: Uint8Array): Uint8Array {
     for (let i = 0; i < 16; i++) {
       const j = offset + i * 4;
       w[i] = (
-        (padded[j] << 24) |
-        (padded[j + 1] << 16) |
-        (padded[j + 2] << 8) |
-        padded[j + 3]
+        (readPkceByte(padded, j) << 24) |
+        (readPkceByte(padded, j + 1) << 16) |
+        (readPkceByte(padded, j + 2) << 8) |
+        readPkceByte(padded, j + 3)
       ) >>> 0;
     }
 
     for (let i = 16; i < 64; i++) {
-      const s0 = (rightRotate(w[i - 15], 7) ^ rightRotate(w[i - 15], 18) ^ (w[i - 15] >>> 3)) >>> 0;
-      const s1 = (rightRotate(w[i - 2], 17) ^ rightRotate(w[i - 2], 19) ^ (w[i - 2] >>> 10)) >>> 0;
-      w[i] = (w[i - 16] + s0 + w[i - 7] + s1) >>> 0;
+      const wordMinus15 = readSha256Word(w, i - 15);
+      const wordMinus2 = readSha256Word(w, i - 2);
+      const s0 = (rightRotate(wordMinus15, 7) ^ rightRotate(wordMinus15, 18) ^ (wordMinus15 >>> 3)) >>> 0;
+      const s1 = (rightRotate(wordMinus2, 17) ^ rightRotate(wordMinus2, 19) ^ (wordMinus2 >>> 10)) >>> 0;
+      w[i] = (readSha256Word(w, i - 16) + s0 + readSha256Word(w, i - 7) + s1) >>> 0;
     }
 
-    let a = h[0];
-    let b = h[1];
-    let c = h[2];
-    let d = h[3];
-    let e = h[4];
-    let f = h[5];
-    let g = h[6];
-    let hash = h[7];
+    let a = readSha256Word(h, 0);
+    let b = readSha256Word(h, 1);
+    let c = readSha256Word(h, 2);
+    let d = readSha256Word(h, 3);
+    let e = readSha256Word(h, 4);
+    let f = readSha256Word(h, 5);
+    let g = readSha256Word(h, 6);
+    let hash = readSha256Word(h, 7);
 
     for (let i = 0; i < 64; i++) {
       const s1 = (rightRotate(e, 6) ^ rightRotate(e, 11) ^ rightRotate(e, 25)) >>> 0;
       const ch = ((e & f) ^ (~e & g)) >>> 0;
-      const temp1 = (hash + s1 + ch + SHA256_K[i] + w[i]) >>> 0;
+      const temp1 = (hash + s1 + ch + readSha256Word(SHA256_K, i) + readSha256Word(w, i)) >>> 0;
       const s0 = (rightRotate(a, 2) ^ rightRotate(a, 13) ^ rightRotate(a, 22)) >>> 0;
       const maj = ((a & b) ^ (a & c) ^ (b & c)) >>> 0;
       const temp2 = (s0 + maj) >>> 0;
@@ -107,19 +125,19 @@ function sha256Fallback(bytes: Uint8Array): Uint8Array {
       a = (temp1 + temp2) >>> 0;
     }
 
-    h[0] = (h[0] + a) >>> 0;
-    h[1] = (h[1] + b) >>> 0;
-    h[2] = (h[2] + c) >>> 0;
-    h[3] = (h[3] + d) >>> 0;
-    h[4] = (h[4] + e) >>> 0;
-    h[5] = (h[5] + f) >>> 0;
-    h[6] = (h[6] + g) >>> 0;
-    h[7] = (h[7] + hash) >>> 0;
+    h[0] = (readSha256Word(h, 0) + a) >>> 0;
+    h[1] = (readSha256Word(h, 1) + b) >>> 0;
+    h[2] = (readSha256Word(h, 2) + c) >>> 0;
+    h[3] = (readSha256Word(h, 3) + d) >>> 0;
+    h[4] = (readSha256Word(h, 4) + e) >>> 0;
+    h[5] = (readSha256Word(h, 5) + f) >>> 0;
+    h[6] = (readSha256Word(h, 6) + g) >>> 0;
+    h[7] = (readSha256Word(h, 7) + hash) >>> 0;
   }
 
   const digest = new Uint8Array(32);
   for (let i = 0; i < h.length; i++) {
-    const value = h[i];
+    const value = readSha256Word(h, i);
     const offset = i * 4;
     digest[offset] = (value >>> 24) & 0xff;
     digest[offset + 1] = (value >>> 16) & 0xff;

@@ -26,6 +26,10 @@ const PLACEHOLDER_HINT_KEYS = [
   "input.placeholder.summarize",
 ];
 
+function getPlaceholderHintKey(index: number): string {
+  return PLACEHOLDER_HINT_KEYS[index] ?? PLACEHOLDER_HINT_KEYS[0] ?? "input.placeholder.ask";
+}
+
 @customElement("pi-input")
 export class PiInput extends LitElement {
   @property({ type: Boolean }) isStreaming = false;
@@ -35,7 +39,7 @@ export class PiInput extends LitElement {
   @state() private _isDragOver = false;
   @query("textarea") private _textarea!: HTMLTextAreaElement;
 
-  private _placeholderTimer?: ReturnType<typeof setInterval>;
+  private _placeholderTimer: ReturnType<typeof setInterval> | undefined;
 
   get value(): string { return this._value; }
   set value(v: string) {
@@ -179,7 +183,7 @@ export class PiInput extends LitElement {
         <textarea
           class="pi-input-textarea"
           .value=${this._value}
-          placeholder=${this.isStreaming ? t("input.streaming.placeholder") : t(PLACEHOLDER_HINT_KEYS[this._placeholderIndex])}
+          placeholder=${this.isStreaming ? t("input.streaming.placeholder") : t(getPlaceholderHintKey(this._placeholderIndex))}
           rows="1"
           aria-label=${t("input.chat.aria")}
           autocomplete="off"

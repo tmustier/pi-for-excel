@@ -154,11 +154,13 @@ export function handleSlashCommandExecution(args: {
     name: cmdName,
     args: argsText,
     busy,
-    enqueueCommand: actionQueue
-      ? (name: string, args: string) => {
-        actionQueue.enqueueCommand(name, args);
+    ...(actionQueue
+      ? {
+        enqueueCommand: (name: string, args: string) => {
+          actionQueue.enqueueCommand(name, args);
+        },
       }
-      : undefined,
+      : {}),
     beforeExecute: () => {
       event.preventDefault();
       event.stopImmediatePropagation();

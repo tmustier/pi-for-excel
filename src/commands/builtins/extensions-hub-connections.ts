@@ -306,7 +306,11 @@ export async function renderConnectionsTab(args: {
           const testKey = key.length > 0 ? key : (getApiKeyForProvider(config) ?? "");
           if (!testKey) { showToast(t("extensions-hub-connections.toast.noApiKeyToValidate")); return; }
           const proxyBaseUrl = await getEnabledProxyBaseUrl(settings);
-          const result = await validateWebSearchApiKey({ provider: selectedProvider, apiKey: testKey, proxyBaseUrl });
+          const result = await validateWebSearchApiKey({
+            provider: selectedProvider,
+            apiKey: testKey,
+            ...(proxyBaseUrl !== undefined ? { proxyBaseUrl } : {}),
+          });
           showToast(t(result.ok ? "extensions-hub-connections.toast.validationOk" : "extensions-hub-connections.toast.validationFailed", { message: result.message }));
         } catch (err) {
           showToast(t("extensions-hub-connections.toast.validationError", { error: err instanceof Error ? err.message : String(err) }));

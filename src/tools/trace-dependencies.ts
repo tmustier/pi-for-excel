@@ -91,14 +91,16 @@ async function loadLeafNode(
   sheet.load("name");
   await context.sync();
 
-  const rawFmt: DynamicValue = range.numberFormat[0][0];
-  const rawFormula: DynamicValue = range.formulas[0][0];
+  const rawFmt: DynamicValue = range.numberFormat[0]?.[0];
+  const rawFormula: DynamicValue = range.formulas[0]?.[0];
+  const numberFormat = typeof rawFmt === "string" && rawFmt !== "" ? rawFmt : undefined;
+  const formula = typeof rawFormula === "string" && rawFormula.startsWith("=") ? rawFormula : undefined;
 
   return {
     address: qualifiedAddress(sheet.name, range.address),
-    value: range.values[0][0],
-    numberFormat: typeof rawFmt === "string" && rawFmt !== "" ? rawFmt : undefined,
-    formula: typeof rawFormula === "string" && rawFormula.startsWith("=") ? rawFormula : undefined,
+    value: range.values[0]?.[0],
+    ...(numberFormat !== undefined ? { numberFormat } : {}),
+    ...(formula !== undefined ? { formula } : {}),
     precedents: [],
   };
 }
@@ -339,22 +341,22 @@ async function traceCell(
   await context.sync();
 
   const fullAddr = qualifiedAddress(sheet.name, range.address);
-  const rawFmt: DynamicValue = range.numberFormat[0][0];
+  const rawFmt: DynamicValue = range.numberFormat[0]?.[0];
   const numberFormat = typeof rawFmt === "string" && rawFmt !== "" ? rawFmt : undefined;
 
   if (visited.has(fullAddr)) {
     return {
       address: fullAddr,
-      value: range.values[0][0],
-      numberFormat,
+      value: range.values[0]?.[0],
+      ...(numberFormat !== undefined ? { numberFormat } : {}),
       formula: "(circular reference — already visited)",
       precedents: [],
     };
   }
   visited.add(fullAddr);
 
-  const rawFormula: DynamicValue = range.formulas[0][0];
-  const value: DynamicValue = range.values[0][0];
+  const rawFormula: DynamicValue = range.formulas[0]?.[0];
+  const value: DynamicValue = range.values[0]?.[0];
   const formula = typeof rawFormula === "string" && rawFormula.startsWith("=")
     ? rawFormula
     : undefined;
@@ -367,8 +369,8 @@ async function traceCell(
   const node: DepNodeDetail = {
     address: fullAddr,
     value,
-    numberFormat,
-    formula,
+    ...(numberFormat !== undefined ? { numberFormat } : {}),
+    ...(formula !== undefined ? { formula } : {}),
     precedents: [],
   };
 

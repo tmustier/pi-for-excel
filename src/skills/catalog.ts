@@ -78,7 +78,9 @@ function buildDefinition(args: {
   return {
     name: args.frontmatter.name,
     description: args.frontmatter.description,
-    compatibility: args.frontmatter.compatibility,
+    ...(args.frontmatter.compatibility !== undefined
+      ? { compatibility: args.frontmatter.compatibility }
+      : {}),
     location: args.location,
     sourceKind: args.sourceKind,
     markdown: args.markdown,

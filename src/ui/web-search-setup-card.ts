@@ -244,7 +244,11 @@ function createKeyStep(
         status.textContent = t("web-search-setup.validating");
         status.className = "pi-search-setup__status";
 
-        const result = await validateWebSearchApiKey({ provider, apiKey: key, proxyBaseUrl });
+        const result = await validateWebSearchApiKey({
+          provider,
+          apiKey: key,
+          ...(proxyBaseUrl !== undefined ? { proxyBaseUrl } : {}),
+        });
 
         if (result.ok) {
           status.textContent = `✓ ${result.message}`;

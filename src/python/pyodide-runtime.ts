@@ -116,8 +116,10 @@ export async function callPyodideRuntime(
     id,
     type: "run",
     code: request.code,
-    inputJson: request.input_json,
   };
+  if (request.input_json !== undefined) {
+    workerRequest.inputJson = request.input_json;
+  }
 
   // Set up abort handling
   let abortHandler: (() => void) | null = null;
@@ -136,20 +138,21 @@ export async function callPyodideRuntime(
   try {
     const workerResponse = await sendToWorker(workerRequest, timeoutMs);
 
-    return {
+    const response: PythonBridgeResponse = {
       ok: workerResponse.ok,
       action: "run_python",
       exit_code: workerResponse.ok ? 0 : 1,
-      stdout: workerResponse.stdout,
-      stderr: workerResponse.stderr,
-      result_json: workerResponse.resultJson,
-      error: workerResponse.error,
       metadata: {
         backend: "pyodide",
         loadTimeMs: workerResponse.loadTimeMs,
         runTimeMs: workerResponse.runTimeMs,
       },
     };
+    if (workerResponse.stdout !== undefined) response.stdout = workerResponse.stdout;
+    if (workerResponse.stderr !== undefined) response.stderr = workerResponse.stderr;
+    if (workerResponse.resultJson !== undefined) response.result_json = workerResponse.resultJson;
+    if (workerResponse.error !== undefined) response.error = workerResponse.error;
+    return response;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return {

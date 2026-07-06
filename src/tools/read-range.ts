@@ -98,8 +98,9 @@ export function createReadRangeTool(): AgentTool<typeof schema> {
 
             const rangeAddr = range.address;
             for (const { comment, location, replyCount } of entries) {
-              const locCell = location.address.includes("!")
-                ? location.address.split("!")[1]
+              const locBangIndex = location.address.indexOf("!");
+              const locCell = locBangIndex >= 0
+                ? location.address.slice(locBangIndex + 1)
                 : location.address;
               if (isCellInRange(locCell, rangeAddr)) {
                 comments.push({
@@ -127,8 +128,10 @@ export function createReadRangeTool(): AgentTool<typeof schema> {
 
         const fullAddress = qualifiedAddress(result.sheetName, result.address);
         // Extract just the cell part (without sheet!) for offset calculations
-        const cellPart = result.address.includes("!") ? result.address.split("!")[1] : result.address;
-        const startCell = cellPart.split(":")[0];
+        const bangIndex = result.address.indexOf("!");
+        const cellPart = bangIndex >= 0 ? result.address.slice(bangIndex + 1) : result.address;
+        const colonIndex = cellPart.indexOf(":");
+        const startCell = colonIndex >= 0 ? cellPart.slice(0, colonIndex) : cellPart;
 
         if (mode === "compact") {
           return formatCompact(fullAddress, result, startCell);
@@ -157,10 +160,16 @@ export function createReadRangeTool(): AgentTool<typeof schema> {
 
 /** Check if a cell address falls within a range address (both without sheet prefix). */
 function isCellInRange(cellAddr: string, rangeAddr: string): boolean {
-  const clean = rangeAddr.includes("!") ? rangeAddr.split("!")[1] : rangeAddr;
+  const bangIndex = rangeAddr.indexOf("!");
+  const clean = bangIndex >= 0 ? rangeAddr.slice(bangIndex + 1) : rangeAddr;
   const parts = clean.includes(":") ? clean.split(":") : [clean, clean];
-  const start = parseCell(parts[0]);
-  const end = parseCell(parts[1]);
+  const startPart = parts[0];
+  const endPart = parts[1];
+  if (startPart === undefined || endPart === undefined) {
+    return false;
+  }
+  const start = parseCell(startPart);
+  const end = parseCell(endPart);
   const cell = parseCell(cellAddr);
   return (
     cell.col >= start.col &&
@@ -193,7 +202,8 @@ function formatAsExcelMarkdownTable(values: DynamicValue[][], startCell: string)
   const rows: DynamicValue[][] = [header];
 
   for (let r = 0; r < values.length; r++) {
-    const row: DynamicValue[] = [start.row + r, ...values[r]];
+    const valueRow = values[r] ?? [];
+    const row: DynamicValue[] = [start.row + r, ...valueRow];
     while (row.length < numCols + 1) row.push("");
     rows.push(row);
   }
@@ -279,8 +289,9 @@ function formatDetailed(
   const formatMap = new Map<string, string[]>();
   const start = parseCell(startCell);
   for (let r = 0; r < result.numberFormats.length; r++) {
-    for (let c = 0; c < result.numberFormats[r].length; c++) {
-      const fmt = result.numberFormats[r][c];
+    const numberFormatRow = result.numberFormats[r] ?? [];
+    for (let c = 0; c < numberFormatRow.length; c++) {
+      const fmt = numberFormatRow[c];
       if (typeof fmt === "string" && fmt !== "" && fmt !== "General") {
         const addr = `${colToLetter(start.col + c)}${start.row + r}`;
         const existing = formatMap.get(fmt) || [];

@@ -33,31 +33,42 @@ function isAuthAnthropicBrowserOauthPayloadShape(value: DynamicValue): value is 
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function createParsedAuthorizationInput(
+  code: string | null | undefined,
+  state: string | null | undefined,
+): ParsedAuthorizationInput {
+  const parsed: ParsedAuthorizationInput = {};
+  if (code !== null && code !== undefined) {
+    parsed.code = code;
+  }
+  if (state !== null && state !== undefined) {
+    parsed.state = state;
+  }
+  return parsed;
+}
+
 function parseAuthorizationInput(input: string): ParsedAuthorizationInput {
   const value = input.trim();
   if (!value) return {};
 
   try {
     const url = new URL(value);
-    return {
-      code: url.searchParams.get("code") ?? undefined,
-      state: url.searchParams.get("state") ?? undefined,
-    };
+    return createParsedAuthorizationInput(
+      url.searchParams.get("code"),
+      url.searchParams.get("state"),
+    );
   } catch {
     // not a URL
   }
 
   if (value.includes("#")) {
-    const [code, state] = value.split("#", 2);
-    return { code, state };
+    const parts = value.split("#", 2);
+    return createParsedAuthorizationInput(parts[0], parts[1]);
   }
 
   if (value.includes("code=")) {
     const params = new URLSearchParams(value.startsWith("?") ? value.slice(1) : value);
-    return {
-      code: params.get("code") ?? undefined,
-      state: params.get("state") ?? undefined,
-    };
+    return createParsedAuthorizationInput(params.get("code"), params.get("state"));
   }
 
   return { code: value };

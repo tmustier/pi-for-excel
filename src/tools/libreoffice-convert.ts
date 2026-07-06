@@ -197,12 +197,13 @@ function validateParams(params: Params): void {
 }
 
 function toBridgeRequest(params: Params): LibreOfficeConvertRequest {
+  const outputPath = cleanOptionalString(params.output_path);
   return {
     input_path: params.input_path.trim(),
     target_format: params.target_format,
-    output_path: cleanOptionalString(params.output_path),
-    overwrite: params.overwrite,
-    timeout_ms: params.timeout_ms,
+    ...(outputPath !== undefined ? { output_path: outputPath } : {}),
+    ...(params.overwrite !== undefined ? { overwrite: params.overwrite } : {}),
+    ...(params.timeout_ms !== undefined ? { timeout_ms: params.timeout_ms } : {}),
   };
 }
 
@@ -226,13 +227,13 @@ function parseBridgeResponse(value: DynamicValue): LibreOfficeConvertResponse {
   return {
     ok,
     action: "convert",
-    input_path: inputPath,
-    target_format: targetFormat,
-    output_path: outputPath,
-    bytes,
-    converter,
-    error,
-    metadata,
+    ...(inputPath !== undefined ? { input_path: inputPath } : {}),
+    ...(targetFormat !== undefined ? { target_format: targetFormat } : {}),
+    ...(outputPath !== undefined ? { output_path: outputPath } : {}),
+    ...(bytes !== undefined ? { bytes } : {}),
+    ...(converter !== undefined ? { converter } : {}),
+    ...(error !== undefined ? { error } : {}),
+    ...(metadata !== undefined ? { metadata } : {}),
   };
 }
 
@@ -432,9 +433,9 @@ export function createLibreOfficeConvertTool(
             bridgeUrl: bridgeConfig.url,
             inputPath: response.input_path ?? request.input_path,
             targetFormat: response.target_format ?? request.target_format,
-            outputPath: response.output_path,
-            bytes: response.bytes,
-            converter: response.converter,
+            ...(response.output_path !== undefined ? { outputPath: response.output_path } : {}),
+            ...(response.bytes !== undefined ? { bytes: response.bytes } : {}),
+            ...(response.converter !== undefined ? { converter: response.converter } : {}),
           },
         };
       } catch (error) {
@@ -455,7 +456,7 @@ export function createLibreOfficeConvertTool(
             ok: false,
             action: "convert",
             error: message,
-            skillHint,
+            ...(skillHint !== undefined ? { skillHint } : {}),
           },
         };
       }

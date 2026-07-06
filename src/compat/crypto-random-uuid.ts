@@ -9,8 +9,14 @@ function createRandomUuid(getRandomValues: Crypto["getRandomValues"]): ReturnTyp
   getRandomValues.call(globalThis.crypto, bytes);
 
   // RFC 4122 version 4 UUID: set version and variant bits.
-  bytes[6] = (bytes[6] & 0x0f) | 0x40;
-  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const versionByte = bytes[6];
+  const variantByte = bytes[8];
+  if (versionByte === undefined || variantByte === undefined) {
+    throw new Error("Failed to allocate UUID bytes.");
+  }
+
+  bytes[6] = (versionByte & 0x0f) | 0x40;
+  bytes[8] = (variantByte & 0x3f) | 0x80;
 
   const hex = Array.from(bytes, byteToHex);
   return `${hex.slice(0, 4).join("")}-${hex.slice(4, 6).join("")}-${hex

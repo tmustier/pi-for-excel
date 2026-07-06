@@ -127,7 +127,7 @@ function formatRangeForDisplay(range: string, maxShow = 3): RangeDisplayResult {
   const sheetsFound = [
     ...new Set(parsed.map((p) => p.sheet).filter(Boolean)),
   ];
-  const commonSheet = sheetsFound.length === 1 ? sheetsFound[0] : "";
+  const commonSheet = sheetsFound.length === 1 ? (sheetsFound[0] ?? "") : "";
 
   // Build display addresses — strip the common sheet prefix
   const addresses = commonSheet

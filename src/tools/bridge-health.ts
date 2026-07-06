@@ -114,9 +114,9 @@ function parsePythonHealth(payload: DynamicValue): PythonServiceEntry {
   return {
     ...base,
     status,
-    pythonVersion,
     libreofficeAvailable,
-    libreofficeVersion,
+    ...(pythonVersion !== undefined ? { pythonVersion } : {}),
+    ...(libreofficeVersion !== undefined ? { libreofficeVersion } : {}),
   };
 }
 
@@ -136,14 +136,19 @@ function parseTmuxHealth(payload: DynamicValue): TmuxServiceEntry {
 
   // Stub mode: bridge is running but tmux is not installed
   if (payload.mode === "stub" || payload.backend === "stub") {
-    return { ...base, status: "partial", tmuxVersion, tmuxSessions };
+    return {
+      ...base,
+      status: "partial",
+      ...(tmuxVersion !== undefined ? { tmuxVersion } : {}),
+      ...(tmuxSessions !== undefined ? { tmuxSessions } : {}),
+    };
   }
 
   return {
     ...base,
     status: "running",
-    tmuxVersion,
-    tmuxSessions,
+    ...(tmuxVersion !== undefined ? { tmuxVersion } : {}),
+    ...(tmuxSessions !== undefined ? { tmuxSessions } : {}),
   };
 }
 

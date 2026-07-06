@@ -168,10 +168,11 @@ function validateParams(params: Params): void {
 }
 
 function toBridgeRequest(params: Params): PythonBridgeRequest {
+  const inputJson = cleanOptionalString(params.input_json);
   return {
     code: params.code,
-    input_json: cleanOptionalString(params.input_json),
-    timeout_ms: params.timeout_ms,
+    ...(inputJson !== undefined ? { input_json: inputJson } : {}),
+    ...(params.timeout_ms !== undefined ? { timeout_ms: params.timeout_ms } : {}),
   };
 }
 
@@ -195,13 +196,13 @@ function parseBridgeResponse(value: DynamicValue): PythonBridgeResponse {
   return {
     ok,
     action: "run_python",
-    exit_code: exitCode,
-    stdout,
-    stderr,
-    result_json: resultJson,
-    truncated,
-    error,
-    metadata,
+    ...(exitCode !== undefined ? { exit_code: exitCode } : {}),
+    ...(stdout !== undefined ? { stdout } : {}),
+    ...(stderr !== undefined ? { stderr } : {}),
+    ...(resultJson !== undefined ? { result_json: resultJson } : {}),
+    ...(truncated !== undefined ? { truncated } : {}),
+    ...(error !== undefined ? { error } : {}),
+    ...(metadata !== undefined ? { metadata } : {}),
   };
 }
 
@@ -237,7 +238,7 @@ export async function getDefaultPythonBridgeConfig(): Promise<PythonBridgeConfig
     const normalizedUrl = validateOfficeProxyUrl(rawUrl);
     return {
       url: normalizedUrl,
-      token,
+      ...(token !== undefined ? { token } : {}),
       source,
     };
   } catch {
@@ -303,10 +304,11 @@ export async function callDefaultPythonBridge(
     }
 
     if (parsedBody === null) {
+      const stdout = rawBody.trim().length > 0 ? rawBody : undefined;
       return {
         ok: true,
         action: "run_python",
-        stdout: rawBody.trim().length > 0 ? rawBody : undefined,
+        ...(stdout !== undefined ? { stdout } : {}),
       };
     }
 
@@ -490,6 +492,9 @@ export function createPythonRunTool(
               throw new Error(response.error ?? "Python bridge rejected the request.");
             }
 
+            const stdoutPreview = buildOutputPreview(response.stdout);
+            const stderrPreview = buildOutputPreview(response.stderr);
+            const resultPreview = buildOutputPreview(response.result_json);
             return {
               content: [{ type: "text", text: formatBridgeSuccessText(response) }],
               details: {
@@ -497,11 +502,11 @@ export function createPythonRunTool(
                 ok: true,
                 action: "run_python",
                 bridgeUrl: bridgeConfig.url,
-                exitCode: response.exit_code,
-                stdoutPreview: buildOutputPreview(response.stdout),
-                stderrPreview: buildOutputPreview(response.stderr),
-                resultPreview: buildOutputPreview(response.result_json),
-                truncated: response.truncated,
+                ...(response.exit_code !== undefined ? { exitCode: response.exit_code } : {}),
+                ...(stdoutPreview !== undefined ? { stdoutPreview } : {}),
+                ...(stderrPreview !== undefined ? { stderrPreview } : {}),
+                ...(resultPreview !== undefined ? { resultPreview } : {}),
+                ...(response.truncated !== undefined ? { truncated: response.truncated } : {}),
               },
             };
           } catch (error) {
@@ -539,17 +544,20 @@ export function createPythonRunTool(
           throw new Error(response.error ?? "Pyodide execution failed.");
         }
 
+        const stdoutPreview = buildOutputPreview(response.stdout);
+        const stderrPreview = buildOutputPreview(response.stderr);
+        const resultPreview = buildOutputPreview(response.result_json);
         return {
           content: [{ type: "text", text: formatBridgeSuccessText(response) }],
           details: {
             kind: "python_bridge",
             ok: true,
             action: "run_python",
-            exitCode: response.exit_code,
-            stdoutPreview: buildOutputPreview(response.stdout),
-            stderrPreview: buildOutputPreview(response.stderr),
-            resultPreview: buildOutputPreview(response.result_json),
-            truncated: response.truncated,
+            ...(response.exit_code !== undefined ? { exitCode: response.exit_code } : {}),
+            ...(stdoutPreview !== undefined ? { stdoutPreview } : {}),
+            ...(stderrPreview !== undefined ? { stderrPreview } : {}),
+            ...(resultPreview !== undefined ? { resultPreview } : {}),
+            ...(response.truncated !== undefined ? { truncated: response.truncated } : {}),
           },
         };
       } catch (error) {
@@ -570,7 +578,7 @@ export function createPythonRunTool(
             ok: false,
             action: "run_python",
             error: message,
-            skillHint,
+            ...(skillHint !== undefined ? { skillHint } : {}),
           },
         };
       }

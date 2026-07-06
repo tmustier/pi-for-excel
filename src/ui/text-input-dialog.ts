@@ -44,7 +44,7 @@ export function requestTextInputDialog(options: TextInputDialogOptions): Promise
     const dialog = createOverlayDialog({
       overlayId,
       cardClassName: options.cardClassName ?? "pi-welcome-card pi-overlay-card pi-overlay-card--s",
-      restoreFocusOnClose: options.restoreFocusOnClose,
+      ...(options.restoreFocusOnClose !== undefined ? { restoreFocusOnClose: options.restoreFocusOnClose } : {}),
     });
 
     let settled = false;

@@ -92,6 +92,15 @@ export function familyPriority(provider: string, id: string): number {
   return 9;
 }
 
+
+function parseRegexInt(value: string | undefined): number | null {
+  if (value === undefined) {
+    return null;
+  }
+
+  return parseInt(value, 10);
+}
+
 export function parseMajorMinor(id: string): number {
   // Extract a comparable major/minor number from common model ID formats.
   // Important: only parse the leading version segment, not later date-like suffixes.
@@ -121,37 +130,48 @@ export function parseMajorMinor(id: string): number {
 
   const claudeVer = id.match(CLAUDE_VERSION_RE);
   if (claudeVer) {
-    return pack(parseInt(claudeVer[1], 10), parseInt(claudeVer[2], 10));
+    const major = parseRegexInt(claudeVer[1]);
+    const minor = parseRegexInt(claudeVer[2]);
+    if (major !== null && minor !== null) return pack(major, minor);
   }
 
   const gptDotVer = id.match(GPT_DOT_VERSION_RE);
   if (gptDotVer) {
-    return pack(parseInt(gptDotVer[1], 10), parseInt(gptDotVer[2], 10));
+    const major = parseRegexInt(gptDotVer[1]);
+    const minor = parseRegexInt(gptDotVer[2]);
+    if (major !== null && minor !== null) return pack(major, minor);
   }
 
   const geminiDotVer = id.match(GEMINI_DOT_VERSION_RE);
   if (geminiDotVer) {
-    return pack(parseInt(geminiDotVer[1], 10), parseInt(geminiDotVer[2], 10));
+    const major = parseRegexInt(geminiDotVer[1]);
+    const minor = parseRegexInt(geminiDotVer[2]);
+    if (major !== null && minor !== null) return pack(major, minor);
   }
 
   const claudeMajor = id.match(CLAUDE_MAJOR_RE);
   if (claudeMajor) {
-    return pack(parseInt(claudeMajor[1], 10), null);
+    const major = parseRegexInt(claudeMajor[1]);
+    if (major !== null) return pack(major, null);
   }
 
   const gptMajor = id.match(GPT_MAJOR_RE);
   if (gptMajor) {
-    return pack(parseInt(gptMajor[1], 10), null);
+    const major = parseRegexInt(gptMajor[1]);
+    if (major !== null) return pack(major, null);
   }
 
   const geminiMajor = id.match(GEMINI_MAJOR_RE);
   if (geminiMajor) {
-    return pack(parseInt(geminiMajor[1], 10), null);
+    const major = parseRegexInt(geminiMajor[1]);
+    if (major !== null) return pack(major, null);
   }
 
   const letterPrefixedDotVersion = id.match(LETTER_PREFIXED_DOT_VERSION_RE);
   if (letterPrefixedDotVersion) {
-    return pack(parseInt(letterPrefixedDotVersion[1], 10), parseInt(letterPrefixedDotVersion[2], 10));
+    const major = parseRegexInt(letterPrefixedDotVersion[1]);
+    const minor = parseRegexInt(letterPrefixedDotVersion[2]);
+    if (major !== null && minor !== null) return pack(major, minor);
   }
 
   for (const genericVersion of id.matchAll(GENERIC_VERSION_RE)) {
@@ -161,8 +181,12 @@ export function parseMajorMinor(id: string): number {
     const surrounding = id.slice(Math.max(0, digitIndex - 5), digitIndex + 8);
     if (/\d{4}-\d{2}-\d{2}/.test(surrounding)) continue;
 
-    const major = parseInt(genericVersion[1], 10);
-    const minor = genericVersion[2] && !genericVersion[3] ? parseInt(genericVersion[2], 10) : null;
+    const major = parseRegexInt(genericVersion[1]);
+    if (major === null) continue;
+
+    const minor = genericVersion[2] && !genericVersion[3]
+      ? parseRegexInt(genericVersion[2])
+      : null;
     return pack(major, minor);
   }
 
@@ -173,19 +197,33 @@ function parseDateSuffixScore(id: string): number {
   let score = 0;
 
   for (const match of id.matchAll(/(?:^|[-/:])(\d{8})(?=$|[-/:])/g)) {
-    score = Math.max(score, parseInt(match[1], 10));
+    const date = parseRegexInt(match[1]);
+    if (date !== null) score = Math.max(score, date);
   }
 
   for (const match of id.matchAll(/(?:^|[-/:])(\d{4})-(\d{2})-(\d{2})(?=$|[-/:])/g)) {
-    score = Math.max(score, parseInt(`${match[1]}${match[2]}${match[3]}`, 10));
+    const year = match[1];
+    const month = match[2];
+    const day = match[3];
+    if (year !== undefined && month !== undefined && day !== undefined) {
+      score = Math.max(score, parseInt(`${year}${month}${day}`, 10));
+    }
   }
 
   for (const match of id.matchAll(/(?:^|[-/:])(\d{2})-(\d{4})(?=$|[-/:])/g)) {
-    score = Math.max(score, parseInt(`${match[2]}${match[1]}00`, 10));
+    const month = match[1];
+    const year = match[2];
+    if (month !== undefined && year !== undefined) {
+      score = Math.max(score, parseInt(`${year}${month}00`, 10));
+    }
   }
 
   for (const match of id.matchAll(/(?:^|[-/:])(\d{2})-(\d{2})(?=$|[-/:])/g)) {
-    score = Math.max(score, parseInt(`${match[1]}${match[2]}`, 10));
+    const month = match[1];
+    const day = match[2];
+    if (month !== undefined && day !== undefined) {
+      score = Math.max(score, parseInt(`${month}${day}`, 10));
+    }
   }
 
   return score;

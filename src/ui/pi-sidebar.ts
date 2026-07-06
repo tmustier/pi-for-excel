@@ -163,16 +163,16 @@ export class PiSidebar extends LitElement {
   @query("pi-input") private _input?: PiInput;
   @query(".pi-session-tabs__scroller") private _tabsScroller?: HTMLElement;
 
-  private _unsubscribe?: () => void;
-  private _cleanupGrouping?: () => void;
+  private _unsubscribe: (() => void) | undefined;
+  private _cleanupGrouping: (() => void) | undefined;
   private _autoScroll = true;
   private _lastScrollTop = 0;
-  private _resizeObserver?: ResizeObserver;
-  private _scrollContainerEl?: HTMLElement;
-  private _scrollListener?: () => void;
-  private _groupingRoot?: HTMLElement;
+  private _resizeObserver: ResizeObserver | undefined;
+  private _scrollContainerEl: HTMLElement | undefined;
+  private _scrollListener: (() => void) | undefined;
+  private _groupingRoot: HTMLElement | undefined;
   /** rAF handle for the inner-container auto-scroll loop (thinking / tool blocks). */
-  private _innerScrollRAF?: number;
+  private _innerScrollRAF: number | undefined;
   /** Inner elements we have snapped to bottom at least once. */
   private _innerScrollSeen = new WeakSet<HTMLElement>();
   /** Inner elements the user has manually scrolled away from bottom. */
@@ -183,8 +183,8 @@ export class PiSidebar extends LitElement {
   private _innerScrollProgrammaticPending = new WeakSet<HTMLElement>();
   /** Previous value of `_isStreaming` so we can detect edges in `updated()`. */
   private _wasStreaming = false;
-  private _utilitiesMenuClickHandler?: (event: MouseEvent) => void;
-  private _tabContextMenuClickHandler?: (event: MouseEvent) => void;
+  private _utilitiesMenuClickHandler: ((event: MouseEvent) => void) | undefined;
+  private _tabContextMenuClickHandler: ((event: MouseEvent) => void) | undefined;
   private readonly _utilitiesMenuId = "pi-utilities-menu";
   private readonly _tabContextMenuId = "pi-tab-context-menu";
   private readonly _contextPillBodyId = "pi-context-pill-body";
@@ -1134,7 +1134,7 @@ export class PiSidebar extends LitElement {
           `|---|---|---|`,
           ...ctx.tools.map((t) => {
             const schemaSize = JSON.stringify(t.parameters).length;
-            const desc = t.description.split("\n")[0].slice(0, 80);
+            const desc = (t.description.split("\n")[0] ?? "").slice(0, 80);
             return `| \`${t.name}\` | ${desc} | ${formatK(schemaSize)} |`;
           }),
         ].join("\n")

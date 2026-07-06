@@ -48,18 +48,21 @@ function buildDefaultPresetFormat(preset: NumberPreset): StoredFormatPreset {
     DEFAULT_FORMAT_CONVENTIONS,
   );
 
-  return {
+  const presetFormat: StoredFormatPreset = {
     format: built.format,
-    builderParams: preset === "text"
-      ? undefined
-      : {
-        dp: defaultDp ?? undefined,
-        negativeStyle: DEFAULT_FORMAT_CONVENTIONS.negativeStyle,
-        zeroStyle: DEFAULT_FORMAT_CONVENTIONS.zeroStyle,
-        thousandsSeparator: DEFAULT_FORMAT_CONVENTIONS.thousandsSeparator,
-        currencySymbol: defaultSymbol,
-      },
   };
+
+  if (preset !== "text") {
+    presetFormat.builderParams = {
+      ...(defaultDp !== null ? { dp: defaultDp } : {}),
+      negativeStyle: DEFAULT_FORMAT_CONVENTIONS.negativeStyle,
+      zeroStyle: DEFAULT_FORMAT_CONVENTIONS.zeroStyle,
+      thousandsSeparator: DEFAULT_FORMAT_CONVENTIONS.thousandsSeparator,
+      ...(defaultSymbol !== undefined ? { currencySymbol: defaultSymbol } : {}),
+    };
+  }
+
+  return presetFormat;
 }
 
 export const DEFAULT_PRESET_FORMATS: Record<NumberPreset, StoredFormatPreset> = {

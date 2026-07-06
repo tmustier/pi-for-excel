@@ -39,10 +39,16 @@ function StringEnum<T extends string[]>(values: [...T], opts?: { description?: s
 }
 /** Check if a cell (already stripped of sheet prefix) falls within a range address. */
 function isCellInRange(cellAddr: string, rangeAddr: string): boolean {
-  const clean = rangeAddr.includes("!") ? rangeAddr.split("!")[1] : rangeAddr;
+  const bangIndex = rangeAddr.indexOf("!");
+  const clean = bangIndex >= 0 ? rangeAddr.slice(bangIndex + 1) : rangeAddr;
   const parts = clean.includes(":") ? clean.split(":") : [clean, clean];
-  const start = parseCell(parts[0]);
-  const end = parseCell(parts[1]);
+  const startPart = parts[0];
+  const endPart = parts[1];
+  if (startPart === undefined || endPart === undefined) {
+    return false;
+  }
+  const start = parseCell(startPart);
+  const end = parseCell(endPart);
   const cell = parseCell(cellAddr);
   return (
     cell.col >= start.col &&
@@ -54,7 +60,8 @@ function isCellInRange(cellAddr: string, rangeAddr: string): boolean {
 
 /** Strip sheet prefix from an address (e.g. "Sheet1!A1" → "A1"). */
 function stripSheet(address: string): string {
-  return address.includes("!") ? address.split("!")[1] : address;
+  const bangIndex = address.indexOf("!");
+  return bangIndex >= 0 ? address.slice(bangIndex + 1) : address;
 }
 
 function requireContent(content: string | undefined, action: string): string {
@@ -204,6 +211,25 @@ export function createCommentsTool(
         const outputAddress = result.outputAddress ?? params.range;
         const changedCount = result.changedCount ?? 1;
 
+        const recovery = beforeThreadState
+          ? {
+            result: output,
+            appendRecoverySnapshot: () => resolvedDependencies.appendRecoverySnapshot({
+              toolName: "comments",
+              toolCallId,
+              address: outputAddress,
+              changedCount,
+              commentThreadState: beforeThreadState,
+            }),
+            appendResultNote: appendMutationResultNote,
+            unavailableReason: CHECKPOINT_SKIPPED_REASON,
+            unavailableNote: CHECKPOINT_SKIPPED_NOTE,
+            dispatchSnapshotCreated: (checkpoint: WorkbookRecoverySnapshot) => {
+              resolvedDependencies.dispatchSnapshotCreated(checkpoint);
+            },
+          }
+          : undefined;
+
         await finalizeMutationOperation(mutationFinalizeDependencies, {
           auditEntry: {
             toolName: "comments",
@@ -214,24 +240,7 @@ export function createCommentsTool(
             changes: [],
             summary: result.summary ?? `${params.action} comment action`,
           },
-          recovery: beforeThreadState
-            ? {
-              result: output,
-              appendRecoverySnapshot: () => resolvedDependencies.appendRecoverySnapshot({
-                toolName: "comments",
-                toolCallId,
-                address: outputAddress,
-                changedCount,
-                commentThreadState: beforeThreadState,
-              }),
-              appendResultNote: appendMutationResultNote,
-              unavailableReason: CHECKPOINT_SKIPPED_REASON,
-              unavailableNote: CHECKPOINT_SKIPPED_NOTE,
-              dispatchSnapshotCreated: (checkpoint) => {
-                resolvedDependencies.dispatchSnapshotCreated(checkpoint);
-              },
-            }
-            : undefined,
+          ...(recovery !== undefined ? { recovery } : {}),
         });
 
         return output;

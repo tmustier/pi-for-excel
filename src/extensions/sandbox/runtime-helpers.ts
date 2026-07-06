@@ -102,11 +102,15 @@ export function parseSandboxLlmCompletionRequest(requestRaw: DynamicValue): LlmC
     messages.push({ role, content });
   }
 
+  const model = typeof requestRaw.model === "string" ? requestRaw.model : undefined;
+  const systemPrompt = typeof requestRaw.systemPrompt === "string" ? requestRaw.systemPrompt : undefined;
+  const maxTokens = typeof requestRaw.maxTokens === "number" ? requestRaw.maxTokens : undefined;
+
   return {
-    model: typeof requestRaw.model === "string" ? requestRaw.model : undefined,
-    systemPrompt: typeof requestRaw.systemPrompt === "string" ? requestRaw.systemPrompt : undefined,
+    ...(model !== undefined ? { model } : {}),
+    ...(systemPrompt !== undefined ? { systemPrompt } : {}),
     messages,
-    maxTokens: typeof requestRaw.maxTokens === "number" ? requestRaw.maxTokens : undefined,
+    ...(maxTokens !== undefined ? { maxTokens } : {}),
   };
 }
 
@@ -141,11 +145,15 @@ export function parseSandboxHttpRequestOptions(optionsRaw: DynamicValue): HttpRe
     ? optionsRaw.connection.trim()
     : "";
 
+  const method = asHttpMethodOrUndefined(optionsRaw.method);
+  const body = typeof optionsRaw.body === "string" ? optionsRaw.body : undefined;
+  const timeoutMs = typeof optionsRaw.timeoutMs === "number" ? optionsRaw.timeoutMs : undefined;
+
   return {
-    method: asHttpMethodOrUndefined(optionsRaw.method),
-    headers,
-    body: typeof optionsRaw.body === "string" ? optionsRaw.body : undefined,
-    timeoutMs: typeof optionsRaw.timeoutMs === "number" ? optionsRaw.timeoutMs : undefined,
+    ...(method !== undefined ? { method } : {}),
+    ...(headers !== undefined ? { headers } : {}),
+    ...(body !== undefined ? { body } : {}),
+    ...(timeoutMs !== undefined ? { timeoutMs } : {}),
     ...(normalizedConnection.length > 0 ? { connection: normalizedConnection } : {}),
   };
 }

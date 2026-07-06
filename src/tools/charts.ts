@@ -341,7 +341,7 @@ function parsePositionAnchors(position: string): PositionAnchors {
   const second = parts[1];
   return {
     start: qualify(start),
-    end: second ? qualify(second) : undefined,
+    ...(second ? { end: qualify(second) } : {}),
   };
 }
 
@@ -567,7 +567,7 @@ async function executeCreate(params: Params): Promise<ChartsExecutionResult> {
       kind: "chart_absent",
       sheetName: chartSheet.name,
       name: chart.name,
-      chartId,
+      ...(chartId !== undefined ? { chartId } : {}),
     };
 
     return {
@@ -627,7 +627,7 @@ async function executeUpdate(params: Params): Promise<ChartsExecutionResult> {
           action: "update",
           name: chart.name,
           address,
-          sourceRange: sourceAddress,
+          ...(sourceAddress !== undefined ? { sourceRange: sourceAddress } : {}),
         },
       },
       outputAddress: address,
@@ -833,23 +833,25 @@ export function createChartsTool(
           return result.result;
         }
 
+        const outputAddress = result.outputAddress ?? result.result.details.address;
+        const recovery = buildRecoveryStep(
+          resolvedDependencies,
+          toolCallId,
+          result.result,
+          result,
+          captureError,
+        );
         await finalizeMutationOperation(mutationFinalizeDependencies, {
           auditEntry: {
             toolName: "charts",
             toolCallId,
             blocked: false,
-            outputAddress: result.outputAddress ?? result.result.details.address,
+            ...(outputAddress !== undefined ? { outputAddress } : {}),
             changedCount: result.changedCount ?? 1,
             changes: [],
             summary: result.auditSummary ?? `${params.action} chart`,
           },
-          recovery: buildRecoveryStep(
-            resolvedDependencies,
-            toolCallId,
-            result.result,
-            result,
-            captureError,
-          ),
+          ...(recovery !== undefined ? { recovery } : {}),
         });
 
         if (result.sourceRangeChanged) {
@@ -861,12 +863,13 @@ export function createChartsTool(
         const message = getErrorMessage(error);
 
         if (isMutation) {
+          const outputAddress = params.name ?? params.source_range ?? params.sheet;
           await finalizeMutationOperation(mutationFinalizeDependencies, {
             auditEntry: {
               toolName: "charts",
               toolCallId,
               blocked: true,
-              outputAddress: params.name ?? params.source_range ?? params.sheet,
+              ...(outputAddress !== undefined ? { outputAddress } : {}),
               changedCount: 0,
               changes: [],
               summary: `error: ${message}`,
@@ -879,8 +882,8 @@ export function createChartsTool(
           details: {
             kind: "charts",
             action: params.action,
-            name: params.name,
-            sourceRange: params.source_range,
+            ...(params.name !== undefined ? { name: params.name } : {}),
+            ...(params.source_range !== undefined ? { sourceRange: params.source_range } : {}),
           },
         };
       }

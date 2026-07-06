@@ -97,6 +97,7 @@ export function estimateContextTokens(
 
   for (let i = messages.length - 1; i >= 0; i--) {
     const msg = messages[i];
+    if (msg === undefined) continue;
     if (msg.role !== "assistant") continue;
     if (msg.stopReason === "error" || msg.stopReason === "aborted") continue;
 
@@ -112,6 +113,7 @@ export function estimateContextTokens(
   let lastCompactionTimestamp = 0;
   for (let i = messages.length - 1; i >= 0; i--) {
     const msg = messages[i];
+    if (msg === undefined) continue;
     if (msg.role === "compactionSummary") {
       lastCompactionTimestamp = msg.timestamp;
       break;
@@ -124,7 +126,10 @@ export function estimateContextTokens(
   if (lastUsage && lastUsageIndex !== null && !usageIsStale) {
     totalTokens = calculateContextTokens(lastUsage);
     for (let i = lastUsageIndex + 1; i < messages.length; i++) {
-      totalTokens += estimateMessageTokens(messages[i]);
+      const msg = messages[i];
+      if (msg !== undefined) {
+        totalTokens += estimateMessageTokens(msg);
+      }
     }
   } else {
     // No reliable usage signal (or it became stale after /compact). Estimate from scratch.

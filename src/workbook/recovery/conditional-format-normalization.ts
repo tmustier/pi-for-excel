@@ -420,10 +420,12 @@ export function captureDataBarRule(value: DynamicValue): RecoveryConditionalData
     return null;
   }
 
-  return {
-    type,
-    formula: typeof formula === "string" ? formula : undefined,
-  };
+  const rule: RecoveryConditionalDataBarRule = { type };
+  if (typeof formula === "string") {
+    rule.formula = formula;
+  }
+
+  return rule;
 }
 
 export function captureColorScaleCriterion(value: DynamicValue): RecoveryConditionalColorScaleCriterion | null {
@@ -445,11 +447,15 @@ export function captureColorScaleCriterion(value: DynamicValue): RecoveryConditi
     return null;
   }
 
-  return {
-    type,
-    formula: typeof formula === "string" ? formula : undefined,
-    color: typeof color === "string" ? color : undefined,
-  };
+  const criterion: RecoveryConditionalColorScaleCriterion = { type };
+  if (typeof formula === "string") {
+    criterion.formula = formula;
+  }
+  if (typeof color === "string") {
+    criterion.color = color;
+  }
+
+  return criterion;
 }
 
 export function captureConditionalIcon(value: DynamicValue): RecoveryConditionalIcon | null {
@@ -497,12 +503,16 @@ export function captureIconCriterion(value: DynamicValue): RecoveryConditionalIc
     customIcon = capturedCustomIcon;
   }
 
-  return {
+  const criterion: RecoveryConditionalIconCriterion = {
     type,
     operator,
     formula,
-    customIcon,
   };
+  if (customIcon) {
+    criterion.customIcon = customIcon;
+  }
+
+  return criterion;
 }
 
 export function toDataBarRule(rule: RecoveryConditionalDataBarRule): Excel.ConditionalDataBarRule {

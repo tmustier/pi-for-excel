@@ -139,7 +139,7 @@ function renderMenu(): void {
   menuEl.replaceChildren();
 
   for (const [index, command] of filteredCommands.entries()) {
-    const badge = SOURCE_BADGES[command.source];
+    const badge = SOURCE_BADGES[command.source] ?? "";
     const isSelected = index === selectedIndex;
 
     const item = document.createElement("button");

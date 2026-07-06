@@ -385,11 +385,11 @@ async function defaultProbeTmuxBridgeHealth(bridgeUrl: string): Promise<TmuxBrid
 
     return {
       reachable: response.ok,
-      status,
-      mode,
-      backend,
-      sessions,
-      error,
+      ...(status !== undefined ? { status } : {}),
+      ...(mode !== undefined ? { mode } : {}),
+      ...(backend !== undefined ? { backend } : {}),
+      ...(sessions !== undefined ? { sessions } : {}),
+      ...(error !== undefined ? { error } : {}),
     };
   } catch (error) {
     return {
@@ -429,7 +429,12 @@ async function handleBridgeUrlCommand(
     return;
   }
 
-  const firstToken = valueTokens[0].toLowerCase();
+  const firstRawToken = valueTokens[0];
+  if (!firstRawToken) {
+    return;
+  }
+
+  const firstToken = firstRawToken.toLowerCase();
   if (URL_SHOW_ACTIONS.has(firstToken)) {
     const existing = await getValue();
     if (!existing) {
@@ -489,7 +494,12 @@ async function handleBridgeTokenCommand(
     return;
   }
 
-  const firstToken = valueTokens[0].toLowerCase();
+  const firstRawToken = valueTokens[0];
+  if (!firstRawToken) {
+    return;
+  }
+
+  const firstToken = firstRawToken.toLowerCase();
   if (TOKEN_SHOW_ACTIONS.has(firstToken)) {
     const existing = await getValue();
     if (!existing) {
@@ -549,11 +559,11 @@ async function handleTmuxStatusCommand(
     ? {
       allowed: false,
       reason: gateReason,
-      bridgeUrl: normalizedBridgeUrl,
+      ...(normalizedBridgeUrl !== undefined ? { bridgeUrl: normalizedBridgeUrl } : {}),
     }
     : {
       allowed: true,
-      bridgeUrl: normalizedBridgeUrl,
+      ...(normalizedBridgeUrl !== undefined ? { bridgeUrl: normalizedBridgeUrl } : {}),
     };
 
   const lines: string[] = ["Tmux bridge status:"];
@@ -621,7 +631,12 @@ export function createExperimentalCommands(
             return;
           }
 
-          const action = tokens[0].toLowerCase();
+          const firstToken = tokens[0];
+          if (!firstToken) {
+            return;
+          }
+
+          const action = firstToken.toLowerCase();
 
           if (action === "help") {
             resolved.showToast(t("experimental.toast.usageFeatures", { usage: usageText(), features: featureListText(resolved.getFeatureSlugs) }));

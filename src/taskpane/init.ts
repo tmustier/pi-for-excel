@@ -697,7 +697,7 @@ export async function initTaskpane(opts: {
     toolName: snapshot.toolName,
     address: snapshot.address,
     changedCount: snapshot.changedCount,
-    restoredFromSnapshotId: snapshot.restoredFromSnapshotId,
+    ...(snapshot.restoredFromSnapshotId !== undefined ? { restoredFromSnapshotId: snapshot.restoredFromSnapshotId } : {}),
   });
 
   const formatSessionTitle = (title: string): string => {
@@ -906,7 +906,7 @@ export async function initTaskpane(opts: {
       overlayId: TOOL_APPROVAL_OVERLAY_ID,
       title: args.title,
       message: normalizeApprovalMessage(args.title, args.message),
-      confirmLabel: args.confirmLabel,
+      ...(args.confirmLabel !== undefined ? { confirmLabel: args.confirmLabel } : {}),
       cancelLabel: t("confirm.cancel"),
       restoreFocusOnClose: true,
     });
@@ -1635,7 +1635,7 @@ export async function initTaskpane(opts: {
         connectionManager,
         onChanged: refreshCapabilitiesForAllRuntimes,
       },
-      { tab },
+      tab !== undefined ? { tab } : {},
     );
   };
 
@@ -2022,7 +2022,12 @@ export async function initTaskpane(opts: {
       const nextIndex = (activeIndex + direction + tabs.length) % tabs.length;
 
       suppressNextInputAutofocus = true;
-      runtimeManager.switchRuntime(tabs[nextIndex].runtimeId);
+      const nextTab = tabs[nextIndex];
+      if (!nextTab) {
+        return;
+      }
+
+      runtimeManager.switchRuntime(nextTab.runtimeId);
       requestAnimationFrame(() => {
         sidebar.focusTabNavigationAnchor();
       });
@@ -2101,8 +2106,8 @@ export async function initTaskpane(opts: {
     toggleContextPopover({
       anchor: trigger,
       description,
-      tokenDetail,
-      warning,
+      ...(tokenDetail !== undefined ? { tokenDetail } : {}),
+      ...(warning !== undefined ? { warning } : {}),
       onRunCommand: (command) => {
         runSlashCommand(command);
       },

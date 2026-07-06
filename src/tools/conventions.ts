@@ -16,7 +16,15 @@ import {
   setStoredConventions,
 } from "../conventions/store.js";
 import { getErrorMessage } from "../utils/errors.js";
-import type { StoredConventions, StoredFormatPreset } from "../conventions/types.js";
+import type {
+  FormatBuilderParams,
+  StoredColorConventions,
+  StoredConventions,
+  StoredCustomPreset,
+  StoredFormatPreset,
+  StoredHeaderStyle,
+  StoredVisualDefaults,
+} from "../conventions/types.js";
 
 const builderParamsSchema = Type.Object({
   dp: Type.Optional(Type.Number({ description: "Decimal places (0-10)." })),
@@ -146,6 +154,22 @@ function formatConventionsMarkdown(stored: StoredConventions): string {
   return lines.join("\n");
 }
 
+function mapBuilderParams(input: {
+  dp?: number;
+  negative_style?: "parens" | "minus";
+  zero_style?: "dash" | "single-dash" | "zero" | "blank";
+  thousands_separator?: boolean;
+  currency_symbol?: string;
+}): FormatBuilderParams {
+  return {
+    ...(input.dp !== undefined ? { dp: input.dp } : {}),
+    ...(input.negative_style !== undefined ? { negativeStyle: input.negative_style } : {}),
+    ...(input.zero_style !== undefined ? { zeroStyle: input.zero_style } : {}),
+    ...(input.thousands_separator !== undefined ? { thousandsSeparator: input.thousands_separator } : {}),
+    ...(input.currency_symbol !== undefined ? { currencySymbol: input.currency_symbol } : {}),
+  };
+}
+
 function mapFormatPreset(input: {
   format: string;
   builder_params?: {
@@ -158,15 +182,7 @@ function mapFormatPreset(input: {
 }): StoredFormatPreset {
   return {
     format: input.format,
-    builderParams: input.builder_params
-      ? {
-        dp: input.builder_params.dp,
-        negativeStyle: input.builder_params.negative_style,
-        zeroStyle: input.builder_params.zero_style,
-        thousandsSeparator: input.builder_params.thousands_separator,
-        currencySymbol: input.builder_params.currency_symbol,
-      }
-      : undefined,
+    ...(input.builder_params !== undefined ? { builderParams: mapBuilderParams(input.builder_params) } : {}),
   };
 }
 
@@ -183,7 +199,7 @@ function buildUpdates(params: Params): StoredConventions {
     if (params.preset_formats.text) updates.presetFormats.text = mapFormatPreset(params.preset_formats.text);
 
     if (Object.keys(updates.presetFormats).length === 0) {
-      updates.presetFormats = undefined;
+      delete updates.presetFormats;
     }
   }
 
@@ -191,47 +207,47 @@ function buildUpdates(params: Params): StoredConventions {
     updates.customPresets = {};
 
     for (const [name, preset] of Object.entries(params.custom_presets)) {
-      updates.customPresets[name] = {
+      const customPreset: StoredCustomPreset = {
         format: preset.format,
-        description: preset.description,
-        builderParams: preset.builder_params
-          ? {
-            dp: preset.builder_params.dp,
-            negativeStyle: preset.builder_params.negative_style,
-            zeroStyle: preset.builder_params.zero_style,
-            thousandsSeparator: preset.builder_params.thousands_separator,
-            currencySymbol: preset.builder_params.currency_symbol,
-          }
-          : undefined,
+        ...(preset.description !== undefined ? { description: preset.description } : {}),
+        ...(preset.builder_params !== undefined ? { builderParams: mapBuilderParams(preset.builder_params) } : {}),
       };
+      updates.customPresets[name] = customPreset;
     }
 
     if (Object.keys(updates.customPresets).length === 0) {
-      updates.customPresets = undefined;
+      delete updates.customPresets;
     }
   }
 
   if (params.visual_defaults) {
-    updates.visualDefaults = {
-      fontName: params.visual_defaults.font_name,
-      fontSize: params.visual_defaults.font_size,
+    const visualDefaults: StoredVisualDefaults = {
+      ...(params.visual_defaults.font_name !== undefined ? { fontName: params.visual_defaults.font_name } : {}),
+      ...(params.visual_defaults.font_size !== undefined ? { fontSize: params.visual_defaults.font_size } : {}),
     };
+    updates.visualDefaults = visualDefaults;
   }
 
   if (params.color_conventions) {
-    updates.colorConventions = {
-      hardcodedValueColor: params.color_conventions.hardcoded_value_color,
-      crossSheetLinkColor: params.color_conventions.cross_sheet_link_color,
+    const colorConventions: StoredColorConventions = {
+      ...(params.color_conventions.hardcoded_value_color !== undefined
+        ? { hardcodedValueColor: params.color_conventions.hardcoded_value_color }
+        : {}),
+      ...(params.color_conventions.cross_sheet_link_color !== undefined
+        ? { crossSheetLinkColor: params.color_conventions.cross_sheet_link_color }
+        : {}),
     };
+    updates.colorConventions = colorConventions;
   }
 
   if (params.header_style) {
-    updates.headerStyle = {
-      fillColor: params.header_style.fill_color,
-      fontColor: params.header_style.font_color,
-      bold: params.header_style.bold,
-      wrapText: params.header_style.wrap_text,
+    const headerStyle: StoredHeaderStyle = {
+      ...(params.header_style.fill_color !== undefined ? { fillColor: params.header_style.fill_color } : {}),
+      ...(params.header_style.font_color !== undefined ? { fontColor: params.header_style.font_color } : {}),
+      ...(params.header_style.bold !== undefined ? { bold: params.header_style.bold } : {}),
+      ...(params.header_style.wrap_text !== undefined ? { wrapText: params.header_style.wrap_text } : {}),
     };
+    updates.headerStyle = headerStyle;
   }
 
   return updates;

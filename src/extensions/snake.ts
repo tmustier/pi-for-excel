@@ -114,6 +114,13 @@ export function activate(api: ExcelExtensionAPI): void {
         if (gameOver) return;
         dir = nextDir;
         const head = snake[0];
+        if (head === undefined) {
+          gameOver = true;
+          draw();
+          updateHeader();
+          return;
+        }
+
         const moves: Record<Dir, Pt> = {
           up: { x: head.x, y: head.y - 1 }, down: { x: head.x, y: head.y + 1 },
           left: { x: head.x - 1, y: head.y }, right: { x: head.x + 1, y: head.y },

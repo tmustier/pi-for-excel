@@ -65,9 +65,13 @@ function formatFunctionList(functionNames: readonly string[]): string {
   if (functionNames.length === 0) return "computes a result from referenced cells";
 
   const labels = functionNames.map((name) => FUNCTION_SUMMARIES[name] ?? `uses ${name}`);
-  if (labels.length === 1) return labels[0];
-  if (labels.length === 2) return `${labels[0]} and ${labels[1]}`;
-  return `${labels.slice(0, -1).join(", ")}, and ${labels[labels.length - 1]}`;
+  const [firstLabel, secondLabel] = labels;
+  if (firstLabel === undefined) return "computes a result from referenced cells";
+  if (secondLabel === undefined) return firstLabel;
+  if (labels.length === 2) return `${firstLabel} and ${secondLabel}`;
+  const lastLabel = labels[labels.length - 1];
+  if (lastLabel === undefined) return `${firstLabel} and ${secondLabel}`;
+  return `${labels.slice(0, -1).join(", ")}, and ${lastLabel}`;
 }
 
 export interface ExplainFormulaNarrativeInput {

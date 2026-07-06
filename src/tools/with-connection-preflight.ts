@@ -154,7 +154,7 @@ function buildConnectionErrorResult(args: {
     connectionTitle: args.snapshot.title,
     status: args.snapshot.status,
     setupHint: args.snapshot.setupHint,
-    reason: args.reason,
+    ...(args.reason !== undefined ? { reason: args.reason } : {}),
   };
 
   const message = buildErrorMessage(details);
@@ -206,7 +206,7 @@ function wrapTool(tool: AgentTool, connectionManager: ConnectionManager): AgentT
           return buildConnectionErrorResult({
             snapshot,
             errorCode,
-            reason: snapshot.lastError,
+            ...(snapshot.lastError !== undefined ? { reason: snapshot.lastError } : {}),
           });
         }
       }
@@ -256,7 +256,7 @@ function wrapTool(tool: AgentTool, connectionManager: ConnectionManager): AgentT
           return buildConnectionErrorResult({
             snapshot: snapshotForResponse,
             errorCode: "connection_auth_failed",
-            reason: snapshotForResponse.lastError,
+            ...(snapshotForResponse.lastError !== undefined ? { reason: snapshotForResponse.lastError } : {}),
           });
         }
 

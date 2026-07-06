@@ -167,7 +167,7 @@ export function createOverlayHeader(options: OverlayHeaderOptions): OverlayHeade
 
   const closeButton = createOverlayCloseButton({
     onClose: options.onClose,
-    label: options.closeLabel,
+    ...(options.closeLabel !== undefined ? { label: options.closeLabel } : {}),
   });
 
   header.append(titleWrap, closeButton);
@@ -207,8 +207,13 @@ export function createOverlayDialog(options: OverlayDialogOptions): OverlayDialo
     overlayClosers.delete(overlay);
 
     for (let index = cleanups.length - 1; index >= 0; index -= 1) {
+      const cleanup = cleanups[index];
+      if (!cleanup) {
+        continue;
+      }
+
       try {
-        cleanups[index]();
+        cleanup();
       } catch {
         // ignore cleanup errors
       }

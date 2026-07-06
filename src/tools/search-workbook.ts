@@ -119,8 +119,10 @@ export function createSearchWorkbookTool(): AgentTool<typeof schema> {
 
             // Parse start address for cell computation
             const addr = used.address;
-            const cellPart = addr.includes("!") ? addr.split("!")[1] : addr;
-            const startCell = cellPart.split(":")[0];
+            const bangIndex = addr.indexOf("!");
+            const cellPart = bangIndex >= 0 ? addr.slice(bangIndex + 1) : addr;
+            const colonIndex = cellPart.indexOf(":");
+            const startCell = colonIndex >= 0 ? cellPart.slice(0, colonIndex) : cellPart;
             let start;
             try {
               start = parseCell(startCell);
@@ -129,9 +131,11 @@ export function createSearchWorkbookTool(): AgentTool<typeof schema> {
             }
 
             for (let r = 0; r < values.length; r++) {
-              for (let c = 0; c < values[r].length; c++) {
-                const value: DynamicValue = values[r][c];
-                const formula: DynamicValue = formulas[r][c];
+              const valueRow = values[r] ?? [];
+              const formulaRow = formulas[r] ?? [];
+              for (let c = 0; c < valueRow.length; c++) {
+                const value: DynamicValue = valueRow[c];
+                const formula: DynamicValue = formulaRow[c];
 
                 let match = false;
                 if (searchFormulas) {
@@ -150,19 +154,22 @@ export function createSearchWorkbookTool(): AgentTool<typeof schema> {
 
                   const cellAddr = `${colToLetter(start.col + c)}${start.row + r}`;
 
-                  allMatches.push({
+                  const formulaText = typeof formula === "string" && formula.startsWith("=") ? formula : undefined;
+                  const matchEntry: SearchMatch = {
                     sheet: sheet.name,
                     address: cellAddr,
                     value,
-                    formula: typeof formula === "string" && formula.startsWith("=") ? formula : undefined,
-                  });
+                    ...(formulaText !== undefined ? { formula: formulaText } : {}),
+                  };
+                  allMatches.push(matchEntry);
 
                   if (contextRows > 0) {
                     const rStart = Math.max(0, r - contextRows);
                     const rEnd = Math.min(values.length - 1, r + contextRows);
                     const colRadius = 10;
                     const cStart = Math.max(0, c - colRadius);
-                    const cEnd = Math.min(values[0].length - 1, c + colRadius);
+                    const firstValueRow = values[0] ?? [];
+                    const cEnd = Math.min(firstValueRow.length - 1, c + colRadius);
 
                     const ctxLines: string[] = [];
                     const hdr: string[] = [""];
@@ -174,8 +181,9 @@ export function createSearchWorkbookTool(): AgentTool<typeof schema> {
 
                     for (let ri = rStart; ri <= rEnd; ri++) {
                       const cells: string[] = [String(start.row + ri)];
+                      const contextRow = values[ri] ?? [];
                       for (let ci = cStart; ci <= cEnd; ci++) {
-                        const v: DynamicValue = values[ri][ci];
+                        const v: DynamicValue = contextRow[ci];
                         let s = v === null || v === undefined || v === "" ? "" : typeof v === "string" ? v : typeof v === "number" || typeof v === "boolean" ? String(v) : JSON.stringify(v);
                         if (s.length > 20) s = s.substring(0, 20) + "…";
                         s = s.replace(/\|/g, "\\|");
@@ -185,7 +193,7 @@ export function createSearchWorkbookTool(): AgentTool<typeof schema> {
                       ctxLines.push("| " + cells.join(" | ") + " |" + marker);
                     }
 
-                    allMatches[allMatches.length - 1].context = ctxLines
+                    matchEntry.context = ctxLines
                       .map((l) => "  " + l)
                       .join("\n");
                   }

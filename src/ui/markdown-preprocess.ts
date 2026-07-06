@@ -68,6 +68,10 @@ function isLikelyYamlFrontmatterBlock(block: string): boolean {
     const mappingMatch = YAML_MAPPING_RE.exec(rawLine);
     if (mappingMatch) {
       const rawKey = mappingMatch[1];
+      if (rawKey === undefined) {
+        return false;
+      }
+
       const key = normalizeFrontmatterKey(rawKey);
       const normalizedKey = key.toLowerCase();
 
@@ -79,7 +83,7 @@ function isLikelyYamlFrontmatterBlock(block: string): boolean {
 
       sawMapping = true;
 
-      const value = mappingMatch[2].trim();
+      const value = (mappingMatch[2] ?? "").trim();
       if (/^[>|][+-]?\d*$/u.test(value)) {
         blockScalarIndent = lineIndent;
       }
@@ -110,7 +114,7 @@ export function stripYamlFrontmatter(text: string): string {
   if (!match) return text;
 
   const frontmatterBody = match[1];
-  if (!isLikelyYamlFrontmatterBlock(frontmatterBody)) return text;
+  if (frontmatterBody === undefined || !isLikelyYamlFrontmatterBlock(frontmatterBody)) return text;
 
   return text.slice(match[0].length);
 }

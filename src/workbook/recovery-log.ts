@@ -426,8 +426,8 @@ export class WorkbookRecoveryLog {
       beforeFormulas: formulas,
       snapshotKind: "range_values",
       workbookId: workbookIdentity.workbookId,
-      workbookLabel: workbookIdentity.workbookLabel,
-      restoredFromSnapshotId: args.restoredFromSnapshotId,
+      ...(workbookIdentity.workbookLabel !== undefined ? { workbookLabel: workbookIdentity.workbookLabel } : {}),
+      ...(args.restoredFromSnapshotId !== undefined ? { restoredFromSnapshotId: args.restoredFromSnapshotId } : {}),
     });
   }
 
@@ -459,8 +459,8 @@ export class WorkbookRecoveryLog {
       snapshotKind: "format_cells_state",
       formatRangeState,
       workbookId: workbookIdentity.workbookId,
-      workbookLabel: workbookIdentity.workbookLabel,
-      restoredFromSnapshotId: args.restoredFromSnapshotId,
+      ...(workbookIdentity.workbookLabel !== undefined ? { workbookLabel: workbookIdentity.workbookLabel } : {}),
+      ...(args.restoredFromSnapshotId !== undefined ? { restoredFromSnapshotId: args.restoredFromSnapshotId } : {}),
     });
   }
 
@@ -493,8 +493,8 @@ export class WorkbookRecoveryLog {
       snapshotKind: "modify_structure_state",
       modifyStructureState,
       workbookId: workbookIdentity.workbookId,
-      workbookLabel: workbookIdentity.workbookLabel,
-      restoredFromSnapshotId: args.restoredFromSnapshotId,
+      ...(workbookIdentity.workbookLabel !== undefined ? { workbookLabel: workbookIdentity.workbookLabel } : {}),
+      ...(args.restoredFromSnapshotId !== undefined ? { restoredFromSnapshotId: args.restoredFromSnapshotId } : {}),
     });
   }
 
@@ -526,8 +526,8 @@ export class WorkbookRecoveryLog {
       snapshotKind: "conditional_format_rules",
       conditionalFormatRules: rules,
       workbookId: workbookIdentity.workbookId,
-      workbookLabel: workbookIdentity.workbookLabel,
-      restoredFromSnapshotId: args.restoredFromSnapshotId,
+      ...(workbookIdentity.workbookLabel !== undefined ? { workbookLabel: workbookIdentity.workbookLabel } : {}),
+      ...(args.restoredFromSnapshotId !== undefined ? { restoredFromSnapshotId: args.restoredFromSnapshotId } : {}),
     });
   }
 
@@ -555,8 +555,8 @@ export class WorkbookRecoveryLog {
       snapshotKind: "comment_thread",
       commentThreadState: cloneRecoveryCommentThreadState(args.commentThreadState),
       workbookId: workbookIdentity.workbookId,
-      workbookLabel: workbookIdentity.workbookLabel,
-      restoredFromSnapshotId: args.restoredFromSnapshotId,
+      ...(workbookIdentity.workbookLabel !== undefined ? { workbookLabel: workbookIdentity.workbookLabel } : {}),
+      ...(args.restoredFromSnapshotId !== undefined ? { restoredFromSnapshotId: args.restoredFromSnapshotId } : {}),
     });
   }
 
@@ -584,8 +584,8 @@ export class WorkbookRecoveryLog {
       snapshotKind: "chart_state",
       chartState: cloneRecoveryChartState(args.chartState),
       workbookId: workbookIdentity.workbookId,
-      workbookLabel: workbookIdentity.workbookLabel,
-      restoredFromSnapshotId: args.restoredFromSnapshotId,
+      ...(workbookIdentity.workbookLabel !== undefined ? { workbookLabel: workbookIdentity.workbookLabel } : {}),
+      ...(args.restoredFromSnapshotId !== undefined ? { restoredFromSnapshotId: args.restoredFromSnapshotId } : {}),
     });
   }
 

@@ -16,9 +16,9 @@ function parseHexColor(input: string): RgbColor | null {
   const normalized = raw.startsWith("#") ? raw.slice(1) : raw;
 
   if (normalized.length === 3) {
-    const r = Number.parseInt(normalized[0].repeat(2), 16);
-    const g = Number.parseInt(normalized[1].repeat(2), 16);
-    const b = Number.parseInt(normalized[2].repeat(2), 16);
+    const r = Number.parseInt(normalized.charAt(0).repeat(2), 16);
+    const g = Number.parseInt(normalized.charAt(1).repeat(2), 16);
+    const b = Number.parseInt(normalized.charAt(2).repeat(2), 16);
     if (Number.isNaN(r) || Number.isNaN(g) || Number.isNaN(b)) {
       return null;
     }

@@ -212,8 +212,8 @@ function buildSkillsErrorDetails(args: {
     kind: "skills_error",
     action: args.action,
     message: args.message,
-    requestedName: args.requestedName,
-    availableNames: args.availableNames,
+    ...(args.requestedName !== undefined ? { requestedName: args.requestedName } : {}),
+    ...(args.availableNames !== undefined ? { availableNames: args.availableNames } : {}),
     externalDiscoveryEnabled: args.externalDiscoveryEnabled,
   };
 }
@@ -255,7 +255,7 @@ function buildSkillsReadDetails(args: {
     cacheHit: args.cacheHit,
     refreshed: args.refreshed,
     sessionScoped: args.sessionScoped,
-    readCount: args.readCount,
+    ...(args.readCount !== undefined ? { readCount: args.readCount } : {}),
   };
 }
 
@@ -453,7 +453,7 @@ export function createSkillsTool(
                 cacheHit: true,
                 refreshed: false,
                 sessionScoped,
-                readCount: cached.readCount,
+                ...(cached.readCount !== undefined ? { readCount: cached.readCount } : {}),
               }),
             };
           }
@@ -491,7 +491,7 @@ export function createSkillsTool(
           cacheHit: false,
           refreshed: refresh,
           sessionScoped,
-          readCount: cachedEntry?.readCount,
+          ...(cachedEntry?.readCount !== undefined ? { readCount: cachedEntry.readCount } : {}),
         }),
       };
     },

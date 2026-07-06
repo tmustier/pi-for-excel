@@ -105,8 +105,8 @@ export function createToggleRow(opts: ToggleRowOptions): {
   }
 
   const toggle = createToggle({
-    checked: opts.checked,
-    onChange: opts.onChange,
+    ...(opts.checked !== undefined ? { checked: opts.checked } : {}),
+    ...(opts.onChange !== undefined ? { onChange: opts.onChange } : {}),
   });
 
   row.append(labels, toggle.root);

@@ -159,21 +159,24 @@ function parseAuditEntry(value: DynamicValue): WorkbookChangeAuditEntry | null {
 
   const rawExecutionMode = value.executionMode;
 
-  return {
+  const entry: WorkbookChangeAuditEntry = {
     id,
     at,
     toolName: value.toolName,
     toolCallId: value.toolCallId,
     blocked: value.blocked,
-    inputAddress: typeof value.inputAddress === "string" ? value.inputAddress : undefined,
-    outputAddress: typeof value.outputAddress === "string" ? value.outputAddress : undefined,
     changedCount: value.changedCount,
     changes: value.changes,
-    summary: typeof value.summary === "string" ? value.summary : undefined,
-    executionMode: typeof rawExecutionMode === "string" ? normalizeExecutionMode(rawExecutionMode) : undefined,
-    workbookId: typeof value.workbookId === "string" ? value.workbookId : undefined,
-    workbookLabel: typeof value.workbookLabel === "string" ? value.workbookLabel : undefined,
   };
+
+  if (typeof value.inputAddress === "string") entry.inputAddress = value.inputAddress;
+  if (typeof value.outputAddress === "string") entry.outputAddress = value.outputAddress;
+  if (typeof value.summary === "string") entry.summary = value.summary;
+  if (typeof rawExecutionMode === "string") entry.executionMode = normalizeExecutionMode(rawExecutionMode);
+  if (typeof value.workbookId === "string") entry.workbookId = value.workbookId;
+  if (typeof value.workbookLabel === "string") entry.workbookLabel = value.workbookLabel;
+
+  return entry;
 }
 
 function parsePersistedEntries(payload: DynamicValue): WorkbookChangeAuditEntry[] {
@@ -283,15 +286,16 @@ export class WorkbookChangeAuditLog {
       toolName: args.toolName,
       toolCallId: args.toolCallId,
       blocked: args.blocked,
-      inputAddress: args.inputAddress,
-      outputAddress: args.outputAddress,
       changedCount: args.changedCount,
       changes: args.changes,
-      summary: args.summary,
       executionMode: executionMode ?? "yolo",
-      workbookId,
-      workbookLabel,
     };
+
+    if (args.inputAddress !== undefined) entry.inputAddress = args.inputAddress;
+    if (args.outputAddress !== undefined) entry.outputAddress = args.outputAddress;
+    if (args.summary !== undefined) entry.summary = args.summary;
+    if (workbookId !== undefined) entry.workbookId = workbookId;
+    if (workbookLabel !== undefined) entry.workbookLabel = workbookLabel;
 
     this.entries = [entry, ...this.entries].slice(0, MAX_AUDIT_ENTRIES);
     await this.persist();

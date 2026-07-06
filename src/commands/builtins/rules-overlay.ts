@@ -489,7 +489,7 @@ function renderFormatCard(args: {
     value: args.preset.format,
     onChange: (value) => {
       args.preset.format = value;
-      args.preset.builderParams = undefined;
+      delete args.preset.builderParams;
       args.onChange();
     },
     className: "pi-conventions-input pi-conventions-input--wide pi-conventions-input--mono",
@@ -620,9 +620,10 @@ function renderConventionsEditor(
   const presetFormats = getPresetSection(draft);
 
   for (const presetName of BUILTIN_PRESET_NAMES) {
+    const resolvedPreset = resolved.presetFormats[presetName];
     const preset = presetFormats[presetName] ?? {
-      format: resolved.presetFormats[presetName].format,
-      builderParams: resolved.presetFormats[presetName].builderParams,
+      format: resolvedPreset.format,
+      ...(resolvedPreset.builderParams !== undefined ? { builderParams: resolvedPreset.builderParams } : {}),
     };
 
     presetFormats[presetName] = preset;
@@ -646,7 +647,7 @@ function renderConventionsEditor(
       title: customName,
       presetName: customName,
       preset: custom,
-      description: custom.description,
+      ...(custom.description !== undefined ? { description: custom.description } : {}),
       onRename: (nextName) => renameCustomPreset(draft, customName, nextName),
       onDescriptionChange: (value) => {
         custom.description = value;

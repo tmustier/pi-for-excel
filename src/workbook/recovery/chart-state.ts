@@ -215,7 +215,7 @@ async function captureChartStateFromTarget(
     yAxisTitle = undefined;
   }
 
-  return {
+  const state: RecoveryChartPresentState = {
     kind: "chart_present",
     sheetName: sheet.name,
     name: chart.name,
@@ -225,10 +225,17 @@ async function captureChartStateFromTarget(
       position: typeof chart.legend.position === "string" ? chart.legend.position : "Right",
       visible: Boolean(chart.legend.visible),
     },
-    xAxisTitle,
-    yAxisTitle,
     position: makePositionState(chart),
   };
+
+  if (xAxisTitle) {
+    state.xAxisTitle = xAxisTitle;
+  }
+  if (yAxisTitle) {
+    state.yAxisTitle = yAxisTitle;
+  }
+
+  return state;
 }
 
 function applyTitleState(target: Excel.ChartTitle | Excel.ChartAxisTitle, state: RecoveryChartTitleState): void {

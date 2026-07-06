@@ -160,7 +160,8 @@ export function pickWhimsicalMessage(current?: string): string {
   }
   let msg: string;
   do {
-    msg = t(messageKeys[Math.floor(Math.random() * messageKeys.length)]);
+    const key = messageKeys[Math.floor(Math.random() * messageKeys.length)] ?? messageKeys[0] ?? "working.default";
+    msg = t(key);
   } while (msg === current && messageKeys.length > 1);
   return msg;
 }

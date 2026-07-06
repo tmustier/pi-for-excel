@@ -210,6 +210,16 @@ function sanitizeOptionalPath(value: DynamicValue): string | undefined {
   }
 }
 
+function requestedLocationArgs(
+  locationKind: WorkspaceFileLocationKind | undefined,
+): { requestedLocationKind?: WorkspaceFileLocationKind } {
+  if (locationKind === undefined) {
+    return {};
+  }
+
+  return { requestedLocationKind: locationKind };
+}
+
 function parseWorkbookTag(value: DynamicValue): WorkspaceFileWorkbookTag | null {
   if (!isFilesWorkspacePayloadShape(value)) return null;
 
@@ -273,20 +283,23 @@ function parseAuditEntry(value: DynamicValue): FilesWorkspaceAuditEntry | null {
   const workbookId = isNonEmptyString(value.workbookId) ? value.workbookId.trim() : undefined;
   const workbookLabel = isNonEmptyString(value.workbookLabel) ? value.workbookLabel.trim() : undefined;
 
-  return {
+  const entry: FilesWorkspaceAuditEntry = {
     id,
     at,
     action: value.action,
     actor: value.actor,
     source: value.source.trim(),
     backend: value.backend,
-    path,
-    fromPath,
-    toPath,
-    bytes,
-    workbookId,
-    workbookLabel,
   };
+
+  if (path !== undefined) entry.path = path;
+  if (fromPath !== undefined) entry.fromPath = fromPath;
+  if (toPath !== undefined) entry.toPath = toPath;
+  if (bytes !== undefined) entry.bytes = bytes;
+  if (workbookId !== undefined) entry.workbookId = workbookId;
+  if (workbookLabel !== undefined) entry.workbookLabel = workbookLabel;
+
+  return entry;
 }
 
 function parsePersistedAuditTrail(value: DynamicValue): FilesWorkspaceAuditEntry[] {
@@ -915,13 +928,14 @@ export class FilesWorkspace {
       actor: args.context.actor,
       source: args.context.source,
       backend: args.backend,
-      path: args.path,
-      fromPath: args.fromPath,
-      toPath: args.toPath,
-      bytes: args.bytes,
-      workbookId: workbookTag?.workbookId,
-      workbookLabel: workbookTag?.workbookLabel,
     };
+
+    if (args.path !== undefined) entry.path = args.path;
+    if (args.fromPath !== undefined) entry.fromPath = args.fromPath;
+    if (args.toPath !== undefined) entry.toPath = args.toPath;
+    if (args.bytes !== undefined) entry.bytes = args.bytes;
+    if (workbookTag?.workbookId !== undefined) entry.workbookId = workbookTag.workbookId;
+    if (workbookTag?.workbookLabel !== undefined) entry.workbookLabel = workbookTag.workbookLabel;
 
     this.auditEntries = [entry, ...this.auditEntries].slice(0, MAX_AUDIT_ENTRIES);
     await this.persistAuditTrail();
@@ -1165,13 +1179,18 @@ export class FilesWorkspace {
     const backend = await this.getBackend();
     const nativeSupported = this.isNativeDirectoryPickerSupported();
 
-    return {
+    const status: WorkspaceBackendStatus = {
       kind: backend.kind,
       label: backendLabel(backend.kind),
       nativeSupported,
       nativeConnected: backend.kind === "native-directory",
-      nativeDirectoryName: this.nativeHandle?.name,
     };
+
+    if (this.nativeHandle?.name !== undefined) {
+      status.nativeDirectoryName = this.nativeHandle.name;
+    }
+
+    return status;
   }
 
   async listFiles(options: WorkspaceListOptions = {}): Promise<WorkspaceFileEntry[]> {
@@ -1234,7 +1253,7 @@ export class FilesWorkspace {
     const normalizedPath = normalizeWorkspacePath(path);
     const rawReadResult = await this.readRawFile({
       path: normalizedPath,
-      requestedLocationKind: opts.locationKind,
+      ...requestedLocationArgs(opts.locationKind),
     });
 
     const withTags =
@@ -1244,16 +1263,13 @@ export class FilesWorkspace {
         : [rawReadResult.result];
 
     const taggedResult = withTags[0];
-    const result: WorkspaceFileReadResult = taggedResult
-      ? {
-        ...rawReadResult.result,
-        workbookTag: taggedResult.workbookTag,
-        locationKind: rawReadResult.locationKind,
-      }
-      : {
-        ...rawReadResult.result,
-        locationKind: rawReadResult.locationKind,
-      };
+    const result: WorkspaceFileReadResult = {
+      ...rawReadResult.result,
+      locationKind: rawReadResult.locationKind,
+    };
+    if (taggedResult?.workbookTag !== undefined) {
+      result.workbookTag = taggedResult.workbookTag;
+    }
 
     const mode = opts.mode ?? "auto";
     const maxChars = opts.maxChars ?? 20000;
@@ -1271,36 +1287,36 @@ export class FilesWorkspace {
       resolved = {
         ...result,
         text: truncated.text,
-        base64: undefined,
         truncated: truncated.truncated,
       };
+      delete resolved.base64;
     } else if (mode === "base64") {
       const base64Content = result.base64 ?? bytesToBase64(encodeTextUtf8(result.text ?? ""));
       const truncated = truncateBase64(base64Content, maxChars);
 
       resolved = {
         ...result,
-        text: undefined,
         base64: truncated.base64,
         truncated: truncated.truncated,
       };
+      delete resolved.text;
     } else if (result.text !== undefined) {
       const truncated = truncateText(result.text, maxChars);
       resolved = {
         ...result,
         text: truncated.text,
-        base64: undefined,
         truncated: truncated.truncated,
       };
+      delete resolved.base64;
     } else {
       const base64Content = result.base64 ?? "";
       const truncated = truncateBase64(base64Content, maxChars);
       resolved = {
         ...result,
-        text: undefined,
         base64: truncated.base64,
         truncated: truncated.truncated,
       };
+      delete resolved.text;
     }
 
     if (opts.audit) {
@@ -1325,7 +1341,7 @@ export class FilesWorkspace {
   ): Promise<void> {
     const normalizedPath = normalizeWorkspacePath(path);
     const target = await this.resolveMutationTarget({
-      requestedLocationKind: options.locationKind,
+      ...requestedLocationArgs(options.locationKind),
       defaultToWorkspace: false,
       path: normalizedPath,
     });
@@ -1368,7 +1384,7 @@ export class FilesWorkspace {
   ): Promise<void> {
     const normalizedPath = normalizeWorkspacePath(path);
     const target = await this.resolveMutationTarget({
-      requestedLocationKind: options.locationKind,
+      ...requestedLocationArgs(options.locationKind),
       defaultToWorkspace: false,
       path: normalizedPath,
     });
@@ -1406,7 +1422,7 @@ export class FilesWorkspace {
   async deleteFile(path: string, options: WorkspaceMutationOptions = {}): Promise<void> {
     const normalizedPath = normalizeWorkspacePath(path);
     const target = await this.resolveMutationTarget({
-      requestedLocationKind: options.locationKind,
+      ...requestedLocationArgs(options.locationKind),
       defaultToWorkspace: false,
       path: normalizedPath,
     });
@@ -1442,7 +1458,7 @@ export class FilesWorkspace {
     const normalizedNewPath = normalizeWorkspacePath(newPath);
 
     const target = await this.resolveMutationTarget({
-      requestedLocationKind: options.locationKind,
+      ...requestedLocationArgs(options.locationKind),
       defaultToWorkspace: false,
       path: normalizedOldPath,
     });
@@ -1476,7 +1492,7 @@ export class FilesWorkspace {
 
   async importFiles(files: Iterable<File>, options: WorkspaceMutationOptions = {}): Promise<number> {
     const target = await this.resolveMutationTarget({
-      requestedLocationKind: options.locationKind,
+      ...requestedLocationArgs(options.locationKind),
       defaultToWorkspace: true,
     });
 
@@ -1559,7 +1575,7 @@ export class FilesWorkspace {
       const normalizedPath = normalizeWorkspacePath(path);
       const readResult = await this.readRawFile({
         path: normalizedPath,
-        requestedLocationKind: options.locationKind,
+        ...requestedLocationArgs(options.locationKind),
       });
       const result = readResult.result;
 

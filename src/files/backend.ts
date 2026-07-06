@@ -69,6 +69,9 @@ async function resolveParentDirectoryHandle(args: {
 
   for (let i = 0; i < args.pathParts.length - 1; i += 1) {
     const segment = args.pathParts[i];
+    if (!segment) {
+      throw new Error("Path contains an empty directory segment.");
+    }
     current = await current.getDirectoryHandle(segment, { create: args.createDirectories });
   }
 

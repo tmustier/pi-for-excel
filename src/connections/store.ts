@@ -52,12 +52,18 @@ function normalizeSecrets(value: DynamicValue): ConnectionSecrets | undefined {
 function normalizeConnectionRecord(value: DynamicValue): StoredConnectionRecord | null {
   if (!isConnectionsStorePayloadShape(value)) return null;
 
-  return {
-    status: normalizeConnectionStatus(value.status),
-    lastValidatedAt: normalizeOptionalString(value.lastValidatedAt),
-    lastError: normalizeOptionalString(value.lastError),
-    secrets: normalizeSecrets(value.secrets),
-  };
+  const record: StoredConnectionRecord = {};
+  const status = normalizeConnectionStatus(value.status);
+  const lastValidatedAt = normalizeOptionalString(value.lastValidatedAt);
+  const lastError = normalizeOptionalString(value.lastError);
+  const secrets = normalizeSecrets(value.secrets);
+
+  if (status !== undefined) record.status = status;
+  if (lastValidatedAt !== undefined) record.lastValidatedAt = lastValidatedAt;
+  if (lastError !== undefined) record.lastError = lastError;
+  if (secrets !== undefined) record.secrets = secrets;
+
+  return record;
 }
 
 function normalizeDocument(value: DynamicValue): ConnectionStoreDocument {

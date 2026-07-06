@@ -120,14 +120,18 @@ function normalizeServer(raw: DynamicValue): McpServerConfig | null {
 
   const id = normalizeServerId(raw.id, name, url);
   const token = normalizeOptionalString(raw.token);
-
-  return {
+  const server: McpServerConfig = {
     id,
     name,
     url,
     enabled: normalizeEnabled(raw.enabled),
-    token,
   };
+
+  if (token !== undefined) {
+    server.token = token;
+  }
+
+  return server;
 }
 
 function uniqueById(servers: McpServerConfig[]): McpServerConfig[] {
@@ -256,14 +260,21 @@ async function loadConnectionStoreItems(
     }
 
     const status = rawRecord.status;
-    items[connectionId] = {
-      status: status === "connected" || status === "missing" || status === "invalid" || status === "error"
-        ? status
-        : undefined,
-      lastValidatedAt: normalizeOptionalString(rawRecord.lastValidatedAt),
-      lastError: normalizeOptionalString(rawRecord.lastError),
+    const record: StoredConnectionRecord = {
       secrets,
     };
+    if (status === "connected" || status === "missing" || status === "invalid" || status === "error") {
+      record.status = status;
+    }
+    const lastValidatedAt = normalizeOptionalString(rawRecord.lastValidatedAt);
+    if (lastValidatedAt !== undefined) {
+      record.lastValidatedAt = lastValidatedAt;
+    }
+    const lastError = normalizeOptionalString(rawRecord.lastError);
+    if (lastError !== undefined) {
+      record.lastError = lastError;
+    }
+    items[connectionId] = record;
   }
 
   return items;
@@ -303,12 +314,15 @@ async function writeConnectionStoreMcpTokens(
     return;
   }
 
-  items[MCP_SERVER_TOKENS_CONNECTION_ID] = {
+  const record: StoredConnectionRecord = {
     status: "connected",
-    lastValidatedAt: previous?.lastValidatedAt,
-    lastError: undefined,
     secrets: normalizedTokens,
   };
+  const previousLastValidatedAt = normalizeOptionalString(previous?.lastValidatedAt);
+  if (previousLastValidatedAt !== undefined) {
+    record.lastValidatedAt = previousLastValidatedAt;
+  }
+  items[MCP_SERVER_TOKENS_CONNECTION_ID] = record;
 
   await saveConnectionStoreItems(settings, items);
 }
@@ -317,11 +331,20 @@ function mergeServersWithConnectionTokens(args: {
   servers: readonly McpServerConfig[];
   connectionTokens: Readonly<Record<string, string>>;
 }): McpServerConfig[] {
-  return args.servers.map((server) => ({
-    ...server,
-    token: normalizeOptionalString(args.connectionTokens[server.id])
-      ?? normalizeOptionalString(server.token),
-  }));
+  return args.servers.map((server) => {
+    const token = normalizeOptionalString(args.connectionTokens[server.id])
+      ?? normalizeOptionalString(server.token);
+    const merged: McpServerConfig = {
+      id: server.id,
+      name: server.name,
+      url: server.url,
+      enabled: server.enabled,
+    };
+    if (token !== undefined) {
+      merged.token = token;
+    }
+    return merged;
+  });
 }
 
 export async function migrateLegacyMcpTokensToConnectionStore(
@@ -411,12 +434,16 @@ export function createMcpServerConfig(input: {
 
   const url = validateMcpServerUrl(input.url);
   const token = normalizeOptionalString(input.token);
-
-  return {
+  const server: McpServerConfig = {
     id: `mcp-${crypto.randomUUID()}`,
     name,
     url,
     enabled: input.enabled ?? true,
-    token,
   };
+
+  if (token !== undefined) {
+    server.token = token;
+  }
+
+  return server;
 }

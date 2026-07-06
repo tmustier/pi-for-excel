@@ -250,12 +250,15 @@ export function isBlockedExtensionHostname(hostname: string): boolean {
   const ipv4Match = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/u.exec(unwrapped);
 
   if (ipv4Match) {
-    const octets = ipv4Match.slice(1).map((part) => Number(part));
+    const a = Number(ipv4Match[1] ?? Number.NaN);
+    const b = Number(ipv4Match[2] ?? Number.NaN);
+    const c = Number(ipv4Match[3] ?? Number.NaN);
+    const d = Number(ipv4Match[4] ?? Number.NaN);
+    const octets = [a, b, c, d];
     if (octets.some((octet) => Number.isNaN(octet) || octet < 0 || octet > 255)) {
       return true;
     }
 
-    const [a, b] = octets;
     if (a === 10 || a === 127 || a === 0) {
       return true;
     }

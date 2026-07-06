@@ -70,12 +70,17 @@ export function normalizeBorderParams(params: {
   border_left?: DynamicValue;
   border_right?: DynamicValue;
 }): NormalizedBorderParams {
+  const shorthand = normalizeBorderWeight(params.borders, "borders");
+  const top = normalizeBorderWeight(params.border_top, "border_top");
+  const bottom = normalizeBorderWeight(params.border_bottom, "border_bottom");
+  const left = normalizeBorderWeight(params.border_left, "border_left");
+  const right = normalizeBorderWeight(params.border_right, "border_right");
   return {
-    shorthand: normalizeBorderWeight(params.borders, "borders"),
-    top: normalizeBorderWeight(params.border_top, "border_top"),
-    bottom: normalizeBorderWeight(params.border_bottom, "border_bottom"),
-    left: normalizeBorderWeight(params.border_left, "border_left"),
-    right: normalizeBorderWeight(params.border_right, "border_right"),
+    ...(shorthand !== undefined ? { shorthand } : {}),
+    ...(top !== undefined ? { top } : {}),
+    ...(bottom !== undefined ? { bottom } : {}),
+    ...(left !== undefined ? { left } : {}),
+    ...(right !== undefined ? { right } : {}),
   };
 }
 

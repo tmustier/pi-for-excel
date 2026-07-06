@@ -293,18 +293,23 @@ function validateActionParams(params: Params): void {
 }
 
 function toBridgeRequest(params: Params): TmuxBridgeRequest {
+  const session = cleanOptionalString(params.session);
+  const cwd = cleanOptionalString(params.cwd);
+  const text = cleanOptionalString(params.text);
+  const keys = cleanOptionalStringArray(params.keys);
+  const waitFor = cleanOptionalString(params.wait_for);
   return {
     action: params.action,
-    session: cleanOptionalString(params.session),
-    cwd: cleanOptionalString(params.cwd),
-    text: cleanOptionalString(params.text),
-    keys: cleanOptionalStringArray(params.keys),
-    enter: params.enter,
-    lines: params.lines,
-    wait_for: cleanOptionalString(params.wait_for),
-    timeout_ms: params.timeout_ms,
-    wait_ms: params.wait_ms,
-    join_wrapped: params.join_wrapped,
+    ...(session !== undefined ? { session } : {}),
+    ...(cwd !== undefined ? { cwd } : {}),
+    ...(text !== undefined ? { text } : {}),
+    ...(keys !== undefined ? { keys } : {}),
+    ...(params.enter !== undefined ? { enter: params.enter } : {}),
+    ...(params.lines !== undefined ? { lines: params.lines } : {}),
+    ...(waitFor !== undefined ? { wait_for: waitFor } : {}),
+    ...(params.timeout_ms !== undefined ? { timeout_ms: params.timeout_ms } : {}),
+    ...(params.wait_ms !== undefined ? { wait_ms: params.wait_ms } : {}),
+    ...(params.join_wrapped !== undefined ? { join_wrapped: params.join_wrapped } : {}),
   };
 }
 
@@ -340,11 +345,11 @@ function parseBridgeResponse(value: DynamicValue, fallbackAction: TmuxAction): T
   return {
     ok,
     action,
-    session,
-    sessions,
-    output,
-    error,
-    metadata,
+    ...(session !== undefined ? { session } : {}),
+    ...(sessions !== undefined ? { sessions } : {}),
+    ...(output !== undefined ? { output } : {}),
+    ...(error !== undefined ? { error } : {}),
+    ...(metadata !== undefined ? { metadata } : {}),
   };
 }
 
@@ -374,7 +379,7 @@ async function defaultGetBridgeConfig(): Promise<TmuxBridgeConfig | null> {
     const normalizedUrl = validateOfficeProxyUrl(rawUrl);
     return {
       url: normalizedUrl,
-      token,
+      ...(token !== undefined ? { token } : {}),
     };
   } catch {
     return null;
@@ -451,11 +456,12 @@ async function defaultCallBridge(
     }
 
     if (parsedBody === null) {
+      const output = rawBody.trim().length > 0 ? rawBody : undefined;
       return {
         ok: true,
         action: request.action,
-        session: request.session,
-        output: rawBody.trim().length > 0 ? rawBody : undefined,
+        ...(request.session !== undefined ? { session: request.session } : {}),
+        ...(output !== undefined ? { output } : {}),
       };
     }
 
@@ -634,6 +640,8 @@ export function createTmuxTool(
         }
 
         const session = response.session ?? request.session;
+        const outputPreview = buildOutputPreview(response.output);
+        const sessionsCount = response.sessions?.length;
 
         return {
           content: [{ type: "text", text: formatBridgeSuccessText(request, response) }],
@@ -642,9 +650,9 @@ export function createTmuxTool(
             ok: true,
             action: request.action,
             bridgeUrl: bridgeConfig.url,
-            session,
-            sessionsCount: response.sessions?.length,
-            outputPreview: buildOutputPreview(response.output),
+            ...(session !== undefined ? { session } : {}),
+            ...(sessionsCount !== undefined ? { sessionsCount } : {}),
+            ...(outputPreview !== undefined ? { outputPreview } : {}),
           },
         };
       } catch (error) {
@@ -670,7 +678,7 @@ export function createTmuxTool(
             ok: false,
             action: fallbackAction,
             error: message,
-            skillHint,
+            ...(skillHint !== undefined ? { skillHint } : {}),
           },
         };
       }

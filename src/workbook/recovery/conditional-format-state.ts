@@ -4,6 +4,7 @@ import { excelRun, getRange } from "../../excel/helpers.js";
 import { cloneRecoveryConditionalFormatRules } from "./clone.js";
 import {
   BASIC_CONDITIONAL_FORMAT_RULE_HANDLERS,
+  type ConditionalFormatRuleCaptureContext,
   type ConditionalFormatRuleHandler,
 } from "./conditional-format-handlers-basic.js";
 import { ADVANCED_CONDITIONAL_FORMAT_RULE_HANDLERS } from "./conditional-format-handlers-advanced.js";
@@ -65,10 +66,16 @@ async function captureConditionalFormatRulesInRange(
 
   for (const entry of entries) {
     const handler = CONDITIONAL_FORMAT_RULE_HANDLERS[entry.normalizedType];
-    const captureResult = handler.capture(entry.conditionalFormat, {
-      stopIfTrue: normalizeOptionalBoolean(entry.conditionalFormat.stopIfTrue),
-      appliesToAddress: normalizeConditionalFormatAddress(entry.appliesTo.address),
-    });
+    const captureContext: ConditionalFormatRuleCaptureContext = {};
+    const stopIfTrue = normalizeOptionalBoolean(entry.conditionalFormat.stopIfTrue);
+    if (stopIfTrue !== undefined) {
+      captureContext.stopIfTrue = stopIfTrue;
+    }
+    const appliesToAddress = normalizeConditionalFormatAddress(entry.appliesTo.address);
+    if (appliesToAddress !== undefined) {
+      captureContext.appliesToAddress = appliesToAddress;
+    }
+    const captureResult = handler.capture(entry.conditionalFormat, captureContext);
 
     if (!captureResult.supported) {
       return {

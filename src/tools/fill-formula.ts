@@ -185,8 +185,10 @@ export function createFillFormulaTool(): AgentTool<typeof schema, FillFormulaDet
           lines.push(`**Example formulas:** top-left \`${topLeft}\`, bottom-right \`${bottomRight}\``);
         }
 
-        const cellPart = result.address.includes("!") ? result.address.split("!")[1] : result.address;
-        const startCell = cellPart.split(":")[0];
+        const bangIndex = result.address.indexOf("!");
+        const cellPart = bangIndex >= 0 ? result.address.slice(bangIndex + 1) : result.address;
+        const colonIndex = cellPart.indexOf(":");
+        const startCell = colonIndex >= 0 ? cellPart.slice(0, colonIndex) : cellPart;
         const errors = findErrors(result.readBackValues, startCell);
         if (errors.length > 0) {
           lines.push("");

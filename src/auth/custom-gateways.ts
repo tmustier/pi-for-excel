@@ -273,11 +273,18 @@ export async function saveOpenAiGatewayConfig(
   }
 
   const displayName = deriveDisplayName(input.displayName, endpointUrl);
-  const providerName = resolveUniqueProviderName({
+  const uniqueProviderNameArgs: {
+    displayName: string;
+    existingGateways: OpenAiGatewayConfig[];
+    editingId?: string;
+  } = {
     displayName,
     existingGateways,
-    editingId: input.id,
-  });
+  };
+  if (input.id !== undefined) {
+    uniqueProviderNameArgs.editingId = input.id;
+  }
+  const providerName = resolveUniqueProviderName(uniqueProviderNameArgs);
 
   const id = input.id ?? `${OPENAI_GATEWAY_ID_PREFIX}${crypto.randomUUID()}`;
   const apiKey = normalizeOptionalString(input.apiKey);
@@ -287,7 +294,6 @@ export async function saveOpenAiGatewayConfig(
     name: displayName,
     type: OPENAI_GATEWAY_TYPE,
     baseUrl: endpointUrl,
-    apiKey: apiKey.length > 0 ? apiKey : undefined,
     models: [
       createGatewayModel({
         endpointUrl,
@@ -297,6 +303,9 @@ export async function saveOpenAiGatewayConfig(
       }),
     ],
   };
+  if (apiKey.length > 0) {
+    provider.apiKey = apiKey;
+  }
 
   await customProvidersStore.set(provider);
 
@@ -342,7 +351,11 @@ export function resolveCustomProviderModel(
     }
   }
 
-  return fallbackMatches.length === 1 ? fallbackMatches[0] : null;
+  if (fallbackMatches.length !== 1) {
+    return null;
+  }
+
+  return fallbackMatches[0] ?? null;
 }
 
 export async function deleteOpenAiGatewayConfig(

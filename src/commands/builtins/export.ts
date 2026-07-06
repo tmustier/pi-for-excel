@@ -285,7 +285,7 @@ function estimateTokens(message: AgentMessage): number {
 function getPreviousCompaction(messages: AgentMessage[]): { boundaryStart: number; previousSummary?: string } {
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i];
-    if (m.role === "compactionSummary") {
+    if (m?.role === "compactionSummary") {
       return { boundaryStart: i + 1, previousSummary: m.summary };
     }
   }
@@ -296,7 +296,12 @@ function findCutIndex(messages: AgentMessage[], boundaryStart: number, keepRecen
   let accumulated = 0;
 
   for (let i = messages.length - 1; i >= boundaryStart; i--) {
-    accumulated += estimateTokens(messages[i]);
+    const message = messages[i];
+    if (!message) {
+      continue;
+    }
+
+    accumulated += estimateTokens(message);
     if (accumulated >= keepRecentTokens) {
       let cut = i;
       // Never start kept context with a tool result.
@@ -578,8 +583,8 @@ export async function runCompactCommand(agent: Agent, args: string): Promise<voi
     );
     const promptText = buildSummarizationPrompt({
       conversationText,
-      previousSummary,
-      customInstructions,
+      ...(previousSummary !== undefined ? { previousSummary } : {}),
+      ...(customInstructions !== undefined ? { customInstructions } : {}),
     });
 
     const stream = await agent.streamFn(
@@ -596,7 +601,7 @@ export async function runCompactCommand(agent: Agent, args: string): Promise<voi
       },
       {
         apiKey,
-        sessionId: agent.sessionId,
+        ...(agent.sessionId !== undefined ? { sessionId: agent.sessionId } : {}),
         maxTokens,
         // Match pi-coding-agent: don't force temperature when using reasoning,
         // since Anthropic requires temperature=1 when thinking is enabled.

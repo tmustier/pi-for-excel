@@ -147,6 +147,7 @@ function normalizeGoogleOAuthModel(model: Model<Api>): Model<Api> {
 function isToolContinuation(messages: Context["messages"]): boolean {
   if (messages.length === 0) return false;
   const last = messages[messages.length - 1];
+  if (!last) return false;
   return last.role === "toolResult";
 }
 
@@ -331,24 +332,28 @@ function setSessionContext(sessionId: string, context: Context): void {
 
   if (lastContextBySession.size <= MAX_SESSION_CONTEXTS) return;
 
-  const oldest = lastContextBySession.keys().next().value;
-  if (typeof oldest === "string") {
-    lastContextBySession.delete(oldest);
+  const oldestEntry = lastContextBySession.keys().next();
+  if (!oldestEntry.done) {
+    lastContextBySession.delete(oldestEntry.value);
   }
 }
 
 function upsertPayloadShape(call: number, payload: DynamicValue): void {
   let index = -1;
   for (let i = payloadSnapshots.length - 1; i >= 0; i -= 1) {
-    if (payloadSnapshots[i].call === call) {
+    const snapshot = payloadSnapshots[i];
+    if (snapshot?.call === call) {
       index = i;
       break;
     }
   }
   if (index < 0) return;
 
+  const snapshot = payloadSnapshots[index];
+  if (!snapshot) return;
+
   payloadSnapshots[index] = {
-    ...payloadSnapshots[index],
+    ...snapshot,
     payloadShape: summarizePayloadShape(payload),
   };
 
@@ -413,10 +418,9 @@ function recordCall(
     }
 
     const totalChars = stats.systemChars + stats.toolSchemaChars + stats.messageChars;
-    pushSnapshot({
+    const snapshot: PayloadSnapshot = {
       call,
       timestamp: Date.now(),
-      sessionId,
       provider: model.provider,
       modelId: model.id,
       isToolContinuation: continuation,
@@ -430,7 +434,11 @@ function recordCall(
       messageCount: stats.messageCount,
       prefixChanged,
       prefixChangeReasons: prefixChangeReasons.slice(),
-    });
+    };
+    if (sessionId !== undefined) {
+      snapshot.sessionId = sessionId;
+    }
+    pushSnapshot(snapshot);
   }
 
   document.dispatchEvent(new Event("pi:status-update"));
@@ -467,9 +475,18 @@ export function createOfficeStreamFn(getProxyUrl: GetProxyUrl): OfficeStreamFn {
     // continuation calls after tool results. This preserves full agent loops.
     const toolSelection = selectToolBundle(context);
 
-    const effectiveContext = toolSelection.tools === context.tools
-      ? context
-      : { ...context, tools: toolSelection.tools };
+    const effectiveContext = (() => {
+      if (toolSelection.tools === context.tools) {
+        return context;
+      }
+
+      if (toolSelection.tools !== undefined) {
+        return { ...context, tools: toolSelection.tools };
+      }
+
+      const { tools: _tools, ...contextWithoutTools } = context;
+      return contextWithoutTools;
+    })();
 
     const normalizedModel = normalizeGoogleOAuthModel(model);
 

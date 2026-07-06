@@ -136,13 +136,18 @@ function parseProvider(value: DynamicValue): WebSearchProvider | undefined {
 }
 
 function createEmptyApiKeyMap(): Partial<Record<WebSearchProvider, string>> {
-  return {
-    jina: undefined,
-    firecrawl: undefined,
-    serper: undefined,
-    tavily: undefined,
-    brave: undefined,
-  };
+  return {};
+}
+
+function setApiKeyIfPresent(
+  apiKeys: Partial<Record<WebSearchProvider, string>>,
+  provider: WebSearchProvider,
+  value: DynamicValue,
+): void {
+  const normalized = normalizeOptionalString(value);
+  if (normalized !== undefined) {
+    apiKeys[provider] = normalized;
+  }
 }
 
 async function loadLegacyWebSearchApiKeys(
@@ -156,13 +161,13 @@ async function loadLegacyWebSearchApiKeys(
     settings.get(WEB_SEARCH_BRAVE_API_KEY_SETTING_KEY),
   ]);
 
-  return {
-    jina: normalizeOptionalString(jinaApiKeyRaw),
-    firecrawl: normalizeOptionalString(firecrawlApiKeyRaw),
-    serper: normalizeOptionalString(serperApiKeyRaw),
-    tavily: normalizeOptionalString(tavilyApiKeyRaw),
-    brave: normalizeOptionalString(braveApiKeyRaw),
-  };
+  const apiKeys = createEmptyApiKeyMap();
+  setApiKeyIfPresent(apiKeys, "jina", jinaApiKeyRaw);
+  setApiKeyIfPresent(apiKeys, "firecrawl", firecrawlApiKeyRaw);
+  setApiKeyIfPresent(apiKeys, "serper", serperApiKeyRaw);
+  setApiKeyIfPresent(apiKeys, "tavily", tavilyApiKeyRaw);
+  setApiKeyIfPresent(apiKeys, "brave", braveApiKeyRaw);
+  return apiKeys;
 }
 
 async function loadConnectionStoreWebSearchApiKeys(
@@ -184,7 +189,7 @@ async function loadConnectionStoreWebSearchApiKeys(
 
   for (const provider of WEB_SEARCH_PROVIDERS) {
     const fieldId = WEB_SEARCH_CONNECTION_SECRET_FIELD_BY_PROVIDER[provider];
-    apiKeys[provider] = normalizeOptionalString(rawSecrets[fieldId]);
+    setApiKeyIfPresent(apiKeys, provider, rawSecrets[fieldId]);
   }
 
   return apiKeys;
@@ -197,8 +202,11 @@ function mergeApiKeys(args: {
   const merged = createEmptyApiKeyMap();
 
   for (const provider of WEB_SEARCH_PROVIDERS) {
-    merged[provider] = normalizeOptionalString(args.primary[provider])
+    const apiKey = normalizeOptionalString(args.primary[provider])
       ?? normalizeOptionalString(args.fallback[provider]);
+    if (apiKey !== undefined) {
+      merged[provider] = apiKey;
+    }
   }
 
   return merged;
@@ -236,14 +244,21 @@ async function loadConnectionStoreItems(
     }
 
     const status = rawRecord.status;
-    items[connectionId] = {
-      status: status === "connected" || status === "missing" || status === "invalid" || status === "error"
-        ? status
-        : undefined,
-      lastValidatedAt: normalizeOptionalString(rawRecord.lastValidatedAt),
-      lastError: normalizeOptionalString(rawRecord.lastError),
+    const record: StoredConnectionRecord = {
       secrets,
     };
+    if (status === "connected" || status === "missing" || status === "invalid" || status === "error") {
+      record.status = status;
+    }
+    const lastValidatedAt = normalizeOptionalString(rawRecord.lastValidatedAt);
+    if (lastValidatedAt !== undefined) {
+      record.lastValidatedAt = lastValidatedAt;
+    }
+    const lastError = normalizeOptionalString(rawRecord.lastError);
+    if (lastError !== undefined) {
+      record.lastError = lastError;
+    }
+    items[connectionId] = record;
   }
 
   return items;
@@ -282,12 +297,15 @@ async function writeConnectionStoreWebSearchApiKeys(
     return;
   }
 
-  items[WEB_SEARCH_CONNECTION_ID] = {
+  const record: StoredConnectionRecord = {
     status: "connected",
-    lastValidatedAt: previous?.lastValidatedAt,
-    lastError: undefined,
     secrets,
   };
+  const previousLastValidatedAt = normalizeOptionalString(previous?.lastValidatedAt);
+  if (previousLastValidatedAt !== undefined) {
+    record.lastValidatedAt = previousLastValidatedAt;
+  }
+  items[WEB_SEARCH_CONNECTION_ID] = record;
 
   await saveConnectionStoreItems(settings, items);
 }
@@ -400,8 +418,8 @@ export async function clearWebSearchApiKey(
   const current = await loadWebSearchProviderConfig(settings);
   const nextApiKeys = {
     ...current.apiKeys,
-    [provider]: undefined,
   };
+  delete nextApiKeys[provider];
 
   await writeConnectionStoreWebSearchApiKeys(settings, nextApiKeys);
   await clearLegacyWebSearchApiKey(settings, provider);

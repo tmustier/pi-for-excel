@@ -116,7 +116,7 @@ export async function buildOverview(): Promise<string> {
 
       const headers = headerRange.isNullObject
         ? []
-        : headerRange.values[0].filter((v) => v !== null && v !== undefined && v !== "");
+        : (headerRange.values[0] ?? []).filter((v) => v !== null && v !== undefined && v !== "");
 
       lines.push(
         `${sheet.position + 1}. **${sheet.name}**${visibility} — ${dims}`,
@@ -218,7 +218,7 @@ async function buildSheetDetail(sheetName: string): Promise<string> {
     // ── Headers ──
     const headers = headerRange.isNullObject
       ? []
-      : (headerRange.values[0] as DynamicValue[]).filter(
+      : (headerRange.values[0] ?? []).filter(
           (v) => v !== null && v !== undefined && v !== "",
         );
     if (headers.length > 0) {
@@ -290,7 +290,8 @@ async function buildSheetDetail(sheetName: string): Promise<string> {
       lines.push(headerRow);
       lines.push(separator);
       for (let r = 0; r < previewRows.length; r++) {
-        const cells = previewRows[r].map((v) =>
+        const row = previewRows[r] ?? [];
+        const cells = row.map((v) =>
           v === null || v === undefined || v === "" ? "" : typeof v === "string" ? v : typeof v === "number" || typeof v === "boolean" ? String(v) : JSON.stringify(v),
         );
         lines.push(`| ${r + 1} | ${cells.join(" | ")} |`);

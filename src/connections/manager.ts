@@ -7,6 +7,7 @@ import {
 import type {
   ConnectionDefinition,
   ConnectionPromptEntry,
+  ConnectionSecretFieldDefinition,
   ConnectionRuntimeAuthFailure,
   ConnectionSnapshot,
   ConnectionState,
@@ -109,6 +110,9 @@ function normalizeHttpAuthConfig(args: {
 
   while (placeholderMatch) {
     const placeholderRaw = placeholderMatch[1];
+    if (placeholderRaw === undefined) {
+      throw new Error("connection httpAuth.valueTemplate contains an invalid placeholder.");
+    }
     const placeholder = normalizeNonEmpty(placeholderRaw, "httpAuth value template placeholder");
 
     if (!args.allowedSecretIds.has(placeholder)) {
@@ -204,19 +208,51 @@ function resolveEffectiveStatus(
   return "connected";
 }
 
+
+function buildStoredConnectionRecord(args: {
+  status: ConnectionStatus;
+  secrets?: Record<string, string>;
+  lastValidatedAt?: string;
+  lastError?: string;
+}): StoredConnectionRecord {
+  const record: StoredConnectionRecord = {
+    status: args.status,
+  };
+
+  if (args.secrets !== undefined) {
+    record.secrets = args.secrets;
+  }
+  if (args.lastValidatedAt !== undefined) {
+    record.lastValidatedAt = args.lastValidatedAt;
+  }
+  if (args.lastError !== undefined) {
+    record.lastError = args.lastError;
+  }
+
+  return record;
+}
+
+function cloneSecretFieldDefinition(
+  field: ConnectionSecretFieldDefinition,
+): ConnectionSecretFieldDefinition {
+  const normalized: ConnectionSecretFieldDefinition = {
+    id: normalizeNonEmpty(field.id, "secret field id"),
+    label: normalizeNonEmpty(field.label, "secret field label"),
+    required: field.required,
+  };
+
+  if (field.maskInUi !== undefined) {
+    normalized.maskInUi = field.maskInUi;
+  }
+
+  return normalized;
+}
 function normalizeConnectionDefinition(definition: ConnectionDefinition): ConnectionDefinition {
   const id = normalizeConnectionId(definition.id);
   const title = normalizeNonEmpty(definition.title, "connection title");
   const capability = normalizeNonEmpty(definition.capability, "connection capability");
 
-  const secretFields = definition.secretFields.map((field) => {
-    return {
-      id: normalizeNonEmpty(field.id, "secret field id"),
-      label: normalizeNonEmpty(field.label, "secret field label"),
-      required: field.required,
-      maskInUi: field.maskInUi,
-    };
-  });
+  const secretFields = definition.secretFields.map(cloneSecretFieldDefinition);
 
   const allowedSecretIds = new Set<string>(secretFields.map((field) => field.id));
   const httpAuth = normalizeHttpAuthConfig({
@@ -224,43 +260,51 @@ function normalizeConnectionDefinition(definition: ConnectionDefinition): Connec
     allowedSecretIds,
   });
 
-  return {
-    ...definition,
+  const normalized: ConnectionDefinition = {
     id,
     title,
     capability,
+    authKind: definition.authKind,
     secretFields,
-    httpAuth,
-    setupHint: definition.setupHint?.trim().length
-      ? definition.setupHint.trim()
-      : undefined,
   };
+
+  if (httpAuth) {
+    normalized.httpAuth = httpAuth;
+  }
+
+  const setupHint = definition.setupHint?.trim();
+  if (setupHint) {
+    normalized.setupHint = setupHint;
+  }
+
+  return normalized;
 }
 
 function toPublicConnectionDefinition(
   definition: RegisteredConnectionDefinition,
 ): ConnectionDefinition {
-  return {
+  const publicDefinition: ConnectionDefinition = {
     id: definition.id,
     title: definition.title,
     capability: definition.capability,
     authKind: definition.authKind,
-    setupHint: definition.setupHint,
-    httpAuth: definition.httpAuth
-      ? {
-        placement: definition.httpAuth.placement,
-        headerName: definition.httpAuth.headerName,
-        valueTemplate: definition.httpAuth.valueTemplate,
-        allowedHosts: [...definition.httpAuth.allowedHosts],
-      }
-      : undefined,
-    secretFields: definition.secretFields.map((field) => ({
-      id: field.id,
-      label: field.label,
-      required: field.required,
-      maskInUi: field.maskInUi,
-    })),
+    secretFields: definition.secretFields.map(cloneSecretFieldDefinition),
   };
+
+  if (definition.setupHint !== undefined) {
+    publicDefinition.setupHint = definition.setupHint;
+  }
+
+  if (definition.httpAuth) {
+    publicDefinition.httpAuth = {
+      placement: definition.httpAuth.placement,
+      headerName: definition.httpAuth.headerName,
+      valueTemplate: definition.httpAuth.valueTemplate,
+      allowedHosts: [...definition.httpAuth.allowedHosts],
+    };
+  }
+
+  return publicDefinition;
 }
 
 async function mutateConnectionRecord(args: {
@@ -455,12 +499,10 @@ export class ConnectionManager {
         const merged = { ...(record?.secrets ?? {}), ...patch };
         const requiredPresent = hasRequiredSecrets(definition, merged);
 
-        return {
+        return buildStoredConnectionRecord({
           status: requiredPresent ? "connected" : "missing",
-          lastValidatedAt: undefined,
-          lastError: undefined,
           secrets: merged,
-        };
+        });
       },
     });
 
@@ -478,10 +520,8 @@ export class ConnectionManager {
     const changed = await mutateConnectionRecord({
       settings: this.settings,
       connectionId: definition.id,
-      mutator: () => ({
+      mutator: () => buildStoredConnectionRecord({
         status: "missing",
-        lastValidatedAt: undefined,
-        lastError: undefined,
         secrets: {},
       }),
     });
@@ -563,12 +603,11 @@ export class ConnectionManager {
         const previousStatus = record?.status ?? "missing";
         assertStatusTransition(previousStatus, nextStatus);
 
-        return {
+        return buildStoredConnectionRecord({
           status: nextStatus,
-          lastValidatedAt: requiredPresent ? now : undefined,
-          lastError: undefined,
           secrets: normalizedSecrets,
-        };
+          ...(requiredPresent ? { lastValidatedAt: now } : {}),
+        });
       },
     });
 
@@ -588,12 +627,10 @@ export class ConnectionManager {
         const previousStatus = record?.status ?? "missing";
         assertStatusTransition(previousStatus, "missing");
 
-        return {
+        return buildStoredConnectionRecord({
           status: "missing",
-          lastValidatedAt: undefined,
-          lastError: undefined,
           secrets: {},
-        };
+        });
       },
     });
 
@@ -614,21 +651,18 @@ export class ConnectionManager {
 
         if (!hasRequiredSecrets(definition, record?.secrets)) {
           assertStatusTransition(previousStatus, "missing");
-          return {
-            ...record,
+          return buildStoredConnectionRecord({
             status: "missing",
-            lastValidatedAt: undefined,
-            lastError: undefined,
-          };
+            ...(record?.secrets !== undefined ? { secrets: record.secrets } : {}),
+          });
         }
 
         assertStatusTransition(previousStatus, "connected");
-        return {
-          ...record,
+        return buildStoredConnectionRecord({
           status: "connected",
+          ...(record?.secrets !== undefined ? { secrets: record.secrets } : {}),
           lastValidatedAt: new Date().toISOString(),
-          lastError: undefined,
-        };
+        });
       },
     });
 
@@ -651,12 +685,12 @@ export class ConnectionManager {
 
         const redactedReason = redactSecretsInMessage(trimmedReason, record?.secrets);
 
-        return {
-          ...record,
+        return buildStoredConnectionRecord({
           status: "invalid",
+          ...(record?.secrets !== undefined ? { secrets: record.secrets } : {}),
           lastValidatedAt: new Date().toISOString(),
           lastError: redactedReason,
-        };
+        });
       },
     });
 
@@ -678,12 +712,12 @@ export class ConnectionManager {
 
         const redactedMessage = redactSecretsInMessage(message, record?.secrets);
 
-        return {
-          ...record,
+        return buildStoredConnectionRecord({
           status: "error",
+          ...(record?.secrets !== undefined ? { secrets: record.secrets } : {}),
           lastValidatedAt: new Date().toISOString(),
           lastError: redactedMessage,
-        };
+        });
       },
     });
 
@@ -709,27 +743,41 @@ export class ConnectionManager {
       ? record?.lastError
       : undefined;
 
-    return {
+    const snapshot: ConnectionSnapshot = {
       connectionId: definition.id,
       title: definition.title,
       capability: definition.capability,
       status,
       setupHint,
-      lastValidatedAt: record?.lastValidatedAt,
-      lastError,
     };
+
+    if (record?.lastValidatedAt !== undefined) {
+      snapshot.lastValidatedAt = record.lastValidatedAt;
+    }
+    if (lastError !== undefined) {
+      snapshot.lastError = lastError;
+    }
+
+    return snapshot;
   }
 
   async getState(connectionId: string): Promise<ConnectionState | null> {
     const snapshot = await this.getSnapshot(connectionId);
     if (!snapshot) return null;
 
-    return {
+    const state: ConnectionState = {
       connectionId: snapshot.connectionId,
       status: snapshot.status,
-      lastValidatedAt: snapshot.lastValidatedAt,
-      lastError: snapshot.lastError,
     };
+
+    if (snapshot.lastValidatedAt !== undefined) {
+      state.lastValidatedAt = snapshot.lastValidatedAt;
+    }
+    if (snapshot.lastError !== undefined) {
+      state.lastError = snapshot.lastError;
+    }
+
+    return state;
   }
 
   async listSnapshots(connectionIds?: readonly string[]): Promise<ConnectionSnapshot[]> {
@@ -752,14 +800,21 @@ export class ConnectionManager {
   async listPromptEntries(connectionIds: readonly string[]): Promise<ConnectionPromptEntry[]> {
     const snapshots = await this.listSnapshots(connectionIds);
 
-    return snapshots.map((snapshot) => ({
-      id: snapshot.connectionId,
-      title: snapshot.title,
-      capability: snapshot.capability,
-      status: snapshot.status,
-      setupHint: snapshot.setupHint,
-      lastError: snapshot.lastError,
-    }));
+    return snapshots.map((snapshot) => {
+      const entry: ConnectionPromptEntry = {
+        id: snapshot.connectionId,
+        title: snapshot.title,
+        capability: snapshot.capability,
+        status: snapshot.status,
+        setupHint: snapshot.setupHint,
+      };
+
+      if (snapshot.lastError !== undefined) {
+        entry.lastError = snapshot.lastError;
+      }
+
+      return entry;
+    });
   }
 }
 

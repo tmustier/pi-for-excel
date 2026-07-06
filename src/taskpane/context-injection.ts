@@ -191,7 +191,7 @@ export function createContextInjector(
     const nextMessages = [...messages];
     let lastUserIdx = -1;
     for (let i = nextMessages.length - 1; i >= 0; i--) {
-      if (nextMessages[i].role === "user") {
+      if (nextMessages[i]?.role === "user") {
         lastUserIdx = i;
         break;
       }

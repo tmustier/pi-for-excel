@@ -22,7 +22,7 @@ import {
 import { finalizeMutationOperation, finalizeMutationRecoveryStep } from "./mutation/finalize.js";
 import { appendMutationResultNote } from "./mutation/result-note.js";
 import type { MutationFinalizeDependencies } from "./mutation/types.js";
-import type { BorderWeight } from "../conventions/index.js";
+import type { BorderWeight, CellStyle } from "../conventions/index.js";
 import {
   buildBorderInstructions,
   normalizeBorderParams,
@@ -175,22 +175,21 @@ function buildFormatCheckpointPlan(
   props: ResolvedFormatPropertiesForCheckpoint,
   hasNumberFormat: boolean,
 ): FormatCheckpointPlan {
-  const selection: RecoveryFormatSelection = {
-    numberFormat: hasNumberFormat || undefined,
-    fillColor: props.fillColor !== undefined || undefined,
-    fontColor: props.fontColor !== undefined || undefined,
-    bold: props.bold !== undefined || undefined,
-    italic: props.italic !== undefined || undefined,
-    underlineStyle: props.underline !== undefined || undefined,
-    fontName: props.fontName !== undefined || undefined,
-    fontSize: props.fontSize !== undefined || undefined,
-    horizontalAlignment: props.horizontalAlignment !== undefined || undefined,
-    verticalAlignment: props.verticalAlignment !== undefined || undefined,
-    wrapText: props.wrapText !== undefined || undefined,
-    columnWidth: params.column_width !== undefined || params.auto_fit === true || undefined,
-    rowHeight: params.row_height !== undefined || params.auto_fit === true || undefined,
-    mergedAreas: params.merge !== undefined || undefined,
-  };
+  const selection: RecoveryFormatSelection = {};
+  if (hasNumberFormat) selection.numberFormat = true;
+  if (props.fillColor !== undefined) selection.fillColor = true;
+  if (props.fontColor !== undefined) selection.fontColor = true;
+  if (props.bold !== undefined) selection.bold = true;
+  if (props.italic !== undefined) selection.italic = true;
+  if (props.underline !== undefined) selection.underlineStyle = true;
+  if (props.fontName !== undefined) selection.fontName = true;
+  if (props.fontSize !== undefined) selection.fontSize = true;
+  if (props.horizontalAlignment !== undefined) selection.horizontalAlignment = true;
+  if (props.verticalAlignment !== undefined) selection.verticalAlignment = true;
+  if (props.wrapText !== undefined) selection.wrapText = true;
+  if (params.column_width !== undefined || params.auto_fit === true) selection.columnWidth = true;
+  if (params.row_height !== undefined || params.auto_fit === true) selection.rowHeight = true;
+  if (params.merge !== undefined) selection.mergedAreas = true;
 
   const hasShorthand = borderParams.shorthand !== undefined;
   const hasParamEdges =
@@ -212,10 +211,10 @@ function buildFormatCheckpointPlan(
     selection.borderInsideHorizontal = true;
     selection.borderInsideVertical = true;
   } else {
-    selection.borderTop = borderParams.top !== undefined || props.borderTop !== undefined || undefined;
-    selection.borderBottom = borderParams.bottom !== undefined || props.borderBottom !== undefined || undefined;
-    selection.borderLeft = borderParams.left !== undefined || props.borderLeft !== undefined || undefined;
-    selection.borderRight = borderParams.right !== undefined || props.borderRight !== undefined || undefined;
+    if (borderParams.top !== undefined || props.borderTop !== undefined) selection.borderTop = true;
+    if (borderParams.bottom !== undefined || props.borderBottom !== undefined) selection.borderBottom = true;
+    if (borderParams.left !== undefined || props.borderLeft !== undefined) selection.borderLeft = true;
+    if (borderParams.right !== undefined || props.borderRight !== undefined) selection.borderRight = true;
   }
 
   const hasSelectedProperty = Object.values(selection).some((value) => value === true);
@@ -258,25 +257,30 @@ export function createFormatCellsTool(): AgentTool<typeof schema, FormatCellsDet
         const normalizedBorders = normalizeBorderParams(params);
 
         // ── Resolve styles + overrides into flat properties ──────────
-        const styleResult = resolveStyles(params.style, {
-          numberFormat: params.number_format,
-          numberFormatDp: params.number_format_dp,
-          currencySymbol: params.currency_symbol,
-          bold: params.bold,
-          italic: params.italic,
-          underline: params.underline,
-          fontColor: params.font_color,
-          fontSize: params.font_size,
-          fontName: params.font_name,
-          fillColor: params.fill_color,
-          horizontalAlignment: params.horizontal_alignment as "Left" | "Center" | "Right" | "General" | undefined,
-          verticalAlignment: params.vertical_alignment as "Top" | "Center" | "Bottom" | undefined,
-          wrapText: params.wrap_text,
-          borderTop: normalizedBorders.top,
-          borderBottom: normalizedBorders.bottom,
-          borderLeft: normalizedBorders.left,
-          borderRight: normalizedBorders.right,
-        }, conventionConfig);
+        const styleOverrides: CellStyle = {
+          ...(params.number_format !== undefined ? { numberFormat: params.number_format } : {}),
+          ...(params.number_format_dp !== undefined ? { numberFormatDp: params.number_format_dp } : {}),
+          ...(params.currency_symbol !== undefined ? { currencySymbol: params.currency_symbol } : {}),
+          ...(params.bold !== undefined ? { bold: params.bold } : {}),
+          ...(params.italic !== undefined ? { italic: params.italic } : {}),
+          ...(params.underline !== undefined ? { underline: params.underline } : {}),
+          ...(params.font_color !== undefined ? { fontColor: params.font_color } : {}),
+          ...(params.font_size !== undefined ? { fontSize: params.font_size } : {}),
+          ...(params.font_name !== undefined ? { fontName: params.font_name } : {}),
+          ...(params.fill_color !== undefined ? { fillColor: params.fill_color } : {}),
+          ...(params.horizontal_alignment !== undefined && isHorizontalAlignment(params.horizontal_alignment)
+            ? { horizontalAlignment: params.horizontal_alignment }
+            : {}),
+          ...(params.vertical_alignment !== undefined && isVerticalAlignment(params.vertical_alignment)
+            ? { verticalAlignment: params.vertical_alignment }
+            : {}),
+          ...(params.wrap_text !== undefined ? { wrapText: params.wrap_text } : {}),
+          ...(normalizedBorders.top !== undefined ? { borderTop: normalizedBorders.top } : {}),
+          ...(normalizedBorders.bottom !== undefined ? { borderBottom: normalizedBorders.bottom } : {}),
+          ...(normalizedBorders.left !== undefined ? { borderLeft: normalizedBorders.left } : {}),
+          ...(normalizedBorders.right !== undefined ? { borderRight: normalizedBorders.right } : {}),
+        };
+        const styleResult = resolveStyles(params.style, styleOverrides, conventionConfig);
         const props = styleResult.properties;
 
         const checkpointPlan = buildFormatCheckpointPlan(

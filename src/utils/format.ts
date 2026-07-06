@@ -33,11 +33,16 @@ export function formatAsMarkdownTable(values: DynamicValue[][]): string {
     return r;
   });
 
+  const header = padded[0];
+  if (header === undefined) return "(empty)";
+
   const lines: string[] = [];
-  lines.push(`| ${padded[0].join(" | ")} |`);
-  lines.push(`| ${padded[0].map(() => "---").join(" | ")} |`);
+  lines.push(`| ${header.join(" | ")} |`);
+  lines.push(`| ${header.map(() => "---").join(" | ")} |`);
   for (let i = 1; i < padded.length; i++) {
-    lines.push(`| ${padded[i].join(" | ")} |`);
+    const row = padded[i];
+    if (row === undefined) continue;
+    lines.push(`| ${row.join(" | ")} |`);
   }
   return lines.join("\n");
 }
@@ -54,8 +59,10 @@ export function extractFormulas(formulas: DynamicValue[][], startAddress: string
   const start = parseCell(startAddress);
 
   for (let r = 0; r < formulas.length; r++) {
-    for (let c = 0; c < formulas[r].length; c++) {
-      const f = formulas[r][c];
+    const row = formulas[r];
+    if (row === undefined) continue;
+    for (let c = 0; c < row.length; c++) {
+      const f = row[c];
       if (typeof f === "string" && f.startsWith("=")) {
         const addr = `${colToLetter(start.col + c)}${start.row + r}`;
         result.push(`${addr}: ${f}`);
@@ -77,8 +84,10 @@ export function findErrors(
   const start = parseCell(startAddress);
 
   for (let r = 0; r < values.length; r++) {
-    for (let c = 0; c < values[r].length; c++) {
-      const v = values[r][c];
+    const row = values[r];
+    if (row === undefined) continue;
+    for (let c = 0; c < row.length; c++) {
+      const v = row[c];
       if (typeof v === "string" && v.startsWith("#")) {
         errors.push({
           address: `${colToLetter(start.col + c)}${start.row + r}`,

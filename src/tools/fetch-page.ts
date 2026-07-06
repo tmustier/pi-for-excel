@@ -79,6 +79,61 @@ function normalizeOptionalString(value: DynamicValue): string | undefined {
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
+function proxyBaseUrlArg(proxyBaseUrl: string | undefined): { proxyBaseUrl?: string } {
+  return proxyBaseUrl === undefined ? {} : { proxyBaseUrl };
+}
+
+function createMarkdownResult(title: string | undefined, markdown: string): { title?: string; markdown: string } {
+  const result: { title?: string; markdown: string } = { markdown };
+  if (title !== undefined) {
+    result.title = title;
+  }
+  return result;
+}
+
+function createExtractedResult(args: {
+  title?: string | undefined;
+  markdown: string;
+  truncated: boolean;
+}): { title?: string; markdown: string; truncated: boolean } {
+  const result: { title?: string; markdown: string; truncated: boolean } = {
+    markdown: args.markdown,
+    truncated: args.truncated,
+  };
+  if (args.title !== undefined) {
+    result.title = args.title;
+  }
+  return result;
+}
+
+function createFetchPageDetails(args: {
+  ok: boolean;
+  url: string;
+  title?: string | undefined;
+  chars?: number | undefined;
+  truncated?: boolean | undefined;
+  proxied?: boolean | undefined;
+  proxyBaseUrl?: string | undefined;
+  contentType?: string | undefined;
+  error?: string | undefined;
+  proxyDown?: boolean | undefined;
+}): FetchPageToolDetails {
+  const details: FetchPageToolDetails = {
+    kind: "fetch_page",
+    ok: args.ok,
+    url: args.url,
+  };
+  if (args.title !== undefined) details.title = args.title;
+  if (args.chars !== undefined) details.chars = args.chars;
+  if (args.truncated !== undefined) details.truncated = args.truncated;
+  if (args.proxied !== undefined) details.proxied = args.proxied;
+  if (args.proxyBaseUrl !== undefined) details.proxyBaseUrl = args.proxyBaseUrl;
+  if (args.contentType !== undefined) details.contentType = args.contentType;
+  if (args.error !== undefined) details.error = args.error;
+  if (args.proxyDown !== undefined) details.proxyDown = args.proxyDown;
+  return details;
+}
+
 function parseParams(raw: DynamicValue): Params {
   if (!raw || typeof raw !== "object") {
     throw new Error("Invalid fetch_page params: expected an object.");
@@ -177,10 +232,7 @@ function htmlToMarkdown(html: string): { title?: string; markdown: string } {
 
   const root = doc.querySelector("main, article, [role='main']") ?? doc.body;
   if (!root) {
-    return {
-      title,
-      markdown: stripHtmlTags(html),
-    };
+    return createMarkdownResult(title, stripHtmlTags(html));
   }
 
   const parts: string[] = [];
@@ -220,10 +272,7 @@ function htmlToMarkdown(html: string): { title?: string; markdown: string } {
   }
 
   if (parts.length === 0) {
-    return {
-      title,
-      markdown: stripHtmlTags(html),
-    };
+    return createMarkdownResult(title, stripHtmlTags(html));
   }
 
   const deduped: string[] = [];
@@ -232,10 +281,7 @@ function htmlToMarkdown(html: string): { title?: string; markdown: string } {
     deduped.push(part);
   }
 
-  return {
-    title,
-    markdown: deduped.join("\n\n"),
-  };
+  return createMarkdownResult(title, deduped.join("\n\n"));
 }
 
 function extractReadableMarkdown(args: {
@@ -256,11 +302,11 @@ function extractReadableMarkdown(args: {
     : { markdown: normalizeText(limitedRaw) };
 
   const truncated = truncateText(extracted.markdown, maxChars);
-  return {
+  return createExtractedResult({
     title: extracted.title,
     markdown: truncated.text,
     truncated: truncated.truncated || limitedRaw.length < body.length,
-  };
+  });
 }
 
 function enforceDomainRateLimit(hostname: string, now: number): void {
@@ -276,20 +322,26 @@ async function defaultGetConfig(): Promise<FetchPageToolConfig> {
   const storageModule = await import("@earendil-works/pi-web-ui/dist/storage/app-storage.js");
   const settings: ProxyAwareSettingsStore = storageModule.getAppStorage().settings;
   const proxyBaseUrl = await getEnabledProxyBaseUrl(settings);
-  return { proxyBaseUrl };
+  return {
+    ...proxyBaseUrlArg(proxyBaseUrl),
+  };
 }
 
 async function defaultExecuteFetch(
   requestUrl: string,
   signal: AbortSignal | undefined,
 ): Promise<FetchPageResponse> {
-  const response = await fetch(requestUrl, {
+  const requestInit: RequestInit = {
     method: "GET",
     headers: {
       Accept: "text/html, text/plain;q=0.9, application/xhtml+xml;q=0.8",
     },
-    signal,
-  });
+  };
+  if (signal !== undefined) {
+    requestInit.signal = signal;
+  }
+
+  const response = await fetch(requestUrl, requestInit);
 
   const body = await response.text();
 
@@ -356,7 +408,7 @@ export function createFetchPageTool(
         usedProxyBaseUrl = config.proxyBaseUrl;
         const resolved = resolveOutboundRequestUrl({
           targetUrl,
-          proxyBaseUrl: config.proxyBaseUrl,
+          ...proxyBaseUrlArg(config.proxyBaseUrl),
         });
 
         const response = await runWithTimeoutAbort({
@@ -382,15 +434,13 @@ export function createFetchPageTool(
             type: "text",
             text: buildResultMarkdown({
               url: targetUrl,
-              title: extracted.title,
-              markdown: extracted.markdown,
+              ...createMarkdownResult(extracted.title, extracted.markdown),
               truncated: extracted.truncated,
               proxied: resolved.proxied,
-              proxyBaseUrl: resolved.proxyBaseUrl,
+              ...proxyBaseUrlArg(resolved.proxyBaseUrl),
             }),
           }],
-          details: {
-            kind: "fetch_page",
+          details: createFetchPageDetails({
             ok: true,
             url: targetUrl,
             title: extracted.title,
@@ -399,7 +449,7 @@ export function createFetchPageTool(
             proxied: resolved.proxied,
             proxyBaseUrl: resolved.proxyBaseUrl,
             contentType: response.contentType,
-          },
+          }),
         };
       } catch (error) {
         const message = getErrorMessage(error);
@@ -410,13 +460,12 @@ export function createFetchPageTool(
 
         return {
           content: [{ type: "text", text: displayMessage }],
-          details: {
-            kind: "fetch_page",
+          details: createFetchPageDetails({
             ok: false,
             url: targetUrl,
             error: message,
             proxyDown,
-          },
+          }),
         };
       }
     },
