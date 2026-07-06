@@ -215,6 +215,22 @@ Strict product-level proof is blocked in the current personal WPS
   `publish.xml`/`authwebsite.xml`, first ET launch writes `authaddin.enable=false`,
   and opening a blank spreadsheet recreates `jsaddinblockhost.ini`. This removes
   sticky per-user profile state as the primary root cause.
+- Installing the 32-bit/x86 WPS 365 build (`12.1.0.26899`, registered under
+  `HKLM\\Software\\WOW6432Node`; `et.exe`/`wps.exe`/`promecefpluginhost.exe`
+  PE machine `I386`) in the same Windows ARM VM is the first confirmed unblock:
+  the official `wpsjs@2.2.3` ET sample installed through the real publish/trust
+  flow, reached the in-app first-load trust prompt, wrote `authaddin.enable=true`,
+  and fired `OnAction` (`弹出消息框` displayed a WPS alert). This isolates the
+  earlier blocker to WPS host architecture/build behavior rather than Pi
+  taskpane/auth code.
+- On the x86 WPS build, the real Pi WPS add-in also installs and loads when the
+  add-in root is served from a stable Windows-local origin. WPS fetches
+  `manifest.xml`, `ribbon.xml`, `index.html`, `main.js`, and `js/ribbon.js`,
+  writes `authaddin.enable=true`, shows the real `Pi for Excel` ribbon tab, and
+  `Open Pi` opens the real `/src/taskpane.html` taskpane. The taskpane origin
+  permission prompt is expected in the dev harness (`127.0.0.1` add-in opening
+  `10.0.2.2:3141`), and WPS guest access to `/__pi-auth` remains blocked
+  (`HTTP 403`).
 - Public WPS documentation and forum research match this risk profile:
   - WPS personal `>= 12.1.0.16910` intentionally restricts the old
     `oem.ini`/`jsplugins.xml` path; personal installs are expected to use
@@ -235,19 +251,25 @@ Strict product-level proof is blocked in the current personal WPS
     Windows ARM / `win-arm64ec`, so architecture-specific add-in host behavior is
     now a prime suspect.
 
-Do not claim product-complete WPS support until this trust/action blocker is
-resolved on a WPS build/architecture that WPS' JS add-in host actually supports,
-through enterprise-managed deployment/WPS 365 configuration, a signed official
-WPS config path, or vendor guidance beyond ordinary personal-account login.
+Do not claim product-complete WPS support on the original Windows ARM /
+`win-arm64ec` WPS personal build; it still suppresses third-party add-in actions.
+For China WPS desktop proof, use a WPS build/architecture whose JS add-in host
+actually supports command execution (currently confirmed with the 32-bit/x86 WPS
+365 build above) and keep the full taskpane/model/tool proof separate from the
+host-architecture isolation proof.
 
 ## Open verification gaps
 
 - Enterprise/OEM `jsplugins.xml` deployment remains unsmoked on a managed WPS
   build; personal WPS 12.1.0.16910+ should use publish mode.
 - China WPS personal account login alone does not unlock third-party JS add-in
-  actions in the current VM. Visitor mode is no longer the only plausible cause;
-  enterprise/WPS 365 policy, signed WPS config state, a non-ARM/non-64-bit WPS
-  build, or another WPS-supported approval path likely needs testing.
+  actions in the original ARM/ARM64EC WPS build. Visitor mode is no longer the
+  only plausible cause; architecture/build is confirmed material by the x86 WPS
+  365 result.
+- The strict product proof is still incomplete until provider auth/model
+  selection, streaming output, visible tool cards, and workbook mutation are
+  captured in the real WPS taskpane. The x86 host now opens the real taskpane;
+  the remaining work is end-to-end assistant proof, not WPS command trust.
 - The WPS taskpane docs currently document `Application.CreateTaskpane(url)`;
   the skeleton also tries the `wps.CreateTaskPane(url)` form referenced in WPS
   add-in guidance for compatibility.

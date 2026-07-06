@@ -162,6 +162,23 @@ function OpenPi() {
 
 const globalScope = getGlobalScope();
 if (globalScope) {
+  const ribbonCallbacks = {
+    OnAddInLoad,
+    OnAddinLoad,
+    OnGetEnabled,
+    OnGetVisible,
+    GetImage,
+    OnAction,
+    OpenPi,
+  };
+
+  // WPS' official template prefixes callbacks with `ribbon.` in ribbon.xml.
+  // Keep the legacy globals as aliases for older generated manifests and local
+  // smoke packages.
+  globalScope.ribbon = {
+    ...(globalScope.ribbon && typeof globalScope.ribbon === "object" ? globalScope.ribbon : {}),
+    ...ribbonCallbacks,
+  };
   globalScope.OnAddInLoad = OnAddInLoad;
   globalScope.OnAddinLoad = OnAddinLoad;
   globalScope.OnGetEnabled = OnGetEnabled;
