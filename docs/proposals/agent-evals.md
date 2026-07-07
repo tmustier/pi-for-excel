@@ -22,12 +22,21 @@ on smaller models?" (#603).
    each, run per-phase rather than per-commit), speed is a non-issue and
    fidelity is everything.
 3. **No workbook simulator.** An earlier draft proposed an in-memory fake
-   workbook lane. Rejected: it is a simulator-building project that would
-   consume the effort budget, cannot compute formulas without bolting on an
-   engine (HyperFormula is GPL; MIT parsers are partial), and produces false
-   confidence exactly where fidelity matters. Unit tests keep using small
-   ad-hoc fakes; evals use real Excel. Revisit only if we someday need
-   CI-scale or cross-platform runs.
+   workbook lane. Rejected on cost/fidelity grounds:
+   - Formula engines don't solve the problem. HyperFormula (GPLv3/commercial
+     dual-licensed) would be license-acceptable as a dev-only harness
+     dependency — GPL obligations trigger on distribution, and evals never
+     ship in the MIT add-in bundle — but it is a formula engine, not an
+     Office.js host emulator. The bulk of the simulator is the host object
+     model (formats, charts, pivots, tables, freeze panes, insert/delete
+     semantics), which we would still hand-build around it, and its formula
+     semantics diverge from real Excel at the edges, so even the part it
+     covers isn't ground truth.
+   - The real-Excel lane already exists and *is* ground truth, so the
+     simulator adds cost without adding trust.
+
+   Unit tests keep using small ad-hoc fakes; evals use real Excel. Revisit
+   only if we someday need CI-scale or cross-platform runs.
 4. **Deterministic grading.** Assert final workbook state: cell values,
    formula text, number formats, object existence (tables/charts/pivots/
    names), freeze panes, and absence of leftover artifacts. Reply-text checks
