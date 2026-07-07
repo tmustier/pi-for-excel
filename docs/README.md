@@ -21,7 +21,8 @@ This folder contains **current** docs that should match shipped behavior.
 
 ## Proposals
 - [Agent tool interface redesign](./proposals/agent-tool-interface-redesign.md)
-- [Agent eval harness](./proposals/agent-evals.md)
+- [Agent eval suite](./proposals/agent-evals.md)
+- [Research: Claude for Excel teardown](./research/claude-for-excel-teardown.md)
 
 ## Architecture & policy
 - [Coding standards for agents](./coding-standards.md)

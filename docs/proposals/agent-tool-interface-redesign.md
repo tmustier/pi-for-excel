@@ -275,6 +275,9 @@ release. Per-tool checklist from `AGENTS.md` applies every time: `registry.ts`,
 
 ### Competitive appendix (2026-07-07)
 
+Full findings record: [`../research/claude-for-excel-teardown.md`](../research/claude-for-excel-teardown.md).
+Summary:
+
 **Claude for Excel** (from its leaked system prompt, dated 2026-04-24 —
 `github.com/asgeirtj/system_prompts_leaks`, `Anthropic/claude-for-excel.md` —
 cross-checked against Anthropic's support docs):
