@@ -192,6 +192,19 @@ strictly separate from our own corpus and fixtures, and never tune on tasks
 we later report as held-out. This is context, not the gate — our own task
 set remains the regression asset.
 
+**Model-level baseline (run 2026-07-08, local):** `gpt-5.5:medium` via the
+paper's single-round code-generation protocol (openpyxl code, LibreOffice
+recalc, authors' grader) scored **65.5% soft/hard on verified-400**
+(cell-level 61.1%, sheet-level 75.2%; 400/400 tasks, no auth/exec
+blockers). Caveats: verified-400 has one test case per task, so it is not
+apples-to-apples with the paper's all-912 three-case numbers (same-model
+stratified 15-task smoke on all-912: 28.9% soft / 20.0% hard). Reading:
+the raw model ceiling is well above every product figure above — the gap
+between 65.5% (model, code-gen) and product agents is harness/tool-surface
+loss, which is exactly what our product-lane evals should measure and
+close. Full report and harness live in the private corpus repo
+(`_external/SpreadsheetBench/BASELINE_REPORT.md`).
+
 ## 7. Non-goals
 
 - Not a public benchmark/leaderboard.
