@@ -19,9 +19,10 @@
 }
 
 .pi-disclosure-bar__actions {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
-  gap: 8px;
+  gap: 6px 8px;
 }
 
 .pi-disclosure-bar__link {
@@ -31,7 +32,9 @@
   font-size: var(--text-sm);
   cursor: pointer;
   font-weight: 500;
+  justify-self: start;
   padding: 0;
+  white-space: nowrap;
 }
 
 .pi-disclosure-bar__link:hover {
@@ -39,17 +42,23 @@
 }
 
 .pi-disclosure-bar__muted {
+  grid-column: 1 / -1;
   font-size: var(--text-xs);
   color: var(--muted-foreground);
+  line-height: 1.25;
 }
 
 .pi-disclosure-bar__settings-link {
+  grid-column: 1 / -1;
   background: none;
   border: none;
   color: var(--muted-foreground);
   font-size: var(--text-xs);
   cursor: pointer;
+  justify-self: start;
+  line-height: 1.25;
   padding: 0;
+  text-align: left;
   text-decoration: underline;
   text-decoration-style: dotted;
   text-underline-offset: 2px;
