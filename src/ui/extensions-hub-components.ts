@@ -134,7 +134,7 @@ export function createSectionHeader(opts: SectionHeaderOptions): HTMLDivElement 
   if (opts.count != null) {
     const count = document.createElement("span");
     count.className = "pi-section-header__count";
-    count.textContent = `${opts.count} ${opts.count === 1 ? "skill" : "skills"}`;
+    count.textContent = String(opts.count);
     header.appendChild(count);
   }
 

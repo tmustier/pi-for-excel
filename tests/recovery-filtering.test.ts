@@ -7,7 +7,7 @@ import {
   DEFAULT_FILTER_STATE,
   type RecoveryFilterState,
 } from "../src/commands/builtins/recovery-filtering.ts";
-import type { RecoveryCheckpointSummary } from "../src/commands/builtins/recovery-overlay.ts";
+import type { RecoveryCheckpointSummary } from "../src/commands/builtins/recovery-types.ts";
 
 function makeCheckpoint(
   overrides: Partial<RecoveryCheckpointSummary> & { id: string },

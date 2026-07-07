@@ -152,6 +152,8 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  /* Let controls drop below the label instead of clipping at taskpane widths. */
+  flex-wrap: wrap;
 }
 
 .pi-item-card__config-label {
@@ -364,6 +366,8 @@
   font-family: var(--font-sans);
   font-size: var(--text-sm);
   color: var(--muted-foreground);
+  /* Preserve intentional line breaks in empty-state copy (e.g. recovery.emptyState). */
+  white-space: pre-line;
 }
 
 /* ── Layout helpers (avoiding inline styles) ────────── */
@@ -380,10 +384,19 @@
 
 .pi-hub-inline-row {
   display: flex;
+  /* Wrap action buttons onto their own line when the input needs the width. */
+  flex-wrap: wrap;
   gap: 6px;
   align-items: center;
   flex: 1;
+  min-width: 0;
   max-width: 260px;
+  justify-content: flex-end;
+}
+
+.pi-hub-inline-row .pi-item-card__config-input {
+  flex: 1 1 120px;
+  min-width: 120px;
 }
 
 .pi-hub-bridge-setup {

@@ -1,13 +1,13 @@
 /**
- * Recovery backups overlay.
+ * Backups page — workbook recovery snapshots.
  *
  * Progressive-disclosure empty state: when there are no backups, only the
- * title, subtitle, warning callout, and empty message are shown. Search,
- * filter, toolbar, and retention controls appear once backups exist.
+ * warning callout and empty message are shown. Search, filter, toolbar,
+ * and retention controls appear once backups exist.
  */
 
-import { formatRelativeDate } from "./overlay-relative-date.js";
-import { t } from "../../language/index.js";
+import { formatRelativeDate } from "../overlay-relative-date.js";
+import { t } from "../../../language/index.js";
 import {
   applyRecoveryFilters,
   buildToolFilterOptions,
@@ -15,46 +15,28 @@ import {
   type RecoveryFilterState,
   type RecoverySortOrder,
   type RecoveryToolFilter,
-} from "./recovery-filtering.js";
-import {
-  closeOverlayById,
-  createOverlayDialog,
-  createOverlayHeader,
-} from "../../ui/overlay-dialog.js";
-import { requestConfirmationDialog } from "../../ui/confirm-dialog.js";
-import { RECOVERY_OVERLAY_ID } from "../../ui/overlay-ids.js";
-import { showToast } from "../../ui/toast.js";
+} from "../recovery-filtering.js";
+import { requestConfirmationDialog } from "../../../ui/confirm-dialog.js";
+import type { SettingsShellPage } from "../../../ui/settings-shell.js";
+import { showToast } from "../../../ui/toast.js";
 import {
   createCallout,
   createEmptyInline,
   createButton,
   createActionsRow,
-} from "../../ui/extensions-hub-components.js";
-import { lucide, AlertTriangle, Package, Search } from "../../ui/lucide-icons.js";
+} from "../../../ui/extensions-hub-components.js";
+import { lucide, AlertTriangle, Package, Search } from "../../../ui/lucide-icons.js";
 import {
   MAX_RECOVERY_ENTRIES,
   MIN_RETENTION_LIMIT,
-} from "../../workbook/recovery/constants.js";
+} from "../../../workbook/recovery/constants.js";
+import { getSettingsPagesDependencies } from "./dependencies.js";
+import type {
+  RecoveryCheckpointSummary,
+  RecoveryCheckpointToolName,
+} from "../recovery-types.js";
 
-export type RecoveryCheckpointToolName =
-  | "write_cells"
-  | "fill_formula"
-  | "python_transform_range"
-  | "format_cells"
-  | "conditional_format"
-  | "comments"
-  | "charts"
-  | "modify_structure"
-  | "restore_snapshot";
-
-export interface RecoveryCheckpointSummary {
-  id: string;
-  at: number;
-  toolName: RecoveryCheckpointToolName;
-  address: string;
-  changedCount: number;
-  restoredFromSnapshotId?: string;
-}
+export type { RecoveryCheckpointSummary, RecoveryCheckpointToolName };
 
 function formatRecoveryToolLabel(toolName: RecoveryCheckpointToolName): string {
   switch (toolName) {
@@ -120,8 +102,7 @@ export interface ManualFullBackupSummary {
 // Overlay
 // ---------------------------------------------------------------------------
 
-export async function showRecoveryDialog(opts: {
-  workbookLabel: string;
+export interface BackupsPageCallbacks {
   loadCheckpoints: () => Promise<RecoveryCheckpointSummary[]>;
   onRestore: (snapshotId: string) => Promise<void>;
   onDelete: (snapshotId: string) => Promise<boolean>;
@@ -129,23 +110,34 @@ export async function showRecoveryDialog(opts: {
   onCreateManualFullBackup?: () => Promise<ManualFullBackupSummary>;
   getRetentionConfig?: () => Promise<RetentionConfig>;
   setRetentionConfig?: (config: RetentionConfig) => Promise<void>;
-}): Promise<void> {
-  if (closeOverlayById(RECOVERY_OVERLAY_ID)) {
-    return;
-  }
+}
 
-  const dialog = createOverlayDialog({
-    overlayId: RECOVERY_OVERLAY_ID,
-    cardClassName: "pi-welcome-card pi-overlay-card pi-overlay-card--m pi-recovery-dialog",
-  });
+export function createBackupsPage(): SettingsShellPage {
+  return {
+    id: "backups",
+    parentId: "root",
+    title: () => t("recovery.title"),
+    subtitle: () => t("recovery.subtitle"),
+    render: async (ctx) => {
+      const opts = getSettingsPagesDependencies().backups;
+      if (!opts) {
+        const hint = document.createElement("p");
+        hint.className = "pi-overlay-hint";
+        hint.textContent = t("recovery.loadFailed");
+        ctx.body.appendChild(hint);
+        return;
+      }
 
-  const { header } = createOverlayHeader({
-    onClose: dialog.close,
-    closeLabel: t("recovery.close"),
-    title: t("recovery.title"),
-    subtitle: t("recovery.subtitle"),
-  });
+      await renderBackupsContent(ctx.body, ctx.addCleanup, opts);
+    },
+  };
+}
 
+async function renderBackupsContent(
+  host: HTMLElement,
+  addCleanup: (cleanup: () => void) => void,
+  opts: BackupsPageCallbacks,
+): Promise<void> {
   // -- Warning callout --
 
   const warningCallout = createCallout(
@@ -333,7 +325,7 @@ export async function showRecoveryDialog(opts: {
 
   // -- Assemble --
 
-  dialog.card.append(header, warningCallout, searchRow, toolbar, retentionDetails, list);
+  host.append(warningCallout, searchRow, toolbar, retentionDetails, list);
 
   // -- State --
 
@@ -539,13 +531,11 @@ export async function showRecoveryDialog(opts: {
 
   // -- Cleanup --
 
-  dialog.addCleanup(() => {
+  addCleanup(() => {
     if (searchTimer !== null) clearTimeout(searchTimer);
   });
 
-  // -- Mount + initial load --
-
-  dialog.mount();
+  // -- Initial load --
 
   setBusy(true);
   statusText.textContent = t("recovery.loading");

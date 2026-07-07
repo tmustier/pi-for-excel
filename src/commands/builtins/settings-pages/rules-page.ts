@@ -1,5 +1,7 @@
 /**
- * Rules editor overlay — rules (user + workbook) and conventions.
+ * Rules page — user rules, workbook rules, and format conventions,
+ * edited as drafts with an explicit Save/Cancel footer and an
+ * unsaved-changes guard on navigation.
  */
 
 import { getAppStorage } from "../../storage/local/app-storage.js";
@@ -11,34 +13,32 @@ import {
   setWorkbookRules,
   USER_RULES_SOFT_LIMIT,
   WORKBOOK_RULES_SOFT_LIMIT,
-} from "../../rules/store.js";
+} from "../../../rules/store.js";
 import {
   getStoredConventions,
   isBuiltinPresetName,
   normalizeConventionColor,
   resolveConventions,
   setStoredConventions,
-} from "../../conventions/store.js";
+} from "../../../conventions/store.js";
 import {
   DEFAULT_CURRENCY_SYMBOL,
   DEFAULT_PRESET_FORMATS,
-} from "../../conventions/defaults.js";
-import { buildFormatString } from "../../conventions/format-builder.js";
+} from "../../../conventions/defaults.js";
+import { buildFormatString } from "../../../conventions/format-builder.js";
 import type {
   NumberPreset,
   StoredConventions,
   StoredCustomPreset,
   StoredFormatPreset,
-} from "../../conventions/types.js";
-import {
-  closeOverlayById,
-  createOverlayDialog,
-  createOverlayHeader,
-} from "../../ui/overlay-dialog.js";
-import { RULES_OVERLAY_ID } from "../../ui/overlay-ids.js";
-import { t } from "../../language/index.js";
-import { showToast } from "../../ui/toast.js";
-import { formatWorkbookLabel, getWorkbookContext } from "../../workbook/context.js";
+} from "../../../conventions/types.js";
+import { requestConfirmationDialog } from "../../../ui/confirm-dialog.js";
+import { createSegmentedControl } from "../../../ui/settings-rows.js";
+import type { SettingsShellPage } from "../../../ui/settings-shell.js";
+import { t } from "../../../language/index.js";
+import { showToast } from "../../../ui/toast.js";
+import { formatWorkbookLabel, getWorkbookContext } from "../../../workbook/context.js";
+import { getSettingsPagesDependencies } from "./dependencies.js";
 
 type RulesTab = "user" | "workbook" | "conventions";
 
@@ -51,26 +51,17 @@ const BUILTIN_PRESET_NAMES: NumberPreset[] = [
   "text",
 ];
 
-function getPresetLabel(presetName: string): string {
-  const key = `rules.preset.${presetName}` as const;
-  return t(key);
-}
+const PRESET_LABEL_KEYS: Record<NumberPreset, string> = {
+  number: "rules.preset.number",
+  integer: "rules.preset.integer",
+  currency: "rules.preset.currency",
+  percent: "rules.preset.percent",
+  ratio: "rules.preset.ratio",
+  text: "rules.preset.text",
+};
 
-function setActiveTab(
-  tabButtons: Record<RulesTab, HTMLButtonElement>,
-  activeTab: RulesTab,
-): void {
-  const tabs: RulesTab[] = ["user", "workbook", "conventions"];
-
-  for (const tab of tabs) {
-    const button = tabButtons[tab];
-    if (!button) continue;
-
-    const isActive = tab === activeTab;
-    button.classList.toggle("is-active", isActive);
-    button.setAttribute("aria-selected", String(isActive));
-    button.setAttribute("tabindex", isActive ? "0" : "-1");
-  }
+function getPresetLabel(presetName: NumberPreset): string {
+  return t(PRESET_LABEL_KEYS[presetName]);
 }
 
 function formatCounterLabel(chars: number, limit: number): string {
@@ -792,220 +783,201 @@ function renderConventionsEditor(
   container.append(formatsSection, colorsSection, headerSection, visualSection);
 }
 
-export async function showRulesDialog(opts?: {
-  onSaved?: () => void | Promise<void>;
-}): Promise<void> {
-  if (closeOverlayById(RULES_OVERLAY_ID)) {
-    return;
-  }
+export function createRulesPage(): SettingsShellPage {
+  return {
+    id: "rules",
+    parentId: "root",
+    title: () => t("rules.title"),
+    subtitle: () => t("rules.subtitle"),
+    render: async (ctx) => {
+      const storage = getAppStorage();
+      const workbookContext = await getWorkbookContext();
+      const workbookId = workbookContext.workbookId;
+      const workbookLabel = formatWorkbookLabel(workbookContext);
 
-  const storage = getAppStorage();
-  const workbookContext = await getWorkbookContext();
-  const workbookId = workbookContext.workbookId;
-  const workbookLabel = formatWorkbookLabel(workbookContext);
+      const initialUserDraft = (await getUserRules(storage.settings)) ?? "";
+      const initialWorkbookDraft = (await getWorkbookRules(storage.settings, workbookId)) ?? "";
+      const storedConventions = await getStoredConventions(storage.settings);
+      const initialConventionsJson = JSON.stringify(storedConventions);
 
-  let userDraft = (await getUserRules(storage.settings)) ?? "";
-  let workbookDraft = (await getWorkbookRules(storage.settings, workbookId)) ?? "";
-  const storedConventions = await getStoredConventions(storage.settings);
-  const conventionsDraft = cloneStoredConventions(storedConventions);
-  let activeTab: RulesTab = "user";
+      let userDraft = initialUserDraft;
+      let workbookDraft = initialWorkbookDraft;
+      const conventionsDraft = cloneStoredConventions(storedConventions);
+      let activeTab: RulesTab = "user";
+      let saved = false;
 
-  const dialog = createOverlayDialog({
-    overlayId: RULES_OVERLAY_ID,
-    cardClassName: "pi-welcome-card pi-overlay-card pi-overlay-card--m",
-  });
+      const segmented = createSegmentedControl({
+        segments: [
+          { id: "user", label: t("rules-overlay.all-my-files") },
+          { id: "workbook", label: t("rules-overlay.this-file") },
+          { id: "conventions", label: t("rules-overlay.formats") },
+        ],
+        active: activeTab,
+        ariaLabel: t("rules.title"),
+        onChange: (id) => {
+          saveActiveDraft();
+          if (id === "user" || id === "workbook" || id === "conventions") {
+            activeTab = id;
+            refreshTabUi();
+          }
+        },
+      });
 
-  const closeOverlay = dialog.close;
+      const workbookTag = document.createElement("div");
+      workbookTag.className = "pi-overlay-workbook-tag";
+      workbookTag.textContent = t("rules.workbook_tag", { label: workbookLabel });
 
-  const { header } = createOverlayHeader({
-    onClose: closeOverlay,
-    closeLabel: t("rules.close"),
-    title: t("rules.title"),
-    subtitle: t("rules.subtitle"),
-  });
+      const hint = document.createElement("div");
+      hint.className = "pi-overlay-hint";
 
-  const tabs = document.createElement("div");
-  tabs.className = "pi-overlay-tabs";
-  tabs.setAttribute("role", "tablist");
+      const textarea = document.createElement("textarea");
+      textarea.className = "pi-overlay-textarea";
 
-  const userTab = document.createElement("button");
-  userTab.type = "button";
-  userTab.textContent = t("rules-overlay.all-my-files");
-  userTab.className = "pi-overlay-tab";
-  userTab.setAttribute("role", "tab");
+      const conventionsContainer = document.createElement("div");
+      conventionsContainer.className = "pi-conventions-container pi-conventions-container--page";
 
-  const workbookTab = document.createElement("button");
-  workbookTab.type = "button";
-  workbookTab.textContent = t("rules-overlay.this-file");
-  workbookTab.className = "pi-overlay-tab";
-  workbookTab.setAttribute("role", "tab");
+      ctx.body.append(segmented.root, workbookTag, hint, textarea, conventionsContainer);
 
-  const conventionsTab = document.createElement("button");
-  conventionsTab.type = "button";
-  conventionsTab.textContent = t("rules-overlay.formats");
-  conventionsTab.className = "pi-overlay-tab";
-  conventionsTab.setAttribute("role", "tab");
+      // ── Footer: counter + Cancel/Save ──
+      const footer = document.createElement("div");
+      footer.className = "pi-overlay-footer pi-rules-page__footer";
 
-  tabs.append(userTab, workbookTab, conventionsTab);
+      const counter = document.createElement("div");
+      counter.className = "pi-overlay-counter";
 
-  const workbookTag = document.createElement("div");
-  workbookTag.className = "pi-overlay-workbook-tag";
-  workbookTag.textContent = t("rules.workbook_tag", { label: workbookLabel });
+      const actions = document.createElement("div");
+      actions.className = "pi-overlay-actions";
 
-  const hint = document.createElement("div");
-  hint.className = "pi-overlay-hint";
+      const cancelBtn = document.createElement("button");
+      cancelBtn.type = "button";
+      cancelBtn.textContent = t("rules-overlay.cancel");
+      cancelBtn.className = "pi-overlay-btn pi-overlay-btn--ghost";
 
-  const textarea = document.createElement("textarea");
-  textarea.className = "pi-overlay-textarea";
+      const saveBtn = document.createElement("button");
+      saveBtn.type = "button";
+      saveBtn.textContent = t("rules-overlay.save");
+      saveBtn.className = "pi-overlay-btn pi-overlay-btn--primary";
 
-  const conventionsContainer = document.createElement("div");
-  conventionsContainer.className = "pi-conventions-container";
+      actions.append(cancelBtn, saveBtn);
+      footer.append(counter, actions);
+      ctx.setFooter(footer);
 
-  const body = document.createElement("div");
-  body.className = "pi-overlay-body";
-  body.append(header, tabs, workbookTag, hint, textarea, conventionsContainer);
+      const rerenderConventions = (): void => {
+        renderConventionsEditor(conventionsContainer, conventionsDraft, rerenderConventions);
+      };
 
-  const footer = document.createElement("div");
-  footer.className = "pi-overlay-footer";
+      const refreshTabUi = (): void => {
+        segmented.setActive(activeTab);
 
-  const counter = document.createElement("div");
-  counter.className = "pi-overlay-counter";
+        const isConventionsTab = activeTab === "conventions";
+        textarea.hidden = isConventionsTab;
+        conventionsContainer.hidden = !isConventionsTab;
+        counter.hidden = isConventionsTab;
 
-  const actions = document.createElement("div");
-  actions.className = "pi-overlay-actions";
+        if (activeTab === "user") {
+          textarea.value = userDraft;
+          textarea.placeholder = t("rules.placeholder.user");
 
-  const cancelBtn = document.createElement("button");
-  cancelBtn.type = "button";
-  cancelBtn.textContent = t("rules-overlay.cancel");
-  cancelBtn.className = "pi-overlay-btn pi-overlay-btn--ghost";
+          const count = userDraft.length;
+          counter.textContent = formatCounterLabel(count, USER_RULES_SOFT_LIMIT);
+          counter.classList.toggle("is-warning", count > USER_RULES_SOFT_LIMIT);
 
-  const saveBtn = document.createElement("button");
-  saveBtn.type = "button";
-  saveBtn.textContent = t("rules-overlay.save");
-  saveBtn.className = "pi-overlay-btn pi-overlay-btn--primary";
+          hint.textContent = t("rules.guidance.default");
+          workbookTag.hidden = true;
+          return;
+        }
 
-  actions.append(cancelBtn, saveBtn);
-  footer.append(counter, actions);
-  dialog.card.append(body, footer);
+        if (activeTab === "workbook") {
+          textarea.value = workbookDraft;
+          textarea.placeholder = t("rules.placeholder.workbook");
 
-  const tabButtons: Record<RulesTab, HTMLButtonElement> = {
-    user: userTab,
-    workbook: workbookTab,
-    conventions: conventionsTab,
+          const count = workbookDraft.length;
+          counter.textContent = formatCounterLabel(count, WORKBOOK_RULES_SOFT_LIMIT);
+          counter.classList.toggle("is-warning", count > WORKBOOK_RULES_SOFT_LIMIT);
+
+          hint.textContent = !workbookId
+            ? t("rules.hint.workbook.no_id")
+            : t("rules.guidance.workbook");
+
+          workbookTag.hidden = false;
+          return;
+        }
+
+        workbookTag.hidden = true;
+        hint.textContent = t("rules-overlay.hint-formats");
+        rerenderConventions();
+      };
+
+      const saveActiveDraft = (): void => {
+        if (activeTab === "user") {
+          userDraft = textarea.value;
+          return;
+        }
+
+        if (activeTab === "workbook") {
+          workbookDraft = textarea.value;
+        }
+      };
+
+      const isDirty = (): boolean => {
+        saveActiveDraft();
+        return (
+          userDraft !== initialUserDraft
+          || workbookDraft !== initialWorkbookDraft
+          || JSON.stringify(conventionsDraft) !== initialConventionsJson
+        );
+      };
+
+      // Guard back/close/navigate while there are unsaved edits.
+      ctx.setBeforeLeave(async () => {
+        if (saved || !isDirty()) return true;
+        return requestConfirmationDialog({
+          title: t("rules.discard.title"),
+          message: t("rules.discard.message"),
+          confirmLabel: t("rules.discard.confirm"),
+          cancelLabel: t("rules.discard.keep_editing"),
+          confirmButtonTone: "danger",
+          restoreFocusOnClose: false,
+        });
+      });
+
+      textarea.addEventListener("input", () => {
+        saveActiveDraft();
+        refreshTabUi();
+      });
+
+      cancelBtn.addEventListener("click", () => {
+        ctx.back();
+      });
+
+      saveBtn.addEventListener("click", () => {
+        void (async () => {
+          saveActiveDraft();
+
+          await setUserRules(storage.settings, userDraft);
+          if (workbookId) {
+            await setWorkbookRules(storage.settings, workbookId, workbookDraft);
+          }
+
+          await setStoredConventions(storage.settings, conventionsDraft);
+
+          document.dispatchEvent(new CustomEvent("pi:rules-updated"));
+          document.dispatchEvent(new CustomEvent("pi:conventions-updated"));
+          document.dispatchEvent(new CustomEvent("pi:status-update"));
+
+          const onRulesSaved = getSettingsPagesDependencies().onRulesSaved;
+          if (onRulesSaved) {
+            await onRulesSaved();
+          }
+
+          saved = true;
+          showToast(t("rules.toast.saved"));
+          ctx.back();
+        })();
+      });
+
+      refreshTabUi();
+      textarea.focus();
+    },
   };
-
-  const rerenderConventions = (): void => {
-    renderConventionsEditor(conventionsContainer, conventionsDraft, rerenderConventions);
-  };
-
-  const refreshTabUi = (): void => {
-    setActiveTab(tabButtons, activeTab);
-
-    const isConventionsTab = activeTab === "conventions";
-    textarea.hidden = isConventionsTab;
-    conventionsContainer.hidden = !isConventionsTab;
-    counter.hidden = isConventionsTab;
-
-    if (activeTab === "user") {
-      textarea.value = userDraft;
-      textarea.placeholder =
-                t("rules.placeholder.user");
-
-      const count = userDraft.length;
-      counter.textContent = formatCounterLabel(count, USER_RULES_SOFT_LIMIT);
-      counter.classList.toggle("is-warning", count > USER_RULES_SOFT_LIMIT);
-
-      hint.textContent =
-        t("rules.guidance.default");
-      workbookTag.hidden = true;
-      return;
-    }
-
-    if (activeTab === "workbook") {
-      textarea.value = workbookDraft;
-      textarea.placeholder =
-                t("rules.placeholder.workbook");
-
-      const count = workbookDraft.length;
-      counter.textContent = formatCounterLabel(count, WORKBOOK_RULES_SOFT_LIMIT);
-      counter.classList.toggle("is-warning", count > WORKBOOK_RULES_SOFT_LIMIT);
-
-      hint.textContent = !workbookId
-        ? t("rules.hint.workbook.no_id")
-        : t("rules.guidance.workbook");
-
-      workbookTag.hidden = false;
-      return;
-    }
-
-    workbookTag.hidden = true;
-    hint.textContent = t("rules-overlay.hint-formats");
-    rerenderConventions();
-  };
-
-  const saveActiveDraft = (): void => {
-    if (activeTab === "user") {
-      userDraft = textarea.value;
-      return;
-    }
-
-    if (activeTab === "workbook") {
-      workbookDraft = textarea.value;
-    }
-  };
-
-  userTab.addEventListener("click", () => {
-    saveActiveDraft();
-    activeTab = "user";
-    refreshTabUi();
-  });
-
-  workbookTab.addEventListener("click", () => {
-    saveActiveDraft();
-    activeTab = "workbook";
-    refreshTabUi();
-  });
-
-  conventionsTab.addEventListener("click", () => {
-    saveActiveDraft();
-    activeTab = "conventions";
-    refreshTabUi();
-  });
-
-  textarea.addEventListener("input", () => {
-    saveActiveDraft();
-    refreshTabUi();
-  });
-
-  cancelBtn.addEventListener("click", () => {
-    closeOverlay();
-  });
-
-  saveBtn.addEventListener("click", () => {
-    void (async () => {
-      saveActiveDraft();
-
-      await setUserRules(storage.settings, userDraft);
-      if (workbookId) {
-        await setWorkbookRules(storage.settings, workbookId, workbookDraft);
-      }
-
-      await setStoredConventions(storage.settings, conventionsDraft);
-
-      document.dispatchEvent(new CustomEvent("pi:rules-updated"));
-      document.dispatchEvent(new CustomEvent("pi:conventions-updated"));
-      document.dispatchEvent(new CustomEvent("pi:status-update"));
-
-      if (opts?.onSaved) {
-        await opts.onSaved();
-      }
-
-      showToast(t("rules.toast.saved"));
-      closeOverlay();
-    })();
-  });
-
-  refreshTabUi();
-  dialog.mount();
-  textarea.focus();
 }

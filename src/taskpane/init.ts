@@ -60,18 +60,15 @@ import {
   withWorkbookCoordinator,
 } from "../tools/with-workbook-coordinator.js";
 import { registerBuiltins } from "../commands/builtins.js";
-import { showExtensionsHubDialog, type ExtensionsHubTab } from "../commands/builtins/extensions-hub-overlay.js";
 import { ExtensionRuntimeManager } from "../extensions/runtime-manager.js";
 import type { ResumeDialogTarget } from "../commands/builtins/resume-target.js";
 import {
-  showRulesDialog,
-  showRecoveryDialog,
+  configureSettingsPages,
+  openSettings,
   showResumeDialog,
-  showSettingsDialog,
-  showShortcutsDialog,
+  type ExtensionsHubTab,
   type RecoveryCheckpointSummary,
 } from "../commands/builtins/overlays.js";
-import { configureSettingsDialogDependencies } from "../commands/builtins/settings-overlay.js";
 import { wireCommandMenu } from "../commands/command-menu.js";
 import { executeSlashCommand } from "../commands/slash-command-execution.js";
 import {
@@ -1304,11 +1301,7 @@ export async function initTaskpane(opts: {
   };
 
   const openRulesEditor = async (): Promise<void> => {
-    await showRulesDialog({
-      onSaved: async () => {
-        await refreshWorkbookState();
-      },
-    });
+    await openSettings("rules");
   };
 
   type ReopenRecentlyClosedResult = "reopened" | "missing" | "failed";
@@ -1621,29 +1614,35 @@ export async function initTaskpane(opts: {
   });
 
   const openExtensionsHub = (tab?: ExtensionsHubTab): void => {
-    void showExtensionsHubDialog(
-      {
-        getActiveSessionId: () => getActiveRuntime()?.persistence.getSessionId() ?? null,
-        resolveWorkbookContext: async () => {
-          const workbookContext = await resolveWorkbookContext();
-          return {
-            workbookId: workbookContext.workbookId,
-            workbookLabel: formatWorkbookLabel(workbookContext),
-          };
-        },
-        extensionManager,
-        connectionManager,
-        onChanged: refreshCapabilitiesForAllRuntimes,
-      },
-      tab !== undefined ? { tab } : {},
-    );
+    void openSettings(tab ?? "connections");
   };
 
   const openRecoveryDialog = async (): Promise<void> => {
-    const workbookContext = await resolveWorkbookContext();
+    await openSettings("backups");
+  };
 
-    await showRecoveryDialog({
-      workbookLabel: formatWorkbookLabel(workbookContext),
+  configureSettingsPages({
+    getExecutionMode,
+    setExecutionMode,
+    getModelSwitchBehavior,
+    setModelSwitchBehavior,
+    onRulesSaved: async () => {
+      await refreshWorkbookState();
+    },
+    extensionsHub: {
+      getActiveSessionId: () => getActiveRuntime()?.persistence.getSessionId() ?? null,
+      resolveWorkbookContext: async () => {
+        const workbookContext = await resolveWorkbookContext();
+        return {
+          workbookId: workbookContext.workbookId,
+          workbookLabel: formatWorkbookLabel(workbookContext),
+        };
+      },
+      extensionManager,
+      connectionManager,
+      onChanged: refreshCapabilitiesForAllRuntimes,
+    },
+    backups: {
       loadCheckpoints: async () => {
         const checkpoints = await workbookRecoveryLog.listForCurrentWorkbook(40);
         return checkpoints.map((checkpoint) => toRecoveryCheckpointSummary(checkpoint));
@@ -1667,17 +1666,7 @@ export async function initTaskpane(opts: {
       setRetentionConfig: async (config) => {
         await writeRetentionLimit(config.maxSnapshots);
       },
-    });
-  };
-
-  configureSettingsDialogDependencies({
-    openRulesDialog: openRulesEditor,
-    openRecoveryDialog,
-    openShortcutsDialog: showShortcutsDialog,
-    getExecutionMode,
-    setExecutionMode,
-    getModelSwitchBehavior,
-    setModelSwitchBehavior,
+    },
   });
 
   const applyModelSelection = async (runtimeId: string, nextModel: RuntimeModel): Promise<void> => {
@@ -1889,7 +1878,7 @@ export async function initTaskpane(opts: {
     openExtensionsHub();
   };
   sidebar.onOpenSettings = () => {
-    void showSettingsDialog();
+    void openSettings();
   };
   sidebar.onOpenFilesWorkspace = () => {
     void showFilesWorkspaceDialog();
@@ -1920,7 +1909,7 @@ export async function initTaskpane(opts: {
     void openRecoveryDialog();
   };
   sidebar.onOpenShortcuts = () => {
-    showShortcutsDialog();
+    void openSettings("shortcuts");
   };
 
 
@@ -1939,7 +1928,7 @@ export async function initTaskpane(opts: {
     const { createDisclosureBar } = await import("../ui/disclosure-bar.js");
     const disclosureEl = createDisclosureBar({
       providerCount: availableProviders.length,
-      onOpenSettings: () => void showSettingsDialog(),
+      onOpenSettings: () => void openSettings(),
     });
     if (disclosureEl) {
       const messagesContainer = sidebar.querySelector(".pi-messages");

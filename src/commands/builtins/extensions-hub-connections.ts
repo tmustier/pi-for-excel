@@ -63,7 +63,7 @@ import {
 } from "../../ui/extensions-hub-components.js";
 import { lucide, Search, Terminal, Zap } from "../../ui/lucide-icons.js";
 import { t } from "../../language/index.js";
-import type { ExtensionsHubDependencies } from "./extensions-hub-overlay.js";
+import type { ExtensionsHubDependencies } from "./settings-pages/dependencies.js";
 import { renderExtensionConnectionsSection } from "./extensions-hub-extension-connections.js";
 
 type SettingsStore = IntegrationSettingsStore & WebSearchConfigStore & McpConfigStore & {

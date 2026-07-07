@@ -185,9 +185,9 @@ void test("taskpane init wires extensions menu opener", async () => {
   const initSource = await readFile(new URL("../src/taskpane/init.ts", import.meta.url), "utf8");
 
   assert.match(initSource, /const openExtensionsHub = \(tab\?: ExtensionsHubTab\): void =>/);
-  assert.match(initSource, /showExtensionsHubDialog\(/);
+  assert.match(initSource, /openSettings\(tab \?\? "connections"\)/);
   assert.match(initSource, /extensionManager/);
-  assert.match(initSource, /configureSettingsDialogDependencies/);
+  assert.match(initSource, /configureSettingsPages/);
   assert.match(initSource, /registerBuiltins\([\s\S]*openExtensionsHub/);
   assert.match(initSource, /sidebar\.onOpenExtensions\s*=\s*\(\)\s*=>\s*\{\s*openExtensionsHub\(\);\s*\};/);
 });
@@ -195,15 +195,15 @@ void test("taskpane init wires extensions menu opener", async () => {
 void test("taskpane init wires gear settings to unified settings overlay", async () => {
   const initSource = await readFile(new URL("../src/taskpane/init.ts", import.meta.url), "utf8");
 
-  assert.match(initSource, /showSettingsDialog/);
+  assert.match(initSource, /openSettings/);
   assert.match(
     initSource,
-    /sidebar\.onOpenSettings\s*=\s*\(\)\s*=>\s*\{\s*void showSettingsDialog\(\);\s*\};/,
+    /sidebar\.onOpenSettings\s*=\s*\(\)\s*=>\s*\{\s*void openSettings\(\);\s*\};/,
   );
-  assert.match(initSource, /configureSettingsDialogDependencies\([\s\S]*getExecutionMode/);
-  assert.match(initSource, /configureSettingsDialogDependencies\([\s\S]*setExecutionMode/);
-  assert.match(initSource, /configureSettingsDialogDependencies\([\s\S]*getModelSwitchBehavior/);
-  assert.match(initSource, /configureSettingsDialogDependencies\([\s\S]*setModelSwitchBehavior/);
+  assert.match(initSource, /configureSettingsPages\(\{[\s\S]*getExecutionMode/);
+  assert.match(initSource, /configureSettingsPages\(\{[\s\S]*setExecutionMode/);
+  assert.match(initSource, /configureSettingsPages\(\{[\s\S]*getModelSwitchBehavior/);
+  assert.match(initSource, /configureSettingsPages\(\{[\s\S]*setModelSwitchBehavior/);
 });
 
 void test("taskpane init mounts proxy banner and reacts to proxy state changes", async () => {
@@ -243,8 +243,11 @@ void test("disclosure bar reuses shared toggle rows", async () => {
   assert.doesNotMatch(disclosureSource, /pi-toggle__track/);
 });
 
-void test("extensions hub groups connections, plugins, and skills with tabs", async () => {
-  const hubSource = await readFile(new URL("../src/commands/builtins/extensions-hub-overlay.ts", import.meta.url), "utf8");
+void test("extensions pages expose connections, plugins, and skills in the settings shell", async () => {
+  const pagesSource = await readFile(
+    new URL("../src/commands/builtins/settings-pages/extensions-pages.ts", import.meta.url),
+    "utf8",
+  );
   const connectionsSource = await readFile(
     new URL("../src/commands/builtins/extensions-hub-connections.ts", import.meta.url),
     "utf8",
@@ -258,10 +261,10 @@ void test("extensions hub groups connections, plugins, and skills with tabs", as
     "utf8",
   );
 
-  assert.match(hubSource, /title:\s*t\("extensions-hub\.title"\)/);
-  assert.match(hubSource, /extensions-hub\.subtitle/);
-  assert.match(hubSource, /dataset\.hubTab/);
-  assert.match(hubSource, /dataset\.hubPanel/);
+  assert.match(pagesSource, /export function createConnectionsPage/);
+  assert.match(pagesSource, /export function createPluginsPage/);
+  assert.match(pagesSource, /export function createSkillsPage/);
+  assert.match(pagesSource, /createDeferredConnectionsRefreshController/);
   assert.match(connectionsSource, /Web search/);
   assert.match(pluginsSource, /Installed/);
   assert.match(skillsSource, /Bundled skills/);
@@ -329,8 +332,8 @@ void test("provider and experimental overlays are aliases into settings sections
   const providerSource = await readFile(new URL("../src/commands/builtins/provider-overlay.ts", import.meta.url), "utf8");
   const experimentalSource = await readFile(new URL("../src/commands/builtins/experimental-overlay.ts", import.meta.url), "utf8");
 
-  assert.match(providerSource, /showSettingsDialog\(\{ section: "providers" \}\)/);
-  assert.match(experimentalSource, /showSettingsDialog\(\{ section: "experimental" \}\)/);
+  assert.match(providerSource, /openSettings\("providers"\)/);
+  assert.match(experimentalSource, /openSettings\("experimental"\)/);
   assert.match(experimentalSource, /buildExperimentalFeatureContent/);
   assert.match(experimentalSource, /createToggleRow/);
 });
@@ -350,22 +353,30 @@ void test("extensions and alias commands deep-link to hub tabs", async () => {
   assert.match(skillsSource, /openExtensionsHub\("skills"\)/);
 });
 
-void test("settings overlay serializes open flow and adopts shared proxy + execution controls", async () => {
-  const settingsOverlaySource = await readFile(
-    new URL("../src/commands/builtins/settings-overlay.ts", import.meta.url),
+void test("settings shell guards navigation and pages adopt shared controls", async () => {
+  const shellSource = await readFile(new URL("../src/ui/settings-shell.ts", import.meta.url), "utf8");
+  const rootSource = await readFile(
+    new URL("../src/commands/builtins/settings-pages/root-page.ts", import.meta.url),
+    "utf8",
+  );
+  const providersSource = await readFile(
+    new URL("../src/commands/builtins/settings-pages/providers-page.ts", import.meta.url),
+    "utf8",
+  );
+  const proxySource = await readFile(
+    new URL("../src/commands/builtins/settings-pages/proxy-page.ts", import.meta.url),
     "utf8",
   );
 
-  assert.match(settingsOverlaySource, /settingsDialogOpenInFlight/);
-  assert.match(settingsOverlaySource, /pendingSectionFocus/);
-  assert.match(settingsOverlaySource, /await settingsDialogOpenInFlight/);
-  assert.match(settingsOverlaySource, /settings\.warning\.provider_state/);
-  assert.match(settingsOverlaySource, /createToggleRow/);
-  assert.match(settingsOverlaySource, /createConfigRow/);
-  assert.match(settingsOverlaySource, /createCallout/);
-  assert.match(settingsOverlaySource, /settings\.section\.execution\.auto_mode/);
-  assert.match(settingsOverlaySource, /settings\.section\.advanced\.fork_label/);
-  assert.doesNotMatch(settingsOverlaySource, /text:\s*"Save"/);
+  assert.match(shellSource, /beforeLeave/);
+  assert.match(shellSource, /registerOverlayCloser/);
+  assert.match(shellSource, /buildStackFor/);
+  assert.match(rootSource, /settings\.section\.execution\.auto_mode/);
+  assert.match(rootSource, /settings\.section\.advanced\.fork_label/);
+  assert.match(providersSource, /settings\.warning\.provider_state/);
+  assert.match(proxySource, /createToggleRow/);
+  assert.match(proxySource, /createConfigRow/);
+  assert.match(proxySource, /createCallout/);
 });
 
 void test("slash-command busy policy is centralized and shared across entry points", async () => {
@@ -415,14 +426,17 @@ void test("escape guard scopes widget claims to streaming abort paths", async ()
 void test("taskpane init wires recovery overlay opener", async () => {
   const initSource = await readFile(new URL("../src/taskpane/init.ts", import.meta.url), "utf8");
 
-  assert.match(initSource, /showRecoveryDialog/);
+  assert.match(initSource, /openSettings\("backups"\)/);
   assert.match(initSource, /const openRecoveryDialog = async \(\): Promise<void> =>/);
   assert.match(initSource, /sidebar\.onOpenRecovery\s*=\s*\(\)\s*=>\s*\{\s*void openRecoveryDialog\(\);\s*\};/);
   assert.match(initSource, /onCreateManualFullBackup:\s*async \(\)\s*=>\s*\{\s*return createManualFullBackup\(\);\s*\}/);
 });
 
-void test("recovery overlay includes manual full-backup action", async () => {
-  const overlaySource = await readFile(new URL("../src/commands/builtins/recovery-overlay.ts", import.meta.url), "utf8");
+void test("backups page includes manual full-backup action", async () => {
+  const overlaySource = await readFile(
+    new URL("../src/commands/builtins/settings-pages/backups-page.ts", import.meta.url),
+    "utf8",
+  );
 
   assert.match(overlaySource, /onCreateManualFullBackup\?: \(\) => Promise<ManualFullBackupSummary>/);
   assert.match(overlaySource, /createButton\(t\("recovery\.downloadBackup"\)/);

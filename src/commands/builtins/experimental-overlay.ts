@@ -146,7 +146,7 @@ export function buildExperimentalFeatureFooter(): HTMLParagraphElement {
 }
 
 export function showExperimentalDialog(): void {
-  void import("./settings-overlay.js").then(({ showSettingsDialog }) => {
-    void showSettingsDialog({ section: "experimental" });
+  void import("./settings-pages/index.js").then(({ openSettings }) => {
+    void openSettings("experimental");
   });
 }

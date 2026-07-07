@@ -6,7 +6,7 @@ import {
   INTEGRATIONS_MANAGER_LABEL_LOWER,
   TOOLS_COMMAND_NAME,
 } from "../../integrations/naming.js";
-import type { ExtensionsHubTab } from "./extensions-hub-overlay.js";
+import type { ExtensionsHubTab } from "./settings-pages/index.js";
 import type { SlashCommand } from "../types.js";
 import { t } from "../../language/index.js";
 

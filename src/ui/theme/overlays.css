@@ -5,6 +5,7 @@
  */
 
 @import "./overlays/primitives.css";
+@import "./overlays/settings-shell.css";
 @import "./overlays/provider-resume-shortcuts.css";
 @import "./overlays/recovery.css";
 @import "./overlays/settings.css";

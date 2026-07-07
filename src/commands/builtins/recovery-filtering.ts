@@ -3,7 +3,7 @@
  */
 
 import { t } from "../../language/index.js";
-import type { RecoveryCheckpointSummary, RecoveryCheckpointToolName } from "./recovery-overlay.js";
+import type { RecoveryCheckpointSummary, RecoveryCheckpointToolName } from "./recovery-types.js";
 
 // ---------------------------------------------------------------------------
 // Tool filter

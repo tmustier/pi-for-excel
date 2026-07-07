@@ -235,9 +235,9 @@ export async function showWelcomeLogin(providerKeys: ProviderKeysStore): Promise
     customGatewayButton.addEventListener("click", () => {
       closeOverlay();
 
-      void import("../commands/builtins/settings-overlay.js")
-        .then(({ showSettingsDialog }) => {
-          void showSettingsDialog({ section: "custom-gateways" });
+      void import("../commands/builtins/settings-pages/index.js")
+        .then(({ openSettings }) => {
+          void openSettings("gateway");
         })
         .catch(() => {
           showToast(t("welcome.toast.cannot_open_settings"));
