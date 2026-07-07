@@ -555,6 +555,10 @@ function promptForText(opts: {
     externalUrlEl.className = "pi-prompt-external-url";
     externalUrlEl.hidden = true;
 
+    const externalUrlFallbackEl = document.createElement("div");
+    externalUrlFallbackEl.className = "pi-prompt-external-url__manual";
+    externalUrlFallbackEl.hidden = true;
+
     const actions = document.createElement("div");
     actions.className = "pi-prompt-actions";
 
@@ -569,7 +573,16 @@ function promptForText(opts: {
     okBtn.textContent = opts.submitLabel ?? t("provider.prompt.continue");
 
     actions.append(cancelBtn, okBtn);
-    dialog.card.append(titleEl, messageEl, helperEl, externalUrlEl, captureStatusEl, input, actions);
+    dialog.card.append(
+      titleEl,
+      messageEl,
+      helperEl,
+      externalUrlEl,
+      externalUrlFallbackEl,
+      captureStatusEl,
+      input,
+      actions,
+    );
 
     if (opts.helperText) {
       helperEl.textContent = opts.helperText;
@@ -588,21 +601,48 @@ function promptForText(opts: {
       openLink.rel = "noopener noreferrer";
       openLink.textContent = t("provider.prompt.openLoginPage");
 
+      const manualLabel = document.createElement("label");
+      manualLabel.className = "pi-prompt-external-url__manual-label";
+      manualLabel.textContent = t("provider.prompt.loginUrlFallback");
+
+      const manualInput = document.createElement("textarea");
+      manualInput.className = "pi-prompt-external-url__manual-value";
+      manualInput.readOnly = true;
+      manualInput.rows = 3;
+      manualInput.value = opts.externalUrl;
+      manualInput.setAttribute("aria-label", t("provider.prompt.loginUrlFallback"));
+      const selectManualUrl = (): void => {
+        manualInput.focus();
+        manualInput.select();
+      };
+      manualInput.addEventListener("focus", selectManualUrl);
+      manualInput.addEventListener("click", selectManualUrl);
+
       const copyBtn = document.createElement("button");
       copyBtn.type = "button";
       copyBtn.className = "pi-prompt-external-url__copy";
       copyBtn.textContent = t("provider.prompt.copyLoginLink");
       copyBtn.addEventListener("click", () => {
-        void copyTextToClipboard(opts.externalUrl ?? "").then(() => {
-          copyBtn.textContent = t("provider.prompt.copied");
-          setTimeout(() => {
-            copyBtn.textContent = t("provider.prompt.copyLoginLink");
-          }, 1500);
-        });
+        void copyTextToClipboard(opts.externalUrl ?? "")
+          .then(() => {
+            copyBtn.textContent = t("provider.prompt.copied");
+            setTimeout(() => {
+              copyBtn.textContent = t("provider.prompt.copyLoginLink");
+            }, 1500);
+          })
+          .catch(() => {
+            copyBtn.textContent = t("provider.prompt.copyFailedShort");
+            selectManualUrl();
+            setTimeout(() => {
+              copyBtn.textContent = t("provider.prompt.copyLoginLink");
+            }, 2000);
+          });
       });
 
+      externalUrlFallbackEl.append(manualLabel, manualInput);
       externalUrlEl.append(openLink, copyBtn);
       externalUrlEl.hidden = false;
+      externalUrlFallbackEl.hidden = false;
     }
 
     let settled = false;
