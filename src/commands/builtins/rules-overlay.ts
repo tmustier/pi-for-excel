@@ -2,7 +2,7 @@
  * Rules editor overlay — rules (user + workbook) and conventions.
  */
 
-import { getAppStorage } from "@earendil-works/pi-web-ui/dist/storage/app-storage.js";
+import { getAppStorage } from "../../storage/local/app-storage.js";
 
 import {
   getUserRules,

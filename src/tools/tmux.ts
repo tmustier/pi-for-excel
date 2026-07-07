@@ -358,7 +358,7 @@ async function defaultGetBridgeConfig(): Promise<TmuxBridgeConfig | null> {
   let token: string | undefined;
 
   try {
-    const storageModule = await import("@earendil-works/pi-web-ui/dist/storage/app-storage.js");
+    const storageModule = await import("../storage/local/app-storage.js");
     const settings = storageModule.getAppStorage().settings;
 
     const urlValue = await settings.get<string>(TMUX_BRIDGE_URL_SETTING_KEY);

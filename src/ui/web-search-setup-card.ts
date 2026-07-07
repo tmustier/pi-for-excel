@@ -6,7 +6,7 @@
  * actions (proxy retry + API key save/validate).
  */
 
-import { getAppStorage } from "@earendil-works/pi-web-ui/dist/storage/app-storage.js";
+import { getAppStorage } from "../storage/local/app-storage.js";
 
 import {
   DEFAULT_PROXY_URL,

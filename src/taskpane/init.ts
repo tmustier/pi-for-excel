@@ -13,9 +13,9 @@ import { html, render } from "lit";
 import { Agent } from "@earendil-works/pi-agent-core";
 import { ApiKeyPromptDialog } from "@earendil-works/pi-web-ui/dist/dialogs/ApiKeyPromptDialog.js";
 import { ModelSelector } from "@earendil-works/pi-web-ui/dist/dialogs/ModelSelector.js";
-import { getAppStorage } from "@earendil-works/pi-web-ui/dist/storage/app-storage.js";
-import type { CustomProvider } from "@earendil-works/pi-web-ui/dist/storage/stores/custom-providers-store.js";
-import type { SessionData } from "@earendil-works/pi-web-ui/dist/storage/types.js";
+import { getAppStorage } from "../storage/local/app-storage.js";
+import type { CustomProvider } from "../storage/local/custom-providers-store.js";
+import type { SessionData } from "../storage/local/types.js";
 
 import { createOfficeStreamFn } from "../auth/stream-proxy.js";
 import {

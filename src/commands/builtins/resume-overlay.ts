@@ -2,8 +2,8 @@
  * Resume-session overlay.
  */
 
-import type { SessionData, SessionMetadata } from "@earendil-works/pi-web-ui/dist/storage/types.js";
-import { getAppStorage } from "@earendil-works/pi-web-ui/dist/storage/app-storage.js";
+import type { SessionData, SessionMetadata } from "../../storage/local/types.js";
+import { getAppStorage } from "../../storage/local/app-storage.js";
 
 import {
   getCrossWorkbookResumeConfirmMessage,

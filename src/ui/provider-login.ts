@@ -7,8 +7,8 @@
  * - API key input + Save button
  */
 
-import { getAppStorage } from "@earendil-works/pi-web-ui/dist/storage/app-storage.js";
-import { isCorsError } from "@earendil-works/pi-web-ui/dist/utils/proxy-utils.js";
+import { getAppStorage } from "../storage/local/app-storage.js";
+import { isCorsError } from "../auth/cors-error.js";
 import { pollOAuthCallbackCapture } from "../auth/oauth-callback-capture.js";
 import { getOAuthProvider } from "../auth/oauth-provider-registry.js";
 import { clearOAuthCredentials, saveOAuthCredentials } from "../auth/oauth-storage.js";

@@ -4,8 +4,8 @@
 
 import { t, initLanguage, getLanguage } from "../language/index.js";
 
-import type { ProviderKeysStore } from "@earendil-works/pi-web-ui/dist/storage/stores/provider-keys-store.js";
-import { getAppStorage } from "@earendil-works/pi-web-ui/dist/storage/app-storage.js";
+import type { ProviderKeysStore } from "../storage/local/provider-keys-store.js";
+import { getAppStorage } from "../storage/local/app-storage.js";
 
 import { closeOverlayById, createOverlayDialog } from "../ui/overlay-dialog.js";
 import { WELCOME_LOGIN_OVERLAY_ID } from "../ui/overlay-ids.js";

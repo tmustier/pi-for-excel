@@ -10,7 +10,7 @@ function isCommandsBuiltinsSettingsOverlayPayloadShape(value: DynamicValue): val
  * - More (execution mode, advanced, experimental)
  */
 
-import { getAppStorage } from "@earendil-works/pi-web-ui/dist/storage/app-storage.js";
+import { getAppStorage } from "../../storage/local/app-storage.js";
 
 import {
   DEFAULT_PROXY_IS_REMOTE,

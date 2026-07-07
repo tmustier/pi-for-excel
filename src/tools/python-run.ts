@@ -11,7 +11,7 @@ function isToolsPythonRunPayloadShape(value: DynamicValue): value is DynamicObje
  */
 
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
-import type { SettingsStore } from "@earendil-works/pi-web-ui/dist/storage/stores/settings-store.js";
+import type { SettingsStore } from "../storage/local/settings-store.js";
 import { Type, type Static, type TSchema } from "@sinclair/typebox";
 
 import { validateOfficeProxyUrl } from "../auth/proxy-validation.js";
@@ -207,7 +207,7 @@ function parseBridgeResponse(value: DynamicValue): PythonBridgeResponse {
 }
 
 async function getSettingsStore(): Promise<SettingsStore> {
-  const storageModule = await import("@earendil-works/pi-web-ui/dist/storage/app-storage.js");
+  const storageModule = await import("../storage/local/app-storage.js");
   return storageModule.getAppStorage().settings;
 }
 

@@ -30,7 +30,7 @@ import {
   type NormalizedBorderParams,
 } from "./format-cells-borders.js";
 import { getResolvedConventions } from "../conventions/store.js";
-import { getAppStorage } from "@earendil-works/pi-web-ui/dist/storage/app-storage.js";
+import { getAppStorage } from "../storage/local/app-storage.js";
 
 const DEFAULT_FONT_NAME = "Arial";
 const DEFAULT_FONT_SIZE = 10;

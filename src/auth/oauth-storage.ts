@@ -13,7 +13,7 @@ function isAuthOauthStoragePayloadShape(value: DynamicValue): value is DynamicOb
  */
 
 import type { OAuthCredentials } from "@earendil-works/pi-ai/compat";
-import type { SettingsStore } from "@earendil-works/pi-web-ui/dist/storage/stores/settings-store.js";
+import type { SettingsStore } from "../storage/local/settings-store.js";
 
 
 export function isOAuthCredentials(value: DynamicValue): value is OAuthCredentials {
