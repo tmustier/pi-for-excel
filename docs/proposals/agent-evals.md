@@ -3,6 +3,7 @@
 **Status:** Proposal (not yet accepted) — v2, restructured task-set-first
 **Date:** 2026-07-07
 **Companion to:** [`agent-tool-interface-redesign.md`](./agent-tool-interface-redesign.md)
+**Prior art survey:** [`../research/spreadsheet-agent-evals-prior-art.md`](../research/spreadsheet-agent-evals-prior-art.md)
 
 Telemetry is off the table (product decision) and no usage corpus exists.
 Evals are the evidence loop for the tool-surface redesign, the regression gate
@@ -42,6 +43,15 @@ on smaller models?" (#603).
    names), freeze panes, and absence of leftover artifacts. Reply-text checks
    are `contains`-style and coarse. LLM-judge only ever as a labeled
    spot-check, never the gate.
+5. **Hidden data variants defeat hardcoding.** SpreadsheetBench's core
+   insight: a solution must generalize to structurally similar workbooks with
+   different values. For manipulation/workflow tasks, generate 2–3 hidden
+   variants from the fixture builder (normal / edge case / scale case) and
+   grade across all of them. Cheaper and stronger than formula-text sniffing.
+6. **Placement ambiguity is explicit.** If the prompt pins a location, grade
+   that location. If it says "add a summary", grade semantically (find the
+   labeled block/table) — never silently require a hidden coordinate for a
+   task whose prompt allowed a different professional layout.
 
 ## 2. Metrics (per task × model)
 
@@ -52,11 +62,26 @@ on smaller models?" (#603).
 | **Tool-error rate** (failed calls, schema rejections, retries) | Schema/semantics friction |
 | **Efficiency** (tool calls, tokens, wall time) | Batch/high-level tool gaps |
 | **Behavioral checks** (asked-when-ambiguous, no-clobber-without-confirm) | Interaction quality |
+| **Variant pass rate** (pass across hidden data variants) | Anti-hardcoding signal |
+| **Destructive-edit count** (cells/objects changed outside allowed diff) | Mutation safety / collateral damage |
+
+Report two levels per task (SpreadsheetBench 2's `Modif.` vs `Acc.` split):
+**partial score** (fraction of assertions passing — diagnostic) and **task
+pass** (all required assertions — the gate). A near-miss with one convention
+error should be visible as such, not as total failure.
 
 Per-tool-surface phase, the acceptance criterion for a new tool is a measured
 drop in escape-hatch/failure rate in its category.
 
 ## 3. Task set v0 (~20 tasks)
+
+The suite grows along three lanes (per the prior-art survey): **Lane A** —
+atomic tool regression (fast, deterministic, fixed locations; most of v0);
+**Lane B** — realistic manipulation tasks with hidden variants; **Lane C** —
+multi-sheet workflow/professional tasks (model debugging, scenario edits,
+build-outs; mostly corpus-derived). Lane C is where current frontier agents
+are weakest — SpreadsheetBench 2 reports 12% on debugging for the best
+model — and where a real-Excel agent can differentiate.
 
 Seed workbooks are small fixtures (`evals/fixtures/*.xlsx` or builder
 scripts); task specs are data (YAML/JSON), e.g.:
@@ -118,6 +143,12 @@ freeze volatile functions (`RAND()`), and keep identifying/licensed content
 out of the repo — corpus-derived fixtures stay local or are anonymized before
 committing.
 
+Leakage sweep (fixture builders must strip **all** of): hidden/very-hidden
+sheets, validation/helper columns encoding expected answers, comments/notes,
+defined names pointing at solutions, custom document properties, cached
+formula values, calc chains, and external links to answer workbooks. Hidden ≠
+inaccessible — agents can unhide and read all of these.
+
 ## 4. Runner: thin glue over the existing bridge
 
 Per task: **reset → seed → `submitPrompt` → read state → grade → report**
@@ -149,7 +180,19 @@ separate, later concern.
 - **Later:** model matrix runs; grow toward ~50 tasks; WPS lane via
   `wps-windows-smoke` if/when WPS tools grow; CI transcript subset.
 
-## 6. Non-goals
+## 6. External baseline: SpreadsheetBench
+
+SpreadsheetBench v1 (912 real forum-derived manipulation tasks, CC BY-SA 4.0,
+OJ-style multi-test-case grading) is runnable as an external context
+baseline: drive tasks through the bridge against real Excel, grade with the
+authors' script. Vendor-reported scores for calibration: Excel Agent Mode
+57.2%, ChatGPT agent 45.5%, Copilot 20%; best agent on v2 34.9% overall.
+Rules: run a stratified sample first (~30–50 tasks), keep the CC BY-SA data
+strictly separate from our own corpus and fixtures, and never tune on tasks
+we later report as held-out. This is context, not the gate — our own task
+set remains the regression asset.
+
+## 7. Non-goals
 
 - Not a public benchmark/leaderboard.
 - No telemetry, no session harvesting — all workbooks and prompts synthetic.
