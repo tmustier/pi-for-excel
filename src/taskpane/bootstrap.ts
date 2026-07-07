@@ -10,7 +10,6 @@
 import { render } from "lit";
 
 import { installFetchInterceptor } from "../auth/cors-proxy.js";
-import { installModelSelectorPatch } from "../compat/model-selector-patch.js";
 import { installProcessEnvShim } from "../compat/process-env-shim.js";
 import {
   resolveSpreadsheetHostForBoot,
@@ -45,7 +44,6 @@ export function bootstrapTaskpane(): void {
   // Global patches
   installProcessEnvShim();
   installFetchInterceptor();
-  installModelSelectorPatch();
 
   // Host bootstrap (Office/WPS/browser fallback for local dev)
   let initialized = false;

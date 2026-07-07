@@ -122,9 +122,24 @@ Steps (each a coherent commit):
    - first-party hljs color theme + shimmer keyframes added to
      `theme/content/message-components.css` so both survive the later
      app.css removal
-6. **Own dialogs** → local model selector + API key prompt; delete
-   `compat/model-selector-patch.ts`; fold `dialog-style-hooks.ts` semantics
-   into the components.
+6. **Own dialogs** ✅ → `src/ui/model-selector-dialog.ts` +
+   `src/ui/api-key-dialog.ts`, built on the first-party overlay system
+   (`overlay-dialog.ts`) instead of mini-lit's DialogBase.
+   `compat/model-selector-patch.ts` deleted — featured-model ordering moved
+   to `src/models/featured-models.ts` (pure, testable) and the active
+   provider set to `src/models/active-providers.ts`. `dialog-style-hooks.ts`
+   deleted — semantics folded into component templates; `theme/dialogs.css`
+   rewritten against stable first-party classes.
+
+   Intentional divergences from upstream:
+   - no Thinking/Vision filter pills, capability icons, or cost column
+     (theme already hid all three)
+   - no ollama/llama.cpp/vllm/lmstudio auto-discovery (this add-in's
+     custom-gateway UI only creates explicit model lists; drops the
+     @lmstudio/sdk + ollama transitive deps)
+   - provider connect dialog reuses the welcome-overlay provider row, so
+     OAuth logins now work from the in-flight key prompt too (upstream was
+     API-key only), and no 500ms key polling loop
 7. **Drop Tailwind + package** → remove `app.css` from boot, add owned base
    styles, delete stubs + vite plugin + aliases + `pi-ai → compat` alias,
    remove `@earendil-works/pi-web-ui` and `@mariozechner/mini-lit` from

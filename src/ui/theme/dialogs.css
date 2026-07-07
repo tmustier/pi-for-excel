@@ -1,120 +1,120 @@
 /* ═══════════════════════════════════════════════════════
-   12. DIALOGS — stable selectors only
-   Hooks are added by installDialogStyleHooks() in src/ui/dialog-style-hooks.ts.
+   12. DIALOGS — first-party model selector + provider connect
+   Components: src/ui/model-selector-dialog.ts, src/ui/api-key-dialog.ts.
+   Both mount inside .pi-welcome-overlay via createOverlayDialog().
    ═══════════════════════════════════════════════════════ */
 
-/* ── Shared backdrop + card ── */
+/* ── Model selector ── */
 
-.pi-dialog-backdrop {
-  background: var(--alpha-25);
-  backdrop-filter: var(--glass-blur-heavy);
-  -webkit-backdrop-filter: var(--glass-blur-heavy);
-}
-
-/*
- * mini-lit Dialog sets width/height via inline styles.
- * Use !important only where we need to override those.
- */
-.pi-dialog-card {
-  width: min(340px, 92vw) !important;
+.pi-model-selector-card {
+  display: flex;
+  flex-direction: column;
+  width: min(340px, 92vw);
+  height: min(500px, 78vh);
   border-radius: var(--radius-xl);
   box-shadow: var(--glass-shadow-lg);
   border: var(--glass-border);
   background: var(--glass-bg-solid);
+  overflow: hidden;
 }
 
-.pi-dialog-close {
-  top: 16px;
-  right: 16px;
+.pi-model-selector-card .pi-overlay-header {
+  padding: 16px 16px 0;
 }
 
-/* Save/primary button — teal */
-.pi-dialog-save-button {
-  background: var(--pi-green);
-  border-radius: var(--radius-sm);
+.pi-model-selector-search {
+  margin: 12px 16px;
+  flex-shrink: 0;
 }
 
-/* ── ModelSelector specifics ── */
-
-agent-model-selector .pi-model-selector-card {
-  height: min(500px, 78vh) !important;
+.pi-model-selector-list {
+  flex: 1;
+  overflow-y: auto;
+  border-top: 1px solid var(--alpha-6);
+  scrollbar-width: thin;
+  scrollbar-color: var(--alpha-12) transparent;
 }
 
-/* Font consistency — DM Sans everywhere */
-agent-model-selector {
-  font-family: var(--font-sans);
-}
-
-/* Title — smaller, match our weight */
-agent-model-selector h2 {
-  font-family: var(--font-sans);
-  font-size: var(--text-md);
-  font-weight: 600;
-}
-
-/* Header section — tighter padding for sidebar width */
-agent-model-selector .pi-model-selector-header {
-  padding: 16px 16px 12px;
-  gap: 12px;
-}
-
-/* Search input — softer focus ring, match our input card style */
-agent-model-selector input {
-  font-family: var(--font-sans);
-  font-size: var(--text-base);
-  border-radius: var(--radius-sm);
-}
-
-agent-model-selector input:focus-visible {
-  border-color: var(--green-alpha-25);
-  box-shadow: 0 0 0 2px var(--pi-green-light);
-}
-
-/* Hide filter pills (Thinking / Vision) — we don't need them */
-agent-model-selector .pi-model-selector-filters {
-  display: none;
-}
-
-/* Model items — tighter, softer dividers */
-agent-model-selector .pi-model-selector-item {
+.pi-model-selector-item {
+  display: block;
+  width: 100%;
   padding: 10px 16px;
-  border-color: var(--alpha-4);
+  border: 0;
+  border-bottom: 1px solid var(--alpha-4);
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 
-agent-model-selector .pi-model-selector-item:hover,
-agent-model-selector .pi-model-selector-item--selected {
+.pi-model-selector-item--selected {
   background: var(--pi-green-lighter);
 }
 
-/* Model ID — our mono font */
-agent-model-selector .pi-model-selector-item-id {
+.pi-model-selector-item-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 2px;
+}
+
+.pi-model-selector-item-id {
   font-family: var(--font-mono);
   font-size: var(--text-sm);
   font-weight: 500;
+  color: var(--foreground);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-/* Provider badge — subtle tinted pill instead of stark outline */
-agent-model-selector .pi-model-selector-item-provider {
+.pi-model-selector-item-check {
+  color: var(--pi-green-strong);
+  font-size: var(--text-sm);
+  flex-shrink: 0;
+}
+
+.pi-model-selector-item-provider {
+  margin-left: auto;
+  flex-shrink: 0;
   font-family: var(--font-mono);
   font-size: var(--text-xs);
-  border-color: var(--alpha-6);
+  letter-spacing: 0.01em;
+  color: var(--muted-foreground);
+  border: 1px solid var(--alpha-6);
   background: var(--alpha-3);
   border-radius: var(--radius-xs);
-  letter-spacing: 0.01em;
+  padding: 1px 6px;
 }
 
-/* Hide capability icons (brain/vision) in model detail row */
-agent-model-selector .pi-model-selector-item-capabilities > span:has(svg) {
-  display: none;
-}
-
-/* Hide cost column */
-agent-model-selector .pi-model-selector-item-cost {
-  display: none;
-}
-
-/* Context info — our mono font, smaller */
-agent-model-selector .pi-model-selector-item-meta {
+.pi-model-selector-item-meta {
+  display: block;
   font-family: var(--font-mono);
   font-size: var(--text-xs);
+  color: var(--muted-foreground);
+}
+
+.pi-model-selector-empty {
+  padding: 24px 16px;
+  text-align: center;
+  font-size: var(--text-sm);
+  color: var(--muted-foreground);
+}
+
+/* ── Provider connect (API key / OAuth) ── */
+
+.pi-api-key-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(340px, 92vw);
+  max-height: 78vh;
+  overflow-y: auto;
+  padding: 16px;
+  border-radius: var(--radius-xl);
+  box-shadow: var(--glass-shadow-lg);
+  border: var(--glass-border);
+  background: var(--glass-bg-solid);
+  scrollbar-width: thin;
+  scrollbar-color: var(--alpha-12) transparent;
 }

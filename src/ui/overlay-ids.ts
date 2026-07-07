@@ -16,3 +16,5 @@ export const TEXT_INPUT_DIALOG_OVERLAY_ID = "pi-text-input-dialog-overlay";
 export const TOOL_APPROVAL_OVERLAY_ID = "pi-tool-approval-overlay";
 export const EXTENSION_OVERLAY_ID = "pi-ext-overlay";
 export const PROXY_GATE_OVERLAY_ID = "pi-proxy-gate-overlay";
+export const MODEL_SELECTOR_OVERLAY_ID = "pi-model-selector-overlay";
+export const API_KEY_OVERLAY_ID = "pi-api-key-overlay";

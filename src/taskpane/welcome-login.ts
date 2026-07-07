@@ -10,7 +10,7 @@ import { getAppStorage } from "../storage/local/app-storage.js";
 import { closeOverlayById, createOverlayDialog } from "../ui/overlay-dialog.js";
 import { WELCOME_LOGIN_OVERLAY_ID } from "../ui/overlay-ids.js";
 import { showToast } from "../ui/toast.js";
-import { setActiveProviders } from "../compat/model-selector-patch.js";
+import { setActiveProviders } from "../models/active-providers.js";
 import {
   DEFAULT_PROXY_IS_REMOTE,
   DEFAULT_PROXY_URL,

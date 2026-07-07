@@ -11,8 +11,6 @@ function isTaskpaneInitPayloadShape(value: DynamicValue): value is DynamicObject
 
 import { html, render } from "lit";
 import { Agent } from "@earendil-works/pi-agent-core";
-import { ApiKeyPromptDialog } from "@earendil-works/pi-web-ui/dist/dialogs/ApiKeyPromptDialog.js";
-import { ModelSelector } from "@earendil-works/pi-web-ui/dist/dialogs/ModelSelector.js";
 import { getAppStorage } from "../storage/local/app-storage.js";
 import type { CustomProvider } from "../storage/local/custom-providers-store.js";
 import type { SessionData } from "../storage/local/types.js";
@@ -129,7 +127,9 @@ import { TOOL_APPROVAL_OVERLAY_ID } from "../ui/overlay-ids.js";
 import { showActionToast, showToast } from "../ui/toast.js";
 import { PiSidebar } from "../ui/pi-sidebar.js";
 import { createProxyBanner } from "../ui/proxy-banner.js";
-import { setActiveProviders } from "../compat/model-selector-patch.js";
+import { setActiveProviders } from "../models/active-providers.js";
+import { promptForProviderConnection } from "../ui/api-key-dialog.js";
+import { openModelSelectorDialog } from "../ui/model-selector-dialog.js";
 import { getCurrentSpreadsheetHost } from "../host/index.js";
 import { createWorkbookCoordinator } from "../workbook/coordinator.js";
 import { formatWorkbookLabel, type WorkbookContext } from "../workbook/context.js";
@@ -1089,7 +1089,7 @@ export async function initTaskpane(opts: {
         return customProviderApiKeys.get(provider) ?? undefined;
       }
 
-      const success = await ApiKeyPromptDialog.prompt(provider);
+      const success = await promptForProviderConnection(provider);
       await refreshConfiguredProviders();
       if (success) {
         clearErrorBanner(errorRoot);
@@ -1739,8 +1739,11 @@ export async function initTaskpane(opts: {
 
       closeStatusPopover();
 
-      await ModelSelector.open(currentModel, (model) => {
-        void applyModelSelection(targetRuntimeId, model);
+      openModelSelectorDialog({
+        currentModel,
+        onSelect: (model) => {
+          void applyModelSelection(targetRuntimeId, model);
+        },
       });
     })();
   };
