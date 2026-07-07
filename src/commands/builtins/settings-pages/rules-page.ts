@@ -81,6 +81,88 @@ function cloneStoredConventions(value: StoredConventions): StoredConventions {
   return structuredClone(value);
 }
 
+function normalizeFormatPresetForDirtyCheck(preset: StoredFormatPreset): StoredFormatPreset {
+  const normalized: StoredFormatPreset = { format: preset.format };
+
+  if (preset.builderParams !== undefined) {
+    const builderParams: NonNullable<StoredFormatPreset["builderParams"]> = {};
+    if (preset.builderParams.dp !== undefined) builderParams.dp = preset.builderParams.dp;
+    if (preset.builderParams.negativeStyle !== undefined) {
+      builderParams.negativeStyle = preset.builderParams.negativeStyle;
+    }
+    if (preset.builderParams.zeroStyle !== undefined) builderParams.zeroStyle = preset.builderParams.zeroStyle;
+    if (preset.builderParams.thousandsSeparator !== undefined) {
+      builderParams.thousandsSeparator = preset.builderParams.thousandsSeparator;
+    }
+    if (preset.builderParams.currencySymbol !== undefined) {
+      builderParams.currencySymbol = preset.builderParams.currencySymbol;
+    }
+    normalized.builderParams = builderParams;
+  }
+
+  return normalized;
+}
+
+function normalizeCustomPresetForDirtyCheck(preset: StoredCustomPreset): StoredCustomPreset {
+  const normalized: StoredCustomPreset = normalizeFormatPresetForDirtyCheck(preset);
+  if (preset.description !== undefined) {
+    normalized.description = preset.description;
+  }
+  return normalized;
+}
+
+function serializeConventionsForDirtyCheck(value: StoredConventions): string {
+  const draft = cloneStoredConventions(value);
+  const resolved = resolveConventions(draft);
+  const presetFormats = getPresetSection(draft);
+  const customPresets = getCustomPresetSection(draft);
+  const colorConventions = getColorConventions(draft);
+  const headerStyle = getHeaderStyle(draft);
+  const visualDefaults = getVisualDefaults(draft);
+
+  const normalizedPresetFormats: NonNullable<StoredConventions["presetFormats"]> = {};
+  for (const presetName of BUILTIN_PRESET_NAMES) {
+    const resolvedPreset = resolved.presetFormats[presetName];
+    const preset = presetFormats[presetName] ?? {
+      format: resolvedPreset.format,
+      ...(resolvedPreset.builderParams !== undefined ? { builderParams: resolvedPreset.builderParams } : {}),
+    };
+    normalizedPresetFormats[presetName] = normalizeFormatPresetForDirtyCheck(preset);
+  }
+
+  const normalizedCustomPresets: NonNullable<StoredConventions["customPresets"]> = {};
+  for (const customName of Object.keys(customPresets).sort((left, right) => left.localeCompare(right))) {
+    const customPreset = customPresets[customName];
+    if (!customPreset) continue;
+    normalizedCustomPresets[customName] = normalizeCustomPresetForDirtyCheck(customPreset);
+  }
+
+  const normalized: StoredConventions = {
+    presetFormats: normalizedPresetFormats,
+    customPresets: normalizedCustomPresets,
+    colorConventions: {
+      ...(colorConventions.hardcodedValueColor !== undefined
+        ? { hardcodedValueColor: colorConventions.hardcodedValueColor }
+        : {}),
+      ...(colorConventions.crossSheetLinkColor !== undefined
+        ? { crossSheetLinkColor: colorConventions.crossSheetLinkColor }
+        : {}),
+    },
+    headerStyle: {
+      ...(headerStyle.fillColor !== undefined ? { fillColor: headerStyle.fillColor } : {}),
+      ...(headerStyle.fontColor !== undefined ? { fontColor: headerStyle.fontColor } : {}),
+      ...(headerStyle.bold !== undefined ? { bold: headerStyle.bold } : {}),
+      ...(headerStyle.wrapText !== undefined ? { wrapText: headerStyle.wrapText } : {}),
+    },
+    visualDefaults: {
+      ...(visualDefaults.fontName !== undefined ? { fontName: visualDefaults.fontName } : {}),
+      ...(visualDefaults.fontSize !== undefined ? { fontSize: visualDefaults.fontSize } : {}),
+    },
+  };
+
+  return JSON.stringify(normalized);
+}
+
 function getPresetSection(draft: StoredConventions): Partial<Record<NumberPreset, StoredFormatPreset>> {
   if (!draft.presetFormats) {
     draft.presetFormats = {};
@@ -798,7 +880,7 @@ export function createRulesPage(): SettingsShellPage {
       const initialUserDraft = (await getUserRules(storage.settings)) ?? "";
       const initialWorkbookDraft = (await getWorkbookRules(storage.settings, workbookId)) ?? "";
       const storedConventions = await getStoredConventions(storage.settings);
-      const initialConventionsJson = JSON.stringify(storedConventions);
+      const initialConventionsJson = serializeConventionsForDirtyCheck(storedConventions);
 
       let userDraft = initialUserDraft;
       let workbookDraft = initialWorkbookDraft;
@@ -924,7 +1006,7 @@ export function createRulesPage(): SettingsShellPage {
         return (
           userDraft !== initialUserDraft
           || workbookDraft !== initialWorkbookDraft
-          || JSON.stringify(conventionsDraft) !== initialConventionsJson
+          || serializeConventionsForDirtyCheck(conventionsDraft) !== initialConventionsJson
         );
       };
 

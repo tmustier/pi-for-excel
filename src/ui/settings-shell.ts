@@ -86,6 +86,7 @@ export function createSettingsShell(options: SettingsShellOptions): SettingsShel
   let pageCleanups: Array<() => void> = [];
   let beforeLeave: (() => Promise<boolean>) | null = null;
   let transitionInFlight = false;
+  let renderToken = 0;
 
   const runPageCleanups = (): void => {
     for (let index = pageCleanups.length - 1; index >= 0; index -= 1) {
@@ -103,6 +104,7 @@ export function createSettingsShell(options: SettingsShellOptions): SettingsShel
 
   const destroyShell = (): void => {
     if (!mounted) return;
+    renderToken += 1;
     runPageCleanups();
     unregisterOverlayCloser(mounted.overlay);
     mounted.destroy();
@@ -160,6 +162,8 @@ export function createSettingsShell(options: SettingsShellOptions): SettingsShel
       return;
     }
 
+    const currentRenderToken = renderToken + 1;
+    renderToken = currentRenderToken;
     runPageCleanups();
 
     shell.backButton.hidden = stack.length <= 1;
@@ -168,7 +172,10 @@ export function createSettingsShell(options: SettingsShellOptions): SettingsShel
     shell.subtitleEl.textContent = subtitleText;
     shell.subtitleEl.hidden = subtitleText.length === 0;
 
-    shell.bodyEl.replaceChildren();
+    const pageBody = document.createElement("div");
+    pageBody.className = "pi-set-shell__page";
+
+    shell.bodyEl.replaceChildren(pageBody);
     shell.bodyEl.scrollTop = 0;
     shell.footerEl.replaceChildren();
     shell.footerEl.hidden = true;
@@ -183,9 +190,17 @@ export function createSettingsShell(options: SettingsShellOptions): SettingsShel
       );
     }
 
+    const isCurrentRender = (): boolean => (
+      mounted === shell
+      && renderToken === currentRenderToken
+      && stack[stack.length - 1] === pageId
+      && pageBody.isConnected
+    );
+
     const ctx: SettingsPageContext = {
-      body: shell.bodyEl,
+      body: pageBody,
       setFooter: (footer) => {
+        if (!isCurrentRender()) return;
         shell.footerEl.replaceChildren();
         if (footer) {
           shell.footerEl.appendChild(footer);
@@ -195,18 +210,34 @@ export function createSettingsShell(options: SettingsShellOptions): SettingsShel
         }
       },
       navigate: (nextId) => {
-        void navigateTo(nextId);
+        if (isCurrentRender()) {
+          void navigateTo(nextId);
+        }
       },
       back: () => {
-        void goBack();
+        if (isCurrentRender()) {
+          void goBack();
+        }
       },
       close: () => {
-        void requestClose();
+        if (isCurrentRender()) {
+          void requestClose();
+        }
       },
       addCleanup: (cleanup) => {
-        pageCleanups.push(cleanup);
+        if (isCurrentRender()) {
+          pageCleanups.push(cleanup);
+          return;
+        }
+
+        try {
+          cleanup();
+        } catch {
+          // ignore cleanup errors from stale async renders
+        }
       },
       setBeforeLeave: (guard) => {
+        if (!isCurrentRender()) return;
         beforeLeave = guard;
       },
     };
@@ -324,7 +355,7 @@ export function createSettingsShell(options: SettingsShellOptions): SettingsShel
     overlay.addEventListener("click", onBackdropClick);
 
     registerOverlayCloser(overlay, () => {
-      destroyShell();
+      void requestClose();
     });
 
     document.body.appendChild(overlay);

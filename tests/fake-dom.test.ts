@@ -181,6 +181,10 @@ class FakeHTMLElement extends FakeElement {
   constructor(tagName: string) {
     super(tagName);
   }
+
+  focus(_options?: FocusOptions): void {
+    // no-op for tests
+  }
 }
 
 class FakeBodyElement extends FakeHTMLElement {

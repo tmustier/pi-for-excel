@@ -82,6 +82,13 @@
   outline: none;
 }
 
+.pi-set-shell__page {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 100%;
+}
+
 .pi-set-shell__body--forward {
   animation: pi-set-page-forward var(--duration-normal) ease-out;
 }
