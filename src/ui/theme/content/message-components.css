@@ -30,7 +30,7 @@
 }
 
 .pi-tool-group__chevron {
-  font-size: 10px;
+  font-size: var(--text-xs);
   transition: transform var(--duration-fast);
   flex-shrink: 0;
 }

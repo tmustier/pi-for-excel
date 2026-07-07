@@ -87,7 +87,7 @@
   display: block;
   width: 14px;
   height: 14px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   background: white;
   position: absolute;
   top: 1px;

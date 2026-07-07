@@ -84,11 +84,12 @@ export class MarkdownBlock extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
-    // NOTE: deliberately NOT adding mini-lit's `markdown-content` class —
-    // pi-web-ui's app.css styles it with higher-specificity typography rules
-    // that fight our sidebar scale (e.g. `.markdown-content h2` resolving
-    // var(--text-xl) = 40px from our tokens). All typography lives under
-    // `markdown-block …` selectors in theme/content CSS instead.
+    // NOTE: deliberately NOT carrying mini-lit's legacy `markdown-content`
+    // class — when pi-web-ui's app.css was still loaded, it styled that class
+    // with higher-specificity typography rules that fought our sidebar scale
+    // (e.g. `.markdown-content h2` resolving a 40px display token). All
+    // typography lives under `markdown-block …` selectors in theme/content
+    // CSS instead.
     this.style.display = "block";
   }
 

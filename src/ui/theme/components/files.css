@@ -13,7 +13,7 @@
 }
 
 .pi-files-actions__icon {
-  font-size: 11px;
+  font-size: var(--text-sm);
   margin-right: 2px;
   display: inline-flex;
   align-items: center;
@@ -42,7 +42,7 @@
 }
 
 .pi-files-filter__icon {
-  font-size: 11px;
+  font-size: var(--text-sm);
   flex-shrink: 0;
   opacity: 0.5;
   display: flex;
@@ -166,7 +166,7 @@
 }
 
 .pi-files-folder__name {
-  font-size: 13px;
+  font-size: var(--text-base);
   font-weight: 500;
   color: var(--foreground);
   flex: 1;
@@ -177,7 +177,7 @@
 }
 
 .pi-files-folder__count {
-  font-size: 11px;
+  font-size: var(--text-sm);
   color: var(--muted-foreground);
   flex-shrink: 0;
 }
@@ -277,7 +277,7 @@
 
 .pi-files-item__arrow {
   flex-shrink: 0;
-  font-size: 16px;
+  font-size: var(--text-md);
   color: var(--muted-foreground);
   opacity: 0;
   transition: opacity var(--duration-fast);
@@ -309,7 +309,7 @@
 }
 
 .pi-files-empty__icon {
-  font-size: 32px;
+  font-size: 32px; /* decorative glyph */
   opacity: 0.4;
   margin-bottom: 4px;
   display: flex;
@@ -362,7 +362,7 @@
   border: 1px solid var(--alpha-10);
   border-radius: var(--radius-xs);
   color: var(--foreground);
-  font-size: 14px;
+  font-size: var(--text-base);
   padding: 4px 8px;
   cursor: pointer;
   flex-shrink: 0;
@@ -454,7 +454,7 @@
 }
 
 .pi-files-detail-preview__placeholder-icon {
-  font-size: 36px;
+  font-size: 36px; /* decorative glyph */
   opacity: 0.3;
   display: flex;
   align-items: center;
@@ -515,7 +515,7 @@
   border-radius: var(--radius-xs);
   border: none;
   padding: 1px 5px;
-  font-size: 10px;
+  font-size: var(--text-xs);
 }
 
 /* ── Text preview scroll fixes (#491) ────────────── */

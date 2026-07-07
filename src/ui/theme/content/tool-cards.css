@@ -221,7 +221,7 @@
   display: inline-block;
   width: 10px;
   height: 10px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   border: 1px solid var(--alpha-15);
   vertical-align: middle;
   margin-right: 4px;

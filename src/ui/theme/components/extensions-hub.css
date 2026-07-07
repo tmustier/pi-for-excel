@@ -15,7 +15,7 @@
   gap: 0;
   border: 1px solid var(--alpha-8);
   background: var(--white-alpha-35);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   overflow: hidden;
   transition: border-color var(--duration-fast);
 }
@@ -50,7 +50,7 @@
   flex-shrink: 0;
   border-radius: var(--radius-sm);
   background: var(--alpha-6);
-  font-size: 14px;
+  font-size: var(--text-md);
   line-height: 1;
 }
 
@@ -167,7 +167,7 @@
   color: var(--foreground);
   background: var(--alpha-4);
   padding: 3px 7px;
-  border-radius: 6px;
+  border-radius: var(--radius-xs);
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -279,7 +279,7 @@
 
 .pi-callout__icon {
   flex-shrink: 0;
-  font-size: 14px;
+  font-size: var(--text-md);
   line-height: 1.45;
   display: flex;
   align-items: center;
@@ -303,7 +303,7 @@
   gap: 8px;
   padding: 10px 12px;
   border: 1px dashed var(--alpha-12);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: var(--alpha-2);
 }
 
@@ -344,11 +344,11 @@
   padding: 20px 12px;
   text-align: center;
   border: 1px dashed var(--alpha-8);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
 }
 
 .pi-empty-inline__icon {
-  font-size: 20px;
+  font-size: 20px; /* decorative glyph */
   opacity: 0.4;
   display: flex;
   align-items: center;
@@ -407,7 +407,7 @@
   gap: 6px;
   border: 1px solid var(--alpha-10);
   background: var(--alpha-3);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   padding: 6px 8px;
 }
 
@@ -426,10 +426,10 @@
   width: 24px;
   height: 24px;
   border: 1px solid var(--alpha-10);
-  border-radius: 6px;
+  border-radius: var(--radius-xs);
   background: var(--white-alpha-80);
   color: var(--foreground);
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1;
   cursor: pointer;
   flex-shrink: 0;
