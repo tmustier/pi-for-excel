@@ -8,13 +8,20 @@
   border-radius: var(--pill-radius);
 }
 
+/* Breathing room under the last row when expanded (collapsed groups are
+   header-only and stay symmetric without it). */
+.pi-tool-group:not(.pi-tool-group--collapsed) {
+  padding-bottom: 4px;
+}
+
 /* Group header — collapsible summary */
 .pi-tool-group__header {
   display: flex;
   align-items: center;
   gap: 6px;
   width: 100%;
-  padding: 6px 10px;
+  /* Horizontal padding matches standalone pill cards (--pill-padding-x). */
+  padding: 6px var(--pill-padding-x);
   border: none;
   background: none;
   cursor: pointer;

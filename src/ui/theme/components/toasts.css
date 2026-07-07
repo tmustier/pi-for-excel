@@ -66,6 +66,9 @@
   font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
+  /* Overlap the toast's vertical padding so action toasts keep the same
+     height as plain message toasts. */
+  margin-block: -3px;
 }
 
 .pi-toast__action:hover {

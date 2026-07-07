@@ -93,24 +93,26 @@ function createMockFileItem(name: string, meta: string, badgeLabel?: string): HT
   nameEl.textContent = name;
   nameRow.appendChild(nameEl);
 
-  if (badgeLabel) {
-    const badge = document.createElement("span");
-    badge.className = "pi-overlay-badge pi-overlay-badge--muted";
-    badge.textContent = badgeLabel;
-    nameRow.appendChild(badge);
-  }
-
   const metaEl = document.createElement("span");
   metaEl.className = "pi-files-item__meta";
   metaEl.textContent = meta;
 
   info.append(nameRow, metaEl);
+  row.append(icon, info);
+
+  // Badge is a row-level right-aligned column — same x on every row.
+  if (badgeLabel) {
+    const badge = document.createElement("span");
+    badge.className = "pi-overlay-badge pi-overlay-badge--muted";
+    badge.textContent = badgeLabel;
+    row.appendChild(badge);
+  }
 
   const arrow = document.createElement("span");
   arrow.className = "pi-files-item__arrow";
   arrow.textContent = "›";
 
-  row.append(icon, info, arrow);
+  row.appendChild(arrow);
   return row;
 }
 
@@ -165,9 +167,38 @@ const groupSection = section("tool-groups", "Grouped Tool Cards");
 const group = document.createElement("div");
 group.className = "pi-tool-group";
 
+// Real groups always carry a header (see tool-grouping.ts).
+const groupHeader = document.createElement("button");
+groupHeader.type = "button";
+groupHeader.className = "pi-tool-group__header";
+groupHeader.setAttribute("aria-expanded", "true");
+const groupChevron = document.createElement("span");
+groupChevron.className = "pi-tool-group__chevron";
+groupChevron.textContent = "▸";
+const groupLabel = document.createElement("span");
+groupLabel.className = "pi-tool-group__label";
+groupLabel.textContent = "5 fill operations";
+groupHeader.append(groupChevron, groupLabel);
+groupHeader.addEventListener("click", () => {
+  const collapsed = group.classList.toggle("pi-tool-group--collapsed");
+  groupHeader.setAttribute("aria-expanded", collapsed ? "false" : "true");
+  // Shipped CSS hides direct-child <tool-message>; the gallery uses div
+  // stand-ins, so mirror the collapse manually.
+  for (const child of group.children) {
+    if (child !== groupHeader) {
+      (child instanceof HTMLElement ? child : null)?.style.setProperty(
+        "display",
+        collapsed ? "none" : "",
+      );
+    }
+  }
+});
+group.appendChild(groupHeader);
+
 for (let i = 10; i <= 14; i++) {
+  // Simulate tool-message wrapping — grouped-card CSS matches any
+  // descendant .pi-tool-card, so a plain div stands in for <tool-message>.
   const wrapper = document.createElement("div");
-  // Simulate tool-message wrapping
   const card = createMockToolCard("complete", "Filled", `'Cash Flow'!D${i}:L${i} — 9 changes`);
   wrapper.appendChild(card);
   group.appendChild(wrapper);
@@ -235,50 +266,52 @@ diffSection.appendChild(diffWrap);
 
 const previewSection = section("text-preview", "File Text Preview");
 
-const preview = document.createElement("div");
-preview.className = "pi-files-detail-preview pi-files-detail-preview--text";
+const sampleMarkdown = `# Context Management Policy
 
-const sampleLines = [
-  "# Context Management Policy",
-  "",
-  "**Status:** Active policy (2026-02-12)",
-  "**Scope:** How Pi for Excel builds and manages context",
-  "",
-  "---",
-  "",
-  "## Why this exists",
-  "",
-  "We optimize for **answer quality and reliability** across multi-turn sessions.",
-  "",
-  "In practice, quality drops when we blindly stuff context or let it grow unbounded.",
-  "",
-  "## Core principles",
-  "",
-  "1. **Minimal viable context** — include only what improves this turn.",
-  "2. **Freshness over volume** — recent state > historical state.",
-  "3. **Structured disclosure** — progressive detail, not a wall of text.",
-  "4. **Cache-friendly ordering** — static prefix, dynamic tail.",
-  "5. **Bounded growth** — auto-compact before hitting limits.",
-];
+**Status:** Active policy (2026-02-12)
+**Scope:** How Pi for Excel builds and manages context
 
-sampleLines.forEach((line, i) => {
-  const lineRow = document.createElement("div");
-  lineRow.className = "pi-files-detail-preview__line";
-  if (i === 0) lineRow.style.paddingTop = "8px";
-  if (i === sampleLines.length - 1) lineRow.style.paddingBottom = "8px";
+## Why this exists
 
-  const ln = document.createElement("span");
-  ln.className = "pi-files-detail-preview__ln";
-  ln.textContent = String(i + 1);
+We optimize for **answer quality and reliability** across multi-turn sessions. In practice, quality drops when we blindly stuff context or let it grow unbounded.
 
-  const code = document.createElement("span");
-  code.className = "pi-files-detail-preview__code";
-  code.textContent = line;
+## Core principles
 
-  lineRow.append(ln, code);
-  preview.appendChild(lineRow);
-});
-previewSection.appendChild(preview);
+1. **Minimal viable context** — include only what improves this turn.
+2. **Freshness over volume** — recent state > historical state.
+3. **Bounded growth** — auto-compact before hitting limits.`;
+
+const previewCaptionMd = document.createElement("div");
+previewCaptionMd.style.cssText = "font-size: 10px; color: var(--muted-foreground); margin: 0 0 4px; opacity: 0.8;";
+previewCaptionMd.textContent = "Markdown file — rendered";
+previewSection.appendChild(previewCaptionMd);
+
+const mdPreview = document.createElement("div");
+mdPreview.className = "pi-files-detail-preview pi-files-detail-preview--markdown";
+const mdPreviewBlock = document.createElement("markdown-block") as HTMLElement & { content: string };
+mdPreviewBlock.content = sampleMarkdown;
+mdPreview.appendChild(mdPreviewBlock);
+const mdFade = document.createElement("div");
+mdFade.className = "pi-files-detail-preview__fade";
+mdPreview.appendChild(mdFade);
+previewSection.appendChild(mdPreview);
+
+const previewCaptionText = document.createElement("div");
+previewCaptionText.style.cssText = "font-size: 10px; color: var(--muted-foreground); margin: 12px 0 4px; opacity: 0.8;";
+previewCaptionText.textContent = "Plain text file — wrapped, no line numbers";
+previewSection.appendChild(previewCaptionText);
+
+const textPreview = document.createElement("div");
+textPreview.className = "pi-files-detail-preview pi-files-detail-preview--text";
+const textPreviewBody = document.createElement("div");
+textPreviewBody.className = "pi-files-detail-preview__body";
+textPreviewBody.textContent = `region,quarter,revenue,cost,margin
+EMEA,Q1 2026,1204000,861000,0.285
+EMEA,Q2 2026,1287500,903200,0.298
+APAC,Q1 2026,644800,517900,0.197
+APAC,Q2 2026,701300,548100,0.218`;
+textPreview.appendChild(textPreviewBody);
+previewSection.appendChild(textPreview);
 
 /* ── 7. Action Buttons ───────────────────────────────── */
 

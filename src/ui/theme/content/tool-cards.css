@@ -43,12 +43,21 @@
 .pi-tool-group .pi-tool-card[data-state="complete"]:hover {
   border-color: transparent;
 }
+/* Grouped rows: inset 4px from the group border so the hover highlight
+   reads concentric (16px group − 4px inset = 12px row radius) and row
+   text aligns with the group-header label (4px + 8px = 12px pill x). */
 .pi-tool-group .pi-tool-card[data-state="complete"] .pi-tool-card__toggle {
-  padding: 2px 4px;
+  width: calc(100% - 8px);
+  margin: 0 4px;
+  padding: 3px 8px;
+  border-radius: var(--radius-md);
 }
-/* Grouped: inner pill needs top-margin since card chrome is stripped */
+.pi-tool-group .pi-tool-card[data-state="complete"] .pi-tool-card__toggle:hover {
+  background: var(--alpha-4);
+}
+/* Grouped: inner pill needs margins since card chrome is stripped */
 .pi-tool-group .pi-tool-card[data-state="complete"] .pi-tool-card__inner {
-  margin-top: 4px;
+  margin: 4px 8px 6px;
 }
 
 /* Header — local tool-card toggle markup */

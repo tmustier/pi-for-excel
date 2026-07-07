@@ -84,6 +84,33 @@ visibility utilities that shell components toggle.
 > - `theme/dialogs.css` (12, stable selectors)
 > - `theme/queue.css` (13)
 
+### Radius system
+
+All radii come from the token scale in `theme/tokens.css` — never hardcode.
+Tiers, by surface role:
+
+| Token | Value | Used for |
+|---|---|---|
+| `--radius-xl` | 20px | Overlay dialogs (outermost surfaces) |
+| `--pill-radius` (= `--radius-lg`) | 16px | Transcript units: standalone tool cards, tool groups, user bubble, input card |
+| `--radius-md` | 12px | Cards *inside* another surface (list cards in overlays, rows inside 16px pills) |
+| `--radius-sm` | 8px | Buttons, command blocks, small interactive chrome |
+| `--radius-xs` | 4px | Chips, badges, tiny inline elements |
+| `--radius-full` | round | Circular buttons, pill badges, toggle knobs |
+
+**Concentric rule for nesting:** when an element with a visible
+background/border sits inside a rounded parent, its radius should be
+*parent radius − inset*, clamped to the nearest token. Examples:
+
+- Grouped tool-card rows sit 4px inside a 16px group → 12px (`--radius-md`).
+- List cards sit ~8px inside a 20px dialog → 12px (`--radius-md`).
+- Matching the parent's radius on a nested element (16 inside 16) reads
+  wrong at the corners — avoid it.
+
+Standalone vs grouped tool cards intentionally share the same outer
+language: **one 16px pill per transcript unit** (a lone card or a whole
+group), with grouped rows demoted to inset 12px rows inside the pill.
+
 ### Styling message components
 
 Message components use Light DOM (`createRenderRoot() { return this; }`), so theme CSS applies directly. Conventions:
