@@ -1,6 +1,6 @@
 # UI Ownership: dropping pi-web-ui and owning the rendering layer
 
-**Status:** In progress (branch `ui-ownership`)
+**Status:** Phase 1 complete (branch `ui-ownership`); Phase 2 pending
 **Date:** 2026-07-07
 **Decision:** Own the entire UI layer first (Phase 1), then overhaul UX/visuals on the owned foundation (Phase 2).
 
@@ -140,13 +140,38 @@ Steps (each a coherent commit):
    - provider connect dialog reuses the welcome-overlay provider row, so
      OAuth logins now work from the in-flight key prompt too (upstream was
      API-key only), and no 500ms key polling loop
-7. **Drop Tailwind + package** → remove `app.css` from boot, add owned base
-   styles, delete stubs + vite plugin + aliases + `pi-ai → compat` alias,
-   remove `@earendil-works/pi-web-ui` and `@mariozechner/mini-lit` from
-   package.json, retire `unstable-overrides.css`, update lint checks and docs
-   (`src/ui/README.md`, `docs/upstream-divergences.md`, AGENTS.md pointers).
-8. **Verification** → `npm run check`, full `npm test`, `npm run build`
-   (bundle-size comparison), ui-gallery + taskpane screenshots, manual Excel
+7. **Drop Tailwind + package** ✅ → `app.css` removed from boot; first-party
+   `theme/preflight.css` replaces Tailwind's preflight (faithful reset — the
+   component CSS was written against those semantics — plus the `.hidden` /
+   `[hidden]` utilities and thin scrollbars). Deleted the six
+   `src/stubs/pi-web-ui-*` stubs + their vite plugin, the pi-web-ui dist
+   alias, and the `pi-ai → compat` root alias. Removed
+   `@earendil-works/pi-web-ui` + `@mariozechner/mini-lit` from package.json
+   (and the pi-ai `overrides` entry they required); `highlight.js` and
+   `lucide` promoted to direct deps. Retired the (already empty)
+   `unstable-overrides.css`; `check:theme-utility-overrides` now covers all
+   theme CSS with no exemption. `compat/lit-class-field-shadowing.ts`
+   deleted — it existed for pi-web-ui's tsgo-compiled dist components; our
+   own components compile with `useDefineForClassFields: false` +
+   experimental decorators, so no shadowing occurs.
+
+   Last Tailwind utilities in first-party templates converted to semantic
+   classes: tool result images (`pi-tool-images`, `pi-tool-image-frame`),
+   image path links (`pi-tool-image-link*`), message gutters
+   (`pi-message-gutter`), and — found by visual re-verification — the tool
+   card collapse mechanism, which had used `max-h-0`/`transition-all`
+   utilities as JS-toggled state. Now: templates render
+   `pi-tool-card__body--collapsed` and both toggle paths
+   (`tool-card-header.ts`, keyboard-shortcuts expand-all) flip that one
+   class. Bonus fix: the ⌃O expand-all chevron sync had been silently
+   broken (queried stale `.chevron-up`/`.chevrons-up-down` selectors from
+   the mini-lit icon era); it now targets the first-party chevron classes
+   and works. Intentional divergence: expand-all no longer adds `mt-3` to
+   card bodies, matching the click-toggle path's spacing.
+8. **Verification** → `npm run check`, full `npm test` (889 tests),
+   `npm run build` (register-components CSS 195 KB → 119 KB; chunk
+   830 KB → 526 KB vs pre-migration), ui-gallery + taskpane screenshots
+   at 360px, collapse/expand + ⌃O cycles browser-verified, manual Excel
    smoke via excel-background-verification.
 
 Known risk areas and how they are handled:
@@ -169,11 +194,9 @@ Known risk areas and how they are handled:
   prompt, tool schemas, or message conversion semantics beyond moving
   `defaultConvertToLlm` in-repo verbatim.
 
-Remaining runtime pi-web-ui surface after step 5: `app.css` (boot),
-`ModelSelector` + `ApiKeyPromptDialog` (steps 6–7). mini-lit remains only via
-the dialogs' `DialogBase` dependency chain. `pi-sidebar` still toggles the
-Tailwind `hidden` class on `<streaming-message-container>`; replace with a
-first-party class when app.css goes.
+Remaining runtime pi-web-ui surface after step 7: **none**. The packages are
+gone from `package.json`; `hidden` is now a first-party class owned by
+`theme/preflight.css`.
 
 ## 4. Phase 2 — UX/visual overhaul (follow-up on the owned foundation)
 

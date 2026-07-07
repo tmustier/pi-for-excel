@@ -11,7 +11,7 @@
  */
 
 // Boot with the same CSS + patches as the real taskpane.
-// This imports pi-web-ui/app.css, theme.css, and installs Lit/marked/theme patches.
+// This imports theme.css and installs Lit/marked/theme patches.
 import "./boot.js";
 
 // Register web components we render

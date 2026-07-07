@@ -125,14 +125,19 @@
 }
 
 /* Body — revealed on expand.
-   We keep max-h-0 collapsed and toggle .pi-tool-card__body--open in JS. */
+   Collapse state is first-party: templates render the body with
+   .pi-tool-card__body--collapsed and JS toggles that class
+   (tool-card-header.ts click toggle, keyboard-shortcuts.ts expand-all). */
 .pi-tool-card__body {
+  max-height: 2000px;
+  overflow-x: hidden;
   overflow-y: auto;
+  transition: max-height 300ms ease;
   scrollbar-width: thin;
 }
 
-.pi-tool-card__body--open {
-  max-height: 2000px;
+.pi-tool-card__body--collapsed {
+  max-height: 0;
 }
 /* Inner pill — white content area nested inside green/white outer pill */
 .pi-tool-card__inner {
@@ -265,3 +270,46 @@
   font-size: var(--text-xs);
 }
 
+
+/* ── Tool result images (charts, screenshots) ── */
+
+.pi-tool-images {
+  margin-top: 8px;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+.pi-tool-image-frame {
+  margin-top: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--background);
+}
+
+.pi-tool-images .pi-tool-image-frame {
+  margin-top: 0;
+}
+
+.pi-tool-image {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.pi-tool-image-link {
+  font-size: var(--text-sm);
+}
+
+.pi-tool-image-link__anchor {
+  text-decoration: underline;
+}
+
+.pi-tool-image-link__path {
+  margin-top: 4px;
+  font-size: var(--text-xs);
+  font-family: var(--font-mono);
+  color: var(--muted-foreground);
+  word-break: break-all;
+}

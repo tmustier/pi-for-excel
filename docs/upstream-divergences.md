@@ -155,13 +155,13 @@ worst-case tool-loop context proportional to the model's actual capacity (#566).
 
 **Rationale:** pi-ai 0.80 removed the global registry/dispatch API from the
 root entrypoint and provides a temporary `/compat` entrypoint that preserves
-it. `pi-web-ui` 0.75.x still imports the old root surface, so a full migration
-to `createModels()` is blocked until pi-web-ui ships a 0.80-native release.
+it. First-party code still uses the legacy surface; migrating to
+`createModels()` is now purely an internal refactor (the old blocker —
+pi-web-ui importing the root surface — was removed with pi-web-ui itself on
+2026-07-07, along with the Vite exact-match root→compat alias).
 
 Interim wiring:
 - All first-party imports use `@earendil-works/pi-ai/compat` explicitly.
-- A Vite exact-match alias (`/^@earendil-works\/pi-ai$/` → `…/compat`)
-  covers pi-web-ui's dist modules so the bundle resolves one shared module.
 - The Bedrock browser stub now exports the uniform `ProviderStreams` shape
   (`stream`/`streamSimple`) required by `setBedrockProviderModule()`.
 - The 0.79-era `stubBedrockProviderPlugin` / `stubPiAiOAuthIndexPlugin` Vite
@@ -170,14 +170,13 @@ Interim wiring:
   OAuth index from its root, so both plugins were dead code whose resolved-id
   fallbacks had become mis-fire hazards against 0.80's changed layout.
 
-**Exit plan:** when pi-web-ui supports pi-ai 0.80 natively, migrate first-party
-code to `createModels()`/`getBuiltinModel(s)`, drop the alias, and remove this
-entry. Upstream deletes `/compat` “with the coding-agent ModelManager
-migration”, so this must happen before picking up that release.
+**Exit plan:** migrate first-party code to
+`createModels()`/`getBuiltinModel(s)` and remove this entry. Upstream deletes
+`/compat` “with the coding-agent ModelManager migration”, so this must happen
+before picking up that release.
 
-**Files:** `vite.config.ts` (`buildBrowserAliases`), all `src`/`tests` imports
-of `@earendil-works/pi-ai/compat`, `src/stubs/amazon-bedrock.ts`,
-`src/compat/bedrock-provider-stub.ts`
+**Files:** all `src`/`tests` imports of `@earendil-works/pi-ai/compat`,
+`src/stubs/amazon-bedrock.ts`, `src/compat/bedrock-provider-stub.ts`
 
 ---
 
@@ -188,9 +187,8 @@ layer (`src/language/`) with an AI-generated Simplified Chinese locale
 (issue #608, derived from community PR #554).
 
 **Scope limits:**
-- Only in-repo UI chrome is localized. Strings rendered by `pi-web-ui`
-  internals (e.g. parts of message rendering and shared dialogs) remain
-  English until upstream exposes an override path.
+- All UI strings are in-repo now (the UI layer is fully first-party), so any
+  user-visible string can and should go through `t()`.
 - Agent-facing strings (system prompt, tool names/descriptions/schemas,
   context injection, compaction prompts) are deliberately **not** localized —
   prompt-cache prefix stability and model behavior stay language-independent.
@@ -200,6 +198,27 @@ placeholder validity, no dead keys, no unknown keys, and no module-scope
 `t()` calls. New UI strings must be added to both locale files.
 
 **Files:** `src/language/`, `tests/i18n-locales.test.ts`
+
+---
+
+## 8. First-party UI layer (pi-web-ui removed)
+
+| | pi-mono direction | Pi for Excel (current) |
+|---|---|---|
+| Web UI | `@earendil-works/pi-web-ui` (unmaintained since 0.75.3) + mini-lit + Tailwind v4 | Fully first-party Lit components, semantic CSS, owned preflight |
+
+**Rationale:** upstream stopped publishing `pi-web-ui` after 0.75.3 while
+`pi-ai`/`pi-agent-core` kept moving. Rather than pin a dead UI dependency, the
+message rendering, dialogs, storage layer, and CSS were clean-roomed in-repo
+(2026-07). IndexedDB schema and session compatibility were preserved.
+
+**Status:** complete — `@earendil-works/pi-web-ui`, `@mariozechner/mini-lit`,
+Tailwind, and KaTeX are no longer dependencies. `highlight.js` and `lucide`
+became direct dependencies. See `docs/ui-ownership.md` for the full migration
+record.
+
+**Files:** `src/ui/messages/`, `src/ui/model-selector-dialog.ts`,
+`src/ui/api-key-dialog.ts`, `src/storage/local/`, `src/ui/theme/preflight.css`
 
 ---
 

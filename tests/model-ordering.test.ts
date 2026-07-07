@@ -495,10 +495,10 @@ void test("vite aliases Ajv packages to local stubs for CSP-safe Office builds",
     -1,
     "expected resolve.alias to use centralized browser alias helper",
   );
-  assert.notEqual(
-    content.indexOf('{ find: /^@earendil-works\\/pi-ai$/, replacement: "@earendil-works/pi-ai/compat" }'),
+  assert.equal(
+    content.indexOf("pi-web-ui"),
     -1,
-    "expected exact-match pi-ai \u2192 compat alias for pi-web-ui's legacy root imports",
+    "expected no pi-web-ui aliases/stubs to remain in vite.config (UI is first-party)",
   );
 });
 

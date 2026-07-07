@@ -221,12 +221,12 @@ function renderImages(images: ImageContent[]): TemplateResult {
   if (!images.length) return html``;
 
   return html`
-    <div class="mt-2 grid grid-cols-1 gap-2">
+    <div class="pi-tool-images">
       ${images.map((img) => {
         const src = `data:${img.mimeType};base64,${img.data}`;
         return html`
-          <div class="border border-border rounded-lg overflow-hidden bg-background">
-            <img src=${src} alt="Tool result image" class="block w-full h-auto" />
+          <div class="pi-tool-image-frame">
+            <img src=${src} alt="Tool result image" class="pi-tool-image" />
           </div>
         `;
       })}
@@ -305,8 +305,8 @@ function renderChartImageDetails(details: DynamicValue, hasImageContent: boolean
   const alt = details.name ? `Chart ${details.name}` : "Chart image";
 
   return html`
-    <div class="mt-2 border border-border rounded-lg overflow-hidden bg-background">
-      <img src=${src} alt=${alt} class="block w-full h-auto" />
+    <div class="pi-tool-image-frame">
+      <img src=${src} alt=${alt} class="pi-tool-image" />
     </div>
   `;
 }
@@ -1200,7 +1200,7 @@ function createExcelMarkdownRenderer(toolName: SupportedToolName): ToolRenderer<
                 ${renderCollapsibleToolCardHeader(state, title, contentRef, chevronRef, defaultExpanded)}
               </div>
               <div ${ref(contentRef)}
-                class="pi-tool-card__body overflow-hidden transition-all duration-300 max-h-0"
+                class="pi-tool-card__body pi-tool-card__body--collapsed"
               >
                 <div class="pi-tool-card__inner">
                   <div class="pi-tool-card__detail">
@@ -1224,14 +1224,14 @@ function createExcelMarkdownRenderer(toolName: SupportedToolName): ToolRenderer<
                       ? html`<div class="pi-tool-card__plain-text pi-tool-card__echo-result">✓ Done</div>`
                       : standaloneImagePath
                       ? html`
-                        <div class="text-sm">
+                        <div class="pi-tool-image-link">
                           <div>Image:
                             <a href=${toFileUrl(standaloneImagePath)} target="_blank"
-                              rel="noopener noreferrer" class="underline">
+                              rel="noopener noreferrer" class="pi-tool-image-link__anchor">
                               ${pathBasename(standaloneImagePath)}
                             </a>
                           </div>
-                          <div class="mt-1 text-xs font-mono text-muted-foreground break-all">
+                          <div class="pi-tool-image-link__path">
                             ${standaloneImagePath}
                           </div>
                         </div>
@@ -1265,7 +1265,7 @@ function createExcelMarkdownRenderer(toolName: SupportedToolName): ToolRenderer<
                 ${renderCollapsibleToolCardHeader(state, title, contentRef, chevronRef, defaultExpanded)}
               </div>
               <div ${ref(contentRef)}
-                class="pi-tool-card__body overflow-hidden transition-all duration-300 max-h-0"
+                class="pi-tool-card__body pi-tool-card__body--collapsed"
               >
                 <div class="pi-tool-card__inner">
                   <div class="pi-tool-card__detail">

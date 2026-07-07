@@ -4,11 +4,9 @@
  * Designed to sit alongside a white Excel sheet in a narrow sidebar.
  * Warm off-white background with teal-green accent.
  *
- * Overrides pi-web-ui's CSS variables and refines component styles.
- * Imported AFTER pi-web-ui/app.css in boot.ts.
- *
- * This file is kept intentionally small; the actual styles live in
- * src/ui/theme/*.css and are imported in order below.
+ * Fully first-party: tokens, preflight reset, components, and content
+ * styles. This file is kept intentionally small; the actual styles live
+ * in src/ui/theme/*.css and are imported in order below.
  */
 
 /* ── Google Fonts ─────────────────────────────────────────── */
@@ -16,10 +14,10 @@
 
 /* Theme partials (loaded in order) */
 @import "./theme/tokens.css";
+@import "./theme/preflight.css";
 @import "./theme/base.css";
 @import "./theme/components.css";
 @import "./theme/overlays.css";
 @import "./theme/content-overrides.css";
 @import "./theme/dialogs.css";
-@import "./theme/unstable-overrides.css";
 @import "./theme/queue.css";

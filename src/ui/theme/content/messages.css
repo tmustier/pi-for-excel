@@ -149,3 +149,9 @@ markdown-block h5:first-child,
 markdown-block h6:first-child {
   margin-top: 0;
 }
+
+/* Horizontal gutter for custom message renderers (archived/compact cards,
+   sidebar-rendered rows). Replaces the old Tailwind px-4. */
+.pi-message-gutter {
+  padding-inline: 16px;
+}

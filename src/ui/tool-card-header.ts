@@ -29,17 +29,9 @@ function toggleContent(
   const chevron = chevronRef.value;
   if (!content || !chevron) return;
 
-  const isCollapsed = content.classList.contains("max-h-0");
-  if (isCollapsed) {
-    content.classList.remove("max-h-0");
-    content.classList.add("pi-tool-card__body--open");
-    setChevronState(chevron, true);
-    return;
-  }
-
-  content.classList.remove("pi-tool-card__body--open");
-  content.classList.add("max-h-0");
-  setChevronState(chevron, false);
+  const isCollapsed = content.classList.contains("pi-tool-card__body--collapsed");
+  content.classList.toggle("pi-tool-card__body--collapsed", !isCollapsed);
+  setChevronState(chevron, isCollapsed);
 }
 
 function renderStreamingSpinner(state: ToolHeaderState): TemplateResult {

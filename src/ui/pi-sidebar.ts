@@ -1056,7 +1056,7 @@ export class PiSidebar extends LitElement {
       ].join("\n");
 
       return html`
-        <div class="px-4">
+        <div class="pi-message-gutter">
           <div class="pi-context-pill">
             <button
               type="button"
@@ -1143,7 +1143,7 @@ export class PiSidebar extends LitElement {
     const phaseLabel = latestSnapshot.isToolContinuation ? ` · ${t("sidebar.context_pill.continuation")}` : ` · ${t("sidebar.context_pill.first")}`;
 
     return html`
-      <div class="px-4">
+      <div class="pi-message-gutter">
         <div class="pi-context-pill">
           <button
             type="button"

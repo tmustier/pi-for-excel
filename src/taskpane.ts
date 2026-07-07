@@ -4,14 +4,14 @@
  * Keep this file as thin as possible.
  *
  * MUST import `./boot.js` first:
- * - installs Lit compat patch
- * - ensures CSS ordering (theme.css loaded after pi-web-ui/app.css)
+ * - loads the first-party theme CSS
+ * - installs compat patches (marked safety, theme mode, …)
  */
 
 // MUST be first
 import "./boot.js";
 
-// Register third-party web components we rely on.
+// Register first-party web components we rely on.
 import "./ui/register-components.js";
 
 // Custom tool + message renderers (Excel tools return markdown)

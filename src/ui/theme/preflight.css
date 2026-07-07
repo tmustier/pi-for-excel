@@ -1,0 +1,136 @@
+/* ═══════════════════════════════════════════════════════
+   0. PREFLIGHT — first-party base reset
+   Replaces Tailwind v4's preflight (dropped with pi-web-ui/app.css).
+   The component CSS in this theme was written against these resets;
+   keep them faithful to Tailwind preflight semantics.
+   ═══════════════════════════════════════════════════════ */
+
+*,
+::before,
+::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  border: 0 solid var(--border);
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  tab-size: 4;
+  line-height: 1.5;
+}
+
+body {
+  min-height: 100%;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-size: inherit;
+  font-weight: inherit;
+}
+
+a {
+  color: inherit;
+  text-decoration: inherit;
+}
+
+b,
+strong {
+  font-weight: bolder;
+}
+
+code,
+kbd,
+samp,
+pre {
+  font-family: var(--font-mono);
+  font-size: 1em;
+}
+
+small {
+  font-size: 80%;
+}
+
+table {
+  text-indent: 0;
+  border-color: inherit;
+  border-collapse: collapse;
+}
+
+ol,
+ul {
+  list-style: none;
+}
+
+img,
+svg,
+video,
+canvas,
+audio,
+iframe,
+embed,
+object {
+  display: block;
+  vertical-align: middle;
+}
+
+img,
+video {
+  max-width: 100%;
+  height: auto;
+}
+
+button,
+input,
+optgroup,
+select,
+textarea {
+  font: inherit;
+  font-feature-settings: inherit;
+  font-variation-settings: inherit;
+  letter-spacing: inherit;
+  color: inherit;
+  background: transparent;
+  border-radius: 0;
+}
+
+button,
+[role="button"] {
+  cursor: pointer;
+}
+
+:disabled {
+  cursor: default;
+}
+
+::placeholder {
+  opacity: 1;
+  color: color-mix(in oklab, currentColor 50%, transparent);
+}
+
+textarea {
+  resize: vertical;
+}
+
+/* Thin, quiet scrollbars everywhere (Firefox + spec-compliant engines).
+   WebKit fallbacks live in base.css. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--alpha-12) transparent;
+}
+
+/* Visibility utility used by pi-sidebar / keyboard-shortcuts / tool cards. */
+[hidden] {
+  display: none !important;
+}
+
+.hidden {
+  display: none !important;
+}
