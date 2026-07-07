@@ -101,9 +101,11 @@ valuable design input — for this redesign or the next one.
    noun-tool with an `action` param (`charts`, `comments`, `tables`, `pivots`,
    `names`, `sheets`). No more junk drawers: if an action does not belong to the
    tool's noun, it goes elsewhere.
-2. **Cover the frequent 95% with structured tools; instrument the tail.** Every
-   `execute_office_js` call is a datapoint about a missing tool. Log it (locally),
-   categorize it, and let that drive the next tool — evidence instead of taste.
+2. **Cover the frequent 95% with structured tools; measure the tail with evals.**
+   Telemetry is explicitly off the table (product decision). The evidence loop is
+   an eval suite (see `agent-evals.md`): task success rate, escape-hatch rate,
+   and tool-error rate per model tell us which structured tool to build next —
+   evidence instead of taste.
 3. **Semantic addressing everywhere.** Every range-accepting param takes
    A1 (`Sheet1!A1:D10`), a named range (`Revenue`), a structured table reference
    (`Table1[Revenue]`, `Table1[#Headers]`), or `selection`. One shared resolver;
@@ -170,10 +172,12 @@ names have ET JSAPI equivalents and can join the supported WPS slice later.
    future sandboxed runner share it.
 2. **Mutation receipt contract** — document the required receipt shape in
    `DECISIONS.md`; add a shared helper/type so new tools cannot drift.
-3. **Local usage instrumentation** — per-tool call counts, error rates, and an
-   `execute_office_js` reason log (explanation text + coarse category), persisted
-   in `SettingsStore`, exportable via `/export usage`. Local-only, no network.
-   This is the evidence loop for the next iteration.
+3. **Eval suite as the evidence loop** — no telemetry will be added. Instead, a
+   task-based eval harness (companion doc:
+   [`agent-evals.md`](./agent-evals.md)) baselines the current surface and
+   re-measures after each phase: task success, escape-hatch usage, tool-error
+   rate, call/token efficiency, across a model matrix (frontier + small
+   OpenAI-compatible models).
 4. **Delete dead disclosure machinery** — remove the inert bundle/trigger code in
    `tool-disclosure.ts` / `capabilities.ts` (keep `buildCoreToolPromptLines` and
    the UI metadata). Less code lying about how the system works.
@@ -188,8 +192,9 @@ release. Per-tool checklist from `AGENTS.md` applies every time: `registry.ts`,
 `system-prompt.ts`, i18n keys, execution policy, backup/recovery coverage,
 `DECISIONS.md`, tests.
 
-- **Phase 0 — foundations (no behavior change):** instrumentation (§5.3), dead
-  code removal (§5.4), receipt contract (§5.2), this doc merged.
+- **Phase 0 — foundations (no behavior change):** eval harness MVP + baseline
+  run on the current surface (§5.3, `agent-evals.md`), dead code removal (§5.4),
+  receipt contract (§5.2), this doc merged.
 - **Phase 1 — highest-demand gaps:** `tables`, `names`, `search_workbook`
   replace. Tables is the marquee win and directly informs the `WorkbookAPI`
   shape. Additive → low risk, one cache-prefix bump per release.
@@ -225,6 +230,19 @@ release. Per-tool checklist from `AGENTS.md` applies every time: `registry.ts`,
   granularity incoherence and pays the migration cost later anyway.
 - **Reviving intent-routed disclosure bundles:** conflicts with the cache-first
   policy that deliberately won (#424); revisit only if token budget demands it.
+- **Claude-for-Excel-style minimal tools + guided codemode** (see §10
+  competitive appendix): Anthropic ships essentially *read range / read CSV /
+  write range / `execute_office_js`* and compensates with ~10k tokens of
+  workflow + Office.js recipe guidance in the system prompt. Rejected as our
+  *sole* strategy: it presumes a frontier coding model (we support arbitrary
+  providers, including small gateway models — #603), leaves scripted mutations
+  without checkpoint/rollback/audit (their docs confirm no audit trail; we treat
+  recovery as a core feature), and is not portable to WPS where Office.js does
+  not exist and the structured tool layer is our portability seam. Partially
+  adopted instead: keep noun-tool schemas tight rather than maximal, raise the
+  priority of #605 (guided, sandboxed codemode is clearly load-bearing at the
+  frontier), and invest in prompt-level workflow guidance, which is cheap and
+  model-agnostic.
 
 ## 9. Open questions
 
@@ -236,6 +254,9 @@ release. Per-tool checklist from `AGENTS.md` applies every time: `registry.ts`,
 3. #19 — native Excel Style API vs our style system: decide before `tables`
    `set_style` lands to avoid two style vocabularies.
 4. Pivot scope on hosts without full 1.12 API: create-only vs fail-fast matrix.
+5. Should `write_cells` gain a generalized `copy_to_range` param (write pattern
+   once, replicate with `$`-lock semantics) à la Claude for Excel's
+   `set_cell_range`? Overlaps with `fill_formula` — decide together with Q2.
 
 ## 10. Evidence appendix
 
@@ -251,3 +272,52 @@ release. Per-tool checklist from `AGENTS.md` applies every time: `registry.ts`,
 - **#376 / #489:** schema-semantics friction (border value normalization,
   `freeze_at` API mismatch) — examples of why host-side normalization and
   semantic addressing beat model-side literalism.
+
+### Competitive appendix (2026-07-07)
+
+**Claude for Excel** (from its leaked system prompt, dated 2026-04-24 —
+`github.com/asgeirtj/system_prompts_leaks`, `Anthropic/claude-for-excel.md` —
+cross-checked against Anthropic's support docs):
+
+- **Tool surface is minimal:** `get_cell_ranges`, `get_range_as_csv`,
+  `set_cell_range` (overwrite protection with the *same* try-without /
+  read-conflicts / confirm / retry flow we use; `copyToRange` replication
+  param; auto-returned `formula_results`), and `execute_office_js` for
+  *everything else* — charts, pivots, sheet lifecycle, row/col structure,
+  clearing, conditional formatting, sort/filter, data validation, print prep.
+  Plus: Python `code_execution` container, `web_search`/`web_fetch`,
+  `ask_user_question`, `context_snip`/`retrieve_snipped` (agent-driven context
+  compression), `send_message` (Word/PowerPoint peer agents), `read_skill`
+  (finance skills: `audit-xls`, `dcf-model`, `lbo-model`, `3-statement-model`,
+  `clean-data-xls`, `comps-analysis`), `update_instructions`.
+- **The prompt does the heavy lifting:** interaction protocol (clarify → plan →
+  check-ins → final review → reporting discipline, "tool success ≠ task
+  correct"), finance formatting conventions (blue inputs / black formulas /
+  green cross-sheet links — near-identical to ours), verification gotchas
+  (inserts don't expand ranges, formatting inheritance), chart-source layout
+  recipes, and inline Office.js recipes (calc-suspend batching, pivot
+  delete+recreate because pivot source is immutable).
+- **Convergent with us already:** overwrite protection flow, formulas-not-values
+  doctrine, skills for domain knowledge, instructions management, clickable cell
+  citations, conventions (ours are workbook-scoped and user-editable — arguably
+  stronger).
+- **What they accept that we shouldn't:** no checkpoint/rollback/audit on the
+  scripted path (support docs confirm: no observability/audit, chat history not
+  persisted, silent compaction); frontier-Claude-only; Office.js-only.
+- **Worth stealing:** `copyToRange` generalization (§9 Q5), richer workflow
+  guidance in the system prompt, a finance skills pack, structured
+  `ask_user_question`. Their session-log-to-a-sheet feature is a UX idea our
+  workbook_history already exceeds.
+
+**ChatGPT for Excel** (OpenAI): sidebar add-in for Excel + Google Sheets;
+public docs reveal little tool structure beyond requiring MCP apps to be
+annotated read-only/non-destructive. **Copilot in Excel** (Microsoft): "editing
+with Copilot" applies Excel-native features (tables, charts, pivots, formulas);
+no public tool API detail. Neither offers a teardown-grade signal today;
+Claude for Excel is the informative comparator.
+
+**Independent review** (Quadratic research, competitor-authored, early 2026):
+confirms CfE ships sort/filter, pivot *editing*, conditional formatting, data
+validation, and print prep — matching our §2.2 gap list almost item for item —
+and flags its lack of persistence/auditability as its main structural weakness
+(both areas where we are already ahead).

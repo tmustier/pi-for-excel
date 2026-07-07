@@ -21,6 +21,7 @@ This folder contains **current** docs that should match shipped behavior.
 
 ## Proposals
 - [Agent tool interface redesign](./proposals/agent-tool-interface-redesign.md)
+- [Agent eval harness](./proposals/agent-evals.md)
 
 ## Architecture & policy
 - [Coding standards for agents](./coding-standards.md)
