@@ -1,4 +1,4 @@
-import { icon } from "@mariozechner/mini-lit";
+import { icon } from "./icons.js";
 import { html, type TemplateResult } from "lit";
 import { ref } from "lit/directives/ref.js";
 import { ChevronUp, ChevronsUpDown, Loader } from "lucide";

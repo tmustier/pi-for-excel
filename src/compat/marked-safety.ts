@@ -1,15 +1,18 @@
 /**
  * Marked/Markdown safety hardening.
  *
- * pi-web-ui uses <markdown-block> (from @mariozechner/mini-lit), which:
+ * Our first-party <markdown-block> (src/ui/messages/markdown-block.ts):
  * - parses markdown via `marked`
  * - renders HTML via Lit's `unsafeHTML`
  * - escapes raw HTML tags in the input (good)
  *
- * Remaining risks we harden here:
+ * Remaining risks we harden here, at the `marked` prototype level so every
+ * renderer instance (ours or any third-party module using `marked`) inherits
+ * them:
  * - `javascript:` / `data:` links in markdown
  * - automatic network requests via markdown images: ![alt](https://...)
- * - `$...$` KaTeX collisions with currency prose in thinking/tool output
+ * - math/KaTeX extensions registered via marked.use() (currency `$`
+ *   collisions; our own markdown-block registers none, this guards others)
  *
  * We patch marked once at boot.
  */

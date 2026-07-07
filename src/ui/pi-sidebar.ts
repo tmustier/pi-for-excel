@@ -7,16 +7,15 @@
  */
 
 import { html, LitElement, nothing, type PropertyValues } from "lit";
-import { icon } from "@mariozechner/mini-lit";
+import { icon } from "./icons.js";
 import { customElement, property, query, state } from "lit/decorators.js";
 import type { Agent, AgentEvent } from "@earendil-works/pi-agent-core";
 import type { ToolResultMessage } from "@earendil-works/pi-ai/compat";
-import type { StreamingMessageContainer } from "@earendil-works/pi-web-ui/dist/components/StreamingMessageContainer.js";
+import type { StreamingMessageContainer } from "./messages/streaming-message-container.js";
 import { Archive, ChevronRight, FileText, Keyboard, Puzzle, RotateCcw, Ruler, Settings, Wrench } from "lucide";
 import "./pi-input.js";
 import "./working-indicator.js";
 import { initToolGrouping } from "./tool-grouping.js";
-import { applyMessageStyleHooks } from "./message-style-hooks.js";
 import type { PiInput } from "./pi-input.js";
 import { isDebugEnabled, formatK } from "../debug/debug.js";
 import {
@@ -375,8 +374,6 @@ export class PiSidebar extends LitElement {
 
     const inner = this.querySelector<HTMLElement>(".pi-messages__inner");
     if (!inner) return;
-
-    applyMessageStyleHooks(inner);
 
     if (this._groupingRoot === inner) return;
 

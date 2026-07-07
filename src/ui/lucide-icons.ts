@@ -7,7 +7,7 @@
  * to duplicate imports.
  */
 
-import { iconDOM } from "@mariozechner/mini-lit";
+import { iconDOM } from "./icons.js";
 import type { IconNode } from "lucide";
 import {
   AlertTriangle,

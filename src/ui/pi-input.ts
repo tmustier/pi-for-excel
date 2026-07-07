@@ -12,7 +12,7 @@
  */
 
 import { html, LitElement } from "lit";
-import { icon } from "@mariozechner/mini-lit";
+import { icon } from "./icons.js";
 import { customElement, property, state, query } from "lit/decorators.js";
 import { FileText } from "lucide";
 

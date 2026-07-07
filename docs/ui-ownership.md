@@ -87,22 +87,41 @@ bundle. `pi-agent-core` / `pi-ai` remain as the maintained runtime deps.
 
 Steps (each a coherent commit):
 
-1. **Findings/plan doc** (this file).
+1. **Findings/plan doc** (this file). ✅
 2. **Vendor storage** → `src/storage/local/` (port of app-storage, store,
    types, IndexedDB backend, and the four stores; MIT-attributed). Rewire all
-   imports. API-identical to minimize churn.
+   imports. API-identical to minimize churn. ✅
 3. **Own icon helper** → replace mini-lit `icon`/`iconDOM` with a small local
-   lucide wrapper.
-4. **Own markdown/code rendering** → `<pi-markdown>` / `<pi-code-block>`
+   lucide wrapper (`src/ui/icons.ts`). ✅
+4. **Own markdown/code rendering** ✅ → first-party `<markdown-block>` /
+   `<code-block>` (same tag names for CSS stability) in `src/ui/messages/`,
    using our existing `marked` + `installMarkedSafetyPatch()` pipeline,
-   styled with first-party semantic CSS (no Tailwind classes).
-5. **Clean-room message layer** → `src/ui/messages/`: `MessageList`,
-   `StreamingMessageContainer`, `UserMessage`, `AssistantMessage`,
-   `ToolMessage`, `AbortedMessage`, `AttachmentTile`, renderer registries,
-   and a local `convertToLlm` default (attachment/artifact filtering logic
-   currently imported from `Messages.js`). Fold the style-hook semantics
-   directly into templates; delete `message-style-hooks.ts` and rewrite the
-   3 utility-class-using files to semantic classes.
+   styled with first-party semantic CSS (no Tailwind classes). KaTeX/math
+   dropped entirely (was already disabled by policy) — removes katex from
+   the bundle. Fenced code travels base64 (`encoding="base64"`) through the
+   HTML attribute boundary.
+5. **Clean-room message layer** ✅ → `src/ui/messages/`: `message-list`,
+   `streaming-message-container`, `user-message`, `assistant-message`,
+   `tool-message`, `thinking-block`, `attachment-tile`, both renderer
+   registries, and a local standard `convertToLlm` conversion
+   (`src/messages/attachments.ts` owns the attachment/artifact roles +
+   `CustomAgentMessages` augmentation). Style-hook semantics folded directly
+   into templates; `message-style-hooks.ts` deleted. `thinking-duration.ts`
+   compat patch deleted — the label lifecycle ("Thinking…" → "Thought for
+   Xs") now lives inside `<thinking-block>`.
+
+   Intentional divergences from upstream while porting:
+   - usage/cost row not rendered (theme always hid it; status bar covers it)
+   - `AbortedMessage`/`ToolMessageDebugView`/`setShowJsonMode` not ported
+     (no call sites)
+   - `markdown-content` class dropped — fixes a live bug where app.css's
+     higher-specificity `.markdown-content h2` resolved `var(--text-xl)`
+     (40px in our tokens) and blew up headings in messages
+   - inline-code styling scoped to `code:not(.hljs)` so it can't leak into
+     highlighted blocks
+   - first-party hljs color theme + shimmer keyframes added to
+     `theme/content/message-components.css` so both survive the later
+     app.css removal
 6. **Own dialogs** → local model selector + API key prompt; delete
    `compat/model-selector-patch.ts`; fold `dialog-style-hooks.ts` semantics
    into the components.
@@ -134,6 +153,12 @@ Known risk areas and how they are handled:
 - **Prompt caching** — this migration is UI-only; no changes to system
   prompt, tool schemas, or message conversion semantics beyond moving
   `defaultConvertToLlm` in-repo verbatim.
+
+Remaining runtime pi-web-ui surface after step 5: `app.css` (boot),
+`ModelSelector` + `ApiKeyPromptDialog` (steps 6–7). mini-lit remains only via
+the dialogs' `DialogBase` dependency chain. `pi-sidebar` still toggles the
+Tailwind `hidden` class on `<streaming-message-container>`; replace with a
+first-party class when app.css goes.
 
 ## 4. Phase 2 — UX/visual overhaul (follow-up on the owned foundation)
 

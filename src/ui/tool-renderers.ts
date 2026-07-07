@@ -6,8 +6,8 @@
  */
 
 import type { ImageContent, TextContent, ToolResultMessage } from "@earendil-works/pi-ai/compat";
-import { registerToolRenderer } from "@earendil-works/pi-web-ui/dist/tools/renderer-registry.js";
-import type { ToolRenderer, ToolRenderResult } from "@earendil-works/pi-web-ui/dist/tools/types.js";
+import { registerToolRenderer } from "./messages/tool-renderer-registry.js";
+import type { ToolRenderer, ToolRenderResult } from "./messages/tool-renderer-registry.js";
 import { t } from "../language/index.js";
 import { html, type TemplateResult } from "lit";
 import { createRef, ref } from "lit/directives/ref.js";
@@ -54,7 +54,8 @@ import { renderCsvTable } from "./render-csv-table.js";
 import { renderDepTree } from "./render-dep-tree.js";
 
 // Ensure <markdown-block> custom element is registered before we render it.
-import "@mariozechner/mini-lit/dist/MarkdownBlock.js";
+import "./messages/markdown-block.js";
+import "./messages/code-block.js";
 
 type ToolState = "inprogress" | "complete" | "error";
 type SupportedToolName = UiToolName;

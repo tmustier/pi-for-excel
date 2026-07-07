@@ -7,15 +7,16 @@
 
 import { html } from "lit";
 import { createRef, ref } from "lit/directives/ref.js";
-import { registerMessageRenderer } from "@earendil-works/pi-web-ui/dist/components/message-renderer-registry.js";
+import { registerMessageRenderer } from "./messages/message-renderer-registry.js";
 import { renderCollapsibleToolCardHeader } from "./tool-card-header.js";
 import { t } from "../language/index.js";
 
 import { formatCompactionSummaryExtent, type CompactionSummaryMessage } from "../messages/compaction.js";
 import type { ArchivedMessagesMessage } from "../messages/archived-history.js";
 
-// Ensure <markdown-block> is registered.
-import "@mariozechner/mini-lit/dist/MarkdownBlock.js";
+// Ensure <markdown-block> and <message-list> are registered.
+import "./messages/markdown-block.js";
+import "./messages/message-list.js";
 
 const EMPTY_PENDING_TOOL_CALLS = new Set<string>();
 
