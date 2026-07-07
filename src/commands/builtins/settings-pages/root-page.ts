@@ -3,7 +3,7 @@
  * behavior settings (execution mode, model-switch fork, language).
  */
 
-import { getAppStorage } from "@earendil-works/pi-web-ui/dist/storage/app-storage.js";
+import { getAppStorage } from "../../../storage/local/app-storage.js";
 
 import { listOpenAiGatewayConfigs } from "../../../auth/custom-gateways.js";
 import { PI_EXECUTION_MODE_CHANGED_EVENT, type ExecutionMode } from "../../../execution/mode.js";

@@ -6,7 +6,7 @@
  * handling and live-refresh subscriptions scoped to the page lifecycle.
  */
 
-import { getAppStorage } from "@earendil-works/pi-web-ui/dist/storage/app-storage.js";
+import { getAppStorage } from "../../../storage/local/app-storage.js";
 
 import { dispatchIntegrationsChanged } from "../../../integrations/events.js";
 import { t } from "../../../language/index.js";

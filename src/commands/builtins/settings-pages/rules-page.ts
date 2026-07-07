@@ -4,7 +4,7 @@
  * unsaved-changes guard on navigation.
  */
 
-import { getAppStorage } from "../../storage/local/app-storage.js";
+import { getAppStorage } from "../../../storage/local/app-storage.js";
 
 import {
   getUserRules,

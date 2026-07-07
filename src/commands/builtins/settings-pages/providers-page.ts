@@ -2,7 +2,7 @@
  * Model providers page — connect/disconnect provider logins.
  */
 
-import { getAppStorage } from "@earendil-works/pi-web-ui/dist/storage/app-storage.js";
+import { getAppStorage } from "../../../storage/local/app-storage.js";
 
 import { t } from "../../../language/index.js";
 import { VISIBLE_PROVIDERS, buildProviderRow } from "../../../ui/provider-login.js";
