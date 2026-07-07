@@ -100,6 +100,24 @@ budget: { max_tool_calls: 8 }
 today — they exist to baseline the before-picture and measure each redesign
 phase's lift.
 
+### Corpus-derived realistic tasks (v1+)
+
+Beyond the synthetic v0 set, a locally held private corpus of real
+finance/statistics coursework and training models (inventoried 2026-07-07;
+kept out of this repo) supplies realistic seeds: modeling-test workbooks with
+built-in prompt/blank-response/solution tabs, guided exercises with hidden
+expert-solution tabs, case prompts paired with completed multi-thousand-formula
+models, and scenario-switch models. These yield high-value task families the
+synthetic set can't fake: complete-the-partial-model, assumption-edit →
+report (MOIC/IRR-style crisp numeric grading), scenario switching, dependency
+tracing in large real workbooks, and a statistics formula family
+(distributions, likelihoods) distinct from finance models. Fixture prep rules:
+strip all solution tabs/answer workbooks from what the agent sees (hidden ≠
+inaccessible — agents can unhide), convert legacy `.xls` copies to `.xlsx`,
+freeze volatile functions (`RAND()`), and keep identifying/licensed content
+out of the repo — corpus-derived fixtures stay local or are anonymized before
+committing.
+
 ## 4. Runner: thin glue over the existing bridge
 
 Per task: **reset → seed → `submitPrompt` → read state → grade → report**
