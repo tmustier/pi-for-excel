@@ -347,4 +347,213 @@ So for Year 7 (column I, calendar year 2031): 2031 – 2025 + 1 = 7 ✓`;
 
 mdSection.appendChild(mdBlock);
 
+/* ── 10. Activity Block (Phase 2 proposal — mockup only) ─ */
+// Condenses a run of tool calls between assistant messages into one
+// collapsible block. Proposal CSS lives in this <style> tag until the
+// direction is approved; it is NOT shipped in the taskpane bundle.
+
+const activitySection = section("activity-block", "Activity Block (Phase 2 proposal)");
+
+const activityStyles = document.createElement("style");
+activityStyles.textContent = `
+  /* Proposal: pi-activity — condensed tool-run block (mockup only) */
+  .pi-activity {
+    border: var(--pill-green-border);
+    background: var(--pill-green-bg);
+    border-radius: var(--pill-radius);
+    box-shadow: var(--pill-shadow);
+    overflow: hidden;
+    margin-bottom: 12px;
+  }
+  .pi-activity--working {
+    border: var(--pill-border);
+    background: var(--pill-bg);
+  }
+  .pi-activity__header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: var(--pill-padding-y) var(--pill-padding-x);
+    border: none;
+    background: none;
+    cursor: pointer;
+    font-family: var(--font-sans);
+    font-size: var(--text-base);
+    color: var(--muted-foreground);
+    text-align: left;
+    transition: color var(--duration-fast);
+  }
+  .pi-activity__header:hover { color: var(--foreground); }
+  .pi-activity__chevron {
+    font-size: var(--text-sm);
+    opacity: 0.55;
+    flex-shrink: 0;
+    width: 12px;
+    transition: transform var(--duration-fast);
+  }
+  .pi-activity__header:hover .pi-activity__chevron { opacity: 1; }
+  .pi-activity--open .pi-activity__chevron { transform: rotate(90deg); }
+  .pi-activity__summary {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+  }
+  .pi-activity__count {
+    margin-left: auto;
+    flex-shrink: 0;
+    font-size: var(--text-sm);
+    opacity: 0.7;
+  }
+  .pi-activity__count em {
+    font-style: normal;
+    color: var(--destructive);
+  }
+  .pi-activity__steps {
+    border-top: 1px solid var(--green-alpha-12);
+    padding: 4px 0 6px;
+  }
+  .pi-activity__step {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 3px var(--pill-padding-x);
+    border: none;
+    background: none;
+    cursor: pointer;
+    text-align: left;
+    font-family: var(--font-sans);
+    font-size: var(--text-sm);
+    color: var(--muted-foreground);
+  }
+  .pi-activity__step:hover { color: var(--foreground); }
+  .pi-activity__step-status {
+    flex-shrink: 0;
+    width: 12px;
+    font-size: var(--text-xs);
+    color: var(--pi-green);
+    opacity: 0.8;
+  }
+  .pi-activity__step-status--error { color: var(--destructive); }
+  .pi-activity__step-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+  }
+  .pi-activity__step-label strong { font-weight: 400; }
+  .pi-activity__step-detail { opacity: 0.7; }
+  .pi-activity__step--error .pi-activity__step-label { color: var(--destructive); }
+  .pi-activity__drilldown {
+    padding: 2px var(--pill-padding-x) 8px calc(var(--pill-padding-x) + 20px);
+  }
+`;
+activitySection.appendChild(activityStyles);
+
+const activityNote = document.createElement("p");
+activityNote.style.cssText = "font-size: 11px; color: var(--muted-foreground); margin: 0 0 12px;";
+activityNote.textContent =
+  "Proposal: one block per tool run instead of one card per call. States: live (working), collapsed (default when done), expanded with drill-in.";
+activitySection.appendChild(activityNote);
+
+type MockStep = { verb: string; detail: string; error?: boolean };
+
+const mockSteps: MockStep[] = [
+  { verb: "Read", detail: "'Cash Flow'!A1:N40" },
+  { verb: "Filled", detail: "'Cash Flow'!D10:L10 — 9 changes" },
+  { verb: "Filled", detail: "'Cash Flow'!D13:L13 — 9 changes" },
+  { verb: "Fill", detail: "'Cash Flow'!D15:L15 — #REF! error", error: true },
+  { verb: "Formatted", detail: "'Cash Flow'!D10:L15 — currency" },
+];
+
+function createActivityBlock(state: "working" | "collapsed" | "open"): HTMLDivElement {
+  const block = document.createElement("div");
+  block.className =
+    state === "working"
+      ? "pi-activity pi-activity--working"
+      : state === "open"
+        ? "pi-activity pi-activity--open"
+        : "pi-activity";
+
+  const header = document.createElement("button");
+  header.type = "button";
+  header.className = "pi-activity__header";
+
+  if (state === "working") {
+    const label = document.createElement("span");
+    // Reuses the real thinking-block shimmer + spinner affordance.
+    label.className = "pi-thinking-label--streaming pi-activity__summary";
+    label.textContent = "Working — formatting 'Cash Flow'!D10:L15";
+    const count = document.createElement("span");
+    count.className = "pi-activity__count";
+    count.textContent = "step 5";
+    header.append(label, count);
+  } else {
+    const chevron = document.createElement("span");
+    chevron.className = "pi-activity__chevron";
+    chevron.textContent = "▸";
+    const summary = document.createElement("span");
+    summary.className = "pi-activity__summary";
+    summary.textContent = "Worked for 8s";
+    const count = document.createElement("span");
+    count.className = "pi-activity__count";
+    setSafeInnerHTML(
+      count,
+      `5 steps · <em>1 issue</em>`,
+      "UI gallery mock activity count with static demo markup",
+    );
+    header.append(chevron, summary, count);
+  }
+  block.appendChild(header);
+
+  if (state === "open") {
+    const steps = document.createElement("div");
+    steps.className = "pi-activity__steps";
+    mockSteps.forEach((step, i) => {
+      const row = document.createElement("button");
+      row.type = "button";
+      row.className = step.error ? "pi-activity__step pi-activity__step--error" : "pi-activity__step";
+      const status = document.createElement("span");
+      status.className = step.error
+        ? "pi-activity__step-status pi-activity__step-status--error"
+        : "pi-activity__step-status";
+      status.textContent = step.error ? "✕" : "✓";
+      const label = document.createElement("span");
+      label.className = "pi-activity__step-label";
+      setSafeInnerHTML(
+        label,
+        `<strong>${escapeHtml(step.verb)}</strong> <span class="pi-activity__step-detail">${escapeHtml(step.detail)}</span>`,
+        "UI gallery mock activity step with escaped demo labels",
+      );
+      row.append(status, label);
+      steps.appendChild(row);
+
+      // Demonstrate drill-in: the error step expands to its full tool card.
+      if (i === 3) {
+        const drilldown = document.createElement("div");
+        drilldown.className = "pi-activity__drilldown";
+        drilldown.appendChild(createMockToolCard("error", "Fill", "'Cash Flow'!D15:L15 — #REF! error"));
+        steps.appendChild(drilldown);
+      }
+    });
+    block.appendChild(steps);
+  }
+
+  return block;
+}
+
+for (const [label, state] of [
+  ["Live (streaming)", "working"],
+  ["Done — collapsed (default)", "collapsed"],
+  ["Done — expanded with drill-in", "open"],
+] as const) {
+  const caption = document.createElement("div");
+  caption.style.cssText = "font-size: 10px; color: var(--muted-foreground); margin: 0 0 4px; opacity: 0.8;";
+  caption.textContent = label;
+  activitySection.appendChild(caption);
+  activitySection.appendChild(createActivityBlock(state));
+}
+
 console.log("[ui-gallery] Rendered all sections");
