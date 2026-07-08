@@ -215,6 +215,18 @@ achieve over 65.5% is a direct measure of how much value our tool surface
 adds vs destroys. Full report and harness live in the private corpus repo
 (`_external/SpreadsheetBench/BASELINE_REPORT.md`).
 
+**Thinking-effort sensitivity (run 2026-07-08, local):** the same protocol
+with `gpt-5.5:xhigh` scored **69.0% soft/hard on verified-400** — +3.5 pp
+over medium, driven by cell-level manipulation (+5.5 pp to 66.5%) while
+sheet-level slightly regressed (−0.8 pp to 74.4%) — at 6.4× the codegen
+latency (21.6s → 138.3s mean; ~5h18m wall at concurrency 3). Two
+implications: (1) raw thinking effort alone recovers only a small slice of
+the ~17–31 pt gap to verified product agents, reinforcing that the delta
+is mostly harness (iteration, grounding, self-verification), not model
+effort; (2) for the product, spending latency on agentic verification
+loops likely beats spending it on longer single-shot thinking. Report:
+`_external/SpreadsheetBench/BASELINE_REPORT_XHIGH.md`.
+
 ## 7. Non-goals
 
 - Not a public benchmark/leaderboard.
