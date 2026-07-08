@@ -185,8 +185,13 @@ separate, later concern.
 SpreadsheetBench v1 (912 real forum-derived manipulation tasks, CC BY-SA 4.0,
 OJ-style multi-test-case grading) is runnable as an external context
 baseline: drive tasks through the bridge against real Excel, grade with the
-authors' script. Vendor-reported scores for calibration: Excel Agent Mode
-57.2%, ChatGPT agent 45.5%, Copilot 20%; best agent on v2 34.9% overall.
+authors' script. Calibration: the official V1 Verified (400) leaderboard
+(as of Jul 2026) spans 82.5%–96.5% across nine verified product agents —
+ByteDance Data Analysis Agent 96.5%, Kingsoft Qingqiu 94.75%, DealGlass
+Tetra-Beta-2 94.25%, Talarian GPT for Excel 92.5%, WPS AI 91.25%, Nobie
+91.0%, Shortcut.ai 86.0%, Kyra 84.25%, Decide Agent 82.5%. (Older
+paper-era product figures — Copilot 20%, ChatGPT agent 45.5%, Excel Agent
+Mode 57.2% — are stale/different protocol; do not calibrate against them.)
 Rules: run a stratified sample first (~30–50 tasks), keep the CC BY-SA data
 strictly separate from our own corpus and fixtures, and never tune on tasks
 we later report as held-out. This is context, not the gate — our own task
@@ -198,11 +203,16 @@ recalc, authors' grader) scored **65.5% soft/hard on verified-400**
 (cell-level 61.1%, sheet-level 75.2%; 400/400 tasks, no auth/exec
 blockers). Caveats: verified-400 has one test case per task, so it is not
 apples-to-apples with the paper's all-912 three-case numbers (same-model
-stratified 15-task smoke on all-912: 28.9% soft / 20.0% hard). Reading:
-the raw model ceiling is well above every product figure above — the gap
-between 65.5% (model, code-gen) and product agents is harness/tool-surface
-loss, which is exactly what our product-lane evals should measure and
-close. Full report and harness live in the private corpus repo
+stratified 15-task smoke on all-912: 28.9% soft / 20.0% hard). Reading
+(corrected 2026-07-08 against the live verified leaderboard): 65.5%
+single-shot sits ~17 pts below the weakest verified product agent (82.5%)
+and ~31 pts below the leader (96.5%) on the same subset — agentic
+iteration, workbook grounding, and self-verification are worth roughly
++17–31 points over the naive single-shot floor. For Pi for Excel the
+single-shot 65.5% is the floor our product harness must clearly beat;
+verified-leaderboard territory (85%+) is the aspiration, and the delta we
+achieve over 65.5% is a direct measure of how much value our tool surface
+adds vs destroys. Full report and harness live in the private corpus repo
 (`_external/SpreadsheetBench/BASELINE_REPORT.md`).
 
 ## 7. Non-goals
