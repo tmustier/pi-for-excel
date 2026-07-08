@@ -559,6 +559,7 @@ const handler = async (req, res) => {
     }
     res.statusCode = 200;
     res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.setHeader("X-Pi-For-Excel-Proxy", "1");
     res.end("ok");
     return;
   }
