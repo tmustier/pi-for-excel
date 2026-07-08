@@ -55,7 +55,6 @@ export function createDisclosureBar(options: DisclosureBarOptions): HTMLElement 
   // --- Expandable picker (hidden by default) ---
   const picker = document.createElement("div");
   picker.className = "pi-disclosure-picker";
-  bar.appendChild(picker);
 
   const toggleRows: { label: string; sublabel: string }[] = [
     { label: t("disclosure-bar.webSearchLabel"), sublabel: "Search engines and read web pages" },
@@ -112,6 +111,7 @@ export function createDisclosureBar(options: DisclosureBarOptions): HTMLElement 
     hint = span;
   }
   actions.appendChild(hint);
+  bar.appendChild(picker);
 
   customizeBtn.addEventListener("click", () => {
     const isVisible = picker.classList.toggle("is-visible");

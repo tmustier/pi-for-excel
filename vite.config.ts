@@ -1,4 +1,5 @@
 import { defineConfig, type Plugin } from "vite";
+import { isPiAuthRequestAllowed } from "./src/dev-auth-policy.js";
 import { resolveDevOrigin } from "./scripts/generate-dev-manifest.mjs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import fs from "fs";
@@ -16,23 +17,18 @@ import os from "os";
  */
 function piAuthPlugin(): Plugin {
   const authPath = path.join(os.homedir(), ".pi", "agent", "auth.json");
-
-  const isLoopbackAddress = (addr: string | undefined): boolean => {
-    if (!addr) return false;
-    if (addr === "::1" || addr === "0:0:0:0:0:0:0:1") return true;
-    if (addr.startsWith("127.")) return true;
-    if (addr.startsWith("::ffff:127.")) return true;
-    return false;
-  };
+  const allowNonLocalHost = process.env.PI_AUTH_ALLOW_NONLOCAL_HOST === "1";
 
   return {
     name: "pi-auth",
     configureServer(server) {
       server.middlewares.use("/__pi-auth", (req: IncomingMessage, res: ServerResponse) => {
         // SECURITY: auth.json can contain API keys + refresh tokens.
-        // Only serve it to loopback clients (Excel webviews, local browser).
+        // Only serve it to loopback clients on loopback hostnames (Excel webviews,
+        // local browser). QEMU user networking can make WPS guest traffic appear
+        // loopback to Vite, so also require a localhost/127.0.0.1 Host header by default.
         const remote = req.socket?.remoteAddress;
-        if (!isLoopbackAddress(remote)) {
+        if (!isPiAuthRequestAllowed({ remoteAddress: remote, hostHeader: req.headers.host, allowNonLocalHost })) {
           res.statusCode = 403;
           res.setHeader("Content-Type", "application/json; charset=utf-8");
           res.setHeader("Cache-Control", "no-store");

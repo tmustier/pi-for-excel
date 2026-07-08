@@ -21,3 +21,4 @@
 @import "./theme/content-overrides.css";
 @import "./theme/dialogs.css";
 @import "./theme/queue.css";
+@import "./theme/legacy-webview.css";

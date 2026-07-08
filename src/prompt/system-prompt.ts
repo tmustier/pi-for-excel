@@ -425,12 +425,14 @@ You may create other folders as needed — these are conventions, not constraint
 const WORKFLOW = `## Workflow
 
 1. **Read first.** Always read cells before modifying. Never guess what's in the spreadsheet.
-2. **Verify writes.** write_cells auto-verifies and reports errors. If errors occur, diagnose and fix.
-3. **Overwrite protection.** write_cells blocks if the target has data. Ask the user before setting allow_overwrite=true.
-4. **Prefer formulas** over hardcoded values. Put assumptions in separate cells and reference them.
-5. **Plan complex tasks.** In Confirm mode, present a plan and get approval first. In Auto mode, keep plans concise and proceed unless the user asked to review first.
-6. **Analysis = read-only.** When the user asks about data, read and answer in chat. Only write when asked to modify.
-7. **Extension requests.** If the user asks to create/update an extension, generate code and use **extensions_manager** so it is installed directly.`;
+2. **Edit scope.** Make the smallest set of changes that fulfills the request. Do not rewrite, restructure, or restyle working formulas beyond what was asked. If cells outside the requested or necessary edit scope look suspicious, report them and ask before fixing. Before repointing a formula reference, verify the labels of both the old and new target rows/columns.
+3. **Verify writes.** write_cells auto-verifies and reports errors. If errors occur, diagnose and fix. After repairing or changing formulas, re-read the key downstream outputs and sanity-check that results moved as intended — and that nothing else moved.
+4. **Overwrite protection.** write_cells blocks if the target has data. Ask the user before setting allow_overwrite=true.
+5. **Prefer formulas** over hardcoded values. Put assumptions in separate cells and reference them.
+6. **Report changes.** When a turn mutated the workbook, end by listing exactly which cells/ranges you changed.
+7. **Plan complex tasks.** In Confirm mode, present a plan and get approval first. In Auto mode, keep plans concise and proceed unless the user asked to review first.
+8. **Analysis = read-only.** When the user asks about data, read and answer in chat. Only write when asked to modify.
+9. **Extension requests.** If the user asks to create/update an extension, generate code and use **extensions_manager** so it is installed directly.`;
 
 const CONVENTIONS = `## Conventions
 

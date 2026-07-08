@@ -11,6 +11,7 @@ WINRM_PORT=${WPS_WINRM_PORT:-15985}
 SMP=${WPS_SMP:-4}
 MEMORY=${WPS_MEMORY:-8192}
 NET_DEVICE=${WPS_NET_DEVICE:-virtio-net-pci}
+DISPLAY_DEVICE=${WPS_DISPLAY_DEVICE:-ramfb}
 DISK=${WPS_DISK:-"$VM_DIR/wps-win11-arm64.qcow2"}
 VARS=${WPS_EFI_VARS:-"$VM_DIR/edk2-arm-vars.fd"}
 TPM_DIR=${WPS_TPM_DIR:-"$VM_DIR/tpm"}
@@ -36,6 +37,7 @@ Commands:
   install-netkvm        Stage/install NetKVM ARM64 driver from a mounted virtio-win ISO.
 
 Environment overrides: WPS_VM_DIR, WPS_NET_DEVICE (virtio-net-pci or e1000e),
+WPS_DISPLAY_DEVICE (ramfb or e.g. virtio-gpu-pci,xres=1280,yres=800),
 WPS_RDP_PORT, WPS_WINRM_PORT, WPS_VNC_DISPLAY, WPS_MEMORY, WPS_SMP.
 
 Credentials are read from $WPS_VM_DIR/credentials.txt with lines like:
@@ -166,7 +168,7 @@ start_vm() {
     -m "$MEMORY" \
     -drive if=pflash,format=raw,readonly=on,file="$(qemu_code_fd)" \
     -drive if=pflash,format=raw,file="$VARS" \
-    -device ramfb \
+    -device "$DISPLAY_DEVICE" \
     -device qemu-xhci \
     -device usb-kbd \
     -device usb-tablet \

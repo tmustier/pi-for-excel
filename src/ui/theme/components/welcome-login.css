@@ -325,6 +325,38 @@
   color: var(--foreground);
 }
 
+.pi-prompt-external-url__manual {
+  margin: -2px 0 10px;
+}
+
+.pi-prompt-external-url__manual-label {
+  display: block;
+  margin: 0 0 4px;
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  color: var(--muted-foreground);
+}
+
+.pi-prompt-external-url__manual-value {
+  width: 100%;
+  min-height: 58px;
+  padding: 7px 8px;
+  border: 1px solid var(--alpha-10);
+  border-radius: var(--radius-sm);
+  background: var(--white-alpha-60);
+  color: var(--foreground);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1.35;
+  outline: none;
+  resize: vertical;
+}
+
+.pi-prompt-external-url__manual-value:focus-visible {
+  border-color: var(--green-alpha-25);
+  box-shadow: 0 0 0 2px var(--pi-green-lighter);
+}
+
 .pi-prompt-input {
   width: 100%;
   padding: 8px 10px;

@@ -18,6 +18,7 @@ import { FileText } from "lucide";
 
 import { doesUiClaimStreamingEscape } from "../utils/escape-guard.js";
 import { t } from "../language/index.js";
+import { getSendText, resolveInputAutoGrowHeight, shouldSendOnEnter } from "./pi-input-behavior.js";
 
 const PLACEHOLDER_HINT_KEYS = [
   "input.placeholder.ask",
@@ -64,17 +65,32 @@ export class PiInput extends LitElement {
 
   protected override createRenderRoot() { return this; }
 
+  private _readTextareaValue(): string {
+    return this._textarea?.value ?? this._value;
+  }
+
+  private _syncValueFromTextarea(): string {
+    const nextValue = this._readTextareaValue();
+    if (nextValue !== this._value) {
+      this._value = nextValue;
+    }
+    return nextValue;
+  }
+
   private _onInput = (e: Event) => {
-    this._value = (e.target as HTMLTextAreaElement).value;
+    if (e.target instanceof HTMLTextAreaElement) {
+      this._value = e.target.value;
+    } else {
+      this._syncValueFromTextarea();
+    }
     this._autoGrow();
     this.dispatchEvent(new Event("input", { bubbles: true }));
   };
 
   private _onKeydown = (e: KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
-      if (this.isStreaming) return;
-      if (!this._value.trim()) return;
-      if (this._value.startsWith("/")) return;
+      const value = this._syncValueFromTextarea();
+      if (!shouldSendOnEnter({ key: e.key, shiftKey: e.shiftKey, isStreaming: this.isStreaming, value })) return;
       e.preventDefault();
       this._send();
       return;
@@ -127,12 +143,30 @@ export class PiInput extends LitElement {
     this._dispatchFiles(files);
   };
 
-  private _openFilesWorkspace = () => {
+  private _openFilesWorkspace = (event?: Event) => {
+    event?.preventDefault();
+    event?.stopPropagation();
     this.dispatchEvent(new CustomEvent("pi-open-files", { bubbles: true }));
   };
 
+  private _onActionMouseDown = (event: MouseEvent) => {
+    event.preventDefault();
+  };
+
+  private _onSendClick = (event: MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    this._send();
+  };
+
+  private _onAbortClick = (event: MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    this.dispatchEvent(new CustomEvent("pi-abort", { bubbles: true }));
+  };
+
   private _send() {
-    const text = this._value.trim();
+    const text = getSendText(this._syncValueFromTextarea());
     if (!text) return;
     this.dispatchEvent(new CustomEvent("pi-send", { bubbles: true, detail: { text } }));
   }
@@ -141,7 +175,20 @@ export class PiInput extends LitElement {
     const ta = this._textarea;
     if (!ta) return;
     ta.style.height = "auto";
-    ta.style.height = Math.min(ta.scrollHeight, window.innerHeight * 0.4) + "px";
+    const height = resolveInputAutoGrowHeight({
+      scrollHeight: ta.scrollHeight,
+      viewportHeight: window.innerHeight,
+      cssMaxHeight: this._getTextareaCssMaxHeight(ta),
+    });
+    ta.style.height = `${height}px`;
+  }
+
+  private _getTextareaCssMaxHeight(ta: HTMLTextAreaElement): number {
+    if (typeof window.getComputedStyle !== "function") return Number.NaN;
+    const computed = window.getComputedStyle(ta).maxHeight;
+    if (!computed || computed === "none") return Number.NaN;
+    const parsed = Number.parseFloat(computed);
+    return Number.isFinite(parsed) ? parsed : Number.NaN;
   }
 
   override connectedCallback() {
@@ -174,6 +221,7 @@ export class PiInput extends LitElement {
         <button
           class="pi-input-btn pi-input-btn--attach"
           type="button"
+          @mousedown=${this._onActionMouseDown}
           @click=${this._openFilesWorkspace}
           aria-label=${t("input.attach.aria")}
           title=${t("input.attach.aria")}
@@ -188,6 +236,8 @@ export class PiInput extends LitElement {
           aria-label=${t("input.chat.aria")}
           autocomplete="off"
           @input=${this._onInput}
+          @change=${this._onInput}
+          @keyup=${this._onInput}
           @keydown=${this._onKeydown}
         ></textarea>
         ${this._isDragOver
@@ -195,15 +245,23 @@ export class PiInput extends LitElement {
           : null}
         ${this.isStreaming
           ? html`
-            <button class="pi-input-btn pi-input-btn--abort" @click=${() => this.dispatchEvent(new CustomEvent("pi-abort", { bubbles: true }))} aria-label=${t("input.stop.aria")}>
+            <button
+              class="pi-input-btn pi-input-btn--abort"
+              type="button"
+              @mousedown=${this._onActionMouseDown}
+              @click=${this._onAbortClick}
+              aria-label=${t("input.stop.aria")}
+            >
               <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
             </button>`
           : html`
             <button
               class="pi-input-btn pi-input-btn--send ${hasContent ? "" : "is-disabled"}"
-              @click=${() => this._send()}
+              type="button"
+              @mousedown=${this._onActionMouseDown}
+              @click=${this._onSendClick}
               aria-label=${t("input.send.aria")}
-              ?disabled=${!hasContent}
+              aria-disabled=${hasContent ? "false" : "true"}
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
             </button>`
