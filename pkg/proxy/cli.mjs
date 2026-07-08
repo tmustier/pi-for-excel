@@ -61,7 +61,7 @@ function supportsMkcertCli(command) {
   return result.status === 0 && !result.signal;
 }
 
-function getMkcertCommandCandidates() {
+function findMkcertCommand() {
   const candidates = [];
 
   if (process.platform === "darwin") {
@@ -77,11 +77,7 @@ function getMkcertCommandCandidates() {
     candidates.push("mkcert");
   }
 
-  return candidates;
-}
-
-function findMkcertCommand() {
-  for (const candidate of getMkcertCommandCandidates()) {
+  for (const candidate of candidates) {
     if (supportsMkcertCli(candidate)) {
       return candidate;
     }
@@ -182,41 +178,6 @@ function resolveProxyConfig() {
   };
 }
 
-function hasExplicitPort() {
-  return typeof process.env.PORT === "string" && process.env.PORT.trim().length > 0;
-}
-
-function hasExplicitHost() {
-  return typeof process.env.HOST === "string" && process.env.HOST.trim().length > 0;
-}
-
-function readMkcertRootCa() {
-  const mkcertCommand = findMkcertCommand();
-  if (!mkcertCommand) {
-    return null;
-  }
-
-  const result = spawnSync(mkcertCommand, ["-CAROOT"], {
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "ignore"],
-  });
-  if (result.error || result.status !== 0 || result.signal) {
-    return null;
-  }
-
-  const caRoot = result.stdout.trim();
-  if (!caRoot) {
-    return null;
-  }
-
-  const rootCaPath = path.join(caRoot, "rootCA.pem");
-  try {
-    return fs.readFileSync(rootCaPath);
-  } catch {
-    return null;
-  }
-}
-
 function probeHttpsHealth(urlString, trustedCa) {
   return new Promise((resolve) => {
     let settled = false;
@@ -264,12 +225,34 @@ function probeHttpsHealth(urlString, trustedCa) {
 }
 
 async function exitIfDefaultProxyAlreadyRunning(proxyConfig) {
-  if (!proxyConfig.usesHttps || hasExplicitPort() || hasExplicitHost()) {
+  const portWasRequested = typeof process.env.PORT === "string" && process.env.PORT.trim().length > 0;
+  const hostWasRequested = typeof process.env.HOST === "string" && process.env.HOST.trim().length > 0;
+  if (!proxyConfig.usesHttps || portWasRequested || hostWasRequested) {
     return;
   }
 
-  const trustedCa = readMkcertRootCa();
-  if (!trustedCa) {
+  const mkcertCommand = findMkcertCommand();
+  if (!mkcertCommand) {
+    return;
+  }
+
+  const caRootResult = spawnSync(mkcertCommand, ["-CAROOT"], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "ignore"],
+  });
+  if (caRootResult.error || caRootResult.status !== 0 || caRootResult.signal) {
+    return;
+  }
+
+  const caRoot = caRootResult.stdout.trim();
+  if (!caRoot) {
+    return;
+  }
+
+  let trustedCa;
+  try {
+    trustedCa = fs.readFileSync(path.join(caRoot, "rootCA.pem"));
+  } catch {
     return;
   }
 

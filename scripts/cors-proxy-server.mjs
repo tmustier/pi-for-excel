@@ -751,21 +751,10 @@ function createProxyServer() {
   );
 }
 
-function getListeningPort(server, fallbackPort) {
-  const address = server.address();
-  if (address && typeof address !== "string") {
-    return address.port;
-  }
-  return fallbackPort;
-}
-
-function formatHostForUrl(host) {
-  return host.includes(":") && !host.startsWith("[") ? `[${host}]` : host;
-}
-
 function logStartup(listeningPort, listeningHosts) {
   const scheme = useHttps ? "https" : "http";
-  const proxyUrl = `${scheme}://${formatHostForUrl(HOST)}:${listeningPort}`;
+  const formattedHost = HOST.includes(":") && !HOST.startsWith("[") ? `[${HOST}]` : HOST;
+  const proxyUrl = `${scheme}://${formattedHost}:${listeningPort}`;
   console.log(`[pi-for-excel] CORS proxy listening on ${proxyUrl}`);
   if (listeningHosts.length > 1) {
     console.log(`[pi-for-excel] Listening on loopback addresses: ${listeningHosts.join(", ")}`);
@@ -860,16 +849,6 @@ function listenOAuthCallbackServers() {
   }
 }
 
-function isAddressInUse(error) {
-  return typeof error?.code === "string" && error.code === "EADDRINUSE";
-}
-
-function isOptionalLoopbackUnavailable(error) {
-  if (hasExplicitHost) return false;
-  const code = typeof error?.code === "string" ? error.code : "";
-  return code === "EAFNOSUPPORT" || code === "EADDRNOTAVAIL";
-}
-
 function closeServer(server) {
   return new Promise((resolve) => {
     try {
@@ -878,10 +857,6 @@ function closeServer(server) {
       resolve();
     }
   });
-}
-
-async function closeServerEntries(entries) {
-  await Promise.all(entries.map((entry) => closeServer(entry.server)));
 }
 
 function listenServer(server, port, host) {
@@ -912,52 +887,50 @@ function listenServer(server, port, host) {
   });
 }
 
-async function listenOnHosts(port) {
+async function listen(port) {
   const entries = [];
   const skippedHosts = [];
   let selectedPort = port;
 
-  for (const host of LISTEN_HOSTS) {
-    const server = createProxyServer();
-    try {
-      await listenServer(server, selectedPort, host);
-    } catch (error) {
-      await closeServer(server);
-      if (isOptionalLoopbackUnavailable(error)) {
-        skippedHosts.push(host);
-        continue;
-      }
-      await closeServerEntries(entries);
-      throw error;
-    }
-
-    const actualPort = getListeningPort(server, selectedPort);
-    if (selectedPort === 0) {
-      selectedPort = actualPort;
-    }
-    entries.push({ server, host, port: actualPort });
-  }
-
-  if (entries.length === 0) {
-    throw new Error(
-      skippedHosts.length > 0
-        ? `No loopback listen addresses were available (${skippedHosts.join(", ")})`
-        : "No listen addresses were configured",
-    );
-  }
-
-  return { entries, listeningPort: selectedPort, skippedHosts };
-}
-
-async function listen(port) {
   try {
-    const { entries, listeningPort, skippedHosts } = await listenOnHosts(port);
+    for (const host of LISTEN_HOSTS) {
+      const server = createProxyServer();
+      try {
+        await listenServer(server, selectedPort, host);
+      } catch (error) {
+        await closeServer(server);
+        const code = typeof error?.code === "string" ? error.code : "";
+        if (!hasExplicitHost && (code === "EAFNOSUPPORT" || code === "EADDRNOTAVAIL")) {
+          skippedHosts.push(host);
+          continue;
+        }
+        await Promise.all(entries.map((entry) => closeServer(entry.server)));
+        throw error;
+      }
+
+      const address = server.address();
+      const actualPort = address && typeof address !== "string" ? address.port : selectedPort;
+      if (selectedPort === 0) {
+        selectedPort = actualPort;
+      }
+      entries.push({ server, host, port: actualPort });
+    }
+
+    if (entries.length === 0) {
+      throw new Error(
+        skippedHosts.length > 0
+          ? `No loopback listen addresses were available (${skippedHosts.join(", ")})`
+          : "No listen addresses were configured",
+      );
+    }
+
     if (skippedHosts.length > 0) {
       console.warn(`[pi-for-excel] Skipped unavailable loopback addresses: ${skippedHosts.join(", ")}`);
     }
-    logStartup(listeningPort, entries.map((entry) => entry.host));
+    logStartup(selectedPort, entries.map((entry) => entry.host));
   } catch (error) {
-    if (isAddressInUse(error) && !hasExplicitPort && port === DEFAULT_PORT) {
+    const code = typeof error?.code === "string" ? error.code : "";
+    if (code === "EADDRINUSE" && !hasExplicitPort && port === DEFAULT_PORT) {
       console.warn(`[pi-for-excel] Port ${DEFAULT_PORT} is already in use; choosing a random available port instead.`);
       await listen(0);
       return;
