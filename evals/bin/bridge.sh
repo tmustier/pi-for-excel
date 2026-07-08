@@ -9,12 +9,30 @@ set -euo pipefail
 
 BRIDGE_URL="${PI_BRIDGE_URL:-https://localhost:3157}"
 TOKEN_FILE="${PI_BRIDGE_TOKEN_FILE:-/tmp/pi-background-verify-token.evalrun}"
-TOKEN="$(cat "$TOKEN_FILE")"
 
 post() { # type clientId payload timeoutMs
-  curl -sk -m "$(( ${4:-15000} / 1000 + 10 ))" -X POST "$BRIDGE_URL/command" \
-    -H 'Content-Type: application/json' \
-    -d "{\"token\":\"$TOKEN\",\"type\":\"$1\",\"clientId\":\"$2\",\"payload\":$3,\"timeoutMs\":${4:-15000}}"
+  local ms="${4:-15000}"
+  case "$ms" in (*[!0-9]*|'') echo "bridge.sh: timeoutMs must be an integer, got '$ms'" >&2; return 1;; esac
+  if [ ! -r "$TOKEN_FILE" ]; then
+    echo "bridge.sh: token file not readable: $TOKEN_FILE (is the bridge server running?)" >&2
+    return 1
+  fi
+  # Build the body with a real JSON encoder: token/type/clientId are
+  # escaped, payload must itself parse as JSON (fail early otherwise).
+  BRIDGE_TYPE="$1" BRIDGE_CLIENT="$2" BRIDGE_PAYLOAD="$3" BRIDGE_MS="$ms" \
+  TOKEN_FILE="$TOKEN_FILE" python3 -c '
+import json, os, sys
+try:
+    payload = json.loads(os.environ["BRIDGE_PAYLOAD"])
+except json.JSONDecodeError as e:
+    sys.exit(f"bridge.sh: payload is not valid JSON: {e}")
+with open(os.environ["TOKEN_FILE"]) as fh:
+    token = fh.read().strip()
+print(json.dumps({"token": token, "type": os.environ["BRIDGE_TYPE"],
+                  "clientId": os.environ["BRIDGE_CLIENT"], "payload": payload,
+                  "timeoutMs": int(os.environ["BRIDGE_MS"])}))' |
+  curl -sk -m "$(( (ms + 999) / 1000 + 10 ))" -X POST "$BRIDGE_URL/command" \
+    -H 'Content-Type: application/json' --data-binary @-
 }
 
 case "${1:-help}" in

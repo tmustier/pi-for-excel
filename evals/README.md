@@ -27,11 +27,17 @@ The private corpus is a local-only git repo at `~/projects/excel-eval-corpus`
 - **`bin/grade.py`** — standard grader. Inputs: seed xlsx, per-sheet bridge
   snapshot JSONs, expected-values JSON, optional target-fix map, protected
   sheets. Outputs a JSON verdict + human summary with four checks:
-  1. `cells_match` — graded output cells vs oracle (rel tol, bool-aware)
-  2. `target_fixes` — normalized-formula equality for intended edits
-  3. `no_mutation` — protected sheets untouched
-  4. `unintended_edited_cells` — formula diffs vs seed outside the intended
-     edit set. First-class destructive-edit metric: an agent can fix all
+  1. `cells_match` — graded output cells vs oracle (`--rel-tol` for nonzero
+     expecteds, `--abs-tol` at zero; bools must be bools; addresses outside
+     the snapshot used range are hard failures, never silently indexed)
+  2. `target_fixes` — quote-aware normalized formula equality for intended
+     edits (case/whitespace normalized only outside string/sheet literals)
+  3. `no_mutation` — protected sheets untouched: values AND formulas,
+     diffed over the union of seed and snapshot cells (whitespace-only
+     spacer strings ≡ empty, documented leniency)
+  4. `unintended_edited_cells` — formula-level diffs vs seed outside the
+     intended edit set, incl. formula→value replacement and formulas
+     deleted/cleared even when the final used range shrank. First-class destructive-edit metric: an agent can fix all
      target bugs (`Modif.` pass) while silently rewiring healthy formulas
      (`Acc.` fail). Observed in practice: 31 unintended edits in a run that
      fixed 3/3 target bugs.
@@ -42,9 +48,13 @@ The private corpus is a local-only git repo at `~/projects/excel-eval-corpus`
   an Excel-derived oracle on a model using CHOOSE/IF/ISERROR/IFERROR/SUM/
   SUMIF/SUMPRODUCT/MIN/MAX/AVERAGE; re-validate before trusting it for
   dates, IRR/NPV, lookups, or text functions.
-- **`lib/scrub.py`** — leakage scrub shared by fixture builders (strip
-  personal metadata; builders additionally fail on hidden sheets and strip
-  solution tabs / validation helper columns / cached values).
+- **`lib/scrub.py`** — leakage scrub + zip-level `assert_no_leakage()`
+  gate that fixture builders run on every emitted seed: hidden sheets,
+  personal metadata, custom props, comments, external links, calc chain,
+  cached formula values, VBA, and non-builtin defined names. (Real catch:
+  it flagged training-workbook external links pointing at a
+  `*_CorrectAnswers_*.xls` path, tutoring comments, and ~130 defined names
+  of validation machinery.)
 
 ## Task spec schema
 
