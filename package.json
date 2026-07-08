@@ -54,14 +54,14 @@
   },
   "devDependencies": {
     "@types/node": "^22.20.0",
-    "@types/office-js": "^1.0.598",
+    "@types/office-js": "^1.0.599",
     "eslint": "^10.6.0",
-    "office-addin-debugging": "^6.0.6",
+    "office-addin-debugging": "^6.1.2",
     "office-addin-manifest": "^2.1.2",
     "portless": "0.15.1",
-    "typebox": "^1.3.3",
+    "typebox": "^1.3.5",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.62.1",
+    "typescript-eslint": "^8.63.0",
     "vite": "^8.1.3"
   },
   "license": "MIT",
