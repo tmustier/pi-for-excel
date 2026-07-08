@@ -12,8 +12,9 @@ This command:
 
 1. Ensures `mkcert` exists (installs via Homebrew on macOS if missing)
 2. Creates certificates in `~/.pi-for-excel/certs/` when needed
-3. Starts the proxy at `https://localhost:3003`, or picks a random free port if 3003 is busy
-4. Starts loopback-only callback listeners for ChatGPT, Anthropic, and Google OAuth so supported logins can complete without copy/paste when possible
+3. Starts the proxy at `https://localhost:3003`, or reuses an already-running healthy proxy on that URL
+4. Picks a random free port only when 3003 is busy and no compatible default proxy is already running
+5. Starts loopback-only callback listeners for ChatGPT, Anthropic, and Google OAuth so supported logins can complete without copy/paste when possible
 
 Then in Pi for Excel:
 

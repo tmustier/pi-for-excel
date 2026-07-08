@@ -518,6 +518,13 @@ test("proxy /healthz responds without an Origin header and never proxies", async
   assert.equal(health.status, 200);
   assert.equal(await health.text(), "ok");
 
+  const browserHealth = await fetch(`http://127.0.0.1:${proxy.port}/healthz`, {
+    headers: { Origin: ORIGIN },
+  });
+  assert.equal(browserHealth.status, 200);
+  assert.equal(browserHealth.headers.get("access-control-allow-origin"), ORIGIN);
+  assert.equal(await browserHealth.text(), "ok");
+
   // Query strings (including ?url=) must not turn /healthz into a proxy path.
   const withUrl = await fetch(
     `http://127.0.0.1:${proxy.port}/healthz?url=${encodeURIComponent("https://api.openai.com/")}`,

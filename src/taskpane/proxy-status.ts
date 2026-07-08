@@ -5,7 +5,7 @@
  * dispatches a custom event so UI surfaces can react.
  */
 
-import { DEFAULT_PROXY_URL } from "../auth/proxy-validation.js";
+import { DEFAULT_PROXY_URL, normalizeProxyUrl } from "../auth/proxy-validation.js";
 
 const CHECK_INTERVAL_MS = 30_000;
 const CHECK_TIMEOUT_MS = 1_500;
@@ -24,14 +24,12 @@ async function probeProxy(proxyUrl: string): Promise<boolean> {
   const timeout = setTimeout(() => controller.abort(), CHECK_TIMEOUT_MS);
 
   try {
-    // Probe without a ?url= parameter — the proxy returns 400 ("Missing target"),
-    // which proves it's running. This avoids hitting the target allowlist.
-    const url = `${proxyUrl.replace(/\/+$/, "")}/`;
-    const resp = await fetch(url, { method: "HEAD", signal: controller.signal });
-    // Any response (200, 400, 404) proves the proxy is reachable.
-    // Only network errors (fetch throws) indicate it's not running.
-    void resp;
-    return true;
+    // Health never proxies upstream data and includes CORS headers for allowed
+    // add-in origins, so status detection does not depend on target allowlists
+    // or a browser accepting an error response body from `/`.
+    const url = `${normalizeProxyUrl(proxyUrl)}/healthz`;
+    const resp = await fetch(url, { cache: "no-store", signal: controller.signal });
+    return resp.ok;
   } catch {
     return false;
   } finally {

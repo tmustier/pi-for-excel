@@ -48,7 +48,13 @@ if (useHttps && useHttp) {
 }
 
 const DEFAULT_PORT = 3003;
-const HOST = process.env.HOST || (useHttps ? "localhost" : "127.0.0.1");
+const hasExplicitHost = typeof process.env.HOST === "string" && process.env.HOST.trim().length > 0;
+const HOST = hasExplicitHost ? process.env.HOST.trim() : (useHttps ? "localhost" : "127.0.0.1");
+const LISTEN_HOSTS = hasExplicitHost
+  ? [HOST]
+  : useHttps
+    ? ["127.0.0.1", "::1"]
+    : [HOST];
 const hasExplicitPort = typeof process.env.PORT === "string" && process.env.PORT.trim().length > 0;
 
 function parsePort(rawPort) {
@@ -541,9 +547,16 @@ const handler = async (req, res) => {
   }
 
   // Health endpoint for load balancers / monitoring. Sits after the client
-  // address check but before origin enforcement (health checks send no
-  // Origin header). Never proxies anything.
+  // address check but before origin enforcement (health checks often send no
+  // Origin header). Browser-based status probes still need CORS headers when
+  // they come from an allowed add-in origin. Never proxies anything.
   if ((req.url || "").split("?")[0] === "/healthz") {
+    setCorsHeaders(req, res);
+    if (req.method === "OPTIONS") {
+      res.statusCode = 204;
+      res.end();
+      return;
+    }
     res.statusCode = 200;
     res.setHeader("Content-Type", "text/plain; charset=utf-8");
     res.end("ok");
@@ -714,7 +727,7 @@ const handler = async (req, res) => {
   }
 };
 
-const server = (() => {
+function createProxyServer() {
   if (!useHttps) {
     return http.createServer(handler);
   }
@@ -735,9 +748,9 @@ const server = (() => {
     },
     handler,
   );
-})();
+}
 
-function getListeningPort(fallbackPort) {
+function getListeningPort(server, fallbackPort) {
   const address = server.address();
   if (address && typeof address !== "string") {
     return address.port;
@@ -745,10 +758,17 @@ function getListeningPort(fallbackPort) {
   return fallbackPort;
 }
 
-function logStartup(listeningPort) {
+function formatHostForUrl(host) {
+  return host.includes(":") && !host.startsWith("[") ? `[${host}]` : host;
+}
+
+function logStartup(listeningPort, listeningHosts) {
   const scheme = useHttps ? "https" : "http";
-  const proxyUrl = `${scheme}://${HOST}:${listeningPort}`;
+  const proxyUrl = `${scheme}://${formatHostForUrl(HOST)}:${listeningPort}`;
   console.log(`[pi-for-excel] CORS proxy listening on ${proxyUrl}`);
+  if (listeningHosts.length > 1) {
+    console.log(`[pi-for-excel] Listening on loopback addresses: ${listeningHosts.join(", ")}`);
+  }
   console.log(`[pi-for-excel] Format: ${proxyUrl}/?url=<target-url>`);
   if (listeningPort !== DEFAULT_PORT) {
     console.log(`[pi-for-excel] Update Pi for Excel /settings → Proxy URL to ${proxyUrl}`);
@@ -839,41 +859,117 @@ function listenOAuthCallbackServers() {
   }
 }
 
-function listen(port) {
-  let cleanedUp = false;
-  const cleanup = () => {
-    if (cleanedUp) return;
-    cleanedUp = true;
-    server.off("error", onError);
-    server.off("listening", onListening);
-  };
+function isAddressInUse(error) {
+  return typeof error?.code === "string" && error.code === "EADDRINUSE";
+}
 
-  const onError = (err) => {
-    cleanup();
+function isOptionalLoopbackUnavailable(error) {
+  if (hasExplicitHost) return false;
+  const code = typeof error?.code === "string" ? error.code : "";
+  return code === "EAFNOSUPPORT" || code === "EADDRNOTAVAIL";
+}
 
-    if (err?.code === "EADDRINUSE" && !hasExplicitPort && port === DEFAULT_PORT) {
+function closeServer(server) {
+  return new Promise((resolve) => {
+    try {
+      server.close(() => resolve());
+    } catch {
+      resolve();
+    }
+  });
+}
+
+async function closeServerEntries(entries) {
+  await Promise.all(entries.map((entry) => closeServer(entry.server)));
+}
+
+function listenServer(server, port, host) {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const cleanup = () => {
+      server.off("error", onError);
+      server.off("listening", onListening);
+    };
+
+    const onError = (error) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(error);
+    };
+
+    const onListening = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve();
+    };
+
+    server.once("error", onError);
+    server.once("listening", onListening);
+    server.listen(port, host);
+  });
+}
+
+async function listenOnHosts(port) {
+  const entries = [];
+  const skippedHosts = [];
+  let selectedPort = port;
+
+  for (const host of LISTEN_HOSTS) {
+    const server = createProxyServer();
+    try {
+      await listenServer(server, selectedPort, host);
+    } catch (error) {
+      await closeServer(server);
+      if (isOptionalLoopbackUnavailable(error)) {
+        skippedHosts.push(host);
+        continue;
+      }
+      await closeServerEntries(entries);
+      throw error;
+    }
+
+    const actualPort = getListeningPort(server, selectedPort);
+    if (selectedPort === 0) {
+      selectedPort = actualPort;
+    }
+    entries.push({ server, host, port: actualPort });
+  }
+
+  if (entries.length === 0) {
+    throw new Error(
+      skippedHosts.length > 0
+        ? `No loopback listen addresses were available (${skippedHosts.join(", ")})`
+        : "No listen addresses were configured",
+    );
+  }
+
+  return { entries, listeningPort: selectedPort, skippedHosts };
+}
+
+async function listen(port) {
+  try {
+    const { entries, listeningPort, skippedHosts } = await listenOnHosts(port);
+    if (skippedHosts.length > 0) {
+      console.warn(`[pi-for-excel] Skipped unavailable loopback addresses: ${skippedHosts.join(", ")}`);
+    }
+    logStartup(listeningPort, entries.map((entry) => entry.host));
+  } catch (error) {
+    if (isAddressInUse(error) && !hasExplicitPort && port === DEFAULT_PORT) {
       console.warn(`[pi-for-excel] Port ${DEFAULT_PORT} is already in use; choosing a random available port instead.`);
-      listen(0);
+      await listen(0);
       return;
     }
 
-    const message = err instanceof Error ? err.message : String(err);
+    const message = error instanceof Error ? error.message : String(error);
     console.error(`[pi-for-excel] Failed to listen on ${HOST}:${port}: ${message}`);
     if (hasExplicitPort) {
       console.error("[pi-for-excel] Choose a different port with PORT=0 (random) or PORT=<port>.");
     }
     process.exit(1);
-  };
-
-  const onListening = () => {
-    cleanup();
-    logStartup(getListeningPort(port));
-  };
-
-  server.once("error", onError);
-  server.once("listening", onListening);
-  server.listen(port, HOST);
+  }
 }
 
-listen(PORT);
+await listen(PORT);
 listenOAuthCallbackServers();
