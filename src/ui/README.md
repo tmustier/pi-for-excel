@@ -72,7 +72,7 @@ visibility utilities that shell components toggle.
 | 7–10. Chrome | Status bar (model picker + ctx + thinking), toast, slash command menu, welcome overlay |
 | 10b. Overlay primitives | Shared classes for builtins overlays (tabs, textarea, buttons, footer actions) |
 | 11. Content styles | Message component styling — user bubble, sidebar-width margins, tool cards, markdown/code/thinking styles (all first-party semantic classes) |
-| 12–13. Dialogs, Queue | First-party dialog styling (model selector, provider connect) + steer/follow-up queue |
+| 12–14. Dialogs, Queue, Legacy WebView | First-party dialog styling (model selector, provider connect) + steer/follow-up queue + sRGB fallbacks for WPS/older WebViews without OKLCH support |
 
 > Note: `theme.css` is an entrypoint; styles are split into `src/ui/theme/*.css` and imported in order:
 > - `theme/tokens.css` (1)
@@ -83,6 +83,7 @@ visibility utilities that shell components toggle.
 > - `theme/content-overrides.css` (11) → imports `theme/content/{messages,tool-cards,csv-table,dependency-tree,tool-card-markdown,message-components}.css`
 > - `theme/dialogs.css` (12, stable selectors)
 > - `theme/queue.css` (13)
+> - `theme/legacy-webview.css` (14, sRGB fallbacks under `@supports not (color: oklch(...))`)
 
 ### Radius system
 

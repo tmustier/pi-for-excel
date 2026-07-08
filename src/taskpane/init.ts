@@ -20,6 +20,7 @@ import {
   DEFAULT_PROXY_URL,
   PROXY_HELPER_DOCS_URL,
   isLoopbackProxyUrl,
+  resolveRuntimeDefaultProxyUrl,
   validateOfficeProxyUrl,
 } from "../auth/proxy-validation.js";
 import { restoreCredentials } from "../auth/restore.js";
@@ -127,7 +128,7 @@ import { createProxyBanner } from "../ui/proxy-banner.js";
 import { setActiveProviders } from "../models/active-providers.js";
 import { promptForProviderConnection } from "../ui/api-key-dialog.js";
 import { openModelSelectorDialog } from "../ui/model-selector-dialog.js";
-import { getCurrentSpreadsheetHost } from "../host/index.js";
+import { getCurrentSpreadsheetHost, type SpreadsheetHostKind } from "../host/index.js";
 import { createWorkbookCoordinator } from "../workbook/coordinator.js";
 import { formatWorkbookLabel, type WorkbookContext } from "../workbook/context.js";
 import {
@@ -200,14 +201,19 @@ interface ProxySettingsStore {
   set(key: string, value: DynamicValue): Promise<void>;
 }
 
-async function ensureDefaultProxyUrl(settings: ProxySettingsStore): Promise<void> {
+async function ensureDefaultProxyUrl(
+  settings: ProxySettingsStore,
+  hostKind: SpreadsheetHostKind,
+): Promise<void> {
   try {
+    const runtimeDefaultProxyUrl = resolveRuntimeDefaultProxyUrl({ hostKind });
     const proxyUrl = await settings.get<string>("proxy.url");
-    if (typeof proxyUrl === "string" && proxyUrl.trim().length > 0) {
+    const storedProxyUrl = typeof proxyUrl === "string" ? proxyUrl.trim() : "";
+    if (storedProxyUrl.length > 0 && !(storedProxyUrl === DEFAULT_PROXY_URL && runtimeDefaultProxyUrl !== DEFAULT_PROXY_URL)) {
       return;
     }
 
-    await settings.set("proxy.url", DEFAULT_PROXY_URL);
+    await settings.set("proxy.url", runtimeDefaultProxyUrl);
   } catch {
     // ignore
   }
@@ -234,7 +240,7 @@ export async function initTaskpane(opts: {
   }
 
   // Seed a predictable proxy default for OAuth flows.
-  await ensureDefaultProxyUrl(settings);
+  await ensureDefaultProxyUrl(settings, spreadsheetHost.kind);
 
   // Migrate legacy web-search API keys to the connection store schema.
   try {
