@@ -1,0 +1,32 @@
+# Example task spec (schema reference). Real tasks live in the private
+# corpus (~/projects/excel-eval-corpus/_evals/tasks/); some are derived
+# from licensed training materials and are not committed here.
+id: example-doctor-01
+category: model-doctor        # find-and-fix injected bugs (Lane C)
+difficulty: hard
+fixture: example
+seed: fixtures/example/seed-doctor-1.xlsx   # = variant a
+variants:
+  a: { seed: fixtures/example/seed-doctor-1a.xlsx, expected: fixtures/example/expected-clean.json,   reference: fixtures/example/doctor-1-bugs-a.json }
+  b: { seed: fixtures/example/seed-doctor-1b.xlsx, expected: fixtures/example/expected-clean-b.json, reference: fixtures/example/doctor-1-bugs-b.json }
+  c: { seed: fixtures/example/seed-doctor-1c.xlsx, expected: fixtures/example/expected-clean-c.json, reference: fixtures/example/doctor-1-bugs-c.json }
+prompt: >
+  This financing model was edited by several people and the numbers no
+  longer tie to the last board deck. Audit the model, find and fix any
+  broken or suspicious formulas (do not change assumptions on the Inputs
+  sheet), and reply with a list of exactly what you fixed and why.
+budget: { max_tool_calls: 60, max_minutes: 20 }
+grading:
+  workbook_state:
+    # Acc.: all graded output cells must match the variant's oracle
+    - { check: cells_match, file: <variant.expected>, rel_tol: 1e-6 }
+    # Modif.: intended fixes present as formulas (not pasted values)
+    - { check: cell_is_formula, cells: ["Calculations!K42", "Calculations!I156", "Calculations!L97"] }
+  reference: <variant.reference>   # transcript review aid, not strict match
+  behavior:
+    - { check: no_mutation, sheet: Inputs }
+    - { check: unintended_edited_cells, seed_diff: formulas, target: 0 }
+notes: >
+  Grade with evals/bin/grade.py. Variants perturb Inputs literals so
+  hardcoded answers fail across variants; the injected stale-value bug is
+  recomputed per variant so its magnitude matches that variant's economics.

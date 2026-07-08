@@ -673,7 +673,7 @@ function buildResultMarkdown(args: {
 }
 
 async function defaultGetConfig(): Promise<WebSearchToolConfig> {
-  const storageModule = await import("@earendil-works/pi-web-ui/dist/storage/app-storage.js");
+  const storageModule = await import("../storage/local/app-storage.js");
   const settings: ProxyAwareSettingsStore = storageModule.getAppStorage().settings;
 
   const [providerConfig, proxyBaseUrl] = await Promise.all([

@@ -1,28 +1,21 @@
 /**
- * Boot — runs before any pi-web-ui components mount.
+ * Boot — runs before any UI components mount.
  *
- * 1. Imports Tailwind CSS (pi-web-ui/app.css)
- * 2. Installs compatibility patches (Lit class-field shadowing, markdown safety)
+ * 1. Imports the first-party theme CSS (tokens, preflight, components)
+ * 2. Installs markdown-safety and theme-mode patches
  * 3. Installs browser/runtime compatibility patches, including the Bedrock stub
  *
  * MUST be imported as the first module in taskpane.ts.
  */
 
-import "@earendil-works/pi-web-ui/app.css";
 import "./ui/theme.css";
 
 import { installBedrockProviderStub } from "./compat/bedrock-provider-stub.js";
 import { installCryptoRandomUuidPatch } from "./compat/crypto-random-uuid.js";
-import { installLitClassFieldShadowingPatch } from "./compat/lit-class-field-shadowing.js";
 import { installMarkedSafetyPatch } from "./compat/marked-safety.js";
-import { installThinkingDurationPatch } from "./compat/thinking-duration.js";
-import { installDialogStyleHooks } from "./ui/dialog-style-hooks.js";
 import { installThemeModeSync } from "./ui/theme-mode.js";
 
 installBedrockProviderStub();
 installCryptoRandomUuidPatch();
-installLitClassFieldShadowingPatch();
 installMarkedSafetyPatch();
-installThinkingDurationPatch();
-installDialogStyleHooks();
 installThemeModeSync();

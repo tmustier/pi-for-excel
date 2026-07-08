@@ -3,7 +3,6 @@ import path from "node:path";
 
 const ROOT = process.cwd();
 const THEME_ROOT = path.join(ROOT, "src", "ui", "theme");
-const UNSTABLE_FILE = path.join(THEME_ROOT, "unstable-overrides.css");
 
 const UTILITY_CLASS_PATTERN = /\.(?:p[trblxy]?|m[trblxy]?|gap|space-[xy]?|text|bg|border|rounded|shadow|flex|grid|inline|block|hidden|absolute|relative|fixed|sticky|top|right|bottom|left|min-|max-|w-|h-|overflow|cursor|hover|transition|duration|animate)-[a-z0-9_:[\]()./%-]+/i;
 
@@ -81,9 +80,7 @@ function findViolations(source, filePath) {
 }
 
 async function main() {
-  const files = (await collectCssFiles(THEME_ROOT))
-    .filter((filePath) => path.resolve(filePath) !== path.resolve(UNSTABLE_FILE))
-    .sort();
+  const files = (await collectCssFiles(THEME_ROOT)).sort();
 
   const violations = [];
 
@@ -93,14 +90,14 @@ async function main() {
   }
 
   if (violations.length > 0) {
-    console.error("\n✗ Utility-class selectors detected outside theme/unstable-overrides.css\n");
+    console.error("\n✗ Utility-class selectors detected in theme CSS\n");
 
     for (const violation of violations) {
       console.error(`- ${relative(violation.filePath)}:${violation.lineNo}`);
       console.error(`  ${violation.snippet}`);
     }
 
-    console.error("\nEither move the selector to src/ui/theme/unstable-overrides.css or add stable semantic hooks.\n");
+    console.error("\nAdd stable semantic classes in the templates instead of utility-class selectors.\n");
     process.exitCode = 1;
     return;
   }

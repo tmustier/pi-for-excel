@@ -7,7 +7,7 @@
  * ports and exposes the captured code back to the taskpane through its HTTPS/CORS endpoint.
  */
 
-import { getAppStorage } from "@earendil-works/pi-web-ui/dist/storage/app-storage.js";
+import { getAppStorage } from "../storage/local/app-storage.js";
 
 import {
   isLoopbackProxyUrl,

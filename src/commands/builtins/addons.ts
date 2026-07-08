@@ -2,7 +2,7 @@
  * Builtin commands for unified extensions management UI.
  */
 
-import type { ExtensionsHubTab } from "./extensions-hub-overlay.js";
+import type { ExtensionsHubTab } from "./settings-pages/index.js";
 import type { SlashCommand } from "../types.js";
 import { t } from "../../language/index.js";
 

@@ -319,7 +319,7 @@ function enforceDomainRateLimit(hostname: string, now: number): void {
 }
 
 async function defaultGetConfig(): Promise<FetchPageToolConfig> {
-  const storageModule = await import("@earendil-works/pi-web-ui/dist/storage/app-storage.js");
+  const storageModule = await import("../storage/local/app-storage.js");
   const settings: ProxyAwareSettingsStore = storageModule.getAppStorage().settings;
   const proxyBaseUrl = await getEnabledProxyBaseUrl(settings);
   return {

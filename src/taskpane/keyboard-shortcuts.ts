@@ -89,16 +89,10 @@ function setExcelToolCardsExpanded(expanded: boolean): void {
     const body = toolMessage.querySelector<HTMLElement>(".pi-tool-card__body");
     if (!body) continue;
 
-    if (expanded) {
-      body.classList.remove("max-h-0");
-      body.classList.add("max-h-[2000px]", "mt-3");
-    } else {
-      body.classList.remove("max-h-[2000px]", "mt-3");
-      body.classList.add("max-h-0");
-    }
+    body.classList.toggle("pi-tool-card__body--collapsed", !expanded);
 
-    const up = toolMessage.querySelector<HTMLElement>(".chevron-up");
-    const down = toolMessage.querySelector<HTMLElement>(".chevrons-up-down");
+    const up = toolMessage.querySelector<HTMLElement>(".pi-tool-card__chevron-up");
+    const down = toolMessage.querySelector<HTMLElement>(".pi-tool-card__chevron-collapsed");
     if (!up || !down) continue;
 
     if (expanded) {

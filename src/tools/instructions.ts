@@ -7,7 +7,7 @@
 
 import { Type, type Static } from "@sinclair/typebox";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
-import { getAppStorage } from "@earendil-works/pi-web-ui/dist/storage/app-storage.js";
+import { getAppStorage } from "../storage/local/app-storage.js";
 
 import {
   applyRuleAction,

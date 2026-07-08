@@ -33,35 +33,6 @@
   font-size: var(--text-base);
 }
 
-.pi-overlay-tabs {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 10px;
-}
-
-.pi-overlay-tab {
-  border: 1px solid var(--alpha-8);
-  border-radius: var(--radius-sm);
-  background: var(--alpha-4);
-  color: var(--muted-foreground);
-  padding: 6px 10px;
-  font-family: var(--font-sans);
-  font-size: var(--text-sm);
-  cursor: pointer;
-  transition: background var(--duration-fast), color var(--duration-fast), border-color var(--duration-fast);
-}
-
-.pi-overlay-tab:hover {
-  background: var(--alpha-6);
-}
-
-.pi-overlay-tab.is-active {
-  background: var(--green-alpha-12);
-  border-color: var(--green-alpha-30);
-  color: var(--foreground);
-}
-
 .pi-overlay-workbook-tag {
   margin: -4px 0 8px;
   font-family: var(--font-mono);
@@ -380,7 +351,7 @@
   gap: 8px;
   border: 1px solid var(--alpha-8);
   background: var(--white-alpha-35);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   padding: 9px;
 }
 
@@ -395,8 +366,9 @@
   font-family: var(--font-sans);
   font-size: var(--text-xs);
   padding: 2px 6px;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   border: 1px solid var(--alpha-8);
+  white-space: nowrap;
 }
 
 .pi-overlay-badge--ok {
@@ -678,7 +650,7 @@
 .pi-conventions-color-swatch {
   inline-size: 18px;
   block-size: 18px;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   border: 1px solid var(--alpha-12);
   background: transparent;
   padding: 0;
@@ -691,7 +663,7 @@
 
 .pi-conventions-color-swatch::-webkit-color-swatch {
   border: none;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
 }
 
 .pi-conventions-header-colors {

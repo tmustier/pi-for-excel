@@ -19,7 +19,7 @@
 }
 
 .pi-empty__logo {
-  font-size: var(--text-xl);
+  font-size: var(--text-display);
   font-weight: 700;
   color: var(--pi-green);
   font-family: var(--font-sans);

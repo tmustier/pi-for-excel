@@ -7,7 +7,7 @@ Notes for agents working in this repo.
 ## Read before changing behavior
 - Agent coding standards: `docs/coding-standards.md`
 - Tool behavior rules: `src/tools/DECISIONS.md`
-- UI/CSS architecture: `src/ui/README.md` (Tailwind v4 `@layer` gotcha)
+- UI/CSS architecture: `src/ui/README.md` (first-party preflight; keep it faithful)
 - Upstream divergences: `docs/upstream-divergences.md` (read before adding new divergences)
 - Docs index: `docs/README.md`
 - Model registry freshness: `docs/model-updates.md` (if **Last verified** > 1 week, refresh Pi deps + re-verify model IDs before model UX changes)

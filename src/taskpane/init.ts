@@ -11,17 +11,16 @@ function isTaskpaneInitPayloadShape(value: DynamicValue): value is DynamicObject
 
 import { html, render } from "lit";
 import { Agent } from "@earendil-works/pi-agent-core";
-import { ApiKeyPromptDialog } from "@earendil-works/pi-web-ui/dist/dialogs/ApiKeyPromptDialog.js";
-import { ModelSelector } from "@earendil-works/pi-web-ui/dist/dialogs/ModelSelector.js";
-import { getAppStorage } from "@earendil-works/pi-web-ui/dist/storage/app-storage.js";
-import type { CustomProvider } from "@earendil-works/pi-web-ui/dist/storage/stores/custom-providers-store.js";
-import type { SessionData } from "@earendil-works/pi-web-ui/dist/storage/types.js";
+import { getAppStorage } from "../storage/local/app-storage.js";
+import type { CustomProvider } from "../storage/local/custom-providers-store.js";
+import type { SessionData } from "../storage/local/types.js";
 
 import { createOfficeStreamFn } from "../auth/stream-proxy.js";
 import {
   DEFAULT_PROXY_URL,
   PROXY_HELPER_DOCS_URL,
   isLoopbackProxyUrl,
+  resolveRuntimeDefaultProxyUrl,
   validateOfficeProxyUrl,
 } from "../auth/proxy-validation.js";
 import { restoreCredentials } from "../auth/restore.js";
@@ -62,18 +61,15 @@ import {
   withWorkbookCoordinator,
 } from "../tools/with-workbook-coordinator.js";
 import { registerBuiltins } from "../commands/builtins.js";
-import { showExtensionsHubDialog, type ExtensionsHubTab } from "../commands/builtins/extensions-hub-overlay.js";
 import { ExtensionRuntimeManager } from "../extensions/runtime-manager.js";
 import type { ResumeDialogTarget } from "../commands/builtins/resume-target.js";
 import {
-  showRulesDialog,
-  showRecoveryDialog,
+  configureSettingsPages,
+  openSettings,
   showResumeDialog,
-  showSettingsDialog,
-  showShortcutsDialog,
+  type ExtensionsHubTab,
   type RecoveryCheckpointSummary,
 } from "../commands/builtins/overlays.js";
-import { configureSettingsDialogDependencies } from "../commands/builtins/settings-overlay.js";
 import { wireCommandMenu } from "../commands/command-menu.js";
 import { executeSlashCommand } from "../commands/slash-command-execution.js";
 import {
@@ -129,8 +125,10 @@ import { TOOL_APPROVAL_OVERLAY_ID } from "../ui/overlay-ids.js";
 import { showActionToast, showToast } from "../ui/toast.js";
 import { PiSidebar } from "../ui/pi-sidebar.js";
 import { createProxyBanner } from "../ui/proxy-banner.js";
-import { setActiveProviders } from "../compat/model-selector-patch.js";
-import { getCurrentSpreadsheetHost } from "../host/index.js";
+import { setActiveProviders } from "../models/active-providers.js";
+import { promptForProviderConnection } from "../ui/api-key-dialog.js";
+import { openModelSelectorDialog } from "../ui/model-selector-dialog.js";
+import { getCurrentSpreadsheetHost, type SpreadsheetHostKind } from "../host/index.js";
 import { createWorkbookCoordinator } from "../workbook/coordinator.js";
 import { formatWorkbookLabel, type WorkbookContext } from "../workbook/context.js";
 import {
@@ -203,14 +201,19 @@ interface ProxySettingsStore {
   set(key: string, value: DynamicValue): Promise<void>;
 }
 
-async function ensureDefaultProxyUrl(settings: ProxySettingsStore): Promise<void> {
+async function ensureDefaultProxyUrl(
+  settings: ProxySettingsStore,
+  hostKind: SpreadsheetHostKind,
+): Promise<void> {
   try {
+    const runtimeDefaultProxyUrl = resolveRuntimeDefaultProxyUrl({ hostKind });
     const proxyUrl = await settings.get<string>("proxy.url");
-    if (typeof proxyUrl === "string" && proxyUrl.trim().length > 0) {
+    const storedProxyUrl = typeof proxyUrl === "string" ? proxyUrl.trim() : "";
+    if (storedProxyUrl.length > 0 && !(storedProxyUrl === DEFAULT_PROXY_URL && runtimeDefaultProxyUrl !== DEFAULT_PROXY_URL)) {
       return;
     }
 
-    await settings.set("proxy.url", DEFAULT_PROXY_URL);
+    await settings.set("proxy.url", runtimeDefaultProxyUrl);
   } catch {
     // ignore
   }
@@ -237,7 +240,7 @@ export async function initTaskpane(opts: {
   }
 
   // Seed a predictable proxy default for OAuth flows.
-  await ensureDefaultProxyUrl(settings);
+  await ensureDefaultProxyUrl(settings, spreadsheetHost.kind);
 
   // Migrate legacy web-search API keys to the connection store schema.
   try {
@@ -1089,7 +1092,7 @@ export async function initTaskpane(opts: {
         return customProviderApiKeys.get(provider) ?? undefined;
       }
 
-      const success = await ApiKeyPromptDialog.prompt(provider);
+      const success = await promptForProviderConnection(provider);
       await refreshConfiguredProviders();
       if (success) {
         clearErrorBanner(errorRoot);
@@ -1304,11 +1307,7 @@ export async function initTaskpane(opts: {
   };
 
   const openRulesEditor = async (): Promise<void> => {
-    await showRulesDialog({
-      onSaved: async () => {
-        await refreshWorkbookState();
-      },
-    });
+    await openSettings("rules");
   };
 
   type ReopenRecentlyClosedResult = "reopened" | "missing" | "failed";
@@ -1621,29 +1620,35 @@ export async function initTaskpane(opts: {
   });
 
   const openExtensionsHub = (tab?: ExtensionsHubTab): void => {
-    void showExtensionsHubDialog(
-      {
-        getActiveSessionId: () => getActiveRuntime()?.persistence.getSessionId() ?? null,
-        resolveWorkbookContext: async () => {
-          const workbookContext = await resolveWorkbookContext();
-          return {
-            workbookId: workbookContext.workbookId,
-            workbookLabel: formatWorkbookLabel(workbookContext),
-          };
-        },
-        extensionManager,
-        connectionManager,
-        onChanged: refreshCapabilitiesForAllRuntimes,
-      },
-      tab !== undefined ? { tab } : {},
-    );
+    void openSettings(tab ?? "connections");
   };
 
   const openRecoveryDialog = async (): Promise<void> => {
-    const workbookContext = await resolveWorkbookContext();
+    await openSettings("backups");
+  };
 
-    await showRecoveryDialog({
-      workbookLabel: formatWorkbookLabel(workbookContext),
+  configureSettingsPages({
+    getExecutionMode,
+    setExecutionMode,
+    getModelSwitchBehavior,
+    setModelSwitchBehavior,
+    onRulesSaved: async () => {
+      await refreshWorkbookState();
+    },
+    extensionsHub: {
+      getActiveSessionId: () => getActiveRuntime()?.persistence.getSessionId() ?? null,
+      resolveWorkbookContext: async () => {
+        const workbookContext = await resolveWorkbookContext();
+        return {
+          workbookId: workbookContext.workbookId,
+          workbookLabel: formatWorkbookLabel(workbookContext),
+        };
+      },
+      extensionManager,
+      connectionManager,
+      onChanged: refreshCapabilitiesForAllRuntimes,
+    },
+    backups: {
       loadCheckpoints: async () => {
         const checkpoints = await workbookRecoveryLog.listForCurrentWorkbook(40);
         return checkpoints.map((checkpoint) => toRecoveryCheckpointSummary(checkpoint));
@@ -1667,17 +1672,7 @@ export async function initTaskpane(opts: {
       setRetentionConfig: async (config) => {
         await writeRetentionLimit(config.maxSnapshots);
       },
-    });
-  };
-
-  configureSettingsDialogDependencies({
-    openRulesDialog: openRulesEditor,
-    openRecoveryDialog,
-    openShortcutsDialog: showShortcutsDialog,
-    getExecutionMode,
-    setExecutionMode,
-    getModelSwitchBehavior,
-    setModelSwitchBehavior,
+    },
   });
 
   const applyModelSelection = async (runtimeId: string, nextModel: RuntimeModel): Promise<void> => {
@@ -1739,8 +1734,11 @@ export async function initTaskpane(opts: {
 
       closeStatusPopover();
 
-      await ModelSelector.open(currentModel, (model) => {
-        void applyModelSelection(targetRuntimeId, model);
+      openModelSelectorDialog({
+        currentModel,
+        onSelect: (model) => {
+          void applyModelSelection(targetRuntimeId, model);
+        },
       });
     })();
   };
@@ -1886,7 +1884,7 @@ export async function initTaskpane(opts: {
     openExtensionsHub();
   };
   sidebar.onOpenSettings = () => {
-    void showSettingsDialog();
+    void openSettings();
   };
   sidebar.onOpenFilesWorkspace = () => {
     void showFilesWorkspaceDialog();
@@ -1917,7 +1915,7 @@ export async function initTaskpane(opts: {
     void openRecoveryDialog();
   };
   sidebar.onOpenShortcuts = () => {
-    showShortcutsDialog();
+    void openSettings("shortcuts");
   };
 
 
@@ -1936,7 +1934,7 @@ export async function initTaskpane(opts: {
     const { createDisclosureBar } = await import("../ui/disclosure-bar.js");
     const disclosureEl = createDisclosureBar({
       providerCount: availableProviders.length,
-      onOpenSettings: () => void showSettingsDialog(),
+      onOpenSettings: () => void openSettings(),
     });
     if (disclosureEl) {
       const messagesContainer = sidebar.querySelector(".pi-messages");

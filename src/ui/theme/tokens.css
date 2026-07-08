@@ -47,7 +47,8 @@
   --text-base: 13px;
   --text-md: 15px;
   --text-lg: 18px;
-  --text-xl: 40px;
+  /* Display size — logo glyphs / hero marks only, never body text */
+  --text-display: 40px;
 
   --duration-fast: 0.12s;
   --duration-normal: 0.2s;

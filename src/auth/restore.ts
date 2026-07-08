@@ -11,8 +11,8 @@ function isAuthRestorePayloadShape(value: DynamicValue): value is DynamicObject 
  */
 
 import type { OAuthCredentials, OAuthProviderInterface } from "@earendil-works/pi-ai/compat";
-import type { ProviderKeysStore } from "@earendil-works/pi-web-ui/dist/storage/stores/provider-keys-store.js";
-import type { SettingsStore } from "@earendil-works/pi-web-ui/dist/storage/stores/settings-store.js";
+import type { ProviderKeysStore } from "../storage/local/provider-keys-store.js";
+import type { SettingsStore } from "../storage/local/settings-store.js";
 
 import { originalFetch } from "./cors-proxy.js";
 import { clearOAuthCredentials, loadOAuthCredentials, saveOAuthCredentials } from "./oauth-storage.js";

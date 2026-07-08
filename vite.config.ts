@@ -1,4 +1,5 @@
 import { defineConfig, type Plugin } from "vite";
+import { isPiAuthRequestAllowed } from "./src/dev-auth-policy.js";
 import { resolveDevOrigin } from "./scripts/generate-dev-manifest.mjs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import fs from "fs";
@@ -16,23 +17,18 @@ import os from "os";
  */
 function piAuthPlugin(): Plugin {
   const authPath = path.join(os.homedir(), ".pi", "agent", "auth.json");
-
-  const isLoopbackAddress = (addr: string | undefined): boolean => {
-    if (!addr) return false;
-    if (addr === "::1" || addr === "0:0:0:0:0:0:0:1") return true;
-    if (addr.startsWith("127.")) return true;
-    if (addr.startsWith("::ffff:127.")) return true;
-    return false;
-  };
+  const allowNonLocalHost = process.env.PI_AUTH_ALLOW_NONLOCAL_HOST === "1";
 
   return {
     name: "pi-auth",
     configureServer(server) {
       server.middlewares.use("/__pi-auth", (req: IncomingMessage, res: ServerResponse) => {
         // SECURITY: auth.json can contain API keys + refresh tokens.
-        // Only serve it to loopback clients (Excel webviews, local browser).
+        // Only serve it to loopback clients on loopback hostnames (Excel webviews,
+        // local browser). QEMU user networking can make WPS guest traffic appear
+        // loopback to Vite, so also require a localhost/127.0.0.1 Host header by default.
         const remote = req.socket?.remoteAddress;
-        if (!isLoopbackAddress(remote)) {
+        if (!isPiAuthRequestAllowed({ remoteAddress: remote, hostHeader: req.headers.host, allowNonLocalHost })) {
           res.statusCode = 403;
           res.setHeader("Content-Type", "application/json; charset=utf-8");
           res.setHeader("Cache-Control", "no-store");
@@ -66,57 +62,6 @@ function piAuthPlugin(): Plugin {
 // hazards: 0.80's providers/amazon-bedrock.js exports amazonBedrockProvider
 // and the public /oauth entrypoint resolves to dist/utils/oauth/index.js,
 // both incompatible with the old substitute modules.
-
-/**
- * Stub out pi-web-ui tool modules we don't ship in the Excel add-in.
- *
- * pi-web-ui's tools/index.js auto-imports optional tools (document extraction,
- * JavaScript REPL) to register their renderers. Those pull heavy dependencies
- * (pdfjs-dist, docx-preview, xlsx) that bloat the taskpane bundle.
- */
-function stubPiWebUiBuiltinToolsPlugin(): Plugin {
-  const stubExtractDocumentPath = path.resolve(__dirname, "src/stubs/pi-web-ui-extract-document.ts");
-  const stubJavascriptReplPath = path.resolve(__dirname, "src/stubs/pi-web-ui-javascript-repl.ts");
-  const stubAttachmentUtilsPath = path.resolve(__dirname, "src/stubs/pi-web-ui-attachment-utils.ts");
-  const stubAttachmentOverlayPath = path.resolve(__dirname, "src/stubs/pi-web-ui-attachment-overlay.ts");
-  const stubArtifactsPanelPath = path.resolve(__dirname, "src/stubs/pi-web-ui-artifacts-panel.ts");
-  const stubArtifactsToolRendererPath = path.resolve(__dirname, "src/stubs/pi-web-ui-artifacts-tool-renderer.ts");
-
-  const norm = (p: string): string => p.split("?")[0].replaceAll("\\", "/");
-
-  return {
-    name: "stub-pi-web-ui-builtin-tools",
-    enforce: "pre",
-    resolveId(id, importer) {
-      const cleanId = norm(id);
-      const cleanImporter = importer ? norm(importer) : "";
-
-      const importerIsPiWebUi = cleanImporter.includes("@earendil-works/pi-web-ui");
-      if (!importerIsPiWebUi) return null;
-
-      // ── Tools (pi-web-ui ships them, but Excel add-in does not) ──
-      if (cleanImporter.endsWith("/dist/tools/index.js")) {
-        // tools/index.js imports these via relative paths.
-        if (cleanId === "./extract-document.js") return stubExtractDocumentPath;
-        if (cleanId === "./javascript-repl.js") return stubJavascriptReplPath;
-      }
-
-      // index.js re-exports these via ./tools/*
-      if (cleanId.endsWith("tools/extract-document.js")) return stubExtractDocumentPath;
-      if (cleanId.endsWith("tools/javascript-repl.js")) return stubJavascriptReplPath;
-
-      // ── Attachments (heavy deps: pdfjs-dist, docx-preview, xlsx) ──
-      if (cleanId.endsWith("utils/attachment-utils.js")) return stubAttachmentUtilsPath;
-      if (cleanId.endsWith("dialogs/AttachmentOverlay.js")) return stubAttachmentOverlayPath;
-
-      // ── Artifacts (pull in PDF/DOCX/XLSX renderers) ──
-      if (cleanId.endsWith("tools/artifacts/artifacts.js")) return stubArtifactsPanelPath;
-      if (cleanId.endsWith("tools/artifacts/artifacts-tool-renderer.js")) return stubArtifactsToolRendererPath;
-
-      return null;
-    },
-  };
-}
 
 // ============================================================================
 // Proxy helper — strips browser headers so APIs don't treat requests as CORS
@@ -184,28 +129,14 @@ function buildBrowserAliasMap(): Record<string, string> {
     ajv: resolveFromRoot("src/stubs/ajv.ts"),
     "ajv-formats": resolveFromRoot("src/stubs/ajv-formats.ts"),
 
-    // pi-web-ui only exports "." + "./app.css". We deep-import from its dist
-    // modules to avoid pulling the entire barrel (ChatPanel, artifacts, etc.).
-    // This alias bypasses package.json "exports" restrictions.
-    "@earendil-works/pi-web-ui/dist": resolveFromRoot("node_modules/@earendil-works/pi-web-ui/dist"),
   };
 }
 
 /**
- * Full browser alias list: the centralized alias map plus pattern-based
- * aliases that need exact-match regexes.
+ * Full browser alias list, in vite's find/replacement shape.
  */
 function buildBrowserAliases(): { find: string | RegExp; replacement: string }[] {
-  return [
-    ...Object.entries(buildBrowserAliasMap()).map(([find, replacement]) => ({ find, replacement })),
-
-    // pi-ai 0.80 moved the legacy global API (getModel/getModels/stream/…)
-    // to the "/compat" entrypoint. Our own code imports "/compat" directly;
-    // this alias covers pi-web-ui's dist modules, which still import the old
-    // root surface. Exact-match regex so "/compat" itself is untouched.
-    // Remove once pi-web-ui ships a pi-ai 0.80-native release.
-    { find: /^@earendil-works\/pi-ai$/, replacement: "@earendil-works/pi-ai/compat" },
-  ];
+  return Object.entries(buildBrowserAliasMap()).map(([find, replacement]) => ({ find, replacement }));
 }
 
 // ============================================================================
@@ -269,7 +200,6 @@ const devProxy = resolveDevProxy();
 export default defineConfig({
   plugins: [
     piAuthPlugin(),
-    stubPiWebUiBuiltinToolsPlugin(),
   ],
 
   server: {
@@ -332,9 +262,9 @@ export default defineConfig({
   resolve: {
     alias: buildBrowserAliases(),
     // Force a single `marked` instance so our safety patch
-    // (installMarkedSafetyPatch) intercepts all .use() calls —
-    // including markdown-block's. Without this, mini-lit bundles its
-    // own marked@16 copy that our patch never touches.
+    // (installMarkedSafetyPatch) intercepts every parse. All markdown
+    // rendering is first-party now, but keep the dedupe so a future dep
+    // bundling its own marked copy can't bypass the patch.
     dedupe: ["marked"],
   },
 

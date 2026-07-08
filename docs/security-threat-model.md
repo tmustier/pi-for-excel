@@ -18,7 +18,7 @@ This document summarizes what Pi for Excel stores, where data flows, and key tru
 
 ## Storage model
 
-- API keys: IndexedDB store via pi-web-ui storage backend
+- API keys: IndexedDB store via vendored first-party storage backend (`src/storage/local/`)
 - OAuth credentials: IndexedDB settings (`oauth.<provider>`)
 - Sessions/settings: IndexedDB
 

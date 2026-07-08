@@ -2,7 +2,7 @@
  * Settings section for custom OpenAI-compatible gateways.
  */
 
-import { getAppStorage } from "@earendil-works/pi-web-ui/dist/storage/app-storage.js";
+import { getAppStorage } from "../../storage/local/app-storage.js";
 
 import {
   DEFAULT_OPENAI_GATEWAY_CONTEXT_WINDOW,
@@ -23,6 +23,11 @@ import { t } from "../../language/index.js";
 
 interface BuildCustomGatewaySectionOptions {
   onProvidersChanged: () => void;
+  /**
+   * Include the section's own title + hint. Defaults to true; the settings
+   * gateway page supplies its own page header instead.
+   */
+  includeHeading?: boolean;
 }
 
 function createHint(text: string): HTMLParagraphElement {
@@ -320,6 +325,9 @@ export async function buildCustomGatewaySection(
   renderList();
 
   content.append(formCard, listTitle, listHost);
-  section.append(title, hint, content);
+  if (options.includeHeading !== false) {
+    section.append(title, hint);
+  }
+  section.append(content);
   return section;
 }

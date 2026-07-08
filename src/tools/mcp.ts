@@ -331,7 +331,7 @@ function matchesSearch(tool: McpToolDescriptor, query: string): boolean {
 }
 
 async function defaultGetRuntimeConfig(): Promise<McpRuntimeConfig> {
-  const storageModule = await import("@earendil-works/pi-web-ui/dist/storage/app-storage.js");
+  const storageModule = await import("../storage/local/app-storage.js");
   const settingsStore = storageModule.getAppStorage().settings;
   const configStore: McpConfigStore = settingsStore;
   const proxyStore: ProxyAwareSettingsStore = settingsStore;

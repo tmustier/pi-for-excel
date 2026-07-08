@@ -13,6 +13,20 @@ import { installOverlayEscapeClose } from "./overlay-escape.js";
 
 const overlayClosers = new WeakMap<HTMLElement, () => void>();
 
+/**
+ * Register a close handler for an overlay element that is not built through
+ * `createOverlayDialog` (e.g. the settings shell), so `closeOverlayById`
+ * routes through its cleanup path instead of removing the node directly.
+ */
+export function registerOverlayCloser(overlay: HTMLElement, close: () => void): void {
+  overlayClosers.set(overlay, close);
+}
+
+/** Remove a previously registered overlay close handler. */
+export function unregisterOverlayCloser(overlay: HTMLElement): void {
+  overlayClosers.delete(overlay);
+}
+
 export function closeOverlayById(overlayId: string): boolean {
   const existing = document.getElementById(overlayId);
   if (!(existing instanceof HTMLElement)) {

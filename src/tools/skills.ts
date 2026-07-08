@@ -77,7 +77,7 @@ async function defaultLoadDisabledSkillNames(): Promise<Set<string>> {
 
   try {
     const [{ getAppStorage }, { loadDisabledSkillNamesFromSettings }] = await Promise.all([
-      import("@earendil-works/pi-web-ui/dist/storage/app-storage.js"),
+      import("../storage/local/app-storage.js"),
       import("../skills/activation-store.js"),
     ]);
 

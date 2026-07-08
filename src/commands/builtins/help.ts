@@ -3,7 +3,7 @@
  */
 
 import type { SlashCommand } from "../types.js";
-import { showShortcutsDialog } from "./overlays.js";
+import { openSettings } from "./overlays.js";
 import { t } from "../../language/index.js";
 
 export function createHelpCommands(): SlashCommand[] {
@@ -13,7 +13,7 @@ export function createHelpCommands(): SlashCommand[] {
       description: t("command.help.desc"),
       source: "builtin",
       execute: () => {
-        showShortcutsDialog();
+        void openSettings("shortcuts");
       },
     },
   ];

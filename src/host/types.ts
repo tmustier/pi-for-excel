@@ -1,6 +1,6 @@
 /** Host abstraction types for Office, WPS, and browser/UI-test runtimes. */
 
-import type { SettingsStore } from "@earendil-works/pi-web-ui";
+import type { SettingsStore } from "../storage/local/settings-store.js";
 
 import type { SessionWorkbookPartition } from "../workbook/session-association.js";
 import type { WorkbookContext } from "./workbook-context.js";

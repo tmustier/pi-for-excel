@@ -13,7 +13,7 @@ import { excelRun, getRange, qualifiedAddress, parseCell, colToLetter } from "..
 import { formatAsMarkdownTable, extractFormulas, findErrors } from "../utils/format.js";
 import { getErrorMessage } from "../utils/errors.js";
 import { buildResolvedFormatLabels, getResolvedConventions, humanizeFormat } from "../conventions/index.js";
-import { getAppStorage } from "@earendil-works/pi-web-ui/dist/storage/app-storage.js";
+import { getAppStorage } from "../storage/local/app-storage.js";
 import type { ReadRangeCsvDetails } from "./tool-details.js";
 
 const schema = Type.Object({

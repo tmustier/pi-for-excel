@@ -5,8 +5,8 @@
 This repo hardcodes a small set of "featured" and "preferred" model IDs (for sorting + default selection). Those IDs come from Pi’s model registry (`@earendil-works/pi-ai`) and will drift as new models ship (e.g. `gpt-5.5`, `gpt-5.3-codex`, `claude-fable-5`, `claude-opus-4-8`, `gemini-3.1-pro-preview`).
 
 This doc describes how to update:
-- the **Pi dependency versions** we ship (`@earendil-works/pi-ai`, `@earendil-works/pi-web-ui`, `@earendil-works/pi-agent-core`)
-- the **model ordering/default-selection behavior** in the add-in (`src/models/model-ordering.ts`, `src/taskpane/default-model.ts`, `src/compat/model-selector-patch.ts`)
+- the **Pi dependency versions** we ship (`@earendil-works/pi-ai`, `@earendil-works/pi-agent-core`)
+- the **model ordering/default-selection behavior** in the add-in (`src/models/model-ordering.ts`, `src/models/featured-models.ts`, `src/taskpane/default-model.ts`)
 
 ## Source of truth
 
@@ -24,7 +24,6 @@ This doc describes how to update:
 - Dependabot checks npm dependencies **daily**.
 - A dedicated Dependabot group (`pi-stack`) keeps these packages in one PR:
   - `@earendil-works/pi-ai`
-  - `@earendil-works/pi-web-ui`
   - `@earendil-works/pi-agent-core`
 - `.github/workflows/dependabot-pi-automerge.yml` auto-approves + enables auto-merge for that Dependabot group (merge still waits for green checks).
 - `npm run check` includes `scripts/check-pi-deps-lockstep.mjs`, which enforces the dependency policy below (`pi-ai` === `pi-agent-core`, exact pins, single shared `pi-ai` copy in the lockfile).
@@ -35,7 +34,6 @@ This doc describes how to update:
 
 ```bash
 node -p "require('./node_modules/@earendil-works/pi-ai/package.json').version"
-node -p "require('./node_modules/@earendil-works/pi-web-ui/package.json').version"
 node -p "require('./node_modules/@earendil-works/pi-agent-core/package.json').version"
 ```
 
@@ -43,7 +41,6 @@ node -p "require('./node_modules/@earendil-works/pi-agent-core/package.json').ve
 
 ```bash
 npm view @earendil-works/pi-ai version
-npm view @earendil-works/pi-web-ui version
 npm view @earendil-works/pi-agent-core version
 ```
 
@@ -51,29 +48,22 @@ Also inspect the version lists before choosing a target:
 
 ```bash
 npm view @earendil-works/pi-ai versions --json
-npm view @earendil-works/pi-web-ui versions --json
 npm view @earendil-works/pi-agent-core versions --json
 ```
 
-**Dependency policy (since 2026-06-09):** upstream stopped publishing `pi-web-ui` in lockstep after `0.75.3`, while `pi-ai` / `pi-agent-core` kept moving (and new models like `claude-fable-5` only exist in newer `pi-ai`). The rules are now:
+**Dependency policy:**
 
 - `@earendil-works/pi-ai` and `@earendil-works/pi-agent-core` move **together** to the newest common version.
-- `@earendil-works/pi-web-ui` stays at the newest *published* version (currently `0.75.3`) and is allowed to lag.
-- All three must be **exact-pinned** in `package.json`.
-- The root `package.json` `overrides` entry for `@earendil-works/pi-ai` (`"$@earendil-works/pi-ai"`) forces `pi-web-ui`'s nested `^0.75.x` range onto the root version so the lockfile resolves **exactly one** copy of `pi-ai`. Two copies = two model registries = the ModelSelector and the app disagree about available models.
+- Both must be **exact-pinned** in `package.json`.
+- The lockfile must resolve **exactly one** copy of `pi-ai`. Two copies = two model registries = the model selector and the app disagree about available models.
 - `scripts/check-pi-deps-lockstep.mjs` (run via `npm run check:pi-lockstep`) enforces all of this.
-- When bumping past `pi-web-ui`'s compiled-against version, re-verify the runtime APIs it imports from `pi-ai` still exist (`complete`, `streamSimple`, `getModel`, `getModels`, `getProviders`, `modelsAreEqual`, `StringEnum`) and check the pi changelog for breaking OAuth/streaming surface changes (e.g. 0.79.x made `onDeviceCode` / `onSelect` required in `OAuthLoginCallbacks`).
+- `@earendil-works/pi-web-ui` was **removed entirely** on 2026-07-07 (the UI layer is first-party; see `docs/ui-ownership.md`). Do not re-add it.
+- Check the pi changelog for breaking OAuth/streaming surface changes when bumping (e.g. 0.79.x made `onDeviceCode` / `onSelect` required in `OAuthLoginCallbacks`).
 
 ### 3) Bump dependencies in `package.json`
 
 ```bash
 npm install @earendil-works/pi-ai@<version> @earendil-works/pi-agent-core@<version> --save-exact
-```
-
-Only bump `@earendil-works/pi-web-ui` when upstream actually publishes a newer version:
-
-```bash
-npm install @earendil-works/pi-web-ui@<version> --save-exact
 ```
 
 ### 4) Verify the new model IDs exist in the registry
@@ -98,8 +88,9 @@ If an ID doesn’t appear there, **don’t** add it to the add-in yet—either:
 
 Files:
 - `src/models/model-ordering.ts` (provider/family priority + version/recency scoring)
+- `src/models/featured-models.ts` (featured-model ordering used by the model picker)
 - `src/taskpane/default-model.ts` (default-model selection rules)
-- `src/compat/model-selector-patch.ts` (ModelSelector ordering/featured-model behavior)
+- `src/ui/model-selector-dialog.ts` (first-party model picker UI)
 - `tests/model-ordering.test.ts` (sanity tests; run `npm run test:models` — requires Node 22.19+)
 
 We intentionally avoid pinning exact versioned IDs now. Instead we:
@@ -183,7 +174,7 @@ npm run sideload
 
 1) **Provider filter:** the model picker only shows models for **connected providers** (saved API key/OAuth). Make sure the provider is connected.
 2) **Excel caching:** quit Excel completely (Cmd+Q) and reopen.
-3) **Hot reload note:** taskpane JS/CSS is served from Vite; edits to model-selection files (`src/models/model-ordering.ts`, `src/taskpane/default-model.ts`, `src/compat/model-selector-patch.ts`) should apply via HMR without needing to re-sideload, as long as Excel is pointed at the same running dev server.
+3) **Hot reload note:** taskpane JS/CSS is served from Vite; edits to model-selection files (`src/models/model-ordering.ts`, `src/models/featured-models.ts`, `src/taskpane/default-model.ts`) should apply via HMR without needing to re-sideload, as long as Excel is pointed at the same running dev server.
 4) **Vite optimized deps:** after dependency bumps, clear and restart:
 
 ```bash

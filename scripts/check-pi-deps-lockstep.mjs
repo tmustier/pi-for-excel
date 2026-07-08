@@ -6,18 +6,17 @@ import { promises as fs } from "node:fs";
  * - `@earendil-works/pi-ai` and `@earendil-works/pi-agent-core` must stay in
  *   exact lockstep (same spec in package.json, same resolved version in
  *   package-lock.json).
- * - `@earendil-works/pi-web-ui` is allowed to lag: upstream stopped publishing
- *   it in lockstep after 0.75.3. It must still be exact-pinned.
  * - The lockfile must resolve exactly ONE copy of `pi-ai` and `pi-agent-core`
- *   (no nested duplicates). Duplicate pi-ai copies mean two model registries:
- *   the ModelSelector (pi-web-ui) and the app would disagree about available
- *   models. The root `overrides` entry for pi-ai keeps pi-web-ui's nested
- *   range deduped onto the root version — this check verifies the effect.
+ *   (no nested duplicates). Duplicate pi-ai copies mean two model registries
+ *   that disagree about available models.
+ *
+ * (`@earendil-works/pi-web-ui` was removed entirely — the UI layer is
+ * first-party now; see docs/ui-ownership.md.)
  */
 
 const LOCKSTEP_PAIR = ["@earendil-works/pi-ai", "@earendil-works/pi-agent-core"];
 const SINGLETON_PACKAGES = ["@earendil-works/pi-ai", "@earendil-works/pi-agent-core"];
-const PI_DEPENDENCIES = [...LOCKSTEP_PAIR, "@earendil-works/pi-web-ui"];
+const PI_DEPENDENCIES = [...LOCKSTEP_PAIR];
 
 const EXACT_VERSION_RE = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 
@@ -117,10 +116,8 @@ async function main() {
   }
 
   const coreVersion = packageJsonEntries[0]?.[1] ?? "(unknown)";
-  const webUiVersion =
-    packageJsonEntries.find(([name]) => name === "@earendil-works/pi-web-ui")?.[1] ?? "(unknown)";
   console.log(
-    `✓ Pi dependencies OK (pi-ai/pi-agent-core: ${coreVersion}, pi-web-ui: ${webUiVersion}, single shared pi-ai copy).`,
+    `✓ Pi dependencies OK (pi-ai/pi-agent-core: ${coreVersion}, single shared pi-ai copy).`,
   );
 }
 

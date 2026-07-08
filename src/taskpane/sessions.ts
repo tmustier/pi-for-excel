@@ -9,9 +9,9 @@
 
 import { getModel } from "@earendil-works/pi-ai/compat";
 import type { Agent, AgentMessage } from "@earendil-works/pi-agent-core";
-import type { SessionData } from "@earendil-works/pi-web-ui/dist/storage/types.js";
-import type { SessionsStore } from "@earendil-works/pi-web-ui/dist/storage/stores/sessions-store.js";
-import type { SettingsStore } from "@earendil-works/pi-web-ui/dist/storage/stores/settings-store.js";
+import type { SessionData } from "../storage/local/types.js";
+import type { SessionsStore } from "../storage/local/sessions-store.js";
+import type { SettingsStore } from "../storage/local/settings-store.js";
 
 import {
   resolveCustomProviderModel,

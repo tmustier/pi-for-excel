@@ -29,8 +29,7 @@
     // explicitly (module imports like node:assert still resolve on their own).
     "types": ["office-js", "node"],
     "paths": {
-      "@/*": ["./src/*"],
-      "@earendil-works/pi-web-ui/dist/*": ["./node_modules/@earendil-works/pi-web-ui/dist/*"]
+      "@/*": ["./src/*"]
     }
   },
   "include": ["src/**/*.ts"],

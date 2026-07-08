@@ -9,7 +9,7 @@ function isTaskpaneTabLayoutPayloadShape(value: DynamicValue): value is DynamicO
  * the same set of session tabs and active tab.
  */
 
-import type { SettingsStore } from "@earendil-works/pi-web-ui";
+import type { SettingsStore } from "../storage/local/settings-store.js";
 
 
 const WORKBOOK_TAB_LAYOUT_PREFIX = "workbook.tabLayout.v1.";

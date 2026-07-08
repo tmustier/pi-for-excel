@@ -7,15 +7,16 @@
 
 import { html } from "lit";
 import { createRef, ref } from "lit/directives/ref.js";
-import { registerMessageRenderer } from "@earendil-works/pi-web-ui/dist/components/message-renderer-registry.js";
+import { registerMessageRenderer } from "./messages/message-renderer-registry.js";
 import { renderCollapsibleToolCardHeader } from "./tool-card-header.js";
 import { t } from "../language/index.js";
 
 import { formatCompactionSummaryExtent, type CompactionSummaryMessage } from "../messages/compaction.js";
 import type { ArchivedMessagesMessage } from "../messages/archived-history.js";
 
-// Ensure <markdown-block> is registered.
-import "@mariozechner/mini-lit/dist/MarkdownBlock.js";
+// Ensure <markdown-block> and <message-list> are registered.
+import "./messages/markdown-block.js";
+import "./messages/message-list.js";
 
 const EMPTY_PENDING_TOOL_CALLS = new Set<string>();
 
@@ -32,7 +33,7 @@ registerMessageRenderer("archivedMessages", {
     `;
 
     return html`
-      <div class="px-4">
+      <div class="pi-message-gutter">
         <div class="pi-tool-card" data-state="complete" data-tool-name="archive_history">
           <div class="pi-tool-card__header">
             ${renderCollapsibleToolCardHeader("complete", title, contentRef, chevronRef, false)}
@@ -40,7 +41,7 @@ registerMessageRenderer("archivedMessages", {
 
           <div
             ${ref(contentRef)}
-            class="pi-tool-card__body overflow-hidden transition-all duration-300 max-h-0"
+            class="pi-tool-card__body pi-tool-card__body--collapsed"
           >
             <div class="pi-tool-card__inner">
               <div class="pi-tool-card__detail">
@@ -80,7 +81,7 @@ registerMessageRenderer("compactionSummary", {
     `;
 
     return html`
-      <div class="px-4">
+      <div class="pi-message-gutter">
         <div class="pi-tool-card" data-state="complete" data-tool-name="compact">
           <div class="pi-tool-card__header">
             ${renderCollapsibleToolCardHeader("complete", title, contentRef, chevronRef, false)}
@@ -88,7 +89,7 @@ registerMessageRenderer("compactionSummary", {
 
           <div
             ${ref(contentRef)}
-            class="pi-tool-card__body overflow-hidden transition-all duration-300 max-h-0"
+            class="pi-tool-card__body pi-tool-card__body--collapsed"
           >
             <div class="pi-tool-card__inner">
               <div class="pi-tool-card__detail">
