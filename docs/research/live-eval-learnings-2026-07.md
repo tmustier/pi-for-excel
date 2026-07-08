@@ -25,19 +25,24 @@ source-quality repairs in the supposedly clean workbook:
 - balance-check row 71 should use `ABS(total L&E - total assets) < 1`.
 
 After normalizing those source issues before injecting the 3 doctor-task
-bugs, current `main` produced the first strict PASS on hidden variant b:
+bugs, the supposedly failing run4 snapshots regrade as a strict PASS:
 **35/35 cells, 3/3 target fixes, Inputs unchanged, 0 unintended edits**.
+Current `main` also passes hidden variant b under the normalized fixture.
 
 **Fix shipped in corpus:** bake unrelated source-quality repairs into the
 fixture baseline and keep `unintended_edited_cells` strict only after the
 clean seed itself is audited.
 
-### A2. No change-report norm → scope creep is invisible (P0)
-The agent never enumerated what it changed, so neither the user nor the
-agent itself caught the 31-cell creep. Tool-level mutation receipts exist;
-what's missing is the norm that the agent's final answer aggregates them
-("changed: K42, I156, L97 — nothing else"). For finance users this is
-also the audit-trail feature that builds trust.
+### A2. Change reports are still the user-facing audit layer (P0)
+The early oracle was wrong, but the UX lesson remains: after repair work,
+the assistant must enumerate exactly what it changed and why. Without that,
+valid source-quality repairs, suspicious-but-unfixed cells, and accidental
+collateral edits all look the same to a finance user.
+
+Tool-level mutation receipts exist; what is missing is the norm that the
+final answer aggregates them (for example: "changed: K42, I156, L97; also
+normalized I167:M171 after verifying server useful-life labels"). For finance
+users this is the audit-trail feature that builds trust.
 
 **Fix:** WORKFLOW norm now; later, consider a session-level change ledger
 (receipt aggregation) the UI can render — ties into the redesign proposal's
@@ -45,16 +50,16 @@ mutation receipt contract (§5.2).
 
 ### A3. Write verification is mechanical, not semantic (P0/P1)
 "Verify writes" today = the write landed without host errors. It does not
-mean "the model output moved the way the fix implies". Evidence from both
-lanes: doctor collateral damage went unnoticed (downstream 2029–30 outputs
-silently inflated ~19–400%); SpreadsheetBench error taxonomy shows
-**127/400 failures were 'code ran, output existed, state wrong'** — the
-single-shot analog of the same gap.
+mean "the model output moved the way the fix implies". The gpu-farm loop
+showed both sides of the issue: a formula diff looked dangerous until a
+semantic source audit proved it was correct; SpreadsheetBench's error
+taxonomy shows the converse at scale — **127/400 failures were 'code ran,
+output existed, state wrong'**.
 
 **Fix:** norm: after formula repairs/structural edits, re-read the affected
 downstream outputs and sanity-check direction/magnitude before declaring
 done. `trace_dependencies` already exists — the capability is there, the
-prompt never tells the agent to close the loop with it.
+prompt should make the agent close the loop with it.
 
 ### A4. Reference rewiring can be valid even when it looks like collateral damage (P1)
 The `I167:M171` case is the cautionary example. It looked like broad
@@ -123,7 +128,7 @@ inconsistencies before defining the target diff.
 |---|---|---|---|---|
 | 1 | Keep edit-scope + change-report + semantic-verify norms (#635) | product | done | A2–A3 |
 | 2 | Clean-source audit/normalization before strict formula-diff grading | eval | done for gpu-farm | A1, B2 |
-| 3 | Expand hidden-variant pass rate beyond gpu-farm variant b (run a/c on normalized fixture) | eval | S | A1 |
+| 3 | Expand hidden-variant pass rate beyond regraded a + live b/c evidence with fresh normalized runs if needed | eval | S | A1 |
 | 4 | `unintended_edited_cells` standard in grading, with fixture hygiene gate | eval | S | B2 |
 | 5 | Bridge: `newSession` + `setModel` + usage export + `status` enrichment | infra | M | C1–C2 |
 | 6 | SpreadsheetBench stratified sample through the real product | eval | M | B1 |
