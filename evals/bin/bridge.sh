@@ -73,7 +73,9 @@ print("msgs=%s busy=%s" % (ar.get("messageCount"), ar.get("isBusy")))' 2>/dev/nu
     done
     ;;
   cmd)
-    post "$3" "$2" "${4:-{}}" "${5:-30000}"
+    PAYLOAD="${4-}"
+    [ -n "$PAYLOAD" ] || PAYLOAD='{}'
+    post "$3" "$2" "$PAYLOAD" "${5:-30000}"
     echo
     ;;
   *)
