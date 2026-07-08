@@ -1,31 +1,36 @@
 # Learnings from the first live eval cycle (2026-07-07/08)
 
-Sources: three live product runs (`wso-basic-lbo-01` on opus-4-8;
-`gpu-farm-doctor-01` ×2 on gpt-5.5/high) plus the SpreadsheetBench v1
-model-level baseline (`gpt-5.5:medium`, verified-400, 65.5% soft/hard).
+Sources: live product runs (`wso-basic-lbo-01` on opus-4-8;
+`gpu-farm-doctor-01` on gpt-5.5/high across hidden variants), the corrected
+local gpu-farm fixture/oracle loop, and SpreadsheetBench v1 model-level
+baselines (`gpt-5.5:medium` 65.5%, `gpt-5.5:xhigh` 69.0% on verified-400).
 Companion docs: [`../proposals/agent-evals.md`](../proposals/agent-evals.md),
 [`../proposals/agent-tool-interface-redesign.md`](../proposals/agent-tool-interface-redesign.md).
 
 ## A. Product defects surfaced (agent behavior)
 
-### A1. No edit-restraint norm → collateral edits (P0)
-`gpu-farm-doctor-01`: gpt-5.5/high fixed all 3 injected bugs exactly, then
-made **31 unintended cell edits** — rewired `Calculations!I167:M171` refs
-from healthy rows 118:122 to 82:86 (corrupting 2029–30 outputs), widened a
-subtotal (`Statements!I51`), and restyled tie-checks to `ABS()` form.
-Score: Modif. 3/3, Acc. 27/35 — the exact `Modif. high / Acc. low`
-over-editing signature SpreadsheetBench documents.
+### A1. First-order lesson: clean-source audit before hard over-edit metrics (P0)
+The first gpu-farm doctor runs looked like a classic `Modif. high / Acc. low`
+over-editing failure: the model fixed the 3 planted bugs, then changed
+`Calculations!I167:M171`, `Statements!I51`, and `Statements!I71:M71`, which
+the initial oracle counted as unintended.
 
-The system prompt WORKFLOW has "read first", "verify writes", "overwrite
-protection" — but **no scope norm**. Nothing says: make the smallest set of
-edits that satisfies the request; report suspicious cells instead of
-silently fixing them; don't restyle working formulas. Overwrite protection
-is no defense here — a repair task legitimately authorizes overwrites, and
-once in "fix mode" the agent applies it broadly.
+A source audit overturned that interpretation. Those edits were legitimate
+source-quality repairs in the supposedly clean workbook:
 
-**Fix:** add explicit edit-scope norms to WORKFLOW (small static addition,
-cache-safe). Then re-run the doctor task to measure the delta — first real
-A/B for the eval loop.
+- `Calculations!I167:M171` is the server utilization cohort and should use
+  the server useful-life schedule (`82:86`), not the facility useful-life
+  schedule (`118:122`).
+- `Statements!I51` should include dividends consistently (`SUM(I47:I50)`).
+- balance-check row 71 should use `ABS(total L&E - total assets) < 1`.
+
+After normalizing those source issues before injecting the 3 doctor-task
+bugs, current `main` produced the first strict PASS on hidden variant b:
+**35/35 cells, 3/3 target fixes, Inputs unchanged, 0 unintended edits**.
+
+**Fix shipped in corpus:** bake unrelated source-quality repairs into the
+fixture baseline and keep `unintended_edited_cells` strict only after the
+clean seed itself is audited.
 
 ### A2. No change-report norm → scope creep is invisible (P0)
 The agent never enumerated what it changed, so neither the user nor the
@@ -51,12 +56,19 @@ downstream outputs and sanity-check direction/magnitude before declaring
 done. `trace_dependencies` already exists — the capability is there, the
 prompt never tells the agent to close the loop with it.
 
-### A4. Reference rewiring without label verification (P1)
-Root-cause hypothesis for the I167:M171 rewire: rows 82:86 and 118:122 are
-two similarly-labeled blocks; the agent pattern-matched the wrong one and
-"corrected" healthy references. A norm ("before rewiring a reference,
-verify the row/column label of both old and new targets") plus semantic
-addressing (redesign §3.3) both attack this.
+### A4. Reference rewiring can be valid even when it looks like collateral damage (P1)
+The `I167:M171` case is the cautionary example. It looked like broad
+reference rewiring, but label/dependency inspection showed it was a valid
+fix. Future grading and product UX should distinguish:
+
+1. **auditable reasoning:** did the agent inspect old/new target labels and
+   downstream impact before rewiring?
+2. **mutation safety:** did it preserve the normalized seed outside genuine
+   fixes?
+
+Semantic addressing and dependency-aware mutation receipts (redesign §3.3 / §5.2)
+remain useful, but the eval lesson is: inspect the workbook semantics before
+assuming a formula diff is bad.
 
 ## B. Strategic learnings
 
@@ -69,11 +81,13 @@ product** (taskpane + real Excel) to place Pi on that ladder. If Pi lands
 near the single-shot floor, the harness is destroying model value; the gap
 decomposition tells us exactly where to work.
 
-### B2. `unintended_edited_cells` should be a first-class metric everywhere
-The run-4 grading built a seed-vs-final formula diff (openpyxl seed × bridge
-snapshot) that cleanly separates target fixes from collateral edits. Adopt
-in every lane, not just doctor tasks — destructive edits are the top trust
-risk for real users.
+### B2. `unintended_edited_cells` is valuable, but only with an audited clean seed
+The grader's seed-vs-final formula diff is still the right trust metric for
+repair tasks. But gpu-farm showed the failure mode: if the seed contains
+unrelated plausible bugs, a strict formula diff punishes good work. Adopt the
+metric everywhere *with* fixture hygiene: hidden tabs/answers stripped,
+cached values removed, and clean-source formulas audited for obvious
+inconsistencies before defining the target diff.
 
 ## C. Eval-infra fixes (dev-side, from running the harness)
 
@@ -95,7 +109,10 @@ risk for real users.
    dev edits triggering taskpane reloads.
 5. **Client IDs churn on every reload** — resolve via `/health` lastSeenAt +
    `status` workbookName; never cache across reloads.
-6. **pi CLI as a pure model endpoint** needs the full flag set
+6. **Vite must be started with background-verify env** — if
+   `VITE_PI_BACKGROUND_VERIFY_URL/TOKEN` are missing, the taskpane looks alive
+   but never registers with the bridge.
+7. **pi CLI as a pure model endpoint** needs the full flag set
    (`-p --no-tools --no-context-files --no-extensions --no-skills
    --no-prompt-templates --no-themes --no-session`) — bare `pi -p` is a
    full agent with side effects.
@@ -104,9 +121,10 @@ risk for real users.
 
 | # | Item | Type | Cost | Evidence |
 |---|---|---|---|---|
-| 1 | Edit-scope + change-report + semantic-verify norms in system prompt | product | S | A1–A3 |
-| 2 | Re-run `gpu-farm-doctor-01` post-change; measure `unintended_edited_cells` delta | eval | S | A1 |
-| 3 | `unintended_edited_cells` standard in grading | eval | S | B2 |
-| 4 | Bridge: `newSession` + `setModel` + usage export + `status` enrichment | infra | M | C1–C2 |
-| 5 | SpreadsheetBench stratified sample through the real product | eval | M | B1 |
-| 6 | Semantic addressing + `trace_dependencies` workflow integration | product | L | A4, redesign §3.3 |
+| 1 | Keep edit-scope + change-report + semantic-verify norms (#635) | product | done | A2–A3 |
+| 2 | Clean-source audit/normalization before strict formula-diff grading | eval | done for gpu-farm | A1, B2 |
+| 3 | Expand hidden-variant pass rate beyond gpu-farm variant b (run a/c on normalized fixture) | eval | S | A1 |
+| 4 | `unintended_edited_cells` standard in grading, with fixture hygiene gate | eval | S | B2 |
+| 5 | Bridge: `newSession` + `setModel` + usage export + `status` enrichment | infra | M | C1–C2 |
+| 6 | SpreadsheetBench stratified sample through the real product | eval | M | B1 |
+| 7 | Semantic addressing + `trace_dependencies` workflow integration | product | L | A4, redesign §3.3 |
