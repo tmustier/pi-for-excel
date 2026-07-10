@@ -3,7 +3,7 @@ import http from "node:http";
 import os from "node:os";
 import test from "node:test";
 
-import { WebSocketServer } from "ws";
+import WebSocket, { WebSocketServer } from "ws";
 
 import {
   bridgeCodexWebSocketToSse,
@@ -26,6 +26,16 @@ async function close(server) {
   await new Promise((resolve) => server.close(resolve));
 }
 
+function localWebSocketConstructor(port) {
+  return class LocalWebSocket extends WebSocket {
+    constructor(_url, options) {
+      super(`ws://127.0.0.1:${port}/backend-api/codex/responses`, options);
+    }
+  };
+}
+
+const CODEX_TARGET_URL = new URL("https://chatgpt.com/backend-api/codex/responses");
+
 test("Codex WebSocket bridge converts upstream JSON frames to SSE", async (t) => {
   let receivedBody = "";
   let receivedHeaders = {};
@@ -46,7 +56,7 @@ test("Codex WebSocket bridge converts upstream JSON frames to SSE", async (t) =>
     void bridgeCodexWebSocketToSse({
       req,
       res,
-      targetUrl: new URL(`http://127.0.0.1:${upstreamPort}/backend-api/codex/responses`),
+      targetUrl: CODEX_TARGET_URL,
       outboundHeaders: new Headers({
         Authorization: "Bearer test-token",
         "chatgpt-account-id": "account-test",
@@ -57,6 +67,7 @@ test("Codex WebSocket bridge converts upstream JSON frames to SSE", async (t) =>
         Referer: "https://localhost:3141/src/taskpane.html",
         "Sec-WebSocket-Protocol": "must-not-forward",
       }),
+      WebSocketConstructor: localWebSocketConstructor(upstreamPort),
     });
   });
   const bridgePort = await listen(bridgeServer);
@@ -110,8 +121,9 @@ test("Codex WebSocket bridge emits an SSE error when upstream closes before a te
     void bridgeCodexWebSocketToSse({
       req,
       res,
-      targetUrl: new URL(`http://127.0.0.1:${upstreamPort}/backend-api/codex/responses`),
+      targetUrl: CODEX_TARGET_URL,
       outboundHeaders: new Headers(),
+      WebSocketConstructor: localWebSocketConstructor(upstreamPort),
     });
   });
   const bridgePort = await listen(bridgeServer);
@@ -139,6 +151,26 @@ test("Codex WebSocket bridge emits an SSE error when upstream closes before a te
   ]);
   assert.equal(events[2].error.type, "proxy_stream_error");
   assert.match(events[2].error.message, /closed before a terminal response event/);
+});
+
+test("Codex WebSocket bridge rejects a non-ChatGPT target inside the helper", async (t) => {
+  const bridgeServer = http.createServer((req, res) => {
+    void bridgeCodexWebSocketToSse({
+      req,
+      res,
+      targetUrl: new URL("https://example.com/backend-api/codex/responses"),
+      outboundHeaders: new Headers(),
+    });
+  });
+  const bridgePort = await listen(bridgeServer);
+  t.after(() => close(bridgeServer));
+
+  const response = await fetch(`http://127.0.0.1:${bridgePort}/`, {
+    method: "POST",
+    body: "{}",
+  });
+  assert.equal(response.status, 400);
+  assert.match(await response.text(), /target is not allowed/);
 });
 
 test("Codex WebSocket bridge rejects non-POST requests", async (t) => {

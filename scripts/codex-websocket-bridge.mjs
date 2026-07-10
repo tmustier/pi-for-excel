@@ -6,6 +6,7 @@ export const CODEX_WEBSOCKET_BRIDGE_HEADER = "X-Pi-For-Excel-Codex-WebSocket-Bri
 export const CODEX_WEBSOCKET_BRIDGE_TRANSPORT = "codex-websocket";
 
 const MAX_REQUEST_BODY_BYTES = 32 * 1024 * 1024;
+const CODEX_WEBSOCKET_TARGET_URL = "wss://chatgpt.com/backend-api/codex/responses";
 const OPENAI_WEBSOCKET_BETA = "responses_websockets=2026-02-06";
 const TERMINAL_EVENT_TYPES = new Set([
   "error",
@@ -23,12 +24,6 @@ export function isCodexWebSocketBridgeTarget(targetUrl) {
     && targetUrl.password === ""
     && targetUrl.pathname === "/backend-api/codex/responses"
     && targetUrl.search === "";
-}
-
-function websocketTargetUrl(targetUrl) {
-  const url = new URL(targetUrl);
-  url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
-  return url;
 }
 
 function websocketHeaders(outboundHeaders) {
@@ -141,6 +136,10 @@ export async function bridgeCodexWebSocketToSse({
     endResponse(res, 405, "Codex WebSocket bridge requires POST");
     return;
   }
+  if (!isCodexWebSocketBridgeTarget(targetUrl)) {
+    endResponse(res, 400, "Codex WebSocket bridge target is not allowed");
+    return;
+  }
 
   let requestBody;
   try {
@@ -156,7 +155,9 @@ export async function bridgeCodexWebSocketToSse({
     let settled = false;
     let handlingUnexpectedResponse = false;
     let receivedTerminalEvent = false;
-    const socket = new WebSocketConstructor(websocketTargetUrl(targetUrl), {
+    // Never connect to the request URL directly: it is validated above for
+    // request semantics, while the network sink stays a compile-time constant.
+    const socket = new WebSocketConstructor(CODEX_WEBSOCKET_TARGET_URL, {
       headers: websocketHeaders(outboundHeaders),
       perMessageDeflate: false,
     });
