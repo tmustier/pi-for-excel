@@ -104,6 +104,14 @@
   --pi-grid-line: oklch(0.45 0.08 160 / 0.04);
   --pi-surface-inset-shadow: inset 4px 0 12px -3px var(--alpha-5);
 
+  /* ── Workbook map (X-ray) cell classes ──────────────── */
+  --map-formula: oklch(0.58 0.13 250);
+  --map-input: oklch(0.72 0.16 84);
+  --map-label: oklch(0.87 0.03 160);
+  --map-error: oklch(0.55 0.22 25);
+  --map-empty: oklch(0.99 0.002 90);
+  --map-grid: oklch(0 0 0 / 0.07);
+
   /* ── Pill tokens — shared across all card-like components ── */
   --pill-radius: var(--radius-lg);
   --pill-border-width: 1px;
@@ -197,6 +205,13 @@
   --pi-inner-bg: oklch(0.24 0.012 260);
   --pi-grid-line: oklch(0.8 0.05 160 / 0.08);
   --pi-surface-inset-shadow: inset 4px 0 14px -3px oklch(0 0 0 / 0.45);
+
+  --map-formula: oklch(0.62 0.12 250);
+  --map-input: oklch(0.79 0.14 84);
+  --map-label: oklch(0.42 0.02 160);
+  --map-error: oklch(0.63 0.22 25);
+  --map-empty: oklch(0.25 0.012 260);
+  --map-grid: oklch(1 0 0 / 0.08);
 
   --pill-border: var(--pill-border-width) solid var(--alpha-12);
   --pill-bg: oklch(0.25 0.015 260 / 0.88);

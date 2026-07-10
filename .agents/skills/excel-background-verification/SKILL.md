@@ -82,6 +82,7 @@ PI_BACKGROUND_VERIFY_TOKEN="$TOKEN" PI_BACKGROUND_VERIFY_HOST=localhost npm run 
 PI_BACKGROUND_VERIFY_TOKEN="$TOKEN" PI_BACKGROUND_VERIFY_HOST=localhost npm run background:verify:command -- readUsedRange
 PI_BACKGROUND_VERIFY_TOKEN="$TOKEN" PI_BACKGROUND_VERIFY_HOST=localhost npm run background:verify:command -- readRange '{"address":"Sheet1!A1:B5"}'
 PI_BACKGROUND_VERIFY_TOKEN="$TOKEN" PI_BACKGROUND_VERIFY_HOST=localhost npm run background:verify:command -- listCharts
+PI_BACKGROUND_VERIFY_TOKEN="$TOKEN" PI_BACKGROUND_VERIFY_HOST=localhost npm run background:verify:command -- workbookMapProbe '{"scratch":true}'
 ```
 
 ### Controlled write smoke
@@ -121,6 +122,7 @@ Use the outputs as verification artifacts:
 - `submitPrompt`: exercises the real app prompt → runtime/model/tool loop from the hidden taskpane.
 - `readRange` / `readUsedRange`: verify workbook contents changed as expected.
 - `listCharts`: verify chart creation/update/delete metadata.
+- `workbookMapProbe`: verifies the `/map` special-cells scan. Default mode scans the active (or named) sheet read-only; `{"scratch":true}` provisions a scratch sheet containing every map class, scans it, deletes it, and returns `expectedCounts` alongside the actual scan for comparison.
 
 For adversarial verification, wrap mutating and read-back commands with a frontmost check using `pi-computer-use` helper or strict AX `list_apps`. Completion evidence must include `frontmostSameApp=true` and `frontmostSameWindow=true` (or equivalent before/after app/window IDs).
 

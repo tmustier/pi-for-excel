@@ -18,6 +18,8 @@ import "./boot.js";
 import "./ui/register-components.js";
 
 import { escapeHtml, setSafeInnerHTML } from "./utils/html.js";
+import { createWorkbookMapView } from "./ui/workbook-map-view.js";
+import { buildSheetMapScan } from "./workbook/map-scan.js";
 
 const galleryRoot = document.getElementById("gallery-root");
 if (!galleryRoot) throw new Error("Missing #gallery-root");
@@ -588,5 +590,45 @@ for (const [label, state] of [
   activitySection.appendChild(caption);
   activitySection.appendChild(createActivityBlock(state));
 }
+
+/* ── Workbook Map (X-ray) ────────────────────── */
+
+const mapSection = section("workbook-map", "Workbook Map (X-Ray)");
+
+// Mock a plausible P&L model sheet: label headers, an amber input column,
+// a formula grid, and a couple of red error cells.
+const mapView = createWorkbookMapView({ maxWidth: 300, maxHeight: 300 });
+mapSection.appendChild(mapView.root);
+mapView.renderScan(
+  buildSheetMapScan(
+    "P&L",
+    { startRow: 0, startCol: 0, rowCount: 42, colCount: 14 },
+    {
+      formulasAll: [
+        { startRow: 6, startCol: 3, endRow: 20, endCol: 12 },
+        { startRow: 23, startCol: 3, endRow: 33, endCol: 12 },
+        { startRow: 36, startCol: 3, endRow: 36, endCol: 12 },
+      ],
+      formulaErrors: [
+        { startRow: 14, startCol: 8, endRow: 14, endCol: 8 },
+        { startRow: 36, startCol: 11, endRow: 36, endCol: 11 },
+      ],
+      constantNumbers: [
+        { startRow: 6, startCol: 2, endRow: 20, endCol: 2 },
+        { startRow: 23, startCol: 2, endRow: 33, endCol: 2 },
+        { startRow: 28, startCol: 7, endRow: 28, endCol: 7 },
+      ],
+      constantText: [
+        { startRow: 0, startCol: 0, endRow: 0, endCol: 6 },
+        { startRow: 4, startCol: 2, endRow: 4, endCol: 12 },
+        { startRow: 6, startCol: 0, endRow: 20, endCol: 1 },
+        { startRow: 23, startCol: 0, endRow: 33, endCol: 1 },
+        { startRow: 36, startCol: 0, endRow: 36, endCol: 1 },
+      ],
+      constantErrors: [],
+    },
+  ),
+);
+mapView.setStatus("Hover to inspect · click to select in Excel");
 
 console.log("[ui-gallery] Rendered all sections");

@@ -44,7 +44,9 @@ Pi for Excel is an AI agent that lives inside Excel. It reads your workbook, mak
 
 **Formatting conventions** — define your house style once (currency symbol, negative style, decimal places) and the AI follows it automatically.
 
-**Slash commands** — `/model`, `/login`, `/settings`, `/rules`, `/extensions`, `/tools`, `/export`, `/compact`, `/new`, `/resume`, `/history`, `/shortcuts`, and more.
+**Slash commands** — `/model`, `/login`, `/settings`, `/rules`, `/extensions`, `/tools`, `/map`, `/export`, `/compact`, `/new`, `/resume`, `/history`, `/shortcuts`, and more.
+
+**Workbook X-ray map** — `/map` paints a minimap of any sheet where every cell is colored by what it is: formulas, hardcoded inputs, text labels, errors, empty space. Hover to inspect, click to jump to the cell in Excel — the model-auditing "satellite view" that normally lives in paid auditing add-ins.
 
 **Extensions** — install sidebar extensions (mini-apps) from chat. The AI can generate and install extension code directly via the `extensions_manager` tool. Extensions run in an iframe sandbox by default.
 

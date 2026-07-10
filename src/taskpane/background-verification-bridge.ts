@@ -11,6 +11,7 @@
  */
 
 import type { WorkbookContext } from "../workbook/context.js";
+import { scanSheetMap } from "../workbook/map-scan.js";
 import type { PiSidebar } from "../ui/pi-sidebar.js";
 import type { SessionRuntime } from "./session-runtime-manager.js";
 
@@ -23,6 +24,7 @@ type BridgeCommandType =
   | "writeRange"
   | "clearRange"
   | "workbookWriteProbe"
+  | "workbookMapProbe"
   | "submitPrompt"
   | "listCharts";
 
@@ -219,6 +221,65 @@ async function submitPrompt(payload: DynamicValue, options: BridgeOptions): Prom
     wait: waitForIdle ? await waitForRuntimeIdle(options.getActiveRuntime, initialMessageCount, timeoutMs) : null,
     after: activeRuntimeSummary(options.getActiveRuntime()),
   };
+}
+
+/**
+ * Verify the workbook-map special-cells scan against the real Excel host.
+ *
+ * Read-only mode (default) scans the active/named sheet. Scratch mode
+ * (`{"scratch": true}`) provisions a scratch sheet with one cell of every
+ * map class (labels, hardcoded inputs, formulas, an error formula), scans
+ * it, and deletes the sheet again — a reversible end-to-end proof that the
+ * scan classifies real workbook cells correctly.
+ */
+async function workbookMapProbe(payload: DynamicValue): Promise<JsonRecord> {
+  if (typeof Excel === "undefined") {
+    throw new Error("Excel global is unavailable; the taskpane is not running inside the Excel host.");
+  }
+
+  const scratch = booleanField(payload, "scratch") ?? false;
+  const sheetName = stringField(payload, "sheetName");
+
+  if (!scratch) {
+    const scan = await scanSheetMap(sheetName);
+    return { mode: "readOnly", scan };
+  }
+
+  const scratchName = sheetName ?? "_pi_map_verify";
+
+  await Excel.run(async (context) => {
+    const existing = context.workbook.worksheets.getItemOrNullObject(scratchName);
+    existing.load("name");
+    await context.sync();
+    if (!existing.isNullObject) {
+      throw new Error(`Scratch sheet ${scratchName} already exists; delete it or pass a different sheetName.`);
+    }
+
+    const sheet = context.workbook.worksheets.add(scratchName);
+    // One block covering every map class:
+    // labels (A1:A3), hardcoded inputs (B1:B3), formulas (C1, C3), error (C2).
+    sheet.getRange("A1:C3").formulas = [
+      ["pi map probe", 42, "=B1*2"],
+      ["labels", 7, "=1/0"],
+      ["notes", 1.5, '="t"&"x"'],
+    ];
+    await context.sync();
+  });
+
+  try {
+    const scan = await scanSheetMap(scratchName);
+    return {
+      mode: "scratch",
+      scratchSheet: scratchName,
+      expectedCounts: { formula: 2, input: 3, label: 3, error: 1, empty: 0, total: 9 },
+      scan,
+    };
+  } finally {
+    await Excel.run(async (context) => {
+      context.workbook.worksheets.getItem(scratchName).delete();
+      await context.sync();
+    });
+  }
 }
 
 async function runOfficeProbe(): Promise<JsonRecord> {
@@ -539,6 +600,8 @@ async function executeCommand(command: BridgeCommand, options: BridgeOptions): P
     }
     case "workbookWriteProbe":
       return await workbookWriteProbe(command.payload);
+    case "workbookMapProbe":
+      return await workbookMapProbe(command.payload);
     case "submitPrompt":
       return await submitPrompt(command.payload, options);
     case "listCharts":

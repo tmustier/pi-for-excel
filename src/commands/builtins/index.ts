@@ -17,6 +17,7 @@ import { createAddonsCommands, type AddonsCommandActions } from "./addons.js";
 import { createToolsCommands, type ToolsCommandActions } from "./tools.js";
 import { createSkillsCommands, type SkillsCommandActions } from "./skills.js";
 import { createFilesCommands, type FilesCommandActions } from "./files.js";
+import { createMapCommands } from "./map.js";
 
 export interface BuiltinsContext
   extends SessionCommandActions,
@@ -43,6 +44,7 @@ export function registerBuiltins(context: BuiltinsContext): void {
     ...createToolsCommands(context),
     ...createSkillsCommands(context),
     ...createFilesCommands(context),
+    ...createMapCommands(),
     ...createExperimentalCommands(),
     ...createDebugCommands(),
     ...createClipboardCommands(context.getActiveAgent),

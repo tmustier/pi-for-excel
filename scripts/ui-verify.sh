@@ -10,7 +10,7 @@
 #
 # Sections (data-gallery attributes in ui-gallery.html):
 #   badges, file-items, tool-cards, tool-groups, diff-table,
-#   text-preview, buttons, toasts, markdown
+#   text-preview, buttons, toasts, markdown, workbook-map
 #
 # Prerequisites:
 #   - agent-browser CLI installed

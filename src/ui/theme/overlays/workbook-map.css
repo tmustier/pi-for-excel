@@ -1,0 +1,141 @@
+/* ── Workbook map (X-ray) overlay ─────────────────────────
+   /map — minimap of one sheet where every cell is colored by
+   what it is (formula / input / label / error). The canvas
+   reads its paint colors from the .pi-map-swatch--* classes
+   below, so the legend and canvas can never drift apart. */
+
+.pi-map-dialog {
+  display: flex;
+  flex-direction: column;
+}
+
+.pi-map-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 8px;
+}
+
+.pi-map-tabs {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  gap: 4px;
+  overflow-x: auto;
+}
+
+.pi-map-tab {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted-foreground);
+  border-radius: var(--radius-sm);
+  padding: 3px 10px;
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--duration-fast) ease, color var(--duration-fast) ease;
+}
+
+.pi-map-tab:hover {
+  background: var(--alpha-4);
+}
+
+.pi-map-tab.is-active {
+  background: var(--accent);
+  color: var(--accent-foreground);
+  border-color: var(--ring);
+}
+
+.pi-map-view {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.pi-map-canvas-wrap {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 8px;
+  background: var(--alpha-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: auto;
+  max-height: 380px;
+}
+
+.pi-map-canvas {
+  display: block;
+  image-rendering: pixelated;
+}
+
+.pi-map-canvas--clickable {
+  cursor: crosshair;
+}
+
+.pi-map-empty {
+  padding: 24px 8px;
+  text-align: center;
+}
+
+.pi-map-status {
+  min-height: 16px;
+  margin: 8px 2px 2px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--muted-foreground);
+}
+
+.pi-map-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 6px 2px 2px;
+}
+
+.pi-map-legend__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  color: var(--muted-foreground);
+}
+
+.pi-map-legend__count {
+  font-family: var(--font-mono);
+  color: var(--foreground);
+}
+
+.pi-map-swatch {
+  width: 10px;
+  height: 10px;
+  flex: none;
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--alpha-10);
+}
+
+.pi-map-swatch--formula {
+  background: var(--map-formula);
+}
+
+.pi-map-swatch--input {
+  background: var(--map-input);
+}
+
+.pi-map-swatch--label {
+  background: var(--map-label);
+}
+
+.pi-map-swatch--error {
+  background: var(--map-error);
+}
+
+.pi-map-swatch--empty {
+  background: var(--map-empty);
+}
+
+.pi-map-swatch--grid {
+  background: var(--map-grid);
+}

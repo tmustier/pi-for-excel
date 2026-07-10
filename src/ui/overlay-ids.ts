@@ -13,4 +13,5 @@ export const TOOL_APPROVAL_OVERLAY_ID = "pi-tool-approval-overlay";
 export const EXTENSION_OVERLAY_ID = "pi-ext-overlay";
 export const PROXY_GATE_OVERLAY_ID = "pi-proxy-gate-overlay";
 export const MODEL_SELECTOR_OVERLAY_ID = "pi-model-selector-overlay";
+export const WORKBOOK_MAP_OVERLAY_ID = "pi-workbook-map-overlay";
 export const API_KEY_OVERLAY_ID = "pi-api-key-overlay";
