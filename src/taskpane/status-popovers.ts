@@ -42,6 +42,37 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
 
+interface StatusPopoverLayoutInput {
+  anchor: Pick<DOMRect, "bottom" | "right" | "top">;
+  viewportWidth: number;
+  viewportHeight: number;
+  popoverWidth: number;
+  popoverHeight: number;
+}
+
+export interface StatusPopoverLayout {
+  left: number;
+  top: number;
+  maxHeight: number;
+}
+
+export function resolveStatusPopoverLayout(input: StatusPopoverLayoutInput): StatusPopoverLayout {
+  const inset = 8;
+  const maxHeight = Math.max(0, input.viewportHeight - inset * 2);
+  const boundedHeight = Math.min(input.popoverHeight, maxHeight);
+  const maxLeft = Math.max(inset, input.viewportWidth - input.popoverWidth - inset);
+  const left = clamp(input.anchor.right - input.popoverWidth, inset, maxLeft);
+
+  const preferredTop = input.anchor.top - boundedHeight - inset;
+  const fallbackTop = input.anchor.bottom + inset;
+  const maxTop = Math.max(inset, input.viewportHeight - boundedHeight - inset);
+  const top = preferredTop >= inset
+    ? preferredTop
+    : clamp(fallbackTop, inset, maxTop);
+
+  return { left, top, maxHeight };
+}
+
 function normalizeDescription(text: string): string {
   const compact = text.replace(/\s+/g, " ").trim();
   return compact.length > 0 ? compact : "No details available.";
@@ -63,22 +94,19 @@ function positionPopover(popover: HTMLDivElement, anchor: Element): void {
   popover.style.left = "0px";
   popover.style.top = "0px";
   popover.style.visibility = "hidden";
+  popover.style.maxHeight = `${Math.max(0, viewportHeight - 16)}px`;
 
-  const popoverWidth = popover.offsetWidth;
-  const popoverHeight = popover.offsetHeight;
+  const layout = resolveStatusPopoverLayout({
+    anchor: anchorRect,
+    viewportWidth,
+    viewportHeight,
+    popoverWidth: popover.offsetWidth,
+    popoverHeight: popover.offsetHeight,
+  });
 
-  const maxLeft = Math.max(8, viewportWidth - popoverWidth - 8);
-  const left = clamp(anchorRect.right - popoverWidth, 8, maxLeft);
-
-  const preferredTop = anchorRect.top - popoverHeight - 8;
-  const fallbackTop = anchorRect.bottom + 8;
-  const maxTop = Math.max(8, viewportHeight - popoverHeight - 8);
-  const top = preferredTop >= 8
-    ? preferredTop
-    : clamp(fallbackTop, 8, maxTop);
-
-  popover.style.left = `${left}px`;
-  popover.style.top = `${top}px`;
+  popover.style.left = `${layout.left}px`;
+  popover.style.top = `${layout.top}px`;
+  popover.style.maxHeight = `${layout.maxHeight}px`;
   popover.style.visibility = "visible";
 }
 

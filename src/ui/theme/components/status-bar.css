@@ -469,6 +469,8 @@
   background: var(--popover);
   color: var(--popover-foreground);
   box-shadow: 0 12px 24px oklch(0 0 0 / 0.2);
+  max-height: calc(100vh - 16px);
+  overflow: hidden;
   padding: 10px;
   display: flex;
   flex-direction: column;
@@ -518,6 +520,9 @@
 
 .pi-status-popover__list,
 .pi-status-popover__commands {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   display: flex;
   flex-direction: column;
   gap: 5px;
