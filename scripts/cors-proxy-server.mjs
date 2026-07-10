@@ -279,7 +279,10 @@ function setCorsHeaders(req, res) {
     "Access-Control-Allow-Headers",
     req.headers["access-control-request-headers"] || "*",
   );
-  res.setHeader("Access-Control-Expose-Headers", "*");
+  res.setHeader(
+    "Access-Control-Expose-Headers",
+    `*, X-Pi-For-Excel-Proxy, ${CODEX_WEBSOCKET_BRIDGE_HEADER}`,
+  );
   res.setHeader("Access-Control-Max-Age", "86400");
 }
 

@@ -525,7 +525,11 @@ test("proxy /healthz responds without an Origin header and never proxies", async
   });
   assert.equal(browserHealth.status, 200);
   assert.equal(browserHealth.headers.get("access-control-allow-origin"), ORIGIN);
+  const exposedHeaders = browserHealth.headers.get("access-control-expose-headers")?.toLowerCase() ?? "";
+  assert.match(exposedHeaders, /x-pi-for-excel-proxy/);
+  assert.match(exposedHeaders, /x-pi-for-excel-codex-websocket-bridge/);
   assert.equal(browserHealth.headers.get("x-pi-for-excel-proxy"), "1");
+  assert.equal(browserHealth.headers.get("x-pi-for-excel-codex-websocket-bridge"), "1");
   assert.equal(await browserHealth.text(), "ok");
 
   // Query strings (including ?url=) must not turn /healthz into a proxy path.

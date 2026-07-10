@@ -94,6 +94,53 @@ test("Codex WebSocket bridge converts upstream JSON frames to SSE", async (t) =>
   assert.equal(receivedHeaders["sec-websocket-protocol"], undefined);
 });
 
+test("Codex WebSocket bridge emits an SSE error when upstream closes before a terminal event", async (t) => {
+  const upstreamServer = http.createServer();
+  const upstreamWebSocket = new WebSocketServer({ server: upstreamServer });
+  upstreamWebSocket.on("connection", (socket) => {
+    socket.on("message", () => {
+      socket.send(JSON.stringify({ type: "response.created", response: { id: "resp_partial" } }));
+      socket.send(JSON.stringify({ type: "response.output_text.delta", delta: "PARTIAL" }));
+      socket.close(1000, "premature");
+    });
+  });
+  const upstreamPort = await listen(upstreamServer);
+
+  const bridgeServer = http.createServer((req, res) => {
+    void bridgeCodexWebSocketToSse({
+      req,
+      res,
+      targetUrl: new URL(`http://127.0.0.1:${upstreamPort}/backend-api/codex/responses`),
+      outboundHeaders: new Headers(),
+    });
+  });
+  const bridgePort = await listen(bridgeServer);
+
+  t.after(async () => {
+    upstreamWebSocket.close();
+    await close(bridgeServer);
+    await close(upstreamServer);
+  });
+
+  const response = await fetch(`http://127.0.0.1:${bridgePort}/`, {
+    method: "POST",
+    body: JSON.stringify({ model: "gpt-5.6-luna", stream: true, input: [] }),
+  });
+  const events = (await response.text())
+    .split("\n")
+    .filter((line) => line.startsWith("data: "))
+    .map((line) => JSON.parse(line.slice(6)));
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(events.map((event) => event.type), [
+    "response.created",
+    "response.output_text.delta",
+    "error",
+  ]);
+  assert.equal(events[2].error.type, "proxy_stream_error");
+  assert.match(events[2].error.message, /closed before a terminal response event/);
+});
+
 test("Codex WebSocket bridge rejects non-POST requests", async (t) => {
   const bridgeServer = http.createServer((req, res) => {
     void bridgeCodexWebSocketToSse({

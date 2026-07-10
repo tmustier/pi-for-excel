@@ -80,6 +80,22 @@ function endResponse(res, statusCode, message) {
   res.end(message);
 }
 
+function endBridgeFailure(res, statusCode, message) {
+  if (res.writableEnded) return;
+  if (!res.headersSent) {
+    endResponse(res, statusCode, message);
+    return;
+  }
+
+  const payload = {
+    type: "error",
+    error: { type: "proxy_stream_error", message },
+    status: statusCode,
+  };
+  res.write(encodeSseData("", payload));
+  res.end();
+}
+
 function parseWebSocketEvent(text) {
   try {
     return JSON.parse(text);
@@ -139,6 +155,7 @@ export async function bridgeCodexWebSocketToSse({
   await new Promise((resolve) => {
     let settled = false;
     let handlingUnexpectedResponse = false;
+    let receivedTerminalEvent = false;
     const socket = new WebSocketConstructor(websocketTargetUrl(targetUrl), {
       headers: websocketHeaders(outboundHeaders),
       perMessageDeflate: false,
@@ -190,6 +207,7 @@ export async function bridgeCodexWebSocketToSse({
       const payload = parseWebSocketEvent(text);
       res.write(encodeSseData(text, payload));
       if (isTerminalWebSocketEvent(payload)) {
+        receivedTerminalEvent = true;
         res.end();
         closeUpstream("response_complete");
         settle();
@@ -200,7 +218,7 @@ export async function bridgeCodexWebSocketToSse({
       handlingUnexpectedResponse = true;
       if (res.headersSent) {
         upstreamResponse.resume();
-        endResponse(res, 502, "Codex WebSocket bridge rejected after response start");
+        endBridgeFailure(res, 502, "Codex WebSocket bridge rejected after response start");
         settle();
         return;
       }
@@ -216,23 +234,28 @@ export async function bridgeCodexWebSocketToSse({
       upstreamResponse.pipe(res);
       upstreamResponse.once("end", settle);
       upstreamResponse.once("error", () => {
-        endResponse(res, 502, "Codex WebSocket bridge upstream response failed");
+        if (res.headersSent) {
+          res.destroy(new Error("Codex WebSocket bridge upstream response failed"));
+        } else {
+          endResponse(res, 502, "Codex WebSocket bridge upstream response failed");
+        }
         settle();
       });
     });
 
     socket.once("error", () => {
-      if (handlingUnexpectedResponse) return;
-      endResponse(res, 502, "Codex WebSocket bridge connection failed");
+      if (handlingUnexpectedResponse || settled) return;
+      endBridgeFailure(res, 502, "Codex WebSocket bridge connection failed");
+      closeUpstream("connection_failed");
       settle();
     });
 
     socket.once("close", () => {
-      if (handlingUnexpectedResponse) return;
+      if (handlingUnexpectedResponse || settled) return;
       if (!res.headersSent) {
         endResponse(res, 502, "Codex WebSocket bridge closed before connecting");
-      } else if (!res.writableEnded) {
-        res.end();
+      } else if (!receivedTerminalEvent) {
+        endBridgeFailure(res, 502, "Codex WebSocket bridge closed before a terminal response event");
       }
       settle();
     });
