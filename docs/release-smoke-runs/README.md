@@ -19,6 +19,10 @@ Examples:
 
 Keep each run append-only; create a new file for each run instead of rewriting older runs.
 
+## Recent focused runs
+
+- [`2026-07-10-macos-gpt-5-6.md`](./2026-07-10-macos-gpt-5-6.md) — GPT-5.6 discovery, thinking UI, and real Excel taskpane verification.
+
 ## Templates
 
 - macOS host run: `docs/release-smoke-runs/templates/macos-host-smoke-template.md`
