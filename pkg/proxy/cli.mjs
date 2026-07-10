@@ -19,6 +19,7 @@ const certPath = path.join(certDir, "cert.pem");
 const DEFAULT_PROXY_PORT = "3003";
 const DEFAULT_PROXY_URL = `https://localhost:${DEFAULT_PROXY_PORT}`;
 const PROXY_HEALTH_HEADER = "x-pi-for-excel-proxy";
+const CODEX_WEBSOCKET_BRIDGE_HEADER = "x-pi-for-excel-codex-websocket-bridge";
 const PROXY_HEALTH_VALUE = "1";
 
 function commandExists(command) {
@@ -209,7 +210,10 @@ function probeHttpsHealth(urlString, trustedCa) {
           const healthy = res.statusCode === 200 && body.trim() === "ok";
           finish({
             healthy,
-            compatible: healthy && res.headers[PROXY_HEALTH_HEADER] === PROXY_HEALTH_VALUE,
+            compatible:
+              healthy
+              && res.headers[PROXY_HEALTH_HEADER] === PROXY_HEALTH_VALUE
+              && res.headers[CODEX_WEBSOCKET_BRIDGE_HEADER] === PROXY_HEALTH_VALUE,
           });
         });
       },
@@ -267,10 +271,11 @@ async function exitIfDefaultProxyAlreadyRunning(proxyConfig) {
     process.exit(0);
   }
 
-  if (localhostProbe.compatible || ipv4Probe.compatible) {
-    console.error("[pi-for-excel-proxy] Port 3003 has a partial/stale pi-for-excel proxy listener.");
-    console.error(`[pi-for-excel-proxy] ${DEFAULT_PROXY_URL}/healthz: ${localhostProbe.compatible ? "compatible" : "failed"}`);
-    console.error(`[pi-for-excel-proxy] https://127.0.0.1:${DEFAULT_PROXY_PORT}/healthz: ${ipv4Probe.compatible ? "compatible" : "failed"}`);
+  if (localhostProbe.healthy || ipv4Probe.healthy) {
+    const describeProbe = (probe) => probe.compatible ? "compatible" : probe.healthy ? "outdated" : "failed";
+    console.error("[pi-for-excel-proxy] Port 3003 has an outdated or partial pi-for-excel proxy listener.");
+    console.error(`[pi-for-excel-proxy] ${DEFAULT_PROXY_URL}/healthz: ${describeProbe(localhostProbe)}`);
+    console.error(`[pi-for-excel-proxy] https://127.0.0.1:${DEFAULT_PROXY_PORT}/healthz: ${describeProbe(ipv4Probe)}`);
     console.error("[pi-for-excel-proxy] Stop old pi-for-excel proxy processes, then run npx pi-for-excel-proxy again.");
     console.error("[pi-for-excel-proxy] Or set PORT=<free-port> and copy that URL into Pi for Excel /settings → Proxy.");
     process.exit(1);

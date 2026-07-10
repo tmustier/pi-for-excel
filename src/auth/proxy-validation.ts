@@ -61,6 +61,8 @@ export const DEFAULT_PROXY_IS_REMOTE = !isLoopbackProxyUrl(DEFAULT_PROXY_URL);
  * otherwise the helper will return 403 and OAuth preflight checks will fail.
  */
 export const PROXY_REACHABILITY_TARGET_URL = "https://github.com";
+export const PROXY_HEALTH_HEADER = "x-pi-for-excel-proxy";
+export const CODEX_WEBSOCKET_BRIDGE_HEADER = "x-pi-for-excel-codex-websocket-bridge";
 
 export const PROXY_HELPER_DOCS_URL =
   "https://github.com/tmustier/pi-for-excel/blob/main/docs/install.md#oauth-logins-and-cors-proxy";
@@ -101,6 +103,26 @@ export function resolveConfiguredProxyUrl(rawUrl: DynamicValue): string {
  * Probe whether a proxy URL is reachable and can forward to the allowlisted
  * reachability target.
  */
+export async function probeCodexWebSocketBridge(
+  proxyUrl: string,
+  timeoutMs: number = 1500,
+): Promise<boolean> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const url = `${normalizeProxyUrl(proxyUrl)}/healthz`;
+    const response = await fetch(url, { cache: "no-store", signal: controller.signal });
+    return response.ok
+      && response.headers.get(PROXY_HEALTH_HEADER) === "1"
+      && response.headers.get(CODEX_WEBSOCKET_BRIDGE_HEADER) === "1";
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export async function probeProxyReachability(
   proxyUrl: string,
   timeoutMs: number = 1500,

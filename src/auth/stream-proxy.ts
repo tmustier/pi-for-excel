@@ -8,6 +8,7 @@
  * We route requests through a user-configured local CORS proxy when enabled.
  */
 
+import { uuidv7 } from "@earendil-works/pi-agent-core";
 import {
   getModels,
   streamSimple,
@@ -26,7 +27,11 @@ import {
   type PrefixChangeReason,
   PrefixChangeTracker,
 } from "./prefix-churn.js";
-import { normalizeProxyUrl, validateOfficeProxyUrl } from "./proxy-validation.js";
+import {
+  normalizeProxyUrl,
+  probeCodexWebSocketBridge,
+  validateOfficeProxyUrl,
+} from "./proxy-validation.js";
 
 export type GetProxyUrl = () => Promise<string | undefined>;
 type OfficeStreamFn = (
@@ -66,19 +71,30 @@ function shouldProxyProvider(provider: string, apiKey?: string): boolean {
   }
 }
 
-function applyProxy(model: Model<Api>, proxyUrl: string): Model<Api> {
+type OfficeProxyTransport = "codex-websocket";
+
+function applyProxy(
+  model: Model<Api>,
+  proxyUrl: string,
+  transport?: OfficeProxyTransport,
+): Model<Api> {
   if (!model.baseUrl) return model;
   if (!/^https?:\/\//i.test(model.baseUrl)) return model;
 
   const normalizedProxy = normalizeProxyUrl(proxyUrl);
 
   // Avoid double-proxying
-  if (model.baseUrl.startsWith(`${normalizedProxy}/?url=`)) return model;
+  if (model.baseUrl.startsWith(`${normalizedProxy}/?`)) return model;
 
+  const transportQuery = transport ? `pi_transport=${transport}&` : "";
   return {
     ...model,
-    baseUrl: `${normalizedProxy}/?url=${encodeURIComponent(model.baseUrl)}`,
+    baseUrl: `${normalizedProxy}/?${transportQuery}url=${encodeURIComponent(model.baseUrl)}`,
   };
+}
+
+export function requiresCodexWebSocketBridge(model: Pick<Model<Api>, "id" | "provider">): boolean {
+  return model.provider === "openai-codex" && model.id === "gpt-5.6-luna";
 }
 
 type GoogleOAuthProvider = "google-gemini-cli" | "google-antigravity";
@@ -467,6 +483,59 @@ function withPayloadHook(
 /**
  * Create a StreamFn compatible with Agent that proxies provider base URLs when needed.
  */
+interface CodexBridgeCapabilityCacheEntry {
+  checkedAt: number;
+  supported: boolean;
+}
+
+const CODEX_BRIDGE_SUPPORTED_TTL_MS = 60_000;
+const CODEX_BRIDGE_UNAVAILABLE_TTL_MS = 3_000;
+const MAX_CODEX_BRIDGE_SESSION_IDS = 256;
+const UUID_V7_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
+const codexBridgeCapabilityCache = new Map<string, CodexBridgeCapabilityCacheEntry>();
+const codexBridgeSessionIds = new Map<string, string>();
+
+export function resolveCodexWebSocketBridgeSessionId(sessionId?: string): string {
+  if (sessionId && UUID_V7_PATTERN.test(sessionId)) {
+    return sessionId;
+  }
+
+  const cacheKey = sessionId?.trim();
+  if (!cacheKey) {
+    return uuidv7();
+  }
+
+  const cached = codexBridgeSessionIds.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
+  const generated = uuidv7();
+  codexBridgeSessionIds.set(cacheKey, generated);
+  if (codexBridgeSessionIds.size > MAX_CODEX_BRIDGE_SESSION_IDS) {
+    const oldestKey = codexBridgeSessionIds.keys().next().value;
+    if (typeof oldestKey === "string") {
+      codexBridgeSessionIds.delete(oldestKey);
+    }
+  }
+  return generated;
+}
+
+async function proxySupportsCodexWebSocketBridge(proxyUrl: string): Promise<boolean> {
+  const normalized = normalizeProxyUrl(proxyUrl);
+  const cached = codexBridgeCapabilityCache.get(normalized);
+  const cacheTtlMs = cached?.supported
+    ? CODEX_BRIDGE_SUPPORTED_TTL_MS
+    : CODEX_BRIDGE_UNAVAILABLE_TTL_MS;
+  if (cached && Date.now() - cached.checkedAt < cacheTtlMs) {
+    return cached.supported;
+  }
+
+  const supported = await probeCodexWebSocketBridge(normalized);
+  codexBridgeCapabilityCache.set(normalized, { checkedAt: Date.now(), supported });
+  return supported;
+}
+
 export function createOfficeStreamFn(getProxyUrl: GetProxyUrl): OfficeStreamFn {
   return async (model: Model<Api>, context: Context, options?: StreamOptions) => {
     const continuation = isToolContinuation(context.messages);
@@ -500,7 +569,14 @@ export function createOfficeStreamFn(getProxyUrl: GetProxyUrl): OfficeStreamFn {
     const effectiveOptions = withPayloadHook(options, callRecord.call, callRecord.captureSnapshot);
 
     const proxyUrl = await getProxyUrl();
+    const needsCodexBridge = requiresCodexWebSocketBridge(normalizedModel);
     if (!proxyUrl) {
+      if (needsCodexBridge) {
+        throw new Error(
+          "GPT-5.6 Luna currently requires the latest Pi for Excel proxy for ChatGPT WebSocket transport. " +
+          "Enable Proxy in Settings and run: npx -y pi-for-excel-proxy@latest",
+        );
+      }
       return streamSimple(normalizedModel, effectiveContext, effectiveOptions);
     }
 
@@ -510,7 +586,31 @@ export function createOfficeStreamFn(getProxyUrl: GetProxyUrl): OfficeStreamFn {
 
     // Guardrails: fail fast for known-bad proxy configs (e.g., HTTP proxy from HTTPS taskpane).
     const validated = validateOfficeProxyUrl(proxyUrl);
+    let proxyTransport: OfficeProxyTransport | undefined;
+    if (needsCodexBridge) {
+      const bridgeSupported = await proxySupportsCodexWebSocketBridge(validated);
+      if (!bridgeSupported) {
+        throw new Error(
+          "GPT-5.6 Luna requires a newer Pi for Excel proxy with ChatGPT WebSocket support. " +
+          "Restart with: npx -y pi-for-excel-proxy@latest (central deployments: ask your administrator to upgrade the proxy).",
+        );
+      }
+      proxyTransport = "codex-websocket";
+    }
 
-    return streamSimple(applyProxy(normalizedModel, validated), effectiveContext, effectiveOptions);
+    const proxiedOptions: StreamOptions | undefined = proxyTransport
+      ? {
+          ...effectiveOptions,
+          // Native Pi sessions use UUIDv7. ChatGPT's Codex router can assign an
+          // unavailable Luna rollout alias to older UUIDv4 session identifiers.
+          sessionId: resolveCodexWebSocketBridgeSessionId(effectiveOptions?.sessionId),
+          transport: "sse",
+        }
+      : effectiveOptions;
+    return streamSimple(
+      applyProxy(normalizedModel, validated, proxyTransport),
+      effectiveContext,
+      proxiedOptions,
+    );
   };
 }

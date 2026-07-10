@@ -1,15 +1,31 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "capturedAt": "2026-07-10",
-  "privacy": "Sanitized release evidence: workbook names/content, prompts, responses, session/runtime IDs, credentials, and account identifiers are omitted.",
+  "privacy": "Sanitized release evidence. The final host fixture was a new blank workbook; workbook content, prompt/response bodies, session/runtime IDs, credentials, and account identifiers are omitted.",
   "build": {
-    "commit": "6e1b0fc05e3a467403336b6b29d772ca91b6585f",
+    "commit": "PR #644 final branch head; exact SHA recorded by GitHub checks and merge report",
     "piAiVersion": "0.80.6",
-    "piAgentCoreVersion": "0.80.6"
+    "piAgentCoreVersion": "0.80.6",
+    "proxyPackageVersion": "0.2.5-pre"
   },
   "excelMac": {
     "hostVersion": "16.110.2",
+    "host": "real sideloaded Microsoft Excel for Mac taskpane",
+    "fixture": {
+      "kind": "new unsaved blank workbook",
+      "worksheetNames": [
+        "Sheet1"
+      ],
+      "selectedRange": "Sheet1!A1",
+      "selectedRangeWasBlank": true
+    },
     "bridge": "tokened loopback background verification bridge",
+    "proxy": {
+      "urlOmitted": true,
+      "advertisedProxyCapability": true,
+      "advertisedCodexWebSocketCapability": true,
+      "targetRestriction": "exact ChatGPT Codex responses endpoint"
+    },
     "selections": [
       {
         "provider": "openai-codex",
@@ -51,52 +67,52 @@
         "model": "gpt-5.6-sol",
         "api": "openai-codex-responses",
         "stopReason": "stop",
-        "assistantTextLength": 6
+        "assistantTextLength": 12,
+        "fixedSentinelMatched": true,
+        "elapsedMs": 2009
       },
       {
         "provider": "openai-codex",
         "model": "gpt-5.6-terra",
         "api": "openai-codex-responses",
         "stopReason": "stop",
-        "assistantTextLength": 8
+        "assistantTextLength": 14,
+        "fixedSentinelMatched": true,
+        "elapsedMs": 2008
       },
       {
         "provider": "openai-codex",
         "model": "gpt-5.6-luna",
         "api": "openai-codex-responses",
-        "stopReason": "error",
-        "errorMessage": "Model not found gpt-5.6-luna",
-        "assistantTextLength": 0
-      }
-    ]
-  },
-  "nativePi": {
-    "version": "0.80.6",
-    "cases": [
-      {
-        "provider": "openai-codex",
-        "model": "gpt-5.6-luna",
-        "api": "openai-codex-responses",
-        "requestedTransport": "auto",
+        "transport": "browser HTTP/SSE facade to upstream Codex WebSocket",
         "stopReason": "stop",
-        "sentinel": "LUNA_NATIVE_JSON_OK"
-      },
-      {
-        "provider": "openai-codex",
-        "model": "gpt-5.6-luna",
-        "api": "openai-codex-responses",
-        "requestedTransport": "sse",
-        "stopReason": "error",
-        "errorMessage": "Model not found gpt-5.6-luna"
-      },
-      {
-        "provider": "openrouter",
-        "model": "openai/gpt-5.6-luna",
-        "api": "openai-completions",
-        "stopReason": "stop",
-        "sentinel": "LUNA_OPENROUTER_OK"
+        "assistantTextLength": 23,
+        "fixedSentinelMatched": true,
+        "elapsedMs": 2255
       }
     ],
-    "interpretation": "The canonical Luna model succeeds through native Pi's auto transport and through OpenRouter, while the forced ChatGPT SSE path matches the Excel WebView model-not-found response."
+    "officeWriteProbe": {
+      "createdScratchSheet": true,
+      "formula": "SUM of two fixed numeric cells",
+      "formulaResult": 5,
+      "deletedScratchSheet": true,
+      "finalBlankFixtureRestored": true
+    },
+    "hostDiscipline": {
+      "frontmostSameApp": true,
+      "frontmostSameWindow": true,
+      "frontmostApp": "cmux"
+    }
+  },
+  "transportDiagnosis": {
+    "nativePiVersion": "0.80.6",
+    "originalBoundary": "Luna failed on the forced ChatGPT SSE route but completed through native Pi auto/WebSocket.",
+    "requiredParity": [
+      "native Pi upstream user-agent",
+      "UUIDv7 transport session identifier",
+      "response.create WebSocket envelope",
+      "responses_websockets=2026-02-06 beta header"
+    ],
+    "result": "The adapted Excel WebView path completed Luna successfully without changing the canonical provider or model ID."
   }
 }

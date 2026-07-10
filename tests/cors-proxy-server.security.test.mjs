@@ -517,6 +517,7 @@ test("proxy /healthz responds without an Origin header and never proxies", async
   const health = await fetch(`http://127.0.0.1:${proxy.port}/healthz`);
   assert.equal(health.status, 200);
   assert.equal(health.headers.get("x-pi-for-excel-proxy"), "1");
+  assert.equal(health.headers.get("x-pi-for-excel-codex-websocket-bridge"), "1");
   assert.equal(await health.text(), "ok");
 
   const browserHealth = await fetch(`http://127.0.0.1:${proxy.port}/healthz`, {
@@ -533,6 +534,42 @@ test("proxy /healthz responds without an Origin header and never proxies", async
   );
   assert.equal(withUrl.status, 200);
   assert.equal(await withUrl.text(), "ok");
+});
+
+test("proxy restricts the Codex WebSocket bridge to the exact ChatGPT endpoint", async (t) => {
+  const proxy = await startProxy();
+  t.after(async () => {
+    await proxy.stop();
+  });
+
+  const target = encodeURIComponent("https://chatgpt.com/backend-api/not-codex");
+  const response = await fetch(
+    `http://127.0.0.1:${proxy.port}/?pi_transport=codex-websocket&url=${target}`,
+    {
+      method: "POST",
+      headers: { Origin: ORIGIN, "Content-Type": "application/json" },
+      body: JSON.stringify({ model: "gpt-5.6-luna" }),
+    },
+  );
+
+  assert.equal(response.status, 400);
+  assert.match(await response.text(), /target must be https:\/\/chatgpt\.com\/backend-api\/codex\/responses/);
+});
+
+test("proxy rejects unknown internal transport modes", async (t) => {
+  const proxy = await startProxy();
+  t.after(async () => {
+    await proxy.stop();
+  });
+
+  const target = encodeURIComponent("https://chatgpt.com/backend-api/codex/responses");
+  const response = await fetch(
+    `http://127.0.0.1:${proxy.port}/?pi_transport=unknown&url=${target}`,
+    { method: "POST", headers: { Origin: ORIGIN }, body: "{}" },
+  );
+
+  assert.equal(response.status, 400);
+  assert.match(await response.text(), /Unsupported pi_transport/);
 });
 
 test("proxy auto-selects a random port when default 3003 is busy and PORT is not set", async (t) => {

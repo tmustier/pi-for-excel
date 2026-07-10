@@ -28,6 +28,12 @@ import { lookup as dnsLookup } from "node:dns/promises";
 import { Readable } from "node:stream";
 
 import {
+  bridgeCodexWebSocketToSse,
+  CODEX_WEBSOCKET_BRIDGE_HEADER,
+  CODEX_WEBSOCKET_BRIDGE_TRANSPORT,
+  isCodexWebSocketBridgeTarget,
+} from "./codex-websocket-bridge.mjs";
+import {
   evaluateTargetHostPolicy,
   isIpLiteral,
   normalizeHost,
@@ -485,6 +491,14 @@ function handleOAuthCallbackApiRequest(rawUrl, res) {
   });
 }
 
+function extractProxyTransport(rawUrl) {
+  try {
+    return new URL(rawUrl, "http://proxy.local").searchParams.get("pi_transport");
+  } catch {
+    return null;
+  }
+}
+
 function extractTargetUrl(rawUrl) {
   // rawUrl looks like: /?url=https%3A%2F%2Fapi.example.com/path
   // NOTE: some callers append path segments after the encoded baseUrl,
@@ -560,6 +574,7 @@ const handler = async (req, res) => {
     res.statusCode = 200;
     res.setHeader("Content-Type", "text/plain; charset=utf-8");
     res.setHeader("X-Pi-For-Excel-Proxy", "1");
+    res.setHeader(CODEX_WEBSOCKET_BRIDGE_HEADER, "1");
     res.end("ok");
     return;
   }
@@ -661,6 +676,29 @@ const handler = async (req, res) => {
 
   if (bypassHostAllowlistForGitHubEnterprise) {
     console.log(`[proxy] allowing GitHub enterprise endpoint outside default host allowlist: ${safeTarget}`);
+  }
+
+  const requestedTransport = extractProxyTransport(rawUrl);
+  if (requestedTransport && requestedTransport !== CODEX_WEBSOCKET_BRIDGE_TRANSPORT) {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.end("Unsupported pi_transport value");
+    return;
+  }
+
+  if (requestedTransport === CODEX_WEBSOCKET_BRIDGE_TRANSPORT) {
+    if (!isCodexWebSocketBridgeTarget(targetUrl)) {
+      res.statusCode = 400;
+      res.setHeader("Content-Type", "text/plain; charset=utf-8");
+      res.end("Codex WebSocket bridge target must be https://chatgpt.com/backend-api/codex/responses");
+      return;
+    }
+
+    const startedAt = Date.now();
+    const headers = buildOutboundHeaders(req.headers);
+    await bridgeCodexWebSocketToSse({ req, res, targetUrl, outboundHeaders: headers });
+    console.log(`[proxy] ${req.method || "GET"} ${safeTarget} via Codex WebSocket bridge (${Date.now() - startedAt}ms)`);
+    return;
   }
 
   try {

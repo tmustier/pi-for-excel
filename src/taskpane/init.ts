@@ -382,9 +382,6 @@ export async function initTaskpane(opts: {
   // Workbook structure context is injected separately by transformContext.
 
   const streamFn = createOfficeStreamFn(async () => {
-    // In dev mode, Vite's reverse proxy handles CORS — don't double-proxy.
-    if (import.meta.env.DEV) return undefined;
-
     try {
       const storage = getAppStorage();
       const enabled = await storage.settings.get("proxy.enabled");

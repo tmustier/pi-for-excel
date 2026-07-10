@@ -62,6 +62,7 @@ At startup the proxy logs its effective client, origin, and target policies — 
 ### Health checks / reverse proxies
 
 - `GET /healthz` returns `200 ok` without requiring an `Origin` header (subject to the client-address check). Point load-balancer health checks here.
+- Current builds advertise `X-Pi-For-Excel-Proxy: 1` and `X-Pi-For-Excel-Codex-WebSocket-Bridge: 1`. Require both before enabling ChatGPT GPT-5.6 Luna for users; the second capability is absent on older proxy builds.
 - All *proxying* requests still require an allowlisted `Origin`. If you front the proxy with nginx, make sure it passes the `Origin` header through unchanged (nginx does by default; don't override it).
 - If you terminate TLS at the reverse proxy, note the client-address check sees the reverse proxy's address — restrict at the network layer accordingly (the proxy does not trust `X-Forwarded-For`).
 
@@ -105,8 +106,8 @@ Distribute via a [network-share catalog (Windows)](https://learn.microsoft.com/e
 From a user machine (inside the allowed network):
 
 ```bash
-curl https://pi-proxy.example.com:3003/healthz
-# → ok
+curl -i https://pi-proxy.example.com:3003/healthz
+# → 200 ok with both X-Pi-For-Excel compatibility headers
 
 curl -H "Origin: https://pi-excel.example.com" \
   "https://pi-proxy.example.com:3003/?url=https%3A%2F%2Fapi.deepseek.com%2F"

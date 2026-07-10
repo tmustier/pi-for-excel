@@ -8,6 +8,7 @@ const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptDir, "..");
 
 const sourceFiles = [
+  "scripts/codex-websocket-bridge.mjs",
   "scripts/cors-proxy-server.mjs",
   "scripts/proxy-target-policy.mjs",
   "scripts/proxy-client-policy.mjs",

@@ -11,6 +11,7 @@
  */
 
 import type { WorkbookContext } from "../workbook/context.js";
+import { getAppStorage } from "../storage/local/app-storage.js";
 import { closeOverlayById } from "../ui/overlay-dialog.js";
 import { MODEL_SELECTOR_OVERLAY_ID } from "../ui/overlay-ids.js";
 import type { PiSidebar } from "../ui/pi-sidebar.js";
@@ -25,6 +26,7 @@ type BridgeCommandType =
   | "writeRange"
   | "clearRange"
   | "workbookWriteProbe"
+  | "configureProxy"
   | "selectModel"
   | "submitPrompt"
   | "listCharts";
@@ -240,6 +242,26 @@ function selectorRowIdentity(row: HTMLButtonElement): { provider: string; id: st
   const id = row.querySelector<HTMLElement>(".pi-model-selector-item-id")?.textContent?.trim();
   if (!provider || !id) return null;
   return { provider, id };
+}
+
+async function configureProxy(payload: DynamicValue): Promise<JsonRecord> {
+  const enabled = booleanField(payload, "enabled");
+  if (enabled === undefined) {
+    throw new Error("configureProxy requires boolean payload.enabled");
+  }
+
+  const url = stringField(payload, "url");
+  const settings = getAppStorage().settings;
+  await settings.set("proxy.enabled", enabled);
+  if (url) {
+    await settings.set("proxy.url", url);
+  }
+
+  return {
+    configured: true,
+    enabled,
+    url: url ?? null,
+  };
 }
 
 async function selectModel(payload: DynamicValue, options: BridgeOptions): Promise<JsonRecord> {
@@ -655,6 +677,8 @@ async function executeCommand(command: BridgeCommand, options: BridgeOptions): P
     }
     case "workbookWriteProbe":
       return await workbookWriteProbe(command.payload);
+    case "configureProxy":
+      return await configureProxy(command.payload);
     case "selectModel":
       return await selectModel(command.payload, options);
     case "submitPrompt":
