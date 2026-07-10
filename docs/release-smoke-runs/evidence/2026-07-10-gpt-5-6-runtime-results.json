@@ -1,0 +1,102 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-07-10",
+  "privacy": "Sanitized release evidence: workbook names/content, prompts, responses, session/runtime IDs, credentials, and account identifiers are omitted.",
+  "build": {
+    "commit": "6e1b0fc05e3a467403336b6b29d772ca91b6585f",
+    "piAiVersion": "0.80.6",
+    "piAgentCoreVersion": "0.80.6"
+  },
+  "excelMac": {
+    "hostVersion": "16.110.2",
+    "bridge": "tokened loopback background verification bridge",
+    "selections": [
+      {
+        "provider": "openai-codex",
+        "id": "gpt-5.6-sol",
+        "name": "GPT-5.6 Sol",
+        "api": "openai-codex-responses",
+        "selectorMatch": "gpt-5.6-sol / openai-codex / 372k ctx / 128k out",
+        "contextWindow": 372000,
+        "maxTokens": 128000,
+        "thinkingLevel": "high",
+        "selected": true
+      },
+      {
+        "provider": "openai-codex",
+        "id": "gpt-5.6-terra",
+        "name": "GPT-5.6 Terra",
+        "api": "openai-codex-responses",
+        "selectorMatch": "gpt-5.6-terra / openai-codex / 372k ctx / 128k out",
+        "contextWindow": 372000,
+        "maxTokens": 128000,
+        "thinkingLevel": "high",
+        "selected": true
+      },
+      {
+        "provider": "openai-codex",
+        "id": "gpt-5.6-luna",
+        "name": "GPT-5.6 Luna",
+        "api": "openai-codex-responses",
+        "selectorMatch": "gpt-5.6-luna / openai-codex / 372k ctx / 128k out",
+        "contextWindow": 372000,
+        "maxTokens": 128000,
+        "thinkingLevel": "high",
+        "selected": true
+      }
+    ],
+    "completions": [
+      {
+        "provider": "openai-codex",
+        "model": "gpt-5.6-sol",
+        "api": "openai-codex-responses",
+        "stopReason": "stop",
+        "assistantTextLength": 6
+      },
+      {
+        "provider": "openai-codex",
+        "model": "gpt-5.6-terra",
+        "api": "openai-codex-responses",
+        "stopReason": "stop",
+        "assistantTextLength": 8
+      },
+      {
+        "provider": "openai-codex",
+        "model": "gpt-5.6-luna",
+        "api": "openai-codex-responses",
+        "stopReason": "error",
+        "errorMessage": "Model not found gpt-5.6-luna",
+        "assistantTextLength": 0
+      }
+    ]
+  },
+  "nativePi": {
+    "version": "0.80.6",
+    "cases": [
+      {
+        "provider": "openai-codex",
+        "model": "gpt-5.6-luna",
+        "api": "openai-codex-responses",
+        "requestedTransport": "auto",
+        "stopReason": "stop",
+        "sentinel": "LUNA_NATIVE_JSON_OK"
+      },
+      {
+        "provider": "openai-codex",
+        "model": "gpt-5.6-luna",
+        "api": "openai-codex-responses",
+        "requestedTransport": "sse",
+        "stopReason": "error",
+        "errorMessage": "Model not found gpt-5.6-luna"
+      },
+      {
+        "provider": "openrouter",
+        "model": "openai/gpt-5.6-luna",
+        "api": "openai-completions",
+        "stopReason": "stop",
+        "sentinel": "LUNA_OPENROUTER_OK"
+      }
+    ],
+    "interpretation": "The canonical Luna model succeeds through native Pi's auto transport and through OpenRouter, while the forced ChatGPT SSE path matches the Excel WebView model-not-found response."
+  }
+}
