@@ -5,6 +5,7 @@
   "build": {
     "threeModelPassImplementationCommit": "0f43f4d656c9507cae17bf226c2e5c9306e1eab1",
     "postReviewExactCodeCommit": "57ebeab7d8f121c95311c588d55b411575631299",
+    "postCodeqlPinnedTargetCommit": "22a36961149f4b1ff608c5badaf19188841bd4a0",
     "piAiVersion": "0.80.6",
     "piAgentCoreVersion": "0.80.6",
     "proxyPackageVersion": "0.2.5-pre"
