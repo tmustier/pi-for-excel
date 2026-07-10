@@ -3,7 +3,8 @@
   "capturedAt": "2026-07-10",
   "privacy": "Sanitized release evidence. The final host fixture was a new blank workbook; workbook content, prompt/response bodies, session/runtime IDs, credentials, and account identifiers are omitted.",
   "build": {
-    "commit": "PR #644 final branch head; exact SHA recorded by GitHub checks and merge report",
+    "threeModelPassImplementationCommit": "0f43f4d656c9507cae17bf226c2e5c9306e1eab1",
+    "postReviewExactCodeCommit": "57ebeab7d8f121c95311c588d55b411575631299",
     "piAiVersion": "0.80.6",
     "piAgentCoreVersion": "0.80.6",
     "proxyPackageVersion": "0.2.5-pre"
@@ -97,6 +98,25 @@
       "formulaResult": 5,
       "deletedScratchSheet": true,
       "finalBlankFixtureRestored": true
+    },
+    "postReviewExactCodeRecheck": {
+      "commit": "57ebeab7d8f121c95311c588d55b411575631299",
+      "provider": "openai-codex",
+      "model": "gpt-5.6-luna",
+      "contextWindow": 372000,
+      "maxTokens": 128000,
+      "stopReason": "stop",
+      "assistantTextLength": 18,
+      "fixedSentinelMatched": true,
+      "elapsedMs": 2259,
+      "fixture": "new blank Book3 / Sheet1!A1"
+    },
+    "browserCorsProbe": {
+      "pageOrigin": "https://localhost:3141",
+      "status": 200,
+      "body": "ok",
+      "proxyHeaderVisibleToJavaScript": true,
+      "codexBridgeHeaderVisibleToJavaScript": true
     },
     "hostDiscipline": {
       "frontmostSameApp": true,
