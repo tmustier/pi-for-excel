@@ -23,6 +23,7 @@ export function providerPriority(provider: string): number {
 const OPENAI_CODEX_RE = /^gpt-5(?:\.(\d+))?-codex(?:-|$)/;
 const OPENAI_PLAIN_GPT_RE = /^gpt-5(?:\.(\d+))?$/;
 const OPENAI_GPT_RE = /^gpt-5(?:[.-]|$)/;
+const OPENAI_GPT_56_TIER_RE = /^gpt-5\.6-(sol|terra|luna)(?:-|$)/;
 
 const MODEL_NAME_BOUNDARY = String.raw`(?:^|[\\/~.:])`;
 const MODEL_VERSION_BOUNDARY = String.raw`(?=$|[-/:])`;
@@ -64,6 +65,16 @@ export function openAiFamilyPriority(id: string): number {
   if (isOpenAiCodexModelId(id)) return 2;
   if (id.startsWith("gpt-")) return 3;
   if (id.startsWith("o")) return 4;
+  return 9;
+}
+
+export function openAiVariantPriority(id: string): number {
+  // GPT-5.6 has no bare alias. Keep its three canonical tiers in the
+  // maintainer-preferred quality/cost order rather than alphabetic order.
+  const tier = id.match(OPENAI_GPT_56_TIER_RE)?.[1];
+  if (tier === "sol") return 0;
+  if (tier === "terra") return 1;
+  if (tier === "luna") return 2;
   return 9;
 }
 
@@ -110,6 +121,7 @@ export function parseMajorMinor(id: string): number {
   // - claude-fable-5                          -> 50 (major only)
   // - anthropic.claude-opus-4-1-20250805-v1:0 -> 41 (date handled separately)
   // - claude-opus-4-20250514                  -> 40 (major only; date handled separately)
+  // - gpt-5.6-sol                             -> 56
   // - gpt-5.5                                 -> 55
   // - gpt-4o-2024-11-20                       -> 40 (not 202411)
   // - gemini-2.5-pro-preview-06-05            -> 25 (not 65)
@@ -244,6 +256,9 @@ export function compareOpenAiModelIds(aId: string, bId: string): number {
 
   const family = openAiFamilyPriority(aId) - openAiFamilyPriority(bId);
   if (family !== 0) return family;
+
+  const variant = openAiVariantPriority(aId) - openAiVariantPriority(bId);
+  if (variant !== 0) return variant;
 
   return aId.localeCompare(bId);
 }

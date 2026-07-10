@@ -85,9 +85,9 @@ export function pickDefaultModel(
   customDefaultModel?: Model<Api> | null,
 ): Model<Api> {
   // OpenAI special-case:
-  // GPT-5.5 is the preferred default when an OpenAI-backed provider is available.
   // Prefer the newest general GPT-5 model when it is at least as new as Codex,
-  // while keeping Codex as fallback.
+  // while keeping Codex as fallback. GPT-5.6's canonical tier order is
+  // Sol → Terra → Luna; upstream intentionally exposes no bare gpt-5.6 alias.
   for (const provider of ["openai", "openai-codex"] as const) {
     if (!availableProviders.includes(provider)) continue;
     const model = pickPreferredOpenAiModel(provider);
@@ -141,6 +141,7 @@ export function pickDefaultModel(
     if (best) return best;
   }
 
-  // Absolute fallback: keep this resilient across pi-ai version bumps
-  return getModel("openai", "gpt-5.5");
+  // Absolute fallback: keep this resilient across pi-ai version bumps.
+  // Sol is the maintainer-preferred GPT-5.6 quality tier.
+  return getModel("openai", "gpt-5.6-sol");
 }

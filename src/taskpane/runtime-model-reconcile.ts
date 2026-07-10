@@ -3,7 +3,7 @@
  *
  * Fixes #553: on a fresh install the first runtime is created before any
  * provider is connected, so it holds the absolute-fallback model
- * (`openai/gpt-5.5` — the API provider). When the user then logs in with
+ * (`openai/gpt-5.6-sol` — the API provider). When the user then logs in with
  * ChatGPT (`openai-codex`), the runtime kept pointing at the unusable
  * `openai` provider and pi popped an "enter API key" prompt for the wrong
  * provider — charging the pasted API key instead of the subscription.

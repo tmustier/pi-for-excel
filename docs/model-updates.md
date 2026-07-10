@@ -1,18 +1,40 @@
 # Model / dependency update playbook
 
-**Last verified:** 2026-07-04
+**Last verified:** 2026-07-10
 
-This repo hardcodes a small set of "featured" and "preferred" model IDs (for sorting + default selection). Those IDs come from Pi’s model registry (`@earendil-works/pi-ai`) and will drift as new models ship (e.g. `gpt-5.5`, `gpt-5.3-codex`, `claude-fable-5`, `claude-opus-4-8`, `gemini-3.1-pro-preview`).
+This repo hardcodes a small set of "featured" and "preferred" model patterns (for sorting + default selection). The model IDs and metadata come from Pi’s model registry (`@earendil-works/pi-ai`) and will drift as new models ship (e.g. `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, `claude-fable-5`, `claude-opus-4-8`, `gemini-3.1-pro-preview`).
 
 This doc describes how to update:
 - the **Pi dependency versions** we ship (`@earendil-works/pi-ai`, `@earendil-works/pi-agent-core`)
 - the **model ordering/default-selection behavior** in the add-in (`src/models/model-ordering.ts`, `src/models/featured-models.ts`, `src/taskpane/default-model.ts`)
+- the **thinking-level UI** that reflects registry capabilities (`src/models/thinking-levels.ts`, `src/taskpane/thinking-display.ts`)
 
 ## Source of truth
 
 - **Built-in model IDs:** `node_modules/@earendil-works/pi-ai/dist/models.generated.js`
   - This file is auto-generated upstream and is what `getModel(provider, id)` resolves against.
 - Don’t rely on Pi’s `docs/models.md` for built-in IDs — that doc is about **custom models** via `~/.pi/agent/models.json`.
+- Cross-check the installed native Pi package and changelog when the registry changes. Never infer aliases or metadata from marketing names.
+
+### Current GPT-5.6 registry snapshot (`pi-ai` 0.80.6)
+
+Upstream exposes exactly three IDs on both `openai` and `openai-codex`; there is deliberately no bare `gpt-5.6` alias:
+
+| ID | Display name | Standard input / output | Cache read / write | Above 272k input / output | Above 272k cache read / write |
+|---|---|---:|---:|---:|---:|
+| `gpt-5.6-sol` | GPT-5.6 Sol | $5 / $30 | $0.50 / $6.25 | $10 / $45 | $1 / $12.50 |
+| `gpt-5.6-terra` | GPT-5.6 Terra | $2.50 / $15 | $0.25 / $3.125 | $5 / $22.50 | $0.50 / $6.25 |
+| `gpt-5.6-luna` | GPT-5.6 Luna | $1 / $6 | $0.10 / $1.25 | $2 / $9 | $0.20 / $2.50 |
+
+Prices are registry values in USD per million tokens. All three models:
+
+- accept text and image input, support reasoning, and expose `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, and `max` through `getSupportedThinkingLevels()`
+- have a 128,000-token maximum output
+- use a 272,000-token context window through the OpenAI API (`openai-responses`, `https://api.openai.com/v1`)
+- use a 372,000-token context window through ChatGPT (`openai-codex-responses`, `https://chatgpt.com/backend-api`)
+- preserve distinct native `xhigh` and `max` efforts; the ChatGPT map also maps the add-in's `minimal` level to upstream `low`
+
+`tests/model-ordering.test.ts` pins this metadata so a future registry change is reviewed rather than silently changing the UI/runtime contract.
 
 ## When to run this
 
@@ -71,9 +93,8 @@ npm install @earendil-works/pi-ai@<version> @earendil-works/pi-agent-core@<versi
 Search the local registry:
 
 ```bash
-rg -n "gpt-5\\.5"       node_modules/@earendil-works/pi-ai/dist/models.generated.js -S
-rg -n "gpt-5\\.3-codex" node_modules/@earendil-works/pi-ai/dist/models.generated.js -S
-rg -n "claude-fable-5"   node_modules/@earendil-works/pi-ai/dist/models.generated.js -S
+rg -n "gpt-5\\.6-(sol|terra|luna)" node_modules/@earendil-works/pi-ai/dist/models.generated.js -S
+rg -n "claude-fable-5"             node_modules/@earendil-works/pi-ai/dist/models.generated.js -S
 rg -n "claude-opus-4-8"  node_modules/@earendil-works/pi-ai/dist/models.generated.js -S
 rg -n "gemini-3\\.1-pro-preview" node_modules/@earendil-works/pi-ai/dist/models.generated.js -S
 npm run test:models
@@ -90,8 +111,10 @@ Files:
 - `src/models/model-ordering.ts` (provider/family priority + version/recency scoring)
 - `src/models/featured-models.ts` (featured-model ordering used by the model picker)
 - `src/taskpane/default-model.ts` (default-model selection rules)
+- `src/models/thinking-levels.ts` (registry-driven thinking capabilities)
+- `src/taskpane/thinking-display.ts` (localized thinking labels/hints/colors)
 - `src/ui/model-selector-dialog.ts` (first-party model picker UI)
-- `tests/model-ordering.test.ts` (sanity tests; run `npm run test:models` — requires Node 22.19+)
+- `tests/model-ordering.test.ts` (metadata + behavior regressions; run `npm run test:models` — requires Node 22.19+)
 
 We intentionally avoid pinning exact versioned IDs now. Instead we:
 
@@ -106,24 +129,28 @@ We intentionally avoid pinning exact versioned IDs now. Instead we:
     - Version compare uses `parseMajorMinor()` where `claude-opus-4-6` → `46`, `claude-opus-4-7` → `47`, `claude-fable-5` → `50`.
     - Important: IDs like `claude-opus-4-20250514` are treated as **major only** (`40`) and the `YYYYMMDD` part is considered a separate date suffix by `modelRecencyScore()`.
   - **OpenAI (`openai` + `openai-codex`):** latest general `gpt-5.x` *if* its version >= latest `gpt-5.x-codex`, then latest Codex
-    - `gpt-5.5` scores as `55`; `gpt-5.3-codex` scores as `53`.
+    - GPT-5.6 has three explicit tiers and no bare alias. Same-version ordering is `gpt-5.6-sol` → `gpt-5.6-terra` → `gpt-5.6-luna`.
+    - `gpt-5.6-sol` scores as `56`; `gpt-5.5` scores as `55`; `gpt-5.3-codex` scores as `53`.
     - Major-only GPT-5 IDs are also handled (`gpt-5`, `gpt-5-pro`, `gpt-5-codex`).
-    - Plain `gpt-5.x` / `gpt-5` beats same-version suffixed variants (`gpt-5.5` before `gpt-5.5-pro`, `gpt-5` before `gpt-5-pro`).
+    - Where a plain ID exists, it beats same-version suffixed variants (`gpt-5.5` before `gpt-5.5-pro`, `gpt-5` before `gpt-5-pro`).
   - **Google (API key):** latest `gemini-*-pro*` (regex: `/^gemini-.*-pro/i`)
   - **Google OAuth providers (`google-gemini-cli`, `google-antigravity`):** prefer stable Gemini before previews
 
   The ordering logic is driven by:
   - `providerPriority()` (Anthropic → OpenAI Codex → OpenAI → Google → …)
   - `familyPriority()` / `openAiFamilyPriority()` (Opus/Sonnet/Haiku, GPT vs Codex, etc.)
-  - `parseMajorMinor()` + `modelRecencyScore()` (treats `4-6` / `4.6` as `46`, `5.5` as `55`, keeps embedded date suffixes such as `YYYYMMDD` separate, and ignores later date-like suffixes such as `gpt-4o-2024-11-20` or `gemini-2.5-pro-preview-06-05` when extracting the family version)
+  - `openAiVariantPriority()` (explicit same-version GPT-5.6 tier order)
+  - `parseMajorMinor()` + `modelRecencyScore()` (treats `4-6` / `4.6` as `46`, `5.6` as `56`, keeps embedded date suffixes such as `YYYYMMDD` separate, and ignores later date-like suffixes such as `gpt-4o-2024-11-20` or `gemini-2.5-pro-preview-06-05` when extracting the family version)
   - `compareModels()` (provider + family + recency tie-breaks; deterministic sorting)
 
   UI: the model picker is opened from the footer status bar (click the π model button).
 
 - Pick the default model via provider-aware rules:
   - Anthropic is a small special-case: latest Opus by default while Fable is in the registry but unavailable; Sonnet and Fable remain fallbacks if Opus is absent.
-  - OpenAI (`openai` + `openai-codex`) prefers the newest general GPT-5 when it is at least as new as Codex, with Codex as fallback
+  - OpenAI (`openai` + `openai-codex`) prefers the newest general GPT-5 when it is at least as new as Codex, with Codex as fallback; current GPT-5.6 default is Sol
   - otherwise `DEFAULT_MODEL_RULES` + `pickLatestMatchingModel()` (uses `getModels(provider)` to find the newest available ID)
+
+- Populate thinking controls from `getSupportedThinkingLevels()` instead of provider-specific hardcoded lists. This keeps model-level maps authoritative and ensures `xhigh` and `max` remain distinct.
 
 When new models ship, this usually “just works” as long as naming stays consistent. You only need to update these rules if:
 - a provider changes their naming scheme, or

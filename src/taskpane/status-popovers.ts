@@ -6,6 +6,7 @@ import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
 import { t } from "../language/index.js";
 
 import type { StatusContextWarningSeverity } from "./status-context.js";
+import { getThinkingLevelHint, getThinkingLevelLabel } from "./thinking-display.js";
 
 export type StatusCommandName = "compact" | "new";
 
@@ -32,28 +33,6 @@ interface ContextPopoverOptions {
   tokenDetail?: string;
   warning?: { text: string; severity: StatusContextWarningSeverity };
   onRunCommand: (command: StatusCommandName) => void;
-}
-
-function getThinkingLevelLabels(): Record<ThinkingLevel, string> {
-  return {
-    off: t("status.thinking.off"),
-    minimal: t("status.thinking.min"),
-    low: t("status.thinking.low"),
-    medium: t("status.thinking.medium"),
-    high: t("status.thinking.high"),
-    xhigh: t("status.thinking.max"),
-  };
-}
-
-function getThinkingLevelHints(): Record<ThinkingLevel, string> {
-  return {
-    off: t("status.thinking.offHint"),
-    minimal: t("status.thinking.minimalHint"),
-    low: t("status.thinking.lowHint"),
-    medium: t("status.thinking.mediumHint"),
-    high: t("status.thinking.highHint"),
-    xhigh: t("status.thinking.xhighHint"),
-  };
 }
 
 let activePopover: ActivePopoverState | null = null;
@@ -208,11 +187,11 @@ export function toggleThinkingPopover(opts: ThinkingPopoverOptions): void {
 
     const label = document.createElement("span");
     label.className = "pi-status-popover__item-label";
-    label.textContent = getThinkingLevelLabels()[level];
+    label.textContent = getThinkingLevelLabel(level);
 
     const hint = document.createElement("span");
     hint.className = "pi-status-popover__item-hint";
-    hint.textContent = getThinkingLevelHints()[level];
+    hint.textContent = getThinkingLevelHint(level);
 
     body.append(label, hint);
 

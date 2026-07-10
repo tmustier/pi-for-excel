@@ -2,7 +2,7 @@
  * Status bar rendering + thinking level flash.
  */
 
-import type { Agent } from "@earendil-works/pi-agent-core";
+import type { Agent, ThinkingLevel } from "@earendil-works/pi-agent-core";
 
 import { t } from "../language/index.js";
 import { showToast } from "../ui/toast.js";
@@ -19,6 +19,7 @@ import {
   STATUS_CONTEXT_WARNING_SEVERITY_ATTR,
 } from "./status-context.js";
 import type { RuntimeLockState } from "./session-runtime-manager.js";
+import { getThinkingLevelLabel } from "./thinking-display.js";
 
 export type ActiveAgentProvider = () => Agent | null;
 export type ActiveLockStateProvider = () => RuntimeLockState;
@@ -91,10 +92,7 @@ function renderStatusBar(
     : `${Math.round(contextWindow / 1000)}k`;
 
   // Thinking level
-  const thinkingLabels: Record<string, string> = {
-    off: t("status.thinking.off"), minimal: t("status.thinking.min"), low: t("status.thinking.low"), medium: t("status.thinking.medium"), high: t("status.thinking.high"), xhigh: t("status.thinking.max"),
-  };
-  const thinkingLevel = thinkingLabels[state.thinkingLevel] || state.thinkingLevel;
+  const thinkingLevel = getThinkingLevelLabel(state.thinkingLevel);
 
   // Context health: color + tooltip based on usage
   const ctxDescription = getStatusContextTooltipDescription();
@@ -352,16 +350,8 @@ export function injectStatusBar(opts: {
   };
 }
 
-export function flashThinkingLevel(level: string, color: string): void {
-  const labels: Record<string, string> = {
-    off: "Off",
-    minimal: "Min",
-    low: "Low",
-    medium: "Medium",
-    high: "High",
-    xhigh: "Max",
-  };
-  showToast(t("status.thinking.toast", { level: labels[level] || level }), 1500);
+export function flashThinkingLevel(level: ThinkingLevel, color: string): void {
+  showToast(t("status.thinking.toast", { level: getThinkingLevelLabel(level) }), 1500);
 
   const el = document.querySelector<HTMLElement>(".pi-status-thinking");
   if (!el) return;

@@ -11,6 +11,8 @@
  */
 
 import type { WorkbookContext } from "../workbook/context.js";
+import { closeOverlayById } from "../ui/overlay-dialog.js";
+import { MODEL_SELECTOR_OVERLAY_ID } from "../ui/overlay-ids.js";
 import type { PiSidebar } from "../ui/pi-sidebar.js";
 import type { SessionRuntime } from "./session-runtime-manager.js";
 
@@ -23,6 +25,7 @@ type BridgeCommandType =
   | "writeRange"
   | "clearRange"
   | "workbookWriteProbe"
+  | "selectModel"
   | "submitPrompt"
   | "listCharts";
 
@@ -154,6 +157,27 @@ function isRuntimeBusy(runtime: SessionRuntime | null): boolean {
   return runtime ? runtime.agent.state.isStreaming || runtime.actionQueue.isBusy() : false;
 }
 
+function latestAssistantSummary(runtime: SessionRuntime): JsonRecord | null {
+  for (let index = runtime.agent.state.messages.length - 1; index >= 0; index -= 1) {
+    const message = runtime.agent.state.messages[index];
+    if (!message || message.role !== "assistant") continue;
+
+    const textLength = message.content.reduce((total, part) => (
+      part.type === "text" ? total + part.text.length : total
+    ), 0);
+    return {
+      provider: message.provider,
+      model: message.model,
+      api: message.api,
+      stopReason: message.stopReason,
+      errorMessage: message.errorMessage,
+      textLength,
+      usage: message.usage,
+    };
+  }
+  return null;
+}
+
 function activeRuntimeSummary(runtime: SessionRuntime | null): JsonRecord | null {
   if (!runtime) return null;
   return {
@@ -162,6 +186,7 @@ function activeRuntimeSummary(runtime: SessionRuntime | null): JsonRecord | null
     model: runtime.agent.state.model,
     thinkingLevel: runtime.agent.state.thinkingLevel,
     messageCount: runtime.agent.state.messages.length,
+    lastAssistant: latestAssistantSummary(runtime),
     isStreaming: runtime.agent.state.isStreaming,
     isBusy: isRuntimeBusy(runtime),
   };
@@ -193,6 +218,97 @@ async function waitForRuntimeIdle(
     idle: false,
     elapsedMs: Date.now() - started,
     activeRuntime: activeRuntimeSummary(getActiveRuntime()),
+  };
+}
+
+async function waitForBridgeValue<T>(
+  readValue: () => T | null,
+  description: string,
+  timeoutMs = 10_000,
+): Promise<T> {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    const value = readValue();
+    if (value !== null) return value;
+    await new Promise((resolve) => window.setTimeout(resolve, 50));
+  }
+  throw new Error(`Timed out waiting for ${description}`);
+}
+
+function selectorRowIdentity(row: HTMLButtonElement): { provider: string; id: string } | null {
+  const provider = row.querySelector<HTMLElement>(".pi-model-selector-item-provider")?.textContent?.trim();
+  const id = row.querySelector<HTMLElement>(".pi-model-selector-item-id")?.textContent?.trim();
+  if (!provider || !id) return null;
+  return { provider, id };
+}
+
+async function selectModel(payload: DynamicValue, options: BridgeOptions): Promise<JsonRecord> {
+  const provider = stringField(payload, "provider");
+  const modelId = stringField(payload, "modelId");
+  if (!provider || !modelId) {
+    throw new Error("selectModel requires payload.provider and payload.modelId");
+  }
+
+  const runtime = options.getActiveRuntime();
+  if (!runtime) throw new Error("Cannot select a model without an active runtime");
+  if (isRuntimeBusy(runtime)) throw new Error("Cannot select a model while the active runtime is busy");
+
+  const before = activeRuntimeSummary(runtime);
+  closeOverlayById(MODEL_SELECTOR_OVERLAY_ID);
+
+  const modelButton = await waitForBridgeValue(
+    () => document.querySelector<HTMLButtonElement>(".pi-status-model"),
+    "the status-bar model button",
+  );
+  modelButton.click();
+
+  const searchInput = await waitForBridgeValue(
+    () => document.querySelector<HTMLInputElement>(".pi-model-selector-search"),
+    "the model selector",
+  );
+  searchInput.value = modelId;
+  searchInput.dispatchEvent(new Event("input", { bubbles: true }));
+
+  const row = await waitForBridgeValue(() => {
+    const rows = Array.from(
+      document.querySelectorAll<HTMLButtonElement>(".pi-model-selector-item"),
+    );
+    return rows.find((candidate) => {
+      const identity = selectorRowIdentity(candidate);
+      return identity?.provider === provider && identity.id === modelId;
+    }) ?? null;
+  }, `${provider}/${modelId} in the model selector`);
+
+  const identity = selectorRowIdentity(row);
+  const selectorText = row.textContent?.replace(/\s+/gu, " ").trim() ?? "";
+  row.click();
+
+  await waitForBridgeValue(
+    () => document.getElementById(MODEL_SELECTOR_OVERLAY_ID) === null ? true : null,
+    "the model selector to close",
+  );
+
+  const after = await waitForBridgeValue(() => {
+    const activeRuntime = options.getActiveRuntime();
+    if (
+      activeRuntime?.agent.state.model.provider !== provider
+      || activeRuntime.agent.state.model.id !== modelId
+    ) {
+      return null;
+    }
+    return activeRuntimeSummary(activeRuntime);
+  }, `${provider}/${modelId} to become the active model`);
+
+  return {
+    selected: true,
+    requested: { provider, modelId },
+    selectorMatch: {
+      provider: identity?.provider ?? "",
+      id: identity?.id ?? "",
+      text: selectorText,
+    },
+    before,
+    after,
   };
 }
 
@@ -539,6 +655,8 @@ async function executeCommand(command: BridgeCommand, options: BridgeOptions): P
     }
     case "workbookWriteProbe":
       return await workbookWriteProbe(command.payload);
+    case "selectModel":
+      return await selectModel(command.payload, options);
     case "submitPrompt":
       return await submitPrompt(command.payload, options);
     case "listCharts":

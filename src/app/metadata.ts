@@ -5,4 +5,4 @@
  */
 
 export const APP_NAME = "pi-for-excel";
-export const APP_VERSION = "0.9.5-pre";
+export const APP_VERSION = "0.10.0-pre";

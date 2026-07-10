@@ -3,12 +3,19 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
 
-import { completeSimple, getModel, getModels, type Api, type Model } from "@earendil-works/pi-ai/compat";
+import {
+  completeSimple,
+  getModel,
+  getModels,
+  type Api,
+  type Model,
+} from "@earendil-works/pi-ai/compat";
 
 import { BROWSER_OAUTH_PROVIDERS, mapToApiProvider } from "../src/auth/provider-map.ts";
 import { rewriteDevProxyUrl } from "../src/auth/dev-rewrites.ts";
 import { installBedrockProviderStub } from "../src/compat/bedrock-provider-stub.ts";
 import { installProcessEnvShim } from "../src/compat/process-env-shim.ts";
+import { orderModelsForSelector } from "../src/models/featured-models.ts";
 import {
   compareModels,
   compareOpenAiModelIds,
@@ -16,15 +23,56 @@ import {
   isOpenAiGeneralGptModelId,
   modelRecencyScore,
   openAiFamilyPriority,
+  openAiVariantPriority,
   parseMajorMinor,
   providerPriority,
   shouldPreferOpenAiGeneralModel,
 } from "../src/models/model-ordering.ts";
+import { getThinkingLevelsForModel } from "../src/models/thinking-levels.ts";
 import { pickDefaultModel } from "../src/taskpane/default-model.ts";
 
 type OpenAiProvider = "openai" | "openai-codex";
 
 const OPENAI_PROVIDERS: OpenAiProvider[] = ["openai", "openai-codex"];
+
+const GPT_56_VARIANTS = [
+  {
+    id: "gpt-5.6-sol",
+    name: "GPT-5.6 Sol",
+    cost: {
+      input: 5,
+      output: 30,
+      cacheRead: 0.5,
+      cacheWrite: 6.25,
+      tiers: [{ inputTokensAbove: 272_000, input: 10, output: 45, cacheRead: 1, cacheWrite: 12.5 }],
+    },
+  },
+  {
+    id: "gpt-5.6-terra",
+    name: "GPT-5.6 Terra",
+    cost: {
+      input: 2.5,
+      output: 15,
+      cacheRead: 0.25,
+      cacheWrite: 3.125,
+      tiers: [{ inputTokensAbove: 272_000, input: 5, output: 22.5, cacheRead: 0.5, cacheWrite: 6.25 }],
+    },
+  },
+  {
+    id: "gpt-5.6-luna",
+    name: "GPT-5.6 Luna",
+    cost: {
+      input: 1,
+      output: 6,
+      cacheRead: 0.1,
+      cacheWrite: 1.25,
+      tiers: [{ inputTokensAbove: 272_000, input: 2, output: 9, cacheRead: 0.2, cacheWrite: 2.5 }],
+    },
+  },
+];
+
+const GPT_56_IDS = GPT_56_VARIANTS.map((variant) => variant.id);
+const GPT_56_THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
 
 function pickExpectedOpenAiDefault(provider: OpenAiProvider): Model<Api> | null {
   const models = getModels(provider);
@@ -71,6 +119,9 @@ void test("parseMajorMinor does not treat YYYYMMDD as a minor version", () => {
 void test("parseMajorMinor handles dot-style versions", () => {
   assert.equal(parseMajorMinor("gpt-5.3-codex"), 53);
   assert.equal(parseMajorMinor("gpt-5.5"), 55);
+  assert.equal(parseMajorMinor("gpt-5.6-sol"), 56);
+  assert.equal(parseMajorMinor("gpt-5.6-terra"), 56);
+  assert.equal(parseMajorMinor("gpt-5.6-luna"), 56);
   assert.equal(parseMajorMinor("gemini-2.5-pro"), 25);
   assert.equal(parseMajorMinor("google/gemini-3.1-pro-preview"), 31);
 });
@@ -100,9 +151,12 @@ void test("parseMajorMinor falls back for non-Claude/GPT/Gemini registry familie
   assert.equal(parseMajorMinor("unknown-model-2024-11-20"), 0);
 });
 
-void test("OpenAI model helpers handle major-only GPT-5 ids and Codex variants", () => {
+void test("OpenAI model helpers handle GPT-5.6 tiers and Codex variants", () => {
   assert.equal(isOpenAiGeneralGptModelId("gpt-5"), true);
   assert.equal(isOpenAiGeneralGptModelId("gpt-5-pro"), true);
+  assert.equal(isOpenAiGeneralGptModelId("gpt-5.6-sol"), true);
+  assert.equal(isOpenAiGeneralGptModelId("gpt-5.6-terra"), true);
+  assert.equal(isOpenAiGeneralGptModelId("gpt-5.6-luna"), true);
   assert.equal(isOpenAiGeneralGptModelId("gpt-5-codex"), false);
   assert.equal(isOpenAiCodexModelId("gpt-5-codex"), true);
   assert.equal(isOpenAiCodexModelId("gpt-5.1-codex-max"), true);
@@ -125,21 +179,74 @@ void test("compareOpenAiModelIds prefers plain GPT-5 over other same-version var
   assert.deepEqual(ids, ["gpt-5", "gpt-5-pro", "gpt-5-codex"]);
 });
 
+void test("compareOpenAiModelIds orders GPT-5.6 Sol, Terra, then Luna", () => {
+  const ids = ["gpt-5.6-luna", "gpt-5.6-sol", "gpt-5.6-terra"];
+  ids.sort(compareOpenAiModelIds);
+  assert.deepEqual(ids, GPT_56_IDS);
+  assert.ok(openAiVariantPriority("gpt-5.6-sol") < openAiVariantPriority("gpt-5.6-terra"));
+  assert.ok(openAiVariantPriority("gpt-5.6-terra") < openAiVariantPriority("gpt-5.6-luna"));
+});
+
 void test("shouldPreferOpenAiGeneralModel only prefers GPT when it is as new or newer", () => {
   assert.equal(shouldPreferOpenAiGeneralModel("gpt-5", "gpt-5-codex"), true);
   assert.equal(shouldPreferOpenAiGeneralModel("gpt-5.5", "gpt-5.3-codex"), true);
   assert.equal(shouldPreferOpenAiGeneralModel("gpt-5-pro", "gpt-5.1-codex-max"), false);
 });
 
-void test("current Pi registry exposes the refreshed preferred model ids", () => {
-  assert.equal(getModel("openai", "gpt-5.5").id, "gpt-5.5");
-  // pi-ai 0.79.x moved gpt-5.3-codex off the ChatGPT (openai-codex) provider;
-  // it remains available via the OpenAI API provider.
-  assert.equal(getModel("openai-codex", "gpt-5.5").id, "gpt-5.5");
-  assert.equal(getModel("openai", "gpt-5.3-codex").id, "gpt-5.3-codex");
+void test("current Pi registry exposes only the three canonical GPT-5.6 tier IDs", () => {
+  for (const provider of OPENAI_PROVIDERS) {
+    const ids = getModels(provider)
+      .filter((model) => model.id.startsWith("gpt-5.6"))
+      .map((model) => model.id)
+      .sort();
+
+    assert.deepEqual(ids, GPT_56_IDS.slice().sort(), `unexpected GPT-5.6 IDs for ${provider}`);
+    assert.equal(getModel(provider, "gpt-5.6"), undefined, `bare alias must not exist for ${provider}`);
+  }
+
   assert.equal(getModel("anthropic", "claude-opus-4-7").id, "claude-opus-4-7");
   assert.equal(getModel("anthropic", "claude-fable-5").id, "claude-fable-5");
   assert.equal(getModel("google", "gemini-3.1-pro-preview").id, "gemini-3.1-pro-preview");
+});
+
+void test("GPT-5.6 registry metadata exactly matches native Pi 0.80.6", () => {
+  for (const provider of OPENAI_PROVIDERS) {
+    const isCodex = provider === "openai-codex";
+
+    for (const expected of GPT_56_VARIANTS) {
+      const model = getModel(provider, expected.id);
+      assert.equal(model.id, expected.id);
+      assert.equal(model.name, expected.name);
+      assert.equal(model.provider, provider);
+      assert.equal(model.api, isCodex ? "openai-codex-responses" : "openai-responses");
+      assert.equal(
+        model.baseUrl,
+        isCodex ? "https://chatgpt.com/backend-api" : "https://api.openai.com/v1",
+      );
+      assert.equal(model.reasoning, true);
+      assert.deepEqual(model.input, ["text", "image"]);
+      assert.equal(model.contextWindow, isCodex ? 372_000 : 272_000);
+      assert.equal(model.maxTokens, 128_000);
+      assert.deepEqual(model.cost, expected.cost);
+      assert.deepEqual(
+        model.thinkingLevelMap,
+        isCodex
+          ? { xhigh: "xhigh", max: "max", minimal: "low" }
+          : { off: "none", xhigh: "xhigh", max: "max" },
+      );
+      assert.deepEqual(getThinkingLevelsForModel(model), GPT_56_THINKING_LEVELS);
+    }
+  }
+});
+
+void test("model selector orders all GPT-5.6 tiers as Sol, Terra, Luna", () => {
+  const items = GPT_56_IDS
+    .slice()
+    .reverse()
+    .map((id) => ({ provider: "openai-codex", id, model: getModel("openai-codex", id) }));
+
+  const ordered = orderModelsForSelector(items, null);
+  assert.deepEqual(ordered.map((item) => item.id), GPT_56_IDS);
 });
 
 void test("Claude Fable 5 registry metadata is usable by the add-in", () => {
@@ -160,10 +267,11 @@ void test("pickDefaultModel prefers the latest Opus for Anthropic-only setups", 
   assert.equal(selected.id, "claude-opus-4-8");
 });
 
-void test("current OpenAI providers expose at least one default-model candidate", () => {
+void test("current OpenAI providers select GPT-5.6 Sol as the default", () => {
   for (const provider of OPENAI_PROVIDERS) {
-    const expected = pickExpectedOpenAiDefault(provider);
-    assert.ok(expected, `expected at least one OpenAI default candidate for ${provider}`);
+    const selected = pickDefaultModel([provider]);
+    assert.equal(selected.provider, provider);
+    assert.equal(selected.id, "gpt-5.6-sol");
   }
 });
 
@@ -202,12 +310,12 @@ void test("pickDefaultModel matches the current OpenAI default-selection contrac
 void test("pickDefaultModel falls back to the preferred hardcoded OpenAI default", () => {
   const selected = pickDefaultModel([]);
   assert.equal(selected.provider, "openai");
-  assert.equal(selected.id, "gpt-5.5");
+  assert.equal(selected.id, "gpt-5.6-sol");
 });
 
 void test("pickDefaultModel never picks an unusable provider while a configured provider has models (#553)", () => {
   // Providers with registry models but no dedicated default-model rule used
-  // to fall through to openai/gpt-5.5, which the user has no credentials for.
+  // to fall through to an OpenAI API model, which the user has no credentials for.
   for (const provider of ["github-copilot", "mistral", "groq", "xai", "deepseek"]) {
     const models = getModels(provider as Parameters<typeof getModels>[0]);
     assert.ok(models.length > 0, `expected registry models for ${provider}`);
@@ -224,13 +332,13 @@ void test("pickDefaultModel never picks an unusable provider while a configured 
 void test("pickDefaultModel tolerates unknown provider names", () => {
   const selected = pickDefaultModel(["some-custom-gateway"]);
   assert.equal(selected.provider, "openai");
-  assert.equal(selected.id, "gpt-5.5");
+  assert.equal(selected.id, "gpt-5.6-sol");
 });
 
-void test("pickDefaultModel prefers GPT-5.5 when OpenAI and Anthropic are both available", () => {
+void test("pickDefaultModel prefers GPT-5.6 Sol when OpenAI and Anthropic are both available", () => {
   const selected = pickDefaultModel(["anthropic", "openai"]);
   assert.equal(selected.provider, "openai");
-  assert.equal(selected.id, "gpt-5.5");
+  assert.equal(selected.id, "gpt-5.6-sol");
 });
 
 void test("modelRecencyScore prefers higher version, then later date suffix", () => {

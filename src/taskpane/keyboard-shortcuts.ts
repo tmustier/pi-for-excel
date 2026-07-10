@@ -5,8 +5,8 @@
  */
 
 import type { Agent, ThinkingLevel } from "@earendil-works/pi-agent-core";
-import { getSupportedThinkingLevels } from "@earendil-works/pi-ai/compat";
 
+import { getThinkingLevelsForModel } from "../models/thinking-levels.js";
 import type { PiSidebar } from "../ui/pi-sidebar.js";
 import { moveCursorToEnd } from "../ui/input-focus.js";
 import { isActionToastVisible, showToast } from "../ui/toast.js";
@@ -21,6 +21,7 @@ import {
 } from "../commands/command-menu.js";
 
 import { flashThinkingLevel, updateStatusBarForAgent } from "./status-bar.js";
+import { THINKING_LEVEL_COLORS } from "./thinking-display.js";
 import {
   handleSlashCommandExecution,
   handleStreamingSteerOrFollowUp,
@@ -64,15 +65,6 @@ interface KeydownContext {
 }
 
 type ShortcutHandler = (context: KeydownContext) => boolean;
-
-const THINKING_COLORS: Record<ThinkingLevel, string> = {
-  off: "#a0a0a0",
-  minimal: "#767676",
-  low: "#4488cc",
-  medium: "#22998a",
-  high: "#875f87",
-  xhigh: "#8b008b",
-};
 
 function isInsideSessionTabs(target: EventTarget | null | undefined): boolean {
   if (!(target instanceof Element)) {
@@ -157,23 +149,7 @@ function buildKeydownContext(args: {
 }
 
 export function getThinkingLevels(agent: Agent): ThinkingLevel[] {
-  const model = agent.state.model;
-  if (!model || !model.reasoning) return ["off"];
-
-  const provider = model.provider;
-  if (provider === "openai" || provider === "openai-codex") {
-    const levels: ThinkingLevel[] = ["off", "minimal", "low", "medium", "high"];
-    if (getSupportedThinkingLevels(model).includes("xhigh")) levels.push("xhigh");
-    return levels;
-  }
-
-  if (provider === "anthropic") {
-    const levels: ThinkingLevel[] = ["off", "low", "medium", "high"];
-    if (getSupportedThinkingLevels(model).includes("xhigh")) levels.push("xhigh");
-    return levels;
-  }
-
-  return ["off", "low", "medium", "high"];
+  return getThinkingLevelsForModel(agent.state.model);
 }
 
 export function cycleThinkingLevel(agent: Agent): ThinkingLevel {
@@ -184,7 +160,7 @@ export function cycleThinkingLevel(agent: Agent): ThinkingLevel {
 
   agent.state.thinkingLevel = next;
   updateStatusBarForAgent(agent);
-  flashThinkingLevel(next, THINKING_COLORS[next] || "#a0a0a0");
+  flashThinkingLevel(next, THINKING_LEVEL_COLORS[next]);
 
   return next;
 }

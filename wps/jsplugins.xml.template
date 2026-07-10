@@ -11,6 +11,6 @@
   <jsplugin
     name="Pi for Excel"
     type="et"
-    version="0.9.5-pre"
+    version="0.10.0-pre"
     url="{{ADDIN_BASE_URL}}/" />
 </jsplugins>

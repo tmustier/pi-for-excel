@@ -1,6 +1,6 @@
 {
   "name": "pi-for-excel",
-  "version": "0.9.5-pre",
+  "version": "0.10.0-pre",
   "description": "Open-source, multi-model AI sidebar add-in for Excel. Powered by Pi.",
   "type": "module",
   "scripts": {
@@ -25,7 +25,8 @@
     "check:builtins-inline-style": "node scripts/check-builtins-inline-style.mjs",
     "check:landing-connect-copy": "node scripts/check-landing-connect-copy.mjs",
     "check:pi-lockstep": "node scripts/check-pi-deps-lockstep.mjs",
-    "check": "npm run check:css-theme && npm run check:theme-utility-overrides && npm run check:builtins-inline-style && npm run check:landing-connect-copy && npm run check:pi-lockstep && npm run check:boundary-casts && npm run check:eslint-comments && npm run check:innerhtml && npm run check:return-types && npm run lint && npm run typecheck",
+    "check:version-sync": "node scripts/check-version-sync.mjs",
+    "check": "npm run check:css-theme && npm run check:theme-utility-overrides && npm run check:builtins-inline-style && npm run check:landing-connect-copy && npm run check:pi-lockstep && npm run check:version-sync && npm run check:boundary-casts && npm run check:eslint-comments && npm run check:innerhtml && npm run check:return-types && npm run lint && npm run typecheck",
     "lint": "eslint \"*.ts\" \"src/**/*.ts\" \"tests/**/*.ts\"",
     "lint:fix": "eslint \"*.ts\" \"src/**/*.ts\" \"tests/**/*.ts\" --fix",
     "test:models": "node --test --experimental-strip-types --import ./scripts/register-test-ts-loader.mjs tests/model-ordering.test.ts tests/runtime-model-reconcile.test.ts",
@@ -44,8 +45,8 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.110.0",
-    "@earendil-works/pi-agent-core": "0.80.3",
-    "@earendil-works/pi-ai": "0.80.3",
+    "@earendil-works/pi-agent-core": "0.80.6",
+    "@earendil-works/pi-ai": "0.80.6",
     "@sinclair/typebox": "^0.34.49",
     "highlight.js": "^11.11.1",
     "lit": "^3.3.3",

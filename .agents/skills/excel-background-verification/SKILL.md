@@ -82,6 +82,8 @@ PI_BACKGROUND_VERIFY_TOKEN="$TOKEN" PI_BACKGROUND_VERIFY_HOST=localhost npm run 
 PI_BACKGROUND_VERIFY_TOKEN="$TOKEN" PI_BACKGROUND_VERIFY_HOST=localhost npm run background:verify:command -- readUsedRange
 PI_BACKGROUND_VERIFY_TOKEN="$TOKEN" PI_BACKGROUND_VERIFY_HOST=localhost npm run background:verify:command -- readRange '{"address":"Sheet1!A1:B5"}'
 PI_BACKGROUND_VERIFY_TOKEN="$TOKEN" PI_BACKGROUND_VERIFY_HOST=localhost npm run background:verify:command -- listCharts
+PI_BACKGROUND_VERIFY_TOKEN="$TOKEN" PI_BACKGROUND_VERIFY_HOST=localhost npm run background:verify:command -- selectModel \
+  '{"provider":"openai-codex","modelId":"gpt-5.6-sol"}'
 ```
 
 ### Controlled write smoke
@@ -118,6 +120,7 @@ Use the outputs as verification artifacts:
 - `officeProbe`: proves Office.js can read the real workbook from the hidden taskpane.
 - `workbookWriteProbe`: proves the hidden taskpane can perform reversible real workbook writes and read back formula results.
 - `writeRange` / `clearRange`: deterministic setup and cleanup for feature-specific smoke tests.
+- `selectModel`: opens the real model selector, filters it, clicks the exact provider/model row, and verifies that model became active.
 - `submitPrompt`: exercises the real app prompt → runtime/model/tool loop from the hidden taskpane.
 - `readRange` / `readUsedRange`: verify workbook contents changed as expected.
 - `listCharts`: verify chart creation/update/delete metadata.

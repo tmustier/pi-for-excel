@@ -7,7 +7,7 @@ This folder contains **current** docs that should match shipped behavior.
 - [Deploy hosted build on Vercel](./deploy-vercel.md)
 - [Org-hosted central CORS proxy](./central-proxy.md)
 - [Dev server behind portless (opt-in)](./portless.md)
-- [Release notes (`v0.9.5-pre`)](./release-notes/v0.9.5-pre.md)
+- [Release notes (`v0.10.0-pre`)](./release-notes/v0.10.0-pre.md)
 - [Release smoke test checklist](./release-smoke-test-checklist.md)
 - [Release smoke run logs](./release-smoke-runs/README.md)
 
