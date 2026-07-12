@@ -28,11 +28,18 @@ The private corpus is a local-only git repo at `~/projects/excel-eval-corpus`
     switch via the production model-switch seam, validated against the model
     registry (e.g. `openai-codex gpt-5.6-sol medium`); unknown model or
     unsupported thinking level fails closed.
-  - `submit <clientId> <text> [timeoutMs]` — submit prompt and wait to idle.
+  - `submit <clientId> <text> [timeoutMs]` — **blocking**: submits the prompt
+    and waits until the run returns to idle, then prints the summary. Exits
+    non-zero (2) when the run does not reach idle (start-timeout/wait-timeout)
+    so automation cannot false-pass on a timeout.
   - `wait <clientId> [baselineMsgs] [timeoutMs]` — pollable durable
-    wait-until-idle; pass the `baselineMessageCount` from the submit response
-    for exact start detection (never reports idle before the run starts, even
-    on a silent instant-fail).
+    wait-until-idle; exits 2 unless idle. For a genuine split submit/wait, fire
+    the prompt non-blocking with the raw escape hatch
+    `cmd <clientId> submitPrompt '{"text":"…","waitForIdle":false}'` (returns
+    immediately with `baseline.messageCount`), then pass that count as
+    `baselineMsgs` for exact start detection (never reports idle before the run
+    starts, even on a silent instant-fail). The blocking `submit` wrapper
+    already waits, so it does not yield a pre-run baseline to poll against.
   - `transcript <clientId> [maxReplyChars]` — bounded transcript + usage export
     (reply text, per-tool call/error counts, token totals). By design it
     excludes raw tool-call arguments and raw user/tool-result text; it exports
@@ -97,9 +104,12 @@ See `tasks/example-doctor.yaml`. Key doctrines:
 4. `bridge.sh clients` → target the new client id.
 5. `bridge.sh session <id>` → fresh chat/session for the task.
 6. `bridge.sh model <id> openai-codex gpt-5.6-sol medium` → pin model + thinking.
-7. `bridge.sh submit <id> "<task prompt>" 180000` → submits and waits to idle;
-   note the `baselineMsgs` it prints. (Re-poll with
-   `bridge.sh wait <id> <baselineMsgs> 180000` if you split submit/wait.)
+7. `bridge.sh submit <id> "<task prompt>" 180000` → **blocking** submit that
+   waits to idle and exits non-zero (2) on start-/wait-timeout. To split
+   submit/wait instead (e.g. poll from another shell), fire it non-blocking via
+   `bridge.sh cmd <id> submitPrompt '{"text":"<task prompt>","waitForIdle":false}'`,
+   read `baseline.messageCount` from that response, then
+   `bridge.sh wait <id> <baselineMsgs> 180000`.
 8. `bridge.sh transcript <id>` → reply + tool-call/error counts + token totals.
 9. Snapshot sheets: `bridge.sh cmd <id> readUsedRange '{"sheet":"...","include":"all"}'`
    → save one JSON per sheet.

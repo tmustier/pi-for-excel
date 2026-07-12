@@ -441,6 +441,37 @@ void test("transcript export and status pieces never leak tool args, user text, 
   assert.ok(toolMsg && (toolMsg.textLength ?? 0) > 0 && toolMsg.text === undefined);
 });
 
+void test("transcript export never leaks assistant errorMessage text but surfaces hasError", () => {
+  const SECRET = "ERR-S3CRET-do-not-leak-xyz789";
+  const messages: AgentMessage[] = [
+    userMessage("run the failing step", 1),
+    assistantMessage({
+      text: "Attempting the step.",
+      stopReason: "error",
+      errorMessage: `provider 500: leaked ${SECRET} in raw error body`,
+      timestamp: 2,
+    }),
+  ];
+
+  // Generous caps so exclusion of the raw error is structural, not truncation.
+  const report = buildTranscriptExport(messages, { maxReplyChars: 5_000, maxMessageTextChars: 5_000 });
+  const serialized = JSON.stringify(report);
+  assert.equal(serialized.includes(SECRET), false, "assistant errorMessage text must not appear in export");
+  assert.equal(serialized.includes("errorMessage"), false, "raw errorMessage field must be dropped entirely");
+
+  // Boolean error signal survives on lastAssistant and the compact assistant message.
+  assert.equal(report.lastAssistant?.hasError, true);
+  const assistantMsg = report.messages.find((message) => message.role === "assistant");
+  assert.ok(assistantMsg);
+  assert.equal(assistantMsg?.hasError, true);
+  // Bounded assistant text is still allowed alongside the boolean flag.
+  assert.equal(assistantMsg?.text, "Attempting the step.");
+
+  // The boolean discriminates: a clean run reports hasError=false.
+  const clean = buildTranscriptExport(sampleTranscript());
+  assert.equal(clean.lastAssistant?.hasError, false);
+});
+
 void test("summarizeLastToolCall reports pending, ok, error, and null", () => {
   assert.equal(summarizeLastToolCall([]), null);
 

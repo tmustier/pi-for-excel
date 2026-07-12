@@ -6,8 +6,8 @@
 #   bridge.sh watch <clientId> [timeout_s]         # poll status until idle (legacy)
 #   bridge.sh session <clientId>                   # start a fresh chat/session
 #   bridge.sh model <clientId> <provider> <modelId> [thinkingLevel]
-#   bridge.sh submit <clientId> <text> [timeoutMs]  # prompt + durable wait-until-idle
-#   bridge.sh wait <clientId> [baselineMsgs] [timeoutMs]  # durable wait-until-idle
+#   bridge.sh submit <clientId> <text> [timeoutMs]  # blocking submit + wait-until-idle (exit 2 unless idle)
+#   bridge.sh wait <clientId> [baselineMsgs] [timeoutMs]  # durable wait-until-idle (exit 2 unless idle)
 #   bridge.sh transcript <clientId> [maxReplyChars]  # bounded transcript + usage export
 #   bridge.sh cmd <clientId> <type> <payloadJson> [timeoutMs]   # raw command, JSON out
 set -euo pipefail
@@ -113,7 +113,8 @@ d=json.load(sys.stdin)
 if not d.get("ok"): print("ERR:", d.get("error")); sys.exit(1)
 r=d["result"]; w=r.get("wait") or {}; a=r.get("after") or {}; b=r.get("baseline") or {}
 print("submitted len=%s baselineMsgs=%s | wait idle=%s reason=%s started=%s elapsedMs=%s | afterMsgs=%s busy=%s" % (
-  r.get("textLength"), b.get("messageCount"), w.get("idle"), w.get("reason"), w.get("started"), w.get("elapsedMs"), a.get("messageCount"), a.get("isBusy")))'
+  r.get("textLength"), b.get("messageCount"), w.get("idle"), w.get("reason"), w.get("started"), w.get("elapsedMs"), a.get("messageCount"), a.get("isBusy")))
+sys.exit(0 if w.get("idle") is True else 2)'
     ;;
   wait)
     CID="$2"; BASE="${3-}"; TMS="${4:-180000}"; POST_MS=$((TMS + 10000))
@@ -129,7 +130,8 @@ d=json.load(sys.stdin)
 if not d.get("ok"): print("ERR:", d.get("error")); sys.exit(1)
 r=d["result"]; ar=r.get("activeRuntime") or {}
 print("idle=%s reason=%s started=%s elapsedMs=%s baselineMsgs=%s | msgs=%s busy=%s" % (
-  r.get("idle"), r.get("reason"), r.get("started"), r.get("elapsedMs"), r.get("baselineMessageCount"), ar.get("messageCount"), ar.get("isBusy")))'
+  r.get("idle"), r.get("reason"), r.get("started"), r.get("elapsedMs"), r.get("baselineMessageCount"), ar.get("messageCount"), ar.get("isBusy")))
+sys.exit(0 if r.get("idle") is True else 2)'
     ;;
   transcript)
     CID="$2"; MRC="${3:-4000}"

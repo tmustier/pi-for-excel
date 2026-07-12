@@ -197,7 +197,7 @@ function latestAssistantSummary(runtime: SessionRuntime): JsonRecord | null {
       model: message.model,
       api: message.api,
       stopReason: message.stopReason,
-      errorMessage: message.errorMessage,
+      hasError: message.errorMessage !== undefined,
       textLength,
       snippet: assistantTextSnippet(message),
       usage: message.usage,

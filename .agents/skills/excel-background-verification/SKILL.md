@@ -112,13 +112,22 @@ PI_BACKGROUND_VERIFY_TOKEN="$TOKEN" PI_BACKGROUND_VERIFY_HOST=localhost npm run 
 When the product path itself is under test, submit an actual prompt through the sidebar instead of only calling Office.js helpers:
 
 ```bash
+# Blocking submit: waitForIdle:true blocks until the run returns to idle, so no
+# separate wait is needed. A non-idle result (idle:false, reason
+# start-timeout/wait-timeout) is a FAILURE, not a pass.
 PI_BACKGROUND_VERIFY_TOKEN="$TOKEN" PI_BACKGROUND_VERIFY_HOST=localhost npm run background:verify:command -- submitPrompt \
   '{"text":"Write SMOKE into A1, then report exactly what changed.","waitForIdle":true,"timeoutMs":120000}'
 PI_BACKGROUND_VERIFY_TOKEN="$TOKEN" PI_BACKGROUND_VERIFY_HOST=localhost npm run background:verify:command -- readRange '{"address":"Sheet1!A1"}'
-# submitPrompt returns baseline.messageCount; use it for an exact pollable wait, then export the run:
-PI_BACKGROUND_VERIFY_TOKEN="$TOKEN" PI_BACKGROUND_VERIFY_HOST=localhost npm run background:verify:command -- waitUntilIdle \
-  '{"baselineMessageCount":0,"timeoutMs":120000}'
 PI_BACKGROUND_VERIFY_TOKEN="$TOKEN" PI_BACKGROUND_VERIFY_HOST=localhost npm run background:verify:command -- exportTranscript '{"maxReplyChars":4000}'
+
+# --- OR: genuine split submit/wait (e.g. poll from another shell) ---
+# Fire non-blocking (waitForIdle:false) so submitPrompt returns immediately with
+# baseline.messageCount, then pass that exact value to waitUntilIdle. Do NOT add a
+# second waitUntilIdle after a blocking submit — the run has already finished.
+PI_BACKGROUND_VERIFY_TOKEN="$TOKEN" PI_BACKGROUND_VERIFY_HOST=localhost npm run background:verify:command -- submitPrompt \
+  '{"text":"Write SMOKE into A1, then report exactly what changed.","waitForIdle":false,"timeoutMs":120000}'
+PI_BACKGROUND_VERIFY_TOKEN="$TOKEN" PI_BACKGROUND_VERIFY_HOST=localhost npm run background:verify:command -- waitUntilIdle \
+  '{"baselineMessageCount":<baseline.messageCount from submitPrompt>,"timeoutMs":120000}'
 ```
 
 Use the outputs as verification artifacts:
@@ -130,8 +139,8 @@ Use the outputs as verification artifacts:
 - `configureProxy`: explicitly enables/disables the app's configured proxy for transport-specific real-host checks.
 - `newSession`: starts a fresh chat/session (new runtime + reset message count) so each eval task runs clean; fails closed if the runtime is busy.
 - `selectModel`: applies an exact registry `provider`/`modelId` (+ optional `thinkingLevel`) through the production model-switch seam and verifies the runtime's model + thinking level actually changed; unknown model or unsupported thinking level fails closed.
-- `submitPrompt`: exercises the real app prompt → runtime/model/tool loop from the hidden taskpane; returns `baseline.messageCount` and an optional bounded wait-to-idle.
-- `waitUntilIdle`: pollable durable wait; pass `baselineMessageCount` from `submitPrompt` for exact start detection so it never reports idle before the run starts (surfaces silent instant-fails as a start timeout).
+- `submitPrompt`: exercises the real app prompt → runtime/model/tool loop from the hidden taskpane; returns `baseline.messageCount`. With `"waitForIdle":true` it blocks until idle (no separate wait needed); with `"waitForIdle":false` it returns immediately so you can capture the baseline for a split `waitUntilIdle`.
+- `waitUntilIdle`: pollable durable wait; pass `baselineMessageCount` from a non-blocking `submitPrompt` for exact start detection so it never reports idle before the run starts (surfaces silent instant-fails as a start timeout). A non-idle result (`idle:false`, reason `start-timeout`/`wait-timeout`) is a failure, not a pass.
 - `exportTranscript`: bounded transcript + usage export (reply text, per-tool call/error counts, token totals). Excludes raw tool-call arguments and raw user/tool-result text by design; exports only roles, lengths, tool names/errors, assistant bounded text, stop reasons, and usage.
 - `readRange` / `readUsedRange`: verify workbook contents changed as expected.
 - `listCharts`: verify chart creation/update/delete metadata.

@@ -9,6 +9,7 @@
  *   - Raw user-message and tool-result text are NEVER exported (only lengths,
  *     tool name, and error flag).
  *   - Only assistant text/reply is exported, bounded by explicit caps.
+ *   - Raw assistant error text is NEVER exported (only a boolean `hasError`).
  * Everything here is pure (no DOM/Office access) so it can be unit-tested and
  * asserted against sentinel-secret leakage. The DOM-facing bridge feeds it
  * `runtime.agent.state.messages`.
@@ -54,7 +55,7 @@ export interface TranscriptLastAssistant {
   model: string;
   api: string;
   stopReason: string;
-  errorMessage?: string;
+  hasError: boolean;
   textLength: number;
   snippet: string;
 }
@@ -73,7 +74,7 @@ export interface CompactTranscriptMessage {
   text?: string;
   textTruncated?: boolean;
   stopReason?: string;
-  errorMessage?: string;
+  hasError?: boolean;
   toolName?: string;
   isError?: boolean;
   toolCalls?: CompactTranscriptToolCall[];
@@ -295,7 +296,7 @@ export function buildTranscriptExport(
         stopReason: message.stopReason,
         textLength: parts.text.length,
         snippet,
-        ...(message.errorMessage !== undefined ? { errorMessage: message.errorMessage } : {}),
+        hasError: message.errorMessage !== undefined,
       };
       const replyTruncated = truncateText(parts.text, maxReplyChars);
       reply = {
@@ -323,7 +324,7 @@ export function buildTranscriptExport(
         text: truncatedText.text,
         textTruncated: truncatedText.truncated,
         stopReason: message.stopReason,
-        ...(message.errorMessage !== undefined ? { errorMessage: message.errorMessage } : {}),
+        hasError: message.errorMessage !== undefined,
         ...(toolCalls.length > 0 ? { toolCalls } : {}),
         usage: {
           input: message.usage.input,
