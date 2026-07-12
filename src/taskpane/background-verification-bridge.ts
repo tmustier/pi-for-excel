@@ -17,6 +17,7 @@ import type { WorkbookContext } from "../workbook/context.js";
 import { getAppStorage } from "../storage/local/app-storage.js";
 import type { PiSidebar } from "../ui/pi-sidebar.js";
 import { decideRuntimeIdle } from "./background-verify-idle.js";
+import { validateFreshSessionTransition } from "./background-verify-session.js";
 import {
   collectBuiltInModelCandidates,
   resolveBridgeModelSelection,
@@ -442,21 +443,27 @@ async function startNewSession(options: BridgeOptions): Promise<JsonRecord> {
   const created = await options.createNewSession();
   if (!created) throw new Error("Failed to create a new background-verification session");
 
-  const after = activeRuntimeSummary(options.getActiveRuntime());
-  const beforeRuntimeId = previous?.runtimeId ?? null;
-  const afterRuntimeId = options.getActiveRuntime()?.runtimeId ?? null;
-  const beforeSessionId = previous?.agent.sessionId ?? null;
-  const afterSessionId = options.getActiveRuntime()?.agent.sessionId ?? null;
+  const active = options.getActiveRuntime();
+  const after = activeRuntimeSummary(active);
+  // Fail closed: a real fresh session must produce an active runtime that
+  // actually changed and starts empty. Booleans alone can falsely claim success.
+  const transition = validateFreshSessionTransition({
+    beforeRuntimeId: previous?.runtimeId ?? null,
+    afterRuntimeId: active?.runtimeId ?? null,
+    beforeSessionId: previous?.agent.sessionId ?? null,
+    afterSessionId: active?.agent.sessionId ?? null,
+    afterMessageCount: active?.agent.state.messages.length ?? 0,
+  });
 
   return {
     created: true,
     before,
     after,
-    activeRuntimeId: afterRuntimeId,
-    runtimeChanged: beforeRuntimeId !== afterRuntimeId,
-    sessionChanged: beforeSessionId !== afterSessionId,
+    activeRuntimeId: active?.runtimeId ?? null,
+    runtimeChanged: transition.runtimeChanged,
+    sessionChanged: transition.sessionChanged,
     messageCountBefore: previous?.agent.state.messages.length ?? null,
-    messageCountAfter: options.getActiveRuntime()?.agent.state.messages.length ?? null,
+    messageCountAfter: transition.afterMessageCount,
   };
 }
 

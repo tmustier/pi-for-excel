@@ -5,6 +5,7 @@ import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { Api, AssistantMessage, Model, ToolResultMessage, Usage, UserMessage } from "@earendil-works/pi-ai/compat";
 
 import { decideRuntimeIdle } from "../src/taskpane/background-verify-idle.ts";
+import { validateFreshSessionTransition } from "../src/taskpane/background-verify-session.ts";
 import {
   collectBuiltInModelCandidates,
   resolveBridgeModelSelection,
@@ -238,6 +239,70 @@ void test("decideRuntimeIdle reports running while busy and idle once busy clear
     startupGraceMs: 30_000,
   });
   assert.deepEqual(idleBySticky, { started: true, idle: true, done: true, reason: "idle" });
+});
+
+// ── validateFreshSessionTransition (newSession fail-closed) ──────────────────
+
+void test("validateFreshSessionTransition throws when no active runtime resulted", () => {
+  assert.throws(
+    () => validateFreshSessionTransition({
+      beforeRuntimeId: "rt-1",
+      afterRuntimeId: null,
+      beforeSessionId: "s-1",
+      afterSessionId: null,
+      afterMessageCount: 0,
+    }),
+    /no active runtime/u,
+  );
+});
+
+void test("validateFreshSessionTransition throws when neither runtime nor session changed", () => {
+  assert.throws(
+    () => validateFreshSessionTransition({
+      beforeRuntimeId: "rt-1",
+      afterRuntimeId: "rt-1",
+      beforeSessionId: "s-1",
+      afterSessionId: "s-1",
+      afterMessageCount: 0,
+    }),
+    /did not change the active runtime or session/u,
+  );
+});
+
+void test("validateFreshSessionTransition throws when the new runtime is non-empty", () => {
+  assert.throws(
+    () => validateFreshSessionTransition({
+      beforeRuntimeId: "rt-1",
+      afterRuntimeId: "rt-2",
+      beforeSessionId: "s-1",
+      afterSessionId: "s-2",
+      afterMessageCount: 5,
+    }),
+    /non-empty runtime/u,
+  );
+});
+
+void test("validateFreshSessionTransition accepts a new empty runtime", () => {
+  const transition = validateFreshSessionTransition({
+    beforeRuntimeId: "rt-1",
+    afterRuntimeId: "rt-2",
+    beforeSessionId: "s-1",
+    afterSessionId: "s-2",
+    afterMessageCount: 0,
+  });
+  assert.deepEqual(transition, { runtimeChanged: true, sessionChanged: true, afterMessageCount: 0 });
+});
+
+void test("validateFreshSessionTransition accepts a same-runtime session reset (no prior runtime)", () => {
+  const transition = validateFreshSessionTransition({
+    beforeRuntimeId: null,
+    afterRuntimeId: "rt-1",
+    beforeSessionId: null,
+    afterSessionId: "s-1",
+    afterMessageCount: 0,
+  });
+  assert.equal(transition.runtimeChanged, true);
+  assert.equal(transition.sessionChanged, true);
 });
 
 // ── transcript export ────────────────────────────────────────────────────────
