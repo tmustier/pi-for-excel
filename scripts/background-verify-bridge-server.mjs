@@ -14,6 +14,7 @@ import https from "node:https";
 import os from "node:os";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
+import { pathToFileURL } from "node:url";
 
 const DEFAULT_HOST = "localhost";
 const DEFAULT_PORT = 3157;
@@ -63,8 +64,12 @@ function usage() {
   PI_BACKGROUND_VERIFY_TOKEN=<token> PI_BACKGROUND_VERIFY_HOST=localhost node scripts/background-verify-bridge-server.mjs command clearRange '{"address":"Sheet1!A1:B2","applyTo":"contents"}'
   PI_BACKGROUND_VERIFY_TOKEN=<token> PI_BACKGROUND_VERIFY_HOST=localhost node scripts/background-verify-bridge-server.mjs command workbookWriteProbe '{"keepSheet":false}'
   PI_BACKGROUND_VERIFY_TOKEN=<token> PI_BACKGROUND_VERIFY_HOST=localhost node scripts/background-verify-bridge-server.mjs command configureProxy '{"enabled":true,"url":"https://localhost:3003"}'
-  PI_BACKGROUND_VERIFY_TOKEN=<token> PI_BACKGROUND_VERIFY_HOST=localhost node scripts/background-verify-bridge-server.mjs command selectModel '{"provider":"openai-codex","modelId":"gpt-5.6-sol"}'
-  PI_BACKGROUND_VERIFY_TOKEN=<token> PI_BACKGROUND_VERIFY_HOST=localhost node scripts/background-verify-bridge-server.mjs command submitPrompt '{"text":"Write SMOKE into A1, then tell me what changed","waitForIdle":true}'
+  PI_BACKGROUND_VERIFY_TOKEN=<token> PI_BACKGROUND_VERIFY_HOST=localhost node scripts/background-verify-bridge-server.mjs command newSession
+  PI_BACKGROUND_VERIFY_TOKEN=<token> PI_BACKGROUND_VERIFY_HOST=localhost node scripts/background-verify-bridge-server.mjs command selectModel '{"provider":"openai-codex","modelId":"gpt-5.6-sol","thinkingLevel":"medium"}'
+  PI_BACKGROUND_VERIFY_TOKEN=<token> PI_BACKGROUND_VERIFY_HOST=localhost node scripts/background-verify-bridge-server.mjs command submitPrompt '{"text":"Write SMOKE into A1, then tell me what changed","waitForIdle":true,"timeoutMs":180000}'
+  # Pollable wait: pass baselineMessageCount from the submitPrompt response for exact start detection.
+  PI_BACKGROUND_VERIFY_TOKEN=<token> PI_BACKGROUND_VERIFY_HOST=localhost node scripts/background-verify-bridge-server.mjs command waitUntilIdle '{"baselineMessageCount":0,"timeoutMs":180000}'
+  PI_BACKGROUND_VERIFY_TOKEN=<token> PI_BACKGROUND_VERIFY_HOST=localhost node scripts/background-verify-bridge-server.mjs command exportTranscript '{"maxReplyChars":4000}'
   PI_BACKGROUND_VERIFY_TOKEN=<token> PI_BACKGROUND_VERIFY_HOST=localhost node scripts/background-verify-bridge-server.mjs command listCharts
 `;
 }
@@ -398,9 +403,12 @@ function clampTimeoutMs(value, fallback) {
 
 function commandTimeoutMs(type, payload, explicitTimeoutMs) {
   if (finiteNumber(explicitTimeoutMs)) return clampTimeoutMs(explicitTimeoutMs, COMMAND_DEFAULT_TIMEOUT_MS);
-  if (type === "submitPrompt") {
-    const promptTimeout = payload && typeof payload === "object" ? finiteNumber(payload.timeoutMs) : undefined;
-    return clampTimeoutMs((promptTimeout ?? 60_000) + 5_000, COMMAND_DEFAULT_TIMEOUT_MS);
+  // Commands that run a bounded in-taskpane wait need a server command timeout
+  // that outlasts that wait, so the server surfaces the taskpane result instead
+  // of a premature 504.
+  if (type === "submitPrompt" || type === "waitUntilIdle") {
+    const waitTimeout = payload && typeof payload === "object" ? finiteNumber(payload.timeoutMs) : undefined;
+    return clampTimeoutMs((waitTimeout ?? 60_000) + 5_000, COMMAND_DEFAULT_TIMEOUT_MS);
   }
   return COMMAND_DEFAULT_TIMEOUT_MS;
 }
@@ -513,20 +521,30 @@ async function runCommand(args) {
   console.log(JSON.stringify(response, null, 2));
 }
 
-const args = parseArgs(process.argv.slice(2));
-const mode = args._[0] ?? "help";
-if (mode === "serve") {
-  runServe(args).catch((error) => {
-    console.error(error instanceof Error ? error.message : String(error));
-    process.exit(1);
-  });
-} else if (mode === "command") {
-  runCommand(args).catch((error) => {
-    console.error(error instanceof Error ? error.message : String(error));
-    process.exit(1);
-  });
-} else if (mode === "token") {
-  console.log(randomBytes(24).toString("base64url"));
-} else {
-  console.log(usage());
+export { commandTimeoutMs, clampTimeoutMs, COMMAND_DEFAULT_TIMEOUT_MS, COMMAND_MAX_TIMEOUT_MS };
+
+function invokedDirectly() {
+  const entry = process.argv[1];
+  if (!entry) return false;
+  return import.meta.url === pathToFileURL(entry).href;
+}
+
+if (invokedDirectly()) {
+  const args = parseArgs(process.argv.slice(2));
+  const mode = args._[0] ?? "help";
+  if (mode === "serve") {
+    runServe(args).catch((error) => {
+      console.error(error instanceof Error ? error.message : String(error));
+      process.exit(1);
+    });
+  } else if (mode === "command") {
+    runCommand(args).catch((error) => {
+      console.error(error instanceof Error ? error.message : String(error));
+      process.exit(1);
+    });
+  } else if (mode === "token") {
+    console.log(randomBytes(24).toString("base64url"));
+  } else {
+    console.log(usage());
+  }
 }

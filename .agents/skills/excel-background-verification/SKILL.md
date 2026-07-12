@@ -85,7 +85,8 @@ PI_BACKGROUND_VERIFY_TOKEN="$TOKEN" PI_BACKGROUND_VERIFY_HOST=localhost npm run 
 PI_BACKGROUND_VERIFY_TOKEN="$TOKEN" PI_BACKGROUND_VERIFY_HOST=localhost npm run background:verify:command -- configureProxy \
   '{"enabled":true,"url":"https://localhost:3003"}'
 PI_BACKGROUND_VERIFY_TOKEN="$TOKEN" PI_BACKGROUND_VERIFY_HOST=localhost npm run background:verify:command -- selectModel \
-  '{"provider":"openai-codex","modelId":"gpt-5.6-sol"}'
+  '{"provider":"openai-codex","modelId":"gpt-5.6-sol","thinkingLevel":"medium"}'
+PI_BACKGROUND_VERIFY_TOKEN="$TOKEN" PI_BACKGROUND_VERIFY_HOST=localhost npm run background:verify:command -- newSession
 ```
 
 ### Controlled write smoke
@@ -114,6 +115,10 @@ When the product path itself is under test, submit an actual prompt through the 
 PI_BACKGROUND_VERIFY_TOKEN="$TOKEN" PI_BACKGROUND_VERIFY_HOST=localhost npm run background:verify:command -- submitPrompt \
   '{"text":"Write SMOKE into A1, then report exactly what changed.","waitForIdle":true,"timeoutMs":120000}'
 PI_BACKGROUND_VERIFY_TOKEN="$TOKEN" PI_BACKGROUND_VERIFY_HOST=localhost npm run background:verify:command -- readRange '{"address":"Sheet1!A1"}'
+# submitPrompt returns baseline.messageCount; use it for an exact pollable wait, then export the run:
+PI_BACKGROUND_VERIFY_TOKEN="$TOKEN" PI_BACKGROUND_VERIFY_HOST=localhost npm run background:verify:command -- waitUntilIdle \
+  '{"baselineMessageCount":0,"timeoutMs":120000}'
+PI_BACKGROUND_VERIFY_TOKEN="$TOKEN" PI_BACKGROUND_VERIFY_HOST=localhost npm run background:verify:command -- exportTranscript '{"maxReplyChars":4000}'
 ```
 
 Use the outputs as verification artifacts:
@@ -123,8 +128,11 @@ Use the outputs as verification artifacts:
 - `workbookWriteProbe`: proves the hidden taskpane can perform reversible real workbook writes and read back formula results.
 - `writeRange` / `clearRange`: deterministic setup and cleanup for feature-specific smoke tests.
 - `configureProxy`: explicitly enables/disables the app's configured proxy for transport-specific real-host checks.
-- `selectModel`: opens the real model selector, filters it, clicks the exact provider/model row, and verifies that model became active.
-- `submitPrompt`: exercises the real app prompt → runtime/model/tool loop from the hidden taskpane.
+- `newSession`: starts a fresh chat/session (new runtime + reset message count) so each eval task runs clean; fails closed if the runtime is busy.
+- `selectModel`: applies an exact registry `provider`/`modelId` (+ optional `thinkingLevel`) through the production model-switch seam and verifies the runtime's model + thinking level actually changed; unknown model or unsupported thinking level fails closed.
+- `submitPrompt`: exercises the real app prompt → runtime/model/tool loop from the hidden taskpane; returns `baseline.messageCount` and an optional bounded wait-to-idle.
+- `waitUntilIdle`: pollable durable wait; pass `baselineMessageCount` from `submitPrompt` for exact start detection so it never reports idle before the run starts (surfaces silent instant-fails as a start timeout).
+- `exportTranscript`: bounded transcript + usage export (reply text, per-tool call/error counts, token totals). Excludes raw tool-call arguments and raw user/tool-result text by design; exports only roles, lengths, tool names/errors, assistant bounded text, stop reasons, and usage.
 - `readRange` / `readUsedRange`: verify workbook contents changed as expected.
 - `listCharts`: verify chart creation/update/delete metadata.
 

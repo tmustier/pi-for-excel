@@ -21,9 +21,27 @@ The private corpus is a local-only git repo at `~/projects/excel-eval-corpus`
 - **`bin/bridge.sh`** — token-efficient CLI over the background-verification
   bridge (`scripts/`-served taskpane + tokened loopback HTTPS server). Lists
   live taskpane clients, polls one-line run status (~200 bytes vs ~100 KB for
-  a visual observe), and issues raw bridge commands (`readRange` with
-  `include:"all"`, `submitPrompt`, ...). This is the canonical way to monitor
-  a live eval run; visual observation is for one-off disputes only.
+  a visual observe), and drives a whole eval run without raw GUI input:
+  - `session <clientId>` — fresh chat/session per task (`newSession`), proving
+    runtime/session id + message-count reset.
+  - `model <clientId> <provider> <modelId> [thinkingLevel]` — model + thinking
+    switch via the production model-switch seam, validated against the model
+    registry (e.g. `openai-codex gpt-5.6-sol medium`); unknown model or
+    unsupported thinking level fails closed.
+  - `submit <clientId> <text> [timeoutMs]` — submit prompt and wait to idle.
+  - `wait <clientId> [baselineMsgs] [timeoutMs]` — pollable durable
+    wait-until-idle; pass the `baselineMessageCount` from the submit response
+    for exact start detection (never reports idle before the run starts, even
+    on a silent instant-fail).
+  - `transcript <clientId> [maxReplyChars]` — bounded transcript + usage export
+    (reply text, per-tool call/error counts, token totals). By design it
+    excludes raw tool-call arguments and raw user/tool-result text; it exports
+    only roles, lengths, tool names/errors, assistant bounded text, stop
+    reasons, and usage so terminal artifacts minimize workbook/secret leakage.
+  - `cmd <clientId> <type> <payloadJson> [timeoutMs]` — raw command escape
+    hatch (`readUsedRange` with `include:"all"`, `officeProbe`, ...).
+  This is the canonical way to monitor/drive a live eval run; visual
+  observation is for one-off disputes only.
 - **`bin/grade.py`** — standard grader. Inputs: seed xlsx, per-sheet bridge
   snapshot JSONs, expected-values JSON, optional target-fix map, protected
   sheets. Outputs a JSON verdict + human summary with four checks:
@@ -76,17 +94,23 @@ See `tasks/example-doctor.yaml`. Key doctrines:
    `.agents/skills/excel-background-verification/`).
 2. Copy the seed workbook to a scratch path; open in Excel (`open -g`).
 3. Open the Pi taskpane in that workbook window (semantic AX press only).
-4. `bridge.sh clients` → target the new client id; set model/session.
-5. Submit the task prompt via bridge `submitPrompt`.
-6. `bridge.sh watch <clientId>` until idle.
-7. Snapshot sheets: `bridge.sh cmd <id> readUsedRange '{"sheet":"...","include":"all"}'`
+4. `bridge.sh clients` → target the new client id.
+5. `bridge.sh session <id>` → fresh chat/session for the task.
+6. `bridge.sh model <id> openai-codex gpt-5.6-sol medium` → pin model + thinking.
+7. `bridge.sh submit <id> "<task prompt>" 180000` → submits and waits to idle;
+   note the `baselineMsgs` it prints. (Re-poll with
+   `bridge.sh wait <id> <baselineMsgs> 180000` if you split submit/wait.)
+8. `bridge.sh transcript <id>` → reply + tool-call/error counts + token totals.
+9. Snapshot sheets: `bridge.sh cmd <id> readUsedRange '{"sheet":"...","include":"all"}'`
    → save one JSON per sheet.
-8. `bin/grade.py --seed ... --snapshots ... --expected ... [--targets ...]
+10. `bin/grade.py --seed ... --snapshots ... --expected ... [--targets ...]
    [--no-mutate Sheet]` → verdict JSON + summary.
 
-Known gaps to automate next (tracked in the proposal): per-task fresh chat
-session, workbook reset protocol, transcript/usage export, formula-level
-read in one call (readUsedRange include:"all" covers it), run manifest.
+Now automated by the bridge (previously manual gaps): per-task fresh chat
+session (`session`), registry-validated model/thinking selection (`model`),
+durable wait-until-idle (`wait`/`submit`), and bounded transcript/usage export
+(`transcript`). Remaining gaps to automate next (tracked in the proposal):
+workbook reset protocol and a run manifest.
 
 ## External calibration
 

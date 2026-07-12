@@ -10,6 +10,13 @@ import { once } from "node:events";
 import { setTimeout as delay } from "node:timers/promises";
 import { test } from "node:test";
 
+import {
+  clampTimeoutMs,
+  commandTimeoutMs,
+  COMMAND_DEFAULT_TIMEOUT_MS,
+  COMMAND_MAX_TIMEOUT_MS,
+} from "../scripts/background-verify-bridge-server.mjs";
+
 const TOKEN = "test-background-verify-token";
 const SCRIPT_PATH = "scripts/background-verify-bridge-server.mjs";
 const testCaByPort = new Map();
@@ -325,4 +332,32 @@ test("background verify bridge refuses non-loopback bind hosts", async () => {
 
   assert.notEqual(code, 0);
   assert.match(output, /loopback only/u);
+});
+
+void test("commandTimeoutMs: non-wait commands use the default timeout", () => {
+  assert.equal(commandTimeoutMs("status", undefined, undefined), COMMAND_DEFAULT_TIMEOUT_MS);
+  assert.equal(commandTimeoutMs("newSession", undefined, undefined), COMMAND_DEFAULT_TIMEOUT_MS);
+  assert.equal(commandTimeoutMs("exportTranscript", { maxReplyChars: 4000 }, undefined), COMMAND_DEFAULT_TIMEOUT_MS);
+});
+
+void test("commandTimeoutMs: submitPrompt and waitUntilIdle outlast their payload wait", () => {
+  // The server command timeout must exceed the taskpane-side bounded wait so the
+  // real taskpane result is returned instead of a premature 504.
+  assert.equal(commandTimeoutMs("submitPrompt", { timeoutMs: 180_000 }, undefined), 185_000);
+  assert.equal(commandTimeoutMs("waitUntilIdle", { timeoutMs: 200_000 }, undefined), 205_000);
+  // No payload timeout falls back to 60s + 5s.
+  assert.equal(commandTimeoutMs("submitPrompt", {}, undefined), 65_000);
+  assert.equal(commandTimeoutMs("waitUntilIdle", undefined, undefined), 65_000);
+});
+
+void test("commandTimeoutMs: explicit timeout wins and is clamped to the ceiling", () => {
+  assert.equal(commandTimeoutMs("submitPrompt", { timeoutMs: 10_000 }, 240_000), 240_000);
+  assert.equal(commandTimeoutMs("waitUntilIdle", { timeoutMs: 999_999 }, 999_999), COMMAND_MAX_TIMEOUT_MS);
+});
+
+void test("clampTimeoutMs floors and clamps to [1s, ceiling]", () => {
+  assert.equal(clampTimeoutMs(500, COMMAND_DEFAULT_TIMEOUT_MS), 1_000);
+  assert.equal(clampTimeoutMs(10_000.9, COMMAND_DEFAULT_TIMEOUT_MS), 10_000);
+  assert.equal(clampTimeoutMs(10_000_000, COMMAND_DEFAULT_TIMEOUT_MS), COMMAND_MAX_TIMEOUT_MS);
+  assert.equal(clampTimeoutMs(undefined, 12_345), 12_345);
 });

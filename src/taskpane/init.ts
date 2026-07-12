@@ -11,6 +11,7 @@ function isTaskpaneInitPayloadShape(value: DynamicValue): value is DynamicObject
 
 import { html, render } from "lit";
 import { Agent } from "@earendil-works/pi-agent-core";
+import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
 import { getAppStorage } from "../storage/local/app-storage.js";
 import type { CustomProvider } from "../storage/local/custom-providers-store.js";
 import type { SessionData } from "../storage/local/types.js";
@@ -1672,6 +1673,16 @@ export async function initTaskpane(opts: {
     },
   });
 
+  // Single sanctioned in-place model mutation seam, shared by the interactive
+  // model selector (non-fork branch) and the dev-only background-verification
+  // bridge so both go through the same event dispatch + sidebar refresh.
+  const commitRuntimeModelInPlace = (runtime: SessionRuntime, nextModel: RuntimeModel): void => {
+    runtime.agent.state.model = nextModel;
+    document.dispatchEvent(new CustomEvent("pi:model-changed"));
+    document.dispatchEvent(new CustomEvent("pi:status-update"));
+    requestAnimationFrame(() => sidebar.requestUpdate());
+  };
+
   const applyModelSelection = async (runtimeId: string, nextModel: RuntimeModel): Promise<void> => {
     const runtime = runtimeManager.getRuntime(runtimeId);
     if (!runtime) {
@@ -1693,10 +1704,7 @@ export async function initTaskpane(opts: {
     const behavior = getModelSwitchBehavior();
 
     if (!shouldForkModelSwitch({ behavior, hasMessages })) {
-      runtime.agent.state.model = nextModel;
-      document.dispatchEvent(new CustomEvent("pi:model-changed"));
-      document.dispatchEvent(new CustomEvent("pi:status-update"));
-      requestAnimationFrame(() => sidebar.requestUpdate());
+      commitRuntimeModelInPlace(runtime, nextModel);
       return;
     }
 
@@ -1710,6 +1718,26 @@ export async function initTaskpane(opts: {
     });
 
     showToast(t("init.openedInNewTab", { title: modelForkTitle }));
+  };
+
+  // Dev-only background-verification model switch: applies a registry model +
+  // validated thinking level in place on the target runtime via the shared
+  // sanctioned seam (no fork, no toast), failing closed when the runtime is busy.
+  const applyBridgeModelSelection = (args: {
+    runtimeId: string;
+    model: RuntimeModel;
+    thinkingLevel: ThinkingLevel;
+  }): Promise<void> => {
+    const runtime = runtimeManager.getRuntime(args.runtimeId);
+    if (!runtime) {
+      return Promise.reject(new Error("Runtime not found for background-verification model selection"));
+    }
+    if (runtime.agent.state.isStreaming || runtime.actionQueue.isBusy()) {
+      return Promise.reject(new Error("Cannot change model while the runtime is busy"));
+    }
+    runtime.agent.state.thinkingLevel = args.thinkingLevel;
+    commitRuntimeModelInPlace(runtime, args.model);
+    return Promise.resolve();
   };
 
   const openModelSelector = (): void => {
@@ -2114,6 +2142,8 @@ export async function initTaskpane(opts: {
     sidebar,
     getWorkbookContext: resolveWorkbookContext,
     getActiveRuntime,
+    createNewSession: createRuntimeFromUi,
+    selectRuntimeModel: applyBridgeModelSelection,
   });
   if (backgroundVerificationBridge) {
     window.addEventListener("pagehide", () => backgroundVerificationBridge.stop(), { once: true });

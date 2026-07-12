@@ -10,11 +10,24 @@
  * remains in the background; no raw GUI input is required.
  */
 
+import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
+import type { Api, Model } from "@earendil-works/pi-ai/compat";
+
 import type { WorkbookContext } from "../workbook/context.js";
 import { getAppStorage } from "../storage/local/app-storage.js";
-import { closeOverlayById } from "../ui/overlay-dialog.js";
-import { MODEL_SELECTOR_OVERLAY_ID } from "../ui/overlay-ids.js";
 import type { PiSidebar } from "../ui/pi-sidebar.js";
+import { decideRuntimeIdle } from "./background-verify-idle.js";
+import {
+  collectBuiltInModelCandidates,
+  resolveBridgeModelSelection,
+  type BridgeModelCandidate,
+} from "./background-verify-model.js";
+import {
+  assistantTextSnippet,
+  buildTranscriptExport,
+  summarizeLastToolCall,
+  type TranscriptExportOptions,
+} from "./background-verify-transcript.js";
 import type { SessionRuntime } from "./session-runtime-manager.js";
 
 type BridgeCommandType =
@@ -28,7 +41,10 @@ type BridgeCommandType =
   | "workbookWriteProbe"
   | "configureProxy"
   | "selectModel"
+  | "newSession"
   | "submitPrompt"
+  | "waitUntilIdle"
+  | "exportTranscript"
   | "listCharts";
 
 interface BridgeCommand {
@@ -49,6 +65,14 @@ interface BridgeOptions {
   sidebar: PiSidebar;
   getWorkbookContext: () => Promise<WorkbookContext>;
   getActiveRuntime: () => SessionRuntime | null;
+  /** Production fresh-session seam (new chat tab/runtime). */
+  createNewSession: () => Promise<SessionRuntime | null>;
+  /** Production model-switch seam: applies a registry model + thinking level in place. */
+  selectRuntimeModel: (args: {
+    runtimeId: string;
+    model: Model<Api>;
+    thinkingLevel: ThinkingLevel;
+  }) => Promise<void>;
 }
 
 interface JsonRecord {
@@ -174,6 +198,7 @@ function latestAssistantSummary(runtime: SessionRuntime): JsonRecord | null {
       stopReason: message.stopReason,
       errorMessage: message.errorMessage,
       textLength,
+      snippet: assistantTextSnippet(message),
       usage: message.usage,
     };
   }
@@ -189,59 +214,77 @@ function activeRuntimeSummary(runtime: SessionRuntime | null): JsonRecord | null
     thinkingLevel: runtime.agent.state.thinkingLevel,
     messageCount: runtime.agent.state.messages.length,
     lastAssistant: latestAssistantSummary(runtime),
+    lastToolCall: summarizeLastToolCall(runtime.agent.state.messages),
     isStreaming: runtime.agent.state.isStreaming,
     isBusy: isRuntimeBusy(runtime),
   };
 }
 
+const IDLE_POLL_INTERVAL_MS = 250;
+// Keep the inline wait under the server command timeout ceiling (300s) so the
+// server can still return a bounded 504 rather than hanging.
+const MAX_IDLE_WAIT_MS = 285_000;
+const DEFAULT_IDLE_WAIT_MS = 60_000;
+const DEFAULT_STARTUP_GRACE_MS = 30_000;
+const MAX_STARTUP_GRACE_MS = 120_000;
+
+function clampIdleWaitMs(value: number | undefined): number {
+  const base = typeof value === "number" && Number.isFinite(value) ? Math.floor(value) : DEFAULT_IDLE_WAIT_MS;
+  return Math.max(1_000, Math.min(MAX_IDLE_WAIT_MS, base));
+}
+
+function clampStartupGraceMs(value: number | undefined): number {
+  const base = typeof value === "number" && Number.isFinite(value) ? Math.floor(value) : DEFAULT_STARTUP_GRACE_MS;
+  return Math.max(0, Math.min(MAX_STARTUP_GRACE_MS, base));
+}
+
+/**
+ * Wait until the active runtime has started (busy, or message count grew past
+ * the pre-run baseline) and then returned to idle. Bounded by an explicit
+ * timeout and a startup grace so a run that never starts (dead proxy/OAuth)
+ * surfaces as `start-timeout` instead of a false immediate idle.
+ */
 async function waitForRuntimeIdle(
   getActiveRuntime: () => SessionRuntime | null,
-  initialMessageCount: number,
+  baselineMessageCount: number,
   timeoutMs: number,
+  startupGraceMs: number,
 ): Promise<JsonRecord> {
   const started = Date.now();
-  let sawProgress = false;
+  let sawStart = false;
+
   while (Date.now() - started < timeoutMs) {
     const runtime = getActiveRuntime();
-    const messageCount = runtime?.agent.state.messages.length ?? 0;
-    const busy = isRuntimeBusy(runtime);
-    sawProgress ||= messageCount > initialMessageCount || busy;
-    if (sawProgress && !busy) {
+    const decision = decideRuntimeIdle({
+      baselineMessageCount,
+      currentMessageCount: runtime?.agent.state.messages.length ?? 0,
+      isBusy: isRuntimeBusy(runtime),
+      sawStart,
+      observedElapsedMs: Date.now() - started,
+      startupGraceMs,
+    });
+    sawStart = sawStart || decision.started;
+    if (decision.done) {
       return {
-        idle: true,
+        idle: decision.idle,
+        started: decision.started,
+        reason: decision.reason,
         elapsedMs: Date.now() - started,
+        baselineMessageCount,
         activeRuntime: activeRuntimeSummary(runtime),
       };
     }
-    await new Promise((resolve) => window.setTimeout(resolve, 250));
+    await new Promise((resolve) => window.setTimeout(resolve, IDLE_POLL_INTERVAL_MS));
   }
 
   return {
     idle: false,
+    started: sawStart,
+    reason: "wait-timeout",
     elapsedMs: Date.now() - started,
+    baselineMessageCount,
     activeRuntime: activeRuntimeSummary(getActiveRuntime()),
   };
-}
-
-async function waitForBridgeValue<T>(
-  readValue: () => T | null,
-  description: string,
-  timeoutMs = 10_000,
-): Promise<T> {
-  const started = Date.now();
-  while (Date.now() - started < timeoutMs) {
-    const value = readValue();
-    if (value !== null) return value;
-    await new Promise((resolve) => window.setTimeout(resolve, 50));
-  }
-  throw new Error(`Timed out waiting for ${description}`);
-}
-
-function selectorRowIdentity(row: HTMLButtonElement): { provider: string; id: string } | null {
-  const provider = row.querySelector<HTMLElement>(".pi-model-selector-item-provider")?.textContent?.trim();
-  const id = row.querySelector<HTMLElement>(".pi-model-selector-item-id")?.textContent?.trim();
-  if (!provider || !id) return null;
-  return { provider, id };
 }
 
 async function configureProxy(payload: DynamicValue): Promise<JsonRecord> {
@@ -264,73 +307,75 @@ async function configureProxy(payload: DynamicValue): Promise<JsonRecord> {
   };
 }
 
+async function collectModelCandidates(): Promise<BridgeModelCandidate[]> {
+  const candidates = collectBuiltInModelCandidates();
+  try {
+    const customProviders = await getAppStorage().customProviders.getAll();
+    for (const provider of customProviders) {
+      if (!provider.models) continue;
+      for (const model of provider.models) {
+        candidates.push({ provider: model.provider, id: model.id, model });
+      }
+    }
+  } catch (error) {
+    console.warn("[pi] Background verify: failed to load custom provider models", error);
+  }
+  return candidates;
+}
+
 async function selectModel(payload: DynamicValue, options: BridgeOptions): Promise<JsonRecord> {
   const provider = stringField(payload, "provider");
   const modelId = stringField(payload, "modelId");
   if (!provider || !modelId) {
     throw new Error("selectModel requires payload.provider and payload.modelId");
   }
+  const requestedThinkingLevel = stringField(payload, "thinkingLevel");
 
   const runtime = options.getActiveRuntime();
   if (!runtime) throw new Error("Cannot select a model without an active runtime");
   if (isRuntimeBusy(runtime)) throw new Error("Cannot select a model while the active runtime is busy");
 
   const before = activeRuntimeSummary(runtime);
-  closeOverlayById(MODEL_SELECTOR_OVERLAY_ID);
+  const candidates = await collectModelCandidates();
+  const resolution = resolveBridgeModelSelection({
+    candidates,
+    provider,
+    modelId,
+    requestedThinkingLevel,
+  });
+  if (!resolution.ok) {
+    throw new Error(resolution.error);
+  }
 
-  const modelButton = await waitForBridgeValue(
-    () => document.querySelector<HTMLButtonElement>(".pi-status-model"),
-    "the status-bar model button",
-  );
-  modelButton.click();
+  // Apply via the production model-switch seam (registry model + validated
+  // thinking level), not a direct agent-state mutation or DOM click hack.
+  await options.selectRuntimeModel({
+    runtimeId: runtime.runtimeId,
+    model: resolution.model,
+    thinkingLevel: resolution.thinkingLevel,
+  });
 
-  const searchInput = await waitForBridgeValue(
-    () => document.querySelector<HTMLInputElement>(".pi-model-selector-search"),
-    "the model selector",
-  );
-  searchInput.value = modelId;
-  searchInput.dispatchEvent(new Event("input", { bubbles: true }));
-
-  const row = await waitForBridgeValue(() => {
-    const rows = Array.from(
-      document.querySelectorAll<HTMLButtonElement>(".pi-model-selector-item"),
-    );
-    return rows.find((candidate) => {
-      const identity = selectorRowIdentity(candidate);
-      return identity?.provider === provider && identity.id === modelId;
-    }) ?? null;
-  }, `${provider}/${modelId} in the model selector`);
-
-  const identity = selectorRowIdentity(row);
-  const selectorText = row.textContent?.replace(/\s+/gu, " ").trim() ?? "";
-  row.click();
-
-  await waitForBridgeValue(
-    () => document.getElementById(MODEL_SELECTOR_OVERLAY_ID) === null ? true : null,
-    "the model selector to close",
-  );
-
-  const after = await waitForBridgeValue(() => {
-    const activeRuntime = options.getActiveRuntime();
-    if (
-      activeRuntime?.agent.state.model.provider !== provider
-      || activeRuntime.agent.state.model.id !== modelId
-    ) {
-      return null;
-    }
-    return activeRuntimeSummary(activeRuntime);
-  }, `${provider}/${modelId} to become the active model`);
+  const applied = options.getActiveRuntime();
+  const appliedModel = applied?.agent.state.model;
+  if (!appliedModel || appliedModel.provider !== resolution.provider || appliedModel.id !== resolution.modelId) {
+    throw new Error(`Model switch did not apply ${resolution.provider}/${resolution.modelId}`);
+  }
+  if (applied?.agent.state.thinkingLevel !== resolution.thinkingLevel) {
+    throw new Error(`Thinking level did not apply ${resolution.thinkingLevel}`);
+  }
 
   return {
     selected: true,
-    requested: { provider, modelId },
-    selectorMatch: {
-      provider: identity?.provider ?? "",
-      id: identity?.id ?? "",
-      text: selectorText,
+    requested: { provider, modelId, thinkingLevel: requestedThinkingLevel ?? null },
+    resolved: {
+      provider: resolution.provider,
+      modelId: resolution.modelId,
+      thinkingLevel: resolution.thinkingLevel,
+      requestedThinkingLevel: resolution.requestedThinkingLevel,
     },
+    supportedThinkingLevels: resolution.supportedThinkingLevels,
     before,
-    after,
+    after: activeRuntimeSummary(applied),
   };
 }
 
@@ -344,18 +389,106 @@ async function submitPrompt(payload: DynamicValue, options: BridgeOptions): Prom
   }
 
   const waitForIdle = booleanField(payload, "waitForIdle") ?? true;
-  const timeoutMs = Math.max(1_000, Math.min(120_000, numberField(payload, "timeoutMs") ?? 60_000));
+  const timeoutMs = clampIdleWaitMs(numberField(payload, "timeoutMs"));
+  const startupGraceMs = clampStartupGraceMs(numberField(payload, "startupGraceMs"));
   const before = activeRuntimeSummary(runtime);
-  const initialMessageCount = runtime?.agent.state.messages.length ?? 0;
+  const baselineMessageCount = runtime?.agent.state.messages.length ?? 0;
 
   options.sidebar.sendMessage(text);
 
   return {
     submitted: true,
     textLength: text.length,
+    baseline: {
+      messageCount: baselineMessageCount,
+      runtimeId: runtime?.runtimeId ?? null,
+      sessionId: runtime?.agent.sessionId ?? null,
+    },
     before,
-    wait: waitForIdle ? await waitForRuntimeIdle(options.getActiveRuntime, initialMessageCount, timeoutMs) : null,
+    wait: waitForIdle
+      ? await waitForRuntimeIdle(options.getActiveRuntime, baselineMessageCount, timeoutMs, startupGraceMs)
+      : null,
     after: activeRuntimeSummary(options.getActiveRuntime()),
+  };
+}
+
+/**
+ * Pollable wait-until-idle. Pass `baselineMessageCount` from a prior
+ * `submitPrompt` response for exact start detection; when omitted the current
+ * message count is used and only a live busy state counts as "started", which
+ * fails closed rather than reporting a false idle.
+ */
+async function waitUntilIdle(payload: DynamicValue, options: BridgeOptions): Promise<JsonRecord> {
+  const runtime = options.getActiveRuntime();
+  if (!runtime) throw new Error("waitUntilIdle requires an active runtime");
+
+  const timeoutMs = clampIdleWaitMs(numberField(payload, "timeoutMs"));
+  const startupGraceMs = clampStartupGraceMs(numberField(payload, "startupGraceMs"));
+  const explicitBaseline = numberField(payload, "baselineMessageCount");
+  const baselineMessageCount = typeof explicitBaseline === "number" && Number.isFinite(explicitBaseline)
+    ? Math.max(0, Math.floor(explicitBaseline))
+    : runtime.agent.state.messages.length;
+
+  return waitForRuntimeIdle(options.getActiveRuntime, baselineMessageCount, timeoutMs, startupGraceMs);
+}
+
+async function startNewSession(options: BridgeOptions): Promise<JsonRecord> {
+  const previous = options.getActiveRuntime();
+  if (isRuntimeBusy(previous)) {
+    throw new Error("Cannot start a new session while the active runtime is busy");
+  }
+
+  const before = activeRuntimeSummary(previous);
+  const created = await options.createNewSession();
+  if (!created) throw new Error("Failed to create a new background-verification session");
+
+  const after = activeRuntimeSummary(options.getActiveRuntime());
+  const beforeRuntimeId = previous?.runtimeId ?? null;
+  const afterRuntimeId = options.getActiveRuntime()?.runtimeId ?? null;
+  const beforeSessionId = previous?.agent.sessionId ?? null;
+  const afterSessionId = options.getActiveRuntime()?.agent.sessionId ?? null;
+
+  return {
+    created: true,
+    before,
+    after,
+    activeRuntimeId: afterRuntimeId,
+    runtimeChanged: beforeRuntimeId !== afterRuntimeId,
+    sessionChanged: beforeSessionId !== afterSessionId,
+    messageCountBefore: previous?.agent.state.messages.length ?? null,
+    messageCountAfter: options.getActiveRuntime()?.agent.state.messages.length ?? null,
+  };
+}
+
+function transcriptOptionsFromPayload(payload: DynamicValue): TranscriptExportOptions {
+  const options: TranscriptExportOptions = {};
+  const maxReplyChars = numberField(payload, "maxReplyChars");
+  if (maxReplyChars !== undefined) options.maxReplyChars = maxReplyChars;
+  const maxMessages = numberField(payload, "maxMessages");
+  if (maxMessages !== undefined) options.maxMessages = maxMessages;
+  const maxMessageTextChars = numberField(payload, "maxMessageTextChars");
+  if (maxMessageTextChars !== undefined) options.maxMessageTextChars = maxMessageTextChars;
+  const maxTools = numberField(payload, "maxTools");
+  if (maxTools !== undefined) options.maxTools = maxTools;
+  return options;
+}
+
+function exportTranscript(payload: DynamicValue, options: BridgeOptions): JsonRecord {
+  const runtime = options.getActiveRuntime();
+  if (!runtime) throw new Error("exportTranscript requires an active runtime");
+
+  const transcript = buildTranscriptExport(
+    runtime.agent.state.messages,
+    transcriptOptionsFromPayload(payload),
+  );
+
+  return {
+    runtimeId: runtime.runtimeId,
+    sessionId: runtime.agent.sessionId,
+    model: runtime.agent.state.model,
+    thinkingLevel: runtime.agent.state.thinkingLevel,
+    isBusy: isRuntimeBusy(runtime),
+    transcript,
   };
 }
 
@@ -681,8 +814,14 @@ async function executeCommand(command: BridgeCommand, options: BridgeOptions): P
       return await configureProxy(command.payload);
     case "selectModel":
       return await selectModel(command.payload, options);
+    case "newSession":
+      return await startNewSession(options);
     case "submitPrompt":
       return await submitPrompt(command.payload, options);
+    case "waitUntilIdle":
+      return await waitUntilIdle(command.payload, options);
+    case "exportTranscript":
+      return exportTranscript(command.payload, options);
     case "listCharts":
       return await listCharts();
     default:

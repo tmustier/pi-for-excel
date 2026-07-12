@@ -1,9 +1,14 @@
 #!/usr/bin/env bash
 # Token-efficient bridge helpers for observing/driving Pi-for-Excel taskpanes.
 # Usage:
-#   bridge.sh clients                          # list live clients (compact)
-#   bridge.sh status <clientId>                # one-line runtime status
-#   bridge.sh watch <clientId> [timeout_s]     # poll until idle; prints only state changes
+#   bridge.sh clients                              # list live clients (compact)
+#   bridge.sh status <clientId>                    # one-line runtime status
+#   bridge.sh watch <clientId> [timeout_s]         # poll status until idle (legacy)
+#   bridge.sh session <clientId>                   # start a fresh chat/session
+#   bridge.sh model <clientId> <provider> <modelId> [thinkingLevel]
+#   bridge.sh submit <clientId> <text> [timeoutMs]  # prompt + durable wait-until-idle
+#   bridge.sh wait <clientId> [baselineMsgs] [timeoutMs]  # durable wait-until-idle
+#   bridge.sh transcript <clientId> [maxReplyChars]  # bounded transcript + usage export
 #   bridge.sh cmd <clientId> <type> <payloadJson> [timeoutMs]   # raw command, JSON out
 set -euo pipefail
 
@@ -72,6 +77,77 @@ print("msgs=%s busy=%s" % (ar.get("messageCount"), ar.get("isBusy")))' 2>/dev/nu
       sleep 10
     done
     ;;
+  session)
+    post newSession "$2" '{}' 30000 | python3 -c '
+import json,sys
+d=json.load(sys.stdin)
+if not d.get("ok"): print("ERR:", d.get("error")); sys.exit(1)
+r=d["result"]
+print("newSession runtimeChanged=%s sessionChanged=%s msgsBefore=%s msgsAfter=%s activeRuntime=%s" % (
+  r.get("runtimeChanged"), r.get("sessionChanged"), r.get("messageCountBefore"), r.get("messageCountAfter"), r.get("activeRuntimeId")))'
+    ;;
+  model)
+    CID="$2"; PROV="$3"; MID="$4"; THINK="${5-}"
+    PAYLOAD=$(BRIDGE_PROV="$PROV" BRIDGE_MID="$MID" BRIDGE_THINK="$THINK" python3 -c '
+import json,os
+p={"provider": os.environ["BRIDGE_PROV"], "modelId": os.environ["BRIDGE_MID"]}
+t=os.environ.get("BRIDGE_THINK","")
+if t != "": p["thinkingLevel"]=t
+print(json.dumps(p))')
+    post selectModel "$CID" "$PAYLOAD" 30000 | python3 -c '
+import json,sys
+d=json.load(sys.stdin)
+if not d.get("ok"): print("ERR:", d.get("error")); sys.exit(1)
+r=d["result"]; res=r.get("resolved") or {}; a=r.get("after") or {}; m=a.get("model") or {}
+print("selected %s/%s think=%s | active model=%s think=%s" % (
+  res.get("provider"), res.get("modelId"), res.get("thinkingLevel"), m.get("id"), a.get("thinkingLevel")))'
+    ;;
+  submit)
+    CID="$2"; TEXT="$3"; TMS="${4:-180000}"; POST_MS=$((TMS + 10000))
+    PAYLOAD=$(BRIDGE_TEXT="$TEXT" BRIDGE_TMS="$TMS" python3 -c '
+import json,os
+print(json.dumps({"text": os.environ["BRIDGE_TEXT"], "waitForIdle": True, "timeoutMs": int(os.environ["BRIDGE_TMS"])}))')
+    post submitPrompt "$CID" "$PAYLOAD" "$POST_MS" | python3 -c '
+import json,sys
+d=json.load(sys.stdin)
+if not d.get("ok"): print("ERR:", d.get("error")); sys.exit(1)
+r=d["result"]; w=r.get("wait") or {}; a=r.get("after") or {}; b=r.get("baseline") or {}
+print("submitted len=%s baselineMsgs=%s | wait idle=%s reason=%s started=%s elapsedMs=%s | afterMsgs=%s busy=%s" % (
+  r.get("textLength"), b.get("messageCount"), w.get("idle"), w.get("reason"), w.get("started"), w.get("elapsedMs"), a.get("messageCount"), a.get("isBusy")))'
+    ;;
+  wait)
+    CID="$2"; BASE="${3-}"; TMS="${4:-180000}"; POST_MS=$((TMS + 10000))
+    PAYLOAD=$(BRIDGE_BASE="$BASE" BRIDGE_TMS="$TMS" python3 -c '
+import json,os
+p={"timeoutMs": int(os.environ["BRIDGE_TMS"])}
+b=os.environ.get("BRIDGE_BASE","")
+if b != "": p["baselineMessageCount"]=int(b)
+print(json.dumps(p))')
+    post waitUntilIdle "$CID" "$PAYLOAD" "$POST_MS" | python3 -c '
+import json,sys
+d=json.load(sys.stdin)
+if not d.get("ok"): print("ERR:", d.get("error")); sys.exit(1)
+r=d["result"]; ar=r.get("activeRuntime") or {}
+print("idle=%s reason=%s started=%s elapsedMs=%s baselineMsgs=%s | msgs=%s busy=%s" % (
+  r.get("idle"), r.get("reason"), r.get("started"), r.get("elapsedMs"), r.get("baselineMessageCount"), ar.get("messageCount"), ar.get("isBusy")))'
+    ;;
+  transcript)
+    CID="$2"; MRC="${3:-4000}"
+    PAYLOAD=$(BRIDGE_MRC="$MRC" python3 -c '
+import json,os
+print(json.dumps({"maxReplyChars": int(os.environ["BRIDGE_MRC"])}))')
+    post exportTranscript "$CID" "$PAYLOAD" 30000 | python3 -c '
+import json,sys
+d=json.load(sys.stdin)
+if not d.get("ok"): print("ERR:", d.get("error")); sys.exit(1)
+r=d["result"]; t=r.get("transcript") or {}; u=t.get("usage") or {}; la=t.get("lastToolCall") or {}
+print("model=%s think=%s msgs=%s user=%s asst=%s toolCalls=%s toolErrors=%s tokens=%s(in %s/out %s) lastTool=%s:%s" % (
+  (r.get("model") or {}).get("id"), r.get("thinkingLevel"), t.get("messageCount"), t.get("userCount"), t.get("assistantCount"),
+  t.get("toolCallCount"), t.get("toolErrorCount"), u.get("totalTokens"), u.get("input"), u.get("output"),
+  la.get("name"), la.get("status")))
+rep=t.get("reply") or {}
+if rep.get("text"): print("reply:", rep["text"])'
+    ;;
   cmd)
     PAYLOAD="${4-}"
     [ -n "$PAYLOAD" ] || PAYLOAD='{}'
@@ -79,6 +155,6 @@ print("msgs=%s busy=%s" % (ar.get("messageCount"), ar.get("isBusy")))' 2>/dev/nu
     echo
     ;;
   *)
-    sed -n '2,7p' "$0"
+    sed -n '2,12p' "$0"
     ;;
 esac
