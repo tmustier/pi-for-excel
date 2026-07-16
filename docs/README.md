@@ -9,6 +9,7 @@ This folder contains **current** docs that should match shipped behavior.
 - [Dev server behind portless (opt-in)](./portless.md)
 - [Release notes (`v0.10.0-pre`)](./release-notes/v0.10.0-pre.md)
 - [Release smoke test checklist](./release-smoke-test-checklist.md)
+- [Adversarial extension-provider smoke](./adversarial-extension-provider-smoke.md)
 - [Release smoke run logs](./release-smoke-runs/README.md)
 
 ## Runtime features

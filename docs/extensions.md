@@ -148,6 +148,8 @@ The host owner-qualifies provider ids (`acme` becomes `ext.<extension-id>.acme`)
 
 Credentials remain host-owned. The extension declares which connection secret contains the API key, but discovery and model requests read it inside the host. The provider's `baseUrl` and `modelsUrl` hosts must both appear in the connection's exact `httpAuth.allowedHosts` list. Extensions cannot supply custom stream handlers. Cached discovery results are rebound to the provider's current API and base URL before use, so an endpoint change cannot reuse stale transport headers or route a new credential to the previous host.
 
+Dynamic catalogue responses are limited to 2 MiB, 2,000 entries and 256 characters per model ID. Rejected or unavailable refreshes retain the last safe catalogue and configured baseline. Unloading a provider aborts its in-flight discovery before cache deletion so a delayed response cannot restore stale data.
+
 ```ts
 export function activate(api) {
   api.connections.register({

@@ -16,6 +16,7 @@
     "python:bridge:https": "node scripts/python-bridge-server.mjs --https",
     "background:verify:bridge": "node scripts/background-verify-bridge-server.mjs serve",
     "background:verify:command": "node scripts/background-verify-bridge-server.mjs command",
+    "smoke:extension-provider": "node scripts/adversarial-extension-provider-smoke.mjs",
     "serve:dist": "node scripts/serve-dist-https.mjs",
     "manifest:prod": "node scripts/generate-manifest.mjs",
     "manifest:dev": "node scripts/generate-dev-manifest.mjs",

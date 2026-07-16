@@ -310,12 +310,15 @@ export async function initTaskpane(opts: {
     document.dispatchEvent(new Event("pi:models-changed"));
   };
 
+  let onProvidersChanged: (() => void) | null = null;
+
   const restoreModelCatalogs = async (): Promise<void> => {
     const refreshResult = await modelRuntime.refresh({ allowNetwork: false });
     if (refreshResult.errors.size > 0) {
       console.warn("[models] Some cached provider catalogues could not be restored:", Array.from(refreshResult.errors.keys()));
     }
     await updateAvailableProviderState();
+    onProvidersChanged?.();
   };
 
   const refreshRuntimeModels = async (): Promise<void> => {
@@ -324,6 +327,7 @@ export async function initTaskpane(opts: {
       console.warn("[models] Some provider catalogues could not be refreshed:", Array.from(refreshResult.errors.keys()));
     }
     await updateAvailableProviderState();
+    onProvidersChanged?.();
   };
 
   const refreshConfiguredProviders = async (): Promise<void> => {
@@ -332,17 +336,9 @@ export async function initTaskpane(opts: {
     await restoreModelCatalogs();
   };
 
-  let onProvidersChanged: (() => void) | null = null;
-
   document.addEventListener("pi:providers-changed", () => {
     void refreshConfiguredProviders()
-      .then(() => {
-        onProvidersChanged?.();
-        return refreshRuntimeModels();
-      })
-      .then(() => {
-        onProvidersChanged?.();
-      })
+      .then(() => refreshRuntimeModels())
       .catch((error: DynamicValue) => {
         console.warn("[auth] Provider refresh after settings change failed:", error);
       });
@@ -356,15 +352,7 @@ export async function initTaskpane(opts: {
   void credentialRestorePromise
     .then(() => {
       void refreshConfiguredProviders()
-        .then(() => {
-          // Reconcile any already-created runtimes with the restored
-          // providers (#553) — mirrors the pi:providers-changed path.
-          onProvidersChanged?.();
-          return refreshRuntimeModels();
-        })
-        .then(() => {
-          onProvidersChanged?.();
-        })
+        .then(() => refreshRuntimeModels())
         .catch((error: DynamicValue) => {
           console.warn("[auth] Provider refresh after credential restore failed:", error);
         });
@@ -388,7 +376,6 @@ export async function initTaskpane(opts: {
   // Cached catalogues are available before first paint; remote discovery runs
   // afterward and updates an already-open model selector in place.
   void refreshRuntimeModels()
-    .then(() => onProvidersChanged?.())
     .catch((error: DynamicValue) => {
       console.warn("[models] Background model refresh failed:", error);
     });
@@ -613,9 +600,8 @@ export async function initTaskpane(opts: {
     for (const runtime of runtimeManager.listRuntimes()) {
       // Never mutate the model of a working session — same busy invariant as
       // model switching (see applyModelSelection). A skipped runtime is
-      // reconciled on the next providers-changed / credential-restore pass;
-      // its in-flight work already captured the old model, and a
-      // credential-less provider fails fast anyway.
+      // reconciled after agent_end or on the next provider refresh; its
+      // in-flight work already captured the old model.
       if (runtime.agent.state.isStreaming || runtime.actionQueue.isBusy()) {
         continue;
       }
@@ -837,7 +823,6 @@ export async function initTaskpane(opts: {
   connectionManager.subscribe(() => {
     void refreshCapabilitiesForAllRuntimes();
     void refreshRuntimeModels()
-      .then(() => onProvidersChanged?.())
       .catch((error: DynamicValue) => {
         console.warn("[models] Failed to refresh after connection change:", error);
       });
@@ -1161,6 +1146,11 @@ export async function initTaskpane(opts: {
       }
 
       if (ev.type !== "agent_end") return;
+
+      // Provider refreshes intentionally skip working runtimes. Re-run the
+      // reconciliation after the action queue unwinds so an extension that
+      // unloads mid-turn cannot leave its now-missing provider selected.
+      window.setTimeout(() => onProvidersChanged?.(), 0);
 
       const wasUserAbort = abortedAgents.has(agent);
       abortedAgents.delete(agent);
@@ -1701,12 +1691,22 @@ export async function initTaskpane(opts: {
     }
 
     const currentModel = runtime.agent.state.model;
-    if (currentModel.provider === nextModel.provider && currentModel.id === nextModel.id) {
+    const sameIdentity = currentModel.provider === nextModel.provider
+      && currentModel.id === nextModel.id;
+    if (sameIdentity && areRuntimeModelsEquivalent(currentModel, nextModel)) {
       return;
     }
 
     if (runtime.agent.state.isStreaming || runtime.actionQueue.isBusy()) {
       showToast(t("init.waitBeforeChangingModels"));
+      return;
+    }
+
+    if (sameIdentity) {
+      runtime.agent.state.model = nextModel;
+      document.dispatchEvent(new CustomEvent("pi:model-changed"));
+      document.dispatchEvent(new CustomEvent("pi:status-update"));
+      requestAnimationFrame(() => sidebar.requestUpdate());
       return;
     }
 
@@ -2140,6 +2140,18 @@ export async function initTaskpane(opts: {
     sidebar,
     getWorkbookContext: resolveWorkbookContext,
     getActiveRuntime,
+    extensionManager,
+    connectionManager,
+    modelRuntime,
+    refreshModels: async (allowNetwork) => {
+      const result = await modelRuntime.refresh({
+        allowNetwork,
+        ...(allowNetwork ? { force: true } : {}),
+      });
+      await updateAvailableProviderState();
+      onProvidersChanged?.();
+      return { errors: Array.from(result.errors.keys()).sort() };
+    },
   });
   if (backgroundVerificationBridge) {
     window.addEventListener("pagehide", () => backgroundVerificationBridge.stop(), { once: true });

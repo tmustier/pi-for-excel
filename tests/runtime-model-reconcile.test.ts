@@ -101,6 +101,18 @@ void test("init.ts reconcile loop guards on streaming AND queue-busy runtimes", 
   );
 });
 
+void test("agent-end wiring retries reconciliation skipped during an in-flight unload", () => {
+  const initSource = readFileSync(
+    path.resolve(process.cwd(), "src/taskpane/init.ts"),
+    "utf8",
+  );
+
+  assert.match(
+    initSource,
+    /if \(ev\.type !== "agent_end"\) return;[\s\S]*?window\.setTimeout\(\(\) => onProvidersChanged\?\.\(\), 0\);/u,
+  );
+});
+
 void test("sets thinkingLevel to off when swapping onto a non-reasoning model", () => {
   const nonReasoning = {
     ...codexModel,

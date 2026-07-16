@@ -15,8 +15,9 @@ This doc describes how to update:
 - **Built-in model IDs:** `node_modules/@earendil-works/pi-ai/dist/models.generated.js`, exposed through `builtinProviders()`.
 - **Runtime lookup and streaming:** the taskpane-owned `BrowserModelRuntime`, backed by Pi AI's `createModels()` collection.
 - **Dynamic catalogue cache:** IndexedDB store `model-catalogs`, accessed through `ModelCatalogsStore`; restored entries are rebound to the provider's current API/base URL before use.
+- **Discovery bounds:** responses are limited to 2 MiB, 2,000 entries and 256 characters per model ID. An invalid/oversized refresh leaves the last safe cache and configured baseline intact.
 - **Custom gateways:** baseline models remain in `CustomProvidersStore`; `/models` discovery overlays them without deleting the configured fallback model.
-- **Extension providers:** `api.models.registerProvider()` declarations are runtime-owned and unload with their extension.
+- **Extension providers:** `api.models.registerProvider()` declarations are runtime-owned and unload with their extension. Unregistering aborts in-flight discovery before deleting its cache so late responses cannot resurrect stale entries.
 
 Do not use Pi coding-agent's Node/file `ModelRuntime` directly in the Office WebView. Pi for Excel uses the same Pi AI provider primitives with browser storage, OAuth and proxy policy. Cross-check the installed Pi package and changelog when the generated registry changes. Never infer aliases or metadata from marketing names.
 

@@ -367,7 +367,7 @@ export function buildSandboxSrcdoc(options: BuildSandboxSrcdocOptions): string {
         clearAllWidgetActions();
 
         if (failures.length > 0) {
-          throw new Error('Extension cleanup failed:\n- ' + failures.join('\n- '));
+          throw new Error('Extension cleanup failed:\\n- ' + failures.join('\\n- '));
         }
       }
 

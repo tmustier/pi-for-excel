@@ -243,6 +243,51 @@ void test("failed remote discovery retains the last cached overlay and baseline"
   );
 });
 
+void test("oversized or malformed discovery catalogues retain the last safe cache", async () => {
+  const catalogs = new MemoryCatalogs();
+  let mode: "safe" | "too-many" | "long-id" | "too-large" = "safe";
+  const fetchFn: typeof globalThis.fetch = () => {
+    if (mode === "too-many") {
+      return Promise.resolve(new Response(JSON.stringify({
+        data: Array.from({ length: 2_001 }, (_, index) => ({ id: `model-${index}` })),
+      }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    }
+    if (mode === "long-id") {
+      return Promise.resolve(new Response(JSON.stringify({
+        data: [{ id: "x".repeat(257) }],
+      }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    }
+    if (mode === "too-large") {
+      return Promise.resolve(new Response("{}", {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json",
+          "Content-Length": String(2 * 1024 * 1024 + 1),
+        },
+      }));
+    }
+    return Promise.resolve(new Response(JSON.stringify({ data: [{ id: "last-safe-model" }] }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    }));
+  };
+
+  const runtime = createRuntime({ catalogs, fetchFn });
+  await runtime.syncCustomProviders([gatewayProvider()]);
+  await runtime.refresh({ allowNetwork: true });
+
+  for (const unsafeMode of ["too-many", "long-id", "too-large"] as const) {
+    mode = unsafeMode;
+    const failed = await runtime.refresh({ allowNetwork: true });
+    assert.equal(failed.errors.has("Gateway · Acme"), true, unsafeMode);
+    assert.deepEqual(
+      runtime.models.getModels("Gateway · Acme").map((model) => model.id),
+      ["configured-model", "last-safe-model"],
+      unsafeMode,
+    );
+  }
+});
+
 void test("extension providers are owner-scoped and can resolve host-owned credentials", async () => {
   const runtime = createRuntime();
   const registration: BrowserProviderRegistration = {
@@ -269,6 +314,61 @@ void test("extension providers are owner-scoped and can resolve host-owned crede
   await runtime.unregisterExtensionProvider("ext.example", registration.id);
   assert.equal(runtime.models.getProvider(registration.id), undefined);
   assert.equal(runtime.shouldProxyProvider(registration.id), false);
+});
+
+void test("unregister aborts in-flight discovery before it can resurrect a catalogue", async () => {
+  const catalogs = new MemoryCatalogs();
+  let mode: "delayed" | "offline" = "delayed";
+  let notifyStarted: () => void = () => {};
+  let resolveDelayed: (response: Response) => void = () => {};
+  const started = new Promise<void>((resolve) => {
+    notifyStarted = resolve;
+  });
+  const fetchFn: typeof globalThis.fetch = (_input, init) => {
+    if (mode === "offline") {
+      return Promise.resolve(new Response("offline", { status: 503 }));
+    }
+
+    return new Promise<Response>((resolve, reject) => {
+      resolveDelayed = resolve;
+      const abort = (): void => reject(new DOMException("aborted", "AbortError"));
+      if (init?.signal?.aborted) {
+        abort();
+        return;
+      }
+      init?.signal?.addEventListener("abort", abort, { once: true });
+      notifyStarted();
+    });
+  };
+  const runtime = createRuntime({ catalogs, fetchFn });
+  const registration: BrowserProviderRegistration = {
+    id: "ext.race.provider",
+    name: "Race provider",
+    api: "openai-completions",
+    baseUrl: "https://race.example.com/v1",
+    models: [{ id: "baseline-model", contextWindow: 32_768, maxTokens: 4_096 }],
+    resolveApiKey: () => Promise.resolve("test-key"),
+  };
+
+  runtime.registerExtensionProvider("ext.race", registration);
+  const refresh = runtime.refresh({ allowNetwork: true });
+  await started;
+  await runtime.unregisterExtensionProvider("ext.race", registration.id);
+  resolveDelayed(new Response(JSON.stringify({ data: [{ id: "must-not-resurrect" }] }), {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+  }));
+  await refresh;
+
+  assert.equal(catalogs.entries.has(registration.id), false);
+
+  mode = "offline";
+  runtime.registerExtensionProvider("ext.race", registration);
+  await runtime.refresh({ allowNetwork: true });
+  assert.deepEqual(
+    runtime.models.getModels(registration.id).map((model) => model.id),
+    ["baseline-model"],
+  );
 });
 
 void test("credential adapter does not reinterpret OAuth records as browser API keys", async () => {

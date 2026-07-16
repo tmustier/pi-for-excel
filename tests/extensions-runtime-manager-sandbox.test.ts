@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { readFile } from "node:fs/promises";
+import { Script } from "node:vm";
 
 import { Type } from "@sinclair/typebox";
 import {
@@ -711,6 +712,26 @@ void test("sandbox srcdoc builder emits expected bridge hooks and config", () =>
   assert.match(html, /model_provider_register/);
   assert.match(html, /model_provider_unregister/);
   assert.match(html, /model_providers_refresh/);
+});
+
+void test("sandbox srcdoc bootstrap is syntactically valid JavaScript", () => {
+  const html = buildSandboxSrcdoc({
+    instanceId: "ext.inline.syntax",
+    extensionName: "Inline Syntax",
+    source: {
+      kind: "inline",
+      code: "export function activate(api) { return () => api.toast('clean'); }",
+    },
+    widgetApiV2Enabled: false,
+  });
+  const match = /<script type="module">([\s\S]*)<\/script>/u.exec(html);
+  assert.ok(match);
+  const script = match[1];
+  assert.equal(typeof script, "string");
+  if (typeof script !== "string") return;
+
+  assert.doesNotThrow(() => new Script(script));
+  assert.match(script, /Extension cleanup failed:\\n-/u);
 });
 
 void test("sandbox protocol helpers validate envelope shapes and escape inline script payloads", () => {

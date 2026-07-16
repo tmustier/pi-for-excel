@@ -65,7 +65,12 @@ function usage() {
   PI_BACKGROUND_VERIFY_TOKEN=<token> PI_BACKGROUND_VERIFY_HOST=localhost node scripts/background-verify-bridge-server.mjs command configureProxy '{"enabled":true,"url":"https://localhost:3003"}'
   PI_BACKGROUND_VERIFY_TOKEN=<token> PI_BACKGROUND_VERIFY_HOST=localhost node scripts/background-verify-bridge-server.mjs command selectModel '{"provider":"openai-codex","modelId":"gpt-5.6-sol"}'
   PI_BACKGROUND_VERIFY_TOKEN=<token> PI_BACKGROUND_VERIFY_HOST=localhost node scripts/background-verify-bridge-server.mjs command submitPrompt '{"text":"Write SMOKE into A1, then tell me what changed","waitForIdle":true}'
+  PI_BACKGROUND_VERIFY_TOKEN=<token> PI_BACKGROUND_VERIFY_HOST=localhost node scripts/background-verify-bridge-server.mjs command extensionList
+  PI_BACKGROUND_VERIFY_TOKEN=<token> PI_BACKGROUND_VERIFY_HOST=localhost node scripts/background-verify-bridge-server.mjs command modelsList '{"provider":"ext.example.probe"}'
   PI_BACKGROUND_VERIFY_TOKEN=<token> PI_BACKGROUND_VERIFY_HOST=localhost node scripts/background-verify-bridge-server.mjs command listCharts
+
+  # With the real taskpane connected, run the complete sandbox extension-provider adversarial scenario:
+  PI_BACKGROUND_VERIFY_TOKEN=<token> PI_BACKGROUND_VERIFY_HOST=localhost npm run smoke:extension-provider
 `;
 }
 

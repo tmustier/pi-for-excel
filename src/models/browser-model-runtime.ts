@@ -26,6 +26,9 @@ import {
 const DEFAULT_DISCOVERED_CONTEXT_WINDOW = 32_768;
 const DEFAULT_DISCOVERED_MAX_TOKENS = 4_096;
 const MODEL_DISCOVERY_TIMEOUT_MS = 8_000;
+const MAX_MODEL_DISCOVERY_RESPONSE_BYTES = 2 * 1024 * 1024;
+const MAX_DISCOVERED_MODELS = 2_000;
+const MAX_DISCOVERED_MODEL_ID_LENGTH = 256;
 
 const openAiCompletionsStreams: ProviderStreams = lazyApi(
   () => import("@earendil-works/pi-ai/api/openai-completions"),
@@ -274,15 +277,80 @@ function parseModelIds(value: DynamicValue): string[] {
   if (!isModelsResponse(value) || !Array.isArray(value.data)) {
     throw new Error("Model discovery response must contain a data array.");
   }
+  if (value.data.length > MAX_DISCOVERED_MODELS) {
+    throw new Error(`Model discovery returned more than ${MAX_DISCOVERED_MODELS} entries.`);
+  }
 
   const ids: string[] = [];
   for (const entry of value.data) {
     if (!isModelsResponse(entry) || typeof entry.id !== "string") continue;
     const id = entry.id.trim();
-    if (id.length > 0) ids.push(id);
+    if (id.length === 0) continue;
+    if (id.length > MAX_DISCOVERED_MODEL_ID_LENGTH) {
+      throw new Error(
+        `Discovered model id exceeds ${MAX_DISCOVERED_MODEL_ID_LENGTH} characters.`,
+      );
+    }
+    ids.push(id);
   }
 
   return Array.from(new Set(ids)).sort((left, right) => left.localeCompare(right));
+}
+
+async function readLimitedDiscoveryJson(response: Response): Promise<DynamicValue> {
+  const declaredLengthRaw = response.headers.get("content-length");
+  const declaredLength = declaredLengthRaw === null
+    ? null
+    : Number.parseInt(declaredLengthRaw, 10);
+  if (
+    declaredLength !== null
+    && Number.isFinite(declaredLength)
+    && declaredLength > MAX_MODEL_DISCOVERY_RESPONSE_BYTES
+  ) {
+    throw new Error(
+      `Model discovery response exceeds ${MAX_MODEL_DISCOVERY_RESPONSE_BYTES} bytes.`,
+    );
+  }
+
+  if (!response.body) {
+    const text = await response.text();
+    if (new TextEncoder().encode(text).byteLength > MAX_MODEL_DISCOVERY_RESPONSE_BYTES) {
+      throw new Error(
+        `Model discovery response exceeds ${MAX_MODEL_DISCOVERY_RESPONSE_BYTES} bytes.`,
+      );
+    }
+    const parsed: DynamicValue = JSON.parse(text);
+    return parsed;
+  }
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+
+  while (true) {
+    const chunk = await reader.read();
+    if (chunk.done) break;
+    if (!chunk.value) continue;
+
+    totalBytes += chunk.value.byteLength;
+    if (totalBytes > MAX_MODEL_DISCOVERY_RESPONSE_BYTES) {
+      await reader.cancel();
+      throw new Error(
+        `Model discovery response exceeds ${MAX_MODEL_DISCOVERY_RESPONSE_BYTES} bytes.`,
+      );
+    }
+    chunks.push(chunk.value);
+  }
+
+  const body = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+
+  const parsed: DynamicValue = JSON.parse(new TextDecoder().decode(body));
+  return parsed;
 }
 
 async function resolveDiscoveryRequestUrl(
@@ -299,11 +367,15 @@ async function fetchWithDiscoveryTimeout(
   requestUrl: string,
   headers: Record<string, string>,
   signal?: AbortSignal,
+  lifecycleSignal?: AbortSignal,
 ): Promise<Response> {
   const controller = new AbortController();
   const handleAbort = (): void => controller.abort();
-  if (signal?.aborted) controller.abort();
-  signal?.addEventListener("abort", handleAbort, { once: true });
+  const signals: readonly (AbortSignal | undefined)[] = [signal, lifecycleSignal];
+  for (const sourceSignal of signals) {
+    if (sourceSignal?.aborted) controller.abort();
+    sourceSignal?.addEventListener("abort", handleAbort, { once: true });
+  }
   const timeoutId = setTimeout(() => controller.abort(), MODEL_DISCOVERY_TIMEOUT_MS);
 
   try {
@@ -313,7 +385,9 @@ async function fetchWithDiscoveryTimeout(
     });
   } finally {
     clearTimeout(timeoutId);
-    signal?.removeEventListener("abort", handleAbort);
+    for (const sourceSignal of signals) {
+      sourceSignal?.removeEventListener("abort", handleAbort);
+    }
   }
 }
 
@@ -321,6 +395,7 @@ function createRegisteredProvider(
   registration: BrowserProviderRegistration,
   getProxyUrl: () => Promise<string | undefined>,
   fetchFn: typeof globalThis.fetch,
+  lifecycleSignal: AbortSignal,
 ): Provider {
   const id = normalizeNonEmpty(registration.id, "Provider id");
   const name = normalizeNonEmpty(registration.name, "Provider name");
@@ -363,12 +438,13 @@ function createRegisteredProvider(
             requestUrl,
             headers,
             signal,
+            lifecycleSignal,
           );
           if (!response.ok) {
             throw new Error(`Model discovery failed with HTTP ${response.status}.`);
           }
 
-          const ids = parseModelIds(await response.json());
+          const ids = parseModelIds(await readLimitedDiscoveryJson(response));
           const template = registration.models[0];
           return ids.map((modelId) => createModel({
             providerId: id,
@@ -437,6 +513,7 @@ export class BrowserModelRuntime {
   private readonly builtinProviderIds = new Set<string>();
   private readonly customProviderIds = new Set<string>();
   private readonly extensionProviderOwners = new Map<string, string>();
+  private readonly dynamicProviderAbortControllers = new Map<string, AbortController>();
 
   constructor(options: CreateBrowserModelRuntimeOptions) {
     this.modelCatalogs = new BrowserModelCatalogsStore(options.modelCatalogs);
@@ -460,6 +537,25 @@ export class BrowserModelRuntime {
     }
   }
 
+  private createDynamicProvider(registration: BrowserProviderRegistration): Provider {
+    const controller = new AbortController();
+    const provider = createRegisteredProvider(
+      registration,
+      this.getProxyUrl,
+      this.fetchFn,
+      controller.signal,
+    );
+
+    this.dynamicProviderAbortControllers.get(provider.id)?.abort();
+    this.dynamicProviderAbortControllers.set(provider.id, controller);
+    return provider;
+  }
+
+  private stopDynamicProvider(providerId: string): void {
+    this.dynamicProviderAbortControllers.get(providerId)?.abort();
+    this.dynamicProviderAbortControllers.delete(providerId);
+  }
+
   async syncCustomProviders(customProviders: readonly CustomProvider[]): Promise<void> {
     const nextIds = new Set<string>();
 
@@ -472,11 +568,7 @@ export class BrowserModelRuntime {
           throw new Error(`Custom provider id conflicts with extension provider: ${registration.id}`);
         }
 
-        const provider = createRegisteredProvider(
-          registration,
-          this.getProxyUrl,
-          this.fetchFn,
-        );
+        const provider = this.createDynamicProvider(registration);
         this.modelCatalogs.configure(provider.id, {
           api: registration.api,
           baseUrl: provider.baseUrl ?? normalizeHttpUrl(registration.baseUrl, "Provider baseUrl"),
@@ -488,6 +580,7 @@ export class BrowserModelRuntime {
 
     for (const previousId of this.customProviderIds) {
       if (nextIds.has(previousId)) continue;
+      this.stopDynamicProvider(previousId);
       this.models.deleteProvider(previousId);
       try {
         await this.modelCatalogs.delete(previousId);
@@ -511,11 +604,7 @@ export class BrowserModelRuntime {
       throw new Error(`Provider id is already registered by another extension: ${providerId}`);
     }
 
-    const provider = createRegisteredProvider(
-      registration,
-      this.getProxyUrl,
-      this.fetchFn,
-    );
+    const provider = this.createDynamicProvider(registration);
     this.modelCatalogs.configure(provider.id, {
       api: registration.api,
       baseUrl: provider.baseUrl ?? normalizeHttpUrl(registration.baseUrl, "Provider baseUrl"),
@@ -538,6 +627,7 @@ export class BrowserModelRuntime {
     }
 
     this.extensionProviderOwners.delete(providerId);
+    this.stopDynamicProvider(providerId);
     this.models.deleteProvider(providerId);
     try {
       await this.modelCatalogs.delete(providerId);
