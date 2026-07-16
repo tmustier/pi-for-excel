@@ -11,7 +11,7 @@
 
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { ImageContent, TextContent } from "@earendil-works/pi-ai";
-import type { Message } from "@earendil-works/pi-ai/compat";
+import type { Message } from "@earendil-works/pi-ai";
 
 import { effectiveRecentToolResultsToKeep } from "../context/window-budgets.js";
 import { convertAttachments, isArtifactMessage, isUserMessageWithAttachments } from "./attachments.js";

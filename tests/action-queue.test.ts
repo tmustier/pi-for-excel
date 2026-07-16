@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { Agent, type AgentMessage } from "@earendil-works/pi-agent-core";
-import type { Api, ImageContent, Model, Usage } from "@earendil-works/pi-ai/compat";
+import type { Api, ImageContent, Model, Usage } from "@earendil-works/pi-ai";
 
 import { commandRegistry, type SlashCommand } from "../src/commands/types.ts";
 import { createActionQueue } from "../src/taskpane/action-queue.ts";

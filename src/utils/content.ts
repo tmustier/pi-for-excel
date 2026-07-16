@@ -10,7 +10,7 @@ function isUtilsContentPayloadShape(value: DynamicValue): value is DynamicObject
  * safe to use at those edges.
  */
 
-import type { TextContent, ToolCall } from "@earendil-works/pi-ai/compat";
+import type { TextContent, ToolCall } from "@earendil-works/pi-ai";
 
 
 export function isTextBlock(block: DynamicValue): block is TextContent {

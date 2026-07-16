@@ -9,7 +9,7 @@
 
 import type { CompactionSummaryMessage } from "@earendil-works/pi-agent-core";
 import { t } from "../language/index.js";
-import type { UserMessage } from "@earendil-works/pi-ai/compat";
+import type { UserMessage } from "@earendil-works/pi-ai";
 
 export type { CompactionSummaryMessage };
 

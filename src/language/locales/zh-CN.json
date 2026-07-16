@@ -596,6 +596,7 @@
   "perm.skills.write": "安装 /卸载外部技能",
   "perm.storage.readwrite": "读写扩展存储",
   "perm.tools.register": "注册工具",
+  "perm.models.register": "注册模型提供商",
   "perm.trust.builtin": "内置",
   "perm.trust.inline-code": "内联代码",
   "perm.trust.local-module": "本地模块",

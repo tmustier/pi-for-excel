@@ -15,7 +15,7 @@
  * - then the remaining models, sorted deterministically
  */
 
-import type { Api, Model } from "@earendil-works/pi-ai/compat";
+import type { Api, Model } from "@earendil-works/pi-ai";
 
 import {
   compareModels as compareModelRefs,

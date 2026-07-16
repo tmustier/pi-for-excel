@@ -5,7 +5,7 @@
  * https://github.com/badlogic/pi-mono). See docs/ui-ownership.md.
  */
 
-import type { Api, Model } from "@earendil-works/pi-ai/compat";
+import type { Api, Model } from "@earendil-works/pi-ai";
 
 import { Store } from "./store.js";
 import type { StoreConfig } from "./types.js";

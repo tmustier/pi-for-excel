@@ -3,12 +3,18 @@ import { test } from "node:test";
 import { readFile } from "node:fs/promises";
 
 import { Type } from "@sinclair/typebox";
-import type { ImageContent, TextContent } from "@earendil-works/pi-ai/compat";
+import {
+  InMemoryModelsStore,
+  type ImageContent,
+  type TextContent,
+} from "@earendil-works/pi-ai";
 
 import { ConnectionManager } from "../src/connections/manager.ts";
 import { CONNECTION_STORE_KEY } from "../src/connections/store.ts";
 import { setExperimentalFeatureEnabled } from "../src/experiments/flags.ts";
 import { ExtensionRuntimeManager } from "../src/extensions/runtime-manager.ts";
+import { BrowserModelRuntime } from "../src/models/browser-model-runtime.ts";
+import type { ProviderKeysStoreLike } from "../src/storage/local/provider-credentials-store.ts";
 import { isConnectionToolErrorDetails } from "../src/tools/tool-details.ts";
 import { withConnectionPreflight } from "../src/tools/with-connection-preflight.ts";
 import {
@@ -62,6 +68,24 @@ class FailingConnectionStoreSettings extends MemorySettingsStore {
 
 function createConnectionManager(settings: MemorySettingsStore): ConnectionManager {
   return new ConnectionManager({ settings });
+}
+
+class EmptyProviderKeys implements ProviderKeysStoreLike {
+  get(): Promise<string | null> {
+    return Promise.resolve(null);
+  }
+
+  set(): Promise<void> {
+    return Promise.resolve();
+  }
+
+  delete(): Promise<void> {
+    return Promise.resolve();
+  }
+
+  list(): Promise<string[]> {
+    return Promise.resolve([]);
+  }
 }
 
 class MemoryLocalStorage {
@@ -684,6 +708,9 @@ void test("sandbox srcdoc builder emits expected bridge hooks and config", () =>
   assert.match(html, /hostPort\.addEventListener\("message", handleHostMessage\)/);
   assert.match(html, /placement: payload\.placement === "above-input" \|\| payload\.placement === "below-input"/);
   assert.match(html, /payload\.minHeightPx === null/);
+  assert.match(html, /model_provider_register/);
+  assert.match(html, /model_provider_unregister/);
+  assert.match(html, /model_providers_refresh/);
 });
 
 void test("sandbox protocol helpers validate envelope shapes and escape inline script payloads", () => {
@@ -1196,4 +1223,88 @@ void test("connection preflight attributes auth failures to the matching require
 
   assert.equal(crmState?.status, "connected");
   assert.equal(billingState?.status, "error");
+});
+
+void test("extension model providers use host-owned connection secrets and unload cleanly", async () => {
+  const settings = new MemorySettingsStore();
+  settings.writeRaw(EXTENSIONS_REGISTRY_STORAGE_KEY, {
+    version: 2,
+    items: [createStoredEntry({
+      id: "ext.provider.test",
+      name: "Provider extension",
+      trust: "local-module",
+    })],
+  });
+
+  let authorization = "";
+  const fetchFn: typeof globalThis.fetch = (_input, init) => {
+    authorization = new Headers(init?.headers).get("authorization") ?? "";
+    return Promise.resolve(new Response(JSON.stringify({ data: [{ id: "discovered-model" }] }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    }));
+  };
+  const modelRuntime = new BrowserModelRuntime({
+    providerKeys: new EmptyProviderKeys(),
+    modelCatalogs: new InMemoryModelsStore(),
+    getProxyUrl: () => Promise.resolve(undefined),
+    fetchFn,
+  });
+  const connectionManager = createConnectionManager(settings);
+
+  const manager = new ExtensionRuntimeManager({
+    settings,
+    connectionManager,
+    modelRuntime,
+    getActiveAgent: () => null,
+    refreshRuntimeTools: () => Promise.resolve(),
+    refreshRuntimeModels: async () => {
+      await modelRuntime.refresh({ allowNetwork: true });
+    },
+    reservedToolNames: new Set<string>(),
+    loadExtensionFromSource: async (api) => {
+      api.connections.register({
+        id: "account",
+        title: "Model account",
+        capability: "model inference",
+        authKind: "api_key",
+        secretFields: [{ id: "apiKey", label: "API key", required: true }],
+        httpAuth: {
+          placement: "header",
+          headerName: "Authorization",
+          valueTemplate: "Bearer {apiKey}",
+          allowedHosts: ["models.example.com"],
+        },
+      });
+      await api.connections.setSecrets("account", { apiKey: "host-secret" });
+      await api.connections.markValidated("account");
+      api.models.registerProvider({
+        id: "acme",
+        name: "Acme models",
+        api: "openai-responses",
+        baseUrl: "https://models.example.com/v1",
+        models: [{ id: "baseline-model", contextWindow: 128_000, maxTokens: 16_000 }],
+        connection: "account",
+        apiKeySecret: "apiKey",
+      });
+
+      return {
+        deactivate: () => Promise.resolve(),
+      };
+    },
+  });
+
+  await manager.initialize();
+
+  const providerId = "ext.provider.test.acme";
+  assert.equal(authorization, "Bearer host-secret");
+  assert.equal((await modelRuntime.models.getAuth(providerId))?.auth.apiKey, "host-secret");
+  assert.deepEqual(
+    modelRuntime.models.getModels(providerId).map((model) => model.id),
+    ["baseline-model", "discovered-model"],
+  );
+  assert.deepEqual(manager.list()[0]?.modelProviderIds, [providerId]);
+
+  await manager.setExtensionEnabled("ext.provider.test", false);
+  assert.equal(modelRuntime.models.getProvider(providerId), undefined);
 });

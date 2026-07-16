@@ -131,6 +131,59 @@ Rules:
 - `valueTemplate` placeholders (`{...}`) must reference declared `secretFields` ids.
 - `allowedHosts` is required and uses exact host matching for safe auth injection.
 
+### `models.registerProvider(definition)` / `models.unregisterProvider(id)` / `models.refresh()`
+
+Registers a declarative model provider with the browser-native Pi AI runtime.
+
+Provider definitions include:
+
+- `id` and `name`
+- a supported Pi API: `openai-completions`, `openai-responses` or `anthropic-messages`
+- `baseUrl`
+- zero or more baseline `models`
+- optional `modelsUrl` for dynamic catalogue discovery (OpenAI-compatible providers default to `<baseUrl>/models`)
+- either an extension-owned `connection` plus `apiKeySecret`, or `allowKeyless: true`
+
+The host owner-qualifies provider ids (`acme` becomes `ext.<extension-id>.acme`), persists discovered catalogues in IndexedDB, and removes the provider when the extension unloads. Registered providers participate in the normal model selector, session restore, default-model reconciliation and streaming path.
+
+Credentials remain host-owned. The extension declares which connection secret contains the API key, but discovery and model requests read it inside the host. The provider's `baseUrl` and `modelsUrl` hosts must both appear in the connection's exact `httpAuth.allowedHosts` list. Extensions cannot supply custom stream handlers. Cached discovery results are rebound to the provider's current API and base URL before use, so an endpoint change cannot reuse stale transport headers or route a new credential to the previous host.
+
+```ts
+export function activate(api) {
+  api.connections.register({
+    id: "account",
+    title: "Acme model account",
+    capability: "model inference",
+    authKind: "api_key",
+    secretFields: [{ id: "apiKey", label: "API key", required: true }],
+    httpAuth: {
+      placement: "header",
+      headerName: "Authorization",
+      valueTemplate: "Bearer {apiKey}",
+      allowedHosts: ["models.acme.example"],
+    },
+  });
+
+  api.models.registerProvider({
+    id: "acme",
+    name: "Acme models",
+    api: "openai-responses",
+    baseUrl: "https://models.acme.example/v1",
+    models: [{
+      id: "acme-1",
+      contextWindow: 128_000,
+      maxTokens: 16_000,
+    }],
+    connection: "account",
+    apiKeySecret: "apiKey",
+  });
+}
+```
+
+`models.refresh()` forces a remote refresh of configured dynamic providers. Cache restoration remains available when the add-in starts offline.
+
+When Pi for Excel's CORS proxy is enabled, extension-provider discovery and inference use it too. The proxy remains independently fail-closed: its deployment allowlist must permit the provider host, in addition to the extension connection's exact host allowlist.
+
 ### `agent`
 Agent API surface:
 - `agent.raw` (host runtime only; capability-gated)
@@ -313,6 +366,7 @@ The `/extensions` manager shows capability toggles per installed extension.
 
 High-risk capabilities include:
 - `tools.register`
+- `models.register`
 - `agent.read`
 - `agent.events.read`
 - `llm.complete`

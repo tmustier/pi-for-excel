@@ -14,7 +14,7 @@
  * configured are never touched.
  */
 
-import type { Api, Model } from "@earendil-works/pi-ai/compat";
+import type { Api, Model } from "@earendil-works/pi-ai";
 
 export interface RuntimeModelSwap {
   model: Model<Api>;

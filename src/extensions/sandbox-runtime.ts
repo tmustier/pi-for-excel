@@ -16,6 +16,7 @@ import type { TSchema } from "typebox";
 import type {
   ExtensionCommand,
   ExtensionConnectionDefinition,
+  ExtensionModelProviderDefinition,
   HttpRequestOptions,
   HttpResponse,
   LlmCompletionRequest,
@@ -113,6 +114,9 @@ export interface SandboxActivationOptions {
   markConnectionValidated: (connectionId: string) => Promise<void>;
   markConnectionInvalid: (connectionId: string, reason: string) => Promise<void>;
   markConnectionStatus: (connectionId: string, status: ConnectionStatus, reason?: string) => Promise<void>;
+  registerModelProvider: (definition: ExtensionModelProviderDefinition) => string;
+  unregisterModelProvider: (providerId: string) => void;
+  refreshModelProviders: () => Promise<void>;
   isCapabilityEnabled: (capability: ExtensionCapability) => boolean;
   formatCapabilityError: (capability: ExtensionCapability) => string;
   toast: (message: string) => void;
@@ -250,6 +254,88 @@ function parseConnectionDefinition(value: DynamicValue): ExtensionConnectionDefi
     secretFields,
     ...(httpAuth !== undefined ? { httpAuth } : {}),
     ...(setupHint !== undefined ? { setupHint } : {}),
+  };
+}
+
+function parseModelProviderDefinition(value: DynamicValue): ExtensionModelProviderDefinition {
+  const payload = asSandboxPayload(value, "model provider definition");
+  const id = asNonEmptyString(payload.id, "provider.id");
+  const name = asNonEmptyString(payload.name, "provider.name");
+  const baseUrl = asNonEmptyString(payload.baseUrl, "provider.baseUrl");
+  const api = payload.api;
+  if (api !== "openai-completions" && api !== "openai-responses" && api !== "anthropic-messages") {
+    throw new Error("provider.api must be openai-completions, openai-responses or anthropic-messages.");
+  }
+
+  if (!Array.isArray(payload.models)) {
+    throw new Error("provider.models must be an array.");
+  }
+
+  const models = payload.models.map((rawModel, index) => {
+    const model = asSandboxPayload(rawModel, `provider.models[${index}]`);
+    const modelId = asNonEmptyString(model.id, `provider.models[${index}].id`);
+    const modelName = typeof model.name === "string" && model.name.trim().length > 0
+      ? model.name.trim()
+      : undefined;
+    const reasoning = model.reasoning;
+    if (reasoning !== undefined && typeof reasoning !== "boolean") {
+      throw new Error(`provider.models[${index}].reasoning must be a boolean.`);
+    }
+
+    let input: Array<"text" | "image"> | undefined;
+    if (model.input !== undefined) {
+      if (!Array.isArray(model.input)) {
+        throw new Error(`provider.models[${index}].input must be an array.`);
+      }
+      input = [];
+      for (const kind of model.input) {
+        if (kind !== "text" && kind !== "image") {
+          throw new Error(`provider.models[${index}].input entries must be text or image.`);
+        }
+        input.push(kind === "text" ? "text" : "image");
+      }
+    }
+
+    const contextWindow = asFiniteNumberOrNullOrUndefined(model.contextWindow);
+    const maxTokens = asFiniteNumberOrNullOrUndefined(model.maxTokens);
+    if (contextWindow === null || maxTokens === null) {
+      throw new Error(`provider.models[${index}] token limits must be finite numbers.`);
+    }
+
+    return {
+      id: modelId,
+      ...(modelName !== undefined ? { name: modelName } : {}),
+      ...(reasoning !== undefined ? { reasoning } : {}),
+      ...(input !== undefined ? { input } : {}),
+      ...(contextWindow !== undefined ? { contextWindow } : {}),
+      ...(maxTokens !== undefined ? { maxTokens } : {}),
+    };
+  });
+
+  const modelsUrl = typeof payload.modelsUrl === "string" && payload.modelsUrl.trim().length > 0
+    ? payload.modelsUrl.trim()
+    : undefined;
+  const connection = typeof payload.connection === "string" && payload.connection.trim().length > 0
+    ? payload.connection.trim()
+    : undefined;
+  const apiKeySecret = typeof payload.apiKeySecret === "string" && payload.apiKeySecret.trim().length > 0
+    ? payload.apiKeySecret.trim()
+    : undefined;
+  const allowKeyless = payload.allowKeyless;
+  if (allowKeyless !== undefined && typeof allowKeyless !== "boolean") {
+    throw new Error("provider.allowKeyless must be a boolean.");
+  }
+
+  return {
+    id,
+    name,
+    api,
+    baseUrl,
+    models,
+    ...(modelsUrl !== undefined ? { modelsUrl } : {}),
+    ...(connection !== undefined ? { connection } : {}),
+    ...(apiKeySecret !== undefined ? { apiKeySecret } : {}),
+    ...(allowKeyless !== undefined ? { allowKeyless } : {}),
   };
 }
 
@@ -699,6 +785,31 @@ class SandboxRuntimeHost {
           const name = asNonEmptyString(payload.name, "name");
           this.options.unregisterTool(name);
 
+          this.sendResponse(requestId, true, null);
+          return;
+        }
+
+        case "model_provider_register": {
+          this.assertCapability("models.register");
+          const payload = asSandboxPayload(params, "model_provider_register params");
+          const definition = parseModelProviderDefinition(payload.definition);
+          const providerId = this.options.registerModelProvider(definition);
+          this.sendResponse(requestId, true, { providerId });
+          return;
+        }
+
+        case "model_provider_unregister": {
+          this.assertCapability("models.register");
+          const payload = asSandboxPayload(params, "model_provider_unregister params");
+          const providerId = asNonEmptyString(payload.providerId, "providerId");
+          this.options.unregisterModelProvider(providerId);
+          this.sendResponse(requestId, true, null);
+          return;
+        }
+
+        case "model_providers_refresh": {
+          this.assertCapability("models.register");
+          await this.options.refreshModelProviders();
           this.sendResponse(requestId, true, null);
           return;
         }

@@ -10,18 +10,19 @@ function isAuthRestorePayloadShape(value: DynamicValue): value is DynamicObject 
  * 2. IndexedDB SettingsStore (`oauth.<providerId>`)
  */
 
-import type { OAuthCredentials, OAuthProviderInterface } from "@earendil-works/pi-ai/compat";
+import type { OAuthCredentials } from "@earendil-works/pi-ai";
 import type { ProviderKeysStore } from "../storage/local/provider-keys-store.js";
 import type { SettingsStore } from "../storage/local/settings-store.js";
 
 import { originalFetch } from "./cors-proxy.js";
 import { clearOAuthCredentials, loadOAuthCredentials, saveOAuthCredentials } from "./oauth-storage.js";
+import type { BrowserOAuthProvider } from "./browser-oauth-types.js";
 import { isOpenAICodexCredentialRefreshRequired } from "./openai-codex-browser-oauth.js";
 import { mapToApiProvider, BROWSER_OAUTH_PROVIDERS } from "./provider-map.js";
 import { getOAuthProvider } from "./oauth-provider-registry.js";
 import { getErrorMessage } from "../utils/errors.js";
 
-type GetOAuthProvider = (id: string) => OAuthProviderInterface | undefined;
+type GetOAuthProvider = (id: string) => BrowserOAuthProvider | undefined;
 
 type ApiKeyCredential = {
   type: "api_key";

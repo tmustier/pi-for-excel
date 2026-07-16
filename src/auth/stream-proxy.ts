@@ -9,14 +9,14 @@
  */
 
 import { uuidv7 } from "@earendil-works/pi-agent-core";
-import {
-  getModels,
-  streamSimple,
-  type Api,
-  type Context,
-  type Model,
-  type StreamOptions,
-} from "@earendil-works/pi-ai/compat";
+import type {
+  Api,
+  AssistantMessageEventStream,
+  Context,
+  Model,
+  Models,
+  StreamOptions,
+} from "@earendil-works/pi-ai";
 
 import { isDebugEnabled } from "../debug/debug.js";
 import { selectToolBundle, type ToolBundleId } from "../context/tool-disclosure.js";
@@ -38,9 +38,17 @@ type OfficeStreamFn = (
   model: Model<Api>,
   context: Context,
   options?: StreamOptions,
-) => Promise<Awaited<ReturnType<typeof streamSimple>>>;
+) => Promise<AssistantMessageEventStream>;
 
-function shouldProxyProvider(provider: string, apiKey?: string): boolean {
+function shouldProxyProvider(
+  provider: string,
+  apiKey?: string,
+  isRuntimeProvider?: (providerId: string) => boolean,
+): boolean {
+  if (isRuntimeProvider?.(provider)) {
+    return true;
+  }
+
   const p = provider.toLowerCase();
 
   if (p.startsWith(OPENAI_GATEWAY_PROVIDER_PREFIX.toLowerCase())) {
@@ -105,8 +113,11 @@ function isGoogleOAuthProvider(provider: string): provider is GoogleOAuthProvide
   return provider === "google-gemini-cli" || provider === "google-antigravity";
 }
 
-function pickPreferredGoogleOAuthModel(provider: GoogleOAuthProvider): Model<Api> | null {
-  const models = getModels(provider as Parameters<typeof getModels>[0]) as Model<Api>[];
+function pickPreferredGoogleOAuthModel(
+  modelsRuntime: Models,
+  provider: GoogleOAuthProvider,
+): Model<Api> | null {
+  const models = [...modelsRuntime.getModels(provider)];
 
   const stablePro = models
     .filter((m) => /^gemini-(?!.*preview).*?-pro/i.test(m.id))
@@ -128,7 +139,7 @@ function pickPreferredGoogleOAuthModel(provider: GoogleOAuthProvider): Model<Api
   return geminiAny[geminiAny.length - 1] ?? null;
 }
 
-function normalizeGoogleOAuthModel(model: Model<Api>): Model<Api> {
+function normalizeGoogleOAuthModel(modelsRuntime: Models, model: Model<Api>): Model<Api> {
   const provider = model.provider;
   if (!isGoogleOAuthProvider(provider)) {
     return model;
@@ -137,7 +148,7 @@ function normalizeGoogleOAuthModel(model: Model<Api>): Model<Api> {
   let normalized: Model<Api> = model;
 
   if (/preview/i.test(normalized.id)) {
-    const fallbackModel = pickPreferredGoogleOAuthModel(provider);
+    const fallbackModel = pickPreferredGoogleOAuthModel(modelsRuntime, provider);
     if (fallbackModel) {
       normalized = fallbackModel;
     }
@@ -536,7 +547,11 @@ async function proxySupportsCodexWebSocketBridge(proxyUrl: string): Promise<bool
   return supported;
 }
 
-export function createOfficeStreamFn(getProxyUrl: GetProxyUrl): OfficeStreamFn {
+export function createOfficeStreamFn(
+  getProxyUrl: GetProxyUrl,
+  modelsRuntime: Models,
+  isRuntimeProvider?: (providerId: string) => boolean,
+): OfficeStreamFn {
   return async (model: Model<Api>, context: Context, options?: StreamOptions) => {
     const continuation = isToolContinuation(context.messages);
 
@@ -557,7 +572,7 @@ export function createOfficeStreamFn(getProxyUrl: GetProxyUrl): OfficeStreamFn {
       return contextWithoutTools;
     })();
 
-    const normalizedModel = normalizeGoogleOAuthModel(model);
+    const normalizedModel = normalizeGoogleOAuthModel(modelsRuntime, model);
 
     const callRecord = recordCall(
       normalizedModel,
@@ -577,11 +592,11 @@ export function createOfficeStreamFn(getProxyUrl: GetProxyUrl): OfficeStreamFn {
           "Enable Proxy in Settings and run: npx -y pi-for-excel-proxy@latest",
         );
       }
-      return streamSimple(normalizedModel, effectiveContext, effectiveOptions);
+      return modelsRuntime.streamSimple(normalizedModel, effectiveContext, effectiveOptions);
     }
 
-    if (!shouldProxyProvider(normalizedModel.provider, options?.apiKey)) {
-      return streamSimple(normalizedModel, effectiveContext, effectiveOptions);
+    if (!shouldProxyProvider(normalizedModel.provider, options?.apiKey, isRuntimeProvider)) {
+      return modelsRuntime.streamSimple(normalizedModel, effectiveContext, effectiveOptions);
     }
 
     // Guardrails: fail fast for known-bad proxy configs (e.g., HTTP proxy from HTTPS taskpane).
@@ -607,7 +622,7 @@ export function createOfficeStreamFn(getProxyUrl: GetProxyUrl): OfficeStreamFn {
           transport: "sse",
         }
       : effectiveOptions;
-    return streamSimple(
+    return modelsRuntime.streamSimple(
       applyProxy(normalizedModel, validated, proxyTransport),
       effectiveContext,
       proxiedOptions,

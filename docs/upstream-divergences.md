@@ -1,6 +1,6 @@
 # Upstream divergences from pi-mono
 
-**Last reviewed:** 2026-02-22
+**Last reviewed:** 2026-07-16
 
 This document records every place Pi for Excel intentionally diverges from
 [pi-mono](https://github.com/badlogic/pi-mono) / `@earendil-works/pi-coding-agent`
@@ -147,36 +147,34 @@ worst-case tool-loop context proportional to the model's actual capacity (#566).
 
 ---
 
-## 6. pi-ai legacy API via `/compat` entrypoint (temporary)
+## 6. Browser-native Pi AI Models runtime
 
-| | pi-mono direction | Pi for Excel (current) |
+| | pi-mono / coding-agent | Pi for Excel |
 |---|---|---|
-| pi-ai API surface | Migrating to `createModels()` + provider factories (pi-ai 0.80) | Legacy global API (`getModel`/`getModels`/`stream`/`complete`/…) via `@earendil-works/pi-ai/compat` |
+| Provider collection | `createModels()` wrapped by coding-agent's Node/file `ModelRuntime` | `createModels()` wrapped by a taskpane-owned browser runtime |
+| Credentials | filesystem-backed auth storage and provider OAuth | existing IndexedDB key/OAuth stores, adapted to Pi AI's credential contract |
+| Dynamic catalogues | coding-agent models store | IndexedDB `model-catalogs` store |
+| Provider plugins | trusted coding-agent extensions can register full providers | extensions register declarative providers; host owns credentials, known stream implementations and URL policy |
 
-**Rationale:** pi-ai 0.80 removed the global registry/dispatch API from the
-root entrypoint and provides a temporary `/compat` entrypoint that preserves
-it. First-party code still uses the legacy surface; migrating to
-`createModels()` is now purely an internal refactor (the old blocker —
-pi-web-ui importing the root surface — was removed with pi-web-ui itself on
-2026-07-07, along with the Vite exact-match root→compat alias).
+**Rationale:** Pi AI 0.80 removed the legacy global registry/dispatch API. The
+coding-agent `ModelRuntime` is not suitable for an Office WebView because it
+owns Node/file lifecycle. Pi for Excel now uses the same `createModels()`,
+provider factories, dynamic refresh and stream dispatch primitives with
+browser-native persistence, OAuth, CORS proxying and extension isolation.
+Cached extension/custom discovery entries are reconstructed against the
+currently registered API and base URL before use; persisted transport headers
+or an obsolete endpoint are never trusted after provider configuration changes.
 
-Interim wiring:
-- All first-party imports use `@earendil-works/pi-ai/compat` explicitly.
-- The Bedrock browser stub now exports the uniform `ProviderStreams` shape
-  (`stream`/`streamSimple`) required by `setBedrockProviderModule()`.
-- The 0.79-era `stubBedrockProviderPlugin` / `stubPiAiOAuthIndexPlugin` Vite
-  plugins (and the orphaned `src/stubs/pi-ai-oauth.ts`) were removed: 0.80
-  lazy-loads Bedrock behind a variable specifier and no longer re-exports the
-  OAuth index from its root, so both plugins were dead code whose resolved-id
-  fallbacks had become mis-fire hazards against 0.80's changed layout.
+**Status:** resolved in the 0.80.8 migration. There are no first-party or test
+imports from `@earendil-works/pi-ai/compat`. Built-in, custom, dynamically
+discovered and extension-owned providers all flow through one injected
+`Models` collection. The Bedrock unsupported shim imports its lazy setter from
+the direct browser-safe API subpath.
 
-**Exit plan:** migrate first-party code to
-`createModels()`/`getBuiltinModel(s)` and remove this entry. Upstream deletes
-`/compat` “with the coding-agent ModelManager migration”, so this must happen
-before picking up that release.
-
-**Files:** all `src`/`tests` imports of `@earendil-works/pi-ai/compat`,
-`src/stubs/amazon-bedrock.ts`, `src/compat/bedrock-provider-stub.ts`
+**Files:** `src/models/browser-model-runtime.ts`,
+`src/storage/local/model-catalogs-store.ts`,
+`src/storage/local/provider-credentials-store.ts`,
+`src/auth/stream-proxy.ts`, `src/compat/bedrock-provider-stub.ts`
 
 ---
 

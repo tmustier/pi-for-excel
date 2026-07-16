@@ -802,6 +802,48 @@ export function buildSandboxSrcdoc(options: BuildSandboxSrcdocOptions): string {
             },
           },
 
+          models: {
+            registerProvider(definition) {
+              if (!definition || typeof definition !== "object") {
+                throw new Error('models.registerProvider requires a definition object');
+              }
+
+              const rawProviderId = typeof definition.id === "string"
+                ? definition.id.trim().toLowerCase()
+                : "";
+              if (!rawProviderId) {
+                throw new Error('models.registerProvider requires definition.id');
+              }
+
+              queueActivationOp(requestHost("model_provider_register", { definition }));
+
+              const ownerId = config.instanceId.includes(".")
+                ? config.instanceId.slice(0, config.instanceId.lastIndexOf("."))
+                : config.instanceId;
+              const ownerPrefix = ownerId.toLowerCase() + ".";
+              return rawProviderId.startsWith(ownerPrefix)
+                ? rawProviderId
+                : ownerPrefix + rawProviderId;
+            },
+
+            unregisterProvider(providerId) {
+              const normalizedProviderId = typeof providerId === "string"
+                ? providerId.trim()
+                : "";
+              if (!normalizedProviderId) {
+                throw new Error('models.unregisterProvider requires a non-empty provider id');
+              }
+
+              queueActivationOp(requestHost("model_provider_unregister", {
+                providerId: normalizedProviderId,
+              }));
+            },
+
+            refresh() {
+              return requestHost("model_providers_refresh", {});
+            },
+          },
+
           agent: {
             get raw() {
               throw new Error('api.agent is not available in sandbox runtime. Use onAgentEvent() and explicit APIs.');

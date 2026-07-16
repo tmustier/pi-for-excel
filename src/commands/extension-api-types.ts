@@ -80,6 +80,42 @@ export interface ExtensionConnectionsAPI {
   markStatus(connectionId: string, status: ConnectionStatus, reason?: string): Promise<void>;
 }
 
+export type ExtensionModelProviderApi =
+  | "openai-completions"
+  | "openai-responses"
+  | "anthropic-messages";
+
+export interface ExtensionModelDefinition {
+  id: string;
+  name?: string;
+  reasoning?: boolean;
+  input?: readonly ("text" | "image")[];
+  contextWindow?: number;
+  maxTokens?: number;
+}
+
+/** Declarative provider registration; credentials stay in the host connection store. */
+export interface ExtensionModelProviderDefinition {
+  id: string;
+  name: string;
+  api: ExtensionModelProviderApi;
+  baseUrl: string;
+  models: readonly ExtensionModelDefinition[];
+  modelsUrl?: string;
+  /** Extension-owned connection whose secret is injected by the host. */
+  connection?: string;
+  /** Secret-field id containing the provider API key. Required with connection. */
+  apiKeySecret?: string;
+  /** Allow a provider with no credential, typically a local model server. */
+  allowKeyless?: boolean;
+}
+
+export interface ExtensionModelsAPI {
+  registerProvider(definition: ExtensionModelProviderDefinition): string;
+  unregisterProvider(providerId: string): void;
+  refresh(): Promise<void>;
+}
+
 export interface OverlayAPI {
   /** Show an HTML element as a full-screen overlay */
   show(el: HTMLElement): void;
@@ -203,6 +239,8 @@ export interface ExcelExtensionAPI {
   unregisterTool(name: string): void;
   /** Register/list/update connection requirements and status. */
   connections: ExtensionConnectionsAPI;
+  /** Register declarative model providers; the host owns credentials and transport. */
+  models: ExtensionModelsAPI;
   /** Agent access and steering APIs */
   readonly agent: ExtensionAgentAPI;
   /** LLM completion API via host mediation */
@@ -242,6 +280,9 @@ export interface CreateExtensionAPIOptions {
   markConnectionValidated?: (connectionId: string) => Promise<void>;
   markConnectionInvalid?: (connectionId: string, reason: string) => Promise<void>;
   markConnectionStatus?: (connectionId: string, status: ConnectionStatus, reason?: string) => Promise<void>;
+  registerModelProvider?: (definition: ExtensionModelProviderDefinition) => string;
+  unregisterModelProvider?: (providerId: string) => void;
+  refreshModelProviders?: () => Promise<void>;
   subscribeAgentEvents?: (handler: (ev: AgentEvent) => void) => () => void;
   llmComplete?: (request: LlmCompletionRequest) => Promise<LlmCompletionResult>;
   httpFetch?: (url: string, options?: HttpRequestOptions) => Promise<HttpResponse>;

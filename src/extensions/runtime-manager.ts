@@ -16,6 +16,7 @@ import {
   createExtensionAPI,
   loadExtension,
   type ExtensionCommand,
+  type ExtensionModelProviderDefinition,
   type HttpRequestOptions,
   type HttpResponse,
   type LlmCompletionRequest,
@@ -72,6 +73,10 @@ import {
 } from "./runtime-manager-helpers.js";
 import { buildRuntimeManagerActivationBridge } from "./runtime-manager-activation.js";
 import { getToolRequiredConnectionIds } from "../tools/connection-requirements.js";
+import type {
+  BrowserModelRuntime,
+  BrowserProviderRegistration,
+} from "../models/browser-model-runtime.js";
 
 type AnyAgentTool = AgentTool;
 
@@ -106,11 +111,46 @@ function assertToolExecuteFunction(tool: AnyAgentTool, entry: StoredExtensionEnt
   );
 }
 
+function qualifyExtensionProviderId(entryId: string, providerId: string): string {
+  const normalized = providerId.trim().toLowerCase();
+  if (!/^[a-z0-9][a-z0-9._-]*$/u.test(normalized)) {
+    throw new Error("Provider id may contain only letters, numbers, dots, underscores and hyphens.");
+  }
+
+  const ownerPrefix = `${entryId.toLowerCase()}.`;
+  return normalized.startsWith(ownerPrefix) ? normalized : `${ownerPrefix}${normalized}`;
+}
+
+function qualifyExtensionConnectionId(entryId: string, connectionId: string): string {
+  const normalized = connectionId.trim().toLowerCase();
+  if (normalized.length === 0) {
+    throw new Error("Connection id cannot be empty.");
+  }
+
+  const ownerPrefix = `${entryId.toLowerCase()}.`;
+  return normalized.startsWith(ownerPrefix) ? normalized : `${ownerPrefix}${normalized}`;
+}
+
+function endpointHostname(value: string, label: string): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new Error(`${label} must be a valid URL.`);
+  }
+
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new Error(`${label} must use http:// or https://.`);
+  }
+  return parsed.hostname.toLowerCase();
+}
+
 interface LoadedExtensionState {
   entryId: string;
   runtimeMode: ExtensionRuntimeMode;
   commandNames: Set<string>;
   toolNames: Set<string>;
+  modelProviderIds: Set<string>;
   eventUnsubscribers: Set<() => void>;
   handle: LoadedExtensionHandle | null;
   inlineBlobUrl: string | null;
@@ -133,14 +173,17 @@ export interface ExtensionRuntimeStatus {
   permissionsEnforced: boolean;
   commandNames: string[];
   toolNames: string[];
+  modelProviderIds: string[];
   lastError: string | null;
 }
 
 export interface ExtensionRuntimeManagerOptions {
   settings: ExtensionSettingsStore;
   connectionManager: ConnectionManager;
+  modelRuntime: BrowserModelRuntime;
   getActiveAgent: () => Agent | null;
   refreshRuntimeTools: () => Promise<void>;
+  refreshRuntimeModels: () => Promise<void>;
   reservedToolNames: ReadonlySet<string>;
   afterInjectAgentContext?: () => Promise<void> | void;
   loadExtensionFromSource?: typeof loadExtension;
@@ -151,8 +194,10 @@ export interface ExtensionRuntimeManagerOptions {
 export class ExtensionRuntimeManager {
   private readonly settings: ExtensionSettingsStore;
   private readonly connectionManager: ConnectionManager;
+  private readonly modelRuntime: BrowserModelRuntime;
   private readonly getActiveAgent: () => Agent | null;
   private readonly refreshRuntimeTools: () => Promise<void>;
+  private readonly refreshRuntimeModels: () => Promise<void>;
   private readonly reservedToolNames: ReadonlySet<string>;
   private readonly afterInjectAgentContext: (() => Promise<void> | void) | undefined;
   private readonly loadExtensionFromSource: typeof loadExtension;
@@ -173,8 +218,10 @@ export class ExtensionRuntimeManager {
   constructor(options: ExtensionRuntimeManagerOptions) {
     this.settings = options.settings;
     this.connectionManager = options.connectionManager;
+    this.modelRuntime = options.modelRuntime;
     this.getActiveAgent = options.getActiveAgent;
     this.refreshRuntimeTools = options.refreshRuntimeTools;
+    this.refreshRuntimeModels = options.refreshRuntimeModels;
     this.reservedToolNames = options.reservedToolNames;
     this.afterInjectAgentContext = options.afterInjectAgentContext;
     this.loadExtensionFromSource = options.loadExtensionFromSource ?? loadExtension;
@@ -220,6 +267,7 @@ export class ExtensionRuntimeManager {
         permissionsEnforced,
         commandNames: state ? Array.from(state.commandNames).sort() : [],
         toolNames: state ? Array.from(state.toolNames).sort() : [],
+        modelProviderIds: state ? Array.from(state.modelProviderIds).sort() : [],
         lastError: this.lastErrors.get(entry.id) ?? null,
       };
     });
@@ -410,6 +458,7 @@ export class ExtensionRuntimeManager {
     }
 
     const model = resolveModelForCompletion({
+      models: this.modelRuntime.models,
       fallbackModel: agent.state.model,
       ...(request.model !== undefined ? { requestedModel: request.model } : {}),
     });
@@ -597,6 +646,7 @@ export class ExtensionRuntimeManager {
       runtimeMode: this.resolveRuntimeMode(entry),
       commandNames: new Set<string>(),
       toolNames: new Set<string>(),
+      modelProviderIds: new Set<string>(),
       eventUnsubscribers: new Set<() => void>(),
       handle: null,
       inlineBlobUrl: null,
@@ -604,7 +654,9 @@ export class ExtensionRuntimeManager {
 
     let activationPhase = true;
     let toolsChangedDuringActivation = false;
+    let modelsChangedDuringActivation = false;
     const pendingToolConnectionChecks = new Map<string, readonly string[]>();
+    const pendingModelProviderChecks = new Map<string, ExtensionModelProviderDefinition>();
 
     const assertToolConnectionOwnership = (
       toolName: string,
@@ -623,6 +675,49 @@ export class ExtensionRuntimeManager {
     const validatePendingToolConnectionChecks = (): void => {
       for (const [toolName, requiredConnectionIds] of pendingToolConnectionChecks.entries()) {
         assertToolConnectionOwnership(toolName, requiredConnectionIds);
+      }
+    };
+
+    const assertModelProviderConnection = (definition: ExtensionModelProviderDefinition): void => {
+      const connectionId = definition.connection;
+      if (!connectionId) {
+        if (definition.allowKeyless !== true) {
+          throw new Error(`Model provider "${definition.id}" requires a connection or allowKeyless: true.`);
+        }
+        return;
+      }
+
+      const apiKeySecret = definition.apiKeySecret?.trim();
+      if (!apiKeySecret) {
+        throw new Error(`Model provider "${definition.id}" requires apiKeySecret when connection is set.`);
+      }
+
+      this.connectionManager.assertConnectionOwnedBy(entry.id, connectionId);
+      const connection = this.connectionManager.getDefinition(connectionId);
+      if (!connection) {
+        throw new Error(`Model provider "${definition.id}" references an unknown connection.`);
+      }
+      if (!connection.secretFields.some((field) => field.id === apiKeySecret)) {
+        throw new Error(`Model provider "${definition.id}" references unknown secret field "${apiKeySecret}".`);
+      }
+
+      const allowedHosts = connection.httpAuth?.allowedHosts.map((host) => host.toLowerCase()) ?? [];
+      const endpointHosts = [endpointHostname(definition.baseUrl, "Provider baseUrl")];
+      if (definition.modelsUrl) {
+        endpointHosts.push(endpointHostname(definition.modelsUrl, "Provider modelsUrl"));
+      }
+      for (const host of endpointHosts) {
+        if (!allowedHosts.includes(host)) {
+          throw new Error(
+            `Model provider "${definition.id}" host "${host}" is not allowed by connection "${connectionId}".`,
+          );
+        }
+      }
+    };
+
+    const validatePendingModelProviderChecks = (): void => {
+      for (const definition of pendingModelProviderChecks.values()) {
+        assertModelProviderConnection(definition);
       }
     };
 
@@ -732,6 +827,80 @@ export class ExtensionRuntimeManager {
       }
     };
 
+    const refreshModelsForDynamicChange = (): void => {
+      void this.refreshRuntimeModels().catch((error: DynamicValue) => {
+        console.warn(`[pi] Failed to refresh models after extension provider update: ${getRuntimeManagerErrorMessage(error)}`);
+      });
+    };
+
+    const registerModelProvider = (rawDefinition: ExtensionModelProviderDefinition): string => {
+      const providerId = qualifyExtensionProviderId(entry.id, rawDefinition.id);
+      if (state.modelProviderIds.has(providerId)) {
+        throw new Error(`Model provider "${providerId}" is registered multiple times by this extension.`);
+      }
+
+      const connection = rawDefinition.connection
+        ? qualifyExtensionConnectionId(entry.id, rawDefinition.connection)
+        : undefined;
+      const definition: ExtensionModelProviderDefinition = {
+        ...rawDefinition,
+        id: providerId,
+        ...(connection !== undefined ? { connection } : {}),
+      };
+
+      if (activationPhase) {
+        pendingModelProviderChecks.set(providerId, definition);
+      } else {
+        assertModelProviderConnection(definition);
+      }
+
+      const registration: BrowserProviderRegistration = {
+        id: providerId,
+        name: definition.name,
+        api: definition.api,
+        baseUrl: definition.baseUrl,
+        models: definition.models,
+        resolveApiKey: async () => {
+          if (!connection || !definition.apiKeySecret) return undefined;
+          const snapshot = await this.connectionManager.getSnapshot(connection);
+          if (!snapshot || snapshot.status !== "connected") return undefined;
+          const secrets = await this.connectionManager.getSecretsForOwner(entry.id, connection);
+          return secrets?.[definition.apiKeySecret];
+        },
+        ...(definition.modelsUrl !== undefined ? { modelsUrl: definition.modelsUrl } : {}),
+        ...(definition.allowKeyless !== undefined ? { allowKeyless: definition.allowKeyless } : {}),
+      };
+
+      this.modelRuntime.registerExtensionProvider(entry.id, registration);
+      state.modelProviderIds.add(providerId);
+
+      if (activationPhase) {
+        modelsChangedDuringActivation = true;
+      } else {
+        refreshModelsForDynamicChange();
+      }
+      return providerId;
+    };
+
+    const unregisterModelProvider = (rawProviderId: string): void => {
+      const providerId = qualifyExtensionProviderId(entry.id, rawProviderId);
+      if (!state.modelProviderIds.has(providerId)) {
+        throw new Error(`Model provider "${providerId}" is not registered by this extension.`);
+      }
+
+      state.modelProviderIds.delete(providerId);
+      pendingModelProviderChecks.delete(providerId);
+      void this.modelRuntime.unregisterExtensionProvider(entry.id, providerId)
+        .then(() => {
+          if (!activationPhase) refreshModelsForDynamicChange();
+        })
+        .catch((error: DynamicValue) => {
+          console.warn(`[pi] Failed to unregister extension model provider: ${getRuntimeManagerErrorMessage(error)}`);
+        });
+    };
+
+    const refreshModelProviders = (): Promise<void> => this.refreshRuntimeModels();
+
     const subscribeAgentEvents = (handler: (ev: AgentEvent) => void): (() => void) => {
       const unsubscribe = this.getRequiredActiveAgent().subscribe(handler);
       state.eventUnsubscribers.add(unsubscribe);
@@ -776,6 +945,9 @@ export class ExtensionRuntimeManager {
       triggerExtensionDownload: (filename, content, mimeType) => {
         this.triggerExtensionDownload(filename, content, mimeType);
       },
+      registerModelProvider,
+      unregisterModelProvider,
+      refreshModelProviders,
       isCapabilityEnabled,
       formatCapabilityError,
       showToastMessage: this.showToastMessage,
@@ -826,13 +998,18 @@ export class ExtensionRuntimeManager {
       }
 
       validatePendingToolConnectionChecks();
+      validatePendingModelProviderChecks();
       pendingToolConnectionChecks.clear();
+      pendingModelProviderChecks.clear();
 
       activationPhase = false;
       this.activeStates.set(entry.id, state);
 
       if (toolsChangedDuringActivation) {
         await this.refreshRuntimeTools();
+      }
+      if (modelsChangedDuringActivation) {
+        await this.refreshRuntimeModels();
       }
     } catch (error) {
       try {
@@ -908,6 +1085,17 @@ export class ExtensionRuntimeManager {
     }
     state.toolNames.clear();
 
+    let modelsChanged = false;
+    for (const providerId of state.modelProviderIds) {
+      try {
+        await this.modelRuntime.unregisterExtensionProvider(state.entryId, providerId);
+        modelsChanged = true;
+      } catch (error) {
+        failures.push(getRuntimeManagerErrorMessage(error));
+      }
+    }
+    state.modelProviderIds.clear();
+
     try {
       this.connectionManager.unregisterDefinitionsByOwner(state.entryId);
     } catch (error) {
@@ -922,6 +1110,14 @@ export class ExtensionRuntimeManager {
     if (toolsChanged) {
       try {
         await this.refreshRuntimeTools();
+      } catch (error) {
+        failures.push(getRuntimeManagerErrorMessage(error));
+      }
+    }
+
+    if (modelsChanged) {
+      try {
+        await this.refreshRuntimeModels();
       } catch (error) {
         failures.push(getRuntimeManagerErrorMessage(error));
       }

@@ -46,6 +46,7 @@ import type {
   ExcelExtensionAPI,
   ExtensionCommand,
   ExtensionConnectionDefinition,
+  ExtensionModelProviderDefinition,
   ExtensionToolDefinition,
   HttpRequestOptions,
   HttpResponse,
@@ -68,6 +69,10 @@ export type {
   ExtensionCommand,
   ExtensionConnectionDefinition,
   ExtensionConnectionsAPI,
+  ExtensionModelDefinition,
+  ExtensionModelProviderApi,
+  ExtensionModelProviderDefinition,
+  ExtensionModelsAPI,
   ExtensionToolDefinition,
   HttpAPI,
   HttpRequestOptions,
@@ -110,6 +115,17 @@ function normalizeConnectionIdentifier(value: string): string {
   return trimmed;
 }
 
+function normalizeProviderIdentifier(value: string): string {
+  const normalized = value.trim().toLowerCase();
+  if (normalized.length === 0) {
+    throw new Error("Provider id cannot be empty");
+  }
+  if (!/^[a-z0-9][a-z0-9._-]*$/u.test(normalized)) {
+    throw new Error("Provider id may contain only letters, numbers, dots, underscores and hyphens.");
+  }
+  return normalized;
+}
+
 function qualifyOwnedConnectionId(ownerId: string, connectionId: string): string {
   const normalizedConnectionId = normalizeConnectionIdentifier(connectionId);
   const ownerPrefix = `${ownerId.toLowerCase()}.`;
@@ -119,6 +135,28 @@ function qualifyOwnedConnectionId(ownerId: string, connectionId: string): string
   }
 
   return `${ownerPrefix}${normalizedConnectionId}`;
+}
+
+function qualifyOwnedProviderId(ownerId: string, providerId: string): string {
+  const normalizedProviderId = normalizeProviderIdentifier(providerId);
+  const ownerPrefix = `${ownerId.toLowerCase()}.`;
+  return normalizedProviderId.startsWith(ownerPrefix)
+    ? normalizedProviderId
+    : `${ownerPrefix}${normalizedProviderId}`;
+}
+
+function normalizeModelProviderDefinitionForOwner(
+  ownerId: string,
+  definition: ExtensionModelProviderDefinition,
+): ExtensionModelProviderDefinition {
+  const connection = definition.connection?.trim();
+  return {
+    ...definition,
+    id: qualifyOwnedProviderId(ownerId, definition.id),
+    ...(connection
+      ? { connection: qualifyOwnedConnectionId(ownerId, connection) }
+      : {}),
+  };
 }
 
 function normalizeToolConnectionRequirements(
@@ -282,6 +320,9 @@ export function createExtensionAPI(options: CreateExtensionAPIOptions): ExcelExt
   const markConnectionValidated = options.markConnectionValidated;
   const markConnectionInvalid = options.markConnectionInvalid;
   const markConnectionStatus = options.markConnectionStatus;
+  const registerModelProvider = options.registerModelProvider;
+  const unregisterModelProvider = options.unregisterModelProvider;
+  const refreshModelProviders = options.refreshModelProviders;
   const subscribeAgentEvents = options.subscribeAgentEvents
     ?? ((handler: (ev: AgentEvent) => void) => options.getAgent().subscribe(handler));
   const llmComplete = options.llmComplete;
@@ -503,6 +544,35 @@ export function createExtensionAPI(options: CreateExtensionAPIOptions): ExcelExt
         }
 
         throw new Error("Extension host does not support setting connection status to error.");
+      },
+    },
+
+    models: {
+      registerProvider(definition: ExtensionModelProviderDefinition): string {
+        assertCapability("models.register");
+        if (!registerModelProvider) {
+          throw new Error("Extension host does not support models.registerProvider()");
+        }
+
+        const normalized = normalizeModelProviderDefinitionForOwner(connectionOwnerId, definition);
+        return registerModelProvider(normalized);
+      },
+
+      unregisterProvider(providerId: string): void {
+        assertCapability("models.register");
+        if (!unregisterModelProvider) {
+          throw new Error("Extension host does not support models.unregisterProvider()");
+        }
+
+        unregisterModelProvider(qualifyOwnedProviderId(connectionOwnerId, providerId));
+      },
+
+      async refresh(): Promise<void> {
+        assertCapability("models.register");
+        if (!refreshModelProviders) {
+          throw new Error("Extension host does not support models.refresh()");
+        }
+        await refreshModelProviders();
       },
     },
 

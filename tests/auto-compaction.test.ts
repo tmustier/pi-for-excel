@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { Agent, type AgentMessage } from "@earendil-works/pi-agent-core";
-import type { Api, Model, ToolResultMessage } from "@earendil-works/pi-ai/compat";
+import type { Api, Model, ToolResultMessage } from "@earendil-works/pi-ai";
 
 import {
   maybeAutoCompactBeforeContinuation,

@@ -1,22 +1,26 @@
 # Model / dependency update playbook
 
-**Last verified:** 2026-07-10
+**Last verified:** 2026-07-16
 
-This repo hardcodes a small set of "featured" and "preferred" model patterns (for sorting + default selection). The model IDs and metadata come from Pi’s model registry (`@earendil-works/pi-ai`) and will drift as new models ship (e.g. `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, `claude-fable-5`, `claude-opus-4-8`, `gemini-3.1-pro-preview`).
+This repo hardcodes a small set of "featured" and "preferred" model patterns for sorting and default selection. Static built-in models come from Pi AI, while custom and extension providers can add cached, dynamically discovered catalogues at runtime.
 
 This doc describes how to update:
 - the **Pi dependency versions** we ship (`@earendil-works/pi-ai`, `@earendil-works/pi-agent-core`)
 - the **model ordering/default-selection behavior** in the add-in (`src/models/model-ordering.ts`, `src/models/featured-models.ts`, `src/taskpane/default-model.ts`)
 - the **thinking-level UI** that reflects registry capabilities (`src/models/thinking-levels.ts`, `src/taskpane/thinking-display.ts`)
+- the browser-native runtime and dynamic catalogue path (`src/models/browser-model-runtime.ts`, `src/storage/local/model-catalogs-store.ts`)
 
-## Source of truth
+## Sources of truth
 
-- **Built-in model IDs:** `node_modules/@earendil-works/pi-ai/dist/models.generated.js`
-  - This file is auto-generated upstream and is what `getModel(provider, id)` resolves against.
-- Don’t rely on Pi’s `docs/models.md` for built-in IDs — that doc is about **custom models** via `~/.pi/agent/models.json`.
-- Cross-check the installed native Pi package and changelog when the registry changes. Never infer aliases or metadata from marketing names.
+- **Built-in model IDs:** `node_modules/@earendil-works/pi-ai/dist/models.generated.js`, exposed through `builtinProviders()`.
+- **Runtime lookup and streaming:** the taskpane-owned `BrowserModelRuntime`, backed by Pi AI's `createModels()` collection.
+- **Dynamic catalogue cache:** IndexedDB store `model-catalogs`, accessed through `ModelCatalogsStore`; restored entries are rebound to the provider's current API/base URL before use.
+- **Custom gateways:** baseline models remain in `CustomProvidersStore`; `/models` discovery overlays them without deleting the configured fallback model.
+- **Extension providers:** `api.models.registerProvider()` declarations are runtime-owned and unload with their extension.
 
-### Current GPT-5.6 registry snapshot (`pi-ai` 0.80.6)
+Do not use Pi coding-agent's Node/file `ModelRuntime` directly in the Office WebView. Pi for Excel uses the same Pi AI provider primitives with browser storage, OAuth and proxy policy. Cross-check the installed Pi package and changelog when the generated registry changes. Never infer aliases or metadata from marketing names.
+
+### Current GPT-5.6 registry snapshot (`pi-ai` 0.80.8)
 
 Upstream exposes exactly three IDs on both `openai` and `openai-codex`; there is deliberately no bare `gpt-5.6` alias:
 
@@ -75,7 +79,7 @@ npm view @earendil-works/pi-agent-core versions --json
 
 **Dependency policy:**
 
-- `@earendil-works/pi-ai` and `@earendil-works/pi-agent-core` move **together** to the newest common version.
+- `@earendil-works/pi-ai` and `@earendil-works/pi-agent-core` move **together** to the newest common version. The browser runtime migration was verified on `0.80.8`.
 - Both must be **exact-pinned** in `package.json`.
 - The lockfile must resolve **exactly one** copy of `pi-ai`. Two copies = two model registries = the model selector and the app disagree about available models.
 - `scripts/check-pi-deps-lockstep.mjs` (run via `npm run check:pi-lockstep`) enforces all of this.
@@ -90,20 +94,21 @@ npm install @earendil-works/pi-ai@<version> @earendil-works/pi-agent-core@<versi
 
 ### 4) Verify the new model IDs exist in the registry
 
-Search the local registry:
+Search the generated catalogue and query the runtime-facing built-in provider collection:
 
 ```bash
 rg -n "gpt-5\\.6-(sol|terra|luna)" node_modules/@earendil-works/pi-ai/dist/models.generated.js -S
 rg -n "claude-fable-5"             node_modules/@earendil-works/pi-ai/dist/models.generated.js -S
 rg -n "claude-opus-4-8"  node_modules/@earendil-works/pi-ai/dist/models.generated.js -S
 rg -n "gemini-3\\.1-pro-preview" node_modules/@earendil-works/pi-ai/dist/models.generated.js -S
+node --input-type=module -e 'import { builtinModels } from "@earendil-works/pi-ai/providers/all"; const m=builtinModels(); console.log(m.getModel("openai", "gpt-5.6-sol"))'
 npm run test:models
 ```
 
 If an ID doesn’t appear there, **don’t** add it to the add-in yet—either:
 - bump `@earendil-works/pi-ai` further, or
 - use an older/fallback ID, or
-- define a custom model via `~/.pi/agent/models.json`.
+- configure a custom gateway baseline model in Pi for Excel.
 
 ### 5) Update model ordering + default selection logic (avoid hardcoding exact IDs)
 
@@ -148,7 +153,7 @@ We intentionally avoid pinning exact versioned IDs now. Instead we:
 - Pick the default model via provider-aware rules:
   - Anthropic is a small special-case: latest Opus by default while Fable is in the registry but unavailable; Sonnet and Fable remain fallbacks if Opus is absent.
   - OpenAI (`openai` + `openai-codex`) prefers the newest general GPT-5 when it is at least as new as Codex, with Codex as fallback; current GPT-5.6 default is Sol
-  - otherwise `DEFAULT_MODEL_RULES` + `pickLatestMatchingModel()` (uses `getModels(provider)` to find the newest available ID)
+  - otherwise `DEFAULT_MODEL_RULES` + `pickLatestMatchingModel()` (uses the injected `Models` runtime to find the newest available ID)
 
 - Populate thinking controls from `getSupportedThinkingLevels()` instead of provider-specific hardcoded lists. This keeps model-level maps authoritative and ensures `xhigh` and `max` remain distinct.
 
@@ -199,10 +204,11 @@ npm run sideload
 
 #### “I updated models but they don’t show up” checklist
 
-1) **Provider filter:** the model picker only shows models for **connected providers** (saved API key/OAuth). Make sure the provider is connected.
-2) **Excel caching:** quit Excel completely (Cmd+Q) and reopen.
-3) **Hot reload note:** taskpane JS/CSS is served from Vite; edits to model-selection files (`src/models/model-ordering.ts`, `src/models/featured-models.ts`, `src/taskpane/default-model.ts`) should apply via HMR without needing to re-sideload, as long as Excel is pointed at the same running dev server.
-4) **Vite optimized deps:** after dependency bumps, clear and restart:
+1) **Provider filter:** the model picker only shows models for connected providers (saved API key/OAuth, keyless configured custom providers, or connected extension providers).
+2) **Dynamic catalogue:** custom OpenAI-compatible gateways request `<baseUrl>/models` in the background. The configured model remains as a baseline if discovery is unsupported. Check the local proxy when CORS blocks discovery.
+3) **Excel caching:** quit Excel completely (Cmd+Q) and reopen.
+4) **Hot reload note:** taskpane JS/CSS is served from Vite; edits to model-selection files (`src/models/model-ordering.ts`, `src/models/featured-models.ts`, `src/taskpane/default-model.ts`) should apply via HMR without needing to re-sideload, as long as Excel is pointed at the same running dev server.
+5) **Vite optimized deps:** after dependency bumps, clear and restart:
 
 ```bash
 rm -rf node_modules/.vite

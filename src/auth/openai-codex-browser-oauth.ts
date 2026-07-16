@@ -12,8 +12,9 @@
 import type {
   OAuthCredentials,
   OAuthLoginCallbacks,
-  OAuthProviderInterface,
-} from "@earendil-works/pi-ai/compat";
+} from "@earendil-works/pi-ai";
+
+import type { BrowserOAuthProvider } from "./browser-oauth-types.js";
 import { generatePKCE } from "./pkce.js";
 
 const CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann";
@@ -383,7 +384,7 @@ export async function refreshOpenAICodexBrowserToken(
   return buildOpenAICodexCredentials(tokens, accountId);
 }
 
-export const openaiCodexBrowserOAuthProvider: OAuthProviderInterface = {
+export const openaiCodexBrowserOAuthProvider: BrowserOAuthProvider = {
   id: "openai-codex",
   name: "OpenAI (ChatGPT Plus/Pro)",
 

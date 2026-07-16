@@ -5,7 +5,7 @@
  * can read flags without awaiting IndexedDB.
  */
 
-import type { Usage } from "@earendil-works/pi-ai/compat";
+import type { Usage } from "@earendil-works/pi-ai";
 
 const STORAGE_KEY = "pi-excel.debug";
 
