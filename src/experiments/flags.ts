@@ -114,12 +114,14 @@ function safeGetItem(key: string): string | null {
   }
 }
 
-function safeSetItem(key: string, value: string): void {
-  try {
-    if (typeof localStorage === "undefined") return;
-    localStorage.setItem(key, value);
-  } catch {
-    // ignore (private mode / disabled storage)
+function setStoredItem(key: string, value: string): void {
+  if (typeof localStorage === "undefined") {
+    throw new Error("Local settings storage is unavailable.");
+  }
+
+  localStorage.setItem(key, value);
+  if (localStorage.getItem(key) !== value) {
+    throw new Error("Local settings storage did not retain the change.");
   }
 }
 
@@ -176,7 +178,7 @@ export function setExperimentalFeatureEnabled(
   const feature = getFeatureDefinition(featureId);
   const previous = isExperimentalFeatureEnabled(featureId);
 
-  safeSetItem(feature.storageKey, formatStoredBoolean(enabled));
+  setStoredItem(feature.storageKey, formatStoredBoolean(enabled));
 
   if (previous === enabled) return;
 

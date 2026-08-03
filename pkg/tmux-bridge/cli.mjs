@@ -216,23 +216,12 @@ function applyDefaultPort(env) {
   }
 }
 
-function applyDefaultMode(env) {
-  const configuredMode = typeof env.TMUX_BRIDGE_MODE === "string"
-    ? env.TMUX_BRIDGE_MODE.trim()
-    : "";
-
-  if (configuredMode.length === 0) {
-    env.TMUX_BRIDGE_MODE = "tmux";
-  }
-}
-
 function startBridge(bridgeArgs) {
   fs.mkdirSync(certDir, { recursive: true });
   console.log(`[${PACKAGE_TAG}] Using certificate directory: ${certDir}`);
 
   const childEnv = { ...process.env };
   applyDefaultPort(childEnv);
-  applyDefaultMode(childEnv);
 
   if (typeof childEnv.PI_FOR_EXCEL_CERT_DIR !== "string" || childEnv.PI_FOR_EXCEL_CERT_DIR.trim().length === 0) {
     childEnv.PI_FOR_EXCEL_CERT_DIR = certDir;

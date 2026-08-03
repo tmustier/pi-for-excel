@@ -13,9 +13,9 @@ This command:
 1. Ensures `mkcert` exists (installs via Homebrew on macOS if missing)
 2. Creates certificates in `~/.pi-for-excel/certs/` when needed
 3. Starts the bridge at `https://localhost:3341`
-4. Runs in real `tmux` mode by default
+4. Runs a real `tmux` backend
 
-Real mode requires `tmux` to be installed and available on `PATH`.
+`tmux` must be installed and available on `PATH`; otherwise the bridge exits with an install hint.
 
 Optional assisted install (macOS/Homebrew):
 
@@ -24,12 +24,6 @@ npx pi-for-excel-tmux-bridge --install-missing
 ```
 
 This installs missing `tmux` before starting the bridge.
-
-To force safe simulated mode:
-
-```bash
-TMUX_BRIDGE_MODE=stub npx pi-for-excel-tmux-bridge
-```
 
 Then in Pi for Excel:
 

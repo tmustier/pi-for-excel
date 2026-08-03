@@ -222,33 +222,29 @@ export class WorkbookChangeAuditLog {
 
   private async ensureLoaded(): Promise<void> {
     if (this.loaded) return;
-    this.loaded = true;
 
     const settings = await this.dependencies.getSettingsStore();
-    if (!settings) return;
-
-    try {
-      const payload = await settings.get<DynamicValue>(AUDIT_SETTING_KEY);
-      this.entries = parsePersistedEntries(payload);
-    } catch {
-      this.entries = [];
+    if (!settings) {
+      throw new Error("Workbook audit storage is unavailable.");
     }
+
+    const payload = await settings.get<DynamicValue>(AUDIT_SETTING_KEY);
+    this.entries = parsePersistedEntries(payload);
+    this.loaded = true;
   }
 
-  private async persist(): Promise<void> {
+  private async persist(entries: readonly WorkbookChangeAuditEntry[]): Promise<void> {
     const settings = await this.dependencies.getSettingsStore();
-    if (!settings) return;
+    if (!settings) {
+      throw new Error("Workbook audit storage is unavailable.");
+    }
 
     const payload: PersistedWorkbookChangeAuditPayload = {
       version: 1,
-      entries: this.entries,
+      entries: [...entries],
     };
 
-    try {
-      await settings.set(AUDIT_SETTING_KEY, payload);
-    } catch {
-      // ignore persistence failures
-    }
+    await settings.set(AUDIT_SETTING_KEY, payload);
   }
 
   async append(args: AppendWorkbookChangeAuditEntryArgs): Promise<void> {
@@ -297,8 +293,9 @@ export class WorkbookChangeAuditLog {
     if (workbookId !== undefined) entry.workbookId = workbookId;
     if (workbookLabel !== undefined) entry.workbookLabel = workbookLabel;
 
-    this.entries = [entry, ...this.entries].slice(0, MAX_AUDIT_ENTRIES);
-    await this.persist();
+    const nextEntries = [entry, ...this.entries].slice(0, MAX_AUDIT_ENTRIES);
+    await this.persist(nextEntries);
+    this.entries = nextEntries;
   }
 
   async list(limit = 50): Promise<WorkbookChangeAuditEntry[]> {
@@ -308,16 +305,14 @@ export class WorkbookChangeAuditLog {
 
   async clear(): Promise<void> {
     await this.ensureLoaded();
-    this.entries = [];
 
     const settings = await this.dependencies.getSettingsStore();
-    if (!settings) return;
-
-    try {
-      await settings.delete(AUDIT_SETTING_KEY);
-    } catch {
-      // ignore persistence failures
+    if (!settings) {
+      throw new Error("Workbook audit storage is unavailable.");
     }
+
+    await settings.delete(AUDIT_SETTING_KEY);
+    this.entries = [];
   }
 }
 

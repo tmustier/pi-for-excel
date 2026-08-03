@@ -298,23 +298,12 @@ function applyDefaultPort(env) {
   }
 }
 
-function applyDefaultMode(env) {
-  const configuredMode = typeof env.PYTHON_BRIDGE_MODE === "string"
-    ? env.PYTHON_BRIDGE_MODE.trim()
-    : "";
-
-  if (configuredMode.length === 0) {
-    env.PYTHON_BRIDGE_MODE = "real";
-  }
-}
-
 function startBridge(bridgeArgs) {
   fs.mkdirSync(certDir, { recursive: true });
   console.log(`[${PACKAGE_TAG}] Using certificate directory: ${certDir}`);
 
   const childEnv = { ...process.env };
   applyDefaultPort(childEnv);
-  applyDefaultMode(childEnv);
   applyLibreOfficeBinaryOverride(childEnv);
 
   if (typeof childEnv.PI_FOR_EXCEL_CERT_DIR !== "string" || childEnv.PI_FOR_EXCEL_CERT_DIR.trim().length === 0) {

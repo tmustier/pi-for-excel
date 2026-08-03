@@ -91,6 +91,7 @@ function parsePythonHealth(payload: DynamicValue): PythonServiceEntry {
 
   if (!isToolsBridgeHealthPayloadShape(payload)) return base;
   if (payload.ok !== true) return base;
+  if (payload.mode !== "real" && payload.backend !== "real") return base;
 
   // Extract python version
   const python = isToolsBridgeHealthPayloadShape(payload.python) ? payload.python : undefined;
@@ -134,15 +135,7 @@ function parseTmuxHealth(payload: DynamicValue): TmuxServiceEntry {
   const tmuxVersion = typeof payload.tmuxVersion === "string" ? payload.tmuxVersion : undefined;
   const tmuxSessions = typeof payload.sessions === "number" ? payload.sessions : undefined;
 
-  // Stub mode: bridge is running but tmux is not installed
-  if (payload.mode === "stub" || payload.backend === "stub") {
-    return {
-      ...base,
-      status: "partial",
-      ...(tmuxVersion !== undefined ? { tmuxVersion } : {}),
-      ...(tmuxSessions !== undefined ? { tmuxSessions } : {}),
-    };
-  }
+  if (payload.mode !== "tmux" && payload.backend !== "tmux") return base;
 
   return {
     ...base,

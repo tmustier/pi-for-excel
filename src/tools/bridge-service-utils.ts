@@ -3,7 +3,7 @@ import { validateOfficeProxyUrl } from "../auth/proxy-validation.js";
 import { joinBridgeUrl } from "./bridge-http-utils.js";
 
 const BRIDGE_HEALTH_PATH = "/health";
-const BRIDGE_HEALTH_TIMEOUT_MS = 900;
+export const BRIDGE_HEALTH_TIMEOUT_MS = 900;
 
 async function fetchBridgeHealthResponse(bridgeUrl: string): Promise<Response | null> {
   const controller = new AbortController();
@@ -24,9 +24,8 @@ async function fetchBridgeHealthResponse(bridgeUrl: string): Promise<Response | 
   }
 }
 
-export async function probeBridgeHealth(bridgeUrl: string): Promise<boolean> {
-  const response = await fetchBridgeHealthResponse(bridgeUrl);
-  return response?.ok === true;
+function isBridgeHealthPayload(value: DynamicValue): value is DynamicObject {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 export async function fetchBridgeHealthJson(bridgeUrl: string): Promise<DynamicValue> {
@@ -40,6 +39,26 @@ export async function fetchBridgeHealthJson(bridgeUrl: string): Promise<DynamicV
   } catch {
     return null;
   }
+}
+
+export async function probeTmuxBridgeHealth(bridgeUrl: string): Promise<boolean> {
+  const payload = await fetchBridgeHealthJson(bridgeUrl);
+  if (!isBridgeHealthPayload(payload) || payload.ok !== true) return false;
+  return payload.mode === "tmux" || payload.backend === "tmux";
+}
+
+export type PythonBridgeCapability = "python" | "libreoffice";
+
+export async function probePythonBridgeHealth(
+  bridgeUrl: string,
+  capability: PythonBridgeCapability = "python",
+): Promise<boolean> {
+  const payload = await fetchBridgeHealthJson(bridgeUrl);
+  if (!isBridgeHealthPayload(payload) || payload.ok !== true) return false;
+  if (payload.mode !== "real" && payload.backend !== "real") return false;
+
+  const capabilityHealth = payload[capability];
+  return isBridgeHealthPayload(capabilityHealth) && capabilityHealth.available === true;
 }
 
 export async function getBridgeSetting(settingKey: string): Promise<string | undefined> {
@@ -64,7 +83,7 @@ export async function setBridgeSetting(settingKey: string, value: string): Promi
     const storage = storageModule.getAppStorage();
     await storage.settings.set(settingKey, value);
   } catch {
-    // ignore (approval prompt will continue to appear if persistence is unavailable)
+    // Approval applies to this execution even if the optional cache cannot persist.
   }
 }
 

@@ -231,18 +231,11 @@ function formatPythonServiceLine(service: LocalServiceEntry & { name: "python" }
 
 function formatTmuxServiceLine(service: LocalServiceEntry & { name: "tmux" }): string {
   const label = service.displayName;
-  if (service.status === "not_running") {
+  if (service.status !== "running") {
     return (
       `- **${label}:** not running. If a task would benefit from running shell commands locally ` +
       `(git, build tools, file management), explain what terminal access would enable and offer to help set it up — ` +
       `read skill "${service.skillName}" for instructions.`
-    );
-  }
-
-  if (service.status === "partial") {
-    return (
-      `- **${label}:** bridge running but tmux is not installed. ` +
-      `Shell command execution requires tmux — read skill "${service.skillName}" for install instructions.`
     );
   }
 

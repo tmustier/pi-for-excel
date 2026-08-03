@@ -143,6 +143,51 @@ void test("restore applies checkpoint values and creates inverse checkpoint", as
   assert.equal(inverse?.toolName, "restore_snapshot");
   assert.equal(inverse?.restoredFromSnapshotId, appended?.id);
 });
+void test("restore reports success with rollback unavailable when inverse persistence fails", async () => {
+  const persisted = createInMemorySettingsStore();
+  let failWrites = false;
+  const settingsStore = {
+    get: <T>(key: string): Promise<T | null> => persisted.get<T>(key),
+    set: (key: string, value: DynamicValue): Promise<void> => failWrites
+      ? Promise.reject(new Error("storage quota exceeded"))
+      : persisted.set(key, value),
+  };
+  const workbookContext: WorkbookContext = {
+    workbookId: "url_sha256:restore-persistence",
+    workbookName: "Restore.xlsx",
+    source: "document.url",
+  };
+  let applyCount = 0;
+
+  const log = new WorkbookRecoveryLog({
+    getSettingsStore: () => Promise.resolve(settingsStore),
+    getWorkbookContext: () => Promise.resolve(workbookContext),
+    applySnapshot: () => {
+      applyCount += 1;
+      return Promise.resolve({ values: [[42]], formulas: [[42]] });
+    },
+  });
+
+  const appended = await log.append({
+    toolName: "write_cells",
+    toolCallId: "call-restore-persistence",
+    address: "Sheet1!A1",
+    changedCount: 1,
+    beforeValues: [[10]],
+    beforeFormulas: [[10]],
+  });
+  assert.ok(appended);
+
+  failWrites = true;
+  const restored = await log.restore(appended.id);
+
+  assert.equal(applyCount, 1);
+  assert.equal(restored.restoredSnapshotId, appended.id);
+  assert.equal(restored.inverseSnapshotId, null);
+  assert.match(restored.inverseSnapshotError ?? "", /storage quota exceeded/u);
+  assert.equal((await log.listForCurrentWorkbook(10)).length, 1);
+});
+
 void test("restore applies comment-thread checkpoints and creates inverse checkpoint", async () => {
   const settingsStore = createInMemorySettingsStore();
 

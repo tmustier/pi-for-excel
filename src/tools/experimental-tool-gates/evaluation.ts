@@ -1,9 +1,11 @@
 import {
   getBridgeSetting,
-  probeBridgeHealth,
+  probePythonBridgeHealth,
+  probeTmuxBridgeHealth,
   resolveValidatedBridgeUrl,
   setBridgeSetting,
   validateBridgeUrl,
+  type PythonBridgeCapability,
 } from "../bridge-service-utils.js";
 
 import {
@@ -38,7 +40,6 @@ export async function defaultSetApprovedPythonBridgeUrl(bridgeUrl: string): Prom
 
 const defaultValidateBridgeUrl = validateBridgeUrl;
 
-const defaultProbeBridge = probeBridgeHealth;
 
 export async function evaluateTmuxBridgeGate(
   dependencies: TmuxBridgeGateDependencies = {},
@@ -62,7 +63,7 @@ export async function evaluateTmuxBridgeGate(
     };
   }
 
-  const probeTmuxBridge = dependencies.probeTmuxBridge ?? defaultProbeBridge;
+  const probeTmuxBridge = dependencies.probeTmuxBridge ?? probeTmuxBridgeHealth;
   const reachable = await probeTmuxBridge(bridgeUrl);
   if (!reachable) {
     return {
@@ -87,6 +88,7 @@ export async function evaluateTmuxBridgeGate(
  */
 export async function evaluatePythonBridgeGate(
   dependencies: PythonBridgeGateDependencies = {},
+  requiredCapability: PythonBridgeCapability = "python",
 ): Promise<PythonBridgeGateResult> {
   const getBridgeUrl = dependencies.getPythonBridgeUrl ?? defaultGetPythonBridgeUrl;
   const configuredBridgeUrl = await getBridgeUrl();
@@ -104,8 +106,8 @@ export async function evaluatePythonBridgeGate(
     };
   }
 
-  const probePythonBridge = dependencies.probePythonBridge ?? defaultProbeBridge;
-  const reachable = await probePythonBridge(bridgeUrl);
+  const probePythonBridge = dependencies.probePythonBridge ?? probePythonBridgeHealth;
+  const reachable = await probePythonBridge(bridgeUrl, requiredCapability);
   if (!reachable) {
     return {
       allowed: false,

@@ -4,6 +4,7 @@ import { test } from "node:test";
 import type { AgentToolResult } from "@earendil-works/pi-agent-core";
 
 import {
+  callDefaultTmuxBridge,
   computeTmuxFetchTimeoutMs,
   createTmuxTool,
   type TmuxBridgeConfig,
@@ -184,6 +185,25 @@ void test("tmux bridge errors are surfaced to the user", async () => {
   assert.equal(result.details?.action, "capture_pane");
   assert.equal(result.details?.error, "bridge unavailable");
   assert.equal(result.details?.skillHint, "tmux-bridge");
+});
+
+void test("tmux bridge rejects HTTP 200 responses without an explicit success contract", async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+  globalThis.fetch = () => Promise.resolve(new Response(JSON.stringify({ action: "list_sessions", sessions: [] }), {
+    status: 200,
+  }));
+
+  await assert.rejects(
+    callDefaultTmuxBridge(
+      { action: "list_sessions" },
+      { url: "https://localhost:3341" },
+      undefined,
+    ),
+    /invalid response payload/u,
+  );
 });
 
 void test("tmux tool handles explicit bridge-level rejection payloads", async () => {
