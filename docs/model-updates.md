@@ -23,26 +23,15 @@ Do not use Pi coding-agent's Node/file `ModelRuntime` directly in the Office Web
 
 ### Current GPT-5.6 and Claude Opus 5 registry snapshot (`pi-ai` 0.83.0)
 
-Upstream exposes exactly three IDs on both `openai` and `openai-codex`; there is deliberately no bare `gpt-5.6` alias:
+Pi AI exposes `gpt-5.6-sol`, `gpt-5.6-terra`, and `gpt-5.6-luna` on both `openai` and `openai-codex`, with no bare `gpt-5.6` alias. All three models:
 
-| ID | Display name | Standard input / output | Cache read / write | Above 272k input / output | Above 272k cache read / write |
-|---|---|---:|---:|---:|---:|
-| `gpt-5.6-sol` | GPT-5.6 Sol | $5 / $30 | $0.50 / $6.25 | $10 / $45 | $1 / $12.50 |
-| `gpt-5.6-terra` | GPT-5.6 Terra | $2.50 / $15 | $0.25 / $3.125 | $5 / $22.50 | $0.50 / $6.25 |
-| `gpt-5.6-luna` | GPT-5.6 Luna | $1 / $6 | $0.10 / $1.25 | $2 / $9 | $0.20 / $2.50 |
+- accept text and image input and support reasoning
+- have a 272,000-token context window and 128,000-token maximum output
+- expose `off`, `low`, `medium`, `high`, `xhigh`, and `max`; ChatGPT also exposes `minimal`
 
-Prices are registry values in USD per million tokens. All three models:
+Pi AI 0.83.0 also exposes `claude-opus-5` with a 1,000,000-token context window and 128,000-token maximum output. Anthropic-only setups select it as the latest Opus.
 
-- accept text and image input, support reasoning, and expose `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, and `max` through `getSupportedThinkingLevels()`
-- have a 128,000-token maximum output
-- use a 272,000-token effective context window through both the OpenAI API (`openai-responses`, `https://api.openai.com/v1`) and ChatGPT (`openai-codex-responses`, `https://chatgpt.com/backend-api`)
-- preserve distinct native `xhigh` and `max` efforts; the ChatGPT map also maps the add-in's `minimal` level to upstream `low`
-
-Pi AI 0.81.0 deliberately reduced the ChatGPT GPT-5.6 default from 372,000 to 272,000 tokens to avoid automatically entering long-context pricing. OpenAI's public Sol model page advertises a 1,050,000-token context window, but Pi for Excel follows Pi AI's conservative effective default unless the upstream registry changes.
-
-Pi AI 0.83.0 also exposes `claude-opus-5` with a 1,000,000-token context window, 128,000-token maximum output, and `xhigh` and `max` thinking levels. Anthropic-only setups select it automatically as the latest Opus.
-
-`tests/model-ordering.test.ts` pins this metadata so a future registry change is reviewed rather than silently changing the UI/runtime contract.
+`tests/model-ordering.test.ts` pins these limits and selector behavior.
 
 ## When to run this
 
