@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { Agent, type AgentMessage } from "@earendil-works/pi-agent-core";
-import type { Api, Model, ToolResultMessage } from "@earendil-works/pi-ai";
+import {
+  createAssistantMessageEventStream,
+  type Api,
+  type Model,
+  type ToolResultMessage,
+} from "@earendil-works/pi-ai";
 
 import {
   maybeAutoCompactBeforeContinuation,
@@ -78,6 +83,7 @@ function createModel(contextWindow: number): Model<Api> {
 
 function createAgent(args: { contextWindow: number; messages: AgentMessage[] }): Agent {
   return new Agent({
+    streamFn: createAssistantMessageEventStream,
     initialState: {
       model: createModel(args.contextWindow),
       messages: args.messages,

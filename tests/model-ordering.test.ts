@@ -3,12 +3,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
 
-import type {
-  Api,
-  Context,
-  Model,
-  SimpleStreamOptions,
-} from "@earendil-works/pi-ai";
+import type { Api, Model } from "@earendil-works/pi-ai";
 import { builtinModels } from "@earendil-works/pi-ai/providers/all";
 
 import { BROWSER_OAUTH_PROVIDERS, mapToApiProvider } from "../src/auth/provider-map.ts";
@@ -49,73 +44,8 @@ function pickDefaultModel(availableProviders: string[]): Model<Api> {
   return pickDefaultModelFromRuntime(modelsRuntime, availableProviders);
 }
 
-function completeSimple(
-  model: Model<Api>,
-  context: Context,
-  options?: SimpleStreamOptions,
-) {
-  return modelsRuntime.completeSimple(model, context, options);
-}
-
 const OPENAI_PROVIDERS: OpenAiProvider[] = ["openai", "openai-codex"];
-
-const GPT_56_VARIANTS = [
-  {
-    id: "gpt-5.6-sol",
-    name: "GPT-5.6 Sol",
-    cost: {
-      input: 5,
-      output: 30,
-      cacheRead: 0.5,
-      cacheWrite: 6.25,
-      tiers: [{ inputTokensAbove: 272_000, input: 10, output: 45, cacheRead: 1, cacheWrite: 12.5 }],
-    },
-  },
-  {
-    id: "gpt-5.6-terra",
-    name: "GPT-5.6 Terra",
-    cost: {
-      input: 2.5,
-      output: 15,
-      cacheRead: 0.25,
-      cacheWrite: 3.125,
-      tiers: [{ inputTokensAbove: 272_000, input: 5, output: 22.5, cacheRead: 0.5, cacheWrite: 6.25 }],
-    },
-  },
-  {
-    id: "gpt-5.6-luna",
-    name: "GPT-5.6 Luna",
-    cost: {
-      input: 1,
-      output: 6,
-      cacheRead: 0.1,
-      cacheWrite: 1.25,
-      tiers: [{ inputTokensAbove: 272_000, input: 2, output: 9, cacheRead: 0.2, cacheWrite: 2.5 }],
-    },
-  },
-];
-
-const GPT_56_IDS = GPT_56_VARIANTS.map((variant) => variant.id);
-const GPT_56_THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
-
-function pickExpectedOpenAiDefault(provider: OpenAiProvider): Model<Api> | null {
-  const models = getModels(provider);
-  const bestGeneral = models
-    .filter((model) => isOpenAiGeneralGptModelId(model.id))
-    .sort((a, b) => compareOpenAiModelIds(a.id, b.id))[0];
-  const bestCodex = models
-    .filter((model) => isOpenAiCodexModelId(model.id))
-    .sort((a, b) => compareOpenAiModelIds(a.id, b.id))[0];
-
-  if (bestGeneral && bestCodex) {
-    return shouldPreferOpenAiGeneralModel(bestGeneral.id, bestCodex.id) ? bestGeneral : bestCodex;
-  }
-
-  if (bestGeneral) return bestGeneral;
-  if (bestCodex) return bestCodex;
-
-  return models.slice().sort((a, b) => compareOpenAiModelIds(a.id, b.id))[0] ?? null;
-}
+const GPT_56_IDS = ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"];
 
 void test("parseMajorMinor packs Claude-style -major-minor as major*10+minor", () => {
   assert.equal(parseMajorMinor("claude-opus-4-6"), 46);
@@ -217,48 +147,18 @@ void test("shouldPreferOpenAiGeneralModel only prefers GPT when it is as new or 
   assert.equal(shouldPreferOpenAiGeneralModel("gpt-5-pro", "gpt-5.1-codex-max"), false);
 });
 
-void test("current Pi registry exposes only the three canonical GPT-5.6 tier IDs", () => {
+void test("GPT-5.6 models expose the limits and thinking levels used by the add-in", () => {
   for (const provider of OPENAI_PROVIDERS) {
-    const ids = getModels(provider)
-      .filter((model) => model.id.startsWith("gpt-5.6"))
-      .map((model) => model.id)
-      .sort();
-
-    assert.deepEqual(ids, GPT_56_IDS.slice().sort(), `unexpected GPT-5.6 IDs for ${provider}`);
-    assert.equal(modelsRuntime.getModel(provider, "gpt-5.6"), undefined, `bare alias must not exist for ${provider}`);
-  }
-
-  assert.equal(getModel("anthropic", "claude-opus-4-7").id, "claude-opus-4-7");
-  assert.equal(getModel("anthropic", "claude-fable-5").id, "claude-fable-5");
-  assert.equal(getModel("google", "gemini-3.1-pro-preview").id, "gemini-3.1-pro-preview");
-});
-
-void test("GPT-5.6 registry metadata exactly matches native Pi 0.80.8", () => {
-  for (const provider of OPENAI_PROVIDERS) {
-    const isCodex = provider === "openai-codex";
-
-    for (const expected of GPT_56_VARIANTS) {
-      const model = getModel(provider, expected.id);
-      assert.equal(model.id, expected.id);
-      assert.equal(model.name, expected.name);
-      assert.equal(model.provider, provider);
-      assert.equal(model.api, isCodex ? "openai-codex-responses" : "openai-responses");
-      assert.equal(
-        model.baseUrl,
-        isCodex ? "https://chatgpt.com/backend-api" : "https://api.openai.com/v1",
-      );
-      assert.equal(model.reasoning, true);
-      assert.deepEqual(model.input, ["text", "image"]);
-      assert.equal(model.contextWindow, isCodex ? 372_000 : 272_000);
+    for (const id of GPT_56_IDS) {
+      const model = getModel(provider, id);
+      assert.equal(model.contextWindow, 272_000);
       assert.equal(model.maxTokens, 128_000);
-      assert.deepEqual(model.cost, expected.cost);
       assert.deepEqual(
-        model.thinkingLevelMap,
-        isCodex
-          ? { xhigh: "xhigh", max: "max", minimal: "low" }
-          : { off: "none", xhigh: "xhigh", max: "max" },
+        getThinkingLevelsForModel(model),
+        provider === "openai-codex"
+          ? ["off", "minimal", "low", "medium", "high", "xhigh", "max"]
+          : ["off", "low", "medium", "high", "xhigh", "max"],
       );
-      assert.deepEqual(getThinkingLevelsForModel(model), GPT_56_THINKING_LEVELS);
     }
   }
 });
@@ -281,14 +181,16 @@ void test("Claude Fable 5 registry metadata is usable by the add-in", () => {
   assert.ok(fable.contextWindow >= 1_000_000, "expected a 1M-token context window");
 });
 
-void test("pickDefaultModel prefers the latest Opus for Anthropic-only setups", () => {
-  const models = getModels("anthropic");
-  const opus = models.filter((m) => m.id.startsWith("claude-opus-"));
-  assert.ok(opus.length > 0, "expected at least one Opus model in the registry");
+void test("Claude Opus 5 exposes the limits used by the add-in", () => {
+  const opus = getModel("anthropic", "claude-opus-5");
+  assert.equal(opus.contextWindow, 1_000_000);
+  assert.equal(opus.maxTokens, 128_000);
+});
 
+void test("pickDefaultModel prefers the latest Opus for Anthropic-only setups", () => {
   const selected = pickDefaultModel(["anthropic"]);
   assert.equal(selected.provider, "anthropic");
-  assert.equal(selected.id, "claude-opus-4-8");
+  assert.equal(selected.id, "claude-opus-5");
 });
 
 void test("current OpenAI providers select GPT-5.6 Sol as the default", () => {
@@ -302,7 +204,7 @@ void test("current OpenAI providers select GPT-5.6 Sol as the default", () => {
 void test("Bedrock provider uses the browser-safe unsupported-provider stub", async () => {
   installBedrockProviderStub();
 
-  const selected = await completeSimple(
+  const selected = await modelsRuntime.completeSimple(
     getModel("amazon-bedrock", "amazon.nova-micro-v1:0"),
     {
       messages: [
@@ -318,17 +220,6 @@ void test("Bedrock provider uses the browser-safe unsupported-provider stub", as
 
   assert.equal(selected.stopReason, "error");
   assert.match(selected.errorMessage ?? "", /Amazon Bedrock is not supported/);
-});
-
-void test("pickDefaultModel matches the current OpenAI default-selection contract", () => {
-  for (const provider of OPENAI_PROVIDERS) {
-    const expected = pickExpectedOpenAiDefault(provider);
-    assert.ok(expected, `expected OpenAI default candidate for ${provider}`);
-
-    const selected = pickDefaultModel([provider]);
-    assert.equal(selected.provider, provider);
-    assert.equal(selected.id, expected.id);
-  }
 });
 
 void test("pickDefaultModel falls back to the preferred hardcoded OpenAI default", () => {

@@ -2,7 +2,13 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { Agent, type AgentMessage } from "@earendil-works/pi-agent-core";
-import type { Api, ImageContent, Model, Usage } from "@earendil-works/pi-ai";
+import {
+  createAssistantMessageEventStream,
+  type Api,
+  type ImageContent,
+  type Model,
+  type Usage,
+} from "@earendil-works/pi-ai";
 
 import { commandRegistry, type SlashCommand } from "../src/commands/types.ts";
 import { createActionQueue } from "../src/taskpane/action-queue.ts";
@@ -16,6 +22,7 @@ class TestAgent extends Agent {
 
   constructor(model?: Model<Api>) {
     super({
+      streamFn: createAssistantMessageEventStream,
       initialState: {
         ...(model ? { model } : {}),
         messages: [],

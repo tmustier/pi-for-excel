@@ -1,6 +1,6 @@
 # Model / dependency update playbook
 
-**Last verified:** 2026-07-16
+**Last verified:** 2026-08-03
 
 This repo hardcodes a small set of "featured" and "preferred" model patterns for sorting and default selection. Static built-in models come from Pi AI, while custom and extension providers can add cached, dynamically discovered catalogues at runtime.
 
@@ -12,7 +12,7 @@ This doc describes how to update:
 
 ## Sources of truth
 
-- **Built-in model IDs:** `node_modules/@earendil-works/pi-ai/dist/models.generated.js`, exposed through `builtinProviders()`.
+- **Built-in model IDs and limits:** provider catalogues under `node_modules/@earendil-works/pi-ai/dist/providers/data/`, exposed through `builtinModels()`.
 - **Runtime lookup and streaming:** the taskpane-owned `BrowserModelRuntime`, backed by Pi AI's `createModels()` collection.
 - **Dynamic catalogue cache:** IndexedDB store `model-catalogs`, accessed through `ModelCatalogsStore`; restored entries are rebound to the provider's current API/base URL before use.
 - **Discovery bounds:** responses are limited to 2 MiB, 2,000 entries and 256 characters per model ID. An invalid/oversized refresh leaves the last safe cache and configured baseline intact.
@@ -21,25 +21,17 @@ This doc describes how to update:
 
 Do not use Pi coding-agent's Node/file `ModelRuntime` directly in the Office WebView. Pi for Excel uses the same Pi AI provider primitives with browser storage, OAuth and proxy policy. Cross-check the installed Pi package and changelog when the generated registry changes. Never infer aliases or metadata from marketing names.
 
-### Current GPT-5.6 registry snapshot (`pi-ai` 0.80.8)
+### Current GPT-5.6 and Claude Opus 5 registry snapshot (`pi-ai` 0.83.0)
 
-Upstream exposes exactly three IDs on both `openai` and `openai-codex`; there is deliberately no bare `gpt-5.6` alias:
+Pi AI exposes `gpt-5.6-sol`, `gpt-5.6-terra`, and `gpt-5.6-luna` on both `openai` and `openai-codex`, with no bare `gpt-5.6` alias. All three models:
 
-| ID | Display name | Standard input / output | Cache read / write | Above 272k input / output | Above 272k cache read / write |
-|---|---|---:|---:|---:|---:|
-| `gpt-5.6-sol` | GPT-5.6 Sol | $5 / $30 | $0.50 / $6.25 | $10 / $45 | $1 / $12.50 |
-| `gpt-5.6-terra` | GPT-5.6 Terra | $2.50 / $15 | $0.25 / $3.125 | $5 / $22.50 | $0.50 / $6.25 |
-| `gpt-5.6-luna` | GPT-5.6 Luna | $1 / $6 | $0.10 / $1.25 | $2 / $9 | $0.20 / $2.50 |
+- accept text and image input and support reasoning
+- have a 272,000-token context window and 128,000-token maximum output
+- expose `off`, `low`, `medium`, `high`, `xhigh`, and `max`; ChatGPT also exposes `minimal`
 
-Prices are registry values in USD per million tokens. All three models:
+Pi AI 0.83.0 also exposes `claude-opus-5` with a 1,000,000-token context window and 128,000-token maximum output. Anthropic-only setups select it as the latest Opus.
 
-- accept text and image input, support reasoning, and expose `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, and `max` through `getSupportedThinkingLevels()`
-- have a 128,000-token maximum output
-- use a 272,000-token context window through the OpenAI API (`openai-responses`, `https://api.openai.com/v1`)
-- use a 372,000-token context window through ChatGPT (`openai-codex-responses`, `https://chatgpt.com/backend-api`)
-- preserve distinct native `xhigh` and `max` efforts; the ChatGPT map also maps the add-in's `minimal` level to upstream `low`
-
-`tests/model-ordering.test.ts` pins this metadata so a future registry change is reviewed rather than silently changing the UI/runtime contract.
+`tests/model-ordering.test.ts` pins these limits and selector behavior.
 
 ## When to run this
 
@@ -80,7 +72,7 @@ npm view @earendil-works/pi-agent-core versions --json
 
 **Dependency policy:**
 
-- `@earendil-works/pi-ai` and `@earendil-works/pi-agent-core` move **together** to the newest common version. The browser runtime migration was verified on `0.80.8`.
+- `@earendil-works/pi-ai` and `@earendil-works/pi-agent-core` move **together** to the newest common version. The browser runtime was verified on `0.83.0`.
 - Both must be **exact-pinned** in `package.json`.
 - The lockfile must resolve **exactly one** copy of `pi-ai`. Two copies = two model registries = the model selector and the app disagree about available models.
 - `scripts/check-pi-deps-lockstep.mjs` (run via `npm run check:pi-lockstep`) enforces all of this.
@@ -98,11 +90,10 @@ npm install @earendil-works/pi-ai@<version> @earendil-works/pi-agent-core@<versi
 Search the generated catalogue and query the runtime-facing built-in provider collection:
 
 ```bash
-rg -n "gpt-5\\.6-(sol|terra|luna)" node_modules/@earendil-works/pi-ai/dist/models.generated.js -S
-rg -n "claude-fable-5"             node_modules/@earendil-works/pi-ai/dist/models.generated.js -S
-rg -n "claude-opus-4-8"  node_modules/@earendil-works/pi-ai/dist/models.generated.js -S
-rg -n "gemini-3\\.1-pro-preview" node_modules/@earendil-works/pi-ai/dist/models.generated.js -S
-node --input-type=module -e 'import { builtinModels } from "@earendil-works/pi-ai/providers/all"; const m=builtinModels(); console.log(m.getModel("openai", "gpt-5.6-sol"))'
+rg -n "gpt-5\\.6-(sol|terra|luna)" node_modules/@earendil-works/pi-ai/dist/providers/data/openai*.json -S
+rg -n "claude-(fable|opus)-5" node_modules/@earendil-works/pi-ai/dist/providers/data/anthropic.json -S
+rg -n "gemini-3\\.1-pro-preview" node_modules/@earendil-works/pi-ai/dist/providers/data/google.json -S
+node --input-type=module -e 'import { builtinModels } from "@earendil-works/pi-ai/providers/all"; const m=builtinModels(); console.log(m.getModel("openai-codex", "gpt-5.6-sol")); console.log(m.getModel("anthropic", "claude-opus-5"))'
 npm run test:models
 ```
 

@@ -523,11 +523,6 @@ export async function runCompactCommand(agent: Agent, args: string): Promise<voi
     return;
   }
 
-  // IMPORTANT: use the agent's configured streamFn + api key resolver.
-  // Calling pi-ai's completeSimple() directly bypasses:
-  // - our CORS proxy logic (streamFn)
-  // - our API key/OAuth resolution (agent.getApiKey)
-  // and can crash in browser WebViews due to env key fallbacks using `process`.
   const apiKey = agent.getApiKey ? await agent.getApiKey(model.provider) : undefined;
   if (!apiKey) {
     showToast(t("export.toast.compact.no_api_key", { provider: model.provider }));
@@ -587,7 +582,7 @@ export async function runCompactCommand(agent: Agent, args: string): Promise<voi
       ...(customInstructions !== undefined ? { customInstructions } : {}),
     });
 
-    const stream = await agent.streamFn(
+    const stream = await agent.streamFunction(
       model,
       {
         systemPrompt: SUMMARIZATION_SYSTEM_PROMPT,

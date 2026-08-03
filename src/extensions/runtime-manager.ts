@@ -472,7 +472,7 @@ export class ExtensionRuntimeManager {
       throw new Error("llm.complete requires a messages array.");
     }
 
-    const stream = await agent.streamFn(
+    const stream = await agent.streamFunction(
       model,
       {
         ...(request.systemPrompt !== undefined ? { systemPrompt: request.systemPrompt } : {}),
