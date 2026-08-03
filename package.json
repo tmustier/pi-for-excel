@@ -87,6 +87,7 @@
     "fast-xml-parser": "5.7.0",
     "@xmldom/xmldom": "0.8.13",
     "protobufjs": "7.6.5",
-    "follow-redirects": "1.16.0"
+    "follow-redirects": "1.16.0",
+    "ip-address": "10.4.0"
   }
 }
