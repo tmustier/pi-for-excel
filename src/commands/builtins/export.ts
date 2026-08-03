@@ -587,7 +587,7 @@ export async function runCompactCommand(agent: Agent, args: string): Promise<voi
       ...(customInstructions !== undefined ? { customInstructions } : {}),
     });
 
-    const stream = await agent.streamFn(
+    const stream = await agent.streamFunction(
       model,
       {
         systemPrompt: SUMMARIZATION_SYSTEM_PROMPT,

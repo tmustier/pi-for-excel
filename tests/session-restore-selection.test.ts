@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { Agent } from "@earendil-works/pi-agent-core";
+import { createAssistantMessageEventStream } from "@earendil-works/pi-ai";
 
 import {
   getCrossWorkbookResumeConfirmMessage,
@@ -627,6 +628,7 @@ void test("Alt+Up detection matches host fallbacks and rejects modified chords",
 
 void test("queued restore prepends follow-up and compact queue items before draft text", () => {
   const agent = new Agent({
+    streamFn: createAssistantMessageEventStream,
     initialState: {
       messages: [],
       tools: [],

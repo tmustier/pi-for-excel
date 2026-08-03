@@ -2,7 +2,14 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { Agent, type AgentMessage } from "@earendil-works/pi-agent-core";
-import type { Api, AssistantMessage, Model, ToolResultMessage, Usage } from "@earendil-works/pi-ai";
+import {
+  createAssistantMessageEventStream,
+  type Api,
+  type AssistantMessage,
+  type Model,
+  type ToolResultMessage,
+  type Usage,
+} from "@earendil-works/pi-ai";
 
 import {
   findTrailingContextOverflowError,
@@ -82,6 +89,7 @@ function createTestAgent(args: {
   }
 
   return new RecordingAgent({
+    streamFn: createAssistantMessageEventStream,
     initialState: {
       model: args.model,
       messages: args.messages,

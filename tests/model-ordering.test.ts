@@ -96,7 +96,8 @@ const GPT_56_VARIANTS = [
 ];
 
 const GPT_56_IDS = GPT_56_VARIANTS.map((variant) => variant.id);
-const GPT_56_THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
+const GPT_56_API_THINKING_LEVELS = ["off", "low", "medium", "high", "xhigh", "max"];
+const GPT_56_CODEX_THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
 
 function pickExpectedOpenAiDefault(provider: OpenAiProvider): Model<Api> | null {
   const models = getModels(provider);
@@ -233,7 +234,7 @@ void test("current Pi registry exposes only the three canonical GPT-5.6 tier IDs
   assert.equal(getModel("google", "gemini-3.1-pro-preview").id, "gemini-3.1-pro-preview");
 });
 
-void test("GPT-5.6 registry metadata exactly matches native Pi 0.80.8", () => {
+void test("GPT-5.6 registry metadata exactly matches native Pi 0.83.0", () => {
   for (const provider of OPENAI_PROVIDERS) {
     const isCodex = provider === "openai-codex";
 
@@ -249,16 +250,27 @@ void test("GPT-5.6 registry metadata exactly matches native Pi 0.80.8", () => {
       );
       assert.equal(model.reasoning, true);
       assert.deepEqual(model.input, ["text", "image"]);
-      assert.equal(model.contextWindow, isCodex ? 372_000 : 272_000);
+      assert.equal(model.contextWindow, 272_000);
       assert.equal(model.maxTokens, 128_000);
       assert.deepEqual(model.cost, expected.cost);
       assert.deepEqual(
         model.thinkingLevelMap,
         isCodex
           ? { xhigh: "xhigh", max: "max", minimal: "low" }
-          : { off: "none", xhigh: "xhigh", max: "max" },
+          : {
+            off: "none",
+            minimal: null,
+            low: "low",
+            medium: "medium",
+            high: "high",
+            xhigh: "xhigh",
+            max: "max",
+          },
       );
-      assert.deepEqual(getThinkingLevelsForModel(model), GPT_56_THINKING_LEVELS);
+      assert.deepEqual(
+        getThinkingLevelsForModel(model),
+        isCodex ? GPT_56_CODEX_THINKING_LEVELS : GPT_56_API_THINKING_LEVELS,
+      );
     }
   }
 });
@@ -273,12 +285,19 @@ void test("model selector orders all GPT-5.6 tiers as Sol, Terra, Luna", () => {
   assert.deepEqual(ordered.map((item) => item.id), GPT_56_IDS);
 });
 
-void test("Claude Fable 5 registry metadata is usable by the add-in", () => {
+void test("Claude 5 registry metadata is usable by the add-in", () => {
   const fable = getModel("anthropic", "claude-fable-5");
   assert.equal(fable.provider, "anthropic");
   assert.equal(fable.api, "anthropic-messages");
   assert.ok(fable.reasoning, "expected Fable 5 to support reasoning");
   assert.ok(fable.contextWindow >= 1_000_000, "expected a 1M-token context window");
+
+  const opus = getModel("anthropic", "claude-opus-5");
+  assert.equal(opus.provider, "anthropic");
+  assert.equal(opus.api, "anthropic-messages");
+  assert.ok(opus.reasoning, "expected Opus 5 to support reasoning");
+  assert.equal(opus.contextWindow, 1_000_000);
+  assert.equal(opus.maxTokens, 128_000);
 });
 
 void test("pickDefaultModel prefers the latest Opus for Anthropic-only setups", () => {
@@ -288,7 +307,7 @@ void test("pickDefaultModel prefers the latest Opus for Anthropic-only setups", 
 
   const selected = pickDefaultModel(["anthropic"]);
   assert.equal(selected.provider, "anthropic");
-  assert.equal(selected.id, "claude-opus-4-8");
+  assert.equal(selected.id, "claude-opus-5");
 });
 
 void test("current OpenAI providers select GPT-5.6 Sol as the default", () => {
@@ -479,7 +498,7 @@ void test("compareModels sorts non-OpenAI models by provider, family, then recen
 void test("compareModels puts the Fable family before Opus/Sonnet/Haiku for Anthropic", () => {
   const models = [
     { provider: "anthropic", id: "claude-haiku-4-5" },
-    { provider: "anthropic", id: "claude-opus-4-8" },
+    { provider: "anthropic", id: "claude-opus-5" },
     { provider: "anthropic", id: "claude-fable-5" },
     { provider: "anthropic", id: "claude-sonnet-4-6" },
   ];
@@ -488,7 +507,7 @@ void test("compareModels puts the Fable family before Opus/Sonnet/Haiku for Anth
 
   assert.deepEqual(
     models.map((m) => m.id),
-    ["claude-fable-5", "claude-opus-4-8", "claude-sonnet-4-6", "claude-haiku-4-5"],
+    ["claude-fable-5", "claude-opus-5", "claude-sonnet-4-6", "claude-haiku-4-5"],
   );
 });
 

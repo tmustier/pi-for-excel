@@ -31,11 +31,11 @@ Use a fresh chat tab for each model and fixed prompts with no tools.
 
 | ID | Status (Pass/Fail/Blocked) | Evidence (taskpane-only screenshot/log) | Expected |
 |---|---|---|---|
-| M-WIN-1 |  |  | Select exact `openai-codex/gpt-5.6-sol`; 372k context / 128k output |
+| M-WIN-1 |  |  | Select exact `openai-codex/gpt-5.6-sol`; 272k context / 128k output |
 | M-WIN-2 |  |  | `Reply with exactly SOL_WINDOWS_OK. Do not use tools.` returns exact sentinel |
-| M-WIN-3 |  |  | Select exact `openai-codex/gpt-5.6-terra`; 372k / 128k |
+| M-WIN-3 |  |  | Select exact `openai-codex/gpt-5.6-terra`; 272k / 128k |
 | M-WIN-4 |  |  | Exact `TERRA_WINDOWS_OK` response |
-| M-WIN-5 |  |  | Select exact `openai-codex/gpt-5.6-luna`; 372k / 128k |
+| M-WIN-5 |  |  | Select exact `openai-codex/gpt-5.6-luna`; 272k / 128k |
 | M-WIN-6 |  |  | Exact `LUNA_WINDOWS_WEBSOCKET_OK` response through the proxy bridge |
 | M-WIN-7 |  |  | Select a pre-existing ChatGPT model and complete one no-tool turn |
 
