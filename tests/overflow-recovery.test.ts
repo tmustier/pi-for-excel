@@ -8,6 +8,7 @@ import {
   findTrailingContextOverflowError,
   recoverFromContextOverflow,
 } from "../src/compaction/overflow-recovery.ts";
+import { unusedTestStreamFn } from "./helpers/unused-test-stream.ts";
 
 const EMPTY_USAGE: Usage = {
   input: 0,
@@ -82,6 +83,7 @@ function createTestAgent(args: {
   }
 
   return new RecordingAgent({
+    streamFn: unusedTestStreamFn,
     initialState: {
       model: args.model,
       messages: args.messages,

@@ -96,7 +96,10 @@ const GPT_56_VARIANTS = [
 ];
 
 const GPT_56_IDS = GPT_56_VARIANTS.map((variant) => variant.id);
-const GPT_56_THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
+const GPT_56_THINKING_LEVELS: Record<OpenAiProvider, string[]> = {
+  openai: ["off", "low", "medium", "high", "xhigh", "max"],
+  "openai-codex": ["off", "minimal", "low", "medium", "high", "xhigh", "max"],
+};
 
 function pickExpectedOpenAiDefault(provider: OpenAiProvider): Model<Api> | null {
   const models = getModels(provider);
@@ -233,7 +236,7 @@ void test("current Pi registry exposes only the three canonical GPT-5.6 tier IDs
   assert.equal(getModel("google", "gemini-3.1-pro-preview").id, "gemini-3.1-pro-preview");
 });
 
-void test("GPT-5.6 registry metadata exactly matches native Pi 0.80.8", () => {
+void test("GPT-5.6 registry metadata exactly matches native Pi 0.83.0", () => {
   for (const provider of OPENAI_PROVIDERS) {
     const isCodex = provider === "openai-codex";
 
@@ -249,16 +252,24 @@ void test("GPT-5.6 registry metadata exactly matches native Pi 0.80.8", () => {
       );
       assert.equal(model.reasoning, true);
       assert.deepEqual(model.input, ["text", "image"]);
-      assert.equal(model.contextWindow, isCodex ? 372_000 : 272_000);
+      assert.equal(model.contextWindow, 272_000);
       assert.equal(model.maxTokens, 128_000);
       assert.deepEqual(model.cost, expected.cost);
       assert.deepEqual(
         model.thinkingLevelMap,
         isCodex
           ? { xhigh: "xhigh", max: "max", minimal: "low" }
-          : { off: "none", xhigh: "xhigh", max: "max" },
+          : {
+            off: "none",
+            minimal: null,
+            low: "low",
+            medium: "medium",
+            high: "high",
+            xhigh: "xhigh",
+            max: "max",
+          },
       );
-      assert.deepEqual(getThinkingLevelsForModel(model), GPT_56_THINKING_LEVELS);
+      assert.deepEqual(getThinkingLevelsForModel(model), GPT_56_THINKING_LEVELS[provider]);
     }
   }
 });
@@ -288,7 +299,7 @@ void test("pickDefaultModel prefers the latest Opus for Anthropic-only setups", 
 
   const selected = pickDefaultModel(["anthropic"]);
   assert.equal(selected.provider, "anthropic");
-  assert.equal(selected.id, "claude-opus-4-8");
+  assert.equal(selected.id, "claude-opus-5");
 });
 
 void test("current OpenAI providers select GPT-5.6 Sol as the default", () => {
