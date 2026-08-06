@@ -64,7 +64,7 @@
     "portless": "0.15.5",
     "typebox": "^1.3.10",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.65.0",
+    "typescript-eslint": "^8.66.0",
     "vite": "^8.2.0"
   },
   "license": "MIT",
