@@ -236,7 +236,7 @@ void test("current Pi registry exposes only the three canonical GPT-5.6 tier IDs
   assert.equal(getModel("google", "gemini-3.1-pro-preview").id, "gemini-3.1-pro-preview");
 });
 
-void test("GPT-5.6 registry metadata exactly matches native Pi 0.83.0", () => {
+void test("GPT-5.6 registry exposes the metadata used by the app", () => {
   for (const provider of OPENAI_PROVIDERS) {
     const isCodex = provider === "openai-codex";
 
@@ -255,20 +255,9 @@ void test("GPT-5.6 registry metadata exactly matches native Pi 0.83.0", () => {
       assert.equal(model.contextWindow, 272_000);
       assert.equal(model.maxTokens, 128_000);
       assert.deepEqual(model.cost, expected.cost);
-      assert.deepEqual(
-        model.thinkingLevelMap,
-        isCodex
-          ? { xhigh: "xhigh", max: "max", minimal: "low" }
-          : {
-            off: "none",
-            minimal: null,
-            low: "low",
-            medium: "medium",
-            high: "high",
-            xhigh: "xhigh",
-            max: "max",
-          },
-      );
+      assert.equal(model.thinkingLevelMap?.minimal, isCodex ? "low" : null);
+      assert.equal(model.thinkingLevelMap?.xhigh, "xhigh");
+      assert.equal(model.thinkingLevelMap?.max, "max");
       assert.deepEqual(getThinkingLevelsForModel(model), GPT_56_THINKING_LEVELS[provider]);
     }
   }

@@ -25,7 +25,7 @@ import {
   getRestoreCandidateSessionIds,
   shouldPersistSession,
 } from "../src/taskpane/sessions.ts";
-import { unusedTestStreamFn } from "./helpers/unused-test-stream.ts";
+import { failOnUnexpectedStream } from "./fail-on-unexpected-stream.ts";
 
 void test("known workbook restores only workbook-linked latest session", () => {
   const candidates = getRestoreCandidateSessionIds({
@@ -628,7 +628,7 @@ void test("Alt+Up detection matches host fallbacks and rejects modified chords",
 
 void test("queued restore prepends follow-up and compact queue items before draft text", () => {
   const agent = new Agent({
-    streamFn: unusedTestStreamFn,
+    streamFn: failOnUnexpectedStream,
     initialState: {
       messages: [],
       tools: [],

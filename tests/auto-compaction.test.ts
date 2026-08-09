@@ -13,7 +13,7 @@ import {
   collectCompactionMemoryCues,
   mergeCompactionAdditionalFocus,
 } from "../src/compaction/memory-nudge.ts";
-import { unusedTestStreamFn } from "./helpers/unused-test-stream.ts";
+import { failOnUnexpectedStream } from "./fail-on-unexpected-stream.ts";
 
 function createUserMessage(text: string, timestamp: number): AgentMessage {
   return {
@@ -79,7 +79,7 @@ function createModel(contextWindow: number): Model<Api> {
 
 function createAgent(args: { contextWindow: number; messages: AgentMessage[] }): Agent {
   return new Agent({
-    streamFn: unusedTestStreamFn,
+    streamFn: failOnUnexpectedStream,
     initialState: {
       model: createModel(args.contextWindow),
       messages: args.messages,
