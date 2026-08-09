@@ -51,7 +51,7 @@
     "@sinclair/typebox": "^0.34.52",
     "highlight.js": "^11.11.1",
     "lit": "^3.3.3",
-    "lucide": "^0.544.0",
+    "lucide": "^1.29.0",
     "marked": "^18.0.7",
     "ws": "8.21.1"
   },
