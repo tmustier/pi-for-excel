@@ -207,15 +207,15 @@ function toBridgeRequest(params: Params): LibreOfficeConvertRequest {
   };
 }
 
-function parseBridgeResponse(value: DynamicValue): LibreOfficeConvertResponse {
-  if (!isLibreOfficeBridgePayloadShape(value)) {
-    return {
-      ok: true,
-      action: "convert",
-    };
+function parseBridgeResponse(
+  value: DynamicValue,
+  request: LibreOfficeConvertRequest,
+): LibreOfficeConvertResponse {
+  if (!isLibreOfficeBridgePayloadShape(value) || typeof value.ok !== "boolean") {
+    throw new Error("LibreOffice bridge returned an invalid response payload.");
   }
 
-  const ok = typeof value.ok === "boolean" ? value.ok : true;
+  const ok = value.ok;
   const inputPath = typeof value.input_path === "string" ? value.input_path : undefined;
   const targetFormat = isTargetFormat(value.target_format) ? value.target_format : undefined;
   const outputPath = typeof value.output_path === "string" ? value.output_path : undefined;
@@ -223,6 +223,22 @@ function parseBridgeResponse(value: DynamicValue): LibreOfficeConvertResponse {
   const converter = typeof value.converter === "string" ? value.converter : undefined;
   const error = typeof value.error === "string" ? value.error : undefined;
   const metadata = isLibreOfficeBridgePayloadShape(value.metadata) ? value.metadata : undefined;
+
+  if (ok && (
+    value.action !== "convert"
+    || inputPath !== request.input_path
+    || targetFormat !== request.target_format
+    || outputPath === undefined
+    || outputPath.trim().length === 0
+    || (request.output_path !== undefined && outputPath !== request.output_path)
+    || bytes === undefined
+    || !Number.isFinite(bytes)
+    || bytes < 0
+    || converter === undefined
+    || converter.trim().length === 0
+  )) {
+    throw new Error("LibreOffice bridge returned an incomplete success payload.");
+  }
 
   return {
     ok,
@@ -247,7 +263,7 @@ function computeFetchTimeoutMs(request: LibreOfficeConvertRequest): number {
   return Math.min(requested + 2_000, MAX_TIMEOUT_MS + 2_000);
 }
 
-async function defaultCallBridge(
+export async function callDefaultLibreOfficeBridge(
   request: LibreOfficeConvertRequest,
   config: LibreOfficeBridgeConfig,
   signal: AbortSignal | undefined,
@@ -299,13 +315,10 @@ async function defaultCallBridge(
     }
 
     if (parsedBody === null) {
-      return {
-        ok: true,
-        action: "convert",
-      };
+      throw new Error("LibreOffice bridge returned a non-JSON success response.");
     }
 
-    const parsed = parseBridgeResponse(parsedBody);
+    const parsed = parseBridgeResponse(parsedBody, request);
     if (!parsed.ok) {
       throw new Error(parsed.error ?? "LibreOffice bridge rejected the request.");
     }
@@ -381,7 +394,7 @@ export function createLibreOfficeConvertTool(
   dependencies: LibreOfficeConvertToolDependencies = {},
 ): AgentTool<TSchema, LibreOfficeConvertToolDetails> {
   const getBridgeConfig = dependencies.getBridgeConfig ?? defaultGetBridgeConfig;
-  const callBridge = dependencies.callBridge ?? defaultCallBridge;
+  const callBridge = dependencies.callBridge ?? callDefaultLibreOfficeBridge;
 
   return {
     name: "libreoffice_convert",

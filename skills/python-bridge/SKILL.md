@@ -31,11 +31,10 @@ The Python bridge gives Pi access to native Python on the user's machine. It is 
 npx pi-for-excel-python-bridge
 ```
 
-This defaults to **real execution mode** on `https://localhost:3340`.
+This starts real local execution on `https://localhost:3340`.
 
 Options:
 - `--install-missing` — auto-install Python/LibreOffice via Homebrew (macOS)
-- `PYTHON_BRIDGE_MODE=stub` — safe simulated mode
 - `PYTHON_BRIDGE_TOKEN=your-secret` — require auth token
 - `PYTHON_BRIDGE_PYTHON_BIN=python3.12` — specify Python binary
 

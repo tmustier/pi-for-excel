@@ -4,13 +4,7 @@ Status:
 - Add-in adapter implemented in `src/tools/tmux.ts`
 - Local bridge scaffold implemented in `scripts/tmux-bridge-server.mjs`
 
-The bridge supports two modes:
-- `tmux`: real tmux subprocess backend with guardrails
-- `stub`: in-memory tmux simulation for development/testing (does not execute shell commands)
-
-Notes:
-- The one-command helper (`npx pi-for-excel-tmux-bridge`) defaults to `tmux` mode.
-- The raw server script keeps `stub` as its default for local development/test usage.
+The bridge runs a real tmux subprocess backend with guardrails. It fails at startup when tmux is unavailable rather than simulating successful commands.
 
 ## Availability and gating
 
@@ -24,20 +18,17 @@ The gate is checked on each tool execution (defense in depth).
 ## Local bridge quickstart
 
 ```bash
-# One-command setup (real tmux mode by default)
+# One-command setup
 npx pi-for-excel-tmux-bridge
 
 # Optional assisted dependency install (macOS/Homebrew)
 npx pi-for-excel-tmux-bridge --install-missing
 
-# Force safe simulated mode
-TMUX_BRIDGE_MODE=stub npx pi-for-excel-tmux-bridge
-
 # Source checkout alternative
 npm run tmux:bridge:https
 ```
 
-Real-mode requirement:
+Requirement:
 
 - `tmux` must be installed and discoverable on `PATH`
 - `--install-missing` can install `tmux` on macOS/Homebrew
@@ -121,7 +112,7 @@ Tip: `send_keys` sends input only. Use `capture_pane` or `send_and_capture` when
 Notes:
 - Non-2xx HTTP responses are treated as errors by the adapter.
 - `ok: false` is treated as an error by the adapter.
-- Plain-text success responses are accepted as `output` fallback.
+- Successful responses must be valid JSON with `ok: true`, the expected action, and action-specific result fields.
 
 ## Real tmux guardrails (implemented)
 

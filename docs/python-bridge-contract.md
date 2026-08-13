@@ -34,20 +34,17 @@ Optional bearer auth:
 ## Local bridge quickstart
 
 ```bash
-# One-command setup (real local execution mode by default)
+# One-command setup with real local execution
 npx pi-for-excel-python-bridge
 
 # Optional assisted dependency install (macOS/Homebrew)
 npx pi-for-excel-python-bridge --install-missing
 
-# Force safe simulated mode
-PYTHON_BRIDGE_MODE=stub npx pi-for-excel-python-bridge
-
 # Source checkout alternative
 npm run python:bridge:https
 ```
 
-Real-mode requirements:
+Requirements:
 
 - `python3` must be installed and discoverable on `PATH` (or set `PYTHON_BRIDGE_PYTHON_BIN`)
 - LibreOffice (`soffice` / `libreoffice`) is optional for `python_run`, but required for `libreoffice_convert`

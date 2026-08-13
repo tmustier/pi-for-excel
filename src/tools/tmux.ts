@@ -318,29 +318,39 @@ function parseStringArray(value: DynamicValue): string[] | undefined {
 
   const out: string[] = [];
   for (const item of value) {
-    if (typeof item === "string") {
-      out.push(item);
-    }
+    if (typeof item !== "string") return undefined;
+    out.push(item);
   }
 
-  return out.length > 0 ? out : [];
+  return out;
 }
 
-function parseBridgeResponse(value: DynamicValue, fallbackAction: TmuxAction): TmuxBridgeResponse {
-  if (!isToolsTmuxPayloadShape(value)) {
-    return {
-      ok: true,
-      action: fallbackAction,
-    };
+function parseBridgeResponse(value: DynamicValue, expectedAction: TmuxAction): TmuxBridgeResponse {
+  if (!isToolsTmuxPayloadShape(value) || typeof value.ok !== "boolean") {
+    throw new Error("Tmux bridge returned an invalid response payload.");
   }
 
-  const action = isTmuxAction(value.action) ? value.action : fallbackAction;
-  const ok = typeof value.ok === "boolean" ? value.ok : true;
+  const action = isTmuxAction(value.action) ? value.action : expectedAction;
+  const ok = value.ok;
   const session = typeof value.session === "string" ? value.session : undefined;
   const sessions = parseStringArray(value.sessions);
   const output = typeof value.output === "string" ? value.output : undefined;
   const error = typeof value.error === "string" ? value.error : undefined;
   const metadata = isToolsTmuxPayloadShape(value.metadata) ? value.metadata : undefined;
+
+  if (ok) {
+    const hasExpectedAction = value.action === expectedAction;
+    const hasActionResult = expectedAction === "list_sessions"
+      ? sessions !== undefined
+      : session !== undefined;
+    const hasCaptureOutput = expectedAction === "capture_pane" || expectedAction === "send_and_capture"
+      ? output !== undefined
+      : true;
+
+    if (!hasExpectedAction || !hasActionResult || !hasCaptureOutput) {
+      throw new Error("Tmux bridge returned an incomplete success payload.");
+    }
+  }
 
   return {
     ok,
@@ -404,7 +414,7 @@ export function computeTmuxFetchTimeoutMs(request: TmuxBridgeRequest): number {
   return Math.min(computedTimeoutMs, MAX_TMUX_BRIDGE_TIMEOUT_MS);
 }
 
-async function defaultCallBridge(
+export async function callDefaultTmuxBridge(
   request: TmuxBridgeRequest,
   config: TmuxBridgeConfig,
   signal: AbortSignal | undefined,
@@ -456,13 +466,7 @@ async function defaultCallBridge(
     }
 
     if (parsedBody === null) {
-      const output = rawBody.trim().length > 0 ? rawBody : undefined;
-      return {
-        ok: true,
-        action: request.action,
-        ...(request.session !== undefined ? { session: request.session } : {}),
-        ...(output !== undefined ? { output } : {}),
-      };
+      throw new Error("Tmux bridge returned a non-JSON success response.");
     }
 
     const parsed = parseBridgeResponse(parsedBody, request.action);
@@ -594,7 +598,7 @@ export function createTmuxTool(
   dependencies: TmuxToolDependencies = {},
 ): AgentTool<TSchema, TmuxToolDetails> {
   const getBridgeConfig = dependencies.getBridgeConfig ?? defaultGetBridgeConfig;
-  const callBridge = dependencies.callBridge ?? defaultCallBridge;
+  const callBridge = dependencies.callBridge ?? callDefaultTmuxBridge;
 
   return {
     name: "tmux",

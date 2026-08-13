@@ -3,9 +3,7 @@
 /**
  * Local Python / LibreOffice bridge for Pi for Excel.
  *
- * Modes:
- * - stub (default): deterministic simulated responses for local development.
- * - real: executes local python + libreoffice commands with guardrails.
+ * Executes local Python and LibreOffice commands with guardrails.
  *
  * Endpoints:
  * - GET  /health
@@ -32,13 +30,6 @@ if (useHttps && useHttp) {
 
 const HOST = process.env.HOST || (useHttps ? "localhost" : "127.0.0.1");
 const PORT = Number.parseInt(process.env.PORT || "3340", 10);
-
-const MODE_RAW = (process.env.PYTHON_BRIDGE_MODE || "stub").trim().toLowerCase();
-const MODE = MODE_RAW === "real" ? "real" : MODE_RAW === "stub" ? "stub" : null;
-if (!MODE) {
-  console.error(`[pi-for-excel] Invalid PYTHON_BRIDGE_MODE: ${MODE_RAW}. Use "stub" or "real".`);
-  process.exit(1);
-}
 
 const PYTHON_BIN = (process.env.PYTHON_BRIDGE_PYTHON_BIN || "python3").trim();
 const LIBREOFFICE_BIN_RAW = (process.env.PYTHON_BRIDGE_LIBREOFFICE_BIN || "").trim();
@@ -754,61 +745,6 @@ async function runLibreOfficeConvert(request, libreOfficeInfo) {
   }
 }
 
-function createStubBackend() {
-  return {
-    mode: "stub",
-    async health() {
-      return {
-        backend: "stub",
-        python: {
-          available: true,
-          mode: "stub",
-        },
-        libreoffice: {
-          available: true,
-          mode: "stub",
-        },
-      };
-    },
-
-    /**
-     * @param {{ code: string; input_json?: string; timeout_ms: number }} request
-     */
-    async handlePython(request) {
-      let resultJson;
-      if (request.input_json) {
-        resultJson = request.input_json;
-      }
-
-      return {
-        ok: true,
-        action: "run_python",
-        exit_code: 0,
-        stdout: "[stub] Python execution simulated.",
-        result_json: resultJson,
-        truncated: false,
-      };
-    },
-
-    /**
-     * @param {{ input_path: string; target_format: string; output_path?: string; overwrite: boolean; timeout_ms: number }} request
-     */
-    async handleLibreOffice(request) {
-      const outputPath = resolveOutputPath(request);
-
-      return {
-        ok: true,
-        action: "convert",
-        input_path: request.input_path,
-        target_format: request.target_format,
-        output_path: outputPath,
-        bytes: 0,
-        converter: "stub",
-      };
-    },
-  };
-}
-
 function createRealBackend() {
   const pythonInfo = probeBinary(PYTHON_BIN, ["--version"]);
   const libreOfficeInfo = probeLibreOfficeBinary();
@@ -882,7 +818,7 @@ function createRealBackend() {
   };
 }
 
-const backend = MODE === "real" ? createRealBackend() : createStubBackend();
+const backend = createRealBackend();
 
 const handler = async (req, res) => {
   try {
@@ -1016,10 +952,5 @@ server.listen(PORT, HOST, () => {
   } else {
     console.warn("[pi-for-excel] auth: no bearer token configured — any local process on this machine can drive this bridge.");
     console.warn("[pi-for-excel] recommended: set PYTHON_BRIDGE_TOKEN=<secret> and mirror it in Pi via /experimental python-bridge-token <secret>");
-  }
-
-  if (backend.mode === "stub") {
-    console.log("[pi-for-excel] stub mode: python/libreoffice calls are simulated.");
-    console.log("[pi-for-excel] use PYTHON_BRIDGE_MODE=real for local command execution.");
   }
 });

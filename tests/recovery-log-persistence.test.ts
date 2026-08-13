@@ -6,6 +6,8 @@ import {
   WorkbookRecoveryLog,
 } from "../src/workbook/recovery-log.ts";
 import type { WorkbookContext } from "../src/workbook/context.ts";
+import { finalizeMutationOperation } from "../src/tools/mutation/finalize.ts";
+import type { RecoveryCheckpointDetails } from "../src/tools/tool-details.ts";
 import { RECOVERY_SETTING_KEY, createInMemorySettingsStore } from "./recovery-log-test-helpers.test.ts";
 
 void test("recovery log appends and reloads workbook-scoped snapshots", async () => {
@@ -299,6 +301,94 @@ void test("appendModifyStructure stores cell counts from preserved data ranges",
 
   assert.ok(snapshot);
   assert.equal(snapshot?.cellCount, 4);
+});
+
+void test("recovery log surfaces persistence failure and does not retain an unsaved checkpoint", async () => {
+  const values = new Map<string, DynamicValue>();
+  let rejectWrites = true;
+  const settingsStore = {
+    get: <T>(key: string): Promise<T | null> => Promise.resolve((values.get(key) as T | undefined) ?? null),
+    set: (key: string, value: DynamicValue): Promise<void> => {
+      if (rejectWrites) return Promise.reject(new Error("quota exceeded"));
+      values.set(key, value);
+      return Promise.resolve();
+    },
+  };
+  const log = new WorkbookRecoveryLog({
+    getSettingsStore: () => Promise.resolve(settingsStore),
+    getWorkbookContext: () => Promise.resolve({
+      workbookId: "url_sha256:persistence-failure",
+      workbookName: "Failure.xlsx",
+      source: "document.url",
+    }),
+  });
+
+  await assert.rejects(log.append({
+    toolName: "write_cells",
+    toolCallId: "call-failed-save",
+    address: "Sheet1!A1",
+    beforeValues: [["before"]],
+    beforeFormulas: [[""]],
+  }), /quota exceeded/u);
+
+  rejectWrites = false;
+  assert.equal((await log.list()).length, 0);
+});
+
+void test("recovery log retries loading after a storage read failure", async () => {
+  const settingsStore = createInMemorySettingsStore();
+  await settingsStore.set(RECOVERY_SETTING_KEY, { version: 1, snapshots: [] });
+  let rejectRead = true;
+  const log = new WorkbookRecoveryLog({
+    getSettingsStore: () => Promise.resolve({
+      get: <T>(key: string): Promise<T | null> => rejectRead
+        ? Promise.reject(new Error("read failed"))
+        : settingsStore.get<T>(key),
+      set: (key: string, value: DynamicValue): Promise<void> => settingsStore.set(key, value),
+    }),
+  });
+
+  await assert.rejects(log.list(), /read failed/u);
+  rejectRead = false;
+  assert.deepEqual(await log.list(), []);
+});
+
+void test("mutation finalization warns instead of claiming failed audit and recovery persistence", async () => {
+  const result: {
+    content: [{ type: "text"; text: string }];
+    details: { recovery?: RecoveryCheckpointDetails };
+  } = {
+    content: [{ type: "text", text: "Changed workbook." }],
+    details: {},
+  };
+  const appendResultNote = (target: typeof result, note: string): void => {
+    target.content[0].text += `\n\n${note}`;
+  };
+
+  const finalized = await finalizeMutationOperation({
+    appendAuditEntry: () => Promise.reject(new Error("audit write failed")),
+  }, {
+    auditEntry: {
+      toolName: "write_cells",
+      toolCallId: "call-finalize-failure",
+      blocked: false,
+      changedCount: 1,
+      changes: [],
+    },
+    recovery: {
+      result,
+      appendRecoverySnapshot: () => Promise.reject(new Error("recovery write failed")),
+      appendResultNote,
+      unavailableReason: "not expected",
+      unavailableNote: "not expected",
+    },
+  });
+
+  assert.deepEqual(finalized, { checkpointCreated: false });
+  assert.match(result.content[0].text, /audit entry could not be saved/u);
+  assert.match(result.content[0].text, /Recovery checkpoint could not be saved/u);
+  assert.equal(result.details.recovery?.status, "not_available");
+  assert.equal(result.details.recovery?.reason, "checkpoint_creation_failed");
 });
 
 void test("appendModifyStructure skips oversized preserved data ranges", async () => {

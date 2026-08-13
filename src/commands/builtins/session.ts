@@ -44,14 +44,6 @@ export function createSessionIdentityCommands(actions: SessionCommandActions): S
         showToast(t("session.toast.named", { title }));
       },
     },
-    {
-      name: "share-session",
-      description: t("command.session.share"),
-      source: "builtin",
-      execute: () => {
-        showToast(t("session.toast.sharing_soon"));
-      },
-    },
   ];
 }
 

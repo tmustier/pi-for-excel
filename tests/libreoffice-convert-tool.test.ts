@@ -4,6 +4,7 @@ import { test } from "node:test";
 import type { AgentToolResult } from "@earendil-works/pi-agent-core";
 
 import {
+  callDefaultLibreOfficeBridge,
   createLibreOfficeConvertTool,
   type LibreOfficeBridgeConfig,
   type LibreOfficeConvertRequest,
@@ -127,6 +128,25 @@ void test("libreoffice_convert bridge errors are surfaced", async () => {
   assert.equal(result.details?.ok, false);
   assert.equal(result.details?.error, "bridge unavailable");
   assert.equal(result.details?.skillHint, "python-bridge");
+});
+
+void test("libreoffice bridge rejects incomplete HTTP 200 success payloads", async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+  globalThis.fetch = () => Promise.resolve(new Response(JSON.stringify({ ok: true, action: "convert" }), {
+    status: 200,
+  }));
+
+  await assert.rejects(
+    callDefaultLibreOfficeBridge(
+      { input_path: "/tmp/input.xlsx", target_format: "pdf" },
+      { url: "https://localhost:3340" },
+      undefined,
+    ),
+    /incomplete success payload/u,
+  );
 });
 
 void test("libreoffice_convert handles explicit bridge rejection payloads", async () => {
