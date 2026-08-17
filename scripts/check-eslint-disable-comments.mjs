@@ -23,7 +23,7 @@ function disableDirectiveBeforeReason(line) {
 
 for (const dir of searchRoots) {
   for (const file of collectFiles(join(root, dir))) {
-    const rel = relative(root, file);
+    const rel = relative(root, file).replace(/\\/g, "/");
     if (rel === "scripts/check-eslint-disable-comments.mjs") continue;
     const lines = readFileSync(file, "utf8").split("\n");
     for (const [index, line] of lines.entries()) {

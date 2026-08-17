@@ -19,7 +19,7 @@ function collectFiles(dir, out = []) {
 
 for (const dir of searchRoots) {
   for (const file of collectFiles(join(root, dir))) {
-    const rel = relative(root, file);
+    const rel = relative(root, file).replace(/\\/g, "/");
     if (allowedFiles.has(rel)) continue;
     const lines = readFileSync(file, "utf8").split("\n");
     for (const [index, line] of lines.entries()) {
