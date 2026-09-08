@@ -1,6 +1,7 @@
 export interface PiAuthRequestPolicyInput {
   remoteAddress?: string;
   hostHeader?: string | string[];
+  authorityHeader?: string | string[];
   allowNonLocalHost?: boolean;
 }
 
@@ -34,5 +35,5 @@ export function isLocalPiAuthHost(hostHeader: string | string[] | undefined): bo
 export function isPiAuthRequestAllowed(input: PiAuthRequestPolicyInput): boolean {
   if (!isLoopbackAddress(input.remoteAddress)) return false;
   if (input.allowNonLocalHost === true) return true;
-  return isLocalPiAuthHost(input.hostHeader);
+  return isLocalPiAuthHost(input.hostHeader ?? input.authorityHeader);
 }
