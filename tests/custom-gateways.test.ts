@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import type { Api, Model } from "@earendil-works/pi-ai";
 import type { CustomProvider } from "../src/storage/local/custom-providers-store.js";
 
 import {
@@ -12,6 +13,31 @@ import {
   saveOpenAiGatewayConfig,
   type CustomProvidersStoreLike,
 } from "../src/auth/custom-gateways.ts";
+
+const knownRegistryModel: Model<Api> = {
+  id: "openai/gpt-5.6-sol",
+  name: "OpenAI: GPT-5.6 Sol",
+  api: "openai-completions",
+  provider: "openrouter",
+  baseUrl: "https://openrouter.ai/api/v1",
+  reasoning: true,
+  thinkingLevelMap: {
+    off: "none",
+    low: "low",
+    high: "high",
+  },
+  input: ["text", "image"],
+  cost: {
+    input: 2,
+    output: 10,
+    cacheRead: 0.2,
+    cacheWrite: 2.5,
+  },
+  contextWindow: 1_050_000,
+  maxTokens: 128_000,
+  headers: { "X-Registry-Only": "not-copied" },
+  compat: { thinkingFormat: "openrouter" },
+};
 
 class MemoryCustomProvidersStore implements CustomProvidersStoreLike {
   private readonly providers = new Map<string, CustomProvider>();
@@ -55,6 +81,77 @@ void test("saveOpenAiGatewayConfig stores normalized endpoint/model/provider", a
   assert.equal(listed.length, 1);
   assert.equal(listed[0]?.providerName, saved.providerName);
   assert.equal(listed[0]?.contextWindow, DEFAULT_OPENAI_GATEWAY_CONTEXT_WINDOW);
+});
+
+void test("saveOpenAiGatewayConfig uses matched registry metadata by default", async () => {
+  const store = new MemoryCustomProvidersStore();
+
+  const saved = await saveOpenAiGatewayConfig(store, {
+    endpointUrl: "https://openrouter.ai/api/v1/",
+    modelId: knownRegistryModel.id,
+  }, {
+    getModels: () => [knownRegistryModel],
+  });
+
+  assert.equal(saved.contextWindow, 1_050_000);
+
+  const storedModel = (await store.get(saved.id))?.models?.[0];
+  assert.equal(storedModel?.contextWindow, 1_050_000);
+  assert.equal(storedModel?.maxTokens, 128_000);
+  assert.equal(storedModel?.reasoning, true);
+  assert.deepEqual(storedModel?.thinkingLevelMap, knownRegistryModel.thinkingLevelMap);
+  assert.deepEqual(storedModel?.input, ["text", "image"]);
+  assert.deepEqual(storedModel?.cost, knownRegistryModel.cost);
+  assert.equal(storedModel?.headers, undefined);
+  assert.equal(storedModel?.compat, undefined);
+});
+
+void test("saveOpenAiGatewayConfig lets explicit context override matched registry context", async () => {
+  const store = new MemoryCustomProvidersStore();
+
+  const saved = await saveOpenAiGatewayConfig(store, {
+    endpointUrl: knownRegistryModel.baseUrl,
+    modelId: knownRegistryModel.id,
+    contextWindow: 64_000,
+  }, {
+    getModels: () => [knownRegistryModel],
+  });
+
+  const storedModel = (await store.get(saved.id))?.models?.[0];
+  assert.equal(saved.contextWindow, 64_000);
+  assert.equal(storedModel?.contextWindow, 64_000);
+  assert.equal(storedModel?.maxTokens, 64_000);
+  assert.equal(storedModel?.reasoning, true);
+});
+
+void test("saveOpenAiGatewayConfig falls back when registry endpoint, id, or API differs", async () => {
+  const mismatchedModels: Model<Api>[] = [
+    { ...knownRegistryModel, baseUrl: "https://different.example.com/v1" },
+    { ...knownRegistryModel, id: "openai/different-model" },
+    { ...knownRegistryModel, api: "openai-responses" },
+  ];
+
+  for (const registryModel of mismatchedModels) {
+    const store = new MemoryCustomProvidersStore();
+    const saved = await saveOpenAiGatewayConfig(store, {
+      endpointUrl: knownRegistryModel.baseUrl,
+      modelId: knownRegistryModel.id,
+    }, {
+      getModels: () => [registryModel],
+    });
+
+    const storedModel = (await store.get(saved.id))?.models?.[0];
+    assert.equal(saved.contextWindow, DEFAULT_OPENAI_GATEWAY_CONTEXT_WINDOW);
+    assert.equal(storedModel?.reasoning, false);
+    assert.deepEqual(storedModel?.input, ["text"]);
+    assert.deepEqual(storedModel?.cost, {
+      input: 0,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+    });
+    assert.equal(storedModel?.maxTokens, 4_096);
+  }
 });
 
 void test("saveOpenAiGatewayConfig stores custom context window metadata", async () => {

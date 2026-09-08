@@ -3,6 +3,7 @@
  * `taskpane/init.ts` via `configureSettingsPages`.
  */
 
+import type { Models } from "@earendil-works/pi-ai";
 import type { ConnectionManager } from "../../../connections/manager.js";
 import type { ExecutionMode } from "../../../execution/mode.js";
 import type { ExtensionRuntimeManager } from "../../../extensions/runtime-manager.js";
@@ -30,6 +31,7 @@ export interface SettingsPagesDependencies {
   setExecutionMode?: (mode: ExecutionMode) => Promise<void>;
   getModelSwitchBehavior?: () => ModelSwitchBehavior;
   setModelSwitchBehavior?: (behavior: ModelSwitchBehavior) => Promise<void>;
+  models?: Pick<Models, "getModels">;
   extensionsHub?: ExtensionsHubDependencies;
   onRulesSaved?: () => Promise<void> | void;
   backups?: BackupsPageCallbacks;
