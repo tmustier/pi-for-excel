@@ -80,6 +80,8 @@ Notes for agents working in this repo.
 - Type assertions and lint suppressions must stay local and explain the safety invariant.
 
 ## Verification
+
+Local acceptance means a real taskpane prompt → approved current model → workbook tools → real Excel/WPS result, independently checked and cleaned up. Keep the host in the background. Unit tests, builds, browser fallback checks, and direct Office.js probes support this gate; they do not replace it. Record the revision, provider/model, thinking level, tool execution and read-back evidence. If blocked, report the missing coverage and hold acceptance unless explicitly waived. See `.agents/skills/excel-background-verification/SKILL.md`.
 - `npm run check`
 - `npm run build`
 - `npm run test:models`
