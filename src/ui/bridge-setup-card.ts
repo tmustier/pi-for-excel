@@ -15,7 +15,8 @@ import {
   type TmuxBridgeDetails,
 } from "../tools/tool-details.js";
 import { t } from "../language/index.js";
-import { AlertTriangle, Check, Copy, Terminal, lucide } from "./lucide-icons.js";
+import { createCopyableCommand } from "./command-copy.js";
+import { AlertTriangle, Terminal, lucide } from "./lucide-icons.js";
 
 export const PYTHON_BRIDGE_SETUP_COMMAND = "npx pi-for-excel-python-bridge";
 export const TMUX_BRIDGE_SETUP_COMMAND = "npx pi-for-excel-tmux-bridge";
@@ -34,66 +35,6 @@ interface BridgeSetupCardModel {
 
 interface BridgeSetupCardDependencies {
   probeBridge?: (bridgeUrl: string) => Promise<boolean>;
-}
-
-function selectElementText(element: HTMLElement): void {
-  const selection = window.getSelection();
-  if (!selection) {
-    return;
-  }
-
-  const range = document.createRange();
-  range.selectNodeContents(element);
-  selection.removeAllRanges();
-  selection.addRange(range);
-}
-
-function copyToClipboard(text: string, onCopied: () => void, fallbackElement: HTMLElement): void {
-  if (!navigator.clipboard?.writeText) {
-    selectElementText(fallbackElement);
-    return;
-  }
-
-  void navigator.clipboard.writeText(text).then(onCopied, () => selectElementText(fallbackElement));
-}
-
-function createCopyableCommand(command: string): HTMLDivElement {
-  const row = document.createElement("div");
-  row.className = "pi-bridge-setup__code";
-
-  const code = document.createElement("code");
-  code.textContent = command;
-
-  const copyBtn = document.createElement("button");
-  copyBtn.type = "button";
-  copyBtn.className = "pi-bridge-setup__copy";
-  copyBtn.title = t("bridge-setup.copyCommandTitle");
-  copyBtn.setAttribute("aria-label", t("bridge-setup.copyCommandTitle"));
-  copyBtn.replaceChildren(lucide(Copy));
-
-  let resetTimeout: ReturnType<typeof setTimeout> | null = null;
-
-  copyBtn.addEventListener("click", () => {
-    copyToClipboard(command, () => {
-      copyBtn.replaceChildren(lucide(Check));
-      copyBtn.title = t("bridge-setup.copiedTitle");
-      copyBtn.setAttribute("aria-label", t("bridge-setup.copiedTitle"));
-
-      if (resetTimeout !== null) {
-        clearTimeout(resetTimeout);
-      }
-
-      resetTimeout = setTimeout(() => {
-        copyBtn.replaceChildren(lucide(Copy));
-        copyBtn.title = t("bridge-setup.copyCommandTitle");
-        copyBtn.setAttribute("aria-label", t("bridge-setup.copyCommandTitle"));
-        resetTimeout = null;
-      }, 1400);
-    }, code);
-  });
-
-  row.append(code, copyBtn);
-  return row;
 }
 
 function isSetupFailure(args: {

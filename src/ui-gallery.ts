@@ -17,6 +17,7 @@ import "./boot.js";
 // Register web components we render
 import "./ui/register-components.js";
 
+import { createCopyableCommand } from "./ui/command-copy.js";
 import { escapeHtml, setSafeInnerHTML } from "./utils/html.js";
 
 const galleryRoot = document.getElementById("gallery-root");
@@ -159,6 +160,14 @@ toolCardSection.appendChild(createMockToolCard("complete", "Filled", "'Cash Flow
 toolCardSection.appendChild(createMockToolCard("complete", "Filled", "'Cash Flow'!D13:L13 — 9 changes"));
 toolCardSection.appendChild(createMockToolCard("complete", "Filled", "'Cash Flow'!D14:L14 — 9 changes"));
 toolCardSection.appendChild(createMockToolCard("error", "Fill", "'Cash Flow'!D15:L15 — error"));
+
+const commandCopyWrap = document.createElement("div");
+commandCopyWrap.style.cssText = "margin-top: 12px; display: flex; flex-direction: column; gap: 8px;";
+commandCopyWrap.append(
+  createCopyableCommand("npx pi-for-excel-proxy"),
+  createCopyableCommand("npx pi-for-excel-python-bridge"),
+);
+toolCardSection.appendChild(commandCopyWrap);
 
 /* ── 4. Tool Card Group ──────────────────────────────── */
 
