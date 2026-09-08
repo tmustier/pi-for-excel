@@ -1,0 +1,19 @@
+{
+  "ignorePatterns": [
+    "tools/oxlint/anti-slop/**"
+  ],
+  "jsPlugins": [
+    {
+      "name": "anti-slop",
+      "specifier": "./tools/oxlint/anti-slop/index.ts"
+    }
+  ],
+  "rules": {
+    "oxc/no-accumulating-spread": "error",
+    "anti-slop/no-reduce-accumulator-copy": "error",
+    "anti-slop/no-module-mocking": "error",
+    "anti-slop/no-widen-then-assert": "error",
+    "anti-slop/no-unknown-parameters": "error",
+    "anti-slop/no-unknown-returns": "error"
+  }
+}
