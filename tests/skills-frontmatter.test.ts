@@ -18,8 +18,6 @@ Use this skill when needed.
 `);
 
   assert.ok(parsed);
-  if (!parsed) return;
-
   assert.equal(parsed.frontmatter.name, "sample-skill");
   assert.equal(parsed.frontmatter.description, "Helpful workflow for sample tasks.");
   assert.equal(parsed.frontmatter.compatibility, "Requires sample runtime.");

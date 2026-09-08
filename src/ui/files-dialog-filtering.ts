@@ -86,18 +86,6 @@ export function resolveFilesDialogSourceLabel(file: WorkspaceFileEntry): string 
   return "Uploaded";
 }
 
-export function fileMatchesFilesDialogFilter(args: {
-  file: WorkspaceFileEntry;
-  filterText: string;
-}): boolean {
-  const query = normalizeFilesDialogFilterText(args.filterText);
-  if (query.length === 0) {
-    return true;
-  }
-
-  return args.file.path.toLowerCase().includes(query);
-}
-
 export function filterFilesDialogEntries(args: {
   files: readonly WorkspaceFileEntry[];
   filterText: string;

@@ -10,7 +10,6 @@ import type { FillFormulaDetails } from "./tool-details.js";
 import { excelRun, getRange, qualifiedAddress } from "../excel/helpers.js";
 import { buildWorkbookCellChangeSummary } from "../audit/cell-diff.js";
 import { getWorkbookChangeAuditLog } from "../audit/workbook-change-audit.js";
-import { dispatchWorkbookSnapshotCreated } from "../workbook/recovery-events.js";
 import { getWorkbookRecoveryLog } from "../workbook/recovery-log.js";
 import { countOccupiedCells, validateFormula } from "./write-cells.js";
 import { findErrors } from "../utils/format.js";
@@ -247,14 +246,6 @@ export function createFillFormulaTool(): AgentTool<typeof schema, FillFormulaDet
             appendResultNote: appendMutationResultNote,
             unavailableReason: CHECKPOINT_SKIPPED_REASON,
             unavailableNote: CHECKPOINT_SKIPPED_NOTE,
-            dispatchSnapshotCreated: (checkpoint) => {
-              dispatchWorkbookSnapshotCreated({
-                snapshotId: checkpoint.id,
-                toolName: checkpoint.toolName,
-                address: checkpoint.address,
-                changedCount: checkpoint.changedCount,
-              });
-            },
           },
         });
 

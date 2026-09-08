@@ -1,0 +1,44 @@
+/* Shared copyable command row for inline setup cards. */
+
+.pi-command-copy {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--amber-alpha-16);
+  background: var(--white-alpha-45);
+  border-radius: var(--radius-xs);
+  padding: 6px 8px;
+}
+
+.pi-command-copy code {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--foreground);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pi-command-copy__button {
+  border: none;
+  background: none;
+  color: var(--muted-foreground);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 18px;
+  block-size: 18px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.pi-command-copy__button > svg {
+  inline-size: 14px;
+  block-size: 14px;
+}
+
+.pi-command-copy__button:hover {
+  color: var(--foreground);
+}

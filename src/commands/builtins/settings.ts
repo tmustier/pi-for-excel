@@ -6,7 +6,7 @@ import type { ExecutionMode } from "../../execution/mode.js";
 import { formatExecutionModeLabel, toggleExecutionMode } from "../../execution/mode.js";
 import { showToast } from "../../ui/toast.js";
 import type { SlashCommand } from "../types.js";
-import { showSettingsDialog } from "./overlays.js";
+import { openSettings } from "./overlays.js";
 import { t } from "../../language/index.js";
 
 export interface SettingsCommandActions {
@@ -57,7 +57,7 @@ export function createSettingsCommands(actions: SettingsCommandActions): SlashCo
       description: t("command.settings.desc"),
       source: "builtin",
       execute: () => {
-        void showSettingsDialog();
+        void openSettings();
       },
     },
     {
@@ -65,7 +65,7 @@ export function createSettingsCommands(actions: SettingsCommandActions): SlashCo
       description: t("command.settings.providers"),
       source: "builtin",
       execute: async () => {
-        await showSettingsDialog({ section: "logins" });
+        await openSettings("providers");
       },
     },
     {

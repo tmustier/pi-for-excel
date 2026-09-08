@@ -141,6 +141,33 @@ export function createAsyncCoalescer(task: () => Promise<void>): () => Promise<v
   };
 }
 
+export async function awaitCredentialRestoreForStartup(
+  task: Promise<void>,
+  timeoutMs: number,
+  onLateResolve: () => void | Promise<void>,
+): Promise<void> {
+  let settled = false;
+  void task.then(
+    () => {
+      settled = true;
+    },
+    () => {
+      settled = true;
+    },
+  );
+
+  try {
+    await awaitWithTimeout("Credential restore", timeoutMs, task);
+  } catch (error) {
+    if (!settled) {
+      void task.then(onLateResolve).catch((lateError: DynamicValue) => {
+        console.warn("[auth] Credential restore failed after timeout:", lateError);
+      });
+    }
+    throw error;
+  }
+}
+
 export async function awaitWithTimeout<T>(
   label: string,
   timeoutMs: number,

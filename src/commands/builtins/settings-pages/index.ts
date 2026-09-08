@@ -14,9 +14,6 @@
  *         ├─ skills           bundled + external skills
  *         ├─ shortcuts        keyboard shortcuts reference
  *         └─ experimental     experimental feature toggles
- *
- * `showSettingsDialog({ section })` is kept as a compatibility shim mapping
- * the legacy section names onto page ids.
  */
 
 import { createSettingsShell, type SettingsShellPage } from "../../../ui/settings-shell.js";
@@ -101,65 +98,6 @@ export async function openSettings(pageId?: SettingsPageId): Promise<void> {
   }
 
   await shell.open(pageId);
-}
-
-export function isSettingsOpen(): boolean {
-  return shell.isOpen();
-}
-
-// ── Legacy compatibility ────────────────────────────────────────────
-
-export type SettingsOverlaySection =
-  | "logins"
-  | "more"
-  | "providers"
-  | "custom-gateways"
-  | "proxy"
-  | "execution-mode"
-  | "advanced"
-  | "experimental"
-  | "connections"
-  | "plugins"
-  | "skills";
-
-export interface ShowSettingsDialogOptions {
-  section?: SettingsOverlaySection;
-}
-
-function resolveLegacySection(section: SettingsOverlaySection): SettingsPageId {
-  switch (section) {
-    case "logins":
-    case "providers":
-      return "providers";
-    case "custom-gateways":
-      return "gateway";
-    case "proxy":
-      return "proxy";
-    case "experimental":
-      return "experimental";
-    case "connections":
-      return "connections";
-    case "plugins":
-      return "plugins";
-    case "skills":
-      return "skills";
-    case "more":
-    case "execution-mode":
-    case "advanced":
-      return "root";
-    default:
-      return "root";
-  }
-}
-
-/** Legacy entry point; maps old section names to settings pages. */
-export async function showSettingsDialog(options: ShowSettingsDialogOptions = {}): Promise<void> {
-  if (options.section) {
-    await openSettings(resolveLegacySection(options.section));
-    return;
-  }
-
-  await openSettings();
 }
 
 export { getSettingsPagesDependencies };

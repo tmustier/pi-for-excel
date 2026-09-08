@@ -169,10 +169,10 @@ interface SettingsPageContext {
 - `createSectionHeader` count becomes a caller-supplied localized label (fixes the
   "1 skill" bug for plugins).
 
-### 3.4 Compatibility
+### 3.4 Public API
 
-- `showSettingsDialog({ section })` remains as a shim mapping old section names to
-  page ids (`logins`→`providers`, `more`→root, `execution-mode`→root, etc.).
+- `openSettings(pageId)` is the single settings entry point. Callers use current
+  page ids directly; `/settings` calls it without a page to retain toggle behavior.
 - Slash commands deep-link: `/settings`→root, `/login`→providers, `/rules`→rules,
   `/history`→backups, `/shortcuts`→shortcuts, `/tools`→connections,
   `/extensions`→plugins, `/skills`→skills.
@@ -213,8 +213,8 @@ Implemented on branch `settings-ux-redesign`:
 - **Removed**: `settings-overlay.ts`, `extensions-hub-overlay.ts`,
   `rules-overlay.ts`, `recovery-overlay.ts`, `shortcuts-overlay.ts`, retired
   overlay ids, dead CSS (old tab system, settings panels, dialog cards).
-- **Compat**: `showSettingsDialog({ section })` shim; `openSettings(pageId)` is
-  the new API; slash commands and sidebar menu deep-link to pages.
+- **Navigation**: `openSettings(pageId)` is the settings API; slash commands and
+  the sidebar menu deep-link to pages.
 - **Polish fixes shipped**: `rules.preset.*` locale keys (raw-key bug),
   numeric section-header count (the "1 skill" plugins bug),
   `recovery.emptyState` line break (`white-space: pre-line`), API-key row

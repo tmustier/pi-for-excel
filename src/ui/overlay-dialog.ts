@@ -149,15 +149,6 @@ export function createOverlaySectionTitle(text: string): HTMLHeadingElement {
   return title;
 }
 
-export type OverlayBadgeTone = "ok" | "warn" | "muted";
-
-export function createOverlayBadge(text: string, tone: OverlayBadgeTone): HTMLSpanElement {
-  const badge = document.createElement("span");
-  badge.className = `pi-overlay-badge pi-overlay-badge--${tone}`;
-  badge.textContent = text;
-  return badge;
-}
-
 export function createOverlayHeader(options: OverlayHeaderOptions): OverlayHeaderElements {
   const header = document.createElement("div");
   header.className = "pi-overlay-header";

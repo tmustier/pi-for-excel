@@ -130,15 +130,6 @@ export function parsedReferencesContainTarget(
   });
 }
 
-export function formulaReferencesParsedTarget(
-  formula: string,
-  currentSheet: string,
-  target: ParsedCellAddress,
-): boolean {
-  const refs = extractFormulaReferences(formula, currentSheet);
-  return parsedReferencesContainTarget(refs, target);
-}
-
 export function formulaReferencesTargetCell(
   formula: string,
   currentSheet: string,
@@ -147,7 +138,8 @@ export function formulaReferencesTargetCell(
   const target = parseQualifiedCellAddress(targetAddress, currentSheet);
   if (!target) return false;
 
-  return formulaReferencesParsedTarget(formula, currentSheet, target);
+  const references = extractFormulaReferences(formula, currentSheet);
+  return parsedReferencesContainTarget(references, target);
 }
 
 export function summarizeTraceTree(root: DepNodeDetail): { nodeCount: number; edgeCount: number } {

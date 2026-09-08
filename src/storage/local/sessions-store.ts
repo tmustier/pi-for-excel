@@ -72,11 +72,6 @@ export class SessionsStore extends Store {
     );
   }
 
-  // Alias for backward compatibility
-  async deleteSession(id: string): Promise<void> {
-    return this.delete(id);
-  }
-
   async updateTitle(id: string, title: string): Promise<void> {
     const metadata = await this.getMetadata(id);
     if (metadata) {
@@ -146,8 +141,6 @@ export class SessionsStore extends Store {
 
   async getLatestSessionId(): Promise<string | null> {
     const allMetadata = await this.getAllMetadata();
-    // Sort by lastModified descending
-    allMetadata.sort((a, b) => b.lastModified.localeCompare(a.lastModified));
     return allMetadata[0]?.id ?? null;
   }
 }

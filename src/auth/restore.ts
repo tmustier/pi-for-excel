@@ -5,9 +5,9 @@ function isAuthRestorePayloadShape(value: DynamicValue): value is DynamicObject 
 /**
  * Auto-restore auth credentials from pi's auth.json (dev) or browser storage (OAuth).
  *
- * Priority:
+ * Per-provider priority:
  * 1. pi's ~/.pi/agent/auth.json (served by Vite plugin at /__pi-auth)
- * 2. IndexedDB SettingsStore (`oauth.<providerId>`)
+ * 2. IndexedDB SettingsStore (`oauth.<providerId>`) as fallback
  */
 
 import type { OAuthCredentials } from "@earendil-works/pi-ai";
@@ -48,6 +48,7 @@ function isOAuthCredential(value: DynamicValue): value is OAuthCredential {
     value.type === "oauth" &&
     typeof value.refresh === "string" &&
     typeof value.access === "string" &&
+    value.access.trim().length > 0 &&
     typeof value.expires === "number"
   );
 }
@@ -59,26 +60,25 @@ function isOAuthCredential(value: DynamicValue): value is OAuthCredential {
 export async function restoreCredentials(
   providerKeys: ProviderKeysStore,
   settings: SettingsStore,
+  fetchAuth: typeof fetch = originalFetch,
 ): Promise<void> {
-  // 1. Try pi's auth.json (dev server only)
-  if (await restoreFromPiAuth(providerKeys, getOAuthProvider)) {
-    return;
-  }
-
-  // 2. Browser OAuth sessions (IndexedDB settings)
-  await restoreFromBrowserOAuthStorage(providerKeys, settings, getOAuthProvider);
+  const restoredProviders = await restoreFromPiAuth(providerKeys, getOAuthProvider, fetchAuth);
+  await restoreFromBrowserOAuthStorage(providerKeys, settings, getOAuthProvider, restoredProviders);
 }
 
 async function restoreFromPiAuth(
   providerKeys: ProviderKeysStore,
   getOAuthProvider: GetOAuthProvider,
-): Promise<boolean> {
+  fetchAuth: typeof fetch,
+): Promise<Set<string>> {
+  const restoredProviders = new Set<string>();
+
   try {
-    const res = await originalFetch("/__pi-auth");
-    if (!res.ok) return false;
+    const res = await fetchAuth("/__pi-auth");
+    if (!res.ok) return restoredProviders;
 
     const authData: DynamicValue = await res.json();
-    if (!isAuthRestorePayloadShape(authData)) return false;
+    if (!isAuthRestorePayloadShape(authData)) return restoredProviders;
 
     console.log(`[auth] Found pi auth.json with ${Object.keys(authData).length} provider(s)`);
 
@@ -88,6 +88,7 @@ async function restoreFromPiAuth(
 
         if (isApiKeyCredential(cred)) {
           await providerKeys.set(apiProvider, cred.key);
+          restoredProviders.add(apiProvider);
           console.log(`[auth] ${providerId}: API key loaded`);
           continue;
         }
@@ -106,12 +107,14 @@ async function restoreFromPiAuth(
           try {
             const refreshed = await provider.refreshToken(cred);
             await providerKeys.set(apiProvider, provider.getApiKey(refreshed));
+            restoredProviders.add(apiProvider);
             console.log(`[auth] ${providerId}: token refreshed`);
           } catch (e) {
             console.warn(`[auth] ${providerId}: refresh failed (${getErrorMessage(e)})`);
           }
         } else {
           await providerKeys.set(apiProvider, provider.getApiKey(cred));
+          restoredProviders.add(apiProvider);
           const hours = Math.round((cred.expires - Date.now()) / 3600000);
           console.log(`[auth] ${providerId}: OAuth token loaded (expires in ${hours}h)`);
         }
@@ -120,9 +123,9 @@ async function restoreFromPiAuth(
       }
     }
 
-    return true;
+    return restoredProviders;
   } catch {
-    return false;
+    return restoredProviders;
   }
 }
 
@@ -139,8 +142,12 @@ async function restoreFromBrowserOAuthStorage(
   providerKeys: ProviderKeysStore,
   settings: SettingsStore,
   getOAuthProvider: GetOAuthProvider,
+  restoredProviders: Set<string>,
 ): Promise<void> {
   for (const providerId of BROWSER_OAUTH_PROVIDERS) {
+    const apiProvider = mapToApiProvider(providerId);
+    if (restoredProviders.has(apiProvider)) continue;
+
     const credentials = await loadOAuthCredentials(settings, providerId);
     if (!credentials) continue;
 
@@ -148,13 +155,12 @@ async function restoreFromBrowserOAuthStorage(
       const provider = getOAuthProvider(providerId);
       if (!provider) continue;
 
-      const apiProvider = mapToApiProvider(providerId);
-
       if (Date.now() >= credentials.expires) {
         try {
           const refreshed = await provider.refreshToken(credentials);
           await saveOAuthCredentials(settings, providerId, refreshed);
           await providerKeys.set(apiProvider, provider.getApiKey(refreshed));
+          restoredProviders.add(apiProvider);
           console.log(`[auth] ${provider.name}: token refreshed from IndexedDB`);
         } catch (e) {
           if (providerId === "openai-codex" && isOpenAICodexCredentialRefreshRequired(e)) {
@@ -166,6 +172,7 @@ async function restoreFromBrowserOAuthStorage(
         }
       } else {
         await providerKeys.set(apiProvider, provider.getApiKey(credentials));
+        restoredProviders.add(apiProvider);
         console.log(`[auth] ${provider.name}: session restored from IndexedDB`);
       }
     } catch (e) {

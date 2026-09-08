@@ -7,12 +7,11 @@
 
 import { Type, type Static } from "@sinclair/typebox";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
-import { excelRun, getRange, qualifiedAddress, parseCell } from "../excel/helpers.js";
+import { excelRun, getRange, isCellInRange, qualifiedAddress } from "../excel/helpers.js";
 import {
   getWorkbookChangeAuditLog,
   type AppendWorkbookChangeAuditEntryArgs,
 } from "../audit/workbook-change-audit.js";
-import { dispatchWorkbookSnapshotCreated } from "../workbook/recovery-events.js";
 import { captureCommentThreadState, type RecoveryCommentThreadState } from "../workbook/recovery-states.js";
 import {
   getWorkbookRecoveryLog,
@@ -37,27 +36,6 @@ function StringEnum<T extends string[]>(values: [...T], opts?: { description?: s
     opts,
   );
 }
-/** Check if a cell (already stripped of sheet prefix) falls within a range address. */
-function isCellInRange(cellAddr: string, rangeAddr: string): boolean {
-  const bangIndex = rangeAddr.indexOf("!");
-  const clean = bangIndex >= 0 ? rangeAddr.slice(bangIndex + 1) : rangeAddr;
-  const parts = clean.includes(":") ? clean.split(":") : [clean, clean];
-  const startPart = parts[0];
-  const endPart = parts[1];
-  if (startPart === undefined || endPart === undefined) {
-    return false;
-  }
-  const start = parseCell(startPart);
-  const end = parseCell(endPart);
-  const cell = parseCell(cellAddr);
-  return (
-    cell.col >= start.col &&
-    cell.col <= end.col &&
-    cell.row >= start.row &&
-    cell.row <= end.row
-  );
-}
-
 /** Strip sheet prefix from an address (e.g. "Sheet1!A1" → "A1"). */
 function stripSheet(address: string): string {
   const bangIndex = address.indexOf("!");
@@ -125,7 +103,6 @@ interface CommentsToolDependencies {
   appendRecoverySnapshot: (
     args: AppendCommentThreadRecoverySnapshotArgs,
   ) => Promise<WorkbookRecoverySnapshot | null>;
-  dispatchSnapshotCreated: (snapshot: WorkbookRecoverySnapshot) => void;
 }
 
 function isMutatingCommentsAction(action: CommentAction): boolean {
@@ -143,14 +120,6 @@ const defaultDependencies: CommentsToolDependencies = {
   appendAuditEntry: (entry) => getWorkbookChangeAuditLog().append(entry),
   captureCommentThread: (address) => captureCommentThreadState(address),
   appendRecoverySnapshot: (args) => getWorkbookRecoveryLog().appendCommentThread(args),
-  dispatchSnapshotCreated: (snapshot) => {
-    dispatchWorkbookSnapshotCreated({
-      snapshotId: snapshot.id,
-      toolName: snapshot.toolName,
-      address: snapshot.address,
-      changedCount: snapshot.changedCount,
-    });
-  },
 };
 
 // ── Tool ─────────────────────────────────────────────────────────────
@@ -163,7 +132,6 @@ export function createCommentsTool(
     appendAuditEntry: dependencies.appendAuditEntry ?? defaultDependencies.appendAuditEntry,
     captureCommentThread: dependencies.captureCommentThread ?? defaultDependencies.captureCommentThread,
     appendRecoverySnapshot: dependencies.appendRecoverySnapshot ?? defaultDependencies.appendRecoverySnapshot,
-    dispatchSnapshotCreated: dependencies.dispatchSnapshotCreated ?? defaultDependencies.dispatchSnapshotCreated,
   };
 
   return {
@@ -224,9 +192,6 @@ export function createCommentsTool(
             appendResultNote: appendMutationResultNote,
             unavailableReason: CHECKPOINT_SKIPPED_REASON,
             unavailableNote: CHECKPOINT_SKIPPED_NOTE,
-            dispatchSnapshotCreated: (checkpoint: WorkbookRecoverySnapshot) => {
-              resolvedDependencies.dispatchSnapshotCreated(checkpoint);
-            },
           }
           : undefined;
 

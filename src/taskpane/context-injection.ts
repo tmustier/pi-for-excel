@@ -171,7 +171,7 @@ export function createContextInjector(
     }
 
     try {
-      const sel = await withTimeout(readSelectionContext().catch(() => null), 1500);
+      const sel = await withTimeout(readSelectionContext(), 1500);
       if (sel) injections.push(sel.text);
     } catch {
       // ignore
