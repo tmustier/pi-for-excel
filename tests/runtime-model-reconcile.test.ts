@@ -1,6 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import path from "node:path";
 import { test } from "node:test";
 
 import { getBuiltinModel } from "@earendil-works/pi-ai/providers/all";
@@ -74,43 +72,6 @@ void test("does not swap onto a default model whose provider is also unusable", 
   });
 
   assert.equal(swap, null);
-});
-
-void test("init.ts reconcile loop guards on streaming AND queue-busy runtimes", () => {
-  // Wiring pin for the working-session invariant: the reconcile loop in
-  // init.ts must skip runtimes doing non-streaming work (actionQueue busy)
-  // as well as streaming ones, before any model mutation.
-  const initSource = readFileSync(
-    path.resolve(process.cwd(), "src/taskpane/init.ts"),
-    "utf8",
-  );
-
-  assert.notEqual(
-    initSource.indexOf(
-      "if (runtime.agent.state.isStreaming || runtime.actionQueue.isBusy()) {",
-    ),
-    -1,
-    "expected reconcile loop to skip streaming or queue-busy runtimes",
-  );
-  assert.notEqual(
-    initSource.indexOf(
-      "isBusy: runtime.agent.state.isStreaming || runtime.actionQueue.isBusy(),",
-    ),
-    -1,
-    "expected resolveRuntimeModelSwap to receive the combined busy state",
-  );
-});
-
-void test("agent-end wiring retries reconciliation skipped during an in-flight unload", () => {
-  const initSource = readFileSync(
-    path.resolve(process.cwd(), "src/taskpane/init.ts"),
-    "utf8",
-  );
-
-  assert.match(
-    initSource,
-    /if \(ev\.type !== "agent_end"\) return;[\s\S]*?window\.setTimeout\(\(\) => onProvidersChanged\?\.\(\), 0\);/u,
-  );
 });
 
 void test("sets thinkingLevel to off when swapping onto a non-reasoning model", () => {

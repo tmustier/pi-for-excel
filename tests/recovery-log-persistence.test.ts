@@ -41,7 +41,7 @@ void test("recovery log appends and reloads workbook-scoped snapshots", async ()
   });
 
   assert.ok(appended);
-  assert.equal(appended?.id, "snap-1");
+  assert.equal(appended.id, "snap-1");
 
   const entriesA = await logA.listForCurrentWorkbook();
   assert.equal(entriesA.length, 1);
@@ -128,20 +128,20 @@ void test("delete is scoped to the active workbook", async () => {
 
   currentWorkbookId = "url_sha256:workbook-a";
 
-  const deletedOtherWorkbook = await log.delete(snapshotB?.id ?? "");
+  const deletedOtherWorkbook = await log.delete(snapshotB.id);
   assert.equal(deletedOtherWorkbook, false);
 
-  const deletedCurrentWorkbook = await log.delete(snapshotA?.id ?? "");
+  const deletedCurrentWorkbook = await log.delete(snapshotA.id);
   assert.equal(deletedCurrentWorkbook, true);
 
   currentWorkbookId = null;
-  const deletedWithoutIdentity = await log.delete(snapshotB?.id ?? "");
+  const deletedWithoutIdentity = await log.delete(snapshotB.id);
   assert.equal(deletedWithoutIdentity, false);
 
   currentWorkbookId = "url_sha256:workbook-b";
   const remainingCurrent = await log.listForCurrentWorkbook(10);
   assert.equal(remainingCurrent.length, 1);
-  assert.equal(remainingCurrent[0]?.id, snapshotB?.id);
+  assert.equal(remainingCurrent[0]?.id, snapshotB.id);
 });
 void test("clearForCurrentWorkbook removes only matching workbook checkpoints", async () => {
   const settingsStore = createInMemorySettingsStore();
@@ -298,7 +298,7 @@ void test("appendModifyStructure stores cell counts from preserved data ranges",
   });
 
   assert.ok(snapshot);
-  assert.equal(snapshot?.cellCount, 4);
+  assert.equal(snapshot.cellCount, 4);
 });
 
 void test("appendModifyStructure skips oversized preserved data ranges", async () => {
