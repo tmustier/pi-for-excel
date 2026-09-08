@@ -35,5 +35,6 @@ export function isLocalPiAuthHost(hostHeader: string | string[] | undefined): bo
 export function isPiAuthRequestAllowed(input: PiAuthRequestPolicyInput): boolean {
   if (!isLoopbackAddress(input.remoteAddress)) return false;
   if (input.allowNonLocalHost === true) return true;
-  return isLocalPiAuthHost(input.hostHeader ?? input.authorityHeader);
+  const authorities = [input.hostHeader, input.authorityHeader].filter((header) => header !== undefined);
+  return authorities.length > 0 && authorities.every(isLocalPiAuthHost);
 }
