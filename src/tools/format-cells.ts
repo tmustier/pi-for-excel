@@ -10,7 +10,6 @@ import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import type { FormatCellsDetails } from "./tool-details.js";
 import { excelRun, getRange, parseRangeRef, qualifiedAddress } from "../excel/helpers.js";
 import { getWorkbookChangeAuditLog } from "../audit/workbook-change-audit.js";
-import { dispatchWorkbookSnapshotCreated } from "../workbook/recovery-events.js";
 import { getWorkbookRecoveryLog, MAX_RECOVERY_CELLS } from "../workbook/recovery-log.js";
 import { captureFormatCellsState, type RecoveryFormatSelection } from "../workbook/recovery-states.js";
 import { getErrorMessage } from "../utils/errors.js";
@@ -549,14 +548,6 @@ export function createFormatCellsTool(): AgentTool<typeof schema, FormatCellsDet
           appendResultNote: appendMutationResultNote,
           unavailableReason: recoveryUnavailableReason,
           unavailableNote: CHECKPOINT_SKIPPED_NOTE,
-          dispatchSnapshotCreated: (checkpoint) => {
-            dispatchWorkbookSnapshotCreated({
-              snapshotId: checkpoint.id,
-              toolName: checkpoint.toolName,
-              address: checkpoint.address,
-              changedCount: checkpoint.changedCount,
-            });
-          },
         });
 
         await finalizeMutationOperation(mutationFinalizeDependencies, {

@@ -25,7 +25,6 @@ import {
 } from "../excel/helpers.js";
 import { buildWorkbookCellChangeSummary } from "../audit/cell-diff.js";
 import { getWorkbookChangeAuditLog } from "../audit/workbook-change-audit.js";
-import { dispatchWorkbookSnapshotCreated } from "../workbook/recovery-events.js";
 import { getWorkbookRecoveryLog, MAX_RECOVERY_CELLS } from "../workbook/recovery-log.js";
 import { getErrorMessage } from "../utils/errors.js";
 import { findErrors } from "../utils/format.js";
@@ -626,14 +625,6 @@ export function createPythonTransformRangeTool(
             appendResultNote: appendMutationResultNote,
             unavailableReason: CHECKPOINT_SKIPPED_REASON,
             unavailableNote: CHECKPOINT_SKIPPED_NOTE,
-            dispatchSnapshotCreated: (checkpoint) => {
-              dispatchWorkbookSnapshotCreated({
-                snapshotId: checkpoint.id,
-                toolName: checkpoint.toolName,
-                address: checkpoint.address,
-                changedCount: checkpoint.changedCount,
-              });
-            },
           },
         });
 

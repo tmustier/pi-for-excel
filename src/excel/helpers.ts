@@ -108,6 +108,24 @@ export function cellAddress(col: number, row: number): string {
   return `${colToLetter(col)}${row}`;
 }
 
+/** Check if a cell address falls within a range address. */
+export function isCellInRange(cellAddress: string, rangeAddress: string): boolean {
+  const bangIndex = rangeAddress.indexOf("!");
+  const cleanRange = bangIndex >= 0 ? rangeAddress.slice(bangIndex + 1) : rangeAddress;
+  const colonIndex = cleanRange.indexOf(":");
+  const startAddress = colonIndex >= 0 ? cleanRange.slice(0, colonIndex) : cleanRange;
+  const endAddress = colonIndex >= 0 ? cleanRange.slice(colonIndex + 1) : cleanRange;
+  const start = parseCell(startAddress);
+  const end = parseCell(endAddress);
+  const cell = parseCell(cellAddress);
+  return (
+    cell.col >= start.col &&
+    cell.col <= end.col &&
+    cell.row >= start.row &&
+    cell.row <= end.row
+  );
+}
+
 /**
  * Compute the end address for a 2D array starting at a given cell.
  * E.g. startCell="B2", rows=3, cols=4 → "B2:E4"
