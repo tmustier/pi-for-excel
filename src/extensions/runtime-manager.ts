@@ -72,6 +72,10 @@ import {
   resolveModelForCompletion,
 } from "./runtime-manager-helpers.js";
 import { buildRuntimeManagerActivationBridge } from "./runtime-manager-activation.js";
+import {
+  qualifyExtensionConnectionId,
+  qualifyExtensionProviderId,
+} from "./owner-identifiers.js";
 import { getToolRequiredConnectionIds } from "../tools/connection-requirements.js";
 import type {
   BrowserModelRuntime,
@@ -109,26 +113,6 @@ function assertToolExecuteFunction(tool: AnyAgentTool, entry: StoredExtensionEnt
   throw new Error(
     `Tool "${tool.name}" from extension "${entry.name}" is invalid: execute must be a function.`,
   );
-}
-
-function qualifyExtensionProviderId(entryId: string, providerId: string): string {
-  const normalized = providerId.trim().toLowerCase();
-  if (!/^[a-z0-9][a-z0-9._-]*$/u.test(normalized)) {
-    throw new Error("Provider id may contain only letters, numbers, dots, underscores and hyphens.");
-  }
-
-  const ownerPrefix = `${entryId.toLowerCase()}.`;
-  return normalized.startsWith(ownerPrefix) ? normalized : `${ownerPrefix}${normalized}`;
-}
-
-function qualifyExtensionConnectionId(entryId: string, connectionId: string): string {
-  const normalized = connectionId.trim().toLowerCase();
-  if (normalized.length === 0) {
-    throw new Error("Connection id cannot be empty.");
-  }
-
-  const ownerPrefix = `${entryId.toLowerCase()}.`;
-  return normalized.startsWith(ownerPrefix) ? normalized : `${ownerPrefix}${normalized}`;
 }
 
 function endpointHostname(value: string, label: string): string {
