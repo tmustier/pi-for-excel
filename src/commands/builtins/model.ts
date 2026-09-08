@@ -33,15 +33,5 @@ export function createModelCommands(actions: ModelCommandActions): SlashCommand[
       source: "builtin",
       execute: runModelSelector,
     },
-    {
-      name: "default-models",
-      description: t("command.model.cycle"),
-      source: "builtin",
-      execute: () => {
-        // TODO: implement scoped models dialog
-        // For now, open model selector as a placeholder
-        runModelSelector();
-      },
-    },
   ];
 }

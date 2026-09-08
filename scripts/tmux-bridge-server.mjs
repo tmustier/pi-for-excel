@@ -3,9 +3,7 @@
 /**
  * Local tmux bridge for Pi for Excel.
  *
- * Modes:
- * - stub (default): in-memory session simulator for local development/testing.
- * - tmux: real tmux subprocess backend (guarded; no shell interpolation).
+ * Runs a real tmux subprocess backend (guarded; no shell interpolation).
  *
  * Endpoints:
  * - GET  /health
@@ -32,13 +30,6 @@ if (useHttps && useHttp) {
 
 const HOST = process.env.HOST || (useHttps ? "localhost" : "127.0.0.1");
 const PORT = Number.parseInt(process.env.PORT || "3341", 10);
-
-const MODE_RAW = (process.env.TMUX_BRIDGE_MODE || "stub").trim().toLowerCase();
-const MODE = MODE_RAW === "tmux" ? "tmux" : MODE_RAW === "stub" ? "stub" : null;
-if (!MODE) {
-  console.error(`[pi-for-excel] Invalid TMUX_BRIDGE_MODE: ${MODE_RAW}. Use "stub" or "tmux".`);
-  process.exit(1);
-}
 
 function resolveOptionalEnvPath(name) {
   const raw = process.env[name];
@@ -71,7 +62,6 @@ const MIN_WAIT_TIMEOUT_MS = 100;
 const MAX_WAIT_TIMEOUT_MS = 120_000;
 const MIN_CAPTURE_WAIT_MS = 0;
 const MAX_CAPTURE_WAIT_MS = 120_000;
-const STUB_WAIT_FOR_POLL_INTERVAL_MS = 100;
 const REAL_WAIT_FOR_POLL_INTERVAL_MS = 120;
 
 const SESSION_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/;
@@ -458,143 +448,6 @@ async function captureWithOptionalWaitFor(options) {
   throw new HttpError(408, `wait_for regex did not match before timeout (${timeoutMs}ms).`);
 }
 
-function createStubBackend() {
-  const sessions = new Map();
-
-  function ensureSession(sessionName) {
-    const session = sessions.get(sessionName);
-    if (!session) {
-      throw new HttpError(404, `Session not found: ${sessionName}`);
-    }
-    return session;
-  }
-
-  function appendLine(sessionName, line) {
-    const session = ensureSession(sessionName);
-    session.lines.push(line);
-
-    if (session.lines.length > MAX_CAPTURE_LINES) {
-      session.lines.splice(0, session.lines.length - MAX_CAPTURE_LINES);
-    }
-  }
-
-  function captureLines(sessionName, lines) {
-    const session = ensureSession(sessionName);
-    return session.lines.slice(-lines).join("\n");
-  }
-
-  async function applySendInput(request) {
-    const fragments = [];
-
-    if (request.text) fragments.push(request.text);
-    if (request.keys) fragments.push(...request.keys.map((token) => `<${token}>`));
-    if (request.enter) fragments.push("<Enter>");
-
-    if (fragments.length > 0) {
-      appendLine(request.session, fragments.join(" "));
-    }
-  }
-
-  async function handleSendAndCapture(request) {
-    await applySendInput(request);
-
-    const timeoutMs = request.timeout_ms ?? DEFAULT_WAIT_TIMEOUT_MS;
-    const lines = request.lines ?? DEFAULT_CAPTURE_LINES;
-
-    await maybeDelayCapture(request.wait_ms);
-
-    const output = await captureWithOptionalWaitFor({
-      waitFor: request.wait_for,
-      timeoutMs,
-      pollIntervalMs: STUB_WAIT_FOR_POLL_INTERVAL_MS,
-      capture: async () => captureLines(request.session, lines),
-    });
-
-    return {
-      ok: true,
-      action: "send_and_capture",
-      session: request.session,
-      output,
-    };
-  }
-
-  return {
-    mode: "stub",
-    async health() {
-      return {
-        backend: "stub",
-        sessions: sessions.size,
-      };
-    },
-    async handle(request) {
-      switch (request.action) {
-        case "list_sessions": {
-          return {
-            ok: true,
-            action: "list_sessions",
-            sessions: Array.from(sessions.keys()).sort(),
-          };
-        }
-
-        case "create_session": {
-          const sessionName = request.session || `pi-${randomUUID().slice(0, 8)}`;
-          if (sessions.has(sessionName)) {
-            throw new HttpError(409, `Session already exists: ${sessionName}`);
-          }
-
-          sessions.set(sessionName, {
-            createdAt: Date.now(),
-            cwd: request.cwd,
-            lines: [],
-          });
-
-          return {
-            ok: true,
-            action: "create_session",
-            session: sessionName,
-          };
-        }
-
-        case "send_keys": {
-          await applySendInput(request);
-          return {
-            ok: true,
-            action: "send_keys",
-            session: request.session,
-          };
-        }
-
-        case "capture_pane": {
-          await maybeDelayCapture(request.wait_ms);
-
-          return {
-            ok: true,
-            action: "capture_pane",
-            session: request.session,
-            output: captureLines(request.session, request.lines ?? DEFAULT_CAPTURE_LINES),
-          };
-        }
-
-        case "send_and_capture":
-          return handleSendAndCapture(request);
-
-        case "kill_session": {
-          ensureSession(request.session);
-          sessions.delete(request.session);
-          return {
-            ok: true,
-            action: "kill_session",
-            session: request.session,
-          };
-        }
-
-        default:
-          throw new HttpError(400, "Invalid action.");
-      }
-    },
-  };
-}
-
 function ensureSocketDirectory() {
   fs.mkdirSync(path.dirname(socketPath), {
     recursive: true,
@@ -871,14 +724,11 @@ function createRealTmuxBackend() {
 
 const backend = (() => {
   try {
-    return MODE === "tmux" ? createRealTmuxBackend() : createStubBackend();
+    return createRealTmuxBackend();
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error(`[pi-for-excel] Failed to initialize tmux backend: ${message}`);
-    console.error(
-      "[pi-for-excel] Install tmux (for example: brew install tmux), " +
-      "or run TMUX_BRIDGE_MODE=stub for simulated mode.",
-    );
+    console.error("[pi-for-excel] Install tmux (for example: brew install tmux).");
     process.exit(1);
   }
 })();
@@ -999,10 +849,5 @@ server.listen(PORT, HOST, () => {
     console.warn("[pi-for-excel] recommended: set TMUX_BRIDGE_TOKEN=<secret> and mirror it in Pi via /experimental tmux-bridge-token <secret>");
   }
 
-  if (backend.mode === "tmux") {
-    console.log(`[pi-for-excel] tmux socket: ${socketPath}`);
-  } else {
-    console.log("[pi-for-excel] stub mode: commands are simulated and not executed in a real shell.");
-    console.log("[pi-for-excel] use TMUX_BRIDGE_MODE=tmux for real command output.");
-  }
+  console.log(`[pi-for-excel] tmux socket: ${socketPath}`);
 });

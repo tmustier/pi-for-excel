@@ -359,17 +359,6 @@ void test("system prompt renders partial python (no libreoffice)", () => {
   assert.match(prompt, /read skill "python-bridge" for install instructions/);
 });
 
-void test("system prompt renders partial tmux (stub mode)", () => {
-  const services: LocalServiceEntry[] = [
-    { name: "python", displayName: "Python (native)", status: "not_running", skillName: "python-bridge" },
-    { name: "tmux", displayName: "Terminal (tmux)", status: "partial", skillName: "tmux-bridge" },
-  ];
-  const prompt = buildSystemPrompt({ localServices: services });
-
-  assert.match(prompt, /\*\*Terminal \(tmux\)\:\*\* bridge running but tmux is not installed/);
-  assert.match(prompt, /Shell command execution requires tmux — read skill "tmux-bridge" for install instructions/);
-});
-
 void test("Local Services section is placed after Connections, before Skills", () => {
   const services: LocalServiceEntry[] = [
     { name: "python", displayName: "Python (native)", status: "not_running", skillName: "python-bridge" },

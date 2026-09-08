@@ -166,9 +166,7 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 - **Gate model:** requires a healthy bridge URL (`tmux.bridge.url` override, else default `https://localhost:3341`) and successful `/health` probe.
 - **Gate failure contract:** blocked gate checks return structured `AgentToolResult` payloads (`details.gateReason`, `details.skillHint`) instead of throwing, enabling inline setup UX and deterministic agent recovery.
 - **Execution policy:** classified as `read/none` in workbook coordinator (no workbook lock writes or blueprint invalidation).
-- **Bridge implementation:** local helper script `scripts/tmux-bridge-server.mjs`.
-  - one-command helper (`npx pi-for-excel-tmux-bridge`) defaults to real `tmux` mode
-  - raw server script default remains `stub` for local development/tests
+- **Bridge implementation:** local helper script `scripts/tmux-bridge-server.mjs`; both the one-command helper (`npx pi-for-excel-tmux-bridge`) and raw server run real tmux and fail clearly when tmux is unavailable.
 - **Bridge contract:** POST JSON to `https://localhost:<port>/v1/tmux` with actions:
   - `list_sessions`
   - `create_session`
@@ -196,9 +194,7 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 - **Execution policy:**
   - `python_run` + `libreoffice_convert` → `read/none` (no direct workbook mutation)
   - `python_transform_range` → `mutate/content` (writes transformed values into workbook)
-- **Bridge implementation:** local helper script `scripts/python-bridge-server.mjs`.
-  - one-command helper (`npx pi-for-excel-python-bridge`) defaults to real mode
-  - raw server script default remains `stub` for local development/tests
+- **Bridge implementation:** local helper script `scripts/python-bridge-server.mjs`; both the one-command helper (`npx pi-for-excel-python-bridge`) and raw server execute real local commands and report unavailable dependencies explicitly.
 - **Bridge contract:**
   - `POST /v1/python-run` — execute Python snippet with optional `input_json`, return stdout/stderr/result JSON
   - `POST /v1/libreoffice-convert` — convert files across `csv|pdf|xlsx`

@@ -8,7 +8,6 @@ function isWorkbookRecoveryLogStorePayloadShape(value: DynamicValue): value is D
 
 import {
   clampRetentionLimit,
-  MAX_RECOVERY_ENTRIES,
   RETENTION_LIMIT_SETTING_KEY,
 } from "./constants.js";
 
@@ -43,14 +42,10 @@ export async function readPersistedWorkbookRecoveryPayload(
   settings: SettingsStoreLike | null,
 ): Promise<DynamicValue> {
   if (!settings) {
-    return null;
+    throw new Error("Recovery storage is unavailable.");
   }
 
-  try {
-    return await settings.get<DynamicValue>(RECOVERY_SETTING_KEY);
-  } catch {
-    return null;
-  }
+  return settings.get<DynamicValue>(RECOVERY_SETTING_KEY);
 }
 
 export async function writePersistedWorkbookRecoveryPayload(
@@ -58,14 +53,10 @@ export async function writePersistedWorkbookRecoveryPayload(
   payload: DynamicValue,
 ): Promise<void> {
   if (!settings) {
-    return;
+    throw new Error("Recovery storage is unavailable.");
   }
 
-  try {
-    await settings.set(RECOVERY_SETTING_KEY, payload);
-  } catch {
-    // ignore persistence failures
-  }
+  await settings.set(RECOVERY_SETTING_KEY, payload);
 }
 
 // ---------------------------------------------------------------------------
@@ -74,23 +65,19 @@ export async function writePersistedWorkbookRecoveryPayload(
 
 export async function readRetentionLimit(): Promise<number> {
   const settings = await defaultGetSettingsStore();
-  if (!settings) return MAX_RECOVERY_ENTRIES;
-
-  try {
-    const raw = await settings.get<DynamicValue>(RETENTION_LIMIT_SETTING_KEY);
-    return clampRetentionLimit(raw);
-  } catch {
-    return MAX_RECOVERY_ENTRIES;
+  if (!settings) {
+    throw new Error("Recovery settings storage is unavailable.");
   }
+
+  const raw = await settings.get<DynamicValue>(RETENTION_LIMIT_SETTING_KEY);
+  return clampRetentionLimit(raw);
 }
 
 export async function writeRetentionLimit(limit: number): Promise<void> {
   const settings = await defaultGetSettingsStore();
-  if (!settings) return;
-
-  try {
-    await settings.set(RETENTION_LIMIT_SETTING_KEY, clampRetentionLimit(limit));
-  } catch {
-    // ignore persistence failures
+  if (!settings) {
+    throw new Error("Recovery settings storage is unavailable.");
   }
+
+  await settings.set(RETENTION_LIMIT_SETTING_KEY, clampRetentionLimit(limit));
 }

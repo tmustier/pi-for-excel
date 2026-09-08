@@ -6,6 +6,10 @@ import {
   type BridgeHealthDependencies,
   type LocalServiceEntry,
 } from "../src/tools/bridge-health.ts";
+import {
+  probePythonBridgeHealth,
+  probeTmuxBridgeHealth,
+} from "../src/tools/bridge-service-utils.ts";
 
 function findPython(entries: LocalServiceEntry[]) {
   return entries.find((e) => e.name === "python");
@@ -14,6 +18,34 @@ function findPython(entries: LocalServiceEntry[]) {
 function findTmux(entries: LocalServiceEntry[]) {
   return entries.find((e) => e.name === "tmux");
 }
+
+void test("capability probes reject unrelated 200 responses and unavailable dependencies", async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  globalThis.fetch = () => Promise.resolve(new Response("OK", { status: 200 }));
+  assert.equal(await probeTmuxBridgeHealth("https://localhost:3341"), false);
+  assert.equal(await probePythonBridgeHealth("https://localhost:3340"), false);
+
+  globalThis.fetch = () => Promise.resolve(new Response(JSON.stringify({
+    ok: true,
+    mode: "real",
+    backend: "real",
+    python: { available: true },
+    libreoffice: { available: false },
+  }), { status: 200 }));
+  assert.equal(await probePythonBridgeHealth("https://localhost:3340", "python"), true);
+  assert.equal(await probePythonBridgeHealth("https://localhost:3340", "libreoffice"), false);
+
+  globalThis.fetch = () => Promise.resolve(new Response(JSON.stringify({
+    ok: true,
+    mode: "tmux",
+    backend: "tmux",
+  }), { status: 200 }));
+  assert.equal(await probeTmuxBridgeHealth("https://localhost:3341"), true);
+});
 
 function makeDeps(overrides: Partial<BridgeHealthDependencies> = {}): BridgeHealthDependencies {
   return {
@@ -187,18 +219,17 @@ void test("parses fully healthy tmux bridge", async () => {
 });
 
 // ---------------------------------------------------------------------------
-// Tmux bridge in stub mode → partial
+// Tmux bridge rejects non-tmux backends
 // ---------------------------------------------------------------------------
 
-void test("reports partial for tmux bridge in stub mode", async () => {
+void test("does not report a non-tmux backend as running", async () => {
   const entries = await probeLocalServices(makeDeps({
     fetchHealth: (url) => {
       if (url.includes("3341")) {
         return Promise.resolve({
           ok: true,
-          mode: "stub",
-          backend: "stub",
-          tmuxVersion: undefined,
+          mode: "unexpected",
+          backend: "unexpected",
           sessions: 0,
         });
       }
@@ -208,7 +239,7 @@ void test("reports partial for tmux bridge in stub mode", async () => {
 
   const tmux = findTmux(entries);
   assert.ok(tmux);
-  assert.equal(tmux.status, "partial");
+  assert.equal(tmux.status, "not_running");
 });
 
 // ---------------------------------------------------------------------------
@@ -224,7 +255,7 @@ void test("probes python and tmux in parallel", async () => {
         callOrder.push("python-start");
         await new Promise((r) => setTimeout(r, 20));
         callOrder.push("python-end");
-        return { ok: true, python: { available: true, version: "3.12" }, libreoffice: { available: true } };
+        return { ok: true, mode: "real", python: { available: true, version: "3.12" }, libreoffice: { available: true } };
       }
       callOrder.push("tmux-start");
       await new Promise((r) => setTimeout(r, 20));

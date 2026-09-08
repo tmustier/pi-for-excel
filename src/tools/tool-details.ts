@@ -263,6 +263,7 @@ export interface WorkbookHistoryDetails {
   changedCount?: number;
   deletedCount?: number;
   error?: string;
+  recovery?: RecoveryCheckpointDetails;
 }
 
 export type SkillsSourceKind = "bundled" | "external";

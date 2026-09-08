@@ -96,6 +96,24 @@ function resolveSnapshotKind(snapshot: WorkbookRecoverySnapshot): WorkbookRecove
   return snapshot.snapshotKind ?? "range_values";
 }
 
+interface InverseSnapshotResult {
+  snapshot: WorkbookRecoverySnapshot | null;
+  error?: string;
+}
+
+async function appendInverseSnapshot(
+  append: () => Promise<WorkbookRecoverySnapshot | null>,
+): Promise<InverseSnapshotResult> {
+  try {
+    return { snapshot: await append() };
+  } catch (error) {
+    return {
+      snapshot: null,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
 function assertSnapshotWorkbookIdentity(snapshot: WorkbookRecoverySnapshot, workbookContext: WorkbookContext): void {
   if (!snapshot.workbookId) {
     throw new Error("Snapshot is missing workbook identity and cannot be restored safely.");
@@ -126,7 +144,7 @@ export async function restoreWorkbookRecoverySnapshot(
     }
 
     const currentState = await dependencies.applyFormatCellsSnapshot(snapshot.address, targetState);
-    const inverseSnapshot = await dependencies.appendFormatCellsSnapshot(
+    const inverse = await appendInverseSnapshot(() => dependencies.appendFormatCellsSnapshot(
       {
         toolName: "restore_snapshot",
         toolCallId: `restore:${snapshot.id}`,
@@ -136,11 +154,12 @@ export async function restoreWorkbookRecoverySnapshot(
         restoredFromSnapshotId: snapshot.id,
       },
       workbookContext,
-    );
+    ));
 
     return {
       restoredSnapshotId: snapshot.id,
-      inverseSnapshotId: inverseSnapshot?.id ?? null,
+      inverseSnapshotId: inverse.snapshot?.id ?? null,
+      ...(inverse.error !== undefined ? { inverseSnapshotError: inverse.error } : {}),
       address: snapshot.address,
       changedCount: snapshot.changedCount,
     };
@@ -153,7 +172,7 @@ export async function restoreWorkbookRecoverySnapshot(
     }
 
     const currentState = await dependencies.applyModifyStructureSnapshot(snapshot.address, targetState);
-    const inverseSnapshot = await dependencies.appendModifyStructureSnapshot(
+    const inverse = await appendInverseSnapshot(() => dependencies.appendModifyStructureSnapshot(
       {
         toolName: "restore_snapshot",
         toolCallId: `restore:${snapshot.id}`,
@@ -163,11 +182,12 @@ export async function restoreWorkbookRecoverySnapshot(
         restoredFromSnapshotId: snapshot.id,
       },
       workbookContext,
-    );
+    ));
 
     return {
       restoredSnapshotId: snapshot.id,
-      inverseSnapshotId: inverseSnapshot?.id ?? null,
+      inverseSnapshotId: inverse.snapshot?.id ?? null,
+      ...(inverse.error !== undefined ? { inverseSnapshotError: inverse.error } : {}),
       address: snapshot.address,
       changedCount: snapshot.changedCount,
     };
@@ -181,7 +201,7 @@ export async function restoreWorkbookRecoverySnapshot(
       throw new Error(currentState.reason ?? "Conditional format backup cannot be restored safely.");
     }
 
-    const inverseSnapshot = await dependencies.appendConditionalFormatSnapshot(
+    const inverse = await appendInverseSnapshot(() => dependencies.appendConditionalFormatSnapshot(
       {
         toolName: "restore_snapshot",
         toolCallId: `restore:${snapshot.id}`,
@@ -192,11 +212,12 @@ export async function restoreWorkbookRecoverySnapshot(
         restoredFromSnapshotId: snapshot.id,
       },
       workbookContext,
-    );
+    ));
 
     return {
       restoredSnapshotId: snapshot.id,
-      inverseSnapshotId: inverseSnapshot?.id ?? null,
+      inverseSnapshotId: inverse.snapshot?.id ?? null,
+      ...(inverse.error !== undefined ? { inverseSnapshotError: inverse.error } : {}),
       address: snapshot.address,
       changedCount: snapshot.changedCount,
     };
@@ -209,7 +230,7 @@ export async function restoreWorkbookRecoverySnapshot(
     }
 
     const currentState = await dependencies.applyCommentThreadSnapshot(snapshot.address, targetState);
-    const inverseSnapshot = await dependencies.appendCommentThreadSnapshot(
+    const inverse = await appendInverseSnapshot(() => dependencies.appendCommentThreadSnapshot(
       {
         toolName: "restore_snapshot",
         toolCallId: `restore:${snapshot.id}`,
@@ -219,11 +240,12 @@ export async function restoreWorkbookRecoverySnapshot(
         restoredFromSnapshotId: snapshot.id,
       },
       workbookContext,
-    );
+    ));
 
     return {
       restoredSnapshotId: snapshot.id,
-      inverseSnapshotId: inverseSnapshot?.id ?? null,
+      inverseSnapshotId: inverse.snapshot?.id ?? null,
+      ...(inverse.error !== undefined ? { inverseSnapshotError: inverse.error } : {}),
       address: snapshot.address,
       changedCount: snapshot.changedCount,
     };
@@ -236,8 +258,9 @@ export async function restoreWorkbookRecoverySnapshot(
     }
 
     const applied = await dependencies.applyChartSnapshot(snapshot.address, targetState);
-    const inverseSnapshot = applied.state
-      ? await dependencies.appendChartSnapshot(
+    const appliedState = applied.state;
+    const inverse = appliedState
+      ? await appendInverseSnapshot(() => dependencies.appendChartSnapshot(
         {
           toolName: "restore_snapshot",
           toolCallId: `restore:${snapshot.id}`,
@@ -245,16 +268,17 @@ export async function restoreWorkbookRecoverySnapshot(
           // the post-restore identity for the rollback backup to resolve.
           address: applied.address,
           changedCount: snapshot.changedCount,
-          chartState: applied.state,
+          chartState: appliedState,
           restoredFromSnapshotId: snapshot.id,
         },
         workbookContext,
-      )
-      : null;
+      ))
+      : { snapshot: null };
 
     return {
       restoredSnapshotId: snapshot.id,
-      inverseSnapshotId: inverseSnapshot?.id ?? null,
+      inverseSnapshotId: inverse.snapshot?.id ?? null,
+      ...(inverse.error !== undefined ? { inverseSnapshotError: inverse.error } : {}),
       address: snapshot.address,
       changedCount: snapshot.changedCount,
     };
@@ -270,7 +294,7 @@ export async function restoreWorkbookRecoverySnapshot(
     afterFormulas: snapshot.beforeFormulas,
   });
 
-  const inverseSnapshot = await dependencies.appendRangeSnapshot(
+  const inverse = await appendInverseSnapshot(() => dependencies.appendRangeSnapshot(
     {
       toolName: "restore_snapshot",
       toolCallId: `restore:${snapshot.id}`,
@@ -281,11 +305,12 @@ export async function restoreWorkbookRecoverySnapshot(
       restoredFromSnapshotId: snapshot.id,
     },
     workbookContext,
-  );
+  ));
 
   return {
     restoredSnapshotId: snapshot.id,
-    inverseSnapshotId: inverseSnapshot?.id ?? null,
+    inverseSnapshotId: inverse.snapshot?.id ?? null,
+    ...(inverse.error !== undefined ? { inverseSnapshotError: inverse.error } : {}),
     address: snapshot.address,
     changedCount: inverseChangedCount,
   };

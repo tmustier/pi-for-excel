@@ -16,6 +16,8 @@ function hasTmuxBinary() {
   return !result.error && result.status === 0;
 }
 
+const tmuxTest = hasTmuxBinary() ? test : test.skip;
+
 async function getFreePort() {
   return new Promise((resolve, reject) => {
     const server = net.createServer();
@@ -41,13 +43,15 @@ async function getFreePort() {
 async function startBridge(extraEnv = {}) {
   const port = await getFreePort();
 
+  const socketPath = `/tmp/pi-tmux-bridge-test-${Date.now()}-${Math.random().toString(16).slice(2)}.sock`;
+
   const child = spawn(process.execPath, [BRIDGE_SCRIPT_PATH], {
     env: {
       ...process.env,
       HOST: "127.0.0.1",
       PORT: String(port),
       ALLOWED_ORIGINS: ORIGIN,
-      TMUX_BRIDGE_MODE: "stub",
+      TMUX_BRIDGE_SOCKET_PATH: socketPath,
       ...extraEnv,
     },
     stdio: ["ignore", "pipe", "pipe"],
@@ -96,6 +100,10 @@ async function startBridge(extraEnv = {}) {
         }
       }),
     ]).catch(() => {});
+
+    spawnSync("tmux", ["-f", "/dev/null", "-S", socketPath, "kill-server"], {
+      stdio: "ignore",
+    });
   };
 
   return {
@@ -124,36 +132,8 @@ function requestInit(method, body, token) {
   };
 }
 
-test("tmux bridge health endpoint responds in stub mode", async (t) => {
+tmuxTest("tmux bridge health endpoint uses the real backend by default", async (t) => {
   const bridge = await startBridge();
-  t.after(async () => {
-    await bridge.stop();
-  });
-
-  const response = await fetch(`http://127.0.0.1:${bridge.port}/health`, {
-    headers: { Origin: ORIGIN },
-  });
-
-  assert.equal(response.status, 200);
-
-  const payload = await response.json();
-  assert.equal(payload.ok, true);
-  assert.equal(payload.mode, "stub");
-  assert.equal(payload.backend, "stub");
-});
-
-test("tmux mode health endpoint succeeds before any session exists", async (t) => {
-  if (!hasTmuxBinary()) {
-    t.skip("tmux binary is not available in this environment");
-    return;
-  }
-
-  const socketPath = `/tmp/pi-tmux-bridge-test-${Date.now()}-${Math.random().toString(16).slice(2)}.sock`;
-
-  const bridge = await startBridge({
-    TMUX_BRIDGE_MODE: "tmux",
-    TMUX_BRIDGE_SOCKET_PATH: socketPath,
-  });
 
   t.after(async () => {
     await bridge.stop();
@@ -172,7 +152,7 @@ test("tmux mode health endpoint succeeds before any session exists", async (t) =
   assert.equal(payload.sessions, 0);
 });
 
-test("tmux bridge blocks disallowed origins", async (t) => {
+tmuxTest("tmux bridge blocks disallowed origins", async (t) => {
   const bridge = await startBridge();
   t.after(async () => {
     await bridge.stop();
@@ -187,7 +167,7 @@ test("tmux bridge blocks disallowed origins", async (t) => {
   assert.equal(text, "forbidden");
 });
 
-test("tmux bridge enforces bearer token when configured", async (t) => {
+tmuxTest("tmux bridge enforces bearer token when configured", async (t) => {
   const bridge = await startBridge({
     TMUX_BRIDGE_TOKEN: "local-secret",
   });
@@ -216,7 +196,7 @@ test("tmux bridge enforces bearer token when configured", async (t) => {
   assert.deepEqual(payload.sessions, []);
 });
 
-test("stub mode supports create/list/send/capture/kill lifecycle", async (t) => {
+tmuxTest("tmux bridge supports create/list/send/capture/kill lifecycle", async (t) => {
   const bridge = await startBridge();
   t.after(async () => {
     await bridge.stop();
@@ -266,7 +246,7 @@ test("stub mode supports create/list/send/capture/kill lifecycle", async (t) => 
   assert.deepEqual(afterKillPayload.sessions, []);
 });
 
-test("capture_pane wait_ms delays response in stub mode", async (t) => {
+tmuxTest("capture_pane wait_ms delays response", async (t) => {
   const bridge = await startBridge();
   t.after(async () => {
     await bridge.stop();
@@ -302,7 +282,7 @@ test("capture_pane wait_ms delays response in stub mode", async (t) => {
   assert.match(payload.output, /echo hello/);
 });
 
-test("send_and_capture wait_for matches in stub mode", async (t) => {
+tmuxTest("send_and_capture wait_for matches", async (t) => {
   const bridge = await startBridge();
   t.after(async () => {
     await bridge.stop();
@@ -331,7 +311,7 @@ test("send_and_capture wait_for matches in stub mode", async (t) => {
   assert.match(payload.output, /echo ready/);
 });
 
-test("tmux bridge rejects invalid action payloads", async (t) => {
+tmuxTest("tmux bridge rejects invalid action payloads", async (t) => {
   const bridge = await startBridge();
   t.after(async () => {
     await bridge.stop();

@@ -155,8 +155,8 @@ API-key auth generally works without the proxy.
 
 Use one-command local bridge helpers:
 
-- Python / LibreOffice bridge: `npx pi-for-excel-python-bridge` (default URL `https://localhost:3340`, real mode)
-- tmux bridge: `npx pi-for-excel-tmux-bridge` (default URL `https://localhost:3341`, real mode)
+- Python / LibreOffice bridge: `npx pi-for-excel-python-bridge` (default URL `https://localhost:3340`; requires Python)
+- tmux bridge: `npx pi-for-excel-tmux-bridge` (default URL `https://localhost:3341`; requires tmux)
 
 In Pi, these localhost bridge URLs are used by default. Configure `/experimental ...-bridge-url` only when you want a non-default URL.
 
@@ -164,7 +164,7 @@ Real-mode prerequisites:
 
 - `python3` must be installed for `python_run` / `python_transform_range`
 - LibreOffice (`soffice` or `libreoffice`) is required for `libreoffice_convert`
-- `tmux` is required for the tmux bridge real mode
+- `tmux` is required for the tmux bridge
 
 Optional assisted install (macOS/Homebrew):
 
@@ -177,11 +177,6 @@ Manual macOS install:
 brew install tmux
 brew install --cask libreoffice
 ```
-
-To force safe simulated mode instead:
-
-- `PYTHON_BRIDGE_MODE=stub npx pi-for-excel-python-bridge`
-- `TMUX_BRIDGE_MODE=stub npx pi-for-excel-tmux-bridge`
 
 Source-checkout alternatives remain available via `npm run python:bridge:https` and `npm run tmux:bridge:https`.
 

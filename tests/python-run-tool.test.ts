@@ -4,6 +4,7 @@ import { test } from "node:test";
 import type { AgentToolResult } from "@earendil-works/pi-agent-core";
 
 import {
+  callDefaultPythonBridge,
   createPythonRunTool,
   type PythonBridgeConfig,
   type PythonBridgeRequest,
@@ -140,6 +141,23 @@ void test("python_run falls back to Pyodide when default bridge URL is unavailab
   assert.match(firstText(result), /pyodide fallback/u);
   assert.equal(result.details?.ok, true);
   assert.equal(result.details?.exitCode, 0);
+});
+
+void test("python bridge rejects non-JSON HTTP 200 responses", async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+  globalThis.fetch = () => Promise.resolve(new Response("not json", { status: 200 }));
+
+  await assert.rejects(
+    callDefaultPythonBridge(
+      { code: "print('x')" },
+      { url: "https://localhost:3340" },
+      undefined,
+    ),
+    /non-JSON success response/u,
+  );
 });
 
 void test("python_run handles explicit bridge-level rejection payloads", async () => {

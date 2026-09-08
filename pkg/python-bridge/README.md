@@ -13,9 +13,9 @@ This command:
 1. Ensures `mkcert` exists (installs via Homebrew on macOS if missing)
 2. Creates certificates in `~/.pi-for-excel/certs/` when needed
 3. Starts the bridge at `https://localhost:3340`
-4. Runs in real local execution mode by default
+4. Runs real local Python and LibreOffice commands
 
-Real mode requires `python3` on `PATH`. LibreOffice (`soffice` / `libreoffice`) is optional for Python execution but required for `libreoffice_convert`.
+`python3` must be on `PATH`. LibreOffice (`soffice` / `libreoffice`) is optional for Python execution but required for `libreoffice_convert`.
 
 Optional assisted install (macOS/Homebrew):
 
@@ -24,12 +24,6 @@ npx pi-for-excel-python-bridge --install-missing
 ```
 
 This installs missing `python3` and/or LibreOffice before starting the bridge.
-
-To force safe simulated mode:
-
-```bash
-PYTHON_BRIDGE_MODE=stub npx pi-for-excel-python-bridge
-```
 
 Then in Pi for Excel:
 

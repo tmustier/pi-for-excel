@@ -151,6 +151,7 @@ export interface AppendChartRecoverySnapshotArgs {
 export interface RestoreWorkbookRecoverySnapshotResult {
   restoredSnapshotId: string;
   inverseSnapshotId: string | null;
+  inverseSnapshotError?: string;
   address: string;
   changedCount: number;
 }
@@ -354,18 +355,18 @@ export class WorkbookRecoveryLog {
 
   private async ensureLoaded(): Promise<void> {
     if (this.loaded) return;
-    this.loaded = true;
 
     const settings = await this.dependencies.getSettingsStore();
     const payload = await readPersistedWorkbookRecoveryPayload(settings);
     this.snapshots = parsePersistedSnapshots(payload, {
       maxEntries: MAX_RECOVERY_ENTRIES,
     });
+    this.loaded = true;
   }
 
-  private async persist(): Promise<void> {
+  private async persist(snapshots: WorkbookRecoverySnapshot[]): Promise<void> {
     const settings = await this.dependencies.getSettingsStore();
-    const payload = createPersistedWorkbookRecoveryPayload(this.snapshots);
+    const payload = createPersistedWorkbookRecoveryPayload(snapshots);
     await writePersistedWorkbookRecoveryPayload(settings, payload);
   }
 
@@ -391,8 +392,9 @@ export class WorkbookRecoveryLog {
   private async appendSnapshot(
     snapshot: WorkbookRecoverySnapshot,
   ): Promise<WorkbookRecoverySnapshot> {
-    this.snapshots = [snapshot, ...this.snapshots].slice(0, MAX_RECOVERY_ENTRIES);
-    await this.persist();
+    const nextSnapshots = [snapshot, ...this.snapshots].slice(0, MAX_RECOVERY_ENTRIES);
+    await this.persist(nextSnapshots);
+    this.snapshots = nextSnapshots;
     return snapshot;
   }
 
@@ -662,16 +664,16 @@ export class WorkbookRecoveryLog {
     const workbookId = workbookContext.workbookId;
     if (!workbookId) return false;
 
-    const previousLength = this.snapshots.length;
-    this.snapshots = this.snapshots.filter(
+    const nextSnapshots = this.snapshots.filter(
       (snapshot) => !(snapshot.id === snapshotId && matchesWorkbook(snapshot, workbookId)),
     );
 
-    if (this.snapshots.length === previousLength) {
+    if (nextSnapshots.length === this.snapshots.length) {
       return false;
     }
 
-    await this.persist();
+    await this.persist(nextSnapshots);
+    this.snapshots = nextSnapshots;
     return true;
   }
 
@@ -682,12 +684,11 @@ export class WorkbookRecoveryLog {
     const workbookId = workbookContext.workbookId;
     if (!workbookId) return 0;
 
-    const previousLength = this.snapshots.length;
-    this.snapshots = this.snapshots.filter((snapshot) => !matchesWorkbook(snapshot, workbookId));
-
-    const removed = previousLength - this.snapshots.length;
+    const nextSnapshots = this.snapshots.filter((snapshot) => !matchesWorkbook(snapshot, workbookId));
+    const removed = this.snapshots.length - nextSnapshots.length;
     if (removed > 0) {
-      await this.persist();
+      await this.persist(nextSnapshots);
+      this.snapshots = nextSnapshots;
     }
 
     return removed;

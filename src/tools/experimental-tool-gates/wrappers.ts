@@ -431,7 +431,7 @@ function wrapPythonBridgeOnlyToolWithApprovalGate(
     execute: async (toolCallId, params, signal, onUpdate) => {
       throwIfAborted(signal);
 
-      const gate = await evaluatePythonBridgeGate(dependencies);
+      const gate = await evaluatePythonBridgeGate(dependencies, "libreoffice");
       if (!gate.allowed) {
         const reason = gate.reason ?? "bridge_unreachable";
         return buildLibreOfficeGateErrorResult({

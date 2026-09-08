@@ -1,3 +1,5 @@
+import type { PythonBridgeCapability } from "../bridge-service-utils.js";
+
 export const TMUX_TOOL_NAME = "tmux";
 export const EXECUTE_OFFICE_JS_TOOL_NAME = "execute_office_js";
 export const EXECUTE_WPS_JS_TOOL_NAME = "execute_wps_js";
@@ -51,7 +53,10 @@ export interface PythonBridgeGateResult {
 export interface PythonBridgeGateDependencies {
   getPythonBridgeUrl?: () => Promise<string | undefined>;
   validatePythonBridgeUrl?: (url: string) => string | null;
-  probePythonBridge?: (bridgeUrl: string) => Promise<boolean>;
+  probePythonBridge?: (
+    bridgeUrl: string,
+    capability?: PythonBridgeCapability,
+  ) => Promise<boolean>;
 }
 
 export interface PythonBridgeApprovalRequest {

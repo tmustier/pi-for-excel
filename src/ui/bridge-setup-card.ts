@@ -2,7 +2,10 @@ import {
   DEFAULT_PYTHON_BRIDGE_URL,
   DEFAULT_TMUX_BRIDGE_URL,
 } from "../tools/experimental-tool-gates.js";
-import { probeBridgeHealth } from "../tools/bridge-service-utils.js";
+import {
+  probePythonBridgeHealth,
+  probeTmuxBridgeHealth,
+} from "../tools/bridge-service-utils.js";
 import {
   isLibreOfficeBridgeDetails,
   isPythonBridgeDetails,
@@ -30,6 +33,7 @@ interface BridgeSetupCardModel {
   title: string;
   command: string;
   probeUrl: string | null;
+  capability: "tmux" | "python" | "libreoffice";
 }
 
 interface BridgeSetupCardDependencies {
@@ -148,6 +152,7 @@ function toTmuxModel(details: TmuxBridgeDetails): BridgeSetupCardModel | null {
   return {
     title: t("bridge-setup.tmuxTitle"),
     command: TMUX_BRIDGE_SETUP_COMMAND,
+    capability: "tmux",
     probeUrl: resolveProbeUrl({
       bridgeUrl: details.bridgeUrl,
       gateReason: details.gateReason,
@@ -179,6 +184,7 @@ function toPythonModel(details: PythonBridgeDetails): BridgeSetupCardModel | nul
   return {
     title,
     command: PYTHON_BRIDGE_SETUP_COMMAND,
+    capability: "python",
     probeUrl: resolveProbeUrl({
       bridgeUrl: details.bridgeUrl,
       gateReason: details.gateReason,
@@ -206,6 +212,7 @@ function toLibreOfficeModel(details: LibreOfficeBridgeDetails): BridgeSetupCardM
   return {
     title: t("bridge-setup.fileConversionUnavailable"),
     command: PYTHON_BRIDGE_SETUP_COMMAND,
+    capability: "libreoffice",
     probeUrl: resolveProbeUrl({
       bridgeUrl: details.bridgeUrl,
       gateReason: details.gateReason,
@@ -233,6 +240,7 @@ function toTransformRangeModel(details: PythonTransformRangeDetails): BridgeSetu
   return {
     title: t("bridge-setup.pythonTransformUnavailable"),
     command: PYTHON_BRIDGE_SETUP_COMMAND,
+    capability: "python",
     probeUrl: resolveProbeUrl({
       bridgeUrl: details.bridgeUrl,
       gateReason: details.gateReason,
@@ -265,16 +273,29 @@ export function shouldShowBridgeSetupCard(details: DynamicValue): details is Bri
   return resolveBridgeSetupCardModel(details) !== null;
 }
 
+function probeBridgeSetupBackend(
+  model: BridgeSetupCardModel,
+  bridgeUrl: string,
+): Promise<boolean> {
+  if (model.capability === "tmux") {
+    return probeTmuxBridgeHealth(bridgeUrl);
+  }
+
+  return probePythonBridgeHealth(bridgeUrl, model.capability);
+}
+
 export async function testBridgeSetupConnection(
   details: DynamicValue,
-  probeBridge: (bridgeUrl: string) => Promise<boolean> = probeBridgeHealth,
+  probeBridge?: (bridgeUrl: string) => Promise<boolean>,
 ): Promise<boolean> {
   const model = resolveBridgeSetupCardModel(details);
   if (!model || !model.probeUrl) {
     return false;
   }
 
-  return probeBridge(model.probeUrl);
+  return probeBridge
+    ? probeBridge(model.probeUrl)
+    : probeBridgeSetupBackend(model, model.probeUrl);
 }
 
 export function mountBridgeSetupCard(
@@ -293,7 +314,8 @@ export function mountBridgeSetupCard(
 
   container.dataset.mounted = "true";
 
-  const probeBridge = dependencies.probeBridge ?? probeBridgeHealth;
+  const probeBridge = dependencies.probeBridge
+    ?? ((bridgeUrl: string) => probeBridgeSetupBackend(model, bridgeUrl));
 
   const card = document.createElement("div");
   card.className = "pi-bridge-setup";

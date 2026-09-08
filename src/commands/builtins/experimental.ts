@@ -28,6 +28,7 @@ import {
 } from "../../tools/experimental-tool-gates.js";
 import { PYTHON_BRIDGE_TOKEN_SETTING_KEY } from "../../tools/python-run.js";
 import { TMUX_BRIDGE_TOKEN_SETTING_KEY } from "../../tools/tmux.js";
+import { BRIDGE_HEALTH_TIMEOUT_MS } from "../../tools/bridge-service-utils.js";
 import { showToast } from "../../ui/toast.js";
 import type { SettingsStore } from "../../storage/local/settings-store.js";
 
@@ -53,7 +54,6 @@ const PYTHON_BRIDGE_TOKEN_ACTIONS = new Set(["python-bridge-token", "python-toke
 const TOKEN_CLEAR_ACTIONS = new Set(["clear", "unset", "none"]);
 const TOKEN_SHOW_ACTIONS = new Set(["show", "status", "get"]);
 const TMUX_STATUS_ACTIONS = new Set(["tmux-status", "tmux-bridge-status", "bridge-status"]);
-const TMUX_BRIDGE_HEALTH_TIMEOUT_MS = 1500;
 
 type FeatureResolver = (input: string) => ExperimentalFeatureDefinition | null;
 
@@ -196,17 +196,15 @@ function defaultBridgeUrlForSetting(settingKey: string): string | undefined {
 }
 
 async function defaultGetBridgeUrl(settingKey: string): Promise<string | undefined> {
-  const fallbackUrl = defaultBridgeUrlForSetting(settingKey);
-
   try {
     const settings = await getSettingsStore();
     const value = await settings.get<string>(settingKey);
-    if (typeof value !== "string") return fallbackUrl;
+    if (typeof value !== "string") return undefined;
 
     const trimmed = value.trim();
-    return trimmed.length > 0 ? trimmed : fallbackUrl;
+    return trimmed.length > 0 ? trimmed : undefined;
   } catch {
-    return fallbackUrl;
+    return undefined;
   }
 }
 
@@ -352,11 +350,11 @@ function asErrorMessage(error: DynamicValue, fallback: string): string {
   return fallback;
 }
 
-async function defaultProbeTmuxBridgeHealth(bridgeUrl: string): Promise<TmuxBridgeHealthStatus> {
+export async function defaultProbeTmuxBridgeHealth(bridgeUrl: string): Promise<TmuxBridgeHealthStatus> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => {
     controller.abort();
-  }, TMUX_BRIDGE_HEALTH_TIMEOUT_MS);
+  }, BRIDGE_HEALTH_TIMEOUT_MS);
 
   try {
     const target = `${bridgeUrl.replace(/\/+$/u, "")}/health`;
@@ -383,8 +381,17 @@ async function defaultProbeTmuxBridgeHealth(bridgeUrl: string): Promise<TmuxBrid
       error = normalizeOptionalString(bodyText);
     }
 
+    const isTmuxBackend = mode === "tmux" || backend === "tmux";
+    const reachable = response.ok
+      && isCommandsBuiltinsExperimentalPayloadShape(parsed)
+      && parsed.ok === true
+      && isTmuxBackend;
+    if (response.ok && !reachable && error === undefined) {
+      error = "Health response did not identify a real tmux backend.";
+    }
+
     return {
-      reachable: response.ok,
+      reachable,
       ...(status !== undefined ? { status } : {}),
       ...(mode !== undefined ? { mode } : {}),
       ...(backend !== undefined ? { backend } : {}),
@@ -419,7 +426,7 @@ async function handleBridgeUrlCommand(
   } = config;
 
   if (valueTokens.length === 0) {
-    const existing = await getValue();
+    const existing = await getValue() ?? defaultBridgeUrlForSetting(configKey);
     if (!existing) {
       showToast(t("experimental.toast.bridgeUrlMissing", { bridge: bridgeLabel, command: commandLabel, exampleUrl }));
       return;
@@ -436,7 +443,7 @@ async function handleBridgeUrlCommand(
 
   const firstToken = firstRawToken.toLowerCase();
   if (URL_SHOW_ACTIONS.has(firstToken)) {
-    const existing = await getValue();
+    const existing = await getValue() ?? defaultBridgeUrlForSetting(configKey);
     if (!existing) {
       showToast(t("experimental.toast.bridgeUrlMissing", { bridge: bridgeLabel, command: commandLabel, exampleUrl }));
       return;
@@ -530,16 +537,16 @@ async function handleTmuxStatusCommand(
 ): Promise<void> {
   const configuredBridgeUrl = await dependencies.getTmuxBridgeUrl();
   const configuredToken = await dependencies.getTmuxBridgeToken();
+  const usingDefaultBridgeUrl = !configuredBridgeUrl;
+  const candidateBridgeUrl = configuredBridgeUrl ?? DEFAULT_TMUX_BRIDGE_URL;
 
   let normalizedBridgeUrl: string | undefined;
   let bridgeUrlValidationError: string | undefined;
 
-  if (configuredBridgeUrl) {
-    try {
-      normalizedBridgeUrl = dependencies.validateTmuxBridgeUrl(configuredBridgeUrl);
-    } catch (error) {
-      bridgeUrlValidationError = asErrorMessage(error, "invalid bridge URL");
-    }
+  try {
+    normalizedBridgeUrl = dependencies.validateTmuxBridgeUrl(candidateBridgeUrl);
+  } catch (error) {
+    bridgeUrlValidationError = asErrorMessage(error, "invalid bridge URL");
   }
 
   const health = normalizedBridgeUrl
@@ -547,12 +554,10 @@ async function handleTmuxStatusCommand(
     : undefined;
 
   let gateReason: TmuxBridgeGateReason | undefined;
-  if (!configuredBridgeUrl) {
-    gateReason = "missing_bridge_url";
-  } else if (!normalizedBridgeUrl) {
+  if (!normalizedBridgeUrl) {
     gateReason = "invalid_bridge_url";
   } else if (!health?.reachable) {
-    gateReason = "bridge_unreachable";
+    gateReason = usingDefaultBridgeUrl ? "missing_bridge_url" : "bridge_unreachable";
   }
 
   const gate: TmuxBridgeGateResult = gateReason
@@ -568,12 +573,10 @@ async function handleTmuxStatusCommand(
 
   const lines: string[] = ["Tmux bridge status:"];
 
-  if (!configuredBridgeUrl) {
-    lines.push("- bridge URL: not set");
-  } else if (normalizedBridgeUrl) {
-    lines.push(`- bridge URL: ${normalizedBridgeUrl}`);
+  if (normalizedBridgeUrl) {
+    lines.push(`- bridge URL: ${normalizedBridgeUrl}${usingDefaultBridgeUrl ? " (default)" : ""}`);
   } else {
-    lines.push(`- bridge URL: invalid (${bridgeUrlValidationError ?? configuredBridgeUrl})`);
+    lines.push(`- bridge URL: invalid (${bridgeUrlValidationError ?? candidateBridgeUrl})`);
   }
 
   if (!configuredToken) {

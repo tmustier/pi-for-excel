@@ -177,14 +177,11 @@ function toBridgeRequest(params: Params): PythonBridgeRequest {
 }
 
 function parseBridgeResponse(value: DynamicValue): PythonBridgeResponse {
-  if (!isPythonBridgePayloadShape(value)) {
-    return {
-      ok: true,
-      action: "run_python",
-    };
+  if (!isPythonBridgePayloadShape(value) || typeof value.ok !== "boolean") {
+    throw new Error("Python bridge returned an invalid response payload.");
   }
 
-  const ok = typeof value.ok === "boolean" ? value.ok : true;
+  const ok = value.ok;
   const exitCode = typeof value.exit_code === "number" ? value.exit_code : undefined;
   const stdout = typeof value.stdout === "string" ? value.stdout : undefined;
   const stderr = typeof value.stderr === "string" ? value.stderr : undefined;
@@ -192,6 +189,22 @@ function parseBridgeResponse(value: DynamicValue): PythonBridgeResponse {
   const truncated = typeof value.truncated === "boolean" ? value.truncated : undefined;
   const error = typeof value.error === "string" ? value.error : undefined;
   const metadata = isPythonBridgePayloadShape(value.metadata) ? value.metadata : undefined;
+
+  if (ok && (
+    value.action !== "run_python"
+    || exitCode !== 0
+    || !Number.isInteger(exitCode)
+  )) {
+    throw new Error("Python bridge returned an incomplete success payload.");
+  }
+
+  if (ok && resultJson !== undefined) {
+    try {
+      void JSON.parse(resultJson);
+    } catch {
+      throw new Error("Python bridge returned invalid result_json.");
+    }
+  }
 
   return {
     ok,
@@ -304,12 +317,7 @@ export async function callDefaultPythonBridge(
     }
 
     if (parsedBody === null) {
-      const stdout = rawBody.trim().length > 0 ? rawBody : undefined;
-      return {
-        ok: true,
-        action: "run_python",
-        ...(stdout !== undefined ? { stdout } : {}),
-      };
+      throw new Error("Python bridge returned a non-JSON success response.");
     }
 
     const parsed = parseBridgeResponse(parsedBody);

@@ -36,12 +36,17 @@ function buildFeatureRow(feature: ExperimentalFeatureSnapshot): HTMLElement {
     sublabel: feature.description,
     checked: feature.enabled,
     onChange: (checked) => {
-      setExperimentalFeatureEnabled(feature.id, checked);
+      try {
+        setExperimentalFeatureEnabled(feature.id, checked);
 
-      const suffix = feature.wiring === "flag-only"
-        ? " (flag saved; feature not wired yet)"
-        : "";
-      showToast(`${feature.title}: ${checked ? t("experimental.enabled") : t("experimental.disabled")}${suffix}`);
+        const suffix = feature.wiring === "flag-only"
+          ? " (flag saved; feature not wired yet)"
+          : "";
+        showToast(`${feature.title}: ${checked ? t("experimental.enabled") : t("experimental.disabled")}${suffix}`);
+      } catch {
+        toggleRow.input.checked = !checked;
+        showToast(t("experimental.saveFailed"));
+      }
     },
   });
   toggleRow.root.classList.add("pi-experimental-row__toggle-row");

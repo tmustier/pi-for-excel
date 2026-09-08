@@ -15,6 +15,7 @@ import {
 } from "../audit/workbook-change-audit.js";
 import { getErrorMessage } from "../utils/errors.js";
 import { finalizeMutationOperation } from "./mutation/finalize.js";
+import { appendMutationResultNote } from "./mutation/result-note.js";
 import type { MutationFinalizeDependencies } from "./mutation/types.js";
 import type { WorkbookHistoryDetails } from "./tool-details.js";
 
@@ -50,6 +51,7 @@ type Params = Static<typeof schema>;
 type RestoreResult = {
   restoredSnapshotId: string;
   inverseSnapshotId: string | null;
+  inverseSnapshotError?: string;
   address: string;
   changedCount: number;
 };
@@ -201,21 +203,12 @@ export function createWorkbookHistoryTool(
 
           if (restored.inverseSnapshotId) {
             lines.push(`Rollback backup created: \`${shortId(restored.inverseSnapshotId)}\`.`);
+          } else {
+            const reason = restored.inverseSnapshotError ? ` ${restored.inverseSnapshotError}` : "";
+            lines.push(`⚠ Rollback backup could not be created.${reason}`);
           }
 
-          await finalizeMutationOperation(mutationFinalizeDependencies, {
-            auditEntry: {
-              toolName: "workbook_history",
-              toolCallId,
-              blocked: false,
-              outputAddress: restored.address,
-              changedCount: restored.changedCount,
-              changes: [],
-              summary: `restored backup ${shortId(restored.restoredSnapshotId)} at ${restored.address}`,
-            },
-          });
-
-          return {
+          const restoreResult: AgentToolResult<WorkbookHistoryDetails> = {
             content: [{ type: "text", text: lines.join("\n\n") }],
             details: {
               kind: "workbook_history",
@@ -227,6 +220,24 @@ export function createWorkbookHistoryTool(
               changedCount: restored.changedCount,
             },
           };
+
+          await finalizeMutationOperation(mutationFinalizeDependencies, {
+            auditEntry: {
+              toolName: "workbook_history",
+              toolCallId,
+              blocked: false,
+              outputAddress: restored.address,
+              changedCount: restored.changedCount,
+              changes: [],
+              summary: `restored backup ${shortId(restored.restoredSnapshotId)} at ${restored.address}`,
+            },
+            auditWarning: {
+              result: restoreResult,
+              appendResultNote: appendMutationResultNote,
+            },
+          });
+
+          return restoreResult;
         }
 
         if (action === "delete") {

@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { createExperimentalCommands } from "../src/commands/builtins/experimental.ts";
+import {
+  createExperimentalCommands,
+  defaultProbeTmuxBridgeHealth,
+} from "../src/commands/builtins/experimental.ts";
+import { setExperimentalFeatureEnabled } from "../src/experiments/flags.ts";
 import type {
   ExperimentalFeatureDefinition,
   ExperimentalFeatureId,
@@ -22,6 +26,13 @@ function getExperimentalCommand(dependencies: Parameters<typeof createExperiment
   assert.ok(command);
   return command;
 }
+
+void test("experimental settings fail clearly when local storage is unavailable", () => {
+  assert.throws(
+    () => setExperimentalFeatureEnabled("ui_dark_mode", true),
+    /Local settings storage is unavailable/u,
+  );
+});
 
 void test("/experimental with no args opens the overlay", async () => {
   let openCount = 0;
@@ -374,14 +385,32 @@ void test("/experimental tmux-status reports blocked state with hint", async () 
     },
     getTmuxBridgeUrl: () => Promise.resolve(undefined),
     getTmuxBridgeToken: () => Promise.resolve(undefined),
+    probeTmuxBridgeHealth: () => Promise.resolve({ reachable: false }),
   });
 
   await command.execute("tmux-status");
 
   assert.equal(toasts.length, 1);
-  assert.match(toasts[0], /bridge URL: not set/u);
+  assert.match(toasts[0], /bridge URL: https:\/\/localhost:3341 \(default\)/u);
   assert.match(toasts[0], /gate: blocked \(missing_bridge_url\)/u);
-  assert.match(toasts[0], /health: not checked/u);
+  assert.match(toasts[0], /health: unreachable/u);
+});
+
+void test("tmux status probe rejects HTTP success from a non-tmux backend", async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = () => Promise.resolve(new Response(JSON.stringify({
+      ok: true,
+      mode: "stub",
+      backend: "stub",
+    }), { status: 200 }));
+
+    const status = await defaultProbeTmuxBridgeHealth("https://localhost:3341");
+    assert.equal(status.reachable, false);
+    assert.match(status.error ?? "", /did not identify a real tmux backend/u);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 void test("/experimental tmux-status reports healthy bridge details", async () => {

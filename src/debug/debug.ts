@@ -21,11 +21,10 @@ function safeGetItem(key: string): string | null {
   }
 }
 
-function safeSetItem(key: string, value: string): void {
-  try {
-    window.localStorage.setItem(key, value);
-  } catch {
-    // ignore (private mode / disabled storage)
+function setStoredItem(key: string, value: string): void {
+  window.localStorage.setItem(key, value);
+  if (window.localStorage.getItem(key) !== value) {
+    throw new Error("Local debug settings storage did not retain the change.");
   }
 }
 
@@ -51,7 +50,7 @@ function readState(): DebugState {
 }
 
 function writeState(state: DebugState): void {
-  safeSetItem(STORAGE_KEY, state.enabled ? "1" : "0");
+  setStoredItem(STORAGE_KEY, state.enabled ? "1" : "0");
 }
 
 export function isDebugEnabled(): boolean {

@@ -23,20 +23,32 @@ export function createDebugCommands(): SlashCommand[] {
         const a = normalizeArg(args);
 
         if (a === "" || a === "toggle") {
-          const enabled = toggleDebugEnabled();
-          showToast(t(enabled ? "command.debug.enabled" : "command.debug.disabled"));
+          try {
+            const enabled = toggleDebugEnabled();
+            showToast(t(enabled ? "command.debug.enabled" : "command.debug.disabled"));
+          } catch {
+            showToast(t("command.debug.save_failed"));
+          }
           return;
         }
 
         if (a === "on" || a === "true" || a === "1") {
-          setDebugEnabled(true);
-          showToast(t("command.debug.enabled"));
+          try {
+            setDebugEnabled(true);
+            showToast(t("command.debug.enabled"));
+          } catch {
+            showToast(t("command.debug.save_failed"));
+          }
           return;
         }
 
         if (a === "off" || a === "false" || a === "0") {
-          setDebugEnabled(false);
-          showToast(t("command.debug.disabled"));
+          try {
+            setDebugEnabled(false);
+            showToast(t("command.debug.disabled"));
+          } catch {
+            showToast(t("command.debug.save_failed"));
+          }
           return;
         }
 

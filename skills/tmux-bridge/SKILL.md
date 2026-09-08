@@ -45,11 +45,10 @@ The bridge is a local HTTPS server. Run it from a terminal:
 npx pi-for-excel-tmux-bridge
 ```
 
-This defaults to **real tmux mode** on `https://localhost:3341`.
+This starts a real tmux backend on `https://localhost:3341`. It exits with an install hint if tmux is unavailable.
 
 Options:
 - `--install-missing` — auto-install tmux via Homebrew (macOS)
-- `TMUX_BRIDGE_MODE=stub` — safe simulated mode (no real shell execution)
 - `TMUX_BRIDGE_TOKEN=your-secret` — require auth token
 
 ### 2. Configure in Pi (usually not needed)

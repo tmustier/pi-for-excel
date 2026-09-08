@@ -27,6 +27,10 @@ export interface MutationRecoveryStep<TDetails extends MutationResultDetails> {
 
 export interface MutationFinalizeOperation<TDetails extends MutationResultDetails> {
   auditEntry: AppendWorkbookChangeAuditEntryArgs;
+  auditWarning?: {
+    result: AgentToolResult<TDetails>;
+    appendResultNote: MutationResultNoteAppender<TDetails>;
+  };
   recovery?: MutationRecoveryStep<TDetails>;
 }
 

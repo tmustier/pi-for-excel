@@ -39,7 +39,6 @@ async function startBridge(extraEnv = {}) {
       HOST: "127.0.0.1",
       PORT: String(port),
       ALLOWED_ORIGINS: ORIGIN,
-      PYTHON_BRIDGE_MODE: "stub",
       ...extraEnv,
     },
     stdio: ["ignore", "pipe", "pipe"],
@@ -116,7 +115,7 @@ function requestInit(method, body, token) {
   };
 }
 
-test("python bridge health endpoint responds in stub mode", async (t) => {
+test("python bridge health endpoint reports real dependencies", async (t) => {
   const bridge = await startBridge();
   t.after(async () => {
     await bridge.stop();
@@ -130,10 +129,10 @@ test("python bridge health endpoint responds in stub mode", async (t) => {
 
   const payload = await response.json();
   assert.equal(payload.ok, true);
-  assert.equal(payload.mode, "stub");
-  assert.equal(payload.backend, "stub");
+  assert.equal(payload.mode, "real");
+  assert.equal(payload.backend, "real");
   assert.equal(payload.python.available, true);
-  assert.equal(payload.libreoffice.available, true);
+  assert.equal(typeof payload.libreoffice.available, "boolean");
 });
 
 test("python bridge blocks disallowed origins", async (t) => {
@@ -182,7 +181,7 @@ test("python bridge enforces bearer token when configured", async (t) => {
   assert.equal(payload.action, "run_python");
 });
 
-test("stub mode python endpoint returns deterministic payload", async (t) => {
+test("python endpoint executes code and returns its result", async (t) => {
   const bridge = await startBridge();
   t.after(async () => {
     await bridge.stop();
@@ -191,8 +190,7 @@ test("stub mode python endpoint returns deterministic payload", async (t) => {
   const response = await fetch(
     `http://127.0.0.1:${bridge.port}/v1/python-run`,
     requestInit("POST", {
-      code: "result = {'value': 1}",
-      input_json: "{\"hello\":\"world\"}",
+      code: "print('executed')\nresult = {'value': 1}",
     }),
   );
 
@@ -202,12 +200,14 @@ test("stub mode python endpoint returns deterministic payload", async (t) => {
   assert.equal(payload.ok, true);
   assert.equal(payload.action, "run_python");
   assert.equal(payload.exit_code, 0);
-  assert.match(payload.stdout, /simulated/i);
-  assert.equal(payload.result_json, "{\"hello\":\"world\"}");
+  assert.equal(payload.stdout, "executed");
+  assert.equal(payload.result_json, "{\"value\": 1}");
 });
 
-test("stub mode libreoffice endpoint returns derived output path", async (t) => {
-  const bridge = await startBridge();
+test("libreoffice endpoint fails explicitly when the binary is unavailable", async (t) => {
+  const bridge = await startBridge({
+    PYTHON_BRIDGE_LIBREOFFICE_BIN: "/definitely/missing/libreoffice",
+  });
   t.after(async () => {
     await bridge.stop();
   });
@@ -220,13 +220,11 @@ test("stub mode libreoffice endpoint returns derived output path", async (t) => 
     }),
   );
 
-  assert.equal(response.status, 200);
+  assert.equal(response.status, 501);
 
   const payload = await response.json();
-  assert.equal(payload.ok, true);
-  assert.equal(payload.action, "convert");
-  assert.equal(payload.output_path, "/tmp/source.csv");
-  assert.equal(payload.converter, "stub");
+  assert.equal(payload.ok, false);
+  assert.match(payload.error, /libreoffice binary not available/i);
 });
 
 test("python bridge rejects invalid python payloads", async (t) => {

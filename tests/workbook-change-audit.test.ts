@@ -215,6 +215,55 @@ void test("workbook change audit log clear removes persisted entries", async () 
   assert.equal((await log.list()).length, 0);
 });
 
+void test("workbook change audit rejects failed writes without retaining unsaved entries", async () => {
+  let rejectWrites = true;
+  const values = new Map<string, DynamicValue>();
+  const settingsStore: InMemorySettingsStore = {
+    get: <T>(key: string): Promise<T | null> => Promise.resolve((values.get(key) as T | undefined) ?? null),
+    set: (key: string, value: DynamicValue): Promise<void> => {
+      if (rejectWrites) return Promise.reject(new Error("quota exceeded"));
+      values.set(key, value);
+      return Promise.resolve();
+    },
+    delete: (key: string): Promise<void> => {
+      values.delete(key);
+      return Promise.resolve();
+    },
+  };
+  const log = new WorkbookChangeAuditLog({
+    getSettingsStore: () => Promise.resolve(settingsStore),
+  });
+
+  await assert.rejects(log.append({
+    toolName: "write_cells",
+    toolCallId: "call-unsaved",
+    blocked: false,
+    changedCount: 1,
+    changes: [],
+  }), /quota exceeded/u);
+
+  rejectWrites = false;
+  assert.deepEqual(await log.list(), []);
+});
+
+void test("workbook change audit retries loading after storage read failure", async () => {
+  let rejectRead = true;
+  const settingsStore: InMemorySettingsStore = {
+    get: <T>(): Promise<T | null> => rejectRead
+      ? Promise.reject(new Error("read failed"))
+      : Promise.resolve(null),
+    set: (): Promise<void> => Promise.resolve(),
+    delete: (): Promise<void> => Promise.resolve(),
+  };
+  const log = new WorkbookChangeAuditLog({
+    getSettingsStore: () => Promise.resolve(settingsStore),
+  });
+
+  await assert.rejects(log.list(), /read failed/u);
+  rejectRead = false;
+  assert.deepEqual(await log.list(), []);
+});
+
 void test("workbook change audit log accepts non-cell mutation tool entries", async () => {
   const settingsStore = createInMemorySettingsStore();
 
@@ -511,6 +560,34 @@ void test("workbook_history restore appends audit entries for success and missin
   assert.equal(missingAuditCapture.entries[0]?.toolName, "workbook_history");
   assert.equal(missingAuditCapture.entries[0]?.blocked, true);
   assert.equal(missingAuditCapture.entries[0]?.changedCount, 0);
+});
+
+void test("workbook_history reports applied restore when rollback and audit persistence fail", async () => {
+  const tool = createWorkbookHistoryTool({
+    getRecoveryLog: () => ({
+      listForCurrentWorkbook: () => Promise.resolve([createRecoverySnapshot("snapshot-restore-warning")]),
+      restore: (snapshotId: string) => Promise.resolve({
+        restoredSnapshotId: snapshotId,
+        inverseSnapshotId: null,
+        inverseSnapshotError: "storage quota exceeded",
+        address: "Sheet1!A1",
+        changedCount: 1,
+      }),
+      delete: () => Promise.resolve(false),
+      clearForCurrentWorkbook: () => Promise.resolve(0),
+    }),
+    appendAuditEntry: () => Promise.reject(new Error("audit storage unavailable")),
+  });
+
+  const result = await tool.execute("tool-call-history-warning", {
+    action: "restore",
+  });
+  const text = firstText(result);
+
+  assert.match(text, /Restored backup/u);
+  assert.match(text, /Rollback backup could not be created\. storage quota exceeded/u);
+  assert.match(text, /Workbook audit entry could not be saved/u);
+  assert.ok(!text.startsWith("Error:"));
 });
 
 void test("buildChangeExplanation shapes citations and prompt from change metadata", () => {
