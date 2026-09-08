@@ -7,7 +7,7 @@ function isToolsOutputTruncationPayloadShape(value: DynamicValue): value is Dyna
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-import type { ImageContent, TextContent } from "@earendil-works/pi-ai/compat";
+import type { ImageContent, TextContent } from "@earendil-works/pi-ai";
 
 import type {
   ToolOutputTruncationDetails,

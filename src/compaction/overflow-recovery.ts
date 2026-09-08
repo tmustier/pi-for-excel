@@ -9,7 +9,7 @@
  */
 
 import type { Agent, AgentState } from "@earendil-works/pi-agent-core";
-import { isContextOverflow, type AssistantMessage } from "@earendil-works/pi-ai/compat";
+import { isContextOverflow, type AssistantMessage } from "@earendil-works/pi-ai";
 
 /**
  * Returns the trailing assistant context-overflow error message, or null.

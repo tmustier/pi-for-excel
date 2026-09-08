@@ -3,7 +3,7 @@ import {
   getSupportedThinkingLevels,
   type Api,
   type Model,
-} from "@earendil-works/pi-ai/compat";
+} from "@earendil-works/pi-ai";
 
 /**
  * Return the exact thinking levels exposed by the bundled Pi model registry.

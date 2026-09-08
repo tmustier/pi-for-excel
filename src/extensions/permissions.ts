@@ -20,6 +20,7 @@ export type ExtensionSourceLike =
 export interface StoredExtensionPermissions {
   commandsRegister: boolean;
   toolsRegister: boolean;
+  modelsRegister: boolean;
   agentRead: boolean;
   agentEventsRead: boolean;
   uiOverlay: boolean;
@@ -49,6 +50,7 @@ function getCapabilityDescriptors(): readonly CapabilityDescriptor[] {
   return [
     { capability: "commands.register",           permissionKey: "commandsRegister",           tKey: "perm.commands.register" },
     { capability: "tools.register",              permissionKey: "toolsRegister",              tKey: "perm.tools.register" },
+    { capability: "models.register",             permissionKey: "modelsRegister",             tKey: "perm.models.register" },
     { capability: "agent.read",                  permissionKey: "agentRead",                  tKey: "perm.agent.read" },
     { capability: "agent.events.read",           permissionKey: "agentEventsRead",            tKey: "perm.agent.events.read" },
     { capability: "ui.overlay",                  permissionKey: "uiOverlay",                  tKey: "perm.ui.overlay" },
@@ -72,7 +74,7 @@ function getCapabilityDescriptors(): readonly CapabilityDescriptor[] {
 export type ExtensionCapability = (ReturnType<typeof getCapabilityDescriptors>)[number]["capability"];
 
 export const ALL_EXTENSION_CAPABILITIES: ExtensionCapability[] = [
-  "commands.register", "tools.register", "agent.read", "agent.events.read",
+  "commands.register", "tools.register", "models.register", "agent.read", "agent.events.read",
   "ui.overlay", "ui.widget", "ui.toast", "llm.complete", "http.fetch",
   "storage.readwrite", "connections.readwrite", "connections.secrets.read",
   "clipboard.write", "agent.context.write", "agent.steer", "agent.followup",
@@ -80,7 +82,7 @@ export const ALL_EXTENSION_CAPABILITIES: ExtensionCapability[] = [
 ];
 
 const TRUSTED_PERMISSIONS: StoredExtensionPermissions = {
-  commandsRegister: true, toolsRegister: true, agentRead: true, agentEventsRead: true,
+  commandsRegister: true, toolsRegister: true, modelsRegister: true, agentRead: true, agentEventsRead: true,
   uiOverlay: true, uiWidget: true, uiToast: true, llmComplete: true, httpFetch: true,
   storageReadWrite: true, connectionsReadWrite: true, connectionsSecretsRead: false,
   clipboardWrite: true, agentContextWrite: false, agentSteer: false, agentFollowUp: false,
@@ -88,7 +90,7 @@ const TRUSTED_PERMISSIONS: StoredExtensionPermissions = {
 };
 
 const RESTRICTED_UNTRUSTED_PERMISSIONS: StoredExtensionPermissions = {
-  commandsRegister: true, toolsRegister: false, agentRead: false, agentEventsRead: false,
+  commandsRegister: true, toolsRegister: false, modelsRegister: false, agentRead: false, agentEventsRead: false,
   uiOverlay: true, uiWidget: true, uiToast: true, llmComplete: false, httpFetch: false,
   storageReadWrite: true, connectionsReadWrite: false, connectionsSecretsRead: false,
   clipboardWrite: true, agentContextWrite: false, agentSteer: false, agentFollowUp: false,
@@ -127,6 +129,7 @@ export function normalizeStoredExtensionPermissions(raw: DynamicValue, trust: St
   return {
     commandsRegister: normalizeBooleanOrFallback(raw.commandsRegister, defaults.commandsRegister),
     toolsRegister: normalizeBooleanOrFallback(raw.toolsRegister, defaults.toolsRegister),
+    modelsRegister: normalizeBooleanOrFallback(raw.modelsRegister, defaults.modelsRegister),
     agentRead: normalizeBooleanOrFallback(raw.agentRead, defaults.agentRead),
     agentEventsRead: normalizeBooleanOrFallback(raw.agentEventsRead, defaults.agentEventsRead),
     uiOverlay: normalizeBooleanOrFallback(raw.uiOverlay, defaults.uiOverlay),

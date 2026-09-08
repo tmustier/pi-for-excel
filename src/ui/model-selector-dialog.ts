@@ -5,15 +5,19 @@
  * Differences from upstream (intentional):
  * - No Thinking/Vision filter pills, capability icons, or cost column — the
  *   previous theme already hid all three; they are simply not rendered.
- * - No auto-discovery of ollama/llama.cpp/vllm/lmstudio models. This add-in's
- *   custom-gateway UI only creates providers with explicit model lists, so
- *   the discovery path (and its @lmstudio/sdk + ollama deps) had no callers.
+ * - Provider catalogues come from the browser-native Pi AI Models runtime.
+ *   Cached dynamic models render immediately and background refreshes update
+ *   an already-open selector.
  * - Provider filtering (active credentials) and featured-model ordering are
  *   built in rather than monkey-patched (src/models/featured-models.ts).
  */
 
-import type { Api, Model } from "@earendil-works/pi-ai/compat";
-import { getModels, getProviders, modelsAreEqual } from "@earendil-works/pi-ai/compat";
+import {
+  modelsAreEqual,
+  type Api,
+  type Model,
+  type Models,
+} from "@earendil-works/pi-ai";
 
 import { t } from "../language/index.js";
 import { getActiveProviders } from "../models/active-providers.js";
@@ -22,7 +26,6 @@ import {
   subsequenceScore,
   type ModelSelectorItem,
 } from "../models/featured-models.js";
-import { getAppStorage } from "../storage/local/app-storage.js";
 import { MODEL_SELECTOR_OVERLAY_ID } from "./overlay-ids.js";
 import {
   closeOverlayById,
@@ -31,6 +34,7 @@ import {
 } from "./overlay-dialog.js";
 
 export interface ModelSelectorDialogOptions {
+  models: Models;
   currentModel: Model<Api> | null;
   onSelect: (model: Model<Api>) => void;
 }
@@ -41,28 +45,12 @@ function formatTokenCount(count: number): string {
   return String(count);
 }
 
-function collectBuiltInItems(): ModelSelectorItem[] {
+function collectModelItems(modelsRuntime: Models): ModelSelectorItem[] {
   const items: ModelSelectorItem[] = [];
-  for (const provider of getProviders()) {
-    for (const model of getModels(provider)) {
-      items.push({ provider, id: model.id, model });
+  for (const provider of modelsRuntime.getProviders()) {
+    for (const model of modelsRuntime.getModels(provider.id)) {
+      items.push({ provider: provider.id, id: model.id, model });
     }
-  }
-  return items;
-}
-
-async function collectCustomProviderItems(): Promise<ModelSelectorItem[]> {
-  const items: ModelSelectorItem[] = [];
-  try {
-    const customProviders = await getAppStorage().customProviders.getAll();
-    for (const provider of customProviders) {
-      if (!provider.models) continue;
-      for (const model of provider.models) {
-        items.push({ provider: model.provider, id: model.id, model });
-      }
-    }
-  } catch (error) {
-    console.warn("[pi] Failed to load custom provider models:", error);
   }
   return items;
 }
@@ -76,7 +64,7 @@ export function openModelSelectorDialog(options: ModelSelectorDialogOptions): vo
     restoreFocusOnClose: true,
   });
 
-  let allItems = collectBuiltInItems();
+  let allItems = collectModelItems(options.models);
   let searchQuery = "";
   let selectedIndex = 0;
   // Selection follows the mouse only after real pointer movement, so
@@ -108,7 +96,7 @@ export function openModelSelectorDialog(options: ModelSelectorDialogOptions): vo
     let filtered = allItems;
 
     const active = getActiveProviders();
-    if (active && active.size > 0) {
+    if (active) {
       filtered = filtered.filter((item) => active.has(item.provider));
     }
 
@@ -257,14 +245,17 @@ export function openModelSelectorDialog(options: ModelSelectorDialogOptions): vo
   });
 
   dialog.card.append(header, searchInput, list);
+  const handleModelsChanged = (): void => {
+    if (!dialog.overlay.isConnected) return;
+    allItems = collectModelItems(options.models);
+    renderList();
+  };
+  document.addEventListener("pi:models-changed", handleModelsChanged);
+  dialog.addCleanup(() => {
+    document.removeEventListener("pi:models-changed", handleModelsChanged);
+  });
+
   dialog.mount();
   renderList();
   searchInput.focus();
-
-  // Custom-provider models load asynchronously; merge them in when ready.
-  void collectCustomProviderItems().then((customItems) => {
-    if (customItems.length === 0 || !dialog.overlay.isConnected) return;
-    allItems = [...allItems, ...customItems];
-    renderList();
-  });
 }

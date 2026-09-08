@@ -5,7 +5,7 @@
  * human-readable descriptions. Expand to see raw Input/Output.
  */
 
-import type { ImageContent, TextContent, ToolResultMessage } from "@earendil-works/pi-ai/compat";
+import type { ImageContent, TextContent, ToolResultMessage } from "@earendil-works/pi-ai";
 import { registerToolRenderer } from "./messages/tool-renderer-registry.js";
 import type { ToolRenderer, ToolRenderResult } from "./messages/tool-renderer-registry.js";
 import { t } from "../language/index.js";

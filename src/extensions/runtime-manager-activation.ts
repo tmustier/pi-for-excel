@@ -59,6 +59,9 @@ type HostActivationBridge = Pick<
   | "markConnectionValidated"
   | "markConnectionInvalid"
   | "markConnectionStatus"
+  | "registerModelProvider"
+  | "unregisterModelProvider"
+  | "refreshModelProviders"
   | "isCapabilityEnabled"
   | "formatCapabilityError"
   | "extensionOwnerId"
@@ -92,6 +95,9 @@ type SandboxActivationBridge = Pick<
   | "markConnectionValidated"
   | "markConnectionInvalid"
   | "markConnectionStatus"
+  | "registerModelProvider"
+  | "unregisterModelProvider"
+  | "refreshModelProviders"
   | "isCapabilityEnabled"
   | "formatCapabilityError"
   | "toast"
@@ -239,6 +245,9 @@ export interface BuildRuntimeManagerActivationBridgeOptions {
   runExtensionHttpFetch: (url: string, options?: HttpRequestOptions) => Promise<HttpResponse>;
   writeExtensionClipboard: (text: string) => Promise<void>;
   triggerExtensionDownload: (filename: string, content: string, mimeType?: string) => void;
+  registerModelProvider: NonNullable<CreateExtensionAPIOptions["registerModelProvider"]>;
+  unregisterModelProvider: NonNullable<CreateExtensionAPIOptions["unregisterModelProvider"]>;
+  refreshModelProviders: NonNullable<CreateExtensionAPIOptions["refreshModelProviders"]>;
   isCapabilityEnabled: (capability: ExtensionCapability) => boolean;
   formatCapabilityError: (capability: ExtensionCapability) => string;
   showToastMessage: (message: string) => void;
@@ -258,6 +267,9 @@ export function buildRuntimeManagerActivationBridge(
     runExtensionHttpFetch,
     writeExtensionClipboard,
     triggerExtensionDownload,
+    registerModelProvider,
+    unregisterModelProvider,
+    refreshModelProviders,
     isCapabilityEnabled,
     formatCapabilityError,
     showToastMessage,
@@ -548,6 +560,9 @@ export function buildRuntimeManagerActivationBridge(
     markConnectionValidated,
     markConnectionInvalid,
     markConnectionStatus,
+    registerModelProvider,
+    unregisterModelProvider,
+    refreshModelProviders,
     isCapabilityEnabled,
     formatCapabilityError,
     extensionOwnerId: entry.id,
@@ -580,6 +595,9 @@ export function buildRuntimeManagerActivationBridge(
     markConnectionValidated,
     markConnectionInvalid,
     markConnectionStatus,
+    registerModelProvider,
+    unregisterModelProvider,
+    refreshModelProviders,
     isCapabilityEnabled,
     formatCapabilityError,
     toast: showToastMessage,

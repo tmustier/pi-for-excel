@@ -12,7 +12,6 @@ function isTaskpaneInitPayloadShape(value: DynamicValue): value is DynamicObject
 import { html, render } from "lit";
 import { Agent } from "@earendil-works/pi-agent-core";
 import { getAppStorage } from "../storage/local/app-storage.js";
-import type { CustomProvider } from "../storage/local/custom-providers-store.js";
 import type { SessionData } from "../storage/local/types.js";
 
 import { createOfficeStreamFn } from "../auth/stream-proxy.js";
@@ -24,10 +23,6 @@ import {
   validateOfficeProxyUrl,
 } from "../auth/proxy-validation.js";
 import { restoreCredentials } from "../auth/restore.js";
-import {
-  collectCustomProviderRuntimeInfo,
-  resolveCustomProviderModel,
-} from "../auth/custom-gateways.js";
 import { invalidateBlueprint } from "../context/blueprint.js";
 import { ChangeTracker } from "../context/change-tracker.js";
 import {
@@ -126,6 +121,7 @@ import { showActionToast, showToast } from "../ui/toast.js";
 import { PiSidebar } from "../ui/pi-sidebar.js";
 import { createProxyBanner } from "../ui/proxy-banner.js";
 import { setActiveProviders } from "../models/active-providers.js";
+import { BrowserModelRuntime } from "../models/browser-model-runtime.js";
 import { promptForProviderConnection } from "../ui/api-key-dialog.js";
 import { openModelSelectorDialog } from "../ui/model-selector-dialog.js";
 import { getCurrentSpreadsheetHost, type SpreadsheetHostKind } from "../host/index.js";
@@ -229,7 +225,7 @@ export async function initTaskpane(opts: {
   const spreadsheetHost = getCurrentSpreadsheetHost();
 
   // 1. Storage
-  const { providerKeys, sessions, settings, customProviders } = initAppStorage();
+  const { providerKeys, sessions, settings, customProviders, modelCatalogs } = initAppStorage();
 
   // Initialize language from storage
   try {
@@ -280,57 +276,69 @@ export async function initTaskpane(opts: {
     // ignore
   }
 
-  // 2. Resolve available providers (built-ins + configured custom providers)
+  const getConfiguredProxyUrl = async (): Promise<string | undefined> => {
+    try {
+      const enabled = await settings.get<boolean>("proxy.enabled");
+      if (!enabled) return undefined;
+
+      const rawUrl = await settings.get<string>("proxy.url");
+      const trimmedUrl = typeof rawUrl === "string" ? rawUrl.trim() : "";
+      const candidateUrl = trimmedUrl.length > 0 ? trimmedUrl : DEFAULT_PROXY_URL;
+      return validateOfficeProxyUrl(candidateUrl);
+    } catch {
+      return undefined;
+    }
+  };
+
+  const modelRuntime = new BrowserModelRuntime({
+    providerKeys,
+    modelCatalogs,
+    getProxyUrl: getConfiguredProxyUrl,
+  });
+
+  // 2. Resolve available providers from one browser-native runtime. Static,
+  // custom, dynamically discovered and extension providers share this path.
   let availableProviders: string[] = [];
-  let customProviderApiKeys = new Map<string, string | undefined>();
-  let configuredCustomProviders: CustomProvider[] = [];
-  let defaultCustomModel: ReturnType<typeof collectCustomProviderRuntimeInfo>["defaultModel"] = null;
-  let defaultModel = pickDefaultModel([], null);
+  let defaultModel = pickDefaultModel(modelRuntime.models, [], null);
 
-  const refreshConfiguredProviders = async (): Promise<void> => {
-    const combinedProviders = new Set<string>();
-    let nextCustomApiKeys = new Map<string, string | undefined>();
-    let nextDefaultCustomModel: ReturnType<typeof collectCustomProviderRuntimeInfo>["defaultModel"] = null;
-
-    try {
-      const configuredBuiltInProviders = await providerKeys.list();
-      for (const provider of configuredBuiltInProviders) {
-        combinedProviders.add(provider);
-      }
-    } catch (error) {
-      console.warn("[auth] Built-in provider lookup failed:", error);
-    }
-
-    let nextConfiguredCustomProviders: CustomProvider[] = [];
-
-    try {
-      nextConfiguredCustomProviders = await customProviders.getAll();
-      const customInfo = collectCustomProviderRuntimeInfo(nextConfiguredCustomProviders);
-      nextCustomApiKeys = customInfo.apiKeys;
-      nextDefaultCustomModel = customInfo.defaultModel;
-
-      for (const provider of customInfo.providerNames) {
-        combinedProviders.add(provider);
-      }
-    } catch (error) {
-      console.warn("[auth] Custom provider lookup failed:", error);
-    }
-
+  const updateAvailableProviderState = async (): Promise<void> => {
+    const availableModels = await modelRuntime.models.getAvailable();
+    const combinedProviders = new Set(availableModels.map((model) => model.provider));
     availableProviders = Array.from(combinedProviders);
-    configuredCustomProviders = nextConfiguredCustomProviders;
-    customProviderApiKeys = nextCustomApiKeys;
-    defaultCustomModel = nextDefaultCustomModel;
-    defaultModel = pickDefaultModel(availableProviders, defaultCustomModel);
+    defaultModel = pickDefaultModel(modelRuntime.models, availableProviders, null);
     setActiveProviders(combinedProviders);
+    document.dispatchEvent(new Event("pi:models-changed"));
   };
 
   let onProvidersChanged: (() => void) | null = null;
 
+  const restoreModelCatalogs = async (): Promise<void> => {
+    const refreshResult = await modelRuntime.refresh({ allowNetwork: false });
+    if (refreshResult.errors.size > 0) {
+      console.warn("[models] Some cached provider catalogues could not be restored:", Array.from(refreshResult.errors.keys()));
+    }
+    await updateAvailableProviderState();
+    onProvidersChanged?.();
+  };
+
+  const refreshRuntimeModels = async (): Promise<void> => {
+    const refreshResult = await modelRuntime.refresh({ allowNetwork: true, force: true });
+    if (refreshResult.errors.size > 0) {
+      console.warn("[models] Some provider catalogues could not be refreshed:", Array.from(refreshResult.errors.keys()));
+    }
+    await updateAvailableProviderState();
+    onProvidersChanged?.();
+  };
+
+  const refreshConfiguredProviders = async (): Promise<void> => {
+    const nextCustomProviders = await customProviders.getAll();
+    await modelRuntime.syncCustomProviders(nextCustomProviders);
+    await restoreModelCatalogs();
+  };
+
   document.addEventListener("pi:providers-changed", () => {
     void refreshConfiguredProviders()
-      .then(() => {
-        onProvidersChanged?.();
-      })
+      .then(() => refreshRuntimeModels())
       .catch((error: DynamicValue) => {
         console.warn("[auth] Provider refresh after settings change failed:", error);
       });
@@ -344,11 +352,7 @@ export async function initTaskpane(opts: {
   void credentialRestorePromise
     .then(() => {
       void refreshConfiguredProviders()
-        .then(() => {
-          // Reconcile any already-created runtimes with the restored
-          // providers (#553) — mirrors the pi:providers-changed path.
-          onProvidersChanged?.();
-        })
+        .then(() => refreshRuntimeModels())
         .catch((error: DynamicValue) => {
           console.warn("[auth] Provider refresh after credential restore failed:", error);
         });
@@ -369,6 +373,13 @@ export async function initTaskpane(opts: {
     console.warn("[auth] Provider lookup failed during startup:", error);
   }
 
+  // Cached catalogues are available before first paint; remote discovery runs
+  // afterward and updates an already-open model selector in place.
+  void refreshRuntimeModels()
+    .catch((error: DynamicValue) => {
+      console.warn("[models] Background model refresh failed:", error);
+    });
+
   if (availableProviders.length === 0) {
     void showWelcomeLogin(providerKeys).catch((error: DynamicValue) => {
       console.warn("[auth] Failed to open welcome login:", error);
@@ -381,25 +392,11 @@ export async function initTaskpane(opts: {
   // 4. Shared runtime dependencies
   // Workbook structure context is injected separately by transformContext.
 
-  const streamFn = createOfficeStreamFn(async () => {
-    try {
-      const storage = getAppStorage();
-      const enabled = await storage.settings.get("proxy.enabled");
-      if (!enabled) return undefined;
-
-      const rawUrl = await storage.settings.get("proxy.url");
-      const trimmedUrl = typeof rawUrl === "string" ? rawUrl.trim() : "";
-      const candidateUrl = trimmedUrl.length > 0 ? trimmedUrl : DEFAULT_PROXY_URL;
-
-      try {
-        return validateOfficeProxyUrl(candidateUrl);
-      } catch {
-        return undefined;
-      }
-    } catch {
-      return undefined;
-    }
-  });
+  const streamFn = createOfficeStreamFn(
+    getConfiguredProxyUrl,
+    modelRuntime.models,
+    (providerId) => modelRuntime.shouldProxyProvider(providerId),
+  );
 
   const workbookCoordinator = createWorkbookCoordinator();
 
@@ -603,17 +600,17 @@ export async function initTaskpane(opts: {
     for (const runtime of runtimeManager.listRuntimes()) {
       // Never mutate the model of a working session — same busy invariant as
       // model switching (see applyModelSelection). A skipped runtime is
-      // reconciled on the next providers-changed / credential-restore pass;
-      // its in-flight work already captured the old model, and a
-      // credential-less provider fails fast anyway.
+      // reconciled after agent_end or on the next provider refresh; its
+      // in-flight work already captured the old model.
       if (runtime.agent.state.isStreaming || runtime.actionQueue.isBusy()) {
         continue;
       }
 
       const currentModel = runtime.agent.state.model;
 
-      // 1. Custom-provider models: pick up edited base URLs/limits in place.
-      const refreshedModel = resolveCustomProviderModel(configuredCustomProviders, currentModel);
+      // 1. Refresh metadata from the unified runtime catalogue (built-in,
+      // custom, dynamic or extension-owned).
+      const refreshedModel = modelRuntime.models.getModel(currentModel.provider, currentModel.id);
       if (refreshedModel && !areRuntimeModelsEquivalent(currentModel, refreshedModel)) {
         runtime.agent.state.model = refreshedModel;
         markChanged(runtime.runtimeId);
@@ -805,8 +802,10 @@ export async function initTaskpane(opts: {
   const extensionManager = new ExtensionRuntimeManager({
     settings,
     connectionManager,
+    modelRuntime,
     getActiveAgent,
     refreshRuntimeTools: refreshCapabilitiesForAllRuntimes,
+    refreshRuntimeModels,
     reservedToolNames,
     afterInjectAgentContext: async () => {
       const activeRuntime = getActiveRuntime();
@@ -823,6 +822,10 @@ export async function initTaskpane(opts: {
 
   connectionManager.subscribe(() => {
     void refreshCapabilitiesForAllRuntimes();
+    void refreshRuntimeModels()
+      .catch((error: DynamicValue) => {
+        console.warn("[models] Failed to refresh after connection change:", error);
+      });
   });
 
   const refreshWorkbookState = async () => {
@@ -1082,11 +1085,14 @@ export async function initTaskpane(opts: {
 
     // API key resolution
     agent.getApiKey = async (provider: string) => {
-      const key = await getAppStorage().providerKeys.get(provider);
-      if (key) return key;
+      const resolvedAuth = await modelRuntime.models.getAuth(provider);
+      if (resolvedAuth) return resolvedAuth.auth.apiKey;
 
-      if (customProviderApiKeys.has(provider)) {
-        return customProviderApiKeys.get(provider) ?? undefined;
+      // Extension provider credentials are configured through their host-owned
+      // connection cards, never through the generic API-key dialog.
+      if (modelRuntime.isExtensionProvider(provider)) {
+        showErrorBanner(errorRoot, t("runtime.error.noApiKey", { provider }));
+        return undefined;
       }
 
       const success = await promptForProviderConnection(provider);
@@ -1113,7 +1119,7 @@ export async function initTaskpane(opts: {
       agent,
       sessions,
       settings,
-      customProvidersStore: customProviders,
+      models: modelRuntime.models,
       initialSessionId: runtimeSessionId,
       autoRestoreLatest: optsForRuntime.autoRestoreLatest,
     });
@@ -1140,6 +1146,11 @@ export async function initTaskpane(opts: {
       }
 
       if (ev.type !== "agent_end") return;
+
+      // Provider refreshes intentionally skip working runtimes. Re-run the
+      // reconciliation after the action queue unwinds so an extension that
+      // unloads mid-turn cannot leave its now-missing provider selected.
+      window.setTimeout(() => onProvidersChanged?.(), 0);
 
       const wasUserAbort = abortedAgents.has(agent);
       abortedAgents.delete(agent);
@@ -1680,12 +1691,22 @@ export async function initTaskpane(opts: {
     }
 
     const currentModel = runtime.agent.state.model;
-    if (currentModel.provider === nextModel.provider && currentModel.id === nextModel.id) {
+    const sameIdentity = currentModel.provider === nextModel.provider
+      && currentModel.id === nextModel.id;
+    if (sameIdentity && areRuntimeModelsEquivalent(currentModel, nextModel)) {
       return;
     }
 
     if (runtime.agent.state.isStreaming || runtime.actionQueue.isBusy()) {
       showToast(t("init.waitBeforeChangingModels"));
+      return;
+    }
+
+    if (sameIdentity) {
+      runtime.agent.state.model = nextModel;
+      document.dispatchEvent(new CustomEvent("pi:model-changed"));
+      document.dispatchEvent(new CustomEvent("pi:status-update"));
+      requestAnimationFrame(() => sidebar.requestUpdate());
       return;
     }
 
@@ -1732,10 +1753,15 @@ export async function initTaskpane(opts: {
       closeStatusPopover();
 
       openModelSelectorDialog({
+        models: modelRuntime.models,
         currentModel,
         onSelect: (model) => {
           void applyModelSelection(targetRuntimeId, model);
         },
+      });
+
+      void refreshRuntimeModels().catch((error: DynamicValue) => {
+        console.warn("[models] Model refresh from selector failed:", error);
       });
     })();
   };
@@ -2114,6 +2140,18 @@ export async function initTaskpane(opts: {
     sidebar,
     getWorkbookContext: resolveWorkbookContext,
     getActiveRuntime,
+    extensionManager,
+    connectionManager,
+    modelRuntime,
+    refreshModels: async (allowNetwork) => {
+      const result = await modelRuntime.refresh({
+        allowNetwork,
+        ...(allowNetwork ? { force: true } : {}),
+      });
+      await updateAvailableProviderState();
+      onProvidersChanged?.();
+      return { errors: Array.from(result.errors.keys()).sort() };
+    },
   });
   if (backgroundVerificationBridge) {
     window.addEventListener("pagehide", () => backgroundVerificationBridge.stop(), { once: true });

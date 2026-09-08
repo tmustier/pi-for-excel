@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { test } from "node:test";
 
-import type { OAuthLoginCallbacks } from "@earendil-works/pi-ai/compat";
+import type { OAuthLoginCallbacks } from "@earendil-works/pi-ai";
 
 import { getOAuthProvider } from "../src/auth/oauth-provider-registry.ts";
 import { sha256ForPkce } from "../src/auth/pkce.ts";

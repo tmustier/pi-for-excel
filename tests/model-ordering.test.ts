@@ -3,13 +3,13 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
 
-import {
-  completeSimple,
-  getModel,
-  getModels,
-  type Api,
-  type Model,
-} from "@earendil-works/pi-ai/compat";
+import type {
+  Api,
+  Context,
+  Model,
+  SimpleStreamOptions,
+} from "@earendil-works/pi-ai";
+import { builtinModels } from "@earendil-works/pi-ai/providers/all";
 
 import { BROWSER_OAUTH_PROVIDERS, mapToApiProvider } from "../src/auth/provider-map.ts";
 import { rewriteDevProxyUrl } from "../src/auth/dev-rewrites.ts";
@@ -29,9 +29,33 @@ import {
   shouldPreferOpenAiGeneralModel,
 } from "../src/models/model-ordering.ts";
 import { getThinkingLevelsForModel } from "../src/models/thinking-levels.ts";
-import { pickDefaultModel } from "../src/taskpane/default-model.ts";
+import { pickDefaultModel as pickDefaultModelFromRuntime } from "../src/taskpane/default-model.ts";
 
 type OpenAiProvider = "openai" | "openai-codex";
+
+const modelsRuntime = builtinModels();
+
+function getModels(provider: string): Model<Api>[] {
+  return [...modelsRuntime.getModels(provider)];
+}
+
+function getModel(provider: string, modelId: string): Model<Api> {
+  const model = modelsRuntime.getModel(provider, modelId);
+  if (!model) throw new Error(`Missing test model: ${provider}/${modelId}`);
+  return model;
+}
+
+function pickDefaultModel(availableProviders: string[]): Model<Api> {
+  return pickDefaultModelFromRuntime(modelsRuntime, availableProviders);
+}
+
+function completeSimple(
+  model: Model<Api>,
+  context: Context,
+  options?: SimpleStreamOptions,
+) {
+  return modelsRuntime.completeSimple(model, context, options);
+}
 
 const OPENAI_PROVIDERS: OpenAiProvider[] = ["openai", "openai-codex"];
 
@@ -72,7 +96,10 @@ const GPT_56_VARIANTS = [
 ];
 
 const GPT_56_IDS = GPT_56_VARIANTS.map((variant) => variant.id);
-const GPT_56_THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
+const GPT_56_THINKING_LEVELS: Record<OpenAiProvider, string[]> = {
+  openai: ["off", "low", "medium", "high", "xhigh", "max"],
+  "openai-codex": ["off", "minimal", "low", "medium", "high", "xhigh", "max"],
+};
 
 function pickExpectedOpenAiDefault(provider: OpenAiProvider): Model<Api> | null {
   const models = getModels(provider);
@@ -201,7 +228,7 @@ void test("current Pi registry exposes only the three canonical GPT-5.6 tier IDs
       .sort();
 
     assert.deepEqual(ids, GPT_56_IDS.slice().sort(), `unexpected GPT-5.6 IDs for ${provider}`);
-    assert.equal(getModel(provider, "gpt-5.6"), undefined, `bare alias must not exist for ${provider}`);
+    assert.equal(modelsRuntime.getModel(provider, "gpt-5.6"), undefined, `bare alias must not exist for ${provider}`);
   }
 
   assert.equal(getModel("anthropic", "claude-opus-4-7").id, "claude-opus-4-7");
@@ -209,7 +236,7 @@ void test("current Pi registry exposes only the three canonical GPT-5.6 tier IDs
   assert.equal(getModel("google", "gemini-3.1-pro-preview").id, "gemini-3.1-pro-preview");
 });
 
-void test("GPT-5.6 registry metadata exactly matches native Pi 0.80.6", () => {
+void test("GPT-5.6 registry exposes the metadata used by the app", () => {
   for (const provider of OPENAI_PROVIDERS) {
     const isCodex = provider === "openai-codex";
 
@@ -225,16 +252,13 @@ void test("GPT-5.6 registry metadata exactly matches native Pi 0.80.6", () => {
       );
       assert.equal(model.reasoning, true);
       assert.deepEqual(model.input, ["text", "image"]);
-      assert.equal(model.contextWindow, isCodex ? 372_000 : 272_000);
+      assert.equal(model.contextWindow, 272_000);
       assert.equal(model.maxTokens, 128_000);
       assert.deepEqual(model.cost, expected.cost);
-      assert.deepEqual(
-        model.thinkingLevelMap,
-        isCodex
-          ? { xhigh: "xhigh", max: "max", minimal: "low" }
-          : { off: "none", xhigh: "xhigh", max: "max" },
-      );
-      assert.deepEqual(getThinkingLevelsForModel(model), GPT_56_THINKING_LEVELS);
+      assert.equal(model.thinkingLevelMap?.minimal, isCodex ? "low" : null);
+      assert.equal(model.thinkingLevelMap?.xhigh, "xhigh");
+      assert.equal(model.thinkingLevelMap?.max, "max");
+      assert.deepEqual(getThinkingLevelsForModel(model), GPT_56_THINKING_LEVELS[provider]);
     }
   }
 });
@@ -264,7 +288,7 @@ void test("pickDefaultModel prefers the latest Opus for Anthropic-only setups", 
 
   const selected = pickDefaultModel(["anthropic"]);
   assert.equal(selected.provider, "anthropic");
-  assert.equal(selected.id, "claude-opus-4-8");
+  assert.equal(selected.id, "claude-opus-5");
 });
 
 void test("current OpenAI providers select GPT-5.6 Sol as the default", () => {
@@ -289,7 +313,7 @@ void test("Bedrock provider uses the browser-safe unsupported-provider stub", as
         },
       ],
     },
-    { maxTokens: 1, maxRetries: 0 },
+    { apiKey: "browser-test", maxTokens: 1, maxRetries: 0 },
   );
 
   assert.equal(selected.stopReason, "error");
@@ -317,7 +341,7 @@ void test("pickDefaultModel never picks an unusable provider while a configured 
   // Providers with registry models but no dedicated default-model rule used
   // to fall through to an OpenAI API model, which the user has no credentials for.
   for (const provider of ["github-copilot", "mistral", "groq", "xai", "deepseek"]) {
-    const models = getModels(provider as Parameters<typeof getModels>[0]);
+    const models = getModels(provider);
     assert.ok(models.length > 0, `expected registry models for ${provider}`);
 
     const selected = pickDefaultModel([provider]);

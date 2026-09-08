@@ -12,7 +12,7 @@ function isAuthOauthStoragePayloadShape(value: DynamicValue): value is DynamicOb
  * execution can read IndexedDB.
  */
 
-import type { OAuthCredentials } from "@earendil-works/pi-ai/compat";
+import type { OAuthCredentials } from "@earendil-works/pi-ai";
 import type { SettingsStore } from "../storage/local/settings-store.js";
 
 

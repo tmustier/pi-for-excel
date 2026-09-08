@@ -3,13 +3,12 @@ import type {
   AssistantMessage,
   Message,
   Model,
+  Models,
   Usage,
-} from "@earendil-works/pi-ai/compat";
+} from "@earendil-works/pi-ai";
 function isExtensionsRuntimeManagerHelpersPayloadShape(value: DynamicValue): value is DynamicObject {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
-
-import { getModels, getProviders } from "@earendil-works/pi-ai/compat";
 
 import type { HttpRequestOptions } from "../commands/extension-api.js";
 import type { StoredExtensionSource } from "./store.js";
@@ -57,10 +56,11 @@ function createZeroUsage(): Usage {
 }
 
 export function resolveModelForCompletion(args: {
+  models: Models;
   fallbackModel: Model<Api>;
   requestedModel?: string;
 }): Model<Api> {
-  const { fallbackModel, requestedModel } = args;
+  const { models, fallbackModel, requestedModel } = args;
 
   if (!requestedModel) {
     return fallbackModel;
@@ -72,18 +72,7 @@ export function resolveModelForCompletion(args: {
   }
 
   const findModelByProviderAndId = (providerName: string, modelId: string): Model<Api> | null => {
-    for (const provider of getProviders()) {
-      if (provider !== providerName) {
-        continue;
-      }
-
-      const match = getModels(provider).find((model) => model.id === modelId);
-      if (match) {
-        return match;
-      }
-    }
-
-    return null;
+    return models.getModel(providerName, modelId) ?? null;
   };
 
   const slashIndex = trimmed.indexOf("/");
@@ -104,8 +93,8 @@ export function resolveModelForCompletion(args: {
     return providerMatch;
   }
 
-  for (const provider of getProviders()) {
-    const match = getModels(provider).find((model) => model.id === trimmed);
+  for (const provider of models.getProviders()) {
+    const match = models.getModels(provider.id).find((model) => model.id === trimmed);
     if (match) {
       return match;
     }

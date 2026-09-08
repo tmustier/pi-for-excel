@@ -10,9 +10,9 @@
 import type {
   OAuthCredentials,
   OAuthLoginCallbacks,
-  OAuthProviderInterface,
-} from "@earendil-works/pi-ai/compat";
+} from "@earendil-works/pi-ai";
 
+import type { BrowserOAuthProvider } from "./browser-oauth-types.js";
 import { generatePKCE } from "./pkce.js";
 
 const CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e";
@@ -212,7 +212,7 @@ export async function refreshAnthropicBrowserToken(credentials: OAuthCredentials
   };
 }
 
-export const anthropicBrowserOAuthProvider: OAuthProviderInterface = {
+export const anthropicBrowserOAuthProvider: BrowserOAuthProvider = {
   id: "anthropic",
   name: "Anthropic (Claude Pro/Max)",
 

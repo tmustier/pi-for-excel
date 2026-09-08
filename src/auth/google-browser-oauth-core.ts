@@ -5,8 +5,9 @@
 import type {
   OAuthCredentials,
   OAuthLoginCallbacks,
-  OAuthProviderInterface,
-} from "@earendil-works/pi-ai/compat";
+} from "@earendil-works/pi-ai";
+
+import type { BrowserOAuthProvider } from "./browser-oauth-types.js";
 import { generatePKCE } from "./pkce.js";
 
 const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
@@ -310,7 +311,7 @@ async function refreshGoogleOAuth(
 
 export function createGoogleBrowserOAuthProvider(
   config: GoogleOAuthFlowConfig,
-): OAuthProviderInterface {
+): BrowserOAuthProvider {
   return {
     id: config.id,
     name: config.name,

@@ -596,6 +596,7 @@
   "perm.skills.write": "install/uninstall external skills",
   "perm.storage.readwrite": "read/write extension storage",
   "perm.tools.register": "register tools",
+  "perm.models.register": "register model providers",
   "perm.trust.builtin": "builtin",
   "perm.trust.inline-code": "inline code",
   "perm.trust.local-module": "local module",

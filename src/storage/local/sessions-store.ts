@@ -7,7 +7,7 @@
  */
 
 import type { AgentState } from "@earendil-works/pi-agent-core";
-import type { Api, Model } from "@earendil-works/pi-ai/compat";
+import type { Api, Model } from "@earendil-works/pi-ai";
 
 import { Store } from "./store.js";
 import type { SessionData, SessionMetadata, StoreConfig } from "./types.js";

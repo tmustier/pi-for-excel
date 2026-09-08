@@ -7,16 +7,12 @@
  * - session identity lifecycle (new / rename / resume)
  */
 
-import { getModel } from "@earendil-works/pi-ai/compat";
+import type { Models } from "@earendil-works/pi-ai";
 import type { Agent, AgentMessage } from "@earendil-works/pi-agent-core";
 import type { SessionData } from "../storage/local/types.js";
 import type { SessionsStore } from "../storage/local/sessions-store.js";
 import type { SettingsStore } from "../storage/local/settings-store.js";
 
-import {
-  resolveCustomProviderModel,
-  type CustomProvidersStoreLike,
-} from "../auth/custom-gateways.js";
 import { getCurrentSpreadsheetHost } from "../host/index.js";
 import { extractTextFromContent } from "../utils/content.js";
 
@@ -47,37 +43,14 @@ type UserLikeMessage = AgentMessage & {
  * Re-resolve a persisted model against the current registry so that
  * metadata like `contextWindow` picks up upstream changes (e.g. a dep
  * bump that raised Opus 4.6 from 200k → 1M). Falls back to the
- * persisted model if the registry doesn't have it, then tries the live
- * custom-provider store before finally reusing the persisted snapshot.
+ * persisted model if the runtime no longer has it. Custom and dynamically
+ * discovered providers are already part of the same runtime catalogue.
  */
-async function refreshPersistedModel(args: {
-  persisted: PersistedSessionModel;
-  customProvidersStore?: CustomProvidersStoreLike;
-}): Promise<PersistedSessionModel> {
-  const { persisted, customProvidersStore } = args;
-
-  try {
-    const fresh = getModel(persisted.provider as never, persisted.id as never);
-    if (fresh) {
-      return fresh;
-    }
-  } catch {
-    // Fall through to custom-provider lookup / persisted snapshot.
-  }
-
-  if (customProvidersStore) {
-    try {
-      const customProviders = await customProvidersStore.getAll();
-      const freshCustomModel = resolveCustomProviderModel(customProviders, persisted);
-      if (freshCustomModel) {
-        return freshCustomModel;
-      }
-    } catch {
-      // Fall through to the persisted snapshot.
-    }
-  }
-
-  return persisted;
+function refreshPersistedModel(
+  modelsRuntime: Models,
+  persisted: PersistedSessionModel,
+): PersistedSessionModel {
+  return modelsRuntime.getModel(persisted.provider, persisted.id) ?? persisted;
 }
 
 function hasAssistantMessage(messages: AgentMessage[]): boolean {
@@ -141,7 +114,7 @@ export async function setupSessionPersistence(opts: {
   agent: Agent;
   sessions: SessionsStore;
   settings: SettingsStore;
-  customProvidersStore?: CustomProvidersStoreLike;
+  models: Models;
   initialSessionId?: string;
   autoRestoreLatest?: boolean;
 }): Promise<SessionPersistenceController> {
@@ -324,10 +297,7 @@ export async function setupSessionPersistence(opts: {
     agent.state.messages = sessionData.messages;
 
     if (sessionData.model) {
-      agent.state.model = await refreshPersistedModel({
-        persisted: sessionData.model,
-        ...(opts.customProvidersStore !== undefined ? { customProvidersStore: opts.customProvidersStore } : {}),
-      });
+      agent.state.model = refreshPersistedModel(opts.models, sessionData.model);
     }
     if (sessionData.thinkingLevel) {
       agent.state.thinkingLevel = sessionData.thinkingLevel;

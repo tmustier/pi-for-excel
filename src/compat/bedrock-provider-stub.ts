@@ -7,7 +7,7 @@
  * message instead of trying to load AWS/Node transport code in the Excel WebView.
  */
 
-import { setBedrockProviderModule } from "@earendil-works/pi-ai/compat";
+import { setBedrockProviderModule } from "@earendil-works/pi-ai/api/bedrock-converse-stream.lazy";
 
 import * as bedrockProviderModule from "../stubs/amazon-bedrock.js";
 

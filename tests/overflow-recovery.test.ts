@@ -2,12 +2,13 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { Agent, type AgentMessage } from "@earendil-works/pi-agent-core";
-import type { Api, AssistantMessage, Model, ToolResultMessage, Usage } from "@earendil-works/pi-ai/compat";
+import type { Api, AssistantMessage, Model, ToolResultMessage, Usage } from "@earendil-works/pi-ai";
 
 import {
   findTrailingContextOverflowError,
   recoverFromContextOverflow,
 } from "../src/compaction/overflow-recovery.ts";
+import { failOnUnexpectedStream } from "./fail-on-unexpected-stream.ts";
 
 const EMPTY_USAGE: Usage = {
   input: 0,
@@ -82,6 +83,7 @@ function createTestAgent(args: {
   }
 
   return new RecordingAgent({
+    streamFn: failOnUnexpectedStream,
     initialState: {
       model: args.model,
       messages: args.messages,

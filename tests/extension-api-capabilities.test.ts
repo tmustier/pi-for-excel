@@ -420,3 +420,74 @@ void test("createExtensionAPI connection APIs enforce capability and owner-quali
     /DENIED:connections\.secrets\.read/,
   );
 });
+
+void test("createExtensionAPI gates and owner-qualifies model provider registration", async () => {
+  let registeredProviderId = "";
+  let registeredConnectionId = "";
+  let unregisteredProviderId = "";
+  let refreshCalls = 0;
+
+  const api = createExtensionAPI({
+    getAgent: () => {
+      throw new Error("getAgent should not be called");
+    },
+    extensionOwnerId: "ext.models",
+    registerModelProvider: (definition) => {
+      registeredProviderId = definition.id;
+      registeredConnectionId = definition.connection ?? "";
+      return definition.id;
+    },
+    unregisterModelProvider: (providerId) => {
+      unregisteredProviderId = providerId;
+    },
+    refreshModelProviders: () => {
+      refreshCalls += 1;
+      return Promise.resolve();
+    },
+    isCapabilityEnabled: createCapabilityGate(new Set<ExtensionCapability>([
+      "models.register",
+    ])),
+  });
+
+  const providerId = api.models.registerProvider({
+    id: "acme",
+    name: "Acme models",
+    api: "openai-responses",
+    baseUrl: "https://models.example.com/v1",
+    modelsUrl: "https://models.example.com/v1/models",
+    models: [{ id: "acme-1", contextWindow: 128_000, maxTokens: 16_000 }],
+    connection: "account",
+    apiKeySecret: "apiKey",
+  });
+  api.models.unregisterProvider("acme");
+  await api.models.refresh();
+
+  assert.equal(providerId, "ext.models.acme");
+  assert.equal(registeredProviderId, "ext.models.acme");
+  assert.equal(registeredConnectionId, "ext.models.account");
+  assert.equal(unregisteredProviderId, "ext.models.acme");
+  assert.equal(refreshCalls, 1);
+
+  const deniedApi = createExtensionAPI({
+    getAgent: () => {
+      throw new Error("getAgent should not be called");
+    },
+    registerModelProvider: () => {
+      throw new Error("registerModelProvider should not be called");
+    },
+    isCapabilityEnabled: createCapabilityGate(new Set<ExtensionCapability>()),
+    formatCapabilityError: (capability) => `DENIED:${capability}`,
+  });
+
+  assert.throws(
+    () => deniedApi.models.registerProvider({
+      id: "blocked",
+      name: "Blocked",
+      api: "openai-completions",
+      baseUrl: "https://blocked.example.com/v1",
+      models: [{ id: "blocked-1" }],
+      allowKeyless: true,
+    }),
+    /DENIED:models\.register/,
+  );
+});

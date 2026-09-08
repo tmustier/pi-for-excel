@@ -2,7 +2,7 @@
  * UI-level ordered action queue.
  *
  * Needed because some actions (notably `/compact`) run outside the Agent loop
- * (they call `agent.streamFn(...)` directly) and therefore don't set
+ * (they call `agent.streamFunction(...)` directly) and therefore don't set
  * `agent.state.isStreaming`. Without a queue, user input can be lost when
  * compaction rewrites the message list.
  *

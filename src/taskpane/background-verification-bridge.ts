@@ -10,14 +10,20 @@
  * remains in the background; no raw GUI input is required.
  */
 
-import type { WorkbookContext } from "../workbook/context.js";
 import { getAppStorage } from "../storage/local/app-storage.js";
 import { closeOverlayById } from "../ui/overlay-dialog.js";
 import { MODEL_SELECTOR_OVERLAY_ID } from "../ui/overlay-ids.js";
 import type { PiSidebar } from "../ui/pi-sidebar.js";
+import type { WorkbookContext } from "../workbook/context.js";
+import {
+  executeExtensionVerificationCommand,
+  isExtensionVerificationCommand,
+  type ExtensionVerificationCommandType,
+  type ExtensionVerificationOptions,
+} from "./background-extension-verification.js";
 import type { SessionRuntime } from "./session-runtime-manager.js";
 
-type BridgeCommandType =
+type CoreBridgeCommandType =
   | "noop"
   | "status"
   | "officeProbe"
@@ -30,6 +36,8 @@ type BridgeCommandType =
   | "selectModel"
   | "submitPrompt"
   | "listCharts";
+
+type BridgeCommandType = CoreBridgeCommandType | ExtensionVerificationCommandType;
 
 interface BridgeCommand {
   id?: string;
@@ -45,10 +53,9 @@ interface BridgeClientRegistration {
   clientId: string;
 }
 
-interface BridgeOptions {
+interface BridgeOptions extends ExtensionVerificationOptions {
   sidebar: PiSidebar;
   getWorkbookContext: () => Promise<WorkbookContext>;
-  getActiveRuntime: () => SessionRuntime | null;
 }
 
 interface JsonRecord {
@@ -630,6 +637,14 @@ async function listCharts(): Promise<JsonRecord> {
 }
 
 async function executeCommand(command: BridgeCommand, options: BridgeOptions): Promise<DynamicValue> {
+  if (isExtensionVerificationCommand(command.type)) {
+    return await executeExtensionVerificationCommand(
+      command.type,
+      command.payload ?? null,
+      options,
+    );
+  }
+
   switch (command.type) {
     case "noop":
       return { ok: true };
