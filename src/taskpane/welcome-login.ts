@@ -10,7 +10,7 @@ import { getAppStorage } from "../storage/local/app-storage.js";
 import { closeOverlayById, createOverlayDialog } from "../ui/overlay-dialog.js";
 import { WELCOME_LOGIN_OVERLAY_ID } from "../ui/overlay-ids.js";
 import { showToast } from "../ui/toast.js";
-import { setActiveProviders } from "../models/active-providers.js";
+import { getActiveProviders, setActiveProviders } from "../models/active-providers.js";
 import {
   DEFAULT_PROXY_IS_REMOTE,
   DEFAULT_PROXY_URL,
@@ -61,6 +61,7 @@ export async function showWelcomeLogin(providerKeys: ProviderKeysStore): Promise
   }
 
   closeOverlayById(WELCOME_LOGIN_OVERLAY_ID);
+  if (getActiveProviders()?.size) return;
 
   return new Promise<void>((resolve) => {
     const dialog = createOverlayDialog({
@@ -79,6 +80,11 @@ export async function showWelcomeLogin(providerKeys: ProviderKeysStore): Promise
     });
 
     const closeOverlay = dialog.close;
+    const onModelsChanged = (): void => {
+      if (getActiveProviders()?.size) closeOverlay();
+    };
+    document.addEventListener("pi:models-changed", onModelsChanged);
+    dialog.addCleanup(() => document.removeEventListener("pi:models-changed", onModelsChanged));
 
     const titleId = `${WELCOME_LOGIN_OVERLAY_ID}-title`;
     const subtitleId = `${WELCOME_LOGIN_OVERLAY_ID}-subtitle`;

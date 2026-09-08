@@ -48,6 +48,7 @@ function isOAuthCredential(value: DynamicValue): value is OAuthCredential {
     value.type === "oauth" &&
     typeof value.refresh === "string" &&
     typeof value.access === "string" &&
+    value.access.trim().length > 0 &&
     typeof value.expires === "number"
   );
 }
@@ -59,16 +60,16 @@ function isOAuthCredential(value: DynamicValue): value is OAuthCredential {
 export async function restoreCredentials(
   providerKeys: ProviderKeysStore,
   settings: SettingsStore,
-): Promise<Set<string>> {
-  const restoredProviders = await restoreFromPiAuth(providerKeys, getOAuthProvider);
+  fetchAuth: typeof fetch = originalFetch,
+): Promise<void> {
+  const restoredProviders = await restoreFromPiAuth(providerKeys, getOAuthProvider, fetchAuth);
   await restoreFromBrowserOAuthStorage(providerKeys, settings, getOAuthProvider, restoredProviders);
-  return restoredProviders;
 }
 
-export async function restoreFromPiAuth(
+async function restoreFromPiAuth(
   providerKeys: ProviderKeysStore,
   getOAuthProvider: GetOAuthProvider,
-  fetchAuth: typeof fetch = originalFetch,
+  fetchAuth: typeof fetch,
 ): Promise<Set<string>> {
   const restoredProviders = new Set<string>();
 
@@ -137,7 +138,7 @@ async function clearBrowserOAuthProvider(
   await providerKeys.delete(mapToApiProvider(providerId)).catch(() => {});
 }
 
-export async function restoreFromBrowserOAuthStorage(
+async function restoreFromBrowserOAuthStorage(
   providerKeys: ProviderKeysStore,
   settings: SettingsStore,
   getOAuthProvider: GetOAuthProvider,

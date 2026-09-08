@@ -1,11 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { getOAuthProvider } from "../src/auth/oauth-provider-registry.ts";
-import {
-  restoreFromBrowserOAuthStorage,
-  restoreFromPiAuth,
-} from "../src/auth/restore.ts";
+import { restoreCredentials } from "../src/auth/restore.ts";
 import { ProviderKeysStore } from "../src/storage/local/provider-keys-store.ts";
 import { SettingsStore } from "../src/storage/local/settings-store.ts";
 
@@ -60,17 +56,20 @@ async function restoreBrowserAfterDevPayload(
 ): Promise<TestProviderKeysStore> {
   const settings = new TestSettingsStore();
   settings.values.set("oauth.anthropic", validBrowserGrant);
-  const restored = await restoreFromPiAuth(
+  await restoreCredentials(
     providerKeys,
-    getOAuthProvider,
+    settings,
     () => Promise.resolve(new Response(JSON.stringify(payload))),
   );
-  await restoreFromBrowserOAuthStorage(providerKeys, settings, getOAuthProvider, restored);
   return providerKeys;
 }
 
 void test("empty and unrelated dev auth fall back to a valid browser grant", async () => {
-  for (const payload of [{}, { unrelated: { type: "other" } }]) {
+  for (const payload of [
+    {},
+    { unrelated: { type: "other" } },
+    { anthropic: { ...validBrowserGrant, type: "oauth", access: "" } },
+  ]) {
     const providerKeys = await restoreBrowserAfterDevPayload(payload);
     assert.equal(providerKeys.values.get("anthropic"), validBrowserGrant.access);
   }
@@ -91,15 +90,12 @@ void test("dev credentials take precedence across provider aliases", async () =>
   const settings = new TestSettingsStore();
   settings.values.set("oauth.google-gemini-cli", validBrowserGrant);
 
-  const restored = await restoreFromPiAuth(
+  await restoreCredentials(
     providerKeys,
-    getOAuthProvider,
+    settings,
     () => Promise.resolve(new Response(JSON.stringify({
       "gemini-cli": { type: "api_key", key: "dev-alias-fixture" },
     }))),
   );
-  await restoreFromBrowserOAuthStorage(providerKeys, settings, getOAuthProvider, restored);
-
-  assert.deepEqual([...restored], ["google-gemini-cli"]);
   assert.equal(providerKeys.values.get("google-gemini-cli"), "dev-alias-fixture");
 });

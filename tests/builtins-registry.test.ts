@@ -38,10 +38,6 @@ class MemorySettingsStore {
   }
 }
 
-function isBuiltinsRegistryTestPayloadShape(value: DynamicValue): value is DynamicObject {
-  return typeof value === "object" && value !== null;
-}
-
 void test("registerBuiltins registers and routes workspace commands", async () => {
   const previousCommands = commandRegistry.list();
   const openedTabs: Array<string | undefined> = [];
@@ -77,6 +73,7 @@ void test("registerBuiltins registers and routes workspace commands", async () =
       assert.equal(commandRegistry.get(name)?.source, "builtin", `expected /${name} to be registered`);
     }
     assert.equal(commandRegistry.get("addons"), undefined);
+    assert.equal(commandRegistry.get("integrations"), undefined);
 
     await commandRegistry.get("extensions")?.execute("");
     await commandRegistry.get("plugins")?.execute("");
@@ -105,21 +102,6 @@ void test("taskpane init waits for local services probe and refreshes capabiliti
     initSource,
     /localServicesReady\s*=\s*probeLocalServices\(\)\.then\(\s*\(result\) => \{[\s\S]*localServicesSnapshot\s*=\s*result;[\s\S]*void refreshCapabilitiesForAllRuntimes\(\);[\s\S]*\},/,
   );
-});
-
-void test("tools builtins expose /tools without /integrations alias", async () => {
-  const source = await readFile(new URL("../src/commands/builtins/tools.ts", import.meta.url), "utf8");
-
-  assert.match(source, /TOOLS_COMMAND_NAME/);
-  assert.doesNotMatch(source, /INTEGRATIONS_COMMAND_NAME/);
-});
-
-void test("extensions builtins expose /extensions without /addons alias", async () => {
-  const source = await readFile(new URL("../src/commands/builtins/addons.ts", import.meta.url), "utf8");
-
-  assert.match(source, /name:\s*"extensions"/);
-  assert.doesNotMatch(source, /name:\s*"addons"/);
-  assert.match(source, /openExtensionsHub/);
 });
 
 void test("extensions hub connections tab includes MCP test flow", async () => {
@@ -479,14 +461,7 @@ void test("extension registry migrates legacy v1 entries to v2 permissions", asy
   assert.equal(entries[0].permissions.agentRead, false);
 
   const migrated = settings.readRaw(EXTENSIONS_REGISTRY_STORAGE_KEY);
-  assert.ok(isBuiltinsRegistryTestPayloadShape(migrated));
-  if (!isBuiltinsRegistryTestPayloadShape(migrated)) {
-    return;
-  }
-
-  assert.equal(migrated.version, 2);
-  assert.ok(Array.isArray(migrated.items));
-  assert.equal(migrated.items.length, 1);
+  assert.deepEqual(migrated, { version: 2, items: entries });
 });
 
 void test("tool disclosure bundles remain centralized in capabilities metadata", async () => {

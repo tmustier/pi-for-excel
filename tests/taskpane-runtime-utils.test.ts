@@ -250,6 +250,25 @@ void test("rejected credential restore does not schedule refresh", async () => {
   assert.equal(refreshCount, 0);
 });
 
+void test("credential restore rejection after timeout remains observable", async (t) => {
+  const warnings = t.mock.method(console, "warn", () => {});
+  let rejectRestore: ((error: Error) => void) | undefined;
+  const promise = new Promise<void>((_resolve, reject) => { rejectRestore = reject; });
+  await assert.rejects(awaitCredentialRestoreForStartup(promise, 5, () => {
+    assert.fail("Rejected credentials must not trigger a refresh");
+  }), /timed out/);
+
+  const failure = new Error("late restore failure");
+  assert.ok(rejectRestore);
+  rejectRestore(failure);
+  await promise.catch(() => {});
+  await Promise.resolve();
+  assert.equal(warnings.mock.callCount(), 1);
+  assert.deepEqual(warnings.mock.calls[0]?.arguments, [
+    "[auth] Credential restore failed after timeout:", failure,
+  ]);
+});
+
 void test("awaitWithTimeout resolves when task finishes in time", async () => {
   const value = await awaitWithTimeout("quick task", 50, Promise.resolve("ok"));
   assert.equal(value, "ok");
