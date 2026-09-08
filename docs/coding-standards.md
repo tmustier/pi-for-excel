@@ -79,9 +79,8 @@ The `check:innerhtml` script keeps raw `.innerHTML` out of application code.
 
 ## Tests and verification
 
-- For local acceptance of behavior changes and dependency upgrades, run the real taskpane prompt → model → tools → workbook path in the background. Independently read the result and verify cleanup. Record the revision, provider/model, thinking level, prompt and observed tool execution.
-- Unit tests, CI, builds and direct Office.js probes are supporting evidence. A model's success claim or an idle runtime alone is insufficient. Report blocked end-to-end coverage and hold acceptance unless explicitly waived. Documentation-only changes do not require a runtime test.
-- Prove behavior through public interfaces or real seams; avoid tests that only prove a mock implementation.
+- Accept behavior changes and dependency upgrades through a real taskpane prompt → model → tools → workbook test, with independent read-back and scratch cleanup. Keep the host in the background.
+- Unit tests, CI, builds and direct host probes support this acceptance test. If it is blocked, report the missing coverage and obtain an explicit waiver before accepting the change. Documentation-only changes need no runtime test.
 - For prompt/context/tool-disclosure/session wiring, run `npm run test:context`.
 - For proxy/bridge/auth/HTML safety paths, run `npm run test:security`.
 - For model/provider registry changes, run `npm run test:models` and consult `docs/model-updates.md`.
