@@ -174,6 +174,7 @@ import {
   type SessionRuntime,
 } from "./session-runtime-manager.js";
 import {
+  awaitCredentialRestoreForStartup,
   awaitWithTimeout,
   createAsyncCoalescer,
   createRuntimeToolFingerprint,
@@ -349,20 +350,15 @@ export async function initTaskpane(opts: {
   // background so newly-restored providers appear in the model picker.
   const credentialRestorePromise = restoreCredentials(providerKeys, settings);
 
-  void credentialRestorePromise
-    .then(() => {
-      void refreshConfiguredProviders()
-        .then(() => refreshRuntimeModels())
-        .catch((error: DynamicValue) => {
-          console.warn("[auth] Provider refresh after credential restore failed:", error);
-        });
-    })
-    .catch((error: DynamicValue) => {
-      console.warn("[auth] Credential restore failed:", error);
-    });
-
   try {
-    await awaitWithTimeout("Credential restore", 6000, credentialRestorePromise);
+    await awaitCredentialRestoreForStartup(credentialRestorePromise, 6000, async () => {
+      try {
+        await refreshConfiguredProviders();
+        await refreshRuntimeModels();
+      } catch (error) {
+        console.warn("[auth] Provider refresh after late credential restore failed:", error);
+      }
+    });
   } catch (error) {
     console.warn("[auth] Credential restore skipped:", error);
   }
