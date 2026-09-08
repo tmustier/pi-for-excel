@@ -272,7 +272,8 @@ export async function saveOpenAiGatewayConfig(
   const endpointUrl = normalizeGatewayEndpointUrl(input.endpointUrl);
   const modelId = normalizeGatewayModelId(input.modelId);
   const registryModel = models?.getModels().find((model) => (
-    model.baseUrl === endpointUrl
+    !model.provider.startsWith(OPENAI_GATEWAY_PROVIDER_PREFIX)
+    && model.baseUrl === endpointUrl
     && model.id === modelId
     && model.api === OPENAI_GATEWAY_TYPE
   ));

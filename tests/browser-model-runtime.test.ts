@@ -5,6 +5,7 @@ import type {
   Credential,
   ModelsStore,
   ModelsStoreEntry,
+  SimpleStreamOptions,
 } from "@earendil-works/pi-ai";
 
 import {
@@ -12,6 +13,8 @@ import {
   type BrowserProviderRegistration,
 } from "../src/models/browser-model-runtime.ts";
 import type { CustomProvider } from "../src/storage/local/custom-providers-store.ts";
+import { saveOpenAiGatewayConfig } from "../src/auth/custom-gateways.ts";
+import { createOfficeStreamFn } from "../src/auth/stream-proxy.ts";
 import {
   ProviderCredentialsStore,
   type ProviderKeysStoreLike,
@@ -56,6 +59,49 @@ class MemoryCatalogs implements ModelsStore {
     return Promise.resolve();
   }
 }
+
+void test("Office streaming preserves OpenRouter's registry transport without unsupported effort updates", async (t) => {
+  const originalDocument = Object.getOwnPropertyDescriptor(globalThis, "document");
+  Object.defineProperty(globalThis, "document", { configurable: true, value: new EventTarget() });
+  t.after(() => {
+    if (originalDocument) Object.defineProperty(globalThis, "document", originalDocument);
+    else Reflect.deleteProperty(globalThis, "document");
+  });
+  const runtime = createRuntime();
+  for (const id of ["anthropic/claude-opus-5", "openai/gpt-5.6-sol"]) {
+    const model = runtime.models.getModel("openrouter", id);
+    assert.ok(model);
+    let requestUrl = "";
+    let requestBody = "";
+    let betaHeaders = "";
+    const stream = createOfficeStreamFn(() => Promise.resolve("https://localhost:3004"), runtime.models);
+    const streamOptions: SimpleStreamOptions = {
+      apiKey: "synthetic-key",
+      maxTokens: 256,
+      reasoning: "high",
+      fetch: (url, init) => {
+        requestUrl = typeof url === "string" ? url : url instanceof URL ? url.href : url.url;
+        assert.ok(typeof init?.body === "string");
+        requestBody = init.body;
+        betaHeaders = new Headers(init?.headers).get("anthropic-beta") ?? "";
+        return Promise.resolve(new Response("test endpoint", { status: 400 }));
+      },
+    };
+    const events = await stream(model, { messages: [{ role: "user", content: "test", timestamp: 0 }] }, streamOptions);
+    await events.result();
+    if (model.api === "anthropic-messages") {
+      assert.ok(requestUrl.startsWith("https://localhost:3004/?url="));
+      assert.doesNotMatch(requestBody, /"role":"system"/u);
+      assert.match(requestBody, /"thinking":\{"type":"adaptive"/u);
+      assert.doesNotMatch(betaHeaders, /mid-conversation-output-config/u);
+      await assert.rejects(createOfficeStreamFn(() => Promise.resolve(undefined), runtime.models)(
+        model, { messages: [] },
+      ), /requires the Pi for Excel proxy/u);
+    } else {
+      assert.equal(requestUrl, "https://openrouter.ai/api/v1/chat/completions");
+    }
+  }
+});
 
 function createRuntime(args?: {
   providerKeys?: MemoryProviderKeys;
@@ -105,7 +151,7 @@ void test("browser runtime exposes built-in models through IndexedDB-backed cred
   assert.equal(auth?.auth.apiKey, "test-key");
 });
 
-void test("custom gateway discovery merges remote model ids and persists the catalogue", async () => {
+void test("discovery-enabled custom providers merge remote model ids and persist the catalogue", async () => {
   const catalogs = new MemoryCatalogs();
   let requestedUrl = "";
   let authorization = "";
@@ -140,6 +186,73 @@ void test("custom gateway discovery merges remote model ids and persists the cat
     catalogs.entries.get("Gateway · Acme")?.models.map((model) => model.id),
     ["remote-a", "remote-b"],
   );
+});
+
+void test("a gateway saved through the manual form uses only its configured model, including after reload", async () => {
+  const providers = new Map<string, CustomProvider>();
+  const registry = createRuntime().models;
+  await saveOpenAiGatewayConfig({
+    get: (id) => Promise.resolve(providers.get(id) ?? null),
+    set: (provider) => { providers.set(provider.id, provider); return Promise.resolve(); },
+    delete: (id) => { providers.delete(id); return Promise.resolve(); },
+    getAll: () => Promise.resolve([...providers.values()]),
+  }, {
+    displayName: "Manual gateway",
+    endpointUrl: "https://openrouter.ai/api/v1",
+    modelId: "openai/gpt-5.6-sol",
+    apiKey: "synthetic-key",
+  }, registry);
+  const provider = [...providers.values()][0];
+  const model = provider?.models?.[0];
+  assert.ok(provider);
+  assert.ok(model);
+  const catalogs = new MemoryCatalogs();
+  catalogs.entries.set(model.provider, { models: [{ ...model, id: "formerly-discovered" }] });
+  let requests = 0;
+  const fetchFn: typeof fetch = () => {
+    requests += 1;
+    return Promise.resolve(new Response("not supported", { status: 404 }));
+  };
+  for (let boot = 0; boot < 2; boot += 1) {
+    const runtime = createRuntime({ catalogs, fetchFn });
+    await runtime.syncCustomProviders([provider]);
+    await runtime.refresh({ allowNetwork: false });
+    const result = await runtime.refresh({ allowNetwork: true, force: true });
+    assert.equal(result.errors.size, 0);
+    assert.deepEqual((await runtime.models.getAvailable(model.provider)).map((entry) => entry.id), [model.id]);
+    const registered = runtime.models.getModel(model.provider, model.id);
+    const known = registry.getModel("openrouter", model.id);
+    assert.ok(known);
+    assert.equal(registered?.contextWindow, known.contextWindow);
+    assert.equal(registered?.maxTokens, known.maxTokens);
+    assert.deepEqual(registered?.thinkingLevelMap, known.thinkingLevelMap);
+    assert.deepEqual(registered?.cost, known.cost);
+    assert.equal((await runtime.models.getAuth(model.provider))?.auth.apiKey, "synthetic-key");
+  }
+  assert.equal(requests, 0);
+});
+
+void test("provider discovery distinguishes omitted, explicit and null URLs", async () => {
+  for (const modelsUrl of [undefined, "https://catalog.example.com/models", null]) {
+    const requests: string[] = [];
+    const runtime = createRuntime({ fetchFn: (input) => {
+      requests.push(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+      return Promise.resolve(Response.json({ data: [{ id: "discovered" }] }));
+    } });
+    runtime.registerExtensionProvider("test-owner", {
+      id: "test-provider",
+      name: "Test provider",
+      api: "openai-completions",
+      baseUrl: "https://gateway.example.com/v1",
+      models: [{ id: "baseline" }],
+      resolveApiKey: () => Promise.resolve("synthetic-key"),
+      ...(modelsUrl !== undefined ? { modelsUrl } : {}),
+    });
+    await runtime.refresh({ allowNetwork: true });
+    assert.deepEqual(requests, modelsUrl === null ? [] : [modelsUrl ?? "https://gateway.example.com/v1/models"]);
+    assert.deepEqual(runtime.models.getModels("test-provider").map((model) => model.id),
+      modelsUrl === null ? ["baseline"] : ["baseline", "discovered"]);
+  }
 });
 
 void test("a fresh runtime restores discovered models without network access", async () => {

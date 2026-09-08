@@ -79,7 +79,7 @@
   "custom-gateway.configLabelEndpoint": "Endpoint",
   "custom-gateway.configLabelModel": "Model",
   "custom-gateway.configLabelName": "Name",
-  "custom-gateway.contextWindowHint": "Used for Pi's local context budgeting and auto-compaction. Set this to your gateway model's real context window.",
+  "custom-gateway.contextWindowHint": "Leave blank to use registered model limits, or 16,384 tokens for an unknown model. Enter a value to override.",
   "custom-gateway.deleteButton": "Delete",
   "custom-gateway.deleteConfirmMsg": "Delete gateway \"{name}\"? This removes its stored API key from this add-in.",
   "custom-gateway.deleteConfirmTitle": "Delete custom gateway?",

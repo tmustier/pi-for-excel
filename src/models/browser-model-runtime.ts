@@ -16,6 +16,7 @@ import {
 import { builtinProviders } from "@earendil-works/pi-ai/providers/all";
 
 import { originalFetch } from "../auth/cors-proxy.js";
+import { isOpenAiGatewayProvider } from "../auth/custom-gateways.js";
 import { normalizeProxyUrl } from "../auth/proxy-validation.js";
 import type { CustomProvider } from "../storage/local/custom-providers-store.js";
 import {
@@ -49,6 +50,8 @@ export interface BrowserProviderModelDefinition {
   id: string;
   name?: string;
   reasoning?: boolean;
+  thinkingLevelMap?: Model<Api>["thinkingLevelMap"];
+  cost?: Model<Api>["cost"];
   input?: readonly ("text" | "image")[];
   contextWindow?: number;
   maxTokens?: number;
@@ -60,8 +63,8 @@ export interface BrowserProviderRegistration {
   api: BrowserProviderApi;
   baseUrl: string;
   models: readonly BrowserProviderModelDefinition[];
-  /** Defaults to `${baseUrl}/models` for OpenAI-compatible providers. */
-  modelsUrl?: string;
+  /** Omit to derive the discovery URL; null keeps only the supplied models. */
+  modelsUrl?: string | null;
   resolveApiKey: () => Promise<string | undefined>;
   /** Keyless local providers can opt in while still satisfying Pi AI auth semantics. */
   allowKeyless?: boolean;
@@ -182,8 +185,9 @@ function createModel(args: {
     provider: args.providerId,
     baseUrl: args.baseUrl,
     reasoning: args.definition.reasoning ?? false,
+    ...(args.definition.thinkingLevelMap !== undefined ? { thinkingLevelMap: args.definition.thinkingLevelMap } : {}),
     input: args.definition.input ? [...args.definition.input] : ["text"],
-    cost: {
+    cost: args.definition.cost ?? {
       input: 0,
       output: 0,
       cacheRead: 0,
@@ -406,9 +410,10 @@ function createRegisteredProvider(
     baseUrl,
     definition,
   }));
-  const modelsUrlRaw = registration.modelsUrl
-    ?? deriveModelsUrl(baseUrl, registration.api);
-  const modelsUrl = modelsUrlRaw
+  const modelsUrlRaw = registration.modelsUrl === undefined
+    ? deriveModelsUrl(baseUrl, registration.api)
+    : registration.modelsUrl;
+  const modelsUrl = modelsUrlRaw != null
     ? normalizeHttpUrl(modelsUrlRaw, "Provider modelsUrl")
     : undefined;
 
@@ -475,6 +480,8 @@ function customProviderRegistrations(provider: CustomProvider): BrowserProviderR
       id: model.id,
       name: model.name,
       reasoning: model.reasoning,
+      ...(model.thinkingLevelMap !== undefined ? { thinkingLevelMap: model.thinkingLevelMap } : {}),
+      cost: model.cost,
       input: model.input,
       contextWindow: model.contextWindow,
       maxTokens: model.maxTokens,
@@ -498,6 +505,7 @@ function customProviderRegistrations(provider: CustomProvider): BrowserProviderR
     api: providerApi,
     baseUrl: provider.baseUrl,
     models,
+    ...(isOpenAiGatewayProvider(provider) ? { modelsUrl: null } : {}),
     resolveApiKey: () => Promise.resolve(provider.apiKey),
     allowKeyless: !provider.apiKey,
   }));

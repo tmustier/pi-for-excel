@@ -180,6 +180,7 @@ const DEFAULT_ALLOWED_TARGET_HOSTS = new Set([
   "api.github.com",
   "auth.openai.com",
   "api.openai.com",
+  "openrouter.ai",
   "chatgpt.com",
   "oauth2.googleapis.com",
   "generativelanguage.googleapis.com",

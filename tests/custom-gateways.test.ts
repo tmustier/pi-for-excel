@@ -124,11 +124,12 @@ void test("saveOpenAiGatewayConfig lets explicit context override matched regist
   assert.equal(storedModel?.reasoning, true);
 });
 
-void test("saveOpenAiGatewayConfig falls back when registry endpoint, id, or API differs", async () => {
+void test("saveOpenAiGatewayConfig rejects mismatched metadata and manual gateway self-matches", async () => {
   const mismatchedModels: Model<Api>[] = [
     { ...knownRegistryModel, baseUrl: "https://different.example.com/v1" },
     { ...knownRegistryModel, id: "openai/different-model" },
     { ...knownRegistryModel, api: "openai-responses" },
+    { ...knownRegistryModel, provider: "Gateway · previous manual snapshot" },
   ];
 
   for (const registryModel of mismatchedModels) {
