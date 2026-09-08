@@ -1,6 +1,6 @@
 # Model / dependency update playbook
 
-**Last verified:** 2026-08-05
+**Last verified:** 2026-09-08
 
 This repo hardcodes a small set of "featured" and "preferred" model patterns for sorting and default selection. Static built-in models come from Pi AI, while custom and extension providers can add cached, dynamically discovered catalogues at runtime.
 
