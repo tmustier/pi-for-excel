@@ -22,7 +22,6 @@ export interface MutationRecoveryStep<TDetails extends MutationResultDetails> {
   appendResultNote: MutationResultNoteAppender<TDetails>;
   unavailableReason: string;
   unavailableNote: string;
-  dispatchSnapshotCreated?: (snapshot: WorkbookRecoverySnapshot) => void;
 }
 
 export interface MutationFinalizeOperation<TDetails extends MutationResultDetails> {

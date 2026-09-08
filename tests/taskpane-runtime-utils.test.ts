@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  awaitCredentialRestoreForStartup,
   awaitWithTimeout,
   createAsyncCoalescer,
   createRuntimeToolFingerprint,
@@ -209,6 +210,63 @@ void test("createAsyncCoalescer coalesces overlapping calls into a single rerun"
 
   await Promise.all([first, second, third]);
   assert.equal(runCount, 2);
+});
+
+void test("credential restore adds no duplicate fast refresh and one late refresh after timeout", async () => {
+  let refreshCount = 0;
+  await awaitCredentialRestoreForStartup(Promise.resolve(), 50, () => {
+    refreshCount += 1;
+  });
+  refreshCount += 1; // The normal provider lookup performed by taskpane startup.
+  assert.equal(refreshCount, 1);
+
+  refreshCount = 0;
+  let resolveRestore: (() => void) | undefined;
+  const delayedRestore = new Promise<void>((resolve) => {
+    resolveRestore = resolve;
+  });
+  await assert.rejects(
+    awaitCredentialRestoreForStartup(delayedRestore, 5, () => {
+      refreshCount += 1;
+    }),
+    /timed out/,
+  );
+  refreshCount += 1; // First-paint provider lookup proceeds after the timeout.
+  resolveRestore?.();
+  await delayedRestore;
+  await Promise.resolve();
+  assert.equal(refreshCount, 2);
+});
+
+void test("rejected credential restore does not schedule refresh", async () => {
+  let refreshCount = 0;
+  await assert.rejects(
+    awaitCredentialRestoreForStartup(Promise.reject(new Error("restore failed")), 50, () => {
+      refreshCount += 1;
+    }),
+    /restore failed/,
+  );
+  await Promise.resolve();
+  assert.equal(refreshCount, 0);
+});
+
+void test("credential restore rejection after timeout remains observable", async (t) => {
+  const warnings = t.mock.method(console, "warn", () => {});
+  let rejectRestore: ((error: Error) => void) | undefined;
+  const promise = new Promise<void>((_resolve, reject) => { rejectRestore = reject; });
+  await assert.rejects(awaitCredentialRestoreForStartup(promise, 5, () => {
+    assert.fail("Rejected credentials must not trigger a refresh");
+  }), /timed out/);
+
+  const failure = new Error("late restore failure");
+  assert.ok(rejectRestore);
+  rejectRestore(failure);
+  await promise.catch(() => {});
+  await Promise.resolve();
+  assert.equal(warnings.mock.callCount(), 1);
+  assert.deepEqual(warnings.mock.calls[0]?.arguments, [
+    "[auth] Credential restore failed after timeout:", failure,
+  ]);
 });
 
 void test("awaitWithTimeout resolves when task finishes in time", async () => {

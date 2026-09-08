@@ -14,6 +14,8 @@ import {
   setExtensionCapabilityAllowed,
   type StoredExtensionPermissions,
 } from "../src/extensions/permissions.ts";
+import { registerBuiltins, type BuiltinsContext } from "../src/commands/builtins/index.ts";
+import { commandRegistry } from "../src/commands/types.ts";
 
 class MemorySettingsStore {
   private readonly values = new Map<string, DynamicValue>();
@@ -36,100 +38,59 @@ class MemorySettingsStore {
   }
 }
 
-function isBuiltinsRegistryTestPayloadShape(value: DynamicValue): value is DynamicObject {
-  return typeof value === "object" && value !== null;
-}
+void test("registerBuiltins registers and routes workspace commands", async () => {
+  const previousCommands = commandRegistry.list();
+  const openedTabs: Array<string | undefined> = [];
+  let filesOpenCount = 0;
+  const context: BuiltinsContext = {
+    getActiveAgent: () => null,
+    openModelSelector: () => {},
+    openInstructionsEditor: () => Promise.resolve(),
+    getExecutionMode: () => Promise.resolve("safe"),
+    setExecutionMode: () => Promise.resolve(),
+    renameActiveSession: () => Promise.resolve(),
+    createRuntime: () => Promise.resolve(),
+    openResumeDialog: () => Promise.resolve(),
+    openRecoveryDialog: () => Promise.resolve(),
+    reopenLastClosed: () => Promise.resolve(),
+    revertLatestCheckpoint: () => Promise.resolve(),
+    createManualFullBackup: () => Promise.resolve({ id: "backup", createdAt: 0, sizeBytes: 0 }),
+    listManualFullBackups: () => Promise.resolve([]),
+    restoreManualFullBackup: () => Promise.resolve(null),
+    clearManualFullBackups: () => Promise.resolve(0),
+    openExtensionsHub: (tab) => {
+      openedTabs.push(tab);
+    },
+    openFilesWorkspace: () => {
+      filesOpenCount += 1;
+    },
+  };
 
-void test("builtins registry wires /addons, /experimental, /extensions, /tools, and /files command registration", async () => {
-  const source = await readFile(new URL("../src/commands/builtins/index.ts", import.meta.url), "utf8");
+  try {
+    registerBuiltins(context);
 
-  assert.match(source, /createModelCommands/);
-  assert.match(source, /openModelSelector:\s*context\.openModelSelector/);
+    for (const name of ["settings", "login", "experimental", "extensions", "plugins", "tools", "skills", "files"]) {
+      assert.equal(commandRegistry.get(name)?.source, "builtin", `expected /${name} to be registered`);
+    }
+    assert.equal(commandRegistry.get("addons"), undefined);
+    assert.equal(commandRegistry.get("integrations"), undefined);
 
-  assert.match(source, /createAddonsCommands/);
-  assert.match(source, /\.\.\.createAddonsCommands\(context\)/);
+    await commandRegistry.get("extensions")?.execute("");
+    await commandRegistry.get("plugins")?.execute("");
+    await commandRegistry.get("tools")?.execute("");
+    await commandRegistry.get("skills")?.execute("");
+    await commandRegistry.get("files")?.execute("");
 
-  assert.match(source, /createExperimentalCommands/);
-  assert.match(source, /\.\.\.createExperimentalCommands\(\)/);
-
-  assert.match(source, /createToolsCommands/);
-  assert.match(source, /\.\.\.createToolsCommands\(context\)/);
-
-  assert.match(source, /createExtensionsCommands/);
-  assert.match(source, /\.\.\.createExtensionsCommands\(context\)/);
-
-  assert.match(source, /createFilesCommands/);
-  assert.match(source, /\.\.\.createFilesCommands\(context\)/);
-
-  const extensionApiSource = await readFile(new URL("../src/commands/extension-api.ts", import.meta.url), "utf8");
-  const extensionModuleImportSource = await readFile(
-    new URL("../src/commands/extension-module-import.ts", import.meta.url),
-    "utf8",
-  );
-
-  assert.match(extensionModuleImportSource, /glob\("\.\.\/extensions\/\*\.\{ts,js\}"\)/);
-  assert.match(extensionModuleImportSource, /return import\.meta\.env\.DEV === true/);
-  assert.doesNotMatch(extensionModuleImportSource, /typeof \(import\.meta.*\)\.glob !== "function"/);
-  assert.match(extensionModuleImportSource, /Local extension module/);
-
-  assert.match(extensionApiSource, /isCapabilityEnabled/);
-  assert.match(extensionApiSource, /commands\.register/);
-  assert.match(extensionApiSource, /tools\.register/);
-  assert.match(extensionApiSource, /agent\.events\.read/);
-  assert.match(
-    extensionApiSource,
-    /get raw\(\)\s*\{[\s\S]*assertCapability\("agent\.read"\);[\s\S]*assertCapability\("agent\.events\.read"\);/,
-  );
-
-  const runtimeManagerSource = await readFile(new URL("../src/extensions/runtime-manager.ts", import.meta.url), "utf8");
-  assert.match(runtimeManagerSource, /effectiveCapabilities/);
-  assert.match(runtimeManagerSource, /permissionsEnforced/);
-  assert.match(runtimeManagerSource, /async setExtensionCapability\(/);
-  assert.match(runtimeManagerSource, /setExtensionCapabilityAllowed\(/);
-  assert.match(runtimeManagerSource, /await this\.reloadExtension\(entry\.id\);/);
-  assert.match(runtimeManagerSource, /activateExtensionInSandbox/);
-  assert.match(runtimeManagerSource, /extension_sandbox_runtime/);
-
-  const extensionsHubPluginsSource = await readFile(
-    new URL("../src/commands/builtins/extensions-hub-plugins.ts", import.meta.url),
-    "utf8",
-  );
-  assert.match(extensionsHubPluginsSource, /manager\.setExtensionCapability\(/);
-  assert.match(extensionsHubPluginsSource, /confirmInstall\(/);
-  assert.match(extensionsHubPluginsSource, /confirmEnable\(/);
-  assert.match(extensionsHubPluginsSource, /ext-hub-plugins\.confirm\.grantedHighRisk/);
-  assert.match(extensionsHubPluginsSource, /createSectionHeader\(\{ label: t\("ext-hub-plugins\.permissions"\) \}\)/);
-  assert.match(extensionsHubPluginsSource, /installFromUrl\(/);
-
-  const extensionsDocsSource = await readFile(new URL("../docs/extensions.md", import.meta.url), "utf8");
-  assert.match(extensionsDocsSource, /## Permission review\/revoke/);
-  assert.match(extensionsDocsSource, /Install from URL\/code asks for confirmation/);
-  assert.match(extensionsDocsSource, /extensions\.registry\.v2/);
-  assert.match(extensionsDocsSource, /extension-widget-v2/);
-
-  const experimentalFlagsSource = await readFile(new URL("../src/experiments/flags.ts", import.meta.url), "utf8");
-  assert.match(experimentalFlagsSource, /extension_permission_gates/);
-  assert.match(experimentalFlagsSource, /extension-permissions/);
-  assert.match(experimentalFlagsSource, /extension_sandbox_runtime/);
-  assert.match(experimentalFlagsSource, /extension-sandbox-rollback/);
-  assert.match(experimentalFlagsSource, /extension_widget_v2/);
-  assert.match(experimentalFlagsSource, /extension-widget-v2/);
-  assert.match(experimentalFlagsSource, /ui_dark_mode/);
-  assert.match(experimentalFlagsSource, /dark-mode/);
-  assert.doesNotMatch(experimentalFlagsSource, /external_skills_discovery/);
-  assert.doesNotMatch(experimentalFlagsSource, /id:\s*"mcp_tools"/);
-});
-
-void test("taskpane init keeps getIntegrationToolNames imported when used", async () => {
-  const initSource = await readFile(new URL("../src/taskpane/init.ts", import.meta.url), "utf8");
-  if (!/getIntegrationToolNames\(\)/.test(initSource)) {
-    return;
+    assert.deepEqual(openedTabs, [undefined, "plugins", "connections", "skills"]);
+    assert.equal(filesOpenCount, 1);
+  } finally {
+    for (const command of commandRegistry.list()) {
+      commandRegistry.unregister(command.name);
+    }
+    for (const command of previousCommands) {
+      commandRegistry.register(command);
+    }
   }
-
-  assert.match(
-    initSource,
-    /import\s*\{[\s\S]*getIntegrationToolNames[\s\S]*\}\s*from "\.\.\/integrations\/catalog\.js";/,
-  );
 });
 
 void test("taskpane init waits for local services probe and refreshes capabilities", async () => {
@@ -141,21 +102,6 @@ void test("taskpane init waits for local services probe and refreshes capabiliti
     initSource,
     /localServicesReady\s*=\s*probeLocalServices\(\)\.then\(\s*\(result\) => \{[\s\S]*localServicesSnapshot\s*=\s*result;[\s\S]*void refreshCapabilitiesForAllRuntimes\(\);[\s\S]*\},/,
   );
-});
-
-void test("tools builtins expose /tools without /integrations alias", async () => {
-  const source = await readFile(new URL("../src/commands/builtins/tools.ts", import.meta.url), "utf8");
-
-  assert.match(source, /TOOLS_COMMAND_NAME/);
-  assert.doesNotMatch(source, /INTEGRATIONS_COMMAND_NAME/);
-});
-
-void test("extensions builtins expose /extensions without /addons alias", async () => {
-  const source = await readFile(new URL("../src/commands/builtins/addons.ts", import.meta.url), "utf8");
-
-  assert.match(source, /name:\s*"extensions"/);
-  assert.doesNotMatch(source, /name:\s*"addons"/);
-  assert.match(source, /openExtensionsHub/);
 });
 
 void test("extensions hub connections tab includes MCP test flow", async () => {
@@ -315,24 +261,9 @@ void test("resume overlay surfaces recently closed tabs and taskpane wires reope
   assert.match(initSource, /if \(reopenResult === "failed"\) \{\s*recentlyClosed\.push\(item\);\s*\}/);
 });
 
-void test("settings builtins route to unified settings overlay", async () => {
-  const settingsSource = await readFile(new URL("../src/commands/builtins/settings.ts", import.meta.url), "utf8");
-
-  assert.match(settingsSource, /name:\s*"settings"/);
-  assert.match(settingsSource, /showSettingsDialog/);
-  assert.match(settingsSource, /name:\s*"login"/);
-  assert.match(settingsSource, /showSettingsDialog\(\{ section: "logins" \}\)/);
-
-  assert.match(settingsSource, /name:\s*"yolo"/);
-  assert.match(settingsSource, /command\.settings\.mode/);
-  assert.match(settingsSource, /Usage:\s*\/yolo/);
-});
-
-void test("provider and experimental overlays are aliases into settings sections", async () => {
-  const providerSource = await readFile(new URL("../src/commands/builtins/provider-overlay.ts", import.meta.url), "utf8");
+void test("experimental overlay remains a settings section alias", async () => {
   const experimentalSource = await readFile(new URL("../src/commands/builtins/experimental-overlay.ts", import.meta.url), "utf8");
 
-  assert.match(providerSource, /openSettings\("providers"\)/);
   assert.match(experimentalSource, /openSettings\("experimental"\)/);
   assert.match(experimentalSource, /buildExperimentalFeatureContent/);
   assert.match(experimentalSource, /createToggleRow/);
@@ -530,14 +461,7 @@ void test("extension registry migrates legacy v1 entries to v2 permissions", asy
   assert.equal(entries[0].permissions.agentRead, false);
 
   const migrated = settings.readRaw(EXTENSIONS_REGISTRY_STORAGE_KEY);
-  assert.ok(isBuiltinsRegistryTestPayloadShape(migrated));
-  if (!isBuiltinsRegistryTestPayloadShape(migrated)) {
-    return;
-  }
-
-  assert.equal(migrated.version, 2);
-  assert.ok(Array.isArray(migrated.items));
-  assert.equal(migrated.items.length, 1);
+  assert.deepEqual(migrated, { version: 2, items: entries });
 });
 
 void test("tool disclosure bundles remain centralized in capabilities metadata", async () => {

@@ -8,7 +8,6 @@ import { Type, type Static } from "@sinclair/typebox";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { excelRun } from "../excel/helpers.js";
 import { getWorkbookChangeAuditLog } from "../audit/workbook-change-audit.js";
-import { dispatchWorkbookSnapshotCreated } from "../workbook/recovery-events.js";
 import { MAX_RECOVERY_CELLS, getWorkbookRecoveryLog } from "../workbook/recovery-log.js";
 import {
   captureModifyStructureState,
@@ -516,14 +515,6 @@ export function createModifyStructureTool(): AgentTool<typeof schema, ModifyStru
             appendResultNote: appendMutationResultNote,
             unavailableReason: recoveryUnavailableReason,
             unavailableNote: CHECKPOINT_SKIPPED_NOTE,
-            dispatchSnapshotCreated: (checkpoint) => {
-              dispatchWorkbookSnapshotCreated({
-                snapshotId: checkpoint.id,
-                toolName: checkpoint.toolName,
-                address: checkpoint.address,
-                changedCount: checkpoint.changedCount,
-              });
-            },
           },
         });
 

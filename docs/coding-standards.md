@@ -79,7 +79,8 @@ The `check:innerhtml` script keeps raw `.innerHTML` out of application code.
 
 ## Tests and verification
 
-- Prove behavior through public interfaces or real seams; avoid tests that only prove a mock implementation.
+- Accept behavior changes and dependency upgrades through a real taskpane prompt → model → tools → workbook test, with independent read-back and scratch cleanup. Keep the host in the background.
+- Unit tests, CI, builds and direct host probes support this acceptance test. If it is blocked, report the missing coverage and obtain an explicit waiver before accepting the change. Documentation-only changes need no runtime test.
 - For prompt/context/tool-disclosure/session wiring, run `npm run test:context`.
 - For proxy/bridge/auth/HTML safety paths, run `npm run test:security`.
 - For model/provider registry changes, run `npm run test:models` and consult `docs/model-updates.md`.

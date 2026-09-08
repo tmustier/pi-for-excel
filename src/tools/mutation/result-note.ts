@@ -9,12 +9,3 @@ export function appendMutationResultNote<TDetails>(result: AgentToolResult<TDeta
 
   first.text = `${first.text}\n\n${trimmedNote}`;
 }
-
-export function appendMutationResultNotes<TDetails>(
-  result: AgentToolResult<TDetails>,
-  notes: readonly string[],
-): void {
-  for (const note of notes) {
-    appendMutationResultNote(result, note);
-  }
-}

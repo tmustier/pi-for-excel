@@ -21,6 +21,7 @@ Keep each run append-only; create a new file for each run instead of rewriting o
 
 ## Recent focused runs
 
+- [`2026-09-08-macos-simplification.md`](./2026-09-08-macos-simplification.md) — model-driven workbook, auth/startup, UI, session and sandbox-extension acceptance.
 - [`2026-07-16-macos-extension-provider.md`](./2026-07-16-macos-extension-provider.md) — real Excel sandbox provider registration, credentials, cache, races and teardown.
 - [`2026-07-10-macos-gpt-5-6.md`](./2026-07-10-macos-gpt-5-6.md) — GPT-5.6 discovery, thinking UI, and real Excel taskpane verification.
 

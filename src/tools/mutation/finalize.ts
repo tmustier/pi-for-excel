@@ -40,10 +40,6 @@ export async function finalizeMutationRecoveryStep<TDetails extends MutationResu
 
   recovery.result.details.recovery = recoveryCheckpointCreated(checkpoint.id);
 
-  if (recovery.dispatchSnapshotCreated) {
-    recovery.dispatchSnapshotCreated(checkpoint);
-  }
-
   return {
     checkpointCreated: true,
     snapshotId: checkpoint.id,

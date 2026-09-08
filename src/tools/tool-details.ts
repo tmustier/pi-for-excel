@@ -637,47 +637,6 @@ function isOptionalWorkbookHistorySnapshotSummaryArray(
   return value === undefined || (Array.isArray(value) && value.every((item) => isWorkbookHistorySnapshotSummary(item)));
 }
 
-function isFilesWorkspaceBackendKind(value: DynamicValue): value is FilesWorkspaceBackendKind {
-  return value === "native-directory" || value === "opfs" || value === "memory";
-}
-
-function isFilesSourceKind(value: DynamicValue): value is FilesSourceKind {
-  return value === "workspace" || value === "builtin-doc";
-}
-
-function isOptionalFilesSourceKind(value: DynamicValue): value is FilesSourceKind | undefined {
-  return value === undefined || isFilesSourceKind(value);
-}
-
-function isFilesWorkbookTagDetails(value: DynamicValue): value is FilesWorkbookTagDetails {
-  if (!isToolsToolDetailsPayloadShape(value)) return false;
-
-  return (
-    typeof value.workbookId === "string" &&
-    typeof value.workbookLabel === "string" &&
-    typeof value.taggedAt === "number"
-  );
-}
-
-function isOptionalFilesWorkbookTagDetails(value: DynamicValue): value is FilesWorkbookTagDetails | undefined {
-  return value === undefined || isFilesWorkbookTagDetails(value);
-}
-
-function isFilesListItemDetails(value: DynamicValue): value is FilesListItemDetails {
-  if (!isToolsToolDetailsPayloadShape(value)) return false;
-
-  return (
-    typeof value.path === "string" &&
-    typeof value.size === "number" &&
-    typeof value.mimeType === "string" &&
-    (value.fileKind === "text" || value.fileKind === "binary") &&
-    typeof value.modifiedAt === "number" &&
-    isOptionalFilesSourceKind(value.sourceKind) &&
-    isOptionalBoolean(value.readOnly) &&
-    isOptionalFilesWorkbookTagDetails(value.workbookTag)
-  );
-}
-
 export function isWriteCellsDetails(value: DynamicValue): value is WriteCellsDetails {
   if (!isToolsToolDetailsPayloadShape(value)) return false;
 
@@ -1091,41 +1050,6 @@ export function isWebSearchDetails(value: DynamicValue): value is WebSearchDetai
   );
 }
 
-export function isFetchPageDetails(value: DynamicValue): value is FetchPageDetails {
-  if (!isToolsToolDetailsPayloadShape(value)) return false;
-  if (value.kind !== "fetch_page") return false;
-
-  return (
-    typeof value.ok === "boolean" &&
-    typeof value.url === "string" &&
-    isOptionalString(value.title) &&
-    isOptionalNumber(value.chars) &&
-    isOptionalBoolean(value.truncated) &&
-    isOptionalBoolean(value.proxied) &&
-    isOptionalString(value.proxyBaseUrl) &&
-    isOptionalString(value.contentType) &&
-    isOptionalString(value.error) &&
-    isOptionalBoolean(value.proxyDown)
-  );
-}
-
-export function isMcpGatewayDetails(value: DynamicValue): value is McpGatewayDetails {
-  if (!isToolsToolDetailsPayloadShape(value)) return false;
-  if (value.kind !== "mcp_gateway") return false;
-
-  return (
-    typeof value.ok === "boolean" &&
-    typeof value.operation === "string" &&
-    isOptionalString(value.server) &&
-    isOptionalString(value.tool) &&
-    isOptionalBoolean(value.proxied) &&
-    isOptionalString(value.proxyBaseUrl) &&
-    isOptionalString(value.resultPreview) &&
-    isOptionalString(value.error) &&
-    isOptionalBoolean(value.proxyDown)
-  );
-}
-
 function isConnectionToolErrorCode(value: DynamicValue): value is ConnectionToolErrorDetails["errorCode"] {
   return value === "missing_connection"
     || value === "invalid_connection"
@@ -1146,59 +1070,5 @@ export function isConnectionToolErrorDetails(value: DynamicValue): value is Conn
     (value.status === "connected" || value.status === "missing" || value.status === "invalid" || value.status === "error") &&
     typeof value.setupHint === "string" &&
     (reason === undefined || typeof reason === "string")
-  );
-}
-
-export function isFilesListDetails(value: DynamicValue): value is FilesListDetails {
-  if (!isToolsToolDetailsPayloadShape(value)) return false;
-  if (value.kind !== "files_list") return false;
-
-  return (
-    isFilesWorkspaceBackendKind(value.backend) &&
-    typeof value.count === "number" &&
-    Array.isArray(value.files) &&
-    value.files.every((item) => isFilesListItemDetails(item))
-  );
-}
-
-export function isFilesReadDetails(value: DynamicValue): value is FilesReadDetails {
-  if (!isToolsToolDetailsPayloadShape(value)) return false;
-  if (value.kind !== "files_read") return false;
-
-  return (
-    isFilesWorkspaceBackendKind(value.backend) &&
-    typeof value.path === "string" &&
-    (value.mode === "text" || value.mode === "base64") &&
-    typeof value.size === "number" &&
-    typeof value.mimeType === "string" &&
-    (value.fileKind === "text" || value.fileKind === "binary") &&
-    isOptionalFilesSourceKind(value.sourceKind) &&
-    isOptionalBoolean(value.readOnly) &&
-    typeof value.truncated === "boolean" &&
-    isOptionalFilesWorkbookTagDetails(value.workbookTag)
-  );
-}
-
-export function isFilesWriteDetails(value: DynamicValue): value is FilesWriteDetails {
-  if (!isToolsToolDetailsPayloadShape(value)) return false;
-  if (value.kind !== "files_write") return false;
-
-  return (
-    isFilesWorkspaceBackendKind(value.backend) &&
-    typeof value.path === "string" &&
-    (value.encoding === "text" || value.encoding === "base64") &&
-    typeof value.chars === "number" &&
-    isOptionalFilesWorkbookTagDetails(value.workbookTag)
-  );
-}
-
-export function isFilesDeleteDetails(value: DynamicValue): value is FilesDeleteDetails {
-  if (!isToolsToolDetailsPayloadShape(value)) return false;
-  if (value.kind !== "files_delete") return false;
-
-  return (
-    isFilesWorkspaceBackendKind(value.backend) &&
-    typeof value.path === "string" &&
-    isOptionalFilesWorkbookTagDetails(value.workbookTag)
   );
 }

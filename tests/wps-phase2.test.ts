@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 
 import type { AgentToolResult } from "@earendil-works/pi-agent-core";
@@ -15,6 +14,7 @@ import type {
   WpsEtWorksheet,
 } from "../src/host/wps/jsapi.ts";
 import { createExecuteWpsJsTool } from "../src/tools/execute-wps-js.ts";
+import { createAllTools } from "../src/tools/index.ts";
 import { selectCoreToolForHost, type AnyHostSelectableTool } from "../src/tools/host-selection.ts";
 import { UnsupportedHostToolError } from "../src/tools/unsupported-host-tool.ts";
 import type { ReadRangeCsvDetails, WriteCellsDetails } from "../src/tools/tool-details.ts";
@@ -436,6 +436,8 @@ void test("WPS host wiring keeps core metadata stable and registers execute_wps_
     },
   );
 
-  const registrySource = await readFile(new URL("../src/tools/index.ts", import.meta.url), "utf8");
-  assert.match(registrySource, /hostKind === "wps" \? \[createExecuteWpsJsTool\(\)\] : \[\]/u);
+  const officeToolNames = createAllTools({ hostKind: "office" }).map((tool) => tool.name);
+  const wpsToolNames = createAllTools({ hostKind: "wps" }).map((tool) => tool.name);
+  assert.equal(officeToolNames.includes("execute_wps_js"), false);
+  assert.equal(wpsToolNames.filter((name) => name === "execute_wps_js").length, 1);
 });

@@ -9,6 +9,7 @@ import {
   type ImageContent,
   type TextContent,
 } from "@earendil-works/pi-ai";
+import { Agent } from "@earendil-works/pi-agent-core";
 
 import { ConnectionManager } from "../src/connections/manager.ts";
 import { CONNECTION_STORE_KEY } from "../src/connections/store.ts";
@@ -16,6 +17,7 @@ import { setExperimentalFeatureEnabled } from "../src/experiments/flags.ts";
 import { ExtensionRuntimeManager } from "../src/extensions/runtime-manager.ts";
 import { BrowserModelRuntime } from "../src/models/browser-model-runtime.ts";
 import type { ProviderKeysStoreLike } from "../src/storage/local/provider-credentials-store.ts";
+import { failOnUnexpectedStream } from "./fail-on-unexpected-stream.ts";
 import { isConnectionToolErrorDetails } from "../src/tools/tool-details.ts";
 import { withConnectionPreflight } from "../src/tools/with-connection-preflight.ts";
 import {
@@ -393,6 +395,87 @@ void test("trusted local-module extensions stay on host runtime even when sandbo
     assert.equal(status.loaded, true);
     assert.equal(hostLoadCalls, 1);
     assert.equal(sandboxLoadCalls, 0);
+  } finally {
+    restoreLocalStorage();
+  }
+});
+
+void test("host and sandbox bridges retain distinct authority and owner boundaries", async () => {
+  const restoreLocalStorage = installLocalStorageStub();
+
+  try {
+    clearLocalStorageKey(EXTENSION_SANDBOX_RUNTIME_STORAGE_KEY);
+
+    const settings = new MemorySettingsStore();
+    settings.writeRaw(EXTENSIONS_REGISTRY_STORAGE_KEY, {
+      version: 2,
+      items: [
+        createStoredEntry({
+          id: "ext.local.authority",
+          name: "Local Authority",
+          trust: "local-module",
+        }),
+        createStoredEntry({
+          id: "ext.inline.authority",
+          name: "Sandbox Authority",
+          trust: "inline-code",
+        }),
+      ],
+    });
+
+    const agent = new Agent({
+      streamFn: failOnUnexpectedStream,
+      initialState: {
+        messages: [],
+        tools: [],
+      },
+    });
+    let hostRawAgent: Agent | null = null;
+    let hostConnectionId = "";
+    let sandboxConnectionId = "";
+    let sandboxHasRawAgentCallback = true;
+
+    const manager = new ExtensionRuntimeManager({
+      settings,
+      connectionManager: createConnectionManager(settings),
+      getActiveAgent: () => agent,
+      refreshRuntimeTools: async () => {},
+      reservedToolNames: new Set<string>(),
+      loadExtensionFromSource: (api) => {
+        hostRawAgent = api.agent.raw;
+        hostConnectionId = api.connections.register({
+          id: "ext.other.host-secret",
+          title: "Host connection",
+          capability: "host test",
+          authKind: "api_key",
+          secretFields: [],
+        });
+        return Promise.resolve({
+          deactivate: () => Promise.resolve(),
+        });
+      },
+      activateInSandbox: (activation) => {
+        sandboxHasRawAgentCallback = Reflect.has(activation, "getAgent");
+        sandboxConnectionId = activation.registerConnection({
+          id: "ext.other.sandbox-secret",
+          title: "Sandbox connection",
+          capability: "sandbox test",
+          authKind: "api_key",
+          secretFields: [],
+        });
+        return Promise.resolve({
+          deactivate: () => Promise.resolve(),
+        });
+      },
+    });
+
+    await manager.initialize();
+
+    assert.equal(hostRawAgent, agent);
+    assert.equal(hostConnectionId, "ext.local.authority.ext.other.host-secret");
+    assert.equal(sandboxHasRawAgentCallback, false);
+    assert.equal(sandboxConnectionId, "ext.inline.authority.ext.other.sandbox-secret");
+    assert.deepEqual(manager.list().map((status) => status.loaded), [true, true]);
   } finally {
     restoreLocalStorage();
   }

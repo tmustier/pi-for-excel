@@ -9,7 +9,14 @@
 
 import { Type, type Static } from "@sinclair/typebox";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
-import { excelRun, getRange, qualifiedAddress, parseCell, colToLetter } from "../excel/helpers.js";
+import {
+  colToLetter,
+  excelRun,
+  getRange,
+  isCellInRange,
+  parseCell,
+  qualifiedAddress,
+} from "../excel/helpers.js";
 import { formatAsMarkdownTable, extractFormulas, findErrors } from "../utils/format.js";
 import { getErrorMessage } from "../utils/errors.js";
 import { buildResolvedFormatLabels, getResolvedConventions, humanizeFormat } from "../conventions/index.js";
@@ -156,27 +163,6 @@ export function createReadRangeTool(): AgentTool<typeof schema> {
       }
     },
   };
-}
-
-/** Check if a cell address falls within a range address (both without sheet prefix). */
-function isCellInRange(cellAddr: string, rangeAddr: string): boolean {
-  const bangIndex = rangeAddr.indexOf("!");
-  const clean = bangIndex >= 0 ? rangeAddr.slice(bangIndex + 1) : rangeAddr;
-  const parts = clean.includes(":") ? clean.split(":") : [clean, clean];
-  const startPart = parts[0];
-  const endPart = parts[1];
-  if (startPart === undefined || endPart === undefined) {
-    return false;
-  }
-  const start = parseCell(startPart);
-  const end = parseCell(endPart);
-  const cell = parseCell(cellAddr);
-  return (
-    cell.col >= start.col &&
-    cell.col <= end.col &&
-    cell.row >= start.row &&
-    cell.row <= end.row
-  );
 }
 
 function hasAnyNonEmptyCell(values: DynamicValue[][]): boolean {

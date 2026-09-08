@@ -9,7 +9,6 @@ import type { WorkspaceBackendStatus, WorkspaceFileEntry } from "../src/files/ty
 import {
   buildFilesDialogSections,
   filterFilesDialogEntries,
-  fileMatchesFilesDialogFilter,
   normalizeFilesDialogFilterText,
   resolveFilesDialogBadge,
   resolveFilesDialogConnectFolderButtonState,
@@ -43,14 +42,6 @@ void test("normalizeFilesDialogFilterText trims and lowercases", () => {
   assert.equal(normalizeFilesDialogFilterText("   "), "");
 });
 
-void test("fileMatchesFilesDialogFilter uses case-insensitive path substring", () => {
-  const file = makeFile("notes/Quarterly-Plan.md");
-
-  assert.equal(fileMatchesFilesDialogFilter({ file, filterText: "quarterly" }), true);
-  assert.equal(fileMatchesFilesDialogFilter({ file, filterText: "NOTES/QU" }), true);
-  assert.equal(fileMatchesFilesDialogFilter({ file, filterText: "missing" }), false);
-});
-
 void test("filterFilesDialogEntries returns all files when filter is empty", () => {
   const files = [
     makeFile("notes/index.md"),
@@ -68,19 +59,18 @@ void test("filterFilesDialogEntries returns all files when filter is empty", () 
   ]);
 });
 
-void test("filterFilesDialogEntries returns only matching paths", () => {
+void test("filterFilesDialogEntries matches case-insensitive path substrings", () => {
   const files = [
     makeFile("notes/index.md"),
-    makeFile("notes/meeting-notes.md"),
+    makeFile("notes/Quarterly-Plan.md"),
     makeFile("imports/raw.csv"),
   ];
 
-  const result = filterFilesDialogEntries({
-    files,
-    filterText: "notes/meeting",
-  });
+  const matches = filterFilesDialogEntries({ files, filterText: "NOTES/QU" });
+  assert.deepEqual(matches.map((file) => file.path), ["notes/Quarterly-Plan.md"]);
 
-  assert.deepEqual(result.map((file) => file.path), ["notes/meeting-notes.md"]);
+  const missing = filterFilesDialogEntries({ files, filterText: "missing" });
+  assert.deepEqual(missing, []);
 });
 
 void test("buildFilesDialogSections groups files by category with folder groups", () => {

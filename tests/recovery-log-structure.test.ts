@@ -162,12 +162,7 @@ void test("persisted modify-structure checkpoints retain extended state kinds", 
     applySnapshot: () => Promise.resolve({ values: [["old"]], formulas: [["old"]] }),
   });
 
-  for (let index = 0; index < states.length; index += 1) {
-    const state = states[index];
-    if (!state) {
-      throw new Error("Expected structure checkpoint state.");
-    }
-
+  for (const [index, state] of states.entries()) {
     const appended = await logA.appendModifyStructure({
       toolName: "modify_structure",
       toolCallId: `call-structure-persist-${index + 1}`,
@@ -188,12 +183,7 @@ void test("persisted modify-structure checkpoints retain extended state kinds", 
   const entries = await logB.listForCurrentWorkbook(20);
   assert.equal(entries.length, states.length);
 
-  for (let index = 0; index < states.length; index += 1) {
-    const expectedState = states[index];
-    if (!expectedState) {
-      throw new Error("Expected structure checkpoint state.");
-    }
-
+  for (const [index, expectedState] of states.entries()) {
     const toolCallId = `call-structure-persist-${index + 1}`;
     const entry = entries.find((snapshot) => snapshot.toolCallId === toolCallId);
     if (!entry) {

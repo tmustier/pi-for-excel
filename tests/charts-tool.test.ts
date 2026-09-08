@@ -463,7 +463,6 @@ void test("update captures a chart checkpoint and appends audit metadata", async
   const beforeState = createChartState("Sales");
   let appendedState: RecoveryChartState | null = null;
   let auditEntry: AppendWorkbookChangeAuditEntryArgs | null = null;
-  let dispatchedSnapshotId = "";
 
   const tool = createChartsTool({
     captureChartPresent: () => Promise.resolve(beforeState),
@@ -504,9 +503,6 @@ void test("update captures a chart checkpoint and appends audit metadata", async
       auditEntry = entry;
       return Promise.resolve();
     },
-    dispatchSnapshotCreated: (snapshot) => {
-      dispatchedSnapshotId = snapshot.id;
-    },
   });
 
   const result = await tool.execute("tc-update-checkpoint", {
@@ -519,7 +515,6 @@ void test("update captures a chart checkpoint and appends audit metadata", async
   assert.deepEqual(appendedState, beforeState);
   assert.equal(result.details.recovery?.status, "checkpoint_created");
   assert.equal(result.details.recovery?.snapshotId, "snap-chart-1");
-  assert.equal(dispatchedSnapshotId, "snap-chart-1");
   assert.equal(auditEntry?.toolName, "charts");
   assert.equal(auditEntry?.blocked, false);
   assert.match(firstText(result), /property backup only/u);

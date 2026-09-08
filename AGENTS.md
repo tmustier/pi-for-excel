@@ -80,6 +80,9 @@ Notes for agents working in this repo.
 - Type assertions and lint suppressions must stay local and explain the safety invariant.
 
 ## Verification
+
+Use the local acceptance policy in `docs/coding-standards.md` and the `.agents/skills/excel-background-verification/SKILL.md` workflow.
+
 - `npm run check`
 - `npm run build`
 - `npm run test:models`

@@ -9,7 +9,6 @@ import {
   getWorkbookChangeAuditLog,
   type AppendWorkbookChangeAuditEntryArgs,
 } from "../audit/workbook-change-audit.js";
-import { dispatchWorkbookSnapshotCreated } from "../workbook/recovery-events.js";
 import {
   getWorkbookRecoveryLog,
   type AppendChartRecoverySnapshotArgs,
@@ -208,7 +207,6 @@ interface ChartsToolDependencies {
   captureChartPresent: (name: string, sheetName?: string) => Promise<RecoveryChartPresentState>;
   appendRecoverySnapshot: (args: AppendChartRecoverySnapshotArgs) => Promise<WorkbookRecoverySnapshot | null>;
   appendAuditEntry: (entry: AppendWorkbookChangeAuditEntryArgs) => Promise<void>;
-  dispatchSnapshotCreated: (snapshot: WorkbookRecoverySnapshot) => void;
 }
 
 export function toExcelChartType(chartType: string): SupportedExcelChartType {
@@ -727,14 +725,6 @@ const defaultDependencies: ChartsToolDependencies = {
   captureChartPresent: (name, sheetName) => captureChartPresentState(name, sheetName),
   appendRecoverySnapshot: (args) => getWorkbookRecoveryLog().appendChart(args),
   appendAuditEntry: (entry) => getWorkbookChangeAuditLog().append(entry),
-  dispatchSnapshotCreated: (snapshot) => {
-    dispatchWorkbookSnapshotCreated({
-      snapshotId: snapshot.id,
-      toolName: snapshot.toolName,
-      address: snapshot.address,
-      changedCount: snapshot.changedCount,
-    });
-  },
 };
 
 function buildRecoveryStep(
@@ -783,7 +773,6 @@ function buildRecoveryStep(
     appendResultNote: appendMutationResultNote,
     unavailableReason: captureError ?? "Chart backup capture was skipped.",
     unavailableNote: "ℹ️ Backup not created for this chart mutation.",
-    dispatchSnapshotCreated: (snapshot) => dependencies.dispatchSnapshotCreated(snapshot),
   };
 }
 
@@ -795,7 +784,6 @@ export function createChartsTool(
     captureChartPresent: dependencies.captureChartPresent ?? defaultDependencies.captureChartPresent,
     appendRecoverySnapshot: dependencies.appendRecoverySnapshot ?? defaultDependencies.appendRecoverySnapshot,
     appendAuditEntry: dependencies.appendAuditEntry ?? defaultDependencies.appendAuditEntry,
-    dispatchSnapshotCreated: dependencies.dispatchSnapshotCreated ?? defaultDependencies.dispatchSnapshotCreated,
   };
 
   return {
