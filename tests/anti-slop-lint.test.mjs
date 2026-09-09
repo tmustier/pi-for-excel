@@ -20,7 +20,7 @@ function lint(fixtures) {
     const result = spawnSync(
       process.execPath,
       [oxlint, "--config", ".oxlintrc.json", "--quiet", "--format", "json", ...files],
-      { cwd: root, encoding: "utf8" },
+      { cwd: root, encoding: "utf8", timeout: 30_000 },
     );
     assert.equal(result.signal, null, result.stderr);
     assert.equal(result.error, undefined);

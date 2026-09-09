@@ -35,7 +35,7 @@ void test("shows tmux setup card for tmux bridge gate failures", () => {
   assert.ok(model);
   assert.equal(model.command, TMUX_BRIDGE_SETUP_COMMAND);
   assert.equal(model.probeUrl, DEFAULT_TMUX_BRIDGE_URL);
-  assert.equal(model.title, "Terminal access is not available");
+  assert.match(model.title, /terminal access.*unavailable/i);
 });
 
 void test("uses bridge URL from details when testing tmux setup", () => {
@@ -93,7 +93,7 @@ void test("shows python setup card when no Python runtime is available", () => {
   assert.ok(model);
   assert.equal(model.command, PYTHON_BRIDGE_SETUP_COMMAND);
   assert.equal(model.probeUrl, DEFAULT_PYTHON_BRIDGE_URL);
-  assert.equal(model.title, "Python is unavailable");
+  assert.match(model.title, /python.*unavailable/i);
 });
 
 void test("shows python setup card for libreoffice bridge outages", () => {

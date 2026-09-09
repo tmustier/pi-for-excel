@@ -27,6 +27,9 @@ for (const file of collectFiles(join(root, "src"))) {
   const rel = relative(root, file);
   const exportedNames = new Set(
     sourceFile.statements.flatMap((statement) => {
+      if (ts.isExportAssignment(statement) && ts.isIdentifier(statement.expression)) {
+        return [statement.expression.text];
+      }
       if (!ts.isExportDeclaration(statement) || statement.moduleSpecifier || !statement.exportClause) return [];
       if (!ts.isNamedExports(statement.exportClause)) return [];
       return statement.exportClause.elements.map((element) => (element.propertyName ?? element.name).text);
@@ -34,6 +37,12 @@ for (const file of collectFiles(join(root, "src"))) {
   );
 
   for (const statement of sourceFile.statements) {
+    if (ts.isExportAssignment(statement)) {
+      const expression = statement.expression;
+      if ((ts.isArrowFunction(expression) || ts.isFunctionExpression(expression)) && !expression.type) {
+        offenders.push(`${rel}:${position(sourceFile, expression)} <default>`);
+      }
+    }
     const directlyExported = statement.modifiers?.some(
       (modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword,
     ) ?? false;

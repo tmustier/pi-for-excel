@@ -79,6 +79,8 @@ The `check:innerhtml` script keeps raw `.innerHTML` out of application code.
 
 ## Tests and verification
 
+Use [Behavior tests and acceptance gates](./testing.md) for contract selection, test discovery, fixture placement and mutation evidence. `npm test` is the canonical complete deterministic suite; targeted scripts do not replace it.
+
 - Accept behavior changes and dependency upgrades through a real taskpane prompt → model → tools → workbook test, with independent read-back and scratch cleanup. Keep the host in the background.
 - Unit tests, CI, builds and direct host probes support this acceptance test. If it is blocked, report the missing coverage and obtain an explicit waiver before accepting the change. Documentation-only changes need no runtime test.
 - For prompt/context/tool-disclosure/session wiring, run `npm run test:context`.

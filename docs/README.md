@@ -28,6 +28,7 @@ This folder contains **current** docs that should match shipped behavior.
 ## Architecture & policy
 - [Coding standards for agents](./coding-standards.md)
 - [Anti-slop lint policy](./anti-slop-policy.md)
+- [Behavior tests and acceptance gates](./testing.md)
 - [Upstream divergences from pi-mono](./upstream-divergences.md)
 - [Context management policy (cache-safe)](./context-management-policy.md)
 - [Cache observability baselines](./cache-observability-baselines.md)

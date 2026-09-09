@@ -17,7 +17,7 @@ import {
 import { registerBuiltins, type BuiltinsContext } from "../src/commands/builtins/index.ts";
 import { executeSlashCommand } from "../src/commands/slash-command-execution.ts";
 import { commandRegistry, type SlashCommand } from "../src/commands/types.ts";
-import { installFakeDom } from "./fake-dom.test.ts";
+import { installFakeDom } from "./fixtures/fake-dom.ts";
 
 class MemorySettingsStore {
   private readonly values = new Map<string, DynamicValue>();
