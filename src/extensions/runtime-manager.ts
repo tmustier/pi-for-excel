@@ -76,7 +76,10 @@ import {
   qualifyExtensionConnectionId,
   qualifyExtensionProviderId,
 } from "./owner-identifiers.js";
-import { getToolRequiredConnectionIds } from "../tools/connection-requirements.js";
+import {
+  getToolRequiredConnectionIds,
+  type ConnectionAwareAgentTool,
+} from "../tools/connection-requirements.js";
 import type {
   BrowserModelRuntime,
   BrowserProviderRegistration,
@@ -752,7 +755,7 @@ export class ExtensionRuntimeManager {
         assertToolConnectionOwnership(tool.name, requiredConnectionIds);
       }
 
-      const wrappedTool: AnyAgentTool = {
+      const wrappedTool: ConnectionAwareAgentTool = {
         ...tool,
         description: withExtensionToolDescription(tool, entry),
         execute: async (toolCallId, params, signal, onUpdate) => {
@@ -765,11 +768,10 @@ export class ExtensionRuntimeManager {
             );
           }
         },
+        ...(requiredConnectionIds.length > 0
+          ? { requiresConnection: requiredConnectionIds }
+          : {}),
       };
-
-      if (requiredConnectionIds.length > 0) {
-        Reflect.set(wrappedTool, "requiresConnection", requiredConnectionIds);
-      }
 
       this.toolOwners.set(wrappedTool.name, entry.id);
       this.extensionTools.set(wrappedTool.name, wrappedTool);

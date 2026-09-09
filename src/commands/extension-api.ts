@@ -23,7 +23,7 @@
  * ```
  */
 
-import type { AgentEvent, AgentTool } from "@earendil-works/pi-agent-core";
+import type { AgentEvent } from "@earendil-works/pi-agent-core";
 
 import {
   ALLOW_REMOTE_EXTENSION_URLS_STORAGE_KEY,
@@ -61,6 +61,7 @@ import {
   qualifyExtensionConnectionId,
   qualifyExtensionProviderId,
 } from "../extensions/owner-identifiers.js";
+import type { ConnectionAwareAgentTool } from "../tools/connection-requirements.js";
 
 export type { LoadedExtensionHandle } from "./extension-loader.js";
 export type {
@@ -344,7 +345,11 @@ export function createExtensionAPI(options: CreateExtensionAPIOptions): ExcelExt
       const normalizedName = normalizeIdentifier("tool", name);
       assertValidToolDefinition(normalizedName, tool);
 
-      const wrappedTool: AgentTool = {
+      const requiresConnection = normalizeToolConnectionRequirements(
+        tool.requiresConnection,
+        extensionOwnerId,
+      );
+      const wrappedTool: ConnectionAwareAgentTool = {
         name: normalizedName,
         label: tool.label ?? normalizedName,
         description: tool.description,
@@ -352,16 +357,8 @@ export function createExtensionAPI(options: CreateExtensionAPIOptions): ExcelExt
         execute: async (_toolCallId, params, signal, onUpdate) => {
           return tool.execute(params, signal, onUpdate);
         },
+        ...(requiresConnection ? { requiresConnection } : {}),
       };
-
-      const requiresConnection = normalizeToolConnectionRequirements(
-        Reflect.get(tool, "requiresConnection"),
-        extensionOwnerId,
-      );
-
-      if (requiresConnection && requiresConnection.length > 0) {
-        Reflect.set(wrappedTool, "requiresConnection", requiresConnection);
-      }
 
       registerTool(wrappedTool);
     },
