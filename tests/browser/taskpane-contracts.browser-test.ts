@@ -45,6 +45,7 @@ function isExpectedOfficeUnavailableError(error: Error): boolean {
 async function withBrowserPage(
   path: string,
   run: (page: Page) => Promise<void>,
+  prepareContext?: (context: BrowserContext) => Promise<void>,
 ): Promise<void> {
   const context: BrowserContext = await browser.newContext();
   const page = await context.newPage();
@@ -63,6 +64,7 @@ async function withBrowserPage(
     }
     await route.abort("blockedbyclient");
   });
+  await prepareContext?.(context);
 
   try {
     await page.goto(`${baseUrl}${path}`);
@@ -233,6 +235,168 @@ void test("sidebar Files and Extensions buttons open their views", async () => {
     await openUtilitiesMenu(page);
     await page.getByRole("menuitem", { name: "Extensions" }).click();
     await page.getByRole("heading", { name: "Connections" }).waitFor({ state: "visible", timeout: 5_000 });
+  });
+});
+
+void test("local-service probes populate the first runtime capabilities", async () => {
+  let releaseProbes = (): void => {};
+  const probesReleased = new Promise<void>((resolve) => {
+    releaseProbes = resolve;
+  });
+  let markProbeStarted = (): void => {};
+  const probeStarted = new Promise<void>((resolve) => {
+    markProbeStarted = resolve;
+  });
+
+  await withBrowserPage("src/taskpane.html", async (page) => {
+    await probeStarted;
+    assert.equal(await page.locator("pi-input textarea").count(), 0);
+    releaseProbes();
+
+    await page.locator("pi-input textarea").waitFor({ state: "visible", timeout: 20_000 });
+    const systemPrompt = await page.evaluate(`document.querySelector("pi-sidebar")?.agent?.state?.systemPrompt ?? ""`);
+    assert.match(systemPrompt, /python 3\.browser\.12/);
+    assert.match(systemPrompt, /tmux browser-sentinel/);
+  }, async (context) => {
+    await context.route("https://localhost:3340/health", async (route) => {
+      markProbeStarted();
+      await probesReleased;
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          ok: true,
+          python: { available: true, version: "3.browser.12" },
+          libreoffice: { available: true },
+        }),
+      });
+    });
+    await context.route("https://localhost:3341/health", async (route) => {
+      markProbeStarted();
+      await probesReleased;
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({ ok: true, tmuxVersion: "tmux browser-sentinel", sessions: 2 }),
+      });
+    });
+  });
+});
+
+void test("disclosure customization renders operable shared toggles", async () => {
+  await withBrowserPage("src/ui-gallery.html", async (page) => {
+    await page.evaluate(`
+      (async () => {
+        const { createDisclosureBar } = await import("/src/ui/disclosure-bar.ts");
+        const bar = createDisclosureBar({ providerCount: 1 });
+        if (bar) document.body.appendChild(bar);
+      })()
+    `);
+
+    const customize = page.locator(".pi-disclosure-bar__link");
+    assert.equal(await customize.getAttribute("aria-expanded"), "false");
+    const pickerId = await customize.getAttribute("aria-controls");
+    assert.ok(pickerId);
+    await page.locator(`#${pickerId}`).waitFor({ state: "hidden" });
+    await customize.click();
+    assert.equal(await customize.getAttribute("aria-expanded"), "true");
+    await page.locator(`#${pickerId}`).waitFor({ state: "visible" });
+
+    const webSearchRow = page.locator(".pi-toggle-row").filter({ hasText: "Web search" });
+    const checkbox = webSearchRow.locator('input[type="checkbox"]');
+    await checkbox.waitFor({ state: "attached" });
+    assert.equal(await checkbox.isChecked(), true);
+    await webSearchRow.locator("label.pi-toggle").click();
+    assert.equal(await checkbox.isChecked(), false);
+  });
+});
+
+void test("paperclip, context disclosure, and non-streaming Escape remain operable", async () => {
+  await withTaskpane(async (page) => {
+    await page.getByRole("button", { name: "Browse files" }).click();
+    await page.getByRole("heading", { name: "Files" }).waitFor({ state: "visible", timeout: 5_000 });
+    await page.getByRole("button", { name: "Close Files" }).click();
+
+    await page.evaluate(`
+      (async () => {
+        localStorage.setItem("pi-excel.debug", "1");
+        const { getPayloadStats } = await import("/src/auth/stream-proxy.ts");
+        Object.assign(getPayloadStats(), { calls: 1, messageCount: 1, messageChars: 7 });
+        const sidebar = document.querySelector("pi-sidebar");
+        sidebar.agent.state.messages.push({ role: "user", content: "browser" });
+        sidebar.requestUpdate();
+        document.dispatchEvent(new Event("pi:debug-changed"));
+      })()
+    `);
+
+    const contextHeader = page.locator(".pi-context-pill__header");
+    await contextHeader.waitFor({ state: "visible" });
+    assert.equal(await contextHeader.getAttribute("aria-expanded"), "false");
+    const controlledBodyId = await contextHeader.getAttribute("aria-controls");
+    assert.ok(controlledBodyId);
+    assert.equal(await page.locator(`#${controlledBodyId}`).count(), 0);
+    await contextHeader.click();
+    assert.equal(await contextHeader.getAttribute("aria-expanded"), "true");
+    await page.locator(`#${controlledBodyId}`).waitFor({ state: "visible" });
+    await contextHeader.click();
+    assert.equal(await contextHeader.getAttribute("aria-expanded"), "false");
+    assert.equal(await page.locator(`#${controlledBodyId}`).count(), 0);
+
+    await page.evaluate(`
+      const slot = document.querySelector("#pi-widget-slot");
+      const widget = document.createElement("button");
+      widget.textContent = "Browser widget";
+      slot.appendChild(widget);
+      slot.style.display = "block";
+    `);
+    const input = page.locator("pi-input textarea");
+    await input.fill("preserve this draft");
+    await input.press("Escape");
+    assert.equal(await input.inputValue(), "preserve this draft");
+    assert.equal(await input.evaluate((element) => element === document.activeElement), false);
+  });
+});
+
+void test("recently closed tabs and experimental settings are reachable by commands", async () => {
+  await withTaskpane(async (page) => {
+    await page.getByRole("button", { name: "New tab" }).click();
+    const closeButtons = page.getByRole("button", { name: "Close tab" });
+    await closeButtons.first().waitFor({ state: "visible" });
+    assert.equal(await closeButtons.count(), 2);
+    await closeButtons.first().click();
+    await page.waitForFunction(() => document.querySelectorAll('.pi-session-tab__close').length === 0);
+
+    await enterCommand(page, "/resume");
+    const resume = page.locator("#pi-resume-overlay");
+    await resume.getByRole("heading", { name: "Recently closed" }).waitFor({ state: "visible", timeout: 5_000 });
+    await resume.locator('[data-resume-section="recently-closed"] .pi-resume-item').waitFor({ state: "visible" });
+    await resume.getByRole("button", { name: "Close resume session" }).click();
+
+    await enterCommand(page, "/experimental");
+    const settings = page.locator("#pi-settings-overlay");
+    await settings.getByRole("heading", { name: "Experimental features", level: 2 }).waitFor({ state: "visible", timeout: 5_000 });
+    await settings.getByText("Dark mode", { exact: true }).waitFor({ state: "visible" });
+  });
+});
+
+void test("Settings guards unsaved navigation and exposes shared behavior controls", async () => {
+  await withTaskpane(async (page) => {
+    await enterCommand(page, "/settings");
+    const settings = page.locator("#pi-settings-overlay");
+    await settings.getByText("Auto mode", { exact: true }).waitFor({ state: "visible", timeout: 5_000 });
+    await settings.getByText("Fork model switch into new tab", { exact: true }).waitFor({ state: "visible" });
+    await settings.getByRole("button", { name: /Rules & conventions/ }).click();
+
+    const rules = page.getByPlaceholder(/Your preferences and habits/);
+    await rules.fill("Always show units");
+    await settings.getByRole("button", { name: "Back" }).click();
+
+    const confirmation = page.locator("#pi-confirm-dialog-overlay");
+    await confirmation.getByRole("heading", { name: "Discard changes?" }).waitFor({ state: "visible" });
+    await confirmation.getByRole("button", { name: "Keep editing" }).filter({ hasText: "Keep editing" }).click();
+    await confirmation.waitFor({ state: "detached" });
+    assert.equal(await rules.inputValue(), "Always show units");
+    await settings.getByRole("button", { name: "Back" }).click();
+    await page.getByRole("button", { name: "Discard" }).click();
+    await settings.getByRole("heading", { name: "Settings" }).waitFor({ state: "visible" });
   });
 });
 

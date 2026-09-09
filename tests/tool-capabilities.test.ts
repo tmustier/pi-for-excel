@@ -3,6 +3,7 @@ import { test } from "node:test";
 import {
   buildCoreToolPromptLines,
   CORE_TOOL_CAPABILITIES,
+  filterToolsForDisclosureBundle,
   TOOL_DISCLOSURE_BUNDLES,
   TOOL_DISCLOSURE_FULL_ACCESS_PATTERNS,
   TOOL_DISCLOSURE_TRIGGER_PATTERNS,
@@ -80,6 +81,24 @@ void test("UI metadata drives renderer and humanizer tool subsets", () => {
 
   for (const name of TOOL_NAMES_WITH_HUMANIZER) {
     assert.equal(TOOL_UI_METADATA[name].humanizer, true);
+  }
+});
+
+void test("every disclosed tool bundle resolves to registered core tools", () => {
+  const registeredTools = CORE_TOOL_NAMES.map((name) => ({ name }));
+  const registeredNames = new Set(CORE_TOOL_NAMES);
+
+  for (const bundleName of ["core", "analysis", "formatting", "structure", "comments", "full"] as const) {
+    const names = TOOL_DISCLOSURE_BUNDLES[bundleName];
+    for (const name of names) {
+      assert.equal(registeredNames.has(name), true, `${bundleName} discloses unregistered tool ${name}`);
+    }
+
+    const disclosedNames = new Set<string>(names);
+    assert.deepEqual(
+      filterToolsForDisclosureBundle(registeredTools, bundleName),
+      registeredTools.filter((tool) => disclosedNames.has(tool.name)),
+    );
   }
 });
 

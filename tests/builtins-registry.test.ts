@@ -228,35 +228,6 @@ void test("slash-command dispatcher owns synchronous and asynchronous command fa
   }
 });
 
-void test("taskpane init waits for local services probe and refreshes capabilities", async () => {
-  const initSource = await readFile(new URL("../src/taskpane/init.ts", import.meta.url), "utf8");
-
-  assert.match(initSource, /let localServicesReady: Promise<void> = Promise\.resolve\(\);/);
-  assert.match(initSource, /await localServicesReady;/);
-  assert.match(
-    initSource,
-    /localServicesReady\s*=\s*probeLocalServices\(\)\.then\(\s*\(result\) => \{[\s\S]*localServicesSnapshot\s*=\s*result;[\s\S]*void refreshCapabilitiesForAllRuntimes\(\);[\s\S]*\},/,
-  );
-});
-
-void test("sidebar utilities menu includes extensions label", async () => {
-  const sidebarSource = await readFile(new URL("../src/ui/pi-sidebar.ts", import.meta.url), "utf8");
-
-  assert.match(sidebarSource, /aria-label=\$\{t\("sidebar\.utilities\.aria"\)\}/);
-  assert.match(sidebarSource, /sidebar\.menu\.extensions/);
-  assert.match(sidebarSource, /sidebar\.menu\.files/);
-  assert.doesNotMatch(sidebarSource, /Extensions…/);
-  assert.doesNotMatch(sidebarSource, /Files…/);
-  assert.doesNotMatch(sidebarSource, /Add-ons…/);
-});
-
-void test("disclosure bar reuses shared toggle rows", async () => {
-  const disclosureSource = await readFile(new URL("../src/ui/disclosure-bar.ts", import.meta.url), "utf8");
-
-  assert.match(disclosureSource, /createToggleRow/);
-  assert.doesNotMatch(disclosureSource, /pi-toggle__track/);
-});
-
 void test("extensions pages expose connections, plugins, and skills in the settings shell", async () => {
   const pagesSource = await readFile(
     new URL("../src/commands/builtins/settings-pages/extensions-pages.ts", import.meta.url),
@@ -282,24 +253,6 @@ void test("extensions pages expose connections, plugins, and skills in the setti
   assert.match(connectionsSource, /Web search/);
   assert.match(pluginsSource, /Installed/);
   assert.match(skillsSource, /Bundled skills/);
-});
-
-void test("context pill headers expose expanded state and controlled body", async () => {
-  const sidebarSource = await readFile(new URL("../src/ui/pi-sidebar.ts", import.meta.url), "utf8");
-
-  assert.match(sidebarSource, /private readonly _contextPillBodyId = "pi-context-pill-body";/);
-  assert.match(sidebarSource, /class="pi-context-pill__header"[\s\S]*aria-controls=\$\{this\._contextPillBodyId\}/);
-  assert.match(sidebarSource, /class="pi-context-pill__header"[\s\S]*aria-expanded=\$\{expanded \? "true" : "false"\}/);
-  assert.match(sidebarSource, /class="pi-context-pill__body" id=\$\{this\._contextPillBodyId\}/);
-});
-
-void test("input paperclip opens Files workspace through sidebar callback", async () => {
-  const inputSource = await readFile(new URL("../src/ui/pi-input.ts", import.meta.url), "utf8");
-  const sidebarSource = await readFile(new URL("../src/ui/pi-sidebar.ts", import.meta.url), "utf8");
-
-  assert.match(inputSource, /pi-open-files/);
-  assert.match(sidebarSource, /onOpenFilesWorkspace/);
-  assert.match(sidebarSource, /@pi-open-files=\$\{this\._onOpenFilesWorkspace\}/);
 });
 
 void test("command-layer contract: recovery commands expose completion, errors, busy policy, and queueing", async () => {
@@ -416,49 +369,6 @@ void test("command-layer contract: recovery commands expose completion, errors, 
   }
 });
 
-void test("resume overlay surfaces recently closed tabs", async () => {
-  const resumeSource = await readFile(new URL("../src/commands/builtins/resume-overlay.ts", import.meta.url), "utf8");
-
-  assert.match(resumeSource, /resume\.recentlyClosed/);
-  assert.match(resumeSource, /getRecentlyClosedItems\?: \(\) => readonly ResumeRecentlyClosedItem\[]/);
-  assert.match(resumeSource, /onReopenRecentlyClosed\?: \(item: ResumeRecentlyClosedItem\) => Promise<boolean>/);
-  assert.match(resumeSource, /resume\.recentlyClosedMeta/);
-});
-
-void test("experimental overlay remains a settings section alias", async () => {
-  const experimentalSource = await readFile(new URL("../src/commands/builtins/experimental-overlay.ts", import.meta.url), "utf8");
-
-  assert.match(experimentalSource, /openSettings\("experimental"\)/);
-  assert.match(experimentalSource, /buildExperimentalFeatureContent/);
-  assert.match(experimentalSource, /createToggleRow/);
-});
-
-void test("settings shell guards navigation and pages adopt shared controls", async () => {
-  const shellSource = await readFile(new URL("../src/ui/settings-shell.ts", import.meta.url), "utf8");
-  const rootSource = await readFile(
-    new URL("../src/commands/builtins/settings-pages/root-page.ts", import.meta.url),
-    "utf8",
-  );
-  const providersSource = await readFile(
-    new URL("../src/commands/builtins/settings-pages/providers-page.ts", import.meta.url),
-    "utf8",
-  );
-  const proxySource = await readFile(
-    new URL("../src/commands/builtins/settings-pages/proxy-page.ts", import.meta.url),
-    "utf8",
-  );
-
-  assert.match(shellSource, /beforeLeave/);
-  assert.match(shellSource, /registerOverlayCloser/);
-  assert.match(shellSource, /buildStackFor/);
-  assert.match(rootSource, /settings\.section\.execution\.auto_mode/);
-  assert.match(rootSource, /settings\.section\.advanced\.fork_label/);
-  assert.match(providersSource, /settings\.warning\.provider_state/);
-  assert.match(proxySource, /createToggleRow/);
-  assert.match(proxySource, /createConfigRow/);
-  assert.match(proxySource, /createCallout/);
-});
-
 void test("slash-command busy policy is centralized and shared across entry points", async () => {
   const keyboardActionsSource = await readFile(
     new URL("../src/taskpane/keyboard-shortcuts/editor-actions.ts", import.meta.url),
@@ -482,20 +392,6 @@ void test("slash-command busy policy is centralized and shared across entry poin
   assert.match(busyPolicySource, /command\.busyAllowed \?\? true/);
   assert.doesNotMatch(busyPolicySource, /INTEGRATIONS_COMMAND_NAME/);
   assert.doesNotMatch(busyPolicySource, /"addons"/);
-});
-
-void test("escape guard scopes widget claims to streaming abort paths", async () => {
-  const escapeGuardSource = await readFile(new URL("../src/utils/escape-guard.ts", import.meta.url), "utf8");
-  const keyboardShortcutsSource = await readFile(new URL("../src/taskpane/keyboard-shortcuts.ts", import.meta.url), "utf8");
-  const inputSource = await readFile(new URL("../src/ui/pi-input.ts", import.meta.url), "utf8");
-
-  assert.match(escapeGuardSource, /export function doesExtensionWidgetClaimEscape/);
-  assert.match(escapeGuardSource, /export function doesUiClaimStreamingEscape/);
-  assert.match(escapeGuardSource, /#pi-widget-slot:not\(:empty\)/);
-  assert.match(escapeGuardSource, /#pi-widget-slot-below:not\(:empty\)/);
-
-  assert.match(keyboardShortcutsSource, /doesUiClaimStreamingEscape/);
-  assert.match(inputSource, /doesUiClaimStreamingEscape/);
 });
 
 void test("backups page includes manual full-backup action", async () => {
@@ -597,18 +493,4 @@ void test("extension registry migrates legacy v1 entries to v2 permissions", asy
 
   const migrated = settings.readRaw(EXTENSIONS_REGISTRY_STORAGE_KEY);
   assert.deepEqual(migrated, { version: 2, items: entries });
-});
-
-void test("tool disclosure bundles remain centralized in capabilities metadata", async () => {
-  const disclosureSource = await readFile(new URL("../src/context/tool-disclosure.ts", import.meta.url), "utf8");
-  assert.match(disclosureSource, /type ToolDisclosureBundleId/);
-  assert.doesNotMatch(disclosureSource, /TOOL_DISCLOSURE_BUNDLES\s*=/);
-
-  const capabilitiesSource = await readFile(new URL("../src/tools/capabilities.ts", import.meta.url), "utf8");
-  assert.match(capabilitiesSource, /TOOL_DISCLOSURE_BUNDLES/);
-  assert.match(capabilitiesSource, /core:\s*buildCoreDisclosureBundle/);
-  assert.match(capabilitiesSource, /analysis:\s*buildCoreDisclosureBundle/);
-  assert.match(capabilitiesSource, /formatting:\s*buildCoreDisclosureBundle/);
-  assert.match(capabilitiesSource, /structure:\s*buildCoreDisclosureBundle/);
-  assert.match(capabilitiesSource, /comments:\s*buildCoreDisclosureBundle/);
 });
