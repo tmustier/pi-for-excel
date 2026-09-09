@@ -44,3 +44,25 @@ jobs:
 
       - name: Validate manifest
         run: npm run validate
+
+  browser-contracts:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install chromium --with-deps
+
+      - name: Browser contracts
+        run: npm run test:browser

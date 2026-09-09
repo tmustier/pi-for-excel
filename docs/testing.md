@@ -38,8 +38,14 @@ Use real Chromium for focus, bubbling, layout and accessibility behavior. Use lo
 
 Behavior changes still require the model-driven acceptance described in `coding-standards.md`: current approved model, actual tools, independent workbook assertions and scratch cleanup. Record revision, provider/model, thinking level, prompt, observed tools, assertions and untested paths. Direct probes and deterministic tests support this gate; they do not replace it.
 
+## Browser contracts
+
+Run `npm run test:browser` for taskpane behavior in real headless Chromium, or `npm run test:all` for the deterministic and browser suites together. Install the pinned browser once with `npx playwright install chromium` if it is not already cached.
+
+Add a browser contract under `tests/browser/` when the capability depends on real DOM entry, event propagation, focus, accessibility or rendered visibility. Use the `*.browser-test.ts` suffix so `npm test` remains browser-free. Enter through user-visible controls and assert the visible outcome rather than implementation names.
+
 ## Foundation status
 
-This change establishes full test discovery, persistent lint-rule contracts, command-layer completion and rejection tests, validated compaction preferences, and sandbox LLM request validation.
+This change establishes full test discovery, persistent lint-rule contracts, command-layer completion and rejection tests, browser taskpane navigation contracts, validated compaction preferences, and sandbox LLM request validation.
 
-The broader refactor is not complete. Browser command-entry contracts, session restart and cross-workbook isolation contracts, and the public write/list/restore/read-back chain still need work before the corresponding ownership refactors. Existing source-coupled tests and host emulators remain migration work, not proof of acceptance.
+The broader refactor is not complete. Session restart and cross-workbook isolation contracts, and the public write/list/restore/read-back chain still need work before the corresponding ownership refactors. Existing source-coupled tests and host emulators remain migration work, not proof of acceptance.

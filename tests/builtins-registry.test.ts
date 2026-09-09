@@ -252,60 +252,6 @@ void test("extensions hub connections tab includes MCP test flow", async () => {
   assert.match(source, /probeMcpServer/);
 });
 
-void test("taskpane init wires Files workspace opener", async () => {
-  const initSource = await readFile(new URL("../src/taskpane/init.ts", import.meta.url), "utf8");
-
-  assert.match(initSource, /showFilesWorkspaceDialog/);
-  assert.match(
-    initSource,
-    /sidebar\.onOpenFilesWorkspace\s*=\s*\(\)\s*=>\s*\{\s*void showFilesWorkspaceDialog\(\);\s*\};/,
-  );
-});
-
-void test("taskpane init wires extensions menu opener", async () => {
-  const initSource = await readFile(new URL("../src/taskpane/init.ts", import.meta.url), "utf8");
-
-  assert.match(initSource, /const openExtensionsHub = \(tab\?: ExtensionsHubTab\): Promise<void> =>/);
-  assert.match(initSource, /openSettings\(tab \?\? "connections"\)/);
-  assert.match(initSource, /extensionManager/);
-  assert.match(initSource, /configureSettingsPages/);
-  assert.match(initSource, /registerBuiltins\([\s\S]*openExtensionsHub/);
-  assert.match(initSource, /sidebar\.onOpenExtensions\s*=\s*\(\)\s*=>\s*\{\s*void openExtensionsHub\(\);\s*\};/);
-});
-
-void test("taskpane init wires gear settings to unified settings overlay", async () => {
-  const initSource = await readFile(new URL("../src/taskpane/init.ts", import.meta.url), "utf8");
-
-  assert.match(initSource, /openSettings/);
-  assert.match(
-    initSource,
-    /sidebar\.onOpenSettings\s*=\s*\(\)\s*=>\s*\{\s*void openSettings\(\);\s*\};/,
-  );
-  assert.match(initSource, /configureSettingsPages\(\{[\s\S]*getExecutionMode/);
-  assert.match(initSource, /configureSettingsPages\(\{[\s\S]*setExecutionMode/);
-  assert.match(initSource, /configureSettingsPages\(\{[\s\S]*getModelSwitchBehavior/);
-  assert.match(initSource, /configureSettingsPages\(\{[\s\S]*setModelSwitchBehavior/);
-});
-
-void test("taskpane init mounts proxy banner and reacts to proxy state changes", async () => {
-  const initSource = await readFile(new URL("../src/taskpane/init.ts", import.meta.url), "utf8");
-
-  assert.match(initSource, /createProxyBanner/);
-  assert.match(initSource, /document\.addEventListener\("pi:proxy-state-changed"/);
-  assert.match(initSource, /proxyBanner\.update\(getProxyState\(\)\)/);
-});
-
-void test("status bar keeps model, thinking, context, and mode without rules\/proxy badges", async () => {
-  const statusBarSource = await readFile(new URL("../src/taskpane/status-bar.ts", import.meta.url), "utf8");
-
-  assert.match(statusBarSource, /pi-status-model/);
-  assert.match(statusBarSource, /pi-status-thinking/);
-  assert.match(statusBarSource, /pi-status-ctx__pct/);
-  assert.match(statusBarSource, /pi-status-mode/);
-  assert.doesNotMatch(statusBarSource, /pi-status-rules/);
-  assert.doesNotMatch(statusBarSource, /pi-status-proxy/);
-});
-
 void test("sidebar utilities menu includes extensions label", async () => {
   const sidebarSource = await readFile(new URL("../src/ui/pi-sidebar.ts", import.meta.url), "utf8");
 
@@ -483,20 +429,13 @@ void test("command-layer contract: recovery commands expose completion, errors, 
   }
 });
 
-void test("resume overlay surfaces recently closed tabs and taskpane wires reopen callback", async () => {
+void test("resume overlay surfaces recently closed tabs", async () => {
   const resumeSource = await readFile(new URL("../src/commands/builtins/resume-overlay.ts", import.meta.url), "utf8");
-  const initSource = await readFile(new URL("../src/taskpane/init.ts", import.meta.url), "utf8");
 
   assert.match(resumeSource, /resume\.recentlyClosed/);
   assert.match(resumeSource, /getRecentlyClosedItems\?: \(\) => readonly ResumeRecentlyClosedItem\[]/);
   assert.match(resumeSource, /onReopenRecentlyClosed\?: \(item: ResumeRecentlyClosedItem\) => Promise<boolean>/);
   assert.match(resumeSource, /resume\.recentlyClosedMeta/);
-
-  assert.match(initSource, /getRecentlyClosedItems:\s*\(\)\s*=>\s*recentlyClosed\.snapshot\(\)/);
-  assert.match(initSource, /onReopenRecentlyClosed:\s*async \(item\) =>/);
-  assert.match(initSource, /const reopenRecentlyClosedById = async \(recentlyClosedId: string\): Promise<boolean> =>/);
-  assert.match(initSource, /recentlyClosed\.removeById\(recentlyClosedId\)/);
-  assert.match(initSource, /if \(reopenResult === "failed"\) \{\s*recentlyClosed\.push\(item\);\s*\}/);
 });
 
 void test("experimental overlay remains a settings section alias", async () => {
@@ -538,7 +477,6 @@ void test("slash-command busy policy is centralized and shared across entry poin
     new URL("../src/taskpane/keyboard-shortcuts/editor-actions.ts", import.meta.url),
     "utf8",
   );
-  const initSource = await readFile(new URL("../src/taskpane/init.ts", import.meta.url), "utf8");
   const slashExecutionSource = await readFile(
     new URL("../src/commands/slash-command-execution.ts", import.meta.url),
     "utf8",
@@ -546,8 +484,6 @@ void test("slash-command busy policy is centralized and shared across entry poin
   const busyPolicySource = await readFile(new URL("../src/commands/busy-command-policy.ts", import.meta.url), "utf8");
 
   assert.match(keyboardActionsSource, /executeSlashCommand/);
-  assert.match(initSource, /executeSlashCommand/);
-
   assert.match(slashExecutionSource, /isBusyAllowedCommand/);
   assert.match(slashExecutionSource, /commandRegistry\.get\(options\.name\)/);
 
@@ -565,7 +501,6 @@ void test("escape guard scopes widget claims to streaming abort paths", async ()
   const escapeGuardSource = await readFile(new URL("../src/utils/escape-guard.ts", import.meta.url), "utf8");
   const keyboardShortcutsSource = await readFile(new URL("../src/taskpane/keyboard-shortcuts.ts", import.meta.url), "utf8");
   const inputSource = await readFile(new URL("../src/ui/pi-input.ts", import.meta.url), "utf8");
-  const initSource = await readFile(new URL("../src/taskpane/init.ts", import.meta.url), "utf8");
 
   assert.match(escapeGuardSource, /export function doesExtensionWidgetClaimEscape/);
   assert.match(escapeGuardSource, /export function doesUiClaimStreamingEscape/);
@@ -574,16 +509,6 @@ void test("escape guard scopes widget claims to streaming abort paths", async ()
 
   assert.match(keyboardShortcutsSource, /doesUiClaimStreamingEscape/);
   assert.match(inputSource, /doesUiClaimStreamingEscape/);
-  assert.match(initSource, /doesOverlayClaimEscape\(document\.activeElement\)/);
-});
-
-void test("taskpane init wires recovery overlay opener", async () => {
-  const initSource = await readFile(new URL("../src/taskpane/init.ts", import.meta.url), "utf8");
-
-  assert.match(initSource, /openSettings\("backups"\)/);
-  assert.match(initSource, /const openRecoveryDialog = async \(\): Promise<void> =>/);
-  assert.match(initSource, /sidebar\.onOpenRecovery\s*=\s*\(\)\s*=>\s*\{\s*void openRecoveryDialog\(\);\s*\};/);
-  assert.match(initSource, /onCreateManualFullBackup:\s*async \(\)\s*=>\s*\{\s*return createManualFullBackup\(\);\s*\}/);
 });
 
 void test("backups page includes manual full-backup action", async () => {
