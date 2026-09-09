@@ -12,6 +12,7 @@ import type { Agent, AgentMessage } from "@earendil-works/pi-agent-core";
 import type { SessionData } from "../storage/local/types.js";
 import type { SessionsStore } from "../storage/local/sessions-store.js";
 import type { SettingsStore } from "../storage/local/settings-store.js";
+import type { SpreadsheetHost } from "../host/types.js";
 
 import { getCurrentSpreadsheetHost } from "../host/index.js";
 import { extractTextFromContent } from "../utils/content.js";
@@ -117,9 +118,10 @@ export async function setupSessionPersistence(opts: {
   models: Models;
   initialSessionId?: string;
   autoRestoreLatest?: boolean;
+  spreadsheetHost?: Pick<SpreadsheetHost, "getWorkbookContext" | "sessionStorage">;
 }): Promise<SessionPersistenceController> {
   const { agent, sessions, settings } = opts;
-  const spreadsheetHost = getCurrentSpreadsheetHost();
+  const spreadsheetHost = opts.spreadsheetHost ?? getCurrentSpreadsheetHost();
 
   async function resolveWorkbookId(): Promise<string | null> {
     try {
