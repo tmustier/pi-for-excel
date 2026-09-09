@@ -32,6 +32,7 @@ import {
 import { createConvertToLlm } from "../messages/convert-to-llm.js";
 import { effectiveToolOutputLimits } from "../context/window-budgets.js";
 import { findTrailingContextOverflowError } from "../compaction/overflow-recovery.js";
+import { readAutoCompactionEnabled } from "../compaction/settings.js";
 import { runCompactCommand } from "../commands/builtins/export.js";
 import { getFilesWorkspace } from "../files/workspace.js";
 import { ConnectionManager } from "../connections/manager.js";
@@ -254,12 +255,7 @@ export async function initTaskpane(opts: {
   }
 
   // 1b. Auto-compaction (Pi defaults to enabled)
-  let autoCompactEnabled = true;
-  try {
-    autoCompactEnabled = (await settings.get<boolean>("compaction.enabled")) ?? true;
-  } catch {
-    autoCompactEnabled = true;
-  }
+  const autoCompactEnabled = await readAutoCompactionEnabled(settings);
 
   // 1c. Security warning: remote proxies can see your prompts + credentials.
   try {

@@ -1,13 +1,30 @@
 import type { AgentToolResult } from "@earendil-works/pi-agent-core";
-import { Kind, Type, type TSchema } from "@sinclair/typebox";
+import { Kind, Type, type Static, type TSchema } from "@sinclair/typebox";
+import { Value } from "@sinclair/typebox/value";
 
-import type { HttpRequestOptions, LlmCompletionRequest } from "../../commands/extension-api.js";
+import type {
+  HttpRequestOptions,
+  LlmCompletionRequest,
+  LlmCompletionResult,
+} from "../../commands/extension-api.js";
 
 function isExtensionsSandboxRuntimeHelpersPayloadShape(value: DynamicValue): value is DynamicObject {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 type WidgetPlacement = "above-input" | "below-input";
+
+const sandboxLlmCompletionRequestSchema = Type.Object({
+  model: Type.Optional(Type.String()),
+  systemPrompt: Type.Optional(Type.String()),
+  messages: Type.Array(Type.Object({
+    role: Type.Union([Type.Literal("user"), Type.Literal("assistant")]),
+    content: Type.String(),
+  }, { additionalProperties: true })),
+  maxTokens: Type.Optional(Type.Integer({ minimum: 1 })),
+}, { additionalProperties: true });
+
+type SandboxLlmCompletionRequestDto = Static<typeof sandboxLlmCompletionRequestSchema>;
 
 export function getErrorMessage(error: DynamicValue): string {
   if (error instanceof Error && error.message.trim().length > 0) {
@@ -78,40 +95,28 @@ export function asBooleanOrUndefined(value: DynamicValue): boolean | undefined {
 }
 
 export function parseSandboxLlmCompletionRequest(requestRaw: DynamicValue): LlmCompletionRequest {
-  if (!isExtensionsSandboxRuntimeHelpersPayloadShape(requestRaw)) {
-    throw new Error("llm_complete request must be an object.");
+  if (!Value.Check(sandboxLlmCompletionRequestSchema, requestRaw)) {
+    const error = Value.Errors(sandboxLlmCompletionRequestSchema, requestRaw).First();
+    const field = error?.path ? error.path.replaceAll("/", ".") : "";
+    const reason = error?.message ?? "request does not match the expected schema";
+    throw new Error(`llm_complete request${field} is invalid: ${reason}.`);
   }
 
-  const messagesRaw = requestRaw.messages;
-  if (!Array.isArray(messagesRaw)) {
-    throw new Error("llm_complete request.messages must be an array.");
-  }
-
-  const messages: LlmCompletionRequest["messages"] = [];
-  for (const value of messagesRaw) {
-    if (!isExtensionsSandboxRuntimeHelpersPayloadShape(value)) {
-      throw new Error("llm_complete messages entries must be objects.");
-    }
-
-    const role = value.role;
-    const content = value.content;
-    if ((role !== "user" && role !== "assistant") || typeof content !== "string") {
-      throw new Error("llm_complete messages entries must contain role + string content.");
-    }
-
-    messages.push({ role, content });
-  }
-
-  const model = typeof requestRaw.model === "string" ? requestRaw.model : undefined;
-  const systemPrompt = typeof requestRaw.systemPrompt === "string" ? requestRaw.systemPrompt : undefined;
-  const maxTokens = typeof requestRaw.maxTokens === "number" ? requestRaw.maxTokens : undefined;
-
+  const request: SandboxLlmCompletionRequestDto = requestRaw;
   return {
-    ...(model !== undefined ? { model } : {}),
-    ...(systemPrompt !== undefined ? { systemPrompt } : {}),
-    messages,
-    ...(maxTokens !== undefined ? { maxTokens } : {}),
+    ...(request.model !== undefined ? { model: request.model } : {}),
+    ...(request.systemPrompt !== undefined ? { systemPrompt: request.systemPrompt } : {}),
+    messages: request.messages.map(({ role, content }) => ({ role, content })),
+    ...(request.maxTokens !== undefined ? { maxTokens: request.maxTokens } : {}),
   };
+}
+
+export async function dispatchSandboxLlmCompletion(
+  paramsRaw: DynamicValue,
+  complete: (request: LlmCompletionRequest) => Promise<LlmCompletionResult>,
+): Promise<LlmCompletionResult> {
+  const payload = asSandboxPayload(paramsRaw, "llm_complete params");
+  return complete(parseSandboxLlmCompletionRequest(payload.request));
 }
 
 function asHttpMethodOrUndefined(value: DynamicValue): HttpRequestOptions["method"] | undefined {

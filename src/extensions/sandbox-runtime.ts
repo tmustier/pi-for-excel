@@ -57,11 +57,11 @@ import {
   asNonEmptyString,
   asSandboxPayload,
   asWidgetPlacementOrUndefined,
+  dispatchSandboxLlmCompletion,
   getErrorMessage,
   normalizeSandboxToolParameters,
   normalizeSandboxToolResult,
   parseSandboxHttpRequestOptions,
-  parseSandboxLlmCompletionRequest,
   sanitizeText,
 } from "./sandbox/runtime-helpers.js";
 
@@ -817,9 +817,7 @@ class SandboxRuntimeHost {
         case "llm_complete": {
           this.assertCapability("llm.complete");
 
-          const payload = asSandboxPayload(params, "llm_complete params");
-          const completionRequest = parseSandboxLlmCompletionRequest(payload.request);
-          const result = await this.options.llmComplete(completionRequest);
+          const result = await dispatchSandboxLlmCompletion(params, this.options.llmComplete);
           this.sendResponse(requestId, true, result);
           return;
         }
