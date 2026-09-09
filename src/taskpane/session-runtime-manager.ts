@@ -173,9 +173,7 @@ export class SessionRuntimeManager {
     this.refreshRequested = true;
     if (this.refreshPromise) return this.refreshPromise;
 
-    this.refreshPromise = this.runCapabilityRefreshes().finally(() => {
-      this.refreshPromise = null;
-    });
+    this.refreshPromise = this.runCapabilityRefreshes();
     return this.refreshPromise;
   }
 
@@ -239,17 +237,24 @@ export class SessionRuntimeManager {
   }
 
   private async runCapabilityRefreshes(): Promise<void> {
-    while (this.refreshRequested) {
-      this.refreshRequested = false;
-      const runtimes = this.listRuntimes();
+    try {
+      while (this.refreshRequested) {
+        this.refreshRequested = false;
+        const runtimes = this.listRuntimes();
 
-      for (const runtime of runtimes) {
-        try {
-          await runtime.refreshCapabilities();
-        } catch (error) {
-          this.warnCapabilityRefresh(error);
+        for (const runtime of runtimes) {
+          try {
+            await runtime.refreshCapabilities();
+          } catch (error) {
+            this.warnCapabilityRefresh(error);
+          }
         }
       }
+    } finally {
+      // Release the in-flight slot before notifying listeners so a refresh
+      // requested from a snapshot listener starts a new pass instead of being
+      // coalesced into this finished one.
+      this.refreshPromise = null;
     }
 
     this.emit();

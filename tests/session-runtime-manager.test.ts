@@ -169,3 +169,41 @@ void test("capability refresh is owned by the lifecycle and visits every runtime
   assert.equal(first.getRefreshCount(), 1);
   assert.equal(second.getRefreshCount(), 1);
 });
+
+void test("capability refresh requested during a pass runs again and a listener-triggered refresh is not lost", async () => {
+  const first = createRuntimeHarness("first");
+  const manager = new SessionRuntimeManager({
+    createRuntime: () => Promise.reject(new Error("factory should not run")),
+  });
+  manager.registerRuntime(first.runtime, { activate: true });
+
+  let release: () => void = () => {};
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let refreshCount = 0;
+  first.runtime.refreshCapabilities = async () => {
+    refreshCount += 1;
+    if (refreshCount === 1) await gate;
+  };
+
+  const inFlight = manager.refreshCapabilities();
+  const coalesced = manager.refreshCapabilities();
+  release();
+  await Promise.all([inFlight, coalesced]);
+  assert.equal(refreshCount, 2, "a request during an in-flight pass must run a second pass");
+
+  let listenerRequests = 0;
+  let armed = false;
+  const unsubscribe = manager.subscribe(() => {
+    if (!armed || listenerRequests > 0) return;
+    listenerRequests += 1;
+    void manager.refreshCapabilities();
+  });
+  armed = true;
+  await manager.refreshCapabilities();
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  unsubscribe();
+  assert.equal(listenerRequests, 1);
+  assert.equal(refreshCount, 4, "a refresh requested from a snapshot listener must execute");
+});
