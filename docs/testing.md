@@ -46,6 +46,6 @@ Add a browser contract under `tests/browser/` when the capability depends on rea
 
 ## Foundation status
 
-This change establishes full test discovery, persistent lint-rule contracts, command-layer completion and rejection tests, browser taskpane navigation contracts, validated compaction preferences, and sandbox LLM request validation.
+The foundation now includes full test discovery, persistent lint-rule contracts, command-layer completion and rejection tests, real-Chromium taskpane navigation and failure contracts, the session restart and cross-workbook isolation contract, the write, history, restore and read-back workbook contract, validated compaction preferences, and sandbox LLM request validation.
 
-The broader refactor is not complete. Session restart and cross-workbook isolation contracts, and the public write/list/restore/read-back chain still need work before the corresponding ownership refactors. Existing source-coupled tests and host emulators remain migration work, not proof of acceptance.
+Deterministic contracts use in-memory storage and a small labelled range double at the host boundary. They do not establish Office or WPS workbook semantics; real Excel or WPS acceptance remains required for behavior changes on those paths. Remaining source-coupled tests and fake-DOM suites are listed in the fake-DOM classification and are migration work, not proof of acceptance.

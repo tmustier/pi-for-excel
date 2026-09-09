@@ -159,7 +159,7 @@ void test("sidebar Files and Extensions buttons open their views", async () => {
 void test("proxy state changes update the proxy banner", async () => {
   await withTaskpane(async (page) => {
     const banner = page.locator(".pi-proxy-banner");
-    await page.waitForTimeout(2_000);
+    await banner.waitFor({ state: "attached" });
     await page.evaluate(() => {
       document.dispatchEvent(new CustomEvent("pi:proxy-state-changed", {
         detail: { state: "not-detected" },
