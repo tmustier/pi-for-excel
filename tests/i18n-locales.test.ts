@@ -1,3 +1,5 @@
+// Static contract: locale key parity and source-level t() usage are dependency restrictions;
+// runtime behavior cannot exhaustively prove that every shipped string remains localized.
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { readFileSync, readdirSync, statSync } from "node:fs";

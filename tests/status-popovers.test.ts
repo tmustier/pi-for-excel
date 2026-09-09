@@ -37,7 +37,9 @@ void test("thinking popover remains above its anchor when it fits", () => {
   });
 });
 
-void test("status popover CSS constrains the shell and scrolls its choices", () => {
+// Static contract: these declarations encode the CSS overflow ownership required by the
+// popover shell; the separate layout tests cover computed placement, while rendering belongs in Chromium.
+void test("static contract: status popover shell constrains height and delegates scrolling to its list", () => {
   const css = readFileSync("src/ui/theme/components/status-bar.css", "utf8");
 
   assert.match(

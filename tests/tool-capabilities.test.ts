@@ -1,7 +1,5 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { readFile } from "node:fs/promises";
-
 import {
   buildCoreToolPromptLines,
   CORE_TOOL_CAPABILITIES,
@@ -15,6 +13,9 @@ import {
 } from "../src/tools/capabilities.ts";
 import { CORE_TOOL_NAMES } from "../src/tools/names.ts";
 import { buildSystemPrompt } from "../src/prompt/system-prompt.ts";
+import { humanizeToolInput } from "../src/ui/humanize-params.ts";
+import { getToolRenderer } from "../src/ui/messages/tool-renderer-registry.ts";
+import "../src/ui/tool-renderers.ts";
 
 void test("core capability metadata covers all core tools", () => {
   assert.equal(CORE_TOOL_CAPABILITIES.length, CORE_TOOL_NAMES.length);
@@ -37,14 +38,31 @@ void test("system prompt core tool section is generated from capability metadata
   }
 });
 
-void test("UI tool registration derives from centralized UI metadata", async () => {
-  const rendererSource = await readFile(new URL("../src/ui/tool-renderers.ts", import.meta.url), "utf8");
-  assert.match(rendererSource, /import\s*\{\s*TOOL_NAMES_WITH_RENDERER/);
-  assert.match(rendererSource, /CUSTOM_RENDERED_TOOL_NAMES:\s*readonly SupportedToolName\[\]\s*=\s*TOOL_NAMES_WITH_RENDERER/);
+void test("every core tool has a specific renderer and humanized representative input", () => {
+  const representativeInput = {
+    action: "list",
+    cell: "Sheet1!A1",
+    content: "Review this calculation",
+    formula: "=SUM(B2:B4)",
+    level: "workbook",
+    name: "financial-modeling",
+    query: "revenue",
+    range: "Sheet1!A1:B4",
+    sheet: "Sheet1",
+    source_range: "Sheet1!A1:B4",
+    start_cell: "Sheet1!A1",
+    values: [["Revenue", 42]],
+  };
 
-  const humanizerSource = await readFile(new URL("../src/ui/humanize-params.ts", import.meta.url), "utf8");
-  assert.match(humanizerSource, /TOOL_NAMES_WITH_HUMANIZER/);
-  assert.match(humanizerSource, /HUMANIZABLE_TOOL_NAME_SET/);
+  for (const name of CORE_TOOL_NAMES) {
+    const renderer = getToolRenderer(name);
+    assert.ok(renderer, `Core tool ${name} must have a registered renderer`);
+    assert.notEqual(
+      humanizeToolInput(name, representativeInput),
+      null,
+      `Core tool ${name} must humanize representative input instead of showing generic JSON`,
+    );
+  }
 
   const uniqueNames = new Set(UI_TOOL_NAMES);
   assert.equal(uniqueNames.size, UI_TOOL_NAMES.length);

@@ -262,7 +262,9 @@ void test("extensions hub plugins tab renders installed/extensions sections", ()
     assert.equal(texts.includes("Install"), true);
     assert.equal(texts.includes("Advanced"), false, "Advanced section should be removed");
     assert.equal(texts.includes("Snake"), true);
+    assert.equal(texts.includes(`${builtinStatus.sourceLabel} · ${builtinStatus.runtimeLabel}`), true);
     assert.equal(texts.includes("Broken Inline"), true);
+    assert.equal(texts.includes(`${inlineErrorStatus.sourceLabel} · ${inlineErrorStatus.runtimeLabel}`), true);
   } finally {
     restore();
   }

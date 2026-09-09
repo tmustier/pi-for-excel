@@ -1,3 +1,5 @@
+// Static contract: vercel.json must remain wired to the deploy-policy script;
+// script behavior alone cannot detect a missing or redirected configuration dependency.
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";

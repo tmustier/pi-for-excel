@@ -1,3 +1,5 @@
+// Static contract: generated manifest values and package-script wiring are build artifacts;
+// runtime origin resolution alone cannot prove the checked-in dependency remains connected.
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";

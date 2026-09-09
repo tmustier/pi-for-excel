@@ -1,3 +1,5 @@
+// Static contract: the Vite aliases checked below are browser bundle dependency restrictions;
+// model-ordering behavior cannot prove Node-only provider modules stay excluded from the build.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
