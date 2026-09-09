@@ -19,7 +19,7 @@ This repository deliberately enables only the following reviewed rules at error 
 - `anti-slop/no-module-mocking`
 - `anti-slop/no-widen-then-assert`
 
-This is not the full anti-slop preset. The other vendored rules are source for possible rule-by-rule review, not active repository policy. In particular, local policy does not globally ban raw boundary checks, conditional optional object spreads, names containing `shape`, or `Reflect` calls. The two syntax-based `unknown` signature rules are disabled because `DynamicValue` can evade them, making their apparent coverage misleading. The optional Effect plugin is vendored for source fidelity but is not registered because this project does not directly depend on Effect.
+This is not the full anti-slop preset. The other vendored rules are source for possible rule-by-rule review, not active repository policy. In particular, local policy does not globally ban raw boundary checks, conditional optional object spreads, names containing `shape`, or reflection in test harnesses. Production application code contains no `Reflect.get` or `Reflect.apply`. The syntax-based `unknown` rules remain disabled while `DynamicValue` can evade them, making their apparent coverage misleading. The optional Effect plugin is vendored for source fidelity but is not registered because this project does not directly depend on Effect.
 
 Application lint covers root TypeScript, `src/**/*.ts`, and both TypeScript and MJS tests. The vendored plugin is ignored by application lint. `tests/anti-slop-lint.test.mjs` invokes the real pinned Oxlint CLI with positive and negative TS/MJS fixtures for every enabled policy; changing enabled rules requires updating that contract deliberately.
 

@@ -23,12 +23,13 @@ This is not the full upstream anti-slop preset. The vendored plugin remains an i
 
 In particular:
 
-- `no-unknown-parameters` and `no-unknown-returns` are not enabled. The current `DynamicValue` alias can conceal the syntax they inspect, so global enforcement would overstate boundary safety. The existing ESLint restriction on direct `unknown` syntax remains in force until a coordinated boundary migration replaces `DynamicValue` with honest raw-input types and concrete decoders.
-- Runtime `typeof` checks and small object checks remain valid boundary parsing tools. A primitive check alone does not establish a domain contract.
-- Conditional object spreads remain valid where they preserve omission under `exactOptionalPropertyTypes`.
-- Reflection is not globally banned. Remove unnecessary `Reflect` use as owning host adapters become typed; add a restriction only if the remaining cases support a precise rule.
+- The `no-unknown-*` rules are not enabled while `DynamicValue` exists. The alias can conceal the syntax they inspect, so global enforcement would overstate boundary safety. The existing ESLint restriction on direct `unknown` syntax remains in force until a coordinated boundary migration replaces the alias with honest raw-input types and concrete decoders.
+- Runtime `typeof` checks and small parser primitives remain valid boundary tools. An object check alone does not establish a domain contract; concrete parsers own domain shapes.
+- `filter().map()`, object parameters, clear conditional object spreads, and descriptive symbol names are not banned by style alone.
+- Production code uses typed property access rather than `Reflect.get` or `Reflect.apply`. Test harnesses still use reflection to install host globals and exercise malformed JavaScript calls, so the rules are not enabled across the repository.
 - Return annotations are required where they make exported or public contracts clearer, not as a blanket anti-slop principle for every private helper.
 - Assertions do not require boilerplate safety comments. Unavoidable interop assertions and lint suppressions need a concrete local invariant, while ordinary code should narrow or parse instead.
+- The known-value-widening rule currently also rejects useful explicit public return types and dictionary contracts, and chained assertions remain in test-only DOM interop. Enable neither until the architecture can comply without concealing necessary contracts.
 
 There are no blanket exemptions for existing practice. If an enabled rule finds existing code, either correct the harmful pattern or review a narrow, documented exception based on the rule's actual false positive. Do not add broad baselines, directory-wide disables, or repetitive safety comments.
 

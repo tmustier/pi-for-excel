@@ -76,8 +76,8 @@ Notes for agents working in this repo.
 - If unavoidable: `// @ts-expect-error -- <reason>` with a real reason.
 - No explicit `any`, `as any`, non-null assertions, or direct `unknown` syntax.
 - Use `DynamicValue` only at true external/runtime boundaries, then parse/refine into concrete domain types before values flow inward.
-- Do not add generic object/record guards (`isRecord`, `isObjectValue`, `isPlainObject`, etc.); write concrete parsers or domain-specific predicates instead.
-- Type assertions and lint suppressions must stay local and explain the safety invariant.
+- Small parser primitives are allowed, but an object check alone does not establish a domain contract. Write concrete parsers for domain shapes.
+- Type assertions and lint suppressions must stay local and explain the safety invariant; do not add blanket safety comments.
 
 ## Verification
 
