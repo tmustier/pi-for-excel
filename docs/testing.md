@@ -48,4 +48,8 @@ Add a browser contract under `tests/browser/` when the capability depends on rea
 
 The foundation now includes full test discovery, persistent lint-rule contracts, command-layer completion and rejection tests, real-Chromium taskpane navigation and failure contracts, the session restart and cross-workbook isolation contract, the write, history, restore and read-back workbook contract, validated compaction preferences, and sandbox LLM request validation.
 
-Deterministic contracts use in-memory storage and a small labelled range double at the host boundary. They do not establish Office or WPS workbook semantics; real Excel or WPS acceptance remains required for behavior changes on those paths. Remaining source-coupled tests and fake-DOM suites are listed in the fake-DOM classification and are migration work, not proof of acceptance.
+Deterministic contracts use in-memory storage and a small labelled range double at the host boundary. They do not establish Office or WPS workbook semantics; real Excel or WPS acceptance remains required for behavior changes on those paths.
+
+The only tests that still read repository source are labelled static contracts (CSS, Vite configuration, locale parity, documentation drift, and security policy files). Fake-DOM suites have been replaced by Chromium contracts under `tests/browser/`.
+
+Persistence contracts follow one rule: corrupt persisted data falls back to a documented default, but a failed read is never treated as an absent value on a path that writes, classifies sessions or workbooks, or gates a capability. A committed workbook mutation is never reported as failed because audit or recovery persistence failed. New readers and stores must add the corresponding read-failure and corrupt-value contracts.
