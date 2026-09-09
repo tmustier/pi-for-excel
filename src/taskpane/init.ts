@@ -172,12 +172,12 @@ import {
 import { showWelcomeLogin } from "./welcome-login.js";
 import {
   SessionRuntimeManager,
+  type CreateRuntimeOptions,
   type SessionRuntime,
 } from "./session-runtime-manager.js";
 import {
   awaitCredentialRestoreForStartup,
   awaitWithTimeout,
-  createAsyncCoalescer,
   createRuntimeToolFingerprint,
   isLikelyCorsErrorMessage,
   shouldApplyRuntimeToolUpdate,
@@ -553,10 +553,13 @@ export async function initTaskpane(opts: {
     }
   };
 
-  const runtimeManager = new SessionRuntimeManager(sidebar);
+  const runtimeManager = new SessionRuntimeManager({
+    createRuntime: buildSessionRuntime,
+    warnCapabilityRefresh: (error) => {
+      console.warn("[pi] Failed to refresh runtime capabilities:", error);
+    },
+  });
   const abortedAgents = new WeakSet<Agent>();
-  const runtimeCapabilityRefreshers = new Map<string, () => Promise<void>>();
-  const runtimeActiveIntegrationIds = new Map<string, string[]>();
   const recentlyClosed = new RecentlyClosedStack(10);
 
   const getActiveRuntime = () => runtimeManager.getActiveRuntime();
@@ -749,42 +752,48 @@ export async function initTaskpane(opts: {
     focusChatInputSoon();
   });
 
-  runtimeManager.subscribe((tabs) => {
-    sidebar.sessionTabs = tabs;
-    sidebar.requestUpdate();
+  runtimeManager.subscribe((snapshot) => {
+    sidebar.sessionTabs = snapshot.tabs;
 
-    const activeRuntimeId = tabs.find((tab) => tab.isActive)?.runtimeId ?? null;
-    if (activeRuntimeId !== previousActiveRuntimeId) {
-      previousActiveRuntimeId = activeRuntimeId;
+    if (snapshot.activeRuntimeId !== previousActiveRuntimeId) {
+      const previousRuntime = previousActiveRuntimeId
+        ? runtimeManager.getRuntime(previousActiveRuntimeId)
+        : null;
+      previousRuntime?.queueDisplay.detach();
+
+      previousActiveRuntimeId = snapshot.activeRuntimeId;
+      const activeRuntime = runtimeManager.getActiveRuntime();
+      if (activeRuntime) {
+        sidebar.agent = activeRuntime.agent;
+        sidebar.syncFromAgent();
+      }
+      sidebar.requestUpdate();
+
+      if (activeRuntime) {
+        const activeRuntimeId = activeRuntime.runtimeId;
+        requestAnimationFrame(() => {
+          const activeNow = runtimeManager.getActiveRuntime();
+          if (!activeNow || activeNow.runtimeId !== activeRuntimeId) return;
+          activeNow.queueDisplay.attach(sidebar);
+        });
+      }
+
       document.dispatchEvent(new CustomEvent("pi:active-runtime-changed"));
-      if (activeRuntimeId && !suppressNextInputAutofocus) {
+      if (snapshot.activeRuntimeId && !suppressNextInputAutofocus) {
         focusChatInputSoon();
       }
       suppressNextInputAutofocus = false;
+    } else {
+      sidebar.requestUpdate();
     }
 
     maybePersistTabLayout();
     document.dispatchEvent(new CustomEvent("pi:status-update"));
   });
 
-  const runCapabilityRefreshPass = async (): Promise<void> => {
-    const runtimes = runtimeManager.listRuntimes();
-
-    for (const runtime of runtimes) {
-      const refresh = runtimeCapabilityRefreshers.get(runtime.runtimeId);
-      if (!refresh) continue;
-
-      try {
-        await refresh();
-      } catch (error) {
-        console.warn("[pi] Failed to refresh runtime capabilities:", error);
-      }
-    }
-
-    document.dispatchEvent(new CustomEvent("pi:status-update"));
+  const refreshCapabilitiesForAllRuntimes = (): Promise<void> => {
+    return runtimeManager.refreshCapabilities();
   };
-
-  const refreshCapabilitiesForAllRuntimes = createAsyncCoalescer(runCapabilityRefreshPass);
 
   const reservedToolNames = new Set([
     ...createAllTools({ hostKind: spreadsheetHost.kind }).map((tool) => tool.name),
@@ -907,10 +916,9 @@ export async function initTaskpane(opts: {
     });
   };
 
-  const createRuntime = async (optsForRuntime: {
-    activate: boolean;
-    autoRestoreLatest: boolean;
-  }) => {
+  async function buildSessionRuntime(
+    optsForRuntime: CreateRuntimeOptions,
+  ): Promise<SessionRuntime> {
     const runtimeId = crypto.randomUUID();
     let runtimeSessionId: string = crypto.randomUUID();
     const runtimeSkillReadCache = createSkillReadCache();
@@ -927,8 +935,6 @@ export async function initTaskpane(opts: {
         sessionId,
         workbookId,
       });
-
-      runtimeActiveIntegrationIds.set(runtimeId, activeIntegrationIds);
 
       const coreTools = createAllTools({
         hostKind: spreadsheetHost.kind,
@@ -1073,8 +1079,6 @@ export async function initTaskpane(opts: {
       }
     };
 
-    runtimeCapabilityRefreshers.set(runtimeId, refreshRuntimeCapabilities);
-
     // API key resolution
     agent.getApiKey = async (provider: string) => {
       const resolvedAuth = await modelRuntime.models.getAuth(provider);
@@ -1175,34 +1179,29 @@ export async function initTaskpane(opts: {
       }
     });
 
-    const runtime = runtimeManager.createRuntime(
-      {
-        runtimeId,
-        agent,
-        actionQueue,
-        queueDisplay,
-        persistence,
-        lockState: "idle",
-        dispose: () => {
-          runtimeCapabilityRefreshers.delete(runtimeId);
-          runtimeActiveIntegrationIds.delete(runtimeId);
-          runtimeSkillReadCache.clearAll();
-          unsubscribeSessionCapabilitySync();
-          unsubscribeErrorTracking();
-          actionQueue.shutdown();
-          agent.abort();
-          persistence.dispose();
-        },
+    return {
+      runtimeId,
+      agent,
+      actionQueue,
+      queueDisplay,
+      persistence,
+      lockState: "idle",
+      refreshCapabilities: refreshRuntimeCapabilities,
+      dispose: () => {
+        runtimeSkillReadCache.clearAll();
+        unsubscribeSessionCapabilitySync();
+        unsubscribeErrorTracking();
+        queueDisplay.detach();
+        actionQueue.shutdown();
+        agent.abort();
+        persistence.dispose();
       },
-      { activate: optsForRuntime.activate },
-    );
-
-    return runtime;
-  };
+    };
+  }
 
   const createRuntimeFromUi = async (): Promise<SessionRuntime | null> => {
     try {
-      return await createRuntime({ activate: true, autoRestoreLatest: false });
+      return await runtimeManager.createRuntime({ activate: true, autoRestoreLatest: false });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";
       console.warn("[pi] Failed to create a new runtime:", error);
@@ -1220,7 +1219,7 @@ export async function initTaskpane(opts: {
     let firstRuntime: SessionRuntime | null = null;
 
     for (const sessionId of savedLayout.sessionIds) {
-      const runtime = await createRuntime({
+      const runtime = await runtimeManager.createRuntime({
         activate: false,
         autoRestoreLatest: false,
       });
@@ -1280,7 +1279,7 @@ export async function initTaskpane(opts: {
   };
 
   const openSessionInNewTab = async (sessionData: SessionData): Promise<SessionRuntime> => {
-    const runtime = await createRuntime({
+    const runtime = await runtimeManager.createRuntime({
       activate: true,
       autoRestoreLatest: false,
     });
@@ -1517,7 +1516,7 @@ export async function initTaskpane(opts: {
     targetModel: RuntimeModel;
     targetTitle: string;
   }): Promise<SessionRuntime> => {
-    const clonedRuntime = await createRuntime({
+    const clonedRuntime = await runtimeManager.createRuntime({
       activate: true,
       autoRestoreLatest: false,
     });
@@ -1938,7 +1937,7 @@ export async function initTaskpane(opts: {
   // Bootstrap from persisted tab layout; fallback to legacy single-runtime restore.
   const restoredRuntime = await restorePersistedTabLayout();
   if (!restoredRuntime) {
-    await createRuntime({ activate: true, autoRestoreLatest: true });
+    await runtimeManager.createRuntime({ activate: true, autoRestoreLatest: true });
   }
 
   tabLayoutPersistence.enable();
