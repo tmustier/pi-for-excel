@@ -15,7 +15,8 @@ import {
   type StoredExtensionPermissions,
 } from "../src/extensions/permissions.ts";
 import { registerBuiltins, type BuiltinsContext } from "../src/commands/builtins/index.ts";
-import { executeSlashCommand } from "../src/commands/slash-command-execution.ts";
+import { executeSlashCommand, type SlashCommandExecutionResult } from "../src/commands/slash-command-execution.ts";
+import { TOOLS_COMMAND_NAME } from "../src/integrations/naming.ts";
 import { commandRegistry, type SlashCommand } from "../src/commands/types.ts";
 import { installFakeDom } from "./fixtures/fake-dom.ts";
 
@@ -369,29 +370,48 @@ void test("command-layer contract: recovery commands expose completion, errors, 
   }
 });
 
-void test("slash-command busy policy is centralized and shared across entry points", async () => {
-  const keyboardActionsSource = await readFile(
-    new URL("../src/taskpane/keyboard-shortcuts/editor-actions.ts", import.meta.url),
-    "utf8",
-  );
-  const slashExecutionSource = await readFile(
-    new URL("../src/commands/slash-command-execution.ts", import.meta.url),
-    "utf8",
-  );
-  const busyPolicySource = await readFile(new URL("../src/commands/busy-command-policy.ts", import.meta.url), "utf8");
+void test("command-layer contract: busy policy allows workspace commands and blocks ordinary commands", () => {
+  const previousCommands = commandRegistry.list();
+  const executed: string[] = [];
+  const register = (command: Pick<SlashCommand, "name" | "source"> & Partial<Pick<SlashCommand, "busyAllowed">>): void => {
+    commandRegistry.register({
+      name: command.name,
+      description: command.name,
+      source: command.source,
+      ...(command.busyAllowed !== undefined ? { busyAllowed: command.busyAllowed } : {}),
+      execute: () => {
+        executed.push(command.name);
+      },
+    });
+  };
+  const run = (name: string): SlashCommandExecutionResult =>
+    executeSlashCommand({ name, args: "", busy: true, enqueueCommand: () => {}, onError: () => {} });
 
-  assert.match(keyboardActionsSource, /executeSlashCommand/);
-  assert.match(slashExecutionSource, /isBusyAllowedCommand/);
-  assert.match(slashExecutionSource, /commandRegistry\.get\(options\.name\)/);
+  try {
+    for (const command of commandRegistry.list()) commandRegistry.unregister(command.name);
+    const allowedWhileBusy = ["new", "rules", "resume", "history", "reopen", "yolo", "extensions", "plugins", "skills", "files", TOOLS_COMMAND_NAME];
+    for (const name of allowedWhileBusy) register({ name, source: "builtin" });
+    register({ name: "addons", source: "builtin" });
+    register({ name: "integrations", source: "builtin" });
+    register({ name: "opted-in", source: "builtin", busyAllowed: true });
+    register({ name: "ext-default", source: "extension" });
+    register({ name: "ext-opted-out", source: "extension", busyAllowed: false });
 
-  assert.match(busyPolicySource, /"yolo"/);
-  assert.match(busyPolicySource, /"rules"/);
-  assert.match(busyPolicySource, /"files"/);
-  assert.match(busyPolicySource, /TOOLS_COMMAND_NAME/);
-  assert.match(busyPolicySource, /command\.source === "extension"/);
-  assert.match(busyPolicySource, /command\.busyAllowed \?\? true/);
-  assert.doesNotMatch(busyPolicySource, /INTEGRATIONS_COMMAND_NAME/);
-  assert.doesNotMatch(busyPolicySource, /"addons"/);
+    for (const name of allowedWhileBusy) assert.equal(run(name), "executed", `/${name} must run while busy`);
+    assert.equal(run("opted-in"), "executed");
+    assert.equal(run("ext-default"), "executed", "extension commands run while busy unless they opt out");
+    assert.equal(run("addons"), "busy-blocked");
+    assert.equal(run("integrations"), "busy-blocked");
+    assert.equal(run("ext-opted-out"), "busy-blocked");
+    assert.equal(run("compact"), "not-found");
+    assert.deepEqual(
+      executed,
+      [...allowedWhileBusy, "opted-in", "ext-default"],
+      "blocked commands must not execute",
+    );
+  } finally {
+    restoreCommands(previousCommands);
+  }
 });
 
 void test("backups page includes manual full-backup action", async () => {
