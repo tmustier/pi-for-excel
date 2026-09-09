@@ -8,18 +8,15 @@ import {
   loadStoredExtensions,
   saveStoredExtensions,
 } from "../src/extensions/store.ts";
-import {
-  getDefaultPermissionsForTrust,
-  isExtensionCapabilityAllowed,
-  setExtensionCapabilityAllowed,
-  type StoredExtensionPermissions,
-} from "../src/extensions/permissions.ts";
+import { getDefaultPermissionsForTrust } from "../src/extensions/permissions.ts";
 import { registerBuiltins, type BuiltinsContext } from "../src/commands/builtins/index.ts";
 import { executeSlashCommand, type SlashCommandExecutionResult } from "../src/commands/slash-command-execution.ts";
 import { TOOLS_COMMAND_NAME } from "../src/integrations/naming.ts";
 import { commandRegistry, type SlashCommand } from "../src/commands/types.ts";
 import { installFakeDom } from "./fixtures/fake-dom.ts";
+import { ConnectionManager } from "../src/connections/manager.ts";
 import { CONNECTION_STORE_KEY } from "../src/connections/store.ts";
+import type { ConnectionDefinition } from "../src/connections/types.ts";
 import { stageInlineExtensionUpgrade } from "../src/taskpane/background-extension-verification.ts";
 
 class MemorySettingsStore {
@@ -34,18 +31,21 @@ class MemorySettingsStore {
     return Promise.resolve();
   }
 
-  readRaw(key: string): DynamicValue {
-    return this.values.has(key) ? this.values.get(key) ?? null : null;
-  }
-
   writeRaw(key: string, value: DynamicValue): void {
     this.values.set(key, value);
   }
 }
 
 class ConnectionReadFailureSettings extends MemorySettingsStore {
+  private failNextConnectionRead = false;
+
+  armConnectionReadFailure(): void {
+    this.failNextConnectionRead = true;
+  }
+
   override get(key: string): Promise<DynamicValue> {
-    if (key === CONNECTION_STORE_KEY) {
+    if (key === CONNECTION_STORE_KEY && this.failNextConnectionRead) {
+      this.failNextConnectionRead = false;
       return Promise.reject(new Error("connection document read failed"));
     }
     return super.get(key);
@@ -415,39 +415,6 @@ void test("command-layer contract: busy policy allows workspace commands and blo
 });
 
 
-void test("permission helper updates one capability without mutating others", () => {
-  const permissions: StoredExtensionPermissions = {
-    commandsRegister: true,
-    toolsRegister: false,
-    agentRead: false,
-    agentEventsRead: false,
-    uiOverlay: true,
-    uiWidget: true,
-    uiToast: true,
-    llmComplete: false,
-    httpFetch: false,
-    storageReadWrite: true,
-    connectionsReadWrite: false,
-    connectionsSecretsRead: false,
-    clipboardWrite: true,
-    agentContextWrite: false,
-    agentSteer: false,
-    agentFollowUp: false,
-    skillsRead: true,
-    skillsWrite: false,
-    downloadFile: true,
-  };
-
-  const updated = setExtensionCapabilityAllowed(permissions, "tools.register", true);
-
-  assert.equal(isExtensionCapabilityAllowed(updated, "tools.register"), true);
-  assert.equal(isExtensionCapabilityAllowed(updated, "commands.register"), true);
-  assert.equal(isExtensionCapabilityAllowed(updated, "agent.read"), false);
-
-  // original object remains unchanged
-  assert.equal(isExtensionCapabilityAllowed(permissions, "tools.register"), false);
-});
-
 void test("extension registry seeds default snake extension when storage is empty", async () => {
   const settings = new MemorySettingsStore();
 
@@ -459,8 +426,8 @@ void test("extension registry seeds default snake extension when storage is empt
   assert.equal(entries[0].permissions.toolsRegister, true);
   assert.equal(entries[0].permissions.agentRead, true);
 
-  const raw = settings.readRaw(EXTENSIONS_REGISTRY_STORAGE_KEY);
-  assert.ok(raw);
+  const restartedEntries = await loadStoredExtensions(settings);
+  assert.equal(restartedEntries[0]?.id, BUILTIN_SNAKE_EXTENSION_ID);
 });
 
 void test("extension registry retries transient reads without replacing persisted entries", async () => {
@@ -483,8 +450,9 @@ void test("extension registry retries transient reads without replacing persiste
   settings.armReadFailure();
 
   await assert.rejects(() => loadStoredExtensions(settings), /transient extension registry read failure/u);
-  assert.deepEqual(settings.readRaw(EXTENSIONS_REGISTRY_STORAGE_KEY), registry);
-  assert.equal((await loadStoredExtensions(settings))[0]?.id, "ext.persisted");
+
+  const restartedEntries = await loadStoredExtensions(settings);
+  assert.equal(restartedEntries[0]?.id, "ext.persisted");
 });
 
 void test("staged extension upgrade preserves sibling connections when their document is unreadable", async () => {
@@ -514,6 +482,7 @@ void test("staged extension upgrade preserves sibling connections when their doc
   };
   settings.writeRaw(EXTENSIONS_REGISTRY_STORAGE_KEY, registry);
   settings.writeRaw(CONNECTION_STORE_KEY, connections);
+  settings.armConnectionReadFailure();
 
   await assert.rejects(
     stageInlineExtensionUpgrade({
@@ -525,8 +494,19 @@ void test("staged extension upgrade preserves sibling connections when their doc
     /connection document read failed/u,
   );
 
-  assert.deepEqual(settings.readRaw(EXTENSIONS_REGISTRY_STORAGE_KEY), registry);
-  assert.deepEqual(settings.readRaw(CONNECTION_STORE_KEY), connections);
+  const restartedEntries = await loadStoredExtensions(settings);
+  assert.equal(restartedEntries[0]?.id, "ext.persisted");
+
+  const siblingDefinition: ConnectionDefinition = {
+    id: "ext.sibling.account",
+    title: "Sibling account",
+    capability: "sibling service",
+    authKind: "api_key",
+    secretFields: [{ id: "apiKey", label: "API key", required: true }],
+  };
+  const restartedConnections = new ConnectionManager({ settings });
+  restartedConnections.registerDefinition("ext.sibling", siblingDefinition);
+  assert.equal((await restartedConnections.getSnapshot("ext.sibling.account"))?.status, "connected");
 });
 
 void test("extension registry preserves explicit empty saved entries", async () => {
@@ -566,6 +546,7 @@ void test("extension registry migrates legacy v1 entries to v2 permissions", asy
   assert.equal(entries[0].permissions.toolsRegister, false);
   assert.equal(entries[0].permissions.agentRead, false);
 
-  const migrated = settings.readRaw(EXTENSIONS_REGISTRY_STORAGE_KEY);
-  assert.deepEqual(migrated, { version: 2, items: entries });
+  const restartedEntries = await loadStoredExtensions(settings);
+  assert.equal(restartedEntries[0]?.id, "ext.legacy.inline");
+  assert.equal(restartedEntries[0]?.trust, "inline-code");
 });

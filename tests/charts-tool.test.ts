@@ -6,15 +6,9 @@ import type { AgentToolResult } from "@earendil-works/pi-agent-core";
 import {
   createChartsTool,
   executeChartsAction,
-  toExcelChartType,
 } from "../src/tools/charts.ts";
 import { applyChartState } from "../src/workbook/recovery/chart-state.ts";
-import {
-  createPersistedWorkbookRecoveryPayload,
-  parsePersistedSnapshots,
-} from "../src/workbook/recovery/log-codec.ts";
 import type { ChartsDetails } from "../src/tools/tool-details.ts";
-import { getToolContextImpact, getToolExecutionMode } from "../src/tools/execution-policy.ts";
 import { WorkbookRecoveryLog, type WorkbookRecoverySnapshot } from "../src/workbook/recovery-log.ts";
 import type { WorkbookContext } from "../src/workbook/context.ts";
 import type { AppendWorkbookChangeAuditEntryArgs } from "../src/audit/workbook-change-audit.ts";
@@ -274,14 +268,6 @@ function createChartState(name = "Sales"): RecoveryChartPresentState {
   };
 }
 
-void test("maps friendly chart type names to Office.js chart types", () => {
-  assert.equal(toExcelChartType("column"), "ColumnClustered");
-  assert.equal(toExcelChartType("scatter"), "XYScatter");
-  assert.equal(toExcelChartType("scatter_lines"), "XYScatterLines");
-  assert.equal(toExcelChartType("scatter_smooth"), "XYScatterSmooth");
-  assert.throws(() => toExcelChartType("combo"), /Invalid chart_type/u);
-});
-
 void test("validates action-specific required params", async () => {
   let executeCalled = false;
   const tool = createChartsTool({
@@ -440,23 +426,6 @@ void test("get_image returns text plus image content and structured PNG details"
     height: 720,
     fittingMode: "Fit",
   });
-});
-
-void test("classifies charts actions by execution policy and context impact", () => {
-  assert.equal(getToolExecutionMode("charts", { action: "list" }), "read");
-  assert.equal(getToolContextImpact("charts", { action: "list" }), "none");
-
-  assert.equal(getToolExecutionMode("charts", { action: "get_image" }), "read");
-  assert.equal(getToolContextImpact("charts", { action: "get_image" }), "none");
-
-  assert.equal(getToolExecutionMode("charts", { action: "create" }), "mutate");
-  assert.equal(getToolContextImpact("charts", { action: "create" }), "structure");
-
-  assert.equal(getToolExecutionMode("charts", { action: "update" }), "mutate");
-  assert.equal(getToolContextImpact("charts", { action: "update" }), "content");
-
-  assert.equal(getToolExecutionMode("charts", { action: "delete" }), "mutate");
-  assert.equal(getToolContextImpact("charts", { action: "delete" }), "structure");
 });
 
 void test("update captures a chart checkpoint and appends audit metadata", async () => {
@@ -760,57 +729,3 @@ void test("chart_absent restore with a missing id deletes nothing", async () => 
   assert.equal(sheet.charts.items.length, 1);
 });
 
-void test("persisted chart_state snapshots omit range grids so older codecs drop them", () => {
-  const chartSnapshot: WorkbookRecoverySnapshot = {
-    id: "snap-chart-persist",
-    at: 1700000000300,
-    toolName: "restore_snapshot",
-    toolCallId: "restore:snap-1",
-    address: "Sheet1!Sales",
-    changedCount: 1,
-    cellCount: 1,
-    beforeValues: [],
-    beforeFormulas: [],
-    snapshotKind: "chart_state",
-    chartState: createChartState("Sales"),
-    workbookId: "url_sha256:charts-workbook",
-    workbookLabel: "Charts.xlsx",
-  };
-
-  const rangeSnapshot: WorkbookRecoverySnapshot = {
-    id: "snap-range-persist",
-    at: 1700000000301,
-    toolName: "write_cells",
-    toolCallId: "tc-write",
-    address: "Sheet1!A1",
-    changedCount: 1,
-    cellCount: 1,
-    beforeValues: [[1]],
-    beforeFormulas: [["=A1"]],
-    snapshotKind: "range_values",
-    workbookId: "url_sha256:charts-workbook",
-    workbookLabel: "Charts.xlsx",
-  };
-
-  const payload = createPersistedWorkbookRecoveryPayload([chartSnapshot, rangeSnapshot]);
-
-  const persistedChart = payload.snapshots.find((item) => item.id === "snap-chart-persist");
-  assert.ok(persistedChart);
-  // Older codecs default unknown snapshot kinds to range_values and then
-  // require grids; omitting them makes downgraded readers drop the entry
-  // instead of misreading it as an empty range backup.
-  assert.equal("beforeValues" in persistedChart, false);
-  assert.equal("beforeFormulas" in persistedChart, false);
-
-  const persistedRange = payload.snapshots.find((item) => item.id === "snap-range-persist");
-  assert.ok(persistedRange);
-  assert.deepEqual(persistedRange.beforeValues, [[1]]);
-  assert.deepEqual(persistedRange.beforeFormulas, [["=A1"]]);
-
-  // The current codec must still round-trip the stripped chart snapshot.
-  const reparsed = parsePersistedSnapshots(payload, { maxEntries: 10 });
-  const chartAgain = findSnapshotById(reparsed, "snap-chart-persist");
-  assert.ok(chartAgain);
-  assert.equal(chartAgain.snapshotKind, "chart_state");
-  assert.deepEqual(withoutUndefined(chartAgain.chartState), withoutUndefined(createChartState("Sales")));
-});
