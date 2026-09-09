@@ -249,6 +249,8 @@ export interface WorkbookHistorySnapshotSummary {
   address: string;
   changedCount: number;
   cellCount: number;
+  workbookId?: string;
+  workbookLabel?: string;
 }
 
 export interface WorkbookHistoryDetails {

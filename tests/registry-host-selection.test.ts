@@ -11,8 +11,12 @@ import {
   selectOfficeCoupledToolForHost,
   type AnyHostSelectableTool,
 } from "../src/tools/host-selection.ts";
-import { UnsupportedHostToolError } from "../src/tools/unsupported-host-tool.ts";
 import { CORE_TOOL_NAMES, type CoreToolName } from "../src/tools/names.ts";
+
+function isUnsupportedHostDetails(value: DynamicValue): value is DynamicObject {
+  return typeof value === "object" && value !== null && !Array.isArray(value) &&
+    value.code === "unsupported_host_tool";
+}
 
 function createFakeTool(name: string): AnyHostSelectableTool {
   return {
@@ -61,7 +65,7 @@ void test("composeCoreToolsForHost keeps Office/browser handlers untouched", () 
   }
 });
 
-void test("composeCoreToolsForHost keeps metadata stable on WPS and fails fast with a typed error", async () => {
+void test("composeCoreToolsForHost keeps metadata stable on WPS and returns typed errors", async () => {
   const { factory, createdTools } = createFakeToolFactory();
   const wpsTools = composeCoreToolsForHost(factory, "wps");
 
@@ -80,17 +84,11 @@ void test("composeCoreToolsForHost keeps metadata stable on WPS and fails fast w
       assert.notEqual(wpsTool.execute, originalTool.execute);
     } else if (isCoreToolUnsupportedOnWps(name)) {
       assert.notEqual(wpsTool, originalTool);
-      await assert.rejects(
-        async () => wpsTool.execute("tool-call-1", {}),
-        (error: DynamicValue) => {
-          assert.ok(error instanceof UnsupportedHostToolError);
-          assert.equal(error.code, "unsupported_host_tool");
-          assert.equal(error.hostKind, "wps");
-          assert.equal(error.toolName, name);
-          assert.match(error.message, /not yet supported on WPS Spreadsheets.*NEXSELL-370/u);
-          return true;
-        },
-      );
+      const result = await wpsTool.execute("tool-call-1", {});
+      assert.match(result.content[0]?.type === "text" ? result.content[0].text : "", /not yet supported on WPS Spreadsheets.*NEXSELL-370/u);
+      assert.ok(isUnsupportedHostDetails(result.details));
+      assert.equal(result.details.hostKind, "wps");
+      assert.equal(result.details.toolName, name);
     } else {
       assert.equal(wpsTool, originalTool);
     }
@@ -124,15 +122,10 @@ void test("Office-coupled non-core tools fail fast on WPS and pass through elsew
   assert.notEqual(wpsTool, officeCoupledTool);
   assert.equal(wpsTool.name, officeCoupledTool.name);
 
-  await assert.rejects(
-    async () => wpsTool.execute("tool-call-1", {}),
-    (error: DynamicValue) => {
-      assert.ok(error instanceof UnsupportedHostToolError);
-      assert.equal(error.hostKind, "wps");
-      assert.equal(error.toolName, "execute_office_js");
-      return true;
-    },
-  );
+  const result = await wpsTool.execute("tool-call-1", {});
+  assert.ok(isUnsupportedHostDetails(result.details));
+  assert.equal(result.details.hostKind, "wps");
+  assert.equal(result.details.toolName, "execute_office_js");
 });
 
 void test("WPS leaves local settings/skills and Phase 2 override core tools available", () => {

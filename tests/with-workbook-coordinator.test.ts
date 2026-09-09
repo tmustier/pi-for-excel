@@ -16,10 +16,7 @@ import type {
   WorkbookOperationContext,
   WorkbookQueueSnapshot,
 } from "../src/workbook/coordinator.ts";
-import {
-  createUnsupportedHostTool,
-  UnsupportedHostToolError,
-} from "../src/tools/unsupported-host-tool.ts";
+import { createUnsupportedHostTool } from "../src/tools/unsupported-host-tool.ts";
 
 const GENERIC_PARAMS = Type.Object({});
 
@@ -149,7 +146,7 @@ void test("modify_structure write emits structure-impact mutation event", async 
   assert.equal(firstBlock?.type, "text");
 });
 
-void test("unsupported-host tools bypass workbook coordinator and fail fast", async () => {
+void test("unsupported-host tools bypass workbook coordinator and return an error result", async () => {
   const coordinator = new FakeCoordinator();
   const mutationEvents: WorkbookMutationEvent[] = [];
   const invalidatedWorkbookIds: Array<string | null> = [];
@@ -183,15 +180,13 @@ void test("unsupported-host tools bypass workbook coordinator and fail fast", as
   });
 
   assert.equal(wrapped, unsupportedTool);
-  await assert.rejects(
-    async () => wrapped.execute("tc-unsupported", { range: "Sheet1!A1", format: { bold: true } }),
-    (error: DynamicValue) => {
-      assert.ok(error instanceof UnsupportedHostToolError);
-      assert.equal(error.toolName, "format_cells");
-      assert.equal(error.hostKind, "wps");
-      return true;
-    },
+  const result = await wrapped.execute(
+    "tc-unsupported",
+    { range: "Sheet1!A1", format: { bold: true } },
   );
+  assert.equal("code" in result.details ? result.details.code : undefined, "unsupported_host_tool");
+  assert.equal("toolName" in result.details ? result.details.toolName : undefined, "format_cells");
+  assert.equal("hostKind" in result.details ? result.details.hostKind : undefined, "wps");
 
   assert.equal(approvalCalls, 0);
   assert.equal(executeCount, 0);

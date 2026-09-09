@@ -10,7 +10,7 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 - **No backups on WPS:** `write_cells` preserves overwrite protection and read-back verification, but WPS automatic workbook backups/snapshots are not implemented. The WPS write result says this explicitly and sets recovery metadata to `not_available`; `workbook_history` remains fail-fast on WPS.
 - **Office-coupled non-core tools:** `execute_office_js` and `python_transform_range` drive Office.js/Excel directly, so `createAllTools()` wraps them with the same fail-fast handler on WPS. Local-bridge tools (`tmux`, `python_run`, `libreoffice_convert`, `files`, extensions manager) are host-independent and stay unwrapped.
 - **WPS direct JS tool:** `execute_wps_js` is registered only when `hostKind === "wps"`. It uses the same direct-JS approval gate and JSON serialization policy as `execute_office_js`, but runs synchronous WPS JSAPI code with `Application` in scope.
-- **Typed failure:** fail-fast wrappers throw `UnsupportedHostToolError` (`code: "unsupported_host_tool"`, with `hostKind` + `toolName`), so callers/tests/UI can distinguish "unsupported on this host" from implementation failures.
+- **Typed failure:** fail-fast wrappers return a clear error result with stable `code: "unsupported_host_tool"`, `hostKind`, and `toolName` details, so direct tool callers/tests/UI can handle unsupported capabilities without catching an exception.
 - **Rationale:** preserving the tool list avoids prompt-cache/schema churn and keeps disclosure/UI mappings deterministic, while honest runtime failures prevent pretending unsupported WPS workbook features exist.
 
 ## Column width (`format_cells.column_width`)

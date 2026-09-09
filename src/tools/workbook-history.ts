@@ -163,6 +163,8 @@ export function createWorkbookHistoryTool(
                 address: snapshot.address,
                 changedCount: snapshot.changedCount,
                 cellCount: snapshot.cellCount,
+                ...(snapshot.workbookId !== undefined ? { workbookId: snapshot.workbookId } : {}),
+                ...(snapshot.workbookLabel !== undefined ? { workbookLabel: snapshot.workbookLabel } : {}),
               })),
             },
           };
