@@ -169,6 +169,9 @@ export function handleSlashCommandExecution(args: {
       const input = sidebar.getInput();
       if (input) input.clear();
     },
+    onError: () => {
+      showToast(t("slash-command.toast.failed"));
+    },
   });
 
   if (result === "not-found") {

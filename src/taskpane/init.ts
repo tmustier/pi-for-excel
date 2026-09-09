@@ -1619,8 +1619,8 @@ export async function initTaskpane(opts: {
     }
   });
 
-  const openExtensionsHub = (tab?: ExtensionsHubTab): void => {
-    void openSettings(tab ?? "connections");
+  const openExtensionsHub = (tab?: ExtensionsHubTab): Promise<void> => {
+    return openSettings(tab ?? "connections");
   };
 
   const openRecoveryDialog = async (): Promise<void> => {
@@ -1804,9 +1804,7 @@ export async function initTaskpane(opts: {
     getExecutionMode: () => Promise.resolve(getExecutionMode()),
     setExecutionMode,
     openExtensionsHub,
-    openFilesWorkspace: () => {
-      void showFilesWorkspaceDialog();
-    },
+    openFilesWorkspace: () => showFilesWorkspaceDialog(),
   });
 
   // Slash commands chosen from the popup menu dispatch this event.
@@ -1831,6 +1829,9 @@ export async function initTaskpane(opts: {
       busy,
       enqueueCommand: (commandName: string, commandArgs: string) => {
         activeRuntime.actionQueue.enqueueCommand(commandName, commandArgs);
+      },
+      onError: () => {
+        showToast(t("slash-command.toast.failed"));
       },
     });
 
@@ -1896,7 +1897,7 @@ export async function initTaskpane(opts: {
     void openRulesEditor();
   };
   sidebar.onOpenExtensions = () => {
-    openExtensionsHub();
+    void openExtensionsHub();
   };
   sidebar.onOpenSettings = () => {
     void openSettings();

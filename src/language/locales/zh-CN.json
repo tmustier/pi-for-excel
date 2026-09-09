@@ -954,6 +954,7 @@
   "sidebar.tabs.scroll_left": "向左滚动标签页",
   "sidebar.tabs.scroll_right": "向右滚动标签页",
   "sidebar.utilities.aria": "设置和工具",
+  "slash-command.toast.failed": "无法运行该命令。",
   "status-popovers.compactDesc": "摘要较早消息以释放空间。",
   "status-popovers.compactTitle": "压缩对话",
   "status-popovers.contextUsage": "上下文用量",

@@ -954,6 +954,7 @@
   "sidebar.tabs.scroll_left": "Scroll tabs left",
   "sidebar.tabs.scroll_right": "Scroll tabs right",
   "sidebar.utilities.aria": "Settings and tools",
+  "slash-command.toast.failed": "Could not run that command.",
   "status-popovers.compactDesc": "Summarize earlier messages to free space.",
   "status-popovers.compactTitle": "Compact conversation",
   "status-popovers.contextUsage": "Context usage",

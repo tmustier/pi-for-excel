@@ -111,6 +111,7 @@ void test("command-layer contract: workspace commands complete, preserve failure
       beforeExecute: () => {
         beforeExecuteCount += 1;
       },
+      onError: () => {},
     });
     assert.equal(busyExecution, "executed");
     await Promise.resolve();
@@ -121,8 +122,107 @@ void test("command-layer contract: workspace commands complete, preserve failure
     await assert.rejects(executeRegisteredCommand("files"), /files overlay failed/);
 
     for (const removedAlias of ["addons", "integrations"]) {
-      assert.equal(executeSlashCommand({ name: removedAlias, args: "", busy: false }), "not-found");
+      assert.equal(
+        executeSlashCommand({ name: removedAlias, args: "", busy: false, onError: () => {} }),
+        "not-found",
+      );
     }
+  } finally {
+    restoreCommands(previousCommands);
+  }
+});
+
+void test("slash-command dispatcher owns synchronous and asynchronous command failures", async () => {
+  const previousCommands = commandRegistry.list();
+  let executionCount = 0;
+  let failureCount = 0;
+
+  try {
+    commandRegistry.register({
+      name: "test-sync-failure",
+      description: "Test synchronous failure",
+      source: "builtin",
+      execute: () => {
+        executionCount += 1;
+        throw new Error("sensitive sync failure");
+      },
+    });
+    commandRegistry.register({
+      name: "test-async-failure",
+      description: "Test asynchronous failure",
+      source: "builtin",
+      execute: async () => {
+        executionCount += 1;
+        await Promise.resolve();
+        throw new Error("sensitive async failure");
+      },
+    });
+    commandRegistry.register({
+      name: "test-async-success",
+      description: "Test asynchronous success",
+      source: "builtin",
+      execute: async () => {
+        executionCount += 1;
+        await Promise.resolve();
+      },
+    });
+
+    assert.equal(
+      executeSlashCommand({
+        name: "test-sync-failure",
+        args: "",
+        busy: false,
+        onError: () => {
+          failureCount += 1;
+        },
+      }),
+      "executed",
+    );
+    assert.equal(failureCount, 1);
+
+    assert.equal(
+      executeSlashCommand({
+        name: "test-async-failure",
+        args: "",
+        busy: false,
+        onError: () => {
+          failureCount += 1;
+        },
+      }),
+      "executed",
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    assert.equal(failureCount, 2);
+
+    assert.equal(
+      executeSlashCommand({
+        name: "test-async-success",
+        args: "",
+        busy: false,
+        onError: () => {
+          failureCount += 1;
+        },
+      }),
+      "executed",
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    assert.equal(failureCount, 2);
+
+    assert.equal(
+      executeSlashCommand({
+        name: "test-sync-failure",
+        args: "",
+        busy: true,
+        onError: () => {
+          failureCount += 1;
+        },
+      }),
+      "busy-blocked",
+    );
+    assert.equal(executionCount, 3);
+    assert.equal(failureCount, 2);
   } finally {
     restoreCommands(previousCommands);
   }
@@ -165,12 +265,12 @@ void test("taskpane init wires Files workspace opener", async () => {
 void test("taskpane init wires extensions menu opener", async () => {
   const initSource = await readFile(new URL("../src/taskpane/init.ts", import.meta.url), "utf8");
 
-  assert.match(initSource, /const openExtensionsHub = \(tab\?: ExtensionsHubTab\): void =>/);
+  assert.match(initSource, /const openExtensionsHub = \(tab\?: ExtensionsHubTab\): Promise<void> =>/);
   assert.match(initSource, /openSettings\(tab \?\? "connections"\)/);
   assert.match(initSource, /extensionManager/);
   assert.match(initSource, /configureSettingsPages/);
   assert.match(initSource, /registerBuiltins\([\s\S]*openExtensionsHub/);
-  assert.match(initSource, /sidebar\.onOpenExtensions\s*=\s*\(\)\s*=>\s*\{\s*openExtensionsHub\(\);\s*\};/);
+  assert.match(initSource, /sidebar\.onOpenExtensions\s*=\s*\(\)\s*=>\s*\{\s*void openExtensionsHub\(\);\s*\};/);
 });
 
 void test("taskpane init wires gear settings to unified settings overlay", async () => {
@@ -326,7 +426,12 @@ void test("command-layer contract: recovery commands expose completion, errors, 
     await executeRegisteredCommand("history");
     assert.equal(recoveryOpenCount, 1);
 
-    const blockedRevert = executeSlashCommand({ name: "revert", args: "", busy: true });
+    const blockedRevert = executeSlashCommand({
+      name: "revert",
+      args: "",
+      busy: true,
+      onError: () => {},
+    });
     assert.equal(blockedRevert, "busy-blocked");
     assert.equal(revertCount, 0);
 
@@ -336,7 +441,12 @@ void test("command-layer contract: recovery commands expose completion, errors, 
     failRevert = true;
     await assert.rejects(executeRegisteredCommand("revert"), /restore failed/);
 
-    const blockedBackup = executeSlashCommand({ name: "backup", args: "", busy: true });
+    const blockedBackup = executeSlashCommand({
+      name: "backup",
+      args: "",
+      busy: true,
+      onError: () => {},
+    });
     assert.equal(blockedBackup, "busy-blocked");
     assert.equal(createBackupCount, 0);
 
@@ -358,11 +468,15 @@ void test("command-layer contract: recovery commands expose completion, errors, 
       enqueueCommand: (name, args) => {
         queuedCommands.push({ name, args });
       },
+      onError: () => {},
     });
     assert.equal(queuedCompact, "queued");
     assert.deepEqual(queuedCommands, [{ name: "compact", args: "now" }]);
 
-    assert.equal(executeSlashCommand({ name: "compact", args: "", busy: false }), "missing-queue");
+    assert.equal(
+      executeSlashCommand({ name: "compact", args: "", busy: false, onError: () => {} }),
+      "missing-queue",
+    );
   } finally {
     restoreCommands(previousCommands);
     fakeDom.restore();
