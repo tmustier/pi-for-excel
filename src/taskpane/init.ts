@@ -334,7 +334,7 @@ export async function initTaskpane(opts: {
   }
 
   if (modelRefreshOwner.snapshot().availableProviders.length === 0) {
-    void showWelcomeLogin(providerKeys).catch((error: DynamicValue) => {
+    void showWelcomeLogin(modelRefreshOwner).catch((error: DynamicValue) => {
       console.warn("[auth] Failed to open welcome login:", error);
     });
   }
