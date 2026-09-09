@@ -8,6 +8,7 @@ import { createReadRangeTool } from "../src/tools/read-range.ts";
 import { createWorkbookHistoryTool } from "../src/tools/workbook-history.ts";
 import { createWriteCellsTool } from "../src/tools/write-cells.ts";
 import { composeCoreToolsForHost } from "../src/tools/host-selection.ts";
+import { UnsupportedHostToolError } from "../src/tools/unsupported-host-tool.ts";
 import type { CoreToolName } from "../src/tools/names.ts";
 import { WorkbookRecoveryLog } from "../src/workbook/recovery-log.ts";
 import type { WorkbookContext } from "../src/workbook/context.ts";
@@ -288,7 +289,10 @@ void test("user can write, inspect, reject overwrite, and restore through workbo
   assert.equal(auditEntries.some((entry) => entry.toolCallId === "write-blocked" && entry.blocked), true);
 });
 
-void test("unsupported workbook capability returns a clear tool result instead of throwing", async () => {
+// The agent loop converts a thrown tool error into an `isError` tool result, so the
+// public contract for an unsupported host capability is a typed rejection with a
+// stable code, not a success-shaped result carrying error text.
+void test("unsupported workbook capability fails with a typed error the agent loop reports as an error result", async () => {
   const tools = composeCoreToolsForHost((name: CoreToolName) => {
     if (name === "workbook_history") return createWorkbookHistoryTool();
     return {
@@ -301,11 +305,15 @@ void test("unsupported workbook capability returns a clear tool result instead o
   }, "wps");
   const history = tools.find((tool) => tool.name === "workbook_history");
   assert.ok(history);
-  const result = await history.execute("unsupported-history", { action: "list" });
-  assert.match(firstText(result), /not yet supported on WPS Spreadsheets/u);
-  assert.deepEqual(result.details, {
-    code: "unsupported_host_tool",
-    hostKind: "wps",
-    toolName: "workbook_history",
-  });
+  await assert.rejects(
+    async () => history.execute("unsupported-history", { action: "list" }),
+    (error: DynamicValue) => {
+      assert.ok(error instanceof UnsupportedHostToolError);
+      assert.equal(error.code, "unsupported_host_tool");
+      assert.equal(error.hostKind, "wps");
+      assert.equal(error.toolName, "workbook_history");
+      assert.match(error.message, /not yet supported on WPS Spreadsheets/u);
+      return true;
+    },
+  );
 });

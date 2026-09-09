@@ -16,6 +16,7 @@ import type {
 import { createExecuteWpsJsTool } from "../src/tools/execute-wps-js.ts";
 import { createAllTools } from "../src/tools/index.ts";
 import { selectCoreToolForHost, type AnyHostSelectableTool } from "../src/tools/host-selection.ts";
+import { UnsupportedHostToolError } from "../src/tools/unsupported-host-tool.ts";
 import type { ReadRangeCsvDetails, WriteCellsDetails } from "../src/tools/tool-details.ts";
 
 interface CellPoint {
@@ -426,14 +427,13 @@ void test("WPS host wiring keeps core metadata stable and registers execute_wps_
 
   const fillFormulaLikeTool = { ...readOfficeTool, name: "fill_formula" };
   const unsupported = selectCoreToolForHost("fill_formula", fillFormulaLikeTool, "wps");
-  const unsupportedResult = await unsupported.execute("tool-call-unsupported", {});
-  assert.match(firstText(unsupportedResult), /not yet supported on WPS Spreadsheets/u);
-  assert.equal(
-    typeof unsupportedResult.details === "object" && unsupportedResult.details !== null &&
-      "toolName" in unsupportedResult.details
-      ? unsupportedResult.details.toolName
-      : undefined,
-    "fill_formula",
+  await assert.rejects(
+    async () => unsupported.execute("tool-call-unsupported", {}),
+    (error: DynamicValue) => {
+      assert.ok(error instanceof UnsupportedHostToolError);
+      assert.equal(error.toolName, "fill_formula");
+      return true;
+    },
   );
 
   const officeToolNames = createAllTools({ hostKind: "office" }).map((tool) => tool.name);

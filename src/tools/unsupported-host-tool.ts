@@ -43,28 +43,14 @@ export function isUnsupportedHostTool(tool: AgentTool<TSchema, DynamicValue>): b
   return (tool as AgentTool<TSchema, DynamicValue> & Partial<UnsupportedHostToolMarker>)[UNSUPPORTED_HOST_TOOL_MARKER] === true;
 }
 
-export interface UnsupportedHostToolDetails {
-  code: "unsupported_host_tool";
-  hostKind: SpreadsheetHostKind;
-  toolName: string;
-}
-
 export function createUnsupportedHostTool<TParameters extends TSchema, TDetails>(
   tool: AgentTool<TParameters, TDetails>,
   hostKind: SpreadsheetHostKind,
-): AgentTool<TParameters, TDetails | UnsupportedHostToolDetails> {
-  const unsupportedTool: AgentTool<TParameters, TDetails | UnsupportedHostToolDetails> = {
+): AgentTool<TParameters, TDetails> {
+  const unsupportedTool: AgentTool<TParameters, TDetails> = {
     ...tool,
     execute: () => {
-      const error = new UnsupportedHostToolError(hostKind, tool.name);
-      return Promise.resolve({
-        content: [{ type: "text", text: `Error: ${error.message}` }],
-        details: {
-          code: error.code,
-          hostKind: error.hostKind,
-          toolName: error.toolName,
-        },
-      });
+      throw new UnsupportedHostToolError(hostKind, tool.name);
     },
   };
 
