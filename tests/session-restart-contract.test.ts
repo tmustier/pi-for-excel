@@ -143,6 +143,7 @@ async function createRuntime(
   backend: StorageBackend,
   workbookId: string | null,
   autoRestoreLatest = false,
+  workbookContextError?: Error,
 ): Promise<RuntimeHarness> {
   const { sessions, settings } = initAppStorage(APP_STORAGE_DATABASE_NAME, backend);
   const faux = fauxProvider();
@@ -160,11 +161,13 @@ async function createRuntime(
     models,
     autoRestoreLatest,
     spreadsheetHost: {
-      getWorkbookContext: () => Promise.resolve({
-        workbookId,
-        workbookName: null,
-        source: workbookId ? "document.url" : "unknown",
-      }),
+      getWorkbookContext: () => workbookContextError
+        ? Promise.reject(workbookContextError)
+        : Promise.resolve({
+          workbookId,
+          workbookName: null,
+          source: workbookId ? "document.url" : "unknown",
+        }),
       sessionStorage: settingsBackedSessionStorage,
     },
   });
@@ -296,6 +299,37 @@ void test("corrupt persisted session is skipped and a recoverable sibling remain
   assert.equal(restarted.agent.state.messages.length, 0);
   const recoverable = await restarted.sessions.loadSession(validSessionId);
   assert.match(JSON.stringify(recoverable?.messages), /recoverable-sibling/);
+});
+
+void test("failed workbook identity read restores no global session and writes no pointer", async () => {
+  const backend = new MemoryStorageBackend();
+  const foreignRuntime = await createRuntime(backend, null);
+  const foreignSessionId = await promptAndWaitForSave(foreignRuntime, "foreign-global-session");
+  foreignRuntime.controller.dispose();
+
+  const restarted = await createRuntime(
+    backend,
+    null,
+    false,
+    new Error("workbook identity read failed"),
+  );
+  const settingKeysBefore = await restarted.settings.list();
+  const warnings: string[] = [];
+  const originalWarn = console.warn;
+  console.warn = (...args: DynamicValue[]) => {
+    warnings.push(args.map((arg) => String(arg)).join(" "));
+  };
+
+  try {
+    assert.equal(await restarted.controller.restoreLatestSession(), false);
+  } finally {
+    console.warn = originalWarn;
+  }
+
+  assert.notEqual(restarted.controller.getSessionId(), foreignSessionId);
+  assert.equal(restarted.agent.state.messages.length, 0);
+  assert.deepEqual(await restarted.settings.list(), settingKeysBefore);
+  assert.equal(warnings.some((warning) => warning.includes("[pi] Session restore failed:")), true);
 });
 
 void test("legacy pre-workbook-association session restores through global fallback", async () => {

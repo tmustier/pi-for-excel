@@ -124,12 +124,8 @@ export async function setupSessionPersistence(opts: {
   const spreadsheetHost = opts.spreadsheetHost ?? getCurrentSpreadsheetHost();
 
   async function resolveWorkbookId(): Promise<string | null> {
-    try {
-      const ctx = await spreadsheetHost.getWorkbookContext();
-      return ctx.workbookId;
-    } catch {
-      return null;
-    }
+    const ctx = await spreadsheetHost.getWorkbookContext();
+    return ctx.workbookId;
   }
 
   const listeners = new Set<() => void>();
@@ -152,10 +148,10 @@ export async function setupSessionPersistence(opts: {
   }
 
   async function updateWorkbookAssociation(savedSessionId: string): Promise<void> {
-    const workbookId = await resolveWorkbookId();
-    if (!workbookId) return;
-
     try {
+      const workbookId = await resolveWorkbookId();
+      if (!workbookId) return;
+
       await spreadsheetHost.sessionStorage.linkSessionToWorkbook(settings, savedSessionId, workbookId);
       if (canWriteLatestSessionPointer) {
         await spreadsheetHost.sessionStorage.setLatestSessionForWorkbook(settings, workbookId, savedSessionId);
