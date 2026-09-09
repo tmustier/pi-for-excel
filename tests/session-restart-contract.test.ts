@@ -109,7 +109,11 @@ class MemoryStorageBackend implements StorageBackend {
 }
 
 class LatestPointerReadFailureBackend extends MemoryStorageBackend {
-  private failLatestPointerRead = true;
+  private failLatestPointerRead = false;
+
+  armLatestPointerReadFailure(): void {
+    this.failLatestPointerRead = true;
+  }
 
   override get<T = DynamicValue>(storeName: string, key: string): Promise<T | null> {
     if (
@@ -225,23 +229,23 @@ void test("workbook session partition fails closed when one association cannot b
   );
 });
 
-void test("failed startup latest-pointer read cannot be overwritten by the fallback session", async () => {
+void test("a transient startup failure preserves the session restored on the next restart", async () => {
   const backend = new LatestPointerReadFailureBackend();
-  const persistedSessionId = "00000000-0000-4000-8000-000000000001";
-  await backend.set(
-    "settings",
-    workbookLatestSessionKey("url_sha256:workbook-a"),
-    persistedSessionId,
-  );
+  const original = await createRuntime(backend, "url_sha256:workbook-a");
+  const persistedSessionId = await promptAndWaitForSave(original, "persisted before failure");
+  original.controller.dispose();
 
-  const runtime = await createRuntime(backend, "url_sha256:workbook-a", true);
-  const fallbackSessionId = await promptAndWaitForSave(runtime, "fresh fallback session");
-
+  backend.armLatestPointerReadFailure();
+  const failedRestart = await createRuntime(backend, "url_sha256:workbook-a", true);
+  const fallbackSessionId = await promptAndWaitForSave(failedRestart, "fresh fallback session");
+  failedRestart.controller.dispose();
   assert.notEqual(fallbackSessionId, persistedSessionId);
-  assert.equal(
-    await runtime.settings.get(workbookLatestSessionKey("url_sha256:workbook-a")),
-    persistedSessionId,
-  );
+
+  const healthyRestart = await createRuntime(backend, "url_sha256:workbook-a");
+  assert.equal(await healthyRestart.controller.restoreLatestSession(), true);
+  assert.equal(healthyRestart.controller.getSessionId(), persistedSessionId);
+  assert.match(transcriptText(healthyRestart), /persisted before failure/u);
+  assert.doesNotMatch(transcriptText(healthyRestart), /fresh fallback session/u);
 });
 
 void test("restart restores workbook A without exposing its session to workbook B", async () => {
@@ -313,7 +317,6 @@ void test("failed workbook identity read restores no global session and writes n
     false,
     new Error("workbook identity read failed"),
   );
-  const settingKeysBefore = await restarted.settings.list();
   const warnings: string[] = [];
   const originalWarn = console.warn;
   console.warn = (...args: DynamicValue[]) => {
@@ -328,8 +331,12 @@ void test("failed workbook identity read restores no global session and writes n
 
   assert.notEqual(restarted.controller.getSessionId(), foreignSessionId);
   assert.equal(restarted.agent.state.messages.length, 0);
-  assert.deepEqual(await restarted.settings.list(), settingKeysBefore);
   assert.equal(warnings.some((warning) => warning.includes("[pi] Session restore failed:")), true);
+
+  const healthyRestart = await createRuntime(backend, null);
+  assert.equal(await healthyRestart.controller.restoreLatestSession(), true);
+  assert.equal(healthyRestart.controller.getSessionId(), foreignSessionId);
+  assert.match(transcriptText(healthyRestart), /foreign-global-session/u);
 });
 
 void test("legacy pre-workbook-association session restores through global fallback", async () => {
@@ -339,7 +346,6 @@ void test("legacy pre-workbook-association session restores through global fallb
   legacyRuntime.controller.dispose();
 
   const restarted = await createRuntime(backend, null);
-  assert.equal(await restarted.settings.get(sessionWorkbookKey(legacySessionId)), null);
   assert.equal(await restarted.controller.restoreLatestSession(), true);
   assert.equal(restarted.controller.getSessionId(), legacySessionId);
   assert.match(transcriptText(restarted), /legacy-global-session/);

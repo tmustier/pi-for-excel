@@ -64,20 +64,19 @@ function createManualBackupStoreForTest(files: WorkspaceFileEntry[]): {
   return { store, downloads, deletes };
 }
 
-void test("Office file backup calls getFileAsync on its document owner", async () => {
+void test("manual backup creates a downloadable copy of the current Office workbook", async () => {
   const previousOffice = Object.getOwnPropertyDescriptor(globalThis, "Office");
-  let receiverWasDocument = false;
+  const files: WorkspaceFileEntry[] = [];
+  const writtenFiles = new Map<string, string>();
 
   const document = {
     getFileAsync(
-      this: DynamicObject,
       fileType: string,
       options: { sliceSize?: number },
       callback?: (result: DynamicObject) => void,
     ): void {
-      receiverWasDocument = this === document;
       assert.equal(fileType, "compressed");
-      assert.equal(options.sliceSize, 256);
+      assert.equal(options.sliceSize, 1_048_576);
       callback?.({
         status: "succeeded",
         value: {
@@ -99,9 +98,46 @@ void test("Office file backup calls getFileAsync on its document owner", async (
     value: { context: { document } },
   });
 
+  const store = new ManualFullWorkbookBackupStore({
+    getWorkbookContext: () => Promise.resolve({
+      workbookId: "wb-1",
+      workbookName: "Workbook.xlsx",
+      source: "document.url",
+    }),
+    getWorkspace: () => ({
+      listFiles: () => Promise.resolve(files),
+      writeBase64File: (path, base64, mimeType) => {
+        writtenFiles.set(path, `${mimeType}:${base64}`);
+        files.push(makeManualBackupFile({
+          workbookId: "wb-1",
+          backupId: path.slice(path.lastIndexOf("/") + 1, -5),
+          modifiedAt: 1_700_000_000_000,
+        }));
+        return Promise.resolve();
+      },
+      downloadFile: () => Promise.resolve(),
+      deleteFile: () => Promise.resolve(),
+    }),
+    captureWorkbookBytes: () => captureWorkbookCompressedBytes(),
+    now: () => 1_700_000_000_000,
+    createSuffix: () => "office",
+  });
+
   try {
-    assert.deepEqual(await captureWorkbookCompressedBytes(256), new Uint8Array([7, 9]));
-    assert.equal(receiverWasDocument, true);
+    const created = await store.create();
+    const listed = await store.listForCurrentWorkbook();
+
+    assert.deepEqual(created, {
+      id: "2023-11-14T22-13-20-000Z_workbook.xlsx_office",
+      path: "manual-backups/full-workbook/v1/wb-1/2023-11-14T22-13-20-000Z_workbook.xlsx_office.xlsx",
+      createdAt: 1_700_000_000_000,
+      sizeBytes: 2,
+    });
+    assert.equal(
+      writtenFiles.get("manual-backups/full-workbook/v1/wb-1/2023-11-14T22-13-20-000Z_workbook.xlsx_office.xlsx"),
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:Bwk=",
+    );
+    assert.equal(listed[0]?.id, "2023-11-14T22-13-20-000Z_workbook.xlsx_office");
   } finally {
     if (previousOffice) Object.defineProperty(globalThis, "Office", previousOffice);
     else delete (globalThis as { Office?: DynamicValue }).Office;

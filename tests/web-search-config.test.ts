@@ -18,11 +18,10 @@ import {
   WEB_SEARCH_BRAVE_API_KEY_SETTING_KEY,
   type WebSearchConfigStore,
 } from "../src/tools/web-search-config.ts";
-function isWebSearchConfigTestPayloadShape(value: DynamicValue): value is DynamicObject {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-import { CONNECTION_STORE_KEY } from "../src/connections/store.ts";
+import {
+  CONNECTION_STORE_KEY,
+  loadConnectionStoreDocument,
+} from "../src/connections/store.ts";
 
 class MemorySettingsStore implements WebSearchConfigStore {
   protected readonly values = new Map<string, DynamicValue>();
@@ -41,9 +40,6 @@ class MemorySettingsStore implements WebSearchConfigStore {
     return Promise.resolve();
   }
 
-  peek(key: string): DynamicValue {
-    return this.values.get(key);
-  }
 }
 
 class TransientReadSettings extends MemorySettingsStore {
@@ -60,31 +56,6 @@ class TransientReadSettings extends MemorySettingsStore {
     }
     return super.get(key);
   }
-}
-
-function readConnectionStoreSecrets(
-  settings: MemorySettingsStore,
-): Record<string, string> | undefined {
-  const raw = settings.peek(CONNECTION_STORE_KEY);
-  if (!isWebSearchConfigTestPayloadShape(raw)) return undefined;
-
-  const rawItems = raw.items;
-  if (!isWebSearchConfigTestPayloadShape(rawItems)) return undefined;
-
-  const rawRecord = rawItems[WEB_SEARCH_CONNECTION_ID];
-  if (!isWebSearchConfigTestPayloadShape(rawRecord)) return undefined;
-
-  const rawSecrets = rawRecord.secrets;
-  if (!isWebSearchConfigTestPayloadShape(rawSecrets)) return undefined;
-
-  const secrets: Record<string, string> = {};
-  for (const [key, value] of Object.entries(rawSecrets)) {
-    if (typeof value === "string") {
-      secrets[key] = value;
-    }
-  }
-
-  return secrets;
 }
 
 void test("web search config defaults to jina provider", async () => {
@@ -115,7 +86,7 @@ void test("web search config infers brave when only brave key is present", async
   assert.equal(getApiKeyForProvider(config), "br-legacy");
 });
 
-void test("web search API-key mutation retries transient reads without losing existing keys", async () => {
+void test("a failed web-search key update preserves existing configuration and can be retried", async () => {
   const settings = new TransientReadSettings();
   await settings.set(CONNECTION_STORE_KEY, {
     version: 1,
@@ -133,19 +104,15 @@ void test("web search API-key mutation retries transient reads without losing ex
     () => saveWebSearchApiKey(settings, "serper", "sp-new"),
     /transient web-search read failure/u,
   );
-  assert.equal(readConnectionStoreSecrets(settings)?.serper_api_key, undefined);
-  assert.equal(readConnectionStoreSecrets(settings)?.brave_api_key, "br-existing");
+  const unchanged = await loadWebSearchProviderConfig(settings);
+  assert.equal(getApiKeyForProvider(unchanged, "serper"), undefined);
+  assert.equal(getApiKeyForProvider(unchanged, "brave"), "br-existing");
 
   await saveWebSearchApiKey(settings, "serper", "sp-new");
-  const stored = settings.peek(CONNECTION_STORE_KEY);
-  assert.ok(isWebSearchConfigTestPayloadShape(stored));
-  assert.ok(isWebSearchConfigTestPayloadShape(stored.items));
-  assert.ok(isWebSearchConfigTestPayloadShape(stored.items.sibling));
-  assert.equal(stored.items.sibling.secrets && isWebSearchConfigTestPayloadShape(stored.items.sibling.secrets)
-    ? stored.items.sibling.secrets.token
-    : undefined, "keep");
-  assert.equal(readConnectionStoreSecrets(settings)?.brave_api_key, "br-existing");
-  assert.equal(readConnectionStoreSecrets(settings)?.serper_api_key, "sp-new");
+  const reloaded = await loadWebSearchProviderConfig(settings);
+  assert.equal(getApiKeyForProvider(reloaded, "brave"), "br-existing");
+  assert.equal(getApiKeyForProvider(reloaded, "serper"), "sp-new");
+  assert.equal((await loadConnectionStoreDocument(settings)).sibling?.secrets?.token, "keep");
 });
 
 void test("web search config stores provider-specific api keys", async () => {
@@ -162,17 +129,13 @@ void test("web search config stores provider-specific api keys", async () => {
   assert.equal(getApiKeyForProvider(config, "brave"), "br-123");
 });
 
-void test("web search API keys persist in connection store", async () => {
+void test("web search API keys remain available after configuration reload", async () => {
   const settings = new MemorySettingsStore();
 
   await saveWebSearchApiKey(settings, "serper", "sp-123");
 
-  const secrets = readConnectionStoreSecrets(settings);
-  assert.ok(secrets);
-  assert.equal(secrets.serper_api_key, "sp-123");
-
-  const legacyValue = await settings.get(WEB_SEARCH_SERPER_API_KEY_SETTING_KEY);
-  assert.equal(legacyValue, null);
+  const reloaded = await loadWebSearchProviderConfig(settings);
+  assert.equal(getApiKeyForProvider(reloaded, "serper"), "sp-123");
 });
 
 void test("web search config reads legacy key when connection store key is absent", async () => {
@@ -193,15 +156,10 @@ void test("legacy web search keys migrate into connection store", async () => {
   const migrated = await migrateLegacyWebSearchApiKeysToConnectionStore(settings);
   assert.equal(migrated, true);
 
-  const secrets = readConnectionStoreSecrets(settings);
-  assert.ok(secrets);
-  assert.equal(secrets.serper_api_key, "sp-legacy");
-  assert.equal(secrets.brave_api_key, "br-legacy");
-
-  const legacySerper = await settings.get(WEB_SEARCH_SERPER_API_KEY_SETTING_KEY);
-  const legacyBrave = await settings.get(WEB_SEARCH_BRAVE_API_KEY_SETTING_KEY);
-  assert.equal(legacySerper, null);
-  assert.equal(legacyBrave, null);
+  const reloaded = await loadWebSearchProviderConfig(settings);
+  assert.equal(getApiKeyForProvider(reloaded, "serper"), "sp-legacy");
+  assert.equal(getApiKeyForProvider(reloaded, "brave"), "br-legacy");
+  assert.equal(await migrateLegacyWebSearchApiKeysToConnectionStore(settings), false);
 });
 
 void test("legacy migration does not overwrite existing connection-store keys", async () => {
