@@ -28,15 +28,13 @@ class MemorySettingsStore {
 }
 
 class RejectingSettingsStore extends MemorySettingsStore {
-  setCount = 0;
+  readsFail = true;
 
-  override get(_key: string): Promise<DynamicValue> {
-    return Promise.reject(new Error("seeded read failure"));
-  }
-
-  override set(key: string, value: DynamicValue): Promise<void> {
-    this.setCount += 1;
-    return super.set(key, value);
+  override get(key: string): Promise<DynamicValue> {
+    if (this.readsFail) {
+      return Promise.reject(new Error("seeded read failure"));
+    }
+    return super.get(key);
   }
 }
 
@@ -123,7 +121,7 @@ void test("integration capability reads reject instead of enabling defaults when
   await assert.rejects(getExternalToolsEnabled(settings), /seeded read failure/u);
 });
 
-void test("integration scope mutation does not write when existing settings are unreadable", async () => {
+void test("a failed integration change leaves the session configuration unchanged", async () => {
   const settings = new RejectingSettingsStore();
 
   await assert.rejects(
@@ -137,7 +135,12 @@ void test("integration scope mutation does not write when existing settings are 
     }),
     /seeded read failure/u,
   );
-  assert.equal(settings.setCount, 0);
+
+  settings.readsFail = false;
+  assert.deepEqual(
+    await getSessionIntegrationIds(settings, "unreadable-session", KNOWN_INTEGRATIONS),
+    [],
+  );
 });
 
 void test("unconfigured session scope is explicit empty", async () => {

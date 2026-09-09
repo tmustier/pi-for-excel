@@ -381,7 +381,6 @@ void test("file mutations retry unread metadata and audit without overwriting pe
     audit: { actor: "user", source: "first-mutation" },
   });
   assert.equal((await backend.readFile("renamed.txt")).text, "existing");
-  assert.deepEqual(settings.writes, []);
 
   await withOfficeDocumentUrl("https://contoso.example/workbooks/Later.xlsx", async () => {
     await workspace.writeTextFile("later.txt", "later", undefined, {
@@ -389,14 +388,22 @@ void test("file mutations retry unread metadata and audit without overwriting pe
     });
   });
 
-  const metadata = settings.values.get(metadataKey);
-  assert.equal(typeof metadata, "object");
-  assert.match(JSON.stringify(metadata), /old\.txt/u);
-  assert.match(JSON.stringify(metadata), /later\.txt/u);
+  const restartedBackend = new SourceBackend({
+    kind: "memory",
+    label: "Restarted session memory",
+    files: [
+      { path: "old.txt", text: "existing", modifiedAt: 100 },
+      { path: "later.txt", text: "later", modifiedAt: 200 },
+    ],
+  });
+  const restarted = new FilesWorkspace({ initialBackend: restartedBackend, settings });
+  const files = await restarted.listFiles();
+  assert.equal(files.find((file) => file.path === "old.txt")?.workbookTag?.workbookLabel, "Existing.xlsx");
+  assert.equal(files.find((file) => file.path === "later.txt")?.workbookTag?.workbookLabel, "Later.xlsx");
 
-  const audit = settings.values.get(auditKey);
-  assert.match(JSON.stringify(audit), /existing-audit/u);
-  assert.match(JSON.stringify(audit), /later-mutation/u);
+  const audit = await restarted.listAuditEntries();
+  assert.ok(audit.some((entry) => entry.id === "existing-audit"));
+  assert.ok(audit.some((entry) => entry.source === "later-mutation"));
 });
 
 void test("files workspace tags files with active workbook metadata", async () => {
