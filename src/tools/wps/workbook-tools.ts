@@ -12,13 +12,29 @@ import {
   qualifiedAddress,
 } from "../../excel/helpers.js";
 import {
+  getWpsActiveWorkbook,
+  getWpsActiveWorksheet,
+  getWpsCollectionCount,
+  getWpsCollectionItem,
   getWpsEtApplication,
-  type WpsCountedCollection,
+  getWpsRangeAddress,
+  getWpsRangeColumns,
+  getWpsRangeFormula,
+  getWpsRangeNumberFormat,
+  getWpsRangeRows,
+  getWpsRangeValues,
+  getWpsSelection,
+  getWpsUsedRange,
+  getWpsWorkbookName,
+  getWpsWorkbookSheetCollection,
+  getWpsWorksheetName,
+  getWpsWorksheetRange,
+  getWpsWorksheetVisibility,
+  writeWpsRangeValues,
   type WpsEtApplication,
   type WpsEtRange,
   type WpsEtWorkbook,
   type WpsEtWorksheet,
-  type WpsRowsOrColumns,
 } from "../../host/wps/jsapi.js";
 import { getErrorMessage } from "../../utils/errors.js";
 import { formatAsMarkdownTable, extractFormulas, findErrors } from "../../utils/format.js";
@@ -99,59 +115,28 @@ function asWorksheet(value: DynamicValue): WpsEtWorksheet | null {
   return value;
 }
 
-function asRange(value: DynamicValue): WpsEtRange | null {
-  if (typeof value !== "object" || value === null) return null;
-  return value;
-}
-
 function worksheetName(sheet: WpsEtWorksheet): string {
-  return asString(sheet.Name) ?? asString(sheet.name) ?? "(unnamed sheet)";
+  return asString(getWpsWorksheetName(sheet)) ?? "(unnamed sheet)";
 }
 
 function workbookName(workbook: WpsEtWorkbook): string {
-  return asString(workbook.Name) ?? asString(workbook.name) ?? "(unnamed workbook)";
-}
-
-function getCount(collection: WpsCountedCollection | WpsRowsOrColumns | null | undefined): number | null {
-  const raw = collection?.Count ?? collection?.count;
-  return typeof raw === "number" && Number.isFinite(raw) && raw >= 0
-    ? Math.floor(raw)
-    : null;
-}
-
-function workbookSheetCollection(
-  app: WpsEtApplication,
-  workbook: WpsEtWorkbook,
-): WpsCountedCollection | null {
-  return workbook.Worksheets
-    ?? workbook.Sheets
-    ?? app.Worksheets
-    ?? app.Sheets
-    ?? null;
-}
-
-function getCollectionItem(collection: WpsCountedCollection, key: string | number): DynamicValue {
-  if (typeof collection.Item !== "function") {
-    throw new Error("WPS worksheet collection does not expose Item().");
-  }
-
-  return collection.Item(key);
+  return asString(getWpsWorkbookName(workbook)) ?? "(unnamed workbook)";
 }
 
 function listWorksheets(app: WpsEtApplication, workbook: WpsEtWorkbook): WpsEtWorksheet[] {
-  const collection = workbookSheetCollection(app, workbook);
+  const collection = getWpsWorkbookSheetCollection(app, workbook);
   if (!collection) {
     throw new Error("WPS workbook does not expose a worksheet collection.");
   }
 
-  const count = getCount(collection);
+  const count = getWpsCollectionCount(collection);
   if (count === null) {
     throw new Error("WPS worksheet collection does not expose Count.");
   }
 
   const sheets: WpsEtWorksheet[] = [];
   for (let index = 1; index <= count; index += 1) {
-    const sheet = asWorksheet(getCollectionItem(collection, index));
+    const sheet = asWorksheet(getWpsCollectionItem(collection, index));
     if (sheet) sheets.push(sheet);
   }
 
@@ -163,19 +148,19 @@ function getWorksheetByName(
   workbook: WpsEtWorkbook,
   sheetName: string,
 ): WpsEtWorksheet {
-  const collection = workbookSheetCollection(app, workbook);
+  const collection = getWpsWorkbookSheetCollection(app, workbook);
   if (!collection) {
     throw new Error("WPS workbook does not expose a worksheet collection.");
   }
 
-  const direct = asWorksheet(getCollectionItem(collection, sheetName));
+  const direct = asWorksheet(getWpsCollectionItem(collection, sheetName));
   if (direct) return direct;
 
   throw new Error(`WPS worksheet not found: ${sheetName}`);
 }
 
 function getActiveWorksheet(app: WpsEtApplication, workbook: WpsEtWorkbook): WpsEtWorksheet {
-  const active = asWorksheet(app.ActiveSheet);
+  const active = getWpsActiveWorksheet(app);
   if (active) return active;
 
   const first = listWorksheets(app, workbook)[0];
@@ -190,7 +175,7 @@ function requireWpsWorkbook(): { app: WpsEtApplication; workbook: WpsEtWorkbook 
     throw new Error("WPS ET Application is unavailable.");
   }
 
-  const workbook = app.ActiveWorkbook;
+  const workbook = getWpsActiveWorkbook(app);
   if (!workbook) {
     throw new Error("No active WPS workbook.");
   }
@@ -203,7 +188,7 @@ function normalizeAddress(address: string): string {
 }
 
 function getRangeAddress(range: WpsEtRange, fallbackAddress: string): string {
-  const address = asString(range.Address);
+  const address = asString(getWpsRangeAddress(range));
   return normalizeAddress(address ?? fallbackAddress);
 }
 
@@ -249,8 +234,8 @@ function inferGridDims(raw: DynamicValue): { rows: number; cols: number } | null
 }
 
 function rangeDimensions(range: WpsEtRange, address: string, rawValues: DynamicValue): { rows: number; cols: number } {
-  const rowCount = getCount(range.Rows);
-  const colCount = getCount(range.Columns);
+  const rowCount = getWpsCollectionCount(getWpsRangeRows(range));
+  const colCount = getWpsCollectionCount(getWpsRangeColumns(range));
   if (rowCount !== null && colCount !== null) {
     return { rows: rowCount, cols: colCount };
   }
@@ -291,9 +276,7 @@ function normalizeGrid(raw: DynamicValue, rows: number, cols: number, emptyValue
 }
 
 function readRangeValue2(range: WpsEtRange): DynamicValue {
-  if (range.Value2 !== undefined) return range.Value2;
-  if (typeof range.Value === "function") return range.Value();
-  return undefined;
+  return getWpsRangeValues(range);
 }
 
 function rangeSnapshot(sheet: WpsEtWorksheet, range: WpsEtRange, fallbackAddress: string): WpsRangeSnapshot {
@@ -304,19 +287,21 @@ function rangeSnapshot(sheet: WpsEtWorksheet, range: WpsEtRange, fallbackAddress
   const metadataWarnings: string[] = [];
 
   let formulas: DynamicValue[][];
-  if (range.Formula === undefined) {
+  const rawFormula = getWpsRangeFormula(range);
+  if (rawFormula === undefined) {
     formulas = normalizeGrid(undefined, dimensions.rows, dimensions.cols, "");
     metadataWarnings.push("WPS Formula metadata was unavailable; formula listings may be incomplete.");
   } else {
-    formulas = normalizeGrid(range.Formula, dimensions.rows, dimensions.cols, "");
+    formulas = normalizeGrid(rawFormula, dimensions.rows, dimensions.cols, "");
   }
 
   let numberFormats: DynamicValue[][];
-  if (range.NumberFormat === undefined) {
+  const rawNumberFormat = getWpsRangeNumberFormat(range);
+  if (rawNumberFormat === undefined) {
     numberFormats = normalizeGrid(undefined, dimensions.rows, dimensions.cols, "General");
     metadataWarnings.push("WPS NumberFormat metadata was unavailable; detailed format output may be incomplete.");
   } else {
-    numberFormats = normalizeGrid(range.NumberFormat, dimensions.rows, dimensions.cols, "General");
+    numberFormats = normalizeGrid(rawNumberFormat, dimensions.rows, dimensions.cols, "General");
   }
 
   return {
@@ -341,11 +326,7 @@ function getRangeForRef(
     ? getWorksheetByName(app, workbook, parsed.sheet)
     : getActiveWorksheet(app, workbook);
 
-  if (typeof sheet.Range !== "function") {
-    throw new Error(`WPS worksheet ${worksheetName(sheet)} does not expose Range().`);
-  }
-
-  const range = asRange(sheet.Range(parsed.address));
+  const range = getWpsWorksheetRange(sheet, parsed.address);
   if (!range) {
     throw new Error(`WPS Range("${parsed.address}") did not return a range object.`);
   }
@@ -354,7 +335,7 @@ function getRangeForRef(
 }
 
 function visibilityLabel(sheet: WpsEtWorksheet): string {
-  const value = sheet.Visible ?? sheet.visible;
+  const value = getWpsWorksheetVisibility(sheet);
   if (value === true || value === -1 || value === "Visible" || value === "xlSheetVisible") return "Visible";
   if (value === false || value === 0 || value === "Hidden" || value === "xlSheetHidden") return "Hidden";
   if (value === 2 || value === "VeryHidden" || value === "xlSheetVeryHidden") return "VeryHidden";
@@ -364,7 +345,7 @@ function visibilityLabel(sheet: WpsEtWorksheet): string {
 }
 
 function usedRangeSummary(sheet: WpsEtWorksheet): string {
-  const used = sheet.UsedRange;
+  const used = getWpsUsedRange(sheet);
   if (!used) return "used range unavailable";
 
   const address = getRangeAddress(used, "A1");
@@ -374,9 +355,9 @@ function usedRangeSummary(sheet: WpsEtWorksheet): string {
 }
 
 function selectionAddress(app: WpsEtApplication): string | null {
-  const selection = asRange(app.Selection);
+  const selection = getWpsSelection(app);
   if (!selection) return null;
-  const address = asString(selection.Address);
+  const address = asString(getWpsRangeAddress(selection));
   return address ? normalizeAddress(address) : null;
 }
 
@@ -465,7 +446,8 @@ export function executeWpsGetWorkbookOverview(
 
 function buildWpsOverview(app: WpsEtApplication, workbook: WpsEtWorkbook): string[] {
   const sheets = listWorksheets(app, workbook);
-  const activeName = app.ActiveSheet ? worksheetName(app.ActiveSheet) : null;
+  const activeSheet = getWpsActiveWorksheet(app);
+  const activeName = activeSheet ? worksheetName(activeSheet) : null;
   const currentSelection = selectionAddress(app);
 
   const lines: string[] = [];
@@ -502,7 +484,7 @@ function buildWpsSheetDetail(
   sheetName: string,
 ): string[] {
   const sheet = getWorksheetByName(app, workbook, sheetName);
-  const used = sheet.UsedRange;
+  const used = getWpsUsedRange(sheet);
   const lines: string[] = [];
 
   lines.push(`## Sheet: ${worksheetName(sheet)}${visibilityLabel(sheet) === "Visible" ? "" : ` (${visibilityLabel(sheet)})`}`);
@@ -778,17 +760,7 @@ function findInvalidFormulas(values: DynamicValue[][], startCell: string): Inval
 
 function writeWpsRange(range: WpsEtRange, values: DynamicValue[][]): void {
   const containsFormula = values.some((row) => row.some((value) => typeof value === "string" && value.startsWith("=")));
-  if (containsFormula) {
-    range.Formula = values;
-    return;
-  }
-
-  if (typeof range.Value === "function" && range.Value2 === undefined) {
-    range.Value(undefined, values);
-    return;
-  }
-
-  range.Value2 = values;
+  writeWpsRangeValues(range, values, containsFormula);
 }
 
 export function executeWpsWriteCells(
@@ -860,11 +832,7 @@ function writeWpsCells(
   const { app, workbook } = requireWpsWorkbook();
   const { sheet } = getRangeForRef(app, workbook, params.start_cell);
   const rangeAddress = computeRangeAddress(startCellRef, rows, cols);
-  if (typeof sheet.Range !== "function") {
-    throw new Error(`WPS worksheet ${worksheetName(sheet)} does not expose Range().`);
-  }
-
-  const targetRange = asRange(sheet.Range(rangeAddress));
+  const targetRange = getWpsWorksheetRange(sheet, rangeAddress);
   if (!targetRange) {
     throw new Error(`WPS Range("${rangeAddress}") did not return a range object.`);
   }

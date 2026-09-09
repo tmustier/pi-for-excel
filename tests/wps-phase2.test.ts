@@ -6,12 +6,20 @@ import { Type } from "@sinclair/typebox";
 
 import { colToLetter, parseCell } from "../src/excel/helpers.ts";
 import { WpsHost } from "../src/host/wps-host.ts";
-import type {
-  WpsCountedCollection,
-  WpsEtApplication,
-  WpsEtRange,
-  WpsEtWorkbook,
-  WpsEtWorksheet,
+import {
+  getWpsActiveWorkbook,
+  getWpsCollectionCount,
+  getWpsCollectionItem,
+  getWpsRangeAddress,
+  getWpsRangeValues,
+  getWpsUsedRange,
+  getWpsWorkbookSheetCollection,
+  writeWpsRangeValues,
+  type WpsCountedCollection,
+  type WpsEtApplication,
+  type WpsEtRange,
+  type WpsEtWorkbook,
+  type WpsEtWorksheet,
 } from "../src/host/wps/jsapi.ts";
 import { createExecuteWpsJsTool } from "../src/tools/execute-wps-js.ts";
 import { createAllTools } from "../src/tools/index.ts";
@@ -291,6 +299,65 @@ function firstText<TDetails>(result: AgentToolResult<TDetails>): string {
   }
   return block.text;
 }
+
+void test("WPS adapter decodes callable properties and application-level collections with owner binding", () => {
+  let written: DynamicValue = null;
+  const range: WpsEtRange = {
+    Address(): DynamicValue {
+      assert.equal(this, range);
+      return "$A$1";
+    },
+    Value2(): DynamicValue {
+      assert.equal(this, range);
+      return [["value"]];
+    },
+    Value(_kind?: DynamicValue, value?: DynamicValue): DynamicValue {
+      assert.equal(this, range);
+      written = value;
+      return undefined;
+    },
+  };
+  const sheet: WpsEtWorksheet = {
+    UsedRange(): WpsEtRange {
+      assert.equal(this, sheet);
+      return range;
+    },
+  };
+  const collection: WpsCountedCollection = {
+    Count(): number {
+      assert.equal(this, collection);
+      return 1;
+    },
+    Item(key: string | number): DynamicValue {
+      assert.equal(this, collection);
+      assert.equal(key, 1);
+      return sheet;
+    },
+  };
+  const workbook: WpsEtWorkbook = {};
+  const app: WpsEtApplication = {
+    ActiveWorkbook(): WpsEtWorkbook {
+      assert.equal(this, app);
+      return workbook;
+    },
+    Worksheets(): WpsCountedCollection {
+      assert.equal(this, app);
+      return collection;
+    },
+  };
+
+  assert.equal(getWpsActiveWorkbook(app), workbook);
+  const resolvedCollection = getWpsWorkbookSheetCollection(app, workbook);
+  assert.equal(resolvedCollection, collection);
+  assert.equal(getWpsCollectionCount(resolvedCollection), 1);
+  assert.equal(getWpsCollectionItem(collection, 1), sheet);
+  assert.equal(getWpsUsedRange(sheet), range);
+  assert.equal(getWpsRangeAddress(range), "$A$1");
+  assert.deepEqual(getWpsRangeValues(range), [["value"]]);
+
+  writeWpsRangeValues(range, [["written"]], false);
+  assert.deepEqual(written, [["written"]]);
+});
 
 void test("WpsHost hashes ActiveWorkbook.FullName without exposing the raw path", async () => {
   const app = createFakeWpsApplication();
