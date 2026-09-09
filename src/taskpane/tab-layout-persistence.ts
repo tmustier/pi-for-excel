@@ -1,7 +1,7 @@
 import type { WorkbookTabLayout } from "./tab-layout.js";
 
 export interface TabLayoutPersistenceController {
-  enable(): void;
+  enable(initialLayoutToSkip?: WorkbookTabLayout): void;
   persist(layout: WorkbookTabLayout): void;
   flush(): Promise<void>;
 }
@@ -20,6 +20,7 @@ export function createTabLayoutPersistence(
   options: CreateTabLayoutPersistenceOptions,
 ): TabLayoutPersistenceController {
   let enabled = false;
+  let initialLayoutSignatureToSkip: string | null = null;
   let lastPersistedSignature: string | null = null;
   let persistChain: Promise<void> = Promise.resolve();
 
@@ -28,14 +29,19 @@ export function createTabLayoutPersistence(
   });
 
   return {
-    enable(): void {
+    enable(initialLayoutToSkip?: WorkbookTabLayout): void {
       enabled = true;
+      initialLayoutSignatureToSkip = initialLayoutToSkip
+        ? tabLayoutSignature(initialLayoutToSkip)
+        : null;
     },
 
     persist(layout: WorkbookTabLayout): void {
       if (!enabled) return;
 
       const layoutSignature = tabLayoutSignature(layout);
+      if (layoutSignature === initialLayoutSignatureToSkip) return;
+      initialLayoutSignatureToSkip = null;
 
       persistChain = persistChain
         .then(

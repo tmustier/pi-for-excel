@@ -1076,9 +1076,18 @@ export async function initTaskpane(opts: {
     }
   };
 
+  let tabLayoutReadSucceeded = false;
+
   const restorePersistedTabLayout = async (): Promise<SessionRuntime | null> => {
     const workbookId = await resolveWorkbookId();
-    const savedLayout = await loadWorkbookTabLayout(settings, workbookId);
+    let savedLayout: WorkbookTabLayout | null;
+    try {
+      savedLayout = await loadWorkbookTabLayout(settings, workbookId);
+      tabLayoutReadSucceeded = true;
+    } catch (error) {
+      console.warn("[pi] Failed to read persisted tab layout:", error);
+      return null;
+    }
     if (!savedLayout) return null;
 
     const runtimesBySessionId = new Map<string, SessionRuntime>();
@@ -1806,8 +1815,9 @@ export async function initTaskpane(opts: {
     await runtimeManager.createRuntime({ activate: true, autoRestoreLatest: true });
   }
 
-  tabLayoutPersistence.enable();
-  maybePersistTabLayout();
+  const startupTabLayout = snapshotRuntimeTabLayout();
+  tabLayoutPersistence.enable(tabLayoutReadSucceeded ? undefined : startupTabLayout);
+  tabLayoutPersistence.persist(startupTabLayout);
 
   // ── Disclosure bar (onboarding banner) ──
   // Must run after runtime bootstrap so the sidebar has rendered .pi-messages.

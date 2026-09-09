@@ -360,13 +360,22 @@ export class WorkbookRecoveryLog {
 
   private async ensureLoaded(): Promise<void> {
     if (this.loaded) return;
-    this.loaded = true;
 
     const settings = await this.dependencies.getSettingsStore();
     const payload = await readPersistedWorkbookRecoveryPayload(settings);
     this.snapshots = parsePersistedSnapshots(payload, {
       maxEntries: MAX_RECOVERY_ENTRIES,
     });
+    this.loaded = true;
+  }
+
+  private async ensureLoadedForAppend(): Promise<boolean> {
+    try {
+      await this.ensureLoaded();
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   private async persist(): Promise<void> {
@@ -596,42 +605,42 @@ export class WorkbookRecoveryLog {
   }
 
   async append(args: AppendWorkbookRecoverySnapshotArgs): Promise<WorkbookRecoverySnapshot | null> {
-    await this.ensureLoaded();
+    if (!await this.ensureLoadedForAppend()) return null;
     return this.appendRangeWithContext(args);
   }
 
   async appendFormatCells(
     args: AppendFormatCellsRecoverySnapshotArgs,
   ): Promise<WorkbookRecoverySnapshot | null> {
-    await this.ensureLoaded();
+    if (!await this.ensureLoadedForAppend()) return null;
     return this.appendFormatCellsWithContext(args);
   }
 
   async appendModifyStructure(
     args: AppendModifyStructureRecoverySnapshotArgs,
   ): Promise<WorkbookRecoverySnapshot | null> {
-    await this.ensureLoaded();
+    if (!await this.ensureLoadedForAppend()) return null;
     return this.appendModifyStructureWithContext(args);
   }
 
   async appendConditionalFormat(
     args: AppendConditionalFormatRecoverySnapshotArgs,
   ): Promise<WorkbookRecoverySnapshot | null> {
-    await this.ensureLoaded();
+    if (!await this.ensureLoadedForAppend()) return null;
     return this.appendConditionalFormatWithContext(args);
   }
 
   async appendCommentThread(
     args: AppendCommentThreadRecoverySnapshotArgs,
   ): Promise<WorkbookRecoverySnapshot | null> {
-    await this.ensureLoaded();
+    if (!await this.ensureLoadedForAppend()) return null;
     return this.appendCommentThreadWithContext(args);
   }
 
   async appendChart(
     args: AppendChartRecoverySnapshotArgs,
   ): Promise<WorkbookRecoverySnapshot | null> {
-    await this.ensureLoaded();
+    if (!await this.ensureLoadedForAppend()) return null;
     return this.appendChartWithContext(args);
   }
 

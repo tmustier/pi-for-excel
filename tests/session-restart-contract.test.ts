@@ -108,6 +108,22 @@ class MemoryStorageBackend implements StorageBackend {
   }
 }
 
+class LatestPointerReadFailureBackend extends MemoryStorageBackend {
+  private failLatestPointerRead = true;
+
+  override get<T = DynamicValue>(storeName: string, key: string): Promise<T | null> {
+    if (
+      storeName === "settings" &&
+      key === workbookLatestSessionKey("url_sha256:workbook-a") &&
+      this.failLatestPointerRead
+    ) {
+      this.failLatestPointerRead = false;
+      return Promise.reject(new Error("latest pointer read failed"));
+    }
+    return super.get<T>(storeName, key);
+  }
+}
+
 function readLastModified(value: DynamicValue): string {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return "";
   const candidate = value as { lastModified?: DynamicValue };
@@ -126,6 +142,7 @@ interface RuntimeHarness {
 async function createRuntime(
   backend: StorageBackend,
   workbookId: string | null,
+  autoRestoreLatest = false,
 ): Promise<RuntimeHarness> {
   const { sessions, settings } = initAppStorage(APP_STORAGE_DATABASE_NAME, backend);
   const faux = fauxProvider();
@@ -141,6 +158,7 @@ async function createRuntime(
     sessions,
     settings,
     models,
+    autoRestoreLatest,
     spreadsheetHost: {
       getWorkbookContext: () => Promise.resolve({
         workbookId,
@@ -201,6 +219,25 @@ void test("workbook session partition fails closed when one association cannot b
       "workbook-a",
     ),
     /association read failed/u,
+  );
+});
+
+void test("failed startup latest-pointer read cannot be overwritten by the fallback session", async () => {
+  const backend = new LatestPointerReadFailureBackend();
+  const persistedSessionId = "00000000-0000-4000-8000-000000000001";
+  await backend.set(
+    "settings",
+    workbookLatestSessionKey("url_sha256:workbook-a"),
+    persistedSessionId,
+  );
+
+  const runtime = await createRuntime(backend, "url_sha256:workbook-a", true);
+  const fallbackSessionId = await promptAndWaitForSave(runtime, "fresh fallback session");
+
+  assert.notEqual(fallbackSessionId, persistedSessionId);
+  assert.equal(
+    await runtime.settings.get(workbookLatestSessionKey("url_sha256:workbook-a")),
+    persistedSessionId,
   );
 });
 

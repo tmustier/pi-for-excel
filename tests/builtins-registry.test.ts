@@ -19,6 +19,8 @@ import { executeSlashCommand, type SlashCommandExecutionResult } from "../src/co
 import { TOOLS_COMMAND_NAME } from "../src/integrations/naming.ts";
 import { commandRegistry, type SlashCommand } from "../src/commands/types.ts";
 import { installFakeDom } from "./fixtures/fake-dom.ts";
+import { CONNECTION_STORE_KEY } from "../src/connections/store.ts";
+import { stageInlineExtensionUpgrade } from "../src/taskpane/background-extension-verification.ts";
 
 class MemorySettingsStore {
   protected readonly values = new Map<string, DynamicValue>();
@@ -38,6 +40,15 @@ class MemorySettingsStore {
 
   writeRaw(key: string, value: DynamicValue): void {
     this.values.set(key, value);
+  }
+}
+
+class ConnectionReadFailureSettings extends MemorySettingsStore {
+  override get(key: string): Promise<DynamicValue> {
+    if (key === CONNECTION_STORE_KEY) {
+      return Promise.reject(new Error("connection document read failed"));
+    }
+    return super.get(key);
   }
 }
 
@@ -474,6 +485,48 @@ void test("extension registry retries transient reads without replacing persiste
   await assert.rejects(() => loadStoredExtensions(settings), /transient extension registry read failure/u);
   assert.deepEqual(settings.readRaw(EXTENSIONS_REGISTRY_STORAGE_KEY), registry);
   assert.equal((await loadStoredExtensions(settings))[0]?.id, "ext.persisted");
+});
+
+void test("staged extension upgrade preserves sibling connections when their document is unreadable", async () => {
+  const settings = new ConnectionReadFailureSettings();
+  const timestamp = "2026-09-09T00:00:00.000Z";
+  const registry = {
+    version: 2,
+    items: [{
+      id: "ext.persisted",
+      name: "Persisted",
+      enabled: true,
+      source: { kind: "inline", code: "export function activate() {}" },
+      trust: "inline-code",
+      permissions: getDefaultPermissionsForTrust("inline-code"),
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    }],
+  };
+  const connections = {
+    version: 1,
+    items: {
+      "ext.sibling.account": {
+        status: "connected",
+        secrets: { apiKey: "keep-me" },
+      },
+    },
+  };
+  settings.writeRaw(EXTENSIONS_REGISTRY_STORAGE_KEY, registry);
+  settings.writeRaw(CONNECTION_STORE_KEY, connections);
+
+  await assert.rejects(
+    stageInlineExtensionUpgrade({
+      extensionId: "ext.persisted",
+      code: "export function activate() { return 'updated'; }",
+      connectionId: "ext.persisted.account",
+      secrets: { apiKey: "new-secret" },
+    }, settings),
+    /connection document read failed/u,
+  );
+
+  assert.deepEqual(settings.readRaw(EXTENSIONS_REGISTRY_STORAGE_KEY), registry);
+  assert.deepEqual(settings.readRaw(CONNECTION_STORE_KEY), connections);
 });
 
 void test("extension registry preserves explicit empty saved entries", async () => {

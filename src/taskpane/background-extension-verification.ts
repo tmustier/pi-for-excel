@@ -1,7 +1,8 @@
 import type { ConnectionManager } from "../connections/manager.js";
 import {
-  loadConnectionStoreDocument,
+  loadConnectionStoreDocumentForUpdate,
   saveConnectionStoreDocument,
+  type ConnectionSettingsStore,
 } from "../connections/store.js";
 import {
   ALL_EXTENSION_CAPABILITIES,
@@ -291,7 +292,10 @@ function setExperiment(payload: DynamicValue): JsonRecord {
   return { feature, enabled };
 }
 
-async function stageInlineExtensionUpgrade(payload: DynamicValue): Promise<JsonRecord> {
+export async function stageInlineExtensionUpgrade(
+  payload: DynamicValue,
+  settings: ConnectionSettingsStore = getAppStorage().settings,
+): Promise<JsonRecord> {
   const extensionId = stringField(payload, "extensionId");
   const code = stringField(payload, "code");
   const connectionId = stringField(payload, "connectionId");
@@ -305,7 +309,6 @@ async function stageInlineExtensionUpgrade(payload: DynamicValue): Promise<JsonR
     throw new Error("Staged connection must be owned by the staged extension");
   }
 
-  const settings = getAppStorage().settings;
   const extensions = await loadStoredExtensions(settings);
   const entry = extensions.find((candidate) => candidate.id === extensionId);
   if (!entry) throw new Error("Extension not found");
@@ -315,7 +318,7 @@ async function stageInlineExtensionUpgrade(payload: DynamicValue): Promise<JsonR
   entry.source = { kind: "inline", code };
   entry.updatedAt = now;
 
-  const connections = await loadConnectionStoreDocument(settings);
+  const connections = await loadConnectionStoreDocumentForUpdate(settings);
   connections[connectionId] = {
     status: "connected",
     secrets,

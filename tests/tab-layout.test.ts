@@ -93,7 +93,7 @@ void test("parseWorkbookTabLayout rejects invalid shapes", () => {
   assert.equal(parseWorkbookTabLayout({ sessionIds: ["", "  "] }), null);
 });
 
-void test("tab layout reader round-trips valid data and defaults on missing, corrupt, or failed reads", async () => {
+void test("tab layout reader round-trips valid data, defaults corrupt data, and propagates failed reads", async () => {
   const settings = new MemoryTaskpaneSettingsStore();
   const layout = {
     sessionIds: ["session-a", "session-b"],
@@ -106,9 +106,9 @@ void test("tab layout reader round-trips valid data and defaults on missing, cor
 
   await settings.set(workbookTabLayoutKey("corrupt"), { sessionIds: "not-an-array" });
   assert.equal(await loadWorkbookTabLayout(settings, "corrupt"), null);
-  assert.equal(
-    await loadWorkbookTabLayout(new MemoryTaskpaneSettingsStore(new Error("read failed")), "workbook-a"),
-    null,
+  await assert.rejects(
+    loadWorkbookTabLayout(new MemoryTaskpaneSettingsStore(new Error("read failed")), "workbook-a"),
+    /read failed/u,
   );
 });
 

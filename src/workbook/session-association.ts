@@ -58,12 +58,8 @@ export async function getLatestSessionForWorkbook(
   settings: SessionAssociationSettingsStore,
   workbookId: string,
 ): Promise<string | null> {
-  try {
-    const value = await settings.get(workbookLatestSessionKey(workbookId));
-    return typeof value === "string" && value.trim().length > 0 ? value : null;
-  } catch {
-    return null;
-  }
+  const value = await settings.get(workbookLatestSessionKey(workbookId));
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
 }
 
 export interface SessionWorkbookPartition {

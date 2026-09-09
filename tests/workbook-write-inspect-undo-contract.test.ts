@@ -12,7 +12,11 @@ import { UnsupportedHostToolError } from "../src/tools/unsupported-host-tool.ts"
 import type { CoreToolName } from "../src/tools/names.ts";
 import { WorkbookRecoveryLog } from "../src/workbook/recovery-log.ts";
 import type { WorkbookContext } from "../src/workbook/context.ts";
-import { createInMemorySettingsStore } from "./fixtures/recovery-log.ts";
+import {
+  createInMemorySettingsStore,
+  createRecoveringInMemorySettingsStore,
+  RECOVERY_SETTING_KEY,
+} from "./fixtures/recovery-log.ts";
 
 interface StoredCell {
   value: DynamicValue;
@@ -270,6 +274,72 @@ void test("committed write succeeds and creates recovery when the initial audit 
   assert.equal(persistedCallIds.includes("existing-call"), true);
   assert.equal(persistedCallIds.includes("write-after-audit-failure"), true);
   assert.equal(persistedCallIds.includes("retry-audit-load"), true);
+});
+
+void test("committed write reports recovery unavailable instead of replacing unread checkpoints", async () => {
+  const store = new RangeStore();
+  const recoverySettings = createRecoveringInMemorySettingsStore();
+  recoverySettings.seed(RECOVERY_SETTING_KEY, {
+    version: 1,
+    snapshots: [{
+      id: "existing-checkpoint",
+      at: 1,
+      toolName: "write_cells",
+      toolCallId: "existing-call",
+      address: "Sheet1!Z1",
+      changedCount: 1,
+      cellCount: 1,
+      beforeValues: [["existing"]],
+      beforeFormulas: [[""]],
+      workbookId: "url_sha256:recovery-read-book",
+    }],
+  });
+  const workbookContext = (): Promise<WorkbookContext> => Promise.resolve({
+    workbookId: "url_sha256:recovery-read-book",
+    workbookName: "Recovery read.xlsx",
+    source: "document.url",
+  });
+  let id = 0;
+  const recovery = new WorkbookRecoveryLog({
+    settings: recoverySettings,
+    getWorkbookContext: workbookContext,
+    createId: () => `new-checkpoint-${id += 1}`,
+    now: () => 1_700_000_000_000 + id,
+    applySnapshot: (address, values) => Promise.resolve(store.applySnapshot(address, values)),
+  });
+  const write = createWriteCellsTool({
+    appendAuditEntry: () => Promise.resolve(),
+    appendRecoverySnapshot: (args) => recovery.append(args),
+  });
+  const read = createReadRangeTool();
+
+  await withRangeStore(store, async () => {
+    const first = await write.execute("write-with-unread-recovery", {
+      start_cell: "Sheet1!A1",
+      values: [["committed"]],
+    });
+    assert.match(firstText(first), /Written to/u);
+    assert.equal(first.details.recovery?.status, "not_available");
+    assert.match(firstText(first), /backup not created/iu);
+    assert.match(firstText(await read.execute("read-first-write", {
+      range: "Sheet1!A1",
+      mode: "csv",
+    })), /committed/u);
+
+    const second = await write.execute("write-after-recovery-recovers", {
+      start_cell: "Sheet1!B1",
+      values: [["second"]],
+    });
+    assert.equal(second.details.recovery?.status, "checkpoint_created");
+  });
+
+  const reloaded = new WorkbookRecoveryLog({
+    settings: recoverySettings,
+    getWorkbookContext: workbookContext,
+  });
+  const persistedIds = (await reloaded.list()).map((snapshot) => snapshot.id);
+  assert.equal(persistedIds.includes("existing-checkpoint"), true);
+  assert.equal(persistedIds.includes("new-checkpoint-1"), true);
 });
 
 void test("user can write, inspect, reject overwrite, and restore through workbook tools", async () => {
