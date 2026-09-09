@@ -3,7 +3,10 @@ import { test } from "node:test";
 
 import type { WorkspaceFileEntry } from "../src/files/types.ts";
 import type { WorkbookContext } from "../src/workbook/context.ts";
-import { ManualFullWorkbookBackupStore } from "../src/workbook/manual-full-backup.ts";
+import {
+  captureWorkbookCompressedBytes,
+  ManualFullWorkbookBackupStore,
+} from "../src/workbook/manual-full-backup.ts";
 
 function makeManualBackupFile(args: {
   workbookId: string;
@@ -60,6 +63,50 @@ function createManualBackupStoreForTest(files: WorkspaceFileEntry[]): {
 
   return { store, downloads, deletes };
 }
+
+void test("Office file backup calls getFileAsync on its document owner", async () => {
+  const previousOffice = Object.getOwnPropertyDescriptor(globalThis, "Office");
+  let receiverWasDocument = false;
+
+  const document = {
+    getFileAsync(
+      this: DynamicObject,
+      fileType: string,
+      options: { sliceSize?: number },
+      callback?: (result: DynamicObject) => void,
+    ): void {
+      receiverWasDocument = this === document;
+      assert.equal(fileType, "compressed");
+      assert.equal(options.sliceSize, 256);
+      callback?.({
+        status: "succeeded",
+        value: {
+          size: 2,
+          sliceCount: 1,
+          getSliceAsync(_index: number, sliceCallback?: (result: DynamicObject) => void): void {
+            sliceCallback?.({ status: "succeeded", value: { data: [7, 9] } });
+          },
+          closeAsync(closeCallback?: (result: DynamicObject) => void): void {
+            closeCallback?.({ status: "succeeded" });
+          },
+        },
+      });
+    },
+  };
+
+  Object.defineProperty(globalThis, "Office", {
+    configurable: true,
+    value: { context: { document } },
+  });
+
+  try {
+    assert.deepEqual(await captureWorkbookCompressedBytes(256), new Uint8Array([7, 9]));
+    assert.equal(receiverWasDocument, true);
+  } finally {
+    if (previousOffice) Object.defineProperty(globalThis, "Office", previousOffice);
+    else delete (globalThis as { Office?: DynamicValue }).Office;
+  }
+});
 
 void test("manual backup restore by id searches beyond first 500 entries", async () => {
   const files: WorkspaceFileEntry[] = [];

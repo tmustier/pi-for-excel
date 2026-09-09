@@ -9,44 +9,18 @@
 import { bytesToBase64 } from "../files/encoding.js";
 import { getFilesWorkspace } from "../files/workspace.js";
 import type { WorkspaceFileEntry } from "../files/types.js";
+import {
+  getOfficeDocumentFileAdapter,
+  type OfficeAsyncResultLike,
+  type OfficeFileLike,
+  type OfficeSliceLike,
+} from "../host/office-file.js";
 import { formatWorkbookLabel, getWorkbookContext, type WorkbookContext } from "./context.js";
 
 const FULL_BACKUP_PATH_PREFIX = "manual-backups/full-workbook/v1";
 const XLSX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 const DEFAULT_SLICE_SIZE_BYTES = 1_048_576; // 1 MB
 const DEFAULT_LIST_LIMIT = 20;
-
-interface OfficeAsyncErrorLike {
-  message?: DynamicValue;
-}
-
-interface OfficeAsyncResultLike<T> {
-  status?: DynamicValue;
-  value?: T;
-  error?: OfficeAsyncErrorLike;
-}
-
-interface OfficeSliceLike {
-  data: DynamicValue;
-}
-
-interface OfficeFileLike {
-  size: number;
-  sliceCount: number;
-  getSliceAsync: (
-    sliceIndex: number,
-    callback?: (result: OfficeAsyncResultLike<OfficeSliceLike>) => void,
-  ) => void;
-  closeAsync: (callback?: (result: OfficeAsyncResultLike<void>) => void) => void;
-}
-
-interface OfficeDocumentLike {
-  getFileAsync: (
-    fileType: string,
-    options: { sliceSize?: number },
-    callback?: (result: OfficeAsyncResultLike<OfficeFileLike>) => void,
-  ) => void;
-}
 
 interface ManualFullBackupWorkspace {
   listFiles: () => Promise<WorkspaceFileEntry[]>;
@@ -86,34 +60,6 @@ function defaultCreateSuffix(): string {
     .slice(0, 8);
 }
 
-function isWorkbookManualFullBackupPayloadShape(value: DynamicValue): value is DynamicObject {
-  return typeof value === "object" && value !== null;
-}
-
-function getOfficeDocument(): OfficeDocumentLike | null {
-  const officeRoot = Reflect.get(globalThis, "Office");
-  if (!isWorkbookManualFullBackupPayloadShape(officeRoot)) return null;
-
-  const context = officeRoot.context;
-  if (!isWorkbookManualFullBackupPayloadShape(context)) return null;
-
-  const document = context.document;
-  if (!isWorkbookManualFullBackupPayloadShape(document)) return null;
-
-  const getFileAsync = document.getFileAsync;
-  if (typeof getFileAsync !== "function") return null;
-
-  return {
-    getFileAsync: (
-      fileType: string,
-      options: { sliceSize?: number },
-      callback?: (result: OfficeAsyncResultLike<OfficeFileLike>) => void,
-    ) => {
-      Reflect.apply(getFileAsync, document, [fileType, options, callback]);
-    },
-  };
-}
-
 function toError(error: DynamicValue): Error {
   if (error instanceof Error) {
     return error;
@@ -145,7 +91,7 @@ function assertSucceeded<T>(result: OfficeAsyncResultLike<T>): T {
 }
 
 async function openCompressedWorkbookFile(sliceSize: number): Promise<OfficeFileLike> {
-  const document = getOfficeDocument();
+  const document = getOfficeDocumentFileAdapter();
   if (!document) {
     throw new Error(
       "Manual full-workbook backup is unavailable: Office document file API is not available.",
