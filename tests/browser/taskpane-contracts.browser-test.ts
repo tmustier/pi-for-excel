@@ -9,6 +9,9 @@ let server: ViteDevServer;
 let baseUrl: string;
 
 before(async () => {
+  process.env.VITE_PI_BACKGROUND_VERIFY_URL = "https://localhost:3157";
+  process.env.VITE_PI_BACKGROUND_VERIFY_TOKEN = "browser-bridge-token";
+
   server = await createServer({
     configFile: false,
     root: process.cwd(),
@@ -58,6 +61,18 @@ async function withBrowserPage(
   });
 
   await context.route("**/*", async (route) => {
+    const requestUrl = new URL(route.request().url());
+    if (requestUrl.hostname === "localhost" && requestUrl.port === "3157") {
+      if (requestUrl.pathname === "/client/register") {
+        await route.fulfill({ contentType: "application/json", body: JSON.stringify({ clientId: "idle-browser-client" }) });
+      } else if (requestUrl.pathname === "/client/poll") {
+        await new Promise((resolve) => setTimeout(resolve, 1_000));
+        await route.fulfill({ contentType: "application/json", body: JSON.stringify({ type: "noop" }) });
+      } else {
+        await route.fulfill({ contentType: "application/json", body: JSON.stringify({ ok: true }) });
+      }
+      return;
+    }
     if (isLoopbackUrl(route.request().url())) {
       await route.continue();
       return;
@@ -120,13 +135,10 @@ void test("/files opens the Files view", async () => {
   });
 });
 
-void test("/plugins exposes the MCP server setup flow", async () => {
+void test("/plugins opens the Plugins view", async () => {
   await withTaskpane(async (page) => {
     await enterCommand(page, "/plugins");
-    await page.getByRole("heading", { name: "Connections" }).waitFor({ state: "visible", timeout: 5_000 });
-    await page.getByText("MCP servers", { exact: true }).waitFor({ state: "visible" });
-    await page.getByRole("button", { name: "+ Add server" }).click();
-    await page.getByPlaceholder("https://server-url/rpc").waitFor({ state: "visible" });
+    await page.getByRole("heading", { name: "Plugins" }).waitFor({ state: "visible", timeout: 5_000 });
   });
 });
 
@@ -268,6 +280,73 @@ void test("Extensions exposes Connections, Plugins, and Skills navigation", asyn
       await settings.getByRole("heading", { name: pageName }).waitFor({ state: "visible" });
       await settings.getByRole("button", { name: "Back" }).click();
     }
+  });
+});
+
+void test("typing /backup in the composer and pressing Enter runs the manual backup command", async () => {
+  await withTaskpane(async (page) => {
+    await enterCommand(page, "/backup");
+
+    const toast = page.locator("#pi-toast.visible .pi-toast__message");
+    await toast.waitFor({ state: "visible", timeout: 5_000 });
+    assert.match(await toast.innerText(), /Backup command failed: .*unavailable/i);
+  });
+});
+
+void test("submitInput uses the composer path for commands and model messages", async () => {
+  const commands = [
+    { id: "slash-input", type: "submitInput", payload: { text: "/backup", waitForIdle: true } },
+    { id: "plain-input", type: "submitInput", payload: { text: "browser bridge model message", waitForIdle: false } },
+  ];
+  const results = new Map<string, { ok: boolean }>();
+  const pendingResultIds = ["slash-input", "plain-input"];
+  let allowCommands = false;
+  let allowPlainInput = false;
+  let resolveResults = (): void => {};
+  const allResults = new Promise<void>((resolve) => {
+    resolveResults = resolve;
+  });
+
+  await withBrowserPage("src/taskpane.html", async (page) => {
+    await page.locator("pi-input textarea").waitFor({ state: "visible", timeout: 20_000 });
+    const welcomeOverlay = page.locator("#pi-welcome-login-overlay");
+    await welcomeOverlay.waitFor({ state: "visible", timeout: 10_000 });
+    await welcomeOverlay.click({ position: { x: 2, y: 2 } });
+    await welcomeOverlay.waitFor({ state: "detached" });
+    allowCommands = true;
+
+    const toast = page.locator("#pi-toast.visible .pi-toast__message");
+    await toast.waitFor({ state: "visible", timeout: 5_000 });
+    assert.match(await toast.innerText(), /Backup command failed: .*unavailable/i);
+    allowPlainInput = true;
+    await page.getByText("browser bridge model message", { exact: true }).waitFor({ state: "visible", timeout: 5_000 });
+    await waitForBrowserSignal(allResults, "Timed out waiting for submitInput bridge results");
+    assert.deepEqual([...results.values()], [{ ok: true }, { ok: true }]);
+  }, async (context) => {
+    await context.route("https://localhost:3157/**", async (route) => {
+      const url = new URL(route.request().url());
+      if (url.pathname === "/client/register") {
+        await route.fulfill({ contentType: "application/json", body: JSON.stringify({ clientId: "browser-client" }) });
+        return;
+      }
+      if (url.pathname === "/client/poll") {
+        const nextCommand = commands[0];
+        const canSendNext = allowCommands && (nextCommand?.id !== "plain-input" || allowPlainInput);
+        const command = canSendNext ? commands.shift() ?? { type: "noop" } : { type: "noop" };
+        await route.fulfill({ contentType: "application/json", body: JSON.stringify(command) });
+        return;
+      }
+      if (url.pathname === "/client/result") {
+        const commandId = pendingResultIds.shift();
+        if (commandId) {
+          results.set(commandId, { ok: /"ok":true/u.test(route.request().postData() ?? "") });
+          if (results.size === 2) resolveResults();
+        }
+        await route.fulfill({ contentType: "application/json", body: JSON.stringify({ ok: true }) });
+        return;
+      }
+      await route.abort("blockedbyclient");
+    });
   });
 });
 

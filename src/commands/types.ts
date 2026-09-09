@@ -44,9 +44,14 @@ class CommandRegistry {
     const all = Array.from(this.commands.values());
     if (!filter) return all;
     const q = filter.toLowerCase();
-    return all.filter(
+    const matches = all.filter(
       (c) => c.name.toLowerCase().includes(q) || c.description.toLowerCase().includes(q),
     );
+    return matches.sort((left, right) => {
+      const leftExact = left.name.toLowerCase() === q ? 0 : 1;
+      const rightExact = right.name.toLowerCase() === q ? 0 : 1;
+      return leftExact - rightExact;
+    });
   }
 }
 
