@@ -9,6 +9,7 @@ import {
   workbookTabLayoutKey,
 } from "../src/taskpane/tab-layout.ts";
 import {
+  ensureDefaultProxyUrl,
   readTaskpaneLanguage,
   readTaskpaneProxySettings,
   TASKPANE_LANGUAGE_SETTING_KEY,
@@ -17,7 +18,7 @@ import {
 } from "../src/taskpane/settings.ts";
 
 class MemoryTaskpaneSettingsStore {
-  private readonly values = new Map<string, DynamicValue>();
+  protected readonly values = new Map<string, DynamicValue>();
   private readonly readError: Error | null;
 
   constructor(readError: Error | null = null) {
@@ -37,6 +38,15 @@ class MemoryTaskpaneSettingsStore {
   delete(key: string): Promise<void> {
     this.values.delete(key);
     return Promise.resolve();
+  }
+}
+
+class ProxyEnabledReadFailureStore extends MemoryTaskpaneSettingsStore {
+  override get(key: string): Promise<DynamicValue> {
+    if (key === TASKPANE_PROXY_ENABLED_SETTING_KEY) {
+      return Promise.reject(new Error("proxy enabled read failed"));
+    }
+    return super.get(key);
   }
 }
 
@@ -131,7 +141,7 @@ void test("taskpane proxy reader round-trips current values and accepts legacy e
   }
 });
 
-void test("taskpane proxy reader defaults on missing or failed reads and preserves legacy truthiness", async () => {
+void test("taskpane proxy reader defaults malformed values and propagates failed reads", async () => {
   assert.deepEqual(await readTaskpaneProxySettings(new MemoryTaskpaneSettingsStore()), {
     enabled: false,
     url: null,
@@ -144,8 +154,30 @@ void test("taskpane proxy reader defaults on missing or failed reads and preserv
     enabled: true,
     url: null,
   });
-  assert.deepEqual(
-    await readTaskpaneProxySettings(new MemoryTaskpaneSettingsStore(new Error("read failed"))),
-    { enabled: false, url: null },
+  await assert.rejects(
+    readTaskpaneProxySettings(new MemoryTaskpaneSettingsStore(new Error("read failed"))),
+    /read failed/u,
   );
+});
+
+void test("taskpane startup never overwrites a custom proxy URL when another proxy read fails", async () => {
+  const settings = new ProxyEnabledReadFailureStore();
+  await settings.set(TASKPANE_PROXY_URL_SETTING_KEY, "https://custom.example.com");
+
+  await ensureDefaultProxyUrl(settings, "office");
+
+  assert.equal(
+    await settings.get(TASKPANE_PROXY_URL_SETTING_KEY),
+    "https://custom.example.com",
+  );
+});
+
+void test("taskpane startup replaces a malformed proxy URL with the runtime default", async () => {
+  const settings = new MemoryTaskpaneSettingsStore();
+  await settings.set(TASKPANE_PROXY_ENABLED_SETTING_KEY, false);
+  await settings.set(TASKPANE_PROXY_URL_SETTING_KEY, { url: "https://invalid.example.com" });
+
+  await ensureDefaultProxyUrl(settings, "office");
+
+  assert.equal(await settings.get(TASKPANE_PROXY_URL_SETTING_KEY), "https://localhost:3003");
 });

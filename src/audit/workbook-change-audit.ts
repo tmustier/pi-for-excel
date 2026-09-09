@@ -211,6 +211,7 @@ export class WorkbookChangeAuditLog {
   private readonly dependencies: WorkbookChangeAuditLogDependencies;
   private loaded = false;
   private entries: WorkbookChangeAuditEntry[] = [];
+  private bufferedEntries: WorkbookChangeAuditEntry[] = [];
 
   constructor(dependencies: Partial<WorkbookChangeAuditLogDependencies> = {}) {
     const getSettingsStore = dependencies.settings !== undefined
@@ -231,12 +232,17 @@ export class WorkbookChangeAuditLog {
 
     const settings = await this.dependencies.getSettingsStore();
     if (!settings) {
+      this.entries = this.bufferedEntries;
+      this.bufferedEntries = [];
       this.loaded = true;
       return;
     }
 
     const payload = await settings.get(AUDIT_SETTING_KEY);
-    this.entries = parsePersistedEntries(payload);
+    this.entries = [...this.bufferedEntries, ...parsePersistedEntries(payload)]
+      .sort((a, b) => b.at - a.at)
+      .slice(0, MAX_AUDIT_ENTRIES);
+    this.bufferedEntries = [];
     this.loaded = true;
   }
 
@@ -257,8 +263,6 @@ export class WorkbookChangeAuditLog {
   }
 
   async append(args: AppendWorkbookChangeAuditEntryArgs): Promise<void> {
-    await this.ensureLoaded();
-
     let workbookId: string | undefined;
     let workbookLabel: string | undefined;
 
@@ -301,6 +305,15 @@ export class WorkbookChangeAuditLog {
     if (args.summary !== undefined) entry.summary = args.summary;
     if (workbookId !== undefined) entry.workbookId = workbookId;
     if (workbookLabel !== undefined) entry.workbookLabel = workbookLabel;
+
+    if (!this.loaded) {
+      try {
+        await this.ensureLoaded();
+      } catch {
+        this.bufferedEntries = [entry, ...this.bufferedEntries].slice(0, MAX_AUDIT_ENTRIES);
+        return;
+      }
+    }
 
     this.entries = [entry, ...this.entries].slice(0, MAX_AUDIT_ENTRIES);
     await this.persist();

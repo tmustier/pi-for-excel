@@ -25,12 +25,8 @@ export async function getSessionWorkbookId(
   settings: SessionAssociationSettingsStore,
   sessionId: string,
 ): Promise<string | null> {
-  try {
-    const value = await settings.get(sessionWorkbookKey(sessionId));
-    return typeof value === "string" && value.trim().length > 0 ? value : null;
-  } catch {
-    return null;
-  }
+  const value = await settings.get(sessionWorkbookKey(sessionId));
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
 }
 
 /**

@@ -22,6 +22,7 @@ import type {
 import { settingsBackedSessionStorage } from "../src/host/session-storage.ts";
 import { setupSessionPersistence } from "../src/taskpane/sessions.ts";
 import {
+  partitionSessionIdsByWorkbook,
   sessionWorkbookKey,
   workbookLatestSessionKey,
 } from "../src/workbook/session-association.ts";
@@ -177,6 +178,31 @@ async function promptAndWaitForSave(runtime: RuntimeHarness, prompt: string): Pr
 function transcriptText(runtime: RuntimeHarness): string {
   return JSON.stringify(runtime.agent.state.messages);
 }
+
+void test("workbook session partition fails closed when one association cannot be read", async () => {
+  const associations = new Map<string, DynamicValue>([
+    [sessionWorkbookKey("matching"), "workbook-a"],
+    [sessionWorkbookKey("foreign"), "workbook-b"],
+  ]);
+  const settings = {
+    get: (key: string): Promise<DynamicValue> => {
+      if (key === sessionWorkbookKey("unreadable")) {
+        return Promise.reject(new Error("association read failed"));
+      }
+      return Promise.resolve(associations.get(key) ?? null);
+    },
+    set: (): Promise<void> => Promise.resolve(),
+  };
+
+  await assert.rejects(
+    partitionSessionIdsByWorkbook(
+      settings,
+      ["matching", "unreadable", "foreign"],
+      "workbook-a",
+    ),
+    /association read failed/u,
+  );
+});
 
 void test("restart restores workbook A without exposing its session to workbook B", async () => {
   const backend = new MemoryStorageBackend();

@@ -190,7 +190,7 @@ void test("workbook change audit log appends and reloads entries", async () => {
   assert.equal(entriesB[0]?.toolCallId, "call-1");
 });
 
-void test("workbook change audit retries transient reads before appending", async () => {
+void test("workbook change audit buffers entries across a transient initial read failure", async () => {
   const settings = new TransientAuditReadSettings();
   settings.seed("workbook.change-audit.v1", {
     version: 1,
@@ -204,6 +204,7 @@ void test("workbook change audit retries transient reads before appending", asyn
       changes: [],
     }],
   });
+  let nextId = 0;
   const log = new WorkbookChangeAuditLog({
     settings,
     getWorkbookContext: () => Promise.resolve({
@@ -211,12 +212,12 @@ void test("workbook change audit retries transient reads before appending", asyn
       workbookName: null,
       source: "unknown",
     }),
-    now: () => 2,
-    createId: () => "new-entry",
+    now: () => 2 + nextId,
+    createId: () => `new-entry-${nextId += 1}`,
   });
-  const append = () => log.append({
+  const append = (toolCallId: string) => log.append({
     toolName: "write_cells",
-    toolCallId: "new-call",
+    toolCallId,
     blocked: false,
     changedCount: 1,
     changes: [],
@@ -224,7 +225,7 @@ void test("workbook change audit retries transient reads before appending", asyn
   });
   settings.armReadFailure();
 
-  await assert.rejects(append, /transient audit read failure/u);
+  await append("buffered-call");
   assert.deepEqual((await settings.get("workbook.change-audit.v1")), {
     version: 1,
     entries: [{
@@ -238,8 +239,17 @@ void test("workbook change audit retries transient reads before appending", asyn
     }],
   });
 
-  await append();
-  assert.deepEqual((await log.list()).map((entry) => entry.id), ["new-entry", "existing-entry"]);
+  await append("retry-call");
+  assert.deepEqual(
+    (await log.list()).map((entry) => entry.id),
+    ["new-entry-2", "new-entry-1", "existing-entry"],
+  );
+
+  const reloaded = new WorkbookChangeAuditLog({ settings });
+  assert.deepEqual(
+    (await reloaded.list()).map((entry) => entry.id),
+    ["new-entry-2", "new-entry-1", "existing-entry"],
+  );
 });
 
 void test("workbook change audit log records execution mode metadata", async () => {

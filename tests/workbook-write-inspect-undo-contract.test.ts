@@ -148,6 +148,33 @@ class RangeStore {
   }
 }
 
+class RecoveringAuditSettingsStore {
+  private readonly values = new Map<string, DynamicValue>();
+  private failAuditRead = true;
+
+  get(key: string): Promise<DynamicValue> {
+    if (key === "workbook.change-audit.v1" && this.failAuditRead) {
+      this.failAuditRead = false;
+      return Promise.reject(new Error("seeded audit read failure"));
+    }
+    return Promise.resolve(this.values.get(key) ?? null);
+  }
+
+  set(key: string, value: DynamicValue): Promise<void> {
+    this.values.set(key, value);
+    return Promise.resolve();
+  }
+
+  delete(key: string): Promise<void> {
+    this.values.delete(key);
+    return Promise.resolve();
+  }
+
+  seed(key: string, value: DynamicValue): void {
+    this.values.set(key, value);
+  }
+}
+
 async function withRangeStore<T>(store: RangeStore, action: () => Promise<T>): Promise<T> {
   const hadExcel = Reflect.has(globalThis, "Excel");
   const previousExcel = Reflect.get(globalThis, "Excel");
@@ -169,6 +196,81 @@ function firstText<T>(result: AgentToolResult<T>): string {
   if (!block || block.type !== "text") throw new Error("Expected text tool result.");
   return block.text;
 }
+
+void test("committed write succeeds and creates recovery when the initial audit read fails", async () => {
+  const store = new RangeStore();
+  const recoverySettings = createInMemorySettingsStore();
+  const auditSettings = new RecoveringAuditSettingsStore();
+  auditSettings.seed("workbook.change-audit.v1", {
+    version: 1,
+    entries: [{
+      id: "existing-audit",
+      at: 1,
+      toolName: "write_cells",
+      toolCallId: "existing-call",
+      blocked: false,
+      changedCount: 1,
+      changes: [],
+    }],
+  });
+  const workbookContext = (): Promise<WorkbookContext> => Promise.resolve({
+    workbookId: "url_sha256:audit-recovery-book",
+    workbookName: "Audit recovery.xlsx",
+    source: "document.url",
+  });
+  let id = 0;
+  const recovery = new WorkbookRecoveryLog({
+    settings: recoverySettings,
+    getWorkbookContext: workbookContext,
+    createId: () => `snapshot-${id += 1}`,
+    now: () => 1_700_000_000_000 + id,
+    applySnapshot: (address, values) => Promise.resolve(store.applySnapshot(address, values)),
+  });
+  const audit = new WorkbookChangeAuditLog({
+    settings: auditSettings,
+    getWorkbookContext: workbookContext,
+    createId: () => `audit-${id += 1}`,
+    now: () => 1_700_000_000_000 + id,
+  });
+  const write = createWriteCellsTool({
+    appendAuditEntry: async (entry) => {
+      await audit.append(entry);
+      throw new Error("audit observer failed after buffering");
+    },
+    appendRecoverySnapshot: (args) => recovery.append(args),
+  });
+  const read = createReadRangeTool();
+
+  await withRangeStore(store, async () => {
+    const result = await write.execute("write-after-audit-failure", {
+      start_cell: "Sheet1!A1",
+      values: [["committed"]],
+    });
+
+    assert.match(firstText(result), /Written to/u);
+    assert.equal(result.details.blocked, false);
+    assert.equal(result.details.recovery?.status, "checkpoint_created");
+    assert.equal((await recovery.listForCurrentWorkbook()).length, 1);
+    assert.match(firstText(await read.execute("read-committed", {
+      range: "Sheet1!A1",
+      mode: "csv",
+    })), /committed/u);
+  });
+
+  await audit.append({
+    toolName: "write_cells",
+    toolCallId: "retry-audit-load",
+    blocked: false,
+    changedCount: 0,
+    changes: [],
+    executionMode: "safe",
+  });
+  const reloadedAudit = new WorkbookChangeAuditLog({ settings: auditSettings });
+  const persistedCallIds = (await reloadedAudit.list()).map((entry) => entry.toolCallId);
+  assert.equal(persistedCallIds.includes("existing-call"), true);
+  assert.equal(persistedCallIds.includes("write-after-audit-failure"), true);
+  assert.equal(persistedCallIds.includes("retry-audit-load"), true);
+});
 
 void test("user can write, inspect, reject overwrite, and restore through workbook tools", async () => {
   const store = new RangeStore();

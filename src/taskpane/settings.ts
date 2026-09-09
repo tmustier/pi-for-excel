@@ -1,3 +1,8 @@
+import {
+  DEFAULT_PROXY_URL,
+  resolveRuntimeDefaultProxyUrl,
+} from "../auth/proxy-validation.js";
+import type { SpreadsheetHostKind } from "../host/index.js";
 import type { SupportedLanguage } from "../language/index.js";
 
 export const TASKPANE_LANGUAGE_SETTING_KEY = "language";
@@ -6,6 +11,10 @@ export const TASKPANE_PROXY_URL_SETTING_KEY = "proxy.url";
 
 export interface TaskpaneSettingsStore {
   get(key: string): Promise<DynamicValue>;
+}
+
+interface WritableTaskpaneSettingsStore extends TaskpaneSettingsStore {
+  set(key: string, value: DynamicValue): Promise<void>;
 }
 
 export interface TaskpaneProxySettings {
@@ -38,24 +47,39 @@ export async function readTaskpaneLanguage(
 /**
  * Reads the taskpane proxy preferences.
  *
- * Proxying defaults to disabled with no configured URL when either setting
- * cannot be read. The enabled flag preserves legacy JavaScript truthiness for
- * persisted non-boolean values.
+ * Missing or malformed values use documented defaults. Storage read failures
+ * propagate so callers cannot mistake an unknown URL for an absent URL before
+ * writing a default. The enabled flag preserves legacy JavaScript truthiness
+ * for persisted non-boolean values.
  */
 export async function readTaskpaneProxySettings(
   settings: TaskpaneSettingsStore,
 ): Promise<TaskpaneProxySettings> {
-  try {
-    const [enabled, url] = await Promise.all([
-      settings.get(TASKPANE_PROXY_ENABLED_SETTING_KEY),
-      settings.get(TASKPANE_PROXY_URL_SETTING_KEY),
-    ]);
+  const [enabled, url] = await Promise.all([
+    settings.get(TASKPANE_PROXY_ENABLED_SETTING_KEY),
+    settings.get(TASKPANE_PROXY_URL_SETTING_KEY),
+  ]);
 
-    return {
-      enabled: parseProxyEnabled(enabled),
-      url: typeof url === "string" ? url.trim() : null,
-    };
+  return {
+    enabled: parseProxyEnabled(enabled),
+    url: typeof url === "string" ? url.trim() : null,
+  };
+}
+
+export async function ensureDefaultProxyUrl(
+  settings: WritableTaskpaneSettingsStore,
+  hostKind: SpreadsheetHostKind,
+): Promise<void> {
+  try {
+    const runtimeDefaultProxyUrl = resolveRuntimeDefaultProxyUrl({ hostKind });
+    const proxySettings = await readTaskpaneProxySettings(settings);
+    const storedProxyUrl = proxySettings.url ?? "";
+    if (storedProxyUrl.length > 0 && !(storedProxyUrl === DEFAULT_PROXY_URL && runtimeDefaultProxyUrl !== DEFAULT_PROXY_URL)) {
+      return;
+    }
+
+    await settings.set(TASKPANE_PROXY_URL_SETTING_KEY, runtimeDefaultProxyUrl);
   } catch {
-    return { enabled: false, url: null };
+    // A failed read is unknown state, not permission to replace the stored URL.
   }
 }

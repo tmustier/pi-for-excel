@@ -19,7 +19,6 @@ import {
   DEFAULT_PROXY_URL,
   PROXY_HELPER_DOCS_URL,
   isLoopbackProxyUrl,
-  resolveRuntimeDefaultProxyUrl,
   validateOfficeProxyUrl,
 } from "../auth/proxy-validation.js";
 import { restoreCredentials } from "../auth/restore.js";
@@ -130,7 +129,7 @@ import {
 } from "../models/model-refresh-owner.js";
 import { promptForProviderConnection } from "../ui/api-key-dialog.js";
 import { openModelSelectorDialog } from "../ui/model-selector-dialog.js";
-import { getCurrentSpreadsheetHost, type SpreadsheetHostKind } from "../host/index.js";
+import { getCurrentSpreadsheetHost } from "../host/index.js";
 import { createWorkbookCoordinator } from "../workbook/coordinator.js";
 import { formatWorkbookLabel, type WorkbookContext } from "../workbook/context.js";
 import {
@@ -183,10 +182,9 @@ import {
 } from "./status-popovers.js";
 import { showWelcomeLogin } from "./welcome-login.js";
 import {
+  ensureDefaultProxyUrl,
   readTaskpaneLanguage,
   readTaskpaneProxySettings,
-  TASKPANE_PROXY_URL_SETTING_KEY,
-  type TaskpaneSettingsStore,
 } from "./settings.js";
 import {
   SessionRuntimeManager,
@@ -210,28 +208,6 @@ function showErrorBanner(errorRoot: HTMLElement, message: string): void {
 
 function clearErrorBanner(errorRoot: HTMLElement): void {
   render(html``, errorRoot);
-}
-
-interface WritableTaskpaneSettingsStore extends TaskpaneSettingsStore {
-  set(key: string, value: DynamicValue): Promise<void>;
-}
-
-async function ensureDefaultProxyUrl(
-  settings: WritableTaskpaneSettingsStore,
-  hostKind: SpreadsheetHostKind,
-): Promise<void> {
-  try {
-    const runtimeDefaultProxyUrl = resolveRuntimeDefaultProxyUrl({ hostKind });
-    const proxySettings = await readTaskpaneProxySettings(settings);
-    const storedProxyUrl = proxySettings.url ?? "";
-    if (storedProxyUrl.length > 0 && !(storedProxyUrl === DEFAULT_PROXY_URL && runtimeDefaultProxyUrl !== DEFAULT_PROXY_URL)) {
-      return;
-    }
-
-    await settings.set(TASKPANE_PROXY_URL_SETTING_KEY, runtimeDefaultProxyUrl);
-  } catch {
-    // ignore
-  }
 }
 
 export async function initTaskpane(opts: {

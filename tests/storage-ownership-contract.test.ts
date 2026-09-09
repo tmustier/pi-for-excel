@@ -120,7 +120,7 @@ void test("feature-owned readers return documented defaults for corrupt and fail
   assert.equal(await getEnabledProxyBaseUrl(failing), undefined);
   assert.deepEqual(await readCorsProxySettings(failing), { enabled: false, url: "" });
   assert.equal(await loadOAuthCredentials(failing, "github"), null);
-  assert.equal(await getSessionWorkbookId(failing, "session-a"), null);
+  await assert.rejects(getSessionWorkbookId(failing, "session-a"), /seeded read failure/u);
   assert.deepEqual(await readBridgeUrls(failing), { pythonUrl: "", tmuxUrl: "" });
 });
 
