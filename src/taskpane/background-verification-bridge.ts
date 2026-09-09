@@ -35,6 +35,7 @@ type CoreBridgeCommandType =
   | "configureProxy"
   | "selectModel"
   | "submitPrompt"
+  | "submitInput"
   | "listCharts";
 
 type BridgeCommandType = CoreBridgeCommandType | ExtensionVerificationCommandType;
@@ -362,6 +363,66 @@ async function submitPrompt(payload: DynamicValue, options: BridgeOptions): Prom
     textLength: text.length,
     before,
     wait: waitForIdle ? await waitForRuntimeIdle(options.getActiveRuntime, initialMessageCount, timeoutMs) : null,
+    after: activeRuntimeSummary(options.getActiveRuntime()),
+  };
+}
+
+async function waitForSubmittedInputIdle(
+  getActiveRuntime: () => SessionRuntime | null,
+  timeoutMs: number,
+): Promise<JsonRecord> {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    const runtime = getActiveRuntime();
+    if (!isRuntimeBusy(runtime)) {
+      return {
+        idle: true,
+        elapsedMs: Date.now() - started,
+        activeRuntime: activeRuntimeSummary(runtime),
+      };
+    }
+    await new Promise((resolve) => window.setTimeout(resolve, 250));
+  }
+
+  return {
+    idle: false,
+    elapsedMs: Date.now() - started,
+    activeRuntime: activeRuntimeSummary(getActiveRuntime()),
+  };
+}
+
+async function submitInput(payload: DynamicValue, options: BridgeOptions): Promise<JsonRecord> {
+  const text = stringField(payload, "text");
+  if (!text) throw new Error("submitInput requires payload.text");
+
+  const runtime = options.getActiveRuntime();
+  if (isRuntimeBusy(runtime)) {
+    throw new Error("Cannot submit input while the active runtime is busy");
+  }
+
+  const input = options.sidebar.getInput();
+  const textarea = options.sidebar.getTextarea();
+  if (!input || !textarea) throw new Error("Cannot submit input because the composer is unavailable");
+
+  const waitForIdle = booleanField(payload, "waitForIdle") ?? true;
+  const timeoutMs = Math.max(1_000, Math.min(120_000, numberField(payload, "timeoutMs") ?? 60_000));
+  const before = activeRuntimeSummary(runtime);
+
+  input.value = text;
+  textarea.dispatchEvent(new InputEvent("input", { bubbles: true, composed: true }));
+  textarea.dispatchEvent(new KeyboardEvent("keydown", {
+    key: "Enter",
+    code: "Enter",
+    bubbles: true,
+    cancelable: true,
+    composed: true,
+  }));
+
+  return {
+    submitted: true,
+    textLength: text.length,
+    before,
+    wait: waitForIdle ? await waitForSubmittedInputIdle(options.getActiveRuntime, timeoutMs) : null,
     after: activeRuntimeSummary(options.getActiveRuntime()),
   };
 }
@@ -698,6 +759,8 @@ async function executeCommand(command: BridgeCommand, options: BridgeOptions): P
       return await selectModel(command.payload, options);
     case "submitPrompt":
       return await submitPrompt(command.payload, options);
+    case "submitInput":
+      return await submitInput(command.payload, options);
     case "listCharts":
       return await listCharts();
     default:

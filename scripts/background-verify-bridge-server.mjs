@@ -65,6 +65,7 @@ function usage() {
   PI_BACKGROUND_VERIFY_TOKEN=<token> PI_BACKGROUND_VERIFY_HOST=localhost node scripts/background-verify-bridge-server.mjs command configureProxy '{"enabled":true,"url":"https://localhost:3003"}'
   PI_BACKGROUND_VERIFY_TOKEN=<token> PI_BACKGROUND_VERIFY_HOST=localhost node scripts/background-verify-bridge-server.mjs command selectModel '{"provider":"openai-codex","modelId":"gpt-5.6-sol"}'
   PI_BACKGROUND_VERIFY_TOKEN=<token> PI_BACKGROUND_VERIFY_HOST=localhost node scripts/background-verify-bridge-server.mjs command submitPrompt '{"text":"Write SMOKE into A1, then tell me what changed","waitForIdle":true}'
+  PI_BACKGROUND_VERIFY_TOKEN=<token> PI_BACKGROUND_VERIFY_HOST=localhost node scripts/background-verify-bridge-server.mjs command submitInput '{"text":"/backup","waitForIdle":true}'
   PI_BACKGROUND_VERIFY_TOKEN=<token> PI_BACKGROUND_VERIFY_HOST=localhost node scripts/background-verify-bridge-server.mjs command extensionList
   PI_BACKGROUND_VERIFY_TOKEN=<token> PI_BACKGROUND_VERIFY_HOST=localhost node scripts/background-verify-bridge-server.mjs command modelsList '{"provider":"ext.example.probe"}'
   PI_BACKGROUND_VERIFY_TOKEN=<token> PI_BACKGROUND_VERIFY_HOST=localhost node scripts/background-verify-bridge-server.mjs command listCharts
@@ -403,7 +404,7 @@ function clampTimeoutMs(value, fallback) {
 
 function commandTimeoutMs(type, payload, explicitTimeoutMs) {
   if (finiteNumber(explicitTimeoutMs)) return clampTimeoutMs(explicitTimeoutMs, COMMAND_DEFAULT_TIMEOUT_MS);
-  if (type === "submitPrompt") {
+  if (type === "submitPrompt" || type === "submitInput") {
     const promptTimeout = payload && typeof payload === "object" ? finiteNumber(payload.timeoutMs) : undefined;
     return clampTimeoutMs((promptTimeout ?? 60_000) + 5_000, COMMAND_DEFAULT_TIMEOUT_MS);
   }
