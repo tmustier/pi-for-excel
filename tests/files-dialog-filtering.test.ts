@@ -1,10 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import "./files-dialog-actions.test.mjs";
-import "./files-dialog-mime.test.mjs";
-import "./files-dialog-paths.test.mjs";
-
 import type { WorkspaceBackendStatus, WorkspaceFileEntry } from "../src/files/types.ts";
 import {
   buildFilesDialogSections,

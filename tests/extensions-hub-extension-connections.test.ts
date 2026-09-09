@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { renderExtensionConnectionsSection } from "../src/commands/builtins/extensions-hub-extension-connections.ts";
 import { ConnectionManager } from "../src/connections/manager.ts";
 import type { ConnectionDefinition } from "../src/connections/types.ts";
-import { installFakeDom } from "./fake-dom.test.ts";
+import { installFakeDom } from "./fixtures/fake-dom.ts";
 
 function createMemorySettings(): {
   get(key: string): Promise<DynamicValue>;

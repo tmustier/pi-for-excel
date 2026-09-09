@@ -3,7 +3,7 @@ import { test } from "node:test";
 
 import { closeOverlayById } from "../src/ui/overlay-dialog.ts";
 import { createSettingsShell, type SettingsShellPage } from "../src/ui/settings-shell.ts";
-import { installFakeDom } from "./fake-dom.test.ts";
+import { installFakeDom } from "./fixtures/fake-dom.ts";
 
 async function flushAsync(): Promise<void> {
   await Promise.resolve();

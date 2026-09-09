@@ -19,7 +19,7 @@ import {
 import { describeExtensionRuntimeMode, type ExtensionRuntimeMode } from "../src/extensions/runtime-mode.ts";
 import type { ExtensionSettingsStore, StoredExtensionSource } from "../src/extensions/store.ts";
 import { EXTENSION_OVERLAY_ID } from "../src/ui/overlay-ids.ts";
-import { installFakeDom } from "./fake-dom.test.ts";
+import { installFakeDom } from "./fixtures/fake-dom.ts";
 
 class MemorySettingsStore implements ExtensionSettingsStore {
   get(_key: string): Promise<DynamicValue> {

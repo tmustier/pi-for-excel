@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { createFilesDialogDetailActions } from "../src/ui/files-dialog-actions.ts";
-import { installFakeDom } from "./fake-dom.test.ts";
+import { installFakeDom } from "./fixtures/fake-dom.ts";
 
 function makeFile(path, overrides = {}) {
   return {

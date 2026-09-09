@@ -11,7 +11,7 @@ import { ProviderKeysStore } from "../src/storage/local/provider-keys-store.ts";
 import { SessionsStore } from "../src/storage/local/sessions-store.ts";
 import { SettingsStore } from "../src/storage/local/settings-store.ts";
 import { CONFIRM_DIALOG_OVERLAY_ID } from "../src/ui/overlay-ids.ts";
-import { installFakeDom } from "./fake-dom.test.ts";
+import { installFakeDom } from "./fixtures/fake-dom.ts";
 
 class MemoryCustomProvidersStore extends CustomProvidersStore {
   private readonly providers = new Map<string, CustomProvider>();

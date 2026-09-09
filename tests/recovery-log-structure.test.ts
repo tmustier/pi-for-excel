@@ -9,7 +9,7 @@ import {
   createInMemorySettingsStore,
   findSnapshotById,
   withoutUndefined,
-} from "./recovery-log-test-helpers.test.ts";
+} from "./fixtures/recovery-log.ts";
 
 void test("captureValueDataRange short-circuits oversized captures before loading cell grids", async () => {
   const loadCalls: Array<string | string[]> = [];

@@ -8,7 +8,7 @@ import {
   RECOVERY_SETTING_KEY,
   createInMemorySettingsStore,
   findSnapshotById,
-} from "./recovery-log-test-helpers.test.ts";
+} from "./fixtures/recovery-log.ts";
 
 void test("restore rejects legacy snapshots without workbook identity", async () => {
   const settingsStore = createInMemorySettingsStore();

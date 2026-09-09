@@ -13,7 +13,7 @@ import {
 } from "../src/ui/overlay-ids.ts";
 import { requestConfirmationDialog } from "../src/ui/confirm-dialog.ts";
 import { requestTextInputDialog } from "../src/ui/text-input-dialog.ts";
-import { installFakeDom } from "./fake-dom.test.ts";
+import { installFakeDom } from "./fixtures/fake-dom.ts";
 
 function findButtonByText(root: HTMLElement, text: string): HTMLElement | null {
   const buttons = root.querySelectorAll("button");

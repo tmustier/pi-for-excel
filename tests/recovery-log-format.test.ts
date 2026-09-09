@@ -44,7 +44,7 @@ import {
   createInMemorySettingsStore,
   findSnapshotById,
   withoutUndefined,
-} from "./recovery-log-test-helpers.test.ts";
+} from "./fixtures/recovery-log.ts";
 
 void test("firstCellAddress handles quoted sheet names that include !", () => {
   assert.equal(firstCellAddress("'Q1!Ops'!A1"), "A1");

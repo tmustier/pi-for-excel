@@ -6,7 +6,7 @@ import {
   clearAllExtensionWidgets,
 } from "../src/extensions/internal/widget-surface.ts";
 import type { ExtensionCapability } from "../src/extensions/permissions.ts";
-import { installFakeDom } from "./fake-dom.test.ts";
+import { installFakeDom } from "./fixtures/fake-dom.ts";
 
 function createCapabilityGate(allowed: ReadonlySet<ExtensionCapability>) {
   return (capability: ExtensionCapability): boolean => allowed.has(capability);

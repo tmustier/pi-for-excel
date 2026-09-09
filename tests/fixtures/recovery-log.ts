@@ -1,4 +1,4 @@
-import type { WorkbookRecoverySnapshot } from "../src/workbook/recovery-log.ts";
+import type { WorkbookRecoverySnapshot } from "../../src/workbook/recovery-log.ts";
 
 export const RECOVERY_SETTING_KEY = "workbook.recovery-snapshots.v1";
 

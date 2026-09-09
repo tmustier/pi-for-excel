@@ -3,7 +3,7 @@ import { test } from "node:test";
 
 import { initLanguage } from "../src/language/index.ts";
 import { createCopyableCommand } from "../src/ui/command-copy.ts";
-import { installFakeDom } from "./fake-dom.test.ts";
+import { installFakeDom } from "./fixtures/fake-dom.ts";
 
 function restoreProperty(key: string, descriptor: PropertyDescriptor | undefined): void {
   if (descriptor) {

@@ -27,7 +27,7 @@ import {
   createInMemorySettingsStore,
   findSnapshotById,
   withoutUndefined,
-} from "./recovery-log-test-helpers.test.ts";
+} from "./fixtures/recovery-log.ts";
 
 function firstText(result: AgentToolResult<ChartsDetails>): string {
   const first = result.content[0];
