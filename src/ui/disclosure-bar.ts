@@ -9,6 +9,7 @@ import { t } from "../language/index.js";
 import { createToggleRow } from "./extensions-hub-components.js";
 
 const ACKNOWLEDGED_KEY = "pi.onboarding.disclosure.acknowledged";
+let disclosurePickerSequence = 0;
 
 function isAcknowledged(): boolean {
   try {
@@ -54,7 +55,8 @@ export function createDisclosureBar(options: DisclosureBarOptions): HTMLElement 
 
   // --- Expandable picker (hidden by default) ---
   const picker = document.createElement("div");
-  picker.id = "pi-disclosure-picker";
+  disclosurePickerSequence += 1;
+  picker.id = `pi-disclosure-picker-${disclosurePickerSequence}`;
   picker.className = "pi-disclosure-picker";
 
   const toggleRows: { label: string; sublabel: string }[] = [

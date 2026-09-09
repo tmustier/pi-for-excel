@@ -98,6 +98,21 @@ async function openUtilitiesMenu(page: Page): Promise<void> {
   await page.getByRole("button", { name: "Settings and tools" }).click();
 }
 
+async function waitForBrowserSignal(signal: Promise<void>, timeoutMessage: string): Promise<void> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<void>((_resolve, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(timeoutMessage)), 10_000);
+  });
+
+  try {
+    await Promise.race([signal, timeout]);
+  } finally {
+    if (timeoutId !== undefined) {
+      clearTimeout(timeoutId);
+    }
+  }
+}
+
 void test("/files opens the Files view", async () => {
   await withTaskpane(async (page) => {
     await enterCommand(page, "/files");
@@ -300,9 +315,12 @@ void test("local-service probes populate the first runtime capabilities", async 
   });
 
   await withBrowserPage("src/taskpane.html", async (page) => {
-    await probeStarted;
-    assert.equal(await page.locator("pi-input textarea").count(), 0);
-    releaseProbes();
+    try {
+      await waitForBrowserSignal(probeStarted, "Timed out waiting for a local-service health probe to start");
+      assert.equal(await page.locator("pi-input textarea").count(), 0);
+    } finally {
+      releaseProbes();
+    }
 
     await page.locator("pi-input textarea").waitFor({ state: "visible", timeout: 20_000 });
     const systemPrompt = await page.evaluate(`document.querySelector("pi-sidebar")?.agent?.state?.systemPrompt ?? ""`);
@@ -311,7 +329,7 @@ void test("local-service probes populate the first runtime capabilities", async 
   }, async (context) => {
     await context.route("https://localhost:3340/health", async (route) => {
       markProbeStarted();
-      await probesReleased;
+      await waitForBrowserSignal(probesReleased, "Timed out waiting to release the Python health probe");
       await route.fulfill({
         contentType: "application/json",
         body: JSON.stringify({
@@ -323,7 +341,7 @@ void test("local-service probes populate the first runtime capabilities", async 
     });
     await context.route("https://localhost:3341/health", async (route) => {
       markProbeStarted();
-      await probesReleased;
+      await waitForBrowserSignal(probesReleased, "Timed out waiting to release the tmux health probe");
       await route.fulfill({
         contentType: "application/json",
         body: JSON.stringify({ ok: true, tmuxVersion: "tmux browser-sentinel", sessions: 2 }),
@@ -337,21 +355,34 @@ void test("disclosure customization renders operable shared toggles", async () =
     await page.evaluate(`
       (async () => {
         const { createDisclosureBar } = await import("/src/ui/disclosure-bar.ts");
-        const bar = createDisclosureBar({ providerCount: 1 });
-        if (bar) document.body.appendChild(bar);
+        const firstBar = createDisclosureBar({ providerCount: 1 });
+        const secondBar = createDisclosureBar({ providerCount: 1 });
+        if (firstBar) document.body.appendChild(firstBar);
+        if (secondBar) document.body.appendChild(secondBar);
       })()
     `);
 
-    const customize = page.locator(".pi-disclosure-bar__link");
-    assert.equal(await customize.getAttribute("aria-expanded"), "false");
+    const bars = page.locator(".pi-disclosure-bar");
+    assert.equal(await bars.count(), 2);
+    const firstBar = bars.nth(0);
+    const secondBar = bars.nth(1);
+    const customize = firstBar.locator(".pi-disclosure-bar__link");
+    const secondCustomize = secondBar.locator(".pi-disclosure-bar__link");
     const pickerId = await customize.getAttribute("aria-controls");
+    const secondPickerId = await secondCustomize.getAttribute("aria-controls");
     assert.ok(pickerId);
-    await page.locator(`#${pickerId}`).waitFor({ state: "hidden" });
+    assert.ok(secondPickerId);
+    assert.notEqual(pickerId, secondPickerId);
+    assert.equal(await firstBar.locator(".pi-disclosure-picker").getAttribute("id"), pickerId);
+    assert.equal(await secondBar.locator(".pi-disclosure-picker").getAttribute("id"), secondPickerId);
+
+    assert.equal(await customize.getAttribute("aria-expanded"), "false");
+    await firstBar.locator(`#${pickerId}`).waitFor({ state: "hidden" });
     await customize.click();
     assert.equal(await customize.getAttribute("aria-expanded"), "true");
-    await page.locator(`#${pickerId}`).waitFor({ state: "visible" });
+    await firstBar.locator(`#${pickerId}`).waitFor({ state: "visible" });
 
-    const webSearchRow = page.locator(".pi-toggle-row").filter({ hasText: "Web search" });
+    const webSearchRow = firstBar.locator(".pi-toggle-row").filter({ hasText: "Web search" });
     const checkbox = webSearchRow.locator('input[type="checkbox"]');
     await checkbox.waitFor({ state: "attached" });
     assert.equal(await checkbox.isChecked(), true);
