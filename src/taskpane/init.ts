@@ -184,6 +184,7 @@ import {
   isRuntimeAgentTool,
   normalizeRuntimeTools,
 } from "./runtime-utils.js";
+import { bindRuntimeSidebar } from "./runtime-sidebar-binding.js";
 import { doesOverlayClaimEscape } from "../utils/escape-guard.js";
 
 function showErrorBanner(errorRoot: HTMLElement, message: string): void {
@@ -752,39 +753,16 @@ export async function initTaskpane(opts: {
     focusChatInputSoon();
   });
 
+  bindRuntimeSidebar({ runtimeManager, sidebar });
+
   runtimeManager.subscribe((snapshot) => {
-    sidebar.sessionTabs = snapshot.tabs;
-
     if (snapshot.activeRuntimeId !== previousActiveRuntimeId) {
-      const previousRuntime = previousActiveRuntimeId
-        ? runtimeManager.getRuntime(previousActiveRuntimeId)
-        : null;
-      previousRuntime?.queueDisplay.detach();
-
       previousActiveRuntimeId = snapshot.activeRuntimeId;
-      const activeRuntime = runtimeManager.getActiveRuntime();
-      if (activeRuntime) {
-        sidebar.agent = activeRuntime.agent;
-        sidebar.syncFromAgent();
-      }
-      sidebar.requestUpdate();
-
-      if (activeRuntime) {
-        const activeRuntimeId = activeRuntime.runtimeId;
-        requestAnimationFrame(() => {
-          const activeNow = runtimeManager.getActiveRuntime();
-          if (!activeNow || activeNow.runtimeId !== activeRuntimeId) return;
-          activeNow.queueDisplay.attach(sidebar);
-        });
-      }
-
       document.dispatchEvent(new CustomEvent("pi:active-runtime-changed"));
       if (snapshot.activeRuntimeId && !suppressNextInputAutofocus) {
         focusChatInputSoon();
       }
       suppressNextInputAutofocus = false;
-    } else {
-      sidebar.requestUpdate();
     }
 
     maybePersistTabLayout();
