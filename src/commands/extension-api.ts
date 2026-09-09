@@ -162,14 +162,19 @@ function normalizeConnectionDefinitionForOwner(
   };
 }
 
+interface ExtensionToolDefinitionBoundary {
+  execute?: DynamicValue;
+  handler?: DynamicValue;
+}
+
 function assertValidToolDefinition(name: string, tool: ExtensionToolDefinition): void {
-  const execute: DynamicValue = Reflect.get(tool, "execute");
-  if (typeof execute === "function") {
+  // Runtime extension JavaScript is untyped even though the public authoring API is typed.
+  const boundary = tool as ExtensionToolDefinition & ExtensionToolDefinitionBoundary;
+  if (typeof boundary.execute === "function") {
     return;
   }
 
-  const handler: DynamicValue = Reflect.get(tool, "handler");
-  if (typeof handler === "function") {
+  if (typeof boundary.handler === "function") {
     throw new Error(
       `Extension tool "${name}" is invalid: use execute(params, signal?, onUpdate?) instead of handler.`,
     );

@@ -2,7 +2,8 @@
 
 import type { SpreadsheetHostKind } from "./types.js";
 
-function getGlobalMember(scope: object, key: string): DynamicValue {
+function getGlobalMember(scope: object, key: "wps" | "Application" | "Office"): DynamicValue {
+  // Detection intentionally probes caller-supplied, untyped host globals without mutating them.
   return Reflect.get(scope, key);
 }
 

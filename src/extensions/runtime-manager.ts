@@ -87,6 +87,10 @@ import type {
 
 type AnyAgentTool = AgentTool;
 
+interface ExtensionToolExecutionBoundary {
+  execute?: DynamicValue;
+}
+
 type ManagerListener = () => void;
 
 function buildExtensionToolSourceNote(entry: StoredExtensionEntry): string {
@@ -109,7 +113,9 @@ function withExtensionToolDescription(tool: AnyAgentTool, entry: StoredExtension
 }
 
 function assertToolExecuteFunction(tool: AnyAgentTool, entry: StoredExtensionEntry): void {
-  if (typeof Reflect.get(tool, "execute") === "function") {
+  // Extension JavaScript can bypass AgentTool's compile-time contract; validate at registration.
+  const boundary = tool as AnyAgentTool & ExtensionToolExecutionBoundary;
+  if (typeof boundary.execute === "function") {
     return;
   }
 

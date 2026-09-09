@@ -135,11 +135,19 @@ function buildConnectionErrorMessage(details: ConnectionToolErrorDetails): strin
   return `Connection "${details.connectionTitle}" failed authentication${reasonSuffix}. ${details.setupHint}.`;
 }
 
+class ConnectionFetchError extends Error {
+  readonly details: ConnectionToolErrorDetails;
+  readonly connectionId: string;
+
+  constructor(details: ConnectionToolErrorDetails) {
+    super(buildConnectionErrorMessage(details));
+    this.details = details;
+    this.connectionId = details.connectionId;
+  }
+}
+
 function createConnectionFetchError(details: ConnectionToolErrorDetails): Error {
-  const error = new Error(buildConnectionErrorMessage(details));
-  Reflect.set(error, "details", details);
-  Reflect.set(error, "connectionId", details.connectionId);
-  return error;
+  return new ConnectionFetchError(details);
 }
 
 function buildConnectionErrorDetails(args: {
