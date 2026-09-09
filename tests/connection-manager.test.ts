@@ -19,6 +19,37 @@ function createMemorySettings(): {
   };
 }
 
+class TransientReadSettings {
+  private readonly values = new Map<string, DynamicValue>();
+  private failNextRead = false;
+
+  get(key: string): Promise<DynamicValue> {
+    if (this.failNextRead) {
+      this.failNextRead = false;
+      return Promise.reject(new Error("transient connection read failure"));
+    }
+    return Promise.resolve(this.values.get(key));
+  }
+
+  set(key: string, value: DynamicValue): Promise<void> {
+    this.values.set(key, value);
+    return Promise.resolve();
+  }
+
+  delete(key: string): Promise<void> {
+    this.values.delete(key);
+    return Promise.resolve();
+  }
+
+  armReadFailure(): void {
+    this.failNextRead = true;
+  }
+
+  read(key: string): DynamicValue {
+    return this.values.get(key);
+  }
+}
+
 const APOLLO_DEFINITION: ConnectionDefinition = {
   id: "ext.apollo.apollo",
   title: "Apollo",
@@ -242,6 +273,39 @@ void test("markInvalid redacts stored secret values from failure reasons", async
 });
 
 // ── updateSecretsFromHost ───────────────────────────
+
+void test("updateSecretsFromHost retries transient reads without replacing sibling connections", async () => {
+  const settings = new TransientReadSettings();
+  await settings.set("connections.store.v1", {
+    version: 1,
+    items: {
+      sibling: { status: "connected", secrets: { token: "keep" } },
+    },
+  });
+  const manager = new ConnectionManager({ settings });
+  manager.registerDefinition("ext.apollo", APOLLO_DEFINITION);
+  settings.armReadFailure();
+
+  await assert.rejects(
+    () => manager.updateSecretsFromHost("ext.apollo.apollo", { apiKey: "sk-new" }),
+    /transient connection read failure/u,
+  );
+  assert.deepEqual(settings.read("connections.store.v1"), {
+    version: 1,
+    items: {
+      sibling: { status: "connected", secrets: { token: "keep" } },
+    },
+  });
+
+  await manager.updateSecretsFromHost("ext.apollo.apollo", { apiKey: "sk-new" });
+  assert.deepEqual(settings.read("connections.store.v1"), {
+    version: 1,
+    items: {
+      sibling: { status: "connected", secrets: { token: "keep" } },
+      "ext.apollo.apollo": { status: "connected", secrets: { apiKey: "sk-new" } },
+    },
+  });
+});
 
 void test("updateSecretsFromHost merges into empty store", async () => {
   const manager = new ConnectionManager({ settings: createMemorySettings() });

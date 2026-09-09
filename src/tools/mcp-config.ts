@@ -226,19 +226,32 @@ function areTokenMapsEqual(left: Readonly<Record<string, string>>, right: Readon
 
 async function loadLegacyMcpServers(settings: McpConfigStore): Promise<McpServerConfig[]> {
   try {
-    const raw = await settings.get(MCP_SERVERS_SETTING_KEY);
-    return normalizeServers(raw);
+    return normalizeServers(await settings.get(MCP_SERVERS_SETTING_KEY));
   } catch {
     return [];
   }
 }
 
+async function loadLegacyMcpServersForUpdate(settings: McpConfigStore): Promise<McpServerConfig[]> {
+  return normalizeServers(await settings.get(MCP_SERVERS_SETTING_KEY));
+}
+
+function readConnectionStoreMcpTokens(
+  items: Record<string, StoredConnectionRecord>,
+): Record<string, string> {
+  return normalizeTokenMap(items[MCP_SERVER_TOKENS_CONNECTION_ID]?.secrets ?? {});
+}
+
 async function loadConnectionStoreMcpTokens(
   settings: McpConfigStore,
 ): Promise<Record<string, string>> {
-  const items = await loadConnectionStoreDocument(settings);
-  const rawTokens = items[MCP_SERVER_TOKENS_CONNECTION_ID]?.secrets ?? {};
-  return normalizeTokenMap(rawTokens);
+  return readConnectionStoreMcpTokens(await loadConnectionStoreDocument(settings));
+}
+
+async function loadConnectionStoreMcpTokensForUpdate(
+  settings: McpConfigStore,
+): Promise<Record<string, string>> {
+  return readConnectionStoreMcpTokens(await loadConnectionStoreDocumentForUpdate(settings));
 }
 
 async function writeConnectionStoreMcpTokens(
@@ -294,8 +307,8 @@ export async function migrateLegacyMcpTokensToConnectionStore(
   settings: McpConfigStore,
 ): Promise<boolean> {
   const [legacyServers, connectionTokens] = await Promise.all([
-    loadLegacyMcpServers(settings),
-    loadConnectionStoreMcpTokens(settings),
+    loadLegacyMcpServersForUpdate(settings),
+    loadConnectionStoreMcpTokensForUpdate(settings),
   ]);
 
   const legacyTokens = readTokenMapFromServers(legacyServers);
@@ -343,14 +356,14 @@ export async function saveMcpServers(
 
   // Write tokens first so a failed connection-store write never strips legacy
   // token fields from mcp.servers.v1 before persistence succeeds.
-  const previousTokenMap = await loadConnectionStoreMcpTokens(settings);
+  const previousTokenMap = await loadConnectionStoreMcpTokensForUpdate(settings);
   await writeConnectionStoreMcpTokens(settings, tokensByServerId);
 
   try {
     await settings.set(MCP_SERVERS_SETTING_KEY, createDocument(stripServerTokens(normalized)));
   } catch (error) {
     try {
-      const currentTokenMap = await loadConnectionStoreMcpTokens(settings);
+      const currentTokenMap = await loadConnectionStoreMcpTokensForUpdate(settings);
       const rollbackIsSafe = areTokenMapsEqual(currentTokenMap, tokensByServerId);
 
       if (rollbackIsSafe) {

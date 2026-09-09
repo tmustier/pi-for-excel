@@ -25,7 +25,7 @@ function isWebSearchConfigTestPayloadShape(value: DynamicValue): value is Dynami
 import { CONNECTION_STORE_KEY } from "../src/connections/store.ts";
 
 class MemorySettingsStore implements WebSearchConfigStore {
-  private readonly values = new Map<string, DynamicValue>();
+  protected readonly values = new Map<string, DynamicValue>();
 
   get(key: string): Promise<DynamicValue> {
     return Promise.resolve(this.values.has(key) ? this.values.get(key) ?? null : null);
@@ -43,6 +43,22 @@ class MemorySettingsStore implements WebSearchConfigStore {
 
   peek(key: string): DynamicValue {
     return this.values.get(key);
+  }
+}
+
+class TransientReadSettings extends MemorySettingsStore {
+  private failNextRead = false;
+
+  armReadFailure(): void {
+    this.failNextRead = true;
+  }
+
+  override get(key: string): Promise<DynamicValue> {
+    if (this.failNextRead) {
+      this.failNextRead = false;
+      return Promise.reject(new Error("transient web-search read failure"));
+    }
+    return super.get(key);
   }
 }
 
@@ -97,6 +113,39 @@ void test("web search config infers brave when only brave key is present", async
 
   assert.equal(config.provider, "brave");
   assert.equal(getApiKeyForProvider(config), "br-legacy");
+});
+
+void test("web search API-key mutation retries transient reads without losing existing keys", async () => {
+  const settings = new TransientReadSettings();
+  await settings.set(CONNECTION_STORE_KEY, {
+    version: 1,
+    items: {
+      sibling: { status: "connected", secrets: { token: "keep" } },
+      [WEB_SEARCH_CONNECTION_ID]: {
+        status: "connected",
+        secrets: { brave_api_key: "br-existing" },
+      },
+    },
+  });
+  settings.armReadFailure();
+
+  await assert.rejects(
+    () => saveWebSearchApiKey(settings, "serper", "sp-new"),
+    /transient web-search read failure/u,
+  );
+  assert.equal(readConnectionStoreSecrets(settings)?.serper_api_key, undefined);
+  assert.equal(readConnectionStoreSecrets(settings)?.brave_api_key, "br-existing");
+
+  await saveWebSearchApiKey(settings, "serper", "sp-new");
+  const stored = settings.peek(CONNECTION_STORE_KEY);
+  assert.ok(isWebSearchConfigTestPayloadShape(stored));
+  assert.ok(isWebSearchConfigTestPayloadShape(stored.items));
+  assert.ok(isWebSearchConfigTestPayloadShape(stored.items.sibling));
+  assert.equal(stored.items.sibling.secrets && isWebSearchConfigTestPayloadShape(stored.items.sibling.secrets)
+    ? stored.items.sibling.secrets.token
+    : undefined, "keep");
+  assert.equal(readConnectionStoreSecrets(settings)?.brave_api_key, "br-existing");
+  assert.equal(readConnectionStoreSecrets(settings)?.serper_api_key, "sp-new");
 });
 
 void test("web search config stores provider-specific api keys", async () => {

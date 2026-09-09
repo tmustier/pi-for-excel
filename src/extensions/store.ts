@@ -281,48 +281,27 @@ export async function saveStoredExtensions(
   await settings.set(EXTENSIONS_REGISTRY_STORAGE_KEY, createRegistryDocument(items));
 }
 
-interface ExtensionSettingReadResult {
-  value: DynamicValue;
-  succeeded: boolean;
-}
-
-async function readExtensionSetting(
-  settings: ExtensionSettingsStore,
-  key: string,
-): Promise<ExtensionSettingReadResult> {
-  try {
-    return { value: await settings.get(key), succeeded: true };
-  } catch {
-    return { value: null, succeeded: false };
-  }
-}
-
 /**
  * Load stored extensions from SettingsStore.
  *
  * If nothing is stored (or stored data is invalid), we seed defaults (Snake).
  * Legacy `extensions.registry.v1` data is migrated to `extensions.registry.v2`.
+ * Storage read failures propagate so defaults cannot replace an unread registry.
  */
 export async function loadStoredExtensions(settings: ExtensionSettingsStore): Promise<StoredExtensionEntry[]> {
-  const current = await readExtensionSetting(settings, EXTENSIONS_REGISTRY_STORAGE_KEY);
-  const normalizedCurrent = normalizeDocument(current.value);
+  const normalizedCurrent = normalizeDocument(await settings.get(EXTENSIONS_REGISTRY_STORAGE_KEY));
 
   if (normalizedCurrent && normalizedCurrent.version >= EXTENSIONS_REGISTRY_VERSION) {
     return normalizedCurrent.items;
   }
 
-  const legacy = await readExtensionSetting(settings, LEGACY_EXTENSIONS_REGISTRY_STORAGE_KEY);
-  const normalizedLegacy = normalizeDocument(legacy.value);
+  const normalizedLegacy = normalizeDocument(await settings.get(LEGACY_EXTENSIONS_REGISTRY_STORAGE_KEY));
   if (normalizedLegacy) {
-    if (current.succeeded) {
-      await saveStoredExtensions(settings, normalizedLegacy.items);
-    }
+    await saveStoredExtensions(settings, normalizedLegacy.items);
     return normalizedLegacy.items;
   }
 
   const defaults = createDefaultExtensionEntries();
-  if (current.succeeded && legacy.succeeded) {
-    await saveStoredExtensions(settings, defaults);
-  }
+  await saveStoredExtensions(settings, defaults);
   return defaults;
 }

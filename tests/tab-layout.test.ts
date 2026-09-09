@@ -125,13 +125,13 @@ void test("taskpane proxy reader round-trips current values and accepts legacy e
     url: "https://proxy.example.com/",
   });
 
-  for (const legacyEnabled of [1, "1", "true", "yes"]) {
+  for (const legacyEnabled of [1, "1", "true", "yes", "false", "0", "no", { enabled: false }]) {
     await settings.set(TASKPANE_PROXY_ENABLED_SETTING_KEY, legacyEnabled);
     assert.equal((await readTaskpaneProxySettings(settings)).enabled, true);
   }
 });
 
-void test("taskpane proxy reader defaults on missing, corrupt, or failed reads", async () => {
+void test("taskpane proxy reader defaults on missing or failed reads and preserves legacy truthiness", async () => {
   assert.deepEqual(await readTaskpaneProxySettings(new MemoryTaskpaneSettingsStore()), {
     enabled: false,
     url: null,
@@ -141,7 +141,7 @@ void test("taskpane proxy reader defaults on missing, corrupt, or failed reads",
   await corrupt.set(TASKPANE_PROXY_ENABLED_SETTING_KEY, { enabled: true });
   await corrupt.set(TASKPANE_PROXY_URL_SETTING_KEY, { url: "https://proxy.example.com" });
   assert.deepEqual(await readTaskpaneProxySettings(corrupt), {
-    enabled: false,
+    enabled: true,
     url: null,
   });
   assert.deepEqual(

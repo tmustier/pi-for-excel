@@ -14,12 +14,8 @@ export interface TaskpaneProxySettings {
 }
 
 function parseProxyEnabled(value: DynamicValue): boolean {
-  if (typeof value === "boolean") return value;
-  if (typeof value === "number") return value !== 0;
-  if (typeof value !== "string") return false;
-
-  const normalized = value.trim().toLowerCase();
-  return normalized === "1" || normalized === "true" || normalized === "yes";
+  // Preserve the legacy persisted contract: any truthy value enabled proxying.
+  return Boolean(value);
 }
 
 /**
@@ -42,9 +38,9 @@ export async function readTaskpaneLanguage(
 /**
  * Reads the taskpane proxy preferences.
  *
- * Proxying defaults to disabled with no configured URL when either setting is
- * absent, malformed, or cannot be read. Legacy boolean-like strings and
- * numbers remain supported for the enabled flag.
+ * Proxying defaults to disabled with no configured URL when either setting
+ * cannot be read. The enabled flag preserves legacy JavaScript truthiness for
+ * persisted non-boolean values.
  */
 export async function readTaskpaneProxySettings(
   settings: TaskpaneSettingsStore,

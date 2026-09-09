@@ -210,7 +210,6 @@ function clampLimit(limit: number): number {
 export class WorkbookChangeAuditLog {
   private readonly dependencies: WorkbookChangeAuditLogDependencies;
   private loaded = false;
-  private persistenceReadable = true;
   private entries: WorkbookChangeAuditEntry[] = [];
 
   constructor(dependencies: Partial<WorkbookChangeAuditLogDependencies> = {}) {
@@ -229,23 +228,21 @@ export class WorkbookChangeAuditLog {
 
   private async ensureLoaded(): Promise<void> {
     if (this.loaded) return;
-    this.loaded = true;
 
     const settings = await this.dependencies.getSettingsStore();
-    if (!settings) return;
-
-    try {
-      const payload = await settings.get(AUDIT_SETTING_KEY);
-      this.entries = parsePersistedEntries(payload);
-    } catch {
-      this.entries = [];
-      this.persistenceReadable = false;
+    if (!settings) {
+      this.loaded = true;
+      return;
     }
+
+    const payload = await settings.get(AUDIT_SETTING_KEY);
+    this.entries = parsePersistedEntries(payload);
+    this.loaded = true;
   }
 
   private async persist(): Promise<void> {
     const settings = await this.dependencies.getSettingsStore();
-    if (!settings || !this.persistenceReadable) return;
+    if (!settings) return;
 
     const payload: PersistedWorkbookChangeAuditPayload = {
       version: 1,

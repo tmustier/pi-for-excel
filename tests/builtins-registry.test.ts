@@ -9,6 +9,7 @@ import {
   saveStoredExtensions,
 } from "../src/extensions/store.ts";
 import {
+  getDefaultPermissionsForTrust,
   isExtensionCapabilityAllowed,
   setExtensionCapabilityAllowed,
   type StoredExtensionPermissions,
@@ -20,7 +21,7 @@ import { commandRegistry, type SlashCommand } from "../src/commands/types.ts";
 import { installFakeDom } from "./fixtures/fake-dom.ts";
 
 class MemorySettingsStore {
-  private readonly values = new Map<string, DynamicValue>();
+  protected readonly values = new Map<string, DynamicValue>();
 
   get(key: string): Promise<DynamicValue> {
     return Promise.resolve(this.values.has(key) ? this.values.get(key) ?? null : null);
@@ -37,6 +38,22 @@ class MemorySettingsStore {
 
   writeRaw(key: string, value: DynamicValue): void {
     this.values.set(key, value);
+  }
+}
+
+class TransientExtensionReadSettings extends MemorySettingsStore {
+  private failNextRead = false;
+
+  armReadFailure(): void {
+    this.failNextRead = true;
+  }
+
+  override get(key: string): Promise<DynamicValue> {
+    if (this.failNextRead) {
+      this.failNextRead = false;
+      return Promise.reject(new Error("transient extension registry read failure"));
+    }
+    return super.get(key);
   }
 }
 
@@ -433,6 +450,30 @@ void test("extension registry seeds default snake extension when storage is empt
 
   const raw = settings.readRaw(EXTENSIONS_REGISTRY_STORAGE_KEY);
   assert.ok(raw);
+});
+
+void test("extension registry retries transient reads without replacing persisted entries", async () => {
+  const settings = new TransientExtensionReadSettings();
+  const timestamp = "2026-09-09T00:00:00.000Z";
+  const registry = {
+    version: 2,
+    items: [{
+      id: "ext.persisted",
+      name: "Persisted",
+      enabled: false,
+      source: { kind: "inline", code: "export function activate() {}" },
+      trust: "inline-code",
+      permissions: getDefaultPermissionsForTrust("inline-code"),
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    }],
+  };
+  settings.writeRaw(EXTENSIONS_REGISTRY_STORAGE_KEY, registry);
+  settings.armReadFailure();
+
+  await assert.rejects(() => loadStoredExtensions(settings), /transient extension registry read failure/u);
+  assert.deepEqual(settings.readRaw(EXTENSIONS_REGISTRY_STORAGE_KEY), registry);
+  assert.equal((await loadStoredExtensions(settings))[0]?.id, "ext.persisted");
 });
 
 void test("extension registry preserves explicit empty saved entries", async () => {

@@ -55,6 +55,22 @@ class MemorySettingsStore {
   }
 }
 
+class TransientExtensionReadSettings extends MemorySettingsStore {
+  private failNextRead = false;
+
+  armReadFailure(): void {
+    this.failNextRead = true;
+  }
+
+  override get(key: string): Promise<DynamicValue> {
+    if (this.failNextRead) {
+      this.failNextRead = false;
+      return Promise.reject(new Error("transient runtime registry read failure"));
+    }
+    return super.get(key);
+  }
+}
+
 class FailingConnectionStoreSettings extends MemorySettingsStore {
   private failNextConnectionStoreWrite = false;
 
@@ -169,6 +185,34 @@ function createStoredEntry(input: {
     updatedAt: now,
   };
 }
+
+void test("runtime manager retries initialization after a transient registry read failure", async () => {
+  const settings = new TransientExtensionReadSettings();
+  settings.writeRaw(EXTENSIONS_REGISTRY_STORAGE_KEY, {
+    version: 2,
+    items: [createStoredEntry({
+      id: "ext.persisted.disabled",
+      name: "Persisted disabled",
+      trust: "inline-code",
+      enabled: false,
+    })],
+  });
+  const manager = new ExtensionRuntimeManager({
+    settings,
+    connectionManager: createConnectionManager(settings),
+    getActiveAgent: () => null,
+    refreshRuntimeTools: () => Promise.resolve(),
+    refreshRuntimeModels: () => Promise.resolve(),
+    reservedToolNames: new Set<string>(),
+  });
+  settings.armReadFailure();
+
+  await assert.rejects(() => manager.initialize(), /transient runtime registry read failure/u);
+  assert.deepEqual(manager.list(), []);
+
+  await manager.initialize();
+  assert.equal(manager.list()[0]?.id, "ext.persisted.disabled");
+});
 
 void test("runtime manager passes sandbox activation options and runtime metadata", async () => {
   const restoreLocalStorage = installLocalStorageStub();

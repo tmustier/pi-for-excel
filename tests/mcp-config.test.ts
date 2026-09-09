@@ -29,6 +29,22 @@ class MemorySettingsStore {
   }
 }
 
+class TransientReadSettings extends MemorySettingsStore {
+  private failNextRead = false;
+
+  armReadFailure(): void {
+    this.failNextRead = true;
+  }
+
+  override get(key: string): Promise<DynamicValue> {
+    if (this.failNextRead) {
+      this.failNextRead = false;
+      return Promise.reject(new Error("transient MCP read failure"));
+    }
+    return super.get(key);
+  }
+}
+
 class FailingConnectionStoreSettings extends MemorySettingsStore {
   private failConnectionStoreWrite = true;
 
@@ -168,6 +184,40 @@ void test("mcp config store round-trips normalized server entries", async () => 
   assert.equal(loaded[0].url, "https://localhost:4010/mcp");
   assert.equal(loaded[0].token, "secret");
   assert.equal(loaded[0].enabled, true);
+});
+
+void test("saveMcpServers retries transient reads without replacing sibling connections", async () => {
+  const settings = new TransientReadSettings();
+  await settings.set(CONNECTION_STORE_KEY, {
+    version: 1,
+    items: {
+      sibling: { status: "connected", secrets: { token: "keep" } },
+      [MCP_SERVER_TOKENS_CONNECTION_ID]: {
+        status: "connected",
+        secrets: { "mcp-existing": "existing-token" },
+      },
+    },
+  });
+  const nextServers = [{
+    id: "mcp-new",
+    name: "new",
+    url: "https://example.com/mcp",
+    enabled: true,
+    token: "new-token",
+  }];
+  settings.armReadFailure();
+
+  await assert.rejects(() => saveMcpServers(settings, nextServers), /transient MCP read failure/u);
+  assert.deepEqual(readConnectionStoreTokenMap(settings), { "mcp-existing": "existing-token" });
+
+  await saveMcpServers(settings, nextServers);
+  assert.deepEqual(readConnectionStoreTokenMap(settings), { "mcp-new": "new-token" });
+  const rawStore = settings.peek(CONNECTION_STORE_KEY);
+  assert.ok(isMcpConfigTestPayloadShape(rawStore));
+  assert.ok(isMcpConfigTestPayloadShape(rawStore.items));
+  assert.ok(isMcpConfigTestPayloadShape(rawStore.items.sibling));
+  assert.ok(isMcpConfigTestPayloadShape(rawStore.items.sibling.secrets));
+  assert.equal(rawStore.items.sibling.secrets.token, "keep");
 });
 
 void test("saveMcpServers stores bearer tokens in connection store", async () => {
@@ -349,6 +399,36 @@ void test("loadMcpServers falls back to legacy token when connection store token
 
   assert.equal(loaded.length, 1);
   assert.equal(loaded[0].token, "legacy-token");
+});
+
+void test("legacy MCP migration retries transient reads before stripping tokens", async () => {
+  const settings = new TransientReadSettings();
+  await settings.set(CONNECTION_STORE_KEY, {
+    version: 1,
+    items: { sibling: { status: "connected", secrets: { token: "keep" } } },
+  });
+  await settings.set(MCP_SERVERS_SETTING_KEY, {
+    version: 1,
+    servers: [{
+      id: "mcp-local",
+      name: "local",
+      url: "https://localhost:4010/mcp",
+      enabled: true,
+      token: "legacy-token",
+    }],
+  });
+  settings.armReadFailure();
+
+  await assert.rejects(
+    () => migrateLegacyMcpTokensToConnectionStore(settings),
+    /transient MCP read failure/u,
+  );
+  assert.equal(readStoredServerEntries(settings)[0]?.token, "legacy-token");
+  assert.equal(readConnectionStoreTokenMap(settings), undefined);
+
+  assert.equal(await migrateLegacyMcpTokensToConnectionStore(settings), true);
+  assert.equal(readStoredServerEntries(settings)[0]?.token, undefined);
+  assert.deepEqual(readConnectionStoreTokenMap(settings), { "mcp-local": "legacy-token" });
 });
 
 void test("legacy MCP tokens migrate into connection store", async () => {

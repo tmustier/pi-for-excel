@@ -37,11 +37,8 @@ const proxyCache: ProxySettingsCache = {
 };
 
 function parseProxyEnabled(value: DynamicValue): boolean {
-  if (typeof value === "boolean") return value;
-  if (typeof value === "number") return value !== 0;
-  if (typeof value !== "string") return false;
-  const normalized = value.trim().toLowerCase();
-  return normalized === "1" || normalized === "true" || normalized === "yes";
+  // Preserve the legacy persisted contract: any truthy value enabled proxying.
+  return Boolean(value);
 }
 
 export async function readCorsProxySettings(

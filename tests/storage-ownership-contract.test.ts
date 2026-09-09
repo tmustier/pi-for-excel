@@ -106,7 +106,7 @@ void test("feature-owned readers return documented defaults for corrupt and fail
   assert.deepEqual(await loadMcpServers(corrupt), []);
   assert.equal((await loadWebSearchProviderConfig(corrupt)).provider, DEFAULT_WEB_SEARCH_PROVIDER);
   assert.equal(await getEnabledProxyBaseUrl(corrupt), undefined);
-  assert.deepEqual(await readCorsProxySettings(corrupt), { enabled: false, url: "" });
+  assert.deepEqual(await readCorsProxySettings(corrupt), { enabled: true, url: "" });
   assert.equal(await loadOAuthCredentials(corrupt, "github"), null);
   assert.equal(await getSessionWorkbookId(corrupt, "session-a"), null);
   assert.deepEqual(await readBridgeUrls(corrupt), { pythonUrl: "", tmuxUrl: "" });
@@ -122,6 +122,21 @@ void test("feature-owned readers return documented defaults for corrupt and fail
   assert.equal(await loadOAuthCredentials(failing, "github"), null);
   assert.equal(await getSessionWorkbookId(failing, "session-a"), null);
   assert.deepEqual(await readBridgeUrls(failing), { pythonUrl: "", tmuxUrl: "" });
+});
+
+void test("CORS proxy settings preserve baseline truthiness for legacy flags", async () => {
+  const settings = new MemorySettingsStore();
+  settings.values.set("proxy.url", "https://proxy.example.com");
+
+  for (const value of ["false", "0", "no", { enabled: false }]) {
+    settings.values.set("proxy.enabled", value);
+    assert.equal((await readCorsProxySettings(settings)).enabled, true);
+  }
+
+  for (const value of [false, 0, "", null]) {
+    settings.values.set("proxy.enabled", value);
+    assert.equal((await readCorsProxySettings(settings)).enabled, false);
+  }
 });
 
 void test("valid feature settings round-trip through unchanged public keys and formats", async () => {
