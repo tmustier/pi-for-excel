@@ -158,7 +158,7 @@ export class ModelRefreshOwner {
   }
 
   private requestRefresh(request: RefreshRequest): Promise<void> {
-    if (request.syncConfiguredProviders && !this.activeSync) {
+    if (request.syncConfiguredProviders) {
       this.requestedSync = true;
     }
     if (request.allowNetwork && (!this.activeNetwork || this.requestedSync)) {

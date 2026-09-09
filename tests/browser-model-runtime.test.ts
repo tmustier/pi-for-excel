@@ -75,6 +75,41 @@ function createRuntime(args?: {
   });
 }
 
+class GatedSyncBrowserModelRuntime extends BrowserModelRuntime {
+  syncCount = 0;
+  private readonly firstSyncGate: Promise<void>;
+  private notifyFirstSyncStarted: () => void = () => {};
+  private releaseFirstSyncGate: () => void = () => {};
+  readonly firstSyncStarted = new Promise<void>((resolve) => {
+    this.notifyFirstSyncStarted = resolve;
+  });
+
+  constructor(fetchFn?: typeof globalThis.fetch) {
+    super({
+      providerKeys: new MemoryProviderKeys(),
+      modelCatalogs: new MemoryCatalogs(),
+      getProxyUrl: () => Promise.resolve(undefined),
+      ...(fetchFn !== undefined ? { fetchFn } : {}),
+    });
+    this.firstSyncGate = new Promise<void>((resolve) => {
+      this.releaseFirstSyncGate = resolve;
+    });
+  }
+
+  releaseFirstSync(): void {
+    this.releaseFirstSyncGate();
+  }
+
+  override async syncCustomProviders(customProviders: readonly CustomProvider[]): Promise<void> {
+    this.syncCount += 1;
+    if (this.syncCount === 1) {
+      this.notifyFirstSyncStarted();
+      await this.firstSyncGate;
+    }
+    await super.syncCustomProviders(customProviders);
+  }
+}
+
 function gatewayProvider(options?: {
   id?: string;
   name?: string;
@@ -446,6 +481,110 @@ void test("model refresh owner coalesces concurrent provider discovery", async (
   await Promise.all([first, second]);
   assert.equal(fetchCount, 1);
   assert.ok(runtime.models.getModel("Gateway · Acme", "remote-model"));
+});
+
+void test("configured-provider refresh during active sync reloads the latest configuration", async () => {
+  const firstProvider = gatewayProvider({
+    id: "first",
+    name: "First",
+    providerId: "Gateway · First",
+    baseUrl: "https://first.example.com/v1",
+  });
+  const latestProvider = gatewayProvider({
+    id: "latest",
+    name: "Latest",
+    providerId: "Gateway · Latest",
+    baseUrl: "https://latest.example.com/v1",
+  });
+  let loads = 0;
+  let configuredProviders: readonly CustomProvider[] = [firstProvider];
+  let networkCalls = 0;
+  const runtime = new GatedSyncBrowserModelRuntime(() => {
+    networkCalls += 1;
+    return Promise.resolve(new Response(JSON.stringify({ data: [] }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    }));
+  });
+  const owner = new ModelRefreshOwner({
+    modelRuntime: runtime,
+    loadCustomProviders: () => {
+      loads += 1;
+      return Promise.resolve(configuredProviders);
+    },
+    getRuntimes: () => [],
+  });
+
+  const firstRefresh = owner.refreshConfiguredProviders(false);
+  await runtime.firstSyncStarted;
+  configuredProviders = [latestProvider];
+  const followUpRefresh = owner.refreshConfiguredProviders(true);
+  const coalescedRefresh = owner.refreshConfiguredProviders(true);
+  runtime.releaseFirstSync();
+  await Promise.all([firstRefresh, followUpRefresh, coalescedRefresh]);
+
+  assert.equal(loads, 2);
+  assert.equal(runtime.syncCount, 2);
+  assert.equal(networkCalls, 1, "the network request made during sync must run");
+  assert.equal(owner.snapshot().revision, 2);
+  assert.equal(runtime.models.getProvider("Gateway · First"), undefined);
+  assert.ok(runtime.models.getProvider("Gateway · Latest"));
+});
+
+void test("configured-provider refresh during active network discovery is not lost", async () => {
+  const firstProvider = gatewayProvider({
+    id: "first",
+    name: "First",
+    providerId: "Gateway · First",
+    baseUrl: "https://first.example.com/v1",
+  });
+  const latestProvider = gatewayProvider({
+    id: "latest",
+    name: "Latest",
+    providerId: "Gateway · Latest",
+    baseUrl: "https://latest.example.com/v1",
+  });
+  let configuredProviders: readonly CustomProvider[] = [firstProvider];
+  let loads = 0;
+  let notifyFetchStarted: () => void = () => {};
+  const fetchStarted = new Promise<void>((resolve) => {
+    notifyFetchStarted = resolve;
+  });
+  let releaseFetch: () => void = () => {};
+  const fetchGate = new Promise<void>((resolve) => {
+    releaseFetch = resolve;
+  });
+  const runtime = createRuntime({
+    fetchFn: async () => {
+      notifyFetchStarted();
+      await fetchGate;
+      return new Response(JSON.stringify({ data: [] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    },
+  });
+  const owner = new ModelRefreshOwner({
+    modelRuntime: runtime,
+    loadCustomProviders: () => {
+      loads += 1;
+      return Promise.resolve(configuredProviders);
+    },
+    getRuntimes: () => [],
+  });
+
+  await owner.refreshConfiguredProviders(false);
+  const networkRefresh = owner.refresh(true);
+  await fetchStarted;
+  configuredProviders = [latestProvider];
+  const configuredRefresh = owner.refreshConfiguredProviders(false);
+  releaseFetch();
+  await Promise.all([networkRefresh, configuredRefresh]);
+
+  assert.equal(loads, 2);
+  assert.equal(owner.snapshot().revision, 3);
+  assert.equal(runtime.models.getProvider("Gateway · First"), undefined);
+  assert.ok(runtime.models.getProvider("Gateway · Latest"));
 });
 
 void test("model refresh owner preserves healthy provider models on partial failure", async () => {
