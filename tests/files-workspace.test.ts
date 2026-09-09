@@ -201,6 +201,36 @@ class CleanupTestBackend implements WorkspaceBackend {
   }
 }
 
+class FirstReadRejectingSettings {
+  readonly values = new Map<string, DynamicValue>();
+  readonly writes: string[] = [];
+  private readonly unreadKeys = new Set([
+    "files.workspace.metadata.v1",
+    "files.workspace.audit.v1",
+  ]);
+
+  get<T>(key: string): Promise<T | null> {
+    if (this.unreadKeys.delete(key)) {
+      return Promise.reject(new Error(`seeded read failure: ${key}`));
+    }
+
+    const value = this.values.get(key);
+    // This fixture mirrors the persisted settings boundary.
+    return Promise.resolve(value === undefined ? null : structuredClone(value) as T);
+  }
+
+  set(key: string, value: DynamicValue): Promise<void> {
+    this.writes.push(key);
+    this.values.set(key, structuredClone(value));
+    return Promise.resolve();
+  }
+
+  delete(key: string): Promise<void> {
+    this.values.delete(key);
+    return Promise.resolve();
+  }
+}
+
 class SourceBackend implements WorkspaceBackend {
   readonly kind: WorkspaceBackendKind;
   readonly label: string;
@@ -312,6 +342,62 @@ class SourceBackend implements WorkspaceBackend {
     return Promise.resolve();
   }
 }
+
+void test("file mutations retry unread metadata and audit without overwriting persisted entries", async () => {
+  const metadataKey = "files.workspace.metadata.v1";
+  const auditKey = "files.workspace.audit.v1";
+  const settings = new FirstReadRejectingSettings();
+  settings.values.set(metadataKey, {
+    version: 1,
+    byPath: {
+      "old.txt": {
+        workbookId: "url_sha256:existing",
+        workbookLabel: "Existing.xlsx",
+        taggedAt: 100,
+      },
+    },
+  });
+  settings.values.set(auditKey, {
+    version: 1,
+    entries: [{
+      id: "existing-audit",
+      at: 100,
+      action: "write",
+      actor: "user",
+      source: "existing",
+      backend: "memory",
+      path: "old.txt",
+    }],
+  });
+
+  const backend = new SourceBackend({
+    kind: "memory",
+    label: "Session memory",
+    files: [{ path: "old.txt", text: "existing", modifiedAt: 100 }],
+  });
+  const workspace = new FilesWorkspace({ initialBackend: backend, settings });
+
+  await workspace.renameFile("old.txt", "renamed.txt", {
+    audit: { actor: "user", source: "first-mutation" },
+  });
+  assert.equal((await backend.readFile("renamed.txt")).text, "existing");
+  assert.deepEqual(settings.writes, []);
+
+  await withOfficeDocumentUrl("https://contoso.example/workbooks/Later.xlsx", async () => {
+    await workspace.writeTextFile("later.txt", "later", undefined, {
+      audit: { actor: "assistant", source: "later-mutation" },
+    });
+  });
+
+  const metadata = settings.values.get(metadataKey);
+  assert.equal(typeof metadata, "object");
+  assert.match(JSON.stringify(metadata), /old\.txt/u);
+  assert.match(JSON.stringify(metadata), /later\.txt/u);
+
+  const audit = settings.values.get(auditKey);
+  assert.match(JSON.stringify(audit), /existing-audit/u);
+  assert.match(JSON.stringify(audit), /later-mutation/u);
+});
 
 void test("files workspace tags files with active workbook metadata", async () => {
   await resetWorkspace();

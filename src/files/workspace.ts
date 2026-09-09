@@ -332,13 +332,13 @@ function createAuditEntryId(): string {
   return `audit_${Date.now().toString(36)}_${randomChunk}`;
 }
 
-interface SettingsStoreLike {
+export interface FilesWorkspaceSettingsStore {
   get<T>(key: string): Promise<T | null>;
   set(key: string, value: DynamicValue): Promise<void>;
   delete(key: string): Promise<void>;
 }
 
-function isSettingsStoreLike(value: DynamicValue): value is SettingsStoreLike {
+function isSettingsStoreLike(value: DynamicValue): value is FilesWorkspaceSettingsStore {
   if (!isFilesWorkspacePayloadShape(value)) return false;
 
   return (
@@ -348,7 +348,7 @@ function isSettingsStoreLike(value: DynamicValue): value is SettingsStoreLike {
   );
 }
 
-async function getSettingsStore(): Promise<SettingsStoreLike | null> {
+async function getSettingsStore(): Promise<FilesWorkspaceSettingsStore | null> {
   try {
     const storageModule = await import("../storage/local/app-storage.js");
     const appStorage = storageModule.getAppStorage();
@@ -569,6 +569,7 @@ export function buildWorkspaceContextSummary(args: WorkspaceContextSummaryArgs):
 export interface FilesWorkspaceOptions {
   initialBackend?: WorkspaceBackend;
   initialWorkspaceBackend?: WorkspaceBackend;
+  settings?: FilesWorkspaceSettingsStore | null;
 }
 
 export class FilesWorkspace {
@@ -585,9 +586,11 @@ export class FilesWorkspace {
   private auditLoaded = false;
   private auditEntries: FilesWorkspaceAuditEntry[] = [];
 
+  private readonly settings: FilesWorkspaceSettingsStore | null | undefined;
   private readonly scratchCleanupByBackend = new WeakMap<WorkspaceBackend, Promise<void>>();
 
   constructor(options: FilesWorkspaceOptions = {}) {
+    this.settings = options.settings;
     if (options.initialBackend) {
       this.backend = options.initialBackend;
       if (options.initialBackend.kind !== "native-directory") {
@@ -650,7 +653,7 @@ export class FilesWorkspace {
   }
 
   private async removeWorkbookTags(paths: readonly string[]): Promise<void> {
-    await this.ensureMetadataLoaded();
+    if (!await this.ensureMetadataLoaded()) return;
 
     let changed = false;
     for (const path of paths) {
@@ -742,12 +745,18 @@ export class FilesWorkspace {
     dispatchWorkspaceChanged({ reason: "backend" });
   }
 
-  private async ensureMetadataLoaded(): Promise<void> {
-    if (this.metadataLoaded) return;
-    this.metadataLoaded = true;
+  private resolveSettings(): Promise<FilesWorkspaceSettingsStore | null> {
+    return this.settings === undefined ? getSettingsStore() : Promise.resolve(this.settings);
+  }
 
-    const settings = await getSettingsStore();
-    if (!settings) return;
+  private async ensureMetadataLoaded(): Promise<boolean> {
+    if (this.metadataLoaded) return true;
+
+    const settings = await this.resolveSettings();
+    if (!settings) {
+      this.metadataLoaded = true;
+      return true;
+    }
 
     try {
       const raw = await settings.get<DynamicValue>(METADATA_SETTING_KEY);
@@ -756,13 +765,15 @@ export class FilesWorkspace {
       for (const [path, tag] of parsed) {
         this.metadataByPath.set(path, tag);
       }
+      this.metadataLoaded = true;
+      return true;
     } catch {
-      this.metadataByPath.clear();
+      return false;
     }
   }
 
   private async persistMetadata(): Promise<void> {
-    const settings = await getSettingsStore();
+    const settings = await this.resolveSettings();
     if (!settings) return;
 
     const byPath: Record<string, WorkspaceFileWorkbookTag> = {};
@@ -782,23 +793,27 @@ export class FilesWorkspace {
     }
   }
 
-  private async ensureAuditLoaded(): Promise<void> {
-    if (this.auditLoaded) return;
-    this.auditLoaded = true;
+  private async ensureAuditLoaded(): Promise<boolean> {
+    if (this.auditLoaded) return true;
 
-    const settings = await getSettingsStore();
-    if (!settings) return;
+    const settings = await this.resolveSettings();
+    if (!settings) {
+      this.auditLoaded = true;
+      return true;
+    }
 
     try {
       const raw = await settings.get<DynamicValue>(AUDIT_TRAIL_SETTING_KEY);
       this.auditEntries = parsePersistedAuditTrail(raw);
+      this.auditLoaded = true;
+      return true;
     } catch {
-      this.auditEntries = [];
+      return false;
     }
   }
 
   private async persistAuditTrail(): Promise<void> {
-    const settings = await getSettingsStore();
+    const settings = await this.resolveSettings();
     if (!settings) return;
 
     const payload: PersistedAuditTrail = {
@@ -829,7 +844,7 @@ export class FilesWorkspace {
   }
 
   private async setWorkbookTagForPath(path: string, fallbackTag?: WorkspaceFileWorkbookTag): Promise<void> {
-    await this.ensureMetadataLoaded();
+    if (!await this.ensureMetadataLoaded()) return;
 
     const resolvedTag = await this.resolveActiveWorkbookTag();
     const nextTag = resolvedTag ?? fallbackTag;
@@ -845,7 +860,7 @@ export class FilesWorkspace {
   }
 
   private async removeWorkbookTag(path: string): Promise<void> {
-    await this.ensureMetadataLoaded();
+    if (!await this.ensureMetadataLoaded()) return;
 
     if (!this.metadataByPath.delete(path)) {
       return;
@@ -855,7 +870,7 @@ export class FilesWorkspace {
   }
 
   private async moveWorkbookTag(oldPath: string, newPath: string): Promise<void> {
-    await this.ensureMetadataLoaded();
+    if (!await this.ensureMetadataLoaded()) return;
 
     const previousTag = this.metadataByPath.get(oldPath);
     this.metadataByPath.delete(oldPath);
@@ -865,7 +880,7 @@ export class FilesWorkspace {
   }
 
   private async pruneStaleWorkbookTags(currentPaths: Set<string>): Promise<void> {
-    await this.ensureMetadataLoaded();
+    if (!await this.ensureMetadataLoaded()) return;
 
     let changed = false;
     for (const path of this.metadataByPath.keys()) {
@@ -880,7 +895,7 @@ export class FilesWorkspace {
   }
 
   private async withWorkbookTags(entries: WorkspaceFileEntry[]): Promise<WorkspaceFileEntry[]> {
-    await this.ensureMetadataLoaded();
+    if (!await this.ensureMetadataLoaded()) return entries;
 
     return entries.map((entry) => {
       const tag = this.metadataByPath.get(entry.path);
@@ -918,7 +933,7 @@ export class FilesWorkspace {
     toPath?: string;
     bytes?: number;
   }): Promise<void> {
-    await this.ensureAuditLoaded();
+    if (!await this.ensureAuditLoaded()) return;
 
     const workbookTag = await this.resolveActiveWorkbookTag();
     const entry: FilesWorkspaceAuditEntry = {
@@ -1546,14 +1561,14 @@ export class FilesWorkspace {
   }
 
   async listAuditEntries(limit = 40): Promise<FilesWorkspaceAuditEntry[]> {
-    await this.ensureAuditLoaded();
+    if (!await this.ensureAuditLoaded()) return [];
 
     const safeLimit = Math.max(0, Math.min(limit, MAX_AUDIT_ENTRIES));
     return this.auditEntries.slice(0, safeLimit);
   }
 
   async clearAuditTrail(_options: WorkspaceMutationOptions = {}): Promise<void> {
-    await this.ensureAuditLoaded();
+    if (!await this.ensureAuditLoaded()) return;
 
     this.auditEntries = [];
     await this.persistAuditTrail();
