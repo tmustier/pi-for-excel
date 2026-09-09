@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
-  BUILTIN_SNAKE_EXTENSION_ID,
   EXTENSIONS_REGISTRY_STORAGE_KEY,
   LEGACY_EXTENSIONS_REGISTRY_STORAGE_KEY,
   loadStoredExtensions,
@@ -420,14 +419,14 @@ void test("extension registry seeds default snake extension when storage is empt
 
   const entries = await loadStoredExtensions(settings);
   assert.equal(entries.length, 1);
-  assert.equal(entries[0].id, BUILTIN_SNAKE_EXTENSION_ID);
+  assert.equal(entries[0].id, "builtin.snake");
   assert.equal(entries[0].trust, "builtin");
   assert.equal(entries[0].permissions.commandsRegister, true);
   assert.equal(entries[0].permissions.toolsRegister, true);
   assert.equal(entries[0].permissions.agentRead, true);
 
   const restartedEntries = await loadStoredExtensions(settings);
-  assert.equal(restartedEntries[0]?.id, BUILTIN_SNAKE_EXTENSION_ID);
+  assert.equal(restartedEntries[0]?.id, "builtin.snake");
 });
 
 void test("extension registry retries transient reads without replacing persisted entries", async () => {
