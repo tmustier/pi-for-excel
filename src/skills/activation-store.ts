@@ -93,12 +93,8 @@ function arrayShallowEqual(left: readonly string[], right: readonly string[]): b
 export async function loadDisabledSkillNamesFromSettings(
   settings: SkillActivationSettingsStore,
 ): Promise<Set<string>> {
-  try {
-    const raw = await settings.get(SKILL_ACTIVATION_STORAGE_KEY);
-    return new Set(parseStoredDisabledSkillNames(raw));
-  } catch {
-    return new Set();
-  }
+  const raw = await settings.get(SKILL_ACTIVATION_STORAGE_KEY);
+  return new Set(parseStoredDisabledSkillNames(raw));
 }
 
 export function filterAgentSkillsByEnabledState(args: {

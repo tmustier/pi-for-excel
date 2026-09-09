@@ -27,6 +27,19 @@ class MemorySettingsStore {
   }
 }
 
+class RejectingSettingsStore extends MemorySettingsStore {
+  setCount = 0;
+
+  override get(_key: string): Promise<DynamicValue> {
+    return Promise.reject(new Error("seeded read failure"));
+  }
+
+  override set(key: string, value: DynamicValue): Promise<void> {
+    this.setCount += 1;
+    return super.set(key, value);
+  }
+}
+
 void test("resolves session + workbook integrations in catalog order", async () => {
   const settings = new MemorySettingsStore();
 
@@ -98,6 +111,33 @@ void test("external tools gate defaults on and can be disabled", async () => {
 
   await setExternalToolsEnabled(settings, true);
   assert.equal(await getExternalToolsEnabled(settings), true);
+});
+
+void test("integration capability reads reject instead of enabling defaults when settings are unreadable", async () => {
+  const settings = new RejectingSettingsStore();
+
+  await assert.rejects(
+    getWorkbookIntegrationIds(settings, "unreadable-workbook", KNOWN_INTEGRATIONS),
+    /seeded read failure/u,
+  );
+  await assert.rejects(getExternalToolsEnabled(settings), /seeded read failure/u);
+});
+
+void test("integration scope mutation does not write when existing settings are unreadable", async () => {
+  const settings = new RejectingSettingsStore();
+
+  await assert.rejects(
+    setIntegrationEnabledInScope({
+      settings,
+      scope: "session",
+      identifier: "unreadable-session",
+      integrationId: "web_search",
+      enabled: true,
+      knownIntegrationIds: KNOWN_INTEGRATIONS,
+    }),
+    /seeded read failure/u,
+  );
+  assert.equal(settings.setCount, 0);
 });
 
 void test("unconfigured session scope is explicit empty", async () => {

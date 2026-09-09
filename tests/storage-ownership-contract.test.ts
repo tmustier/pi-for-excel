@@ -80,7 +80,7 @@ class ThrowingSettingsStore extends MemorySettingsStore {
   }
 }
 
-void test("feature-owned readers return documented defaults for corrupt and failed settings", async () => {
+void test("feature-owned readers preserve documented corrupt-value and read-failure behavior", async () => {
   const corrupt = new MemorySettingsStore();
   corrupt.values.set(SKILL_ACTIVATION_STORAGE_KEY, { version: "bad", disabledNames: 3 });
   corrupt.values.set(EXTERNAL_TOOLS_ENABLED_SETTING_KEY, { enabled: true });
@@ -112,8 +112,8 @@ void test("feature-owned readers return documented defaults for corrupt and fail
   assert.deepEqual(await readBridgeUrls(corrupt), { pythonUrl: "", tmuxUrl: "" });
 
   const failing = new ThrowingSettingsStore();
-  assert.deepEqual([...await loadDisabledSkillNamesFromSettings(failing)], []);
-  assert.equal(await getExternalToolsEnabled(failing), true);
+  await assert.rejects(loadDisabledSkillNamesFromSettings(failing), /seeded read failure/u);
+  await assert.rejects(getExternalToolsEnabled(failing), /seeded read failure/u);
   assert.deepEqual(await loadConnectionStoreDocument(failing), {});
   assert.deepEqual(await loadMcpServers(failing), []);
   assert.equal((await loadWebSearchProviderConfig(failing)).provider, DEFAULT_WEB_SEARCH_PROVIDER);
@@ -197,6 +197,19 @@ void test("singleton getters accept injected composition-root defaults", () => {
 
 void test("mutation reads fail closed instead of dropping recoverable sibling records", async () => {
   const settings = new ThrowingSettingsStore();
+  settings.values.set(SKILL_ACTIVATION_STORAGE_KEY, {
+    version: 1,
+    disabledNames: ["existing-disabled-skill"],
+  });
+  await assert.rejects(
+    () => setSkillEnabledInSettings({ settings, name: "new-disabled-skill", enabled: false }),
+    /seeded read failure/u,
+  );
+  assert.deepEqual(settings.values.get(SKILL_ACTIVATION_STORAGE_KEY), {
+    version: 1,
+    disabledNames: ["existing-disabled-skill"],
+  });
+
   settings.values.set(CONNECTION_STORE_KEY, {
     version: 1,
     items: { sibling: { status: "connected", secrets: { token: "keep" } } },

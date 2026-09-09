@@ -75,17 +75,12 @@ async function defaultLoadDisabledSkillNames(): Promise<Set<string>> {
     return new Set();
   }
 
-  try {
-    const [{ getAppStorage }, { loadDisabledSkillNamesFromSettings }] = await Promise.all([
-      import("../storage/local/app-storage.js"),
-      import("../skills/activation-store.js"),
-    ]);
+  const [{ getAppStorage }, { loadDisabledSkillNamesFromSettings }] = await Promise.all([
+    import("../storage/local/app-storage.js"),
+    import("../skills/activation-store.js"),
+  ]);
 
-    return loadDisabledSkillNamesFromSettings(getAppStorage().settings);
-  } catch (error) {
-    console.warn("[skills] Failed to load skill activation state for tool:", error);
-    return new Set();
-  }
+  return loadDisabledSkillNamesFromSettings(getAppStorage().settings);
 }
 
 async function defaultInstallExternalSkill(args: {

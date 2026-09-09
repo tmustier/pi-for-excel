@@ -93,12 +93,7 @@ async function readScopeIntegrationIds(
   const key = scope === "session"
     ? sessionIntegrationsKey(identifier)
     : workbookIntegrationsKey(identifier);
-  let raw: DynamicValue;
-  try {
-    raw = await settings.get(key);
-  } catch {
-    raw = null;
-  }
+  const raw = await settings.get(key);
 
   // Never configured workbook scope inherits defaults (web search).
   // Session scope stays explicit unless the caller opts into fallback defaults.
@@ -237,14 +232,10 @@ function parseStoredBoolean(value: DynamicValue): boolean {
 }
 
 export async function getExternalToolsEnabled(settings: IntegrationSettingsStore): Promise<boolean> {
-  try {
-    const raw = await settings.get(EXTERNAL_TOOLS_ENABLED_SETTING_KEY);
-    // Default ON so web search is available once a provider API key is configured.
-    if (raw == null) return true;
-    return parseStoredBoolean(raw);
-  } catch {
-    return true;
-  }
+  const raw = await settings.get(EXTERNAL_TOOLS_ENABLED_SETTING_KEY);
+  // Default ON so web search is available once a provider API key is configured.
+  if (raw == null) return true;
+  return parseStoredBoolean(raw);
 }
 
 export async function setExternalToolsEnabled(
