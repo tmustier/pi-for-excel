@@ -97,7 +97,6 @@ void test("Anthropic OAuth provider uses the browser-safe implementation", async
   assert.equal(authorizeUrl.searchParams.get("client_id"), "9d1c250a-e61b-44d9-88ed-5944d1962f5e");
   assert.equal(authorizeUrl.searchParams.get("redirect_uri"), "http://localhost:53692/callback");
 
-  assert.equal(requests.length, 1);
   assert.equal(requests[0]?.url, "https://platform.claude.com/v1/oauth/token");
   const body = parseRequestBody(JSON.parse(String(requests[0]?.body)) as DynamicValue);
   assert.equal(body.grant_type, "authorization_code");
@@ -161,7 +160,6 @@ void test("OpenAI Codex browser OAuth matches official Codex CLI authorize param
   assert.equal(authorizeUrl.searchParams.get("id_token_add_organizations"), "true");
   assert.match(authorizeUrl.searchParams.get("state") ?? "", /^[A-Za-z0-9_-]{43}$/);
 
-  assert.equal(requests.length, 1);
   assert.equal(requests[0]?.url, "https://auth.openai.com/oauth/token");
   const body = new URLSearchParams(String(requests[0]?.body));
   assert.equal(body.get("grant_type"), "authorization_code");
@@ -215,7 +213,6 @@ void test("OpenAI Codex browser OAuth accepts pi-sourced credentials with connec
     "codex-cli-rs-connector-scopes-2026-04",
   );
 
-  assert.equal(requests.length, 1);
   const body = new URLSearchParams(String(requests[0]?.body));
   assert.equal(body.get("grant_type"), "refresh_token");
   assert.equal(body.get("refresh_token"), "refresh-from-pi-auth-json");

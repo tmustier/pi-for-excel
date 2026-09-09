@@ -1,17 +1,44 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import type { ModelsStore, ModelsStoreEntry } from "@earendil-works/pi-ai";
+
+import { BrowserModelRuntime } from "../src/models/browser-model-runtime.ts";
 import type { CustomProvider } from "../src/storage/local/custom-providers-store.js";
 
 import {
   DEFAULT_OPENAI_GATEWAY_CONTEXT_WINDOW,
-  collectCustomProviderRuntimeInfo,
   deleteOpenAiGatewayConfig,
   listOpenAiGatewayConfigs,
   resolveCustomProviderModel,
   saveOpenAiGatewayConfig,
   type CustomProvidersStoreLike,
 } from "../src/auth/custom-gateways.ts";
+
+class MemoryCatalogs implements ModelsStore {
+  private readonly entries = new Map<string, ModelsStoreEntry>();
+
+  read(providerId: string): Promise<ModelsStoreEntry | undefined> {
+    return Promise.resolve(this.entries.get(providerId));
+  }
+
+  write(providerId: string, entry: ModelsStoreEntry): Promise<void> {
+    this.entries.set(providerId, entry);
+    return Promise.resolve();
+  }
+
+  delete(providerId: string): Promise<void> {
+    this.entries.delete(providerId);
+    return Promise.resolve();
+  }
+}
+
+class MemoryProviderKeys {
+  get(): Promise<null> { return Promise.resolve(null); }
+  set(): Promise<void> { return Promise.resolve(); }
+  delete(): Promise<void> { return Promise.resolve(); }
+  list(): Promise<string[]> { return Promise.resolve([]); }
+}
 
 class MemoryCustomProvidersStore implements CustomProvidersStoreLike {
   private readonly providers = new Map<string, CustomProvider>();
@@ -33,6 +60,16 @@ class MemoryCustomProvidersStore implements CustomProvidersStoreLike {
   getAll(): Promise<CustomProvider[]> {
     return Promise.resolve(Array.from(this.providers.values()));
   }
+}
+
+async function restartGatewayRuntime(store: MemoryCustomProvidersStore): Promise<BrowserModelRuntime> {
+  const runtime = new BrowserModelRuntime({
+    providerKeys: new MemoryProviderKeys(),
+    modelCatalogs: new MemoryCatalogs(),
+    getProxyUrl: () => Promise.resolve(undefined),
+  });
+  await runtime.syncCustomProviders(await store.getAll());
+  return runtime;
 }
 
 void test("saveOpenAiGatewayConfig stores normalized endpoint/model/provider", async () => {
@@ -83,9 +120,10 @@ void test("saveOpenAiGatewayConfig clamps maxTokens to the configured context wi
     contextWindow: 2_048,
   });
 
-  const storedModel = (await store.get(saved.id))?.models?.[0];
-  assert.equal(storedModel?.contextWindow, 2_048);
-  assert.equal(storedModel?.maxTokens, 2_048);
+  const restarted = await restartGatewayRuntime(store);
+  const model = restarted.models.getModel(saved.providerName, "small-model");
+  assert.equal(model?.contextWindow, 2_048);
+  assert.equal(model?.maxTokens, 2_048);
 });
 
 void test("saveOpenAiGatewayConfig rejects invalid context window values", async () => {
@@ -130,11 +168,10 @@ void test("resolveCustomProviderModel refreshes renamed gateway models by base U
     contextWindow: 16_384,
   });
 
-  const persistedModel = (await store.get(firstSave.id))?.models?.[0];
+  const firstRuntime = await restartGatewayRuntime(store);
+  const persistedModel = firstRuntime.models.getModel(firstSave.providerName, "supply-chain");
   assert.ok(persistedModel);
-  if (!persistedModel) {
-    throw new Error("Persisted model missing");
-  }
+  if (!persistedModel) throw new Error("Gateway model missing");
 
   await saveOpenAiGatewayConfig(store, {
     id: firstSave.id,
@@ -144,10 +181,9 @@ void test("resolveCustomProviderModel refreshes renamed gateway models by base U
     contextWindow: 262_144,
   });
 
-  const refreshed = resolveCustomProviderModel(await store.getAll(), persistedModel);
-  assert.ok(refreshed);
+  const restarted = await restartGatewayRuntime(store);
+  const refreshed = restarted.models.getModel("Gateway · Warehouse API EU", "supply-chain");
   assert.equal(refreshed?.contextWindow, 262_144);
-  assert.match(refreshed?.provider ?? "", /^Gateway · Warehouse API EU/);
 });
 
 void test("resolveCustomProviderModel refuses ambiguous base-url fallback matches", async () => {
@@ -205,12 +241,12 @@ void test("deleteOpenAiGatewayConfig only removes managed gateway entries", asyn
   await deleteOpenAiGatewayConfig(store, saved.id);
   await deleteOpenAiGatewayConfig(store, "manual-openai-provider");
 
-  const all = await store.getAll();
-  assert.equal(all.length, 1);
-  assert.equal(all[0]?.id, "manual-openai-provider");
+  const restarted = await restartGatewayRuntime(store);
+  assert.equal(restarted.models.getProvider(saved.providerName), undefined);
+  assert.ok(restarted.models.getProvider("manual-provider"));
 });
 
-void test("collectCustomProviderRuntimeInfo includes custom provider names and api keys", async () => {
+void test("a restarted runtime resolves custom providers and their credentials", async () => {
   const store = new MemoryCustomProvidersStore();
 
   const gateway = await saveOpenAiGatewayConfig(store, {
@@ -221,17 +257,28 @@ void test("collectCustomProviderRuntimeInfo includes custom provider names and a
   });
 
   await store.set({
-    id: "custom-ollama-1",
-    name: "Local Ollama",
-    type: "ollama",
-    baseUrl: "http://localhost:11434",
+    id: "custom-keyless-1",
+    name: "Keyless provider",
+    type: "openai-responses",
+    baseUrl: "https://keyless.example.com/v1",
+    models: [{
+      id: "keyless-model",
+      name: "keyless-model",
+      api: "openai-responses",
+      provider: "Keyless provider",
+      baseUrl: "https://keyless.example.com/v1",
+      reasoning: false,
+      input: ["text"],
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+      contextWindow: 8_192,
+      maxTokens: 1_024,
+    }],
   });
 
-  const runtimeInfo = collectCustomProviderRuntimeInfo(await store.getAll());
+  const restarted = await restartGatewayRuntime(store);
 
-  assert.ok(runtimeInfo.providerNames.has(gateway.providerName));
-  assert.ok(runtimeInfo.providerNames.has("Local Ollama"));
-  assert.equal(runtimeInfo.apiKeys.get(gateway.providerName), "runtime-key");
-  assert.equal(runtimeInfo.apiKeys.get("Local Ollama"), undefined);
-  assert.equal(runtimeInfo.defaultModel?.id, "runtime-model");
+  assert.ok(restarted.models.getProvider(gateway.providerName));
+  assert.ok(restarted.models.getProvider("Keyless provider"));
+  assert.equal((await restarted.models.getAuth(gateway.providerName))?.auth.apiKey, "runtime-key");
+  assert.ok(restarted.models.getModel(gateway.providerName, "runtime-model"));
 });
