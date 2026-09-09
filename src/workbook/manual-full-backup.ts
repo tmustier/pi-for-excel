@@ -403,9 +403,11 @@ export class ManualFullWorkbookBackupStore {
 
 let singleton: ManualFullWorkbookBackupStore | null = null;
 
-export function getManualFullWorkbookBackupStore(): ManualFullWorkbookBackupStore {
+export function getManualFullWorkbookBackupStore(
+  defaultStore?: ManualFullWorkbookBackupStore,
+): ManualFullWorkbookBackupStore {
   if (!singleton) {
-    singleton = new ManualFullWorkbookBackupStore();
+    singleton = defaultStore ?? new ManualFullWorkbookBackupStore();
   }
 
   return singleton;

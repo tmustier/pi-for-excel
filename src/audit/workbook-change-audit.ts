@@ -59,12 +59,13 @@ export interface AppendWorkbookChangeAuditEntryArgs {
 }
 
 interface SettingsStoreLike {
-  get<T>(key: string): Promise<T | null>;
+  get(key: string): Promise<DynamicValue>;
   set(key: string, value: DynamicValue): Promise<void>;
   delete(key: string): Promise<void>;
 }
 
 interface WorkbookChangeAuditLogDependencies {
+  settings: SettingsStoreLike | null;
   getSettingsStore: () => Promise<SettingsStoreLike | null>;
   getWorkbookContext: () => Promise<WorkbookContext>;
   now: () => number;
@@ -209,11 +210,17 @@ function clampLimit(limit: number): number {
 export class WorkbookChangeAuditLog {
   private readonly dependencies: WorkbookChangeAuditLogDependencies;
   private loaded = false;
+  private persistenceReadable = true;
   private entries: WorkbookChangeAuditEntry[] = [];
 
   constructor(dependencies: Partial<WorkbookChangeAuditLogDependencies> = {}) {
+    const getSettingsStore = dependencies.settings !== undefined
+      ? () => Promise.resolve(dependencies.settings ?? null)
+      : dependencies.getSettingsStore ?? defaultGetSettingsStore;
+
     this.dependencies = {
-      getSettingsStore: dependencies.getSettingsStore ?? defaultGetSettingsStore,
+      settings: dependencies.settings ?? null,
+      getSettingsStore,
       getWorkbookContext: dependencies.getWorkbookContext ?? getWorkbookContext,
       now: dependencies.now ?? defaultNow,
       createId: dependencies.createId ?? defaultCreateId,
@@ -228,16 +235,17 @@ export class WorkbookChangeAuditLog {
     if (!settings) return;
 
     try {
-      const payload = await settings.get<DynamicValue>(AUDIT_SETTING_KEY);
+      const payload = await settings.get(AUDIT_SETTING_KEY);
       this.entries = parsePersistedEntries(payload);
     } catch {
       this.entries = [];
+      this.persistenceReadable = false;
     }
   }
 
   private async persist(): Promise<void> {
     const settings = await this.dependencies.getSettingsStore();
-    if (!settings) return;
+    if (!settings || !this.persistenceReadable) return;
 
     const payload: PersistedWorkbookChangeAuditPayload = {
       version: 1,
@@ -272,7 +280,7 @@ export class WorkbookChangeAuditLog {
       try {
         const settings = await this.dependencies.getSettingsStore();
         if (settings) {
-          const stored = await settings.get<DynamicValue>(EXECUTION_MODE_SETTING_KEY);
+          const stored = await settings.get(EXECUTION_MODE_SETTING_KEY);
           executionMode = normalizeExecutionMode(stored);
         }
       } catch {
@@ -323,9 +331,11 @@ export class WorkbookChangeAuditLog {
 
 let singleton: WorkbookChangeAuditLog | null = null;
 
-export function getWorkbookChangeAuditLog(): WorkbookChangeAuditLog {
+export function getWorkbookChangeAuditLog(
+  defaultLog?: WorkbookChangeAuditLog,
+): WorkbookChangeAuditLog {
   if (!singleton) {
-    singleton = new WorkbookChangeAuditLog();
+    singleton = defaultLog ?? new WorkbookChangeAuditLog();
   }
 
   return singleton;

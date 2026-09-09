@@ -43,6 +43,18 @@ import {
   sessionWorkbookKey,
 } from "../src/workbook/session-association.ts";
 import { readBridgeUrls } from "../src/commands/builtins/extensions-hub-connections.ts";
+import {
+  WorkbookChangeAuditLog,
+  getWorkbookChangeAuditLog,
+} from "../src/audit/workbook-change-audit.ts";
+import {
+  WorkbookRecoveryLog,
+  getWorkbookRecoveryLog,
+} from "../src/workbook/recovery-log.ts";
+import {
+  ManualFullWorkbookBackupStore,
+  getManualFullWorkbookBackupStore,
+} from "../src/workbook/manual-full-backup.ts";
 
 class MemorySettingsStore {
   readonly values = new Map<string, DynamicValue>();
@@ -156,6 +168,16 @@ void test("valid feature settings round-trip through unchanged public keys and f
   await linkSessionToWorkbook(settings, "session-a", "workbook-a");
   await linkSessionToWorkbook(settings, "session-a", "workbook-b");
   assert.equal(settings.values.get(sessionWorkbookKey("session-a")), "workbook-a");
+});
+
+void test("singleton getters accept injected composition-root defaults", () => {
+  const audit = new WorkbookChangeAuditLog({ settings: null });
+  const recovery = new WorkbookRecoveryLog({ settings: null });
+  const backup = new ManualFullWorkbookBackupStore();
+
+  assert.equal(getWorkbookChangeAuditLog(audit), audit);
+  assert.equal(getWorkbookRecoveryLog(recovery), recovery);
+  assert.equal(getManualFullWorkbookBackupStore(backup), backup);
 });
 
 void test("mutation reads fail closed instead of dropping recoverable sibling records", async () => {
