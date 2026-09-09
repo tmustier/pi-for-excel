@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { readFile } from "node:fs/promises";
 
 import {
   BUILTIN_SNAKE_EXTENSION_ID,
@@ -229,33 +228,6 @@ void test("slash-command dispatcher owns synchronous and asynchronous command fa
   }
 });
 
-void test("extensions pages expose connections, plugins, and skills in the settings shell", async () => {
-  const pagesSource = await readFile(
-    new URL("../src/commands/builtins/settings-pages/extensions-pages.ts", import.meta.url),
-    "utf8",
-  );
-  const connectionsSource = await readFile(
-    new URL("../src/commands/builtins/extensions-hub-connections.ts", import.meta.url),
-    "utf8",
-  );
-  const pluginsSource = await readFile(
-    new URL("../src/commands/builtins/extensions-hub-plugins.ts", import.meta.url),
-    "utf8",
-  );
-  const skillsSource = await readFile(
-    new URL("../src/commands/builtins/extensions-hub-skills.ts", import.meta.url),
-    "utf8",
-  );
-
-  assert.match(pagesSource, /export function createConnectionsPage/);
-  assert.match(pagesSource, /export function createPluginsPage/);
-  assert.match(pagesSource, /export function createSkillsPage/);
-  assert.match(pagesSource, /createDeferredConnectionsRefreshController/);
-  assert.match(connectionsSource, /Web search/);
-  assert.match(pluginsSource, /Installed/);
-  assert.match(skillsSource, /Bundled skills/);
-});
-
 void test("command-layer contract: recovery commands expose completion, errors, busy policy, and queueing", async () => {
   const previousCommands = commandRegistry.list();
   const fakeDom = installFakeDom();
@@ -414,17 +386,6 @@ void test("command-layer contract: busy policy allows workspace commands and blo
   }
 });
 
-void test("backups page includes manual full-backup action", async () => {
-  const overlaySource = await readFile(
-    new URL("../src/commands/builtins/settings-pages/backups-page.ts", import.meta.url),
-    "utf8",
-  );
-
-  assert.match(overlaySource, /onCreateManualFullBackup\?: \(\) => Promise<ManualFullBackupSummary>/);
-  assert.match(overlaySource, /createButton\(t\("recovery\.downloadBackup"\)/);
-  assert.match(overlaySource, /recovery\.toast\.backupDownloaded/);
-  assert.match(overlaySource, /retentionInput\.max = String\(MAX_RECOVERY_ENTRIES\)/);
-});
 
 void test("permission helper updates one capability without mutating others", () => {
   const permissions: StoredExtensionPermissions = {

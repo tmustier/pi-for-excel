@@ -238,6 +238,57 @@ void test("sidebar Files and Extensions buttons open their views", async () => {
   });
 });
 
+void test("Extensions exposes Connections, Plugins, and Skills navigation", async () => {
+  await withTaskpane(async (page) => {
+    await openUtilitiesMenu(page);
+    await page.getByRole("menuitem", { name: "Extensions" }).click();
+    const settings = page.locator("#pi-settings-overlay");
+    await settings.getByRole("heading", { name: "Connections" }).waitFor({ state: "visible", timeout: 5_000 });
+    await settings.getByRole("button", { name: "Back" }).click();
+
+    for (const pageName of ["Connections", "Plugins", "Skills"]) {
+      const navigation = settings.getByRole("button", { name: new RegExp(`^${pageName}`) });
+      await navigation.waitFor({ state: "visible" });
+      await navigation.click();
+      await settings.getByRole("heading", { name: pageName }).waitFor({ state: "visible" });
+      await settings.getByRole("button", { name: "Back" }).click();
+    }
+  });
+});
+
+void test("Settings Backups exposes manual backup and reports browser-host unavailability", async () => {
+  await withTaskpane(async (page) => {
+    await page.evaluate(`
+      (async () => {
+        const { getSettingsPagesDependencies } = await import("/src/commands/builtins/settings-pages/dependencies.ts");
+        const backups = getSettingsPagesDependencies().backups;
+        if (!backups) throw new Error("Backups dependencies were not configured");
+        backups.loadCheckpoints = () => Promise.resolve([{
+          id: "browser-checkpoint",
+          at: Date.now(),
+          toolName: "write_cells",
+          address: "Sheet1!A1",
+          changedCount: 1,
+        }]);
+      })()
+    `);
+
+    await openUtilitiesMenu(page);
+    await page.getByRole("menuitem", { name: "Settings" }).click();
+    const settings = page.locator("#pi-settings-overlay");
+    await settings.getByRole("button", { name: /^Backups/ }).click();
+    await settings.getByRole("heading", { name: "Backups" }).waitFor({ state: "visible" });
+
+    const manualBackup = settings.getByRole("button", { name: "Download backup" });
+    await manualBackup.waitFor({ state: "visible" });
+    await manualBackup.click();
+
+    const toast = page.locator("#pi-toast.visible .pi-toast__message");
+    await toast.waitFor({ state: "visible", timeout: 5_000 });
+    assert.match(await toast.innerText(), /Backup failed: .*unavailable/i);
+  });
+});
+
 void test("local-service probes populate the first runtime capabilities", async () => {
   let releaseProbes = (): void => {};
   const probesReleased = new Promise<void>((resolve) => {
