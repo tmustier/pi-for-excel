@@ -16,9 +16,7 @@ export function createExtensionsCommands(actions: ExtensionsCommandActions): Sla
       name: "plugins",
       description: t("command.plugins.desc"),
       source: "builtin",
-      execute: () => {
-        void actions.openExtensionsHub("plugins");
-      },
+      execute: () => actions.openExtensionsHub("plugins"),
     },
   ];
 }

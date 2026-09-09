@@ -15,9 +15,7 @@ export function createFilesCommands(actions: FilesCommandActions): SlashCommand[
       name: "files",
       description: t("command.files.desc"),
       source: "builtin",
-      execute: () => {
-        void actions.openFilesWorkspace();
-      },
+      execute: () => actions.openFilesWorkspace(),
     },
   ];
 }

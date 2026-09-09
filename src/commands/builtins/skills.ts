@@ -16,9 +16,7 @@ export function createSkillsCommands(actions: SkillsCommandActions): SlashComman
       name: "skills",
       description: t("command.skills.desc"),
       source: "builtin",
-      execute: () => {
-        void actions.openExtensionsHub("skills");
-      },
+      execute: () => actions.openExtensionsHub("skills"),
     },
   ];
 }
