@@ -17,6 +17,7 @@ import {
   probeProxyReachability,
   resolveConfiguredProxyUrl,
 } from "../auth/proxy-validation.js";
+import { readTaskpaneProxySettings } from "./settings.js";
 
 function createElement<K extends keyof HTMLElementTagNameMap>(
   tagName: K,
@@ -39,17 +40,15 @@ export async function showWelcomeLogin(modelRefreshOwner: ModelRefreshOwner): Pr
   // Make OAuth flows usable even before the user can access /settings.
   try {
     const storage = getAppStorage();
-    const enabled = await storage.settings.get("proxy.enabled");
-    const url = await storage.settings.get("proxy.url");
+    const proxySettings = await readTaskpaneProxySettings(storage.settings);
+    const currentUrl = resolveConfiguredProxyUrl(proxySettings.url);
 
-    const currentUrl = resolveConfiguredProxyUrl(url);
-
-    if (url === null) {
+    if (proxySettings.url === null) {
       await storage.settings.set("proxy.url", currentUrl);
     }
 
     // Auto-enable if a local HTTPS proxy is actually reachable.
-    if (!enabled) {
+    if (!proxySettings.enabled) {
       const ok = await testLocalHttpsProxy(currentUrl);
       if (ok) {
         await storage.settings.set("proxy.enabled", true);
@@ -262,16 +261,10 @@ export async function showWelcomeLogin(modelRefreshOwner: ModelRefreshOwner): Pr
     });
 
     const hydrateProxyUi = async () => {
-      try {
-        const storage = getAppStorage();
-        const enabled = await storage.settings.get("proxy.enabled");
-        const url = await storage.settings.get("proxy.url");
-        proxyEnabledEl.checked = Boolean(enabled);
-        proxyUrlEl.value = resolveConfiguredProxyUrl(url);
-      } catch {
-        proxyEnabledEl.checked = false;
-        proxyUrlEl.value = DEFAULT_PROXY_URL;
-      }
+      const storage = getAppStorage();
+      const proxySettings = await readTaskpaneProxySettings(storage.settings);
+      proxyEnabledEl.checked = proxySettings.enabled;
+      proxyUrlEl.value = resolveConfiguredProxyUrl(proxySettings.url);
     };
 
     const saveProxyUi = async () => {

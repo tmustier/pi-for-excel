@@ -135,9 +135,18 @@ import { createWorkbookCoordinator } from "../workbook/coordinator.js";
 import { formatWorkbookLabel, type WorkbookContext } from "../workbook/context.js";
 import {
   getManualFullWorkbookBackupStore,
+  ManualFullWorkbookBackupStore,
   type ManualFullWorkbookBackup,
 } from "../workbook/manual-full-backup.js";
-import { getWorkbookRecoveryLog, type WorkbookRecoverySnapshot } from "../workbook/recovery-log.js";
+import {
+  getWorkbookRecoveryLog,
+  WorkbookRecoveryLog,
+  type WorkbookRecoverySnapshot,
+} from "../workbook/recovery-log.js";
+import {
+  getWorkbookChangeAuditLog,
+  WorkbookChangeAuditLog,
+} from "../audit/workbook-change-audit.js";
 import { readRetentionLimit, writeRetentionLimit } from "../workbook/recovery/log-store.js";
 import {
   WorkbookSaveBoundaryMonitor,
@@ -174,6 +183,12 @@ import {
 } from "./status-popovers.js";
 import { showWelcomeLogin } from "./welcome-login.js";
 import {
+  readTaskpaneLanguage,
+  readTaskpaneProxySettings,
+  TASKPANE_PROXY_URL_SETTING_KEY,
+  type TaskpaneSettingsStore,
+} from "./settings.js";
+import {
   SessionRuntimeManager,
   type CreateRuntimeOptions,
   type SessionRuntime,
@@ -197,24 +212,23 @@ function clearErrorBanner(errorRoot: HTMLElement): void {
   render(html``, errorRoot);
 }
 
-interface ProxySettingsStore {
-  get<T>(key: string): Promise<T | null>;
+interface WritableTaskpaneSettingsStore extends TaskpaneSettingsStore {
   set(key: string, value: DynamicValue): Promise<void>;
 }
 
 async function ensureDefaultProxyUrl(
-  settings: ProxySettingsStore,
+  settings: WritableTaskpaneSettingsStore,
   hostKind: SpreadsheetHostKind,
 ): Promise<void> {
   try {
     const runtimeDefaultProxyUrl = resolveRuntimeDefaultProxyUrl({ hostKind });
-    const proxyUrl = await settings.get<string>("proxy.url");
-    const storedProxyUrl = typeof proxyUrl === "string" ? proxyUrl.trim() : "";
+    const proxySettings = await readTaskpaneProxySettings(settings);
+    const storedProxyUrl = proxySettings.url ?? "";
     if (storedProxyUrl.length > 0 && !(storedProxyUrl === DEFAULT_PROXY_URL && runtimeDefaultProxyUrl !== DEFAULT_PROXY_URL)) {
       return;
     }
 
-    await settings.set("proxy.url", runtimeDefaultProxyUrl);
+    await settings.set(TASKPANE_PROXY_URL_SETTING_KEY, runtimeDefaultProxyUrl);
   } catch {
     // ignore
   }
@@ -233,12 +247,7 @@ export async function initTaskpane(opts: {
   const { providerKeys, sessions, settings, customProviders, modelCatalogs } = initAppStorage();
 
   // Initialize language from storage
-  try {
-    const lang = await settings.get<string>("language");
-    initLanguage(lang || "en");
-  } catch {
-    initLanguage("en");
-  }
+  initLanguage(await readTaskpaneLanguage(settings));
 
   // Seed a predictable proxy default for OAuth flows.
   await ensureDefaultProxyUrl(settings, spreadsheetHost.kind);
@@ -261,29 +270,24 @@ export async function initTaskpane(opts: {
   const autoCompactEnabled = await readAutoCompactionEnabled(settings);
 
   // 1c. Security warning: remote proxies can see your prompts + credentials.
-  try {
-    const proxyEnabled = await settings.get<boolean>("proxy.enabled");
-    const proxyUrl = await settings.get<string>("proxy.url");
-    if (
-      proxyEnabled === true &&
-      typeof proxyUrl === "string" &&
-      proxyUrl.trim().length > 0 &&
-      !isLoopbackProxyUrl(proxyUrl)
-    ) {
-      showToast(t("init.securityWarning"));
-    }
-  } catch {
-    // ignore
+  const initialProxySettings = await readTaskpaneProxySettings(settings);
+  if (
+    initialProxySettings.enabled &&
+    initialProxySettings.url !== null &&
+    initialProxySettings.url.length > 0 &&
+    !isLoopbackProxyUrl(initialProxySettings.url)
+  ) {
+    showToast(t("init.securityWarning"));
   }
 
   const getConfiguredProxyUrl = async (): Promise<string | undefined> => {
-    try {
-      const enabled = await settings.get<boolean>("proxy.enabled");
-      if (!enabled) return undefined;
+    const proxySettings = await readTaskpaneProxySettings(settings);
+    if (!proxySettings.enabled) return undefined;
 
-      const rawUrl = await settings.get<string>("proxy.url");
-      const trimmedUrl = typeof rawUrl === "string" ? rawUrl.trim() : "";
-      const candidateUrl = trimmedUrl.length > 0 ? trimmedUrl : DEFAULT_PROXY_URL;
+    const candidateUrl = proxySettings.url && proxySettings.url.length > 0
+      ? proxySettings.url
+      : DEFAULT_PROXY_URL;
+    try {
       return validateOfficeProxyUrl(candidateUrl);
     } catch {
       return undefined;
@@ -545,8 +549,11 @@ export async function initTaskpane(opts: {
     },
   }));
 
-  const workbookRecoveryLog = getWorkbookRecoveryLog();
-  const manualFullBackupStore = getManualFullWorkbookBackupStore();
+  const workbookRecoveryLog = getWorkbookRecoveryLog(new WorkbookRecoveryLog({ settings }));
+  getWorkbookChangeAuditLog(new WorkbookChangeAuditLog({ settings }));
+  const manualFullBackupStore = getManualFullWorkbookBackupStore(
+    new ManualFullWorkbookBackupStore(),
+  );
 
   const toManualFullBackupSummary = (backup: ManualFullWorkbookBackup) => ({
     id: backup.id,

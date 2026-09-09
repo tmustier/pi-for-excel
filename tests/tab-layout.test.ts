@@ -2,10 +2,43 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  loadWorkbookTabLayout,
   normalizeWorkbookTabLayout,
   parseWorkbookTabLayout,
+  saveWorkbookTabLayout,
   workbookTabLayoutKey,
 } from "../src/taskpane/tab-layout.ts";
+import {
+  readTaskpaneLanguage,
+  readTaskpaneProxySettings,
+  TASKPANE_LANGUAGE_SETTING_KEY,
+  TASKPANE_PROXY_ENABLED_SETTING_KEY,
+  TASKPANE_PROXY_URL_SETTING_KEY,
+} from "../src/taskpane/settings.ts";
+
+class MemoryTaskpaneSettingsStore {
+  private readonly values = new Map<string, DynamicValue>();
+  private readonly readError: Error | null;
+
+  constructor(readError: Error | null = null) {
+    this.readError = readError;
+  }
+
+  get(key: string): Promise<DynamicValue> {
+    if (this.readError) return Promise.reject(this.readError);
+    return Promise.resolve(this.values.get(key) ?? null);
+  }
+
+  set(key: string, value: DynamicValue): Promise<void> {
+    this.values.set(key, value);
+    return Promise.resolve();
+  }
+
+  delete(key: string): Promise<void> {
+    this.values.delete(key);
+    return Promise.resolve();
+  }
+}
 
 void test("workbookTabLayoutKey uses workbook id when available", () => {
   assert.equal(
@@ -48,4 +81,71 @@ void test("parseWorkbookTabLayout rejects invalid shapes", () => {
   assert.equal(parseWorkbookTabLayout({}), null);
   assert.equal(parseWorkbookTabLayout({ sessionIds: "not-an-array" }), null);
   assert.equal(parseWorkbookTabLayout({ sessionIds: ["", "  "] }), null);
+});
+
+void test("tab layout reader round-trips valid data and defaults on missing, corrupt, or failed reads", async () => {
+  const settings = new MemoryTaskpaneSettingsStore();
+  const layout = {
+    sessionIds: ["session-a", "session-b"],
+    activeSessionId: "session-b",
+  };
+
+  await saveWorkbookTabLayout(settings, "workbook-a", layout);
+  assert.deepEqual(await loadWorkbookTabLayout(settings, "workbook-a"), layout);
+  assert.equal(await loadWorkbookTabLayout(settings, "missing"), null);
+
+  await settings.set(workbookTabLayoutKey("corrupt"), { sessionIds: "not-an-array" });
+  assert.equal(await loadWorkbookTabLayout(settings, "corrupt"), null);
+  assert.equal(
+    await loadWorkbookTabLayout(new MemoryTaskpaneSettingsStore(new Error("read failed")), "workbook-a"),
+    null,
+  );
+});
+
+void test("taskpane language reader accepts valid data and defaults on missing, corrupt, or failed reads", async () => {
+  const settings = new MemoryTaskpaneSettingsStore();
+  await settings.set(TASKPANE_LANGUAGE_SETTING_KEY, "zh-CN");
+  assert.equal(await readTaskpaneLanguage(settings), "zh-CN");
+
+  assert.equal(await readTaskpaneLanguage(new MemoryTaskpaneSettingsStore()), "en");
+  await settings.set(TASKPANE_LANGUAGE_SETTING_KEY, { language: "zh-CN" });
+  assert.equal(await readTaskpaneLanguage(settings), "en");
+  assert.equal(
+    await readTaskpaneLanguage(new MemoryTaskpaneSettingsStore(new Error("read failed"))),
+    "en",
+  );
+});
+
+void test("taskpane proxy reader round-trips current values and accepts legacy enabled flags", async () => {
+  const settings = new MemoryTaskpaneSettingsStore();
+  await settings.set(TASKPANE_PROXY_ENABLED_SETTING_KEY, true);
+  await settings.set(TASKPANE_PROXY_URL_SETTING_KEY, " https://proxy.example.com/ ");
+  assert.deepEqual(await readTaskpaneProxySettings(settings), {
+    enabled: true,
+    url: "https://proxy.example.com/",
+  });
+
+  for (const legacyEnabled of [1, "1", "true", "yes"]) {
+    await settings.set(TASKPANE_PROXY_ENABLED_SETTING_KEY, legacyEnabled);
+    assert.equal((await readTaskpaneProxySettings(settings)).enabled, true);
+  }
+});
+
+void test("taskpane proxy reader defaults on missing, corrupt, or failed reads", async () => {
+  assert.deepEqual(await readTaskpaneProxySettings(new MemoryTaskpaneSettingsStore()), {
+    enabled: false,
+    url: null,
+  });
+
+  const corrupt = new MemoryTaskpaneSettingsStore();
+  await corrupt.set(TASKPANE_PROXY_ENABLED_SETTING_KEY, { enabled: true });
+  await corrupt.set(TASKPANE_PROXY_URL_SETTING_KEY, { url: "https://proxy.example.com" });
+  assert.deepEqual(await readTaskpaneProxySettings(corrupt), {
+    enabled: false,
+    url: null,
+  });
+  assert.deepEqual(
+    await readTaskpaneProxySettings(new MemoryTaskpaneSettingsStore(new Error("read failed"))),
+    { enabled: false, url: null },
+  );
 });
