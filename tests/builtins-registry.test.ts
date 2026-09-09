@@ -239,19 +239,6 @@ void test("taskpane init waits for local services probe and refreshes capabiliti
   );
 });
 
-void test("extensions hub connections tab includes MCP test flow", async () => {
-  const source = await readFile(
-    new URL("../src/commands/builtins/extensions-hub-connections.ts", import.meta.url),
-    "utf8",
-  );
-
-  assert.match(source, /label: t\("extensions-hub-connections\.mcpSection"\)/);
-  assert.match(source, /extensions-hub-connections\.addServer/);
-  assert.match(source, /createConfigRow\(t\("extensions-hub-connections\.availability"\)/);
-  assert.match(source, /scopeSummary\.textContent = t\("extensions-hub-connections\.scope-controls"\)/);
-  assert.match(source, /probeMcpServer/);
-});
-
 void test("sidebar utilities menu includes extensions label", async () => {
   const sidebarSource = await readFile(new URL("../src/ui/pi-sidebar.ts", import.meta.url), "utf8");
 

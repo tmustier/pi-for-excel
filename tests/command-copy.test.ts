@@ -1,3 +1,4 @@
+// Component-logic contracts only; native selection behavior lives in the Chromium suite.
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
@@ -53,57 +54,6 @@ void test("createCopyableCommand copies, translates its accessible state, and re
     assert.equal(button.getAttribute("aria-label"), "复制命令");
   } finally {
     initLanguage("en");
-    restoreProperty("navigator", navigatorDescriptor);
-    restoreProperty("window", windowDescriptor);
-    restore();
-  }
-});
-
-void test("createCopyableCommand selects the command when clipboard access is unavailable", () => {
-  const { document: fakeDocument, restore } = installFakeDom();
-  const navigatorDescriptor = Object.getOwnPropertyDescriptor(globalThis, "navigator");
-  const windowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
-  let selectedElement: HTMLElement | null = null;
-  let selectionCleared = false;
-  let rangeAdded = false;
-
-  try {
-    const range = {
-      selectNodeContents: (element: HTMLElement) => {
-        selectedElement = element;
-      },
-    };
-    Reflect.set(fakeDocument, "createRange", () => range);
-    Object.defineProperty(globalThis, "navigator", {
-      configurable: true,
-      value: {},
-    });
-    Object.defineProperty(globalThis, "window", {
-      configurable: true,
-      value: {
-        getSelection: () => ({
-          removeAllRanges: () => {
-            selectionCleared = true;
-          },
-          addRange: (addedRange: object) => {
-            rangeAdded = addedRange === range;
-          },
-        }),
-      },
-    });
-
-    const row = createCopyableCommand("npx pi-for-excel-python-bridge");
-    const code = row.children[0];
-    const button = row.children[1];
-    assert.ok(code instanceof HTMLElement);
-    assert.ok(button instanceof HTMLElement);
-
-    button.dispatchEvent(new Event("click"));
-
-    assert.equal(selectedElement, code);
-    assert.equal(selectionCleared, true);
-    assert.equal(rangeAdded, true);
-  } finally {
     restoreProperty("navigator", navigatorDescriptor);
     restoreProperty("window", windowDescriptor);
     restore();

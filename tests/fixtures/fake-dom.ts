@@ -1,3 +1,4 @@
+// This fixture supports component logic only, never native browser-behavior claims.
 import assert from "node:assert/strict";
 
 type ConstructorSnapshot = {

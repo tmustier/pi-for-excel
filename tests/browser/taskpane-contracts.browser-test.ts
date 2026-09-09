@@ -42,7 +42,10 @@ function isExpectedOfficeUnavailableError(error: Error): boolean {
   return /Office(?:\.js)? (?:is |was )?(?:not ready|not available|unavailable)/i.test(error.message);
 }
 
-async function withTaskpane(run: (page: Page) => Promise<void>): Promise<void> {
+async function withBrowserPage(
+  path: string,
+  run: (page: Page) => Promise<void>,
+): Promise<void> {
   const context: BrowserContext = await browser.newContext();
   const page = await context.newPage();
   const pageErrors: Error[] = [];
@@ -62,7 +65,16 @@ async function withTaskpane(run: (page: Page) => Promise<void>): Promise<void> {
   });
 
   try {
-    await page.goto(`${baseUrl}src/taskpane.html`);
+    await page.goto(`${baseUrl}${path}`);
+    await run(page);
+    assert.deepEqual(pageErrors.map((error) => error.message), [], "unexpected uncaught page errors");
+  } finally {
+    await context.close();
+  }
+}
+
+async function withTaskpane(run: (page: Page) => Promise<void>): Promise<void> {
+  await withBrowserPage("src/taskpane.html", async (page) => {
     await page.locator("pi-input textarea").waitFor({ state: "visible", timeout: 20_000 });
 
     const welcomeOverlay = page.locator("#pi-welcome-login-overlay");
@@ -71,10 +83,7 @@ async function withTaskpane(run: (page: Page) => Promise<void>): Promise<void> {
     await welcomeOverlay.waitFor({ state: "detached" });
 
     await run(page);
-    assert.deepEqual(pageErrors.map((error) => error.message), [], "unexpected uncaught page errors");
-  } finally {
-    await context.close();
-  }
+  });
 }
 
 async function enterCommand(page: Page, command: string): Promise<void> {
@@ -94,10 +103,13 @@ void test("/files opens the Files view", async () => {
   });
 });
 
-void test("/plugins opens the extensions hub", async () => {
+void test("/plugins exposes the MCP server setup flow", async () => {
   await withTaskpane(async (page) => {
     await enterCommand(page, "/plugins");
     await page.getByRole("heading", { name: "Connections" }).waitFor({ state: "visible", timeout: 5_000 });
+    await page.getByText("MCP servers", { exact: true }).waitFor({ state: "visible" });
+    await page.getByRole("button", { name: "+ Add server" }).click();
+    await page.getByPlaceholder("https://server-url/rpc").waitFor({ state: "visible" });
   });
 });
 
@@ -135,11 +147,79 @@ void test("a command that throws shows only the generic failure toast", async ()
   await verifyFailedCommandToast("throws");
 });
 
-void test("sidebar Settings opens the unified settings overlay", async () => {
+void test("closing Settings restores focus to the chat input", async () => {
+  await withTaskpane(async (page) => {
+    const input = page.locator("pi-input textarea");
+    await input.focus();
+    await openUtilitiesMenu(page);
+    await page.getByRole("menuitem", { name: "Settings" }).click();
+
+    const settings = page.locator("#pi-settings-overlay");
+    await page.getByRole("heading", { name: "Settings" }).waitFor({ state: "visible", timeout: 5_000 });
+    await settings.getByRole("button", { name: "Close Settings" }).click();
+    await settings.waitFor({ state: "detached" });
+    await page.waitForFunction(() => document.activeElement?.tagName === "TEXTAREA", undefined, { timeout: 3_000 });
+    assert.equal(await input.evaluate((element) => element === document.activeElement), true);
+  });
+});
+
+void test("Settings ignores card clicks and closes on a backdrop click", async () => {
   await withTaskpane(async (page) => {
     await openUtilitiesMenu(page);
     await page.getByRole("menuitem", { name: "Settings" }).click();
+
+    const settings = page.locator("#pi-settings-overlay");
+    await settings.locator(".pi-set-shell").click();
+    await settings.waitFor({ state: "visible" });
+
+    await settings.click({ position: { x: 2, y: 2 } });
+    await settings.waitFor({ state: "detached" });
+  });
+});
+
+void test("Escape preserves keyboard entry and closes only the topmost dialog", async () => {
+  await withTaskpane(async (page) => {
+    await enterCommand(page, "/settings");
+    const settings = page.locator("#pi-settings-overlay");
     await page.getByRole("heading", { name: "Settings" }).waitFor({ state: "visible", timeout: 5_000 });
+    await settings.getByRole("button", { name: "Custom gateway" }).click();
+    await page.getByRole("heading", { name: "Custom OpenAI-compatible gateway" }).waitFor({ state: "visible" });
+
+    const nameInput = page.getByPlaceholder("Gateway name (optional)");
+    await nameInput.fill("Browser gateway");
+    await nameInput.press("Escape");
+    assert.equal(await nameInput.inputValue(), "Browser gateway");
+    assert.equal(await nameInput.evaluate((element) => element === document.activeElement), false);
+    await settings.waitFor({ state: "visible" });
+
+    await page.getByPlaceholder("https://your-gateway.example.com/v1").fill("https://gateway.example.com/v1");
+    await page.getByPlaceholder("model-id").fill("browser-model");
+    await page.getByRole("button", { name: "Save gateway" }).click();
+    await settings.getByText("Browser gateway", { exact: true }).waitFor({ state: "visible" });
+    await settings.getByRole("button", { name: "Delete" }).click();
+
+    const confirmation = page.locator("#pi-confirm-dialog-overlay");
+    await confirmation.waitFor({ state: "visible" });
+    await page.keyboard.press("Escape");
+    await confirmation.waitFor({ state: "detached", timeout: 3_000 });
+    await settings.waitFor({ state: "visible" });
+    await page.getByRole("heading", { name: "Custom OpenAI-compatible gateway" }).waitFor({ state: "visible" });
+
+    await page.keyboard.press("Escape");
+    await page.getByRole("heading", { name: "Settings" }).waitFor({ state: "visible" });
+    await page.keyboard.press("Escape");
+    await settings.waitFor({ state: "detached" });
+  });
+});
+
+void test("copy fallback selects the full command in Chromium", async () => {
+  await withBrowserPage("src/ui-gallery.html", async (page) => {
+    const row = page.locator(".pi-command-copy").filter({ hasText: "npx pi-for-excel-proxy" });
+    await row.waitFor({ state: "visible", timeout: 10_000 });
+    await row.getByRole("button", { name: "Copy command" }).click();
+
+    await page.waitForFunction(() => window.getSelection()?.toString() === "npx pi-for-excel-proxy");
+    assert.equal(await page.evaluate(() => window.getSelection()?.toString()), "npx pi-for-excel-proxy");
   });
 });
 
