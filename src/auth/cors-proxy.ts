@@ -21,6 +21,10 @@ import { rewriteDevProxyUrl } from "./dev-rewrites.js";
 /** The original, un-patched fetch — use for requests that should bypass the proxy */
 export let originalFetch: typeof window.fetch;
 
+export interface CorsProxySettingsReader {
+  get(key: string): Promise<DynamicValue>;
+}
+
 type ProxySettingsCache = {
   checkedAt: number;
   enabled: boolean;
@@ -32,7 +36,34 @@ const proxyCache: ProxySettingsCache = {
   enabled: false,
 };
 
-async function getEnabledProxyUrl(): Promise<string | undefined> {
+function parseProxyEnabled(value: DynamicValue): boolean {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value !== 0;
+  if (typeof value !== "string") return false;
+  const normalized = value.trim().toLowerCase();
+  return normalized === "1" || normalized === "true" || normalized === "yes";
+}
+
+export async function readCorsProxySettings(
+  settings: CorsProxySettingsReader,
+): Promise<{ enabled: boolean; url: string }> {
+  try {
+    const [enabled, url] = await Promise.all([
+      settings.get("proxy.enabled"),
+      settings.get("proxy.url"),
+    ]);
+    return {
+      enabled: parseProxyEnabled(enabled),
+      url: typeof url === "string" ? url.trim() : "",
+    };
+  } catch {
+    return { enabled: false, url: "" };
+  }
+}
+
+async function getEnabledProxyUrl(
+  injectedSettings?: CorsProxySettingsReader,
+): Promise<string | undefined> {
   // OAuth flows are infrequent, but fetch() is frequent; cache for a short time.
   const now = Date.now();
   if (now - proxyCache.checkedAt < 3000) {
@@ -41,27 +72,25 @@ async function getEnabledProxyUrl(): Promise<string | undefined> {
 
   proxyCache.checkedAt = now;
 
-  let enabled: DynamicValue;
-  let url: DynamicValue;
-
-  try {
-    const storage = getAppStorage();
-    enabled = await storage.settings.get("proxy.enabled");
-    url = await storage.settings.get("proxy.url");
-  } catch {
-    proxyCache.enabled = false;
-    delete proxyCache.url;
-    return undefined;
+  let settings = injectedSettings;
+  if (!settings) {
+    try {
+      settings = getAppStorage().settings;
+    } catch {
+      proxyCache.enabled = false;
+      delete proxyCache.url;
+      return undefined;
+    }
   }
 
-  proxyCache.enabled = Boolean(enabled);
+  const stored = await readCorsProxySettings(settings);
+  proxyCache.enabled = stored.enabled;
   if (!proxyCache.enabled) {
     delete proxyCache.url;
     return undefined;
   }
 
-  const trimmed = typeof url === "string" ? url.trim() : "";
-  const candidateUrl = trimmed.length > 0 ? trimmed : DEFAULT_PROXY_URL;
+  const candidateUrl = stored.url.length > 0 ? stored.url : DEFAULT_PROXY_URL;
 
   // Guardrails: validate proxy URL (and fail fast for mixed-content HTTP proxies).
   // This may throw and should surface to the caller.
@@ -117,7 +146,7 @@ function stripAnthropicBrowserHeader(init?: RequestInit): RequestInit | undefine
 /**
  * Install the fetch interceptor. Call once at boot.
  */
-export function installFetchInterceptor(): void {
+export function installFetchInterceptor(settings?: CorsProxySettingsReader): void {
   originalFetch = window.fetch.bind(window);
 
   window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
@@ -152,7 +181,7 @@ export function installFetchInterceptor(): void {
 
     // Production: proxy OAuth/token endpoints through user-configured CORS proxy.
     if (looksLikeOAuthOrTokenEndpoint(url)) {
-      const proxyUrl = await getEnabledProxyUrl();
+      const proxyUrl = await getEnabledProxyUrl(settings);
       if (proxyUrl) {
         const proxied = `${proxyUrl}/?url=${encodeURIComponent(url)}`;
         return originalFetch(proxied, stripAnthropicBrowserHeader(init));

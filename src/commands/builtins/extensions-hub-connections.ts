@@ -77,6 +77,23 @@ function normalizeProvider(value: string): WebSearchProvider {
   return "jina";
 }
 
+export async function readBridgeUrls(
+  settings: SettingsStore,
+): Promise<{ pythonUrl: string; tmuxUrl: string }> {
+  try {
+    const [pythonUrl, tmuxUrl] = await Promise.all([
+      settings.get(PYTHON_BRIDGE_URL_SETTING_KEY),
+      settings.get(TMUX_BRIDGE_URL_SETTING_KEY),
+    ]);
+    return {
+      pythonUrl: typeof pythonUrl === "string" ? pythonUrl.trim() : "",
+      tmuxUrl: typeof tmuxUrl === "string" ? tmuxUrl.trim() : "",
+    };
+  } catch {
+    return { pythonUrl: "", tmuxUrl: "" };
+  }
+}
+
 function getStatusBadge(ok: boolean, label: string): { text: string; tone: "ok" | "warn" | "muted" } {
   return ok ? { text: label, tone: "ok" } : { text: label, tone: "muted" };
 }
@@ -186,8 +203,7 @@ export async function renderConnectionsTab(args: {
     workbookIntegrationIds,
     webSearchConfig,
     mcpServers,
-    pythonUrlRaw,
-    tmuxUrlRaw,
+    bridgeUrls,
   ] = await Promise.all([
     getExternalToolsEnabled(settings),
     sessionId
@@ -200,12 +216,10 @@ export async function renderConnectionsTab(args: {
       : Promise.resolve<string[]>([]),
     loadWebSearchProviderConfig(settings),
     loadMcpServers(settings),
-    settings.get(PYTHON_BRIDGE_URL_SETTING_KEY),
-    settings.get(TMUX_BRIDGE_URL_SETTING_KEY),
+    readBridgeUrls(settings),
   ]);
 
-  const pythonUrl = typeof pythonUrlRaw === "string" ? pythonUrlRaw.trim() : "";
-  const tmuxUrl = typeof tmuxUrlRaw === "string" ? tmuxUrlRaw.trim() : "";
+  const { pythonUrl, tmuxUrl } = bridgeUrls;
   const effectivePythonUrl = pythonUrl.length > 0 ? pythonUrl : DEFAULT_PYTHON_BRIDGE_URL;
   const effectiveTmuxUrl = tmuxUrl.length > 0 ? tmuxUrl : DEFAULT_TMUX_BRIDGE_URL;
   const selectedProvider = webSearchConfig.provider;

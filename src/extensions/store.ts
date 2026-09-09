@@ -281,6 +281,22 @@ export async function saveStoredExtensions(
   await settings.set(EXTENSIONS_REGISTRY_STORAGE_KEY, createRegistryDocument(items));
 }
 
+interface ExtensionSettingReadResult {
+  value: DynamicValue;
+  succeeded: boolean;
+}
+
+async function readExtensionSetting(
+  settings: ExtensionSettingsStore,
+  key: string,
+): Promise<ExtensionSettingReadResult> {
+  try {
+    return { value: await settings.get(key), succeeded: true };
+  } catch {
+    return { value: null, succeeded: false };
+  }
+}
+
 /**
  * Load stored extensions from SettingsStore.
  *
@@ -288,21 +304,25 @@ export async function saveStoredExtensions(
  * Legacy `extensions.registry.v1` data is migrated to `extensions.registry.v2`.
  */
 export async function loadStoredExtensions(settings: ExtensionSettingsStore): Promise<StoredExtensionEntry[]> {
-  const rawCurrent = await settings.get(EXTENSIONS_REGISTRY_STORAGE_KEY);
-  const normalizedCurrent = normalizeDocument(rawCurrent);
+  const current = await readExtensionSetting(settings, EXTENSIONS_REGISTRY_STORAGE_KEY);
+  const normalizedCurrent = normalizeDocument(current.value);
 
   if (normalizedCurrent && normalizedCurrent.version >= EXTENSIONS_REGISTRY_VERSION) {
     return normalizedCurrent.items;
   }
 
-  const rawLegacy = await settings.get(LEGACY_EXTENSIONS_REGISTRY_STORAGE_KEY);
-  const normalizedLegacy = normalizeDocument(rawLegacy);
+  const legacy = await readExtensionSetting(settings, LEGACY_EXTENSIONS_REGISTRY_STORAGE_KEY);
+  const normalizedLegacy = normalizeDocument(legacy.value);
   if (normalizedLegacy) {
-    await saveStoredExtensions(settings, normalizedLegacy.items);
+    if (current.succeeded) {
+      await saveStoredExtensions(settings, normalizedLegacy.items);
+    }
     return normalizedLegacy.items;
   }
 
   const defaults = createDefaultExtensionEntries();
-  await saveStoredExtensions(settings, defaults);
+  if (current.succeeded && legacy.succeeded) {
+    await saveStoredExtensions(settings, defaults);
+  }
   return defaults;
 }

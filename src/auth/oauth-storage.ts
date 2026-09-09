@@ -13,8 +13,11 @@ function isAuthOauthStoragePayloadShape(value: DynamicValue): value is DynamicOb
  */
 
 import type { OAuthCredentials } from "@earendil-works/pi-ai";
-import type { SettingsStore } from "../storage/local/settings-store.js";
-
+export interface OAuthSettingsStore {
+  get(key: string): Promise<DynamicValue>;
+  set(key: string, value: DynamicValue): Promise<void>;
+  delete(key: string): Promise<void>;
+}
 
 export function isOAuthCredentials(value: DynamicValue): value is OAuthCredentials {
   return (
@@ -33,7 +36,7 @@ function oauthSettingsKey(providerId: string): string {
  * Load OAuth credentials from IndexedDB settings.
  */
 export async function loadOAuthCredentials(
-  settings: SettingsStore,
+  settings: OAuthSettingsStore,
   providerId: string,
 ): Promise<OAuthCredentials | null> {
   try {
@@ -45,7 +48,7 @@ export async function loadOAuthCredentials(
 }
 
 export async function saveOAuthCredentials(
-  settings: SettingsStore,
+  settings: OAuthSettingsStore,
   providerId: string,
   credentials: OAuthCredentials,
 ): Promise<void> {
@@ -53,7 +56,7 @@ export async function saveOAuthCredentials(
 }
 
 export async function clearOAuthCredentials(
-  settings: SettingsStore,
+  settings: OAuthSettingsStore,
   providerId: string,
 ): Promise<void> {
   await settings.delete(oauthSettingsKey(providerId));

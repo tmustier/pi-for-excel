@@ -83,7 +83,7 @@ export function normalizeIntegrationIds(raw: DynamicValue, knownIntegrationIds: 
   return ordered;
 }
 
-async function getScopeIntegrationIds(
+async function readScopeIntegrationIds(
   settings: IntegrationSettingsStore,
   scope: IntegrationScope,
   identifier: string,
@@ -93,7 +93,12 @@ async function getScopeIntegrationIds(
   const key = scope === "session"
     ? sessionIntegrationsKey(identifier)
     : workbookIntegrationsKey(identifier);
-  const raw = await settings.get(key);
+  let raw: DynamicValue;
+  try {
+    raw = await settings.get(key);
+  } catch {
+    raw = null;
+  }
 
   // Never configured workbook scope inherits defaults (web search).
   // Session scope stays explicit unless the caller opts into fallback defaults.
@@ -128,7 +133,7 @@ export async function getSessionIntegrationIds(
   knownIntegrationIds: readonly string[],
   options?: SessionIntegrationIdsOptions,
 ): Promise<string[]> {
-  return getScopeIntegrationIds(
+  return readScopeIntegrationIds(
     settings,
     "session",
     sessionId,
@@ -151,7 +156,7 @@ export async function getWorkbookIntegrationIds(
   workbookId: string,
   knownIntegrationIds: readonly string[],
 ): Promise<string[]> {
-  return getScopeIntegrationIds(settings, "workbook", workbookId, knownIntegrationIds, false);
+  return readScopeIntegrationIds(settings, "workbook", workbookId, knownIntegrationIds, false);
 }
 
 export async function setWorkbookIntegrationIds(
@@ -172,7 +177,13 @@ export async function setIntegrationEnabledInScope(args: {
   knownIntegrationIds: readonly string[];
 }): Promise<void> {
   const { settings, scope, identifier, integrationId, enabled, knownIntegrationIds } = args;
-  const existing = await getScopeIntegrationIds(settings, scope, identifier, knownIntegrationIds, false);
+  const key = scope === "session"
+    ? sessionIntegrationsKey(identifier)
+    : workbookIntegrationsKey(identifier);
+  const raw = await settings.get(key);
+  const existing = raw == null && scope === "workbook"
+    ? normalizeIntegrationIds(getDefaultEnabledIntegrationIds(), knownIntegrationIds)
+    : normalizeIntegrationIds(raw, knownIntegrationIds);
 
   const nextSet = new Set<string>(existing);
   if (enabled) {
@@ -226,10 +237,14 @@ function parseStoredBoolean(value: DynamicValue): boolean {
 }
 
 export async function getExternalToolsEnabled(settings: IntegrationSettingsStore): Promise<boolean> {
-  const raw = await settings.get(EXTERNAL_TOOLS_ENABLED_SETTING_KEY);
-  // Default ON so web search is available once a provider API key is configured.
-  if (raw == null) return true;
-  return parseStoredBoolean(raw);
+  try {
+    const raw = await settings.get(EXTERNAL_TOOLS_ENABLED_SETTING_KEY);
+    // Default ON so web search is available once a provider API key is configured.
+    if (raw == null) return true;
+    return parseStoredBoolean(raw);
+  } catch {
+    return true;
+  }
 }
 
 export async function setExternalToolsEnabled(

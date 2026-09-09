@@ -41,7 +41,18 @@ function normalizeStorageDocument(raw: DynamicValue): ExtensionStorageDocument {
   };
 }
 
-async function loadStorageDocument(settings: ExtensionStorageSettings): Promise<ExtensionStorageDocument> {
+async function readStorageDocument(settings: ExtensionStorageSettings): Promise<ExtensionStorageDocument> {
+  try {
+    const raw = await settings.get(EXTENSION_STORAGE_KEY);
+    return normalizeStorageDocument(raw);
+  } catch {
+    return normalizeStorageDocument(null);
+  }
+}
+
+async function loadStorageDocumentForUpdate(
+  settings: ExtensionStorageSettings,
+): Promise<ExtensionStorageDocument> {
   const raw = await settings.get(EXTENSION_STORAGE_KEY);
   return normalizeStorageDocument(raw);
 }
@@ -74,7 +85,7 @@ export async function getExtensionStorageValue(
   extensionId: string,
   key: string,
 ): Promise<DynamicValue> {
-  const document = await loadStorageDocument(settings);
+  const document = await readStorageDocument(settings);
   const extensionStore = document.items[extensionId] ?? {};
   return extensionStore[normalizeStorageKey(key)];
 }
@@ -86,7 +97,7 @@ export async function setExtensionStorageValue(
   value: DynamicValue,
 ): Promise<void> {
   const normalizedKey = normalizeStorageKey(key);
-  const document = await loadStorageDocument(settings);
+  const document = await loadStorageDocumentForUpdate(settings);
   const extensionStore = {
     ...(document.items[extensionId] ?? {}),
     [normalizedKey]: value,
@@ -106,7 +117,7 @@ export async function deleteExtensionStorageValue(
   key: string,
 ): Promise<void> {
   const normalizedKey = normalizeStorageKey(key);
-  const document = await loadStorageDocument(settings);
+  const document = await loadStorageDocumentForUpdate(settings);
   const extensionStore = { ...(document.items[extensionId] ?? {}) };
 
   if (!(normalizedKey in extensionStore)) {
@@ -128,7 +139,7 @@ export async function listExtensionStorageKeys(
   settings: ExtensionStorageSettings,
   extensionId: string,
 ): Promise<string[]> {
-  const document = await loadStorageDocument(settings);
+  const document = await readStorageDocument(settings);
   const extensionStore = document.items[extensionId] ?? {};
   return Object.keys(extensionStore).sort((left, right) => left.localeCompare(right));
 }
@@ -137,7 +148,7 @@ export async function clearExtensionStorage(
   settings: ExtensionStorageSettings,
   extensionId: string,
 ): Promise<void> {
-  const document = await loadStorageDocument(settings);
+  const document = await loadStorageDocumentForUpdate(settings);
   if (!(extensionId in document.items)) {
     return;
   }

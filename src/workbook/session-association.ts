@@ -5,7 +5,10 @@
  * in `SettingsStore` using a dedicated key prefix.
  */
 
-import type { SettingsStore } from "../storage/local/settings-store.js";
+export interface SessionAssociationSettingsStore {
+  get(key: string): Promise<DynamicValue>;
+  set(key: string, value: DynamicValue): Promise<void>;
+}
 
 const SESSION_WORKBOOK_PREFIX = "session.workbook.v1.";
 const WORKBOOK_LATEST_SESSION_PREFIX = "workbook.latestSession.v1.";
@@ -19,11 +22,15 @@ export function workbookLatestSessionKey(workbookId: string): string {
 }
 
 export async function getSessionWorkbookId(
-  settings: SettingsStore,
+  settings: SessionAssociationSettingsStore,
   sessionId: string,
 ): Promise<string | null> {
-  const v = await settings.get(sessionWorkbookKey(sessionId));
-  return typeof v === "string" && v.trim().length > 0 ? v : null;
+  try {
+    const value = await settings.get(sessionWorkbookKey(sessionId));
+    return typeof value === "string" && value.trim().length > 0 ? value : null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -33,7 +40,7 @@ export async function getSessionWorkbookId(
  * workbook won't accidentally "move" it).
  */
 export async function linkSessionToWorkbook(
-  settings: SettingsStore,
+  settings: SessionAssociationSettingsStore,
   sessionId: string,
   workbookId: string,
 ): Promise<void> {
@@ -44,7 +51,7 @@ export async function linkSessionToWorkbook(
 }
 
 export async function setLatestSessionForWorkbook(
-  settings: SettingsStore,
+  settings: SessionAssociationSettingsStore,
   workbookId: string,
   sessionId: string,
 ): Promise<void> {
@@ -52,11 +59,15 @@ export async function setLatestSessionForWorkbook(
 }
 
 export async function getLatestSessionForWorkbook(
-  settings: SettingsStore,
+  settings: SessionAssociationSettingsStore,
   workbookId: string,
 ): Promise<string | null> {
-  const v = await settings.get(workbookLatestSessionKey(workbookId));
-  return typeof v === "string" && v.trim().length > 0 ? v : null;
+  try {
+    const value = await settings.get(workbookLatestSessionKey(workbookId));
+    return typeof value === "string" && value.trim().length > 0 ? value : null;
+  } catch {
+    return null;
+  }
 }
 
 export interface SessionWorkbookPartition {
@@ -73,7 +84,7 @@ export interface SessionWorkbookPartition {
  * - `foreignSessionIds`: linked to another workbook
  */
 export async function partitionSessionIdsByWorkbook(
-  settings: SettingsStore,
+  settings: SessionAssociationSettingsStore,
   sessionIds: string[],
   workbookId: string,
 ): Promise<SessionWorkbookPartition> {
