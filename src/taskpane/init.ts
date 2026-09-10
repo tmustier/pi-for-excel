@@ -80,7 +80,6 @@ import {
 import {
   getStoredModelSwitchBehavior,
   setStoredModelSwitchBehavior,
-  shouldForkModelSwitch,
   type ModelSwitchBehavior,
 } from "../models/switch-behavior.js";
 import { getResolvedConventions } from "../conventions/store.js";
@@ -123,7 +122,6 @@ import { createProxyBanner } from "../ui/proxy-banner.js";
 import { setActiveProviders } from "../models/active-providers.js";
 import { BrowserModelRuntime } from "../models/browser-model-runtime.js";
 import {
-  areRuntimeModelsEquivalent,
   ModelRefreshOwner,
   type ModelRefreshRuntime,
 } from "../models/model-refresh-owner.js";
@@ -1550,53 +1548,29 @@ export async function initTaskpane(opts: {
   });
 
   const applyModelSelection = async (runtimeId: string, nextModel: RuntimeModel): Promise<void> => {
-    const runtime = runtimeManager.getRuntime(runtimeId);
-    if (!runtime) {
+    const result = await runtimeManager.selectModel({
+      runtimeId,
+      nextModel,
+      behavior: getModelSwitchBehavior(),
+    });
+
+    if (result.outcome === "missing") {
       showToast(t("init.sessionNotFound"));
       return;
     }
-
-    const currentModel = runtime.agent.state.model;
-    const sameIdentity = currentModel.provider === nextModel.provider
-      && currentModel.id === nextModel.id;
-    if (sameIdentity && areRuntimeModelsEquivalent(currentModel, nextModel)) {
-      return;
-    }
-
-    if (runtime.agent.state.isStreaming || runtime.actionQueue.isBusy()) {
+    if (result.outcome === "busy") {
       showToast(t("init.waitBeforeChangingModels"));
       return;
     }
+    if (result.outcome === "unchanged") return;
 
-    if (sameIdentity) {
-      runtime.agent.state.model = nextModel;
-      document.dispatchEvent(new CustomEvent("pi:model-changed"));
-      document.dispatchEvent(new CustomEvent("pi:status-update"));
-      requestAnimationFrame(() => sidebar.requestUpdate());
-      return;
+    if (result.outcome === "forked") {
+      sidebar.syncFromAgent();
+      showToast(t("init.openedInNewTab", { title: result.title }));
     }
-
-    const hasMessages = runtime.agent.state.messages.length > 0;
-    const behavior = getModelSwitchBehavior();
-
-    if (!shouldForkModelSwitch({ behavior, hasMessages })) {
-      runtime.agent.state.model = nextModel;
-      document.dispatchEvent(new CustomEvent("pi:model-changed"));
-      document.dispatchEvent(new CustomEvent("pi:status-update"));
-      requestAnimationFrame(() => sidebar.requestUpdate());
-      return;
-    }
-
-    const sourceTitle = resolveRuntimeTabTitle(runtimeId, runtime);
-    const modelForkTitle = `${sourceTitle} (${nextModel.id})`;
-
-    await cloneRuntimeToNewTab({
-      sourceRuntime: runtime,
-      targetModel: nextModel,
-      targetTitle: modelForkTitle,
-    });
-
-    showToast(t("init.openedInNewTab", { title: modelForkTitle }));
+    document.dispatchEvent(new CustomEvent("pi:model-changed"));
+    document.dispatchEvent(new CustomEvent("pi:status-update"));
+    requestAnimationFrame(() => sidebar.requestUpdate());
   };
 
   const openModelSelector = (): void => {

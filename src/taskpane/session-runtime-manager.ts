@@ -4,6 +4,11 @@
 
 import type { Agent } from "@earendil-works/pi-agent-core";
 
+import {
+  shouldForkModelSwitch,
+  type ModelSwitchBehavior,
+} from "../models/switch-behavior.js";
+import { areRuntimeModelsEquivalent } from "../models/model-refresh-owner.js";
 import type { ActionQueue } from "./action-queue.js";
 import type { QueueDisplay } from "./queue-display.js";
 import type { SessionPersistenceController } from "./sessions.js";
@@ -43,6 +48,9 @@ export interface RuntimeLifecycleSnapshot {
 
 export type RuntimeSnapshotListener = (snapshot: RuntimeLifecycleSnapshot) => void;
 export type SessionRuntimeFactory = (opts: CreateRuntimeOptions) => Promise<SessionRuntime>;
+export type ModelSelectionResult =
+  | { outcome: "missing" | "unchanged" | "busy" | "updated" }
+  | { outcome: "forked"; runtime: SessionRuntime; title: string };
 
 interface RuntimeListeners {
   unsubscribeAgent: () => void;
@@ -167,6 +175,51 @@ export class SessionRuntimeManager {
 
     runtime.lockState = lockState;
     this.emit();
+  }
+
+  async selectModel(args: {
+    runtimeId: string;
+    nextModel: Agent["state"]["model"];
+    behavior: ModelSwitchBehavior;
+  }): Promise<ModelSelectionResult> {
+    const runtime = this.runtimes.get(args.runtimeId);
+    if (!runtime) return { outcome: "missing" };
+
+    const currentModel = runtime.agent.state.model;
+    const sameIdentity = currentModel.provider === args.nextModel.provider
+      && currentModel.id === args.nextModel.id;
+    if (sameIdentity && areRuntimeModelsEquivalent(currentModel, args.nextModel)) {
+      return { outcome: "unchanged" };
+    }
+
+    if (runtime.agent.state.isStreaming || runtime.actionQueue.isBusy()) {
+      return { outcome: "busy" };
+    }
+
+    if (sameIdentity || !shouldForkModelSwitch({
+      behavior: args.behavior,
+      hasMessages: runtime.agent.state.messages.length > 0,
+    })) {
+      runtime.agent.state.model = args.nextModel;
+      return { outcome: "updated" };
+    }
+
+    const sourceTitle = this.snapshotTabs()
+      .find((tab) => tab.runtimeId === args.runtimeId)?.title ?? "Untitled";
+    const title = `${sourceTitle} (${args.nextModel.id})`;
+    const forkedRuntime = await this.createRuntime({
+      activate: true,
+      autoRestoreLatest: false,
+    });
+    forkedRuntime.agent.state.messages = structuredClone(runtime.agent.state.messages);
+    forkedRuntime.agent.state.model = args.nextModel;
+    forkedRuntime.agent.state.thinkingLevel = runtime.agent.state.thinkingLevel;
+    await forkedRuntime.persistence.renameSession(title);
+    forkedRuntime.queueDisplay.clear();
+    forkedRuntime.queueDisplay.setActionQueue([]);
+    await forkedRuntime.persistence.saveSession({ force: true });
+
+    return { outcome: "forked", runtime: forkedRuntime, title };
   }
 
   refreshCapabilities(): Promise<void> {
