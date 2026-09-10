@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { Type } from "@sinclair/typebox";
+import { Type } from "typebox";
 import {
   InMemoryModelsStore,
   type ImageContent,

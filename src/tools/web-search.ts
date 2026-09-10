@@ -7,7 +7,8 @@ function isToolsWebSearchPayloadShape(value: DynamicValue): value is DynamicObje
  */
 
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
-import { Type, type Static, type TSchema } from "@sinclair/typebox";
+import { Type, type Static, type TSchema } from "typebox";
+import { StringEnum } from "@earendil-works/pi-ai";
 
 import { integrationsCommandHint } from "../integrations/naming.js";
 import { getErrorMessage } from "../utils/errors.js";
@@ -58,12 +59,6 @@ const firecrawlRecencyToTbs: Record<RecencyValue, string> = {
   year: "qdr:y",
 };
 
-function StringEnum<T extends string[]>(values: [...T], opts?: { description?: string }) {
-  return Type.Union(
-    values.map((value) => Type.Literal(value)),
-    opts,
-  );
-}
 const schema = Type.Object({
   query: Type.String({
     minLength: 1,

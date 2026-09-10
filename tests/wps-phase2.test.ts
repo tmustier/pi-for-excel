@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import type { AgentToolResult } from "@earendil-works/pi-agent-core";
-import { Type } from "@sinclair/typebox";
+import { Type } from "typebox";
 
 import { colToLetter, parseCell } from "../src/excel/helpers.ts";
 import { WpsHost } from "../src/host/wps-host.ts";

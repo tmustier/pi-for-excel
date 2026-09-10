@@ -2,7 +2,8 @@
  * charts — list, create, update, delete, and capture Excel charts.
  */
 
-import { Type, type Static } from "@sinclair/typebox";
+import { Type, type Static } from "typebox";
+import { StringEnum } from "@earendil-works/pi-ai";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { excelRun, parseRangeRef, qualifiedAddress } from "../excel/helpers.js";
 import {
@@ -28,12 +29,6 @@ import { finalizeMutationOperation } from "./mutation/finalize.js";
 import { appendMutationResultNote } from "./mutation/result-note.js";
 import type { MutationFinalizeDependencies, MutationRecoveryStep } from "./mutation/types.js";
 
-function StringEnum<T extends string[]>(values: [...T], opts?: { description?: string }) {
-  return Type.Union(
-    values.map((value) => Type.Literal(value)),
-    opts,
-  );
-}
 const CHART_ACTIONS = ["list", "create", "update", "delete", "get_image"] as const;
 const FRIENDLY_CHART_TYPES = [
   "column",

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { Agent, type AgentMessage, type AgentTool } from "@earendil-works/pi-agent-core";
-import { Type } from "@sinclair/typebox";
+import { Type } from "typebox";
 import { createModels, fauxAssistantMessage, fauxProvider, type Context } from "@earendil-works/pi-ai";
 
 import { effectiveToolOutputLimits } from "../src/context/window-budgets.ts";

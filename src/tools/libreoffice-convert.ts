@@ -11,7 +11,7 @@ function isToolsLibreofficeConvertPayloadShape(value: DynamicValue): value is Dy
  */
 
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
-import { Type, type TSchema } from "@sinclair/typebox";
+import { Type, type TSchema } from "typebox";
 
 import { getErrorMessage } from "../utils/errors.js";
 import {

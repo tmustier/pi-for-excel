@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { Type } from "@sinclair/typebox";
+import { Type } from "typebox";
 import { createModels, fauxAssistantMessage, fauxProvider, type Context, type Model, type Api } from "@earendil-works/pi-ai";
 
 import { createOfficeStreamFn, getPayloadSnapshots } from "../src/auth/stream-proxy.ts";

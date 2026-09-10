@@ -12,7 +12,7 @@ function isToolsPythonRunPayloadShape(value: DynamicValue): value is DynamicObje
 
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import type { SettingsStore } from "../storage/local/settings-store.js";
-import { Type, type Static, type TSchema } from "@sinclair/typebox";
+import { Type, type Static, type TSchema } from "typebox";
 
 import { validateOfficeProxyUrl } from "../auth/proxy-validation.js";
 import { getErrorMessage } from "../utils/errors.js";

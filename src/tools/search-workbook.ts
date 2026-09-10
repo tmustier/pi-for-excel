@@ -5,7 +5,7 @@
  * Returns matching cells with their sheet, address, value, and formula.
  */
 
-import { Type, type Static } from "@sinclair/typebox";
+import { Type, type Static } from "typebox";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { excelRun, qualifiedAddress, parseCell, colToLetter } from "../excel/helpers.js";
 import { getErrorMessage } from "../utils/errors.js";

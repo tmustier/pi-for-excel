@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { InMemoryModelsStore } from "@earendil-works/pi-ai";
-import { Type } from "@sinclair/typebox";
+import { Type } from "typebox";
 
 import { commandRegistry } from "../src/commands/types.ts";
 import { ConnectionManager } from "../src/connections/manager.ts";

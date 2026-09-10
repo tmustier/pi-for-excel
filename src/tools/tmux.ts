@@ -14,7 +14,8 @@ function isToolsTmuxPayloadShape(value: DynamicValue): value is DynamicObject {
  */
 
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
-import { Type, type Static, type TSchema } from "@sinclair/typebox";
+import { Type, type Static, type TSchema } from "typebox";
+import { StringEnum } from "@earendil-works/pi-ai";
 
 import { validateOfficeProxyUrl } from "../auth/proxy-validation.js";
 import { getErrorMessage } from "../utils/errors.js";
@@ -54,12 +55,6 @@ function isTmuxAction(value: DynamicValue): value is TmuxAction {
   return typeof value === "string" && TMUX_ACTION_SET.has(value);
 }
 
-function StringEnum<T extends string[]>(values: [...T], opts?: { description?: string }) {
-  return Type.Union(
-    values.map((value) => Type.Literal(value)),
-    opts,
-  );
-}
 const schema = Type.Object({
   action: StringEnum([...TMUX_ACTIONS], {
     description:

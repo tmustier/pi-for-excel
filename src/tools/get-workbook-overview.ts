@@ -9,7 +9,7 @@
  */
 
 import { t } from "../language/index.js";
-import { Type, type Static } from "@sinclair/typebox";
+import { Type, type Static } from "typebox";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { excelRun, colToLetter } from "../excel/helpers.js";
 import { getErrorMessage } from "../utils/errors.js";

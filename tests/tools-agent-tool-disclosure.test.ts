@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { createModels, fauxAssistantMessage, fauxProvider, type Context, type Tool } from "@earendil-works/pi-ai";
-import { Type } from "@sinclair/typebox";
+import { Type } from "typebox";
 
 import { createOfficeStreamFn } from "../src/auth/stream-proxy.ts";
 import { CORE_TOOL_NAMES } from "../src/tools/names.ts";

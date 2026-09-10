@@ -7,7 +7,7 @@ function isToolsMcpPayloadShape(value: DynamicValue): value is DynamicObject {
  */
 
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
-import { Type, type Static, type TSchema } from "@sinclair/typebox";
+import { Type, type Static, type TSchema } from "typebox";
 
 import { APP_NAME, APP_VERSION } from "../app/metadata.js";
 import { integrationsCommandHint } from "../integrations/naming.js";

@@ -9,7 +9,7 @@ function isToolsExecuteWpsJsPayloadShape(value: DynamicValue): value is DynamicO
  * body receives `Application` (the active WPS ET Application) and `wps` in scope.
  */
 
-import { Type, type Static } from "@sinclair/typebox";
+import { Type, type Static } from "typebox";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 
 import {

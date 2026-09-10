@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import type { AgentTool } from "@earendil-works/pi-agent-core";
-import { Type } from "@sinclair/typebox";
+import { Type } from "typebox";
 
 import { withWorkbookCoordinator } from "../src/tools/with-workbook-coordinator.ts";
 import { createWorkbookCoordinator } from "../src/workbook/coordinator.ts";

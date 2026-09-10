@@ -1,6 +1,6 @@
 import type { AgentToolResult } from "@earendil-works/pi-agent-core";
-import { Kind, Type, type Static, type TSchema } from "@sinclair/typebox";
-import { Value } from "@sinclair/typebox/value";
+import { IsSchema, Type, type Static, type TSchema } from "typebox";
+import { Value } from "typebox/value";
 
 import type {
   HttpRequestOptions,
@@ -96,8 +96,8 @@ export function asBooleanOrUndefined(value: DynamicValue): boolean | undefined {
 
 export function parseSandboxLlmCompletionRequest(requestRaw: DynamicValue): LlmCompletionRequest {
   if (!Value.Check(sandboxLlmCompletionRequestSchema, requestRaw)) {
-    const error = Value.Errors(sandboxLlmCompletionRequestSchema, requestRaw).First();
-    const field = error?.path ? error.path.replaceAll("/", ".") : "";
+    const error = Value.Errors(sandboxLlmCompletionRequestSchema, requestRaw)[0];
+    const field = error?.instancePath ? error.instancePath.replaceAll("/", ".") : "";
     const reason = error?.message ?? "request does not match the expected schema";
     throw new Error(`llm_complete request${field} is invalid: ${reason}.`);
   }
@@ -164,7 +164,7 @@ export function parseSandboxHttpRequestOptions(optionsRaw: DynamicValue): HttpRe
 }
 
 function isTypeBoxSchema(value: DynamicValue): value is TSchema {
-  return isExtensionsSandboxRuntimeHelpersPayloadShape(value) && Kind in value;
+  return IsSchema(value);
 }
 
 export function normalizeSandboxToolParameters(raw: DynamicValue): TSchema {

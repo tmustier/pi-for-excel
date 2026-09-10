@@ -13,7 +13,7 @@ function isToolsPythonTransformRangePayloadShape(value: DynamicValue): value is 
  */
 
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
-import { Type, type Static, type TSchema } from "@sinclair/typebox";
+import { Type, type Static, type TSchema } from "typebox";
 
 import {
   computeRangeAddress,
