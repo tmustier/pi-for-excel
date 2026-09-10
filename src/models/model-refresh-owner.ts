@@ -5,6 +5,7 @@ import type { CustomProvider } from "../storage/local/custom-providers-store.js"
 import { pickDefaultModel } from "../taskpane/default-model.js";
 import { resolveRuntimeModelSwap } from "../taskpane/runtime-model-reconcile.js";
 import type { BrowserModelRuntime } from "./browser-model-runtime.js";
+import { canonicalJson, toJsonValue } from "../utils/json.js";
 
 export interface ModelRefreshRuntime {
   runtimeId: string;
@@ -28,34 +29,13 @@ interface RefreshRequest {
 }
 
 /**
- * Canonical JSON for a model: keys sorted at every depth, `undefined` members
- * dropped. Models are JSON-shaped records (that is how they persist inside
- * sessions), so this totally orders everything that reaches the wire or the UI.
- */
-function canonicalModelJson(value: DynamicValue): string {
-  if (Array.isArray(value)) {
-    return `[${value.map((item: DynamicValue) => canonicalModelJson(item)).join(",")}]`;
-  }
-  if (typeof value === "object" && value !== null) {
-    // Non-array object: models only nest plain records (cost, thinking levels, headers, compat).
-    const record = value as Record<string, DynamicValue>;
-    const members = Object.keys(record).sort()
-      .filter((key) => record[key] !== undefined)
-      .map((key) => `${JSON.stringify(key)}:${canonicalModelJson(record[key])}`);
-    return `{${members.join(",")}}`;
-  }
-  if (value === undefined) return "null";
-  return JSON.stringify(value);
-}
-
-/**
  * Whole-model equality. Every field on a `Model` reaches the wire or the UI
  * (reasoning, thinking levels, input modalities, cost, headers, compat, ...),
  * so an active session must pick up any difference, not just identity and
  * token limits.
  */
 export function areRuntimeModelsEquivalent(left: RuntimeModelShape, right: RuntimeModelShape): boolean {
-  return canonicalModelJson(left) === canonicalModelJson(right);
+  return canonicalJson(toJsonValue(left)) === canonicalJson(toJsonValue(right));
 }
 
 // Structural identity floor for callers holding `Model<any>` (agent state); the
