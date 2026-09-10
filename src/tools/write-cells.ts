@@ -16,7 +16,11 @@ import {
 } from "../excel/helpers.js";
 import { buildWorkbookCellChangeSummary } from "../audit/cell-diff.js";
 import { getWorkbookChangeAuditLog } from "../audit/workbook-change-audit.js";
-import { getWorkbookRecoveryLog } from "../workbook/recovery-log.js";
+import {
+  getWorkbookRecoveryLog,
+  type AppendWorkbookRecoverySnapshotArgs,
+  type WorkbookRecoverySnapshot,
+} from "../workbook/recovery-log.js";
 import { formatAsMarkdownTable, findErrors } from "../utils/format.js";
 import { getErrorMessage } from "../utils/errors.js";
 import {
@@ -78,11 +82,30 @@ type WriteCellsResult =
 type BlockedWriteCellsResult = Extract<WriteCellsResult, { blocked: true }>;
 type SuccessWriteCellsResult = Extract<WriteCellsResult, { blocked: false }>;
 
-const mutationFinalizeDependencies: MutationFinalizeDependencies = {
+interface WriteCellsToolDependencies {
+  appendAuditEntry: MutationFinalizeDependencies["appendAuditEntry"];
+  appendRecoverySnapshot: (
+    args: AppendWorkbookRecoverySnapshotArgs,
+  ) => Promise<WorkbookRecoverySnapshot | null>;
+}
+
+const defaultDependencies: WriteCellsToolDependencies = {
   appendAuditEntry: (entry) => getWorkbookChangeAuditLog().append(entry),
+  appendRecoverySnapshot: (args) => getWorkbookRecoveryLog().append(args),
 };
 
-export function createWriteCellsTool(): AgentTool<typeof schema, WriteCellsDetails> {
+export function createWriteCellsTool(
+  dependencies: Partial<WriteCellsToolDependencies> = {},
+): AgentTool<typeof schema, WriteCellsDetails> {
+  const resolvedDependencies: WriteCellsToolDependencies = {
+    appendAuditEntry: dependencies.appendAuditEntry ?? defaultDependencies.appendAuditEntry,
+    appendRecoverySnapshot:
+      dependencies.appendRecoverySnapshot ?? defaultDependencies.appendRecoverySnapshot,
+  };
+  const mutationFinalizeDependencies: MutationFinalizeDependencies = {
+    appendAuditEntry: resolvedDependencies.appendAuditEntry,
+  };
+
   return {
     name: "write_cells",
     label: "Write Cells",
@@ -219,7 +242,7 @@ export function createWriteCellsTool(): AgentTool<typeof schema, WriteCellsDetai
           },
           recovery: {
             result: successResult,
-            appendRecoverySnapshot: () => getWorkbookRecoveryLog().append({
+            appendRecoverySnapshot: () => resolvedDependencies.appendRecoverySnapshot({
               toolName: "write_cells",
               toolCallId,
               address: successResult.details.address ?? qualifiedAddress(result.sheetName, result.address),

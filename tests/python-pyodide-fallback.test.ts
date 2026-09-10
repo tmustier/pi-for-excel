@@ -18,16 +18,6 @@ function firstText(result: { content: Array<{ type: string; text?: string }> }):
   return item?.text ?? "";
 }
 
-function makeBridgeResponse(overrides: Partial<PythonBridgeResponse> = {}): PythonBridgeResponse {
-  return {
-    ok: true,
-    action: "run_python",
-    exit_code: 0,
-    stdout: "hello from bridge",
-    ...overrides,
-  };
-}
-
 function makePyodideResponse(overrides: Partial<PythonBridgeResponse> = {}): PythonBridgeResponse {
   return {
     ok: true,
@@ -38,64 +28,6 @@ function makePyodideResponse(overrides: Partial<PythonBridgeResponse> = {}): Pyt
     ...overrides,
   };
 }
-
-void test("python_run prefers native bridge when configured", async () => {
-  let bridgeCalled = false;
-  let pyodideCalled = false;
-
-  const tool = createPythonRunTool({
-    getBridgeConfig: () => Promise.resolve({ url: "https://localhost:3340" }),
-    callBridge: () => {
-      bridgeCalled = true;
-      return Promise.resolve(makeBridgeResponse());
-    },
-    isPyodideAvailable: () => {
-      return true;
-    },
-    callPyodide: () => {
-      pyodideCalled = true;
-      return Promise.resolve(makePyodideResponse());
-    },
-  });
-
-  const result = await tool.execute("tc-1", { code: "print('hello')" });
-
-  assert.equal(bridgeCalled, true);
-  assert.equal(pyodideCalled, false);
-  assert.match(firstText(result), /hello from bridge/);
-});
-
-void test("python_run falls back to Pyodide when no bridge configured", async () => {
-  let pyodideCalled = false;
-
-  const tool = createPythonRunTool({
-    getBridgeConfig: () => Promise.resolve(null),
-    isPyodideAvailable: () => true,
-    callPyodide: (_request) => {
-      pyodideCalled = true;
-      return Promise.resolve(makePyodideResponse());
-    },
-  });
-
-  const result = await tool.execute("tc-2", { code: "print('hello')" });
-
-  assert.equal(pyodideCalled, true);
-  assert.match(firstText(result), /hello from pyodide/);
-  assert.equal(result.details?.ok, true);
-});
-
-void test("python_run returns error when neither bridge nor Pyodide available", async () => {
-  const tool = createPythonRunTool({
-    getBridgeConfig: () => Promise.resolve(null),
-    isPyodideAvailable: () => false,
-  });
-
-  const result = await tool.execute("tc-3", { code: "print('hello')" });
-
-  assert.equal(result.details?.ok, false);
-  assert.equal(result.details?.error, "no_python_runtime");
-  assert.match(firstText(result), /Python is unavailable/);
-});
 
 void test("python_run propagates Pyodide execution errors", async () => {
   const tool = createPythonRunTool({

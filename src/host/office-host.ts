@@ -19,7 +19,7 @@ import type {
 
 function getOfficeDocumentUrl(): string | null {
   try {
-    const office = Reflect.get(globalThis, "Office");
+    const office: DynamicValue = typeof Office === "undefined" ? undefined : Office;
     if (!isHostOfficeHostPayloadShape(office)) return null;
 
     const ctx = office.context;

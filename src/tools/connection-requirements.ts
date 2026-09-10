@@ -1,5 +1,15 @@
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 
+export interface ToolConnectionMetadata {
+  readonly requiresConnection?: string | readonly string[];
+}
+
+export type ConnectionAwareAgentTool = AgentTool & ToolConnectionMetadata;
+
+interface ToolConnectionMetadataBoundary {
+  requiresConnection?: DynamicValue;
+}
+
 function normalizeConnectionId(rawValue: string): string {
   const normalized = rawValue.trim().toLowerCase();
   if (normalized.length === 0) {
@@ -9,13 +19,17 @@ function normalizeConnectionId(rawValue: string): string {
   return normalized;
 }
 
-function normalizeRawRequirementList(rawValue: DynamicValue): string[] {
+function parseToolConnectionMetadata(tool: AgentTool): ToolConnectionMetadata {
+  // AgentTool is extensible at the extension boundary; this parser validates its optional metadata.
+  const boundary = tool as AgentTool & ToolConnectionMetadataBoundary;
+  const rawValue = boundary.requiresConnection;
+
   if (rawValue === undefined || rawValue === null) {
-    return [];
+    return {};
   }
 
   if (typeof rawValue === "string") {
-    return [normalizeConnectionId(rawValue)];
+    return { requiresConnection: normalizeConnectionId(rawValue) };
   }
 
   if (!Array.isArray(rawValue)) {
@@ -31,12 +45,13 @@ function normalizeRawRequirementList(rawValue: DynamicValue): string[] {
     normalized.push(normalizeConnectionId(value));
   }
 
-  return normalized;
+  return { requiresConnection: normalized };
 }
 
 export function getToolRequiredConnectionIds(tool: AgentTool): string[] {
-  const rawRequirement: DynamicValue = Reflect.get(tool, "requiresConnection");
-  const normalized = normalizeRawRequirementList(rawRequirement);
+  const metadata = parseToolConnectionMetadata(tool);
+  const requirement = metadata.requiresConnection;
+  const normalized = typeof requirement === "string" ? [requirement] : requirement ?? [];
   return Array.from(new Set(normalized));
 }
 

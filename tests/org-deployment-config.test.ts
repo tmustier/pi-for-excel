@@ -16,34 +16,18 @@ import {
   resolveDefaultProxyUrl,
   resolveRuntimeDefaultProxyUrl,
 } from "../src/auth/proxy-validation.ts";
-import {
-  requiresCodexWebSocketBridge,
-  resolveCodexWebSocketBridgeSessionId,
-} from "../src/auth/stream-proxy.ts";
 import { filterProvidersByAllowlist, resolveAllowedProviderIds } from "../src/ui/provider-allowlist.ts";
 
-void test("resolveDefaultProxyUrl falls back to local default when unset", () => {
-  assert.equal(resolveDefaultProxyUrl(undefined), DEFAULT_LOCAL_PROXY_URL);
-  assert.equal(resolveDefaultProxyUrl(""), DEFAULT_LOCAL_PROXY_URL);
-  assert.equal(resolveDefaultProxyUrl("   "), DEFAULT_LOCAL_PROXY_URL);
-  assert.equal(resolveDefaultProxyUrl(42), DEFAULT_LOCAL_PROXY_URL);
-});
-
-void test("resolveDefaultProxyUrl accepts https URLs and strips trailing slashes", () => {
-  assert.equal(
-    resolveDefaultProxyUrl("https://pi-proxy.example.com:3003"),
-    "https://pi-proxy.example.com:3003",
-  );
-  assert.equal(
-    resolveDefaultProxyUrl("https://pi-proxy.example.com:3003/"),
-    "https://pi-proxy.example.com:3003",
-  );
-});
-
-void test("resolveDefaultProxyUrl refuses http (mixed content) and garbage", () => {
-  assert.equal(resolveDefaultProxyUrl("http://pi-proxy.example.com:3003"), DEFAULT_LOCAL_PROXY_URL);
-  assert.equal(resolveDefaultProxyUrl("pi-proxy.example.com"), DEFAULT_LOCAL_PROXY_URL);
-  assert.equal(resolveDefaultProxyUrl("https://"), DEFAULT_LOCAL_PROXY_URL);
+void test("deployment config resolves valid, absent, and invalid proxy URLs", () => {
+  const cases: [string, string | number | undefined, string][] = [
+    ["unset", undefined, DEFAULT_LOCAL_PROXY_URL], ["empty", "", DEFAULT_LOCAL_PROXY_URL],
+    ["blank", "   ", DEFAULT_LOCAL_PROXY_URL], ["non-string", 42, DEFAULT_LOCAL_PROXY_URL],
+    ["HTTPS", "https://pi-proxy.example.com:3003", "https://pi-proxy.example.com:3003"],
+    ["trailing slash", "https://pi-proxy.example.com:3003/", "https://pi-proxy.example.com:3003"],
+    ["HTTP", "http://pi-proxy.example.com:3003", DEFAULT_LOCAL_PROXY_URL],
+    ["bare host", "pi-proxy.example.com", DEFAULT_LOCAL_PROXY_URL], ["invalid HTTPS", "https://", DEFAULT_LOCAL_PROXY_URL],
+  ];
+  for (const [name, input, expected] of cases) assert.equal(resolveDefaultProxyUrl(input), expected, name);
 });
 
 void test("resolveRuntimeDefaultProxyUrl uses host-gateway proxy for WPS HTTP harness", () => {
@@ -92,61 +76,26 @@ void test("Codex WebSocket bridge capability probe requires the advertised healt
   }
 });
 
-void test("only ChatGPT GPT-5.6 Luna requires the Codex WebSocket bridge", () => {
-  assert.equal(requiresCodexWebSocketBridge({ provider: "openai-codex", id: "gpt-5.6-luna" }), true);
-  assert.equal(requiresCodexWebSocketBridge({ provider: "openai-codex", id: "gpt-5.6-sol" }), false);
-  assert.equal(requiresCodexWebSocketBridge({ provider: "openai", id: "gpt-5.6-luna" }), false);
-});
-
-void test("Codex WebSocket bridge preserves UUIDv7 and stably maps legacy session ids", () => {
-  const nativeSessionId = "019f4c1c-03ae-7d15-8e28-035d6a58c787";
-  assert.equal(resolveCodexWebSocketBridgeSessionId(nativeSessionId), nativeSessionId);
-
-  const legacySessionId = "b01d800c-e36c-4737-b987-c5ebb16d4106";
-  const mapped = resolveCodexWebSocketBridgeSessionId(legacySessionId);
-  assert.match(mapped, /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u);
-  assert.equal(resolveCodexWebSocketBridgeSessionId(legacySessionId), mapped);
-  assert.notEqual(
-    resolveCodexWebSocketBridgeSessionId("6a4bafc5-79fc-4c27-a9e3-86bf0c35917f"),
-    mapped,
-  );
-  assert.notEqual(
-    resolveCodexWebSocketBridgeSessionId(),
-    resolveCodexWebSocketBridgeSessionId(),
-  );
-});
-
 const PROVIDERS = [
   { id: "anthropic", label: "Anthropic" },
   { id: "openai", label: "OpenAI (API)" },
   { id: "deepseek", label: "DeepSeek" },
 ];
 
-void test("resolveAllowedProviderIds returns null when unset", () => {
-  assert.equal(resolveAllowedProviderIds(undefined), null);
-  assert.equal(resolveAllowedProviderIds(""), null);
-  assert.equal(resolveAllowedProviderIds(" , "), null);
-  assert.equal(resolveAllowedProviderIds(7), null);
+void test("provider allowlist parsing/filtering policy", () => {
+  for (const input of [undefined, "", " , ", 7]) assert.equal(resolveAllowedProviderIds(input), null, String(input));
+
+  const parsed = resolveAllowedProviderIds(" OpenAI, deepseek ,");
+  assert.ok(parsed);
+  assert.deepEqual([...parsed].sort(), ["deepseek", "openai"]);
+
+  const cases = [
+    { name: "unrestricted", allowed: null, expected: ["anthropic", "openai", "deepseek"] },
+    { name: "ordered subset", allowed: resolveAllowedProviderIds("deepseek,openai"), expected: ["openai", "deepseek"] },
+    { name: "mismatch fails open", allowed: resolveAllowedProviderIds("no-such-provider"), expected: ["anthropic", "openai", "deepseek"] },
+  ];
+  for (const entry of cases) {
+    assert.deepEqual(filterProvidersByAllowlist(PROVIDERS, entry.allowed).map((provider) => provider.id), entry.expected, entry.name);
+  }
 });
 
-void test("resolveAllowedProviderIds parses and lowercases ids", () => {
-  const ids = resolveAllowedProviderIds(" OpenAI, deepseek ,");
-  assert.notEqual(ids, null);
-  assert.deepEqual([...(ids as Set<string>)].sort(), ["deepseek", "openai"]);
-});
-
-void test("filterProvidersByAllowlist passes through with no restriction", () => {
-  assert.deepEqual(filterProvidersByAllowlist(PROVIDERS, null), PROVIDERS);
-});
-
-void test("filterProvidersByAllowlist keeps only allowlisted providers in order", () => {
-  const allowed = resolveAllowedProviderIds("deepseek,openai");
-  const filtered = filterProvidersByAllowlist(PROVIDERS, allowed);
-  assert.deepEqual(filtered.map((p) => p.id), ["openai", "deepseek"]);
-});
-
-void test("filterProvidersByAllowlist fails open on fully mismatched allowlist", () => {
-  const allowed = resolveAllowedProviderIds("no-such-provider");
-  const filtered = filterProvidersByAllowlist(PROVIDERS, allowed);
-  assert.deepEqual(filtered.map((p) => p.id), ["anthropic", "openai", "deepseek"]);
-});

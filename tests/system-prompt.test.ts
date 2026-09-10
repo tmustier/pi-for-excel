@@ -286,88 +286,63 @@ void test("system prompt omits Local Services when no entries provided", () => {
   assert.ok(!prompt.includes("## Local Services"));
 });
 
-void test("system prompt omits Local Services when empty array", () => {
-  const prompt = buildSystemPrompt({ localServices: [] });
-  assert.ok(!prompt.includes("## Local Services"));
-});
-
-void test("system prompt renders Local Services for both bridges not running", () => {
-  const services: LocalServiceEntry[] = [
-    { name: "python", displayName: "Python (native)", status: "not_running", skillName: "python-bridge" },
-    { name: "tmux", displayName: "Terminal (tmux)", status: "not_running", skillName: "tmux-bridge" },
-  ];
-  const prompt = buildSystemPrompt({ localServices: services });
-
-  assert.match(prompt, /## Local Services/);
-  assert.match(prompt, /Probed at session start/);
-  assert.match(prompt, /use the skills tool to read the referenced skill before responding/);
-  assert.match(prompt, /tool result includes `Skill: <name>`/);
-  assert.match(prompt, /Do not guess platform-specific install commands/);
-  assert.match(prompt, /\*\*Python \(native\)\:\*\* not running/);
-  assert.match(prompt, /Pyodide/);
-  assert.match(prompt, /read skill "python-bridge"/);
-  assert.match(prompt, /\*\*Terminal \(tmux\)\:\*\* not running/);
-  assert.match(prompt, /read skill "tmux-bridge"/);
-});
-
-void test("system prompt renders Local Services for both bridges running", () => {
-  const services: LocalServiceEntry[] = [
+void test("Local Services renders stable output for bridge capability combinations", () => {
+  const cases: Array<{
+    name: string;
+    services: LocalServiceEntry[];
+    expected: RegExp[];
+    ordered?: [string, string];
+  }> = [
     {
-      name: "python", displayName: "Python (native)", status: "running",
-      pythonVersion: "3.12.1", libreofficeAvailable: true, libreofficeVersion: "7.6.4", skillName: "python-bridge",
+      name: "both bridges not running",
+      services: [
+        { name: "python", displayName: "Python (native)", status: "not_running", skillName: "python-bridge" },
+        { name: "tmux", displayName: "Terminal (tmux)", status: "not_running", skillName: "tmux-bridge" },
+      ],
+      expected: [/## Local Services/u, /Probed at session start/u, /use the skills tool to read the referenced skill before responding/u, /tool result includes `Skill: <name>`/u, /Do not guess platform-specific install commands/u, /\*\*Python \(native\):\*\* not running/u, /Pyodide/u, /read skill "python-bridge"/u, /\*\*Terminal \(tmux\):\*\* not running/u, /read skill "tmux-bridge"/u],
     },
     {
-      name: "tmux", displayName: "Terminal (tmux)", status: "running",
-      tmuxVersion: "3.4", tmuxSessions: 2, skillName: "tmux-bridge",
+      name: "both bridges running",
+      services: [
+        { name: "python", displayName: "Python (native)", status: "running", pythonVersion: "3.12.1", libreofficeAvailable: true, libreofficeVersion: "7.6.4", skillName: "python-bridge" },
+        { name: "tmux", displayName: "Terminal (tmux)", status: "running", tmuxVersion: "3.4", tmuxSessions: 2, skillName: "tmux-bridge" },
+      ],
+      expected: [/\*\*Python \(native\):\*\* running — python 3\.12\.1/u, /libreoffice 7\.6\.4/u, /\*\*Terminal \(tmux\):\*\* running — tmux 3\.4, 2 active sessions/u, /shell commands/u],
     },
-  ];
-  const prompt = buildSystemPrompt({ localServices: services });
-
-  assert.match(prompt, /## Local Services/);
-  assert.match(prompt, /\*\*Python \(native\)\:\*\* running — python 3\.12\.1/);
-  assert.match(prompt, /libreoffice 7\.6\.4/);
-  assert.match(prompt, /\*\*Terminal \(tmux\)\:\*\* running — tmux 3\.4, 2 active sessions/);
-  assert.match(prompt, /shell commands/);
-});
-
-void test("system prompt renders local services in stable python→tmux order", () => {
-  const services: LocalServiceEntry[] = [
-    { name: "tmux", displayName: "Terminal (tmux)", status: "not_running", skillName: "tmux-bridge" },
-    { name: "python", displayName: "Python (native)", status: "not_running", skillName: "python-bridge" },
-  ];
-  const prompt = buildSystemPrompt({ localServices: services });
-
-  const pythonIdx = prompt.indexOf("**Python (native):**");
-  const tmuxIdx = prompt.indexOf("**Terminal (tmux):**");
-  assert.ok(pythonIdx > -1, "Python line should exist");
-  assert.ok(tmuxIdx > -1, "tmux line should exist");
-  assert.ok(pythonIdx < tmuxIdx, "Python should be listed before tmux");
-});
-
-void test("system prompt renders partial python (no libreoffice)", () => {
-  const services: LocalServiceEntry[] = [
     {
-      name: "python", displayName: "Python (native)", status: "partial",
-      pythonVersion: "3.11.0", libreofficeAvailable: false, skillName: "python-bridge",
+      name: "input order is normalized",
+      services: [
+        { name: "tmux", displayName: "Terminal (tmux)", status: "not_running", skillName: "tmux-bridge" },
+        { name: "python", displayName: "Python (native)", status: "not_running", skillName: "python-bridge" },
+      ],
+      expected: [],
+      ordered: ["**Python (native):**", "**Terminal (tmux):**"],
     },
-    { name: "tmux", displayName: "Terminal (tmux)", status: "not_running", skillName: "tmux-bridge" },
+    {
+      name: "python without LibreOffice",
+      services: [
+        { name: "python", displayName: "Python (native)", status: "partial", pythonVersion: "3.11.0", libreofficeAvailable: false, skillName: "python-bridge" },
+        { name: "tmux", displayName: "Terminal (tmux)", status: "not_running", skillName: "tmux-bridge" },
+      ],
+      expected: [/\*\*Python \(native\):\*\* running — python 3\.11\.0, libreoffice not installed/u, /file conversion.*requires LibreOffice/u, /read skill "python-bridge" for install instructions/u],
+    },
+    {
+      name: "tmux bridge stub mode",
+      services: [
+        { name: "python", displayName: "Python (native)", status: "not_running", skillName: "python-bridge" },
+        { name: "tmux", displayName: "Terminal (tmux)", status: "partial", skillName: "tmux-bridge" },
+      ],
+      expected: [/\*\*Terminal \(tmux\):\*\* bridge running but tmux is not installed/u, /Shell command execution requires tmux — read skill "tmux-bridge" for install instructions/u],
+    },
   ];
-  const prompt = buildSystemPrompt({ localServices: services });
 
-  assert.match(prompt, /\*\*Python \(native\)\:\*\* running — python 3\.11\.0, libreoffice not installed/);
-  assert.match(prompt, /file conversion.*requires LibreOffice/);
-  assert.match(prompt, /read skill "python-bridge" for install instructions/);
-});
-
-void test("system prompt renders partial tmux (stub mode)", () => {
-  const services: LocalServiceEntry[] = [
-    { name: "python", displayName: "Python (native)", status: "not_running", skillName: "python-bridge" },
-    { name: "tmux", displayName: "Terminal (tmux)", status: "partial", skillName: "tmux-bridge" },
-  ];
-  const prompt = buildSystemPrompt({ localServices: services });
-
-  assert.match(prompt, /\*\*Terminal \(tmux\)\:\*\* bridge running but tmux is not installed/);
-  assert.match(prompt, /Shell command execution requires tmux — read skill "tmux-bridge" for install instructions/);
+  for (const entry of cases) {
+    const prompt = buildSystemPrompt({ localServices: entry.services });
+    for (const pattern of entry.expected) assert.match(prompt, pattern, entry.name);
+    if (entry.ordered) {
+      assert.ok(prompt.indexOf(entry.ordered[0]) < prompt.indexOf(entry.ordered[1]), entry.name);
+    }
+  }
 });
 
 void test("Local Services section is placed after Connections, before Skills", () => {

@@ -9,6 +9,7 @@ import { t } from "../language/index.js";
 import { createToggleRow } from "./extensions-hub-components.js";
 
 const ACKNOWLEDGED_KEY = "pi.onboarding.disclosure.acknowledged";
+let disclosurePickerSequence = 0;
 
 function isAcknowledged(): boolean {
   try {
@@ -54,6 +55,8 @@ export function createDisclosureBar(options: DisclosureBarOptions): HTMLElement 
 
   // --- Expandable picker (hidden by default) ---
   const picker = document.createElement("div");
+  disclosurePickerSequence += 1;
+  picker.id = `pi-disclosure-picker-${disclosurePickerSequence}`;
   picker.className = "pi-disclosure-picker";
 
   const toggleRows: { label: string; sublabel: string }[] = [
@@ -91,6 +94,8 @@ export function createDisclosureBar(options: DisclosureBarOptions): HTMLElement 
   const customizeBtn = document.createElement("button");
   customizeBtn.className = "pi-disclosure-bar__link";
   customizeBtn.textContent = t("disclosure-bar.customize");
+  customizeBtn.setAttribute("aria-controls", picker.id);
+  customizeBtn.setAttribute("aria-expanded", "false");
   actions.appendChild(customizeBtn);
 
   let hint: HTMLElement;
@@ -115,6 +120,7 @@ export function createDisclosureBar(options: DisclosureBarOptions): HTMLElement 
 
   customizeBtn.addEventListener("click", () => {
     const isVisible = picker.classList.toggle("is-visible");
+    customizeBtn.setAttribute("aria-expanded", String(isVisible));
     if (isVisible) {
       gotItBtn.textContent = t("disclosure-bar.done");
       customizeBtn.style.display = "none";

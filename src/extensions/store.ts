@@ -286,17 +286,16 @@ export async function saveStoredExtensions(
  *
  * If nothing is stored (or stored data is invalid), we seed defaults (Snake).
  * Legacy `extensions.registry.v1` data is migrated to `extensions.registry.v2`.
+ * Storage read failures propagate so defaults cannot replace an unread registry.
  */
 export async function loadStoredExtensions(settings: ExtensionSettingsStore): Promise<StoredExtensionEntry[]> {
-  const rawCurrent = await settings.get(EXTENSIONS_REGISTRY_STORAGE_KEY);
-  const normalizedCurrent = normalizeDocument(rawCurrent);
+  const normalizedCurrent = normalizeDocument(await settings.get(EXTENSIONS_REGISTRY_STORAGE_KEY));
 
   if (normalizedCurrent && normalizedCurrent.version >= EXTENSIONS_REGISTRY_VERSION) {
     return normalizedCurrent.items;
   }
 
-  const rawLegacy = await settings.get(LEGACY_EXTENSIONS_REGISTRY_STORAGE_KEY);
-  const normalizedLegacy = normalizeDocument(rawLegacy);
+  const normalizedLegacy = normalizeDocument(await settings.get(LEGACY_EXTENSIONS_REGISTRY_STORAGE_KEY));
   if (normalizedLegacy) {
     await saveStoredExtensions(settings, normalizedLegacy.items);
     return normalizedLegacy.items;

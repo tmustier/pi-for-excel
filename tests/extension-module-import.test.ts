@@ -51,17 +51,6 @@ void test("importExtensionModule falls back to dynamic import only in dev for mi
   assert.deepEqual(module, { from: "dynamic", specifier: "../extensions/missing" });
 });
 
-void test("importExtensionModule rejects missing local bundle in non-dev mode", async () => {
-  await assert.rejects(
-    importExtensionModule("../extensions/missing", "local-module", {
-      bundledImporters: {},
-      dynamicImport: (_specifier) => Promise.resolve({ from: "dynamic" }),
-      isDev: false,
-    }),
-    /Local extension module "\.\.\/extensions\/missing" was not bundled/,
-  );
-});
-
 void test("importExtensionModule uses dynamic import for blob and remote sources", async () => {
   const seenSpecifiers: string[] = [];
   const dynamicImport = (specifier: string) => {

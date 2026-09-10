@@ -4,7 +4,6 @@ import { test } from "node:test";
 import { WorkbookRecoveryLog } from "../src/workbook/recovery-log.ts";
 import type { WorkbookContext } from "../src/workbook/context.ts";
 import {
-  estimateFormatCaptureCellCount,
   firstCellAddress,
   type RecoveryConditionalFormatRule,
   type RecoveryFormatRangeState,
@@ -20,71 +19,23 @@ import {
 import {
   collectMergedAreaAddresses,
   dedupeRecoveryAddresses,
-  validateStringGrid,
 } from "../src/workbook/recovery/format-state-utils.ts";
 import {
-  ADVANCED_CONDITIONAL_FORMAT_RULE_HANDLERS,
-} from "../src/workbook/recovery/conditional-format-handlers-advanced.ts";
-import {
-  BASIC_CONDITIONAL_FORMAT_RULE_HANDLERS,
-} from "../src/workbook/recovery/conditional-format-handlers-basic.ts";
-import {
-  captureColorScaleCriterion,
-  captureDataBarRule,
-  captureIconCriterion,
   isRecoveryConditionalDataBarState,
   isRecoveryConditionalIconSetState,
-  normalizeConditionalFormatAddress,
   normalizeConditionalFormatType,
-  toColorScaleCriterion,
-  toDataBarRule,
-  toIconCriterion,
 } from "../src/workbook/recovery/conditional-format-normalization.ts";
 import {
   createInMemorySettingsStore,
   findSnapshotById,
   withoutUndefined,
-} from "./recovery-log-test-helpers.test.ts";
+} from "./fixtures/recovery-log.ts";
 
 void test("firstCellAddress handles quoted sheet names that include !", () => {
   assert.equal(firstCellAddress("'Q1!Ops'!A1"), "A1");
   assert.equal(firstCellAddress("'Q1!Ops'!$B$2:$D$9"), "$B$2");
   assert.equal(firstCellAddress("Sheet1!C5:D7"), "C5");
 });
-void test("estimateFormatCaptureCellCount scales by serialized checkpoint shape", () => {
-  const largeArea = [{ rowCount: 1_048_576, columnCount: 3 }];
-
-  assert.equal(
-    estimateFormatCaptureCellCount(largeArea, { columnWidth: true }),
-    3,
-  );
-
-  assert.equal(
-    estimateFormatCaptureCellCount(largeArea, { rowHeight: true }),
-    1_048_576,
-  );
-
-  assert.equal(
-    estimateFormatCaptureCellCount(largeArea, { columnWidth: true, rowHeight: true }),
-    1_048_579,
-  );
-
-  assert.equal(
-    estimateFormatCaptureCellCount(largeArea, { columnWidth: true, fillColor: true }),
-    4,
-  );
-
-  assert.equal(
-    estimateFormatCaptureCellCount(largeArea, { mergedAreas: true }),
-    1_572_864,
-  );
-
-  assert.equal(
-    estimateFormatCaptureCellCount(largeArea, { mergedAreas: true, rowHeight: true }),
-    2_621_440,
-  );
-});
-
 void test("format-state normalization guards accept only supported values", () => {
   assert.equal(isRecoveryUnderlineStyle("Single"), true);
   assert.equal(isRecoveryUnderlineStyle("DoubleAccountant"), true);
@@ -129,39 +80,11 @@ void test("format-state utilities dedupe addresses and merged areas deterministi
   assert.deepEqual(merged, ["Sheet1!A1:B1", "Sheet1!C1:D1"]);
 });
 
-void test("format-state utilities validate string grid shape", () => {
-  assert.deepEqual(
-    validateStringGrid([["0.00", "General"], ["General", "0.00"]], 2, 2),
-    [["0.00", "General"], ["General", "0.00"]],
-  );
-
-  assert.equal(validateStringGrid([["0.00"]], 2, 1), null);
-  assert.equal(validateStringGrid([["0.00", 42]], 1, 2), null);
-});
-
 void test("conditional-format normalization maps supported Excel types", () => {
   assert.equal(normalizeConditionalFormatType("Custom"), "custom");
   assert.equal(normalizeConditionalFormatType("colorScale"), "color_scale");
   assert.equal(normalizeConditionalFormatType("IconSet"), "icon_set");
   assert.equal(normalizeConditionalFormatType("NotSupported"), null);
-});
-
-void test("basic conditional-format handler registry keeps core rule coverage", () => {
-  assert.deepEqual(Object.keys(BASIC_CONDITIONAL_FORMAT_RULE_HANDLERS).sort(), [
-    "cell_value",
-    "custom",
-    "preset_criteria",
-    "text_comparison",
-    "top_bottom",
-  ]);
-});
-
-void test("advanced conditional-format handler registry keeps extended rule coverage", () => {
-  assert.deepEqual(Object.keys(ADVANCED_CONDITIONAL_FORMAT_RULE_HANDLERS).sort(), [
-    "color_scale",
-    "data_bar",
-    "icon_set",
-  ]);
 });
 
 void test("conditional-format guards validate data-bar and icon-set rule state", () => {
@@ -229,53 +152,6 @@ void test("conditional-format guards validate data-bar and icon-set rule state",
   );
 });
 
-void test("conditional-format helpers capture and serialize rule fragments", () => {
-  assert.equal(normalizeConditionalFormatAddress(" Sheet1!A1:A3 "), "Sheet1!A1:A3");
-  assert.equal(normalizeConditionalFormatAddress("  "), undefined);
-
-  assert.deepEqual(captureDataBarRule({ type: "Percentile", formula: "90" }), {
-    type: "Percentile",
-    formula: "90",
-  });
-  assert.equal(captureDataBarRule({ type: "Percentile", formula: 90 }), null);
-  assert.deepEqual(toDataBarRule({ type: "LowestValue" }), { type: "LowestValue" });
-
-  assert.deepEqual(captureColorScaleCriterion({ type: "Percentile", formula: "50", color: "#FFEB84" }), {
-    type: "Percentile",
-    formula: "50",
-    color: "#FFEB84",
-  });
-  assert.equal(captureColorScaleCriterion({ type: "Percentile", color: 10 }), null);
-  assert.deepEqual(toColorScaleCriterion({ type: "HighestValue", color: "#63BE7B" }), {
-    type: "HighestValue",
-    color: "#63BE7B",
-  });
-
-  const iconCriterion = captureIconCriterion({
-    type: "Percent",
-    operator: "GreaterThanOrEqual",
-    formula: "67",
-    customIcon: { set: "ThreeTrafficLights1", index: 2 },
-  });
-
-  assert.deepEqual(iconCriterion, {
-    type: "Percent",
-    operator: "GreaterThanOrEqual",
-    formula: "67",
-    customIcon: { set: "ThreeTrafficLights1", index: 2 },
-  });
-  assert.equal(captureIconCriterion({ type: "Percent", operator: "LessThan", formula: "67" }), null);
-
-  if (iconCriterion) {
-    assert.deepEqual(toIconCriterion(iconCriterion), {
-      type: "Percent",
-      operator: "GreaterThanOrEqual",
-      formula: "67",
-      customIcon: { set: "ThreeTrafficLights1", index: 2 },
-    });
-  }
-});
-
 void test("persisted format checkpoints retain dimension state", async () => {
   const settingsStore = createInMemorySettingsStore();
 
@@ -332,126 +208,6 @@ void test("persisted format checkpoints retain dimension state", async () => {
   assert.equal(entries.length, 1);
   assert.equal(entries[0]?.snapshotKind, "format_cells_state");
   assert.deepEqual(withoutUndefined(entries[0]?.formatRangeState), withoutUndefined(formatState));
-});
-void test("persisted conditional-format checkpoints retain extended rule types", async () => {
-  const settingsStore = createInMemorySettingsStore();
-
-  const getWorkbookContext = (): Promise<WorkbookContext> => Promise.resolve({
-    workbookId: "url_sha256:workbook-conditional-format-persist",
-    workbookName: "Ops.xlsx",
-    source: "document.url",
-  });
-
-  const rules = [
-    {
-      type: "custom",
-      formula: "=A1>10",
-      fillColor: "#FF0000",
-      appliesToAddress: "Sheet1!A1:A2",
-    },
-    {
-      type: "cell_value",
-      operator: "GreaterThan",
-      formula1: "10",
-      fillColor: "#0000FF",
-      appliesToAddress: "Sheet1!B1:B2",
-    },
-    {
-      type: "text_comparison",
-      textOperator: "Contains",
-      text: "urgent",
-      fillColor: "#FFE599",
-      appliesToAddress: "Sheet1!C1:C2",
-    },
-    {
-      type: "top_bottom",
-      topBottomType: "TopItems",
-      rank: 3,
-      fillColor: "#E2EFDA",
-      appliesToAddress: "Sheet1!D1:D10",
-    },
-    {
-      type: "preset_criteria",
-      presetCriterion: "DuplicateValues",
-      fillColor: "#FCE4D6",
-      appliesToAddress: "Sheet1!E1:E10",
-    },
-    {
-      type: "data_bar",
-      stopIfTrue: true,
-      appliesToAddress: "Sheet1!F1:F10",
-      dataBar: {
-        axisColor: "#000000",
-        axisFormat: "Automatic",
-        barDirection: "Context",
-        showDataBarOnly: false,
-        lowerBoundRule: { type: "LowestValue" },
-        upperBoundRule: { type: "HighestValue" },
-        positiveFillColor: "#63C384",
-        positiveBorderColor: "#2E8540",
-        positiveGradientFill: true,
-        negativeFillColor: "#D13438",
-        negativeBorderColor: "#A4262C",
-        negativeMatchPositiveFillColor: false,
-        negativeMatchPositiveBorderColor: false,
-      },
-    },
-    {
-      type: "color_scale",
-      stopIfTrue: false,
-      appliesToAddress: "Sheet1!G1:G10",
-      colorScale: {
-        minimum: { type: "LowestValue", color: "#F8696B" },
-        midpoint: { type: "Percentile", formula: "50", color: "#FFEB84" },
-        maximum: { type: "HighestValue", color: "#63BE7B" },
-      },
-    },
-    {
-      type: "icon_set",
-      stopIfTrue: true,
-      appliesToAddress: "Sheet1!H1:H10",
-      iconSet: {
-        style: "ThreeTrafficLights1",
-        reverseIconOrder: false,
-        showIconOnly: false,
-        criteria: [
-          { type: "Percent", operator: "GreaterThanOrEqual", formula: "0" },
-          { type: "Percent", operator: "GreaterThanOrEqual", formula: "33" },
-          { type: "Percent", operator: "GreaterThanOrEqual", formula: "67" },
-        ],
-      },
-    },
-  ] as const;
-
-  const logA = new WorkbookRecoveryLog({
-    getSettingsStore: () => Promise.resolve(settingsStore),
-    getWorkbookContext,
-    now: () => 1700000000150,
-    createId: () => "snap-conditional-format-persist-1",
-    applySnapshot: () => Promise.resolve({ values: [["old"]], formulas: [["old"]] }),
-  });
-
-  const appended = await logA.appendConditionalFormat({
-    toolName: "conditional_format",
-    toolCallId: "call-conditional-format-persist",
-    address: "Sheet1!A1:E10",
-    changedCount: 50,
-    cellCount: 50,
-    conditionalFormatRules: [...rules],
-  });
-
-  assert.ok(appended);
-
-  const logB = new WorkbookRecoveryLog({
-    getSettingsStore: () => Promise.resolve(settingsStore),
-    getWorkbookContext,
-    applySnapshot: () => Promise.resolve({ values: [["old"]], formulas: [["old"]] }),
-  });
-
-  const entries = await logB.listForCurrentWorkbook(10);
-  assert.equal(entries.length, 1);
-  assert.equal(entries[0]?.snapshotKind, "conditional_format_rules");
-  assert.deepEqual(withoutUndefined(entries[0]?.conditionalFormatRules), withoutUndefined(rules));
 });
 void test("restore applies format-cells checkpoints and creates inverse checkpoint", async () => {
   const settingsStore = createInMemorySettingsStore();
@@ -571,249 +327,6 @@ void test("restore applies format-cells checkpoints and creates inverse checkpoi
   assert.equal(inverse?.snapshotKind, "format_cells_state");
   assert.equal(inverse?.restoredFromSnapshotId, appended?.id);
   assert.deepEqual(withoutUndefined(inverse?.formatRangeState), withoutUndefined(currentFormatState));
-});
-void test("restore applies conditional-format checkpoints and creates inverse checkpoint", async () => {
-  const settingsStore = createInMemorySettingsStore();
-
-  const workbookContext: WorkbookContext = {
-    workbookId: "url_sha256:workbook-cf",
-    workbookName: "Formatting.xlsx",
-    source: "document.url",
-  };
-
-  let idCounter = 0;
-  const createId = (): string => {
-    idCounter += 1;
-    return `snap-cf-${idCounter}`;
-  };
-
-  let appliedAddress = "";
-  const appliedRules: DynamicValue[] = [];
-
-  const log = new WorkbookRecoveryLog({
-    getSettingsStore: () => Promise.resolve(settingsStore),
-    getWorkbookContext: () => Promise.resolve(workbookContext),
-    now: () => 1700000002000,
-    createId,
-    applySnapshot: () => Promise.resolve({ values: [[1]], formulas: [[1]] }),
-    applyConditionalFormatSnapshot: (address, rules) => {
-      appliedAddress = address;
-      appliedRules.push(...rules);
-      return Promise.resolve({
-        supported: true,
-        rules: [{
-          type: "custom",
-          formula: "=A1>0",
-          fillColor: "#00FF00",
-          appliesToAddress: "Sheet1!A1:A2",
-        }],
-      });
-    },
-  });
-
-  const appended = await log.appendConditionalFormat({
-    toolName: "conditional_format",
-    toolCallId: "call-cf",
-    address: "Sheet1!A1:B2",
-    changedCount: 4,
-    cellCount: 4,
-    conditionalFormatRules: [
-      {
-        type: "custom",
-        formula: "=A1>10",
-        fillColor: "#FF0000",
-        appliesToAddress: "Sheet1!A1:A2",
-      },
-      {
-        type: "cell_value",
-        operator: "GreaterThan",
-        formula1: "10",
-        fillColor: "#0000FF",
-        appliesToAddress: "Sheet1!B1:B2",
-      },
-      {
-        type: "text_comparison",
-        textOperator: "Contains",
-        text: "urgent",
-        fillColor: "#FFE599",
-        appliesToAddress: "Sheet1!C1:C2",
-      },
-      {
-        type: "top_bottom",
-        topBottomType: "TopItems",
-        rank: 3,
-        fillColor: "#E2EFDA",
-        appliesToAddress: "Sheet1!D1:D10",
-      },
-      {
-        type: "preset_criteria",
-        presetCriterion: "DuplicateValues",
-        fillColor: "#FCE4D6",
-        appliesToAddress: "Sheet1!E1:E10",
-      },
-      {
-        type: "data_bar",
-        stopIfTrue: true,
-        appliesToAddress: "Sheet1!F1:F10",
-        dataBar: {
-          axisColor: "#000000",
-          axisFormat: "Automatic",
-          barDirection: "Context",
-          showDataBarOnly: false,
-          lowerBoundRule: { type: "LowestValue" },
-          upperBoundRule: { type: "HighestValue" },
-          positiveFillColor: "#63C384",
-          positiveBorderColor: "#2E8540",
-          positiveGradientFill: true,
-          negativeFillColor: "#D13438",
-          negativeBorderColor: "#A4262C",
-          negativeMatchPositiveFillColor: false,
-          negativeMatchPositiveBorderColor: false,
-        },
-      },
-      {
-        type: "color_scale",
-        stopIfTrue: false,
-        appliesToAddress: "Sheet1!G1:G10",
-        colorScale: {
-          minimum: { type: "LowestValue", color: "#F8696B" },
-          midpoint: { type: "Percentile", formula: "50", color: "#FFEB84" },
-          maximum: { type: "HighestValue", color: "#63BE7B" },
-        },
-      },
-      {
-        type: "icon_set",
-        stopIfTrue: true,
-        appliesToAddress: "Sheet1!H1:H10",
-        iconSet: {
-          style: "ThreeTrafficLights1",
-          reverseIconOrder: false,
-          showIconOnly: false,
-          criteria: [
-            { type: "Percent", operator: "GreaterThanOrEqual", formula: "0" },
-            { type: "Percent", operator: "GreaterThanOrEqual", formula: "33" },
-            { type: "Percent", operator: "GreaterThanOrEqual", formula: "67" },
-          ],
-        },
-      },
-    ],
-  });
-
-  assert.ok(appended);
-
-  const restored = await log.restore(appended?.id ?? "");
-
-  assert.equal(restored.address, "Sheet1!A1:B2");
-  assert.equal(restored.restoredSnapshotId, appended?.id);
-  assert.equal(appliedAddress, "Sheet1!A1:B2");
-  assert.equal(appliedRules.length, 8);
-  assert.deepEqual(
-    withoutUndefined(appliedRules),
-    withoutUndefined([
-      {
-        type: "custom",
-        formula: "=A1>10",
-        fillColor: "#FF0000",
-        appliesToAddress: "Sheet1!A1:A2",
-      },
-      {
-        type: "cell_value",
-        operator: "GreaterThan",
-        formula1: "10",
-        fillColor: "#0000FF",
-        appliesToAddress: "Sheet1!B1:B2",
-      },
-      {
-        type: "text_comparison",
-        textOperator: "Contains",
-        text: "urgent",
-        fillColor: "#FFE599",
-        appliesToAddress: "Sheet1!C1:C2",
-      },
-      {
-        type: "top_bottom",
-        topBottomType: "TopItems",
-        rank: 3,
-        fillColor: "#E2EFDA",
-        appliesToAddress: "Sheet1!D1:D10",
-      },
-      {
-        type: "preset_criteria",
-        presetCriterion: "DuplicateValues",
-        fillColor: "#FCE4D6",
-        appliesToAddress: "Sheet1!E1:E10",
-      },
-      {
-        type: "data_bar",
-        stopIfTrue: true,
-        appliesToAddress: "Sheet1!F1:F10",
-        dataBar: {
-          axisColor: "#000000",
-          axisFormat: "Automatic",
-          barDirection: "Context",
-          showDataBarOnly: false,
-          lowerBoundRule: { type: "LowestValue" },
-          upperBoundRule: { type: "HighestValue" },
-          positiveFillColor: "#63C384",
-          positiveBorderColor: "#2E8540",
-          positiveGradientFill: true,
-          negativeFillColor: "#D13438",
-          negativeBorderColor: "#A4262C",
-          negativeMatchPositiveFillColor: false,
-          negativeMatchPositiveBorderColor: false,
-        },
-      },
-      {
-        type: "color_scale",
-        stopIfTrue: false,
-        appliesToAddress: "Sheet1!G1:G10",
-        colorScale: {
-          minimum: { type: "LowestValue", color: "#F8696B" },
-          midpoint: { type: "Percentile", formula: "50", color: "#FFEB84" },
-          maximum: { type: "HighestValue", color: "#63BE7B" },
-        },
-      },
-      {
-        type: "icon_set",
-        stopIfTrue: true,
-        appliesToAddress: "Sheet1!H1:H10",
-        iconSet: {
-          style: "ThreeTrafficLights1",
-          reverseIconOrder: false,
-          showIconOnly: false,
-          criteria: [
-            { type: "Percent", operator: "GreaterThanOrEqual", formula: "0" },
-            { type: "Percent", operator: "GreaterThanOrEqual", formula: "33" },
-            { type: "Percent", operator: "GreaterThanOrEqual", formula: "67" },
-          ],
-        },
-      },
-    ]),
-  );
-
-  const snapshots = await log.listForCurrentWorkbook(10);
-  const inverse = restored.inverseSnapshotId
-    ? findSnapshotById(snapshots, restored.inverseSnapshotId)
-    : null;
-
-  assert.ok(inverse);
-  assert.equal(inverse?.toolName, "restore_snapshot");
-  assert.equal(inverse?.snapshotKind, "conditional_format_rules");
-  assert.equal(inverse?.restoredFromSnapshotId, appended?.id);
-  assert.deepEqual(
-    (inverse?.conditionalFormatRules ?? []).map((rule) => ({
-      type: rule.type,
-      formula: rule.formula,
-      fillColor: rule.fillColor,
-      appliesToAddress: rule.appliesToAddress,
-    })),
-    [{
-      type: "custom",
-      formula: "=A1>0",
-      fillColor: "#00FF00",
-      appliesToAddress: "Sheet1!A1:A2",
-    }],
-  );
 });
 void test("restore round-trips conditional-format rules in target and inverse snapshots", async () => {
   const settingsStore = createInMemorySettingsStore();

@@ -2,12 +2,12 @@
  * Web-search configuration shared by tool + settings UI.
  */
 
-const CONNECTION_STORE_KEY = "connections.store.v1";
-const CONNECTION_STORE_VERSION = 1;
-
-function isToolsWebSearchConfigPayloadShape(value: DynamicValue): value is DynamicObject {
-  return typeof value === "object" && value !== null;
-}
+import {
+  loadConnectionStoreDocument,
+  loadConnectionStoreDocumentForUpdate,
+  saveConnectionStoreDocument,
+  type StoredConnectionRecord,
+} from "../connections/store.js";
 
 export const WEB_SEARCH_PROVIDER_SETTING_KEY = "web.search.provider";
 export const WEB_SEARCH_BRAVE_API_KEY_SETTING_KEY = "web.search.brave.apiKey";
@@ -150,49 +150,77 @@ function setApiKeyIfPresent(
   }
 }
 
+async function readWebSearchSetting(
+  settings: WebSearchConfigReader,
+  key: string,
+): Promise<DynamicValue> {
+  try {
+    return await settings.get(key);
+  } catch {
+    return null;
+  }
+}
+
+function parseLegacyWebSearchApiKeys(
+  values: readonly DynamicValue[],
+): Partial<Record<WebSearchProvider, string>> {
+  const apiKeys = createEmptyApiKeyMap();
+  for (const [index, provider] of WEB_SEARCH_PROVIDERS.entries()) {
+    setApiKeyIfPresent(apiKeys, provider, values[index]);
+  }
+  return apiKeys;
+}
+
 async function loadLegacyWebSearchApiKeys(
   settings: WebSearchConfigReader,
 ): Promise<Partial<Record<WebSearchProvider, string>>> {
-  const [jinaApiKeyRaw, firecrawlApiKeyRaw, serperApiKeyRaw, tavilyApiKeyRaw, braveApiKeyRaw] = await Promise.all([
-    settings.get(WEB_SEARCH_JINA_API_KEY_SETTING_KEY),
-    settings.get(WEB_SEARCH_FIRECRAWL_API_KEY_SETTING_KEY),
-    settings.get(WEB_SEARCH_SERPER_API_KEY_SETTING_KEY),
-    settings.get(WEB_SEARCH_TAVILY_API_KEY_SETTING_KEY),
-    settings.get(WEB_SEARCH_BRAVE_API_KEY_SETTING_KEY),
-  ]);
+  const values = await Promise.all(WEB_SEARCH_PROVIDERS.map((provider) =>
+    readWebSearchSetting(settings, WEB_SEARCH_API_KEY_BY_PROVIDER_SETTING_KEY[provider])));
+  return parseLegacyWebSearchApiKeys(values);
+}
 
+async function loadLegacyWebSearchApiKeysForUpdate(
+  settings: WebSearchConfigStore,
+): Promise<Partial<Record<WebSearchProvider, string>>> {
+  const values = await Promise.all(WEB_SEARCH_PROVIDERS.map((provider) =>
+    settings.get(WEB_SEARCH_API_KEY_BY_PROVIDER_SETTING_KEY[provider])));
+  return parseLegacyWebSearchApiKeys(values);
+}
+
+function readConnectionStoreWebSearchApiKeys(
+  items: Record<string, StoredConnectionRecord>,
+): Partial<Record<WebSearchProvider, string>> {
+  const secrets = items[WEB_SEARCH_CONNECTION_ID]?.secrets ?? {};
   const apiKeys = createEmptyApiKeyMap();
-  setApiKeyIfPresent(apiKeys, "jina", jinaApiKeyRaw);
-  setApiKeyIfPresent(apiKeys, "firecrawl", firecrawlApiKeyRaw);
-  setApiKeyIfPresent(apiKeys, "serper", serperApiKeyRaw);
-  setApiKeyIfPresent(apiKeys, "tavily", tavilyApiKeyRaw);
-  setApiKeyIfPresent(apiKeys, "brave", braveApiKeyRaw);
+
+  for (const provider of WEB_SEARCH_PROVIDERS) {
+    const fieldId = WEB_SEARCH_CONNECTION_SECRET_FIELD_BY_PROVIDER[provider];
+    setApiKeyIfPresent(apiKeys, provider, secrets[fieldId]);
+  }
+
   return apiKeys;
 }
 
 async function loadConnectionStoreWebSearchApiKeys(
   settings: WebSearchConfigReader,
 ): Promise<Partial<Record<WebSearchProvider, string>>> {
-  const rawStore = await settings.get(CONNECTION_STORE_KEY);
-  if (!isToolsWebSearchConfigPayloadShape(rawStore)) return createEmptyApiKeyMap();
+  return readConnectionStoreWebSearchApiKeys(await loadConnectionStoreDocument(settings));
+}
 
-  const rawItems = rawStore.items;
-  if (!isToolsWebSearchConfigPayloadShape(rawItems)) return createEmptyApiKeyMap();
+async function loadConnectionStoreWebSearchApiKeysForUpdate(
+  settings: WebSearchConfigStore,
+): Promise<Partial<Record<WebSearchProvider, string>>> {
+  return readConnectionStoreWebSearchApiKeys(await loadConnectionStoreDocumentForUpdate(settings));
+}
 
-  const rawRecord = rawItems[WEB_SEARCH_CONNECTION_ID];
-  if (!isToolsWebSearchConfigPayloadShape(rawRecord)) return createEmptyApiKeyMap();
-
-  const rawSecrets = rawRecord.secrets;
-  if (!isToolsWebSearchConfigPayloadShape(rawSecrets)) return createEmptyApiKeyMap();
-
-  const apiKeys = createEmptyApiKeyMap();
-
-  for (const provider of WEB_SEARCH_PROVIDERS) {
-    const fieldId = WEB_SEARCH_CONNECTION_SECRET_FIELD_BY_PROVIDER[provider];
-    setApiKeyIfPresent(apiKeys, provider, rawSecrets[fieldId]);
-  }
-
-  return apiKeys;
+async function loadWebSearchApiKeysForUpdate(
+  settings: WebSearchConfigStore,
+): Promise<Partial<Record<WebSearchProvider, string>>> {
+  const [connectionApiKeys, legacyApiKeys] = await Promise.all([
+    loadConnectionStoreWebSearchApiKeysForUpdate(settings),
+    loadLegacyWebSearchApiKeysForUpdate(settings),
+  ]);
+  return mergeApiKeys({ primary: connectionApiKeys, fallback: legacyApiKeys });
 }
 
 function mergeApiKeys(args: {
@@ -212,73 +240,12 @@ function mergeApiKeys(args: {
   return merged;
 }
 
-type StoredConnectionRecord = {
-  status?: "connected" | "missing" | "invalid" | "error";
-  lastValidatedAt?: string;
-  lastError?: string;
-  secrets?: Record<string, string>;
-};
-
-async function loadConnectionStoreItems(
-  settings: WebSearchConfigStore,
-): Promise<Record<string, StoredConnectionRecord>> {
-  const raw = await settings.get(CONNECTION_STORE_KEY);
-  if (!isToolsWebSearchConfigPayloadShape(raw)) return {};
-
-  const rawItems = raw.items;
-  if (!isToolsWebSearchConfigPayloadShape(rawItems)) return {};
-
-  const items: Record<string, StoredConnectionRecord> = {};
-
-  for (const [connectionId, rawRecord] of Object.entries(rawItems)) {
-    if (!isToolsWebSearchConfigPayloadShape(rawRecord)) continue;
-
-    const rawSecrets = rawRecord.secrets;
-    const secrets: Record<string, string> = {};
-    if (isToolsWebSearchConfigPayloadShape(rawSecrets)) {
-      for (const [fieldId, value] of Object.entries(rawSecrets)) {
-        const normalized = normalizeOptionalString(value);
-        if (!normalized) continue;
-        secrets[fieldId] = normalized;
-      }
-    }
-
-    const status = rawRecord.status;
-    const record: StoredConnectionRecord = {
-      secrets,
-    };
-    if (status === "connected" || status === "missing" || status === "invalid" || status === "error") {
-      record.status = status;
-    }
-    const lastValidatedAt = normalizeOptionalString(rawRecord.lastValidatedAt);
-    if (lastValidatedAt !== undefined) {
-      record.lastValidatedAt = lastValidatedAt;
-    }
-    const lastError = normalizeOptionalString(rawRecord.lastError);
-    if (lastError !== undefined) {
-      record.lastError = lastError;
-    }
-    items[connectionId] = record;
-  }
-
-  return items;
-}
-
-async function saveConnectionStoreItems(
-  settings: WebSearchConfigStore,
-  items: Record<string, StoredConnectionRecord>,
-): Promise<void> {
-  await settings.set(CONNECTION_STORE_KEY, {
-    version: CONNECTION_STORE_VERSION,
-    items,
-  });
-}
 
 async function writeConnectionStoreWebSearchApiKeys(
   settings: WebSearchConfigStore,
   apiKeys: Partial<Record<WebSearchProvider, string>>,
 ): Promise<void> {
-  const items = await loadConnectionStoreItems(settings);
+  const items = await loadConnectionStoreDocumentForUpdate(settings);
   const previous = items[WEB_SEARCH_CONNECTION_ID];
 
   const secrets: Record<string, string> = {};
@@ -292,7 +259,7 @@ async function writeConnectionStoreWebSearchApiKeys(
   if (Object.keys(secrets).length === 0) {
     if (WEB_SEARCH_CONNECTION_ID in items) {
       delete items[WEB_SEARCH_CONNECTION_ID];
-      await saveConnectionStoreItems(settings, items);
+      await saveConnectionStoreDocument(settings, items);
     }
     return;
   }
@@ -307,7 +274,7 @@ async function writeConnectionStoreWebSearchApiKeys(
   }
   items[WEB_SEARCH_CONNECTION_ID] = record;
 
-  await saveConnectionStoreItems(settings, items);
+  await saveConnectionStoreDocument(settings, items);
 }
 
 async function clearLegacyWebSearchApiKey(
@@ -328,8 +295,8 @@ export async function migrateLegacyWebSearchApiKeysToConnectionStore(
   settings: WebSearchConfigStore,
 ): Promise<boolean> {
   const [legacyApiKeys, connectionApiKeys] = await Promise.all([
-    loadLegacyWebSearchApiKeys(settings),
-    loadConnectionStoreWebSearchApiKeys(settings),
+    loadLegacyWebSearchApiKeysForUpdate(settings),
+    loadConnectionStoreWebSearchApiKeysForUpdate(settings),
   ]);
 
   const mergedApiKeys = mergeApiKeys({
@@ -362,7 +329,7 @@ export async function loadWebSearchProviderConfig(
   settings: WebSearchConfigReader,
 ): Promise<WebSearchProviderConfig> {
   const [providerRaw, connectionApiKeys, legacyApiKeys] = await Promise.all([
-    settings.get(WEB_SEARCH_PROVIDER_SETTING_KEY),
+    readWebSearchSetting(settings, WEB_SEARCH_PROVIDER_SETTING_KEY),
     loadConnectionStoreWebSearchApiKeys(settings),
     loadLegacyWebSearchApiKeys(settings),
   ]);
@@ -401,9 +368,9 @@ export async function saveWebSearchApiKey(
     throw new Error("API key cannot be empty.");
   }
 
-  const current = await loadWebSearchProviderConfig(settings);
+  const currentApiKeys = await loadWebSearchApiKeysForUpdate(settings);
   const nextApiKeys = {
-    ...current.apiKeys,
+    ...currentApiKeys,
     [provider]: normalized,
   };
 
@@ -415,9 +382,9 @@ export async function clearWebSearchApiKey(
   settings: WebSearchConfigStore,
   provider: WebSearchProvider,
 ): Promise<void> {
-  const current = await loadWebSearchProviderConfig(settings);
+  const currentApiKeys = await loadWebSearchApiKeysForUpdate(settings);
   const nextApiKeys = {
-    ...current.apiKeys,
+    ...currentApiKeys,
   };
   delete nextApiKeys[provider];
 

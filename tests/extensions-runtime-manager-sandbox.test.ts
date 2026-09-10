@@ -1,8 +1,5 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { readFile } from "node:fs/promises";
-import { Script } from "node:vm";
-
 import { Type } from "@sinclair/typebox";
 import {
   InMemoryModelsStore,
@@ -15,6 +12,10 @@ import { ConnectionManager } from "../src/connections/manager.ts";
 import { CONNECTION_STORE_KEY } from "../src/connections/store.ts";
 import { setExperimentalFeatureEnabled } from "../src/experiments/flags.ts";
 import { ExtensionRuntimeManager } from "../src/extensions/runtime-manager.ts";
+import {
+  activateExtensionInSandbox,
+  type SandboxActivationOptions,
+} from "../src/extensions/sandbox-runtime.ts";
 import { BrowserModelRuntime } from "../src/models/browser-model-runtime.ts";
 import type { ProviderKeysStoreLike } from "../src/storage/local/provider-credentials-store.ts";
 import { failOnUnexpectedStream } from "./fail-on-unexpected-stream.ts";
@@ -27,7 +28,6 @@ import {
   isSandboxEnvelope,
   serializeForSandboxInlineScript,
 } from "../src/extensions/sandbox/protocol.ts";
-import { buildSandboxSrcdoc } from "../src/extensions/sandbox/srcdoc.ts";
 import { EXTENSIONS_REGISTRY_STORAGE_KEY } from "../src/extensions/store.ts";
 import {
   getDefaultPermissionsForTrust,
@@ -49,6 +49,22 @@ class MemorySettingsStore {
 
   writeRaw(key: string, value: DynamicValue): void {
     this.values.set(key, value);
+  }
+}
+
+class TransientExtensionReadSettings extends MemorySettingsStore {
+  private failNextRead = false;
+
+  armReadFailure(): void {
+    this.failNextRead = true;
+  }
+
+  override get(key: string): Promise<DynamicValue> {
+    if (this.failNextRead) {
+      this.failNextRead = false;
+      return Promise.reject(new Error("transient runtime registry read failure"));
+    }
+    return super.get(key);
   }
 }
 
@@ -167,6 +183,34 @@ function createStoredEntry(input: {
   };
 }
 
+void test("runtime manager retries initialization after a transient registry read failure", async () => {
+  const settings = new TransientExtensionReadSettings();
+  settings.writeRaw(EXTENSIONS_REGISTRY_STORAGE_KEY, {
+    version: 2,
+    items: [createStoredEntry({
+      id: "ext.persisted.disabled",
+      name: "Persisted disabled",
+      trust: "inline-code",
+      enabled: false,
+    })],
+  });
+  const manager = new ExtensionRuntimeManager({
+    settings,
+    connectionManager: createConnectionManager(settings),
+    getActiveAgent: () => null,
+    refreshRuntimeTools: () => Promise.resolve(),
+    refreshRuntimeModels: () => Promise.resolve(),
+    reservedToolNames: new Set<string>(),
+  });
+  settings.armReadFailure();
+
+  await assert.rejects(() => manager.initialize(), /transient runtime registry read failure/u);
+  assert.deepEqual(manager.list(), []);
+
+  await manager.initialize();
+  assert.equal(manager.list()[0]?.id, "ext.persisted.disabled");
+});
+
 void test("runtime manager passes sandbox activation options and runtime metadata", async () => {
   const restoreLocalStorage = installLocalStorageStub();
 
@@ -233,12 +277,6 @@ void test("runtime manager passes sandbox activation options and runtime metadat
   } finally {
     restoreLocalStorage();
   }
-});
-
-void test("extensions hub plugins source includes runtime metadata for installed rows", async () => {
-  const source = await readFile(new URL("../src/commands/builtins/extensions-hub-plugins.ts", import.meta.url), "utf8");
-
-  assert.match(source, /description:\s*`\$\{status\.sourceLabel\} · \$\{status\.runtimeLabel\}`/);
 });
 
 void test("untrusted extensions default to sandbox runtime when rollback kill switch is unset", async () => {
@@ -770,53 +808,6 @@ void test("host runtime extension tool errors include extension ownership contex
   }
 });
 
-void test("sandbox srcdoc builder emits expected bridge hooks and config", () => {
-  const html = buildSandboxSrcdoc({
-    instanceId: "ext.inline.srcdoc",
-    extensionName: "Inline Srcdoc",
-    source: {
-      kind: "inline",
-      code: "export function activate(api) { api.toast('hello'); }",
-    },
-    widgetApiV2Enabled: true,
-  });
-
-  assert.match(html, /"instanceId":"ext\.inline\.srcdoc"/);
-  assert.match(html, /"widgetApiV2Enabled":true/);
-  assert.match(html, /"bootstrapKind":"bootstrap"/);
-  assert.match(html, /if \(method === "ui_action"\)/);
-  assert.match(html, /Unknown sandbox UI action id:/);
-  assert.match(html, /api\.agent is not available in sandbox runtime/);
-  assert.match(html, /event\.source !== parent/);
-  assert.match(html, /message\.kind !== config\.bootstrapKind/);
-  assert.match(html, /hostPort\.addEventListener\("message", handleHostMessage\)/);
-  assert.match(html, /placement: payload\.placement === "above-input" \|\| payload\.placement === "below-input"/);
-  assert.match(html, /payload\.minHeightPx === null/);
-  assert.match(html, /model_provider_register/);
-  assert.match(html, /model_provider_unregister/);
-  assert.match(html, /model_providers_refresh/);
-});
-
-void test("sandbox srcdoc bootstrap is syntactically valid JavaScript", () => {
-  const html = buildSandboxSrcdoc({
-    instanceId: "ext.inline.syntax",
-    extensionName: "Inline Syntax",
-    source: {
-      kind: "inline",
-      code: "export function activate(api) { return () => api.toast('clean'); }",
-    },
-    widgetApiV2Enabled: false,
-  });
-  const match = /<script type="module">([\s\S]*)<\/script>/u.exec(html);
-  assert.ok(match);
-  const script = match[1];
-  assert.equal(typeof script, "string");
-  if (typeof script !== "string") return;
-
-  assert.doesNotThrow(() => new Script(script));
-  assert.match(script, /Extension cleanup failed:\\n-/u);
-});
-
 void test("sandbox protocol helpers validate envelope shapes and escape inline script payloads", () => {
   const validBootstrap: DynamicValue = {
     channel: SANDBOX_CHANNEL,
@@ -862,16 +853,164 @@ void test("sandbox protocol helpers validate envelope shapes and escape inline s
   assert.equal(serialized.includes("\\u003cdiv>safe\\u003c/div>"), true);
 });
 
-void test("sandbox runtime host source retains isolation boundary guards", async () => {
-  const hostSource = await readFile(new URL("../src/extensions/sandbox-runtime.ts", import.meta.url), "utf8");
+void test("sandbox activation uses a script-only iframe and dedicated, direction-checked message port", async () => {
+  const previousDocument = Reflect.get(globalThis, "document");
+  const previousWindow = Reflect.get(globalThis, "window");
+  const previousHTMLElement = Reflect.get(globalThis, "HTMLElement");
+  let iframe: HTMLElement | null = null;
+  let sandboxPort: MessagePort | null = null;
+  let activationSettled = false;
+  const getIframe = (): HTMLElement | null => iframe;
+  const getSandboxPort = (): MessagePort | null => sandboxPort;
 
-  assert.match(hostSource, /setAttribute\("sandbox", "allow-scripts"\)/);
-  assert.match(hostSource, /new MessageChannel\(\)/);
-  assert.match(hostSource, /postMessage\(bootstrap,/);
-  assert.match(hostSource, /channel\.port2/);
-  assert.match(hostSource, /this\.getSandboxPort\(\)\.postMessage\(envelope\)/);
-  assert.match(hostSource, /if \(envelope\.direction !== "sandbox_to_host"\)/);
-  assert.match(hostSource, /if \(!isSandboxEnvelope\(envelope\)\)/);
+  const body = {
+    appendChild: (element: HTMLElement): HTMLElement => {
+      iframe = element;
+      return element;
+    },
+  };
+  const fakeDocument = {
+    body,
+    createElement: (tagName: string): HTMLElement => {
+      assert.equal(tagName, "iframe");
+      const target = new EventTarget();
+      const attributes = new Map<string, string>();
+      const element = target as DynamicValue as HTMLElement;
+      Reflect.set(element, "style", {});
+      Reflect.set(element, "setAttribute", (name: string, value: string) => attributes.set(name, value));
+      Reflect.set(element, "getAttribute", (name: string) => attributes.get(name) ?? null);
+      Reflect.set(element, "remove", () => {});
+      Reflect.set(element, "contentWindow", {
+        postMessage: (bootstrap: DynamicValue, targetOrigin: string, transfer: MessagePort[]) => {
+          assert.equal(targetOrigin, "*");
+          assert.equal(transfer.length, 1);
+          sandboxPort = transfer[0] ?? null;
+          assert.deepEqual(bootstrap, {
+            channel: SANDBOX_CHANNEL,
+            instanceId: "ext.sandbox.boundary",
+            direction: "host_to_sandbox",
+            kind: SANDBOX_BOOTSTRAP_KIND,
+          });
+        },
+      });
+      return element;
+    },
+    getElementById: () => null,
+  };
+
+  const options: SandboxActivationOptions = {
+    instanceId: "ext.sandbox.boundary",
+    extensionName: "Boundary contract",
+    source: { kind: "inline", code: "export function activate() {}" },
+    registerCommand: () => {},
+    registerTool: () => {},
+    unregisterTool: () => {},
+    subscribeAgentEvents: () => () => {},
+    llmComplete: () => Promise.reject(new Error("not expected")),
+    httpFetch: () => Promise.reject(new Error("not expected")),
+    storageGet: () => Promise.resolve(null),
+    storageSet: () => Promise.resolve(),
+    storageDelete: () => Promise.resolve(),
+    storageKeys: () => Promise.resolve([]),
+    clipboardWriteText: () => Promise.resolve(),
+    injectAgentContext: () => {},
+    steerAgent: () => {},
+    followUpAgent: () => {},
+    listSkills: () => Promise.resolve([]),
+    readSkill: () => Promise.reject(new Error("not expected")),
+    installSkill: () => Promise.resolve(),
+    uninstallSkill: () => Promise.resolve(),
+    downloadFile: () => {},
+    registerConnection: () => "connection-id",
+    unregisterConnection: () => {},
+    listConnections: () => Promise.resolve([]),
+    getConnection: () => Promise.resolve(null),
+    getConnectionSecrets: () => Promise.resolve(null),
+    setConnectionSecrets: () => Promise.resolve(),
+    clearConnectionSecrets: () => Promise.resolve(),
+    markConnectionValidated: () => Promise.resolve(),
+    markConnectionInvalid: () => Promise.resolve(),
+    markConnectionStatus: () => Promise.resolve(),
+    registerModelProvider: () => "provider-id",
+    unregisterModelProvider: () => {},
+    refreshModelProviders: () => Promise.resolve(),
+    isCapabilityEnabled: () => false,
+    formatCapabilityError: (capability) => `Denied ${capability}`,
+    toast: () => {},
+  };
+
+  Reflect.set(globalThis, "document", fakeDocument);
+  Reflect.set(globalThis, "window", {});
+  Reflect.set(globalThis, "HTMLElement", EventTarget);
+
+  try {
+    const activation = activateExtensionInSandbox(options).then((handle) => {
+      activationSettled = true;
+      return handle;
+    });
+
+    const mountedIframe = getIframe();
+    assert.ok(mountedIframe);
+    assert.equal(mountedIframe.getAttribute("sandbox"), "allow-scripts");
+    assert.equal(mountedIframe.getAttribute("aria-hidden"), "true");
+    mountedIframe.dispatchEvent(new Event("load"));
+    const transferredPort = getSandboxPort();
+    assert.ok(transferredPort);
+
+    transferredPort.postMessage({
+      channel: SANDBOX_CHANNEL,
+      instanceId: options.instanceId,
+      direction: "host_to_sandbox",
+      kind: "event",
+      event: "ready",
+      data: null,
+    });
+    await new Promise<void>((resolve) => setTimeout(resolve, 20));
+    assert.equal(activationSettled, false, "host-direction messages must not activate the sandbox");
+
+    transferredPort.postMessage({
+      channel: SANDBOX_CHANNEL,
+      instanceId: options.instanceId,
+      direction: "sandbox_to_host",
+      kind: "event",
+      event: "ready",
+      data: null,
+    });
+    const handle = await activation;
+
+    const deactivateRequest = new Promise<DynamicObject>((resolve) => {
+      transferredPort.addEventListener("message", (event: MessageEvent<DynamicValue>) => {
+        const envelope = event.data;
+        if (typeof envelope !== "object" || envelope === null || Array.isArray(envelope)) return;
+        const payload = envelope as DynamicObject;
+        if (payload.kind !== "request" || payload.method !== "deactivate") return;
+        resolve(payload);
+        transferredPort.postMessage({
+          channel: SANDBOX_CHANNEL,
+          instanceId: options.instanceId,
+          direction: "sandbox_to_host",
+          kind: "response",
+          requestId: payload.requestId,
+          ok: true,
+          result: null,
+        });
+      });
+      transferredPort.start();
+    });
+
+    const deactivated = handle.deactivate();
+    const request = await deactivateRequest;
+    assert.equal(request.direction, "host_to_sandbox");
+    await deactivated;
+  } finally {
+    if (previousDocument === undefined) Reflect.deleteProperty(globalThis, "document");
+    else Reflect.set(globalThis, "document", previousDocument);
+    if (previousWindow === undefined) Reflect.deleteProperty(globalThis, "window");
+    else Reflect.set(globalThis, "window", previousWindow);
+    if (previousHTMLElement === undefined) Reflect.deleteProperty(globalThis, "HTMLElement");
+    else Reflect.set(globalThis, "HTMLElement", previousHTMLElement);
+    getSandboxPort()?.close();
+  }
 });
 
 void test("sandbox activation failures are isolated per extension during initialize", async () => {

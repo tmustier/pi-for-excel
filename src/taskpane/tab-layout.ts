@@ -81,12 +81,8 @@ export async function loadWorkbookTabLayout(
   settings: SettingsStore,
   workbookId: string | null,
 ): Promise<WorkbookTabLayout | null> {
-  try {
-    const stored = await settings.get(workbookTabLayoutKey(workbookId));
-    return parseWorkbookTabLayout(stored);
-  } catch {
-    return null;
-  }
+  const stored = await settings.get(workbookTabLayoutKey(workbookId));
+  return parseWorkbookTabLayout(stored);
 }
 
 export async function saveWorkbookTabLayout(

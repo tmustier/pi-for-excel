@@ -200,6 +200,32 @@ void test("skills read resolves external skill when discovery is enabled", async
   assert.equal(result.details.location, CUSTOM_EXTERNAL_SKILL.location);
 });
 
+void test("skills tool exposes no skills when activation state is unreadable", async () => {
+  const previousWindow = Reflect.get(globalThis, "window");
+  Reflect.set(globalThis, "window", {});
+
+  try {
+    const tool = createSkillsTool({
+      catalog: {
+        list: () => [WEB_SEARCH_SKILL],
+      },
+      isExternalDiscoveryEnabled: () => false,
+      loadExternalSkills: () => Promise.resolve([]),
+    });
+
+    await assert.rejects(
+      tool.execute("call-list-unreadable-activation", { action: "list" }),
+      /AppStorage not initialized/u,
+    );
+  } finally {
+    if (previousWindow === undefined) {
+      Reflect.deleteProperty(globalThis, "window");
+    } else {
+      Reflect.set(globalThis, "window", previousWindow);
+    }
+  }
+});
+
 void test("skills list/read exclude disabled skills", async () => {
   const tool = createSkillsTool({
     catalog: {

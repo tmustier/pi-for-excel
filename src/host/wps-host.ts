@@ -1,6 +1,11 @@
 /** WPS Spreadsheets host implementation. */
 
-import { getWpsEtApplication } from "./wps/jsapi.js";
+import {
+  getWpsActiveWorkbook,
+  getWpsEtApplication,
+  getWpsWorkbookFullName,
+  getWpsWorkbookName,
+} from "./wps/jsapi.js";
 import { settingsBackedSessionStorage } from "./session-storage.js";
 import {
   createUnknownWorkbookContext,
@@ -49,21 +54,16 @@ export class WpsHost implements SpreadsheetHost {
   }
 
   getWorkbookContext(): Promise<WorkbookContext> {
-    const workbook = getWpsEtApplication()?.ActiveWorkbook;
+    const app = getWpsEtApplication();
+    const workbook = app ? getWpsActiveWorkbook(app) : null;
     if (!workbook) {
       return Promise.resolve(createUnknownWorkbookContext());
     }
 
-    const fullName = typeof workbook.FullName === "string"
-      ? workbook.FullName
-      : typeof workbook.fullName === "string"
-      ? workbook.fullName
-      : null;
-    const workbookName = typeof workbook.Name === "string"
-      ? workbook.Name
-      : typeof workbook.name === "string"
-      ? workbook.name
-      : null;
+    const rawFullName = getWpsWorkbookFullName(workbook);
+    const rawWorkbookName = getWpsWorkbookName(workbook);
+    const fullName = typeof rawFullName === "string" ? rawFullName : null;
+    const workbookName = typeof rawWorkbookName === "string" ? rawWorkbookName : null;
 
     return getWorkbookContextFromWpsFullName(fullName, workbookName);
   }

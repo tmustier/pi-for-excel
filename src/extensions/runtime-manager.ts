@@ -76,13 +76,20 @@ import {
   qualifyExtensionConnectionId,
   qualifyExtensionProviderId,
 } from "./owner-identifiers.js";
-import { getToolRequiredConnectionIds } from "../tools/connection-requirements.js";
+import {
+  getToolRequiredConnectionIds,
+  type ConnectionAwareAgentTool,
+} from "../tools/connection-requirements.js";
 import type {
   BrowserModelRuntime,
   BrowserProviderRegistration,
 } from "../models/browser-model-runtime.js";
 
 type AnyAgentTool = AgentTool;
+
+interface ExtensionToolExecutionBoundary {
+  execute?: DynamicValue;
+}
 
 type ManagerListener = () => void;
 
@@ -106,7 +113,9 @@ function withExtensionToolDescription(tool: AnyAgentTool, entry: StoredExtension
 }
 
 function assertToolExecuteFunction(tool: AnyAgentTool, entry: StoredExtensionEntry): void {
-  if (typeof Reflect.get(tool, "execute") === "function") {
+  // Extension JavaScript can bypass AgentTool's compile-time contract; validate at registration.
+  const boundary = tool as AnyAgentTool & ExtensionToolExecutionBoundary;
+  if (typeof boundary.execute === "function") {
     return;
   }
 
@@ -752,7 +761,7 @@ export class ExtensionRuntimeManager {
         assertToolConnectionOwnership(tool.name, requiredConnectionIds);
       }
 
-      const wrappedTool: AnyAgentTool = {
+      const wrappedTool: ConnectionAwareAgentTool = {
         ...tool,
         description: withExtensionToolDescription(tool, entry),
         execute: async (toolCallId, params, signal, onUpdate) => {
@@ -765,11 +774,10 @@ export class ExtensionRuntimeManager {
             );
           }
         },
+        ...(requiredConnectionIds.length > 0
+          ? { requiresConnection: requiredConnectionIds }
+          : {}),
       };
-
-      if (requiredConnectionIds.length > 0) {
-        Reflect.set(wrappedTool, "requiresConnection", requiredConnectionIds);
-      }
 
       this.toolOwners.set(wrappedTool.name, entry.id);
       this.extensionTools.set(wrappedTool.name, wrappedTool);

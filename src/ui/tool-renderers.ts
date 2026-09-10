@@ -53,9 +53,7 @@ import {
 import { renderCsvTable } from "./render-csv-table.js";
 import { renderDepTree } from "./render-dep-tree.js";
 
-// Ensure <markdown-block> custom element is registered before we render it.
-import "./messages/markdown-block.js";
-import "./messages/code-block.js";
+// The taskpane registers <markdown-block> and <code-block> through register-components.
 
 type ToolState = "inprogress" | "complete" | "error";
 type SupportedToolName = UiToolName;

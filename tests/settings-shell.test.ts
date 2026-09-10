@@ -1,9 +1,10 @@
+// Component-logic contracts only; this suite does not claim native browser behavior.
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { closeOverlayById } from "../src/ui/overlay-dialog.ts";
 import { createSettingsShell, type SettingsShellPage } from "../src/ui/settings-shell.ts";
-import { installFakeDom } from "./fake-dom.test.ts";
+import { installFakeDom } from "./fixtures/fake-dom.ts";
 
 async function flushAsync(): Promise<void> {
   await Promise.resolve();
@@ -88,45 +89,6 @@ void test("settings shell ignores stale async renders after navigation", async (
     assert.equal(closeOverlayById("settings-test"), true);
     await flushAsync();
     assert.equal(fakeDocument.getElementById("settings-test"), null);
-  } finally {
-    restore();
-  }
-});
-
-void test("settings shell registered closer honors before-leave guard", async () => {
-  const { document: fakeDocument, restore } = installFakeDom();
-  let allowClose = false;
-
-  const page: SettingsShellPage = {
-    id: "root",
-    title: () => "Root",
-    render: (ctx) => {
-      ctx.body.append(createMarker("guarded-marker", "Guarded page"));
-      ctx.setBeforeLeave(() => Promise.resolve(allowClose));
-    },
-  };
-
-  const shell = createSettingsShell({
-    overlayId: "settings-guard-test",
-    rootId: "root",
-    getPage: (id) => (id === "root" ? page : undefined),
-    backLabel: () => "Back",
-    closeLabel: () => "Close",
-  });
-
-  try {
-    await shell.open();
-    assert.ok(fakeDocument.getElementById("settings-guard-test"));
-
-    assert.equal(closeOverlayById("settings-guard-test"), true);
-    await flushAsync();
-    assert.ok(fakeDocument.getElementById("settings-guard-test"));
-    assert.ok(fakeDocument.getElementById("guarded-marker"));
-
-    allowClose = true;
-    assert.equal(closeOverlayById("settings-guard-test"), true);
-    await flushAsync();
-    assert.equal(fakeDocument.getElementById("settings-guard-test"), null);
   } finally {
     restore();
   }

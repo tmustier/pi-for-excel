@@ -12,6 +12,7 @@ import type { Agent, AgentMessage } from "@earendil-works/pi-agent-core";
 import type { SessionData } from "../storage/local/types.js";
 import type { SessionsStore } from "../storage/local/sessions-store.js";
 import type { SettingsStore } from "../storage/local/settings-store.js";
+import type { SpreadsheetHost } from "../host/types.js";
 
 import { getCurrentSpreadsheetHost } from "../host/index.js";
 import { extractTextFromContent } from "../utils/content.js";
@@ -117,17 +118,14 @@ export async function setupSessionPersistence(opts: {
   models: Models;
   initialSessionId?: string;
   autoRestoreLatest?: boolean;
+  spreadsheetHost?: Pick<SpreadsheetHost, "getWorkbookContext" | "sessionStorage">;
 }): Promise<SessionPersistenceController> {
   const { agent, sessions, settings } = opts;
-  const spreadsheetHost = getCurrentSpreadsheetHost();
+  const spreadsheetHost = opts.spreadsheetHost ?? getCurrentSpreadsheetHost();
 
   async function resolveWorkbookId(): Promise<string | null> {
-    try {
-      const ctx = await spreadsheetHost.getWorkbookContext();
-      return ctx.workbookId;
-    } catch {
-      return null;
-    }
+    const ctx = await spreadsheetHost.getWorkbookContext();
+    return ctx.workbookId;
   }
 
   const listeners = new Set<() => void>();
@@ -139,6 +137,7 @@ export async function setupSessionPersistence(opts: {
   let sessionCreatedAt = new Date().toISOString();
   let firstAssistantSeen = false;
   let explicitTitle = false;
+  let canWriteLatestSessionPointer = !opts.autoRestoreLatest;
 
   agent.sessionId = sessionId;
 
@@ -149,12 +148,14 @@ export async function setupSessionPersistence(opts: {
   }
 
   async function updateWorkbookAssociation(savedSessionId: string): Promise<void> {
-    const workbookId = await resolveWorkbookId();
-    if (!workbookId) return;
-
     try {
+      const workbookId = await resolveWorkbookId();
+      if (!workbookId) return;
+
       await spreadsheetHost.sessionStorage.linkSessionToWorkbook(settings, savedSessionId, workbookId);
-      await spreadsheetHost.sessionStorage.setLatestSessionForWorkbook(settings, workbookId, savedSessionId);
+      if (canWriteLatestSessionPointer) {
+        await spreadsheetHost.sessionStorage.setLatestSessionForWorkbook(settings, workbookId, savedSessionId);
+      }
     } catch (err) {
       console.warn("[pi] Workbook/session association update failed:", err);
     }
@@ -270,6 +271,7 @@ export async function setupSessionPersistence(opts: {
     sessionCreatedAt = new Date().toISOString();
     firstAssistantSeen = false;
     explicitTitle = false;
+    canWriteLatestSessionPointer = true;
     agent.sessionId = sessionId;
     emitChange();
   }
@@ -282,6 +284,8 @@ export async function setupSessionPersistence(opts: {
   }
 
   async function applyLoadedSession(sessionData: SessionData): Promise<void> {
+    canWriteLatestSessionPointer = true;
+
     if (isSessionId(sessionData.id)) {
       sessionId = sessionData.id;
     } else {
@@ -314,6 +318,7 @@ export async function setupSessionPersistence(opts: {
         ? await spreadsheetHost.sessionStorage.getLatestSessionForWorkbook(settings, workbookId)
         : null;
       const globalLatest = workbookId ? null : await sessions.getLatestSessionId();
+      canWriteLatestSessionPointer = true;
 
       const candidates = getRestoreCandidateSessionIds({
         workbookId,

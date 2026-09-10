@@ -94,8 +94,7 @@ export async function loadDisabledSkillNamesFromSettings(
   settings: SkillActivationSettingsStore,
 ): Promise<Set<string>> {
   const raw = await settings.get(SKILL_ACTIVATION_STORAGE_KEY);
-  const names = parseStoredDisabledSkillNames(raw);
-  return new Set(names);
+  return new Set(parseStoredDisabledSkillNames(raw));
 }
 
 export function filterAgentSkillsByEnabledState(args: {

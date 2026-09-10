@@ -705,6 +705,15 @@ const handler = async (req, res) => {
     return;
   }
 
+  // A client that goes away (stop button, closed taskpane, navigation) must
+  // cancel the upstream request too, or the provider keeps generating and
+  // billing. `res` closes on both normal completion and disconnect; aborting
+  // after completion is a no-op.
+  const upstreamAbort = new AbortController();
+  res.on("close", () => {
+    if (!res.writableFinished) upstreamAbort.abort();
+  });
+
   try {
     const startedAt = Date.now();
     const headers = buildOutboundHeaders(req.headers);
@@ -719,6 +728,7 @@ const handler = async (req, res) => {
       // Required when using a stream body in Node fetch
       ...(body ? { duplex: "half" } : {}),
       redirect: "manual",
+      signal: upstreamAbort.signal,
     });
 
     // Log without query string to avoid leaking tokens
@@ -763,7 +773,17 @@ const handler = async (req, res) => {
     });
     nodeStream.pipe(res);
   } catch (err) {
+    if (upstreamAbort.signal.aborted) {
+      // The client is gone; there is nobody to send a 502 to and nothing went wrong upstream.
+      console.log(`[proxy] ${req.method || "GET"} ${safeTarget} cancelled by client`);
+      res.destroy();
+      return;
+    }
     console.warn(`[proxy] ${req.method || "GET"} ${targetUrl.origin}${targetUrl.pathname} -> ERROR (${err instanceof Error ? err.message : String(err)})`);
+    if (res.headersSent) {
+      res.destroy();
+      return;
+    }
     res.statusCode = 502;
     res.setHeader("Content-Type", "text/plain; charset=utf-8");
     res.end(`Proxy error: ${err instanceof Error ? err.message : String(err)}`);

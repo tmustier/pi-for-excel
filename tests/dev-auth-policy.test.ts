@@ -1,49 +1,34 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import {
-  hostnameFromHostHeader,
-  isLocalPiAuthHost,
-  isPiAuthRequestAllowed,
-  isLoopbackAddress,
-} from "../src/dev-auth-policy.ts";
+import { isPiAuthRequestAllowed, type PiAuthRequestPolicyInput } from "../src/dev-auth-policy.ts";
 
-void test("isLoopbackAddress accepts IPv4 and IPv6 loopback forms", () => {
-  assert.equal(isLoopbackAddress("127.0.0.1"), true);
-  assert.equal(isLoopbackAddress("127.12.34.56"), true);
-  assert.equal(isLoopbackAddress("::1"), true);
-  assert.equal(isLoopbackAddress("0:0:0:0:0:0:0:1"), true);
-  assert.equal(isLoopbackAddress("::ffff:127.0.0.1"), true);
-  assert.equal(isLoopbackAddress("10.0.2.15"), false);
-  assert.equal(isLoopbackAddress(undefined), false);
-});
+// Policy table for the dev credential endpoint. The HTTP wiring of this policy is
+// covered by tests/dev-auth-server.test.ts against a real Vite server; this table
+// pins the rows that HTTP/1.1 alone cannot reach (HTTP/2 `:authority`, opt-in).
+const POLICY: ReadonlyArray<{ input: PiAuthRequestPolicyInput; allowed: boolean; why: string }> = [
+  { input: { remoteAddress: "127.0.0.1", hostHeader: "localhost:3141" }, allowed: true, why: "loopback socket + local host" },
+  { input: { remoteAddress: "::1", hostHeader: "[::1]:3141" }, allowed: true, why: "IPv6 loopback + bracketed host" },
+  { input: { remoteAddress: "::ffff:127.0.0.1", hostHeader: "127.0.0.1:3141" }, allowed: true, why: "mapped IPv4 loopback" },
+  { input: { remoteAddress: "10.0.2.15", hostHeader: "localhost:3141" }, allowed: false, why: "non-loopback socket" },
+  { input: { remoteAddress: "127.0.0.1", hostHeader: "10.0.2.2:3141" }, allowed: false, why: "loopback socket but guest-facing host" },
+  { input: { remoteAddress: "127.0.0.1", hostHeader: ["localhost:3141", "example.com"] }, allowed: true, why: "repeated host header: first value decides" },
+  { input: { remoteAddress: "127.0.0.1" }, allowed: false, why: "no authority at all" },
+  { input: { remoteAddress: undefined, hostHeader: "localhost:3141" }, allowed: false, why: "unknown socket address" },
+  { input: { remoteAddress: "127.0.0.1", hostHeader: "10.0.2.2:3141", allowNonLocalHost: true }, allowed: true, why: "explicit opt-in relaxes host only" },
+  { input: { remoteAddress: "10.0.2.15", hostHeader: "10.0.2.2:3141", allowNonLocalHost: true }, allowed: false, why: "opt-in never relaxes loopback" },
+  { input: { remoteAddress: "::1", authorityHeader: "localhost:3141" }, allowed: true, why: "HTTP/2 authority alone" },
+  { input: { remoteAddress: "::1", authorityHeader: "10.0.2.2:3141" }, allowed: false, why: "HTTP/2 non-local authority" },
+  { input: { remoteAddress: "10.0.2.15", authorityHeader: "localhost:3141" }, allowed: false, why: "HTTP/2 needs loopback socket too" },
+  { input: { remoteAddress: "::1", hostHeader: "example.com", authorityHeader: "localhost:3141" }, allowed: false, why: "host and authority must both be local" },
+  { input: { remoteAddress: "::1", hostHeader: "localhost:3141", authorityHeader: "10.0.2.2:3141" }, allowed: false, why: "authority cannot be overridden by host" },
+  { input: { remoteAddress: "::1", hostHeader: "localhost:3141", authorityHeader: "" }, allowed: false, why: "empty authority is not absent" },
+  { input: { remoteAddress: "::1", hostHeader: "localhost:3141", authorityHeader: "localhost:3141" }, allowed: true, why: "both present and local" },
+];
 
-void test("hostnameFromHostHeader handles ports and bracketed IPv6", () => {
-  assert.equal(hostnameFromHostHeader("localhost:3141"), "localhost");
-  assert.equal(hostnameFromHostHeader("127.0.0.1:3141"), "127.0.0.1");
-  assert.equal(hostnameFromHostHeader("[::1]:3141"), "::1");
-  assert.equal(hostnameFromHostHeader("10.0.2.2:3141"), "10.0.2.2");
-  assert.equal(hostnameFromHostHeader(undefined), null);
-});
-
-void test("isLocalPiAuthHost allows only loopback hostnames", () => {
-  assert.equal(isLocalPiAuthHost("localhost:3141"), true);
-  assert.equal(isLocalPiAuthHost("127.0.0.1:3141"), true);
-  assert.equal(isLocalPiAuthHost("[::1]:3141"), true);
-  assert.equal(isLocalPiAuthHost("10.0.2.2:3141"), false);
-  assert.equal(isLocalPiAuthHost("example.com:3141"), false);
-});
-
-void test("isPiAuthRequestAllowed requires both loopback socket and local host header", () => {
-  assert.equal(isPiAuthRequestAllowed({ remoteAddress: "127.0.0.1", hostHeader: "localhost:3141" }), true);
-  assert.equal(isPiAuthRequestAllowed({ remoteAddress: "::1", hostHeader: "[::1]:3141" }), true);
-  assert.equal(isPiAuthRequestAllowed({ remoteAddress: "10.0.2.15", hostHeader: "localhost:3141" }), false);
-  assert.equal(isPiAuthRequestAllowed({ remoteAddress: "127.0.0.1", hostHeader: "10.0.2.2:3141" }), false);
-});
-
-void test("isPiAuthRequestAllowed has an explicit non-local-host opt-in for disposable dev runs", () => {
-  assert.equal(isPiAuthRequestAllowed({ remoteAddress: "127.0.0.1", hostHeader: "10.0.2.2:3141", allowNonLocalHost: true }), true);
-  assert.equal(isPiAuthRequestAllowed({ remoteAddress: "10.0.2.15", hostHeader: "10.0.2.2:3141", allowNonLocalHost: true }), false);
+void test("dev auth request policy table", () => {
+  const observed = POLICY.map((row) => ({ why: row.why, allowed: isPiAuthRequestAllowed(row.input) }));
+  assert.deepEqual(observed, POLICY.map((row) => ({ why: row.why, allowed: row.allowed })));
 });
 
 void test("HTTP/2 authority preserves both dev-auth loopback restrictions", () => {

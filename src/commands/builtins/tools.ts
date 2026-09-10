@@ -20,9 +20,7 @@ export function createToolsCommands(actions: ToolsCommandActions): SlashCommand[
       name: TOOLS_COMMAND_NAME,
       description: t("command.tools.desc", { label: INTEGRATIONS_MANAGER_LABEL_LOWER }),
       source: "builtin",
-      execute: () => {
-        void actions.openExtensionsHub("connections");
-      },
+      execute: () => actions.openExtensionsHub("connections"),
     },
   ];
 }

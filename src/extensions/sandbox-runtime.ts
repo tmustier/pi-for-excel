@@ -25,6 +25,7 @@ import type {
   SkillSummary,
 } from "../commands/extension-api.js";
 import type { ConnectionState, ConnectionStatus } from "../connections/types.js";
+import type { ToolConnectionMetadata } from "../tools/connection-requirements.js";
 import type { ExtensionCapability } from "./permissions.js";
 import {
   clearExtensionWidgets,
@@ -57,11 +58,11 @@ import {
   asNonEmptyString,
   asSandboxPayload,
   asWidgetPlacementOrUndefined,
+  dispatchSandboxLlmCompletion,
   getErrorMessage,
   normalizeSandboxToolParameters,
   normalizeSandboxToolResult,
   parseSandboxHttpRequestOptions,
-  parseSandboxLlmCompletionRequest,
   sanitizeText,
 } from "./sandbox/runtime-helpers.js";
 
@@ -751,7 +752,7 @@ class SandboxRuntimeHost {
               : undefined;
           }
 
-          const tool: AgentTool<TSchema, DynamicValue> = {
+          const tool: AgentTool<TSchema, DynamicValue> & ToolConnectionMetadata = {
             name,
             label,
             description,
@@ -767,11 +768,8 @@ class SandboxRuntimeHost {
 
               return normalizeSandboxToolResult(result);
             },
+            ...(requiresConnection ? { requiresConnection } : {}),
           };
-
-          if (requiresConnection && requiresConnection.length > 0) {
-            Reflect.set(tool, "requiresConnection", requiresConnection);
-          }
 
           this.options.registerTool(tool);
           this.sendResponse(requestId, true, null);
@@ -817,9 +815,7 @@ class SandboxRuntimeHost {
         case "llm_complete": {
           this.assertCapability("llm.complete");
 
-          const payload = asSandboxPayload(params, "llm_complete params");
-          const completionRequest = parseSandboxLlmCompletionRequest(payload.request);
-          const result = await this.options.llmComplete(completionRequest);
+          const result = await dispatchSandboxLlmCompletion(params, this.options.llmComplete);
           this.sendResponse(requestId, true, result);
           return;
         }

@@ -76,7 +76,7 @@ function resolveThemeDarkFromColor(input: DynamicValue): boolean | null {
 }
 
 export function resolveOfficeThemeDark(): boolean | null {
-  const officeRoot = Reflect.get(globalThis, "Office");
+  const officeRoot: DynamicValue = typeof Office === "undefined" ? undefined : Office;
   if (!isHostOfficeThemePayloadShape(officeRoot)) {
     return null;
   }

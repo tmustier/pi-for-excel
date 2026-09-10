@@ -83,7 +83,7 @@ export function normalizeIntegrationIds(raw: DynamicValue, knownIntegrationIds: 
   return ordered;
 }
 
-async function getScopeIntegrationIds(
+async function readScopeIntegrationIds(
   settings: IntegrationSettingsStore,
   scope: IntegrationScope,
   identifier: string,
@@ -128,7 +128,7 @@ export async function getSessionIntegrationIds(
   knownIntegrationIds: readonly string[],
   options?: SessionIntegrationIdsOptions,
 ): Promise<string[]> {
-  return getScopeIntegrationIds(
+  return readScopeIntegrationIds(
     settings,
     "session",
     sessionId,
@@ -151,7 +151,7 @@ export async function getWorkbookIntegrationIds(
   workbookId: string,
   knownIntegrationIds: readonly string[],
 ): Promise<string[]> {
-  return getScopeIntegrationIds(settings, "workbook", workbookId, knownIntegrationIds, false);
+  return readScopeIntegrationIds(settings, "workbook", workbookId, knownIntegrationIds, false);
 }
 
 export async function setWorkbookIntegrationIds(
@@ -172,7 +172,13 @@ export async function setIntegrationEnabledInScope(args: {
   knownIntegrationIds: readonly string[];
 }): Promise<void> {
   const { settings, scope, identifier, integrationId, enabled, knownIntegrationIds } = args;
-  const existing = await getScopeIntegrationIds(settings, scope, identifier, knownIntegrationIds, false);
+  const key = scope === "session"
+    ? sessionIntegrationsKey(identifier)
+    : workbookIntegrationsKey(identifier);
+  const raw = await settings.get(key);
+  const existing = raw == null && scope === "workbook"
+    ? normalizeIntegrationIds(getDefaultEnabledIntegrationIds(), knownIntegrationIds)
+    : normalizeIntegrationIds(raw, knownIntegrationIds);
 
   const nextSet = new Set<string>(existing);
   if (enabled) {

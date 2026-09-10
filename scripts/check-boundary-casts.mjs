@@ -5,7 +5,7 @@ import ts from "typescript";
 
 const root = process.cwd();
 const searchRoots = ["src", "tests"];
-const allowedBoundaryTypes = new Set(["DynamicValue"]);
+const allowedBoundaryTypes = new Set(["DynamicValue", "JsonValue"]);
 const offenders = [];
 
 function collectFiles(dir, out = []) {

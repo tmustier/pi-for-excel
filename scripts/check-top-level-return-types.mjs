@@ -5,7 +5,6 @@ import ts from "typescript";
 
 const root = process.cwd();
 const offenders = [];
-const inferenceSensitiveHelpers = new Set(["StringEnum", "stringEnum"]);
 
 function collectFiles(dir, out = []) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -26,11 +25,31 @@ for (const file of collectFiles(join(root, "src"))) {
   const text = readFileSync(file, "utf8");
   const sourceFile = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
   const rel = relative(root, file);
+  const exportedNames = new Set(
+    sourceFile.statements.flatMap((statement) => {
+      if (ts.isExportAssignment(statement) && ts.isIdentifier(statement.expression)) {
+        return [statement.expression.text];
+      }
+      if (!ts.isExportDeclaration(statement) || statement.moduleSpecifier || !statement.exportClause) return [];
+      if (!ts.isNamedExports(statement.exportClause)) return [];
+      return statement.exportClause.elements.map((element) => (element.propertyName ?? element.name).text);
+    }),
+  );
 
   for (const statement of sourceFile.statements) {
+    if (ts.isExportAssignment(statement)) {
+      const expression = statement.expression;
+      if ((ts.isArrowFunction(expression) || ts.isFunctionExpression(expression)) && !expression.type) {
+        offenders.push(`${rel}:${position(sourceFile, expression)} <default>`);
+      }
+    }
+    const directlyExported = statement.modifiers?.some(
+      (modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword,
+    ) ?? false;
+
     if (ts.isFunctionDeclaration(statement) && statement.body && !statement.type) {
       const name = statement.name?.text ?? "<default>";
-      if (!inferenceSensitiveHelpers.has(name)) {
+      if (directlyExported || exportedNames.has(name)) {
         offenders.push(`${rel}:${position(sourceFile, statement)} function ${name}`);
       }
       continue;
@@ -39,6 +58,7 @@ for (const file of collectFiles(join(root, "src"))) {
     if (!ts.isVariableStatement(statement)) continue;
     for (const declaration of statement.declarationList.declarations) {
       if (!ts.isIdentifier(declaration.name) || declaration.type) continue;
+      if (!directlyExported && !exportedNames.has(declaration.name.text)) continue;
       const initializer = declaration.initializer;
       if (!initializer) continue;
       if ((ts.isArrowFunction(initializer) || ts.isFunctionExpression(initializer)) && !initializer.type) {
@@ -50,8 +70,7 @@ for (const file of collectFiles(join(root, "src"))) {
 
 if (offenders.length > 0) {
   console.error("Top-level return type check failed.");
-  console.error("Declare return types for top-level module functions so future agents can read contracts without re-inference.");
-  console.error("Tiny TypeBox enum helpers named StringEnum/stringEnum are exempt because explicit return types erase literal schema inference.");
+  console.error("Declare return types for exported top-level functions so future agents can read public contracts without re-inference.");
   for (const offender of offenders) console.error(`- ${offender}`);
   process.exit(1);
 }

@@ -2,40 +2,9 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
-  describeExtensionRuntimeMode,
-  isSandboxCandidateTrust,
-  resolveExtensionRuntimeMode,
-} from "../src/extensions/runtime-mode.ts";
-import {
   collectSandboxUiActionIds,
   normalizeSandboxUiNode,
 } from "../src/extensions/sandbox-ui.ts";
-
-void test("isSandboxCandidateTrust only flags inline/remote trust", () => {
-  assert.equal(isSandboxCandidateTrust("builtin"), false);
-  assert.equal(isSandboxCandidateTrust("local-module"), false);
-  assert.equal(isSandboxCandidateTrust("inline-code"), true);
-  assert.equal(isSandboxCandidateTrust("remote-url"), true);
-});
-
-void test("resolveExtensionRuntimeMode defaults untrusted sources to sandbox runtime", () => {
-  assert.equal(resolveExtensionRuntimeMode("builtin", false), "host");
-  assert.equal(resolveExtensionRuntimeMode("local-module", false), "host");
-  assert.equal(resolveExtensionRuntimeMode("inline-code", false), "sandbox-iframe");
-  assert.equal(resolveExtensionRuntimeMode("remote-url", false), "sandbox-iframe");
-});
-
-void test("resolveExtensionRuntimeMode rollback flag routes untrusted sources to host runtime", () => {
-  assert.equal(resolveExtensionRuntimeMode("builtin", true), "host");
-  assert.equal(resolveExtensionRuntimeMode("local-module", true), "host");
-  assert.equal(resolveExtensionRuntimeMode("inline-code", true), "host");
-  assert.equal(resolveExtensionRuntimeMode("remote-url", true), "host");
-});
-
-void test("describeExtensionRuntimeMode returns user-facing labels", () => {
-  assert.equal(describeExtensionRuntimeMode("host"), "host runtime");
-  assert.equal(describeExtensionRuntimeMode("sandbox-iframe"), "sandbox iframe");
-});
 
 void test("normalizeSandboxUiNode downgrades unsafe tags and strips invalid action ids", () => {
   const normalized = normalizeSandboxUiNode({

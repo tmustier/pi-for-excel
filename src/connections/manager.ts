@@ -1,5 +1,6 @@
 import {
   loadConnectionStoreDocument,
+  loadConnectionStoreDocumentForUpdate,
   saveConnectionStoreDocument,
   type ConnectionSettingsStore,
   type StoredConnectionRecord,
@@ -312,7 +313,7 @@ async function mutateConnectionRecord(args: {
   connectionId: string;
   mutator: (record: StoredConnectionRecord | undefined) => StoredConnectionRecord | null;
 }): Promise<boolean> {
-  const items = await loadConnectionStoreDocument(args.settings);
+  const items = await loadConnectionStoreDocumentForUpdate(args.settings);
   const previous = items[args.connectionId];
   const next = args.mutator(previous);
 

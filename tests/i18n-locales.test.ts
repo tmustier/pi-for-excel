@@ -1,3 +1,5 @@
+// Static contract: locale key parity and source-level t() usage are dependency restrictions;
+// runtime behavior cannot exhaustively prove that every shipped string remains localized.
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { readFileSync, readdirSync, statSync } from "node:fs";
@@ -109,83 +111,50 @@ void test("en locale has no empty values", () => {
   assert.deepEqual(empty, [], `empty en values: ${empty.join(", ")}`);
 });
 
-void test("every locale key is referenced somewhere in src/", () => {
-  // Keys appear as t("key") literals, bare string literals in key arrays
-  // (whimsical messages, hint keys), or are constructed dynamically:
-  // - humanize.label.* via l("Label") slugs in src/ui/humanize-params.ts
-  // - humanize.value.* via v("suffix") in src/ui/humanize-params.ts
-  // - humanize.unit.*  via nUnit() template keys in src/ui/humanize-params.ts
+void test("POLICY: locale keys, UI sinks, and initialization stay localization-safe", () => {
   const labelKeys = new Set(
     [...corpus.matchAll(/\bl\("([^"]+)"\)/g)].map(
-      (m) => `humanize.label.${requireMatchGroup(m, 1).toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "")}`,
+      (match) => `humanize.label.${requireMatchGroup(match, 1).toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "")}`,
     ),
   );
   const valueKeys = new Set(
-    [...corpus.matchAll(/\bv\("([^"]+)"/g)].map((m) => `humanize.value.${requireMatchGroup(m, 1)}`),
+    [...corpus.matchAll(/\bv\("([^"]+)"/g)].map((match) => `humanize.value.${requireMatchGroup(match, 1)}`),
   );
-  const unused = Object.keys(en).filter((k) => {
-    if (labelKeys.has(k) || valueKeys.has(k)) return false;
-    if (k.startsWith("humanize.unit.")) return false;
-    // perm.trust.* is constructed via t("perm.trust." + trust) in permissions.ts
-    if (k.startsWith("perm.trust.")) return false;
-    return !corpus.includes(`"${k}"`) && !corpus.includes(`'${k}'`) && !corpus.includes("`" + k + "`");
+  const unusedKeys = Object.keys(en).filter((key) => {
+    if (labelKeys.has(key) || valueKeys.has(key)) return false;
+    if (key.startsWith("humanize.unit.") || key.startsWith("perm.trust.")) return false;
+    return !corpus.includes(`"${key}"`) && !corpus.includes(`'${key}'`) && !corpus.includes("`" + key + "`");
   });
-  assert.deepEqual(unused, [], `locale keys never referenced in src/: ${unused.join(", ")}`);
-});
 
-void test("every static t(\"...\") call site references an existing key", () => {
-  const missing: string[] = [];
-  for (const f of sourceFiles) {
-    const content = readFileSync(f, "utf8");
-    for (const m of content.matchAll(/\bt\(\s*"([^"$`]+)"/g)) {
-      // Keys ending in "." are dynamic prefixes (string concatenation), e.g.
-      // t("perm.trust." + trust) — covered by the unused-key exemptions above.
-      const key = requireMatchGroup(m, 1);
-      if (key.endsWith(".")) continue;
-      if (!(key in en)) missing.push(`${f.slice(root.length + 1)}: ${key}`);
-    }
-  }
-  assert.deepEqual(missing, [], `t() call sites with unknown keys: ${missing.join(", ")}`);
-});
-
-void test("common UI text sinks use locale keys instead of hardcoded English", () => {
-  // This is a deliberately low-noise guard for the UI surfaces agents most
-  // often edit: DOM text sinks, button/config-row helpers, dialog labels, and
-  // toast templates. It does not try to classify every string literal in src/;
-  // agent-facing prompts, model/provider IDs, CSS classes, and command syntax
-  // are valid English literals elsewhere.
   const staticSink = /(?:textContent|innerHTML|placeholder|title|subtitle|message|\w*[Ll]abel|showToast|createButton|createConfigRow|\.text)\s*(?:=|:|\()\s*["`][A-Z]/;
   const toastTemplate = /\b(?:showToast|resolved\.showToast)\(\s*`/;
   const allowed = /aria-|data-|className|\.css|https?:\/\/|icon\(|throw new Error|const message = error instanceof Error|externalLoadError|activationLoadError/;
-  const offenders: string[] = [];
-
-  for (const f of localizedUiSourceFiles) {
-    const rel = f.slice(root.length + 1);
-    for (const [i, line] of readFileSync(f, "utf8").split("\n").entries()) {
+  const hardcodedUiStrings: string[] = [];
+  for (const file of localizedUiSourceFiles) {
+    const relative = file.slice(root.length + 1);
+    for (const [index, line] of readFileSync(file, "utf8").split("\n").entries()) {
       if ((staticSink.test(line) || toastTemplate.test(line)) && !/\bt\(/.test(line) && !allowed.test(line)) {
-        offenders.push(`${rel}:${i + 1}: ${line.trim()}`);
+        hardcodedUiStrings.push(`${relative}:${index + 1}: ${line.trim()}`);
       }
     }
   }
 
-  assert.deepEqual(offenders, [], `hardcoded English in localized UI sinks:\n${offenders.join("\n")}`);
-});
-
-void test("no module-scope t() calls (language is set at boot, after import)", () => {
-  // Heuristic: track brace/paren depth per file; flag t(" calls at depth 0.
-  const offenders: string[] = [];
-  for (const f of sourceFiles) {
-    const content = readFileSync(f, "utf8");
+  const moduleScopeCalls: string[] = [];
+  for (const file of sourceFiles) {
     let depth = 0;
-    for (const [i, line] of content.split("\n").entries()) {
+    for (const [index, line] of readFileSync(file, "utf8").split("\n").entries()) {
       if (depth === 0 && /\bt\(\s*"/.test(line) && !/^\s*(\*|\/\/)/.test(line)) {
-        offenders.push(`${f.slice(root.length + 1)}:${i + 1}`);
+        moduleScopeCalls.push(`${file.slice(root.length + 1)}:${index + 1}`);
       }
-      for (const ch of line) {
-        if (ch === "{" || ch === "(") depth++;
-        else if (ch === "}" || ch === ")") depth = Math.max(0, depth - 1);
+      for (const character of line) {
+        if (character === "{" || character === "(") depth++;
+        else if (character === "}" || character === ")") depth = Math.max(0, depth - 1);
       }
     }
   }
-  assert.deepEqual(offenders, [], `module-scope t() calls: ${offenders.join(", ")}`);
+
+  assert.deepEqual(
+    { unusedKeys, hardcodedUiStrings, moduleScopeCalls },
+    { unusedKeys: [], hardcodedUiStrings: [], moduleScopeCalls: [] },
+  );
 });

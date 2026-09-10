@@ -9,6 +9,7 @@ export interface ExecuteSlashCommandOptions {
   busy: boolean;
   enqueueCommand?: (name: string, args: string) => void;
   beforeExecute?: () => void;
+  onError: () => void;
 }
 
 export function executeSlashCommand(options: ExecuteSlashCommandOptions): SlashCommandExecutionResult {
@@ -32,6 +33,14 @@ export function executeSlashCommand(options: ExecuteSlashCommandOptions): SlashC
     return "queued";
   }
 
-  void command.execute(options.args);
+  try {
+    const execution = command.execute(options.args);
+    void Promise.resolve(execution).catch(() => {
+      options.onError();
+    });
+  } catch {
+    options.onError();
+  }
+
   return "executed";
 }

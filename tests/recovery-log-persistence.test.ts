@@ -6,7 +6,7 @@ import {
   WorkbookRecoveryLog,
 } from "../src/workbook/recovery-log.ts";
 import type { WorkbookContext } from "../src/workbook/context.ts";
-import { RECOVERY_SETTING_KEY, createInMemorySettingsStore } from "./recovery-log-test-helpers.test.ts";
+import { RECOVERY_SETTING_KEY, createInMemorySettingsStore } from "./fixtures/recovery-log.ts";
 
 void test("recovery log appends and reloads workbook-scoped snapshots", async () => {
   const settingsStore = createInMemorySettingsStore();

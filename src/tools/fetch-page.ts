@@ -71,6 +71,7 @@ export interface FetchPageToolDependencies {
     signal: AbortSignal | undefined,
   ) => Promise<FetchPageResponse>;
   now?: () => number;
+  timeoutMs?: number;
 }
 
 function normalizeOptionalString(value: DynamicValue): string | undefined {
@@ -383,6 +384,7 @@ export function createFetchPageTool(
   const getConfig = dependencies.getConfig ?? defaultGetConfig;
   const executeFetch = dependencies.executeFetch ?? defaultExecuteFetch;
   const now = dependencies.now ?? (() => Date.now());
+  const timeoutMs = dependencies.timeoutMs ?? FETCH_PAGE_TIMEOUT_MS;
 
   return {
     name: "fetch_page",
@@ -413,8 +415,8 @@ export function createFetchPageTool(
 
         const response = await runWithTimeoutAbort({
           signal,
-          timeoutMs: FETCH_PAGE_TIMEOUT_MS,
-          timeoutErrorMessage: `fetch_page timed out after ${FETCH_PAGE_TIMEOUT_MS}ms.`,
+          timeoutMs,
+          timeoutErrorMessage: `fetch_page timed out after ${timeoutMs}ms.`,
           run: (requestSignal) => executeFetch(resolved.requestUrl, requestSignal),
         });
 

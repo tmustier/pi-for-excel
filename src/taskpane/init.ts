@@ -19,7 +19,6 @@ import {
   DEFAULT_PROXY_URL,
   PROXY_HELPER_DOCS_URL,
   isLoopbackProxyUrl,
-  resolveRuntimeDefaultProxyUrl,
   validateOfficeProxyUrl,
 } from "../auth/proxy-validation.js";
 import { restoreCredentials } from "../auth/restore.js";
@@ -32,6 +31,7 @@ import {
 import { createConvertToLlm } from "../messages/convert-to-llm.js";
 import { effectiveToolOutputLimits } from "../context/window-budgets.js";
 import { findTrailingContextOverflowError } from "../compaction/overflow-recovery.js";
+import { readAutoCompactionEnabled } from "../compaction/settings.js";
 import { runCompactCommand } from "../commands/builtins/export.js";
 import { getFilesWorkspace } from "../files/workspace.js";
 import { ConnectionManager } from "../connections/manager.js";
@@ -80,7 +80,6 @@ import {
 import {
   getStoredModelSwitchBehavior,
   setStoredModelSwitchBehavior,
-  shouldForkModelSwitch,
   type ModelSwitchBehavior,
 } from "../models/switch-behavior.js";
 import { getResolvedConventions } from "../conventions/store.js";
@@ -122,16 +121,29 @@ import { PiSidebar } from "../ui/pi-sidebar.js";
 import { createProxyBanner } from "../ui/proxy-banner.js";
 import { setActiveProviders } from "../models/active-providers.js";
 import { BrowserModelRuntime } from "../models/browser-model-runtime.js";
+import {
+  ModelRefreshOwner,
+  type ModelRefreshRuntime,
+} from "../models/model-refresh-owner.js";
 import { promptForProviderConnection } from "../ui/api-key-dialog.js";
 import { openModelSelectorDialog } from "../ui/model-selector-dialog.js";
-import { getCurrentSpreadsheetHost, type SpreadsheetHostKind } from "../host/index.js";
+import { getCurrentSpreadsheetHost } from "../host/index.js";
 import { createWorkbookCoordinator } from "../workbook/coordinator.js";
 import { formatWorkbookLabel, type WorkbookContext } from "../workbook/context.js";
 import {
   getManualFullWorkbookBackupStore,
+  ManualFullWorkbookBackupStore,
   type ManualFullWorkbookBackup,
 } from "../workbook/manual-full-backup.js";
-import { getWorkbookRecoveryLog, type WorkbookRecoverySnapshot } from "../workbook/recovery-log.js";
+import {
+  getWorkbookRecoveryLog,
+  WorkbookRecoveryLog,
+  type WorkbookRecoverySnapshot,
+} from "../workbook/recovery-log.js";
+import {
+  getWorkbookChangeAuditLog,
+  WorkbookChangeAuditLog,
+} from "../audit/workbook-change-audit.js";
 import { readRetentionLimit, writeRetentionLimit } from "../workbook/recovery/log-store.js";
 import {
   WorkbookSaveBoundaryMonitor,
@@ -139,8 +151,6 @@ import {
 } from "../workbook/save-boundary-monitor.js";
 
 import { createContextInjector } from "./context-injection.js";
-import { pickDefaultModel } from "./default-model.js";
-import { resolveRuntimeModelSwap } from "./runtime-model-reconcile.js";
 import { getThinkingLevels, installKeyboardShortcuts } from "./keyboard-shortcuts.js";
 import { createQueueDisplay } from "./queue-display.js";
 import { createActionQueue } from "./action-queue.js";
@@ -170,19 +180,24 @@ import {
 } from "./status-popovers.js";
 import { showWelcomeLogin } from "./welcome-login.js";
 import {
+  ensureDefaultProxyUrl,
+  readTaskpaneLanguage,
+  readTaskpaneProxySettings,
+} from "./settings.js";
+import {
   SessionRuntimeManager,
+  type CreateRuntimeOptions,
   type SessionRuntime,
 } from "./session-runtime-manager.js";
 import {
-  awaitCredentialRestoreForStartup,
   awaitWithTimeout,
-  createAsyncCoalescer,
   createRuntimeToolFingerprint,
   isLikelyCorsErrorMessage,
   shouldApplyRuntimeToolUpdate,
   isRuntimeAgentTool,
   normalizeRuntimeTools,
 } from "./runtime-utils.js";
+import { bindRuntimeSidebar } from "./runtime-sidebar-binding.js";
 import { doesOverlayClaimEscape } from "../utils/escape-guard.js";
 
 function showErrorBanner(errorRoot: HTMLElement, message: string): void {
@@ -191,29 +206,6 @@ function showErrorBanner(errorRoot: HTMLElement, message: string): void {
 
 function clearErrorBanner(errorRoot: HTMLElement): void {
   render(html``, errorRoot);
-}
-
-interface ProxySettingsStore {
-  get<T>(key: string): Promise<T | null>;
-  set(key: string, value: DynamicValue): Promise<void>;
-}
-
-async function ensureDefaultProxyUrl(
-  settings: ProxySettingsStore,
-  hostKind: SpreadsheetHostKind,
-): Promise<void> {
-  try {
-    const runtimeDefaultProxyUrl = resolveRuntimeDefaultProxyUrl({ hostKind });
-    const proxyUrl = await settings.get<string>("proxy.url");
-    const storedProxyUrl = typeof proxyUrl === "string" ? proxyUrl.trim() : "";
-    if (storedProxyUrl.length > 0 && !(storedProxyUrl === DEFAULT_PROXY_URL && runtimeDefaultProxyUrl !== DEFAULT_PROXY_URL)) {
-      return;
-    }
-
-    await settings.set("proxy.url", runtimeDefaultProxyUrl);
-  } catch {
-    // ignore
-  }
 }
 
 export async function initTaskpane(opts: {
@@ -229,12 +221,7 @@ export async function initTaskpane(opts: {
   const { providerKeys, sessions, settings, customProviders, modelCatalogs } = initAppStorage();
 
   // Initialize language from storage
-  try {
-    const lang = await settings.get<string>("language");
-    initLanguage(lang || "en");
-  } catch {
-    initLanguage("en");
-  }
+  initLanguage(await readTaskpaneLanguage(settings));
 
   // Seed a predictable proxy default for OAuth flows.
   await ensureDefaultProxyUrl(settings, spreadsheetHost.kind);
@@ -254,37 +241,27 @@ export async function initTaskpane(opts: {
   }
 
   // 1b. Auto-compaction (Pi defaults to enabled)
-  let autoCompactEnabled = true;
-  try {
-    autoCompactEnabled = (await settings.get<boolean>("compaction.enabled")) ?? true;
-  } catch {
-    autoCompactEnabled = true;
-  }
+  const autoCompactEnabled = await readAutoCompactionEnabled(settings);
 
   // 1c. Security warning: remote proxies can see your prompts + credentials.
-  try {
-    const proxyEnabled = await settings.get<boolean>("proxy.enabled");
-    const proxyUrl = await settings.get<string>("proxy.url");
-    if (
-      proxyEnabled === true &&
-      typeof proxyUrl === "string" &&
-      proxyUrl.trim().length > 0 &&
-      !isLoopbackProxyUrl(proxyUrl)
-    ) {
-      showToast(t("init.securityWarning"));
-    }
-  } catch {
-    // ignore
+  const initialProxySettings = await readTaskpaneProxySettings(settings);
+  if (
+    initialProxySettings.enabled &&
+    initialProxySettings.url !== null &&
+    initialProxySettings.url.length > 0 &&
+    !isLoopbackProxyUrl(initialProxySettings.url)
+  ) {
+    showToast(t("init.securityWarning"));
   }
 
   const getConfiguredProxyUrl = async (): Promise<string | undefined> => {
-    try {
-      const enabled = await settings.get<boolean>("proxy.enabled");
-      if (!enabled) return undefined;
+    const proxySettings = await readTaskpaneProxySettings(settings);
+    if (!proxySettings.enabled) return undefined;
 
-      const rawUrl = await settings.get<string>("proxy.url");
-      const trimmedUrl = typeof rawUrl === "string" ? rawUrl.trim() : "";
-      const candidateUrl = trimmedUrl.length > 0 ? trimmedUrl : DEFAULT_PROXY_URL;
+    const candidateUrl = proxySettings.url && proxySettings.url.length > 0
+      ? proxySettings.url
+      : DEFAULT_PROXY_URL;
+    try {
       return validateOfficeProxyUrl(candidateUrl);
     } catch {
       return undefined;
@@ -297,87 +274,45 @@ export async function initTaskpane(opts: {
     getProxyUrl: getConfiguredProxyUrl,
   });
 
-  // 2. Resolve available providers from one browser-native runtime. Static,
-  // custom, dynamically discovered and extension providers share this path.
-  let availableProviders: string[] = [];
-  let defaultModel = pickDefaultModel(modelRuntime.models, [], null);
-
-  const updateAvailableProviderState = async (): Promise<void> => {
-    const availableModels = await modelRuntime.models.getAvailable();
-    const combinedProviders = new Set(availableModels.map((model) => model.provider));
-    availableProviders = Array.from(combinedProviders);
-    defaultModel = pickDefaultModel(modelRuntime.models, availableProviders, null);
-    setActiveProviders(combinedProviders);
+  // 2. Resolve available providers through one owner. Static, custom,
+  // dynamically discovered and extension providers share its snapshot.
+  let listModelRefreshRuntimes: () => readonly ModelRefreshRuntime[] = () => [];
+  const modelRefreshOwner = new ModelRefreshOwner({
+    modelRuntime,
+    loadCustomProviders: () => customProviders.getAll(),
+    getRuntimes: () => listModelRefreshRuntimes(),
+    warn: (message, error) => console.warn(message, error),
+  });
+  modelRefreshOwner.subscribe((snapshot) => {
+    setActiveProviders(new Set(snapshot.availableProviders));
+    if (snapshot.providerErrors.length > 0) {
+      console.warn("[models] Some provider catalogues could not be refreshed:", snapshot.providerErrors);
+    }
     document.dispatchEvent(new Event("pi:models-changed"));
-  };
-
-  let onProvidersChanged: (() => void) | null = null;
-
-  const restoreModelCatalogs = async (): Promise<void> => {
-    const refreshResult = await modelRuntime.refresh({ allowNetwork: false });
-    if (refreshResult.errors.size > 0) {
-      console.warn("[models] Some cached provider catalogues could not be restored:", Array.from(refreshResult.errors.keys()));
-    }
-    await updateAvailableProviderState();
-    onProvidersChanged?.();
-  };
-
-  const refreshRuntimeModels = async (): Promise<void> => {
-    const refreshResult = await modelRuntime.refresh({ allowNetwork: true, force: true });
-    if (refreshResult.errors.size > 0) {
-      console.warn("[models] Some provider catalogues could not be refreshed:", Array.from(refreshResult.errors.keys()));
-    }
-    await updateAvailableProviderState();
-    onProvidersChanged?.();
-  };
-
-  const refreshConfiguredProviders = async (): Promise<void> => {
-    const nextCustomProviders = await customProviders.getAll();
-    await modelRuntime.syncCustomProviders(nextCustomProviders);
-    await restoreModelCatalogs();
-  };
+  });
 
   document.addEventListener("pi:providers-changed", () => {
-    void refreshConfiguredProviders()
-      .then(() => refreshRuntimeModels())
+    void modelRefreshOwner.refreshConfiguredProviders(true)
       .catch((error: DynamicValue) => {
         console.warn("[auth] Provider refresh after settings change failed:", error);
       });
   });
 
-  // 2b. Restore auth (bounded to avoid indefinite startup hang).
-  // If restore completes after the startup timeout, refresh providers in the
-  // background so newly-restored providers appear in the model picker.
+  // 2b. Cached catalogues are published before first paint. Remote discovery
+  // starts afterward; a late credential restore owns one follow-up refresh.
   const credentialRestorePromise = restoreCredentials(providerKeys, settings);
-
   try {
-    await awaitCredentialRestoreForStartup(credentialRestorePromise, 6000, async () => {
-      try {
-        await refreshConfiguredProviders();
-        await refreshRuntimeModels();
-      } catch (error) {
-        console.warn("[auth] Provider refresh after late credential restore failed:", error);
-      }
-    });
+    await awaitWithTimeout(
+      "Provider lookup",
+      9500,
+      modelRefreshOwner.startup(credentialRestorePromise, 6000),
+    );
   } catch (error) {
-    console.warn("[auth] Credential restore skipped:", error);
+    console.warn("[auth] Provider startup failed:", error);
   }
 
-  try {
-    await awaitWithTimeout("Provider lookup", 3500, refreshConfiguredProviders());
-  } catch (error) {
-    console.warn("[auth] Provider lookup failed during startup:", error);
-  }
-
-  // Cached catalogues are available before first paint; remote discovery runs
-  // afterward and updates an already-open model selector in place.
-  void refreshRuntimeModels()
-    .catch((error: DynamicValue) => {
-      console.warn("[models] Background model refresh failed:", error);
-    });
-
-  if (availableProviders.length === 0) {
-    void showWelcomeLogin(providerKeys).catch((error: DynamicValue) => {
+  if (modelRefreshOwner.snapshot().availableProviders.length === 0) {
+    void showWelcomeLogin(modelRefreshOwner).catch((error: DynamicValue) => {
       console.warn("[auth] Failed to open welcome login:", error);
     });
   }
@@ -557,10 +492,13 @@ export async function initTaskpane(opts: {
     }
   };
 
-  const runtimeManager = new SessionRuntimeManager(sidebar);
+  const runtimeManager = new SessionRuntimeManager({
+    createRuntime: buildSessionRuntime,
+    warnCapabilityRefresh: (error) => {
+      console.warn("[pi] Failed to refresh runtime capabilities:", error);
+    },
+  });
   const abortedAgents = new WeakSet<Agent>();
-  const runtimeCapabilityRefreshers = new Map<string, () => Promise<void>>();
-  const runtimeActiveIntegrationIds = new Map<string, string[]>();
   const recentlyClosed = new RecentlyClosedStack(10);
 
   const getActiveRuntime = () => runtimeManager.getActiveRuntime();
@@ -569,80 +507,27 @@ export async function initTaskpane(opts: {
   const getActiveActionQueue = () => getActiveRuntime()?.actionQueue ?? null;
   const getActiveLockState = () => getActiveRuntime()?.lockState ?? "idle";
 
-  const areRuntimeModelsEquivalent = (
-    left: Agent["state"]["model"],
-    right: Agent["state"]["model"],
-  ): boolean => (
-    left.api === right.api &&
-    left.id === right.id &&
-    left.provider === right.provider &&
-    left.baseUrl === right.baseUrl &&
-    left.contextWindow === right.contextWindow &&
-    left.maxTokens === right.maxTokens
+  listModelRefreshRuntimes = () => runtimeManager.listRuntimes().map((runtime) => ({
+    runtimeId: runtime.runtimeId,
+    model: runtime.agent.state.model,
+    isBusy: runtime.agent.state.isStreaming || runtime.actionQueue.isBusy(),
+    applyModel: (model, thinkingLevel) => {
+      runtime.agent.state.model = model;
+      if (thinkingLevel !== undefined) {
+        runtime.agent.state.thinkingLevel = thinkingLevel;
+      }
+      document.dispatchEvent(new CustomEvent("pi:status-update"));
+      if (runtime.runtimeId === getActiveRuntime()?.runtimeId) {
+        requestAnimationFrame(() => sidebar.requestUpdate());
+      }
+    },
+  }));
+
+  const workbookRecoveryLog = getWorkbookRecoveryLog(new WorkbookRecoveryLog({ settings }));
+  getWorkbookChangeAuditLog(new WorkbookChangeAuditLog({ settings }));
+  const manualFullBackupStore = getManualFullWorkbookBackupStore(
+    new ManualFullWorkbookBackupStore(),
   );
-
-  const reconcileRuntimeModelsWithProviders = (): void => {
-    const activeRuntimeId = getActiveRuntime()?.runtimeId ?? null;
-    let activeRuntimeChanged = false;
-    let anyRuntimeChanged = false;
-
-    const markChanged = (runtimeId: string): void => {
-      anyRuntimeChanged = true;
-      if (runtimeId === activeRuntimeId) {
-        activeRuntimeChanged = true;
-      }
-    };
-
-    for (const runtime of runtimeManager.listRuntimes()) {
-      // Never mutate the model of a working session — same busy invariant as
-      // model switching (see applyModelSelection). A skipped runtime is
-      // reconciled after agent_end or on the next provider refresh; its
-      // in-flight work already captured the old model.
-      if (runtime.agent.state.isStreaming || runtime.actionQueue.isBusy()) {
-        continue;
-      }
-
-      const currentModel = runtime.agent.state.model;
-
-      // 1. Refresh metadata from the unified runtime catalogue (built-in,
-      // custom, dynamic or extension-owned).
-      const refreshedModel = modelRuntime.models.getModel(currentModel.provider, currentModel.id);
-      if (refreshedModel && !areRuntimeModelsEquivalent(currentModel, refreshedModel)) {
-        runtime.agent.state.model = refreshedModel;
-        markChanged(runtime.runtimeId);
-        continue;
-      }
-
-      // 2. Unusable providers (#553): a runtime created before login (or whose
-      // provider was disconnected) points at a provider with no credentials.
-      // It cannot complete any request, so move it onto the refreshed default
-      // model instead of prompting for the wrong provider's API key.
-      const swap = resolveRuntimeModelSwap({
-        currentModel,
-        availableProviders,
-        defaultModel,
-        isBusy: runtime.agent.state.isStreaming || runtime.actionQueue.isBusy(),
-      });
-      if (swap && !areRuntimeModelsEquivalent(currentModel, swap.model)) {
-        runtime.agent.state.model = swap.model;
-        runtime.agent.state.thinkingLevel = swap.thinkingLevel;
-        markChanged(runtime.runtimeId);
-      }
-    }
-
-    if (!anyRuntimeChanged) {
-      return;
-    }
-
-    document.dispatchEvent(new CustomEvent("pi:status-update"));
-    if (activeRuntimeChanged) {
-      requestAnimationFrame(() => sidebar.requestUpdate());
-    }
-  };
-  onProvidersChanged = reconcileRuntimeModelsWithProviders;
-
-  const workbookRecoveryLog = getWorkbookRecoveryLog();
-  const manualFullBackupStore = getManualFullWorkbookBackupStore();
 
   const toManualFullBackupSummary = (backup: ManualFullWorkbookBackup) => ({
     id: backup.id,
@@ -753,15 +638,13 @@ export async function initTaskpane(opts: {
     focusChatInputSoon();
   });
 
-  runtimeManager.subscribe((tabs) => {
-    sidebar.sessionTabs = tabs;
-    sidebar.requestUpdate();
+  bindRuntimeSidebar({ runtimeManager, sidebar });
 
-    const activeRuntimeId = tabs.find((tab) => tab.isActive)?.runtimeId ?? null;
-    if (activeRuntimeId !== previousActiveRuntimeId) {
-      previousActiveRuntimeId = activeRuntimeId;
+  runtimeManager.subscribe((snapshot) => {
+    if (snapshot.activeRuntimeId !== previousActiveRuntimeId) {
+      previousActiveRuntimeId = snapshot.activeRuntimeId;
       document.dispatchEvent(new CustomEvent("pi:active-runtime-changed"));
-      if (activeRuntimeId && !suppressNextInputAutofocus) {
+      if (snapshot.activeRuntimeId && !suppressNextInputAutofocus) {
         focusChatInputSoon();
       }
       suppressNextInputAutofocus = false;
@@ -771,24 +654,9 @@ export async function initTaskpane(opts: {
     document.dispatchEvent(new CustomEvent("pi:status-update"));
   });
 
-  const runCapabilityRefreshPass = async (): Promise<void> => {
-    const runtimes = runtimeManager.listRuntimes();
-
-    for (const runtime of runtimes) {
-      const refresh = runtimeCapabilityRefreshers.get(runtime.runtimeId);
-      if (!refresh) continue;
-
-      try {
-        await refresh();
-      } catch (error) {
-        console.warn("[pi] Failed to refresh runtime capabilities:", error);
-      }
-    }
-
-    document.dispatchEvent(new CustomEvent("pi:status-update"));
+  const refreshCapabilitiesForAllRuntimes = (): Promise<void> => {
+    return runtimeManager.refreshCapabilities();
   };
-
-  const refreshCapabilitiesForAllRuntimes = createAsyncCoalescer(runCapabilityRefreshPass);
 
   const reservedToolNames = new Set([
     ...createAllTools({ hostKind: spreadsheetHost.kind }).map((tool) => tool.name),
@@ -801,7 +669,7 @@ export async function initTaskpane(opts: {
     modelRuntime,
     getActiveAgent,
     refreshRuntimeTools: refreshCapabilitiesForAllRuntimes,
-    refreshRuntimeModels,
+    refreshRuntimeModels: () => modelRefreshOwner.refresh(true),
     reservedToolNames,
     afterInjectAgentContext: async () => {
       const activeRuntime = getActiveRuntime();
@@ -818,7 +686,7 @@ export async function initTaskpane(opts: {
 
   connectionManager.subscribe(() => {
     void refreshCapabilitiesForAllRuntimes();
-    void refreshRuntimeModels()
+    void modelRefreshOwner.refresh(true)
       .catch((error: DynamicValue) => {
         console.warn("[models] Failed to refresh after connection change:", error);
       });
@@ -911,10 +779,9 @@ export async function initTaskpane(opts: {
     });
   };
 
-  const createRuntime = async (optsForRuntime: {
-    activate: boolean;
-    autoRestoreLatest: boolean;
-  }) => {
+  async function buildSessionRuntime(
+    optsForRuntime: CreateRuntimeOptions,
+  ): Promise<SessionRuntime> {
     const runtimeId = crypto.randomUUID();
     let runtimeSessionId: string = crypto.randomUUID();
     const runtimeSkillReadCache = createSkillReadCache();
@@ -931,8 +798,6 @@ export async function initTaskpane(opts: {
         sessionId,
         workbookId,
       });
-
-      runtimeActiveIntegrationIds.set(runtimeId, activeIntegrationIds);
 
       const coreTools = createAllTools({
         hostKind: spreadsheetHost.kind,
@@ -1027,7 +892,8 @@ export async function initTaskpane(opts: {
       };
     };
 
-    const initialModel = getActiveRuntime()?.agent.state.model ?? defaultModel;
+    const initialModel = getActiveRuntime()?.agent.state.model
+      ?? modelRefreshOwner.snapshot().defaultModel;
     const initialCapabilities = await buildRuntimeCapabilities(runtimeSessionId);
 
     const agent = new Agent({
@@ -1077,8 +943,6 @@ export async function initTaskpane(opts: {
       }
     };
 
-    runtimeCapabilityRefreshers.set(runtimeId, refreshRuntimeCapabilities);
-
     // API key resolution
     agent.getApiKey = async (provider: string) => {
       const resolvedAuth = await modelRuntime.models.getAuth(provider);
@@ -1092,7 +956,7 @@ export async function initTaskpane(opts: {
       }
 
       const success = await promptForProviderConnection(provider);
-      await refreshConfiguredProviders();
+      await modelRefreshOwner.refreshConfiguredProviders(false);
       if (success) {
         clearErrorBanner(errorRoot);
         return (await getAppStorage().providerKeys.get(provider)) ?? undefined;
@@ -1146,7 +1010,7 @@ export async function initTaskpane(opts: {
       // Provider refreshes intentionally skip working runtimes. Re-run the
       // reconciliation after the action queue unwinds so an extension that
       // unloads mid-turn cannot leave its now-missing provider selected.
-      window.setTimeout(() => onProvidersChanged?.(), 0);
+      window.setTimeout(() => modelRefreshOwner.reconcileRuntimes(), 0);
 
       const wasUserAbort = abortedAgents.has(agent);
       abortedAgents.delete(agent);
@@ -1179,34 +1043,29 @@ export async function initTaskpane(opts: {
       }
     });
 
-    const runtime = runtimeManager.createRuntime(
-      {
-        runtimeId,
-        agent,
-        actionQueue,
-        queueDisplay,
-        persistence,
-        lockState: "idle",
-        dispose: () => {
-          runtimeCapabilityRefreshers.delete(runtimeId);
-          runtimeActiveIntegrationIds.delete(runtimeId);
-          runtimeSkillReadCache.clearAll();
-          unsubscribeSessionCapabilitySync();
-          unsubscribeErrorTracking();
-          actionQueue.shutdown();
-          agent.abort();
-          persistence.dispose();
-        },
+    return {
+      runtimeId,
+      agent,
+      actionQueue,
+      queueDisplay,
+      persistence,
+      lockState: "idle",
+      refreshCapabilities: refreshRuntimeCapabilities,
+      dispose: () => {
+        runtimeSkillReadCache.clearAll();
+        unsubscribeSessionCapabilitySync();
+        unsubscribeErrorTracking();
+        queueDisplay.detach();
+        actionQueue.shutdown();
+        agent.abort();
+        persistence.dispose();
       },
-      { activate: optsForRuntime.activate },
-    );
-
-    return runtime;
-  };
+    };
+  }
 
   const createRuntimeFromUi = async (): Promise<SessionRuntime | null> => {
     try {
-      return await createRuntime({ activate: true, autoRestoreLatest: false });
+      return await runtimeManager.createRuntime({ activate: true, autoRestoreLatest: false });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";
       console.warn("[pi] Failed to create a new runtime:", error);
@@ -1215,16 +1074,25 @@ export async function initTaskpane(opts: {
     }
   };
 
+  let tabLayoutReadSucceeded = false;
+
   const restorePersistedTabLayout = async (): Promise<SessionRuntime | null> => {
     const workbookId = await resolveWorkbookId();
-    const savedLayout = await loadWorkbookTabLayout(settings, workbookId);
+    let savedLayout: WorkbookTabLayout | null;
+    try {
+      savedLayout = await loadWorkbookTabLayout(settings, workbookId);
+      tabLayoutReadSucceeded = true;
+    } catch (error) {
+      console.warn("[pi] Failed to read persisted tab layout:", error);
+      return null;
+    }
     if (!savedLayout) return null;
 
     const runtimesBySessionId = new Map<string, SessionRuntime>();
     let firstRuntime: SessionRuntime | null = null;
 
     for (const sessionId of savedLayout.sessionIds) {
-      const runtime = await createRuntime({
+      const runtime = await runtimeManager.createRuntime({
         activate: false,
         autoRestoreLatest: false,
       });
@@ -1284,7 +1152,7 @@ export async function initTaskpane(opts: {
   };
 
   const openSessionInNewTab = async (sessionData: SessionData): Promise<SessionRuntime> => {
-    const runtime = await createRuntime({
+    const runtime = await runtimeManager.createRuntime({
       activate: true,
       autoRestoreLatest: false,
     });
@@ -1521,7 +1389,7 @@ export async function initTaskpane(opts: {
     targetModel: RuntimeModel;
     targetTitle: string;
   }): Promise<SessionRuntime> => {
-    const clonedRuntime = await createRuntime({
+    const clonedRuntime = await runtimeManager.createRuntime({
       activate: true,
       autoRestoreLatest: false,
     });
@@ -1623,8 +1491,8 @@ export async function initTaskpane(opts: {
     }
   });
 
-  const openExtensionsHub = (tab?: ExtensionsHubTab): void => {
-    void openSettings(tab ?? "connections");
+  const openExtensionsHub = (tab?: ExtensionsHubTab): Promise<void> => {
+    return openSettings(tab ?? "connections");
   };
 
   const openRecoveryDialog = async (): Promise<void> => {
@@ -1681,53 +1549,29 @@ export async function initTaskpane(opts: {
   });
 
   const applyModelSelection = async (runtimeId: string, nextModel: RuntimeModel): Promise<void> => {
-    const runtime = runtimeManager.getRuntime(runtimeId);
-    if (!runtime) {
+    const result = await runtimeManager.selectModel({
+      runtimeId,
+      nextModel,
+      behavior: getModelSwitchBehavior(),
+    });
+
+    if (result.outcome === "missing") {
       showToast(t("init.sessionNotFound"));
       return;
     }
-
-    const currentModel = runtime.agent.state.model;
-    const sameIdentity = currentModel.provider === nextModel.provider
-      && currentModel.id === nextModel.id;
-    if (sameIdentity && areRuntimeModelsEquivalent(currentModel, nextModel)) {
-      return;
-    }
-
-    if (runtime.agent.state.isStreaming || runtime.actionQueue.isBusy()) {
+    if (result.outcome === "busy") {
       showToast(t("init.waitBeforeChangingModels"));
       return;
     }
+    if (result.outcome === "unchanged") return;
 
-    if (sameIdentity) {
-      runtime.agent.state.model = nextModel;
-      document.dispatchEvent(new CustomEvent("pi:model-changed"));
-      document.dispatchEvent(new CustomEvent("pi:status-update"));
-      requestAnimationFrame(() => sidebar.requestUpdate());
-      return;
+    if (result.outcome === "forked") {
+      sidebar.syncFromAgent();
+      showToast(t("init.openedInNewTab", { title: result.title }));
     }
-
-    const hasMessages = runtime.agent.state.messages.length > 0;
-    const behavior = getModelSwitchBehavior();
-
-    if (!shouldForkModelSwitch({ behavior, hasMessages })) {
-      runtime.agent.state.model = nextModel;
-      document.dispatchEvent(new CustomEvent("pi:model-changed"));
-      document.dispatchEvent(new CustomEvent("pi:status-update"));
-      requestAnimationFrame(() => sidebar.requestUpdate());
-      return;
-    }
-
-    const sourceTitle = resolveRuntimeTabTitle(runtimeId, runtime);
-    const modelForkTitle = `${sourceTitle} (${nextModel.id})`;
-
-    await cloneRuntimeToNewTab({
-      sourceRuntime: runtime,
-      targetModel: nextModel,
-      targetTitle: modelForkTitle,
-    });
-
-    showToast(t("init.openedInNewTab", { title: modelForkTitle }));
+    document.dispatchEvent(new CustomEvent("pi:model-changed"));
+    document.dispatchEvent(new CustomEvent("pi:status-update"));
+    requestAnimationFrame(() => sidebar.requestUpdate());
   };
 
   const openModelSelector = (): void => {
@@ -1742,7 +1586,7 @@ export async function initTaskpane(opts: {
 
     void (async () => {
       try {
-        await refreshConfiguredProviders();
+        await modelRefreshOwner.refreshConfiguredProviders(false);
       } catch (error) {
         console.warn("[auth] Failed to refresh providers before opening model selector:", error);
       }
@@ -1757,7 +1601,7 @@ export async function initTaskpane(opts: {
         },
       });
 
-      void refreshRuntimeModels().catch((error: DynamicValue) => {
+      void modelRefreshOwner.refresh(true).catch((error: DynamicValue) => {
         console.warn("[models] Model refresh from selector failed:", error);
       });
     })();
@@ -1809,9 +1653,7 @@ export async function initTaskpane(opts: {
     getExecutionMode: () => Promise.resolve(getExecutionMode()),
     setExecutionMode,
     openExtensionsHub,
-    openFilesWorkspace: () => {
-      void showFilesWorkspaceDialog();
-    },
+    openFilesWorkspace: () => showFilesWorkspaceDialog(),
   });
 
   // Slash commands chosen from the popup menu dispatch this event.
@@ -1836,6 +1678,9 @@ export async function initTaskpane(opts: {
       busy,
       enqueueCommand: (commandName: string, commandArgs: string) => {
         activeRuntime.actionQueue.enqueueCommand(commandName, commandArgs);
+      },
+      onError: () => {
+        showToast(t("slash-command.toast.failed"));
       },
     });
 
@@ -1901,7 +1746,7 @@ export async function initTaskpane(opts: {
     void openRulesEditor();
   };
   sidebar.onOpenExtensions = () => {
-    openExtensionsHub();
+    void openExtensionsHub();
   };
   sidebar.onOpenSettings = () => {
     void openSettings();
@@ -1942,18 +1787,19 @@ export async function initTaskpane(opts: {
   // Bootstrap from persisted tab layout; fallback to legacy single-runtime restore.
   const restoredRuntime = await restorePersistedTabLayout();
   if (!restoredRuntime) {
-    await createRuntime({ activate: true, autoRestoreLatest: true });
+    await runtimeManager.createRuntime({ activate: true, autoRestoreLatest: true });
   }
 
-  tabLayoutPersistence.enable();
-  maybePersistTabLayout();
+  const startupTabLayout = snapshotRuntimeTabLayout();
+  tabLayoutPersistence.enable(tabLayoutReadSucceeded ? undefined : startupTabLayout);
+  tabLayoutPersistence.persist(startupTabLayout);
 
   // ── Disclosure bar (onboarding banner) ──
   // Must run after runtime bootstrap so the sidebar has rendered .pi-messages.
   {
     const { createDisclosureBar } = await import("../ui/disclosure-bar.js");
     const disclosureEl = createDisclosureBar({
-      providerCount: availableProviders.length,
+      providerCount: modelRefreshOwner.snapshot().availableProviders.length,
       onOpenSettings: () => void openSettings(),
     });
     if (disclosureEl) {
@@ -2141,13 +1987,8 @@ export async function initTaskpane(opts: {
     connectionManager,
     modelRuntime,
     refreshModels: async (allowNetwork) => {
-      const result = await modelRuntime.refresh({
-        allowNetwork,
-        ...(allowNetwork ? { force: true } : {}),
-      });
-      await updateAvailableProviderState();
-      onProvidersChanged?.();
-      return { errors: Array.from(result.errors.keys()).sort() };
+      await modelRefreshOwner.refresh(allowNetwork);
+      return { errors: [...modelRefreshOwner.snapshot().providerErrors] };
     },
   });
   if (backgroundVerificationBridge) {

@@ -4,12 +4,9 @@ import { test } from "node:test";
 import { createWebSearchTool } from "../src/tools/web-search.ts";
 
 void test("web_search falls back to Jina when key-required provider is missing an API key and Jina key exists", async () => {
-  const calledProviders: string[] = [];
-
   const tool = createWebSearchTool({
     getConfig: () => Promise.resolve({ provider: "serper", apiKey: undefined, jinaApiKey: "jina-fallback-key" }),
-    executeSearch: (_params, config) => {
-      calledProviders.push(config.provider);
+    executeSearch: () => {
       return Promise.resolve({
         sentQuery: "latest inflation data",
         proxied: false,
@@ -29,7 +26,7 @@ void test("web_search falls back to Jina when key-required provider is missing a
 
   assert.match(text, /used Jina Search/i);
   assert.match(text, /Web search via Jina Search/);
-  assert.deepEqual(calledProviders, ["jina"]);
+  assert.match(text, /\[1\] \[Inflation summary\]\(https:\/\/example\.com\/inflation\)/u);
 
   const details = result.details as {
     ok?: boolean;
@@ -104,13 +101,9 @@ void test("web_search renders compact cited results for serper", async () => {
 });
 
 void test("web_search falls back to Jina when configured provider returns auth or rate-limit errors", async () => {
-  const calledProviders: string[] = [];
-
   const tool = createWebSearchTool({
     getConfig: () => Promise.resolve({ provider: "tavily", apiKey: "tv-key", jinaApiKey: "jina-key" }),
     executeSearch: (_params, config) => {
-      calledProviders.push(config.provider);
-
       if (config.provider === "tavily") {
         return Promise.reject(new Error("429 Too Many Requests: rate limit exceeded"));
       }
@@ -134,7 +127,7 @@ void test("web_search falls back to Jina when configured provider returns auth o
 
   assert.match(text, /Tavily search failed/i);
   assert.match(text, /used Jina Search/i);
-  assert.deepEqual(calledProviders, ["tavily", "jina"]);
+  assert.match(text, /\[1\] \[Volatile functions in Excel\]\(https:\/\/example\.com\/volatile\)/u);
 
   const details = result.details as {
     ok?: boolean;

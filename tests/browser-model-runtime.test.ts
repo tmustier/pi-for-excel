@@ -7,11 +7,16 @@ import type {
   ModelsStoreEntry,
   SimpleStreamOptions,
 } from "@earendil-works/pi-ai";
+import { getBuiltinModel } from "@earendil-works/pi-ai/providers/all";
 
 import {
   BrowserModelRuntime,
   type BrowserProviderRegistration,
 } from "../src/models/browser-model-runtime.ts";
+import {
+  ModelRefreshOwner,
+  type ModelRefreshRuntime,
+} from "../src/models/model-refresh-owner.ts";
 import type { CustomProvider } from "../src/storage/local/custom-providers-store.ts";
 import { saveOpenAiGatewayConfig } from "../src/auth/custom-gateways.ts";
 import { createOfficeStreamFn } from "../src/auth/stream-proxy.ts";
@@ -116,19 +121,61 @@ function createRuntime(args?: {
   });
 }
 
-function gatewayProvider(): CustomProvider {
+class GatedSyncBrowserModelRuntime extends BrowserModelRuntime {
+  private firstSyncPending = true;
+  private readonly firstSyncGate: Promise<void>;
+  private notifyFirstSyncStarted: () => void = () => {};
+  private releaseFirstSyncGate: () => void = () => {};
+  readonly firstSyncStarted = new Promise<void>((resolve) => {
+    this.notifyFirstSyncStarted = resolve;
+  });
+
+  constructor(fetchFn?: typeof globalThis.fetch) {
+    super({
+      providerKeys: new MemoryProviderKeys(),
+      modelCatalogs: new MemoryCatalogs(),
+      getProxyUrl: () => Promise.resolve(undefined),
+      ...(fetchFn !== undefined ? { fetchFn } : {}),
+    });
+    this.firstSyncGate = new Promise<void>((resolve) => {
+      this.releaseFirstSyncGate = resolve;
+    });
+  }
+
+  releaseFirstSync(): void {
+    this.releaseFirstSyncGate();
+  }
+
+  override async syncCustomProviders(customProviders: readonly CustomProvider[]): Promise<void> {
+    if (this.firstSyncPending) {
+      this.firstSyncPending = false;
+      this.notifyFirstSyncStarted();
+      await this.firstSyncGate;
+    }
+    await super.syncCustomProviders(customProviders);
+  }
+}
+
+function gatewayProvider(options?: {
+  id?: string;
+  name?: string;
+  providerId?: string;
+  baseUrl?: string;
+  apiKey?: string;
+}): CustomProvider {
+  const baseUrl = options?.baseUrl ?? "https://gateway.example.com/v1";
   return {
-    id: "stored-gateway",
-    name: "Acme gateway",
+    id: options?.id ?? "stored-gateway",
+    name: options?.name ?? "Acme gateway",
     type: "openai-completions",
-    baseUrl: "https://gateway.example.com/v1",
-    apiKey: "gateway-secret",
+    baseUrl,
+    apiKey: options?.apiKey ?? "gateway-secret",
     models: [{
       id: "configured-model",
       name: "Configured model",
       api: "openai-completions",
-      provider: "Gateway · Acme",
-      baseUrl: "https://gateway.example.com/v1",
+      provider: options?.providerId ?? "Gateway · Acme",
+      baseUrl,
       reasoning: false,
       input: ["text"],
       cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
@@ -257,9 +304,7 @@ void test("provider discovery distinguishes omitted, explicit and null URLs", as
 
 void test("a fresh runtime restores discovered models without network access", async () => {
   const catalogs = new MemoryCatalogs();
-  let networkCalls = 0;
   const fetchFn: typeof globalThis.fetch = () => {
-    networkCalls += 1;
     return Promise.resolve(new Response(JSON.stringify({ data: [{ id: "cached-model" }] }), {
       status: 200,
       headers: { "Content-Type": "application/json" },
@@ -269,13 +314,16 @@ void test("a fresh runtime restores discovered models without network access", a
   const first = createRuntime({ catalogs, fetchFn });
   await first.syncCustomProviders([gatewayProvider()]);
   await first.refresh({ allowNetwork: true });
-  assert.equal(networkCalls, 1);
 
-  const second = createRuntime({ catalogs, fetchFn });
+  const second = createRuntime({
+    catalogs,
+    fetchFn: () => {
+      throw new Error("cache-only startup must not call the gateway");
+    },
+  });
   await second.syncCustomProviders([gatewayProvider()]);
   await second.refresh({ allowNetwork: false });
 
-  assert.equal(networkCalls, 1, "cache-only startup must not call the gateway");
   assert.ok(second.models.getModel("Gateway · Acme", "cached-model"));
 });
 
@@ -496,4 +544,282 @@ void test("credential adapter does not reinterpret OAuth records as browser API 
     } satisfies Credential)),
     /taskpane OAuth store/,
   );
+});
+
+function waitForOwnerRevision(owner: ModelRefreshOwner, revision: number): Promise<void> {
+  if (owner.snapshot().revision >= revision) return Promise.resolve();
+
+  return new Promise((resolve) => {
+    const unsubscribe = owner.subscribe((snapshot) => {
+      if (snapshot.revision < revision) return;
+      unsubscribe();
+      resolve();
+    });
+  });
+}
+
+void test("concurrent model refresh callers receive the discovered catalogue", async () => {
+  let notifyFetchStarted: () => void = () => {};
+  const fetchStarted = new Promise<void>((resolve) => {
+    notifyFetchStarted = resolve;
+  });
+  let releaseFetch: () => void = () => {};
+  const fetchGate = new Promise<void>((resolve) => {
+    releaseFetch = resolve;
+  });
+  const fetchFn: typeof globalThis.fetch = async () => {
+    notifyFetchStarted();
+    await fetchGate;
+    return new Response(JSON.stringify({ data: [{ id: "remote-model" }] }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  };
+  const runtime = createRuntime({ fetchFn });
+  const owner = new ModelRefreshOwner({
+    modelRuntime: runtime,
+    loadCustomProviders: () => Promise.resolve([gatewayProvider()]),
+    getRuntimes: () => [],
+  });
+
+  await owner.restoreCached();
+  const first = owner.refresh(true);
+  const second = owner.refresh(true);
+  assert.equal(first, second, "concurrent callers should share the refresh result");
+  await fetchStarted;
+
+  releaseFetch();
+  await Promise.all([first, second]);
+  assert.ok(runtime.models.getModel("Gateway · Acme", "remote-model"));
+});
+
+void test("configured-provider refresh during active sync reloads the latest configuration", async () => {
+  const firstProvider = gatewayProvider({
+    id: "first",
+    name: "First",
+    providerId: "Gateway · First",
+    baseUrl: "https://first.example.com/v1",
+  });
+  const latestProvider = gatewayProvider({
+    id: "latest",
+    name: "Latest",
+    providerId: "Gateway · Latest",
+    baseUrl: "https://latest.example.com/v1",
+  });
+  let configuredProviders: readonly CustomProvider[] = [firstProvider];
+  const runtime = new GatedSyncBrowserModelRuntime(() => {
+    return Promise.resolve(new Response(JSON.stringify({ data: [] }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    }));
+  });
+  const owner = new ModelRefreshOwner({
+    modelRuntime: runtime,
+    loadCustomProviders: () => Promise.resolve(configuredProviders),
+    getRuntimes: () => [],
+  });
+
+  const firstRefresh = owner.refreshConfiguredProviders(false);
+  await runtime.firstSyncStarted;
+  configuredProviders = [latestProvider];
+  const followUpRefresh = owner.refreshConfiguredProviders(true);
+  const coalescedRefresh = owner.refreshConfiguredProviders(true);
+  runtime.releaseFirstSync();
+  await Promise.all([firstRefresh, followUpRefresh, coalescedRefresh]);
+
+  assert.equal(runtime.models.getProvider("Gateway · First"), undefined);
+  assert.ok(runtime.models.getProvider("Gateway · Latest"));
+});
+
+void test("configured-provider refresh during active network discovery is not lost", async () => {
+  const firstProvider = gatewayProvider({
+    id: "first",
+    name: "First",
+    providerId: "Gateway · First",
+    baseUrl: "https://first.example.com/v1",
+  });
+  const latestProvider = gatewayProvider({
+    id: "latest",
+    name: "Latest",
+    providerId: "Gateway · Latest",
+    baseUrl: "https://latest.example.com/v1",
+  });
+  let configuredProviders: readonly CustomProvider[] = [firstProvider];
+  let notifyFetchStarted: () => void = () => {};
+  const fetchStarted = new Promise<void>((resolve) => {
+    notifyFetchStarted = resolve;
+  });
+  let releaseFetch: () => void = () => {};
+  const fetchGate = new Promise<void>((resolve) => {
+    releaseFetch = resolve;
+  });
+  const runtime = createRuntime({
+    fetchFn: async () => {
+      notifyFetchStarted();
+      await fetchGate;
+      return new Response(JSON.stringify({ data: [] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    },
+  });
+  const owner = new ModelRefreshOwner({
+    modelRuntime: runtime,
+    loadCustomProviders: () => Promise.resolve(configuredProviders),
+    getRuntimes: () => [],
+  });
+
+  await owner.refreshConfiguredProviders(false);
+  const networkRefresh = owner.refresh(true);
+  await fetchStarted;
+  configuredProviders = [latestProvider];
+  const configuredRefresh = owner.refreshConfiguredProviders(false);
+  releaseFetch();
+  await Promise.all([networkRefresh, configuredRefresh]);
+
+  assert.equal(runtime.models.getProvider("Gateway · First"), undefined);
+  assert.ok(runtime.models.getProvider("Gateway · Latest"));
+});
+
+void test("model refresh owner preserves healthy provider models on partial failure", async () => {
+  const healthy = gatewayProvider({
+    id: "healthy",
+    name: "Healthy",
+    providerId: "Gateway · Healthy",
+    baseUrl: "https://healthy.example.com/v1",
+  });
+  const failing = gatewayProvider({
+    id: "failing",
+    name: "Failing",
+    providerId: "Gateway · Failing",
+    baseUrl: "https://failing.example.com/v1",
+  });
+  const fetchFn: typeof globalThis.fetch = (input) => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+    if (new URL(url).hostname === "failing.example.com") {
+      return Promise.resolve(new Response("unavailable", { status: 503 }));
+    }
+    return Promise.resolve(new Response(JSON.stringify({ data: [{ id: "healthy-remote" }] }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    }));
+  };
+  const runtime = createRuntime({ fetchFn });
+  const owner = new ModelRefreshOwner({
+    modelRuntime: runtime,
+    loadCustomProviders: () => Promise.resolve([healthy, failing]),
+    getRuntimes: () => [],
+  });
+
+  await owner.refreshConfiguredProviders(true);
+
+  assert.deepEqual(owner.snapshot().providerErrors, ["Gateway · Failing"]);
+  assert.deepEqual(
+    runtime.models.getModels("Gateway · Healthy").map((model) => model.id),
+    ["configured-model", "healthy-remote"],
+  );
+  assert.ok(owner.snapshot().availableProviders.includes("Gateway · Healthy"));
+});
+
+void test("late credentials update idle runtimes and defer busy runtimes", async () => {
+  const providerKeys = new MemoryProviderKeys();
+  const runtime = createRuntime({ providerKeys });
+  let restoreCredentials: () => void = () => {};
+  const credentialRestore = new Promise<void>((resolve) => {
+    restoreCredentials = resolve;
+  });
+  let idleModel = getBuiltinModel("openai", "gpt-5.6-sol");
+  let busyModel = getBuiltinModel("openai", "gpt-5.6-sol");
+  let busy = true;
+  const targets: ModelRefreshRuntime[] = [
+    {
+      runtimeId: "idle",
+      model: idleModel,
+      isBusy: false,
+      applyModel: (model) => {
+        idleModel = model;
+        targets[0].model = model;
+      },
+    },
+    {
+      runtimeId: "busy",
+      model: busyModel,
+      isBusy: busy,
+      applyModel: (model) => {
+        busyModel = model;
+        targets[1].model = model;
+      },
+    },
+  ];
+  const owner = new ModelRefreshOwner({
+    modelRuntime: runtime,
+    loadCustomProviders: () => Promise.resolve([]),
+    getRuntimes: () => {
+      targets[1].isBusy = busy;
+      return targets;
+    },
+  });
+
+  await owner.startup(credentialRestore, 1);
+  await waitForOwnerRevision(owner, 2);
+
+  await providerKeys.set("openai-codex", "late-key");
+  restoreCredentials();
+  for (let attempt = 0; attempt < 50 && idleModel.provider !== "openai-codex"; attempt += 1) {
+    await new Promise<void>((resolve) => setTimeout(resolve, 1));
+  }
+
+  assert.equal(idleModel.provider, "openai-codex");
+  assert.equal(busyModel.provider, "openai");
+
+  busy = false;
+  owner.reconcileRuntimes();
+  assert.equal(busyModel.provider, "openai-codex");
+});
+
+void test("model refresh owner publishes cached startup before network discovery", async () => {
+  const catalogs = new MemoryCatalogs();
+  catalogs.entries.set("Gateway · Acme", {
+    models: [{
+      id: "cached-before-network",
+      name: "Cached before network",
+      api: "openai-completions",
+      provider: "Gateway · Acme",
+      baseUrl: "https://gateway.example.com/v1",
+      reasoning: false,
+      input: ["text"],
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+      contextWindow: 32_768,
+      maxTokens: 4_096,
+    }],
+  });
+  let releaseFetch: () => void = () => {};
+  const fetchGate = new Promise<void>((resolve) => {
+    releaseFetch = resolve;
+  });
+  const runtime = createRuntime({
+    catalogs,
+    fetchFn: async () => {
+      await fetchGate;
+      return new Response(JSON.stringify({ data: [{ id: "network-model" }] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    },
+  });
+  const owner = new ModelRefreshOwner({
+    modelRuntime: runtime,
+    loadCustomProviders: () => Promise.resolve([gatewayProvider()]),
+    getRuntimes: () => [],
+  });
+
+  await owner.startup(Promise.resolve(), 50);
+
+  assert.equal(owner.snapshot().revision, 1);
+  assert.ok(runtime.models.getModel("Gateway · Acme", "cached-before-network"));
+  assert.equal(runtime.models.getModel("Gateway · Acme", "network-model"), undefined);
+
+  releaseFetch();
+  await waitForOwnerRevision(owner, 2);
+  assert.ok(runtime.models.getModel("Gateway · Acme", "network-model"));
 });

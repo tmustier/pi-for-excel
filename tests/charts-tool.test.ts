@@ -6,18 +6,13 @@ import type { AgentToolResult } from "@earendil-works/pi-agent-core";
 import {
   createChartsTool,
   executeChartsAction,
-  toExcelChartType,
 } from "../src/tools/charts.ts";
 import { applyChartState } from "../src/workbook/recovery/chart-state.ts";
-import {
-  createPersistedWorkbookRecoveryPayload,
-  parsePersistedSnapshots,
-} from "../src/workbook/recovery/log-codec.ts";
 import type { ChartsDetails } from "../src/tools/tool-details.ts";
-import { getToolContextImpact, getToolExecutionMode } from "../src/tools/execution-policy.ts";
-import { WorkbookRecoveryLog, type WorkbookRecoverySnapshot } from "../src/workbook/recovery-log.ts";
+import { createWorkbookHistoryTool } from "../src/tools/workbook-history.ts";
+import { WorkbookRecoveryLog } from "../src/workbook/recovery-log.ts";
 import type { WorkbookContext } from "../src/workbook/context.ts";
-import type { AppendWorkbookChangeAuditEntryArgs } from "../src/audit/workbook-change-audit.ts";
+import { WorkbookChangeAuditLog } from "../src/audit/workbook-change-audit.ts";
 import type {
   RecoveryChartAbsentState,
   RecoveryChartPresentState,
@@ -27,7 +22,7 @@ import {
   createInMemorySettingsStore,
   findSnapshotById,
   withoutUndefined,
-} from "./recovery-log-test-helpers.test.ts";
+} from "./fixtures/recovery-log.ts";
 
 function firstText(result: AgentToolResult<ChartsDetails>): string {
   const first = result.content[0];
@@ -274,14 +269,6 @@ function createChartState(name = "Sales"): RecoveryChartPresentState {
   };
 }
 
-void test("maps friendly chart type names to Office.js chart types", () => {
-  assert.equal(toExcelChartType("column"), "ColumnClustered");
-  assert.equal(toExcelChartType("scatter"), "XYScatter");
-  assert.equal(toExcelChartType("scatter_lines"), "XYScatterLines");
-  assert.equal(toExcelChartType("scatter_smooth"), "XYScatterSmooth");
-  assert.throws(() => toExcelChartType("combo"), /Invalid chart_type/u);
-});
-
 void test("validates action-specific required params", async () => {
   let executeCalled = false;
   const tool = createChartsTool({
@@ -442,87 +429,73 @@ void test("get_image returns text plus image content and structured PNG details"
   });
 });
 
-void test("classifies charts actions by execution policy and context impact", () => {
-  assert.equal(getToolExecutionMode("charts", { action: "list" }), "read");
-  assert.equal(getToolContextImpact("charts", { action: "list" }), "none");
-
-  assert.equal(getToolExecutionMode("charts", { action: "get_image" }), "read");
-  assert.equal(getToolContextImpact("charts", { action: "get_image" }), "none");
-
-  assert.equal(getToolExecutionMode("charts", { action: "create" }), "mutate");
-  assert.equal(getToolContextImpact("charts", { action: "create" }), "structure");
-
-  assert.equal(getToolExecutionMode("charts", { action: "update" }), "mutate");
-  assert.equal(getToolContextImpact("charts", { action: "update" }), "content");
-
-  assert.equal(getToolExecutionMode("charts", { action: "delete" }), "mutate");
-  assert.equal(getToolContextImpact("charts", { action: "delete" }), "structure");
-});
-
-void test("update captures a chart checkpoint and appends audit metadata", async () => {
-  const beforeState = createChartState("Sales");
-  let appendedState: RecoveryChartState | null = null;
-  let auditEntry: AppendWorkbookChangeAuditEntryArgs | null = null;
-
-  const tool = createChartsTool({
-    captureChartPresent: () => Promise.resolve(beforeState),
-    executeAction: () => Promise.resolve({
-      result: {
-        content: [{ type: "text", text: "Chart 'Sales' updated." }],
-        details: {
-          kind: "charts",
-          action: "update",
-          name: "Sales",
-          address: "Sheet1!Sales",
-        },
-      },
-      outputAddress: "Sheet1!Sales",
-      changedCount: 1,
-      auditSummary: "updated chart Sales",
-      sourceRangeChanged: true,
+void test("chart update can be restored through workbook_history and records audit metadata", async () => {
+  const sheet = new FakeWorksheet("Sheet1");
+  const chart = sheet.charts.add("ColumnClustered", sheet.getRange("A1:B12"), "Columns");
+  chart.name = "Sales";
+  chart.title.text = "Old title";
+  chart.title.visible = true;
+  const context = new FakeContext([sheet]);
+  const settings = createInMemorySettingsStore();
+  const workbookContext: WorkbookContext = {
+    workbookId: "url_sha256:charts-tool-seam",
+    workbookName: "Charts.xlsx",
+    source: "document.url",
+  };
+  let id = 0;
+  const recovery = new WorkbookRecoveryLog({
+    getSettingsStore: () => Promise.resolve(settings),
+    getWorkbookContext: () => Promise.resolve(workbookContext),
+    now: () => 1_700_000_000_000 + id,
+    createId: () => `chart-snapshot-${id += 1}`,
+    applySnapshot: () => Promise.resolve({ values: [], formulas: [] }),
+    applyChartSnapshot: (address, state) => applyChartState(address, state),
+  });
+  const audit = new WorkbookChangeAuditLog({
+    getSettingsStore: () => Promise.resolve({
+      ...settings,
+      delete: () => Promise.resolve(),
     }),
-    appendRecoverySnapshot: (args) => {
-      appendedState = args.chartState;
-      const snapshot: WorkbookRecoverySnapshot = {
-        id: "snap-chart-1",
-        at: 1700000000000,
-        toolName: "charts",
-        toolCallId: args.toolCallId,
-        address: args.address,
-        changedCount: args.changedCount ?? 1,
-        cellCount: 1,
-        beforeValues: [],
-        beforeFormulas: [],
-        snapshotKind: "chart_state",
-        chartState: args.chartState,
-        workbookId: "url_sha256:workbook",
-      };
-      return Promise.resolve(snapshot);
-    },
-    appendAuditEntry: (entry) => {
-      auditEntry = entry;
-      return Promise.resolve();
-    },
+    getWorkbookContext: () => Promise.resolve(workbookContext),
+    now: () => 1_700_000_000_100,
+    createId: () => "chart-audit-1",
+  });
+  const charts = createChartsTool({
+    appendRecoverySnapshot: (args) => recovery.appendChart(args),
+    appendAuditEntry: (entry) => audit.append(entry),
+  });
+  const history = createWorkbookHistoryTool({
+    getRecoveryLog: () => recovery,
+    appendAuditEntry: (entry) => audit.append(entry),
   });
 
-  const result = await tool.execute("tc-update-checkpoint", {
-    action: "update",
-    name: "Sales",
-    source_range: "B1:C12",
-    title: "Updated",
+  await withFakeExcel(context, async () => {
+    const updated = await charts.execute("tc-update-checkpoint", {
+      action: "update",
+      name: "Sales",
+      title: "Updated title",
+    });
+    assert.equal(chart.title.text, "Updated title");
+    assert.equal(updated.details.recovery?.status, "checkpoint_created");
+    const snapshotId = updated.details.recovery?.snapshotId;
+    assert.ok(snapshotId);
+
+    const restored = await history.execute("tc-restore-chart", {
+      action: "restore",
+      snapshot_id: snapshotId,
+    });
+    assert.equal(restored.details.restoredSnapshotId, snapshotId);
+    assert.equal(chart.title.text, "Old title");
   });
 
-  assert.deepEqual(appendedState, beforeState);
-  assert.equal(result.details.recovery?.status, "checkpoint_created");
-  assert.equal(result.details.recovery?.snapshotId, "snap-chart-1");
-  assert.equal(auditEntry?.toolName, "charts");
-  assert.equal(auditEntry?.blocked, false);
-  assert.match(firstText(result), /property backup only/u);
+  const entries = await audit.list();
+  const updateEntry = entries.find((entry) => entry.toolCallId === "tc-update-checkpoint");
+  assert.equal(updateEntry?.toolName, "charts");
+  assert.equal(updateEntry?.blocked, false);
+  assert.equal(updateEntry?.outputAddress, "Sheet1!Sales");
 });
 
-void test("delete explicitly signals no backup and does not append a recovery snapshot", async () => {
-  let appendRecoveryCalls = 0;
-
+void test("chart delete explicitly returns that no backup is available", async () => {
   const tool = createChartsTool({
     executeAction: () => Promise.resolve({
       result: {
@@ -538,10 +511,6 @@ void test("delete explicitly signals no backup and does not append a recovery sn
       changedCount: 1,
       auditSummary: "deleted chart Sales",
     }),
-    appendRecoverySnapshot: () => {
-      appendRecoveryCalls += 1;
-      return Promise.resolve(null);
-    },
     appendAuditEntry: () => Promise.resolve(),
   });
 
@@ -550,7 +519,6 @@ void test("delete explicitly signals no backup and does not append a recovery sn
     name: "Sales",
   });
 
-  assert.equal(appendRecoveryCalls, 0);
   assert.equal(result.details.recovery?.status, "not_available");
   assert.match(firstText(result), /Backup not created/u);
   assert.match(firstText(result), /cannot faithfully recreate deleted charts/u);
@@ -760,57 +728,3 @@ void test("chart_absent restore with a missing id deletes nothing", async () => 
   assert.equal(sheet.charts.items.length, 1);
 });
 
-void test("persisted chart_state snapshots omit range grids so older codecs drop them", () => {
-  const chartSnapshot: WorkbookRecoverySnapshot = {
-    id: "snap-chart-persist",
-    at: 1700000000300,
-    toolName: "restore_snapshot",
-    toolCallId: "restore:snap-1",
-    address: "Sheet1!Sales",
-    changedCount: 1,
-    cellCount: 1,
-    beforeValues: [],
-    beforeFormulas: [],
-    snapshotKind: "chart_state",
-    chartState: createChartState("Sales"),
-    workbookId: "url_sha256:charts-workbook",
-    workbookLabel: "Charts.xlsx",
-  };
-
-  const rangeSnapshot: WorkbookRecoverySnapshot = {
-    id: "snap-range-persist",
-    at: 1700000000301,
-    toolName: "write_cells",
-    toolCallId: "tc-write",
-    address: "Sheet1!A1",
-    changedCount: 1,
-    cellCount: 1,
-    beforeValues: [[1]],
-    beforeFormulas: [["=A1"]],
-    snapshotKind: "range_values",
-    workbookId: "url_sha256:charts-workbook",
-    workbookLabel: "Charts.xlsx",
-  };
-
-  const payload = createPersistedWorkbookRecoveryPayload([chartSnapshot, rangeSnapshot]);
-
-  const persistedChart = payload.snapshots.find((item) => item.id === "snap-chart-persist");
-  assert.ok(persistedChart);
-  // Older codecs default unknown snapshot kinds to range_values and then
-  // require grids; omitting them makes downgraded readers drop the entry
-  // instead of misreading it as an empty range backup.
-  assert.equal("beforeValues" in persistedChart, false);
-  assert.equal("beforeFormulas" in persistedChart, false);
-
-  const persistedRange = payload.snapshots.find((item) => item.id === "snap-range-persist");
-  assert.ok(persistedRange);
-  assert.deepEqual(persistedRange.beforeValues, [[1]]);
-  assert.deepEqual(persistedRange.beforeFormulas, [["=A1"]]);
-
-  // The current codec must still round-trip the stripped chart snapshot.
-  const reparsed = parsePersistedSnapshots(payload, { maxEntries: 10 });
-  const chartAgain = findSnapshotById(reparsed, "snap-chart-persist");
-  assert.ok(chartAgain);
-  assert.equal(chartAgain.snapshotKind, "chart_state");
-  assert.deepEqual(withoutUndefined(chartAgain.chartState), withoutUndefined(createChartState("Sales")));
-});

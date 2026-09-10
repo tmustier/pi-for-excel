@@ -1,10 +1,14 @@
 /**
- * Multi-runtime manager for taskpane session tabs.
+ * UI-independent lifecycle owner for taskpane session runtimes.
  */
 
 import type { Agent } from "@earendil-works/pi-agent-core";
 
-import type { PiSidebar } from "../ui/pi-sidebar.js";
+import {
+  shouldForkModelSwitch,
+  type ModelSwitchBehavior,
+} from "../models/switch-behavior.js";
+import { areRuntimeModelsEquivalent } from "../models/model-refresh-owner.js";
 import type { ActionQueue } from "./action-queue.js";
 import type { QueueDisplay } from "./queue-display.js";
 import type { SessionPersistenceController } from "./sessions.js";
@@ -19,7 +23,13 @@ export interface SessionRuntime {
   queueDisplay: QueueDisplay;
   persistence: SessionPersistenceController;
   lockState: RuntimeLockState;
+  refreshCapabilities: () => Promise<void>;
   dispose: () => void;
+}
+
+export interface CreateRuntimeOptions {
+  activate: boolean;
+  autoRestoreLatest: boolean;
 }
 
 export interface RuntimeTabSnapshot {
@@ -31,7 +41,16 @@ export interface RuntimeTabSnapshot {
   lockState: RuntimeLockState;
 }
 
-export type RuntimeSnapshotListener = (tabs: RuntimeTabSnapshot[]) => void;
+export interface RuntimeLifecycleSnapshot {
+  activeRuntimeId: string | null;
+  tabs: RuntimeTabSnapshot[];
+}
+
+export type RuntimeSnapshotListener = (snapshot: RuntimeLifecycleSnapshot) => void;
+export type SessionRuntimeFactory = (opts: CreateRuntimeOptions) => Promise<SessionRuntime>;
+export type ModelSelectionResult =
+  | { outcome: "missing" | "unchanged" | "busy" | "updated" }
+  | { outcome: "forked"; runtime: SessionRuntime; title: string };
 
 interface RuntimeListeners {
   unsubscribeAgent: () => void;
@@ -39,7 +58,8 @@ interface RuntimeListeners {
 }
 
 export class SessionRuntimeManager {
-  private readonly sidebar: PiSidebar;
+  private readonly createSessionRuntime: SessionRuntimeFactory;
+  private readonly warnCapabilityRefresh: (error: DynamicValue) => void;
   private readonly runtimes = new Map<string, SessionRuntime>();
   private readonly runtimeOrder: string[] = [];
   private readonly runtimeDefaultTabNumbers = new Map<string, number>();
@@ -48,12 +68,23 @@ export class SessionRuntimeManager {
 
   private activeRuntimeId: string | null = null;
   private nextDefaultTabNumber = 1;
+  private refreshPromise: Promise<void> | null = null;
+  private refreshRequested = false;
 
-  constructor(sidebar: PiSidebar) {
-    this.sidebar = sidebar;
+  constructor(opts: {
+    createRuntime: SessionRuntimeFactory;
+    warnCapabilityRefresh?: (error: DynamicValue) => void;
+  }) {
+    this.createSessionRuntime = opts.createRuntime;
+    this.warnCapabilityRefresh = opts.warnCapabilityRefresh ?? (() => {});
   }
 
-  createRuntime(runtime: SessionRuntime, opts?: { activate?: boolean }): SessionRuntime {
+  async createRuntime(opts: CreateRuntimeOptions): Promise<SessionRuntime> {
+    const runtime = await this.createSessionRuntime(opts);
+    return this.registerRuntime(runtime, { activate: opts.activate });
+  }
+
+  registerRuntime(runtime: SessionRuntime, opts?: { activate?: boolean }): SessionRuntime {
     this.runtimes.set(runtime.runtimeId, runtime);
     this.runtimeOrder.push(runtime.runtimeId);
     this.runtimeDefaultTabNumbers.set(runtime.runtimeId, this.nextDefaultTabNumber);
@@ -81,26 +112,7 @@ export class SessionRuntimeManager {
     const next = this.runtimes.get(runtimeId);
     if (!next) return null;
 
-    if (this.activeRuntimeId === runtimeId) {
-      this.emit();
-      return next;
-    }
-
-    const current = this.getActiveRuntime();
-    current?.queueDisplay.detach();
-
     this.activeRuntimeId = runtimeId;
-
-    this.sidebar.agent = next.agent;
-    this.sidebar.syncFromAgent();
-    this.sidebar.requestUpdate();
-
-    requestAnimationFrame(() => {
-      const activeNow = this.getActiveRuntime();
-      if (!activeNow || activeNow.runtimeId !== runtimeId) return;
-      activeNow.queueDisplay.attach(this.sidebar);
-    });
-
     this.emit();
     return next;
   }
@@ -122,7 +134,6 @@ export class SessionRuntimeManager {
     listeners?.unsubscribePersistence();
     this.runtimeListeners.delete(runtimeId);
 
-    runtime.queueDisplay.detach();
     runtime.dispose();
 
     this.runtimes.delete(runtimeId);
@@ -166,6 +177,60 @@ export class SessionRuntimeManager {
     this.emit();
   }
 
+  async selectModel(args: {
+    runtimeId: string;
+    nextModel: Agent["state"]["model"];
+    behavior: ModelSwitchBehavior;
+  }): Promise<ModelSelectionResult> {
+    const runtime = this.runtimes.get(args.runtimeId);
+    if (!runtime) return { outcome: "missing" };
+
+    const currentModel = runtime.agent.state.model;
+    const sameIdentity = currentModel.provider === args.nextModel.provider
+      && currentModel.id === args.nextModel.id;
+    if (sameIdentity && areRuntimeModelsEquivalent(currentModel, args.nextModel)) {
+      return { outcome: "unchanged" };
+    }
+
+    if (runtime.agent.state.isStreaming || runtime.actionQueue.isBusy()) {
+      return { outcome: "busy" };
+    }
+
+    if (sameIdentity || !shouldForkModelSwitch({
+      behavior: args.behavior,
+      hasMessages: runtime.agent.state.messages.length > 0,
+    })) {
+      runtime.agent.state.model = args.nextModel;
+      await runtime.persistence.saveSession({ force: true });
+      return { outcome: "updated" };
+    }
+
+    const sourceTitle = this.snapshotTabs()
+      .find((tab) => tab.runtimeId === args.runtimeId)?.title ?? "Untitled";
+    const title = `${sourceTitle} (${args.nextModel.id})`;
+    const forkedRuntime = await this.createRuntime({
+      activate: true,
+      autoRestoreLatest: false,
+    });
+    forkedRuntime.agent.state.messages = structuredClone(runtime.agent.state.messages);
+    forkedRuntime.agent.state.model = args.nextModel;
+    forkedRuntime.agent.state.thinkingLevel = runtime.agent.state.thinkingLevel;
+    await forkedRuntime.persistence.renameSession(title);
+    forkedRuntime.queueDisplay.clear();
+    forkedRuntime.queueDisplay.setActionQueue([]);
+    await forkedRuntime.persistence.saveSession({ force: true });
+
+    return { outcome: "forked", runtime: forkedRuntime, title };
+  }
+
+  refreshCapabilities(): Promise<void> {
+    this.refreshRequested = true;
+    if (this.refreshPromise) return this.refreshPromise;
+
+    this.refreshPromise = this.runCapabilityRefreshes();
+    return this.refreshPromise;
+  }
+
   findRuntimeBySessionId(sessionId: string): SessionRuntime | null {
     for (const runtimeId of this.runtimeOrder) {
       const runtime = this.runtimes.get(runtimeId);
@@ -195,6 +260,13 @@ export class SessionRuntimeManager {
     return out;
   }
 
+  snapshot(): RuntimeLifecycleSnapshot {
+    return {
+      activeRuntimeId: this.activeRuntimeId,
+      tabs: this.snapshotTabs(),
+    };
+  }
+
   snapshotTabs(): RuntimeTabSnapshot[] {
     return this.listRuntimes().map((runtime, index) => ({
       runtimeId: runtime.runtimeId,
@@ -212,14 +284,38 @@ export class SessionRuntimeManager {
 
   subscribe(listener: RuntimeSnapshotListener): () => void {
     this.listeners.add(listener);
-    listener(this.snapshotTabs());
+    listener(this.snapshot());
     return () => {
       this.listeners.delete(listener);
     };
   }
 
+  private async runCapabilityRefreshes(): Promise<void> {
+    try {
+      while (this.refreshRequested) {
+        this.refreshRequested = false;
+        const runtimes = this.listRuntimes();
+
+        for (const runtime of runtimes) {
+          try {
+            await runtime.refreshCapabilities();
+          } catch (error) {
+            this.warnCapabilityRefresh(error);
+          }
+        }
+      }
+    } finally {
+      // Release the in-flight slot before notifying listeners so a refresh
+      // requested from a snapshot listener starts a new pass instead of being
+      // coalesced into this finished one.
+      this.refreshPromise = null;
+    }
+
+    this.emit();
+  }
+
   private emit(): void {
-    const snapshot = this.snapshotTabs();
+    const snapshot = this.snapshot();
     for (const listener of this.listeners) {
       listener(snapshot);
     }

@@ -3,28 +3,28 @@ import { test } from "node:test";
 
 import { getCompactionThresholds } from "../src/compaction/defaults.ts";
 
-void test("applies earlier hard compaction cap for 200k-context models", () => {
-  const thresholds = getCompactionThresholds(200_000);
+// Policy table: published compaction budgets. The 200k consumer contract is
+// independently exercised through the agent request seam in agent-request.test.ts.
+void test("compaction thresholds follow the published context-window policy", () => {
+  const cases = [
+    {
+      name: "200k quality cap",
+      contextWindow: 200_000,
+      expected: { contextWindow: 200_000, reserveTokens: 16_384, hardTriggerTokens: 170_000, softWarningTokens: 160_000 },
+    },
+    {
+      name: "small-window reserve",
+      contextWindow: 32_768,
+      expected: { contextWindow: 32_768, reserveTokens: 16_384, hardTriggerTokens: 16_384, softWarningTokens: 14_336 },
+    },
+    {
+      name: "invalid-window fallback",
+      contextWindow: Number.NaN,
+      expected: { contextWindow: 200_000, reserveTokens: 16_384, hardTriggerTokens: 170_000, softWarningTokens: 160_000 },
+    },
+  ];
 
-  assert.equal(thresholds.contextWindow, 200_000);
-  assert.equal(thresholds.reserveTokens, 16_384);
-  assert.equal(thresholds.hardTriggerTokens, 170_000);
-  assert.equal(thresholds.softWarningTokens, 160_000);
-});
-
-void test("keeps reserve-based trigger for smaller context windows", () => {
-  const thresholds = getCompactionThresholds(32_768);
-
-  assert.equal(thresholds.reserveTokens, 16_384);
-  assert.equal(thresholds.hardTriggerTokens, 16_384);
-  assert.equal(thresholds.softWarningTokens, 14_336);
-});
-
-void test("normalizes invalid context window inputs to fallback values", () => {
-  const thresholds = getCompactionThresholds(Number.NaN);
-
-  assert.equal(thresholds.contextWindow, 200_000);
-  assert.equal(thresholds.reserveTokens, 16_384);
-  assert.equal(thresholds.hardTriggerTokens, 170_000);
-  assert.equal(thresholds.softWarningTokens, 160_000);
+  for (const entry of cases) {
+    assert.deepEqual(getCompactionThresholds(entry.contextWindow), entry.expected, entry.name);
+  }
 });

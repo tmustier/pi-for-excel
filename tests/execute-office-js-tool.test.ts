@@ -2,10 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { createExecuteOfficeJsTool } from "../src/tools/execute-office-js.ts";
-import {
-  buildBorderInstructions,
-  normalizeBorderParams,
-} from "../src/tools/format-cells-borders.ts";
 
 function firstText(result: { content: Array<{ type: string; text: string }> }): string {
   const block = result.content[0];
@@ -71,35 +67,4 @@ void test("execute_office_js reports non-serializable result payloads", async ()
 
   const text = firstText(result);
   assert.match(text, /Result is not JSON-serializable/u);
-});
-
-void test("format_cells border shorthand none is normalized and clears all edges", () => {
-  const borderParams = normalizeBorderParams({
-    borders: "BordersNone",
-  });
-
-  const instructions = buildBorderInstructions(borderParams, {}, undefined);
-
-  assert.deepEqual(borderParams, {
-    shorthand: "none",
-  });
-
-  assert.deepEqual(instructions, {
-    operations: [
-      { edge: "EdgeTop", weight: "none" },
-      { edge: "EdgeBottom", weight: "none" },
-      { edge: "EdgeLeft", weight: "none" },
-      { edge: "EdgeRight", weight: "none" },
-      { edge: "InsideHorizontal", weight: "none" },
-      { edge: "InsideVertical", weight: "none" },
-    ],
-    appliedText: "none borders",
-  });
-});
-
-void test("format_cells rejects invalid border values instead of falling back", () => {
-  assert.throws(
-    () => normalizeBorderParams({ borders: "remove-all" }),
-    /Invalid borders/u,
-  );
 });

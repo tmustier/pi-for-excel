@@ -19,6 +19,34 @@ function createMemorySettings(): {
   };
 }
 
+class TransientReadSettings {
+  private readonly values = new Map<string, DynamicValue>();
+  private failNextRead = false;
+
+  get(key: string): Promise<DynamicValue> {
+    if (this.failNextRead) {
+      this.failNextRead = false;
+      return Promise.reject(new Error("transient connection read failure"));
+    }
+    return Promise.resolve(this.values.get(key));
+  }
+
+  set(key: string, value: DynamicValue): Promise<void> {
+    this.values.set(key, value);
+    return Promise.resolve();
+  }
+
+  delete(key: string): Promise<void> {
+    this.values.delete(key);
+    return Promise.resolve();
+  }
+
+  armReadFailure(): void {
+    this.failNextRead = true;
+  }
+
+}
+
 const APOLLO_DEFINITION: ConnectionDefinition = {
   id: "ext.apollo.apollo",
   title: "Apollo",
@@ -243,17 +271,41 @@ void test("markInvalid redacts stored secret values from failure reasons", async
 
 // ── updateSecretsFromHost ───────────────────────────
 
-void test("updateSecretsFromHost merges into empty store", async () => {
-  const manager = new ConnectionManager({ settings: createMemorySettings() });
+void test("updateSecretsFromHost retries transient reads without replacing sibling connections", async () => {
+  const settings = new TransientReadSettings();
+  await settings.set("connections.store.v1", {
+    version: 1,
+    items: {
+      sibling: { status: "connected", secrets: { token: "keep" } },
+    },
+  });
+  const manager = new ConnectionManager({ settings });
   manager.registerDefinition("ext.apollo", APOLLO_DEFINITION);
+  settings.armReadFailure();
+
+  await assert.rejects(
+    () => manager.updateSecretsFromHost("ext.apollo.apollo", { apiKey: "sk-new" }),
+    /transient connection read failure/u,
+  );
+
+  const siblingDefinition: ConnectionDefinition = {
+    id: "sibling",
+    title: "Sibling",
+    capability: "sibling service",
+    authKind: "api_key",
+    secretFields: [{ id: "token", label: "Token", required: true }],
+  };
+  const afterFailure = new ConnectionManager({ settings });
+  afterFailure.registerDefinition("sibling", siblingDefinition);
+  assert.equal((await afterFailure.getSnapshot("sibling"))?.status, "connected");
+  assert.equal(await afterFailure.getSnapshot("ext.apollo.apollo"), null);
 
   await manager.updateSecretsFromHost("ext.apollo.apollo", { apiKey: "sk-new" });
-
-  const snapshot = await manager.getSnapshot("ext.apollo.apollo");
-  assert.ok(snapshot);
-  assert.equal(snapshot.status, "connected");
-  const presence = await manager.getSecretFieldPresence("ext.apollo.apollo");
-  assert.equal(presence.apiKey, true);
+  const restarted = new ConnectionManager({ settings });
+  restarted.registerDefinition("sibling", siblingDefinition);
+  restarted.registerDefinition("ext.apollo", APOLLO_DEFINITION);
+  assert.equal((await restarted.getSnapshot("sibling"))?.status, "connected");
+  assert.equal((await restarted.getSnapshot("ext.apollo.apollo"))?.status, "connected");
 });
 
 void test("updateSecretsFromHost merges partial patch preserving existing fields", async () => {
@@ -312,15 +364,20 @@ void test("updateSecretsFromHost rejects unknown secret fields", async () => {
   );
 });
 
-void test("updateSecretsFromHost notifies listeners", async () => {
+void test("subscribers observe a connected state after host credentials change", async () => {
   const manager = new ConnectionManager({ settings: createMemorySettings() });
   manager.registerDefinition("ext.apollo", APOLLO_DEFINITION);
 
-  let notified = false;
-  manager.subscribe(() => { notified = true; });
+  let resolveObserved: (status: string | undefined) => void = () => {};
+  const observed = new Promise<string | undefined>((resolve) => {
+    resolveObserved = resolve;
+  });
+  manager.subscribe(() => {
+    void manager.getSnapshot("ext.apollo.apollo").then((snapshot) => resolveObserved(snapshot?.status));
+  });
 
   await manager.updateSecretsFromHost("ext.apollo.apollo", { apiKey: "sk-test" });
-  assert.ok(notified);
+  assert.equal(await observed, "connected");
 });
 
 // ── clearSecretsFromHost ────────────────────────────
@@ -353,16 +410,21 @@ void test("clearSecretsFromHost clears error state", async () => {
   assert.equal(snapshot.lastError, undefined);
 });
 
-void test("clearSecretsFromHost notifies listeners", async () => {
+void test("subscribers observe a missing state after host credentials are cleared", async () => {
   const manager = new ConnectionManager({ settings: createMemorySettings() });
   manager.registerDefinition("ext.apollo", APOLLO_DEFINITION);
   await manager.setSecrets("ext.apollo", "ext.apollo.apollo", { apiKey: "sk-test" });
 
-  let notified = false;
-  manager.subscribe(() => { notified = true; });
+  let resolveObserved: (status: string | undefined) => void = () => {};
+  const observed = new Promise<string | undefined>((resolve) => {
+    resolveObserved = resolve;
+  });
+  manager.subscribe(() => {
+    void manager.getSnapshot("ext.apollo.apollo").then((snapshot) => resolveObserved(snapshot?.status));
+  });
 
   await manager.clearSecretsFromHost("ext.apollo.apollo");
-  assert.ok(notified);
+  assert.equal(await observed, "missing");
 });
 
 void test("clearSecretsFromHost normalizes connection id", async () => {

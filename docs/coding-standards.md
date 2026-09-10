@@ -20,9 +20,9 @@ Deterministic checks enforce the sharpest rules:
 - No explicit `any` or `as any`.
 - No non-null assertions.
 - No direct `unknown` syntax except the sanctioned boundary marker in `src/types/dynamic-values.d.ts`.
-- No generic object/record guards (`isRecord`, `isObjectValue`, `isPlainObject`, etc.). These hide untyped values flowing too far inward.
+- Small parser primitives are allowed, but an object check alone does not establish a domain contract. Write concrete parsers for domain shapes.
 - `@ts-ignore` and `@ts-nocheck` are banned. `@ts-expect-error` requires a real explanation.
-- ESLint disable comments must name specific rules and explain the local safety/interop invariant.
+- ESLint disable comments must name specific rules and explain the local safety/interop invariant. Do not add blanket safety comments.
 - Top-level exported APIs and public methods should expose clear contracts. Add return types when inference obscures the contract for future agents.
 
 Prefer:
@@ -42,7 +42,7 @@ Avoid:
 
 ```ts
 const payload = JSON.parse(text) as ToolPayload;
-if (isRecord(payload)) return payload;
+if (isObject(payload)) return payload; // object-ness is not a ToolPayload contract
 ```
 
 ## Boundaries and parsing
@@ -52,12 +52,12 @@ Boundary input includes JSON, `Response.json()`, Office.js/WPS host objects, bri
 Rules:
 
 - Decoded JSON/fetch payloads first land as `DynamicValue`, then a concrete parser/refiner returns the app type.
-- Do not cast `JSON.parse(...)` or `response.json()` directly to app/domain/test types.
+- Do not cast `JSON.parse(...)` or `response.json()` directly to app/domain/test types. The `check:boundary-casts` script enforces this.
 - A successful parse returns the refined value; do not validate and then keep passing the unrefined object.
 - Keep protocol DTOs, persistence records, and domain/service values distinct even when their shapes look similar.
 - Mutating command/request parsers should reject misspelled or obsolete fields unless the sub-object is explicitly extensible.
 
-The `check:boundary-casts` script enforces the direct-cast rule.
+Production host detection uses an optional, read-only probe shape; application code does not use `Reflect.get` or `Reflect.apply`. Test harnesses may still use reflection to install host globals or exercise malformed JavaScript calls.
 
 ## UI and HTML safety
 
@@ -78,6 +78,8 @@ The `check:innerhtml` script keeps raw `.innerHTML` out of application code.
 - Do not add hidden globals for time, randomness, IDs, workbook state, providers, or settings when a seam can pass the dependency explicitly.
 
 ## Tests and verification
+
+Use [Behavior tests and acceptance gates](./testing.md) for contract selection, test discovery, fixture placement and mutation evidence. `npm test` is the canonical complete deterministic suite; targeted scripts do not replace it.
 
 - Accept behavior changes and dependency upgrades through a real taskpane prompt → model → tools → workbook test, with independent read-back and scratch cleanup. Keep the host in the background.
 - Unit tests, CI, builds and direct host probes support this acceptance test. If it is blocked, report the missing coverage and obtain an explicit waiver before accepting the change. Documentation-only changes need no runtime test.

@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import type { Agent } from "@earendil-works/pi-agent-core";
+import { Agent } from "@earendil-works/pi-agent-core";
+import { createModels, fauxAssistantMessage, fauxProvider } from "@earendil-works/pi-ai";
 
 import { ConnectionManager } from "../src/connections/manager.ts";
 import { buildRuntimeManagerActivationBridge } from "../src/extensions/runtime-manager-activation.ts";
@@ -84,28 +85,28 @@ function buildBridge(args: {
   });
 }
 
-void test("injectContext appends a message and triggers host sync hook", async () => {
+void test("injected extension context is available to the next agent request", async () => {
   const settings = new MemorySettingsStore();
   const entry = createEntry("ext.inject");
   const connectionManager = new ConnectionManager({ settings });
-  const messages: Agent["state"]["messages"] = [];
-  let syncCalls = 0;
-
-  const agentStub: DynamicValue = {
-    state: { messages },
-    steer: () => {},
-    followUp: () => {},
-  };
-  const agent = agentStub as Agent;
+  const faux = fauxProvider();
+  const models = createModels();
+  models.setProvider(faux.provider);
+  faux.setResponses([fauxAssistantMessage("done")]);
+  let outboundContext = "";
+  const agent = new Agent({
+    initialState: { model: faux.getModel(), messages: [], tools: [] },
+    streamFn: (model, context, options) => {
+      outboundContext = JSON.stringify(context);
+      return models.streamSimple(model, context, options);
+    },
+  });
 
   const bridge = buildBridge({
     entry,
     settings,
     connectionManager,
     getRequiredActiveAgent: () => agent,
-    afterInjectAgentContext: () => {
-      syncCalls += 1;
-    },
     runExtensionHttpFetch: () => Promise.resolve({
       status: 200,
       statusText: "OK",
@@ -115,21 +116,9 @@ void test("injectContext appends a message and triggers host sync hook", async (
   });
 
   bridge.host.injectAgentContext?.("context please");
-  await Promise.resolve();
+  await agent.prompt("continue");
 
-  assert.equal(syncCalls, 1);
-  assert.equal(messages.length, 1);
-  assert.equal(messages[0]?.role, "user");
-
-  const firstContent = messages[0]?.content[0];
-  assert.ok(firstContent && firstContent.type === "text");
-  if (!firstContent || firstContent.type !== "text") {
-    assert.fail("expected extension context injection to append a text message");
-  }
-
-  const injectedMessageJson = JSON.stringify(messages[0]);
-  assert.match(injectedMessageJson, /\[Extension Acme Extension\]/);
-  assert.match(injectedMessageJson, /context please/);
+  assert.match(outboundContext, /\[Extension Acme Extension\].*context please/u);
 });
 
 void test("connection-aware http fetch injects auth header for allowed hosts", async () => {

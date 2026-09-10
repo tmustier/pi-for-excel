@@ -46,11 +46,7 @@ export async function readPersistedWorkbookRecoveryPayload(
     return null;
   }
 
-  try {
-    return await settings.get<DynamicValue>(RECOVERY_SETTING_KEY);
-  } catch {
-    return null;
-  }
+  return settings.get<DynamicValue>(RECOVERY_SETTING_KEY);
 }
 
 export async function writePersistedWorkbookRecoveryPayload(

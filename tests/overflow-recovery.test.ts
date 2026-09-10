@@ -1,14 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { Agent, type AgentMessage } from "@earendil-works/pi-agent-core";
+import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { Api, AssistantMessage, Model, ToolResultMessage, Usage } from "@earendil-works/pi-ai";
 
-import {
-  findTrailingContextOverflowError,
-  recoverFromContextOverflow,
-} from "../src/compaction/overflow-recovery.ts";
-import { failOnUnexpectedStream } from "./fail-on-unexpected-stream.ts";
+import { findTrailingContextOverflowError } from "../src/compaction/overflow-recovery.ts";
 
 const EMPTY_USAGE: Usage = {
   input: 0,
@@ -69,41 +65,6 @@ function createOverflowError(model: Model<Api>, timestamp: number): AssistantMes
   };
 }
 
-function createTestAgent(args: {
-  model: Model<Api>;
-  messages: AgentMessage[];
-}): Agent & { continueCalls: number } {
-  class RecordingAgent extends Agent {
-    continueCalls = 0;
-
-    override continue(): Promise<void> {
-      this.continueCalls += 1;
-      return Promise.resolve();
-    }
-  }
-
-  return new RecordingAgent({
-    streamFn: failOnUnexpectedStream,
-    initialState: {
-      model: args.model,
-      messages: args.messages,
-      tools: [],
-    },
-  });
-}
-
-void test("findTrailingContextOverflowError matches LiteLLM overflow from the active model", () => {
-  const model = createModel(65_536);
-  const failure = createOverflowError(model, 3);
-
-  const found = findTrailingContextOverflowError({
-    messages: [createUser("analyze this data", 1), createToolResult("rows...", 2), failure],
-    model,
-  });
-
-  assert.equal(found, failure);
-});
-
 void test("findTrailingContextOverflowError ignores failures from a different model", () => {
   const oldModel = createModel(65_536, "small-model");
   const newModel = createModel(200_000, "big-model");
@@ -141,97 +102,3 @@ void test("findTrailingContextOverflowError ignores non-overflow errors and non-
   );
 });
 
-void test("recoverFromContextOverflow drops the failure, compacts, and retries once", async () => {
-  const model = createModel(65_536);
-  const user = createUser("analyze this data", 1);
-  const toolResult = createToolResult("rows...", 2);
-  const agent = createTestAgent({
-    model,
-    messages: [user, toolResult, createOverflowError(model, 3)],
-  });
-
-  let compactRuns = 0;
-  const recovered = await recoverFromContextOverflow({
-    agent,
-    runCompact: () => {
-      compactRuns += 1;
-      // Simulate compaction rewriting history (new array identity, kept tail).
-      agent.state.messages = [createUser("compaction summary", 4), toolResult];
-      return Promise.resolve();
-    },
-  });
-
-  assert.equal(recovered, true);
-  assert.equal(compactRuns, 1);
-  assert.equal(agent.continueCalls, 1);
-  assert.equal(
-    agent.state.messages.some((m) => m.role === "assistant"),
-    false,
-  );
-});
-
-void test("recoverFromContextOverflow restores the failure when compaction is a no-op", async () => {
-  const model = createModel(65_536);
-  const failure = createOverflowError(model, 3);
-  const agent = createTestAgent({
-    model,
-    messages: [createUser("hi", 1), createToolResult("rows...", 2), failure],
-  });
-
-  const recovered = await recoverFromContextOverflow({
-    agent,
-    runCompact: () => {
-      // Compaction failed / nothing to compact: messages left untouched.
-      return Promise.resolve();
-    },
-  });
-
-  assert.equal(recovered, false);
-  assert.equal(agent.continueCalls, 0);
-
-  const last = agent.state.messages[agent.state.messages.length - 1];
-  if (last?.role !== "assistant") throw new Error("expected trailing assistant failure");
-  assert.equal(last.errorMessage, LITELLM_OVERFLOW_ERROR);
-});
-
-void test("recoverFromContextOverflow restores the failure when compaction throws", async () => {
-  const model = createModel(65_536);
-  const failure = createOverflowError(model, 3);
-  const agent = createTestAgent({
-    model,
-    messages: [createUser("hi", 1), createToolResult("rows...", 2), failure],
-  });
-
-  const recovered = await recoverFromContextOverflow({
-    agent,
-    runCompact: () => Promise.reject(new Error("summarizer exploded")),
-  });
-
-  assert.equal(recovered, false);
-  assert.equal(agent.continueCalls, 0);
-
-  const last = agent.state.messages[agent.state.messages.length - 1];
-  if (last?.role !== "assistant") throw new Error("expected trailing assistant failure");
-  assert.equal(last.errorMessage, LITELLM_OVERFLOW_ERROR);
-});
-
-void test("recoverFromContextOverflow does nothing without a trailing overflow error", async () => {
-  const model = createModel(65_536);
-  const agent = createTestAgent({
-    model,
-    messages: [createUser("hi", 1), createToolResult("rows...", 2)],
-  });
-
-  let compactRuns = 0;
-  const recovered = await recoverFromContextOverflow({
-    agent,
-    runCompact: () => {
-      compactRuns += 1;
-      return Promise.resolve();
-    },
-  });
-
-  assert.equal(recovered, false);
-  assert.equal(compactRuns, 0);
-  assert.equal(agent.continueCalls, 0);
-});

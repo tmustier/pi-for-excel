@@ -23,7 +23,7 @@
  * ```
  */
 
-import type { AgentEvent, AgentTool } from "@earendil-works/pi-agent-core";
+import type { AgentEvent } from "@earendil-works/pi-agent-core";
 
 import {
   ALLOW_REMOTE_EXTENSION_URLS_STORAGE_KEY,
@@ -61,6 +61,7 @@ import {
   qualifyExtensionConnectionId,
   qualifyExtensionProviderId,
 } from "../extensions/owner-identifiers.js";
+import type { ConnectionAwareAgentTool } from "../tools/connection-requirements.js";
 
 export type { LoadedExtensionHandle } from "./extension-loader.js";
 export type {
@@ -161,14 +162,19 @@ function normalizeConnectionDefinitionForOwner(
   };
 }
 
+interface ExtensionToolDefinitionBoundary {
+  execute?: DynamicValue;
+  handler?: DynamicValue;
+}
+
 function assertValidToolDefinition(name: string, tool: ExtensionToolDefinition): void {
-  const execute: DynamicValue = Reflect.get(tool, "execute");
-  if (typeof execute === "function") {
+  // Runtime extension JavaScript is untyped even though the public authoring API is typed.
+  const boundary = tool as ExtensionToolDefinition & ExtensionToolDefinitionBoundary;
+  if (typeof boundary.execute === "function") {
     return;
   }
 
-  const handler: DynamicValue = Reflect.get(tool, "handler");
-  if (typeof handler === "function") {
+  if (typeof boundary.handler === "function") {
     throw new Error(
       `Extension tool "${name}" is invalid: use execute(params, signal?, onUpdate?) instead of handler.`,
     );
@@ -344,7 +350,11 @@ export function createExtensionAPI(options: CreateExtensionAPIOptions): ExcelExt
       const normalizedName = normalizeIdentifier("tool", name);
       assertValidToolDefinition(normalizedName, tool);
 
-      const wrappedTool: AgentTool = {
+      const requiresConnection = normalizeToolConnectionRequirements(
+        tool.requiresConnection,
+        extensionOwnerId,
+      );
+      const wrappedTool: ConnectionAwareAgentTool = {
         name: normalizedName,
         label: tool.label ?? normalizedName,
         description: tool.description,
@@ -352,16 +362,8 @@ export function createExtensionAPI(options: CreateExtensionAPIOptions): ExcelExt
         execute: async (_toolCallId, params, signal, onUpdate) => {
           return tool.execute(params, signal, onUpdate);
         },
+        ...(requiresConnection ? { requiresConnection } : {}),
       };
-
-      const requiresConnection = normalizeToolConnectionRequirements(
-        Reflect.get(tool, "requiresConnection"),
-        extensionOwnerId,
-      );
-
-      if (requiresConnection && requiresConnection.length > 0) {
-        Reflect.set(wrappedTool, "requiresConnection", requiresConnection);
-      }
 
       registerTool(wrappedTool);
     },

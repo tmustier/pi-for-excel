@@ -7,8 +7,11 @@ function isConnectionsStorePayloadShape(value: DynamicValue): value is DynamicOb
 export const CONNECTION_STORE_KEY = "connections.store.v1";
 const CONNECTION_STORE_VERSION = 1;
 
-export interface ConnectionSettingsStore {
+export interface ConnectionSettingsReader {
   get(key: string): Promise<DynamicValue>;
+}
+
+export interface ConnectionSettingsStore extends ConnectionSettingsReader {
   set(key: string, value: DynamicValue): Promise<void>;
   delete?(key: string): Promise<void>;
 }
@@ -88,11 +91,25 @@ function normalizeDocument(value: DynamicValue): ConnectionStoreDocument {
 }
 
 export async function loadConnectionStoreDocument(
+  settings: ConnectionSettingsReader,
+): Promise<Record<string, StoredConnectionRecord>> {
+  try {
+    const raw = await settings.get(CONNECTION_STORE_KEY);
+    return normalizeDocument(raw).items;
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Reads the connection document before a mutation. Unlike the display reader,
+ * storage failures propagate so a write cannot replace unread sibling records.
+ */
+export async function loadConnectionStoreDocumentForUpdate(
   settings: ConnectionSettingsStore,
 ): Promise<Record<string, StoredConnectionRecord>> {
   const raw = await settings.get(CONNECTION_STORE_KEY);
-  const normalized = normalizeDocument(raw);
-  return normalized.items;
+  return normalizeDocument(raw).items;
 }
 
 export async function saveConnectionStoreDocument(

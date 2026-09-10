@@ -4,12 +4,90 @@ import { test } from "node:test";
 import {
   createTabLayoutPersistence,
 } from "../src/taskpane/tab-layout-persistence.ts";
-import type { WorkbookTabLayout } from "../src/taskpane/tab-layout.ts";
+import {
+  loadWorkbookTabLayout,
+  saveWorkbookTabLayout,
+  type WorkbookTabLayout,
+  workbookTabLayoutKey,
+} from "../src/taskpane/tab-layout.ts";
 
 const SAMPLE_LAYOUT: WorkbookTabLayout = {
   sessionIds: ["session-a", "session-b"],
   activeSessionId: "session-b",
 };
+
+class StartupLayoutSettings {
+  private readonly values = new Map<string, DynamicValue>();
+  private failRead = false;
+
+  get(key: string): Promise<DynamicValue> {
+    if (this.failRead) {
+      this.failRead = false;
+      return Promise.reject(new Error("seeded layout read failure"));
+    }
+    return Promise.resolve(this.values.get(key) ?? null);
+  }
+
+  set(key: string, value: DynamicValue): Promise<void> {
+    this.values.set(key, value);
+    return Promise.resolve();
+  }
+
+  delete(key: string): Promise<void> {
+    this.values.delete(key);
+    return Promise.resolve();
+  }
+
+  seed(value: DynamicValue, failRead = false): void {
+    this.values.set(workbookTabLayoutKey("wb-1"), value);
+    this.failRead = failRead;
+  }
+
+  stored(): DynamicValue {
+    return this.values.get(workbookTabLayoutKey("wb-1")) ?? null;
+  }
+}
+
+async function persistStartupFallback(settings: StartupLayoutSettings): Promise<void> {
+  let readSucceeded = false;
+  try {
+    await loadWorkbookTabLayout(settings, "wb-1");
+    readSucceeded = true;
+  } catch {
+    // Startup falls back to a fresh runtime, but must preserve unread storage.
+  }
+
+  const fallback: WorkbookTabLayout = {
+    sessionIds: ["fresh-session"],
+    activeSessionId: "fresh-session",
+  };
+  const controller = createTabLayoutPersistence({
+    resolveWorkbookId: () => Promise.resolve("wb-1"),
+    saveLayout: (workbookId, layout) => saveWorkbookTabLayout(settings, workbookId, layout),
+  });
+  controller.enable(readSucceeded ? undefined : fallback);
+  controller.persist(fallback);
+  await controller.flush();
+}
+
+void test("startup preserves an unread layout but replaces a corrupt layout", async () => {
+  const persistedLayout = {
+    sessionIds: ["persisted-session"],
+    activeSessionId: "persisted-session",
+  };
+  const unreadable = new StartupLayoutSettings();
+  unreadable.seed(persistedLayout, true);
+  await persistStartupFallback(unreadable);
+  assert.deepEqual(unreadable.stored(), persistedLayout);
+
+  const corrupt = new StartupLayoutSettings();
+  corrupt.seed({ sessionIds: "corrupt" });
+  await persistStartupFallback(corrupt);
+  assert.deepEqual(corrupt.stored(), {
+    sessionIds: ["fresh-session"],
+    activeSessionId: "fresh-session",
+  });
+});
 
 void test("tab layout persistence is disabled until enabled", async () => {
   const saves: Array<{ workbookId: string | null; layout: WorkbookTabLayout }> = [];

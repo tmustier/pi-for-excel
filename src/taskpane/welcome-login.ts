@@ -4,13 +4,12 @@
 
 import { t, initLanguage, getLanguage } from "../language/index.js";
 
-import type { ProviderKeysStore } from "../storage/local/provider-keys-store.js";
+import type { ModelRefreshOwner } from "../models/model-refresh-owner.js";
 import { getAppStorage } from "../storage/local/app-storage.js";
 
 import { closeOverlayById, createOverlayDialog } from "../ui/overlay-dialog.js";
 import { WELCOME_LOGIN_OVERLAY_ID } from "../ui/overlay-ids.js";
 import { showToast } from "../ui/toast.js";
-import { getActiveProviders, setActiveProviders } from "../models/active-providers.js";
 import {
   DEFAULT_PROXY_IS_REMOTE,
   DEFAULT_PROXY_URL,
@@ -18,6 +17,7 @@ import {
   probeProxyReachability,
   resolveConfiguredProxyUrl,
 } from "../auth/proxy-validation.js";
+import { readTaskpaneProxySettings } from "./settings.js";
 
 function createElement<K extends keyof HTMLElementTagNameMap>(
   tagName: K,
@@ -34,23 +34,21 @@ async function testLocalHttpsProxy(proxyUrl: string): Promise<boolean> {
   return probeProxyReachability(proxyUrl, 1200);
 }
 
-export async function showWelcomeLogin(providerKeys: ProviderKeysStore): Promise<void> {
+export async function showWelcomeLogin(modelRefreshOwner: ModelRefreshOwner): Promise<void> {
   const { VISIBLE_PROVIDERS, buildProviderRow } = await import("../ui/provider-login.js");
 
   // Make OAuth flows usable even before the user can access /settings.
   try {
     const storage = getAppStorage();
-    const enabled = await storage.settings.get("proxy.enabled");
-    const url = await storage.settings.get("proxy.url");
+    const proxySettings = await readTaskpaneProxySettings(storage.settings);
+    const currentUrl = resolveConfiguredProxyUrl(proxySettings.url);
 
-    const currentUrl = resolveConfiguredProxyUrl(url);
-
-    if (url === null) {
+    if (proxySettings.url === null) {
       await storage.settings.set("proxy.url", currentUrl);
     }
 
     // Auto-enable if a local HTTPS proxy is actually reachable.
-    if (!enabled) {
+    if (!proxySettings.enabled) {
       const ok = await testLocalHttpsProxy(currentUrl);
       if (ok) {
         await storage.settings.set("proxy.enabled", true);
@@ -61,7 +59,7 @@ export async function showWelcomeLogin(providerKeys: ProviderKeysStore): Promise
   }
 
   closeOverlayById(WELCOME_LOGIN_OVERLAY_ID);
-  if (getActiveProviders()?.size) return;
+  if (modelRefreshOwner.snapshot().availableProviders.length > 0) return;
 
   return new Promise<void>((resolve) => {
     const dialog = createOverlayDialog({
@@ -80,11 +78,10 @@ export async function showWelcomeLogin(providerKeys: ProviderKeysStore): Promise
     });
 
     const closeOverlay = dialog.close;
-    const onModelsChanged = (): void => {
-      if (getActiveProviders()?.size) closeOverlay();
-    };
-    document.addEventListener("pi:models-changed", onModelsChanged);
-    dialog.addCleanup(() => document.removeEventListener("pi:models-changed", onModelsChanged));
+    const unsubscribeModels = modelRefreshOwner.subscribe((snapshot) => {
+      if (snapshot.availableProviders.length > 0) closeOverlay();
+    });
+    dialog.addCleanup(unsubscribeModels);
 
     const titleId = `${WELCOME_LOGIN_OVERLAY_ID}-title`;
     const subtitleId = `${WELCOME_LOGIN_OVERLAY_ID}-subtitle`;
@@ -264,16 +261,10 @@ export async function showWelcomeLogin(providerKeys: ProviderKeysStore): Promise
     });
 
     const hydrateProxyUi = async () => {
-      try {
-        const storage = getAppStorage();
-        const enabled = await storage.settings.get("proxy.enabled");
-        const url = await storage.settings.get("proxy.url");
-        proxyEnabledEl.checked = Boolean(enabled);
-        proxyUrlEl.value = resolveConfiguredProxyUrl(url);
-      } catch {
-        proxyEnabledEl.checked = false;
-        proxyUrlEl.value = DEFAULT_PROXY_URL;
-      }
+      const storage = getAppStorage();
+      const proxySettings = await readTaskpaneProxySettings(storage.settings);
+      proxyEnabledEl.checked = proxySettings.enabled;
+      proxyUrlEl.value = resolveConfiguredProxyUrl(proxySettings.url);
     };
 
     const saveProxyUi = async () => {
@@ -303,21 +294,13 @@ export async function showWelcomeLogin(providerKeys: ProviderKeysStore): Promise
         isActive: false,
         expandedRef,
         onConnected: (_row, _id, label) => {
-          void (async () => {
-            const updated = await providerKeys.list();
-            setActiveProviders(new Set(updated));
-            document.dispatchEvent(new CustomEvent("pi:providers-changed"));
-            showToast(t("welcome.toast.connected", { label }), 3200);
-            closeOverlay();
-          })();
+          document.dispatchEvent(new CustomEvent("pi:providers-changed"));
+          showToast(t("welcome.toast.connected", { label }), 3200);
+          closeOverlay();
         },
         onDisconnected: (_row, _id, label) => {
-          void (async () => {
-            const updated = await providerKeys.list();
-            setActiveProviders(new Set(updated));
-            document.dispatchEvent(new CustomEvent("pi:providers-changed"));
-            showToast(t("welcome.toast.disconnected", { label }));
-          })();
+          document.dispatchEvent(new CustomEvent("pi:providers-changed"));
+          showToast(t("welcome.toast.disconnected", { label }));
         },
       });
       providerList.appendChild(row);

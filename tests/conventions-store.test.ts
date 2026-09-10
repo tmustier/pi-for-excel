@@ -41,65 +41,58 @@ void describe("getStoredConventions", () => {
     assert.deepEqual(result, {});
   });
 
-  void test("validates nested sections and normalizes colors", async () => {
-    const store = createFakeStore();
-    store.data.set("conventions.v1", {
-      presetFormats: {
-        number: { format: "#,##0.000" },
-      },
-      customPresets: {
-        bps: {
-          format: '#,##0 "bps"',
-          description: "Basis points",
+  void test("conventions validation policy handles every nested value class", async () => {
+    const cases: Array<{ name: string; stored: DynamicValue; expected: StoredConventions }> = [
+      {
+        name: "valid nested sections and normalized colors",
+        stored: {
+          presetFormats: { number: { format: "#,##0.000" } },
+          customPresets: { bps: { format: '#,##0 "bps"', description: "Basis points" } },
+          visualDefaults: { fontName: "Calibri", fontSize: 11 },
+          colorConventions: {
+            hardcodedValueColor: "rgb(0,0,255)",
+            crossSheetLinkColor: "#008000",
+          },
+          headerStyle: {
+            fillColor: "#002060",
+            fontColor: "#fff",
+            bold: true,
+            wrapText: false,
+          },
+        },
+        expected: {
+          presetFormats: { number: { format: "#,##0.000" } },
+          customPresets: { bps: { format: '#,##0 "bps"', description: "Basis points" } },
+          visualDefaults: { fontName: "Calibri", fontSize: 11 },
+          colorConventions: {
+            hardcodedValueColor: "#0000FF",
+            crossSheetLinkColor: "#008000",
+          },
+          headerStyle: {
+            fillColor: "#002060",
+            fontColor: "#FFFFFF",
+            bold: true,
+            wrapText: false,
+          },
         },
       },
-      visualDefaults: {
-        fontName: "Calibri",
-        fontSize: 11,
+      {
+        name: "invalid nested values",
+        stored: {
+          presetFormats: { number: { format: "" } },
+          customPresets: { "": { format: "0.00" } },
+          visualDefaults: { fontSize: 1000 },
+          colorConventions: { hardcodedValueColor: "blue" },
+        },
+        expected: {},
       },
-      colorConventions: {
-        hardcodedValueColor: "rgb(0,0,255)",
-        crossSheetLinkColor: "#008000",
-      },
-      headerStyle: {
-        fillColor: "#002060",
-        fontColor: "#fff",
-        bold: true,
-        wrapText: false,
-      },
-    });
+    ];
 
-    const result = await getStoredConventions(store);
-    assert.equal(result.presetFormats?.number?.format, "#,##0.000");
-    assert.equal(result.customPresets?.bps?.description, "Basis points");
-    assert.equal(result.visualDefaults?.fontName, "Calibri");
-    assert.equal(result.colorConventions?.hardcodedValueColor, "#0000FF");
-    assert.equal(result.colorConventions?.crossSheetLinkColor, "#008000");
-    assert.equal(result.headerStyle?.fontColor, "#FFFFFF");
-  });
-
-  void test("drops invalid nested values", async () => {
-    const store = createFakeStore();
-    store.data.set("conventions.v1", {
-      presetFormats: {
-        number: { format: "" },
-      },
-      customPresets: {
-        "": { format: "0.00" },
-      },
-      visualDefaults: {
-        fontSize: 1000,
-      },
-      colorConventions: {
-        hardcodedValueColor: "blue",
-      },
-    });
-
-    const result = await getStoredConventions(store);
-    assert.equal(result.presetFormats, undefined);
-    assert.equal(result.customPresets, undefined);
-    assert.equal(result.visualDefaults, undefined);
-    assert.equal(result.colorConventions, undefined);
+    for (const { name, stored, expected } of cases) {
+      const store = createFakeStore();
+      store.data.set("conventions.v1", stored);
+      assert.deepEqual(await getStoredConventions(store), expected, name);
+    }
   });
 });
 
