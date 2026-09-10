@@ -10,11 +10,11 @@ interface RawMarkdownGlobLoader {
   (pattern: string, importerUrl: string): Record<string, string>;
 }
 
-function isTestRawMarkdownGlobPayloadShape(value: DynamicValue): value is DynamicObject {
+function isTestRawMarkdownGlobPayloadShape(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-function isRawMarkdownMap(value: DynamicValue): value is Record<string, string> {
+function isRawMarkdownMap(value: unknown): value is Record<string, string> {
   if (!isTestRawMarkdownGlobPayloadShape(value)) {
     return false;
   }

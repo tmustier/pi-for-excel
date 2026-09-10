@@ -23,7 +23,7 @@ This is not the full upstream anti-slop preset. The vendored plugin remains an i
 
 In particular:
 
-- The `no-unknown-*` rules are not enabled while `DynamicValue` exists. The alias can conceal the syntax they inspect, so global enforcement would overstate boundary safety. The existing ESLint restriction on direct `unknown` syntax remains in force until a coordinated boundary migration replaces the alias with honest raw-input types and concrete decoders.
+- The `no-unknown-*` rules run as a ratchet, not as errors. The `DynamicValue` alias is gone, so the count they report is honest, but `src` had 461 sites (384 parameters, 77 returns) at that point. `npm run check:unknown-burndown` runs them through `.oxlintrc.unknown-burndown.json` and fails when the count rises above the baseline in `scripts/check-unknown-burndown.mjs`; lower the baseline as the count falls. They become ordinary errors once it reaches zero.
 - Runtime `typeof` checks and small parser primitives remain valid boundary tools. An object check alone does not establish a domain contract; concrete parsers own domain shapes.
 - `filter().map()`, object parameters, clear conditional object spreads, and descriptive symbol names are not banned by style alone.
 - Production code uses typed property access rather than `Reflect.get` or `Reflect.apply`. Test harnesses still use reflection to install host globals and exercise malformed JavaScript calls, so the rules are not enabled across the repository.

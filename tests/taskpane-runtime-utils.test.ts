@@ -14,12 +14,12 @@ import {
 function createFingerprintTestTool(args: {
   name: string;
   description: string;
-  parameters?: DynamicValue;
+  parameters?: unknown;
 }): {
   name: string;
   label: string;
   description: string;
-  parameters: DynamicValue;
+  parameters: unknown;
   execute: () => Promise<{ content: Array<{ type: "text"; text: string }>; details: null }>;
 } {
   return {

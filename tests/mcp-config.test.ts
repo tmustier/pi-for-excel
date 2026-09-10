@@ -16,13 +16,13 @@ import {
 } from "../src/tools/mcp-config.ts";
 
 class MemorySettingsStore {
-  protected readonly values = new Map<string, DynamicValue>();
+  protected readonly values = new Map<string, unknown>();
 
-  get(key: string): Promise<DynamicValue> {
+  get(key: string): Promise<unknown> {
     return Promise.resolve(this.values.has(key) ? this.values.get(key) ?? null : null);
   }
 
-  set(key: string, value: DynamicValue): Promise<void> {
+  set(key: string, value: unknown): Promise<void> {
     this.values.set(key, value);
     return Promise.resolve();
   }
@@ -36,7 +36,7 @@ class TransientReadSettings extends MemorySettingsStore {
     this.failNextRead = true;
   }
 
-  override get(key: string): Promise<DynamicValue> {
+  override get(key: string): Promise<unknown> {
     if (this.failNextRead) {
       this.failNextRead = false;
       return Promise.reject(new Error("transient MCP read failure"));
@@ -48,7 +48,7 @@ class TransientReadSettings extends MemorySettingsStore {
 class FailingConnectionStoreSettings extends MemorySettingsStore {
   private failConnectionStoreWrite = true;
 
-  override set(key: string, value: DynamicValue): Promise<void> {
+  override set(key: string, value: unknown): Promise<void> {
     if (this.failConnectionStoreWrite && key === CONNECTION_STORE_KEY) {
       this.failConnectionStoreWrite = false;
       return Promise.reject(new Error("simulated connection store failure"));
@@ -65,7 +65,7 @@ class FailingServerSettings extends MemorySettingsStore {
     this.failServerDocumentWrite = true;
   }
 
-  override set(key: string, value: DynamicValue): Promise<void> {
+  override set(key: string, value: unknown): Promise<void> {
     if (this.failServerDocumentWrite && key === MCP_SERVERS_SETTING_KEY) {
       this.failServerDocumentWrite = false;
       return Promise.reject(new Error("simulated mcp.servers write failure"));
@@ -76,7 +76,7 @@ class FailingServerSettings extends MemorySettingsStore {
 }
 
 class ConcurrentServerFailureSettings extends MemorySettingsStore {
-  private firstServerWriteReject: ((reason?: DynamicValue) => void) | null = null;
+  private firstServerWriteReject: ((reason?: unknown) => void) | null = null;
   private firstServerWriteStartedResolve: (() => void) | null = null;
   private readonly firstServerWriteStarted: Promise<void>;
   private shouldInterceptServerWrite = false;
@@ -106,7 +106,7 @@ class ConcurrentServerFailureSettings extends MemorySettingsStore {
     reject(new Error("simulated concurrent mcp.servers write failure"));
   }
 
-  override set(key: string, value: DynamicValue): Promise<void> {
+  override set(key: string, value: unknown): Promise<void> {
     if (key === MCP_SERVERS_SETTING_KEY && this.shouldInterceptServerWrite) {
       this.shouldInterceptServerWrite = false;
 

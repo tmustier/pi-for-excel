@@ -1,4 +1,4 @@
-function isExtensionsSandboxRuntimePayloadShape(value: DynamicValue): value is DynamicObject {
+function isExtensionsSandboxRuntimePayloadShape(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -87,13 +87,13 @@ export interface SandboxActivationOptions {
   extensionName: string;
   source: SandboxExtensionSource;
   registerCommand: (name: string, cmd: ExtensionCommand) => void;
-  registerTool: (tool: AgentTool<TSchema, DynamicValue>) => void;
+  registerTool: (tool: AgentTool<TSchema, unknown>) => void;
   unregisterTool: (name: string) => void;
   subscribeAgentEvents: (handler: (event: AgentEvent) => void) => () => void;
   llmComplete: (request: LlmCompletionRequest) => Promise<LlmCompletionResult>;
   httpFetch: (url: string, options?: HttpRequestOptions) => Promise<HttpResponse>;
-  storageGet: (key: string) => Promise<DynamicValue>;
-  storageSet: (key: string, value: DynamicValue) => Promise<void>;
+  storageGet: (key: string) => Promise<unknown>;
+  storageSet: (key: string, value: unknown) => Promise<void>;
   storageDelete: (key: string) => Promise<void>;
   storageKeys: () => Promise<string[]>;
   clipboardWriteText: (text: string) => Promise<void>;
@@ -126,12 +126,12 @@ export interface SandboxActivationOptions {
 }
 
 interface SandboxPendingRequest {
-  resolve: (value: DynamicValue) => void;
-  reject: (reason: DynamicValue) => void;
+  resolve: (value: unknown) => void;
+  reject: (reason: unknown) => void;
   timeoutId: ReturnType<typeof setTimeout>;
 }
 
-function parseConnectionStatus(value: DynamicValue): ConnectionStatus {
+function parseConnectionStatus(value: unknown): ConnectionStatus {
   if (value === "connected" || value === "missing" || value === "invalid" || value === "error") {
     return value;
   }
@@ -139,7 +139,7 @@ function parseConnectionStatus(value: DynamicValue): ConnectionStatus {
   throw new Error("Invalid connection status.");
 }
 
-function parseConnectionSecrets(value: DynamicValue): Record<string, string> {
+function parseConnectionSecrets(value: unknown): Record<string, string> {
   const payload = asSandboxPayload(value, "connection secrets");
   const secrets: Record<string, string> = {};
 
@@ -154,7 +154,7 @@ function parseConnectionSecrets(value: DynamicValue): Record<string, string> {
   return secrets;
 }
 
-function parseConnectionHttpAuth(value: DynamicValue): ExtensionConnectionDefinition["httpAuth"] {
+function parseConnectionHttpAuth(value: unknown): ExtensionConnectionDefinition["httpAuth"] {
   if (value === undefined || value === null) {
     return undefined;
   }
@@ -198,7 +198,7 @@ function parseConnectionHttpAuth(value: DynamicValue): ExtensionConnectionDefini
   };
 }
 
-function parseConnectionDefinition(value: DynamicValue): ExtensionConnectionDefinition {
+function parseConnectionDefinition(value: unknown): ExtensionConnectionDefinition {
   const payload = asSandboxPayload(value, "connection definition");
   const title = asNonEmptyString(payload.title, "title");
   const id = asNonEmptyString(payload.id, "id");
@@ -258,7 +258,7 @@ function parseConnectionDefinition(value: DynamicValue): ExtensionConnectionDefi
   };
 }
 
-function parseModelProviderDefinition(value: DynamicValue): ExtensionModelProviderDefinition {
+function parseModelProviderDefinition(value: unknown): ExtensionModelProviderDefinition {
   const payload = asSandboxPayload(value, "model provider definition");
   const id = asNonEmptyString(payload.id, "provider.id");
   const name = asNonEmptyString(payload.name, "provider.name");
@@ -352,13 +352,13 @@ class SandboxRuntimeHost {
     this.bootstrapSandboxPort();
   };
 
-  private readonly onPortMessage = (event: MessageEvent<DynamicValue>) => {
+  private readonly onPortMessage = (event: MessageEvent<unknown>) => {
     this.handlePortMessage(event);
   };
 
   private readonly readyPromise: Promise<void>;
   private resolveReady: (() => void) | null = null;
-  private rejectReady: ((reason: DynamicValue) => void) | null = null;
+  private rejectReady: ((reason: unknown) => void) | null = null;
 
   private nextRequestId = 1;
   private disposed = false;
@@ -507,11 +507,11 @@ class SandboxRuntimeHost {
 
   private async callSandbox(
     method: string,
-    params: DynamicValue,
+    params: unknown,
     options?: {
       allowWhenDisposed?: boolean;
     },
-  ): Promise<DynamicValue> {
+  ): Promise<unknown> {
     if (this.disposed && !options?.allowWhenDisposed) {
       throw new Error("Sandbox runtime is already disposed.");
     }
@@ -519,7 +519,7 @@ class SandboxRuntimeHost {
     const requestId = `req-${this.nextRequestId}`;
     this.nextRequestId += 1;
 
-    return new Promise<DynamicValue>((resolve, reject) => {
+    return new Promise<unknown>((resolve, reject) => {
       const timeoutId = setTimeout(() => {
         this.pendingRequests.delete(requestId);
         reject(new Error(`Sandbox request timed out: ${method}`));
@@ -548,7 +548,7 @@ class SandboxRuntimeHost {
   private sendResponse(
     requestId: string,
     ok: boolean,
-    payload: DynamicValue,
+    payload: unknown,
   ): void {
     if (!this.port) {
       return;
@@ -572,7 +572,7 @@ class SandboxRuntimeHost {
     this.port.postMessage(envelope);
   }
 
-  private sendEvent(eventName: string, data: DynamicValue): void {
+  private sendEvent(eventName: string, data: unknown): void {
     if (!this.port) {
       return;
     }
@@ -610,12 +610,12 @@ class SandboxRuntimeHost {
 
   private dispatchSandboxUiAction(actionId: string): void {
     void this.callSandbox("ui_action", { actionId })
-      .catch((error: DynamicValue) => {
+      .catch((error: unknown) => {
         console.warn(`[pi] Sandbox UI action failed: ${getErrorMessage(error)}`);
       });
   }
 
-  private handlePortMessage(event: MessageEvent<DynamicValue>): void {
+  private handlePortMessage(event: MessageEvent<unknown>): void {
     const envelope = event.data;
     if (!isSandboxEnvelope(envelope)) {
       return;
@@ -752,15 +752,15 @@ class SandboxRuntimeHost {
               : undefined;
           }
 
-          const tool: AgentTool<TSchema, DynamicValue> & ToolConnectionMetadata = {
+          const tool: AgentTool<TSchema, unknown> & ToolConnectionMetadata = {
             name,
             label,
             description,
             parameters,
             execute: async (
               _toolCallId: string,
-              toolParams: DynamicValue,
-            ): Promise<AgentToolResult<DynamicValue>> => {
+              toolParams: unknown,
+            ): Promise<AgentToolResult<unknown>> => {
               const result = await this.callSandbox("invoke_tool", {
                 toolId,
                 params: toolParams,

@@ -6,8 +6,8 @@
  */
 
 export interface SessionAssociationSettingsStore {
-  get(key: string): Promise<DynamicValue>;
-  set(key: string, value: DynamicValue): Promise<void>;
+  get(key: string): Promise<unknown>;
+  set(key: string, value: unknown): Promise<void>;
 }
 
 const SESSION_WORKBOOK_PREFIX = "session.workbook.v1.";

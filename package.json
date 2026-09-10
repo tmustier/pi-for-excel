@@ -27,7 +27,7 @@
     "check:landing-connect-copy": "node scripts/check-landing-connect-copy.mjs",
     "check:pi-lockstep": "node scripts/check-pi-deps-lockstep.mjs",
     "check:version-sync": "node scripts/check-version-sync.mjs",
-    "check": "npm run check:css-theme && npm run check:theme-utility-overrides && npm run check:builtins-inline-style && npm run check:landing-connect-copy && npm run check:pi-lockstep && npm run check:version-sync && npm run check:boundary-casts && npm run check:eslint-comments && npm run check:innerhtml && npm run check:return-types && npm run lint && npm run typecheck",
+    "check": "npm run check:css-theme && npm run check:theme-utility-overrides && npm run check:builtins-inline-style && npm run check:landing-connect-copy && npm run check:pi-lockstep && npm run check:version-sync && npm run check:boundary-casts && npm run check:unknown-burndown && npm run check:eslint-comments && npm run check:innerhtml && npm run check:return-types && npm run lint && npm run typecheck",
     "lint": "npm run lint:eslint && npm run lint:anti-slop",
     "lint:eslint": "eslint \"*.ts\" \"src/**/*.ts\" \"tests/**/*.ts\"",
     "lint:anti-slop": "oxlint --quiet vite.config.ts src tests",
@@ -46,7 +46,8 @@
     "test": "node --test --experimental-strip-types --import ./scripts/register-test-ts-loader.mjs \"tests/**/*.test.ts\" \"tests/**/*.test.mjs\"",
     "test:browser": "node --test --test-concurrency=1 --experimental-strip-types --import ./scripts/register-test-ts-loader.mjs \"tests/browser/**/*.browser-test.ts\"",
     "test:all": "npm test && npm run test:browser",
-    "check:return-types": "node scripts/check-top-level-return-types.mjs"
+    "check:return-types": "node scripts/check-top-level-return-types.mjs",
+    "check:unknown-burndown": "node scripts/check-unknown-burndown.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.124.0",

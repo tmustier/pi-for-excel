@@ -91,8 +91,8 @@ async function loadLeafNode(
   sheet.load("name");
   await context.sync();
 
-  const rawFmt: DynamicValue = range.numberFormat[0]?.[0];
-  const rawFormula: DynamicValue = range.formulas[0]?.[0];
+  const rawFmt: unknown = range.numberFormat[0]?.[0];
+  const rawFormula: unknown = range.formulas[0]?.[0];
   const numberFormat = typeof rawFmt === "string" && rawFmt !== "" ? rawFmt : undefined;
   const formula = typeof rawFormula === "string" && rawFormula.startsWith("=") ? rawFormula : undefined;
 
@@ -195,7 +195,7 @@ async function buildDependentFormulaCandidates(
   const formulaCandidates: FormulaDependentCandidate[] = [];
 
   for (const loaded of loadedRanges) {
-    const formulasGrid: DynamicValue = loaded.range.formulas;
+    const formulasGrid: unknown = loaded.range.formulas;
     if (!Array.isArray(formulasGrid)) continue;
 
     for (const [rowIndex, rowValue] of formulasGrid.entries()) {
@@ -341,7 +341,7 @@ async function traceCell(
   await context.sync();
 
   const fullAddr = qualifiedAddress(sheet.name, range.address);
-  const rawFmt: DynamicValue = range.numberFormat[0]?.[0];
+  const rawFmt: unknown = range.numberFormat[0]?.[0];
   const numberFormat = typeof rawFmt === "string" && rawFmt !== "" ? rawFmt : undefined;
 
   if (visited.has(fullAddr)) {
@@ -355,8 +355,8 @@ async function traceCell(
   }
   visited.add(fullAddr);
 
-  const rawFormula: DynamicValue = range.formulas[0]?.[0];
-  const value: DynamicValue = range.values[0]?.[0];
+  const rawFormula: unknown = range.formulas[0]?.[0];
+  const value: unknown = range.values[0]?.[0];
   const formula = typeof rawFormula === "string" && rawFormula.startsWith("=")
     ? rawFormula
     : undefined;

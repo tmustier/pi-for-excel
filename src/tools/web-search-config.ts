@@ -109,11 +109,11 @@ const WEB_SEARCH_CONNECTION_SECRET_FIELD_BY_PROVIDER: Record<WebSearchProvider, 
 };
 
 export interface WebSearchConfigReader {
-  get(key: string): Promise<DynamicValue>;
+  get(key: string): Promise<unknown>;
 }
 
 export interface WebSearchConfigStore extends WebSearchConfigReader {
-  set(key: string, value: DynamicValue): Promise<void>;
+  set(key: string, value: unknown): Promise<void>;
   delete?(key: string): Promise<void>;
 }
 
@@ -122,13 +122,13 @@ export interface WebSearchProviderConfig {
   apiKeys: Partial<Record<WebSearchProvider, string>>;
 }
 
-function normalizeOptionalString(value: DynamicValue): string | undefined {
+function normalizeOptionalString(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
-function parseProvider(value: DynamicValue): WebSearchProvider | undefined {
+function parseProvider(value: unknown): WebSearchProvider | undefined {
   if (value === "jina" || value === "firecrawl" || value === "serper" || value === "tavily" || value === "brave") {
     return value;
   }
@@ -142,7 +142,7 @@ function createEmptyApiKeyMap(): Partial<Record<WebSearchProvider, string>> {
 function setApiKeyIfPresent(
   apiKeys: Partial<Record<WebSearchProvider, string>>,
   provider: WebSearchProvider,
-  value: DynamicValue,
+  value: unknown,
 ): void {
   const normalized = normalizeOptionalString(value);
   if (normalized !== undefined) {
@@ -153,7 +153,7 @@ function setApiKeyIfPresent(
 async function readWebSearchSetting(
   settings: WebSearchConfigReader,
   key: string,
-): Promise<DynamicValue> {
+): Promise<unknown> {
   try {
     return await settings.get(key);
   } catch {
@@ -162,7 +162,7 @@ async function readWebSearchSetting(
 }
 
 function parseLegacyWebSearchApiKeys(
-  values: readonly DynamicValue[],
+  values: readonly unknown[],
 ): Partial<Record<WebSearchProvider, string>> {
   const apiKeys = createEmptyApiKeyMap();
   for (const [index, provider] of WEB_SEARCH_PROVIDERS.entries()) {

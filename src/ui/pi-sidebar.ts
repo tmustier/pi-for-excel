@@ -676,8 +676,8 @@ export class PiSidebar extends LitElement {
     this._detachTabContextMenuDocumentListener();
   }
 
-  private _buildToolResultsMap(): Map<string, ToolResultMessage<DynamicValue>> {
-    const map = new Map<string, ToolResultMessage<DynamicValue>>();
+  private _buildToolResultsMap(): Map<string, ToolResultMessage<unknown>> {
+    const map = new Map<string, ToolResultMessage<unknown>>();
     if (!this.agent) return map;
     for (const msg of this.agent.state.messages) {
       if (msg.role === "toolResult") map.set(msg.toolCallId, msg);

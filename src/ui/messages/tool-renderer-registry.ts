@@ -19,7 +19,7 @@ export interface ToolRenderResult {
   isCustom: boolean;
 }
 
-export interface ToolRenderer<TParams = DynamicValue, TDetails = DynamicValue> {
+export interface ToolRenderer<TParams = unknown, TDetails = unknown> {
   render(
     params: TParams | undefined,
     result: ToolResultMessage<TDetails> | undefined,
@@ -41,7 +41,7 @@ export function getToolRenderer(toolName: string): ToolRenderer | undefined {
 
 type FallbackState = "inprogress" | "complete" | "error";
 
-function formatJson(value: DynamicValue): string {
+function formatJson(value: unknown): string {
   if (typeof value === "string") {
     try {
       return JSON.stringify(JSON.parse(value), null, 2);
@@ -79,8 +79,8 @@ function renderFallbackSection(label: string, code: string, language: string): T
 }
 
 function renderDefaultTool(
-  params: DynamicValue,
-  result: ToolResultMessage<DynamicValue> | undefined,
+  params: unknown,
+  result: ToolResultMessage<unknown> | undefined,
   isStreaming: boolean,
 ): ToolRenderResult {
   const state: FallbackState = result
@@ -144,8 +144,8 @@ function renderDefaultTool(
  */
 export function renderTool(
   toolName: string,
-  params: DynamicValue,
-  result: ToolResultMessage<DynamicValue> | undefined,
+  params: unknown,
+  result: ToolResultMessage<unknown> | undefined,
   isStreaming: boolean,
 ): ToolRenderResult {
   const renderer = getToolRenderer(toolName);

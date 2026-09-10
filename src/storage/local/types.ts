@@ -14,9 +14,9 @@ import type { Api, Model } from "@earendil-works/pi-ai";
  */
 export interface StorageTransaction {
   /** Get a value by key from a specific store. */
-  get<T = DynamicValue>(storeName: string, key: string): Promise<T | null>;
+  get<T = unknown>(storeName: string, key: string): Promise<T | null>;
   /** Set a value for a key in a specific store. */
-  set<T = DynamicValue>(storeName: string, key: string, value: T): Promise<void>;
+  set<T = unknown>(storeName: string, key: string, value: T): Promise<void>;
   /** Delete a key from a specific store. */
   delete(storeName: string, key: string): Promise<void>;
 }
@@ -28,9 +28,9 @@ export interface StorageTransaction {
  */
 export interface StorageBackend {
   /** Get a value by key from a specific store. Returns null if key doesn't exist. */
-  get<T = DynamicValue>(storeName: string, key: string): Promise<T | null>;
+  get<T = unknown>(storeName: string, key: string): Promise<T | null>;
   /** Set a value for a key in a specific store. */
-  set<T = DynamicValue>(storeName: string, key: string, value: T): Promise<void>;
+  set<T = unknown>(storeName: string, key: string, value: T): Promise<void>;
   /** Delete a key from a specific store. */
   delete(storeName: string, key: string): Promise<void>;
   /** Get all keys from a specific store, optionally filtered by prefix. */
@@ -41,7 +41,7 @@ export interface StorageBackend {
    * @param indexName - The index to use for ordering
    * @param direction - Sort direction ("asc" or "desc")
    */
-  getAllFromIndex<T = DynamicValue>(
+  getAllFromIndex<T = unknown>(
     storeName: string,
     indexName: string,
     direction?: "asc" | "desc",

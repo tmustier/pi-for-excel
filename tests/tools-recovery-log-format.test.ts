@@ -5,7 +5,7 @@ import { WorkbookRecoveryLog } from "../src/workbook/recovery-log.ts";
 import type { RecoveryFormatRangeState } from "../src/workbook/recovery-states.ts";
 import { RECOVERY_SETTING_KEY } from "./fixtures/recovery-log.ts";
 
-function recoveryLog(formatRangeState: DynamicValue, apply: (state: RecoveryFormatRangeState) => void): WorkbookRecoveryLog {
+function recoveryLog(formatRangeState: unknown, apply: (state: RecoveryFormatRangeState) => void): WorkbookRecoveryLog {
   const payload = {
     version: 1,
     snapshots: [{

@@ -82,7 +82,7 @@ export function bootstrapTaskpane(): void {
         clearTimeout(slowInitTimer);
         clearTimeout(hardTimeoutTimer);
       })
-      .catch((error: DynamicValue) => {
+      .catch((error: unknown) => {
         if (!markInitComplete()) {
           console.error("[pi] Init error after timeout:", error);
           return;
@@ -116,7 +116,7 @@ export function bootstrapTaskpane(): void {
 
       runInit();
     })
-    .catch((error: DynamicValue) => {
+    .catch((error: unknown) => {
       console.warn("[pi] Host detection failed — initializing without Excel:", error);
       runInit();
     });

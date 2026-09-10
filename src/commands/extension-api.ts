@@ -126,7 +126,7 @@ function normalizeModelProviderDefinitionForOwner(
 }
 
 function normalizeToolConnectionRequirements(
-  rawValue: DynamicValue,
+  rawValue: unknown,
   ownerId: string,
 ): string[] | undefined {
   const normalizedIds: string[] = [];
@@ -163,8 +163,8 @@ function normalizeConnectionDefinitionForOwner(
 }
 
 interface ExtensionToolDefinitionBoundary {
-  execute?: DynamicValue;
-  handler?: DynamicValue;
+  execute?: unknown;
+  handler?: unknown;
 }
 
 function assertValidToolDefinition(name: string, tool: ExtensionToolDefinition): void {
@@ -606,7 +606,7 @@ export function createExtensionAPI(options: CreateExtensionAPIOptions): ExcelExt
     },
 
     storage: {
-      async get(key: string): Promise<DynamicValue> {
+      async get(key: string): Promise<unknown> {
         assertCapability("storage.readwrite");
         if (!storageGet) {
           throw new Error("Extension host does not support storage.get()");
@@ -615,7 +615,7 @@ export function createExtensionAPI(options: CreateExtensionAPIOptions): ExcelExt
         return storageGet(key);
       },
 
-      async set(key: string, value: DynamicValue): Promise<void> {
+      async set(key: string, value: unknown): Promise<void> {
         assertCapability("storage.readwrite");
         if (!storageSet) {
           throw new Error("Extension host does not support storage.set()");

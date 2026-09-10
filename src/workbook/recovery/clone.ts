@@ -198,7 +198,7 @@ export function cloneRecoveryChartState(state: RecoveryChartState): RecoveryChar
   return cloned;
 }
 
-function cloneUnknownGrid(grid: readonly DynamicValue[][]): DynamicValue[][] {
+function cloneUnknownGrid(grid: readonly unknown[][]): unknown[][] {
   return grid.map((row) => [...row]);
 }
 

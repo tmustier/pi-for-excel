@@ -1,4 +1,4 @@
-function isToolsWebSearchPayloadShape(value: DynamicValue): value is DynamicObject {
+function isToolsWebSearchPayloadShape(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -152,7 +152,7 @@ export interface WebSearchApiKeyValidationResult {
   resultCount?: number;
 }
 
-function normalizeOptionalString(value: DynamicValue): string | undefined {
+function normalizeOptionalString(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
@@ -196,7 +196,7 @@ function createWebSearchDetails(args: {
   return details;
 }
 
-function parseSites(value: DynamicValue): string[] {
+function parseSites(value: unknown): string[] {
   if (typeof value === "string") {
     const trimmed = value.trim();
     return trimmed.length > 0 ? [trimmed] : [];
@@ -219,7 +219,7 @@ function isRecencyValue(value: string): value is RecencyValue {
   return value === "day" || value === "week" || value === "month" || value === "year";
 }
 
-function parseParams(raw: DynamicValue): Params {
+function parseParams(raw: unknown): Params {
   if (!isToolsWebSearchPayloadShape(raw)) {
     throw new Error("Invalid web_search params: expected an object.");
   }
@@ -319,7 +319,7 @@ function buildProviderRequest(
   const maxResults = params.max_results ?? 5;
 
   if (provider === "jina") {
-    const body: DynamicObject = {
+    const body: Record<string, unknown> = {
       q: sentQuery,
     };
 
@@ -367,7 +367,7 @@ function buildProviderRequest(
   }
 
   if (provider === "serper") {
-    const body: DynamicObject = {
+    const body: Record<string, unknown> = {
       q: sentQuery,
       num: maxResults,
     };
@@ -392,7 +392,7 @@ function buildProviderRequest(
   }
 
   if (provider === "firecrawl") {
-    const body: DynamicObject = {
+    const body: Record<string, unknown> = {
       query: sentQuery,
       limit: maxResults,
     };
@@ -416,7 +416,7 @@ function buildProviderRequest(
     };
   }
 
-  const tavilyBody: DynamicObject = {
+  const tavilyBody: Record<string, unknown> = {
     api_key: apiKey,
     query: sentQuery,
     max_results: maxResults,
@@ -445,8 +445,8 @@ interface HitParsingShape {
   snippetKeys: readonly string[];
 }
 
-function readArrayPath(payload: DynamicValue, path: readonly string[]): DynamicValue[] {
-  let cursor: DynamicValue = payload;
+function readArrayPath(payload: unknown, path: readonly string[]): unknown[] {
+  let cursor: unknown = payload;
 
   for (const key of path) {
     if (!isToolsWebSearchPayloadShape(cursor)) {
@@ -459,7 +459,7 @@ function readArrayPath(payload: DynamicValue, path: readonly string[]): DynamicV
   return Array.isArray(cursor) ? cursor : [];
 }
 
-function parseHitsFromEntries(entries: readonly DynamicValue[], shape: HitParsingShape): WebSearchHit[] {
+function parseHitsFromEntries(entries: readonly unknown[], shape: HitParsingShape): WebSearchHit[] {
   const hits: WebSearchHit[] = [];
 
   for (const entry of entries) {
@@ -488,7 +488,7 @@ function parseHitsFromEntries(entries: readonly DynamicValue[], shape: HitParsin
   return hits;
 }
 
-function parseBraveHits(payload: DynamicValue): WebSearchHit[] {
+function parseBraveHits(payload: unknown): WebSearchHit[] {
   return parseHitsFromEntries(
     readArrayPath(payload, ["web", "results"]),
     {
@@ -499,7 +499,7 @@ function parseBraveHits(payload: DynamicValue): WebSearchHit[] {
   );
 }
 
-function parseSerperHits(payload: DynamicValue): WebSearchHit[] {
+function parseSerperHits(payload: unknown): WebSearchHit[] {
   return parseHitsFromEntries(
     readArrayPath(payload, ["organic"]),
     {
@@ -510,7 +510,7 @@ function parseSerperHits(payload: DynamicValue): WebSearchHit[] {
   );
 }
 
-function parseTavilyHits(payload: DynamicValue): WebSearchHit[] {
+function parseTavilyHits(payload: unknown): WebSearchHit[] {
   return parseHitsFromEntries(
     readArrayPath(payload, ["results"]),
     {
@@ -521,7 +521,7 @@ function parseTavilyHits(payload: DynamicValue): WebSearchHit[] {
   );
 }
 
-function parseJinaHits(payload: DynamicValue): WebSearchHit[] {
+function parseJinaHits(payload: unknown): WebSearchHit[] {
   return parseHitsFromEntries(
     readArrayPath(payload, ["data"]),
     {
@@ -532,7 +532,7 @@ function parseJinaHits(payload: DynamicValue): WebSearchHit[] {
   );
 }
 
-function parseFirecrawlHits(payload: DynamicValue): WebSearchHit[] {
+function parseFirecrawlHits(payload: unknown): WebSearchHit[] {
   return parseHitsFromEntries(
     readArrayPath(payload, ["data", "web"]),
     {
@@ -543,7 +543,7 @@ function parseFirecrawlHits(payload: DynamicValue): WebSearchHit[] {
   );
 }
 
-const SEARCH_HIT_PARSERS: Record<WebSearchProvider, (payload: DynamicValue) => WebSearchHit[]> = {
+const SEARCH_HIT_PARSERS: Record<WebSearchProvider, (payload: unknown) => WebSearchHit[]> = {
   jina: parseJinaHits,
   firecrawl: parseFirecrawlHits,
   brave: parseBraveHits,
@@ -551,7 +551,7 @@ const SEARCH_HIT_PARSERS: Record<WebSearchProvider, (payload: DynamicValue) => W
   tavily: parseTavilyHits,
 };
 
-function parseSearchHits(provider: WebSearchProvider, payload: DynamicValue, maxResults?: number): WebSearchHit[] {
+function parseSearchHits(provider: WebSearchProvider, payload: unknown, maxResults?: number): WebSearchHit[] {
   const hits = SEARCH_HIT_PARSERS[provider](payload);
   if (typeof maxResults === "number" && hits.length > maxResults) {
     return hits.slice(0, maxResults);
@@ -559,7 +559,7 @@ function parseSearchHits(provider: WebSearchProvider, payload: DynamicValue, max
   return hits;
 }
 
-function shouldFallbackToJina(provider: WebSearchProvider, error: DynamicValue): boolean {
+function shouldFallbackToJina(provider: WebSearchProvider, error: unknown): boolean {
   if (provider === "jina") return false;
 
   if (error instanceof WebSearchExecutionError) {
@@ -733,7 +733,7 @@ async function defaultExecuteSearch(
           });
         }
 
-        let payload: DynamicValue = null;
+        let payload: unknown = null;
         try {
           payload = JSON.parse(text);
         } catch {
@@ -833,7 +833,7 @@ export function createWebSearchTool(
     parameters: schema,
     execute: async (
       _toolCallId: string,
-      rawParams: DynamicValue,
+      rawParams: unknown,
       signal: AbortSignal | undefined,
     ): Promise<AgentToolResult<WebSearchToolDetails>> => {
       let params: Params | null = null;

@@ -1,9 +1,9 @@
-function isToolsBridgeHttpUtilsPayloadShape(value: DynamicValue): value is DynamicObject {
+function isToolsBridgeHttpUtilsPayloadShape(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 
-export function tryParseBridgeJson(text: string): DynamicValue {
+export function tryParseBridgeJson(text: string): unknown {
   const trimmed = text.trim();
   if (trimmed.length === 0) return null;
 
@@ -14,7 +14,7 @@ export function tryParseBridgeJson(text: string): DynamicValue {
   }
 }
 
-export function extractBridgeErrorMessage(value: DynamicValue): string | null {
+export function extractBridgeErrorMessage(value: unknown): string | null {
   if (isToolsBridgeHttpUtilsPayloadShape(value) && typeof value.error === "string") {
     return value.error;
   }
@@ -31,7 +31,7 @@ export function joinBridgeUrl(baseUrl: string, path: string): string {
   return `${baseUrl.replace(/\/+$/, "")}${path}`;
 }
 
-export function isAbortError(error: DynamicValue): boolean {
+export function isAbortError(error: unknown): boolean {
   if (error instanceof DOMException) {
     return error.name === "AbortError";
   }

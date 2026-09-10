@@ -73,7 +73,7 @@ void test("manual backup creates a downloadable copy of the current Office workb
     getFileAsync(
       fileType: string,
       options: { sliceSize?: number },
-      callback?: (result: DynamicObject) => void,
+      callback?: (result: Record<string, unknown>) => void,
     ): void {
       assert.equal(fileType, "compressed");
       assert.equal(options.sliceSize, 1_048_576);
@@ -82,10 +82,10 @@ void test("manual backup creates a downloadable copy of the current Office workb
         value: {
           size: 2,
           sliceCount: 1,
-          getSliceAsync(_index: number, sliceCallback?: (result: DynamicObject) => void): void {
+          getSliceAsync(_index: number, sliceCallback?: (result: Record<string, unknown>) => void): void {
             sliceCallback?.({ status: "succeeded", value: { data: [7, 9] } });
           },
-          closeAsync(closeCallback?: (result: DynamicObject) => void): void {
+          closeAsync(closeCallback?: (result: Record<string, unknown>) => void): void {
             closeCallback?.({ status: "succeeded" });
           },
         },
@@ -140,7 +140,7 @@ void test("manual backup creates a downloadable copy of the current Office workb
     assert.equal(listed[0]?.id, "2023-11-14T22-13-20-000Z_workbook.xlsx_office");
   } finally {
     if (previousOffice) Object.defineProperty(globalThis, "Office", previousOffice);
-    else delete (globalThis as { Office?: DynamicValue }).Office;
+    else delete (globalThis as { Office?: unknown }).Office;
   }
 });
 

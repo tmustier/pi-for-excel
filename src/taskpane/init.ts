@@ -1,4 +1,4 @@
-function isTaskpaneInitPayloadShape(value: DynamicValue): value is DynamicObject {
+function isTaskpaneInitPayloadShape(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -293,7 +293,7 @@ export async function initTaskpane(opts: {
 
   document.addEventListener("pi:providers-changed", () => {
     void modelRefreshOwner.refreshConfiguredProviders(true)
-      .catch((error: DynamicValue) => {
+      .catch((error: unknown) => {
         console.warn("[auth] Provider refresh after settings change failed:", error);
       });
   });
@@ -312,7 +312,7 @@ export async function initTaskpane(opts: {
   }
 
   if (modelRefreshOwner.snapshot().availableProviders.length === 0) {
-    void showWelcomeLogin(modelRefreshOwner).catch((error: DynamicValue) => {
+    void showWelcomeLogin(modelRefreshOwner).catch((error: unknown) => {
       console.warn("[auth] Failed to open welcome login:", error);
     });
   }
@@ -687,7 +687,7 @@ export async function initTaskpane(opts: {
   connectionManager.subscribe(() => {
     void refreshCapabilitiesForAllRuntimes();
     void modelRefreshOwner.refresh(true)
-      .catch((error: DynamicValue) => {
+      .catch((error: unknown) => {
         console.warn("[models] Failed to refresh after connection change:", error);
       });
   });
@@ -744,7 +744,7 @@ export async function initTaskpane(opts: {
       localServicesSnapshot = result;
       void refreshCapabilitiesForAllRuntimes();
     },
-    (error: DynamicValue) => { console.warn("[pi] Local services probe failed:", error); },
+    (error: unknown) => { console.warn("[pi] Local services probe failed:", error); },
   );
 
   const normalizeApprovalMessage = (title: string, message: string): string => {
@@ -1601,7 +1601,7 @@ export async function initTaskpane(opts: {
         },
       });
 
-      void modelRefreshOwner.refresh(true).catch((error: DynamicValue) => {
+      void modelRefreshOwner.refresh(true).catch((error: unknown) => {
         console.warn("[models] Model refresh from selector failed:", error);
       });
     })();
@@ -1769,7 +1769,7 @@ export async function initTaskpane(opts: {
         const importedLabel = `${count} file${count === 1 ? "" : "s"}`;
         showToast(t("init.importedIntoFiles", { label: importedLabel }));
       })
-      .catch((error: DynamicValue) => {
+      .catch((error: unknown) => {
         showToast(t("init.importFailed", { error: error instanceof Error ? error.message : t("init.unknownError") }));
       });
   };
@@ -1821,7 +1821,7 @@ export async function initTaskpane(opts: {
 
       document.addEventListener("pi:proxy-state-changed", (event: Event) => {
         if (!(event instanceof CustomEvent)) return;
-        const detail: DynamicValue = event.detail;
+        const detail: unknown = event.detail;
         if (!isTaskpaneInitPayloadShape(detail)) return;
         const state = detail.state;
         if (state === "detected" || state === "not-detected" || state === "unknown") {
@@ -1837,7 +1837,7 @@ export async function initTaskpane(opts: {
   // is still in-flight, and let extensions finish loading in the background.
   const extensionInitialization = extensionManager.initialize();
 
-  void extensionInitialization.catch((error: DynamicValue) => {
+  void extensionInitialization.catch((error: unknown) => {
     console.warn("[pi] Extension initialization failed:", error);
   });
 

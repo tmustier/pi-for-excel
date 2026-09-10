@@ -59,7 +59,7 @@ interface RuntimeListeners {
 
 export class SessionRuntimeManager {
   private readonly createSessionRuntime: SessionRuntimeFactory;
-  private readonly warnCapabilityRefresh: (error: DynamicValue) => void;
+  private readonly warnCapabilityRefresh: (error: unknown) => void;
   private readonly runtimes = new Map<string, SessionRuntime>();
   private readonly runtimeOrder: string[] = [];
   private readonly runtimeDefaultTabNumbers = new Map<string, number>();
@@ -73,7 +73,7 @@ export class SessionRuntimeManager {
 
   constructor(opts: {
     createRuntime: SessionRuntimeFactory;
-    warnCapabilityRefresh?: (error: DynamicValue) => void;
+    warnCapabilityRefresh?: (error: unknown) => void;
   }) {
     this.createSessionRuntime = opts.createRuntime;
     this.warnCapabilityRefresh = opts.warnCapabilityRefresh ?? (() => {});

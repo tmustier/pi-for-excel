@@ -16,8 +16,8 @@ function context(systemPrompt: string, includeTool: boolean): Context {
 }
 
 void test("agent request diagnostics report stable prefixes and model, prompt, and tool changes per session", async () => {
-  const priorDocument = Reflect.get(globalThis, "document") as DynamicValue;
-  const priorWindow = Reflect.get(globalThis, "window") as DynamicValue;
+  const priorDocument = Reflect.get(globalThis, "document") as unknown;
+  const priorWindow = Reflect.get(globalThis, "window") as unknown;
   Reflect.set(globalThis, "document", new EventTarget());
   const values = new Map<string, string>();
   Reflect.set(globalThis, "window", { localStorage: {

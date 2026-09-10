@@ -25,19 +25,19 @@ import type {
 } from "../recovery-states.js";
 
 interface WorkbookRangeState {
-  values: DynamicValue[][];
-  formulas: DynamicValue[][];
+  values: unknown[][];
+  formulas: unknown[][];
 }
 
 interface CountChangedCellsArgs {
-  beforeValues: DynamicValue[][];
-  beforeFormulas: DynamicValue[][];
-  afterValues: DynamicValue[][];
-  afterFormulas: DynamicValue[][];
+  beforeValues: unknown[][];
+  beforeFormulas: unknown[][];
+  afterValues: unknown[][];
+  afterFormulas: unknown[][];
 }
 
 export interface RestoreWorkbookRecoverySnapshotDependencies {
-  applySnapshot: (address: string, values: DynamicValue[][]) => Promise<WorkbookRangeState>;
+  applySnapshot: (address: string, values: unknown[][]) => Promise<WorkbookRangeState>;
   applyFormatCellsSnapshot: (
     address: string,
     state: RecoveryFormatRangeState,
@@ -82,7 +82,7 @@ export interface RestoreWorkbookRecoverySnapshotDependencies {
     args: AppendChartRecoverySnapshotArgs,
     scope: RecoveryWorkbookScope,
   ) => Promise<WorkbookRecoverySnapshot | null>;
-  toRestoreValues: (values: DynamicValue[][], formulas: DynamicValue[][]) => DynamicValue[][];
+  toRestoreValues: (values: unknown[][], formulas: unknown[][]) => unknown[][];
   countChangedCells: (args: CountChangedCellsArgs) => number;
 }
 

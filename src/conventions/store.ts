@@ -1,4 +1,4 @@
-function isConventionsStorePayloadShape(value: DynamicValue): value is DynamicObject {
+function isConventionsStorePayloadShape(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -27,8 +27,8 @@ import type {
 const CONVENTIONS_KEY = "conventions.v1";
 
 export interface ConventionsStore {
-  get: (key: string) => Promise<DynamicValue>;
-  set: (key: string, value: DynamicValue) => Promise<void>;
+  get: (key: string) => Promise<unknown>;
+  set: (key: string, value: unknown) => Promise<void>;
 }
 
 export interface ConventionDiff {
@@ -91,7 +91,7 @@ function cloneCustomPreset(value: StoredCustomPreset): StoredCustomPreset {
   return cloned;
 }
 
-function normalizeNumberInRange(value: DynamicValue, min: number, max: number): number | null {
+function normalizeNumberInRange(value: unknown, min: number, max: number): number | null {
   if (typeof value !== "number" || Number.isNaN(value) || !Number.isFinite(value)) {
     return null;
   }
@@ -103,7 +103,7 @@ function normalizeNumberInRange(value: DynamicValue, min: number, max: number): 
   return value;
 }
 
-function normalizeIntegerInRange(value: DynamicValue, min: number, max: number): number | null {
+function normalizeIntegerInRange(value: unknown, min: number, max: number): number | null {
   const n = normalizeNumberInRange(value, min, max);
   if (n === null || !Number.isInteger(n)) {
     return null;
@@ -155,7 +155,7 @@ function normalizeRgbColor(value: string): string | null {
   return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 }
 
-export function normalizeConventionColor(value: DynamicValue): string | null {
+export function normalizeConventionColor(value: unknown): string | null {
   if (typeof value !== "string") {
     return null;
   }
@@ -163,7 +163,7 @@ export function normalizeConventionColor(value: DynamicValue): string | null {
   return normalizeHexColor(value) ?? normalizeRgbColor(value);
 }
 
-function normalizeBuilderParams(raw: DynamicValue): FormatBuilderParams | undefined {
+function normalizeBuilderParams(raw: unknown): FormatBuilderParams | undefined {
   if (!isConventionsStorePayloadShape(raw)) {
     return undefined;
   }
@@ -194,7 +194,7 @@ function normalizeBuilderParams(raw: DynamicValue): FormatBuilderParams | undefi
   return Object.keys(result).length > 0 ? result : undefined;
 }
 
-function normalizeStoredFormatPreset(raw: DynamicValue): StoredFormatPreset | null {
+function normalizeStoredFormatPreset(raw: unknown): StoredFormatPreset | null {
   if (!isConventionsStorePayloadShape(raw)) {
     return null;
   }
@@ -213,7 +213,7 @@ function normalizeStoredFormatPreset(raw: DynamicValue): StoredFormatPreset | nu
   return preset;
 }
 
-function normalizeStoredCustomPreset(raw: DynamicValue): StoredCustomPreset | null {
+function normalizeStoredCustomPreset(raw: unknown): StoredCustomPreset | null {
   const base = normalizeStoredFormatPreset(raw);
   if (!base || !isConventionsStorePayloadShape(raw)) {
     return null;
@@ -231,7 +231,7 @@ function normalizeStoredCustomPreset(raw: DynamicValue): StoredCustomPreset | nu
   return preset;
 }
 
-function normalizePresetFormats(raw: DynamicValue): Partial<Record<NumberPreset, StoredFormatPreset>> | undefined {
+function normalizePresetFormats(raw: unknown): Partial<Record<NumberPreset, StoredFormatPreset>> | undefined {
   if (!isConventionsStorePayloadShape(raw)) {
     return undefined;
   }
@@ -257,7 +257,7 @@ function normalizeCustomPresetName(name: string): string | null {
   return trimmed;
 }
 
-function normalizeCustomPresets(raw: DynamicValue): Record<string, StoredCustomPreset> | undefined {
+function normalizeCustomPresets(raw: unknown): Record<string, StoredCustomPreset> | undefined {
   if (!isConventionsStorePayloadShape(raw)) {
     return undefined;
   }
@@ -281,7 +281,7 @@ function normalizeCustomPresets(raw: DynamicValue): Record<string, StoredCustomP
   return Object.keys(result).length > 0 ? result : undefined;
 }
 
-function normalizeVisualDefaults(raw: DynamicValue): StoredVisualDefaults | undefined {
+function normalizeVisualDefaults(raw: unknown): StoredVisualDefaults | undefined {
   if (!isConventionsStorePayloadShape(raw)) {
     return undefined;
   }
@@ -300,7 +300,7 @@ function normalizeVisualDefaults(raw: DynamicValue): StoredVisualDefaults | unde
   return Object.keys(result).length > 0 ? result : undefined;
 }
 
-function normalizeColorConventions(raw: DynamicValue): StoredColorConventions | undefined {
+function normalizeColorConventions(raw: unknown): StoredColorConventions | undefined {
   if (!isConventionsStorePayloadShape(raw)) {
     return undefined;
   }
@@ -320,7 +320,7 @@ function normalizeColorConventions(raw: DynamicValue): StoredColorConventions | 
   return Object.keys(result).length > 0 ? result : undefined;
 }
 
-function normalizeHeaderStyle(raw: DynamicValue): StoredHeaderStyle | undefined {
+function normalizeHeaderStyle(raw: unknown): StoredHeaderStyle | undefined {
   if (!isConventionsStorePayloadShape(raw)) {
     return undefined;
   }
@@ -348,7 +348,7 @@ function normalizeHeaderStyle(raw: DynamicValue): StoredHeaderStyle | undefined 
   return Object.keys(result).length > 0 ? result : undefined;
 }
 
-function validateStoredConventions(raw: DynamicValue): StoredConventions {
+function validateStoredConventions(raw: unknown): StoredConventions {
   if (!isConventionsStorePayloadShape(raw)) {
     return {};
   }

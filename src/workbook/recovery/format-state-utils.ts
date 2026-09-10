@@ -38,7 +38,7 @@ export function collectMergedAreaAddresses(state: RecoveryFormatRangeState): str
 }
 
 export function validateStringGrid(
-  value: DynamicValue,
+  value: unknown,
   rowCount: number,
   columnCount: number,
 ): string[][] | null {

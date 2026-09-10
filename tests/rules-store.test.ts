@@ -12,13 +12,13 @@ import {
 } from "../src/rules/store.ts";
 
 class MemoryStore implements RulesStore {
-  private values = new Map<string, DynamicValue>();
+  private values = new Map<string, unknown>();
 
-  get(key: string): Promise<DynamicValue> {
+  get(key: string): Promise<unknown> {
     return Promise.resolve(this.values.get(key));
   }
 
-  set(key: string, value: DynamicValue): Promise<void> {
+  set(key: string, value: unknown): Promise<void> {
     this.values.set(key, value);
     return Promise.resolve();
   }

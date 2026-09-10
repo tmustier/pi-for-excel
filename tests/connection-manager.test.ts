@@ -7,11 +7,11 @@ import type { ConnectionDefinition } from "../src/connections/types.ts";
 // ── In-memory settings store ────────────────────────
 
 function createMemorySettings(): {
-  get(key: string): Promise<DynamicValue>;
-  set(key: string, value: DynamicValue): Promise<void>;
+  get(key: string): Promise<unknown>;
+  set(key: string, value: unknown): Promise<void>;
   delete(key: string): Promise<void>;
 } {
-  const data = new Map<string, DynamicValue>();
+  const data = new Map<string, unknown>();
   return {
     get: (key) => Promise.resolve(data.get(key)),
     set: (key, value) => { data.set(key, value); return Promise.resolve(); },
@@ -20,10 +20,10 @@ function createMemorySettings(): {
 }
 
 class TransientReadSettings {
-  private readonly values = new Map<string, DynamicValue>();
+  private readonly values = new Map<string, unknown>();
   private failNextRead = false;
 
-  get(key: string): Promise<DynamicValue> {
+  get(key: string): Promise<unknown> {
     if (this.failNextRead) {
       this.failNextRead = false;
       return Promise.reject(new Error("transient connection read failure"));
@@ -31,7 +31,7 @@ class TransientReadSettings {
     return Promise.resolve(this.values.get(key));
   }
 
-  set(key: string, value: DynamicValue): Promise<void> {
+  set(key: string, value: unknown): Promise<void> {
     this.values.set(key, value);
     return Promise.resolve();
   }

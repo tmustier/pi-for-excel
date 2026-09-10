@@ -10,7 +10,7 @@ import { applyToolOutputTruncation } from "../src/tools/output-truncation.ts";
 import { getToolOutputTruncationDetails } from "../src/tools/tool-details.ts";
 
 const parameters = Type.Object({});
-type Result = AgentToolResult<DynamicValue>;
+type Result = AgentToolResult<unknown>;
 type ToolResultMessage = Extract<AgentMessage, { role: "toolResult" }>;
 
 function tool(name: string, result: Result, update?: Result): AgentTool {

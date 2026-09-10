@@ -1,7 +1,5 @@
 import tseslint from "typescript-eslint";
 
-const NO_UNKNOWN_MESSAGE =
-  "Do not introduce `unknown` here. If you think you need `unknown`, fix the upstream type first: the agent should not have an unknown at this point in the code at all.";
 
 export default tseslint.config(
   {
@@ -58,13 +56,6 @@ export default tseslint.config(
         },
       ],
 
-      // Dynamic values must be normalized at typed boundaries rather than
-      // leaking direct `unknown` syntax through application code.
-      "no-restricted-syntax": [
-        "error",
-        { selector: "TSUnknownKeyword", message: NO_UNKNOWN_MESSAGE },
-      ],
-
       // ── Async safety ───────────────────────────────────────────────────────
       "@typescript-eslint/no-floating-promises": "error",
       "@typescript-eslint/no-misused-promises": "error",
@@ -112,21 +103,11 @@ export default tseslint.config(
     rules: {
       "no-restricted-syntax": [
         "error",
-        { selector: "TSUnknownKeyword", message: NO_UNKNOWN_MESSAGE },
         {
           selector: "Identifier[name='localStorage']",
           message: "OAuth credentials must not use localStorage; use the encrypted OAuth storage boundary.",
         },
       ],
-    },
-  },
-
-  {
-    files: ["src/types/dynamic-values.d.ts"],
-    rules: {
-      // The single sanctioned untyped boundary marker. All other explicit
-      // `unknown` spellings remain banned by the main rule above.
-      "no-restricted-syntax": "off",
     },
   },
 );

@@ -45,13 +45,13 @@ import {
 import { readBridgeUrls } from "../src/commands/builtins/extensions-hub-connections.ts";
 
 class MemorySettingsStore {
-  readonly values = new Map<string, DynamicValue>();
+  readonly values = new Map<string, unknown>();
 
-  async get(key: string): Promise<DynamicValue> {
+  async get(key: string): Promise<unknown> {
     return Promise.resolve(this.values.get(key) ?? null);
   }
 
-  async set(key: string, value: DynamicValue): Promise<void> {
+  async set(key: string, value: unknown): Promise<void> {
     this.values.set(key, value);
     await Promise.resolve();
   }
@@ -69,7 +69,7 @@ class ThrowingSettingsStore extends MemorySettingsStore {
     this.readsFail = false;
   }
 
-  override async get(key: string): Promise<DynamicValue> {
+  override async get(key: string): Promise<unknown> {
     if (this.readsFail) {
       return Promise.reject(new Error("seeded read failure"));
     }

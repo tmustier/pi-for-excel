@@ -18,16 +18,16 @@ import {
 import type { StoredConventions } from "../src/conventions/types.ts";
 
 function createFakeStore(): {
-  get: (key: string) => Promise<DynamicValue>;
-  set: (key: string, value: DynamicValue) => Promise<void>;
-  data: Map<string, DynamicValue>;
+  get: (key: string) => Promise<unknown>;
+  set: (key: string, value: unknown) => Promise<void>;
+  data: Map<string, unknown>;
 } {
-  const data = new Map<string, DynamicValue>();
+  const data = new Map<string, unknown>();
 
   return {
     data,
     get: (key: string) => Promise.resolve(data.get(key)),
-    set: (key: string, value: DynamicValue) => {
+    set: (key: string, value: unknown) => {
       data.set(key, value);
       return Promise.resolve();
     },
@@ -42,7 +42,7 @@ void describe("getStoredConventions", () => {
   });
 
   void test("conventions validation policy handles every nested value class", async () => {
-    const cases: Array<{ name: string; stored: DynamicValue; expected: StoredConventions }> = [
+    const cases: Array<{ name: string; stored: unknown; expected: StoredConventions }> = [
       {
         name: "valid nested sections and normalized colors",
         stored: {

@@ -88,7 +88,7 @@ import type {
 type AnyAgentTool = AgentTool;
 
 interface ExtensionToolExecutionBoundary {
-  execute?: DynamicValue;
+  execute?: unknown;
 }
 
 type ManagerListener = () => void;
@@ -715,7 +715,7 @@ export class ExtensionRuntimeManager {
     };
 
     const refreshToolsForDynamicChange = (): void => {
-      void this.refreshRuntimeTools().catch((error: DynamicValue) => {
+      void this.refreshRuntimeTools().catch((error: unknown) => {
         console.warn(`[pi] Failed to refresh tools after extension tool update: ${getRuntimeManagerErrorMessage(error)}`);
       });
     };
@@ -820,7 +820,7 @@ export class ExtensionRuntimeManager {
     };
 
     const refreshModelsForDynamicChange = (): void => {
-      void this.refreshRuntimeModels().catch((error: DynamicValue) => {
+      void this.refreshRuntimeModels().catch((error: unknown) => {
         console.warn(`[pi] Failed to refresh models after extension provider update: ${getRuntimeManagerErrorMessage(error)}`);
       });
     };
@@ -886,7 +886,7 @@ export class ExtensionRuntimeManager {
         .then(() => {
           if (!activationPhase) refreshModelsForDynamicChange();
         })
-        .catch((error: DynamicValue) => {
+        .catch((error: unknown) => {
           console.warn(`[pi] Failed to unregister extension model provider: ${getRuntimeManagerErrorMessage(error)}`);
         });
     };

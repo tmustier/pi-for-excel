@@ -15,17 +15,21 @@ Re-run the probes in each section before acting on it. Counts drift.
 
 ### Boundary policy: concrete types instead of `DynamicValue`
 
-`DynamicValue` is `unknown` under a global alias
-(`src/types/dynamic-values.d.ts`). ESLint bans the word `unknown`, so the ban
-is nominal. The plan decided to delete the alias and parse boundary values into
-domain types. Neither happened; the count rose during the test rework because
-agents followed the still-active rule.
+First step done (2026-09-10): the `DynamicValue`/`DynamicObject` aliases and
+the ESLint ban on `unknown` are gone; every former alias site now says
+`unknown` / `Record<string, unknown>`. `npm run check:unknown-burndown` runs
+the anti-slop `no-unknown-*` rules as a ratchet (baseline 461 sites in `src`:
+384 parameters, 77 returns) and fails if the count rises. Both TypeBox majors
+are gone too: everything imports `typebox`, pinned to pi-ai's exact version so
+one copy ships, and `StringEnum` comes from pi-ai.
+
+Still to do: parse boundary values into domain types so the count falls.
 
 Probe:
 
 ```bash
-rg -c 'DynamicValue|DynamicObject' src | awk -F: '{s+=$2} END{print s}'   # 1,029 at review
-rg -c '^(export )?function is\w+\(\w+: DynamicValue' src | awk -F: '{s+=$2} END{print s}'  # 234 hand-written guards
+npm run check:unknown-burndown                                                  # 461 at the alias deletion
+rg -c '^(export )?function is\w+\(\w+: unknown' src | awk -F: '{s+=$2} END{print s}'  # 233 hand-written guards
 ```
 
 Where the uses are, and what proper typing means for each:
@@ -40,14 +44,13 @@ Where the uses are, and what proper typing means for each:
 | Office.js and WPS host values | 40 | Typed host adapter interfaces (`src/host/wps/jsapi.ts` is the pattern). |
 | Storage `get<T = DynamicValue>()` | 20 | See next section. |
 
-Suggested order: delete the alias and the lint ban first so `rg -c unknown src`
-becomes an honest burn-down number; then persisted DTOs (largest, and it removes
-`get<T>`); then extensions and bridge; then errors; then host.
+Suggested order from here: persisted DTOs (largest, and it removes `get<T>`);
+then extensions and bridge; then errors; then host. Lower the ratchet baseline
+with each.
 
-Constraints from the plan that still apply: use the TypeBox version pi-ai
-already ships (two majors are currently bundled, see below); no runtime code
-generation (Office WebView CSP); schema strictness must not discard recoverable
-persisted data, so migrations stay explicit.
+Constraints from the plan that still apply: no runtime code generation (Office
+WebView CSP); schema strictness must not discard recoverable persisted data, so
+migrations stay explicit.
 
 ### Caller-selected `get<T>()` for persisted settings
 
@@ -61,11 +64,10 @@ Probe: `rg -n 'get<T' src/storage/local/settings-store.ts`
 
 ### Guidance still describes the old policy
 
-`AGENTS.md` and `docs/coding-standards.md` still say "no direct `unknown`",
-"use `DynamicValue` at boundaries" and "do not add generic object/record
-guards". The lint rule for the guard-name ban was removed; the docs were not
-updated. The plan required guidance to change before enforcement. Fix the docs
-in the same change that deletes the alias.
+Done (2026-09-10), in the same change that deleted the alias: `AGENTS.md`,
+`docs/coding-standards.md` and `docs/anti-slop-policy.md` now describe
+`unknown` at the seam, the burn-down ratchet, and TypeBox + `Static<>` as the
+preferred parser.
 
 ### WPS detection on a real capability
 
@@ -236,9 +238,9 @@ corrupt-recovery-log fallback (seam tests only).
 
 ## Pre-existing observations
 
-- Two TypeBox majors ship in the bundle: `@sinclair/typebox` 0.34 (29 files)
-  and `typebox` 1.x (6 files, added with the model registry refresh to match
-  pi-ai). The schema work should settle on one.
+- Two TypeBox majors shipped in the bundle (`@sinclair/typebox` 0.34 and
+  `typebox` 1.x). Settled on `typebox` 1.3.7 (2026-09-10), pinned to pi-ai's
+  version and enforced by `check:pi-lockstep`.
 - `npm audit --audit-level=high` reports two high findings, both transitive
   (`@xmldom/xmldom`, `js-yaml`), on `main` and on every branch since. The
   pre-push hook blocks on them; pushes during the review used `--no-verify`

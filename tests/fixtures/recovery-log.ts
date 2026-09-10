@@ -4,15 +4,15 @@ export const RECOVERY_SETTING_KEY = "workbook.recovery-snapshots.v1";
 
 export interface InMemorySettingsStore {
   get<T>(key: string): Promise<T | null>;
-  set(key: string, value: DynamicValue): Promise<void>;
+  set(key: string, value: unknown): Promise<void>;
 }
 
 export interface RecoveringInMemorySettingsStore extends InMemorySettingsStore {
-  seed(key: string, value: DynamicValue): void;
+  seed(key: string, value: unknown): void;
 }
 
 export function createRecoveringInMemorySettingsStore(): RecoveringInMemorySettingsStore {
-  const values = new Map<string, DynamicValue>();
+  const values = new Map<string, unknown>();
   let failRecoveryRead = true;
 
   return {
@@ -24,25 +24,25 @@ export function createRecoveringInMemorySettingsStore(): RecoveringInMemorySetti
       const value = values.get(key);
       return Promise.resolve(value === undefined ? null : value as T);
     },
-    set: (key: string, value: DynamicValue): Promise<void> => {
+    set: (key: string, value: unknown): Promise<void> => {
       values.set(key, value);
       return Promise.resolve();
     },
-    seed: (key: string, value: DynamicValue): void => {
+    seed: (key: string, value: unknown): void => {
       values.set(key, value);
     },
   };
 }
 
 export function createInMemorySettingsStore(): InMemorySettingsStore {
-  const values = new Map<string, DynamicValue>();
+  const values = new Map<string, unknown>();
 
   return {
     get: <T>(key: string): Promise<T | null> => {
       const value = values.get(key);
       return Promise.resolve(value === undefined ? null : value as T);
     },
-    set: (key: string, value: DynamicValue): Promise<void> => {
+    set: (key: string, value: unknown): Promise<void> => {
       values.set(key, value);
       return Promise.resolve();
     },
@@ -59,6 +59,6 @@ export function findSnapshotById(snapshots: WorkbookRecoverySnapshot[], id: stri
   return null;
 }
 
-export function withoutUndefined(value: DynamicValue): DynamicValue {
+export function withoutUndefined(value: unknown): unknown {
   return JSON.parse(JSON.stringify(value));
 }

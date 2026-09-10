@@ -12,7 +12,7 @@
 // Worker globals — declared locally to avoid tsconfig lib conflicts
 declare const self: {
   addEventListener(type: "message", listener: (event: MessageEvent) => void): void;
-  postMessage(message: DynamicValue): void;
+  postMessage(message: unknown): void;
 };
 
 export interface PyodideWorkerRequest {
@@ -36,14 +36,14 @@ export interface PyodideWorkerResponse {
 
 // Pyodide types (minimal subset for the worker)
 interface PyodideInterface {
-  runPythonAsync(code: string): Promise<DynamicValue>;
+  runPythonAsync(code: string): Promise<unknown>;
   loadPackage(names: string | string[]): Promise<void>;
   globals: {
-    set(name: string, value: DynamicValue): void;
-    get(name: string): DynamicValue;
+    set(name: string, value: unknown): void;
+    get(name: string): unknown;
     delete(name: string): void;
   };
-  toPy(value: DynamicValue): DynamicValue;
+  toPy(value: unknown): unknown;
   version: string;
   FS: {
     writeFile(path: string, data: string | Uint8Array): void;
@@ -315,7 +315,7 @@ self.addEventListener("message", (event: MessageEvent<PyodideWorkerRequest>) => 
 
   void handleRun(request).then(
     (response) => self.postMessage(response),
-    (error: DynamicValue) => {
+    (error: unknown) => {
       const message = error instanceof Error ? error.message : String(error);
       const response: PyodideWorkerResponse = {
         id: request.id,

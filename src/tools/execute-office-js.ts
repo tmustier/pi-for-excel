@@ -1,4 +1,4 @@
-function isToolsExecuteOfficeJsPayloadShape(value: DynamicValue): value is DynamicObject {
+function isToolsExecuteOfficeJsPayloadShape(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -40,10 +40,10 @@ const schema = Type.Object({
 
 type Params = Static<typeof schema>;
 
-type ExecuteOfficeJsRunner = (context: Excel.RequestContext) => Promise<DynamicValue>;
+type ExecuteOfficeJsRunner = (context: Excel.RequestContext) => Promise<unknown>;
 
 interface ExecuteOfficeJsToolDependencies {
-  runCode: (code: string) => Promise<DynamicValue>;
+  runCode: (code: string) => Promise<unknown>;
 }
 
 function normalizeExplanation(explanation: string): string {
@@ -76,9 +76,9 @@ function normalizeCode(code: string): string {
   return trimmed;
 }
 
-type OfficeJsRunnerCandidate = (context: Excel.RequestContext) => DynamicValue;
+type OfficeJsRunnerCandidate = (context: Excel.RequestContext) => unknown;
 
-function isOfficeJsRunnerCandidate(value: DynamicValue): value is OfficeJsRunnerCandidate {
+function isOfficeJsRunnerCandidate(value: unknown): value is OfficeJsRunnerCandidate {
   return typeof value === "function";
 }
 
@@ -93,7 +93,7 @@ async function loadOfficeJsRunner(code: string): Promise<ExecuteOfficeJsRunner> 
   const blobUrl = URL.createObjectURL(blob);
 
   try {
-    const moduleNamespace: DynamicValue = await import(/* @vite-ignore */ blobUrl);
+    const moduleNamespace: unknown = await import(/* @vite-ignore */ blobUrl);
     if (!isToolsExecuteOfficeJsPayloadShape(moduleNamespace)) {
       throw new Error("Compiled Office.js module did not export a valid function.");
     }
@@ -103,7 +103,7 @@ async function loadOfficeJsRunner(code: string): Promise<ExecuteOfficeJsRunner> 
       throw new Error("Compiled Office.js module must export a default async function.");
     }
 
-    return (context: Excel.RequestContext): Promise<DynamicValue> => {
+    return (context: Excel.RequestContext): Promise<unknown> => {
       const rawResult = maybeRunner(context);
       return Promise.resolve(rawResult);
     };
@@ -114,7 +114,7 @@ async function loadOfficeJsRunner(code: string): Promise<ExecuteOfficeJsRunner> 
   }
 }
 
-async function defaultRunCode(code: string): Promise<DynamicValue> {
+async function defaultRunCode(code: string): Promise<unknown> {
   const runner = await loadOfficeJsRunner(code);
 
   return excelRun(async (context) => {
@@ -122,7 +122,7 @@ async function defaultRunCode(code: string): Promise<DynamicValue> {
   });
 }
 
-function jsonSafeReplacer(_key: string, value: DynamicValue): DynamicValue {
+function jsonSafeReplacer(_key: string, value: unknown): unknown {
   if (typeof value === "bigint") {
     return value.toString();
   }
@@ -130,7 +130,7 @@ function jsonSafeReplacer(_key: string, value: DynamicValue): DynamicValue {
   return value;
 }
 
-function serializeResult(result: DynamicValue): { text: string; truncated: boolean } {
+function serializeResult(result: unknown): { text: string; truncated: boolean } {
   let serialized: string;
 
   try {

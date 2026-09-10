@@ -16,11 +16,11 @@ export class SettingsStore extends Store {
     };
   }
 
-  async get<T = DynamicValue>(key: string): Promise<T | null> {
+  async get<T = unknown>(key: string): Promise<T | null> {
     return this.getBackend().get<T>("settings", key);
   }
 
-  async set<T = DynamicValue>(key: string, value: T): Promise<void> {
+  async set<T = unknown>(key: string, value: T): Promise<void> {
     await this.getBackend().set("settings", key, value);
   }
 

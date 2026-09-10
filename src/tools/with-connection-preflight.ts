@@ -4,7 +4,7 @@ import {
   ConnectionManager,
   looksLikeConnectionAuthFailure,
 } from "../connections/manager.js";
-function isToolsWithConnectionPreflightPayloadShape(value: DynamicValue): value is DynamicObject {
+function isToolsWithConnectionPreflightPayloadShape(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -15,7 +15,7 @@ import type {
 } from "../connections/types.js";
 import { getToolRequiredConnectionIds } from "./connection-requirements.js";
 
-function normalizeErrorMessage(error: DynamicValue): string {
+function normalizeErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message.trim().length > 0) {
     return error.message;
   }
@@ -41,7 +41,7 @@ function containsToken(haystack: string, token: string): boolean {
   return boundaryPattern.test(haystack);
 }
 
-function extractExplicitConnectionId(error: DynamicValue): string | undefined {
+function extractExplicitConnectionId(error: unknown): string | undefined {
   if (!isToolsWithConnectionPreflightPayloadShape(error)) {
     return undefined;
   }
@@ -84,7 +84,7 @@ function snapshotMatchesAuthFailure(snapshot: ConnectionSnapshot, normalizedErro
 
 function resolveAuthFailureSnapshot(args: {
   snapshots: readonly ConnectionSnapshot[];
-  error: DynamicValue;
+  error: unknown;
   errorMessage: string;
 }): ConnectionSnapshot | null {
   if (args.snapshots.length === 0) {

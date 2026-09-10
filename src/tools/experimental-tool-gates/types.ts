@@ -57,7 +57,7 @@ export interface PythonBridgeGateDependencies {
 export interface PythonBridgeApprovalRequest {
   toolName: string;
   bridgeUrl: string;
-  params: DynamicValue;
+  params: unknown;
 }
 
 export interface OfficeJsExecuteApprovalRequest {

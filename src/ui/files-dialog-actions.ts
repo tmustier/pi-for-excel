@@ -190,7 +190,7 @@ export function createFilesDialogDetailActions(options: CreateFilesDialogDetailA
         });
         if (result.text === undefined) throw new Error("Could not read file.");
         await copyTextToClipboard(result.text, options.file.name);
-      })().catch((error: DynamicValue) => {
+      })().catch((error: unknown) => {
         showToast(t("files-dialog-actions.toast.copyFailed", { error: getErrorMessage(error) }));
       });
     });
@@ -213,7 +213,7 @@ export function createFilesDialogDetailActions(options: CreateFilesDialogDetailA
           options.file.name,
           resolveSafeBlobUrlMimeType(options.file.mimeType || "text/plain"),
         );
-      })().catch((error: DynamicValue) => {
+      })().catch((error: unknown) => {
         showToast(t("files-dialog-actions.toast.downloadFailed", { error: getErrorMessage(error) }));
       });
     });
@@ -233,7 +233,7 @@ export function createFilesDialogDetailActions(options: CreateFilesDialogDetailA
         fileRef: options.fileRef,
         workspace: options.workspace,
         auditContext: options.auditContext,
-      }).catch((error: DynamicValue) => {
+      }).catch((error: unknown) => {
         showToast(t("files-dialog-actions.toast.openFailed", { error: getErrorMessage(error) }));
       });
     });
@@ -245,7 +245,7 @@ export function createFilesDialogDetailActions(options: CreateFilesDialogDetailA
     downloadButton.addEventListener("click", () => {
       void options.workspace.downloadFile(options.file.path, {
         locationKind: options.fileRef.locationKind,
-      }).catch((error: DynamicValue) => {
+      }).catch((error: unknown) => {
         showToast(t("files-dialog-actions.toast.downloadFailed", { error: getErrorMessage(error) }));
       });
     });
@@ -291,7 +291,7 @@ export function createFilesDialogDetailActions(options: CreateFilesDialogDetailA
       showToast(t("files-dialog-actions.toast.renamed", { path: nextPath }));
 
       await options.onAfterRename(nextPath, options.fileRef.locationKind);
-    })().catch((error: DynamicValue) => {
+    })().catch((error: unknown) => {
       showToast(t("files-dialog-actions.toast.renameFailed", { error: getErrorMessage(error) }));
     });
   });
@@ -326,7 +326,7 @@ export function createFilesDialogDetailActions(options: CreateFilesDialogDetailA
       showToast(t("files-dialog-actions.toast.deleted", { name: options.file.name }));
 
       await options.onAfterDelete();
-    })().catch((error: DynamicValue) => {
+    })().catch((error: unknown) => {
       showToast(t("files-dialog-actions.toast.deleteFailed", { error: getErrorMessage(error) }));
     });
   });

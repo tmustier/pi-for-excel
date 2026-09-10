@@ -241,7 +241,7 @@ async function buildSheetDetail(sheetName: string): Promise<string> {
     const sheetQuotedPrefix = `'${sheet.name}'!`.toLowerCase();
     const relevantNames = names.items.filter((n) => {
       if (!n.visible) return false;
-      const rawVal: DynamicValue = n.value;
+      const rawVal: unknown = n.value;
       const val = typeof rawVal === "string" ? rawVal.toLowerCase() : "";
       return val.startsWith(sheetPrefix) || val.startsWith(sheetQuotedPrefix);
     });
@@ -276,7 +276,7 @@ async function buildSheetDetail(sheetName: string): Promise<string> {
     // ── Data preview (first 5 rows as markdown table) ──
     if (!used.isNullObject && used.rowCount > 0 && used.columnCount > 0) {
       const previewRowCount = Math.min(5, used.rowCount);
-      const allValues = used.values as DynamicValue[][];
+      const allValues = used.values as unknown[][];
       const previewRows = allValues.slice(0, previewRowCount);
       const colCount = used.columnCount;
 

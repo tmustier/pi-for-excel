@@ -8,7 +8,7 @@ import {
 } from "../src/workbook/recovery/constants.ts";
 
 void test("retention limit normalizes default, floor, min, max, and valid values", () => {
-  const cases: ReadonlyArray<{ input: DynamicValue; expected: number; label: string }> = [
+  const cases: ReadonlyArray<{ input: unknown; expected: number; label: string }> = [
     { input: undefined, expected: MAX_RECOVERY_ENTRIES, label: "undefined defaults" },
     { input: null, expected: MAX_RECOVERY_ENTRIES, label: "null defaults" },
     { input: "50", expected: MAX_RECOVERY_ENTRIES, label: "string defaults" },

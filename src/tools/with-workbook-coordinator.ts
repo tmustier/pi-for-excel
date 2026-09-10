@@ -34,7 +34,7 @@ export interface WorkbookMutationObserver {
 export interface MutationApprovalRequest {
   executionMode: ExecutionMode;
   toolName: string;
-  params: DynamicValue;
+  params: unknown;
 }
 
 export interface WorkbookExecutionPolicy {
@@ -67,18 +67,18 @@ function throwIfAborted(signal: AbortSignal | undefined): void {
   throw new Error("Aborted");
 }
 
-function isWorkbookCoordinatorParamsShape(value: DynamicValue): value is DynamicObject {
+function isWorkbookCoordinatorParamsShape(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function getActionParam(params: DynamicValue): string | null {
+function getActionParam(params: unknown): string | null {
   if (!isWorkbookCoordinatorParamsShape(params)) return null;
 
   const action = params.action;
   return typeof action === "string" && action.trim().length > 0 ? action.trim() : null;
 }
 
-function getRangeParam(params: DynamicValue): string | null {
+function getRangeParam(params: unknown): string | null {
   if (!isWorkbookCoordinatorParamsShape(params)) return null;
 
   const range = params.range;
@@ -118,7 +118,7 @@ function defaultRequestMutationApproval(_request: MutationApprovalRequest): Prom
 async function requireMutationApprovalIfNeeded(args: {
   policy: WorkbookExecutionPolicy;
   toolName: string;
-  params: DynamicValue;
+  params: unknown;
 }): Promise<void> {
   const getExecutionMode = args.policy.getExecutionMode ?? defaultGetExecutionMode;
   const executionMode = await getExecutionMode();

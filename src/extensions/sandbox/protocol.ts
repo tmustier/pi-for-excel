@@ -1,4 +1,4 @@
-function isExtensionsSandboxProtocolPayloadShape(value: DynamicValue): value is DynamicObject {
+function isExtensionsSandboxProtocolPayloadShape(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -29,26 +29,26 @@ export interface SandboxRequestEnvelope extends SandboxEnvelopeBase {
   kind: "request";
   requestId: string;
   method: string;
-  params?: DynamicValue;
+  params?: unknown;
 }
 
 export interface SandboxResponseEnvelope extends SandboxEnvelopeBase {
   kind: "response";
   requestId: string;
   ok: boolean;
-  result?: DynamicValue;
+  result?: unknown;
   error?: string;
 }
 
 export interface SandboxEventEnvelope extends SandboxEnvelopeBase {
   kind: "event";
   event: string;
-  data?: DynamicValue;
+  data?: unknown;
 }
 
 export type SandboxEnvelope = SandboxRequestEnvelope | SandboxResponseEnvelope | SandboxEventEnvelope;
 
-function hasValidSandboxEnvelopeBase(value: DynamicValue): value is DynamicObject & {
+function hasValidSandboxEnvelopeBase(value: unknown): value is Record<string, unknown> & {
   channel: string;
   instanceId: string;
   direction: SandboxDirection;
@@ -78,7 +78,7 @@ function hasValidSandboxEnvelopeBase(value: DynamicValue): value is DynamicObjec
   return typeof kind === "string";
 }
 
-export function isSandboxBootstrapEnvelope(value: DynamicValue): value is SandboxBootstrapEnvelope {
+export function isSandboxBootstrapEnvelope(value: unknown): value is SandboxBootstrapEnvelope {
   if (!hasValidSandboxEnvelopeBase(value)) {
     return false;
   }
@@ -86,7 +86,7 @@ export function isSandboxBootstrapEnvelope(value: DynamicValue): value is Sandbo
   return value.direction === "host_to_sandbox" && value.kind === SANDBOX_BOOTSTRAP_KIND;
 }
 
-export function isSandboxEnvelope(value: DynamicValue): value is SandboxEnvelope {
+export function isSandboxEnvelope(value: unknown): value is SandboxEnvelope {
   if (!hasValidSandboxEnvelopeBase(value)) {
     return false;
   }
@@ -107,6 +107,6 @@ export function isSandboxEnvelope(value: DynamicValue): value is SandboxEnvelope
   return typeof value.event === "string";
 }
 
-export function serializeForSandboxInlineScript(value: DynamicValue): string {
+export function serializeForSandboxInlineScript(value: unknown): string {
   return JSON.stringify(value).replace(/</g, "\\u003c");
 }

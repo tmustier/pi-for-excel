@@ -1,4 +1,4 @@
-function isToolsPythonRunPayloadShape(value: DynamicValue): value is DynamicObject {
+function isToolsPythonRunPayloadShape(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -76,7 +76,7 @@ export interface PythonBridgeResponse {
   result_json?: string;
   truncated?: boolean;
   error?: string;
-  metadata?: DynamicObject;
+  metadata?: Record<string, unknown>;
 }
 
 export interface PythonRunToolDetails {
@@ -110,7 +110,7 @@ export interface PythonRunToolDependencies {
   ) => Promise<PythonBridgeResponse>;
 }
 
-function isPythonBridgePayloadShape(value: DynamicValue): value is DynamicObject {
+function isPythonBridgePayloadShape(value: unknown): value is Record<string, unknown> {
   return isToolsPythonRunPayloadShape(value) && !Array.isArray(value);
 }
 
@@ -121,14 +121,14 @@ function cleanOptionalString(value: string | undefined): string | undefined {
   return trimmed.length > 0 ? value : undefined;
 }
 
-function toOptionalInteger(value: DynamicValue): number | undefined {
+function toOptionalInteger(value: unknown): number | undefined {
   if (typeof value !== "number") return undefined;
   if (!Number.isFinite(value)) return undefined;
   if (!Number.isInteger(value)) return undefined;
   return value;
 }
 
-function parseParams(raw: DynamicValue): Params {
+function parseParams(raw: unknown): Params {
   if (!isPythonBridgePayloadShape(raw)) {
     throw new Error("Invalid python_run params: expected an object.");
   }
@@ -176,7 +176,7 @@ function toBridgeRequest(params: Params): PythonBridgeRequest {
   };
 }
 
-function parseBridgeResponse(value: DynamicValue): PythonBridgeResponse {
+function parseBridgeResponse(value: unknown): PythonBridgeResponse {
   if (!isPythonBridgePayloadShape(value)) {
     return {
       ok: true,
@@ -413,7 +413,7 @@ function shouldAttachPythonBridgeSkillHint(message: string): boolean {
 }
 
 export function shouldFallbackToPyodideAfterBridgeError(
-  error: DynamicValue,
+  error: unknown,
   bridgeConfig: PythonBridgeConfig,
 ): boolean {
   if (bridgeConfig.source !== "default") {
@@ -471,7 +471,7 @@ export function createPythonRunTool(
     parameters: schema,
     execute: async (
       _toolCallId: string,
-      rawParams: DynamicValue,
+      rawParams: unknown,
       signal: AbortSignal | undefined,
     ): Promise<AgentToolResult<PythonRunToolDetails>> => {
       let params: Params | null = null;

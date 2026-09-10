@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { createWriteCellsTool } from "../src/tools/write-cells.ts";
 
 interface StoredCell {
-  value: DynamicValue;
+  value: unknown;
   formula: string;
 }
 
@@ -23,7 +23,7 @@ class WriteRange {
   readonly address: string;
   readonly rowCount = 1;
   readonly columnCount: number;
-  readonly numberFormat: DynamicValue[][];
+  readonly numberFormat: unknown[][];
   private readonly cells: StoredCell[];
 
   constructor(cells: StoredCell[], address: string) {
@@ -40,11 +40,11 @@ class WriteRange {
 
   load(_properties?: string | string[]): void {}
 
-  get values(): DynamicValue[][] {
+  get values(): unknown[][] {
     return [this.cells.slice(0, this.columnCount).map((cell) => cell.value)];
   }
 
-  set values(values: DynamicValue[][]) {
+  set values(values: unknown[][]) {
     for (let index = 0; index < this.columnCount; index += 1) {
       const value = values[0]?.[index] ?? null;
       const formula = typeof value === "string" && value.startsWith("=") ? value : "";
@@ -52,7 +52,7 @@ class WriteRange {
     }
   }
 
-  get formulas(): DynamicValue[][] {
+  get formulas(): unknown[][] {
     return [this.cells.slice(0, this.columnCount).map((cell) => cell.formula)];
   }
 }
@@ -76,7 +76,7 @@ async function withWriteHost<T>(action: () => Promise<T>): Promise<T> {
   const hadExcel = Reflect.has(globalThis, "Excel");
   const previousExcel = Reflect.get(globalThis, "Excel");
   Reflect.set(globalThis, "Excel", {
-    run: <TResult>(callback: (hostContext: DynamicValue) => Promise<TResult>): Promise<TResult> => callback(context),
+    run: <TResult>(callback: (hostContext: unknown) => Promise<TResult>): Promise<TResult> => callback(context),
   });
 
   try {

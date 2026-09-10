@@ -29,11 +29,11 @@ import type {
 } from "../tool-details.js";
 import { isUnsupportedHostTool } from "../unsupported-host-tool.js";
 
-function isExperimentalGateParamsShape(value: DynamicValue): value is DynamicObject {
+function isExperimentalGateParamsShape(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function getGateParamString(record: DynamicObject, key: string): string | undefined {
+function getGateParamString(record: Record<string, unknown>, key: string): string | undefined {
   const value = record[key];
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
 }
@@ -46,7 +46,7 @@ function throwIfAborted(signal: AbortSignal | undefined): void {
   throw new Error("Aborted");
 }
 
-function getTmuxActionFromParams(params: DynamicValue): string {
+function getTmuxActionFromParams(params: unknown): string {
   if (!isExperimentalGateParamsShape(params)) {
     return "list_sessions";
   }
@@ -70,7 +70,7 @@ function buildGateErrorText(message: string, skillName: string): string {
 function buildTmuxGateErrorResult(args: {
   reason: TmuxBridgeGateReason;
   bridgeUrl?: string;
-  params: DynamicValue;
+  params: unknown;
 }): AgentToolResult<TmuxBridgeDetails> {
   const message = buildTmuxBridgeGateErrorMessage(args.reason);
 
@@ -163,7 +163,7 @@ function buildLibreOfficeGateErrorResult(args: {
 export function buildPythonBridgeApprovalMessage(
   toolName: string,
   bridgeUrl: string,
-  params: DynamicValue,
+  params: unknown,
 ): string {
   const title = "Allow local Python / LibreOffice execution?";
 
@@ -240,7 +240,7 @@ function defaultRequestOfficeJsExecuteApproval(
 }
 
 function getDirectJsExecuteApprovalRequest(
-  params: DynamicValue,
+  params: unknown,
   apiName: "Office.js" | "WPS JSAPI",
 ): OfficeJsExecuteApprovalRequest {
   if (!isExperimentalGateParamsShape(params)) {
@@ -333,7 +333,7 @@ function wrapDirectWorkbookJsToolWithHardGate(
 
 function createPythonBridgeApprover(
   dependencies: ExperimentalToolGateDependencies,
-): (toolName: string, bridgeUrl: string, params: DynamicValue) => Promise<void> {
+): (toolName: string, bridgeUrl: string, params: unknown) => Promise<void> {
   const requestApproval = dependencies.requestPythonBridgeApproval ?? defaultRequestPythonBridgeApproval;
   const getApprovedBridgeUrl =
     dependencies.getApprovedPythonBridgeUrl
@@ -342,7 +342,7 @@ function createPythonBridgeApprover(
     dependencies.setApprovedPythonBridgeUrl
     ?? defaultSetApprovedPythonBridgeUrl;
 
-  return async (toolName: string, bridgeUrl: string, params: DynamicValue): Promise<void> => {
+  return async (toolName: string, bridgeUrl: string, params: unknown): Promise<void> => {
     const cachedApprovalUrl = await getApprovedBridgeUrl();
     if (cachedApprovalUrl === bridgeUrl) {
       return;

@@ -1,4 +1,4 @@
-function isAuthRestorePayloadShape(value: DynamicValue): value is DynamicObject {
+function isAuthRestorePayloadShape(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -33,7 +33,7 @@ type OAuthCredential = OAuthCredentials & {
   type: "oauth";
 };
 
-function isApiKeyCredential(value: DynamicValue): value is ApiKeyCredential {
+function isApiKeyCredential(value: unknown): value is ApiKeyCredential {
   return (
     isAuthRestorePayloadShape(value) &&
     value.type === "api_key" &&
@@ -42,7 +42,7 @@ function isApiKeyCredential(value: DynamicValue): value is ApiKeyCredential {
   );
 }
 
-function isOAuthCredential(value: DynamicValue): value is OAuthCredential {
+function isOAuthCredential(value: unknown): value is OAuthCredential {
   return (
     isAuthRestorePayloadShape(value) &&
     value.type === "oauth" &&
@@ -77,7 +77,7 @@ async function restoreFromPiAuth(
     const res = await fetchAuth("/__pi-auth");
     if (!res.ok) return restoredProviders;
 
-    const authData: DynamicValue = await res.json();
+    const authData: unknown = await res.json();
     if (!isAuthRestorePayloadShape(authData)) return restoredProviders;
 
     console.log(`[auth] Found pi auth.json with ${Object.keys(authData).length} provider(s)`);

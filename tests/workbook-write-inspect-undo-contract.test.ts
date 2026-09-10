@@ -19,7 +19,7 @@ import {
 } from "./fixtures/recovery-log.ts";
 
 interface StoredCell {
-  value: DynamicValue;
+  value: unknown;
   formula: string;
 }
 
@@ -49,7 +49,7 @@ class RangeStoreRange {
   readonly address: string;
   readonly rowCount: number;
   readonly columnCount: number;
-  readonly numberFormat: DynamicValue[][];
+  readonly numberFormat: unknown[][];
   private readonly store: RangeStore;
   private readonly parsed: ParsedRange;
 
@@ -65,22 +65,22 @@ class RangeStoreRange {
 
   load(_properties?: string | string[]): void {}
 
-  get values(): DynamicValue[][] {
+  get values(): unknown[][] {
     return this.store.readGrid(this.parsed, "value");
   }
 
-  set values(values: DynamicValue[][]) {
+  set values(values: unknown[][]) {
     this.store.writeGrid(this.parsed, values);
   }
 
-  get formulas(): DynamicValue[][] {
+  get formulas(): unknown[][] {
     return this.store.readGrid(this.parsed, "formula");
   }
 }
 
 class RangeStoreSheet {
   readonly name = "Sheet1";
-  readonly comments = { items: [] as DynamicValue[], load: (_properties?: string) => undefined };
+  readonly comments = { items: [] as unknown[], load: (_properties?: string) => undefined };
   private readonly store: RangeStore;
 
   constructor(store: RangeStore) {
@@ -114,10 +114,10 @@ class RangeStore {
     return `${row}:${col}`;
   }
 
-  readGrid(parsed: ParsedRange, field: keyof StoredCell): DynamicValue[][] {
-    const rows: DynamicValue[][] = [];
+  readGrid(parsed: ParsedRange, field: keyof StoredCell): unknown[][] {
+    const rows: unknown[][] = [];
     for (let row = parsed.startRow; row <= parsed.endRow; row += 1) {
-      const values: DynamicValue[] = [];
+      const values: unknown[] = [];
       for (let col = parsed.startCol; col <= parsed.endCol; col += 1) {
         const cell = this.cells.get(this.key(row, col));
         values.push(cell ? cell[field] : field === "formula" ? "" : null);
@@ -127,7 +127,7 @@ class RangeStore {
     return rows;
   }
 
-  writeGrid(parsed: ParsedRange, values: DynamicValue[][]): void {
+  writeGrid(parsed: ParsedRange, values: unknown[][]): void {
     for (let rowOffset = 0; rowOffset <= parsed.endRow - parsed.startRow; rowOffset += 1) {
       for (let colOffset = 0; colOffset <= parsed.endCol - parsed.startCol; colOffset += 1) {
         const value = values[rowOffset]?.[colOffset] ?? null;
@@ -141,9 +141,9 @@ class RangeStore {
     }
   }
 
-  applySnapshot(address: string, values: DynamicValue[][]): {
-    values: DynamicValue[][];
-    formulas: DynamicValue[][];
+  applySnapshot(address: string, values: unknown[][]): {
+    values: unknown[][];
+    formulas: unknown[][];
   } {
     const range = new RangeStoreRange(this, address);
     const before = { values: range.values, formulas: range.formulas };
@@ -153,10 +153,10 @@ class RangeStore {
 }
 
 class RecoveringAuditSettingsStore {
-  private readonly values = new Map<string, DynamicValue>();
+  private readonly values = new Map<string, unknown>();
   private failAuditRead = true;
 
-  get(key: string): Promise<DynamicValue> {
+  get(key: string): Promise<unknown> {
     if (key === "workbook.change-audit.v1" && this.failAuditRead) {
       this.failAuditRead = false;
       return Promise.reject(new Error("seeded audit read failure"));
@@ -164,7 +164,7 @@ class RecoveringAuditSettingsStore {
     return Promise.resolve(this.values.get(key) ?? null);
   }
 
-  set(key: string, value: DynamicValue): Promise<void> {
+  set(key: string, value: unknown): Promise<void> {
     this.values.set(key, value);
     return Promise.resolve();
   }
@@ -174,7 +174,7 @@ class RecoveringAuditSettingsStore {
     return Promise.resolve();
   }
 
-  seed(key: string, value: DynamicValue): void {
+  seed(key: string, value: unknown): void {
     this.values.set(key, value);
   }
 }
@@ -183,7 +183,7 @@ async function withRangeStore<T>(store: RangeStore, action: () => Promise<T>): P
   const hadExcel = Reflect.has(globalThis, "Excel");
   const previousExcel = Reflect.get(globalThis, "Excel");
   Reflect.set(globalThis, "Excel", {
-    run: <TResult>(callback: (context: DynamicValue) => Promise<TResult>): Promise<TResult> =>
+    run: <TResult>(callback: (context: unknown) => Promise<TResult>): Promise<TResult> =>
       callback(store.context),
   });
 
@@ -479,7 +479,7 @@ void test("unsupported workbook capability fails with a typed error the agent lo
   assert.ok(history);
   await assert.rejects(
     async () => history.execute("unsupported-history", { action: "list" }),
-    (error: DynamicValue) => {
+    (error: unknown) => {
       assert.ok(error instanceof UnsupportedHostToolError);
       assert.equal(error.code, "unsupported_host_tool");
       assert.equal(error.hostKind, "wps");

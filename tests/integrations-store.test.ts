@@ -15,13 +15,13 @@ import {
 const KNOWN_INTEGRATIONS = ["web_search", "mcp_tools"] as const;
 
 class MemorySettingsStore {
-  private readonly values = new Map<string, DynamicValue>();
+  private readonly values = new Map<string, unknown>();
 
-  get(key: string): Promise<DynamicValue> {
+  get(key: string): Promise<unknown> {
     return Promise.resolve(this.values.has(key) ? this.values.get(key) ?? null : null);
   }
 
-  set(key: string, value: DynamicValue): Promise<void> {
+  set(key: string, value: unknown): Promise<void> {
     this.values.set(key, value);
     return Promise.resolve();
   }
@@ -30,7 +30,7 @@ class MemorySettingsStore {
 class RejectingSettingsStore extends MemorySettingsStore {
   readsFail = true;
 
-  override get(key: string): Promise<DynamicValue> {
+  override get(key: string): Promise<unknown> {
     if (this.readsFail) {
       return Promise.reject(new Error("seeded read failure"));
     }

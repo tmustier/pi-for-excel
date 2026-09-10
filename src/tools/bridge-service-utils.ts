@@ -29,14 +29,14 @@ export async function probeBridgeHealth(bridgeUrl: string): Promise<boolean> {
   return response?.ok === true;
 }
 
-export async function fetchBridgeHealthJson(bridgeUrl: string): Promise<DynamicValue> {
+export async function fetchBridgeHealthJson(bridgeUrl: string): Promise<unknown> {
   const response = await fetchBridgeHealthResponse(bridgeUrl);
   if (!response?.ok) {
     return null;
   }
 
   try {
-    return await response.json() as DynamicValue;
+    return await response.json() as unknown;
   } catch {
     return null;
   }

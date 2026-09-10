@@ -55,7 +55,7 @@ type Params = Static<typeof schema>;
 interface SearchMatch {
   sheet: string;
   address: string;
-  value: DynamicValue;
+  value: unknown;
   formula?: string;
   context?: string;
 }
@@ -134,8 +134,8 @@ export function createSearchWorkbookTool(): AgentTool<typeof schema> {
               const valueRow = values[r] ?? [];
               const formulaRow = formulas[r] ?? [];
               for (let c = 0; c < valueRow.length; c++) {
-                const value: DynamicValue = valueRow[c];
-                const formula: DynamicValue = formulaRow[c];
+                const value: unknown = valueRow[c];
+                const formula: unknown = formulaRow[c];
 
                 let match = false;
                 if (searchFormulas) {
@@ -183,7 +183,7 @@ export function createSearchWorkbookTool(): AgentTool<typeof schema> {
                       const cells: string[] = [String(start.row + ri)];
                       const contextRow = values[ri] ?? [];
                       for (let ci = cStart; ci <= cEnd; ci++) {
-                        const v: DynamicValue = contextRow[ci];
+                        const v: unknown = contextRow[ci];
                         let s = v === null || v === undefined || v === "" ? "" : typeof v === "string" ? v : typeof v === "number" || typeof v === "boolean" ? String(v) : JSON.stringify(v);
                         if (s.length > 20) s = s.substring(0, 20) + "…";
                         s = s.replace(/\|/g, "\\|");

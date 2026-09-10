@@ -1,4 +1,4 @@
-function isUiThemeModePayloadShape(value: DynamicValue): value is DynamicObject {
+function isUiThemeModePayloadShape(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -66,7 +66,7 @@ function isExperimentalFeatureChangedEvent(
     return false;
   }
 
-  const detail: DynamicValue = event.detail;
+  const detail: unknown = event.detail;
   if (!isUiThemeModePayloadShape(detail)) {
     return false;
   }

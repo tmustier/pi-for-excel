@@ -1,4 +1,4 @@
-function isSkillsActivationStorePayloadShape(value: DynamicValue): value is DynamicObject {
+function isSkillsActivationStorePayloadShape(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -13,11 +13,11 @@ import type { AgentSkillDefinition } from "./types.js";
 export const SKILL_ACTIVATION_STORAGE_KEY = "skills.activation.v1";
 
 export interface SkillActivationSettingsStore {
-  get: (key: string) => Promise<DynamicValue>;
+  get: (key: string) => Promise<unknown>;
 }
 
 export interface SkillActivationMutableSettingsStore extends SkillActivationSettingsStore {
-  set: (key: string, value: DynamicValue) => Promise<void>;
+  set: (key: string, value: unknown) => Promise<void>;
 }
 
 interface StoredSkillActivationDocument {
@@ -34,7 +34,7 @@ function normalizeSkillName(name: string): string {
   return normalized;
 }
 
-function normalizeSkillNamesList(raw: DynamicValue): string[] {
+function normalizeSkillNamesList(raw: unknown): string[] {
   if (!Array.isArray(raw)) {
     return [];
   }
@@ -57,7 +57,7 @@ function normalizeSkillNamesList(raw: DynamicValue): string[] {
   return Array.from(normalized).sort((left, right) => left.localeCompare(right));
 }
 
-function parseStoredDisabledSkillNames(raw: DynamicValue): string[] {
+function parseStoredDisabledSkillNames(raw: unknown): string[] {
   if (Array.isArray(raw)) {
     return normalizeSkillNamesList(raw);
   }

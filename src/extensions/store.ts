@@ -1,4 +1,4 @@
-function isExtensionsStorePayloadShape(value: DynamicValue): value is DynamicObject {
+function isExtensionsStorePayloadShape(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -21,8 +21,8 @@ export const LEGACY_EXTENSIONS_REGISTRY_STORAGE_KEY = "extensions.registry.v1";
 const EXTENSIONS_REGISTRY_VERSION = 2;
 
 export interface ExtensionSettingsStore {
-  get(key: string): Promise<DynamicValue>;
-  set(key: string, value: DynamicValue): Promise<void>;
+  get(key: string): Promise<unknown>;
+  set(key: string, value: unknown): Promise<void>;
 }
 
 export const BUILTIN_SNAKE_EXTENSION_ID = "builtin.snake";
@@ -62,13 +62,13 @@ function isValidIsoTimestamp(value: string): boolean {
   return !Number.isNaN(Date.parse(value));
 }
 
-function normalizeNonEmptyString(value: DynamicValue): string | null {
+function normalizeNonEmptyString(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
 }
 
-function normalizeSource(raw: DynamicValue): StoredExtensionSource | null {
+function normalizeSource(raw: unknown): StoredExtensionSource | null {
   if (!isExtensionsStorePayloadShape(raw)) return null;
 
   const kind = raw.kind;
@@ -87,7 +87,7 @@ function normalizeSource(raw: DynamicValue): StoredExtensionSource | null {
   return null;
 }
 
-function normalizeBaseEntry(raw: DynamicValue): {
+function normalizeBaseEntry(raw: unknown): {
   id: string;
   name: string;
   enabled: boolean;
@@ -121,7 +121,7 @@ function normalizeBaseEntry(raw: DynamicValue): {
   };
 }
 
-function normalizeTrust(raw: DynamicValue): StoredExtensionTrust | null {
+function normalizeTrust(raw: unknown): StoredExtensionTrust | null {
   switch (raw) {
     case "builtin":
     case "local-module":
@@ -133,7 +133,7 @@ function normalizeTrust(raw: DynamicValue): StoredExtensionTrust | null {
   }
 }
 
-function normalizeEntry(raw: DynamicValue): StoredExtensionEntry | null {
+function normalizeEntry(raw: unknown): StoredExtensionEntry | null {
   const base = normalizeBaseEntry(raw);
   if (!base) {
     return null;
@@ -154,7 +154,7 @@ function normalizeEntry(raw: DynamicValue): StoredExtensionEntry | null {
   };
 }
 
-function normalizeLegacyEntry(raw: DynamicValue): LegacyStoredExtensionEntry | null {
+function normalizeLegacyEntry(raw: unknown): LegacyStoredExtensionEntry | null {
   const base = normalizeBaseEntry(raw);
   if (!base) {
     return null;
@@ -163,7 +163,7 @@ function normalizeLegacyEntry(raw: DynamicValue): LegacyStoredExtensionEntry | n
   return base;
 }
 
-function normalizeItems(raw: DynamicValue): StoredExtensionEntry[] | null {
+function normalizeItems(raw: unknown): StoredExtensionEntry[] | null {
   if (!Array.isArray(raw)) return null;
 
   const byId = new Map<string, StoredExtensionEntry>();
@@ -181,7 +181,7 @@ function normalizeItems(raw: DynamicValue): StoredExtensionEntry[] | null {
   return Array.from(byId.values());
 }
 
-function normalizeLegacyItems(raw: DynamicValue): LegacyStoredExtensionEntry[] | null {
+function normalizeLegacyItems(raw: unknown): LegacyStoredExtensionEntry[] | null {
   if (!Array.isArray(raw)) return null;
 
   const byId = new Map<string, LegacyStoredExtensionEntry>();
@@ -208,7 +208,7 @@ function migrateLegacyEntry(entry: LegacyStoredExtensionEntry): StoredExtensionE
   };
 }
 
-function normalizeDocument(raw: DynamicValue): StoredExtensionRegistryDocument | null {
+function normalizeDocument(raw: unknown): StoredExtensionRegistryDocument | null {
   if (!isExtensionsStorePayloadShape(raw)) return null;
 
   const version = raw.version;

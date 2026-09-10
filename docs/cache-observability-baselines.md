@@ -39,6 +39,7 @@ Use this as the default expectation map when reviewing context-shape changes.
 | Extension add/remove tool (schema delta) | includes `"tools"` | Tool schema changed. |
 | Extension handler hot-reload with same schema | `[]` | #444 uses extension tool revision tracking so handler swaps still refresh runtime tools while schema-stable prefixes remain unchanged. |
 | Extension `llm.complete` side call | Main runtime session: `[]` | Side completions use an extension-scoped session key, so prefix churn is isolated from the primary runtime session. |
+| Upgrade across a schema-library change (one-off) | First call after upgrade: `["tools"]`; then `[]` | Serialized tool schemas changed bytes without changing meaning. Last such change: 2026-09-10, `@sinclair/typebox` 0.34 → `typebox` 1.3.7 (key order `type` before `description`; string enums as `{type, enum}` instead of `anyOf`/`const`). |
 
 ## Investigation rules
 

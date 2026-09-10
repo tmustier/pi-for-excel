@@ -1,4 +1,4 @@
-function isAuditWorkbookChangeAuditPayloadShape(value: DynamicValue): value is DynamicObject {
+function isAuditWorkbookChangeAuditPayloadShape(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -59,8 +59,8 @@ export interface AppendWorkbookChangeAuditEntryArgs {
 }
 
 interface SettingsStoreLike {
-  get(key: string): Promise<DynamicValue>;
-  set(key: string, value: DynamicValue): Promise<void>;
+  get(key: string): Promise<unknown>;
+  set(key: string, value: unknown): Promise<void>;
   delete(key: string): Promise<void>;
 }
 
@@ -94,7 +94,7 @@ function defaultCreateId(): string {
   return `change_${Date.now().toString(36)}_${randomChunk}`;
 }
 
-function isSettingsStoreLike(value: DynamicValue): value is SettingsStoreLike {
+function isSettingsStoreLike(value: unknown): value is SettingsStoreLike {
   if (!isAuditWorkbookChangeAuditPayloadShape(value)) return false;
 
   return (
@@ -115,7 +115,7 @@ async function defaultGetSettingsStore(): Promise<SettingsStoreLike | null> {
   }
 }
 
-function isWorkbookAuditToolName(value: DynamicValue): value is WorkbookAuditToolName {
+function isWorkbookAuditToolName(value: unknown): value is WorkbookAuditToolName {
   return (
     value === "write_cells" ||
     value === "fill_formula" ||
@@ -131,7 +131,7 @@ function isWorkbookAuditToolName(value: DynamicValue): value is WorkbookAuditToo
   );
 }
 
-function isWorkbookCellChange(value: DynamicValue): value is WorkbookCellChange {
+function isWorkbookCellChange(value: unknown): value is WorkbookCellChange {
   if (!isAuditWorkbookChangeAuditPayloadShape(value)) return false;
 
   const beforeFormula = value.beforeFormula;
@@ -146,7 +146,7 @@ function isWorkbookCellChange(value: DynamicValue): value is WorkbookCellChange 
   );
 }
 
-function parseAuditEntry(value: DynamicValue): WorkbookChangeAuditEntry | null {
+function parseAuditEntry(value: unknown): WorkbookChangeAuditEntry | null {
   if (!isAuditWorkbookChangeAuditPayloadShape(value)) return null;
 
   if (!isWorkbookAuditToolName(value.toolName)) return null;
@@ -180,7 +180,7 @@ function parseAuditEntry(value: DynamicValue): WorkbookChangeAuditEntry | null {
   return entry;
 }
 
-function parsePersistedEntries(payload: DynamicValue): WorkbookChangeAuditEntry[] {
+function parsePersistedEntries(payload: unknown): WorkbookChangeAuditEntry[] {
   if (!isAuditWorkbookChangeAuditPayloadShape(payload)) return [];
 
   const entriesRaw = payload.entries;

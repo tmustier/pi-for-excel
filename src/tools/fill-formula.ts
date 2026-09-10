@@ -46,7 +46,7 @@ type FillFormulaResult =
     sheetName: string;
     address: string;
     existingCount: number;
-    existingValues: DynamicValue[][];
+    existingValues: unknown[][];
   }
   | {
     blocked: false;
@@ -54,10 +54,10 @@ type FillFormulaResult =
     address: string;
     rowCount: number;
     columnCount: number;
-    beforeValues: DynamicValue[][];
-    beforeFormulas: DynamicValue[][];
-    readBackValues: DynamicValue[][];
-    readBackFormulas: DynamicValue[][];
+    beforeValues: unknown[][];
+    beforeFormulas: unknown[][];
+    readBackValues: unknown[][];
+    readBackFormulas: unknown[][];
   };
 
 const mutationFinalizeDependencies: MutationFinalizeDependencies = {
@@ -176,8 +176,8 @@ export function createFillFormulaTool(): AgentTool<typeof schema, FillFormulaDet
         lines.push(`Filled formula across **${fullAddr}** (${result.rowCount}×${result.columnCount})`);
         lines.push(`**Formula pattern:** \`${params.formula}\``);
 
-        const topLeftRaw: DynamicValue = result.readBackFormulas?.[0]?.[0] ?? "";
-        const bottomRightRaw: DynamicValue = result.readBackFormulas?.[result.rowCount - 1]?.[result.columnCount - 1] ?? "";
+        const topLeftRaw: unknown = result.readBackFormulas?.[0]?.[0] ?? "";
+        const bottomRightRaw: unknown = result.readBackFormulas?.[result.rowCount - 1]?.[result.columnCount - 1] ?? "";
         const topLeft = typeof topLeftRaw === "string" ? topLeftRaw : JSON.stringify(topLeftRaw);
         const bottomRight = typeof bottomRightRaw === "string" ? bottomRightRaw : JSON.stringify(bottomRightRaw);
         if (topLeft && bottomRight && (result.rowCount > 1 || result.columnCount > 1)) {

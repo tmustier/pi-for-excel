@@ -1,4 +1,4 @@
-function isConditionalFormatHandlersBasicPayloadShape(value: DynamicValue): value is DynamicObject {
+function isConditionalFormatHandlersBasicPayloadShape(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 

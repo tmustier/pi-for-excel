@@ -7,7 +7,7 @@ export interface ToolConnectionMetadata {
 export type ConnectionAwareAgentTool = AgentTool & ToolConnectionMetadata;
 
 interface ToolConnectionMetadataBoundary {
-  requiresConnection?: DynamicValue;
+  requiresConnection?: unknown;
 }
 
 function normalizeConnectionId(rawValue: string): string {

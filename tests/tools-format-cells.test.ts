@@ -6,23 +6,23 @@ import type { StorageBackend, StorageTransaction } from "../src/storage/local/ty
 import { createFormatCellsTool } from "../src/tools/format-cells.ts";
 
 class MemoryStorageBackend implements StorageBackend {
-  private readonly stores = new Map<string, Map<string, DynamicValue>>();
+  private readonly stores = new Map<string, Map<string, unknown>>();
 
-  private store(name: string): Map<string, DynamicValue> {
+  private store(name: string): Map<string, unknown> {
     const existing = this.stores.get(name);
     if (existing) return existing;
-    const created = new Map<string, DynamicValue>();
+    const created = new Map<string, unknown>();
     this.stores.set(name, created);
     return created;
   }
 
-  get<T = DynamicValue>(storeName: string, key: string): Promise<T | null> {
+  get<T = unknown>(storeName: string, key: string): Promise<T | null> {
     const value = this.store(storeName).get(key);
     // This boundary mirrors IndexedDB: callers own the requested persisted type.
     return Promise.resolve(value === undefined ? null : structuredClone(value) as T);
   }
 
-  set<T = DynamicValue>(storeName: string, key: string, value: T): Promise<void> {
+  set<T = unknown>(storeName: string, key: string, value: T): Promise<void> {
     this.store(storeName).set(key, structuredClone(value));
     return Promise.resolve();
   }
@@ -37,7 +37,7 @@ class MemoryStorageBackend implements StorageBackend {
     return Promise.resolve(prefix ? keys.filter((key) => key.startsWith(prefix)) : keys);
   }
 
-  getAllFromIndex<T = DynamicValue>(): Promise<T[]> {
+  getAllFromIndex<T = unknown>(): Promise<T[]> {
     return Promise.resolve([]);
   }
 
@@ -56,8 +56,8 @@ class MemoryStorageBackend implements StorageBackend {
     operation: (transaction: StorageTransaction) => Promise<T>,
   ): Promise<T> {
     return operation({
-      get: <V = DynamicValue>(storeName: string, key: string) => this.get<V>(storeName, key),
-      set: <V = DynamicValue>(storeName: string, key: string, value: V) => this.set(storeName, key, value),
+      get: <V = unknown>(storeName: string, key: string) => this.get<V>(storeName, key),
+      set: <V = unknown>(storeName: string, key: string, value: V) => this.set(storeName, key, value),
       delete: (storeName: string, key: string) => this.delete(storeName, key),
     });
   }
@@ -129,7 +129,7 @@ async function withFormatHost<T>(range: FormatRange, action: () => Promise<T>): 
   const hadExcel = Reflect.has(globalThis, "Excel");
   const previousExcel = Reflect.get(globalThis, "Excel");
   Reflect.set(globalThis, "Excel", {
-    run: <TResult>(callback: (host: DynamicValue) => Promise<TResult>): Promise<TResult> => callback(context),
+    run: <TResult>(callback: (host: unknown) => Promise<TResult>): Promise<TResult> => callback(context),
   });
 
   try {

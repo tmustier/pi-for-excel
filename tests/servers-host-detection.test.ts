@@ -8,9 +8,9 @@ import {
 } from "../src/host/index.ts";
 
 type HostGlobals = {
-  Office?: DynamicValue;
-  wps?: DynamicValue;
-  Application?: DynamicValue;
+  Office?: unknown;
+  wps?: unknown;
+  Application?: unknown;
 };
 
 async function withHostGlobals<T>(values: HostGlobals, run: () => Promise<T> | T): Promise<T> {
@@ -18,7 +18,7 @@ async function withHostGlobals<T>(values: HostGlobals, run: () => Promise<T> | T
   const previous = keys.map((key) => ({
     key,
     present: Reflect.has(globalThis, key),
-    value: Reflect.get(globalThis, key) as DynamicValue,
+    value: Reflect.get(globalThis, key) as unknown,
   }));
 
   for (const key of keys) Reflect.deleteProperty(globalThis, key);

@@ -60,7 +60,7 @@ function defaultCreateSuffix(): string {
     .slice(0, 8);
 }
 
-function toError(error: DynamicValue): Error {
+function toError(error: unknown): Error {
   if (error instanceof Error) {
     return error;
   }
@@ -68,7 +68,7 @@ function toError(error: DynamicValue): Error {
   return new Error(typeof error === "string" ? error : "Unknown error");
 }
 
-function formatOfficeAsyncError(result: OfficeAsyncResultLike<DynamicValue>): string {
+function formatOfficeAsyncError(result: OfficeAsyncResultLike<unknown>): string {
   const maybeMessage = result.error?.message;
   if (typeof maybeMessage === "string" && maybeMessage.trim().length > 0) {
     return maybeMessage.trim();
@@ -139,7 +139,7 @@ async function readSlice(file: OfficeFileLike, index: number): Promise<OfficeSli
   });
 }
 
-function normalizeSliceData(data: DynamicValue): Uint8Array {
+function normalizeSliceData(data: unknown): Uint8Array {
   if (data instanceof Uint8Array) {
     return data;
   }
@@ -153,7 +153,7 @@ function normalizeSliceData(data: DynamicValue): Uint8Array {
   }
 
   if (Array.isArray(data)) {
-    const items = Array.from<DynamicValue>(data);
+    const items = Array.from<unknown>(data);
     const bytes = new Uint8Array(items.length);
 
     for (let index = 0; index < items.length; index += 1) {

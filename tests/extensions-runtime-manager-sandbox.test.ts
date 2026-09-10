@@ -36,18 +36,18 @@ import {
 } from "../src/extensions/permissions.ts";
 
 class MemorySettingsStore {
-  private readonly values = new Map<string, DynamicValue>();
+  private readonly values = new Map<string, unknown>();
 
-  get(key: string): Promise<DynamicValue> {
+  get(key: string): Promise<unknown> {
     return Promise.resolve(this.values.has(key) ? this.values.get(key) ?? null : null);
   }
 
-  set(key: string, value: DynamicValue): Promise<void> {
+  set(key: string, value: unknown): Promise<void> {
     this.values.set(key, value);
     return Promise.resolve();
   }
 
-  writeRaw(key: string, value: DynamicValue): void {
+  writeRaw(key: string, value: unknown): void {
     this.values.set(key, value);
   }
 }
@@ -59,7 +59,7 @@ class TransientExtensionReadSettings extends MemorySettingsStore {
     this.failNextRead = true;
   }
 
-  override get(key: string): Promise<DynamicValue> {
+  override get(key: string): Promise<unknown> {
     if (this.failNextRead) {
       this.failNextRead = false;
       return Promise.reject(new Error("transient runtime registry read failure"));
@@ -75,7 +75,7 @@ class FailingConnectionStoreSettings extends MemorySettingsStore {
     this.failNextConnectionStoreWrite = true;
   }
 
-  override set(key: string, value: DynamicValue): Promise<void> {
+  override set(key: string, value: unknown): Promise<void> {
     if (this.failNextConnectionStoreWrite && key === CONNECTION_STORE_KEY) {
       this.failNextConnectionStoreWrite = false;
       return Promise.reject(new Error("simulated connection store failure"));
@@ -159,7 +159,7 @@ function createStoredEntry(input: {
   trust: StoredExtensionTrust;
   enabled?: boolean;
   permissions?: StoredExtensionPermissions;
-}): DynamicObject {
+}): Record<string, unknown> {
   const now = new Date().toISOString();
   const source = input.trust === "inline-code"
     ? {
@@ -809,14 +809,14 @@ void test("host runtime extension tool errors include extension ownership contex
 });
 
 void test("sandbox protocol helpers validate envelope shapes and escape inline script payloads", () => {
-  const validBootstrap: DynamicValue = {
+  const validBootstrap: unknown = {
     channel: SANDBOX_CHANNEL,
     instanceId: "ext.inline.proto",
     direction: "host_to_sandbox",
     kind: SANDBOX_BOOTSTRAP_KIND,
   };
 
-  const validRequest: DynamicValue = {
+  const validRequest: unknown = {
     channel: SANDBOX_CHANNEL,
     instanceId: "ext.inline.proto",
     direction: "sandbox_to_host",
@@ -825,7 +825,7 @@ void test("sandbox protocol helpers validate envelope shapes and escape inline s
     method: "register_tool",
   };
 
-  const invalidDirection: DynamicValue = {
+  const invalidDirection: unknown = {
     channel: SANDBOX_CHANNEL,
     instanceId: "ext.inline.proto",
     direction: "sideways",
@@ -834,7 +834,7 @@ void test("sandbox protocol helpers validate envelope shapes and escape inline s
     method: "register_tool",
   };
 
-  const invalidKind: DynamicValue = {
+  const invalidKind: unknown = {
     channel: SANDBOX_CHANNEL,
     instanceId: "ext.inline.proto",
     direction: "sandbox_to_host",
@@ -875,13 +875,13 @@ void test("sandbox activation uses a script-only iframe and dedicated, direction
       assert.equal(tagName, "iframe");
       const target = new EventTarget();
       const attributes = new Map<string, string>();
-      const element = target as DynamicValue as HTMLElement;
+      const element = target as unknown as HTMLElement;
       Reflect.set(element, "style", {});
       Reflect.set(element, "setAttribute", (name: string, value: string) => attributes.set(name, value));
       Reflect.set(element, "getAttribute", (name: string) => attributes.get(name) ?? null);
       Reflect.set(element, "remove", () => {});
       Reflect.set(element, "contentWindow", {
-        postMessage: (bootstrap: DynamicValue, targetOrigin: string, transfer: MessagePort[]) => {
+        postMessage: (bootstrap: unknown, targetOrigin: string, transfer: MessagePort[]) => {
           assert.equal(targetOrigin, "*");
           assert.equal(transfer.length, 1);
           sandboxPort = transfer[0] ?? null;
@@ -978,11 +978,11 @@ void test("sandbox activation uses a script-only iframe and dedicated, direction
     });
     const handle = await activation;
 
-    const deactivateRequest = new Promise<DynamicObject>((resolve) => {
-      transferredPort.addEventListener("message", (event: MessageEvent<DynamicValue>) => {
+    const deactivateRequest = new Promise<Record<string, unknown>>((resolve) => {
+      transferredPort.addEventListener("message", (event: MessageEvent<unknown>) => {
         const envelope = event.data;
         if (typeof envelope !== "object" || envelope === null || Array.isArray(envelope)) return;
-        const payload = envelope as DynamicObject;
+        const payload = envelope as Record<string, unknown>;
         if (payload.kind !== "request" || payload.method !== "deactivate") return;
         resolve(payload);
         transferredPort.postMessage({

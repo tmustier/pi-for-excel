@@ -1,4 +1,4 @@
-function isExtensionsSandboxUiPayloadShape(value: DynamicValue): value is DynamicObject {
+function isExtensionsSandboxUiPayloadShape(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -52,7 +52,7 @@ const MAX_NODES = 300;
 const MAX_DEPTH = 12;
 const MAX_CLASS_TOKENS = 8;
 
-function normalizeText(value: DynamicValue): string {
+function normalizeText(value: unknown): string {
   if (typeof value !== "string") {
     return "";
   }
@@ -64,7 +64,7 @@ function normalizeText(value: DynamicValue): string {
   return value.slice(0, MAX_TEXT_LENGTH);
 }
 
-function normalizeTag(value: DynamicValue): string {
+function normalizeTag(value: unknown): string {
   if (typeof value !== "string") {
     return "div";
   }
@@ -77,7 +77,7 @@ function normalizeTag(value: DynamicValue): string {
   return lowered;
 }
 
-function normalizeClassName(value: DynamicValue): string | undefined {
+function normalizeClassName(value: unknown): string | undefined {
   if (typeof value !== "string") {
     return undefined;
   }
@@ -95,7 +95,7 @@ function normalizeClassName(value: DynamicValue): string | undefined {
   return tokens.join(" ");
 }
 
-function normalizeActionId(value: DynamicValue): string | undefined {
+function normalizeActionId(value: unknown): string | undefined {
   if (typeof value !== "string") {
     return undefined;
   }
@@ -112,7 +112,7 @@ interface NormalizeState {
   remainingNodes: number;
 }
 
-function normalizeNode(raw: DynamicValue, depth: number, state: NormalizeState): SandboxUiNode | null {
+function normalizeNode(raw: unknown, depth: number, state: NormalizeState): SandboxUiNode | null {
   if (state.remainingNodes <= 0) {
     return null;
   }
@@ -164,7 +164,7 @@ function normalizeNode(raw: DynamicValue, depth: number, state: NormalizeState):
   };
 }
 
-export function normalizeSandboxUiNode(raw: DynamicValue): SandboxUiNode {
+export function normalizeSandboxUiNode(raw: unknown): SandboxUiNode {
   const state: NormalizeState = {
     remainingNodes: MAX_NODES,
   };

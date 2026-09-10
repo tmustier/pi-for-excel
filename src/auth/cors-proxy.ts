@@ -22,7 +22,7 @@ import { rewriteDevProxyUrl } from "./dev-rewrites.js";
 export let originalFetch: typeof window.fetch;
 
 export interface CorsProxySettingsReader {
-  get(key: string): Promise<DynamicValue>;
+  get(key: string): Promise<unknown>;
 }
 
 type ProxySettingsCache = {
@@ -36,7 +36,7 @@ const proxyCache: ProxySettingsCache = {
   enabled: false,
 };
 
-function parseProxyEnabled(value: DynamicValue): boolean {
+function parseProxyEnabled(value: unknown): boolean {
   // Preserve the legacy persisted contract: any truthy value enabled proxying.
   return Boolean(value);
 }

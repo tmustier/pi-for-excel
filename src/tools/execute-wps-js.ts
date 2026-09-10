@@ -1,4 +1,4 @@
-function isToolsExecuteWpsJsPayloadShape(value: DynamicValue): value is DynamicObject {
+function isToolsExecuteWpsJsPayloadShape(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -42,10 +42,10 @@ const schema = Type.Object({
 
 type Params = Static<typeof schema>;
 
-type ExecuteWpsJsRunner = (Application: WpsEtApplication, wps: WpsGlobal | null) => DynamicValue;
+type ExecuteWpsJsRunner = (Application: WpsEtApplication, wps: WpsGlobal | null) => unknown;
 
 interface ExecuteWpsJsToolDependencies {
-  runCode: (code: string) => Promise<DynamicValue>;
+  runCode: (code: string) => Promise<unknown>;
 }
 
 function normalizeExplanation(explanation: string): string {
@@ -78,9 +78,9 @@ function normalizeCode(code: string): string {
   return trimmed;
 }
 
-type WpsJsRunnerCandidate = (Application: WpsEtApplication, wps: WpsGlobal | null) => DynamicValue;
+type WpsJsRunnerCandidate = (Application: WpsEtApplication, wps: WpsGlobal | null) => unknown;
 
-function isWpsJsRunnerCandidate(value: DynamicValue): value is WpsJsRunnerCandidate {
+function isWpsJsRunnerCandidate(value: unknown): value is WpsJsRunnerCandidate {
   return typeof value === "function";
 }
 
@@ -95,7 +95,7 @@ async function loadWpsJsRunner(code: string): Promise<ExecuteWpsJsRunner> {
   const blobUrl = URL.createObjectURL(blob);
 
   try {
-    const moduleNamespace: DynamicValue = await import(/* @vite-ignore */ blobUrl);
+    const moduleNamespace: unknown = await import(/* @vite-ignore */ blobUrl);
     if (!isToolsExecuteWpsJsPayloadShape(moduleNamespace)) {
       throw new Error("Compiled WPS JSAPI module did not export a valid function.");
     }
@@ -105,7 +105,7 @@ async function loadWpsJsRunner(code: string): Promise<ExecuteWpsJsRunner> {
       throw new Error("Compiled WPS JSAPI module must export a default function.");
     }
 
-    return (Application: WpsEtApplication, wps: WpsGlobal | null): DynamicValue => maybeRunner(Application, wps);
+    return (Application: WpsEtApplication, wps: WpsGlobal | null): unknown => maybeRunner(Application, wps);
   } catch (error) {
     throw new Error(`Invalid WPS JSAPI code: ${getErrorMessage(error)}`);
   } finally {
@@ -113,7 +113,7 @@ async function loadWpsJsRunner(code: string): Promise<ExecuteWpsJsRunner> {
   }
 }
 
-async function defaultRunCode(code: string): Promise<DynamicValue> {
+async function defaultRunCode(code: string): Promise<unknown> {
   const app = getWpsEtApplication();
   if (!app) {
     throw new Error("WPS ET Application is unavailable.");
@@ -123,7 +123,7 @@ async function defaultRunCode(code: string): Promise<DynamicValue> {
   return runner(app, getWpsGlobalForTaskPane());
 }
 
-function jsonSafeReplacer(_key: string, value: DynamicValue): DynamicValue {
+function jsonSafeReplacer(_key: string, value: unknown): unknown {
   if (typeof value === "bigint") {
     return value.toString();
   }
@@ -131,7 +131,7 @@ function jsonSafeReplacer(_key: string, value: DynamicValue): DynamicValue {
   return value;
 }
 
-function serializeResult(result: DynamicValue): { text: string; truncated: boolean } {
+function serializeResult(result: unknown): { text: string; truncated: boolean } {
   let serialized: string;
 
   try {

@@ -41,7 +41,7 @@ type VersionedOpenAICodexCredentials = OAuthCredentials & {
   scopes?: string;
 };
 
-function isOpenaiCodexBrowserOauthPayloadShape(value: DynamicValue): value is DynamicObject {
+function isOpenaiCodexBrowserOauthPayloadShape(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -101,7 +101,7 @@ function parseAuthorizationInput(input: string): ParsedAuthorizationInput {
   return { code: value };
 }
 
-function parseTokenPayload(payload: DynamicValue): TokenPayload | null {
+function parseTokenPayload(payload: unknown): TokenPayload | null {
   if (!isOpenaiCodexBrowserOauthPayloadShape(payload)) {
     return null;
   }
@@ -191,7 +191,7 @@ function decodeBase64Url(encoded: string): string {
   return atob(padded);
 }
 
-function decodeJwtPayload(token: string): DynamicObject | null {
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
   try {
     const parts = token.split(".");
     if (parts.length !== 3) {
@@ -200,7 +200,7 @@ function decodeJwtPayload(token: string): DynamicObject | null {
 
     const payloadSegment = parts[1] ?? "";
     const decoded = decodeBase64Url(payloadSegment);
-    const parsed: DynamicValue = JSON.parse(decoded);
+    const parsed: unknown = JSON.parse(decoded);
 
     if (!isOpenaiCodexBrowserOauthPayloadShape(parsed)) {
       return null;
@@ -231,7 +231,7 @@ function getAccountId(accessToken: string): string | null {
   return accountId;
 }
 
-export function isOpenAICodexCredentialRefreshRequired(error: DynamicValue): boolean {
+export function isOpenAICodexCredentialRefreshRequired(error: unknown): boolean {
   return error instanceof Error && error.message.includes(STALE_CREDENTIAL_ERROR);
 }
 
@@ -248,7 +248,7 @@ const REQUIRED_SCOPES = SCOPE.split(" ");
  * sourced Codex credential would be rejected as stale even when the
  * underlying grant already includes the connector scopes.
  */
-function accessTokenHasRequiredScopes(accessToken: DynamicValue): boolean {
+function accessTokenHasRequiredScopes(accessToken: unknown): boolean {
   if (typeof accessToken !== "string") {
     return false;
   }

@@ -15,11 +15,11 @@ import type {
   WorkspaceSnapshot,
 } from "../src/files/types.ts";
 
-function getOfficeGlobal(): DynamicValue {
+function getOfficeGlobal(): unknown {
   return Reflect.get(globalThis, "Office");
 }
 
-function setOfficeGlobal(value: DynamicValue): void {
+function setOfficeGlobal(value: unknown): void {
   Reflect.set(globalThis, "Office", value);
 }
 
@@ -202,7 +202,7 @@ class CleanupTestBackend implements WorkspaceBackend {
 }
 
 class FirstReadRejectingSettings {
-  readonly values = new Map<string, DynamicValue>();
+  readonly values = new Map<string, unknown>();
   readonly writes: string[] = [];
   private readonly unreadKeys = new Set([
     "files.workspace.metadata.v1",
@@ -219,7 +219,7 @@ class FirstReadRejectingSettings {
     return Promise.resolve(value === undefined ? null : structuredClone(value) as T);
   }
 
-  set(key: string, value: DynamicValue): Promise<void> {
+  set(key: string, value: unknown): Promise<void> {
     this.writes.push(key);
     this.values.set(key, structuredClone(value));
     return Promise.resolve();

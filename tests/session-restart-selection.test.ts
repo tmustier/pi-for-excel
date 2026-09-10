@@ -11,22 +11,22 @@ import { setupSessionPersistence } from "../src/taskpane/sessions.ts";
 import { workbookLatestSessionKey } from "../src/workbook/session-association.ts";
 
 class MemoryStorageBackend implements StorageBackend {
-  private readonly stores = new Map<string, Map<string, DynamicValue>>();
+  private readonly stores = new Map<string, Map<string, unknown>>();
 
-  private store(name: string): Map<string, DynamicValue> {
+  private store(name: string): Map<string, unknown> {
     const existing = this.stores.get(name);
     if (existing) return existing;
-    const created = new Map<string, DynamicValue>();
+    const created = new Map<string, unknown>();
     this.stores.set(name, created);
     return created;
   }
 
-  get<T = DynamicValue>(storeName: string, key: string): Promise<T | null> {
+  get<T = unknown>(storeName: string, key: string): Promise<T | null> {
     const value = this.store(storeName).get(key);
     return Promise.resolve(value === undefined ? null : structuredClone(value) as T);
   }
 
-  set<T = DynamicValue>(storeName: string, key: string, value: T): Promise<void> {
+  set<T = unknown>(storeName: string, key: string, value: T): Promise<void> {
     this.store(storeName).set(key, structuredClone(value));
     return Promise.resolve();
   }
@@ -41,7 +41,7 @@ class MemoryStorageBackend implements StorageBackend {
     return Promise.resolve(prefix ? keys.filter((key) => key.startsWith(prefix)) : keys);
   }
 
-  getAllFromIndex<T = DynamicValue>(
+  getAllFromIndex<T = unknown>(
     storeName: string,
     _indexName: string,
     direction: "asc" | "desc" = "asc",
@@ -72,8 +72,8 @@ class MemoryStorageBackend implements StorageBackend {
     operation: (tx: StorageTransaction) => Promise<T>,
   ): Promise<T> {
     return operation({
-      get: <V = DynamicValue>(storeName: string, key: string) => this.get<V>(storeName, key),
-      set: <V = DynamicValue>(storeName: string, key: string, value: V) => this.set(storeName, key, value),
+      get: <V = unknown>(storeName: string, key: string) => this.get<V>(storeName, key),
+      set: <V = unknown>(storeName: string, key: string, value: V) => this.set(storeName, key, value),
       delete: (storeName: string, key: string) => this.delete(storeName, key),
     });
   }
@@ -87,9 +87,9 @@ class MemoryStorageBackend implements StorageBackend {
   }
 }
 
-function readLastModified(value: DynamicValue): string {
+function readLastModified(value: unknown): string {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return "";
-  const candidate = value as { lastModified?: DynamicValue };
+  const candidate = value as { lastModified?: unknown };
   return typeof candidate.lastModified === "string" ? candidate.lastModified : "";
 }
 

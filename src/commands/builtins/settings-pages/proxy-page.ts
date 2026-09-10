@@ -21,13 +21,13 @@ import {
 import type { SettingsShellPage } from "../../../ui/settings-shell.js";
 import { showToast } from "../../../ui/toast.js";
 
-function isProxyPagePayloadShape(value: DynamicValue): value is DynamicObject {
+function isProxyPagePayloadShape(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 interface SettingsStore {
   get<T>(key: string): Promise<T | null>;
-  set(key: string, value: DynamicValue): Promise<void>;
+  set(key: string, value: unknown): Promise<void>;
 }
 
 function resolveProxyCallout(args: {
@@ -211,7 +211,7 @@ export function createProxyPage(): SettingsShellPage {
       const onProxyStateChanged = (event: Event): void => {
         if (!(event instanceof CustomEvent)) return;
 
-        const detail: DynamicValue = event.detail;
+        const detail: unknown = event.detail;
         if (!isProxyPagePayloadShape(detail)) return;
 
         const state = detail.state;

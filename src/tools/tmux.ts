@@ -1,4 +1,4 @@
-function isToolsTmuxPayloadShape(value: DynamicValue): value is DynamicObject {
+function isToolsTmuxPayloadShape(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -51,7 +51,7 @@ type TmuxAction = (typeof TMUX_ACTIONS)[number];
 
 const TMUX_ACTION_SET = new Set<string>(TMUX_ACTIONS);
 
-function isTmuxAction(value: DynamicValue): value is TmuxAction {
+function isTmuxAction(value: unknown): value is TmuxAction {
   return typeof value === "string" && TMUX_ACTION_SET.has(value);
 }
 
@@ -142,7 +142,7 @@ export interface TmuxBridgeResponse {
   sessions?: string[];
   output?: string;
   error?: string;
-  metadata?: DynamicObject;
+  metadata?: Record<string, unknown>;
 }
 
 export interface TmuxToolDetails {
@@ -184,18 +184,18 @@ function cleanOptionalStringArray(values: string[] | undefined): string[] | unde
   return cleaned.length > 0 ? cleaned : undefined;
 }
 
-function toOptionalBoolean(value: DynamicValue): boolean | undefined {
+function toOptionalBoolean(value: unknown): boolean | undefined {
   return typeof value === "boolean" ? value : undefined;
 }
 
-function toOptionalInteger(value: DynamicValue): number | undefined {
+function toOptionalInteger(value: unknown): number | undefined {
   if (typeof value !== "number") return undefined;
   if (!Number.isFinite(value)) return undefined;
   if (!Number.isInteger(value)) return undefined;
   return value;
 }
 
-function parseParams(raw: DynamicValue): Params {
+function parseParams(raw: unknown): Params {
   if (!isToolsTmuxPayloadShape(raw)) {
     throw new Error("Invalid tmux params: expected an object.");
   }
@@ -308,7 +308,7 @@ function toBridgeRequest(params: Params): TmuxBridgeRequest {
   };
 }
 
-function parseStringArray(value: DynamicValue): string[] | undefined {
+function parseStringArray(value: unknown): string[] | undefined {
   if (!Array.isArray(value)) return undefined;
 
   const out: string[] = [];
@@ -321,7 +321,7 @@ function parseStringArray(value: DynamicValue): string[] | undefined {
   return out.length > 0 ? out : [];
 }
 
-function parseBridgeResponse(value: DynamicValue, fallbackAction: TmuxAction): TmuxBridgeResponse {
+function parseBridgeResponse(value: unknown, fallbackAction: TmuxAction): TmuxBridgeResponse {
   if (!isToolsTmuxPayloadShape(value)) {
     return {
       ok: true,
@@ -600,7 +600,7 @@ export function createTmuxTool(
     parameters: schema,
     execute: async (
       _toolCallId: string,
-      rawParams: DynamicValue,
+      rawParams: unknown,
       signal: AbortSignal | undefined,
     ): Promise<AgentToolResult<TmuxToolDetails>> => {
       let params: Params | null = null;

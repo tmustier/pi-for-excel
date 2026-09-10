@@ -1,4 +1,4 @@
-function isRecoveryConditionalFormatNormalizationPayloadShape(value: DynamicValue): value is DynamicObject {
+function isRecoveryConditionalFormatNormalizationPayloadShape(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -146,7 +146,7 @@ const SUPPORTED_ICON_SETS: readonly RecoveryConditionalIconSet[] = [
   "FiveBoxes",
 ];
 
-export function isRecoveryConditionalCellValueOperator(value: DynamicValue): value is RecoveryConditionalCellValueOperator {
+export function isRecoveryConditionalCellValueOperator(value: unknown): value is RecoveryConditionalCellValueOperator {
   if (typeof value !== "string") return false;
 
   for (const operator of SUPPORTED_CELL_VALUE_OPERATORS) {
@@ -158,7 +158,7 @@ export function isRecoveryConditionalCellValueOperator(value: DynamicValue): val
   return false;
 }
 
-export function isRecoveryConditionalTextOperator(value: DynamicValue): value is RecoveryConditionalTextOperator {
+export function isRecoveryConditionalTextOperator(value: unknown): value is RecoveryConditionalTextOperator {
   if (typeof value !== "string") return false;
 
   for (const operator of SUPPORTED_TEXT_OPERATORS) {
@@ -170,7 +170,7 @@ export function isRecoveryConditionalTextOperator(value: DynamicValue): value is
   return false;
 }
 
-export function isRecoveryConditionalTopBottomCriterionType(value: DynamicValue): value is RecoveryConditionalTopBottomCriterionType {
+export function isRecoveryConditionalTopBottomCriterionType(value: unknown): value is RecoveryConditionalTopBottomCriterionType {
   if (typeof value !== "string") return false;
 
   for (const type of SUPPORTED_TOP_BOTTOM_TYPES) {
@@ -182,7 +182,7 @@ export function isRecoveryConditionalTopBottomCriterionType(value: DynamicValue)
   return false;
 }
 
-export function isRecoveryConditionalPresetCriterion(value: DynamicValue): value is RecoveryConditionalPresetCriterion {
+export function isRecoveryConditionalPresetCriterion(value: unknown): value is RecoveryConditionalPresetCriterion {
   if (typeof value !== "string") return false;
 
   for (const criterion of SUPPORTED_PRESET_CRITERIA) {
@@ -194,7 +194,7 @@ export function isRecoveryConditionalPresetCriterion(value: DynamicValue): value
   return false;
 }
 
-export function isRecoveryConditionalDataBarAxisFormat(value: DynamicValue): value is RecoveryConditionalDataBarAxisFormat {
+export function isRecoveryConditionalDataBarAxisFormat(value: unknown): value is RecoveryConditionalDataBarAxisFormat {
   if (typeof value !== "string") return false;
 
   for (const axisFormat of SUPPORTED_DATA_BAR_AXIS_FORMATS) {
@@ -206,7 +206,7 @@ export function isRecoveryConditionalDataBarAxisFormat(value: DynamicValue): val
   return false;
 }
 
-export function isRecoveryConditionalDataBarDirection(value: DynamicValue): value is RecoveryConditionalDataBarDirection {
+export function isRecoveryConditionalDataBarDirection(value: unknown): value is RecoveryConditionalDataBarDirection {
   if (typeof value !== "string") return false;
 
   for (const direction of SUPPORTED_DATA_BAR_DIRECTIONS) {
@@ -218,7 +218,7 @@ export function isRecoveryConditionalDataBarDirection(value: DynamicValue): valu
   return false;
 }
 
-export function isRecoveryConditionalDataBarRuleType(value: DynamicValue): value is RecoveryConditionalDataBarRuleType {
+export function isRecoveryConditionalDataBarRuleType(value: unknown): value is RecoveryConditionalDataBarRuleType {
   if (typeof value !== "string") return false;
 
   for (const type of SUPPORTED_DATA_BAR_RULE_TYPES) {
@@ -230,7 +230,7 @@ export function isRecoveryConditionalDataBarRuleType(value: DynamicValue): value
   return false;
 }
 
-export function isRecoveryConditionalColorCriterionType(value: DynamicValue): value is RecoveryConditionalColorCriterionType {
+export function isRecoveryConditionalColorCriterionType(value: unknown): value is RecoveryConditionalColorCriterionType {
   if (typeof value !== "string") return false;
 
   for (const type of SUPPORTED_COLOR_CRITERION_TYPES) {
@@ -242,7 +242,7 @@ export function isRecoveryConditionalColorCriterionType(value: DynamicValue): va
   return false;
 }
 
-export function isRecoveryConditionalIconCriterionType(value: DynamicValue): value is RecoveryConditionalIconCriterionType {
+export function isRecoveryConditionalIconCriterionType(value: unknown): value is RecoveryConditionalIconCriterionType {
   if (typeof value !== "string") return false;
 
   for (const type of SUPPORTED_ICON_CRITERION_TYPES) {
@@ -254,7 +254,7 @@ export function isRecoveryConditionalIconCriterionType(value: DynamicValue): val
   return false;
 }
 
-export function isRecoveryConditionalIconCriterionOperator(value: DynamicValue): value is RecoveryConditionalIconCriterionOperator {
+export function isRecoveryConditionalIconCriterionOperator(value: unknown): value is RecoveryConditionalIconCriterionOperator {
   if (typeof value !== "string") return false;
 
   for (const operator of SUPPORTED_ICON_CRITERION_OPERATORS) {
@@ -266,7 +266,7 @@ export function isRecoveryConditionalIconCriterionOperator(value: DynamicValue):
   return false;
 }
 
-export function isRecoveryConditionalIconSet(value: DynamicValue): value is RecoveryConditionalIconSet {
+export function isRecoveryConditionalIconSet(value: unknown): value is RecoveryConditionalIconSet {
   if (typeof value !== "string") return false;
 
   for (const style of SUPPORTED_ICON_SETS) {
@@ -278,7 +278,7 @@ export function isRecoveryConditionalIconSet(value: DynamicValue): value is Reco
   return false;
 }
 
-export function normalizeConditionalFormatType(type: DynamicValue): RecoveryConditionalFormatRuleType | null {
+export function normalizeConditionalFormatType(type: unknown): RecoveryConditionalFormatRuleType | null {
   if (type === "Custom" || type === "custom") {
     return "custom";
   }
@@ -314,15 +314,15 @@ export function normalizeConditionalFormatType(type: DynamicValue): RecoveryCond
   return null;
 }
 
-export function normalizeOptionalString(value: DynamicValue): string | undefined {
+export function normalizeOptionalString(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
 }
 
-export function normalizeOptionalBoolean(value: DynamicValue): boolean | undefined {
+export function normalizeOptionalBoolean(value: unknown): boolean | undefined {
   return typeof value === "boolean" ? value : undefined;
 }
 
-export function normalizeUnderline(value: DynamicValue): boolean | undefined {
+export function normalizeUnderline(value: unknown): boolean | undefined {
   if (typeof value === "boolean") return value;
 
   if (typeof value === "string") {
@@ -332,14 +332,14 @@ export function normalizeUnderline(value: DynamicValue): boolean | undefined {
   return undefined;
 }
 
-export function isRecoveryConditionalDataBarRule(value: DynamicValue): value is RecoveryConditionalDataBarRule {
+export function isRecoveryConditionalDataBarRule(value: unknown): value is RecoveryConditionalDataBarRule {
   if (!isRecoveryConditionalFormatNormalizationPayloadShape(value)) return false;
   if (!isRecoveryConditionalDataBarRuleType(value.type)) return false;
   if (value.formula !== undefined && typeof value.formula !== "string") return false;
   return true;
 }
 
-export function isRecoveryConditionalDataBarState(value: DynamicValue): value is RecoveryConditionalDataBarState {
+export function isRecoveryConditionalDataBarState(value: unknown): value is RecoveryConditionalDataBarState {
   if (!isRecoveryConditionalFormatNormalizationPayloadShape(value)) return false;
   if (!isRecoveryConditionalDataBarAxisFormat(value.axisFormat)) return false;
   if (!isRecoveryConditionalDataBarDirection(value.barDirection)) return false;
@@ -357,7 +357,7 @@ export function isRecoveryConditionalDataBarState(value: DynamicValue): value is
   return true;
 }
 
-export function isRecoveryConditionalColorScaleCriterion(value: DynamicValue): value is RecoveryConditionalColorScaleCriterion {
+export function isRecoveryConditionalColorScaleCriterion(value: unknown): value is RecoveryConditionalColorScaleCriterion {
   if (!isRecoveryConditionalFormatNormalizationPayloadShape(value)) return false;
   if (!isRecoveryConditionalColorCriterionType(value.type)) return false;
   if (value.formula !== undefined && typeof value.formula !== "string") return false;
@@ -365,7 +365,7 @@ export function isRecoveryConditionalColorScaleCriterion(value: DynamicValue): v
   return true;
 }
 
-export function isRecoveryConditionalColorScaleState(value: DynamicValue): value is RecoveryConditionalColorScaleState {
+export function isRecoveryConditionalColorScaleState(value: unknown): value is RecoveryConditionalColorScaleState {
   if (!isRecoveryConditionalFormatNormalizationPayloadShape(value)) return false;
   if (!isRecoveryConditionalColorScaleCriterion(value.minimum)) return false;
   if (!isRecoveryConditionalColorScaleCriterion(value.maximum)) return false;
@@ -373,13 +373,13 @@ export function isRecoveryConditionalColorScaleState(value: DynamicValue): value
   return true;
 }
 
-export function isRecoveryConditionalIcon(value: DynamicValue): value is RecoveryConditionalIcon {
+export function isRecoveryConditionalIcon(value: unknown): value is RecoveryConditionalIcon {
   if (!isRecoveryConditionalFormatNormalizationPayloadShape(value)) return false;
   if (!isRecoveryConditionalIconSet(value.set)) return false;
   return typeof value.index === "number" && Number.isFinite(value.index);
 }
 
-export function isRecoveryConditionalIconCriterion(value: DynamicValue): value is RecoveryConditionalIconCriterion {
+export function isRecoveryConditionalIconCriterion(value: unknown): value is RecoveryConditionalIconCriterion {
   if (!isRecoveryConditionalFormatNormalizationPayloadShape(value)) return false;
   if (!isRecoveryConditionalIconCriterionType(value.type)) return false;
   if (!isRecoveryConditionalIconCriterionOperator(value.operator)) return false;
@@ -388,7 +388,7 @@ export function isRecoveryConditionalIconCriterion(value: DynamicValue): value i
   return true;
 }
 
-export function isRecoveryConditionalIconSetState(value: DynamicValue): value is RecoveryConditionalIconSetState {
+export function isRecoveryConditionalIconSetState(value: unknown): value is RecoveryConditionalIconSetState {
   if (!isRecoveryConditionalFormatNormalizationPayloadShape(value)) return false;
   if (!isRecoveryConditionalIconSet(value.style)) return false;
   if (typeof value.reverseIconOrder !== "boolean") return false;
@@ -398,7 +398,7 @@ export function isRecoveryConditionalIconSetState(value: DynamicValue): value is
   return true;
 }
 
-export function normalizeConditionalFormatAddress(value: DynamicValue): string | undefined {
+export function normalizeConditionalFormatAddress(value: unknown): string | undefined {
   if (typeof value !== "string") {
     return undefined;
   }
@@ -407,7 +407,7 @@ export function normalizeConditionalFormatAddress(value: DynamicValue): string |
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
-export function captureDataBarRule(value: DynamicValue): RecoveryConditionalDataBarRule | null {
+export function captureDataBarRule(value: unknown): RecoveryConditionalDataBarRule | null {
   if (!isRecoveryConditionalFormatNormalizationPayloadShape(value)) return null;
 
   const type = value.type;
@@ -428,7 +428,7 @@ export function captureDataBarRule(value: DynamicValue): RecoveryConditionalData
   return rule;
 }
 
-export function captureColorScaleCriterion(value: DynamicValue): RecoveryConditionalColorScaleCriterion | null {
+export function captureColorScaleCriterion(value: unknown): RecoveryConditionalColorScaleCriterion | null {
   if (!isRecoveryConditionalFormatNormalizationPayloadShape(value)) return null;
 
   const type = value.type;
@@ -458,7 +458,7 @@ export function captureColorScaleCriterion(value: DynamicValue): RecoveryConditi
   return criterion;
 }
 
-export function captureConditionalIcon(value: DynamicValue): RecoveryConditionalIcon | null {
+export function captureConditionalIcon(value: unknown): RecoveryConditionalIcon | null {
   if (!isRecoveryConditionalFormatNormalizationPayloadShape(value)) return null;
 
   if (!isRecoveryConditionalIconSet(value.set)) {
@@ -475,7 +475,7 @@ export function captureConditionalIcon(value: DynamicValue): RecoveryConditional
   };
 }
 
-export function captureIconCriterion(value: DynamicValue): RecoveryConditionalIconCriterion | null {
+export function captureIconCriterion(value: unknown): RecoveryConditionalIconCriterion | null {
   if (!isRecoveryConditionalFormatNormalizationPayloadShape(value)) return null;
 
   const type = value.type;

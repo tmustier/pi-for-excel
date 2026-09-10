@@ -50,7 +50,7 @@ export class ModelRefreshOwner {
   private readonly loadCustomProviders: () => Promise<readonly CustomProvider[]>;
   private readonly getRuntimes: () => readonly ModelRefreshRuntime[];
   private readonly listeners = new Set<ModelRefreshListener>();
-  private readonly warn: (message: string, error?: DynamicValue) => void;
+  private readonly warn: (message: string, error?: unknown) => void;
 
   private currentSnapshot: ModelRefreshSnapshot;
   private refreshPromise: Promise<void> | null = null;
@@ -63,7 +63,7 @@ export class ModelRefreshOwner {
     modelRuntime: BrowserModelRuntime;
     loadCustomProviders: () => Promise<readonly CustomProvider[]>;
     getRuntimes: () => readonly ModelRefreshRuntime[];
-    warn?: (message: string, error?: DynamicValue) => void;
+    warn?: (message: string, error?: unknown) => void;
   }) {
     this.modelRuntime = options.modelRuntime;
     this.models = options.modelRuntime.models;
@@ -126,7 +126,7 @@ export class ModelRefreshOwner {
       const outcome = await Promise.race([
         credentialRestore.then(
           () => "restored" as const,
-          (error: DynamicValue) => {
+          (error: unknown) => {
             this.warn("[auth] Credential restore failed:", error);
             return "failed" as const;
           },
@@ -137,13 +137,13 @@ export class ModelRefreshOwner {
       if (outcome === "timeout") {
         void credentialRestore.then(
           () => this.refreshConfiguredProviders(true),
-          (error: DynamicValue) => {
+          (error: unknown) => {
             this.warn("[auth] Credential restore failed after timeout:", error);
           },
         );
       }
 
-      void this.refresh(true).catch((error: DynamicValue) => {
+      void this.refresh(true).catch((error: unknown) => {
         this.warn("[models] Background model refresh failed:", error);
       });
     } finally {

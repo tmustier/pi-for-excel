@@ -1,4 +1,4 @@
-function isToolsPythonTransformRangePayloadShape(value: DynamicValue): value is DynamicObject {
+function isToolsPythonTransformRangePayloadShape(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -81,12 +81,12 @@ interface InputRangeSnapshot {
   sheetName: string;
   /** Sheet-local address, e.g. A1:C10 */
   address: string;
-  values: DynamicValue[][];
+  values: unknown[][];
 }
 
 interface WriteOutputRequest {
   outputStartCell: string;
-  values: DynamicValue[][];
+  values: unknown[][];
   allowOverwrite: boolean;
 }
 
@@ -102,10 +102,10 @@ type WriteOutputResult =
     rowsWritten: number;
     colsWritten: number;
     formulaErrorCount: number;
-    beforeValues?: DynamicValue[][];
-    beforeFormulas?: DynamicValue[][];
-    readBackValues?: DynamicValue[][];
-    readBackFormulas?: DynamicValue[][];
+    beforeValues?: unknown[][];
+    beforeFormulas?: unknown[][];
+    readBackValues?: unknown[][];
+    readBackFormulas?: unknown[][];
     outputStartCell?: string;
     outputSheetName?: string;
   };
@@ -139,14 +139,14 @@ function cleanOptionalString(value: string | undefined): string | undefined {
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
-function toOptionalInteger(value: DynamicValue): number | undefined {
+function toOptionalInteger(value: unknown): number | undefined {
   if (typeof value !== "number") return undefined;
   if (!Number.isFinite(value)) return undefined;
   if (!Number.isInteger(value)) return undefined;
   return value;
 }
 
-function parseParams(raw: DynamicValue): Params {
+function parseParams(raw: unknown): Params {
   if (!isToolsPythonTransformRangePayloadShape(raw) || Array.isArray(raw)) {
     throw new Error("Invalid python_transform_range params: expected an object.");
   }
@@ -243,8 +243,8 @@ async function defaultWriteOutputValues(request: WriteOutputRequest): Promise<Wr
     const outputCellCount = rows * cols;
     const shouldLoadBeforeState = !request.allowOverwrite || outputCellCount <= MAX_RECOVERY_CELLS;
 
-    let beforeValues: DynamicValue[][] | undefined;
-    let beforeFormulas: DynamicValue[][] | undefined;
+    let beforeValues: unknown[][] | undefined;
+    let beforeFormulas: unknown[][] | undefined;
 
     if (shouldLoadBeforeState) {
       targetRange.load("values,formulas");
@@ -294,15 +294,15 @@ async function defaultWriteOutputValues(request: WriteOutputRequest): Promise<Wr
   });
 }
 
-function isPythonTransformPayloadShape(value: DynamicValue): value is DynamicObject {
+function isPythonTransformPayloadShape(value: unknown): value is Record<string, unknown> {
   return isToolsPythonTransformRangePayloadShape(value) && !Array.isArray(value);
 }
 
-function normalizeTo2dValues(value: DynamicValue): DynamicValue[][] | null {
+function normalizeTo2dValues(value: unknown): unknown[][] | null {
   if (Array.isArray(value)) {
     if (value.length === 0) return [];
 
-    const rows: DynamicValue[][] = [];
+    const rows: unknown[][] = [];
     let allRows = true;
 
     for (const item of value) {
@@ -311,7 +311,7 @@ function normalizeTo2dValues(value: DynamicValue): DynamicValue[][] | null {
         break;
       }
 
-      const row: DynamicValue[] = [];
+      const row: unknown[] = [];
       for (const cell of item) {
         row.push(cell);
       }
@@ -342,7 +342,7 @@ function normalizeTo2dValues(value: DynamicValue): DynamicValue[][] | null {
   return [[value]];
 }
 
-function parseBridgeResultJson(resultJson: string | undefined): DynamicValue[][] {
+function parseBridgeResultJson(resultJson: string | undefined): unknown[][] {
   const trimmed = resultJson?.trim();
   if (!trimmed) {
     throw new Error(
@@ -350,7 +350,7 @@ function parseBridgeResultJson(resultJson: string | undefined): DynamicValue[][]
     );
   }
 
-  let parsed: DynamicValue;
+  let parsed: unknown;
   try {
     parsed = JSON.parse(trimmed);
   } catch {
@@ -430,7 +430,7 @@ export function createPythonTransformRangeTool(
     parameters: schema,
     execute: async (
       toolCallId: string,
-      rawParams: DynamicValue,
+      rawParams: unknown,
       signal: AbortSignal | undefined,
     ): Promise<AgentToolResult<PythonTransformRangeDetails>> => {
       try {
