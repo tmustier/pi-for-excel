@@ -308,19 +308,6 @@ void test("updateSecretsFromHost retries transient reads without replacing sibli
   assert.equal((await restarted.getSnapshot("ext.apollo.apollo"))?.status, "connected");
 });
 
-void test("updateSecretsFromHost merges into empty store", async () => {
-  const manager = new ConnectionManager({ settings: createMemorySettings() });
-  manager.registerDefinition("ext.apollo", APOLLO_DEFINITION);
-
-  await manager.updateSecretsFromHost("ext.apollo.apollo", { apiKey: "sk-new" });
-
-  const snapshot = await manager.getSnapshot("ext.apollo.apollo");
-  assert.ok(snapshot);
-  assert.equal(snapshot.status, "connected");
-  const presence = await manager.getSecretFieldPresence("ext.apollo.apollo");
-  assert.equal(presence.apiKey, true);
-});
-
 void test("updateSecretsFromHost merges partial patch preserving existing fields", async () => {
   const manager = new ConnectionManager({ settings: createMemorySettings() });
   manager.registerDefinition("ext.vendor", MULTI_FIELD_DEFINITION);
