@@ -229,7 +229,7 @@ void test("/experimental tmux-bridge-url clear removes stored URL and triggers t
   assert.equal(toasts[0], "Tmux bridge URL override cleared. Using default https://localhost:3341.");
 });
 
-void test("/experimental tmux-bridge-url invalid URL surfaces validation error", async () => {
+void test("/experimental tmux-bridge-url rejects a non-HTTP bridge URL", async () => {
   const toasts: string[] = [];
 
   const command = getExperimentalCommand({
@@ -237,14 +237,14 @@ void test("/experimental tmux-bridge-url invalid URL surfaces validation error",
     showToast: (message) => {
       toasts.push(message);
     },
-    validateTmuxBridgeUrl: () => {
-      throw new Error("Invalid Proxy URL");
-    },
   });
 
   await command.execute("tmux-bridge-url ftp://localhost:3341");
 
-  assert.equal(toasts[0], "Invalid Proxy URL");
+  assert.equal(
+    toasts[0],
+    'Invalid Proxy URL: "ftp://localhost:3341". Expected a full URL like https://localhost:3003',
+  );
 });
 
 void test("/experimental tmux-bridge-token shows masked configured value", async () => {
@@ -368,7 +368,7 @@ void test("/experimental tmux-status reports healthy bridge details", async () =
   assert.ok(!toasts[0].includes("supersecrettoken"));
 });
 
-void test("/experimental tmux-status uses a single health probe for gate + diagnostics", async () => {
+void test("/experimental tmux-status emits unreachable diagnostics", async () => {
   const toasts: string[] = [];
 
   const command = getExperimentalCommand({
