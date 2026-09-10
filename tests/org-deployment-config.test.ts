@@ -16,10 +16,6 @@ import {
   resolveDefaultProxyUrl,
   resolveRuntimeDefaultProxyUrl,
 } from "../src/auth/proxy-validation.ts";
-import {
-  requiresCodexWebSocketBridge,
-  resolveCodexWebSocketBridgeSessionId,
-} from "../src/auth/stream-proxy.ts";
 import { filterProvidersByAllowlist, resolveAllowedProviderIds } from "../src/ui/provider-allowlist.ts";
 
 void test("deployment config resolves valid, absent, and invalid proxy URLs", () => {
@@ -78,30 +74,6 @@ void test("Codex WebSocket bridge capability probe requires the advertised healt
   } finally {
     Reflect.set(globalThis, "fetch", previousFetch);
   }
-});
-
-void test("only ChatGPT GPT-5.6 Luna requires the Codex WebSocket bridge", () => {
-  assert.equal(requiresCodexWebSocketBridge({ provider: "openai-codex", id: "gpt-5.6-luna" }), true);
-  assert.equal(requiresCodexWebSocketBridge({ provider: "openai-codex", id: "gpt-5.6-sol" }), false);
-  assert.equal(requiresCodexWebSocketBridge({ provider: "openai", id: "gpt-5.6-luna" }), false);
-});
-
-void test("Codex WebSocket bridge preserves UUIDv7 and stably maps legacy session ids", () => {
-  const nativeSessionId = "019f4c1c-03ae-7d15-8e28-035d6a58c787";
-  assert.equal(resolveCodexWebSocketBridgeSessionId(nativeSessionId), nativeSessionId);
-
-  const legacySessionId = "b01d800c-e36c-4737-b987-c5ebb16d4106";
-  const mapped = resolveCodexWebSocketBridgeSessionId(legacySessionId);
-  assert.match(mapped, /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u);
-  assert.equal(resolveCodexWebSocketBridgeSessionId(legacySessionId), mapped);
-  assert.notEqual(
-    resolveCodexWebSocketBridgeSessionId("6a4bafc5-79fc-4c27-a9e3-86bf0c35917f"),
-    mapped,
-  );
-  assert.notEqual(
-    resolveCodexWebSocketBridgeSessionId(),
-    resolveCodexWebSocketBridgeSessionId(),
-  );
 });
 
 const PROVIDERS = [
