@@ -22,28 +22,16 @@ import {
 } from "../src/auth/stream-proxy.ts";
 import { filterProvidersByAllowlist, resolveAllowedProviderIds } from "../src/ui/provider-allowlist.ts";
 
-void test("resolveDefaultProxyUrl falls back to local default when unset", () => {
-  assert.equal(resolveDefaultProxyUrl(undefined), DEFAULT_LOCAL_PROXY_URL);
-  assert.equal(resolveDefaultProxyUrl(""), DEFAULT_LOCAL_PROXY_URL);
-  assert.equal(resolveDefaultProxyUrl("   "), DEFAULT_LOCAL_PROXY_URL);
-  assert.equal(resolveDefaultProxyUrl(42), DEFAULT_LOCAL_PROXY_URL);
-});
-
-void test("resolveDefaultProxyUrl accepts https URLs and strips trailing slashes", () => {
-  assert.equal(
-    resolveDefaultProxyUrl("https://pi-proxy.example.com:3003"),
-    "https://pi-proxy.example.com:3003",
-  );
-  assert.equal(
-    resolveDefaultProxyUrl("https://pi-proxy.example.com:3003/"),
-    "https://pi-proxy.example.com:3003",
-  );
-});
-
-void test("resolveDefaultProxyUrl refuses http (mixed content) and garbage", () => {
-  assert.equal(resolveDefaultProxyUrl("http://pi-proxy.example.com:3003"), DEFAULT_LOCAL_PROXY_URL);
-  assert.equal(resolveDefaultProxyUrl("pi-proxy.example.com"), DEFAULT_LOCAL_PROXY_URL);
-  assert.equal(resolveDefaultProxyUrl("https://"), DEFAULT_LOCAL_PROXY_URL);
+void test("deployment config resolves valid, absent, and invalid proxy URLs", () => {
+  const cases: [string, string | number | undefined, string][] = [
+    ["unset", undefined, DEFAULT_LOCAL_PROXY_URL], ["empty", "", DEFAULT_LOCAL_PROXY_URL],
+    ["blank", "   ", DEFAULT_LOCAL_PROXY_URL], ["non-string", 42, DEFAULT_LOCAL_PROXY_URL],
+    ["HTTPS", "https://pi-proxy.example.com:3003", "https://pi-proxy.example.com:3003"],
+    ["trailing slash", "https://pi-proxy.example.com:3003/", "https://pi-proxy.example.com:3003"],
+    ["HTTP", "http://pi-proxy.example.com:3003", DEFAULT_LOCAL_PROXY_URL],
+    ["bare host", "pi-proxy.example.com", DEFAULT_LOCAL_PROXY_URL], ["invalid HTTPS", "https://", DEFAULT_LOCAL_PROXY_URL],
+  ];
+  for (const [name, input, expected] of cases) assert.equal(resolveDefaultProxyUrl(input), expected, name);
 });
 
 void test("resolveRuntimeDefaultProxyUrl uses host-gateway proxy for WPS HTTP harness", () => {
@@ -122,31 +110,20 @@ const PROVIDERS = [
   { id: "deepseek", label: "DeepSeek" },
 ];
 
-void test("resolveAllowedProviderIds returns null when unset", () => {
-  assert.equal(resolveAllowedProviderIds(undefined), null);
-  assert.equal(resolveAllowedProviderIds(""), null);
-  assert.equal(resolveAllowedProviderIds(" , "), null);
-  assert.equal(resolveAllowedProviderIds(7), null);
+void test("provider allowlist parsing/filtering policy", () => {
+  for (const input of [undefined, "", " , ", 7]) assert.equal(resolveAllowedProviderIds(input), null, String(input));
+
+  const parsed = resolveAllowedProviderIds(" OpenAI, deepseek ,");
+  assert.ok(parsed);
+  assert.deepEqual([...parsed].sort(), ["deepseek", "openai"]);
+
+  const cases = [
+    { name: "unrestricted", allowed: null, expected: ["anthropic", "openai", "deepseek"] },
+    { name: "ordered subset", allowed: resolveAllowedProviderIds("deepseek,openai"), expected: ["openai", "deepseek"] },
+    { name: "mismatch fails open", allowed: resolveAllowedProviderIds("no-such-provider"), expected: ["anthropic", "openai", "deepseek"] },
+  ];
+  for (const entry of cases) {
+    assert.deepEqual(filterProvidersByAllowlist(PROVIDERS, entry.allowed).map((provider) => provider.id), entry.expected, entry.name);
+  }
 });
 
-void test("resolveAllowedProviderIds parses and lowercases ids", () => {
-  const ids = resolveAllowedProviderIds(" OpenAI, deepseek ,");
-  assert.notEqual(ids, null);
-  assert.deepEqual([...(ids as Set<string>)].sort(), ["deepseek", "openai"]);
-});
-
-void test("filterProvidersByAllowlist passes through with no restriction", () => {
-  assert.deepEqual(filterProvidersByAllowlist(PROVIDERS, null), PROVIDERS);
-});
-
-void test("filterProvidersByAllowlist keeps only allowlisted providers in order", () => {
-  const allowed = resolveAllowedProviderIds("deepseek,openai");
-  const filtered = filterProvidersByAllowlist(PROVIDERS, allowed);
-  assert.deepEqual(filtered.map((p) => p.id), ["openai", "deepseek"]);
-});
-
-void test("filterProvidersByAllowlist fails open on fully mismatched allowlist", () => {
-  const allowed = resolveAllowedProviderIds("no-such-provider");
-  const filtered = filterProvidersByAllowlist(PROVIDERS, allowed);
-  assert.deepEqual(filtered.map((p) => p.id), ["anthropic", "openai", "deepseek"]);
-});
