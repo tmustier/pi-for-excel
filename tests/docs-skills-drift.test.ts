@@ -109,26 +109,26 @@ void test("bundled skills catalog stays in sync with skills/*/SKILL.md", async (
   assert.deepEqual(actualSkillPaths, expectedSkillPaths);
 });
 
-void test("public docs avoid retired /integrations command references", async () => {
+void test("POLICY: bundled docs avoid retired commands and declare Jina as default", async () => {
   const docPaths = await readBundledDocPathsFromFilesystem();
   const skillPaths = await readBundledSkillPathsFromFilesystem();
   const filesToCheck = [...docPaths, ...skillPaths];
+  const rules: ReadonlyArray<{ name: string; violations: (path: string, source: string) => string[] }> = [
+    {
+      name: "retired /integrations command",
+      violations: (path, source) => source.includes("`/integrations`") ? [path] : [],
+    },
+    {
+      name: "web search default provider",
+      violations: (path, source) => path === "skills/web-search/SKILL.md"
+        && (!/Jina \(default\)/i.test(source) || /Serper\.dev \(default\)/i.test(source)) ? [path] : [],
+    },
+  ];
 
-  const staleCommandRefs: string[] = [];
+  const sources = await Promise.all(filesToCheck.map(async (path) => ({ path, source: await readRepoText(path) })));
+  const violations = rules.flatMap((rule) => sources.flatMap(({ path, source }) =>
+    rule.violations(path, source).map((violation) => `${rule.name}: ${violation}`),
+  ));
 
-  for (const filePath of filesToCheck) {
-    const source = await readRepoText(filePath);
-    if (source.includes("`/integrations`")) {
-      staleCommandRefs.push(filePath);
-    }
-  }
-
-  assert.deepEqual(staleCommandRefs, []);
-});
-
-void test("web-search docs keep Jina as the default provider", async () => {
-  const webSearchSkill = await readRepoText("skills/web-search/SKILL.md");
-
-  assert.match(webSearchSkill, /Jina \(default\)/i);
-  assert.doesNotMatch(webSearchSkill, /Serper\.dev \(default\)/i);
+  assert.deepEqual(violations, []);
 });
