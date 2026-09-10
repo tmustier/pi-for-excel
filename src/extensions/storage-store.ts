@@ -1,4 +1,4 @@
-function isExtensionsStorageStorePayloadShape(value: DynamicValue): value is DynamicObject {
+function isExtensionsStorageStorePayloadShape(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -9,15 +9,15 @@ const MAX_EXTENSION_STORAGE_BYTES = 1_000_000;
 
 interface ExtensionStorageDocument {
   version: number;
-  items: Record<string, DynamicObject>;
+  items: Record<string, Record<string, unknown>>;
 }
 
 export interface ExtensionStorageSettings {
-  get(key: string): Promise<DynamicValue>;
-  set(key: string, value: DynamicValue): Promise<void>;
+  get(key: string): Promise<unknown>;
+  set(key: string, value: unknown): Promise<void>;
 }
 
-function normalizeStorageDocument(raw: DynamicValue): ExtensionStorageDocument {
+function normalizeStorageDocument(raw: unknown): ExtensionStorageDocument {
   if (!isExtensionsStorageStorePayloadShape(raw) || typeof raw.version !== "number" || !isExtensionsStorageStorePayloadShape(raw.items)) {
     return {
       version: EXTENSION_STORAGE_VERSION,
@@ -25,7 +25,7 @@ function normalizeStorageDocument(raw: DynamicValue): ExtensionStorageDocument {
     };
   }
 
-  const items: Record<string, DynamicObject> = {};
+  const items: Record<string, Record<string, unknown>> = {};
 
   for (const [extensionId, extensionRecord] of Object.entries(raw.items)) {
     if (!isExtensionsStorageStorePayloadShape(extensionRecord)) {
@@ -76,7 +76,7 @@ function normalizeStorageKey(key: string): string {
   return trimmed;
 }
 
-function calculateSerializedSize(value: DynamicValue): number {
+function calculateSerializedSize(value: unknown): number {
   return new TextEncoder().encode(JSON.stringify(value)).length;
 }
 
@@ -84,7 +84,7 @@ export async function getExtensionStorageValue(
   settings: ExtensionStorageSettings,
   extensionId: string,
   key: string,
-): Promise<DynamicValue> {
+): Promise<unknown> {
   const document = await readStorageDocument(settings);
   const extensionStore = document.items[extensionId] ?? {};
   return extensionStore[normalizeStorageKey(key)];
@@ -94,7 +94,7 @@ export async function setExtensionStorageValue(
   settings: ExtensionStorageSettings,
   extensionId: string,
   key: string,
-  value: DynamicValue,
+  value: unknown,
 ): Promise<void> {
   const normalizedKey = normalizeStorageKey(key);
   const document = await loadStorageDocumentForUpdate(settings);

@@ -75,7 +75,7 @@ interface WorkbookQueueState {
 
 const UNKNOWN_WORKBOOK = "workbook:unknown";
 
-function toError(error: DynamicValue): Error {
+function toError(error: unknown): Error {
   if (error instanceof Error) return error;
   return new Error(getErrorMessage(error));
 }

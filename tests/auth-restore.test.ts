@@ -25,15 +25,15 @@ class TestProviderKeysStore extends ProviderKeysStore {
 }
 
 class TestSettingsStore extends SettingsStore {
-  readonly values = new Map<string, DynamicValue>();
+  readonly values = new Map<string, unknown>();
 
-  override get<T = DynamicValue>(key: string): Promise<T | null> {
+  override get<T = unknown>(key: string): Promise<T | null> {
     const value = this.values.get(key);
     // Test fixtures control every stored value and callers validate OAuth payloads.
     return Promise.resolve(value === undefined ? null : value as T);
   }
 
-  override set<T = DynamicValue>(key: string, value: T): Promise<void> {
+  override set<T = unknown>(key: string, value: T): Promise<void> {
     this.values.set(key, value);
     return Promise.resolve();
   }
@@ -51,7 +51,7 @@ const validBrowserGrant = {
 };
 
 async function restoreBrowserAfterDevPayload(
-  payload: DynamicValue,
+  payload: unknown,
   providerKeys = new TestProviderKeysStore(),
 ): Promise<TestProviderKeysStore> {
   const settings = new TestSettingsStore();

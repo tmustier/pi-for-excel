@@ -5,11 +5,11 @@
  * still access `process.env` directly. Office WebViews do not expose `process`.
  */
 
-function isCompatProcessEnvShimPayloadShape(value: DynamicValue): value is DynamicObject {
+function isCompatProcessEnvShimPayloadShape(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-type ProcessShimTarget = { process?: DynamicValue };
+type ProcessShimTarget = { process?: unknown };
 
 export function installProcessEnvShim(target: ProcessShimTarget = globalThis): void {
   const processValue = target.process;

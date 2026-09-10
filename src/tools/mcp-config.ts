@@ -1,4 +1,4 @@
-function isToolsMcpConfigPayloadShape(value: DynamicValue): value is DynamicObject {
+function isToolsMcpConfigPayloadShape(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -20,8 +20,8 @@ const MCP_SERVERS_DOC_VERSION = 1;
 export const MCP_SERVER_TOKENS_CONNECTION_ID = "builtin.mcp.servers";
 
 export interface McpConfigStore {
-  get(key: string): Promise<DynamicValue>;
-  set(key: string, value: DynamicValue): Promise<void>;
+  get(key: string): Promise<unknown>;
+  set(key: string, value: unknown): Promise<void>;
 }
 
 export interface McpServerConfig {
@@ -37,19 +37,19 @@ interface McpServersDocument {
   servers: Array<Omit<McpServerConfig, "token">>;
 }
 
-function normalizeOptionalString(value: DynamicValue): string | undefined {
+function normalizeOptionalString(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
-function normalizeName(value: DynamicValue): string | null {
+function normalizeName(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
 }
 
-function normalizeEnabled(value: DynamicValue): boolean {
+function normalizeEnabled(value: unknown): boolean {
   if (typeof value === "boolean") return value;
   if (typeof value === "number") return value !== 0;
   if (typeof value === "string") {
@@ -81,7 +81,7 @@ export function validateMcpServerUrl(url: string): string {
   return trimmed.replace(/\/+$/u, "");
 }
 
-function normalizeServerId(value: DynamicValue, fallbackName: string, fallbackUrl: string): string {
+function normalizeServerId(value: unknown, fallbackName: string, fallbackUrl: string): string {
   if (typeof value === "string") {
     const trimmed = value.trim();
     if (trimmed.length > 0) {
@@ -98,7 +98,7 @@ function normalizeServerId(value: DynamicValue, fallbackName: string, fallbackUr
   return base.length > 0 ? `mcp-${base}` : `mcp-${crypto.randomUUID()}`;
 }
 
-function normalizeServer(raw: DynamicValue): McpServerConfig | null {
+function normalizeServer(raw: unknown): McpServerConfig | null {
   if (!isToolsMcpConfigPayloadShape(raw)) return null;
 
   const name = normalizeName(raw.name);
@@ -152,7 +152,7 @@ function uniqueById(servers: McpServerConfig[]): McpServerConfig[] {
   return out;
 }
 
-function normalizeServers(raw: DynamicValue): McpServerConfig[] {
+function normalizeServers(raw: unknown): McpServerConfig[] {
   const source = Array.isArray(raw)
     ? raw
     : isToolsMcpConfigPayloadShape(raw) && Array.isArray(raw.servers)

@@ -14,7 +14,7 @@ import {
 import { failOnUnexpectedStream } from "./fail-on-unexpected-stream.ts";
 
 void test("compaction setting accepts only booleans and defaults enabled", async () => {
-  const read = (value: DynamicValue) => readAutoCompactionEnabled({
+  const read = (value: unknown) => readAutoCompactionEnabled({
     get: (key) => {
       assert.equal(key, COMPACTION_ENABLED_SETTING_KEY);
       return Promise.resolve(value);

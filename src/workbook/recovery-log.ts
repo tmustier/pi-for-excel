@@ -86,8 +86,8 @@ export interface WorkbookRecoverySnapshot {
   address: string;
   changedCount: number;
   cellCount: number;
-  beforeValues: DynamicValue[][];
-  beforeFormulas: DynamicValue[][];
+  beforeValues: unknown[][];
+  beforeFormulas: unknown[][];
   snapshotKind?: WorkbookRecoverySnapshotKind;
   formatRangeState?: RecoveryFormatRangeState;
   modifyStructureState?: RecoveryModifyStructureState;
@@ -104,8 +104,8 @@ export interface AppendWorkbookRecoverySnapshotArgs {
   toolCallId: string;
   address: string;
   changedCount?: number;
-  beforeValues: DynamicValue[][];
-  beforeFormulas: DynamicValue[][];
+  beforeValues: unknown[][];
+  beforeFormulas: unknown[][];
   restoredFromSnapshotId?: string;
 }
 
@@ -163,8 +163,8 @@ export interface RestoreWorkbookRecoverySnapshotResult {
 }
 
 interface WorkbookRangeState {
-  values: DynamicValue[][];
-  formulas: DynamicValue[][];
+  values: unknown[][];
+  formulas: unknown[][];
 }
 
 interface WorkbookRecoveryLogDependencies {
@@ -174,7 +174,7 @@ interface WorkbookRecoveryLogDependencies {
   getDocumentInstance: () => DocumentInstanceIdentity | null;
   now: () => number;
   createId: () => string;
-  applySnapshot: (address: string, values: DynamicValue[][]) => Promise<WorkbookRangeState>;
+  applySnapshot: (address: string, values: unknown[][]) => Promise<WorkbookRangeState>;
   applyFormatCellsSnapshot: (
     address: string,
     state: RecoveryFormatRangeState,
@@ -214,7 +214,7 @@ function defaultCreateId(): string {
   return `checkpoint_${Date.now().toString(36)}_${randomChunk}`;
 }
 
-async function defaultApplySnapshot(address: string, values: DynamicValue[][]): Promise<WorkbookRangeState> {
+async function defaultApplySnapshot(address: string, values: unknown[][]): Promise<WorkbookRangeState> {
   return excelRun<WorkbookRangeState>(async (context) => {
     const { range } = getRange(context, address);
     range.load("values,formulas");
@@ -268,7 +268,7 @@ async function defaultApplyChartSnapshot(
   return applyChartState(address, state);
 }
 
-function serializeComparable(raw: DynamicValue): string {
+function serializeComparable(raw: unknown): string {
   if (raw === null || raw === undefined || raw === "") return "";
 
   if (typeof raw === "string") return raw;
@@ -286,10 +286,10 @@ function serializeComparable(raw: DynamicValue): string {
 }
 
 function countChangedCells(args: {
-  beforeValues: DynamicValue[][];
-  beforeFormulas: DynamicValue[][];
-  afterValues: DynamicValue[][];
-  afterFormulas: DynamicValue[][];
+  beforeValues: unknown[][];
+  beforeFormulas: unknown[][];
+  afterValues: unknown[][];
+  afterFormulas: unknown[][];
 }): number {
   const rowCount = Math.max(
     args.beforeValues.length,

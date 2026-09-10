@@ -719,7 +719,7 @@ function promptForText(opts: {
           input.value = capture.url;
           submit();
         },
-        (error: DynamicValue) => {
+        (error: unknown) => {
           if (settled) return;
           if (error instanceof Error && error.name === "AbortError") return;
           captureStatusEl.textContent = t("provider.oauth.capture_fallback");

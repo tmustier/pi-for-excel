@@ -19,12 +19,12 @@ import type { WorkbookRecoverySnapshot } from "../src/workbook/recovery-log.ts";
 
 interface InMemorySettingsStore {
   get<T>(key: string): Promise<T | null>;
-  set(key: string, value: DynamicValue): Promise<void>;
+  set(key: string, value: unknown): Promise<void>;
   delete(key: string): Promise<void>;
 }
 
 function createInMemorySettingsStore(): InMemorySettingsStore {
-  const values = new Map<string, DynamicValue>();
+  const values = new Map<string, unknown>();
 
   return {
     get: <T>(key: string): Promise<T | null> => {
@@ -35,7 +35,7 @@ function createInMemorySettingsStore(): InMemorySettingsStore {
 
       return Promise.resolve(value as T);
     },
-    set: (key: string, value: DynamicValue): Promise<void> => {
+    set: (key: string, value: unknown): Promise<void> => {
       values.set(key, value);
       return Promise.resolve();
     },
@@ -47,10 +47,10 @@ function createInMemorySettingsStore(): InMemorySettingsStore {
 }
 
 class TransientAuditReadSettings {
-  private readonly values = new Map<string, DynamicValue>();
+  private readonly values = new Map<string, unknown>();
   private failNextRead = false;
 
-  get(key: string): Promise<DynamicValue> {
+  get(key: string): Promise<unknown> {
     if (this.failNextRead) {
       this.failNextRead = false;
       return Promise.reject(new Error("transient audit read failure"));
@@ -58,7 +58,7 @@ class TransientAuditReadSettings {
     return Promise.resolve(this.values.get(key) ?? null);
   }
 
-  set(key: string, value: DynamicValue): Promise<void> {
+  set(key: string, value: unknown): Promise<void> {
     this.values.set(key, value);
     return Promise.resolve();
   }
@@ -68,7 +68,7 @@ class TransientAuditReadSettings {
     return Promise.resolve();
   }
 
-  seed(key: string, value: DynamicValue): void {
+  seed(key: string, value: unknown): void {
     this.values.set(key, value);
   }
 
@@ -77,15 +77,15 @@ class TransientAuditReadSettings {
   }
 }
 
-function isWorkbookChangeAuditTestPayloadShape(value: DynamicValue): value is DynamicObject {
+function isWorkbookChangeAuditTestPayloadShape(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-function isUnknownArray(value: DynamicValue): value is DynamicValue[] {
+function isUnknownArray(value: unknown): value is unknown[] {
   return Array.isArray(value);
 }
 
-function firstText(result: DynamicValue): string {
+function firstText(result: unknown): string {
   if (!isWorkbookChangeAuditTestPayloadShape(result)) {
     throw new Error("Expected tool result object");
   }
@@ -103,7 +103,7 @@ function firstText(result: DynamicValue): string {
   return first.text;
 }
 
-function viewSettingsDetails(result: DynamicValue): DynamicObject {
+function viewSettingsDetails(result: unknown): Record<string, unknown> {
   if (!isWorkbookChangeAuditTestPayloadShape(result)) {
     throw new Error("Expected tool result object");
   }

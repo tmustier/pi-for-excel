@@ -360,6 +360,6 @@ export function mountSearchSetupCard(container: HTMLElement, details: WebSearchD
  * Returns true when the details indicate a web search failure that should
  * show the inline setup card.
  */
-export function shouldShowSearchSetupCard(details: DynamicValue): details is WebSearchDetails {
+export function shouldShowSearchSetupCard(details: unknown): details is WebSearchDetails {
   return isWebSearchDetails(details) && details.ok === false;
 }

@@ -7,7 +7,7 @@
  * - Supports formulas (strings starting with "=")
  */
 
-import { Type, type Static } from "@sinclair/typebox";
+import { Type, type Static } from "typebox";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import type { WriteCellsDetails } from "./tool-details.js";
 import {
@@ -67,16 +67,16 @@ type WriteCellsResult =
     sheetName: string;
     address: string;
     existingCount: number;
-    existingValues: DynamicValue[][];
+    existingValues: unknown[][];
   }
   | {
     blocked: false;
     sheetName: string;
     address: string;
-    beforeValues: DynamicValue[][];
-    beforeFormulas: DynamicValue[][];
-    readBackValues: DynamicValue[][];
-    readBackFormulas: DynamicValue[][];
+    beforeValues: unknown[][];
+    beforeFormulas: unknown[][];
+    readBackValues: unknown[][];
+    readBackFormulas: unknown[][];
   };
 
 type BlockedWriteCellsResult = Extract<WriteCellsResult, { blocked: true }>;
@@ -267,7 +267,7 @@ export function createWriteCellsTool(
   };
 }
 
-function findInvalidFormulas(values: DynamicValue[][], startCell: string): InvalidFormula[] {
+function findInvalidFormulas(values: unknown[][], startCell: string): InvalidFormula[] {
   const start = parseCell(startCell);
   const invalid: InvalidFormula[] = [];
 
@@ -323,7 +323,7 @@ export function validateFormula(formula: string): string | null {
   return null;
 }
 
-export function countOccupiedCells(values: DynamicValue[][], formulas: DynamicValue[][]): number {
+export function countOccupiedCells(values: unknown[][], formulas: unknown[][]): number {
   let count = 0;
   for (let r = 0; r < values.length; r++) {
     const valueRow = values[r] ?? [];
@@ -342,7 +342,7 @@ const VERIFIED_VALUES_PREVIEW_ROWS = 8;
 const VERIFIED_VALUES_PREVIEW_COLS = 6;
 
 interface VerifiedValuesPreview {
-  values: DynamicValue[][];
+  values: unknown[][];
   totalRows: number;
   totalCols: number;
   shownRows: number;
@@ -352,14 +352,14 @@ interface VerifiedValuesPreview {
   truncated: boolean;
 }
 
-function buildVerifiedValuesPreview(values: DynamicValue[][]): VerifiedValuesPreview {
+function buildVerifiedValuesPreview(values: unknown[][]): VerifiedValuesPreview {
   const totalRows = values.length;
   const totalCols = values.reduce((max, row) => Math.max(max, row.length), 0);
 
   const shownRows = Math.min(totalRows, VERIFIED_VALUES_PREVIEW_ROWS);
   const shownCols = Math.min(totalCols, VERIFIED_VALUES_PREVIEW_COLS);
 
-  const previewValues: DynamicValue[][] = [];
+  const previewValues: unknown[][] = [];
   for (let r = 0; r < shownRows; r += 1) {
     previewValues.push((values[r] ?? []).slice(0, shownCols));
   }

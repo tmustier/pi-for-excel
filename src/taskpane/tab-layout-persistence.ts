@@ -9,7 +9,7 @@ export interface TabLayoutPersistenceController {
 export interface CreateTabLayoutPersistenceOptions {
   resolveWorkbookId: () => Promise<string | null>;
   saveLayout: (workbookId: string | null, layout: WorkbookTabLayout) => Promise<void>;
-  warn?: (message: string, error: DynamicValue) => void;
+  warn?: (message: string, error: unknown) => void;
 }
 
 function tabLayoutSignature(layout: WorkbookTabLayout): string {
@@ -24,7 +24,7 @@ export function createTabLayoutPersistence(
   let lastPersistedSignature: string | null = null;
   let persistChain: Promise<void> = Promise.resolve();
 
-  const warn = options.warn ?? ((message: string, error: DynamicValue) => {
+  const warn = options.warn ?? ((message: string, error: unknown) => {
     console.warn(message, error);
   });
 
@@ -57,7 +57,7 @@ export function createTabLayoutPersistence(
           },
           () => undefined,
         )
-        .catch((error: DynamicValue) => {
+        .catch((error: unknown) => {
           warn("[pi] Failed to persist tab layout:", error);
         });
     },

@@ -5,7 +5,7 @@ import { createAllTools } from "../src/tools/index.ts";
 import { UnsupportedHostToolError } from "../src/tools/unsupported-host-tool.ts";
 
 interface WpsGlobals {
-  Application?: DynamicValue;
+  Application?: unknown;
 }
 
 const globals = globalThis as typeof globalThis & WpsGlobals;
@@ -29,7 +29,7 @@ void test("registered Office.js tools fail publicly on WPS without entering Offi
       explanation: "Inspect workbook",
       code: "return { ok: true };",
     }),
-    (error: DynamicValue) => {
+    (error: unknown) => {
       assert.ok(error instanceof UnsupportedHostToolError);
       assert.equal(error.hostKind, "wps");
       assert.equal(error.toolName, "execute_office_js");

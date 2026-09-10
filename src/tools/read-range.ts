@@ -7,7 +7,7 @@
  * - "detailed": Full JSON with formulas, number formats. For debugging.
  */
 
-import { Type, type Static } from "@sinclair/typebox";
+import { Type, type Static } from "typebox";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import {
   colToLetter,
@@ -54,9 +54,9 @@ interface ReadRangeResult {
   address: string;
   rows: number;
   cols: number;
-  values: DynamicValue[][];
-  formulas: DynamicValue[][];
-  numberFormats: DynamicValue[][];
+  values: unknown[][];
+  formulas: unknown[][];
+  numberFormats: unknown[][];
   comments: CommentSummary[];
 }
 
@@ -165,7 +165,7 @@ export function createReadRangeTool(): AgentTool<typeof schema> {
   };
 }
 
-function hasAnyNonEmptyCell(values: DynamicValue[][]): boolean {
+function hasAnyNonEmptyCell(values: unknown[][]): boolean {
   for (const row of values) {
     for (const v of row) {
       if (v !== null && v !== undefined && v !== "") return true;
@@ -174,22 +174,22 @@ function hasAnyNonEmptyCell(values: DynamicValue[][]): boolean {
   return false;
 }
 
-function formatAsExcelMarkdownTable(values: DynamicValue[][], startCell: string): string {
+function formatAsExcelMarkdownTable(values: unknown[][], startCell: string): string {
   if (!values || values.length === 0) return "(empty)";
 
   const start = parseCell(startCell);
   const numCols = Math.max(...values.map((r) => r.length));
 
-  const header: DynamicValue[] = [""];
+  const header: unknown[] = [""];
   for (let c = 0; c < numCols; c++) {
     header.push(colToLetter(start.col + c));
   }
 
-  const rows: DynamicValue[][] = [header];
+  const rows: unknown[][] = [header];
 
   for (let r = 0; r < values.length; r++) {
     const valueRow = values[r] ?? [];
-    const row: DynamicValue[] = [start.row + r, ...valueRow];
+    const row: unknown[] = [start.row + r, ...valueRow];
     while (row.length < numCols + 1) row.push("");
     rows.push(row);
   }
@@ -321,7 +321,7 @@ function formatDetailed(
 
 /* ── CSV helpers (migrated from get-range-as-csv) ──────────────────── */
 
-function toCsvField(value: DynamicValue): string {
+function toCsvField(value: unknown): string {
   if (value === null || value === undefined) return "";
   if (typeof value === "string") return value.includes(",") || value.includes('"') || value.includes("\n") || value.includes("\r") ? `"${value.replace(/"/g, '""')}"` : value;
   const str = typeof value === "number" || typeof value === "boolean" ? String(value) : JSON.stringify(value);
@@ -331,7 +331,7 @@ function toCsvField(value: DynamicValue): string {
   return str;
 }
 
-function valuesToCsv(values: DynamicValue[][]): string {
+function valuesToCsv(values: unknown[][]): string {
   if (!values || values.length === 0) return "";
   return values
     .map((row) => row.map((v) => toCsvField(v)).join(","))

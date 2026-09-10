@@ -10,11 +10,11 @@ export const TASKPANE_PROXY_ENABLED_SETTING_KEY = "proxy.enabled";
 export const TASKPANE_PROXY_URL_SETTING_KEY = "proxy.url";
 
 export interface TaskpaneSettingsStore {
-  get(key: string): Promise<DynamicValue>;
+  get(key: string): Promise<unknown>;
 }
 
 interface WritableTaskpaneSettingsStore extends TaskpaneSettingsStore {
-  set(key: string, value: DynamicValue): Promise<void>;
+  set(key: string, value: unknown): Promise<void>;
 }
 
 export interface TaskpaneProxySettings {
@@ -22,7 +22,7 @@ export interface TaskpaneProxySettings {
   url: string | null;
 }
 
-function parseProxyEnabled(value: DynamicValue): boolean {
+function parseProxyEnabled(value: unknown): boolean {
   // Preserve the legacy persisted contract: any truthy value enabled proxying.
   return Boolean(value);
 }

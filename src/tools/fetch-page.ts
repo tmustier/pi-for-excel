@@ -3,7 +3,7 @@
  */
 
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
-import { Type, type Static, type TSchema } from "@sinclair/typebox";
+import { Type, type Static, type TSchema } from "typebox";
 
 import { getErrorMessage } from "../utils/errors.js";
 import { runWithTimeoutAbort } from "../utils/network.js";
@@ -74,7 +74,7 @@ export interface FetchPageToolDependencies {
   timeoutMs?: number;
 }
 
-function normalizeOptionalString(value: DynamicValue): string | undefined {
+function normalizeOptionalString(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
@@ -135,12 +135,12 @@ function createFetchPageDetails(args: {
   return details;
 }
 
-function parseParams(raw: DynamicValue): Params {
+function parseParams(raw: unknown): Params {
   if (!raw || typeof raw !== "object") {
     throw new Error("Invalid fetch_page params: expected an object.");
   }
 
-  const params = raw as DynamicObject;
+  const params = raw as Record<string, unknown>;
   const url = normalizeOptionalString(params.url);
   if (!url) {
     throw new Error("fetch_page requires a non-empty url.");
@@ -393,7 +393,7 @@ export function createFetchPageTool(
     parameters: schema,
     execute: async (
       _toolCallId: string,
-      rawParams: DynamicValue,
+      rawParams: unknown,
       signal: AbortSignal | undefined,
     ): Promise<AgentToolResult<FetchPageToolDetails>> => {
       let targetUrl = "";

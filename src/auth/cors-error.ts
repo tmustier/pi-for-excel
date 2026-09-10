@@ -13,7 +13,7 @@
  * - TypeError with message "Failed to fetch"
  * - NetworkError
  */
-export function isCorsError(error: DynamicValue): boolean {
+export function isCorsError(error: unknown): boolean {
   if (!(error instanceof Error)) {
     return false;
   }

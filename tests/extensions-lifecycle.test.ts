@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { InMemoryModelsStore } from "@earendil-works/pi-ai";
-import { Type } from "@sinclair/typebox";
+import { Type } from "typebox";
 
 import { commandRegistry } from "../src/commands/types.ts";
 import { ConnectionManager } from "../src/connections/manager.ts";
@@ -12,13 +12,13 @@ import { BrowserModelRuntime } from "../src/models/browser-model-runtime.ts";
 import type { ProviderKeysStoreLike } from "../src/storage/local/provider-credentials-store.ts";
 
 class MemorySettingsStore {
-  private readonly values = new Map<string, DynamicValue>();
+  private readonly values = new Map<string, unknown>();
 
-  get(key: string): Promise<DynamicValue> {
+  get(key: string): Promise<unknown> {
     return Promise.resolve(this.values.get(key) ?? null);
   }
 
-  set(key: string, value: DynamicValue): Promise<void> {
+  set(key: string, value: unknown): Promise<void> {
     this.values.set(key, value);
     return Promise.resolve();
   }

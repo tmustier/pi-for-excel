@@ -71,14 +71,14 @@ export class IndexedDBStorageBackend implements StorageBackend {
   }
 
   /** Put honoring in-line (keyPath) vs out-of-line keys. */
-  private putIntoStore(store: IDBObjectStore, key: string, value: DynamicValue): Promise<IDBValidKey> {
+  private putIntoStore(store: IDBObjectStore, key: string, value: unknown): Promise<IDBValidKey> {
     if (store.keyPath) {
       return this.promisifyRequest(store.put(value));
     }
     return this.promisifyRequest(store.put(value, key));
   }
 
-  async get<T = DynamicValue>(storeName: string, key: string): Promise<T | null> {
+  async get<T = unknown>(storeName: string, key: string): Promise<T | null> {
     const db = await this.getDB();
     const store = db.transaction(storeName, "readonly").objectStore(storeName);
     const result = await this.promisifyRequest<T | undefined>(
@@ -87,7 +87,7 @@ export class IndexedDBStorageBackend implements StorageBackend {
     return result ?? null;
   }
 
-  async set<T = DynamicValue>(storeName: string, key: string, value: T): Promise<void> {
+  async set<T = unknown>(storeName: string, key: string, value: T): Promise<void> {
     const db = await this.getDB();
     const store = db.transaction(storeName, "readwrite").objectStore(storeName);
     await this.putIntoStore(store, key, value);
@@ -112,7 +112,7 @@ export class IndexedDBStorageBackend implements StorageBackend {
     return keys.flatMap(normalizeIdbKey);
   }
 
-  async getAllFromIndex<T = DynamicValue>(
+  async getAllFromIndex<T = unknown>(
     storeName: string,
     indexName: string,
     direction: "asc" | "desc" = "asc",
@@ -157,14 +157,14 @@ export class IndexedDBStorageBackend implements StorageBackend {
     const db = await this.getDB();
     const idbTx = db.transaction(storeNames, mode);
     const storageTx: StorageTransaction = {
-      get: async <V = DynamicValue>(storeName: string, key: string): Promise<V | null> => {
+      get: async <V = unknown>(storeName: string, key: string): Promise<V | null> => {
         const store = idbTx.objectStore(storeName);
         const result = await this.promisifyRequest<V | undefined>(
           store.get(key) as IDBRequest<V | undefined>,
         );
         return result ?? null;
       },
-      set: async <V = DynamicValue>(storeName: string, key: string, value: V): Promise<void> => {
+      set: async <V = unknown>(storeName: string, key: string, value: V): Promise<void> => {
         const store = idbTx.objectStore(storeName);
         await this.putIntoStore(store, key, value);
       },

@@ -16,7 +16,7 @@ import type {
   SpreadsheetHostSessionStorage,
 } from "./types.js";
 
-function nativeValueToString(value: DynamicValue): string | null {
+function nativeValueToString(value: unknown): string | null {
   if (typeof value === "string" && value.trim().length > 0) {
     return value;
   }
@@ -24,13 +24,13 @@ function nativeValueToString(value: DynamicValue): string | null {
   return null;
 }
 
-function toError(error: DynamicValue): Error {
+function toError(error: unknown): Error {
   return error instanceof Error ? error : new Error("Office.onReady failed.");
 }
 
 interface OfficeReadyInfoLike {
-  host?: DynamicValue;
-  platform?: DynamicValue;
+  host?: unknown;
+  platform?: unknown;
 }
 
 function fromOfficeReadyInfo(info: OfficeReadyInfoLike): SpreadsheetHostReadyInfo {
@@ -60,7 +60,7 @@ export class OfficeHost implements SpreadsheetHost {
           resolve(fromOfficeReadyInfo(info));
         });
 
-        void readyPromise.catch((error: DynamicValue) => {
+        void readyPromise.catch((error: unknown) => {
           reject(error instanceof Error ? error : new Error("Office.onReady failed."));
         });
       } catch (error) {
@@ -81,7 +81,7 @@ export class OfficeHost implements SpreadsheetHost {
         callback(fromOfficeReadyInfo(info));
       });
 
-      void readyPromise.catch((error: DynamicValue) => {
+      void readyPromise.catch((error: unknown) => {
         if (!disposed) {
           console.warn("[pi] Office.onReady hook failed:", error);
         }

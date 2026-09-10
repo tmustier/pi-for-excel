@@ -1,4 +1,4 @@
-function isWorkbookRecoveryLogCodecPayloadShape(value: DynamicValue): value is DynamicObject {
+function isWorkbookRecoveryLogCodecPayloadShape(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -42,8 +42,8 @@ export interface ParsePersistedSnapshotsOptions {
 export type PersistedWorkbookRecoverySnapshot =
   & Omit<WorkbookRecoverySnapshot, "beforeValues" | "beforeFormulas">
   & {
-    beforeValues?: DynamicValue[][];
-    beforeFormulas?: DynamicValue[][];
+    beforeValues?: unknown[][];
+    beforeFormulas?: unknown[][];
   };
 
 export interface PersistedWorkbookRecoveryPayload {
@@ -64,7 +64,7 @@ function defaultCreateId(): string {
   return `checkpoint_${Date.now().toString(36)}_${randomChunk}`;
 }
 
-function isWorkbookRecoveryToolName(value: DynamicValue): value is WorkbookRecoveryToolName {
+function isWorkbookRecoveryToolName(value: unknown): value is WorkbookRecoveryToolName {
   return (
     value === "write_cells" ||
     value === "fill_formula" ||
@@ -78,11 +78,11 @@ function isWorkbookRecoveryToolName(value: DynamicValue): value is WorkbookRecov
   );
 }
 
-function isGrid(value: DynamicValue): value is DynamicValue[][] {
+function isGrid(value: unknown): value is unknown[][] {
   return Array.isArray(value) && value.every((row) => Array.isArray(row));
 }
 
-function parseWorkbookRecoverySnapshotKind(value: DynamicValue): WorkbookRecoverySnapshotKind {
+function parseWorkbookRecoverySnapshotKind(value: unknown): WorkbookRecoverySnapshotKind {
   return value === "conditional_format_rules" ||
       value === "comment_thread" ||
       value === "chart_state" ||
@@ -93,7 +93,7 @@ function parseWorkbookRecoverySnapshotKind(value: DynamicValue): WorkbookRecover
     : "range_values";
 }
 
-function isRecoveryFormatSelection(value: DynamicValue): value is RecoveryFormatRangeState["selection"] {
+function isRecoveryFormatSelection(value: unknown): value is RecoveryFormatRangeState["selection"] {
   if (!isWorkbookRecoveryLogCodecPayloadShape(value)) return false;
 
   const keys: Array<keyof RecoveryFormatRangeState["selection"]> = [
@@ -129,20 +129,20 @@ function isRecoveryFormatSelection(value: DynamicValue): value is RecoveryFormat
   return true;
 }
 
-function isStringGrid(value: DynamicValue): value is string[][] {
+function isStringGrid(value: unknown): value is string[][] {
   return Array.isArray(value) &&
     value.every((row) => Array.isArray(row) && row.every((cell) => typeof cell === "string"));
 }
 
-function isNumberList(value: DynamicValue): value is number[] {
+function isNumberList(value: unknown): value is number[] {
   return Array.isArray(value) && value.every((item) => typeof item === "number" && Number.isFinite(item));
 }
 
-function isStringList(value: DynamicValue): value is string[] {
+function isStringList(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === "string");
 }
 
-function isRecoveryFormatBorderState(value: DynamicValue): value is RecoveryFormatBorderState {
+function isRecoveryFormatBorderState(value: unknown): value is RecoveryFormatBorderState {
   if (!isWorkbookRecoveryLogCodecPayloadShape(value)) return false;
 
   return (
@@ -152,7 +152,7 @@ function isRecoveryFormatBorderState(value: DynamicValue): value is RecoveryForm
   );
 }
 
-function isRecoveryFormatAreaState(value: DynamicValue): value is RecoveryFormatRangeState["areas"][number] {
+function isRecoveryFormatAreaState(value: unknown): value is RecoveryFormatRangeState["areas"][number] {
   if (!isWorkbookRecoveryLogCodecPayloadShape(value)) return false;
   if (typeof value.address !== "string") return false;
   if (typeof value.rowCount !== "number") return false;
@@ -199,7 +199,7 @@ function isRecoveryFormatAreaState(value: DynamicValue): value is RecoveryFormat
   return true;
 }
 
-function isRecoveryFormatRangeState(value: DynamicValue): value is RecoveryFormatRangeState {
+function isRecoveryFormatRangeState(value: unknown): value is RecoveryFormatRangeState {
   if (!isWorkbookRecoveryLogCodecPayloadShape(value)) return false;
   if (!isRecoveryFormatSelection(value.selection)) return false;
   if (!Array.isArray(value.areas) || !value.areas.every((area) => isRecoveryFormatAreaState(area))) return false;
@@ -208,15 +208,15 @@ function isRecoveryFormatRangeState(value: DynamicValue): value is RecoveryForma
   return true;
 }
 
-function isRecoverySheetVisibility(value: DynamicValue): value is "Visible" | "Hidden" | "VeryHidden" {
+function isRecoverySheetVisibility(value: unknown): value is "Visible" | "Hidden" | "VeryHidden" {
   return value === "Visible" || value === "Hidden" || value === "VeryHidden";
 }
 
-function isPositiveInteger(value: DynamicValue): value is number {
+function isPositiveInteger(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value) && value > 0;
 }
 
-function isRecoveryStructureValueRangeState(value: DynamicValue): value is RecoveryStructureValueRangeState {
+function isRecoveryStructureValueRangeState(value: unknown): value is RecoveryStructureValueRangeState {
   if (!isWorkbookRecoveryLogCodecPayloadShape(value)) {
     return false;
   }
@@ -237,7 +237,7 @@ function isRecoveryStructureValueRangeState(value: DynamicValue): value is Recov
   return stats.rows === value.rowCount && stats.cols === value.columnCount;
 }
 
-function isRecoveryModifyStructureState(value: DynamicValue): value is RecoveryModifyStructureState {
+function isRecoveryModifyStructureState(value: unknown): value is RecoveryModifyStructureState {
   if (!isWorkbookRecoveryLogCodecPayloadShape(value)) return false;
 
   if (value.kind === "sheet_name") {
@@ -311,7 +311,7 @@ function isRecoveryModifyStructureState(value: DynamicValue): value is RecoveryM
   return false;
 }
 
-function isRecoveryCommentThreadState(value: DynamicValue): value is RecoveryCommentThreadState {
+function isRecoveryCommentThreadState(value: unknown): value is RecoveryCommentThreadState {
   if (!isWorkbookRecoveryLogCodecPayloadShape(value)) return false;
   if (typeof value.exists !== "boolean") return false;
   if (typeof value.content !== "string") return false;
@@ -321,17 +321,17 @@ function isRecoveryCommentThreadState(value: DynamicValue): value is RecoveryCom
   return value.replies.every((reply) => typeof reply === "string");
 }
 
-function isRecoveryChartTitleState(value: DynamicValue): boolean {
+function isRecoveryChartTitleState(value: unknown): boolean {
   if (!isWorkbookRecoveryLogCodecPayloadShape(value)) return false;
   return typeof value.text === "string" && typeof value.visible === "boolean";
 }
 
-function isRecoveryChartLegendState(value: DynamicValue): boolean {
+function isRecoveryChartLegendState(value: unknown): boolean {
   if (!isWorkbookRecoveryLogCodecPayloadShape(value)) return false;
   return typeof value.position === "string" && typeof value.visible === "boolean";
 }
 
-function isRecoveryChartPositionState(value: DynamicValue): boolean {
+function isRecoveryChartPositionState(value: unknown): boolean {
   if (!isWorkbookRecoveryLogCodecPayloadShape(value)) return false;
   return (
     typeof value.top === "number" &&
@@ -341,7 +341,7 @@ function isRecoveryChartPositionState(value: DynamicValue): boolean {
   );
 }
 
-function isRecoveryChartState(value: DynamicValue): value is RecoveryChartState {
+function isRecoveryChartState(value: unknown): value is RecoveryChartState {
   if (!isWorkbookRecoveryLogCodecPayloadShape(value)) return false;
 
   if (value.kind === "chart_absent") {
@@ -368,7 +368,7 @@ function isRecoveryChartState(value: DynamicValue): value is RecoveryChartState 
   return false;
 }
 
-function parseWorkbookRecoverySnapshot(value: DynamicValue): WorkbookRecoverySnapshot | null {
+function parseWorkbookRecoverySnapshot(value: unknown): WorkbookRecoverySnapshot | null {
   if (!isWorkbookRecoveryLogCodecPayloadShape(value)) return null;
 
   if (!isWorkbookRecoveryToolName(value.toolName)) return null;
@@ -501,7 +501,7 @@ function parseWorkbookRecoverySnapshot(value: DynamicValue): WorkbookRecoverySna
 }
 
 export function parsePersistedSnapshots(
-  payload: DynamicValue,
+  payload: unknown,
   options: ParsePersistedSnapshotsOptions,
 ): WorkbookRecoverySnapshot[] {
   if (!isWorkbookRecoveryLogCodecPayloadShape(payload)) return [];

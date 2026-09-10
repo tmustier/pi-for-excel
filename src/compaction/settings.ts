@@ -1,7 +1,7 @@
 export const COMPACTION_ENABLED_SETTING_KEY = "compaction.enabled";
 
 export interface CompactionSettingsStore {
-  get(key: string): Promise<DynamicValue>;
+  get(key: string): Promise<unknown>;
 }
 
 /**

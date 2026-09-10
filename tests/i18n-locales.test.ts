@@ -9,12 +9,12 @@ import { fileURLToPath } from "node:url";
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const localesDir = join(root, "src", "language", "locales");
 
-function parseLocaleJson(raw: DynamicValue, label: string): Record<string, string> {
+function parseLocaleJson(raw: unknown, label: string): Record<string, string> {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
     throw new Error(`${label} locale must be an object`);
   }
 
-  const rawObject = raw as DynamicObject;
+  const rawObject = raw as Record<string, unknown>;
   const parsed: Record<string, string> = {};
   for (const [key, value] of Object.entries(rawObject)) {
     if (typeof value !== "string") {
@@ -25,8 +25,8 @@ function parseLocaleJson(raw: DynamicValue, label: string): Record<string, strin
   return parsed;
 }
 
-const en = parseLocaleJson(JSON.parse(readFileSync(join(localesDir, "en.json"), "utf8")) as DynamicValue, "en");
-const zh = parseLocaleJson(JSON.parse(readFileSync(join(localesDir, "zh-CN.json"), "utf8")) as DynamicValue, "zh-CN");
+const en = parseLocaleJson(JSON.parse(readFileSync(join(localesDir, "en.json"), "utf8")) as unknown, "en");
+const zh = parseLocaleJson(JSON.parse(readFileSync(join(localesDir, "zh-CN.json"), "utf8")) as unknown, "zh-CN");
 
 function requireMatchGroup(match: RegExpMatchArray, index: number): string {
   const value = match[index];

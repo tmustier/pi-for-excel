@@ -1,4 +1,4 @@
-function isCommandsBuiltinsExportPayloadShape(value: DynamicValue): value is DynamicObject {
+function isCommandsBuiltinsExportPayloadShape(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -36,7 +36,7 @@ type TranscriptEntry = {
   stopReason?: StopReason;
 };
 
-function isApiModel(model: DynamicValue): model is Model<Api> {
+function isApiModel(model: unknown): model is Model<Api> {
   if (!isCommandsBuiltinsExportPayloadShape(model)) return false;
 
   return (
@@ -47,7 +47,7 @@ function isApiModel(model: DynamicValue): model is Model<Api> {
   );
 }
 
-function hasContent(message: AgentMessage): message is AgentMessage & { content: DynamicValue } {
+function hasContent(message: AgentMessage): message is AgentMessage & { content: unknown } {
   return isCommandsBuiltinsExportPayloadShape(message) && "content" in message;
 }
 
@@ -403,7 +403,7 @@ function buildSummarizationPrompt(args: {
   return prompt;
 }
 
-function isPromptTooLongError(err: DynamicValue): boolean {
+function isPromptTooLongError(err: unknown): boolean {
   const msg = getErrorMessage(err).toLowerCase();
   return (
     msg.includes("prompt is too long") ||

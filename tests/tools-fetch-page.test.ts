@@ -11,21 +11,21 @@ import { SessionsStore } from "../src/storage/local/sessions-store.ts";
 import { SettingsStore } from "../src/storage/local/settings-store.ts";
 
 class ProxySettingsStore extends SettingsStore {
-  private readonly values: ReadonlyMap<string, DynamicValue>;
+  private readonly values: ReadonlyMap<string, unknown>;
 
-  constructor(values: ReadonlyMap<string, DynamicValue>) {
+  constructor(values: ReadonlyMap<string, unknown>) {
     super();
     this.values = values;
   }
 
-  override get<T = DynamicValue>(key: string): Promise<T | null> {
+  override get<T = unknown>(key: string): Promise<T | null> {
     const value = this.values.get(key);
     // The fixture values are controlled at the settings storage boundary.
     return Promise.resolve(value === undefined ? null : value as T);
   }
 }
 
-function installProxySettings(values: ReadonlyMap<string, DynamicValue>): void {
+function installProxySettings(values: ReadonlyMap<string, unknown>): void {
   setAppStorage(new AppStorage(
     new ProxySettingsStore(values),
     new ProviderKeysStore(),
@@ -63,7 +63,7 @@ void test("fetch_page uses the default local proxy when proxy is enabled without
 });
 
 void test("fetch_page ignores a configured proxy URL when proxy is disabled", async () => {
-  installProxySettings(new Map<string, DynamicValue>([
+  installProxySettings(new Map<string, unknown>([
     ["proxy.enabled", false],
     ["proxy.url", "https://localhost:3004"],
   ]));

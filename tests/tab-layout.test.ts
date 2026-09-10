@@ -18,19 +18,19 @@ import {
 } from "../src/taskpane/settings.ts";
 
 class MemoryTaskpaneSettingsStore {
-  protected readonly values = new Map<string, DynamicValue>();
+  protected readonly values = new Map<string, unknown>();
   private readonly readError: Error | null;
 
   constructor(readError: Error | null = null) {
     this.readError = readError;
   }
 
-  get(key: string): Promise<DynamicValue> {
+  get(key: string): Promise<unknown> {
     if (this.readError) return Promise.reject(this.readError);
     return Promise.resolve(this.values.get(key) ?? null);
   }
 
-  set(key: string, value: DynamicValue): Promise<void> {
+  set(key: string, value: unknown): Promise<void> {
     this.values.set(key, value);
     return Promise.resolve();
   }
@@ -42,7 +42,7 @@ class MemoryTaskpaneSettingsStore {
 }
 
 class ProxyEnabledReadFailureStore extends MemoryTaskpaneSettingsStore {
-  override get(key: string): Promise<DynamicValue> {
+  override get(key: string): Promise<unknown> {
     if (key === TASKPANE_PROXY_ENABLED_SETTING_KEY) {
       return Promise.reject(new Error("proxy enabled read failed"));
     }

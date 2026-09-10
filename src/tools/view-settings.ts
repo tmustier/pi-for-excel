@@ -4,7 +4,8 @@
  * Scope: on-screen worksheet view/navigation only (not print/page layout).
  */
 
-import { Type, type Static } from "@sinclair/typebox";
+import { Type, type Static } from "typebox";
+import { StringEnum } from "@earendil-works/pi-ai";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { excelRun, parseCell, qualifiedAddress } from "../excel/helpers.js";
 import {
@@ -22,12 +23,6 @@ import { appendMutationResultNote } from "./mutation/result-note.js";
 import type { MutationFinalizeDependencies } from "./mutation/types.js";
 import type { ViewSettingsDetails } from "./tool-details.js";
 
-function StringEnum<T extends string[]>(values: [...T], opts?: { description?: string }) {
-  return Type.Union(
-    values.map((value) => Type.Literal(value)),
-    opts,
-  );
-}
 const schema = Type.Object({
   action: StringEnum(
     [

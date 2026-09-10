@@ -1,4 +1,4 @@
-function isFilesWorkspacePayloadShape(value: DynamicValue): value is DynamicObject {
+function isFilesWorkspacePayloadShape(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -86,12 +86,12 @@ interface PersistedAuditTrail {
   entries: FilesWorkspaceAuditEntry[];
 }
 
-function isDirectoryPickerHost(value: DynamicValue): value is DirectoryPickerHost {
+function isDirectoryPickerHost(value: unknown): value is DirectoryPickerHost {
   if (!isFilesWorkspacePayloadShape(value)) return false;
   return typeof value.showDirectoryPicker === "function";
 }
 
-function isDirectoryHandle(value: DynamicValue): value is FileSystemDirectoryHandle {
+function isDirectoryHandle(value: unknown): value is FileSystemDirectoryHandle {
   if (!isFilesWorkspacePayloadShape(value)) return false;
   return (
     value.kind === "directory" &&
@@ -101,7 +101,7 @@ function isDirectoryHandle(value: DynamicValue): value is FileSystemDirectoryHan
   );
 }
 
-function isDirectoryPermissionHandle(value: DynamicValue): value is DirectoryPermissionHandle {
+function isDirectoryPermissionHandle(value: unknown): value is DirectoryPermissionHandle {
   if (!isFilesWorkspacePayloadShape(value)) return false;
 
   return (
@@ -146,15 +146,15 @@ function tryOpenDownloadWindow(url: string, pendingWindow: Window | null): boole
   return window.open(url, "_blank") !== null;
 }
 
-function isNonEmptyString(value: DynamicValue): value is string {
+function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
 
-function isFiniteNumber(value: DynamicValue): value is number {
+function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
 
-function isMissingWorkspaceFileError(error: DynamicValue): boolean {
+function isMissingWorkspaceFileError(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
 
   if (error.name === "NotFoundError") {
@@ -178,15 +178,15 @@ function isMissingWorkspaceFileError(error: DynamicValue): boolean {
   return /\b(can\s?not|cannot|can't)\s+be\s+found\b/u.test(message);
 }
 
-function isWorkspaceBackendKind(value: DynamicValue): value is WorkspaceBackendKind {
+function isWorkspaceBackendKind(value: unknown): value is WorkspaceBackendKind {
   return value === "native-directory" || value === "opfs" || value === "memory";
 }
 
-function isFilesWorkspaceAuditActor(value: DynamicValue): value is FilesWorkspaceAuditActor {
+function isFilesWorkspaceAuditActor(value: unknown): value is FilesWorkspaceAuditActor {
   return value === "assistant" || value === "user" || value === "system";
 }
 
-function isFilesWorkspaceAuditAction(value: DynamicValue): value is FilesWorkspaceAuditAction {
+function isFilesWorkspaceAuditAction(value: unknown): value is FilesWorkspaceAuditAction {
   return (
     value === "list" ||
     value === "read" ||
@@ -200,7 +200,7 @@ function isFilesWorkspaceAuditAction(value: DynamicValue): value is FilesWorkspa
   );
 }
 
-function sanitizeOptionalPath(value: DynamicValue): string | undefined {
+function sanitizeOptionalPath(value: unknown): string | undefined {
   if (!isNonEmptyString(value)) return undefined;
 
   try {
@@ -220,7 +220,7 @@ function requestedLocationArgs(
   return { requestedLocationKind: locationKind };
 }
 
-function parseWorkbookTag(value: DynamicValue): WorkspaceFileWorkbookTag | null {
+function parseWorkbookTag(value: unknown): WorkspaceFileWorkbookTag | null {
   if (!isFilesWorkspacePayloadShape(value)) return null;
 
   const workbookId = typeof value.workbookId === "string"
@@ -244,7 +244,7 @@ function parseWorkbookTag(value: DynamicValue): WorkspaceFileWorkbookTag | null 
   };
 }
 
-function parsePersistedMetadata(value: DynamicValue): Map<string, WorkspaceFileWorkbookTag> {
+function parsePersistedMetadata(value: unknown): Map<string, WorkspaceFileWorkbookTag> {
   const byPath = new Map<string, WorkspaceFileWorkbookTag>();
   if (!isFilesWorkspacePayloadShape(value)) return byPath;
 
@@ -264,7 +264,7 @@ function parsePersistedMetadata(value: DynamicValue): Map<string, WorkspaceFileW
   return byPath;
 }
 
-function parseAuditEntry(value: DynamicValue): FilesWorkspaceAuditEntry | null {
+function parseAuditEntry(value: unknown): FilesWorkspaceAuditEntry | null {
   if (!isFilesWorkspacePayloadShape(value)) return null;
 
   if (!isFilesWorkspaceAuditAction(value.action)) return null;
@@ -302,7 +302,7 @@ function parseAuditEntry(value: DynamicValue): FilesWorkspaceAuditEntry | null {
   return entry;
 }
 
-function parsePersistedAuditTrail(value: DynamicValue): FilesWorkspaceAuditEntry[] {
+function parsePersistedAuditTrail(value: unknown): FilesWorkspaceAuditEntry[] {
   if (!isFilesWorkspacePayloadShape(value)) return [];
 
   const entriesRaw = value.entries;
@@ -334,11 +334,11 @@ function createAuditEntryId(): string {
 
 export interface FilesWorkspaceSettingsStore {
   get<T>(key: string): Promise<T | null>;
-  set(key: string, value: DynamicValue): Promise<void>;
+  set(key: string, value: unknown): Promise<void>;
   delete(key: string): Promise<void>;
 }
 
-function isSettingsStoreLike(value: DynamicValue): value is FilesWorkspaceSettingsStore {
+function isSettingsStoreLike(value: unknown): value is FilesWorkspaceSettingsStore {
   if (!isFilesWorkspacePayloadShape(value)) return false;
 
   return (
@@ -364,7 +364,7 @@ async function readPersistedNativeHandle(): Promise<FileSystemDirectoryHandle | 
   if (!settings) return null;
 
   try {
-    const stored = await settings.get<DynamicValue>(NATIVE_HANDLE_SETTING_KEY);
+    const stored = await settings.get<unknown>(NATIVE_HANDLE_SETTING_KEY);
     return isDirectoryHandle(stored) ? stored : null;
   } catch {
     return null;
@@ -759,7 +759,7 @@ export class FilesWorkspace {
     }
 
     try {
-      const raw = await settings.get<DynamicValue>(METADATA_SETTING_KEY);
+      const raw = await settings.get<unknown>(METADATA_SETTING_KEY);
       const parsed = parsePersistedMetadata(raw);
       this.metadataByPath.clear();
       for (const [path, tag] of parsed) {
@@ -803,7 +803,7 @@ export class FilesWorkspace {
     }
 
     try {
-      const raw = await settings.get<DynamicValue>(AUDIT_TRAIL_SETTING_KEY);
+      const raw = await settings.get<unknown>(AUDIT_TRAIL_SETTING_KEY);
       this.auditEntries = parsePersistedAuditTrail(raw);
       this.auditLoaded = true;
       return true;

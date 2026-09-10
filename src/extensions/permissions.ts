@@ -1,4 +1,4 @@
-function isExtensionsPermissionsPayloadShape(value: DynamicValue): value is DynamicObject {
+function isExtensionsPermissionsPayloadShape(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -123,7 +123,7 @@ export function getDefaultPermissionsForTrust(trust: StoredExtensionTrust): Stor
   return clonePermissions(RESTRICTED_UNTRUSTED_PERMISSIONS);
 }
 
-export function normalizeStoredExtensionPermissions(raw: DynamicValue, trust: StoredExtensionTrust): StoredExtensionPermissions {
+export function normalizeStoredExtensionPermissions(raw: unknown, trust: StoredExtensionTrust): StoredExtensionPermissions {
   const defaults = getDefaultPermissionsForTrust(trust);
   if (!isExtensionsPermissionsPayloadShape(raw)) return defaults;
   return {
@@ -179,6 +179,6 @@ export function listGrantedExtensionCapabilities(permissions: StoredExtensionPer
     .map((descriptor) => descriptor.capability);
 }
 
-function normalizeBooleanOrFallback(value: DynamicValue, fallback: boolean): boolean {
+function normalizeBooleanOrFallback(value: unknown, fallback: boolean): boolean {
   return typeof value === "boolean" ? value : fallback;
 }

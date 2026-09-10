@@ -11,7 +11,7 @@ const TEST_SERVER = {
 } as const;
 
 function createMockMcpTool() {
-  const calls: Array<{ method: string; params?: DynamicValue }> = [];
+  const calls: Array<{ method: string; params?: unknown }> = [];
 
   const tool = createMcpTool({
     getRuntimeConfig: () => Promise.resolve({

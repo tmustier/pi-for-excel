@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { Agent, type AgentMessage, type AgentTool } from "@earendil-works/pi-agent-core";
-import { Type } from "@sinclair/typebox";
+import { Type } from "typebox";
 import { createModels, fauxAssistantMessage, fauxProvider, type Context } from "@earendil-works/pi-ai";
 
 import { effectiveToolOutputLimits } from "../src/context/window-budgets.ts";
@@ -35,7 +35,7 @@ void test("agent requests apply full, scaled, and floor budgets for each model w
     const wrapped = applyToolOutputTruncation([sourceTool], { limits: () => limits });
     const result = await wrapped[0]?.execute("large", {});
     if (!result) throw new Error("Expected wrapped tool result.");
-    const truncation = Reflect.get(result.details, "outputTruncation") as DynamicValue;
+    const truncation = Reflect.get(result.details, "outputTruncation") as unknown;
     if (typeof truncation !== "object" || truncation === null) throw new Error("Expected truncation metadata.");
     assert.equal(Reflect.get(truncation, "maxBytes"), scenario.maxBytes, scenario.name);
     assert.equal(Reflect.get(truncation, "maxLines"), scenario.maxLines, scenario.name);

@@ -5,7 +5,7 @@ import ts from "typescript";
 
 const root = process.cwd();
 const searchRoots = ["src", "tests"];
-const allowedBoundaryTypes = new Set(["DynamicValue", "JsonValue"]);
+const allowedBoundaryTypes = new Set(["unknown", "JsonValue"]);
 const offenders = [];
 
 function collectFiles(dir, out = []) {
@@ -73,7 +73,7 @@ for (const dir of searchRoots) {
 
 if (offenders.length > 0) {
   console.error("Boundary cast check failed.");
-  console.error("Decoded JSON/fetch payloads must first land as DynamicValue, then be parsed/refined by a concrete boundary parser.");
+  console.error("Decoded JSON/fetch payloads must first land as unknown, then be parsed/refined by a concrete boundary parser.");
   console.error("Offenders:");
   for (const offender of offenders) console.error(`- ${offender}`);
   process.exit(1);

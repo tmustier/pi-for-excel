@@ -19,18 +19,18 @@ import type { ConnectionDefinition } from "../src/connections/types.ts";
 import { stageInlineExtensionUpgrade } from "../src/taskpane/background-extension-verification.ts";
 
 class MemorySettingsStore {
-  protected readonly values = new Map<string, DynamicValue>();
+  protected readonly values = new Map<string, unknown>();
 
-  get(key: string): Promise<DynamicValue> {
+  get(key: string): Promise<unknown> {
     return Promise.resolve(this.values.has(key) ? this.values.get(key) ?? null : null);
   }
 
-  set(key: string, value: DynamicValue): Promise<void> {
+  set(key: string, value: unknown): Promise<void> {
     this.values.set(key, value);
     return Promise.resolve();
   }
 
-  writeRaw(key: string, value: DynamicValue): void {
+  writeRaw(key: string, value: unknown): void {
     this.values.set(key, value);
   }
 }
@@ -42,7 +42,7 @@ class ConnectionReadFailureSettings extends MemorySettingsStore {
     this.failNextConnectionRead = true;
   }
 
-  override get(key: string): Promise<DynamicValue> {
+  override get(key: string): Promise<unknown> {
     if (key === CONNECTION_STORE_KEY && this.failNextConnectionRead) {
       this.failNextConnectionRead = false;
       return Promise.reject(new Error("connection document read failed"));
@@ -58,7 +58,7 @@ class TransientExtensionReadSettings extends MemorySettingsStore {
     this.failNextRead = true;
   }
 
-  override get(key: string): Promise<DynamicValue> {
+  override get(key: string): Promise<unknown> {
     if (this.failNextRead) {
       this.failNextRead = false;
       return Promise.reject(new Error("transient extension registry read failure"));

@@ -1,4 +1,4 @@
-function isToolsLibreofficeConvertPayloadShape(value: DynamicValue): value is DynamicObject {
+function isToolsLibreofficeConvertPayloadShape(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -11,7 +11,7 @@ function isToolsLibreofficeConvertPayloadShape(value: DynamicValue): value is Dy
  */
 
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
-import { Type, type TSchema } from "@sinclair/typebox";
+import { Type, type TSchema } from "typebox";
 
 import { getErrorMessage } from "../utils/errors.js";
 import {
@@ -32,7 +32,7 @@ type LibreOfficeTargetFormat = (typeof TARGET_FORMATS)[number];
 
 const TARGET_FORMAT_SET = new Set<string>(TARGET_FORMATS);
 
-function isTargetFormat(value: DynamicValue): value is LibreOfficeTargetFormat {
+function isTargetFormat(value: unknown): value is LibreOfficeTargetFormat {
   return typeof value === "string" && TARGET_FORMAT_SET.has(value);
 }
 
@@ -92,7 +92,7 @@ export interface LibreOfficeConvertResponse {
   bytes?: number;
   converter?: string;
   error?: string;
-  metadata?: DynamicObject;
+  metadata?: Record<string, unknown>;
 }
 
 export interface LibreOfficeConvertToolDetails {
@@ -119,7 +119,7 @@ export interface LibreOfficeConvertToolDependencies {
   ) => Promise<LibreOfficeConvertResponse>;
 }
 
-function isLibreOfficeBridgePayloadShape(value: DynamicValue): value is DynamicObject {
+function isLibreOfficeBridgePayloadShape(value: unknown): value is Record<string, unknown> {
   return isToolsLibreofficeConvertPayloadShape(value) && !Array.isArray(value);
 }
 
@@ -130,7 +130,7 @@ function cleanOptionalString(value: string | undefined): string | undefined {
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
-function toOptionalInteger(value: DynamicValue): number | undefined {
+function toOptionalInteger(value: unknown): number | undefined {
   if (typeof value !== "number") return undefined;
   if (!Number.isFinite(value)) return undefined;
   if (!Number.isInteger(value)) return undefined;
@@ -144,7 +144,7 @@ function isAbsolutePath(value: string): boolean {
   return false;
 }
 
-function parseParams(raw: DynamicValue): Params {
+function parseParams(raw: unknown): Params {
   if (!isLibreOfficeBridgePayloadShape(raw)) {
     throw new Error("Invalid libreoffice_convert params: expected an object.");
   }
@@ -207,7 +207,7 @@ function toBridgeRequest(params: Params): LibreOfficeConvertRequest {
   };
 }
 
-function parseBridgeResponse(value: DynamicValue): LibreOfficeConvertResponse {
+function parseBridgeResponse(value: unknown): LibreOfficeConvertResponse {
   if (!isLibreOfficeBridgePayloadShape(value)) {
     return {
       ok: true,
@@ -392,7 +392,7 @@ export function createLibreOfficeConvertTool(
     parameters: schema,
     execute: async (
       _toolCallId: string,
-      rawParams: DynamicValue,
+      rawParams: unknown,
       signal: AbortSignal | undefined,
     ): Promise<AgentToolResult<LibreOfficeConvertToolDetails>> => {
       try {

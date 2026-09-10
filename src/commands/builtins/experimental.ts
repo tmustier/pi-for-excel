@@ -1,4 +1,4 @@
-function isCommandsBuiltinsExperimentalPayloadShape(value: DynamicValue): value is DynamicObject {
+function isCommandsBuiltinsExperimentalPayloadShape(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -258,13 +258,13 @@ function maskToken(token: string): string {
   return `${token.slice(0, 4)}${"*".repeat(hiddenLength)}${token.slice(-2)}`;
 }
 
-function normalizeOptionalString(value: DynamicValue): string | undefined {
+function normalizeOptionalString(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
-function normalizeOptionalInteger(value: DynamicValue): number | undefined {
+function normalizeOptionalInteger(value: unknown): number | undefined {
   if (typeof value !== "number" || !Number.isInteger(value)) {
     return undefined;
   }
@@ -272,7 +272,7 @@ function normalizeOptionalInteger(value: DynamicValue): number | undefined {
   return value;
 }
 
-function tryParseJson(text: string): DynamicValue {
+function tryParseJson(text: string): unknown {
   const trimmed = text.trim();
   if (trimmed.length === 0) return null;
 
@@ -345,7 +345,7 @@ function resolveDependencies(
   };
 }
 
-function asErrorMessage(error: DynamicValue, fallback: string): string {
+function asErrorMessage(error: unknown, fallback: string): string {
   if (error instanceof Error && error.message.trim().length > 0) {
     return error.message;
   }

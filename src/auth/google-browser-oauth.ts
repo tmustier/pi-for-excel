@@ -64,11 +64,11 @@ type CodeAssistHeaders = {
   "Client-Metadata"?: string;
 };
 
-function isAuthGoogleBrowserOauthPayloadShape(value: DynamicValue): value is DynamicObject {
+function isAuthGoogleBrowserOauthPayloadShape(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function getProjectId(data: DynamicValue): string | undefined {
+function getProjectId(data: unknown): string | undefined {
   if (!isAuthGoogleBrowserOauthPayloadShape(data)) return undefined;
 
   const direct = data.cloudaicompanionProject;
@@ -86,7 +86,7 @@ function getProjectId(data: DynamicValue): string | undefined {
   return undefined;
 }
 
-function getDefaultTierId(data: DynamicValue): string {
+function getDefaultTierId(data: unknown): string {
   if (!isAuthGoogleBrowserOauthPayloadShape(data)) return TIER_LEGACY;
 
   const allowedTiers = data.allowedTiers;
@@ -111,12 +111,12 @@ function getDefaultTierId(data: DynamicValue): string {
   return fallbackTier ?? TIER_LEGACY;
 }
 
-function hasCurrentTier(data: DynamicValue): boolean {
+function hasCurrentTier(data: unknown): boolean {
   if (!isAuthGoogleBrowserOauthPayloadShape(data)) return false;
   return isAuthGoogleBrowserOauthPayloadShape(data.currentTier);
 }
 
-function isVpcScAffectedUser(payload: DynamicValue): boolean {
+function isVpcScAffectedUser(payload: unknown): boolean {
   if (!isAuthGoogleBrowserOauthPayloadShape(payload)) return false;
 
   const error = payload.error;
@@ -174,7 +174,7 @@ async function pollOnboardingOperation(
   operationName: string,
   headers: CodeAssistHeaders,
   onProgress?: (message: string) => void,
-): Promise<DynamicValue> {
+): Promise<unknown> {
   let attempt = 0;
 
   while (true) {
@@ -192,7 +192,7 @@ async function pollOnboardingOperation(
       throw new Error(`Failed to poll Google onboarding operation: ${response.status} ${response.statusText}`);
     }
 
-    const payload: DynamicValue = await response.json();
+    const payload: unknown = await response.json();
     if (!isAuthGoogleBrowserOauthPayloadShape(payload)) {
       throw new Error("Google onboarding returned an invalid response payload");
     }
@@ -225,9 +225,9 @@ async function discoverGeminiCliProject(
     }),
   });
 
-  let loadData: DynamicValue;
+  let loadData: unknown;
   if (!loadResponse.ok) {
-    let errorPayload: DynamicValue;
+    let errorPayload: unknown;
     try {
       errorPayload = await loadResponse.clone().json();
     } catch {
@@ -261,7 +261,7 @@ async function discoverGeminiCliProject(
 
   callbacks.onProgress?.("Provisioning Cloud Code Assist project…");
 
-  const onboardBody: DynamicObject = {
+  const onboardBody: Record<string, unknown> = {
     tierId,
     metadata: {
       ideType: "IDE_UNSPECIFIED",
@@ -291,7 +291,7 @@ async function discoverGeminiCliProject(
     );
   }
 
-  let onboardingData: DynamicValue = await onboardResponse.json();
+  let onboardingData: unknown = await onboardResponse.json();
   if (isAuthGoogleBrowserOauthPayloadShape(onboardingData) && onboardingData.done !== true) {
     const operationName = onboardingData.name;
     if (typeof operationName === "string" && operationName.trim().length > 0) {
@@ -341,7 +341,7 @@ async function discoverAntigravityProject(
         continue;
       }
 
-      const payload: DynamicValue = await response.json();
+      const payload: unknown = await response.json();
       const projectId = getProjectId(payload);
       if (projectId) {
         return projectId;

@@ -80,7 +80,7 @@ void test("connection API preserves UUIDv7 and stably maps legacy bridge session
     models.setProvider(faux.provider);
     const seenSessionIds: Array<string | undefined> = [];
     faux.setResponses(Array.from({ length: 3 }, () => (
-      _context: DynamicValue,
+      _context: unknown,
       options: StreamOptions | undefined,
     ) => {
       seenSessionIds.push(options?.sessionId);

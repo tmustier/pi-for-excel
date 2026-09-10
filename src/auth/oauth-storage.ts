@@ -1,4 +1,4 @@
-function isAuthOauthStoragePayloadShape(value: DynamicValue): value is DynamicObject {
+function isAuthOauthStoragePayloadShape(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -14,12 +14,12 @@ function isAuthOauthStoragePayloadShape(value: DynamicValue): value is DynamicOb
 
 import type { OAuthCredentials } from "@earendil-works/pi-ai";
 export interface OAuthSettingsStore {
-  get(key: string): Promise<DynamicValue>;
-  set(key: string, value: DynamicValue): Promise<void>;
+  get(key: string): Promise<unknown>;
+  set(key: string, value: unknown): Promise<void>;
   delete(key: string): Promise<void>;
 }
 
-export function isOAuthCredentials(value: DynamicValue): value is OAuthCredentials {
+export function isOAuthCredentials(value: unknown): value is OAuthCredentials {
   return (
     isAuthOauthStoragePayloadShape(value) &&
     typeof value.refresh === "string" &&
@@ -40,7 +40,7 @@ export async function loadOAuthCredentials(
   providerId: string,
 ): Promise<OAuthCredentials | null> {
   try {
-    const stored: DynamicValue = await settings.get(oauthSettingsKey(providerId));
+    const stored: unknown = await settings.get(oauthSettingsKey(providerId));
     return isOAuthCredentials(stored) ? stored : null;
   } catch {
     return null;

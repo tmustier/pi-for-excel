@@ -77,7 +77,7 @@ void test("python_run validates params before checking backend", async () => {
 });
 
 void test("python_run passes input_json to Pyodide", async () => {
-  let receivedRequest: DynamicValue = null;
+  let receivedRequest: unknown = null;
 
   const tool = createPythonRunTool({
     getBridgeConfig: () => Promise.resolve(null),
@@ -95,7 +95,7 @@ void test("python_run passes input_json to Pyodide", async () => {
 
   assert.ok(receivedRequest);
   assert.equal(
-    (receivedRequest as DynamicObject).input_json,
+    (receivedRequest as Record<string, unknown>).input_json,
     '{"values": [1, 2, 3]}',
   );
 });

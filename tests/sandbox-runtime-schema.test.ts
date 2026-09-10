@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { Type } from "@sinclair/typebox";
+import { Type } from "typebox";
 
 import { normalizeSandboxToolParameters } from "../src/extensions/sandbox-runtime.ts";
 import {
@@ -18,7 +18,7 @@ void test("normalizeSandboxToolParameters keeps TypeBox schema unchanged", () =>
 });
 
 void test("sandbox LLM dispatch rejects malformed declared fields before service execution", async () => {
-  const invalidRequests: DynamicValue[] = [
+  const invalidRequests: unknown[] = [
     { messages: [], maxTokens: Number.NaN },
     { messages: [], maxTokens: -1 },
     { messages: [], maxTokens: 1.5 },
@@ -45,7 +45,7 @@ void test("sandbox LLM dispatch rejects malformed declared fields before service
 });
 
 void test("sandbox LLM dispatch forwards a valid normalized request to the service", async () => {
-  let received: DynamicValue = null;
+  let received: unknown = null;
   const result = await dispatchSandboxLlmCompletion(
     {
       request: {

@@ -22,13 +22,13 @@ import {
 } from "../src/connections/store.ts";
 
 class MemorySettingsStore implements WebSearchConfigStore {
-  protected readonly values = new Map<string, DynamicValue>();
+  protected readonly values = new Map<string, unknown>();
 
-  get(key: string): Promise<DynamicValue> {
+  get(key: string): Promise<unknown> {
     return Promise.resolve(this.values.has(key) ? this.values.get(key) ?? null : null);
   }
 
-  set(key: string, value: DynamicValue): Promise<void> {
+  set(key: string, value: unknown): Promise<void> {
     this.values.set(key, value);
     return Promise.resolve();
   }
@@ -47,7 +47,7 @@ class TransientReadSettings extends MemorySettingsStore {
     this.failNextRead = true;
   }
 
-  override get(key: string): Promise<DynamicValue> {
+  override get(key: string): Promise<unknown> {
     if (this.failNextRead) {
       this.failNextRead = false;
       return Promise.reject(new Error("transient web-search read failure"));

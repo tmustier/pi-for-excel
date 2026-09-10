@@ -18,8 +18,8 @@ void test("captureValueDataRange short-circuits oversized captures before loadin
     address: "Sheet1!A1:CV201",
     rowCount: 201,
     columnCount: 100,
-    values: [] as DynamicValue[][],
-    formulas: [] as DynamicValue[][],
+    values: [] as unknown[][],
+    formulas: [] as unknown[][],
     load: (propertyNames: string | string[]): void => {
       loadCalls.push(propertyNames);
     },
@@ -30,7 +30,7 @@ void test("captureValueDataRange short-circuits oversized captures before loadin
   };
 
   const context = {
-    sync: (): Promise<DynamicValue> => Promise.resolve(),
+    sync: (): Promise<unknown> => Promise.resolve(),
   };
 
   const capture = await captureValueDataRange(context, targetRange, MAX_RECOVERY_CELLS);
@@ -56,7 +56,7 @@ void test("captureValueDataRange captures in-range value/formula payloads", asyn
   };
 
   const context = {
-    sync: (): Promise<DynamicValue> => Promise.resolve(),
+    sync: (): Promise<unknown> => Promise.resolve(),
   };
 
   const capture = await captureValueDataRange(context, targetRange, MAX_RECOVERY_CELLS);

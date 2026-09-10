@@ -17,10 +17,10 @@ const SAMPLE_LAYOUT: WorkbookTabLayout = {
 };
 
 class StartupLayoutSettings {
-  private readonly values = new Map<string, DynamicValue>();
+  private readonly values = new Map<string, unknown>();
   private failRead = false;
 
-  get(key: string): Promise<DynamicValue> {
+  get(key: string): Promise<unknown> {
     if (this.failRead) {
       this.failRead = false;
       return Promise.reject(new Error("seeded layout read failure"));
@@ -28,7 +28,7 @@ class StartupLayoutSettings {
     return Promise.resolve(this.values.get(key) ?? null);
   }
 
-  set(key: string, value: DynamicValue): Promise<void> {
+  set(key: string, value: unknown): Promise<void> {
     this.values.set(key, value);
     return Promise.resolve();
   }
@@ -38,12 +38,12 @@ class StartupLayoutSettings {
     return Promise.resolve();
   }
 
-  seed(value: DynamicValue, failRead = false): void {
+  seed(value: unknown, failRead = false): void {
     this.values.set(workbookTabLayoutKey("wb-1"), value);
     this.failRead = failRead;
   }
 
-  stored(): DynamicValue {
+  stored(): unknown {
     return this.values.get(workbookTabLayoutKey("wb-1")) ?? null;
   }
 }

@@ -5,7 +5,8 @@
  * Handles threaded replies via the Excel CommentReply API.
  */
 
-import { Type, type Static } from "@sinclair/typebox";
+import { Type, type Static } from "typebox";
+import { StringEnum } from "@earendil-works/pi-ai";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { excelRun, getRange, isCellInRange, qualifiedAddress } from "../excel/helpers.js";
 import {
@@ -30,12 +31,6 @@ import type { MutationFinalizeDependencies } from "./mutation/types.js";
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
-function StringEnum<T extends string[]>(values: [...T], opts?: { description?: string }) {
-  return Type.Union(
-    values.map((value) => Type.Literal(value)),
-    opts,
-  );
-}
 /** Strip sheet prefix from an address (e.g. "Sheet1!A1" → "A1"). */
 function stripSheet(address: string): string {
   const bangIndex = address.indexOf("!");
@@ -49,9 +44,11 @@ function requireContent(content: string | undefined, action: string): string {
   return content;
 }
 
+const COMMENT_ACTIONS = ["read", "add", "update", "reply", "delete", "resolve", "reopen"] as const;
+
 const schema = Type.Object({
   action: StringEnum(
-    ["read", "add", "update", "reply", "delete", "resolve", "reopen"],
+    COMMENT_ACTIONS,
     {
       description:
         "Comment operation: read (list comments in range), add (new comment on cell), " +

@@ -2,7 +2,7 @@
  * skills — list/read bundled Agent Skills (SKILL.md), with optional external discovery.
  */
 
-import { Type, type Static } from "@sinclair/typebox";
+import { Type, type Static } from "typebox";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 
 import { filterAgentSkillsByEnabledState } from "../skills/activation-store.js";

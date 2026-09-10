@@ -1,4 +1,4 @@
-function isCommandsExtensionLoaderPayloadShape(value: DynamicValue): value is DynamicObject {
+function isCommandsExtensionLoaderPayloadShape(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -14,19 +14,19 @@ export interface LoadedExtensionHandle {
   deactivate: () => Promise<void>;
 }
 
-function isExtensionActivator<TApi>(value: DynamicValue): value is ExtensionActivator<TApi> {
+function isExtensionActivator<TApi>(value: unknown): value is ExtensionActivator<TApi> {
   return typeof value === "function";
 }
 
-function isExtensionDeactivator(value: DynamicValue): value is ExtensionDeactivator {
+function isExtensionDeactivator(value: unknown): value is ExtensionDeactivator {
   return typeof value === "function";
 }
 
-function isExtensionCleanup(value: DynamicValue): value is ExtensionCleanup {
+function isExtensionCleanup(value: unknown): value is ExtensionCleanup {
   return typeof value === "function";
 }
 
-export function getExtensionActivator<TApi>(mod: DynamicValue): ExtensionActivator<TApi> | null {
+export function getExtensionActivator<TApi>(mod: unknown): ExtensionActivator<TApi> | null {
   if (!isCommandsExtensionLoaderPayloadShape(mod)) return null;
 
   const activate = mod.activate;
@@ -42,21 +42,21 @@ export function getExtensionActivator<TApi>(mod: DynamicValue): ExtensionActivat
   return null;
 }
 
-export function getExtensionDeactivator(mod: DynamicValue): ExtensionDeactivator | null {
+export function getExtensionDeactivator(mod: unknown): ExtensionDeactivator | null {
   if (!isCommandsExtensionLoaderPayloadShape(mod)) return null;
 
   const deactivate = mod.deactivate;
   return isExtensionDeactivator(deactivate) ? deactivate : null;
 }
 
-function toErrorMessage(error: DynamicValue): string {
+function toErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message.trim().length > 0) {
     return error.message;
   }
   return String(error);
 }
 
-export function collectActivationCleanups(result: DynamicValue): ExtensionCleanup[] {
+export function collectActivationCleanups(result: unknown): ExtensionCleanup[] {
   if (typeof result === "undefined") {
     return [];
   }

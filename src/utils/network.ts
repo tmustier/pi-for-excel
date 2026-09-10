@@ -1,4 +1,4 @@
-export function isAbortError(error: DynamicValue): boolean {
+export function isAbortError(error: unknown): boolean {
   if (error instanceof DOMException) {
     return error.name === "AbortError";
   }
@@ -43,7 +43,7 @@ export async function runWithTimeoutAbort<TResult>(args: {
     }
   }
 
-  let rejectAbort: ((reason?: DynamicValue) => void) | null = null;
+  let rejectAbort: ((reason?: unknown) => void) | null = null;
   const abortPromise = new Promise<never>((_resolve, reject) => {
     rejectAbort = reject;
   });

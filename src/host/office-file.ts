@@ -1,17 +1,17 @@
 /** Typed boundary adapter for the Office document file capability. */
 
 export interface OfficeAsyncErrorLike {
-  message?: DynamicValue;
+  message?: unknown;
 }
 
 export interface OfficeAsyncResultLike<T> {
-  status?: DynamicValue;
+  status?: unknown;
   value?: T;
   error?: OfficeAsyncErrorLike;
 }
 
 export interface OfficeSliceLike {
-  data: DynamicValue;
+  data: unknown;
 }
 
 export interface OfficeFileLike {
@@ -29,11 +29,11 @@ interface OfficeDocumentFileBoundary {
 }
 
 interface OfficeContextFileBoundary {
-  document?: DynamicValue;
+  document?: unknown;
 }
 
 interface OfficeFileBoundary {
-  context?: DynamicValue;
+  context?: unknown;
 }
 
 export interface OfficeDocumentFileAdapter {
@@ -44,7 +44,7 @@ export interface OfficeDocumentFileAdapter {
   ) => void;
 }
 
-function parseOfficeDocumentFileAdapter(rawOffice: DynamicValue): OfficeDocumentFileAdapter | null {
+function parseOfficeDocumentFileAdapter(rawOffice: unknown): OfficeDocumentFileAdapter | null {
   if (typeof rawOffice !== "object" || rawOffice === null || Array.isArray(rawOffice)) return null;
   const office = rawOffice as OfficeFileBoundary;
 
@@ -70,6 +70,6 @@ function parseOfficeDocumentFileAdapter(rawOffice: DynamicValue): OfficeDocument
 }
 
 export function getOfficeDocumentFileAdapter(): OfficeDocumentFileAdapter | null {
-  const officeRoot: DynamicValue = typeof Office === "undefined" ? undefined : Office;
+  const officeRoot: unknown = typeof Office === "undefined" ? undefined : Office;
   return parseOfficeDocumentFileAdapter(officeRoot);
 }

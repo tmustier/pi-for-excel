@@ -60,7 +60,7 @@ type SupportedToolName = UiToolName;
 
 /* ── Helpers ────────────────────────────────────────────────── */
 
-function formatParamsJson(params: DynamicValue): string {
+function formatParamsJson(params: unknown): string {
   if (params === undefined) return "";
 
   try {
@@ -77,20 +77,20 @@ function formatParamsJson(params: DynamicValue): string {
   }
 }
 
-function safeParseParams(params: DynamicValue): DynamicObject {
+function safeParseParams(params: unknown): Record<string, unknown> {
   if (!params) return {};
-  if (typeof params === "object" && params !== null) return params as DynamicObject;
+  if (typeof params === "object" && params !== null) return params as Record<string, unknown>;
   if (typeof params === "string") {
     try {
-      const parsed: DynamicValue = JSON.parse(params);
-      if (typeof parsed === "object" && parsed !== null) return parsed as DynamicObject;
+      const parsed: unknown = JSON.parse(params);
+      if (typeof parsed === "object" && parsed !== null) return parsed as Record<string, unknown>;
       return {};
     } catch { return {}; }
   }
   return {};
 }
 
-function splitToolResultContent(result: ToolResultMessage<DynamicValue>): {
+function splitToolResultContent(result: ToolResultMessage<unknown>): {
   text: string;
   images: ImageContent[];
 } {
@@ -109,7 +109,7 @@ function tryFormatJsonOutput(text: string): { isJson: boolean; formatted: string
   if (!trimmed) return { isJson: false, formatted: text };
 
   try {
-    const parsed: DynamicValue = JSON.parse(trimmed);
+    const parsed: unknown = JSON.parse(trimmed);
     return { isJson: true, formatted: JSON.stringify(parsed, null, 2) };
   } catch {
     return { isJson: false, formatted: text };
@@ -232,7 +232,7 @@ function renderImages(images: ImageContent[]): TemplateResult {
   `;
 }
 
-function getWorkbookCellChanges(details: DynamicValue): WriteCellsDetails["changes"] | undefined {
+function getWorkbookCellChanges(details: unknown): WriteCellsDetails["changes"] | undefined {
   if (isWriteCellsDetails(details)) {
     return details.changes;
   }
@@ -252,7 +252,7 @@ function formatDiffValue(value: string): string {
   return value.length > 0 ? value : "∅";
 }
 
-function renderWorkbookCellDiff(details: DynamicValue): TemplateResult {
+function renderWorkbookCellDiff(details: unknown): TemplateResult {
   const changes = getWorkbookCellChanges(details);
   if (!changes || changes.changedCount <= 0) return html``;
 
@@ -296,7 +296,7 @@ function renderWorkbookCellDiff(details: DynamicValue): TemplateResult {
   `;
 }
 
-function renderChartImageDetails(details: DynamicValue, hasImageContent: boolean): TemplateResult {
+function renderChartImageDetails(details: unknown, hasImageContent: boolean): TemplateResult {
   if (hasImageContent || !isChartsDetails(details) || !details.image) return html``;
 
   const src = `data:${details.image.mimeType};base64,${details.image.base64}`;
@@ -309,7 +309,7 @@ function renderChartImageDetails(details: DynamicValue, hasImageContent: boolean
   `;
 }
 
-function renderExplainFormulaDetails(details: DynamicValue): TemplateResult | null {
+function renderExplainFormulaDetails(details: unknown): TemplateResult | null {
   if (!isExplainFormulaDetails(details)) return null;
 
   if (!details.hasFormula) {
@@ -343,7 +343,7 @@ function renderExplainFormulaDetails(details: DynamicValue): TemplateResult | nu
   `;
 }
 
-function optionalString(value: DynamicValue): string | undefined {
+function optionalString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim().length > 0 ? value : undefined;
 }
 
@@ -385,9 +385,9 @@ function extractResultError(resultText: string | undefined): string | undefined 
 
 function buildChangeExplanationInputForTool(
   toolName: SupportedToolName,
-  params: DynamicValue,
+  params: unknown,
   resultText: string | undefined,
-  details: DynamicValue,
+  details: unknown,
 ): ChangeExplanationInput | null {
   if (getToolExecutionMode(toolName, params) !== "mutate") return null;
 
@@ -539,9 +539,9 @@ function renderCitations(citations: readonly string[]): TemplateResult {
 
 function renderChangeExplanationSection(
   toolName: SupportedToolName,
-  params: DynamicValue,
+  params: unknown,
   resultText: string | undefined,
-  details: DynamicValue,
+  details: unknown,
 ): TemplateResult {
   const input = buildChangeExplanationInputForTool(toolName, params, resultText, details);
   if (!input) return html``;
@@ -687,7 +687,7 @@ function withRecoveryBadge(base: string, recovery: RecoveryCheckpointDetails | u
   return base.length > 0 ? `${base}, no backup` : " — no backup";
 }
 
-function recoveryBadgeForDetails(details: DynamicValue): string {
+function recoveryBadgeForDetails(details: unknown): string {
   if (isFormatCellsDetails(details)) {
     return withRecoveryBadge("", details.recovery);
   }
@@ -719,7 +719,7 @@ function recoveryBadgeForDetails(details: DynamicValue): string {
 function badge(
   toolName: SupportedToolName,
   resultText: string | undefined,
-  details: DynamicValue,
+  details: unknown,
 ): string {
   if (toolName === "write_cells" && isWriteCellsDetails(details)) {
     if (details.blocked) return " — blocked";
@@ -777,9 +777,9 @@ function splitFirstWord(text: string): ToolDesc {
 /** Structured description: bold action + normal-weight detail. */
 function describeToolCall(
   toolName: SupportedToolName,
-  params: DynamicValue,
+  params: unknown,
   resultText: string | undefined,
-  details: DynamicValue,
+  details: unknown,
 ): ToolDesc {
   const p = safeParseParams(params);
   const range = p.range as string | undefined;
@@ -1121,11 +1121,11 @@ function describeToolCall(
 
 /* ── Renderer ───────────────────────────────────────────────── */
 
-function createExcelMarkdownRenderer(toolName: SupportedToolName): ToolRenderer<DynamicValue, DynamicValue> {
+function createExcelMarkdownRenderer(toolName: SupportedToolName): ToolRenderer<unknown, unknown> {
   return {
     render(
-      params: DynamicValue,
-      result: ToolResultMessage<DynamicValue> | undefined,
+      params: unknown,
+      result: ToolResultMessage<unknown> | undefined,
       isStreaming?: boolean,
     ): ToolRenderResult {
       const state: ToolState = result
@@ -1175,7 +1175,7 @@ function createExcelMarkdownRenderer(toolName: SupportedToolName): ToolRenderer<
         const formulaExplanation = renderExplainFormulaDetails(result.details);
 
         // Search setup card: show inline guided setup when web_search fails
-        const resultDetails: DynamicValue = result.details;
+        const resultDetails: unknown = result.details;
         const searchSetupDetails = shouldShowSearchSetupCard(resultDetails) ? resultDetails : null;
         const initSearchSetup = (el: Element | undefined): void => {
           if (el instanceof HTMLElement && searchSetupDetails) {

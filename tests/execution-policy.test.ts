@@ -6,7 +6,7 @@ import { getToolContextImpact, getToolExecutionMode } from "../src/tools/executi
 void test("execution policy classifies every tool and action", () => {
   const rows: Array<{
     name: string;
-    params: DynamicValue;
+    params: unknown;
     mode: "read" | "mutate";
     impact: "none" | "content" | "structure";
   }> = [

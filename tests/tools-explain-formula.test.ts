@@ -3,7 +3,7 @@ import { test } from "node:test";
 
 import { createExplainFormulaTool } from "../src/tools/explain-formula.ts";
 
-function createRange(address: string, value: DynamicValue, formula: DynamicValue) {
+function createRange(address: string, value: unknown, formula: unknown) {
   return {
     address,
     values: [[value]],
@@ -40,7 +40,7 @@ async function withFormulaWorkbook<T>(action: () => Promise<T>): Promise<T> {
   const hadExcel = Reflect.has(globalThis, "Excel");
   const previousExcel = Reflect.get(globalThis, "Excel");
   Reflect.set(globalThis, "Excel", {
-    run: <TResult>(callback: (hostContext: DynamicValue) => Promise<TResult>): Promise<TResult> =>
+    run: <TResult>(callback: (hostContext: unknown) => Promise<TResult>): Promise<TResult> =>
       callback(context),
   });
 

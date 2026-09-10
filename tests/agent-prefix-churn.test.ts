@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { Type } from "@sinclair/typebox";
+import { Type } from "typebox";
 import { createModels, fauxAssistantMessage, fauxProvider, type Context, type Model, type Api } from "@earendil-works/pi-ai";
 
 import { createOfficeStreamFn, getPayloadSnapshots } from "../src/auth/stream-proxy.ts";
@@ -16,8 +16,8 @@ function context(systemPrompt: string, includeTool: boolean): Context {
 }
 
 void test("agent request diagnostics report stable prefixes and model, prompt, and tool changes per session", async () => {
-  const priorDocument = Reflect.get(globalThis, "document") as DynamicValue;
-  const priorWindow = Reflect.get(globalThis, "window") as DynamicValue;
+  const priorDocument = Reflect.get(globalThis, "document") as unknown;
+  const priorWindow = Reflect.get(globalThis, "window") as unknown;
   Reflect.set(globalThis, "document", new EventTarget());
   const values = new Map<string, string>();
   Reflect.set(globalThis, "window", { localStorage: {

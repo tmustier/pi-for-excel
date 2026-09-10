@@ -19,8 +19,9 @@ Deterministic checks enforce the sharpest rules:
 
 - No explicit `any` or `as any`.
 - No non-null assertions.
-- No direct `unknown` syntax except the sanctioned boundary marker in `src/types/dynamic-values.d.ts`.
-- Small parser primitives are allowed, but an object check alone does not establish a domain contract. Write concrete parsers for domain shapes.
+- `unknown` is the honest type for a raw external value and is allowed only at the seam: the line that decodes JSON, reads a host object, receives a bridge or sandbox message, or catches a thrown value. The next line parses it into a concrete domain type; `unknown` does not travel inward. (The former `DynamicValue`/`DynamicObject` aliases were `unknown` under another name and are gone.)
+- Do not add generic object/record guards (`isRecord`, `isPlainObject`, `is…PayloadShape`); an object check alone does not establish a domain contract. Parse the domain shape, ideally with a TypeBox schema and `Static<>` so the type and the check cannot drift.
+- Burn-down: `npm run check:unknown-burndown` runs the anti-slop `no-unknown-*` rules and fails if the count of `unknown` parameters/returns/aliases in `src` rises above the baseline in `scripts/check-unknown-burndown.mjs` (461 when the aliases were deleted on 2026-09-10; `rg -c '\\bunknown\\b' src` gave 1,071 mentions and 233 hand-written guards). Lower the baseline as you go. The per-area plan is in `docs/clean-base-followups.md`.
 - `@ts-ignore` and `@ts-nocheck` are banned. `@ts-expect-error` requires a real explanation.
 - ESLint disable comments must name specific rules and explain the local safety/interop invariant. Do not add blanket safety comments.
 - Top-level exported APIs and public methods should expose clear contracts. Add return types when inference obscures the contract for future agents.
@@ -28,13 +29,14 @@ Deterministic checks enforce the sharpest rules:
 Prefer:
 
 ```ts
-function parseToolPayload(raw: DynamicValue): ToolPayload {
-  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
-    throw new Error("tool payload must be an object");
+const toolPayloadSchema = Type.Object({ action: Type.String() });
+type ToolPayload = Static<typeof toolPayloadSchema>;
+
+function parseToolPayload(raw: unknown): ToolPayload {
+  if (!Value.Check(toolPayloadSchema, raw)) {
+    throw new Error("tool payload must be an object with a string action");
   }
-  const payload = raw as DynamicObject;
-  // refine concrete fields here
-  return { action: String(payload.action) };
+  return raw;
 }
 ```
 
@@ -51,7 +53,7 @@ Boundary input includes JSON, `Response.json()`, Office.js/WPS host objects, bri
 
 Rules:
 
-- Decoded JSON/fetch payloads first land as `DynamicValue`, then a concrete parser/refiner returns the app type.
+- Decoded JSON/fetch payloads first land as `unknown` (or `JsonValue` when the protocol is JSON), then a concrete parser returns the app type.
 - Do not cast `JSON.parse(...)` or `response.json()` directly to app/domain/test types. The `check:boundary-casts` script enforces this.
 - A successful parse returns the refined value; do not validate and then keep passing the unrefined object.
 - Keep protocol DTOs, persistence records, and domain/service values distinct even when their shapes look similar.
@@ -110,7 +112,7 @@ The repo enables both `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes
 - Indexed access must be proven with bounds/key checks, iteration patterns (`entries`, `for...of`), or domain-specific fallbacks. Do not silence it with non-null assertions.
 - Optional fields should be omitted when absent. Only model `prop: T | undefined` when the runtime contract intentionally distinguishes “present with undefined” from “not present”.
 
-`ts-reset` is not currently used: this repo instead forces decoded JSON/fetch payloads through the explicit `DynamicValue` boundary and deterministic boundary-cast checks.
+`ts-reset` is not currently used: this repo instead forces decoded JSON/fetch payloads through an explicit `unknown` boundary and deterministic boundary-cast checks.
 
 ## PR checklist
 
@@ -119,5 +121,5 @@ Before opening a PR, report:
 - Which standards surfaces were touched.
 - Which deterministic checks/tests were run.
 - Any lint/type/test warnings left intentionally.
-- Any boundary values still represented as `DynamicValue` and why they cannot be parsed closer to the seam.
+- Any `unknown` that travels past the seam and why it cannot be parsed closer to it.
 - Any safety helper usage (`setSafeInnerHTML`, lint disable, type assertion) and the local invariant that makes it safe.

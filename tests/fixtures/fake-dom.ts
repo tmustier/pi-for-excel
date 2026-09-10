@@ -2,14 +2,14 @@
 import assert from "node:assert/strict";
 
 type ConstructorSnapshot = {
-  Node?: DynamicValue;
-  Element?: DynamicValue;
-  HTMLElement?: DynamicValue;
-  HTMLInputElement?: DynamicValue;
-  HTMLTextAreaElement?: DynamicValue;
-  HTMLSelectElement?: DynamicValue;
-  CustomEvent?: DynamicValue;
-  document?: DynamicValue;
+  Node?: unknown;
+  Element?: unknown;
+  HTMLElement?: unknown;
+  HTMLInputElement?: unknown;
+  HTMLTextAreaElement?: unknown;
+  HTMLSelectElement?: unknown;
+  CustomEvent?: unknown;
+  document?: unknown;
 };
 
 class FakeNode extends EventTarget {
@@ -139,7 +139,7 @@ class FakeElement extends FakeNode {
     const matches: T[] = [];
     const visit = (node: FakeElement) => {
       if (node.tagName === "BUTTON") {
-        matches.push(node as DynamicValue as T);
+        matches.push(node as unknown as T);
       }
 
       for (const child of node.children) {
@@ -159,7 +159,7 @@ class FakeElement extends FakeNode {
 
     for (const part of selectors) {
       if (matchesSelector(this, part)) {
-        return this as DynamicValue as T;
+        return this as unknown as T;
       }
     }
 
@@ -167,7 +167,7 @@ class FakeElement extends FakeNode {
     while (parent) {
       for (const part of selectors) {
         if (matchesSelector(parent, part)) {
-          return parent as DynamicValue as T;
+          return parent as unknown as T;
         }
       }
 
@@ -221,9 +221,9 @@ class FakeHTMLSelectElement extends FakeHTMLElement {
 }
 
 class FakeCustomEvent extends Event {
-  readonly detail: DynamicValue;
+  readonly detail: unknown;
 
-  constructor(type: string, init?: CustomEventInit<DynamicValue>) {
+  constructor(type: string, init?: CustomEventInit<unknown>) {
     super(type, init);
     this.detail = init?.detail;
   }
@@ -240,18 +240,18 @@ class FakeDocument extends EventTarget {
   createElement(tagName: string): Element {
     const normalized = tagName.trim().toLowerCase();
     if (normalized === "input") {
-      return new FakeHTMLInputElement() as DynamicValue as Element;
+      return new FakeHTMLInputElement() as unknown as Element;
     }
 
     if (normalized === "textarea") {
-      return new FakeHTMLTextAreaElement() as DynamicValue as Element;
+      return new FakeHTMLTextAreaElement() as unknown as Element;
     }
 
     if (normalized === "select") {
-      return new FakeHTMLSelectElement() as DynamicValue as Element;
+      return new FakeHTMLSelectElement() as unknown as Element;
     }
 
-    return new FakeHTMLElement(normalized) as DynamicValue as Element;
+    return new FakeHTMLElement(normalized) as unknown as Element;
   }
 
   createElementNS(_namespace: string | null, qualifiedName: string): Element {
@@ -273,7 +273,7 @@ class FakeDocument extends EventTarget {
     };
 
     const found = visit(this.body);
-    return found as DynamicValue as HTMLElement | null;
+    return found as unknown as HTMLElement | null;
   }
 
   querySelectorAll(selector: string): Element[] {
@@ -281,7 +281,7 @@ class FakeDocument extends EventTarget {
 
     const visit = (node: FakeElement): void => {
       if (matchesSelector(node, selector)) {
-        matches.push(node as DynamicValue as Element);
+        matches.push(node as unknown as Element);
       }
 
       for (const child of node.children) {
@@ -357,7 +357,7 @@ export function installFakeDom(): FakeDomHandle {
   Reflect.set(globalThis, "document", fakeDocument);
 
   return {
-    document: fakeDocument as DynamicValue as Document,
+    document: fakeDocument as unknown as Document,
     restore: () => {
       restoreGlobal("Node", previous.Node);
       restoreGlobal("Element", previous.Element);
@@ -371,7 +371,7 @@ export function installFakeDom(): FakeDomHandle {
   };
 }
 
-function restoreGlobal(key: string, value: DynamicValue): void {
+function restoreGlobal(key: string, value: unknown): void {
   if (value === undefined) {
     const deleted = Reflect.deleteProperty(globalThis, key);
     assert.equal(deleted, true);

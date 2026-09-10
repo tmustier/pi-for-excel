@@ -1020,7 +1020,7 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
 
     void workspace.connectNativeDirectory({
       audit: DIALOG_AUDIT_CONTEXT,
-    }).catch((error: DynamicValue) => {
+    }).catch((error: unknown) => {
       showToast(t("files-dialog.toast.connectFolderFailed", { error: getErrorMessage(error) }));
     });
   });
@@ -1040,7 +1040,7 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
       .then((count) => {
         showToast(t("files-dialog.toast.imported", { count, plural: count === 1 ? "" : "s" }));
       })
-      .catch((error: DynamicValue) => {
+      .catch((error: unknown) => {
         showToast(t("files-dialog.toast.uploadFailed", { error: getErrorMessage(error) }));
       });
   });

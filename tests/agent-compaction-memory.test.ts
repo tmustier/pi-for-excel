@@ -16,7 +16,7 @@ class ElementStub {
     toggle: (_name: string, _enabled?: boolean): boolean => false,
     contains: (_name: string): boolean => false,
   };
-  append(..._nodes: DynamicValue[]): void {}
+  append(..._nodes: unknown[]): void {}
   appendChild<T>(node: T): T { return node; }
   setAttribute(_name: string, _value: string): void {}
   addEventListener(_name: string, _listener: () => void): void {}
@@ -28,7 +28,7 @@ function user(content: string, timestamp: number): AgentMessage {
 }
 
 async function captureCompactionRequest(messages: AgentMessage[]): Promise<string> {
-  const priorDocument = Reflect.get(globalThis, "document") as DynamicValue;
+  const priorDocument = Reflect.get(globalThis, "document") as unknown;
   Reflect.set(globalThis, "document", {
     body: new ElementStub(),
     createElement: () => new ElementStub(),

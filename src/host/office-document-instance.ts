@@ -30,7 +30,7 @@ function defaultGetSettings(): OfficeDocumentSettingsLike | null {
   return {
     get: (name) => {
       // Settings values are untyped in Office.js; only string tokens are accepted here.
-      const raw: DynamicValue = settings.get(name);
+      const raw: unknown = settings.get(name);
       return typeof raw === "string" ? raw : undefined;
     },
     set: (name, value) => settings.set(name, value),

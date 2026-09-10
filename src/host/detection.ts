@@ -3,18 +3,18 @@
 import type { SpreadsheetHostKind } from "./types.js";
 
 interface HostGlobalScope {
-  readonly wps?: DynamicValue;
-  readonly Application?: DynamicValue;
-  readonly Office?: DynamicValue;
+  readonly wps?: unknown;
+  readonly Application?: unknown;
+  readonly Office?: unknown;
 }
 
-function getGlobalMember(scope: object, key: keyof HostGlobalScope): DynamicValue {
+function getGlobalMember(scope: object, key: keyof HostGlobalScope): unknown {
   // Every object is safe to read through this optional, read-only host-probe shape.
   const hostGlobals = scope as HostGlobalScope;
   return hostGlobals[key];
 }
 
-function hasObjectOrFunction(value: DynamicValue): value is object {
+function hasObjectOrFunction(value: unknown): value is object {
   return (typeof value === "object" && value !== null) || typeof value === "function";
 }
 
@@ -30,7 +30,7 @@ const WPS_ET_APPLICATION_MEMBERS = [
   "CreateTaskPane",
 ] as const;
 
-function readMember(owner: object, key: string): DynamicValue {
+function readMember(owner: object, key: string): unknown {
   try {
     return Reflect.get(owner, key);
   } catch {
@@ -39,12 +39,12 @@ function readMember(owner: object, key: string): DynamicValue {
   }
 }
 
-function looksLikeWpsEtApplication(value: DynamicValue): boolean {
+function looksLikeWpsEtApplication(value: unknown): boolean {
   if (!hasObjectOrFunction(value)) return false;
   return WPS_ET_APPLICATION_MEMBERS.some((key) => readMember(value, key) !== undefined);
 }
 
-function looksLikeWpsPluginGlobal(value: DynamicValue): boolean {
+function looksLikeWpsPluginGlobal(value: unknown): boolean {
   if (!hasObjectOrFunction(value)) return false;
   if (typeof readMember(value, "EtApplication") === "function") return true;
   if (readMember(value, "PluginStorage") !== undefined) return true;

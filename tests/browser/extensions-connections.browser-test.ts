@@ -15,11 +15,11 @@ after(async () => {
   await env.close();
 });
 
-function readInstalledExtensionId(raw: DynamicValue): string | null {
+function readInstalledExtensionId(raw: unknown): string | null {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return null;
-  const envelope = raw as DynamicObject;
+  const envelope = raw as Record<string, unknown>;
   if (typeof envelope.result !== "object" || envelope.result === null || Array.isArray(envelope.result)) return null;
-  const result = envelope.result as DynamicObject;
+  const result = envelope.result as Record<string, unknown>;
   return typeof result.extensionId === "string" ? result.extensionId : null;
 }
 
@@ -69,7 +69,7 @@ async function openConnectionsWithExtension(code?: string, grantConnections = fa
           }),
         });
       } else if (url.pathname === "/client/result") {
-        const raw: DynamicValue = JSON.parse(route.request().postData() ?? "{}");
+        const raw: unknown = JSON.parse(route.request().postData() ?? "{}");
         installedExtensionId = installedExtensionId ?? readInstalledExtensionId(raw);
         if (!grantConnections || capabilitySent) resolveInstalled?.();
         await route.fulfill({ contentType: "application/json", body: JSON.stringify({ ok: true }) });

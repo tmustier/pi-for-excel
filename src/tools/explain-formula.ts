@@ -2,7 +2,7 @@
  * explain_formula — provide a concise natural-language explanation for a formula cell.
  */
 
-import { Type, type Static } from "@sinclair/typebox";
+import { Type, type Static } from "typebox";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { cellAddress, excelRun, getRange, parseCell, parseRangeRef, qualifiedAddress } from "../excel/helpers.js";
 import { getErrorMessage } from "../utils/errors.js";
@@ -100,7 +100,7 @@ export function createExplainFormulaTool(): AgentTool<typeof schema, ExplainForm
 
           const resolvedCell = qualifiedAddress(sheet.name, range.address);
           const valuePreview = previewCellValue(range.values[0]?.[0]);
-          const rawFormula: DynamicValue = range.formulas[0]?.[0];
+          const rawFormula: unknown = range.formulas[0]?.[0];
           const formula = typeof rawFormula === "string" && rawFormula.startsWith("=")
             ? rawFormula
             : undefined;
@@ -139,7 +139,7 @@ export function createExplainFormulaTool(): AgentTool<typeof schema, ExplainForm
 
           const referenceDetails: ExplainFormulaReferenceDetail[] = loadedReferences.map((reference) => {
             const preview = previewCellValue(reference.range.values[0]?.[0]);
-            const rawRefFormula: DynamicValue = reference.range.formulas[0]?.[0];
+            const rawRefFormula: unknown = reference.range.formulas[0]?.[0];
             const formulaPreview = typeof rawRefFormula === "string" && rawRefFormula.startsWith("=")
               ? rawRefFormula
               : undefined;

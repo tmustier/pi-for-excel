@@ -1,4 +1,4 @@
-function isHostOfficeThemePayloadShape(value: DynamicValue): value is DynamicObject {
+function isHostOfficeThemePayloadShape(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -62,7 +62,7 @@ function isDarkColor(rgb: RgbColor): boolean {
   return relativeLuminance(rgb) < 0.35;
 }
 
-function resolveThemeDarkFromColor(input: DynamicValue): boolean | null {
+function resolveThemeDarkFromColor(input: unknown): boolean | null {
   if (typeof input !== "string") {
     return null;
   }
@@ -76,7 +76,7 @@ function resolveThemeDarkFromColor(input: DynamicValue): boolean | null {
 }
 
 export function resolveOfficeThemeDark(): boolean | null {
-  const officeRoot: DynamicValue = typeof Office === "undefined" ? undefined : Office;
+  const officeRoot: unknown = typeof Office === "undefined" ? undefined : Office;
   if (!isHostOfficeThemePayloadShape(officeRoot)) {
     return null;
   }

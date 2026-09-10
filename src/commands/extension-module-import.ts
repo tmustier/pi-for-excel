@@ -3,18 +3,18 @@ import {
   isRemoteExtensionOptIn,
   type ExtensionSourceKind,
 } from "./extension-source-policy.js";
-function isCommandsExtensionModuleImportPayloadShape(value: DynamicValue): value is DynamicObject {
+function isCommandsExtensionModuleImportPayloadShape(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 
-export type ExtensionModuleImporter = () => Promise<DynamicValue>;
+export type ExtensionModuleImporter = () => Promise<unknown>;
 
-function isExtensionModuleImporter(value: DynamicValue): value is ExtensionModuleImporter {
+function isExtensionModuleImporter(value: unknown): value is ExtensionModuleImporter {
   return typeof value === "function";
 }
 
-function readBundledImportersFromGlob(): DynamicValue {
+function readBundledImportersFromGlob(): unknown {
   try {
     return import.meta.glob("../extensions/*.{ts,js}");
   } catch {
@@ -22,7 +22,7 @@ function readBundledImportersFromGlob(): DynamicValue {
   }
 }
 
-export function resolveBundledLocalExtensionImporters(rawImporters: DynamicValue): Record<string, ExtensionModuleImporter> {
+export function resolveBundledLocalExtensionImporters(rawImporters: unknown): Record<string, ExtensionModuleImporter> {
   if (!isCommandsExtensionModuleImportPayloadShape(rawImporters)) {
     return {};
   }
@@ -60,11 +60,11 @@ export function getLocalExtensionImportCandidates(specifier: string): string[] {
 
 interface ImportExtensionModuleOptions {
   bundledImporters?: Record<string, ExtensionModuleImporter>;
-  dynamicImport?: (specifier: string) => Promise<DynamicValue>;
+  dynamicImport?: (specifier: string) => Promise<unknown>;
   isDev?: boolean;
 }
 
-function getDefaultDynamicImport(): (specifier: string) => Promise<DynamicValue> {
+function getDefaultDynamicImport(): (specifier: string) => Promise<unknown> {
   return (specifier: string) => import(/* @vite-ignore */ specifier);
 }
 
@@ -80,7 +80,7 @@ export async function importExtensionModule(
   specifier: string,
   sourceKind: ExtensionSourceKind,
   options: ImportExtensionModuleOptions = {},
-): Promise<DynamicValue> {
+): Promise<unknown> {
   const bundledImporters = options.bundledImporters ?? BUNDLED_LOCAL_EXTENSION_IMPORTERS;
   const dynamicImport = options.dynamicImport ?? getDefaultDynamicImport();
   const isDev = options.isDev ?? readIsDevDefault();

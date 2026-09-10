@@ -27,7 +27,7 @@
     "check:landing-connect-copy": "node scripts/check-landing-connect-copy.mjs",
     "check:pi-lockstep": "node scripts/check-pi-deps-lockstep.mjs",
     "check:version-sync": "node scripts/check-version-sync.mjs",
-    "check": "npm run check:css-theme && npm run check:theme-utility-overrides && npm run check:builtins-inline-style && npm run check:landing-connect-copy && npm run check:pi-lockstep && npm run check:version-sync && npm run check:boundary-casts && npm run check:eslint-comments && npm run check:innerhtml && npm run check:return-types && npm run lint && npm run typecheck",
+    "check": "npm run check:css-theme && npm run check:theme-utility-overrides && npm run check:builtins-inline-style && npm run check:landing-connect-copy && npm run check:pi-lockstep && npm run check:version-sync && npm run check:boundary-casts && npm run check:unknown-burndown && npm run check:eslint-comments && npm run check:innerhtml && npm run check:return-types && npm run lint && npm run typecheck",
     "lint": "npm run lint:eslint && npm run lint:anti-slop",
     "lint:eslint": "eslint \"*.ts\" \"src/**/*.ts\" \"tests/**/*.ts\"",
     "lint:anti-slop": "oxlint --quiet vite.config.ts src tests",
@@ -46,17 +46,18 @@
     "test": "node --test --experimental-strip-types --import ./scripts/register-test-ts-loader.mjs \"tests/**/*.test.ts\" \"tests/**/*.test.mjs\"",
     "test:browser": "node --test --test-concurrency=1 --experimental-strip-types --import ./scripts/register-test-ts-loader.mjs \"tests/browser/**/*.browser-test.ts\"",
     "test:all": "npm test && npm run test:browser",
-    "check:return-types": "node scripts/check-top-level-return-types.mjs"
+    "check:return-types": "node scripts/check-top-level-return-types.mjs",
+    "check:unknown-burndown": "node scripts/check-unknown-burndown.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.124.0",
     "@earendil-works/pi-agent-core": "0.85.1",
     "@earendil-works/pi-ai": "0.85.1",
-    "@sinclair/typebox": "^0.34.52",
     "highlight.js": "^11.12.0",
     "lit": "^3.3.3",
     "lucide": "^1.42.0",
     "marked": "^18.0.11",
+    "typebox": "1.3.7",
     "ws": "8.21.3"
   },
   "devDependencies": {
@@ -69,7 +70,6 @@
     "oxlint": "1.82.0",
     "playwright": "1.63.0",
     "portless": "0.15.6",
-    "typebox": "^1.3.28",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.69.0",
     "vite": "^8.2.2"

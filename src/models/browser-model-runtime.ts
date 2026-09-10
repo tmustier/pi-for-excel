@@ -273,11 +273,11 @@ class BrowserModelCatalogsStore implements ModelsStore {
   }
 }
 
-function isModelsResponse(value: DynamicValue): value is DynamicObject {
+function isModelsResponse(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function parseModelIds(value: DynamicValue): string[] {
+function parseModelIds(value: unknown): string[] {
   if (!isModelsResponse(value) || !Array.isArray(value.data)) {
     throw new Error("Model discovery response must contain a data array.");
   }
@@ -301,7 +301,7 @@ function parseModelIds(value: DynamicValue): string[] {
   return Array.from(new Set(ids)).sort((left, right) => left.localeCompare(right));
 }
 
-async function readLimitedDiscoveryJson(response: Response): Promise<DynamicValue> {
+async function readLimitedDiscoveryJson(response: Response): Promise<unknown> {
   const declaredLengthRaw = response.headers.get("content-length");
   const declaredLength = declaredLengthRaw === null
     ? null
@@ -323,7 +323,7 @@ async function readLimitedDiscoveryJson(response: Response): Promise<DynamicValu
         `Model discovery response exceeds ${MAX_MODEL_DISCOVERY_RESPONSE_BYTES} bytes.`,
       );
     }
-    const parsed: DynamicValue = JSON.parse(text);
+    const parsed: unknown = JSON.parse(text);
     return parsed;
   }
 
@@ -353,7 +353,7 @@ async function readLimitedDiscoveryJson(response: Response): Promise<DynamicValu
     offset += chunk.byteLength;
   }
 
-  const parsed: DynamicValue = JSON.parse(new TextDecoder().decode(body));
+  const parsed: unknown = JSON.parse(new TextDecoder().decode(body));
   return parsed;
 }
 

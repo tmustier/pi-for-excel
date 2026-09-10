@@ -29,7 +29,7 @@ type TokenPayload = {
   expiresInSeconds: number;
 };
 
-function isAuthAnthropicBrowserOauthPayloadShape(value: DynamicValue): value is DynamicObject {
+function isAuthAnthropicBrowserOauthPayloadShape(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -74,7 +74,7 @@ function parseAuthorizationInput(input: string): ParsedAuthorizationInput {
   return { code: value };
 }
 
-function parseTokenPayload(payload: DynamicValue): TokenPayload | null {
+function parseTokenPayload(payload: unknown): TokenPayload | null {
   if (!isAuthAnthropicBrowserOauthPayloadShape(payload)) return null;
 
   const accessToken = payload.access_token;

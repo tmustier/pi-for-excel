@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { Type } from "@sinclair/typebox";
+import { Type } from "typebox";
 
 import { createExtensionAPI } from "../src/commands/extension-api.ts";
 import type { ExtensionCapability } from "../src/extensions/permissions.ts";
@@ -250,7 +250,7 @@ void test("createExtensionAPI forwards dynamic tools, storage, and agent steerin
   let steeredMessage = "";
   let followUpMessage = "";
 
-  const storage = new Map<string, DynamicValue>();
+  const storage = new Map<string, unknown>();
 
   const api = createExtensionAPI({
     getAgent: () => {
@@ -309,7 +309,7 @@ void test("createExtensionAPI forwards dynamic tools, storage, and agent steerin
 });
 
 void test("createExtensionAPI forwards qualified connection requirements on tools", () => {
-  let registeredRequirements: DynamicValue;
+  let registeredRequirements: unknown;
 
   const api = createExtensionAPI({
     getAgent: () => {

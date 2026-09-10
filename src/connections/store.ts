@@ -1,6 +1,6 @@
 import type { ConnectionSecrets, ConnectionStatus } from "./types.js";
 
-function isConnectionsStorePayloadShape(value: DynamicValue): value is DynamicObject {
+function isConnectionsStorePayloadShape(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -8,11 +8,11 @@ export const CONNECTION_STORE_KEY = "connections.store.v1";
 const CONNECTION_STORE_VERSION = 1;
 
 export interface ConnectionSettingsReader {
-  get(key: string): Promise<DynamicValue>;
+  get(key: string): Promise<unknown>;
 }
 
 export interface ConnectionSettingsStore extends ConnectionSettingsReader {
-  set(key: string, value: DynamicValue): Promise<void>;
+  set(key: string, value: unknown): Promise<void>;
   delete?(key: string): Promise<void>;
 }
 
@@ -28,19 +28,19 @@ interface ConnectionStoreDocument {
   items: Record<string, StoredConnectionRecord>;
 }
 
-function normalizeOptionalString(value: DynamicValue): string | undefined {
+function normalizeOptionalString(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
-function normalizeConnectionStatus(value: DynamicValue): ConnectionStatus | undefined {
+function normalizeConnectionStatus(value: unknown): ConnectionStatus | undefined {
   return value === "connected" || value === "missing" || value === "invalid" || value === "error"
     ? value
     : undefined;
 }
 
-function normalizeSecrets(value: DynamicValue): ConnectionSecrets | undefined {
+function normalizeSecrets(value: unknown): ConnectionSecrets | undefined {
   if (!isConnectionsStorePayloadShape(value)) return undefined;
 
   const next: ConnectionSecrets = {};
@@ -52,7 +52,7 @@ function normalizeSecrets(value: DynamicValue): ConnectionSecrets | undefined {
   return Object.keys(next).length > 0 ? next : undefined;
 }
 
-function normalizeConnectionRecord(value: DynamicValue): StoredConnectionRecord | null {
+function normalizeConnectionRecord(value: unknown): StoredConnectionRecord | null {
   if (!isConnectionsStorePayloadShape(value)) return null;
 
   const record: StoredConnectionRecord = {};
@@ -69,7 +69,7 @@ function normalizeConnectionRecord(value: DynamicValue): StoredConnectionRecord 
   return record;
 }
 
-function normalizeDocument(value: DynamicValue): ConnectionStoreDocument {
+function normalizeDocument(value: unknown): ConnectionStoreDocument {
   if (!isConnectionsStorePayloadShape(value) || !isConnectionsStorePayloadShape(value.items)) {
     return {
       version: CONNECTION_STORE_VERSION,

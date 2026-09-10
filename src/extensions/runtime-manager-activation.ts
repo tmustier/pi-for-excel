@@ -283,14 +283,14 @@ export function buildRuntimeManagerActivationBridge(
   };
 
   const storageGet = (key: string) => getExtensionStorageValue(settings, entry.id, key);
-  const storageSet = (key: string, value: DynamicValue) => setExtensionStorageValue(settings, entry.id, key, value);
+  const storageSet = (key: string, value: unknown) => setExtensionStorageValue(settings, entry.id, key, value);
   const storageDelete = (key: string) => deleteExtensionStorageValue(settings, entry.id, key);
   const storageKeys = () => listExtensionStorageKeys(settings, entry.id);
 
   const injectAgentContext = (content: string): void => {
     const agent = getRequiredActiveAgent();
     agent.state.messages.push(buildExtensionMessage("agent.injectContext content", content));
-    void Promise.resolve(afterInjectAgentContext?.()).catch((error: DynamicValue) => {
+    void Promise.resolve(afterInjectAgentContext?.()).catch((error: unknown) => {
       console.warn("[pi] Failed to sync extension-injected context:", error);
     });
   };

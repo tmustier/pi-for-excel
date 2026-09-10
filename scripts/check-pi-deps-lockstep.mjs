@@ -10,13 +10,18 @@ import { promises as fs } from "node:fs";
  *   (no nested duplicates). Duplicate pi-ai copies mean two model registries
  *   that disagree about available models.
  *
+ * - `typebox` must be pinned to the exact version pi-ai depends on, so the
+ *   lockfile resolves ONE copy shared by first-party tool schemas and pi-ai's
+ *   validation. Bump it together with the Pi packages.
+ *
  * (`@earendil-works/pi-web-ui` was removed entirely — the UI layer is
  * first-party now; see docs/ui-ownership.md.)
  */
 
 const LOCKSTEP_PAIR = ["@earendil-works/pi-ai", "@earendil-works/pi-agent-core"];
-const SINGLETON_PACKAGES = ["@earendil-works/pi-ai", "@earendil-works/pi-agent-core"];
-const PI_DEPENDENCIES = [...LOCKSTEP_PAIR];
+const SCHEMA_PACKAGE = "typebox";
+const SINGLETON_PACKAGES = [...LOCKSTEP_PAIR, SCHEMA_PACKAGE];
+const PI_DEPENDENCIES = [...LOCKSTEP_PAIR, SCHEMA_PACKAGE];
 
 const EXACT_VERSION_RE = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 
@@ -55,6 +60,14 @@ function failIfNotExactPins(entries) {
   for (const [name, version] of loose) {
     console.error(`  - ${name}: ${version}`);
   }
+  return true;
+}
+
+function failIfSchemaPackageDiffersFromPiAi(pkgVersion, lockPackages) {
+  const piAiSpec = lockPackages[`node_modules/${LOCKSTEP_PAIR[0]}`]?.dependencies?.[SCHEMA_PACKAGE];
+  if (piAiSpec === pkgVersion) return false;
+  console.error(`\n✗ ${SCHEMA_PACKAGE} is pinned to ${pkgVersion} but ${LOCKSTEP_PAIR[0]} depends on ${piAiSpec ?? "(none)"}.`);
+  console.error(`\nPin ${SCHEMA_PACKAGE} to the exact version pi-ai uses so a single copy is shared.`);
   return true;
 }
 
@@ -108,6 +121,7 @@ async function main() {
     failIfNotExactPins(packageJsonEntries) ||
     failIfNotLockstep("package.json", pairFrom(packageJsonEntries)) ||
     failIfNotLockstep("package-lock.json", pairFrom(lockEntries)) ||
+    failIfSchemaPackageDiffersFromPiAi(packageJsonDependencies[SCHEMA_PACKAGE], lockPackages) ||
     failIfDuplicateResolutions(lockPackages);
 
   if (hasErrors) {
@@ -117,7 +131,7 @@ async function main() {
 
   const coreVersion = packageJsonEntries[0]?.[1] ?? "(unknown)";
   console.log(
-    `✓ Pi dependencies OK (pi-ai/pi-agent-core: ${coreVersion}, single shared pi-ai copy).`,
+    `✓ Pi dependencies OK (pi-ai/pi-agent-core: ${coreVersion}, ${SCHEMA_PACKAGE}: ${packageJsonDependencies[SCHEMA_PACKAGE]}; single shared copies).`,
   );
 }
 

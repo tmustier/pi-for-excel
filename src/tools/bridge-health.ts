@@ -1,4 +1,4 @@
-function isToolsBridgeHealthPayloadShape(value: DynamicValue): value is DynamicObject {
+function isToolsBridgeHealthPayloadShape(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -60,7 +60,7 @@ export type LocalServiceEntry = PythonServiceEntry | TmuxServiceEntry;
 export interface BridgeHealthDependencies {
   getPythonBridgeUrl?: () => Promise<string | undefined>;
   getTmuxBridgeUrl?: () => Promise<string | undefined>;
-  fetchHealth?: (url: string) => Promise<DynamicValue>;
+  fetchHealth?: (url: string) => Promise<unknown>;
 }
 
 // ---------------------------------------------------------------------------
@@ -81,7 +81,7 @@ function parseLibreofficeVersion(rawVersion: string | undefined): string | undef
   return matched?.[0];
 }
 
-function parsePythonHealth(payload: DynamicValue): PythonServiceEntry {
+function parsePythonHealth(payload: unknown): PythonServiceEntry {
   const base: PythonServiceEntry = {
     name: "python",
     displayName: "Python (native)",
@@ -120,7 +120,7 @@ function parsePythonHealth(payload: DynamicValue): PythonServiceEntry {
   };
 }
 
-function parseTmuxHealth(payload: DynamicValue): TmuxServiceEntry {
+function parseTmuxHealth(payload: unknown): TmuxServiceEntry {
   const base: TmuxServiceEntry = {
     name: "tmux",
     displayName: "Terminal (tmux)",

@@ -10,51 +10,51 @@
 type WpsPropertyOrMethod<T> = T | (() => T);
 
 export interface WpsCountedCollection {
-  Count?: WpsPropertyOrMethod<DynamicValue>;
-  count?: WpsPropertyOrMethod<DynamicValue>;
-  Item?: (key: string | number) => DynamicValue;
+  Count?: WpsPropertyOrMethod<unknown>;
+  count?: WpsPropertyOrMethod<unknown>;
+  Item?: (key: string | number) => unknown;
 }
 
 export interface WpsRowsOrColumns {
-  Count?: WpsPropertyOrMethod<DynamicValue>;
-  count?: WpsPropertyOrMethod<DynamicValue>;
+  Count?: WpsPropertyOrMethod<unknown>;
+  count?: WpsPropertyOrMethod<unknown>;
 }
 
 export interface WpsEtRange {
-  Address?: WpsPropertyOrMethod<DynamicValue>;
-  Value2?: WpsPropertyOrMethod<DynamicValue>;
-  Value?: (rangeValueDataType?: DynamicValue, value?: DynamicValue) => DynamicValue;
-  Formula?: WpsPropertyOrMethod<DynamicValue>;
-  NumberFormat?: WpsPropertyOrMethod<DynamicValue>;
+  Address?: WpsPropertyOrMethod<unknown>;
+  Value2?: WpsPropertyOrMethod<unknown>;
+  Value?: (rangeValueDataType?: unknown, value?: unknown) => unknown;
+  Formula?: WpsPropertyOrMethod<unknown>;
+  NumberFormat?: WpsPropertyOrMethod<unknown>;
   Rows?: WpsPropertyOrMethod<WpsRowsOrColumns | null>;
   Columns?: WpsPropertyOrMethod<WpsRowsOrColumns | null>;
-  Row?: WpsPropertyOrMethod<DynamicValue>;
-  Column?: WpsPropertyOrMethod<DynamicValue>;
-  MergeCells?: WpsPropertyOrMethod<DynamicValue>;
+  Row?: WpsPropertyOrMethod<unknown>;
+  Column?: WpsPropertyOrMethod<unknown>;
+  MergeCells?: WpsPropertyOrMethod<unknown>;
 }
 
 export interface WpsEtWorksheet {
-  Name?: WpsPropertyOrMethod<DynamicValue>;
-  name?: WpsPropertyOrMethod<DynamicValue>;
-  Visible?: WpsPropertyOrMethod<DynamicValue>;
-  visible?: WpsPropertyOrMethod<DynamicValue>;
+  Name?: WpsPropertyOrMethod<unknown>;
+  name?: WpsPropertyOrMethod<unknown>;
+  Visible?: WpsPropertyOrMethod<unknown>;
+  visible?: WpsPropertyOrMethod<unknown>;
   UsedRange?: WpsPropertyOrMethod<WpsEtRange | null>;
   Range?: (address: string) => WpsEtRange;
 }
 
 export interface WpsEtWorkbook {
-  Name?: WpsPropertyOrMethod<DynamicValue>;
-  name?: WpsPropertyOrMethod<DynamicValue>;
-  FullName?: WpsPropertyOrMethod<DynamicValue>;
-  fullName?: WpsPropertyOrMethod<DynamicValue>;
+  Name?: WpsPropertyOrMethod<unknown>;
+  name?: WpsPropertyOrMethod<unknown>;
+  FullName?: WpsPropertyOrMethod<unknown>;
+  fullName?: WpsPropertyOrMethod<unknown>;
   Sheets?: WpsPropertyOrMethod<WpsCountedCollection | null>;
   Worksheets?: WpsPropertyOrMethod<WpsCountedCollection | null>;
 }
 
 export interface WpsPluginStorage {
-  length?: DynamicValue;
-  getItem?: (key: string) => DynamicValue;
-  setItem?: (key: string, value: DynamicValue) => void;
+  length?: unknown;
+  getItem?: (key: string) => unknown;
+  setItem?: (key: string, value: unknown) => void;
   removeItem?: (key: string) => void;
   clear?: () => void;
   key?: (index: number) => string | null;
@@ -62,13 +62,13 @@ export interface WpsPluginStorage {
 }
 
 export interface WpsTaskPane {
-  ID?: DynamicValue;
-  Visible?: DynamicValue;
-  Width?: DynamicValue;
-  Height?: DynamicValue;
-  DockPosition?: DynamicValue;
-  Navigate?: (url: string) => DynamicValue;
-  Delete?: () => DynamicValue;
+  ID?: unknown;
+  Visible?: unknown;
+  Width?: unknown;
+  Height?: unknown;
+  DockPosition?: unknown;
+  Navigate?: (url: string) => unknown;
+  Delete?: () => unknown;
 }
 
 export interface WpsEtApplication {
@@ -84,7 +84,7 @@ export interface WpsEtApplication {
 }
 
 export interface WpsGlobal {
-  EtApplication?: () => DynamicValue;
+  EtApplication?: () => unknown;
   CreateTaskPane?: (url: string) => WpsTaskPane;
   CreateTaskpane?: (url: string) => WpsTaskPane;
   PluginStorage?: WpsPluginStorage;
@@ -97,24 +97,24 @@ function readPropertyOrMethod<T>(owner: object, value: WpsPropertyOrMethod<T> | 
   return method.call(owner);
 }
 
-function parseWpsEtApplication(value: DynamicValue): WpsEtApplication | null {
+function parseWpsEtApplication(value: unknown): WpsEtApplication | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
   return value;
 }
 
-function parseWpsGlobal(value: DynamicValue): WpsGlobal | null {
+function parseWpsGlobal(value: unknown): WpsGlobal | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
   return value;
 }
 
-function parseWpsRange(value: DynamicValue): WpsEtRange | null {
+function parseWpsRange(value: unknown): WpsEtRange | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
   return value;
 }
 
 interface WpsHostGlobals {
-  wps?: DynamicValue;
-  Application?: DynamicValue;
+  wps?: unknown;
+  Application?: unknown;
 }
 
 function getWpsHostGlobals(): WpsHostGlobals {
@@ -178,7 +178,7 @@ export function getWpsCollectionCount(
 export function getWpsCollectionItem(
   collection: WpsCountedCollection,
   key: string | number,
-): DynamicValue {
+): unknown {
   if (typeof collection.Item !== "function") {
     throw new Error("WPS worksheet collection does not expose Item().");
   }
@@ -197,7 +197,7 @@ export function getWpsUsedRange(sheet: WpsEtWorksheet): WpsEtRange | null {
   return readPropertyOrMethod(sheet, sheet.UsedRange) ?? null;
 }
 
-export function getWpsRangeAddress(range: WpsEtRange): DynamicValue {
+export function getWpsRangeAddress(range: WpsEtRange): unknown {
   return readPropertyOrMethod(range, range.Address);
 }
 
@@ -209,40 +209,40 @@ export function getWpsRangeColumns(range: WpsEtRange): WpsRowsOrColumns | null {
   return readPropertyOrMethod(range, range.Columns) ?? null;
 }
 
-export function getWpsRangeValues(range: WpsEtRange): DynamicValue {
+export function getWpsRangeValues(range: WpsEtRange): unknown {
   const value2 = readPropertyOrMethod(range, range.Value2);
   if (value2 !== undefined) return value2;
   return typeof range.Value === "function" ? range.Value() : undefined;
 }
 
-export function getWpsRangeFormula(range: WpsEtRange): DynamicValue {
+export function getWpsRangeFormula(range: WpsEtRange): unknown {
   return readPropertyOrMethod(range, range.Formula);
 }
 
-export function getWpsRangeNumberFormat(range: WpsEtRange): DynamicValue {
+export function getWpsRangeNumberFormat(range: WpsEtRange): unknown {
   return readPropertyOrMethod(range, range.NumberFormat);
 }
 
-export function getWpsWorksheetName(sheet: WpsEtWorksheet): DynamicValue {
+export function getWpsWorksheetName(sheet: WpsEtWorksheet): unknown {
   return readPropertyOrMethod(sheet, sheet.Name) ?? readPropertyOrMethod(sheet, sheet.name);
 }
 
-export function getWpsWorksheetVisibility(sheet: WpsEtWorksheet): DynamicValue {
+export function getWpsWorksheetVisibility(sheet: WpsEtWorksheet): unknown {
   return readPropertyOrMethod(sheet, sheet.Visible) ?? readPropertyOrMethod(sheet, sheet.visible);
 }
 
-export function getWpsWorkbookName(workbook: WpsEtWorkbook): DynamicValue {
+export function getWpsWorkbookName(workbook: WpsEtWorkbook): unknown {
   return readPropertyOrMethod(workbook, workbook.Name) ?? readPropertyOrMethod(workbook, workbook.name);
 }
 
-export function getWpsWorkbookFullName(workbook: WpsEtWorkbook): DynamicValue {
+export function getWpsWorkbookFullName(workbook: WpsEtWorkbook): unknown {
   return readPropertyOrMethod(workbook, workbook.FullName)
     ?? readPropertyOrMethod(workbook, workbook.fullName);
 }
 
 export function writeWpsRangeValues(
   range: WpsEtRange,
-  values: DynamicValue[][],
+  values: unknown[][],
   containsFormula: boolean,
 ): void {
   if (containsFormula) {

@@ -7,7 +7,7 @@ import { createTraceDependenciesTool } from "../src/tools/trace-dependencies.ts"
 import type { TraceDependenciesDetails } from "../src/tools/tool-details.ts";
 
 interface CellState {
-  value: DynamicValue;
+  value: unknown;
   formula: string;
 }
 
@@ -18,10 +18,10 @@ class TraceRange {
   readonly isNullObject = false;
   readonly format = {};
   private readonly cells: Map<string, CellState>;
-  private readonly formulaGrid: DynamicValue[][] | undefined;
+  private readonly formulaGrid: unknown[][] | undefined;
   readonly address: string;
 
-  constructor(cells: Map<string, CellState>, address: string, formulaGrid?: DynamicValue[][]) {
+  constructor(cells: Map<string, CellState>, address: string, formulaGrid?: unknown[][]) {
     this.cells = cells;
     this.address = address;
     this.formulaGrid = formulaGrid;
@@ -29,11 +29,11 @@ class TraceRange {
 
   load(_properties?: string): void {}
 
-  get values(): DynamicValue[][] {
+  get values(): unknown[][] {
     return [[this.cells.get(this.address)?.value ?? null]];
   }
 
-  get formulas(): DynamicValue[][] {
+  get formulas(): unknown[][] {
     return this.formulaGrid ?? [[this.cells.get(this.address)?.formula ?? ""]];
   }
 
@@ -49,7 +49,7 @@ class TraceRange {
 class TraceSheet {
   readonly cells = new Map<string, CellState>();
   readonly name: string;
-  private usedRange: { address: string; formulas: DynamicValue[][] } | undefined;
+  private usedRange: { address: string; formulas: unknown[][] } | undefined;
 
   constructor(name: string) {
     this.name = name;
@@ -67,12 +67,12 @@ class TraceSheet {
       : new TraceRange(this.cells, "A1", [[""]]);
   }
 
-  setUsedRange(address: string, formulas: DynamicValue[][]): void {
+  setUsedRange(address: string, formulas: unknown[][]): void {
     this.usedRange = { address, formulas };
   }
 }
 
-function createContext(sheets: TraceSheet[]): DynamicValue {
+function createContext(sheets: TraceSheet[]): unknown {
   return {
     workbook: {
       worksheets: {
@@ -90,11 +90,11 @@ function createContext(sheets: TraceSheet[]): DynamicValue {
   };
 }
 
-async function withExcel<T>(context: DynamicValue, action: () => Promise<T>): Promise<T> {
+async function withExcel<T>(context: unknown, action: () => Promise<T>): Promise<T> {
   const hadExcel = Reflect.has(globalThis, "Excel");
   const previousExcel = Reflect.get(globalThis, "Excel");
   Reflect.set(globalThis, "Excel", {
-    run: <TResult>(callback: (host: DynamicValue) => Promise<TResult>): Promise<TResult> => callback(context),
+    run: <TResult>(callback: (host: unknown) => Promise<TResult>): Promise<TResult> => callback(context),
   });
 
   try {

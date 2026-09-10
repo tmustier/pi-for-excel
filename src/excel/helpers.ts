@@ -148,7 +148,7 @@ export function cellAtOffset(rangeStart: string, rowOffset: number, colOffset: n
 // Guarded API calls
 // ============================================================================
 
-function isOfficeItemNotFound(error: DynamicValue): boolean {
+function isOfficeItemNotFound(error: unknown): boolean {
   if (typeof error !== "object" || error === null) return false;
 
   if ("code" in error && typeof error.code === "string") {
@@ -217,7 +217,7 @@ export async function getDirectDependentsSafe(
 }
 
 /** Pad a 2D array so all rows have the same length */
-export function padValues(values: DynamicValue[][]): { padded: DynamicValue[][]; rows: number; cols: number } {
+export function padValues(values: unknown[][]): { padded: unknown[][]; rows: number; cols: number } {
   const rows = values.length;
   const cols = Math.max(...values.map((r) => r.length));
   const padded = values.map((row) => {

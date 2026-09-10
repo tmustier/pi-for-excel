@@ -4,11 +4,11 @@ import { test } from "node:test";
 import { getFilesWorkspace } from "../src/files/workspace.ts";
 import { createFilesTool } from "../src/tools/files.ts";
 
-function getOfficeGlobal(): DynamicValue {
+function getOfficeGlobal(): unknown {
   return Reflect.get(globalThis, "Office");
 }
 
-function setOfficeGlobal(value: DynamicValue): void {
+function setOfficeGlobal(value: unknown): void {
   Reflect.set(globalThis, "Office", value);
 }
 
