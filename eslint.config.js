@@ -108,6 +108,20 @@ export default tseslint.config(
   },
 
   {
+    files: ["src/auth/**/*.ts"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        { selector: "TSUnknownKeyword", message: NO_UNKNOWN_MESSAGE },
+        {
+          selector: "Identifier[name='localStorage']",
+          message: "OAuth credentials must not use localStorage; use the encrypted OAuth storage boundary.",
+        },
+      ],
+    },
+  },
+
+  {
     files: ["src/types/dynamic-values.d.ts"],
     rules: {
       // The single sanctioned untyped boundary marker. All other explicit
