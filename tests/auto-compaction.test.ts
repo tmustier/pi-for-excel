@@ -8,9 +8,6 @@ import {
   maybeAutoCompactBeforeContinuation,
 } from "../src/compaction/auto-compaction.ts";
 import {
-  collectCompactionMemoryCues,
-} from "../src/compaction/memory-nudge.ts";
-import {
   COMPACTION_ENABLED_SETTING_KEY,
   readAutoCompactionEnabled,
 } from "../src/compaction/settings.ts";
@@ -43,14 +40,6 @@ function createUserMessage(text: string, timestamp: number): AgentMessage {
   return {
     role: "user",
     content: text,
-    timestamp,
-  };
-}
-
-function createAssistantMessage(text: string, timestamp: number): AgentMessage {
-  return {
-    role: "assistant",
-    content: [{ type: "text", text }],
     timestamp,
   };
 }
@@ -217,36 +206,6 @@ void test("mid-turn check returns undefined when compaction does not rewrite his
   assert.equal(update, undefined);
 });
 
-void test("collects memory cues from user messages and ignores auto-context", () => {
-  const messages: AgentMessage[] = [
-    createUserMessage("[Auto-context] Please remember this summary.", 1),
-    createUserMessage("Please remember this: this workbook uses calendar year.", 2),
-    createAssistantMessage("Got it.", 3),
-    createUserMessage("Don't forget to keep EUR as the default currency.", 4),
-  ];
-
-  const summary = collectCompactionMemoryCues(messages);
-
-  assert.equal(summary.cueCount, 2);
-  assert.equal(summary.snippets.length, 2);
-  assert.ok(summary.snippets.every((snippet) => !snippet.startsWith("[Auto-context]")));
-  assert.match(summary.snippets[0] ?? "", /remember this/i);
-  assert.match(summary.snippets[1] ?? "", /don['’]t forget/i);
-});
-
-void test("deduplicates snippets and respects snippet limits", () => {
-  const messages: AgentMessage[] = [
-    createUserMessage("Remember this: freeze panes on Summary.", 1),
-    createUserMessage("Remember this: freeze panes on Summary.", 2),
-    createUserMessage("Please save this for future reference: Revenue is net of refunds.", 3),
-    createUserMessage("Please save this for future reference: Revenue is net of refunds.", 4),
-  ];
-
-  const summary = collectCompactionMemoryCues(messages, 1);
-
-  assert.equal(summary.cueCount, 4);
-  assert.equal(summary.snippets.length, 1);
-});
 
 
 
