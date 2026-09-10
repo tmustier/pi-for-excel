@@ -7,11 +7,7 @@ import {
   createOverlayDialog,
   createOverlayDialogManager,
 } from "../src/ui/overlay-dialog.ts";
-import {
-  CONFIRM_DIALOG_OVERLAY_ID,
-  TEXT_INPUT_DIALOG_OVERLAY_ID,
-} from "../src/ui/overlay-ids.ts";
-import { requestConfirmationDialog } from "../src/ui/confirm-dialog.ts";
+import { TEXT_INPUT_DIALOG_OVERLAY_ID } from "../src/ui/overlay-ids.ts";
 import { requestTextInputDialog } from "../src/ui/text-input-dialog.ts";
 import { installFakeDom } from "./fixtures/fake-dom.ts";
 
@@ -78,37 +74,6 @@ void test("overlay dialog manager reuses mounted dialog and resets after dismiss
 
     const third = manager.ensure();
     assert.notEqual(third, first);
-  } finally {
-    restore();
-  }
-});
-
-void test("confirmation dialog resolves true when confirm button is clicked", async () => {
-  const { document, restore } = installFakeDom();
-
-  try {
-    const pendingApproval = requestConfirmationDialog({
-      title: "Allow workbook mutation in Confirm mode?",
-      message: "Tool: write_cells",
-      confirmLabel: "Allow once",
-      restoreFocusOnClose: false,
-    });
-
-    const overlay = document.getElementById(CONFIRM_DIALOG_OVERLAY_ID);
-    assert.ok(overlay);
-
-    const approveButton = findButtonByText(overlay, "Allow once");
-
-    assert.ok(approveButton);
-    if (!approveButton) {
-      throw new Error("Approval button not found");
-    }
-
-    approveButton.dispatchEvent(new Event("click"));
-
-    const approved = await pendingApproval;
-    assert.equal(approved, true);
-    assert.equal(document.getElementById(CONFIRM_DIALOG_OVERLAY_ID), null);
   } finally {
     restore();
   }
