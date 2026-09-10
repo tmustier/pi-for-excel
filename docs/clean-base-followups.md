@@ -187,10 +187,34 @@ Office.js independently. `workbookId` was `null` for every step before the save.
 
 Host finding, pre-existing: after the mid-session Save As,
 `Office.context.document.url` stayed empty for 40 s and across an add-in
-reload; it was populated only after close and reopen. Recorded as a limitation
-in `src/tools/DECISIONS.md`.
+reload; it was populated only after close and reopen. Fixed by reading the
+identity live through `getFilePropertiesAsync` (verified in real Excel: it
+returned the new path immediately after the Save As, in the same POSIX format
+that `document.url` uses for files opened from disk, so existing identities are
+unchanged) and clearing token-scoped backups at the first-save transition.
 
 Evidence: `/tmp/pi-excel-unsaved-e2e/` (bridge status, prompt results, read-backs).
+
+### Save As mid-session, after the live-identity fix (2026-09-10, `fix/live-document-identity` at `05aaca3`)
+
+Model `openai-codex/gpt-5.6-sol`, thinking high, background bridge, Excel in
+the background throughout (pane opened with a semantic AX press; no focus
+change at any step). Evidence: `/tmp/pi-excel-saveas-e2e/`.
+
+| Step | Observed |
+| --- | --- |
+| New workbook, pane open | `document.url` = "", `getFilePropertiesAsync` = "", `workbookId` = null |
+| Agent writes 1, 2, 3 into `A1:C1`, lists, transcribes | `write_cells`; `[1, "a2e49941-…"]` — token-scoped checkpoint |
+| Save As into Excel's container (AppleScript, no dialog) | file on disk, 10 213 bytes |
+| Identity probe 5 s later, **no reload** | `document.url` still ""; `getFilePropertiesAsync` = the new path; `workbookId` = `url_sha256:6b4241ad…`, `workbookName` = `PiSaveAsE2E.xlsx` |
+| Agent lists, writes `E1`, lists, transcribes | `[0, 1, "6a0326cf-…"]` — token-scoped checkpoint cleared at the first-save transition; new checkpoint under the path identity; same session |
+| Pane reload | same `workbookId`, same session (`3d3147f9`, 26 messages) — the session followed the file |
+| Close, reopen from disk, Open Pi | static and live URL identical; `workbookId` identical (`url_sha256:6b4241ad…`); same session restored |
+
+Sandbox note for future runs: Excel for Mac shows a "Grant File Access" sheet
+when AppleScript saves into a folder it has no bookmark for (`~/Documents`
+included); while that sheet is up every Office.js call hangs. Save into
+`~/Library/Containers/com.microsoft.Excel/Data/Documents/` instead.
 
 ### Saved workbook (`pi-p3-verify.xlsx`, generated minimal OOXML, `Sheet1!A1:B2` = `p3 baseline, 1 / keep, 2`)
 

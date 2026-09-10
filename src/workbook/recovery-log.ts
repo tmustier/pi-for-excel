@@ -701,11 +701,14 @@ export class WorkbookRecoveryLog {
   }
 
   async clearForCurrentWorkbook(): Promise<number> {
-    await this.ensureLoaded();
-
     const scope = await this.scope.resolveForRead();
     if (!scope) return 0;
-    const workbookId = scope.workbookId;
+    return this.clearForWorkbook(scope.workbookId);
+  }
+
+  /** Remove every checkpoint stored under `workbookId`; the save boundary uses this for identities that are no longer current. */
+  async clearForWorkbook(workbookId: string): Promise<number> {
+    await this.ensureLoaded();
 
     const previousLength = this.snapshots.length;
     this.snapshots = this.snapshots.filter((snapshot) => !matchesWorkbook(snapshot, workbookId));

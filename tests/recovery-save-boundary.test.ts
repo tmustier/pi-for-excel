@@ -34,7 +34,7 @@ void test("save removes earlier backups while a backup made after save survives 
   const monitor = new WorkbookSaveBoundaryMonitor({
     resolveWorkbookId: () => Promise.resolve(workbookContext.workbookId),
     readWorkbookDirtyState: () => Promise.resolve(isDirty),
-    clearBackupsForCurrentWorkbook: () => recoveryLog.clearForCurrentWorkbook(),
+    clearBackupsForWorkbook: (workbookId) => recoveryLog.clearForWorkbook(workbookId),
   });
 
   await recoveryLog.append({
@@ -77,7 +77,7 @@ void test("an already-saved workbook loses existing backups only on the first po
   const monitor = new WorkbookSaveBoundaryMonitor({
     resolveWorkbookId: () => Promise.resolve(workbookContext.workbookId),
     readWorkbookDirtyState: () => Promise.resolve(false),
-    clearBackupsForCurrentWorkbook: () => recoveryLog.clearForCurrentWorkbook(),
+    clearBackupsForWorkbook: (workbookId) => recoveryLog.clearForWorkbook(workbookId),
   });
 
   await recoveryLog.append({
@@ -127,7 +127,7 @@ void test("a save poll without workbook identity preserves backups", async () =>
   const monitor = new WorkbookSaveBoundaryMonitor({
     resolveWorkbookId: () => Promise.resolve(currentContext.workbookId),
     readWorkbookDirtyState: () => Promise.resolve(false),
-    clearBackupsForCurrentWorkbook: () => recoveryLog.clearForCurrentWorkbook(),
+    clearBackupsForWorkbook: (workbookId) => recoveryLog.clearForWorkbook(workbookId),
   });
   await monitor.checkOnce();
 
@@ -156,7 +156,7 @@ void test("save transitions clear backups independently for each workbook", asyn
   const monitor = new WorkbookSaveBoundaryMonitor({
     resolveWorkbookId: async () => (await getWorkbookContext()).workbookId,
     readWorkbookDirtyState: () => Promise.resolve(isDirty),
-    clearBackupsForCurrentWorkbook: () => recoveryLog.clearForCurrentWorkbook(),
+    clearBackupsForWorkbook: (workbookId) => recoveryLog.clearForWorkbook(workbookId),
   });
 
   for (const workbook of ["book-1", "book-2"]) {
