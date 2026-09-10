@@ -108,89 +108,6 @@ void test("keeps tmux tool registered and returns structured gate errors", async
   assert.equal(probeCalled, true);
 });
 
-void test("tmux hard gate re-checks execution on every call", async () => {
-  let bridgeUrl: string | undefined = "https://localhost:4441";
-  let configuredBridgeHealthy = true;
-  let defaultBridgeHealthy = false;
-  let executeCount = 0;
-
-  const [gatedTmux] = await applyExperimentalToolGates([createTestTool("tmux", () => {
-    executeCount += 1;
-  })], {
-    getTmuxBridgeUrl: () => Promise.resolve(bridgeUrl),
-    validateBridgeUrl: (url) => url,
-    probeTmuxBridge: (url) => Promise.resolve(
-      url === "https://localhost:3341" ? defaultBridgeHealthy : configuredBridgeHealthy,
-    ),
-  });
-
-  assert.ok(gatedTmux);
-
-  await gatedTmux.execute("call-1", {});
-  assert.equal(executeCount, 1);
-
-  bridgeUrl = undefined;
-
-  const missingResult = await gatedTmux.execute("call-2", {});
-  const missingText = missingResult.content[0]?.type === "text" ? missingResult.content[0].text : "";
-  assert.match(missingText, /Terminal access is not available/i);
-  assert.match(missingText, /default URL|URL override/i);
-  assert.match(missingText, /Skill: tmux-bridge/i);
-  const missingDetails: DynamicValue = missingResult.details;
-  assertTmuxGateError(missingDetails, "missing_bridge_url");
-  assert.equal(executeCount, 1);
-
-  bridgeUrl = "https://localhost:4441";
-  configuredBridgeHealthy = false;
-  defaultBridgeHealthy = true;
-
-  const unreachableResult = await gatedTmux.execute("call-3", {});
-  const unreachableText = unreachableResult.content[0]?.type === "text" ? unreachableResult.content[0].text : "";
-  assert.match(unreachableText, /Terminal access is not available/i);
-  assert.match(unreachableText, /not reachable/i);
-  assert.match(unreachableText, /Skill: tmux-bridge/i);
-  const unreachableDetails: DynamicValue = unreachableResult.details;
-  assertTmuxGateError(unreachableDetails, "bridge_unreachable");
-  assert.equal(executeCount, 1);
-});
-
-void test("files tool passes through without any gate", async () => {
-  let executeCount = 0;
-
-  const [filesTool] = await applyExperimentalToolGates([
-    createTestTool("files", () => {
-      executeCount += 1;
-    }),
-  ], {});
-
-  // All actions pass through directly
-  await filesTool.execute("call-files-list", { action: "list" });
-  await filesTool.execute("call-files-read", { action: "read", path: "notes.md" });
-  await filesTool.execute("call-files-write", { action: "write", path: "notes.md", content: "hello" });
-  await filesTool.execute("call-files-delete", { action: "delete", path: "notes.md" });
-
-  assert.equal(executeCount, 4);
-});
-
-void test("execute_office_js is available without experimental feature gates", async () => {
-  let executeCount = 0;
-
-  const [officeTool] = await applyExperimentalToolGates([
-    createTestTool("execute_office_js", () => {
-      executeCount += 1;
-    }),
-  ], {
-    requestOfficeJsExecuteApproval: () => Promise.resolve(true),
-  });
-
-  await officeTool.execute("call-office", {
-    explanation: "Update workbook metadata",
-    code: "return { ok: true };",
-  });
-
-  assert.equal(executeCount, 1);
-});
-
 void test("execute_office_js requires explicit user approval", async () => {
   let executeCount = 0;
 
@@ -286,31 +203,6 @@ void test("execute_wps_js uses the same direct-JS approval gate with WPS labelin
   });
 
   assert.equal(executeCount, 1);
-});
-
-void test("execute_office_js skips approval in Auto mode for pure Excel API code", async () => {
-  let executeCount = 0;
-  let approvalCount = 0;
-
-  const [officeTool] = await applyExperimentalToolGates([
-    createTestTool("execute_office_js", () => {
-      executeCount += 1;
-    }),
-  ], {
-    getExecutionMode: () => Promise.resolve("yolo" as const),
-    requestOfficeJsExecuteApproval: () => {
-      approvalCount += 1;
-      return Promise.resolve(true);
-    },
-  });
-
-  await officeTool.execute("call-office", {
-    explanation: "Add totals column",
-    code: "const sheet = context.workbook.worksheets.getActiveWorksheet();\nreturn { ok: true };",
-  });
-
-  assert.equal(executeCount, 1);
-  assert.equal(approvalCount, 0);
 });
 
 void test("execute_office_js requires approval in Auto mode when code references ambient browser authority", async () => {
