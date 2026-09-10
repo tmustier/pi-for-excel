@@ -61,7 +61,7 @@
   },
   "devDependencies": {
     "@oxlint/plugins": "1.82.0",
-    "@types/node": "^22.20.0",
+    "@types/node": "^26.5.0",
     "@types/office-js": "^1.0.608",
     "eslint": "^10.10.0",
     "office-addin-debugging": "^6.1.2",
