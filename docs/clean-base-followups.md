@@ -69,9 +69,12 @@ in the same change that deletes the alias.
 
 ### WPS detection on a real capability
 
-`src/host/detection.ts` still treats any object- or function-valued `wps` or
-`Application` global as WPS. The plan asked for a recognisable host capability.
-`src/host/wps/jsapi.ts` now exists and is the place to put that check.
+Done. `hasWpsJsApiGlobal` in `src/host/detection.ts` now requires the
+`wps.EtApplication` accessor, `PluginStorage`, or an `Application` object
+carrying one of the ET members `src/host/wps/jsapi.ts` reads. An unrelated
+`Application` or `wps` global no longer selects the WPS host. Not verified in
+real WPS: China-domestic WPS add-in loading is gated on an enterprise / WPS 365
+authorisation policy that this machine does not have.
 
 ### Real product acceptance per behaviour-changing slice
 
@@ -157,11 +160,37 @@ Office.js read-back: values `[10, 20, 30, 60]`, formula `=SUM(D1:D3)` in D4.
 The tool card showed "Backup not created for this mutation" and the model
 reported no checkpoint.
 
-That is pre-existing behaviour, identical on `main`: recovery is keyed by
-workbook identity, and an unsaved workbook has none
-(`WorkbookRecoveryLog.resolveWorkbookIdentity` returns `null`). Worth a product
-decision: a user on a new, unsaved workbook has no undo through Pi and only a
-notice in the tool card says so.
+That was pre-existing behaviour, identical on `main` at the time: recovery was
+keyed by workbook identity, and an unsaved workbook had none. Fixed by scoping
+backups for never-saved workbooks to a document-stored token (see "Never-saved
+workbooks" in `src/tools/DECISIONS.md`).
+
+### Never-saved workbook, after the fix (2026-09-10, `fix/unsaved-workbook-recovery` at `0fdcaa0` + `origin/main` `5e4b6b0`)
+
+Model `openai-codex/gpt-5.6-sol`, thinking high, background bridge from the PR
+worktree. New workbook created by AppleScript in the background; the user
+clicked "Open Pi" once; every prompt ran with Excel in the background. One
+deviation: the AppleScript Save As brought Excel frontmost once. The bridge
+exposes only the assistant text length, so the agent was asked to transcribe
+what `workbook_history` returned into cells, which were then read back through
+Office.js independently. `workbookId` was `null` for every step before the save.
+
+| Step | Tools observed | Independent Office.js read-back |
+| --- | --- | --- |
+| Write 10, 20, 30 into `Sheet1!A1:C1` | `write_cells` | `[[10, 20, 30]]` |
+| List backups, transcribe count / oldest id / range to `A3:C3` | `workbook_history` list, `write_cells` | `[1, "6a5e7520-…", "Sheet1!A1:C1"]` |
+| Taskpane reload | — | same session, `workbookId` still `null` |
+| Restore `6a5e7520-…` by id, transcribe counts to `A5:C5` | `workbook_history` list / restore / list, `write_cells` | `A1:C1` → `["", "", ""]`; `[2, 3, "cb88efc1-…"]` (inverse checkpoint created in the same scope) |
+| Save As (AppleScript), unzip the file | — | `xl/webextensions/webextension1.xml` holds `pi.workbookInstanceId` = the token |
+| Close, reopen from disk, "Open Pi" (AX press via computer-use, no focus change) | — | `workbookId` = `url_sha256:…`, `workbookName` = `Book-e2e.xlsx`, fresh session |
+| List, write `hello` into `E1`, list, transcribe to `A7:C7` | `workbook_history` list, `write_cells`, `workbook_history` list, `write_cells` | `[0, 1, "6015428b-…"]`: token-scoped backups gone, new backup under the path identity |
+
+Host finding, pre-existing: after the mid-session Save As,
+`Office.context.document.url` stayed empty for 40 s and across an add-in
+reload; it was populated only after close and reopen. Recorded as a limitation
+in `src/tools/DECISIONS.md`.
+
+Evidence: `/tmp/pi-excel-unsaved-e2e/` (bridge status, prompt results, read-backs).
 
 ### Saved workbook (`pi-p3-verify.xlsx`, generated minimal OOXML, `Sheet1!A1:B2` = `p3 baseline, 1 / keep, 2`)
 
@@ -192,5 +221,9 @@ corrupt-recovery-log fallback (seam tests only).
   after confirming the finding set was unchanged.
 - `tests/browser/extensions-overlays.browser-test.ts` ("an installed extension
   can replace and dismiss its visible overlay") timed out once in eight full
-  serial runs waiting for the welcome overlay to detach. Green in isolation.
-  Not root-caused.
+  serial runs waiting for the welcome overlay to detach. Root-caused and fixed:
+  the extension under test mounts `#pi-ext-overlay` (z-index 250) as soon as
+  it activates, and when that happened before the harness's forced pointer
+  click at (2,2), the click landed on the extension overlay's backdrop instead
+  of the welcome overlay's. `openTaskpane` now dispatches the click on the
+  welcome backdrop element directly; the `welcomeClickForce` option is gone.

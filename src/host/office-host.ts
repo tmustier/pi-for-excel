@@ -4,6 +4,8 @@ function isHostOfficeHostPayloadShape(value: DynamicValue): value is DynamicObje
 
 /** Office.js-backed host implementation. */
 
+import type { DocumentInstanceIdentity } from "./document-instance.js";
+import { createOfficeDocumentInstanceIdentity } from "./office-document-instance.js";
 import { settingsBackedSessionStorage } from "./session-storage.js";
 import { resolveOfficeThemeDark } from "./office-theme.js";
 import {
@@ -65,6 +67,7 @@ export class OfficeHost implements SpreadsheetHost {
   readonly kind = "office";
   readonly displayName = "Microsoft Excel";
   readonly sessionStorage: SpreadsheetHostSessionStorage = settingsBackedSessionStorage;
+  readonly documentInstance: DocumentInstanceIdentity = createOfficeDocumentInstanceIdentity();
 
   whenReady(): Promise<SpreadsheetHostReadyInfo> {
     if (typeof Office === "undefined") {

@@ -35,7 +35,6 @@ async function openTaskpaneWithExtension(code: string): Promise<{
       });
       return true;
     },
-    welcomeClickForce: true,
   });
   return { page: opened.page, finish: opened.finish };
 }

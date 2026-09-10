@@ -48,8 +48,15 @@ void test("POLICY: host globals and Office readiness select the boot host", asyn
     detect: "wps" | "office" | "browser";
     boot?: { kind: "office" | "browser"; reason: "office-ready" | "office-timeout" | "office-unavailable" };
   }> = [
-    { globals: { Office: readyOffice, wps: { Application: {} } }, detect: "wps" },
-    { globals: { Application: {} }, detect: "wps" },
+    { globals: { Office: readyOffice, wps: { EtApplication: () => ({}) } }, detect: "wps" },
+    { globals: { wps: { Application: { ActiveWorkbook: null } } }, detect: "wps" },
+    { globals: { wps: { PluginStorage: {} } }, detect: "wps" },
+    { globals: { Application: { Range: () => ({}) } }, detect: "wps" },
+    { globals: { Application: { CreateTaskpane: () => ({}) } }, detect: "wps" },
+    // Unrelated globals with these names (e.g. injected by a browser extension) are not WPS.
+    { globals: { Application: {} }, detect: "browser", boot: { kind: "browser", reason: "office-unavailable" } },
+    { globals: { wps: {} }, detect: "browser", boot: { kind: "browser", reason: "office-unavailable" } },
+    { globals: { Office: readyOffice, Application: { version: "1.0" } }, detect: "office", boot: { kind: "office", reason: "office-ready" } },
     { globals: { Office: readyOffice }, detect: "office", boot: { kind: "office", reason: "office-ready" } },
     { globals: { Office: { onReady: () => new Promise(() => {}) } }, detect: "office", boot: { kind: "office", reason: "office-timeout" } },
     { globals: { Office: { onReady: () => Promise.reject(new Error("not ready")) } }, detect: "office", boot: { kind: "office", reason: "office-timeout" } },
