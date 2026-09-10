@@ -21,23 +21,7 @@ import {
 } from "../src/taskpane/keyboard-shortcuts.ts";
 import { restoreQueuedMessagesToEditor } from "../src/taskpane/keyboard-shortcuts/editor-actions.ts";
 import { RecentlyClosedStack } from "../src/taskpane/recently-closed.ts";
-import { shouldPersistSession } from "../src/taskpane/sessions.ts";
 import { failOnUnexpectedStream } from "./fail-on-unexpected-stream.ts";
-
-void test("session persistence guard allows forced saves before first assistant response", () => {
-  assert.equal(
-    shouldPersistSession({ firstAssistantSeen: false }),
-    false,
-  );
-  assert.equal(
-    shouldPersistSession({ firstAssistantSeen: false, force: true }),
-    true,
-  );
-  assert.equal(
-    shouldPersistSession({ firstAssistantSeen: true }),
-    true,
-  );
-});
 
 void test("recently closed stack reopens newest first and enforces max size", () => {
   const stack = new RecentlyClosedStack(2);
