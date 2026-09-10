@@ -44,6 +44,9 @@ Run `npm run test:browser` for taskpane behavior in real headless Chromium (file
 
 Add a browser contract under `tests/browser/` when the capability depends on real DOM entry, event propagation, focus, accessibility or rendered visibility. Use the `*.browser-test.ts` suffix so `npm test` remains browser-free. Enter through user-visible controls and assert the visible outcome rather than implementation names.
 
+Use `tests/browser/harness.ts` for the shared Vite server, Chromium lifecycle, loopback-only routing and taskpane setup.
+Supply its `bridge` hook when a test needs custom background-verify commands or responses.
+
 ## Foundation status
 
 The foundation now includes full test discovery, persistent lint-rule contracts, command-layer completion and rejection tests, real-Chromium taskpane navigation and failure contracts, the session restart and cross-workbook isolation contract, the write, history, restore and read-back workbook contract, validated compaction preferences, and sandbox LLM request validation.

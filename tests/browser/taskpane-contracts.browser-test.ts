@@ -1,112 +1,49 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 
-import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
-import { createServer, type ViteDevServer } from "vite";
+import type { BrowserContext, Page } from "playwright";
 
-let browser: Browser;
-let server: ViteDevServer;
-let baseUrl: string;
+import {
+  enterCommand,
+  openBrowserPage,
+  openTaskpane,
+  startTaskpaneServer,
+  type TaskpaneServer,
+} from "./harness.ts";
+
+let env: TaskpaneServer;
 
 before(async () => {
-  process.env.VITE_PI_BACKGROUND_VERIFY_URL = "https://localhost:3157";
-  process.env.VITE_PI_BACKGROUND_VERIFY_TOKEN = "browser-bridge-token";
-
-  server = await createServer({
-    configFile: false,
-    root: process.cwd(),
-    server: {
-      host: "127.0.0.1",
-      port: 0,
-      strictPort: false,
-    },
-  });
-  await server.listen();
-
-  const localUrl = server.resolvedUrls?.local[0];
-  if (!localUrl) {
-    throw new Error("Vite did not expose a local URL");
-  }
-  baseUrl = localUrl;
-  browser = await chromium.launch({ headless: true });
+  env = await startTaskpaneServer();
 });
 
 after(async () => {
-  await browser?.close();
-  await server?.close();
+  await env.close();
 });
-
-function isLoopbackUrl(rawUrl: string): boolean {
-  const url = new URL(rawUrl);
-  return url.hostname === "127.0.0.1" || url.hostname === "localhost" || url.hostname === "[::1]";
-}
-
-function isExpectedOfficeUnavailableError(error: Error): boolean {
-  return /Office(?:\.js)? (?:is |was )?(?:not ready|not available|unavailable)/i.test(error.message);
-}
 
 async function withBrowserPage(
   path: string,
   run: (page: Page) => Promise<void>,
   prepareContext?: (context: BrowserContext) => Promise<void>,
 ): Promise<void> {
-  const context: BrowserContext = await browser.newContext();
-  const page = await context.newPage();
-  const pageErrors: Error[] = [];
-
-  page.on("pageerror", (error) => {
-    if (!isExpectedOfficeUnavailableError(error)) {
-      pageErrors.push(error);
-    }
+  const opened = await openBrowserPage(env, {
+    path,
+    ...(prepareContext ? { prepareContext } : {}),
   });
-
-  await context.route("**/*", async (route) => {
-    const requestUrl = new URL(route.request().url());
-    if (requestUrl.hostname === "localhost" && requestUrl.port === "3157") {
-      if (requestUrl.pathname === "/client/register") {
-        await route.fulfill({ contentType: "application/json", body: JSON.stringify({ clientId: "idle-browser-client" }) });
-      } else if (requestUrl.pathname === "/client/poll") {
-        await new Promise((resolve) => setTimeout(resolve, 1_000));
-        await route.fulfill({ contentType: "application/json", body: JSON.stringify({ type: "noop" }) });
-      } else {
-        await route.fulfill({ contentType: "application/json", body: JSON.stringify({ ok: true }) });
-      }
-      return;
-    }
-    if (isLoopbackUrl(route.request().url())) {
-      await route.continue();
-      return;
-    }
-    await route.abort("blockedbyclient");
-  });
-  await prepareContext?.(context);
-
   try {
-    await page.goto(`${baseUrl}${path}`);
-    await run(page);
-    assert.deepEqual(pageErrors.map((error) => error.message), [], "unexpected uncaught page errors");
+    await run(opened.page);
   } finally {
-    await context.close();
+    await opened.finish();
   }
 }
 
 async function withTaskpane(run: (page: Page) => Promise<void>): Promise<void> {
-  await withBrowserPage("src/taskpane.html", async (page) => {
-    await page.locator("pi-input textarea").waitFor({ state: "visible", timeout: 20_000 });
-
-    const welcomeOverlay = page.locator("#pi-welcome-login-overlay");
-    await welcomeOverlay.waitFor({ state: "visible", timeout: 10_000 });
-    await welcomeOverlay.click({ position: { x: 2, y: 2 } });
-    await welcomeOverlay.waitFor({ state: "detached" });
-
-    await run(page);
-  });
-}
-
-async function enterCommand(page: Page, command: string): Promise<void> {
-  const input = page.locator("pi-input textarea");
-  await input.fill(command);
-  await input.press("Enter");
+  const opened = await openTaskpane(env);
+  try {
+    await run(opened.page);
+  } finally {
+    await opened.finish();
+  }
 }
 
 async function openUtilitiesMenu(page: Page): Promise<void> {

@@ -1,59 +1,29 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 
-import { chromium, type Browser } from "playwright";
-import { createServer, type ViteDevServer } from "vite";
+import { openTaskpane, startTaskpaneServer, type TaskpaneServer } from "./harness.ts";
 
-let browser: Browser;
-let server: ViteDevServer;
-let baseUrl: string;
+let env: TaskpaneServer;
 
 before(async () => {
-  process.env.VITE_PI_BACKGROUND_VERIFY_URL = "https://localhost:3157";
-  process.env.VITE_PI_BACKGROUND_VERIFY_TOKEN = "extensions-browser-token";
-
-  server = await createServer({
-    configFile: false,
-    root: process.cwd(),
-    server: { host: "127.0.0.1", port: 0, strictPort: false },
-  });
-  await server.listen();
-
-  const localUrl = server.resolvedUrls?.local[0];
-  if (!localUrl) throw new Error("Vite did not expose a local URL");
-  baseUrl = localUrl;
-  browser = await chromium.launch({ headless: true });
+  env = await startTaskpaneServer({ token: "extensions-browser-token" });
 });
 
 after(async () => {
-  await browser?.close();
-  await server?.close();
+  await env.close();
 });
 
-function isExpectedOfficeUnavailableError(error: Error): boolean {
-  return /Office(?:\.js)? (?:is |was )?(?:not ready|not available|unavailable)/i.test(error.message);
-}
-
 void test("an inline extension installed through the runtime appears enabled in Plugins", async () => {
-  const context = await browser.newContext();
-  const page = await context.newPage();
-  const pageErrors: Error[] = [];
   let commandSent = false;
   let resolveInstalled: (() => void) | undefined;
   const installed = new Promise<void>((resolve) => {
     resolveInstalled = resolve;
   });
 
-  page.on("pageerror", (error) => {
-    if (!isExpectedOfficeUnavailableError(error)) pageErrors.push(error);
-  });
-
-  await context.route("**/*", async (route) => {
-    const url = new URL(route.request().url());
-    if (url.hostname === "localhost" && url.port === "3157") {
-      if (url.pathname === "/client/register") {
-        await route.fulfill({ contentType: "application/json", body: JSON.stringify({ clientId: "extension-hub-browser" }) });
-      } else if (url.pathname === "/client/poll" && !commandSent) {
+  const opened = await openTaskpane(env, {
+    clientId: "extension-hub-browser",
+    bridge: async (url, route) => {
+      if (url.pathname === "/client/poll" && !commandSent) {
         commandSent = true;
         await route.fulfill({
           contentType: "application/json",
@@ -69,30 +39,19 @@ void test("an inline extension installed through the runtime appears enabled in 
       } else if (url.pathname === "/client/result") {
         resolveInstalled?.();
         await route.fulfill({ contentType: "application/json", body: JSON.stringify({ ok: true }) });
-      } else {
+      } else if (url.pathname === "/client/poll") {
         await new Promise((resolve) => setTimeout(resolve, 250));
         await route.fulfill({ contentType: "application/json", body: JSON.stringify({ type: "noop" }) });
+      } else {
+        return false;
       }
-      return;
-    }
-
-    if (url.hostname === "127.0.0.1" || url.hostname === "localhost" || url.hostname === "[::1]") {
-      await route.continue();
-      return;
-    }
-    await route.abort("blockedbyclient");
+      return true;
+    },
   });
+  const { page } = opened;
+  const input = page.locator("pi-input textarea");
 
   try {
-    await page.goto(`${baseUrl}src/taskpane.html`);
-    const input = page.locator("pi-input textarea");
-    await input.waitFor({ state: "visible", timeout: 20_000 });
-
-    const welcomeOverlay = page.locator("#pi-welcome-login-overlay");
-    await welcomeOverlay.waitFor({ state: "visible", timeout: 10_000 });
-    await welcomeOverlay.click({ position: { x: 2, y: 2 } });
-    await welcomeOverlay.waitFor({ state: "detached" });
-
     await Promise.race([
       installed,
       new Promise<void>((_resolve, reject) => {
@@ -110,8 +69,7 @@ void test("an inline extension installed through the runtime appears enabled in 
     assert.match((await extensionCard.textContent()) ?? "", /inline code \(29 chars, 1 lines\) · sandbox iframe/u);
     await assert.doesNotReject(() => extensionCard.getByRole("checkbox").waitFor({ state: "attached" }));
     assert.equal(await extensionCard.getByRole("checkbox").isChecked(), true);
-    assert.deepEqual(pageErrors.map((error) => error.message), []);
   } finally {
-    await context.close();
+    await opened.finish();
   }
 });
