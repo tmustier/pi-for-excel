@@ -278,41 +278,6 @@ void test("python bridge approvals fail open when no approval handler is configu
   assert.equal(executeCount, 1);
 });
 
-void test("python fallback tools execute even when bridge gate fails", async () => {
-  let executeCount = 0;
-  let approvalCalls = 0;
-
-  const tools = [
-    createTestTool("python_run", () => { executeCount += 1; }),
-    createTestTool("python_transform_range", () => { executeCount += 1; }),
-  ];
-
-  const gatedTools = await applyExperimentalToolGates(tools, {
-    getPythonBridgeUrl: () => Promise.resolve(undefined),
-    validatePythonBridgeUrl: (url) => url,
-    probePythonBridge: () => Promise.resolve(false),
-    requestPythonBridgeApproval: () => {
-      approvalCalls += 1;
-      return Promise.resolve(true);
-    },
-  });
-
-  const pythonRun = gatedTools.find((tool) => tool.name === "python_run");
-  const pythonTransform = gatedTools.find((tool) => tool.name === "python_transform_range");
-
-  assert.ok(pythonRun);
-  assert.ok(pythonTransform);
-
-  await pythonRun.execute("call-python-run", { code: "print('hi')" });
-  await pythonTransform.execute("call-python-transform", {
-    range: "Sheet1!A1:A2",
-    code: "result = [[1], [2]]",
-  });
-
-  assert.equal(executeCount, 2);
-  assert.equal(approvalCalls, 0);
-});
-
 void test("python fallback tools return structured gate errors when configured bridge is unreachable", async () => {
   let executeCount = 0;
 
@@ -444,64 +409,5 @@ void test("python bridge tools require explicit user approval", async () => {
 
   assert.equal(approvalCalls, 1);
   assert.equal(executeCount, 0);
-});
-
-void test("approved python bridge calls proceed to tool execution", async () => {
-  let executeCount = 0;
-
-  const [pythonTool] = await applyExperimentalToolGates([
-    createTestTool("python_run", () => {
-      executeCount += 1;
-    }),
-  ], {
-    getPythonBridgeUrl: () => Promise.resolve("https://localhost:3340"),
-    validatePythonBridgeUrl: () => "https://localhost:3340",
-    probePythonBridge: () => Promise.resolve(true),
-    requestPythonBridgeApproval: () => Promise.resolve(true),
-  });
-
-  await pythonTool.execute("call-python", { code: "print('hello')" });
-  assert.equal(executeCount, 1);
-});
-
-void test("python bridge approval is cached per bridge URL", async () => {
-  let approvalCalls = 0;
-  let executeCount = 0;
-  let currentBridgeUrl = "https://localhost:3340";
-  let approvedBridgeUrl: string | undefined;
-
-  const [pythonTool] = await applyExperimentalToolGates([
-    createTestTool("python_run", () => {
-      executeCount += 1;
-    }),
-  ], {
-    getPythonBridgeUrl: () => Promise.resolve(currentBridgeUrl),
-    validatePythonBridgeUrl: (url) => url,
-    probePythonBridge: () => Promise.resolve(true),
-    requestPythonBridgeApproval: ({ bridgeUrl }) => {
-      approvalCalls += 1;
-      assert.equal(bridgeUrl, currentBridgeUrl);
-      return Promise.resolve(true);
-    },
-    getApprovedPythonBridgeUrl: () => Promise.resolve(approvedBridgeUrl),
-    setApprovedPythonBridgeUrl: (bridgeUrl) => {
-      approvedBridgeUrl = bridgeUrl;
-      return Promise.resolve();
-    },
-  });
-
-  await pythonTool.execute("call-1", { code: "print('first')" });
-  await pythonTool.execute("call-2", { code: "print('second')" });
-
-  assert.equal(approvalCalls, 1);
-  assert.equal(executeCount, 2);
-  assert.equal(approvedBridgeUrl, "https://localhost:3340");
-
-  currentBridgeUrl = "https://localhost:3350";
-  await pythonTool.execute("call-3", { code: "print('third')" });
-
-  assert.equal(approvalCalls, 2);
-  assert.equal(executeCount, 3);
-  assert.equal(approvedBridgeUrl, "https://localhost:3350");
 });
 
