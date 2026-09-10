@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { Kind, Type } from "@sinclair/typebox";
+import { Type } from "@sinclair/typebox";
 
 import { normalizeSandboxToolParameters } from "../src/extensions/sandbox-runtime.ts";
 import {
