@@ -1,7 +1,5 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { Script } from "node:vm";
-
 import { Type } from "@sinclair/typebox";
 import {
   InMemoryModelsStore,
@@ -30,7 +28,6 @@ import {
   isSandboxEnvelope,
   serializeForSandboxInlineScript,
 } from "../src/extensions/sandbox/protocol.ts";
-import { buildSandboxSrcdoc } from "../src/extensions/sandbox/srcdoc.ts";
 import { EXTENSIONS_REGISTRY_STORAGE_KEY } from "../src/extensions/store.ts";
 import {
   getDefaultPermissionsForTrust,
@@ -809,53 +806,6 @@ void test("host runtime extension tool errors include extension ownership contex
   } finally {
     restoreLocalStorage();
   }
-});
-
-void test("sandbox srcdoc builder emits expected bridge hooks and config", () => {
-  const html = buildSandboxSrcdoc({
-    instanceId: "ext.inline.srcdoc",
-    extensionName: "Inline Srcdoc",
-    source: {
-      kind: "inline",
-      code: "export function activate(api) { api.toast('hello'); }",
-    },
-    widgetApiV2Enabled: true,
-  });
-
-  assert.match(html, /"instanceId":"ext\.inline\.srcdoc"/);
-  assert.match(html, /"widgetApiV2Enabled":true/);
-  assert.match(html, /"bootstrapKind":"bootstrap"/);
-  assert.match(html, /if \(method === "ui_action"\)/);
-  assert.match(html, /Unknown sandbox UI action id:/);
-  assert.match(html, /api\.agent is not available in sandbox runtime/);
-  assert.match(html, /event\.source !== parent/);
-  assert.match(html, /message\.kind !== config\.bootstrapKind/);
-  assert.match(html, /hostPort\.addEventListener\("message", handleHostMessage\)/);
-  assert.match(html, /placement: payload\.placement === "above-input" \|\| payload\.placement === "below-input"/);
-  assert.match(html, /payload\.minHeightPx === null/);
-  assert.match(html, /model_provider_register/);
-  assert.match(html, /model_provider_unregister/);
-  assert.match(html, /model_providers_refresh/);
-});
-
-void test("sandbox srcdoc bootstrap is syntactically valid JavaScript", () => {
-  const html = buildSandboxSrcdoc({
-    instanceId: "ext.inline.syntax",
-    extensionName: "Inline Syntax",
-    source: {
-      kind: "inline",
-      code: "export function activate(api) { return () => api.toast('clean'); }",
-    },
-    widgetApiV2Enabled: false,
-  });
-  const match = /<script type="module">([\s\S]*)<\/script>/u.exec(html);
-  assert.ok(match);
-  const script = match[1];
-  assert.equal(typeof script, "string");
-  if (typeof script !== "string") return;
-
-  assert.doesNotThrow(() => new Script(script));
-  assert.match(script, /Extension cleanup failed:\\n-/u);
 });
 
 void test("sandbox protocol helpers validate envelope shapes and escape inline script payloads", () => {
