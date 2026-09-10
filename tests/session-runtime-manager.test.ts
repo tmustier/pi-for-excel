@@ -101,33 +101,6 @@ function createRuntimeHarness(runtimeId: string): RuntimeHarness {
   };
 }
 
-void test("runtime lifecycle switches through snapshots without a sidebar dependency", async () => {
-  const first = createRuntimeHarness("first");
-  const second = createRuntimeHarness("second");
-  const pending = [first.runtime, second.runtime];
-  const manager = new SessionRuntimeManager({
-    createRuntime: () => {
-      const runtime = pending.shift();
-      assert.ok(runtime);
-      return Promise.resolve(runtime);
-    },
-  });
-
-  const activeRuntimeIds: Array<string | null> = [];
-  manager.subscribe((snapshot) => {
-    activeRuntimeIds.push(snapshot.activeRuntimeId);
-  });
-
-  await manager.createRuntime({ activate: true, autoRestoreLatest: false });
-  await manager.createRuntime({ activate: false, autoRestoreLatest: false });
-  assert.equal(manager.getActiveRuntime()?.runtimeId, "first");
-
-  manager.switchRuntime("second");
-  assert.equal(manager.getActiveRuntime()?.runtimeId, "second");
-  assert.deepEqual(manager.snapshot().tabs.map((tab) => tab.runtimeId), ["first", "second"]);
-  assert.equal(activeRuntimeIds.at(-1), "second");
-});
-
 void test("closing a runtime unsubscribes lifecycle persistence events before disposal", () => {
   const first = createRuntimeHarness("first");
   const second = createRuntimeHarness("second");

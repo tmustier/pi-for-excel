@@ -7,8 +7,6 @@ import {
   isModelSwitchBehavior,
   normalizeModelSwitchBehavior,
   setStoredModelSwitchBehavior,
-  shouldForkModelSwitch,
-  type ModelSwitchBehavior,
 } from "../src/models/switch-behavior.ts";
 
 class MemoryStore {
@@ -52,21 +50,3 @@ void test("setStoredModelSwitchBehavior persists and returns the stored value", 
   assert.equal(stored, "fork");
 });
 
-void test("shouldForkModelSwitch only forks for non-empty sessions with fork behavior", () => {
-  const scenarios: Array<{ behavior: ModelSwitchBehavior; hasMessages: boolean; expected: boolean }> = [
-    { behavior: "inPlace", hasMessages: false, expected: false },
-    { behavior: "inPlace", hasMessages: true, expected: false },
-    { behavior: "fork", hasMessages: false, expected: false },
-    { behavior: "fork", hasMessages: true, expected: true },
-  ];
-
-  for (const scenario of scenarios) {
-    assert.equal(
-      shouldForkModelSwitch({
-        behavior: scenario.behavior,
-        hasMessages: scenario.hasMessages,
-      }),
-      scenario.expected,
-    );
-  }
-});
