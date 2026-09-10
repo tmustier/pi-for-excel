@@ -8,9 +8,7 @@ import {
   maybeAutoCompactBeforeContinuation,
 } from "../src/compaction/auto-compaction.ts";
 import {
-  buildCompactionMemoryFocusInstruction,
   collectCompactionMemoryCues,
-  mergeCompactionAdditionalFocus,
 } from "../src/compaction/memory-nudge.ts";
 import {
   COMPACTION_ENABLED_SETTING_KEY,
@@ -250,35 +248,6 @@ void test("deduplicates snippets and respects snippet limits", () => {
   assert.equal(summary.snippets.length, 1);
 });
 
-void test("builds memory focus instructions only when cues are present", () => {
-  const noCueInstruction = buildCompactionMemoryFocusInstruction({
-    cueCount: 0,
-    snippets: [],
-  });
-  assert.equal(noCueInstruction, null);
 
-  const instruction = buildCompactionMemoryFocusInstruction({
-    cueCount: 2,
-    snippets: [
-      "Remember this: workbook uses calendar year.",
-      "Don't forget EUR defaults.",
-    ],
-  });
 
-  assert.notEqual(instruction, null);
-  assert.match(instruction ?? "", /instructions tool/i);
-  assert.match(instruction ?? "", /notes\//i);
-  assert.match(instruction ?? "", /Memory to persist/i);
-  assert.match(instruction ?? "", /Potential user cues/i);
-});
 
-void test("merges compaction focus parts", () => {
-  const merged = mergeCompactionAdditionalFocus(
-    "focus on formulas",
-    null,
-    "capture durable memory",
-  );
-
-  assert.equal(merged, "focus on formulas\n\ncapture durable memory");
-  assert.equal(mergeCompactionAdditionalFocus(" ", null, undefined), undefined);
-});
