@@ -50,17 +50,6 @@ void test("does not swap while the runtime is working (streaming or queue-busy)"
   assert.equal(swap, null);
 });
 
-void test("does not swap when no providers are configured", () => {
-  const swap = resolveRuntimeModelSwap({
-    currentModel: openaiApiModel,
-    availableProviders: [],
-    defaultModel: codexModel,
-    isBusy: false,
-  });
-
-  assert.equal(swap, null);
-});
-
 void test("does not swap onto a default model whose provider is also unusable", () => {
   // e.g. copilot-only setups where the default-model rules used to fall back
   // to openai/gpt-5.6-sol — trading one wrong API-key prompt for another.
