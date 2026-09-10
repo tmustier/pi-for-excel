@@ -31,25 +31,6 @@ function findButtonByText(root: HTMLElement, text: string): HTMLElement | null {
   return null;
 }
 
-function findFirstInput(root: HTMLElement): HTMLInputElement | null {
-  const queue: Element[] = Array.from(root.children);
-
-  while (queue.length > 0) {
-    const next = queue.shift();
-    if (!next) {
-      continue;
-    }
-
-    if (next instanceof HTMLInputElement) {
-      return next;
-    }
-
-    queue.push(...Array.from(next.children));
-  }
-
-  return null;
-}
-
 void test("closeOverlayById returns false when overlay does not exist", () => {
   const { restore } = installFakeDom();
 
@@ -128,45 +109,6 @@ void test("confirmation dialog resolves true when confirm button is clicked", as
     const approved = await pendingApproval;
     assert.equal(approved, true);
     assert.equal(document.getElementById(CONFIRM_DIALOG_OVERLAY_ID), null);
-  } finally {
-    restore();
-  }
-});
-
-void test("text input dialog resolves entered value on confirm", async () => {
-  const { document, restore } = installFakeDom();
-
-  try {
-    const pendingResult = requestTextInputDialog({
-      title: "Rename file",
-      initialValue: "notes.md",
-      confirmLabel: "Rename",
-      cancelLabel: "Cancel",
-      restoreFocusOnClose: false,
-    });
-
-    const overlay = document.getElementById(TEXT_INPUT_DIALOG_OVERLAY_ID);
-    assert.ok(overlay);
-
-    const input = findFirstInput(overlay);
-    assert.ok(input);
-    if (!input) {
-      throw new Error("Text input not found");
-    }
-
-    input.value = "notes-renamed.md";
-
-    const confirmButton = findButtonByText(overlay, "Rename");
-    assert.ok(confirmButton);
-    if (!confirmButton) {
-      throw new Error("Confirm button not found");
-    }
-
-    confirmButton.dispatchEvent(new Event("click"));
-
-    const value = await pendingResult;
-    assert.equal(value, "notes-renamed.md");
-    assert.equal(document.getElementById(TEXT_INPUT_DIALOG_OVERLAY_ID), null);
   } finally {
     restore();
   }

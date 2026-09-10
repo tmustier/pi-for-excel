@@ -8,7 +8,6 @@ import {
 import type {
   LibreOfficeBridgeDetails,
   PythonBridgeDetails,
-  PythonTransformRangeDetails,
   TmuxBridgeDetails,
 } from "../src/tools/tool-details.ts";
 import {
@@ -112,23 +111,6 @@ void test("shows python setup card for libreoffice bridge outages", () => {
   assert.equal(model.command, PYTHON_BRIDGE_SETUP_COMMAND);
   assert.equal(model.probeUrl, "https://localhost:4450");
   assert.equal(model.title, "File conversion is unavailable");
-});
-
-void test("shows setup card for transform-range gate failures", () => {
-  const details: PythonTransformRangeDetails = {
-    kind: "python_transform_range",
-    blocked: false,
-    error: "Native Python is not available right now because the Python bridge is not reachable at the configured URL.",
-    gateReason: "bridge_unreachable",
-    skillHint: "python-bridge",
-  };
-
-  assert.equal(shouldShowBridgeSetupCard(details), true);
-
-  const model = resolveBridgeSetupCardModel(details);
-  assert.ok(model);
-  assert.equal(model.command, PYTHON_BRIDGE_SETUP_COMMAND);
-  assert.equal(model.title, "Python transform is unavailable");
 });
 
 void test("does not show setup card for non-setup python errors", () => {

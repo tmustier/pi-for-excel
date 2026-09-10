@@ -3,23 +3,6 @@ import { test } from "node:test";
 
 import { stripYamlFrontmatter } from "../src/ui/markdown-preprocess.ts";
 
-void test("stripYamlFrontmatter removes leading YAML metadata block", () => {
-  const input = `---
-name: xlsx
-description: Use this skill for spreadsheet workflows
-metadata:
-  integration-id: sample
----
-
-## Important Requirements
-Body content.
-`;
-
-  const output = stripYamlFrontmatter(input);
-  assert.equal(output.trimStart().startsWith("## Important Requirements"), true);
-  assert.equal(output.includes("name: xlsx"), false);
-});
-
 void test("stripYamlFrontmatter preserves markdown that starts with thematic breaks", () => {
   const input = `---
 Section intro

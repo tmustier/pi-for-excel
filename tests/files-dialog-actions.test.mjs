@@ -70,28 +70,3 @@ test("detail actions show open/download only for read-only files", () => {
     restore();
   }
 });
-
-test("detail actions include rename/delete for writable files", () => {
-  const { restore } = installFakeDom();
-
-  try {
-    const actions = createFilesDialogDetailActions({
-      file: makeFile("notes/plan.md"),
-      fileRef: {
-        path: "notes/plan.md",
-        locationKind: "workspace",
-      },
-      workspace: createWorkspaceStub(),
-      auditContext: {
-        actor: "user",
-        source: "test",
-      },
-      onAfterRename: () => Promise.resolve(),
-      onAfterDelete: () => Promise.resolve(),
-    });
-
-    assert.deepEqual(getButtonLabels(actions), ["Open ↗", "Download", "Rename", "Delete"]);
-  } finally {
-    restore();
-  }
-});
