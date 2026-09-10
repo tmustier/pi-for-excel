@@ -9,9 +9,10 @@ import {
 } from "../src/tools/charts.ts";
 import { applyChartState } from "../src/workbook/recovery/chart-state.ts";
 import type { ChartsDetails } from "../src/tools/tool-details.ts";
-import { WorkbookRecoveryLog, type WorkbookRecoverySnapshot } from "../src/workbook/recovery-log.ts";
+import { createWorkbookHistoryTool } from "../src/tools/workbook-history.ts";
+import { WorkbookRecoveryLog } from "../src/workbook/recovery-log.ts";
 import type { WorkbookContext } from "../src/workbook/context.ts";
-import type { AppendWorkbookChangeAuditEntryArgs } from "../src/audit/workbook-change-audit.ts";
+import { WorkbookChangeAuditLog } from "../src/audit/workbook-change-audit.ts";
 import type {
   RecoveryChartAbsentState,
   RecoveryChartPresentState,
@@ -428,70 +429,73 @@ void test("get_image returns text plus image content and structured PNG details"
   });
 });
 
-void test("update captures a chart checkpoint and appends audit metadata", async () => {
-  const beforeState = createChartState("Sales");
-  let appendedState: RecoveryChartState | null = null;
-  let auditEntry: AppendWorkbookChangeAuditEntryArgs | null = null;
-
-  const tool = createChartsTool({
-    captureChartPresent: () => Promise.resolve(beforeState),
-    executeAction: () => Promise.resolve({
-      result: {
-        content: [{ type: "text", text: "Chart 'Sales' updated." }],
-        details: {
-          kind: "charts",
-          action: "update",
-          name: "Sales",
-          address: "Sheet1!Sales",
-        },
-      },
-      outputAddress: "Sheet1!Sales",
-      changedCount: 1,
-      auditSummary: "updated chart Sales",
-      sourceRangeChanged: true,
+void test("chart update can be restored through workbook_history and records audit metadata", async () => {
+  const sheet = new FakeWorksheet("Sheet1");
+  const chart = sheet.charts.add("ColumnClustered", sheet.getRange("A1:B12"), "Columns");
+  chart.name = "Sales";
+  chart.title.text = "Old title";
+  chart.title.visible = true;
+  const context = new FakeContext([sheet]);
+  const settings = createInMemorySettingsStore();
+  const workbookContext: WorkbookContext = {
+    workbookId: "url_sha256:charts-tool-seam",
+    workbookName: "Charts.xlsx",
+    source: "document.url",
+  };
+  let id = 0;
+  const recovery = new WorkbookRecoveryLog({
+    getSettingsStore: () => Promise.resolve(settings),
+    getWorkbookContext: () => Promise.resolve(workbookContext),
+    now: () => 1_700_000_000_000 + id,
+    createId: () => `chart-snapshot-${id += 1}`,
+    applySnapshot: () => Promise.resolve({ values: [], formulas: [] }),
+    applyChartSnapshot: (address, state) => applyChartState(address, state),
+  });
+  const audit = new WorkbookChangeAuditLog({
+    getSettingsStore: () => Promise.resolve({
+      ...settings,
+      delete: () => Promise.resolve(),
     }),
-    appendRecoverySnapshot: (args) => {
-      appendedState = args.chartState;
-      const snapshot: WorkbookRecoverySnapshot = {
-        id: "snap-chart-1",
-        at: 1700000000000,
-        toolName: "charts",
-        toolCallId: args.toolCallId,
-        address: args.address,
-        changedCount: args.changedCount ?? 1,
-        cellCount: 1,
-        beforeValues: [],
-        beforeFormulas: [],
-        snapshotKind: "chart_state",
-        chartState: args.chartState,
-        workbookId: "url_sha256:workbook",
-      };
-      return Promise.resolve(snapshot);
-    },
-    appendAuditEntry: (entry) => {
-      auditEntry = entry;
-      return Promise.resolve();
-    },
+    getWorkbookContext: () => Promise.resolve(workbookContext),
+    now: () => 1_700_000_000_100,
+    createId: () => "chart-audit-1",
+  });
+  const charts = createChartsTool({
+    appendRecoverySnapshot: (args) => recovery.appendChart(args),
+    appendAuditEntry: (entry) => audit.append(entry),
+  });
+  const history = createWorkbookHistoryTool({
+    getRecoveryLog: () => recovery,
+    appendAuditEntry: (entry) => audit.append(entry),
   });
 
-  const result = await tool.execute("tc-update-checkpoint", {
-    action: "update",
-    name: "Sales",
-    source_range: "B1:C12",
-    title: "Updated",
+  await withFakeExcel(context, async () => {
+    const updated = await charts.execute("tc-update-checkpoint", {
+      action: "update",
+      name: "Sales",
+      title: "Updated title",
+    });
+    assert.equal(chart.title.text, "Updated title");
+    assert.equal(updated.details.recovery?.status, "checkpoint_created");
+    const snapshotId = updated.details.recovery?.snapshotId;
+    assert.ok(snapshotId);
+
+    const restored = await history.execute("tc-restore-chart", {
+      action: "restore",
+      snapshot_id: snapshotId,
+    });
+    assert.equal(restored.details.restoredSnapshotId, snapshotId);
+    assert.equal(chart.title.text, "Old title");
   });
 
-  assert.deepEqual(appendedState, beforeState);
-  assert.equal(result.details.recovery?.status, "checkpoint_created");
-  assert.equal(result.details.recovery?.snapshotId, "snap-chart-1");
-  assert.equal(auditEntry?.toolName, "charts");
-  assert.equal(auditEntry?.blocked, false);
-  assert.match(firstText(result), /property backup only/u);
+  const entries = await audit.list();
+  const updateEntry = entries.find((entry) => entry.toolCallId === "tc-update-checkpoint");
+  assert.equal(updateEntry?.toolName, "charts");
+  assert.equal(updateEntry?.blocked, false);
+  assert.equal(updateEntry?.outputAddress, "Sheet1!Sales");
 });
 
-void test("delete explicitly signals no backup and does not append a recovery snapshot", async () => {
-  let appendRecoveryCalls = 0;
-
+void test("chart delete explicitly returns that no backup is available", async () => {
   const tool = createChartsTool({
     executeAction: () => Promise.resolve({
       result: {
@@ -507,10 +511,6 @@ void test("delete explicitly signals no backup and does not append a recovery sn
       changedCount: 1,
       auditSummary: "deleted chart Sales",
     }),
-    appendRecoverySnapshot: () => {
-      appendRecoveryCalls += 1;
-      return Promise.resolve(null);
-    },
     appendAuditEntry: () => Promise.resolve(),
   });
 
@@ -519,7 +519,6 @@ void test("delete explicitly signals no backup and does not append a recovery sn
     name: "Sales",
   });
 
-  assert.equal(appendRecoveryCalls, 0);
   assert.equal(result.details.recovery?.status, "not_available");
   assert.match(firstText(result), /Backup not created/u);
   assert.match(firstText(result), /cannot faithfully recreate deleted charts/u);
