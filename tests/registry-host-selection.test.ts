@@ -4,10 +4,8 @@ import { test } from "node:test";
 import { Type } from "@sinclair/typebox";
 
 import {
-  WPS_CORE_TOOL_EXECUTE_OVERRIDES,
   composeCoreToolsForHost,
   isCoreToolUnsupportedOnWps,
-  selectCoreToolForHost,
   selectOfficeCoupledToolForHost,
   type AnyHostSelectableTool,
 } from "../src/tools/host-selection.ts";
