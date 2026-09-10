@@ -44,7 +44,7 @@
     "check:eslint-comments": "node scripts/check-eslint-disable-comments.mjs",
     "check:innerhtml": "node scripts/check-innerhtml-usage.mjs",
     "test": "node --test --experimental-strip-types --import ./scripts/register-test-ts-loader.mjs \"tests/**/*.test.ts\" \"tests/**/*.test.mjs\"",
-    "test:browser": "node --test --experimental-strip-types --import ./scripts/register-test-ts-loader.mjs \"tests/browser/**/*.browser-test.ts\"",
+    "test:browser": "node --test --test-concurrency=1 --experimental-strip-types --import ./scripts/register-test-ts-loader.mjs \"tests/browser/**/*.browser-test.ts\"",
     "test:all": "npm test && npm run test:browser",
     "check:return-types": "node scripts/check-top-level-return-types.mjs"
   },
