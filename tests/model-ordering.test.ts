@@ -23,11 +23,7 @@ import {
   compareOpenAiModelIds,
   isOpenAiCodexModelId,
   isOpenAiGeneralGptModelId,
-  modelRecencyScore,
-  openAiFamilyPriority,
-  openAiVariantPriority,
   parseMajorMinor,
-  providerPriority,
   shouldPreferOpenAiGeneralModel,
 } from "../src/models/model-ordering.ts";
 import { getThinkingLevelsForModel } from "../src/models/thinking-levels.ts";
