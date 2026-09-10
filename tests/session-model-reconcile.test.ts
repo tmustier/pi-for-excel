@@ -129,3 +129,39 @@ void test("provider refresh switches an unavailable session to an available non-
   assert.equal(selected.id, "plain-model");
   assert.equal(thinkingLevel, "off");
 });
+
+void test("provider refresh applies metadata-only changes to a session on the same model", async () => {
+  const keys = new MemoryProviderKeys();
+  const provider = customProvider();
+  const catalogModel = provider.models[0];
+  assert.ok(catalogModel);
+  // Same identity and token limits as the catalogue entry; everything else is
+  // what an older gateway save carried before the registry match succeeded.
+  const staleModel = {
+    ...catalogModel,
+    reasoning: false,
+    input: ["text" as const],
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+  };
+  provider.models[0] = {
+    ...catalogModel,
+    reasoning: true,
+    thinkingLevelMap: { low: "minimal", high: "xhigh" },
+    input: ["text", "image"],
+    cost: { input: 0.6, output: 2.5, cacheRead: 0.1, cacheWrite: 0 },
+  };
+  let selected = staleModel;
+  const runtimes: ModelRefreshRuntime[] = [{
+    runtimeId: "session-a",
+    model: staleModel,
+    isBusy: false,
+    applyModel: (model) => {
+      selected = model;
+      runtimes[0].model = model;
+    },
+  }];
+
+  await createOwner(keys, runtimes, [provider]).restoreCached();
+
+  assert.deepEqual(selected, provider.models[0]);
+});

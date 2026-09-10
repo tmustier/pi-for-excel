@@ -27,26 +27,40 @@ interface RefreshRequest {
   allowNetwork: boolean;
 }
 
-interface ComparableRuntimeModel {
-  api: string;
-  id: string;
-  provider: string;
-  baseUrl: string;
-  contextWindow: number;
-  maxTokens: number;
+/**
+ * Canonical JSON for a model: keys sorted at every depth, `undefined` members
+ * dropped. Models are JSON-shaped records (that is how they persist inside
+ * sessions), so this totally orders everything that reaches the wire or the UI.
+ */
+function canonicalModelJson(value: DynamicValue): string {
+  if (Array.isArray(value)) {
+    return `[${value.map((item: DynamicValue) => canonicalModelJson(item)).join(",")}]`;
+  }
+  if (typeof value === "object" && value !== null) {
+    // Non-array object: models only nest plain records (cost, thinking levels, headers, compat).
+    const record = value as Record<string, DynamicValue>;
+    const members = Object.keys(record).sort()
+      .filter((key) => record[key] !== undefined)
+      .map((key) => `${JSON.stringify(key)}:${canonicalModelJson(record[key])}`);
+    return `{${members.join(",")}}`;
+  }
+  if (value === undefined) return "null";
+  return JSON.stringify(value);
 }
 
-export function areRuntimeModelsEquivalent(
-  left: ComparableRuntimeModel,
-  right: ComparableRuntimeModel,
-): boolean {
-  return left.api === right.api
-    && left.id === right.id
-    && left.provider === right.provider
-    && left.baseUrl === right.baseUrl
-    && left.contextWindow === right.contextWindow
-    && left.maxTokens === right.maxTokens;
+/**
+ * Whole-model equality. Every field on a `Model` reaches the wire or the UI
+ * (reasoning, thinking levels, input modalities, cost, headers, compat, ...),
+ * so an active session must pick up any difference, not just identity and
+ * token limits.
+ */
+export function areRuntimeModelsEquivalent(left: RuntimeModelShape, right: RuntimeModelShape): boolean {
+  return canonicalModelJson(left) === canonicalModelJson(right);
 }
+
+// Structural identity floor for callers holding `Model<any>` (agent state); the
+// comparison itself covers every member of the object, not just these.
+type RuntimeModelShape = Pick<Model<Api>, "id" | "provider" | "api">;
 
 /** Owns provider catalogue refresh, publication, coalescing and runtime reconciliation. */
 export class ModelRefreshOwner {

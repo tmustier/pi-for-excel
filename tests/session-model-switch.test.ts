@@ -225,3 +225,27 @@ void test("fork model switch preserves the source session and restores a new sel
   assert.equal(restartedFork.agent.state.model.provider, "openai-codex");
   assert.match(JSON.stringify(restartedFork.agent.state.messages), /original question/u);
 });
+
+void test("re-selecting the same model with changed metadata updates and persists the session", async () => {
+  const environment = createEnvironment(new MemoryStorageBackend());
+  const original = await seedConversation(environment);
+  const originalSessionId = original.persistence.getSessionId();
+  const current = original.agent.state.model;
+  const refreshed = {
+    ...current,
+    reasoning: !current.reasoning,
+    cost: { ...current.cost, input: current.cost.input + 1 },
+  };
+
+  const result = await environment.manager.selectModel({
+    runtimeId: original.runtimeId,
+    nextModel: refreshed,
+    behavior: "inPlace",
+  });
+  assert.equal(result.outcome, "updated");
+  original.dispose();
+
+  const restarted = await restartSession(environment, originalSessionId);
+  assert.equal(restarted.agent.state.model.reasoning, refreshed.reasoning);
+  assert.equal(restarted.agent.state.model.cost.input, refreshed.cost.input);
+});
