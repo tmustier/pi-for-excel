@@ -82,20 +82,17 @@ void test("/plugins opens the Plugins view", async () => {
 async function verifyFailedCommandToast(failureKind: "rejects" | "throws"): Promise<void> {
   await withTaskpane(async (page) => {
     const sentinel = `browser-command-${failureKind}-sentinel`;
-    const executeSource = failureKind === "rejects"
-      ? `() => Promise.reject(new Error(${JSON.stringify(sentinel)}))`
-      : `() => { throw new Error(${JSON.stringify(sentinel)}); }`;
-    await page.evaluate(`
-      (async () => {
-        const { commandRegistry } = await import("/src/commands/types.ts");
-        commandRegistry.register({
-          name: "browser-${failureKind}",
-          description: "Browser failure contract",
-          source: "extension",
-          execute: ${executeSource},
-        });
-      })()
-    `);
+    await page.evaluate(async ({ kind, message }: { kind: "rejects" | "throws"; message: string }) => {
+      const { commandRegistry } = await import("/src/commands/types.ts") as typeof import("../../src/commands/types.ts");
+      commandRegistry.register({
+        name: `browser-${kind}`,
+        description: "Browser failure contract",
+        source: "extension",
+        execute: kind === "rejects"
+          ? () => Promise.reject(new Error(message))
+          : () => { throw new Error(message); },
+      });
+    }, { kind: failureKind, message: sentinel });
 
     await enterCommand(page, `/browser-${failureKind}`);
     const toast = page.locator("#pi-toast.visible .pi-toast__message");

@@ -696,7 +696,7 @@ void test("model refresh owner preserves healthy provider models on partial fail
   });
   const fetchFn: typeof globalThis.fetch = (input) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
-    if (url.includes("failing.example.com")) {
+    if (new URL(url).hostname === "failing.example.com") {
       return Promise.resolve(new Response("unavailable", { status: 503 }));
     }
     return Promise.resolve(new Response(JSON.stringify({ data: [{ id: "healthy-remote" }] }), {

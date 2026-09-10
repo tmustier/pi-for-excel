@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import http from "node:http";
 import https from "node:https";
@@ -28,12 +28,19 @@ async function getFreePort(): Promise<number> {
 
 // Vite serves TLS when the repo root holds mkcert output; the policy under test is
 // transport-independent, so follow the same rule Vite applies and keep asserting.
-const repoServesTls = existsSync(path.resolve("key.pem")) && existsSync(path.resolve("cert.pem"));
+// Trust is pinned to that exact certificate (a partial chain: the leaf is the anchor)
+// and identity is checked against the name it was issued for (`mkcert localhost`), so a
+// different certificate on the port still fails verification.
+const repoCertPath = path.resolve("cert.pem");
+const repoServesTls = existsSync(path.resolve("key.pem")) && existsSync(repoCertPath);
 
 async function requestAuth(port: number, host: string): Promise<{ status: number; body: string; cacheControl?: string }> {
   return new Promise((resolve, reject) => {
-    const options = { hostname: "127.0.0.1", port, path: "/__pi-auth", headers: { Host: host }, rejectUnauthorized: false };
-    const request = (repoServesTls ? https : http).get(options, (response) => {
+    const options = { hostname: "127.0.0.1", port, path: "/__pi-auth", headers: { Host: host } };
+    const request = repoServesTls
+      ? https.get({ ...options, servername: "localhost", ca: readFileSync(repoCertPath), allowPartialTrustChain: true }, onResponse)
+      : http.get(options, onResponse);
+    function onResponse(response: http.IncomingMessage): void {
       response.setEncoding("utf8");
       let body = "";
       response.on("data", (chunk: string) => { body += chunk; });
@@ -42,7 +49,7 @@ async function requestAuth(port: number, host: string): Promise<{ status: number
         body,
         ...(response.headers["cache-control"] ? { cacheControl: response.headers["cache-control"] } : {}),
       }));
-    });
+    }
     request.once("error", reject);
   });
 }
