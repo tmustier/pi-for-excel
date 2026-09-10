@@ -201,6 +201,7 @@ export class SessionRuntimeManager {
       hasMessages: runtime.agent.state.messages.length > 0,
     })) {
       runtime.agent.state.model = args.nextModel;
+      await runtime.persistence.saveSession({ force: true });
       return { outcome: "updated" };
     }
 
