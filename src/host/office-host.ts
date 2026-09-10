@@ -1,11 +1,8 @@
-function isHostOfficeHostPayloadShape(value: DynamicValue): value is DynamicObject {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 /** Office.js-backed host implementation. */
 
 import type { DocumentInstanceIdentity } from "./document-instance.js";
 import { createOfficeDocumentInstanceIdentity } from "./office-document-instance.js";
+import { createOfficeDocumentUrlReader } from "./office-document-url.js";
 import { settingsBackedSessionStorage } from "./session-storage.js";
 import { resolveOfficeThemeDark } from "./office-theme.js";
 import {
@@ -18,24 +15,6 @@ import type {
   SpreadsheetHostReadyInfo,
   SpreadsheetHostSessionStorage,
 } from "./types.js";
-
-function getOfficeDocumentUrl(): string | null {
-  try {
-    const office: DynamicValue = typeof Office === "undefined" ? undefined : Office;
-    if (!isHostOfficeHostPayloadShape(office)) return null;
-
-    const ctx = office.context;
-    if (!isHostOfficeHostPayloadShape(ctx)) return null;
-
-    const doc = ctx.document;
-    if (!isHostOfficeHostPayloadShape(doc)) return null;
-
-    const url = doc.url;
-    return typeof url === "string" && url.trim().length > 0 ? url : null;
-  } catch {
-    return null;
-  }
-}
 
 function nativeValueToString(value: DynamicValue): string | null {
   if (typeof value === "string" && value.trim().length > 0) {
@@ -68,6 +47,7 @@ export class OfficeHost implements SpreadsheetHost {
   readonly displayName = "Microsoft Excel";
   readonly sessionStorage: SpreadsheetHostSessionStorage = settingsBackedSessionStorage;
   readonly documentInstance: DocumentInstanceIdentity = createOfficeDocumentInstanceIdentity();
+  private readonly documentUrl = createOfficeDocumentUrlReader();
 
   whenReady(): Promise<SpreadsheetHostReadyInfo> {
     if (typeof Office === "undefined") {
@@ -115,8 +95,8 @@ export class OfficeHost implements SpreadsheetHost {
     };
   }
 
-  getWorkbookContext(): Promise<WorkbookContext> {
-    return getWorkbookContextFromDocumentUrl(getOfficeDocumentUrl());
+  async getWorkbookContext(): Promise<WorkbookContext> {
+    return getWorkbookContextFromDocumentUrl(await this.documentUrl.read());
   }
 
   resolveThemeDark(): boolean | null {

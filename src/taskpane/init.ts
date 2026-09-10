@@ -536,7 +536,7 @@ export async function initTaskpane(opts: {
   });
 
   const saveBoundaryMonitor = new WorkbookSaveBoundaryMonitor({
-    clearBackupsForCurrentWorkbook: () => workbookRecoveryLog.clearForCurrentWorkbook(),
+    clearBackupsForWorkbook: (workbookId) => workbookRecoveryLog.clearForWorkbook(workbookId),
   });
   const stopSaveBoundaryPolling = startWorkbookSaveBoundaryPolling({
     monitor: saveBoundaryMonitor,

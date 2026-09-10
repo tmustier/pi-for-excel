@@ -11,6 +11,7 @@
  */
 
 import { getAppStorage } from "../storage/local/app-storage.js";
+import { getErrorMessage } from "../utils/errors.js";
 import { closeOverlayById } from "../ui/overlay-dialog.js";
 import { MODEL_SELECTOR_OVERLAY_ID } from "../ui/overlay-ids.js";
 import type { PiSidebar } from "../ui/pi-sidebar.js";
@@ -27,6 +28,7 @@ type CoreBridgeCommandType =
   | "noop"
   | "status"
   | "officeProbe"
+  | "documentIdentityProbe"
   | "readRange"
   | "readUsedRange"
   | "writeRange"
@@ -427,6 +429,59 @@ async function submitInput(payload: DynamicValue, options: BridgeOptions): Promi
   };
 }
 
+/**
+ * Raw host identity sources side by side, so a Save As / reopen can be checked
+ * against what the host reports. Dev-only: the values are local paths.
+ */
+async function runDocumentIdentityProbe(options: BridgeOptions): Promise<JsonRecord> {
+  if (typeof Office === "undefined") {
+    throw new Error("Office global is unavailable; the taskpane is not running inside an Office host.");
+  }
+
+  const stepTimeoutMs = 5000;
+  const withTimeout = async <T>(label: string, run: () => Promise<T>): Promise<{ value: T | null; error: string | null; ms: number }> => {
+    const startedAt = Date.now();
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`${label} timed out after ${stepTimeoutMs}ms`)), stepTimeoutMs);
+    });
+    try {
+      const value = await Promise.race([run(), timeout]);
+      return { value, error: null, ms: Date.now() - startedAt };
+    } catch (error) {
+      return { value: null, error: getErrorMessage(error), ms: Date.now() - startedAt };
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  };
+
+  const document = Office.context.document;
+  const staticUrl = document.url;
+
+  const fileProperties = await withTimeout("getFilePropertiesAsync", () => new Promise<string>((resolve, reject) => {
+    document.getFilePropertiesAsync((result) => {
+      if (result.status === Office.AsyncResultStatus.Succeeded) resolve(result.value.url);
+      else reject(new Error(result.error?.message ?? "getFilePropertiesAsync failed"));
+    });
+  }));
+
+  const workbookName = await withTimeout("workbook.name", () => Excel.run(async (context) => {
+    const workbook = context.workbook;
+    workbook.load("name");
+    await context.sync();
+    return workbook.name;
+  }));
+
+  const workbookContext = await withTimeout("getWorkbookContext", () => options.getWorkbookContext());
+
+  return {
+    staticDocumentUrl: typeof staticUrl === "string" ? staticUrl : null,
+    fileProperties,
+    workbookName,
+    workbookContext,
+  };
+}
+
 async function runOfficeProbe(): Promise<JsonRecord> {
   if (typeof Excel === "undefined") {
     throw new Error("Excel global is unavailable; the taskpane is not running inside the Excel host.");
@@ -730,6 +785,8 @@ async function executeCommand(command: BridgeCommand, options: BridgeOptions): P
     }
     case "officeProbe":
       return await runOfficeProbe();
+    case "documentIdentityProbe":
+      return await runDocumentIdentityProbe(options);
     case "readRange": {
       const address = stringField(command.payload, "address");
       if (!address) throw new Error("readRange requires payload.address");

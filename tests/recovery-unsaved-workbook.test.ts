@@ -173,7 +173,7 @@ void test("saving a never-saved workbook clears its checkpoints at the save boun
   const monitor = new WorkbookSaveBoundaryMonitor({
     resolveWorkbookId: async () => (await resolver.resolveForRead())?.workbookId ?? null,
     readWorkbookDirtyState: () => Promise.resolve(isDirty),
-    clearBackupsForCurrentWorkbook: () => log.clearForCurrentWorkbook(),
+    clearBackupsForWorkbook: (workbookId) => log.clearForWorkbook(workbookId),
   });
 
   await monitor.checkOnce();
@@ -187,4 +187,59 @@ void test("saving a never-saved workbook clears its checkpoints at the save boun
   isDirty = false;
   await monitor.checkOnce();
   assert.deepEqual(await log.listForCurrentWorkbook(), [], "saved: checkpoint cleared");
+});
+
+void test("the first save of a new workbook clears its token-scoped checkpoints once the path identity appears", async () => {
+  const settings = createInMemorySettingsStore();
+  const document = createDocument({ token: "dddddddd-0000-4000-8000-000000000004" });
+  let context: WorkbookContext = UNSAVED;
+  const getWorkbookContext = () => Promise.resolve(context);
+  const log = createLog({ settings, document: document.identity, context: () => context });
+  const resolver = createRecoveryScopeResolver({ getWorkbookContext, getDocumentInstance: () => document.identity });
+  let isDirty = true;
+  const monitor = new WorkbookSaveBoundaryMonitor({
+    resolveWorkbookId: async () => (await resolver.resolveForRead())?.workbookId ?? null,
+    readWorkbookDirtyState: () => Promise.resolve(isDirty),
+    clearBackupsForWorkbook: (workbookId) => log.clearForWorkbook(workbookId),
+  });
+
+  const tokenScoped = await log.append(write);
+  assert.ok(tokenScoped);
+  await monitor.checkOnce();
+  assert.equal((await persistedSnapshots(settings)).length, 1, "dirty: kept");
+
+  // Save As: the host now reports a path, and the document is clean.
+  context = { workbookId: "url_sha256:first-save", workbookName: "First.xlsx", source: "document.url" };
+  isDirty = false;
+  await monitor.checkOnce();
+
+  assert.deepEqual(await persistedSnapshots(settings), [], "token-scoped checkpoints do not linger after the first save");
+  assert.deepEqual(await log.listForCurrentWorkbook(), []);
+
+  const afterSave = await log.append({ ...write, toolCallId: "call-after-save" });
+  assert.equal(afterSave?.workbookId, "url_sha256:first-save");
+});
+
+void test("switching between two saved workbooks never clears the one left dirty", async () => {
+  const settings = createInMemorySettingsStore();
+  const ids = ["url_sha256:a", "url_sha256:b"] as const;
+  let current = 0;
+  const log = createLog({
+    settings,
+    document: null,
+    context: () => ({ workbookId: ids[current] ?? null, workbookName: null, source: "document.url" }),
+  });
+  const monitor = new WorkbookSaveBoundaryMonitor({
+    resolveWorkbookId: () => Promise.resolve(ids[current] ?? null),
+    readWorkbookDirtyState: () => Promise.resolve(current === 0),
+    clearBackupsForWorkbook: (workbookId) => log.clearForWorkbook(workbookId),
+  });
+
+  await monitor.checkOnce();
+  assert.ok(await log.append(write), "checkpoint on dirty workbook A");
+
+  current = 1;
+  await monitor.checkOnce();
+  current = 0;
+  assert.equal((await log.listForCurrentWorkbook()).length, 1, "A keeps its checkpoint after B was observed saved");
 });

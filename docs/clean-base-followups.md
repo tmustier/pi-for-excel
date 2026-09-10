@@ -187,8 +187,11 @@ Office.js independently. `workbookId` was `null` for every step before the save.
 
 Host finding, pre-existing: after the mid-session Save As,
 `Office.context.document.url` stayed empty for 40 s and across an add-in
-reload; it was populated only after close and reopen. Recorded as a limitation
-in `src/tools/DECISIONS.md`.
+reload; it was populated only after close and reopen. Fixed by reading the
+identity live through `getFilePropertiesAsync` (verified in real Excel: it
+returned the new path immediately after the Save As, in the same POSIX format
+that `document.url` uses for files opened from disk, so existing identities are
+unchanged) and clearing token-scoped backups at the first-save transition.
 
 Evidence: `/tmp/pi-excel-unsaved-e2e/` (bridge status, prompt results, read-backs).
 
