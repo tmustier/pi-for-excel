@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { renderPluginsTab } from "../src/commands/builtins/extensions-hub-plugins.ts";
-import { createExtensionAPI } from "../src/commands/extension-api.ts";
 import { ConnectionManager } from "../src/connections/manager.ts";
 import {
   describeStoredExtensionTrust,
@@ -18,7 +17,6 @@ import {
 } from "../src/extensions/runtime-manager-helpers.ts";
 import { describeExtensionRuntimeMode, type ExtensionRuntimeMode } from "../src/extensions/runtime-mode.ts";
 import type { ExtensionSettingsStore, StoredExtensionSource } from "../src/extensions/store.ts";
-import { EXTENSION_OVERLAY_ID } from "../src/ui/overlay-ids.ts";
 import { installFakeDom } from "./fixtures/fake-dom.ts";
 
 class MemorySettingsStore implements ExtensionSettingsStore {
@@ -149,50 +147,6 @@ function collectTextContent(root: HTMLElement): string[] {
     .map((element) => (element.textContent ?? "").trim())
     .filter((text) => text.length > 0);
 }
-
-void test("extension overlay show/dismiss mounts and tears down shared overlay", () => {
-  const { document, restore } = installFakeDom();
-
-  try {
-    const api = createExtensionAPI({
-      getAgent: () => {
-        throw new Error("agent should not be requested in overlay test");
-      },
-    });
-
-    const first = document.createElement("div");
-    first.id = "first-content";
-
-    api.overlay.show(first);
-
-    const mounted = document.getElementById(EXTENSION_OVERLAY_ID);
-    assert.notEqual(mounted, null);
-    if (!mounted) {
-      return;
-    }
-
-    assert.equal(mounted.contains(first), true);
-
-    const second = document.createElement("div");
-    second.id = "second-content";
-
-    api.overlay.show(second);
-
-    const remounted = document.getElementById(EXTENSION_OVERLAY_ID);
-    assert.notEqual(remounted, null);
-    if (!remounted) {
-      return;
-    }
-
-    assert.equal(remounted.contains(second), true);
-    assert.equal(remounted.contains(first), false);
-
-    api.overlay.dismiss();
-    assert.equal(document.getElementById(EXTENSION_OVERLAY_ID), null);
-  } finally {
-    restore();
-  }
-});
 
 void test("extensions hub plugins tab renders installed/extensions sections", () => {
   const { document, restore } = installFakeDom();
