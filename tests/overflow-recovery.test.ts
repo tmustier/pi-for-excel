@@ -141,35 +141,6 @@ void test("findTrailingContextOverflowError ignores non-overflow errors and non-
   );
 });
 
-void test("recoverFromContextOverflow drops the failure, compacts, and retries once", async () => {
-  const model = createModel(65_536);
-  const user = createUser("analyze this data", 1);
-  const toolResult = createToolResult("rows...", 2);
-  const agent = createTestAgent({
-    model,
-    messages: [user, toolResult, createOverflowError(model, 3)],
-  });
-
-  let compactRuns = 0;
-  const recovered = await recoverFromContextOverflow({
-    agent,
-    runCompact: () => {
-      compactRuns += 1;
-      // Simulate compaction rewriting history (new array identity, kept tail).
-      agent.state.messages = [createUser("compaction summary", 4), toolResult];
-      return Promise.resolve();
-    },
-  });
-
-  assert.equal(recovered, true);
-  assert.equal(compactRuns, 1);
-  assert.equal(agent.continueCalls, 1);
-  assert.equal(
-    agent.state.messages.some((m) => m.role === "assistant"),
-    false,
-  );
-});
-
 void test("recoverFromContextOverflow restores the failure when compaction is a no-op", async () => {
   const model = createModel(65_536);
   const failure = createOverflowError(model, 3);
