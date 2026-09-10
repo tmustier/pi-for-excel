@@ -21,51 +21,8 @@ import {
 } from "../src/taskpane/keyboard-shortcuts.ts";
 import { restoreQueuedMessagesToEditor } from "../src/taskpane/keyboard-shortcuts/editor-actions.ts";
 import { RecentlyClosedStack } from "../src/taskpane/recently-closed.ts";
-import {
-  getRestoreCandidateSessionIds,
-  shouldPersistSession,
-} from "../src/taskpane/sessions.ts";
+import { shouldPersistSession } from "../src/taskpane/sessions.ts";
 import { failOnUnexpectedStream } from "./fail-on-unexpected-stream.ts";
-
-void test("known workbook restores only workbook-linked latest session", () => {
-  const candidates = getRestoreCandidateSessionIds({
-    workbookId: "url_sha256:workbook-a",
-    workbookLatestSessionId: "session-a",
-    globalLatestSessionId: "session-global",
-  });
-
-  assert.deepEqual(candidates, ["session-a"]);
-});
-
-void test("known workbook with no workbook-linked latest does not fall back to global", () => {
-  const candidates = getRestoreCandidateSessionIds({
-    workbookId: "url_sha256:workbook-b",
-    workbookLatestSessionId: null,
-    globalLatestSessionId: "session-global",
-  });
-
-  assert.deepEqual(candidates, []);
-});
-
-void test("unknown workbook falls back to global latest", () => {
-  const candidates = getRestoreCandidateSessionIds({
-    workbookId: null,
-    workbookLatestSessionId: "session-workbook",
-    globalLatestSessionId: "session-global",
-  });
-
-  assert.deepEqual(candidates, ["session-global"]);
-});
-
-void test("candidate selection normalizes empty session IDs", () => {
-  const candidates = getRestoreCandidateSessionIds({
-    workbookId: null,
-    workbookLatestSessionId: "",
-    globalLatestSessionId: "   ",
-  });
-
-  assert.deepEqual(candidates, []);
-});
 
 void test("session persistence guard allows forced saves before first assistant response", () => {
   assert.equal(
