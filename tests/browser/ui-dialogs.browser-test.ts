@@ -76,6 +76,12 @@ void test("an overlay exposes modal dialog semantics and focuses its text input"
     await openFileDetail(page, "focus.md");
     await page.locator(".pi-files-detail-actions").getByRole("button", { name: "Rename" }).evaluate((button) => button.dispatchEvent(new MouseEvent("click", { bubbles: true })));
     const dialog = page.locator("#pi-text-input-dialog-overlay");
+    // The dialog moves focus on the next animation frame after opening.
+    await page.waitForFunction(
+      () => document.activeElement?.closest("#pi-text-input-dialog-overlay") !== null,
+      undefined,
+      { timeout: 5_000 },
+    );
     assert.deepEqual({
       role: await dialog.getAttribute("role"),
       modal: await dialog.getAttribute("aria-modal"),
