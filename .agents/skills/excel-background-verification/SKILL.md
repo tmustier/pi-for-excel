@@ -87,7 +87,9 @@ bridge officeProbe
 | No bridge client | Workbook and Pi pane open; Vite URL and bridge environment configured |
 | Pane loads, model returns `Load failed` | Configured proxy is running and reachable |
 | Cannot set the WebKit textarea through accessibility | Submit through the bridge |
-| Unsaved workbook has no workbook ID | Identify it through the client and sheet/range evidence |
+| Unsaved workbook has no workbook ID | Identify it through the client and sheet/range evidence; `documentIdentityProbe` shows both host URL sources beside the resolved context |
+| Every Office.js call hangs after an AppleScript save | Excel is showing a "Grant File Access" sheet for a folder without a sandbox bookmark (`~/Documents` included); cancel it and save into `~/Library/Containers/com.microsoft.Excel/Data/Documents/` |
+| Model turn fails with `Importing a module script failed.` | `npm ci` ran under the live Vite server and wiped `node_modules/.vite/deps`; restart Vite and reload the pane |
 
 Use `officeProbe`, `readRange`, `readUsedRange` and `listCharts` for independent inspection. `workbookWriteProbe` is a reversible Office.js diagnostic, not a model test. `writeRange` and `clearRange` can prepare fixtures, but must not perform the work the model is meant to do. `configureProxy` changes saved settings; restore them after transport-specific tests.
 
