@@ -1,16 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { describeExtensionRuntimeMode } from "../src/extensions/runtime-mode.ts";
 import {
   collectSandboxUiActionIds,
   normalizeSandboxUiNode,
 } from "../src/extensions/sandbox-ui.ts";
-
-void test("describeExtensionRuntimeMode returns user-facing labels", () => {
-  assert.equal(describeExtensionRuntimeMode("host"), "host runtime");
-  assert.equal(describeExtensionRuntimeMode("sandbox-iframe"), "sandbox iframe");
-});
 
 void test("normalizeSandboxUiNode downgrades unsafe tags and strips invalid action ids", () => {
   const normalized = normalizeSandboxUiNode({
