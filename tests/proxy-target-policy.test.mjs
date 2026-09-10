@@ -11,187 +11,51 @@ import {
   parseAllowedTargetHosts,
 } from "../scripts/proxy-target-policy.mjs";
 
-test("isIpLiteral detects IPv4/IPv6 literals", () => {
-  assert.equal(isIpLiteral("127.0.0.1"), true);
-  assert.equal(isIpLiteral("[::1]"), true);
-  assert.equal(isIpLiteral("::1"), true);
-  assert.equal(isIpLiteral("localhost"), false);
-  assert.equal(isIpLiteral("api.openai.com"), false);
+test("target policy classifies literal, loopback, private, and public hosts", () => {
+  const literalCases = [["127.0.0.1", true], ["[::1]", true], ["::1", true], ["localhost", false], ["api.openai.com", false]];
+  for (const [host, expected] of literalCases) assert.equal(isIpLiteral(host), expected, host);
+
+  const loopbackCases = [["localhost", true], ["127.0.0.1", true], ["::1", true], ["[::1]", true], ["::ffff:127.0.0.1", true], ["example.com", false]];
+  for (const [host, expected] of loopbackCases) assert.equal(isLoopbackHostname(host), expected, host);
+
+  const privateCases = [
+    ["127.0.0.1", true], ["10.2.3.4", true], ["172.16.5.5", true], ["172.31.255.255", true],
+    ["192.168.1.2", true], ["169.254.12.9", true], ["::1", true], ["fc00::1", true],
+    ["fd12:3456::1", true], ["fe80::1", true], ["8.8.8.8", false], ["1.1.1.1", false],
+    ["2001:4860:4860::8888", false],
+  ];
+  for (const [host, expected] of privateCases) assert.equal(isPrivateOrLocalIp(host), expected, host);
 });
 
-test("isLoopbackHostname covers localhost + mapped loopback", () => {
-  assert.equal(isLoopbackHostname("localhost"), true);
-  assert.equal(isLoopbackHostname("127.0.0.1"), true);
-  assert.equal(isLoopbackHostname("::1"), true);
-  assert.equal(isLoopbackHostname("[::1]"), true);
-  assert.equal(isLoopbackHostname("::ffff:127.0.0.1"), true);
-  assert.equal(isLoopbackHostname("example.com"), false);
-});
-
-test("isPrivateOrLocalIp classifies private/local ranges", () => {
-  assert.equal(isPrivateOrLocalIp("127.0.0.1"), true);
-  assert.equal(isPrivateOrLocalIp("10.2.3.4"), true);
-  assert.equal(isPrivateOrLocalIp("172.16.5.5"), true);
-  assert.equal(isPrivateOrLocalIp("172.31.255.255"), true);
-  assert.equal(isPrivateOrLocalIp("192.168.1.2"), true);
-  assert.equal(isPrivateOrLocalIp("169.254.12.9"), true);
-  assert.equal(isPrivateOrLocalIp("::1"), true);
-  assert.equal(isPrivateOrLocalIp("fc00::1"), true);
-  assert.equal(isPrivateOrLocalIp("fd12:3456::1"), true);
-  assert.equal(isPrivateOrLocalIp("fe80::1"), true);
-
-  assert.equal(isPrivateOrLocalIp("8.8.8.8"), false);
-  assert.equal(isPrivateOrLocalIp("1.1.1.1"), false);
-  assert.equal(isPrivateOrLocalIp("2001:4860:4860::8888"), false);
-});
-
-test("parseAllowedTargetHosts accepts plain hosts and URLs", () => {
+test("target allowlist parser accepts host and URL forms", () => {
   const allowed = parseAllowedTargetHosts("api.openai.com, https://oauth2.googleapis.com/token ,[::1]");
-
-  assert.equal(allowed.has("api.openai.com"), true);
-  assert.equal(allowed.has("oauth2.googleapis.com"), true);
-  assert.equal(allowed.has("::1"), true);
-
+  for (const host of ["api.openai.com", "oauth2.googleapis.com", "::1"]) assert.equal(allowed.has(host), true, host);
   assert.equal(isAllowedTargetHost("api.openai.com", allowed), true);
   assert.equal(isAllowedTargetHost("example.com", allowed), false);
 });
 
-test("evaluateTargetHostPolicy blocks loopback/private by default", () => {
-  const loopback = evaluateTargetHostPolicy({ hostname: "127.0.0.1" });
-  assert.deepEqual(loopback, { allowed: false, reason: "blocked_target_loopback" });
+test("target-host policy applies deny, allowlist, and override precedence", () => {
+  const strict = parseAllowedTargetHosts("api.openai.com");
+  const cases = [
+    [{ hostname: "127.0.0.1" }, { allowed: false, reason: "blocked_target_loopback" }],
+    [{ hostname: "10.0.0.10" }, { allowed: false, reason: "blocked_target_private_ip" }],
+    [{ hostname: "api.example.com", resolvedIps: ["192.168.1.22"] }, { allowed: false, reason: "blocked_target_private_ip" }],
+    [{ hostname: "127.0.0.1", allowLoopbackTargets: true }, { allowed: true }],
+    [{ hostname: "10.0.0.10", allowPrivateTargets: true }, { allowed: true }],
+    [{ hostname: "api.openai.com", allowedHosts: strict }, { allowed: true }],
+    [{ hostname: "example.com", allowedHosts: strict }, { allowed: false, reason: "blocked_target_not_allowlisted" }],
+    [{ hostname: "127.0.0.1", allowedHosts: strict }, { allowed: false, reason: "blocked_target_loopback" }],
+    [{ hostname: "127.0.0.1", allowLoopbackTargets: true, allowPrivateTargets: true, allowedHosts: strict }, { allowed: true }],
+    [{ hostname: "10.0.0.5", allowPrivateTargets: true, allowedHosts: new Set(["api.openai.com", "10.97.193.77"]), requireAllowlistForOverriddenTargets: true }, { allowed: false, reason: "blocked_target_not_allowlisted" }],
+    [{ hostname: "10.97.193.77", allowPrivateTargets: true, allowedHosts: new Set(["api.openai.com", "10.97.193.77"]), requireAllowlistForOverriddenTargets: true }, { allowed: true }],
+    [{ hostname: "127.0.0.1", allowLoopbackTargets: true, allowedHosts: new Set(["api.openai.com", "10.97.193.77"]), requireAllowlistForOverriddenTargets: true }, { allowed: false, reason: "blocked_target_not_allowlisted" }],
+    [{ hostname: "localhost", allowLoopbackTargets: true, allowedHosts: new Set(["localhost"]), requireAllowlistForOverriddenTargets: true }, { allowed: true }],
+    [{ hostname: "127.0.0.1", allowLoopbackTargets: true, allowedHosts: strict }, { allowed: true }],
+    [{ hostname: "10.0.0.5", allowPrivateTargets: true, allowedHosts: strict }, { allowed: true }],
+  ];
+  for (const [input, expected] of cases) assert.deepEqual(evaluateTargetHostPolicy(input), expected, JSON.stringify(input));
 
-  const privateIp = evaluateTargetHostPolicy({ hostname: "10.0.0.10" });
-  assert.deepEqual(privateIp, { allowed: false, reason: "blocked_target_private_ip" });
-
-  const dnsPrivate = evaluateTargetHostPolicy({
-    hostname: "api.example.com",
-    resolvedIps: ["192.168.1.22"],
-  });
-  assert.deepEqual(dnsPrivate, { allowed: false, reason: "blocked_target_private_ip" });
-});
-
-test("evaluateTargetHostPolicy supports overrides", () => {
-  const allowLoopback = evaluateTargetHostPolicy({
-    hostname: "127.0.0.1",
-    allowLoopbackTargets: true,
-  });
-  assert.deepEqual(allowLoopback, { allowed: true });
-
-  const allowPrivate = evaluateTargetHostPolicy({
-    hostname: "10.0.0.10",
-    allowPrivateTargets: true,
-  });
-  assert.deepEqual(allowPrivate, { allowed: true });
-
-  const allowlistedOnly = evaluateTargetHostPolicy({
-    hostname: "api.openai.com",
-    allowedHosts: parseAllowedTargetHosts("api.openai.com"),
-  });
-  assert.deepEqual(allowlistedOnly, { allowed: true });
-
-  const blockedByAllowlist = evaluateTargetHostPolicy({
-    hostname: "example.com",
-    allowedHosts: parseAllowedTargetHosts("api.openai.com"),
-  });
-  assert.deepEqual(blockedByAllowlist, {
-    allowed: false,
-    reason: "blocked_target_not_allowlisted",
-  });
-});
-
-test("loopback/private checks run before host allowlist", () => {
-  const strictAllowlist = parseAllowedTargetHosts("api.openai.com");
-
-  const blockedLoopback = evaluateTargetHostPolicy({
-    hostname: "127.0.0.1",
-    allowedHosts: strictAllowlist,
-  });
-  assert.deepEqual(blockedLoopback, {
-    allowed: false,
-    reason: "blocked_target_loopback",
-  });
-
-  const allowedLocalWithOverrides = evaluateTargetHostPolicy({
-    hostname: "127.0.0.1",
-    allowLoopbackTargets: true,
-    allowPrivateTargets: true,
-    allowedHosts: strictAllowlist,
-  });
-  assert.deepEqual(allowedLocalWithOverrides, { allowed: true });
-});
-
-test("isBlockedTargetByHostname reflects default deny policy", () => {
   assert.equal(isBlockedTargetByHostname("localhost"), true);
   assert.equal(isBlockedTargetByHostname("10.0.0.8"), true);
   assert.equal(isBlockedTargetByHostname("api.openai.com"), false);
-});
-
-test("explicit allowlist still applies to loopback/private targets when overrides are enabled", () => {
-  const allowedHosts = new Set(["api.openai.com", "10.97.193.77"]);
-
-  // Private literal NOT in the configured allowlist: blocked even with ALLOW_PRIVATE_TARGETS.
-  assert.deepEqual(
-    evaluateTargetHostPolicy({
-      hostname: "10.0.0.5",
-      allowPrivateTargets: true,
-      allowedHosts,
-      requireAllowlistForOverriddenTargets: true,
-    }),
-    { allowed: false, reason: "blocked_target_not_allowlisted" },
-  );
-
-  // Private literal IN the configured allowlist: allowed.
-  assert.deepEqual(
-    evaluateTargetHostPolicy({
-      hostname: "10.97.193.77",
-      allowPrivateTargets: true,
-      allowedHosts,
-      requireAllowlistForOverriddenTargets: true,
-    }),
-    { allowed: true },
-  );
-
-  // Loopback NOT in the configured allowlist: blocked even with ALLOW_LOOPBACK_TARGETS.
-  assert.deepEqual(
-    evaluateTargetHostPolicy({
-      hostname: "127.0.0.1",
-      allowLoopbackTargets: true,
-      allowedHosts,
-      requireAllowlistForOverriddenTargets: true,
-    }),
-    { allowed: false, reason: "blocked_target_not_allowlisted" },
-  );
-
-  // Loopback IN the configured allowlist: allowed.
-  assert.deepEqual(
-    evaluateTargetHostPolicy({
-      hostname: "localhost",
-      allowLoopbackTargets: true,
-      allowedHosts: new Set(["localhost"]),
-      requireAllowlistForOverriddenTargets: true,
-    }),
-    { allowed: true },
-  );
-});
-
-test("legacy override semantics preserved without requireAllowlistForOverriddenTargets", () => {
-  // Default-allowlist local deployments keep the old behavior: overrides
-  // bypass the host allowlist (e.g. local llama.cpp via ALLOW_LOOPBACK_TARGETS).
-  assert.deepEqual(
-    evaluateTargetHostPolicy({
-      hostname: "127.0.0.1",
-      allowLoopbackTargets: true,
-      allowedHosts: new Set(["api.openai.com"]),
-    }),
-    { allowed: true },
-  );
-
-  assert.deepEqual(
-    evaluateTargetHostPolicy({
-      hostname: "10.0.0.5",
-      allowPrivateTargets: true,
-      allowedHosts: new Set(["api.openai.com"]),
-    }),
-    { allowed: true },
-  );
 });
