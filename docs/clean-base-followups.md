@@ -84,9 +84,10 @@ family (`d9fb842`, `4eff17e`, `332b59b`, `9991dd8`, `b3572d3`), the format-grid
 guard, the provider refresh fixes, the compaction and sandbox validation, and
 the whole-model comparison and proxy cancellation fixes added during review.
 
-The write, inspect and undo capability was partly run in real Excel on
-2026-09-10 (see "Real Excel run" below). The recovery and restore half was not
-reached because the background lane cannot open a taskpane in a saved workbook.
+The write, inspect and undo capability and workbook-keyed session restore
+were run in real Excel on 2026-09-10 (see "Real Excel run" below). That
+covers the persistence fail-closed family end to end for one saved workbook;
+the other slices still rest on seam tests.
 
 ## Partly done
 
@@ -139,18 +140,22 @@ was reverted. All four were caught.
 | Wrong workbook association | `session-association.ts`: shared latest-session key | 2 failures in session restart contract |
 | Dropped save subscription | `sessions.ts`: never call `saveSession` on message end | 8 failures across session restart and model switch suites |
 
-## Real Excel run (2026-09-10, `chore/anti-slop` at `615ddd4`)
+## Real Excel run (2026-09-10, `chore/anti-slop` at `e5e84ba`)
 
 Model `openai-codex/gpt-5.6-sol`, thinking high, background bridge from the
-repo worktree, Excel never frontmost during the prompt.
+repo worktree. Excel stayed in the background for every prompt; the only
+foreground action was the user clicking "Open Pi" once to open the taskpane in
+the saved workbook.
+
+### Unsaved workbook (Book2)
 
 Prompt: write 10, 20, 30 into `_pi_p3_verify!D1:D3` and `=SUM(D1:D3)` into D4,
 then list recovery checkpoints and report the tools called.
 
 Observed: `read_range` → `write_cells` → `workbook_history` (list). Independent
 Office.js read-back: values `[10, 20, 30, 60]`, formula `=SUM(D1:D3)` in D4.
-The model reported "Checkpoint ID: none — the write did not create a recovery
-checkpoint" and the tool card showed "Backup not created for this mutation".
+The tool card showed "Backup not created for this mutation" and the model
+reported no checkpoint.
 
 That is pre-existing behaviour, identical on `main`: recovery is keyed by
 workbook identity, and an unsaved workbook has none
@@ -158,11 +163,23 @@ workbook identity, and an unsaved workbook has none
 decision: a user on a new, unsaved workbook has no undo through Pi and only a
 notice in the tool card says so.
 
-Not reached: overwrite rejection and checkpoint restore on a saved workbook.
-Opening a taskpane in a freshly opened saved workbook needs the ribbon "Open
-Pi" button, and neither the session's computer-use press primitive nor System
-Events could press it without foregrounding Excel. Excel was briefly activated
-four times while trying; no workbook state was changed by those attempts.
+### Saved workbook (`pi-p3-verify.xlsx`, generated minimal OOXML, `Sheet1!A1:B2` = `p3 baseline, 1 / keep, 2`)
+
+Workbook context after open: `workbookId` from `document.url`, fresh session.
+
+| Step | Prompt (abridged) | Tools observed | Independent read-back of `Sheet1!A1:B2` |
+| --- | --- | --- | --- |
+| 1 | Write 100, 200 into A1:B1 with default options; do not retry | `read_range`, `write_cells` (blocked: "Sheet1!A1:B1 contains 2 non-empty cell(s)") | unchanged |
+| 2 | I confirm; overwrite with `allow_overwrite: true`, then list checkpoints | `write_cells` (2 changed), `workbook_history` list: checkpoint `7e7a659c…` labelled `write_cells — Sheet1!A1:B1` | `[[100, 200], ["keep", 2]]` |
+| 3 | Restore checkpoint `7e7a659c…`, then read A1:B2 | `workbook_history` restore ("Restored backup … at Sheet1!A1:B1"), `read_range` | `[["p3 baseline", 1], ["keep", 2]]` |
+| 4 | Taskpane reload (Vite full reload, no prompt) | — | same session id, 18 messages, same `workbookId` |
+
+Tool cards, refusal text and checkpoint identifiers were read from the
+taskpane's accessibility tree; cell values from the bridge's Office.js
+`readRange`, not from the model's report.
+
+Not covered by this run: WPS, multiple workbooks open at once, and the
+corrupt-recovery-log fallback (seam tests only).
 
 ## Pre-existing observations
 
