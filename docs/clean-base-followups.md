@@ -194,5 +194,9 @@ corrupt-recovery-log fallback (seam tests only).
   after confirming the finding set was unchanged.
 - `tests/browser/extensions-overlays.browser-test.ts` ("an installed extension
   can replace and dismiss its visible overlay") timed out once in eight full
-  serial runs waiting for the welcome overlay to detach. Green in isolation.
-  Not root-caused.
+  serial runs waiting for the welcome overlay to detach. Root-caused and fixed:
+  the extension under test mounts `#pi-ext-overlay` (z-index 250) as soon as
+  it activates, and when that happened before the harness's forced pointer
+  click at (2,2), the click landed on the extension overlay's backdrop instead
+  of the welcome overlay's. `openTaskpane` now dispatches the click on the
+  welcome backdrop element directly; the `welcomeClickForce` option is gone.

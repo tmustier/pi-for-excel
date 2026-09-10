@@ -33,9 +33,7 @@ interface OpenBrowserPageOptions {
   prepareContext?: (context: BrowserContext) => Promise<void>;
 }
 
-interface OpenTaskpaneOptions extends OpenBrowserPageOptions {
-  welcomeClickForce?: boolean;
-}
+type OpenTaskpaneOptions = OpenBrowserPageOptions;
 
 export interface OpenedBrowserPage {
   page: Page;
@@ -150,10 +148,11 @@ export async function openTaskpane(
     await opened.page.locator("pi-input textarea").waitFor({ state: "visible", timeout: 20_000 });
     const welcomeOverlay = opened.page.locator("#pi-welcome-login-overlay");
     await welcomeOverlay.waitFor({ state: "visible", timeout: 10_000 });
-    const clickOptions = options.welcomeClickForce
-      ? { position: { x: 2, y: 2 }, force: true }
-      : { position: { x: 2, y: 2 } };
-    await welcomeOverlay.click(clickOptions);
+    // Dispatch on the backdrop element itself rather than clicking a viewport
+    // point: an extension or dialog overlay stacked above the welcome overlay
+    // would otherwise receive the click and the welcome overlay would stay.
+    // Real backdrop-click dismissal is covered by taskpane-contracts.
+    await welcomeOverlay.dispatchEvent("click");
     await welcomeOverlay.waitFor({ state: "detached" });
     return opened;
   } catch (error) {
