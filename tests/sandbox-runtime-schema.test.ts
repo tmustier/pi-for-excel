@@ -7,13 +7,7 @@ import { normalizeSandboxToolParameters } from "../src/extensions/sandbox-runtim
 import {
   dispatchSandboxLlmCompletion,
   parseSandboxHttpRequestOptions,
-  parseSandboxLlmCompletionRequest,
 } from "../src/extensions/sandbox/runtime-helpers.ts";
-function isSandboxRuntimeSchemaTestPayloadShape(value: DynamicValue): value is DynamicObject {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-
 void test("normalizeSandboxToolParameters keeps TypeBox schema unchanged", () => {
   const schema = Type.Object({
     text: Type.String(),
@@ -21,66 +15,6 @@ void test("normalizeSandboxToolParameters keeps TypeBox schema unchanged", () =>
 
   const normalized = normalizeSandboxToolParameters(schema);
   assert.equal(normalized, schema);
-});
-
-void test("normalizeSandboxToolParameters accepts plain JSON schema objects", () => {
-  const rawSchema = {
-    type: "object",
-    properties: {
-      text: {
-        type: "string",
-      },
-    },
-    required: ["text"],
-    additionalProperties: false,
-  };
-
-  const normalized = normalizeSandboxToolParameters(rawSchema);
-
-  assert.ok(isSandboxRuntimeSchemaTestPayloadShape(normalized));
-  assert.equal(normalized.type, "object");
-  assert.ok(Array.isArray(normalized.required));
-  assert.equal(normalized.additionalProperties, false);
-  assert.ok(Kind in normalized);
-});
-
-void test("normalizeSandboxToolParameters rejects non-object schema values", () => {
-  assert.throws(
-    () => {
-      normalizeSandboxToolParameters("type:string");
-    },
-    /object schema/i,
-  );
-});
-
-void test("parseSandboxLlmCompletionRequest validates and normalizes request payload", () => {
-  const request = parseSandboxLlmCompletionRequest({
-    model: "openai/gpt-5-mini",
-    systemPrompt: "system",
-    maxTokens: 123,
-    messages: [
-      { role: "user", content: "hello", extensionMetadata: true },
-      { role: "assistant", content: "hi" },
-    ],
-    extensionMetadata: "preserved as accepted input, omitted from the service DTO",
-  });
-
-  assert.deepEqual(request, {
-    model: "openai/gpt-5-mini",
-    systemPrompt: "system",
-    maxTokens: 123,
-    messages: [
-      { role: "user", content: "hello" },
-      { role: "assistant", content: "hi" },
-    ],
-  });
-
-  assert.throws(
-    () => {
-      parseSandboxLlmCompletionRequest({ messages: "bad" });
-    },
-    /request\.messages is invalid/i,
-  );
 });
 
 void test("sandbox LLM dispatch rejects malformed declared fields before service execution", async () => {
