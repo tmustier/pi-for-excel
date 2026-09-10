@@ -10,6 +10,7 @@ const repoRoot = path.resolve(scriptDir, "..");
 const sourceFiles = [
   "scripts/cors-proxy-server.mjs",
   "scripts/proxy-target-policy.mjs",
+  "scripts/proxy-client-policy.mjs",
 ];
 
 const packageScriptsDir = path.join(repoRoot, "pkg", "proxy", "scripts");

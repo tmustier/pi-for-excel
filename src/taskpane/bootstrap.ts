@@ -12,6 +12,8 @@ import { render } from "lit";
 import { installFetchInterceptor } from "../auth/cors-proxy.js";
 import { installModelSelectorPatch } from "../compat/model-selector-patch.js";
 import { installProcessEnvShim } from "../compat/process-env-shim.js";
+import { createSpreadsheetHost, detectSpreadsheetHostKind } from "../host/index.js";
+import type { SpreadsheetHost } from "../host/types.js";
 import { renderLoading, renderError } from "../ui/loading.js";
 import { getErrorMessage } from "../utils/errors.js";
 
@@ -45,7 +47,7 @@ export function bootstrapTaskpane(): void {
   // Office bootstrap (with fallback for local dev)
   let initialized = false;
 
-  const runInit = () => {
+  const runInit = (host: SpreadsheetHost = createSpreadsheetHost(detectSpreadsheetHostKind())) => {
     if (initialized) return;
 
     initialized = true;
@@ -73,7 +75,7 @@ export function bootstrapTaskpane(): void {
       console.error("[pi] Init error: Taskpane initialization timed out after 60000ms");
     }, 60_000);
 
-    void initTaskpane({ appEl, errorRoot })
+    void initTaskpane({ appEl, errorRoot, host })
       .then(() => {
         if (!markInitComplete()) return;
         clearTimeout(slowInitTimer);
@@ -93,21 +95,37 @@ export function bootstrapTaskpane(): void {
       });
   };
 
-  if (typeof Office === "undefined") {
-    console.warn("[pi] Office.js is unavailable — initializing without Excel");
-    runInit();
+  const bootHost = createSpreadsheetHost(detectSpreadsheetHostKind());
+
+  const finishHostReady = (host: SpreadsheetHost): void => {
+    host.ready()
+      .then((info) => {
+        if (info.kind === "office") {
+          console.log(`[pi] Office.js ready: host=${info.host ?? "unknown"}, platform=${info.platform ?? "unknown"}`);
+        } else if (info.kind === "wps") {
+          console.log("[pi] WPS host ready");
+        } else {
+          console.warn("[pi] Office.js is unavailable — initializing without Excel");
+        }
+        runInit(host);
+      })
+      .catch((error: unknown) => {
+        console.warn("[pi] Host readiness failed — initializing in browser mode", error);
+        runInit(createSpreadsheetHost("browser"));
+      });
+  };
+
+  if (bootHost.kind !== "office") {
+    finishHostReady(bootHost);
     return;
   }
 
-  void Office.onReady((info) => {
-    console.log(`[pi] Office.js ready: host=${info.host}, platform=${info.platform}`);
-    runInit();
-  });
+  finishHostReady(bootHost);
 
   setTimeout(() => {
     if (initialized) return;
 
     console.warn("[pi] Office.js not ready after 3s — initializing without Excel");
-    runInit();
+    runInit(createSpreadsheetHost("browser"));
   }, 3000);
 }

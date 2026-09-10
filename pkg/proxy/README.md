@@ -12,13 +12,13 @@ This command:
 
 1. Ensures `mkcert` exists (installs via Homebrew on macOS if missing)
 2. Creates certificates in `~/.pi-for-excel/certs/` when needed
-3. Starts the proxy at `https://localhost:3003`
+3. Starts the proxy at `https://localhost:3003`, or picks a random free port if 3003 is busy
 
 Then in Pi for Excel:
 
 1. Open `/settings`
 2. Enable **Proxy**
-3. Set URL to `https://localhost:3003`
+3. Set URL to the URL printed by the proxy (normally `https://localhost:3003`)
 4. Run `/login`
 
 ## Publishing (maintainers)
@@ -29,6 +29,7 @@ Before packing/publishing, `prepack` copies runtime files from repo root:
 
 - `scripts/cors-proxy-server.mjs`
 - `scripts/proxy-target-policy.mjs`
+- `scripts/proxy-client-policy.mjs`
 
 Publish from this directory:
 

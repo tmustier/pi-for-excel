@@ -29,6 +29,23 @@ async function getFreePort() {
   });
 }
 
+async function stopChild(child) {
+  if (!child.killed) {
+    child.kill("SIGTERM");
+  }
+
+  const exited = Promise.race([
+    once(child, "exit"),
+    delay(2000).then(() => {
+      if (!child.killed) {
+        child.kill("SIGKILL");
+      }
+    }),
+  ]);
+
+  await exited.catch(() => {});
+}
+
 async function startProxy(extraEnv = {}) {
   const port = await getFreePort();
 
@@ -78,26 +95,71 @@ async function startProxy(extraEnv = {}) {
     }),
   ]);
 
-  const stop = async () => {
-    if (!child.killed) {
-      child.kill("SIGTERM");
-    }
-
-    const exited = Promise.race([
-      once(child, "exit"),
-      delay(2000).then(() => {
-        if (!child.killed) {
-          child.kill("SIGKILL");
-        }
-      }),
-    ]);
-
-    await exited.catch(() => {});
-  };
-
   return {
     port,
-    stop,
+    stop: () => stopChild(child),
+    getLogs: () => ({ stdout, stderr }),
+  };
+}
+
+async function startProxyOnDefaultPort(extraEnv = {}) {
+  const env = { ...process.env };
+  delete env.PORT;
+  Object.assign(env, {
+    HOST: "127.0.0.1",
+    ALLOWED_ORIGINS: ORIGIN,
+    ...extraEnv,
+  });
+
+  const child = spawn(process.execPath, [PROXY_SCRIPT_PATH], {
+    env,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  let stdout = "";
+  let stderr = "";
+
+  child.stdout.setEncoding("utf8");
+  child.stderr.setEncoding("utf8");
+
+  const ready = new Promise((resolve, reject) => {
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk;
+      const hasListeningLog = stdout.includes("CORS proxy listening on");
+      const hasTargetPolicyLog =
+        stdout.includes("Allowed target hosts")
+        || stdout.includes("target host allowlisting disabled");
+
+      if (hasListeningLog && hasTargetPolicyLog) {
+        resolve(undefined);
+      }
+    });
+
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk;
+    });
+
+    child.once("exit", (code, signal) => {
+      reject(new Error(`proxy exited before ready (code=${String(code)} signal=${String(signal)})\n${stdout}\n${stderr}`));
+    });
+  });
+
+  await Promise.race([
+    ready,
+    delay(5000).then(() => {
+      throw new Error(`proxy start timeout\n${stdout}\n${stderr}`);
+    }),
+  ]);
+
+  const match = stdout.match(/CORS proxy listening on http:\/\/127\.0\.0\.1:(\d+)/);
+  if (!match) {
+    await stopChild(child);
+    throw new Error(`Could not parse proxy port from logs\n${stdout}\n${stderr}`);
+  }
+
+  return {
+    port: Number.parseInt(match[1], 10),
+    stop: () => stopChild(child),
     getLogs: () => ({ stdout, stderr }),
   };
 }
@@ -351,6 +413,33 @@ test("proxy /healthz responds without an Origin header and never proxies", async
   );
   assert.equal(withUrl.status, 200);
   assert.equal(await withUrl.text(), "ok");
+});
+
+test("proxy auto-selects a random port when default 3003 is busy and PORT is not set", async (t) => {
+  const first = await startProxyOnDefaultPort();
+  t.after(async () => {
+    await first.stop();
+  });
+
+  const second = await startProxyOnDefaultPort();
+  t.after(async () => {
+    await second.stop();
+  });
+
+  assert.notEqual(second.port, 3003);
+
+  const health = await fetch(`http://127.0.0.1:${second.port}/healthz`);
+  assert.equal(health.status, 200);
+  assert.equal(await health.text(), "ok");
+
+  const { stdout, stderr } = second.getLogs();
+  const listeningLogCount = stdout.match(/CORS proxy listening on/g)?.length ?? 0;
+  const settingsHintCount = stdout.match(/Update Pi for Excel \/settings → Proxy URL/g)?.length ?? 0;
+  assert.equal(listeningLogCount, 1);
+  assert.equal(settingsHintCount, 1);
+  assert.match(stderr, /Port 3003 is already in use; choosing a random available port instead\./);
+  assert.match(stdout, new RegExp(`CORS proxy listening on http://127\\.0\\.0\\.1:${second.port}`));
+  assert.match(stdout, /Update Pi for Excel \/settings → Proxy URL to http:\/\/127\.0\.0\.1:\d+/);
 });
 
 test("proxy boots with ALLOWED_CLIENT_CIDRS, warns, and still serves loopback", async (t) => {

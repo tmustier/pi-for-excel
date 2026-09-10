@@ -26,7 +26,7 @@ node scripts/cors-proxy-server.mjs --https
 | Variable | Default | Purpose |
 |---|---|---|
 | `HOST` | `localhost` (https) / `127.0.0.1` (http) | Bind address. Use your server's interface address (or `0.0.0.0` behind a firewall). |
-| `PORT` | `3003` | Listen port. |
+| `PORT` | `3003` | Listen port. If unset and 3003 is busy, the local helper may choose a random free port; central deployments should set `PORT` explicitly for a stable URL. |
 | `HTTPS=1` / `--https` | off | Serve TLS directly. Recommended unless you terminate TLS at a reverse proxy. |
 | `TLS_KEY_PATH` / `TLS_CERT_PATH` | `./key.pem` / `./cert.pem` | Paths to your org-issued TLS key/cert (e.g. `*.example.com`). |
 | `ALLOWED_CLIENT_CIDRS` | *(unset — loopback only)* | Comma-separated IPv4 CIDRs (or bare IPs) allowed as clients, e.g. `10.96.0.0/13,192.168.1.5`. Loopback is always allowed. Invalid entries (including `/0`) are fatal at startup — fail closed. IPv6 client ranges are not supported. |

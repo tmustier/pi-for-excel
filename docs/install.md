@@ -158,7 +158,7 @@ curl -fsSL https://piforexcel.com/proxy | sh
 
 2. In Pi, open `/settings` → **Proxy**:
    - enable **Proxy**
-   - set URL to `https://localhost:3003`
+   - set URL to the URL printed by the proxy (normally `https://localhost:3003`; if 3003 is busy, it will choose a random free port and print that URL)
 
 3. Retry OAuth login
 
@@ -178,7 +178,8 @@ curl -k -i -s \
 Notes:
 - Keep the proxy URL on **HTTPS** (`https://...`), not HTTP.
 - API-key providers generally work without proxy.
-- If port `3003` is busy, run with another port and use that same URL in settings:
+- If port `3003` is busy, `npx pi-for-excel-proxy` automatically chooses a random free port. Copy the printed `https://localhost:<port>` URL into `/settings` → **Proxy**.
+- To force a specific port, set `PORT` and use that same URL in settings:
 
 ```bash
 PORT=3005 npx pi-for-excel-proxy

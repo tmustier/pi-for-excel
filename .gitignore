@@ -36,3 +36,11 @@ manifest.dev.xml
 
 # Session exports
 pi-session-*
+
+.projects/cache
+.projects/vault
+.projects/state.test.json
+.projects/state.local.test.json
+.env
+.env.*
+!.env.example
