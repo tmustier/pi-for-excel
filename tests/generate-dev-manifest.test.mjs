@@ -13,77 +13,27 @@ import {
 
 // ── resolveDevOrigin ────────────────────────────────────────────────────────
 
-test("defaults to pi-excel.localhost (matches npm run dev:portless)", () => {
-  const resolved = resolveDevOrigin({});
-  assert.equal(resolved.origin, `https://${DEFAULT_DEV_PROXY_HOST}`);
-  assert.equal(resolved.source, "default");
-});
+test("dev origin resolver applies precedence and validates every supported input form", () => {
+  const cases = [
+    { name: "default", input: {}, expected: { origin: `https://${DEFAULT_DEV_PROXY_HOST}`, source: "default" } },
+    { name: "argument wins", input: { arg: "my-addin.localhost", env: { DEV_HOST: "other.localhost", PORTLESS_URL: "https://third.localhost" } }, expected: { origin: "https://my-addin.localhost", source: "argument" } },
+    { name: "DEV_HOST wins", input: { env: { DEV_HOST: "pi-excel.localhost", PORTLESS_URL: "https://other.localhost" } }, expected: { origin: "https://pi-excel.localhost", source: "DEV_HOST" } },
+    { name: "PORTLESS_URL fallback", input: { env: { PORTLESS_URL: "https://pi-excel.localhost" } }, expected: { origin: "https://pi-excel.localhost", source: "PORTLESS_URL" } },
+    { name: "non-443 port", input: { env: { PORTLESS_URL: "https://pi-excel.localhost:1355" } }, expected: { origin: "https://pi-excel.localhost:1355", source: "PORTLESS_URL" } },
+    { name: "full HTTPS URL", input: { env: { DEV_HOST: "https://pi-excel.localhost" } }, expected: { origin: "https://pi-excel.localhost", source: "DEV_HOST" } },
+    { name: "blank fallback", input: { arg: "  ", env: { DEV_HOST: "", PORTLESS_URL: "  " } }, expected: { origin: `https://${DEFAULT_DEV_PROXY_HOST}`, source: "default" } },
+    { name: "retired port accepted", input: { arg: "https://localhost:3000" }, expected: { origin: "https://localhost:3000", source: "argument" } },
+    { name: "HTTP rejected", input: { arg: "http://pi-excel.localhost" }, error: /https/ },
+    { name: "path rejected", input: { arg: "https://pi-excel.localhost/taskpane" }, error: /bare https origin/ },
+    { name: "credentials rejected", input: { arg: "https://user:pass@pi-excel.localhost" }, error: /bare https origin/ },
+    { name: "unparseable rejected", input: { arg: "not a host" }, error: /Invalid dev proxy host/ },
+    { name: "default URL rejected", input: { arg: "localhost:3141" }, error: /already the default/ },
+  ];
 
-test("explicit argument wins over env", () => {
-  const resolved = resolveDevOrigin({
-    arg: "my-addin.localhost",
-    env: { DEV_HOST: "other.localhost", PORTLESS_URL: "https://third.localhost" },
-  });
-
-  assert.equal(resolved.origin, "https://my-addin.localhost");
-  assert.equal(resolved.source, "argument");
-});
-
-test("DEV_HOST wins over PORTLESS_URL", () => {
-  const resolved = resolveDevOrigin({
-    env: { DEV_HOST: "pi-excel.localhost", PORTLESS_URL: "https://other.localhost" },
-  });
-
-  assert.equal(resolved.origin, "https://pi-excel.localhost");
-  assert.equal(resolved.source, "DEV_HOST");
-});
-
-test("PORTLESS_URL is used when DEV_HOST is unset", () => {
-  const resolved = resolveDevOrigin({ env: { PORTLESS_URL: "https://pi-excel.localhost" } });
-  assert.equal(resolved.origin, "https://pi-excel.localhost");
-  assert.equal(resolved.source, "PORTLESS_URL");
-});
-
-test("non-443 proxy ports are preserved", () => {
-  const resolved = resolveDevOrigin({ env: { PORTLESS_URL: "https://pi-excel.localhost:1355" } });
-  assert.equal(resolved.origin, "https://pi-excel.localhost:1355");
-});
-
-test("accepts full https URL in DEV_HOST", () => {
-  const resolved = resolveDevOrigin({ env: { DEV_HOST: "https://pi-excel.localhost" } });
-  assert.equal(resolved.origin, "https://pi-excel.localhost");
-});
-
-test("blank values fall through to the default", () => {
-  const resolved = resolveDevOrigin({ arg: "  ", env: { DEV_HOST: "", PORTLESS_URL: "  " } });
-  assert.equal(resolved.origin, `https://${DEFAULT_DEV_PROXY_HOST}`);
-  assert.equal(resolved.source, "default");
-});
-
-test("rejects non-https schemes", () => {
-  assert.throws(() => resolveDevOrigin({ arg: "http://pi-excel.localhost" }), /https/);
-});
-
-test("rejects origins with a path", () => {
-  assert.throws(() => resolveDevOrigin({ arg: "https://pi-excel.localhost/taskpane" }), /bare https origin/);
-});
-
-test("rejects origins with credentials", () => {
-  assert.throws(() => resolveDevOrigin({ arg: "https://user:pass@pi-excel.localhost" }), /bare https origin/);
-});
-
-test("rejects unparseable input", () => {
-  assert.throws(() => resolveDevOrigin({ arg: "not a host" }), /Invalid dev proxy host/);
-});
-
-test("rejects the default dev URL itself", () => {
-  assert.throws(() => resolveDevOrigin({ arg: "localhost:3141" }), /already the default/);
-});
-
-test("accepts the retired :3000 default as a custom origin", () => {
-  // The dev default moved from :3000 to :3141; the old port is now just
-  // another custom origin.
-  assert.equal(resolveDevOrigin({ arg: "https://localhost:3000" }).origin, "https://localhost:3000");
+  for (const entry of cases) {
+    if (entry.error) assert.throws(() => resolveDevOrigin(entry.input), entry.error, entry.name);
+    else assert.deepEqual(resolveDevOrigin(entry.input), entry.expected, entry.name);
+  }
 });
 
 // ── renderDevManifest ───────────────────────────────────────────────────────
