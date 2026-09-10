@@ -1,5 +1,4 @@
-// Static contract: generated manifest values and package-script wiring are build artifacts;
-// runtime origin resolution alone cannot prove the checked-in dependency remains connected.
+// Static config-parser contract: generated manifest values and package-script wiring are build artifacts.
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
@@ -10,8 +9,6 @@ import {
   renderDevManifest,
   resolveDevOrigin,
 } from "../scripts/generate-dev-manifest.mjs";
-
-// ── resolveDevOrigin ────────────────────────────────────────────────────────
 
 test("dev origin resolver applies precedence and validates every supported input form", () => {
   const cases = [
@@ -36,32 +33,28 @@ test("dev origin resolver applies precedence and validates every supported input
   }
 });
 
-// ── renderDevManifest ───────────────────────────────────────────────────────
+test("manifest renderer handles every template validity row", () => {
+  const cases = [
+    {
+      name: "replaces every occurrence",
+      template: `<a>${DEV_BASE_URL}/src/taskpane.html</a><b>${DEV_BASE_URL}/assets/icon-32.png</b>`,
+      expected: "<a>https://pi-excel.localhost/src/taskpane.html</a><b>https://pi-excel.localhost/assets/icon-32.png</b>",
+    },
+    { name: "rejects a template without the base URL", template: "<xml></xml>", error: /expected dev base URL/ },
+  ];
 
-test("replaces every dev base URL occurrence", () => {
-  const template = `<a>${DEV_BASE_URL}/src/taskpane.html</a><b>${DEV_BASE_URL}/assets/icon-32.png</b>`;
-  const rendered = renderDevManifest(template, "https://pi-excel.localhost");
-
-  assert.equal(rendered.includes(DEV_BASE_URL), false);
-  assert.equal(
-    rendered,
-    "<a>https://pi-excel.localhost/src/taskpane.html</a><b>https://pi-excel.localhost/assets/icon-32.png</b>",
-  );
-});
-
-test("throws when the template lacks the dev base URL", () => {
-  assert.throws(() => renderDevManifest("<xml></xml>", "https://pi-excel.localhost"), /expected dev base URL/);
+  for (const entry of cases) {
+    if (entry.error) assert.throws(() => renderDevManifest(entry.template, "https://pi-excel.localhost"), entry.error, entry.name);
+    else assert.equal(renderDevManifest(entry.template, "https://pi-excel.localhost"), entry.expected, entry.name);
+  }
 });
 
 test("real manifest.xml renders with no dev base URLs left over", async () => {
   const xml = await readFile(new URL("../manifest.xml", import.meta.url), "utf8");
   const originalCount = xml.split(DEV_BASE_URL).length - 1;
   assert.ok(originalCount > 0, "manifest.xml should reference the dev base URL");
-
   const rendered = renderDevManifest(xml, "https://pi-excel.localhost");
-
   assert.equal(rendered.includes(DEV_BASE_URL), false);
   assert.equal(rendered.split("https://pi-excel.localhost").length - 1, originalCount);
-  // Same add-in Id: the dev-proxy manifest replaces the default sideload.
   assert.match(rendered, /<Id>[0-9a-f-]+<\/Id>/i);
 });
