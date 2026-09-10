@@ -416,7 +416,7 @@ export function createFetchPageTool(
         const response = await runWithTimeoutAbort({
           signal,
           timeoutMs,
-          timeoutErrorMessage: `fetch_page timed out after ${timeoutMs}ms.`, 
+          timeoutErrorMessage: `fetch_page timed out after ${timeoutMs}ms.`,
           run: (requestSignal) => executeFetch(resolved.requestUrl, requestSignal),
         });
 
