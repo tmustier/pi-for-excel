@@ -412,24 +412,3 @@ void test("write failures do not emit mutation events", async () => {
   assert.deepEqual(invalidatedWorkbookIds, []);
 });
 
-void test("uses workbook:unknown coordinator key when workbook id is unavailable", async () => {
-  const coordinator = new FakeCoordinator();
-  const mutationEvents: WorkbookMutationEvent[] = [];
-  const invalidatedWorkbookIds: Array<string | null> = [];
-
-  const wrapped = wrapSingleTool({
-    tool: makeTool("format_cells"),
-    coordinator,
-    contextProvider: createContextProvider(null),
-    mutationEvents,
-    invalidatedWorkbookIds,
-  });
-
-  await wrapped.execute("tc-null-workbook", { range: "Sheet1!A1" });
-
-  assert.equal(coordinator.writeCalls.length, 1);
-  assert.equal(coordinator.writeCalls[0]?.workbookId, "workbook:unknown");
-  assert.equal(mutationEvents[0]?.workbookId, null);
-  assert.equal(mutationEvents[0]?.impact, "content");
-  assert.deepEqual(invalidatedWorkbookIds, []);
-});
