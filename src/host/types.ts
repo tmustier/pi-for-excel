@@ -3,6 +3,7 @@
 import type { SettingsStore } from "../storage/local/settings-store.js";
 
 import type { SessionWorkbookPartition } from "../workbook/session-association.js";
+import type { DocumentInstanceIdentity } from "./document-instance.js";
 import type { WorkbookContext } from "./workbook-context.js";
 
 export type SpreadsheetHostKind = "office" | "wps" | "browser";
@@ -41,6 +42,12 @@ export interface SpreadsheetHost {
 
   /** Privacy-preserving workbook identity. Never expose or persist raw document URLs. */
   getWorkbookContext(): Promise<WorkbookContext>;
+
+  /**
+   * Document-stored token for workbooks that have no path-derived identity yet.
+   * `null` when the host cannot store anything inside the document.
+   */
+  readonly documentInstance: DocumentInstanceIdentity | null;
 
   /** Host theme signal, if available. Returns null when unknown/unsupported. */
   resolveThemeDark(): boolean | null;

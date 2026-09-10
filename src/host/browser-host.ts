@@ -16,6 +16,7 @@ export class BrowserHost implements SpreadsheetHost {
   readonly kind = "browser";
   readonly displayName = "Browser";
   readonly sessionStorage: SpreadsheetHostSessionStorage = settingsBackedSessionStorage;
+  readonly documentInstance = null;
 
   whenReady(): Promise<SpreadsheetHostReadyInfo> {
     return Promise.resolve({

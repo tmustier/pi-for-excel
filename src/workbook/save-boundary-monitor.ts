@@ -1,13 +1,21 @@
 import { excelRun } from "../excel/helpers.js";
-import { getWorkbookContext, type WorkbookContext } from "./context.js";
+import { createRecoveryScopeResolver } from "./recovery-scope.js";
 
 interface WorkbookSaveBoundaryMonitorDependencies {
-  getWorkbookContext: () => Promise<WorkbookContext>;
+  /** Identity checkpoints are currently stored under, or `null` when there is none to clear. */
+  resolveWorkbookId: () => Promise<string | null>;
   readWorkbookDirtyState: () => Promise<boolean | null>;
   clearBackupsForCurrentWorkbook: () => Promise<number>;
 }
 
 const DEFAULT_POLL_INTERVAL_MS = 4_000;
+
+const defaultScopeResolver = createRecoveryScopeResolver();
+
+async function defaultResolveWorkbookId(): Promise<string | null> {
+  const scope = await defaultScopeResolver.resolveForRead();
+  return scope?.workbookId ?? null;
+}
 
 async function defaultReadWorkbookDirtyState(): Promise<boolean | null> {
   try {
@@ -29,15 +37,14 @@ export class WorkbookSaveBoundaryMonitor {
 
   constructor(dependencies: Partial<WorkbookSaveBoundaryMonitorDependencies> = {}) {
     this.dependencies = {
-      getWorkbookContext: dependencies.getWorkbookContext ?? getWorkbookContext,
+      resolveWorkbookId: dependencies.resolveWorkbookId ?? defaultResolveWorkbookId,
       readWorkbookDirtyState: dependencies.readWorkbookDirtyState ?? defaultReadWorkbookDirtyState,
       clearBackupsForCurrentWorkbook: dependencies.clearBackupsForCurrentWorkbook ?? (() => Promise.resolve(0)),
     };
   }
 
   async checkOnce(): Promise<void> {
-    const workbookContext = await this.dependencies.getWorkbookContext();
-    const workbookId = workbookContext.workbookId;
+    const workbookId = await this.dependencies.resolveWorkbookId();
     if (!workbookId) return;
 
     const isDirty = await this.dependencies.readWorkbookDirtyState();

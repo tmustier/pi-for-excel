@@ -157,11 +157,10 @@ Office.js read-back: values `[10, 20, 30, 60]`, formula `=SUM(D1:D3)` in D4.
 The tool card showed "Backup not created for this mutation" and the model
 reported no checkpoint.
 
-That is pre-existing behaviour, identical on `main`: recovery is keyed by
-workbook identity, and an unsaved workbook has none
-(`WorkbookRecoveryLog.resolveWorkbookIdentity` returns `null`). Worth a product
-decision: a user on a new, unsaved workbook has no undo through Pi and only a
-notice in the tool card says so.
+That was pre-existing behaviour, identical on `main` at the time: recovery was
+keyed by workbook identity, and an unsaved workbook had none. Fixed by scoping
+backups for never-saved workbooks to a document-stored token (see "Never-saved
+workbooks" in `src/tools/DECISIONS.md`).
 
 ### Saved workbook (`pi-p3-verify.xlsx`, generated minimal OOXML, `Sheet1!A1:B2` = `p3 baseline, 1 / keep, 2`)
 

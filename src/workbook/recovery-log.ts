@@ -6,7 +6,14 @@
  */
 
 import { excelRun, getRange } from "../excel/helpers.js";
-import { formatWorkbookLabel, getWorkbookContext, type WorkbookContext } from "./context.js";
+import { getWorkbookContext, type WorkbookContext } from "./context.js";
+import type { DocumentInstanceIdentity } from "../host/document-instance.js";
+import {
+  createRecoveryScopeResolver,
+  defaultGetDocumentInstance,
+  type RecoveryScopeResolver,
+  type RecoveryWorkbookScope,
+} from "./recovery-scope.js";
 import {
   createPersistedWorkbookRecoveryPayload,
   parsePersistedSnapshots,
@@ -164,6 +171,7 @@ interface WorkbookRecoveryLogDependencies {
   settings: SettingsStoreLike | null;
   getSettingsStore: () => Promise<SettingsStoreLike | null>;
   getWorkbookContext: () => Promise<WorkbookContext>;
+  getDocumentInstance: () => DocumentInstanceIdentity | null;
   now: () => number;
   createId: () => string;
   applySnapshot: (address: string, values: DynamicValue[][]) => Promise<WorkbookRangeState>;
@@ -330,6 +338,7 @@ function matchesWorkbook(snapshot: WorkbookRecoverySnapshot, workbookId: string)
 
 export class WorkbookRecoveryLog {
   private readonly dependencies: WorkbookRecoveryLogDependencies;
+  private readonly scope: RecoveryScopeResolver;
   private loaded = false;
   private snapshots: WorkbookRecoverySnapshot[] = [];
 
@@ -342,6 +351,7 @@ export class WorkbookRecoveryLog {
       settings: dependencies.settings ?? null,
       getSettingsStore,
       getWorkbookContext: dependencies.getWorkbookContext ?? getWorkbookContext,
+      getDocumentInstance: dependencies.getDocumentInstance ?? defaultGetDocumentInstance,
       now: dependencies.now ?? defaultNow,
       createId: dependencies.createId ?? defaultCreateId,
       applySnapshot: dependencies.applySnapshot ?? defaultApplySnapshot,
@@ -356,6 +366,10 @@ export class WorkbookRecoveryLog {
       applyChartSnapshot:
         dependencies.applyChartSnapshot ?? defaultApplyChartSnapshot,
     };
+    this.scope = createRecoveryScopeResolver({
+      getWorkbookContext: this.dependencies.getWorkbookContext,
+      getDocumentInstance: this.dependencies.getDocumentInstance,
+    });
   }
 
   private async ensureLoaded(): Promise<void> {
@@ -384,20 +398,17 @@ export class WorkbookRecoveryLog {
     await writePersistedWorkbookRecoveryPayload(settings, payload);
   }
 
-  private async resolveWorkbookIdentity(
-    workbookContextOverride?: WorkbookContext,
-  ): Promise<{ workbookContext: WorkbookContext; workbookId: string; workbookLabel?: string } | null> {
+  /**
+   * Scope for a new checkpoint. A restore passes the scope it already resolved so
+   * the inverse checkpoint lands under the same identity. Host failures mean
+   * "no identity": the mutation must still succeed, so nothing is thrown here.
+   */
+  private async resolveAppendScope(
+    scopeOverride?: RecoveryWorkbookScope,
+  ): Promise<RecoveryWorkbookScope | null> {
+    if (scopeOverride) return scopeOverride;
     try {
-      const workbookContext = workbookContextOverride ?? await this.dependencies.getWorkbookContext();
-      if (!workbookContext.workbookId) {
-        return null;
-      }
-
-      return {
-        workbookContext,
-        workbookId: workbookContext.workbookId,
-        workbookLabel: formatWorkbookLabel(workbookContext),
-      };
+      return await this.scope.resolveForAppend();
     } catch {
       return null;
     }
@@ -413,7 +424,7 @@ export class WorkbookRecoveryLog {
 
   private async appendRangeWithContext(
     args: AppendWorkbookRecoverySnapshotArgs,
-    workbookContextOverride?: WorkbookContext,
+    scopeOverride?: RecoveryWorkbookScope,
   ): Promise<WorkbookRecoverySnapshot | null> {
     const values = cloneGrid(args.beforeValues);
     const formulas = cloneGrid(args.beforeFormulas);
@@ -426,8 +437,8 @@ export class WorkbookRecoveryLog {
       ? Math.max(0, Math.floor(args.changedCount))
       : stats.cellCount;
 
-    const workbookIdentity = await this.resolveWorkbookIdentity(workbookContextOverride);
-    if (!workbookIdentity) return null;
+    const scope = await this.resolveAppendScope(scopeOverride);
+    if (!scope) return null;
 
     return this.appendSnapshot({
       id: this.dependencies.createId(),
@@ -440,22 +451,22 @@ export class WorkbookRecoveryLog {
       beforeValues: values,
       beforeFormulas: formulas,
       snapshotKind: "range_values",
-      workbookId: workbookIdentity.workbookId,
-      ...(workbookIdentity.workbookLabel !== undefined ? { workbookLabel: workbookIdentity.workbookLabel } : {}),
+      workbookId: scope.workbookId,
+      workbookLabel: scope.workbookLabel,
       ...(args.restoredFromSnapshotId !== undefined ? { restoredFromSnapshotId: args.restoredFromSnapshotId } : {}),
     });
   }
 
   private async appendFormatCellsWithContext(
     args: AppendFormatCellsRecoverySnapshotArgs,
-    workbookContextOverride?: WorkbookContext,
+    scopeOverride?: RecoveryWorkbookScope,
   ): Promise<WorkbookRecoverySnapshot | null> {
     const formatRangeState = cloneRecoveryFormatRangeState(args.formatRangeState);
     if (formatRangeState.cellCount <= 0) return null;
     if (formatRangeState.cellCount > MAX_RECOVERY_CELLS) return null;
 
-    const workbookIdentity = await this.resolveWorkbookIdentity(workbookContextOverride);
-    if (!workbookIdentity) return null;
+    const scope = await this.resolveAppendScope(scopeOverride);
+    if (!scope) return null;
 
     const changedCount = typeof args.changedCount === "number"
       ? Math.max(0, Math.floor(args.changedCount))
@@ -473,23 +484,23 @@ export class WorkbookRecoveryLog {
       beforeFormulas: [],
       snapshotKind: "format_cells_state",
       formatRangeState,
-      workbookId: workbookIdentity.workbookId,
-      ...(workbookIdentity.workbookLabel !== undefined ? { workbookLabel: workbookIdentity.workbookLabel } : {}),
+      workbookId: scope.workbookId,
+      workbookLabel: scope.workbookLabel,
       ...(args.restoredFromSnapshotId !== undefined ? { restoredFromSnapshotId: args.restoredFromSnapshotId } : {}),
     });
   }
 
   private async appendModifyStructureWithContext(
     args: AppendModifyStructureRecoverySnapshotArgs,
-    workbookContextOverride?: WorkbookContext,
+    scopeOverride?: RecoveryWorkbookScope,
   ): Promise<WorkbookRecoverySnapshot | null> {
     const modifyStructureState = cloneRecoveryModifyStructureState(args.modifyStructureState);
     const cellCount = estimateModifyStructureCellCount(modifyStructureState);
     if (cellCount <= 0) return null;
     if (cellCount > MAX_RECOVERY_CELLS) return null;
 
-    const workbookIdentity = await this.resolveWorkbookIdentity(workbookContextOverride);
-    if (!workbookIdentity) return null;
+    const scope = await this.resolveAppendScope(scopeOverride);
+    if (!scope) return null;
 
     const changedCount = typeof args.changedCount === "number"
       ? Math.max(0, Math.floor(args.changedCount))
@@ -507,22 +518,22 @@ export class WorkbookRecoveryLog {
       beforeFormulas: [],
       snapshotKind: "modify_structure_state",
       modifyStructureState,
-      workbookId: workbookIdentity.workbookId,
-      ...(workbookIdentity.workbookLabel !== undefined ? { workbookLabel: workbookIdentity.workbookLabel } : {}),
+      workbookId: scope.workbookId,
+      workbookLabel: scope.workbookLabel,
       ...(args.restoredFromSnapshotId !== undefined ? { restoredFromSnapshotId: args.restoredFromSnapshotId } : {}),
     });
   }
 
   private async appendConditionalFormatWithContext(
     args: AppendConditionalFormatRecoverySnapshotArgs,
-    workbookContextOverride?: WorkbookContext,
+    scopeOverride?: RecoveryWorkbookScope,
   ): Promise<WorkbookRecoverySnapshot | null> {
     const rules = cloneRecoveryConditionalFormatRules(args.conditionalFormatRules);
     const normalizedCellCount = Math.max(0, Math.floor(args.cellCount));
     if (normalizedCellCount <= 0) return null;
 
-    const workbookIdentity = await this.resolveWorkbookIdentity(workbookContextOverride);
-    if (!workbookIdentity) return null;
+    const scope = await this.resolveAppendScope(scopeOverride);
+    if (!scope) return null;
 
     const changedCount = typeof args.changedCount === "number"
       ? Math.max(0, Math.floor(args.changedCount))
@@ -540,18 +551,18 @@ export class WorkbookRecoveryLog {
       beforeFormulas: [],
       snapshotKind: "conditional_format_rules",
       conditionalFormatRules: rules,
-      workbookId: workbookIdentity.workbookId,
-      ...(workbookIdentity.workbookLabel !== undefined ? { workbookLabel: workbookIdentity.workbookLabel } : {}),
+      workbookId: scope.workbookId,
+      workbookLabel: scope.workbookLabel,
       ...(args.restoredFromSnapshotId !== undefined ? { restoredFromSnapshotId: args.restoredFromSnapshotId } : {}),
     });
   }
 
   private async appendCommentThreadWithContext(
     args: AppendCommentThreadRecoverySnapshotArgs,
-    workbookContextOverride?: WorkbookContext,
+    scopeOverride?: RecoveryWorkbookScope,
   ): Promise<WorkbookRecoverySnapshot | null> {
-    const workbookIdentity = await this.resolveWorkbookIdentity(workbookContextOverride);
-    if (!workbookIdentity) return null;
+    const scope = await this.resolveAppendScope(scopeOverride);
+    if (!scope) return null;
 
     const changedCount = typeof args.changedCount === "number"
       ? Math.max(0, Math.floor(args.changedCount))
@@ -569,18 +580,18 @@ export class WorkbookRecoveryLog {
       beforeFormulas: [],
       snapshotKind: "comment_thread",
       commentThreadState: cloneRecoveryCommentThreadState(args.commentThreadState),
-      workbookId: workbookIdentity.workbookId,
-      ...(workbookIdentity.workbookLabel !== undefined ? { workbookLabel: workbookIdentity.workbookLabel } : {}),
+      workbookId: scope.workbookId,
+      workbookLabel: scope.workbookLabel,
       ...(args.restoredFromSnapshotId !== undefined ? { restoredFromSnapshotId: args.restoredFromSnapshotId } : {}),
     });
   }
 
   private async appendChartWithContext(
     args: AppendChartRecoverySnapshotArgs,
-    workbookContextOverride?: WorkbookContext,
+    scopeOverride?: RecoveryWorkbookScope,
   ): Promise<WorkbookRecoverySnapshot | null> {
-    const workbookIdentity = await this.resolveWorkbookIdentity(workbookContextOverride);
-    if (!workbookIdentity) return null;
+    const scope = await this.resolveAppendScope(scopeOverride);
+    if (!scope) return null;
 
     const changedCount = typeof args.changedCount === "number"
       ? Math.max(0, Math.floor(args.changedCount))
@@ -598,8 +609,8 @@ export class WorkbookRecoveryLog {
       beforeFormulas: [],
       snapshotKind: "chart_state",
       chartState: cloneRecoveryChartState(args.chartState),
-      workbookId: workbookIdentity.workbookId,
-      ...(workbookIdentity.workbookLabel !== undefined ? { workbookLabel: workbookIdentity.workbookLabel } : {}),
+      workbookId: scope.workbookId,
+      workbookLabel: scope.workbookLabel,
       ...(args.restoredFromSnapshotId !== undefined ? { restoredFromSnapshotId: args.restoredFromSnapshotId } : {}),
     });
   }
@@ -663,19 +674,18 @@ export class WorkbookRecoveryLog {
   }
 
   async listForCurrentWorkbook(limit = 20): Promise<WorkbookRecoverySnapshot[]> {
-    const workbookContext = await this.dependencies.getWorkbookContext();
-    const workbookId = workbookContext.workbookId;
-    if (!workbookId) return [];
+    const scope = await this.scope.resolveForRead();
+    if (!scope) return [];
 
-    return this.list({ limit, workbookId });
+    return this.list({ limit, workbookId: scope.workbookId });
   }
 
   async delete(snapshotId: string): Promise<boolean> {
     await this.ensureLoaded();
 
-    const workbookContext = await this.dependencies.getWorkbookContext();
-    const workbookId = workbookContext.workbookId;
-    if (!workbookId) return false;
+    const scope = await this.scope.resolveForRead();
+    if (!scope) return false;
+    const workbookId = scope.workbookId;
 
     const previousLength = this.snapshots.length;
     this.snapshots = this.snapshots.filter(
@@ -693,9 +703,9 @@ export class WorkbookRecoveryLog {
   async clearForCurrentWorkbook(): Promise<number> {
     await this.ensureLoaded();
 
-    const workbookContext = await this.dependencies.getWorkbookContext();
-    const workbookId = workbookContext.workbookId;
-    if (!workbookId) return 0;
+    const scope = await this.scope.resolveForRead();
+    if (!scope) return 0;
+    const workbookId = scope.workbookId;
 
     const previousLength = this.snapshots.length;
     this.snapshots = this.snapshots.filter((snapshot) => !matchesWorkbook(snapshot, workbookId));
@@ -716,11 +726,14 @@ export class WorkbookRecoveryLog {
       throw new Error("Snapshot not found.");
     }
 
-    const workbookContext = await this.dependencies.getWorkbookContext();
+    const scope = await this.scope.resolveForRead();
+    if (!scope) {
+      throw new Error("Current workbook identity is unavailable; cannot safely restore this snapshot.");
+    }
 
     return restoreWorkbookRecoverySnapshot({
       snapshot,
-      workbookContext,
+      scope,
       dependencies: {
         applySnapshot: this.dependencies.applySnapshot,
         applyFormatCellsSnapshot: this.dependencies.applyFormatCellsSnapshot,

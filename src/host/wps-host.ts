@@ -26,6 +26,7 @@ export class WpsHost implements SpreadsheetHost {
   readonly kind = "wps";
   readonly displayName = "WPS Spreadsheets";
   readonly sessionStorage: SpreadsheetHostSessionStorage = settingsBackedSessionStorage;
+  readonly documentInstance = null;
 
   whenReady(): Promise<SpreadsheetHostReadyInfo> {
     return Promise.resolve({
