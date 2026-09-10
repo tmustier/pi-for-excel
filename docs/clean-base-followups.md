@@ -69,9 +69,12 @@ in the same change that deletes the alias.
 
 ### WPS detection on a real capability
 
-`src/host/detection.ts` still treats any object- or function-valued `wps` or
-`Application` global as WPS. The plan asked for a recognisable host capability.
-`src/host/wps/jsapi.ts` now exists and is the place to put that check.
+Done. `hasWpsJsApiGlobal` in `src/host/detection.ts` now requires the
+`wps.EtApplication` accessor, `PluginStorage`, or an `Application` object
+carrying one of the ET members `src/host/wps/jsapi.ts` reads. An unrelated
+`Application` or `wps` global no longer selects the WPS host. Not verified in
+real WPS: China-domestic WPS add-in loading is gated on an enterprise / WPS 365
+authorisation policy that this machine does not have.
 
 ### Real product acceptance per behaviour-changing slice
 
