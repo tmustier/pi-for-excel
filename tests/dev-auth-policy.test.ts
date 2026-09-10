@@ -45,3 +45,14 @@ void test("isPiAuthRequestAllowed has an explicit non-local-host opt-in for disp
   assert.equal(isPiAuthRequestAllowed({ remoteAddress: "127.0.0.1", hostHeader: "10.0.2.2:3141", allowNonLocalHost: true }), true);
   assert.equal(isPiAuthRequestAllowed({ remoteAddress: "10.0.2.15", hostHeader: "10.0.2.2:3141", allowNonLocalHost: true }), false);
 });
+
+void test("HTTP/2 authority preserves both dev-auth loopback restrictions", () => {
+  assert.equal(isPiAuthRequestAllowed({ remoteAddress: "::1", authorityHeader: "localhost:3141" }), true);
+  assert.equal(isPiAuthRequestAllowed({ remoteAddress: "::1", authorityHeader: "10.0.2.2:3141" }), false);
+  assert.equal(isPiAuthRequestAllowed({ remoteAddress: "10.0.2.15", authorityHeader: "localhost:3141" }), false);
+  assert.equal(isPiAuthRequestAllowed({ remoteAddress: "::1" }), false);
+  assert.equal(isPiAuthRequestAllowed({ remoteAddress: "::1", hostHeader: "example.com", authorityHeader: "localhost:3141" }), false);
+  assert.equal(isPiAuthRequestAllowed({ remoteAddress: "::1", hostHeader: "localhost:3141", authorityHeader: "10.0.2.2:3141" }), false);
+  assert.equal(isPiAuthRequestAllowed({ remoteAddress: "::1", hostHeader: "localhost:3141", authorityHeader: "" }), false);
+  assert.equal(isPiAuthRequestAllowed({ remoteAddress: "::1", hostHeader: "localhost:3141", authorityHeader: "localhost:3141" }), true);
+});

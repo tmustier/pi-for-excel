@@ -9,6 +9,7 @@
  */
 
 import { uuidv7 } from "@earendil-works/pi-agent-core";
+import { hasApi } from "@earendil-works/pi-ai";
 import type {
   Api,
   AssistantMessageEventStream,
@@ -547,6 +548,13 @@ async function proxySupportsCodexWebSocketBridge(proxyUrl: string): Promise<bool
   return supported;
 }
 
+function normalizeOpenRouterModel(model: Model<Api>): Model<Api> {
+  if (model.provider !== "openrouter" || !hasApi(model, "anthropic-messages")) return model;
+  if (!model.compat?.supportsMidConvoEffort) return model;
+  // OpenRouter rejects the configuration_update beta; ordinary adaptive effort works.
+  return { ...model, compat: { ...model.compat, supportsMidConvoEffort: false } };
+}
+
 export function createOfficeStreamFn(
   getProxyUrl: GetProxyUrl,
   modelsRuntime: Models,
@@ -572,7 +580,7 @@ export function createOfficeStreamFn(
       return contextWithoutTools;
     })();
 
-    const normalizedModel = normalizeGoogleOAuthModel(modelsRuntime, model);
+    const normalizedModel = normalizeOpenRouterModel(normalizeGoogleOAuthModel(modelsRuntime, model));
 
     const callRecord = recordCall(
       normalizedModel,
@@ -585,7 +593,15 @@ export function createOfficeStreamFn(
 
     const proxyUrl = await getProxyUrl();
     const needsCodexBridge = requiresCodexWebSocketBridge(normalizedModel);
+    const needsOpenRouterProxy = normalizedModel.provider === "openrouter"
+      && normalizedModel.api === "anthropic-messages";
     if (!proxyUrl) {
+      if (needsOpenRouterProxy) {
+        throw new Error(
+          "OpenRouter's native Anthropic transport requires the Pi for Excel proxy in this browser. " +
+          "Enable Proxy in Settings and run the latest pi-for-excel-proxy helper.",
+        );
+      }
       if (needsCodexBridge) {
         throw new Error(
           "GPT-5.6 Luna currently requires the latest Pi for Excel proxy for ChatGPT WebSocket transport. " +
@@ -595,7 +611,7 @@ export function createOfficeStreamFn(
       return modelsRuntime.streamSimple(normalizedModel, effectiveContext, effectiveOptions);
     }
 
-    if (!shouldProxyProvider(normalizedModel.provider, options?.apiKey, isRuntimeProvider)) {
+    if (!needsOpenRouterProxy && !shouldProxyProvider(normalizedModel.provider, options?.apiKey, isRuntimeProvider)) {
       return modelsRuntime.streamSimple(normalizedModel, effectiveContext, effectiveOptions);
     }
 

@@ -1636,6 +1636,7 @@ export async function initTaskpane(opts: {
     setExecutionMode,
     getModelSwitchBehavior,
     setModelSwitchBehavior,
+    models: modelRuntime.models,
     onRulesSaved: async () => {
       await refreshWorkbookState();
     },

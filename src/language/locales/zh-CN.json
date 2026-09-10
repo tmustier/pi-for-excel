@@ -79,7 +79,7 @@
   "custom-gateway.configLabelEndpoint": "端点",
   "custom-gateway.configLabelModel": "模型",
   "custom-gateway.configLabelName": "名称",
-  "custom-gateway.contextWindowHint": "用于 Pi 的本地上下文预算和自动压缩。请设置为你的网关模型的实际上下文窗口。",
+  "custom-gateway.contextWindowHint": "留空时使用已注册模型的限制；未知模型默认为 16,384 个 token。输入数值可覆盖默认值。",
   "custom-gateway.deleteButton": "删除",
   "custom-gateway.deleteConfirmMsg": "删除网关\"{name}\"？这将从此加载项中删除其存储的 API 密钥。",
   "custom-gateway.deleteConfirmTitle": "删除自定义网关？",
