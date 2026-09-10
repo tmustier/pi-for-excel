@@ -383,6 +383,128 @@ test("proxy keeps its own CORS headers when upstream sends conflicting ones", as
   assert.equal(response.headers.get("x-upstream-custom"), "passthrough");
 });
 
+test("proxy cancels the upstream request when the client disconnects mid-stream", async (t) => {
+  const port = await getFreePort();
+  let upstreamClosed;
+  const upstreamClosedPromise = new Promise((resolve) => { upstreamClosed = resolve; });
+  let upstreamStarted;
+  const upstreamStartedPromise = new Promise((resolve) => { upstreamStarted = resolve; });
+  const server = http.createServer((req, res) => {
+    upstreamStarted();
+    res.statusCode = 200;
+    res.setHeader("Content-Type", "text/event-stream");
+    res.write("data: first\n\n");
+    const ticker = setInterval(() => res.write("data: tick\n\n"), 25);
+    // A generation that never finishes on its own; only a cancelled upstream request ends it.
+    req.on("close", () => {
+      clearInterval(ticker);
+      upstreamClosed(Date.now());
+    });
+  });
+  await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(port, "127.0.0.1", () => resolve(undefined));
+  });
+  t.after(async () => {
+    server.closeAllConnections();
+    await new Promise((resolve) => server.close(() => resolve(undefined)));
+  });
+
+  const proxy = await startProxy({
+    ALLOW_LOOPBACK_TARGETS: "1",
+    ALLOW_PRIVATE_TARGETS: "1",
+  });
+  t.after(async () => {
+    await proxy.stop();
+  });
+
+  const url = encodeURIComponent(`http://127.0.0.1:${port}/v1/messages`);
+  const client = new AbortController();
+  const response = await fetch(`http://127.0.0.1:${proxy.port}/?url=${url}`, {
+    method: "POST",
+    headers: { Origin: ORIGIN, "Content-Type": "application/json" },
+    body: "{}",
+    signal: client.signal,
+  });
+  assert.equal(response.status, 200);
+  await upstreamStartedPromise;
+  const reader = response.body.getReader();
+  const first = await reader.read();
+  assert.equal(first.done, false);
+
+  const abortedAt = Date.now();
+  client.abort();
+
+  const closedAt = await Promise.race([
+    upstreamClosedPromise,
+    delay(3000).then(() => null),
+  ]);
+  assert.notEqual(closedAt, null, "upstream request kept running after the client disconnected");
+  assert.ok(closedAt - abortedAt < 3000);
+
+  // The proxy must stay healthy and must not report the cancellation as an upstream error.
+  await delay(100);
+  const health = await fetch(`http://127.0.0.1:${proxy.port}/healthz`);
+  assert.equal(health.status, 200);
+  const { stdout, stderr } = proxy.getLogs();
+  assert.doesNotMatch(`${stdout}\n${stderr}`, /ERROR|Proxy error|ERR_HTTP_HEADERS_SENT|Unhandled/u);
+});
+
+test("proxy cancels an upstream request the client abandons before any response arrives", async (t) => {
+  const port = await getFreePort();
+  let upstreamClosed;
+  const upstreamClosedPromise = new Promise((resolve) => { upstreamClosed = resolve; });
+  let upstreamStarted;
+  const upstreamStartedPromise = new Promise((resolve) => { upstreamStarted = resolve; });
+  const server = http.createServer((req, res) => {
+    upstreamStarted();
+    // Provider still "thinking": no headers yet. Only a cancelled request ends this.
+    const pending = setTimeout(() => res.end("late"), 10_000);
+    req.on("close", () => {
+      clearTimeout(pending);
+      upstreamClosed(true);
+    });
+  });
+  await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(port, "127.0.0.1", () => resolve(undefined));
+  });
+  t.after(async () => {
+    server.closeAllConnections();
+    await new Promise((resolve) => server.close(() => resolve(undefined)));
+  });
+
+  const proxy = await startProxy({
+    ALLOW_LOOPBACK_TARGETS: "1",
+    ALLOW_PRIVATE_TARGETS: "1",
+  });
+  t.after(async () => {
+    await proxy.stop();
+  });
+
+  const url = encodeURIComponent(`http://127.0.0.1:${port}/v1/messages`);
+  const client = new AbortController();
+  const request = fetch(`http://127.0.0.1:${proxy.port}/?url=${url}`, {
+    method: "POST",
+    headers: { Origin: ORIGIN, "Content-Type": "application/json" },
+    body: "{}",
+    signal: client.signal,
+  });
+  await upstreamStartedPromise;
+  client.abort();
+  await assert.rejects(request, { name: "AbortError" });
+
+  const closed = await Promise.race([upstreamClosedPromise, delay(3000).then(() => false)]);
+  assert.equal(closed, true, "upstream request kept running after the client disconnected");
+
+  await delay(100);
+  const health = await fetch(`http://127.0.0.1:${proxy.port}/healthz`);
+  assert.equal(health.status, 200);
+  const { stdout, stderr } = proxy.getLogs();
+  assert.doesNotMatch(`${stdout}\n${stderr}`, /ERROR|Proxy error|ERR_HTTP_HEADERS_SENT|Unhandled/u);
+  assert.match(stdout, /cancelled by client/u);
+});
+
 test("proxy enforces ALLOWED_TARGET_HOSTS when configured", async (t) => {
   const proxy = await startProxy({
     ALLOWED_TARGET_HOSTS: "api.openai.com",
