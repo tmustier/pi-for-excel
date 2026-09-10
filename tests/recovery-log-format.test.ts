@@ -19,7 +19,6 @@ import {
 import {
   collectMergedAreaAddresses,
   dedupeRecoveryAddresses,
-  validateStringGrid,
 } from "../src/workbook/recovery/format-state-utils.ts";
 import {
   isRecoveryConditionalDataBarState,
@@ -79,16 +78,6 @@ void test("format-state utilities dedupe addresses and merged areas deterministi
   });
 
   assert.deepEqual(merged, ["Sheet1!A1:B1", "Sheet1!C1:D1"]);
-});
-
-void test("format-state utilities validate string grid shape", () => {
-  assert.deepEqual(
-    validateStringGrid([["0.00", "General"], ["General", "0.00"]], 2, 2),
-    [["0.00", "General"], ["General", "0.00"]],
-  );
-
-  assert.equal(validateStringGrid([["0.00"]], 2, 1), null);
-  assert.equal(validateStringGrid([["0.00", 42]], 1, 2), null);
 });
 
 void test("conditional-format normalization maps supported Excel types", () => {

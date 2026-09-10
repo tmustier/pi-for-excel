@@ -158,7 +158,11 @@ function isRecoveryFormatAreaState(value: DynamicValue): value is RecoveryFormat
   if (typeof value.rowCount !== "number") return false;
   if (typeof value.columnCount !== "number") return false;
 
-  if (value.numberFormat !== undefined && !isStringGrid(value.numberFormat)) return false;
+  if (value.numberFormat !== undefined && (
+    !isStringGrid(value.numberFormat) ||
+    value.numberFormat.length !== value.rowCount ||
+    value.numberFormat.some((row) => row.length !== value.columnCount)
+  )) return false;
   if (value.fillColor !== undefined && typeof value.fillColor !== "string") return false;
   if (value.fontColor !== undefined && typeof value.fontColor !== "string") return false;
   if (value.bold !== undefined && typeof value.bold !== "boolean") return false;
