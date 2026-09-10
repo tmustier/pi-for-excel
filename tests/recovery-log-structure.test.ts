@@ -8,7 +8,6 @@ import { type RecoveryModifyStructureState } from "../src/workbook/recovery-stat
 import {
   createInMemorySettingsStore,
   findSnapshotById,
-  withoutUndefined,
 } from "./fixtures/recovery-log.ts";
 
 void test("captureValueDataRange short-circuits oversized captures before loading cell grids", async () => {
