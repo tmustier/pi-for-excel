@@ -29,6 +29,7 @@ async function withFilesPage(paths: readonly string[], run: (page: Page) => Prom
     `);
     await enterCommand(opened.page, "/files");
     await opened.page.getByRole("heading", { name: "Files" }).waitFor({ state: "visible" });
+    await opened.page.locator(".pi-files-section-group").first().waitFor({ state: "visible" });
     await run(opened.page);
   } finally {
     await opened.finish();
@@ -87,6 +88,7 @@ async function withConnectedFilesPage(paths: readonly string[], run: (page: Page
     `);
     await enterCommand(opened.page, "/files");
     await opened.page.getByRole("heading", { name: "Files" }).waitFor({ state: "visible" });
+    await opened.page.locator(".pi-files-section-group").first().waitFor({ state: "visible" });
     await run(opened.page);
   } finally {
     await opened.finish();

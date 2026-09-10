@@ -6,7 +6,7 @@ import { openTaskpane, startTaskpaneServer, type TaskpaneServer } from "./harnes
 let env: TaskpaneServer;
 
 before(async () => {
-  env = await startTaskpaneServer({ token: "extensions3-surfaces-token" });
+  env = await startTaskpaneServer({ token: "extensions-surfaces-token" });
 });
 
 after(async () => {
@@ -14,7 +14,7 @@ after(async () => {
 });
 
 void test("Plugins shows the installed extensions and installation sections", async () => {
-  const opened = await openTaskpane(env, { clientId: "extensions3-hub" });
+  const opened = await openTaskpane(env, { clientId: "extensions-hub" });
   const { page } = opened;
 
   try {
@@ -37,7 +37,7 @@ void test("Plugins shows the installed extensions and installation sections", as
 void test("an installed extension can remove one widget and then clear its remaining widgets", async () => {
   let commandSent = false;
   const opened = await openTaskpane(env, {
-    clientId: "extensions3-widgets",
+    clientId: "extensions-widgets",
     prepareContext: async (context) => {
       await context.addInitScript(() => {
         if (window === window.top) localStorage.setItem("pi.experimental.extensionWidgetV2", "1");
@@ -49,7 +49,7 @@ void test("an installed extension can remove one widget and then clear its remai
       await route.fulfill({
         contentType: "application/json",
         body: JSON.stringify({
-          id: "install-extensions3-widgets",
+          id: "install-extensions-widgets",
           type: "extensionInstallCode",
           payload: {
             name: "Widget lifecycle extension",

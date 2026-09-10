@@ -99,7 +99,7 @@ function createQueueDisplay(): QueueDisplay {
 
 function createEnvironment() {
   const backend = new MemoryStorageBackend();
-  const { sessions, settings } = initAppStorage("session3b-runtime-lifecycle", backend);
+  const { sessions, settings } = initAppStorage("session-runtime-lifecycle", backend);
   const faux = fauxProvider();
   const models = createModels();
   models.setProvider(faux.provider);

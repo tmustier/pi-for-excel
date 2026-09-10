@@ -98,7 +98,7 @@ const sessionA = "00000000-0000-4000-8000-000000000001";
 const sessionB = "00000000-0000-4000-8000-000000000002";
 
 async function createRuntime(backend: StorageBackend, workbookId: string | null) {
-  const { sessions, settings } = initAppStorage("session3b-restore-selection", backend);
+  const { sessions, settings } = initAppStorage("session-restart-selection", backend);
   const faux = fauxProvider();
   const models = createModels();
   models.setProvider(faux.provider);
