@@ -28,32 +28,26 @@ test("vercel.json wires ignoreCommand to the deploy policy script", async () => 
   assert.equal(ignoreCommand, EXPECTED_IGNORE_COMMAND);
 });
 
-test("ignoreCommand allows manual deploys", () => {
-  const exitCode = resolveVercelIgnoreCommandExitCode({});
-  assert.equal(exitCode, 1, "manual deploys should build");
-});
+test("deployment policy maps each Vercel context to deploy or skip", () => {
+  const cases = [
+    { name: "manual deploy", env: {}, expected: 1 },
+    { name: "main branch", env: { VERCEL_GIT_COMMIT_REF: "main" }, expected: 1 },
+    {
+      name: "pull request",
+      env: {
+        VERCEL_GIT_COMMIT_REF: "feature/re-enable-auto-deploy",
+        VERCEL_GIT_PULL_REQUEST_ID: "290",
+      },
+      expected: 1,
+    },
+    {
+      name: "non-PR feature branch",
+      env: { VERCEL_GIT_COMMIT_REF: "feature/re-enable-auto-deploy" },
+      expected: 0,
+    },
+  ];
 
-test("ignoreCommand allows main deploys", () => {
-  const exitCode = resolveVercelIgnoreCommandExitCode({
-    VERCEL_GIT_COMMIT_REF: "main",
-  });
-
-  assert.equal(exitCode, 1, "main branch deploys should build");
-});
-
-test("ignoreCommand allows pull request deploys", () => {
-  const exitCode = resolveVercelIgnoreCommandExitCode({
-    VERCEL_GIT_COMMIT_REF: "feature/re-enable-auto-deploy",
-    VERCEL_GIT_PULL_REQUEST_ID: "290",
-  });
-
-  assert.equal(exitCode, 1, "pull request deploys should build");
-});
-
-test("ignoreCommand skips non-PR feature branches", () => {
-  const exitCode = resolveVercelIgnoreCommandExitCode({
-    VERCEL_GIT_COMMIT_REF: "feature/re-enable-auto-deploy",
-  });
-
-  assert.equal(exitCode, 0, "non-PR feature branch deploys should be skipped");
+  for (const { name, env, expected } of cases) {
+    assert.equal(resolveVercelIgnoreCommandExitCode(env), expected, name);
+  }
 });
