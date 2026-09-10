@@ -62,6 +62,13 @@ const GPT_56_VARIANTS = [
     id: "gpt-5.6-sol",
     name: "GPT-5.6 Sol",
     cost: {
+      input: 4,
+      output: 20,
+      cacheRead: 0.4,
+      cacheWrite: 5,
+      tiers: [{ inputTokensAbove: 272_000, input: 8, output: 30, cacheRead: 0.8, cacheWrite: 10 }],
+    },
+    codexCost: {
       input: 5,
       output: 30,
       cacheRead: 0.5,
@@ -73,22 +80,22 @@ const GPT_56_VARIANTS = [
     id: "gpt-5.6-terra",
     name: "GPT-5.6 Terra",
     cost: {
-      input: 2.5,
-      output: 15,
-      cacheRead: 0.25,
-      cacheWrite: 3.125,
-      tiers: [{ inputTokensAbove: 272_000, input: 5, output: 22.5, cacheRead: 0.5, cacheWrite: 6.25 }],
+      input: 2,
+      output: 12,
+      cacheRead: 0.2,
+      cacheWrite: 2.5,
+      tiers: [{ inputTokensAbove: 272_000, input: 4, output: 18, cacheRead: 0.4, cacheWrite: 5 }],
     },
   },
   {
     id: "gpt-5.6-luna",
     name: "GPT-5.6 Luna",
     cost: {
-      input: 1,
-      output: 6,
-      cacheRead: 0.1,
-      cacheWrite: 1.25,
-      tiers: [{ inputTokensAbove: 272_000, input: 2, output: 9, cacheRead: 0.2, cacheWrite: 2.5 }],
+      input: 0.2,
+      output: 1.2,
+      cacheRead: 0.02,
+      cacheWrite: 0.25,
+      tiers: [{ inputTokensAbove: 272_000, input: 0.4, output: 1.8, cacheRead: 0.04, cacheWrite: 0.5 }],
     },
   },
 ];
@@ -156,7 +163,7 @@ void test("GPT-5.6 registry exposes the metadata used by the app", () => {
       assert.deepEqual(model.input, ["text", "image"]);
       assert.equal(model.contextWindow, 272_000);
       assert.equal(model.maxTokens, 128_000);
-      assert.deepEqual(model.cost, expected.cost);
+      assert.deepEqual(model.cost, isCodex && "codexCost" in expected ? expected.codexCost : expected.cost);
       assert.equal(model.thinkingLevelMap?.minimal, isCodex ? "low" : null);
       assert.equal(model.thinkingLevelMap?.xhigh, "xhigh");
       assert.equal(model.thinkingLevelMap?.max, "max");

@@ -2,7 +2,7 @@
  * Helpers for custom OpenAI-compatible gateway providers.
  */
 
-import type { Api, Model } from "@earendil-works/pi-ai";
+import type { Api, Model, Models } from "@earendil-works/pi-ai";
 import type { CustomProvider } from "../storage/local/custom-providers-store.js";
 
 const OPENAI_GATEWAY_ID_PREFIX = "pi-openai-gateway:";
@@ -194,8 +194,13 @@ function createGatewayModel(args: {
   modelId: string;
   providerName: string;
   contextWindow: number;
+  registryModel?: Model<Api>;
 }): Model<"openai-completions"> {
-  const maxTokens = Math.min(DEFAULT_OPENAI_GATEWAY_MAX_TOKENS, args.contextWindow);
+  const registryModel = args.registryModel;
+  const maxTokens = Math.min(
+    registryModel?.maxTokens ?? DEFAULT_OPENAI_GATEWAY_MAX_TOKENS,
+    args.contextWindow,
+  );
 
   return {
     id: args.modelId,
@@ -203,9 +208,12 @@ function createGatewayModel(args: {
     api: "openai-completions",
     provider: args.providerName,
     baseUrl: args.endpointUrl,
-    reasoning: false,
-    input: ["text"],
-    cost: {
+    reasoning: registryModel?.reasoning ?? false,
+    ...(registryModel?.thinkingLevelMap !== undefined
+      ? { thinkingLevelMap: registryModel.thinkingLevelMap }
+      : {}),
+    input: registryModel?.input ?? ["text"],
+    cost: registryModel?.cost ?? {
       input: 0,
       output: 0,
       cacheRead: 0,
@@ -259,10 +267,19 @@ export async function listOpenAiGatewayConfigs(
 export async function saveOpenAiGatewayConfig(
   customProvidersStore: CustomProvidersStoreLike,
   input: SaveOpenAiGatewayInput,
+  models?: Pick<Models, "getModels">,
 ): Promise<OpenAiGatewayConfig> {
   const endpointUrl = normalizeGatewayEndpointUrl(input.endpointUrl);
   const modelId = normalizeGatewayModelId(input.modelId);
-  const contextWindow = normalizeGatewayContextWindow(input.contextWindow);
+  const registryModel = models?.getModels().find((model) => (
+    !model.provider.startsWith(OPENAI_GATEWAY_PROVIDER_PREFIX)
+    && model.baseUrl === endpointUrl
+    && model.id === modelId
+    && model.api === OPENAI_GATEWAY_TYPE
+  ));
+  const contextWindow = normalizeGatewayContextWindow(
+    input.contextWindow ?? registryModel?.contextWindow,
+  );
   const existingGateways = await listOpenAiGatewayConfigs(customProvidersStore);
 
   if (input.id) {
@@ -300,6 +317,7 @@ export async function saveOpenAiGatewayConfig(
         modelId,
         providerName,
         contextWindow,
+        ...(registryModel !== undefined ? { registryModel } : {}),
       }),
     ],
   };

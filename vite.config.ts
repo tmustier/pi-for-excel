@@ -28,7 +28,7 @@ function piAuthPlugin(): Plugin {
         // local browser). QEMU user networking can make WPS guest traffic appear
         // loopback to Vite, so also require a localhost/127.0.0.1 Host header by default.
         const remote = req.socket?.remoteAddress;
-        if (!isPiAuthRequestAllowed({ remoteAddress: remote, hostHeader: req.headers.host, allowNonLocalHost })) {
+        if (!isPiAuthRequestAllowed({ remoteAddress: remote, hostHeader: req.headers.host, authorityHeader: req.headers[":authority"], allowNonLocalHost })) {
           res.statusCode = 403;
           res.setHeader("Content-Type", "application/json; charset=utf-8");
           res.setHeader("Cache-Control", "no-store");

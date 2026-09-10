@@ -1,6 +1,6 @@
 # Model / dependency update playbook
 
-**Last verified:** 2026-08-05
+**Last verified:** 2026-09-08
 
 This repo hardcodes a small set of "featured" and "preferred" model patterns for sorting and default selection. Static built-in models come from Pi AI, while custom and extension providers can add cached, dynamically discovered catalogues at runtime.
 
@@ -16,20 +16,23 @@ This doc describes how to update:
 - **Runtime lookup and streaming:** the taskpane-owned `BrowserModelRuntime`, backed by Pi AI's `createModels()` collection.
 - **Dynamic catalogue cache:** IndexedDB store `model-catalogs`, accessed through `ModelCatalogsStore`; restored entries are rebound to the provider's current API/base URL before use.
 - **Discovery bounds:** responses are limited to 2 MiB, 2,000 entries and 256 characters per model ID. An invalid/oversized refresh leaves the last safe cache and configured baseline intact.
-- **Custom gateways:** baseline models remain in `CustomProvidersStore`; `/models` discovery overlays them without deleting the configured fallback model.
+- **Manual gateways:** models remain in `CustomProvidersStore` and register through the same collection without `/models` discovery. An exact endpoint, model ID and API match supplies metadata from the shared registry; an explicit context limit takes precedence. Unknown models retain the existing defaults. Previously discovered additions are no longer loaded for manual-form entries.
 - **Extension providers:** `api.models.registerProvider()` declarations are runtime-owned and unload with their extension. Unregistering aborts in-flight discovery before deleting its cache so late responses cannot resurrect stale entries.
 
 Do not use Pi coding-agent's Node/file `ModelRuntime` directly in the Office WebView. Pi for Excel uses the same Pi AI provider primitives with browser storage, OAuth and proxy policy. Cross-check the installed Pi package and changelog when the generated registry changes. Never infer aliases or metadata from marketing names.
 
-### Current GPT-5.6 registry snapshot (`pi-ai` 0.83.0)
+Manual gateway metadata is a save-time snapshot. Existing entries retain saved limits until edited; clear the context field when re-saving to use current registry defaults. Other manual gateway snapshots are excluded from metadata lookup.
+
+### Current GPT-5.6 registry snapshot (`pi-ai` 0.85.1)
 
 Upstream exposes exactly three IDs on both `openai` and `openai-codex`; there is deliberately no bare `gpt-5.6` alias:
 
-| ID | Display name | Standard input / output | Cache read / write | Above 272k input / output | Above 272k cache read / write |
+| ID | Provider | Standard input / output | Cache read / write | Above 272k input / output | Above 272k cache read / write |
 |---|---|---:|---:|---:|---:|
-| `gpt-5.6-sol` | GPT-5.6 Sol | $5 / $30 | $0.50 / $6.25 | $10 / $45 | $1 / $12.50 |
-| `gpt-5.6-terra` | GPT-5.6 Terra | $2.50 / $15 | $0.25 / $3.125 | $5 / $22.50 | $0.50 / $6.25 |
-| `gpt-5.6-luna` | GPT-5.6 Luna | $1 / $6 | $0.10 / $1.25 | $2 / $9 | $0.20 / $2.50 |
+| `gpt-5.6-sol` | OpenAI API | $4 / $20 | $0.40 / $5 | $8 / $30 | $0.80 / $10 |
+| `gpt-5.6-sol` | ChatGPT | $5 / $30 | $0.50 / $6.25 | $10 / $45 | $1 / $12.50 |
+| `gpt-5.6-terra` | Both | $2 / $12 | $0.20 / $2.50 | $4 / $18 | $0.40 / $5 |
+| `gpt-5.6-luna` | Both | $0.20 / $1.20 | $0.02 / $0.25 | $0.40 / $1.80 | $0.04 / $0.50 |
 
 Prices are registry values in USD per million tokens. All three models:
 
@@ -206,7 +209,7 @@ npm run sideload
 #### “I updated models but they don’t show up” checklist
 
 1) **Provider filter:** the model picker only shows models for connected providers (saved API key/OAuth, keyless configured custom providers, or connected extension providers).
-2) **Dynamic catalogue:** custom OpenAI-compatible gateways request `<baseUrl>/models` in the background. The configured model remains as a baseline if discovery is unsupported. Check the local proxy when CORS blocks discovery.
+2) **Catalogue:** manual-form gateways expose only configured models. Other discovery-enabled registrations request `<baseUrl>/models` and retain their baseline when discovery fails.
 3) **Excel caching:** quit Excel completely (Cmd+Q) and reopen.
 4) **Hot reload note:** taskpane JS/CSS is served from Vite; edits to model-selection files (`src/models/model-ordering.ts`, `src/models/featured-models.ts`, `src/taskpane/default-model.ts`) should apply via HMR without needing to re-sideload, as long as Excel is pointed at the same running dev server.
 5) **Vite optimized deps:** after dependency bumps, clear and restart:

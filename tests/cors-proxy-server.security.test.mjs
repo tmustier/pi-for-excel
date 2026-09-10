@@ -267,6 +267,7 @@ test("proxy default allowlist includes supported OAuth and web search providers"
   const requiredHosts = [
     "platform.claude.com",
     "auth.openai.com",
+    "openrouter.ai",
     "s.jina.ai",
     "api.firecrawl.dev",
     "google.serper.dev",

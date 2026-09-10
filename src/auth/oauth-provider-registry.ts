@@ -9,8 +9,8 @@
 
 import type {
   AuthEvent,
-  AuthInteraction,
   AuthPrompt,
+  ProviderAuthInteraction,
   OAuthCredential,
   OAuthCredentials,
   OAuthLoginCallbacks,
@@ -96,9 +96,9 @@ function handleAuthEvent(callbacks: OAuthLoginCallbacks, event: AuthEvent): void
   callbacks.onProgress?.(event.message);
 }
 
-function createAuthInteraction(callbacks: OAuthLoginCallbacks): AuthInteraction {
+function createAuthInteraction(callbacks: OAuthLoginCallbacks): ProviderAuthInteraction {
   return {
-    ...(callbacks.signal !== undefined ? { signal: callbacks.signal } : {}),
+    signal: callbacks.signal ?? new AbortController().signal,
     prompt: (prompt) => handleAuthPrompt(callbacks, prompt),
     notify: (event) => handleAuthEvent(callbacks, event),
   };
@@ -117,7 +117,9 @@ function createGitHubCopilotBrowserProvider(): BrowserOAuthProvider {
       return fromOAuthCredential(await oauth.login(createAuthInteraction(callbacks)));
     },
     async refreshToken(credentials: OAuthCredentials): Promise<OAuthCredentials> {
-      return fromOAuthCredential(await oauth.refresh(toOAuthCredential(credentials)));
+      return fromOAuthCredential(
+        await oauth.refresh(toOAuthCredential(credentials), new AbortController().signal),
+      );
     },
     getApiKey(credentials: OAuthCredentials): string {
       return credentials.access;
