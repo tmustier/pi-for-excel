@@ -76,7 +76,7 @@
     "node": "^22.19.0 || >=24"
   },
   "overrides": {
-    "tmp": "0.2.6",
+    "tmp": "0.2.7",
     "nanoid": "3.3.18",
     "axios": "1.19.0",
     "minimatch": "10.2.4",
@@ -86,7 +86,7 @@
     "tar": "7.5.22",
     "adm-zip": "0.6.0",
     "fast-xml-parser": "5.7.0",
-    "@xmldom/xmldom": "0.8.13",
+    "@xmldom/xmldom": "0.8.15",
     "protobufjs": "7.6.5",
     "follow-redirects": "1.16.0"
   }
