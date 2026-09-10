@@ -197,6 +197,21 @@ unchanged) and clearing token-scoped backups at the first-save transition.
 
 Evidence: `/tmp/pi-excel-unsaved-e2e/` (bridge status, prompt results, read-backs).
 
+### Tool schemas on typebox 1.3.7 (2026-09-10, `chore/types-migration-1` at `f7934b1`)
+
+Model `openai-codex/gpt-5.6-sol`, thinking high, background bridge, Excel in
+the background throughout. Evidence: `/tmp/pi-excel-types-e2e/`. One prompt
+exercised every tool whose schema changed shape (pi-ai `StringEnum` enums) and
+the `Type.Any` values schema:
+
+| Tool | Observed in the pane | Independent check |
+| --- | --- | --- |
+| `modify_structure` (enum action) | Added sheet `_pi_types_e2e` | `officeProbe` listed it |
+| `write_cells` (`Type.Any` values) | Wrote `A1:B4` | `readRange`: Month/Sales, Jan 10, Feb 20, Mar 30 |
+| `charts` (enum action + chart type) | Chart `TypesChart` created | `listCharts`: `ColumnClustered`, named `TypesChart` |
+| `comments` add, then read (enum action) | Added "schema-check" to B1; read found 1 | model wrote the count `1` to D1; `readRange` D1 = 1 |
+| `modify_structure` delete | Sheet removed | `officeProbe`: only `Sheet1` left |
+
 ### Save As mid-session, after the live-identity fix (2026-09-10, `fix/live-document-identity` at `05aaca3`)
 
 Model `openai-codex/gpt-5.6-sol`, thinking high, background bridge, Excel in
