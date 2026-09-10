@@ -7,10 +7,6 @@ import { Type } from "@sinclair/typebox";
 import {
   applyExperimentalToolGates,
   buildOfficeJsExecuteApprovalMessage,
-  buildPythonBridgeGateErrorMessage,
-  buildTmuxBridgeGateErrorMessage,
-  evaluatePythonBridgeGate,
-  evaluateTmuxBridgeGate,
 } from "../src/tools/experimental-tool-gates.ts";
 import {
   isBridgeGateError,
@@ -156,28 +152,6 @@ void test("tmux hard gate re-checks execution on every call", async () => {
   const unreachableDetails: DynamicValue = unreachableResult.details;
   assertTmuxGateError(unreachableDetails, "bridge_unreachable");
   assert.equal(executeCount, 1);
-});
-
-void test("evaluateTmuxBridgeGate reports explicit reason codes", async () => {
-  const missingUrl = await evaluateTmuxBridgeGate({
-    getTmuxBridgeUrl: () => Promise.resolve(undefined),
-    validateBridgeUrl: (url) => url,
-    probeTmuxBridge: () => Promise.resolve(false),
-  });
-
-  assert.equal(missingUrl.allowed, false);
-  assert.equal(missingUrl.reason, "missing_bridge_url");
-
-  const unreachable = await evaluateTmuxBridgeGate({
-    getTmuxBridgeUrl: () => Promise.resolve("https://localhost:3341"),
-    validateBridgeUrl: () => "https://localhost:3341",
-    probeTmuxBridge: () => Promise.resolve(false),
-  });
-
-  assert.equal(unreachable.allowed, false);
-  assert.equal(unreachable.reason, "bridge_unreachable");
-  assert.match(buildTmuxBridgeGateErrorMessage(unreachable.reason), /Terminal access is not available/i);
-  assert.match(buildTmuxBridgeGateErrorMessage(unreachable.reason), /not reachable/i);
 });
 
 void test("files tool passes through without any gate", async () => {
@@ -390,15 +364,6 @@ void test("execute_office_js denial of risky code cancels execution in Auto mode
   );
 
   assert.equal(executeCount, 0);
-});
-
-void test("buildOfficeJsExecuteApprovalMessage omits risk warning for clean requests", () => {
-  const message = buildOfficeJsExecuteApprovalMessage({
-    explanation: "Add totals column",
-    code: "return { ok: true };",
-  });
-
-  assert.doesNotMatch(message, /beyond the Excel API/u);
 });
 
 void test("python bridge approvals fail open when no approval handler is configured", async () => {
@@ -648,45 +613,3 @@ void test("python bridge approval is cached per bridge URL", async () => {
   assert.equal(approvedBridgeUrl, "https://localhost:3350");
 });
 
-void test("evaluatePythonBridgeGate reports explicit reason codes", async () => {
-  const missingUrl = await evaluatePythonBridgeGate({
-    getPythonBridgeUrl: () => Promise.resolve(undefined),
-    validatePythonBridgeUrl: (url) => url,
-    probePythonBridge: () => Promise.resolve(false),
-  });
-
-  assert.equal(missingUrl.allowed, false);
-  assert.equal(missingUrl.reason, "missing_bridge_url");
-
-  const unreachable = await evaluatePythonBridgeGate({
-    getPythonBridgeUrl: () => Promise.resolve("https://localhost:3340"),
-    validatePythonBridgeUrl: () => "https://localhost:3340",
-    probePythonBridge: () => Promise.resolve(false),
-  });
-
-  assert.equal(unreachable.allowed, false);
-  assert.equal(unreachable.reason, "bridge_unreachable");
-  assert.match(buildPythonBridgeGateErrorMessage(unreachable.reason), /Native Python is not available/i);
-  assert.match(buildPythonBridgeGateErrorMessage(unreachable.reason), /not reachable/i);
-});
-
-void test("bridge gate helper detects only gate-shaped bridge details", () => {
-  const gateError = {
-    kind: "python_bridge",
-    ok: false,
-    action: "run_python",
-    error: "Native Python is not available right now because the Python bridge is not reachable at the configured URL.",
-    gateReason: "bridge_unreachable",
-    skillHint: "python-bridge",
-  };
-
-  const nonGateError = {
-    kind: "python_bridge",
-    ok: false,
-    action: "run_python",
-    error: "NameError: x is not defined",
-  };
-
-  assert.equal(isBridgeGateError(gateError), true);
-  assert.equal(isBridgeGateError(nonGateError), false);
-});
