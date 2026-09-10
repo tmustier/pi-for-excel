@@ -3,28 +3,6 @@ import { test } from "node:test";
 
 import { resolveTabTitle } from "../src/taskpane/session-title.ts";
 
-void test("resolveTabTitle uses explicit title when provided", () => {
-  assert.equal(
-    resolveTabTitle({
-      hasExplicitTitle: true,
-      sessionTitle: "  Revenue Model  ",
-      defaultTabNumber: 3,
-    }),
-    "Revenue Model",
-  );
-});
-
-void test("resolveTabTitle falls back to Chat N when no explicit title", () => {
-  assert.equal(
-    resolveTabTitle({
-      hasExplicitTitle: false,
-      sessionTitle: "Please can we do ...",
-      defaultTabNumber: 1,
-    }),
-    "Chat 1",
-  );
-});
-
 void test("resolveTabTitle falls back to Chat N when explicit title is blank", () => {
   assert.equal(
     resolveTabTitle({

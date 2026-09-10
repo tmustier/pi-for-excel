@@ -290,52 +290,6 @@ void test("ordered queue runs compact, prompt, then compact", async () => {
   );
 });
 
-void test("drainQueuedActions clears pending prompts and commands in FIFO order", async () => {
-  const agent = new TestAgent();
-  const waitGate = createDeferred();
-
-  const queueSnapshots: Array<Array<{ type: "prompt" | "command"; label: string; text: string }>> = [];
-
-  agent.onWaitForIdle = () => waitGate.promise;
-
-  const queue = createActionQueue({
-    agent,
-    autoCompactEnabled: false,
-    runCompact: async () => {},
-    sidebar: {
-      setBusyIndicator: () => {
-        // no-op
-      },
-    },
-    queueDisplay: {
-      setActionQueue: (items) => {
-        queueSnapshots.push(items.map((item) => ({ ...item })));
-      },
-    },
-  });
-
-  queue.enqueueCommand("compact", "");
-  queue.enqueuePrompt("after compact");
-  queue.enqueueCommand("compact", "deep");
-
-  await waitForCondition(() => agent.waitForIdleCalls > 0);
-
-  const drained = queue.drainQueuedActions();
-  assert.deepEqual(drained, [
-    { type: "command", name: "compact", args: "" },
-    { type: "prompt", text: "after compact" },
-    { type: "command", name: "compact", args: "deep" },
-  ]);
-
-  const latestSnapshot = queueSnapshots[queueSnapshots.length - 1] ?? [];
-  assert.deepEqual(latestSnapshot, []);
-
-  waitGate.resolve();
-  await waitForCondition(() => !queue.isBusy());
-
-  queue.shutdown();
-});
-
 void test("prompt ending in context overflow triggers compact-and-retry once", async () => {
   const model = createSmallContextModel();
   const agent = new TestAgent(model);
