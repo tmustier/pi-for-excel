@@ -107,7 +107,7 @@ void test("manual backup creates a downloadable copy of the current Office workb
     getWorkspace: () => ({
       listFiles: () => Promise.resolve(files),
       writeBase64File: (path, base64, mimeType) => {
-        writtenFiles.set(path, `${mimeType}:${base64}`);
+        writtenFiles.set(path, `${mimeType ?? "application/octet-stream"}:${base64}`);
         files.push(makeManualBackupFile({
           workbookId: "wb-1",
           backupId: path.slice(path.lastIndexOf("/") + 1, -5),
