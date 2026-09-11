@@ -1,4 +1,10 @@
-export type ConnectionStatus = "connected" | "missing" | "invalid" | "error";
+import { Type, type Static } from "typebox";
+
+import { StringEnum } from "../tools/string-enum.js";
+
+export const connectionStatusSchema = StringEnum(["connected", "missing", "invalid", "error"]);
+
+export type ConnectionStatus = Static<typeof connectionStatusSchema>;
 
 export type ConnectionAuthKind = "api_key" | "bearer_token" | "oauth" | "custom";
 
@@ -59,21 +65,26 @@ export interface ConnectionPromptEntry {
   lastError?: string;
 }
 
-export type ConnectionToolErrorCode =
-  | "missing_connection"
-  | "invalid_connection"
-  | "connection_auth_failed";
+export const connectionToolErrorCodeSchema = StringEnum([
+  "missing_connection",
+  "invalid_connection",
+  "connection_auth_failed",
+]);
 
-export interface ConnectionToolErrorDetails {
-  kind: "connection_error";
-  ok: false;
-  errorCode: ConnectionToolErrorCode;
-  connectionId: string;
-  connectionTitle: string;
-  status: ConnectionStatus;
-  setupHint: string;
-  reason?: string;
-}
+export type ConnectionToolErrorCode = Static<typeof connectionToolErrorCodeSchema>;
+
+export const connectionToolErrorDetailsSchema = Type.Object({
+  kind: Type.Literal("connection_error"),
+  ok: Type.Literal(false),
+  errorCode: connectionToolErrorCodeSchema,
+  connectionId: Type.String(),
+  connectionTitle: Type.String(),
+  status: connectionStatusSchema,
+  setupHint: Type.String(),
+  reason: Type.Optional(Type.String()),
+});
+
+export type ConnectionToolErrorDetails = Static<typeof connectionToolErrorDetailsSchema>;
 
 export interface ConnectionRuntimeAuthFailure {
   message: string;

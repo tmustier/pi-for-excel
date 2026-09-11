@@ -5,7 +5,7 @@
  */
 
 import { Type, type Static } from "typebox";
-import { StringEnum } from "@earendil-works/pi-ai";
+import { StringEnum } from "./string-enum.js";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { excelRun, parseCell, qualifiedAddress } from "../excel/helpers.js";
 import {

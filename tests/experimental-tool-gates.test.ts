@@ -8,13 +8,7 @@ import {
   applyExperimentalToolGates,
   buildOfficeJsExecuteApprovalMessage,
 } from "../src/tools/experimental-tool-gates.ts";
-import {
-  isBridgeGateError,
-  isLibreOfficeBridgeDetails,
-  isPythonBridgeDetails,
-  isPythonTransformRangeDetails,
-  isTmuxBridgeDetails,
-} from "../src/tools/tool-details.ts";
+import { decodeToolDetails, decodeToolDetailsOfKind, isBridgeGateError } from "../src/tools/tool-details.ts";
 
 const emptySchema = Type.Object({});
 
@@ -38,24 +32,27 @@ function createTestTool(
 }
 
 function assertTmuxGateError(
-  details: unknown,
+  raw: unknown,
   reason: "missing_bridge_url" | "bridge_unreachable",
 ): void {
-  assert.ok(isTmuxBridgeDetails(details));
+  const details = decodeToolDetailsOfKind(raw, "tmux_bridge");
+  assert.ok(details);
   assert.equal(details.ok, false);
   assert.equal(details.gateReason, reason);
   assert.equal(details.skillHint, "tmux-bridge");
 }
 
-function assertPythonGateError(details: unknown): void {
-  assert.ok(isPythonBridgeDetails(details));
+function assertPythonGateError(raw: unknown): void {
+  const details = decodeToolDetailsOfKind(raw, "python_bridge");
+  assert.ok(details);
   assert.equal(details.ok, false);
   assert.equal(details.gateReason, "bridge_unreachable");
   assert.equal(details.skillHint, "python-bridge");
 }
 
-function assertPythonTransformRangeGateError(details: unknown): void {
-  assert.ok(isPythonTransformRangeDetails(details));
+function assertPythonTransformRangeGateError(raw: unknown): void {
+  const details = decodeToolDetailsOfKind(raw, "python_transform_range");
+  assert.ok(details);
   assert.equal(details.blocked, false);
   assert.equal(details.gateReason, "bridge_unreachable");
   assert.equal(details.skillHint, "python-bridge");
@@ -63,10 +60,11 @@ function assertPythonTransformRangeGateError(details: unknown): void {
 }
 
 function assertLibreOfficeGateError(
-  details: unknown,
+  raw: unknown,
   reason: "missing_bridge_url" | "bridge_unreachable",
 ): void {
-  assert.ok(isLibreOfficeBridgeDetails(details));
+  const details = decodeToolDetailsOfKind(raw, "libreoffice_bridge");
+  assert.ok(details);
   assert.equal(details.ok, false);
   assert.equal(details.gateReason, reason);
   assert.equal(details.skillHint, "python-bridge");
@@ -100,10 +98,8 @@ void test("keeps tmux tool registered and returns structured gate errors", async
   assert.match(text, /default URL|URL override/i);
   assert.match(text, /Skill: tmux-bridge/i);
 
-  const resultDetails: unknown = result.details;
-  assertTmuxGateError(resultDetails, "missing_bridge_url");
-  assert.ok(isTmuxBridgeDetails(resultDetails));
-  assert.equal(resultDetails.action, "capture_pane");
+  assertTmuxGateError(result.details, "missing_bridge_url");
+  assert.equal(decodeToolDetailsOfKind(result.details, "tmux_bridge")?.action, "capture_pane");
 
   assert.equal(probeCalled, true);
 });
@@ -325,8 +321,9 @@ void test("python_transform_range gate errors keep transform detail kind", async
   assert.match(text, /not reachable/i);
   assert.match(text, /Skill: python-bridge/i);
 
-  const details: unknown = result.details;
-  assertPythonTransformRangeGateError(details);
+  assertPythonTransformRangeGateError(result.details);
+  const details = decodeToolDetails(result.details);
+  assert.ok(details);
   assert.equal(isBridgeGateError(details), true);
 
   assert.equal(executeCount, 0);

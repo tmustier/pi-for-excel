@@ -22,7 +22,7 @@ import {
   WEB_SEARCH_PROVIDER_INFO,
   type WebSearchProvider,
 } from "../tools/web-search-config.js";
-import { isWebSearchDetails, type WebSearchDetails } from "../tools/tool-details.js";
+import type { ExcelToolDetails, WebSearchDetails } from "../tools/tool-details.js";
 import { validateWebSearchApiKey } from "../tools/web-search.js";
 import { createCopyableCommand } from "./command-copy.js";
 import { AlertTriangle, Search, lucide } from "./lucide-icons.js";
@@ -360,6 +360,6 @@ export function mountSearchSetupCard(container: HTMLElement, details: WebSearchD
  * Returns true when the details indicate a web search failure that should
  * show the inline setup card.
  */
-export function shouldShowSearchSetupCard(details: unknown): details is WebSearchDetails {
-  return isWebSearchDetails(details) && details.ok === false;
+export function shouldShowSearchSetupCard(details: ExcelToolDetails): details is WebSearchDetails {
+  return details.kind === "web_search" && details.ok === false;
 }

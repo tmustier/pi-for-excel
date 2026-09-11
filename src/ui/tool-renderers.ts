@@ -26,22 +26,8 @@ import {
   shouldShowBridgeSetupCard,
 } from "./bridge-setup-card.js";
 import {
-  isChartsDetails,
-  isCommentsDetails,
-  isConditionalFormatDetails,
-  isExplainFormulaDetails,
-  isFillFormulaDetails,
-  isFormatCellsDetails,
-  isModifyStructureDetails,
-  isPythonTransformRangeDetails,
-  isReadRangeCsvDetails,
-  isSkillsInstallDetails,
-  isSkillsReadDetails,
-  isSkillsUninstallDetails,
-  isTraceDependenciesDetails,
-  isViewSettingsDetails,
-  isWorkbookHistoryDetails,
-  isWriteCellsDetails,
+  decodeToolDetails,
+  type ExcelToolDetails,
   type RecoveryCheckpointDetails,
   type WriteCellsDetails,
 } from "../tools/tool-details.js";
@@ -232,27 +218,24 @@ function renderImages(images: ImageContent[]): TemplateResult {
   `;
 }
 
-function getWorkbookCellChanges(details: unknown): WriteCellsDetails["changes"] | undefined {
-  if (isWriteCellsDetails(details)) {
-    return details.changes;
-  }
+type ToolDetails = ExcelToolDetails | undefined;
 
-  if (isFillFormulaDetails(details)) {
-    return details.changes;
+function getWorkbookCellChanges(details: ToolDetails): WriteCellsDetails["changes"] | undefined {
+  switch (details?.kind) {
+    case "write_cells":
+    case "fill_formula":
+    case "python_transform_range":
+      return details.changes;
+    default:
+      return undefined;
   }
-
-  if (isPythonTransformRangeDetails(details)) {
-    return details.changes;
-  }
-
-  return undefined;
 }
 
 function formatDiffValue(value: string): string {
   return value.length > 0 ? value : "∅";
 }
 
-function renderWorkbookCellDiff(details: unknown): TemplateResult {
+function renderWorkbookCellDiff(details: ToolDetails): TemplateResult {
   const changes = getWorkbookCellChanges(details);
   if (!changes || changes.changedCount <= 0) return html``;
 
@@ -296,8 +279,8 @@ function renderWorkbookCellDiff(details: unknown): TemplateResult {
   `;
 }
 
-function renderChartImageDetails(details: unknown, hasImageContent: boolean): TemplateResult {
-  if (hasImageContent || !isChartsDetails(details) || !details.image) return html``;
+function renderChartImageDetails(details: ToolDetails, hasImageContent: boolean): TemplateResult {
+  if (hasImageContent || details?.kind !== "charts" || !details.image) return html``;
 
   const src = `data:${details.image.mimeType};base64,${details.image.base64}`;
   const alt = details.name ? `Chart ${details.name}` : "Chart image";
@@ -309,8 +292,8 @@ function renderChartImageDetails(details: unknown, hasImageContent: boolean): Te
   `;
 }
 
-function renderExplainFormulaDetails(details: unknown): TemplateResult | null {
-  if (!isExplainFormulaDetails(details)) return null;
+function renderExplainFormulaDetails(details: ToolDetails): TemplateResult | null {
+  if (details?.kind !== "explain_formula") return null;
 
   if (!details.hasFormula) {
     return html`<div class="pi-tool-card__plain-text">${details.explanation}</div>`;
@@ -387,7 +370,7 @@ function buildChangeExplanationInputForTool(
   toolName: SupportedToolName,
   params: unknown,
   resultText: string | undefined,
-  details: unknown,
+  details: ToolDetails,
 ): ChangeExplanationInput | null {
   if (getToolExecutionMode(toolName, params) !== "mutate") return null;
 
@@ -401,7 +384,7 @@ function buildChangeExplanationInputForTool(
   const error = extractResultError(resultText);
   const blockedFromText = Boolean(resultText && isBlocked(resultText));
 
-  if (isWriteCellsDetails(details)) {
+  if (details?.kind === "write_cells") {
     return createChangeExplanationInput({
       toolName,
       blocked: details.blocked,
@@ -413,7 +396,7 @@ function buildChangeExplanationInputForTool(
     });
   }
 
-  if (isFillFormulaDetails(details)) {
+  if (details?.kind === "fill_formula") {
     return createChangeExplanationInput({
       toolName,
       blocked: details.blocked,
@@ -425,7 +408,7 @@ function buildChangeExplanationInputForTool(
     });
   }
 
-  if (isPythonTransformRangeDetails(details)) {
+  if (details?.kind === "python_transform_range") {
     return createChangeExplanationInput({
       toolName,
       blocked: details.blocked || blockedFromText,
@@ -438,7 +421,7 @@ function buildChangeExplanationInputForTool(
     });
   }
 
-  if (isWorkbookHistoryDetails(details) && details.action === "restore") {
+  if (details?.kind === "workbook_history" && details.action === "restore") {
     const historyError = optionalString(details.error);
     return createChangeExplanationInput({
       toolName,
@@ -451,7 +434,7 @@ function buildChangeExplanationInputForTool(
   }
 
   if (toolName === "format_cells") {
-    const detailsAddress = isFormatCellsDetails(details) ? details.address : undefined;
+    const detailsAddress = details?.kind === "format_cells" ? details.address : undefined;
     return createChangeExplanationInput({
       toolName,
       blocked: blockedFromText,
@@ -505,8 +488,8 @@ function buildChangeExplanationInputForTool(
   }
 
   if (toolName === "charts") {
-    const detailsAddress = isChartsDetails(details) ? details.address : undefined;
-    const detailsSource = isChartsDetails(details) ? details.sourceRange : undefined;
+    const detailsAddress = details?.kind === "charts" ? details.address : undefined;
+    const detailsSource = details?.kind === "charts" ? details.sourceRange : undefined;
     return createChangeExplanationInput({
       toolName,
       blocked: blockedFromText,
@@ -541,7 +524,7 @@ function renderChangeExplanationSection(
   toolName: SupportedToolName,
   params: unknown,
   resultText: string | undefined,
-  details: unknown,
+  details: ToolDetails,
 ): TemplateResult {
   const input = buildChangeExplanationInputForTool(toolName, params, resultText, details);
   if (!input) return html``;
@@ -687,41 +670,27 @@ function withRecoveryBadge(base: string, recovery: RecoveryCheckpointDetails | u
   return base.length > 0 ? `${base}, no backup` : " — no backup";
 }
 
-function recoveryBadgeForDetails(details: unknown): string {
-  if (isFormatCellsDetails(details)) {
-    return withRecoveryBadge("", details.recovery);
+function recoveryBadgeForDetails(details: ToolDetails): string {
+  switch (details?.kind) {
+    case "format_cells":
+    case "conditional_format":
+    case "modify_structure":
+    case "comments":
+    case "view_settings":
+    case "charts":
+      return withRecoveryBadge("", details.recovery);
+    default:
+      return "";
   }
-
-  if (isConditionalFormatDetails(details)) {
-    return withRecoveryBadge("", details.recovery);
-  }
-
-  if (isModifyStructureDetails(details)) {
-    return withRecoveryBadge("", details.recovery);
-  }
-
-  if (isCommentsDetails(details)) {
-    return withRecoveryBadge("", details.recovery);
-  }
-
-  if (isViewSettingsDetails(details)) {
-    return withRecoveryBadge("", details.recovery);
-  }
-
-  if (isChartsDetails(details)) {
-    return withRecoveryBadge("", details.recovery);
-  }
-
-  return "";
 }
 
 /** Append error / blocked badge to the detail string. */
 function badge(
   toolName: SupportedToolName,
   resultText: string | undefined,
-  details: unknown,
+  details: ToolDetails,
 ): string {
-  if (toolName === "write_cells" && isWriteCellsDetails(details)) {
+  if (toolName === "write_cells" && details?.kind === "write_cells") {
     if (details.blocked) return " — blocked";
     return withRecoveryBadge(
       mutationBadge(details.changes?.changedCount, details.formulaErrorCount),
@@ -729,7 +698,7 @@ function badge(
     );
   }
 
-  if (toolName === "fill_formula" && isFillFormulaDetails(details)) {
+  if (toolName === "fill_formula" && details?.kind === "fill_formula") {
     if (details.blocked) return " — blocked";
     return withRecoveryBadge(
       mutationBadge(details.changes?.changedCount, details.formulaErrorCount),
@@ -737,7 +706,7 @@ function badge(
     );
   }
 
-  if (toolName === "python_transform_range" && isPythonTransformRangeDetails(details)) {
+  if (toolName === "python_transform_range" && details?.kind === "python_transform_range") {
     if (details.blocked) return " — blocked";
     if (typeof details.error === "string" && details.error.length > 0) return " — error";
     return withRecoveryBadge(
@@ -779,7 +748,7 @@ function describeToolCall(
   toolName: SupportedToolName,
   params: unknown,
   resultText: string | undefined,
-  details: unknown,
+  details: ToolDetails,
 ): ToolDesc {
   const p = safeParseParams(params);
   const range = p.range as string | undefined;
@@ -801,7 +770,7 @@ function describeToolCall(
     case "write_cells": {
       const b = badge(toolName, resultText, details);
 
-      if (isWriteCellsDetails(details) && details.address) {
+      if (details?.kind === "write_cells" && details.address) {
         const action = details.blocked ? "Write" : "Edit";
         return toolDescWithAddress(action, details.address + b, details.address);
       }
@@ -814,7 +783,7 @@ function describeToolCall(
     case "fill_formula": {
       const b = badge(toolName, resultText, details);
 
-      if (isFillFormulaDetails(details) && details.address) {
+      if (details?.kind === "fill_formula" && details.address) {
         const action = details.blocked ? "Fill" : "Filled";
         return toolDescWithAddress(action, details.address + b, details.address);
       }
@@ -827,7 +796,7 @@ function describeToolCall(
     case "python_transform_range": {
       const b = badge(toolName, resultText, details);
 
-      if (isPythonTransformRangeDetails(details)) {
+      if (details?.kind === "python_transform_range") {
         const address = details.outputAddress ?? details.inputAddress;
         if (address) {
           const hasError = typeof details.error === "string" && details.error.length > 0;
@@ -843,7 +812,7 @@ function describeToolCall(
 
     // ── Format tools ──
     case "format_cells": {
-      const addr = isFormatCellsDetails(details) ? details.address : undefined;
+      const addr = details?.kind === "format_cells" ? details.address : undefined;
       const resolved = addr ?? range;
       const recovery = recoveryBadgeForDetails(details);
       return toolDescWithAddress("Format", (resolved ? compactRange(resolved) : "cells") + recovery, resolved);
@@ -895,13 +864,14 @@ function describeToolCall(
     case "charts": {
       const op = p.action as string | undefined;
       const recovery = recoveryBadgeForDetails(details);
-      const detailsName = isChartsDetails(details) ? details.name : undefined;
-      const detailsSource = isChartsDetails(details) ? details.sourceRange : undefined;
+      const chartDetails = details?.kind === "charts" ? details : undefined;
+      const detailsName = chartDetails?.name;
+      const detailsSource = chartDetails?.sourceRange;
       const chartName = detailsName ?? (p.name as string | undefined) ?? (p.new_name as string | undefined);
       const source = detailsSource ?? (p.source_range as string | undefined);
 
       if (op === "list") {
-        const count = isChartsDetails(details) && typeof details.count === "number" ? ` (${details.count})` : "";
+        const count = chartDetails?.count !== undefined ? ` (${chartDetails.count})` : "";
         return { action: "Charts", detail: `${(p.sheet as string | undefined) ?? "workbook"}${count}` };
       }
 
@@ -929,8 +899,8 @@ function describeToolCall(
       }
 
       if (op === "get_image") {
-        const size = isChartsDetails(details) && details.image
-          ? ` (${details.image.width}×${details.image.height}px)`
+        const size = chartDetails?.image
+          ? ` (${chartDetails.image.width}×${chartDetails.image.height}px)`
           : "";
         return {
           action: "Chart image",
@@ -969,7 +939,7 @@ function describeToolCall(
       const targetSheet = p.sheet as string | undefined;
       const targetSheetLabel = targetSheet ?? "active sheet";
       const targetRange = p.range as string | undefined;
-      const detailsAddress = isViewSettingsDetails(details) ? details.address : undefined;
+      const detailsAddress = details?.kind === "view_settings" ? details.address : undefined;
       const qualifiedRange = detailsAddress ?? qualifyRangeAddress(targetRange, targetSheet);
       const recovery = recoveryBadgeForDetails(details);
 
@@ -1039,14 +1009,13 @@ function describeToolCall(
       const refresh = p.refresh === true;
 
       if (action === "read") {
-        const detailName = isSkillsReadDetails(details)
-          ? details.skillName
-          : name ?? "name";
-        const sourceSuffix = isSkillsReadDetails(details)
-          ? (details.sourceKind === "external" ? " (external)" : " (bundled)")
+        const readDetails = details?.kind === "skills_read" ? details : undefined;
+        const detailName = readDetails?.skillName ?? name ?? "name";
+        const sourceSuffix = readDetails
+          ? (readDetails.sourceKind === "external" ? " (external)" : " (bundled)")
           : "";
 
-        if (isSkillsReadDetails(details) && details.cacheHit) {
+        if (readDetails?.cacheHit) {
           return { action: "Read skill", detail: `${detailName}${sourceSuffix} (cached)` };
         }
 
@@ -1058,18 +1027,17 @@ function describeToolCall(
       }
 
       if (action === "install") {
-        const installedName = isSkillsInstallDetails(details)
+        const installedName = details?.kind === "skills_install"
           ? details.skillName
           : name ?? "skill";
         return { action: "Install skill", detail: installedName };
       }
 
       if (action === "uninstall") {
-        const removedName = isSkillsUninstallDetails(details)
-          ? details.skillName
-          : name ?? "skill";
-        const removedSuffix = isSkillsUninstallDetails(details)
-          ? (details.removed ? "" : " (not found)")
+        const uninstallDetails = details?.kind === "skills_uninstall" ? details : undefined;
+        const removedName = uninstallDetails?.skillName ?? name ?? "skill";
+        const removedSuffix = uninstallDetails
+          ? (uninstallDetails.removed ? "" : " (not found)")
           : "";
         return { action: "Uninstall skill", detail: `${removedName}${removedSuffix}` };
       }
@@ -1142,7 +1110,9 @@ function createExcelMarkdownRenderer(toolName: SupportedToolName): ToolRenderer<
       const defaultExpanded = false;
 
       const resultText = result ? splitToolResultContent(result).text : undefined;
-      const desc = describeToolCall(toolName, params, resultText, result?.details);
+      // `details` is unknown at this seam: older persisted sessions may carry any shape.
+      const details = decodeToolDetails(result?.details);
+      const desc = describeToolCall(toolName, params, resultText, details);
       const detailContent = desc.address
         ? (desc.detail && desc.detail !== desc.address
           ? cellRefDisplay(desc.detail, desc.address)
@@ -1158,11 +1128,11 @@ function createExcelMarkdownRenderer(toolName: SupportedToolName): ToolRenderer<
         const cleanedText = stripYamlFrontmatter(text);
         const humanizedText = compactRangesInMarkdown(humanizeColorsInText(cleanedText));
         const useMarkdown = !json.isJson && looksLikeMarkdown(cleanedText);
-        const csvTable = isReadRangeCsvDetails(result.details)
-          ? renderCsvTable(result.details)
+        const csvTable = details?.kind === "read_range_csv"
+          ? renderCsvTable(details)
           : null;
-        const traceDetails = isTraceDependenciesDetails(result.details)
-          ? result.details
+        const traceDetails = details?.kind === "trace_dependencies"
+          ? details
           : null;
         const depTree = traceDetails
           ? renderDepTree(traceDetails.root, traceDetails.mode ?? "precedents")
@@ -1172,11 +1142,10 @@ function createExcelMarkdownRenderer(toolName: SupportedToolName): ToolRenderer<
             ? "Dependents"
             : "Precedents"
           : "Dependencies";
-        const formulaExplanation = renderExplainFormulaDetails(result.details);
+        const formulaExplanation = renderExplainFormulaDetails(details);
 
         // Search setup card: show inline guided setup when web_search fails
-        const resultDetails: unknown = result.details;
-        const searchSetupDetails = shouldShowSearchSetupCard(resultDetails) ? resultDetails : null;
+        const searchSetupDetails = details !== undefined && shouldShowSearchSetupCard(details) ? details : null;
         const initSearchSetup = (el: Element | undefined): void => {
           if (el instanceof HTMLElement && searchSetupDetails) {
             mountSearchSetupCard(el, searchSetupDetails);
@@ -1184,7 +1153,7 @@ function createExcelMarkdownRenderer(toolName: SupportedToolName): ToolRenderer<
         };
 
         // Bridge setup card: show inline setup for bridge-related failures.
-        const bridgeSetupDetails = shouldShowBridgeSetupCard(resultDetails) ? resultDetails : null;
+        const bridgeSetupDetails = details !== undefined && shouldShowBridgeSetupCard(details) ? details : null;
         const initBridgeSetup = (el: Element | undefined): void => {
           if (el instanceof HTMLElement && bridgeSetupDetails) {
             mountBridgeSetupCard(el, bridgeSetupDetails);
@@ -1240,10 +1209,10 @@ function createExcelMarkdownRenderer(toolName: SupportedToolName): ToolRenderer<
                           ? html`<div class="pi-tool-card__markdown"><markdown-block .content=${humanizedText || "(no output)"}></markdown-block></div>`
                           : html`<div class="pi-tool-card__plain-text">${humanizedText || "(no output)"}</div>`}
                     ${renderImages(images)}
-                    ${renderChartImageDetails(result.details, images.length > 0)}
+                    ${renderChartImageDetails(details, images.length > 0)}
                   </div>
-                  ${renderWorkbookCellDiff(result.details)}
-                  ${renderChangeExplanationSection(toolName, params, text, result.details)}
+                  ${renderWorkbookCellDiff(details)}
+                  ${renderChangeExplanationSection(toolName, params, text, details)}
                 </div>
               </div>
             </div>

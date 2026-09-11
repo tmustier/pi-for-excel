@@ -21,27 +21,29 @@ the ESLint ban on `unknown` are gone; every former alias site now says
 the anti-slop `no-unknown-*` rules as a ratchet (baseline 461 sites in `src`:
 384 parameters, 77 returns) and fails if the count rises. Both TypeBox majors
 are gone too: everything imports `typebox`, pinned to pi-ai's exact version so
-one copy ships, and `StringEnum` comes from pi-ai.
+one copy ships, and `StringEnum` is pi-ai's behind `src/tools/string-enum.ts`
+(a `const` type parameter; without it an inline array widens the static type
+to `string`, which #718 did to two tools before it was caught).
 
 Still to do: parse boundary values into domain types so the count falls.
 
 Probe:
 
 ```bash
-npm run check:unknown-burndown                                                  # 461 at the alias deletion
-rg -c '^(export )?function is\w+\(\w+: unknown' src | awk -F: '{s+=$2} END{print s}'  # 233 hand-written guards
+npm run check:unknown-burndown                                                  # 461 at the alias deletion; 430 after settings contract + tool-details
+rg -c '^(export )?function is\w+\(\w+: unknown' src | awk -F: '{s+=$2} END{print s}'  # 233 hand-written guards; 179 after tool-details
 ```
 
 Where the uses are, and what proper typing means for each:
 
 | Category | Approx. uses | Target |
 | --- | ---: | --- |
-| Hand-written guard functions (`isOptionalString(value: DynamicValue): value is ...`), concentrated in `src/tools/tool-details.ts`, `src/workbook/recovery/*`, `src/files/workspace.ts`, `src/conventions/store.ts` | 630 | One TypeBox schema per DTO, `Static<>` for the type, one `decode(schema, raw)` helper at the boundary. Delete the guards; do not rename them. |
+| Hand-written guard functions (`isOptionalString(value: unknown): value is ...`), concentrated in `src/workbook/recovery/*`, `src/files/workspace.ts`, `src/conventions/store.ts` (`src/tools/tool-details.ts` done 2026-09-10: 54 guards → schemas, `decodeToolDetails` at the renderer seam) | 630 → ~500 | One TypeBox schema per DTO, `Static<>` for the type, one `decode(schema, raw)` helper at the boundary. Delete the guards; do not rename them. |
 | `DynamicObject` shape guards | 115 | Falls out of the schema work. |
 | Extension sandbox and bridge payloads | 90 | `JsonValue` (`src/utils/json.ts`) where the protocol is JSON; TypeBox for structured messages. |
-| UI rendering of tool `details` | 90 | Typed by the details union once tools decode. |
+| UI rendering of tool `details` | 90 | Done 2026-09-10: `src/ui/tool-renderers.ts`, `bridge-setup-card.ts` and `web-search-setup-card.ts` take `ExcelToolDetails` and switch on `kind`. |
 | Error callbacks `(error: DynamicValue) =>` | 33 | `(error: Error)`; normalise once at the catch site. `getErrorMessage` stays the one function that accepts a thrown value. |
-| Office.js and WPS host values | 40 | Typed host adapter interfaces (`src/host/wps/jsapi.ts` is the pattern). |
+| Office.js and WPS host values | 40 | Typed host adapter interfaces (`src/host/wps/jsapi.ts` is the pattern). Includes cell-value grids: `range.values` is `any[][]` in Office.js, so `unknown[][]` runs through 110 sites and into `ReadRangeCsvDetails.values` / `DepNodeDetail.value`; type it once at the adapter, then tighten those two schemas. |
 | Storage `get<T = DynamicValue>()` | 20 | See next section. |
 
 Suggested order from here: persisted DTOs (largest, and it removes `get<T>`);
@@ -258,10 +260,15 @@ corrupt-recovery-log fallback (seam tests only).
 - Two TypeBox majors shipped in the bundle (`@sinclair/typebox` 0.34 and
   `typebox` 1.x). Settled on `typebox` 1.3.7 (2026-09-10), pinned to pi-ai's
   version and enforced by `check:pi-lockstep`.
-- `npm audit --audit-level=high` reports two high findings, both transitive
-  (`@xmldom/xmldom`, `js-yaml`), on `main` and on every branch since. The
-  pre-push hook blocks on them; pushes during the review used `--no-verify`
-  after confirming the finding set was unchanged.
+- `npm audit --audit-level=high` reported two high findings, both transitive
+  (`@xmldom/xmldom`, `js-yaml`), until the Dependabot merges of 2026-09-10;
+  clean since, so pushes no longer need `--no-verify`.
+- Tests are not typechecked. `tsconfig.json` includes `src/**` only;
+  `tsconfig.eslint.json` adds `tests/**` for ESLint parsing, and
+  `tsc --noEmit -p tsconfig.eslint.json` reports 533 errors there
+  (2026-09-10). Type-level contracts therefore cannot live in `tests/`; the
+  `StringEnum` literal regression from #718 is guarded structurally
+  (`src/tools/string-enum.ts`) rather than by a test for that reason.
 - `tests/browser/extensions-overlays.browser-test.ts` ("an installed extension
   can replace and dismiss its visible overlay") timed out once in eight full
   serial runs waiting for the welcome overlay to detach. Root-caused and fixed:

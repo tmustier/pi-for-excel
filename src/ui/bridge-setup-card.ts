@@ -3,16 +3,13 @@ import {
   DEFAULT_TMUX_BRIDGE_URL,
 } from "../tools/experimental-tool-gates.js";
 import { probeBridgeHealth } from "../tools/bridge-service-utils.js";
-import {
-  isLibreOfficeBridgeDetails,
-  isPythonBridgeDetails,
-  isPythonTransformRangeDetails,
-  isTmuxBridgeDetails,
-  type BridgeGateReason,
-  type LibreOfficeBridgeDetails,
-  type PythonBridgeDetails,
-  type PythonTransformRangeDetails,
-  type TmuxBridgeDetails,
+import type {
+  BridgeGateReason,
+  ExcelToolDetails,
+  LibreOfficeBridgeDetails,
+  PythonBridgeDetails,
+  PythonTransformRangeDetails,
+  TmuxBridgeDetails,
 } from "../tools/tool-details.js";
 import { t } from "../language/index.js";
 import { createCopyableCommand } from "./command-copy.js";
@@ -182,40 +179,23 @@ function toTransformRangeModel(details: PythonTransformRangeDetails): BridgeSetu
   };
 }
 
-export function resolveBridgeSetupCardModel(details: unknown): BridgeSetupCardModel | null {
-  if (isTmuxBridgeDetails(details)) {
-    return toTmuxModel(details);
+export function resolveBridgeSetupCardModel(details: ExcelToolDetails): BridgeSetupCardModel | null {
+  switch (details.kind) {
+    case "tmux_bridge":
+      return toTmuxModel(details);
+    case "python_bridge":
+      return toPythonModel(details);
+    case "libreoffice_bridge":
+      return toLibreOfficeModel(details);
+    case "python_transform_range":
+      return toTransformRangeModel(details);
+    default:
+      return null;
   }
-
-  if (isPythonBridgeDetails(details)) {
-    return toPythonModel(details);
-  }
-
-  if (isLibreOfficeBridgeDetails(details)) {
-    return toLibreOfficeModel(details);
-  }
-
-  if (isPythonTransformRangeDetails(details)) {
-    return toTransformRangeModel(details);
-  }
-
-  return null;
 }
 
-export function shouldShowBridgeSetupCard(details: unknown): details is BridgeSetupCardDetails {
+export function shouldShowBridgeSetupCard(details: ExcelToolDetails): details is BridgeSetupCardDetails {
   return resolveBridgeSetupCardModel(details) !== null;
-}
-
-export async function testBridgeSetupConnection(
-  details: unknown,
-  probeBridge: (bridgeUrl: string) => Promise<boolean> = probeBridgeHealth,
-): Promise<boolean> {
-  const model = resolveBridgeSetupCardModel(details);
-  if (!model || !model.probeUrl) {
-    return false;
-  }
-
-  return probeBridge(model.probeUrl);
 }
 
 export function mountBridgeSetupCard(
