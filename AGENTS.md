@@ -84,6 +84,8 @@ Notes for agents working in this repo.
 
 Use the local acceptance policy in `docs/coding-standards.md` and the `.agents/skills/excel-background-verification/SKILL.md` workflow.
 
+The Excel lane runs entirely in the background, including opening the pane after a relaunch (the skill bootstraps it from the scratch workbook) and reading what the taskpane persisted (straight from WebKit's IndexedDB). Work through the skill's "Before you call it blocked" table before reporting the lane blocked; each row there has been hit and worked around.
+
 - `npm run check`
 - `npm run build`
 - `npm run test:models`
@@ -147,3 +149,5 @@ If local changes do not show up:
 4. If still stale, clear WKWebView cache and relaunch Excel:
    - `rm -rf ~/Library/Containers/com.microsoft.Excel/Data/Library/WebKit/`
    - `rm -rf ~/Library/Containers/com.microsoft.Excel/Data/Library/Caches/WebKit/`
+
+No `Open Pi` ribbon button after a relaunch is expected, not a stale manifest: Excel keeps sideloaded add-ins out of the ribbon cache until they have been activated once in the running process. Open the pane from a workbook that carries the auto-open part (`.agents/skills/excel-background-verification/scripts/scratch-workbook.py`); the button appears after that. Clearing the WebKit cache also deletes the taskpane's IndexedDB (sessions, recovery snapshots, files-workspace state), so do it last.
