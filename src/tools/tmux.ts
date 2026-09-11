@@ -15,7 +15,7 @@ function isToolsTmuxPayloadShape(value: unknown): value is Record<string, unknow
 
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { Type, type Static, type TSchema } from "typebox";
-import { StringEnum } from "@earendil-works/pi-ai";
+import { StringEnum } from "./string-enum.js";
 
 import { validateOfficeProxyUrl } from "../auth/proxy-validation.js";
 import { getErrorMessage } from "../utils/errors.js";

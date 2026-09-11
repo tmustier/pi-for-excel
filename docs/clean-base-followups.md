@@ -21,7 +21,9 @@ the ESLint ban on `unknown` are gone; every former alias site now says
 the anti-slop `no-unknown-*` rules as a ratchet (baseline 461 sites in `src`:
 384 parameters, 77 returns) and fails if the count rises. Both TypeBox majors
 are gone too: everything imports `typebox`, pinned to pi-ai's exact version so
-one copy ships, and `StringEnum` comes from pi-ai.
+one copy ships, and `StringEnum` is pi-ai's behind `src/tools/string-enum.ts`
+(a `const` type parameter; without it an inline array widens the static type
+to `string`, which #718 did to two tools before it was caught).
 
 Still to do: parse boundary values into domain types so the count falls.
 

@@ -77,7 +77,7 @@ Notes for agents working in this repo.
 - No explicit `any`, `as any`, or non-null assertions.
 - `unknown` only at the seam (JSON decode, host object, bridge/sandbox message, caught error); parse it into a concrete domain type on the next line. Never add `unknown` further in: `npm run check:unknown-burndown` fails if the count rises (see `docs/coding-standards.md`).
 - Do not add generic object/record guards (`isRecord`, `isObjectValue`, `isPlainObject`, `is…PayloadShape`, etc.); an object check alone does not establish a domain contract. Parse the domain shape, preferably with a TypeBox schema and `Static<>`.
-- Schemas use `typebox` (pinned to pi-ai's version; one copy ships). `StringEnum` comes from `@earendil-works/pi-ai`.
+- Schemas use `typebox` (pinned to pi-ai's version; one copy ships). Import `StringEnum` from `src/tools/string-enum.ts` (pi-ai's, with a `const` type parameter so inline arrays keep literal types).
 - Type assertions and lint suppressions must stay local and explain the safety invariant; do not add blanket safety comments.
 
 ## Verification

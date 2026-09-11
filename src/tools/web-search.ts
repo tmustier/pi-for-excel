@@ -8,7 +8,7 @@ function isToolsWebSearchPayloadShape(value: unknown): value is Record<string, u
 
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { Type, type Static, type TSchema } from "typebox";
-import { StringEnum } from "@earendil-works/pi-ai";
+import { StringEnum } from "./string-enum.js";
 
 import { integrationsCommandHint } from "../integrations/naming.js";
 import { getErrorMessage } from "../utils/errors.js";
