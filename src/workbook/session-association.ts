@@ -5,10 +5,7 @@
  * in `SettingsStore` using a dedicated key prefix.
  */
 
-export interface SessionAssociationSettingsStore {
-  get(key: string): Promise<unknown>;
-  set(key: string, value: unknown): Promise<void>;
-}
+import type { SettingsWriter } from "../storage/local/settings-store.js";
 
 const SESSION_WORKBOOK_PREFIX = "session.workbook.v1.";
 const WORKBOOK_LATEST_SESSION_PREFIX = "workbook.latestSession.v1.";
@@ -22,7 +19,7 @@ export function workbookLatestSessionKey(workbookId: string): string {
 }
 
 export async function getSessionWorkbookId(
-  settings: SessionAssociationSettingsStore,
+  settings: SettingsWriter,
   sessionId: string,
 ): Promise<string | null> {
   const value = await settings.get(sessionWorkbookKey(sessionId));
@@ -36,7 +33,7 @@ export async function getSessionWorkbookId(
  * workbook won't accidentally "move" it).
  */
 export async function linkSessionToWorkbook(
-  settings: SessionAssociationSettingsStore,
+  settings: SettingsWriter,
   sessionId: string,
   workbookId: string,
 ): Promise<void> {
@@ -47,7 +44,7 @@ export async function linkSessionToWorkbook(
 }
 
 export async function setLatestSessionForWorkbook(
-  settings: SessionAssociationSettingsStore,
+  settings: SettingsWriter,
   workbookId: string,
   sessionId: string,
 ): Promise<void> {
@@ -55,7 +52,7 @@ export async function setLatestSessionForWorkbook(
 }
 
 export async function getLatestSessionForWorkbook(
-  settings: SessionAssociationSettingsStore,
+  settings: SettingsWriter,
   workbookId: string,
 ): Promise<string | null> {
   const value = await settings.get(workbookLatestSessionKey(workbookId));
@@ -76,7 +73,7 @@ export interface SessionWorkbookPartition {
  * - `foreignSessionIds`: linked to another workbook
  */
 export async function partitionSessionIdsByWorkbook(
-  settings: SessionAssociationSettingsStore,
+  settings: SettingsWriter,
   sessionIds: string[],
   workbookId: string,
 ): Promise<SessionWorkbookPartition> {

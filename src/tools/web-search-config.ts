@@ -8,6 +8,7 @@ import {
   saveConnectionStoreDocument,
   type StoredConnectionRecord,
 } from "../connections/store.js";
+import type { SettingsAccess, SettingsReader } from "../storage/local/settings-store.js";
 
 export const WEB_SEARCH_PROVIDER_SETTING_KEY = "web.search.provider";
 export const WEB_SEARCH_BRAVE_API_KEY_SETTING_KEY = "web.search.brave.apiKey";
@@ -108,15 +109,6 @@ const WEB_SEARCH_CONNECTION_SECRET_FIELD_BY_PROVIDER: Record<WebSearchProvider, 
   brave: "brave_api_key",
 };
 
-export interface WebSearchConfigReader {
-  get(key: string): Promise<unknown>;
-}
-
-export interface WebSearchConfigStore extends WebSearchConfigReader {
-  set(key: string, value: unknown): Promise<void>;
-  delete?(key: string): Promise<void>;
-}
-
 export interface WebSearchProviderConfig {
   provider: WebSearchProvider;
   apiKeys: Partial<Record<WebSearchProvider, string>>;
@@ -151,7 +143,7 @@ function setApiKeyIfPresent(
 }
 
 async function readWebSearchSetting(
-  settings: WebSearchConfigReader,
+  settings: SettingsReader,
   key: string,
 ): Promise<unknown> {
   try {
@@ -172,7 +164,7 @@ function parseLegacyWebSearchApiKeys(
 }
 
 async function loadLegacyWebSearchApiKeys(
-  settings: WebSearchConfigReader,
+  settings: SettingsReader,
 ): Promise<Partial<Record<WebSearchProvider, string>>> {
   const values = await Promise.all(WEB_SEARCH_PROVIDERS.map((provider) =>
     readWebSearchSetting(settings, WEB_SEARCH_API_KEY_BY_PROVIDER_SETTING_KEY[provider])));
@@ -180,7 +172,7 @@ async function loadLegacyWebSearchApiKeys(
 }
 
 async function loadLegacyWebSearchApiKeysForUpdate(
-  settings: WebSearchConfigStore,
+  settings: SettingsAccess,
 ): Promise<Partial<Record<WebSearchProvider, string>>> {
   const values = await Promise.all(WEB_SEARCH_PROVIDERS.map((provider) =>
     settings.get(WEB_SEARCH_API_KEY_BY_PROVIDER_SETTING_KEY[provider])));
@@ -202,19 +194,19 @@ function readConnectionStoreWebSearchApiKeys(
 }
 
 async function loadConnectionStoreWebSearchApiKeys(
-  settings: WebSearchConfigReader,
+  settings: SettingsReader,
 ): Promise<Partial<Record<WebSearchProvider, string>>> {
   return readConnectionStoreWebSearchApiKeys(await loadConnectionStoreDocument(settings));
 }
 
 async function loadConnectionStoreWebSearchApiKeysForUpdate(
-  settings: WebSearchConfigStore,
+  settings: SettingsAccess,
 ): Promise<Partial<Record<WebSearchProvider, string>>> {
   return readConnectionStoreWebSearchApiKeys(await loadConnectionStoreDocumentForUpdate(settings));
 }
 
 async function loadWebSearchApiKeysForUpdate(
-  settings: WebSearchConfigStore,
+  settings: SettingsAccess,
 ): Promise<Partial<Record<WebSearchProvider, string>>> {
   const [connectionApiKeys, legacyApiKeys] = await Promise.all([
     loadConnectionStoreWebSearchApiKeysForUpdate(settings),
@@ -242,7 +234,7 @@ function mergeApiKeys(args: {
 
 
 async function writeConnectionStoreWebSearchApiKeys(
-  settings: WebSearchConfigStore,
+  settings: SettingsAccess,
   apiKeys: Partial<Record<WebSearchProvider, string>>,
 ): Promise<void> {
   const items = await loadConnectionStoreDocumentForUpdate(settings);
@@ -278,21 +270,14 @@ async function writeConnectionStoreWebSearchApiKeys(
 }
 
 async function clearLegacyWebSearchApiKey(
-  settings: WebSearchConfigStore,
+  settings: SettingsAccess,
   provider: WebSearchProvider,
 ): Promise<void> {
-  const key = WEB_SEARCH_API_KEY_BY_PROVIDER_SETTING_KEY[provider];
-
-  if (typeof settings.delete === "function") {
-    await settings.delete(key);
-    return;
-  }
-
-  await settings.set(key, "");
+  await settings.delete(WEB_SEARCH_API_KEY_BY_PROVIDER_SETTING_KEY[provider]);
 }
 
 export async function migrateLegacyWebSearchApiKeysToConnectionStore(
-  settings: WebSearchConfigStore,
+  settings: SettingsAccess,
 ): Promise<boolean> {
   const [legacyApiKeys, connectionApiKeys] = await Promise.all([
     loadLegacyWebSearchApiKeysForUpdate(settings),
@@ -326,7 +311,7 @@ export async function migrateLegacyWebSearchApiKeysToConnectionStore(
 }
 
 export async function loadWebSearchProviderConfig(
-  settings: WebSearchConfigReader,
+  settings: SettingsReader,
 ): Promise<WebSearchProviderConfig> {
   const [providerRaw, connectionApiKeys, legacyApiKeys] = await Promise.all([
     readWebSearchSetting(settings, WEB_SEARCH_PROVIDER_SETTING_KEY),
@@ -352,14 +337,14 @@ export async function loadWebSearchProviderConfig(
 }
 
 export async function saveWebSearchProvider(
-  settings: WebSearchConfigStore,
+  settings: SettingsAccess,
   provider: WebSearchProvider,
 ): Promise<void> {
   await settings.set(WEB_SEARCH_PROVIDER_SETTING_KEY, provider);
 }
 
 export async function saveWebSearchApiKey(
-  settings: WebSearchConfigStore,
+  settings: SettingsAccess,
   provider: WebSearchProvider,
   apiKey: string,
 ): Promise<void> {
@@ -379,7 +364,7 @@ export async function saveWebSearchApiKey(
 }
 
 export async function clearWebSearchApiKey(
-  settings: WebSearchConfigStore,
+  settings: SettingsAccess,
   provider: WebSearchProvider,
 ): Promise<void> {
   const currentApiKeys = await loadWebSearchApiKeysForUpdate(settings);

@@ -1,4 +1,5 @@
 import type { ConnectionSecrets, ConnectionStatus } from "./types.js";
+import type { SettingsReader, SettingsWriter } from "../storage/local/settings-store.js";
 
 function isConnectionsStorePayloadShape(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -6,15 +7,6 @@ function isConnectionsStorePayloadShape(value: unknown): value is Record<string,
 
 export const CONNECTION_STORE_KEY = "connections.store.v1";
 const CONNECTION_STORE_VERSION = 1;
-
-export interface ConnectionSettingsReader {
-  get(key: string): Promise<unknown>;
-}
-
-export interface ConnectionSettingsStore extends ConnectionSettingsReader {
-  set(key: string, value: unknown): Promise<void>;
-  delete?(key: string): Promise<void>;
-}
 
 export interface StoredConnectionRecord {
   status?: ConnectionStatus;
@@ -91,7 +83,7 @@ function normalizeDocument(value: unknown): ConnectionStoreDocument {
 }
 
 export async function loadConnectionStoreDocument(
-  settings: ConnectionSettingsReader,
+  settings: SettingsReader,
 ): Promise<Record<string, StoredConnectionRecord>> {
   try {
     const raw = await settings.get(CONNECTION_STORE_KEY);
@@ -106,14 +98,14 @@ export async function loadConnectionStoreDocument(
  * storage failures propagate so a write cannot replace unread sibling records.
  */
 export async function loadConnectionStoreDocumentForUpdate(
-  settings: ConnectionSettingsStore,
+  settings: SettingsWriter,
 ): Promise<Record<string, StoredConnectionRecord>> {
   const raw = await settings.get(CONNECTION_STORE_KEY);
   return normalizeDocument(raw).items;
 }
 
 export async function saveConnectionStoreDocument(
-  settings: ConnectionSettingsStore,
+  settings: SettingsWriter,
   items: Record<string, StoredConnectionRecord>,
 ): Promise<void> {
   await settings.set(CONNECTION_STORE_KEY, {

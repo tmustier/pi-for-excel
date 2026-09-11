@@ -87,7 +87,7 @@ function buildProvidersGroup(ctx: SettingsPageContext): HTMLElement {
     }
 
     try {
-      const proxyEnabled = await storage.settings.get<boolean>("proxy.enabled");
+      const proxyEnabled = await storage.settings.get("proxy.enabled");
       proxyRow.setValue(proxyEnabled === true ? t("settings.value.on") : t("settings.value.off"));
     } catch {
       // leave preview empty

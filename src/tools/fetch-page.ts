@@ -7,12 +7,12 @@ import { Type, type Static, type TSchema } from "typebox";
 
 import { getErrorMessage } from "../utils/errors.js";
 import { runWithTimeoutAbort } from "../utils/network.js";
+import type { SettingsReader } from "../storage/local/settings-store.js";
 import {
   buildProxyDownErrorMessage,
   getEnabledProxyBaseUrl,
   isLikelyProxyConnectionError,
   resolveOutboundRequestUrl,
-  type ProxyAwareSettingsStore,
 } from "./external-fetch.js";
 
 const FETCH_PAGE_TIMEOUT_MS = 15_000;
@@ -321,7 +321,7 @@ function enforceDomainRateLimit(hostname: string, now: number): void {
 
 async function defaultGetConfig(): Promise<FetchPageToolConfig> {
   const storageModule = await import("../storage/local/app-storage.js");
-  const settings: ProxyAwareSettingsStore = storageModule.getAppStorage().settings;
+  const settings: SettingsReader = storageModule.getAppStorage().settings;
   const proxyBaseUrl = await getEnabledProxyBaseUrl(settings);
   return {
     ...proxyBaseUrlArg(proxyBaseUrl),

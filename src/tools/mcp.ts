@@ -16,17 +16,16 @@ import {
   getHttpErrorReason,
   runWithTimeoutAbort,
 } from "../utils/network.js";
-import type { ProxyAwareSettingsStore } from "./external-fetch.js";
 import {
   buildProxyDownErrorMessage,
   getEnabledProxyBaseUrl,
   isLikelyProxyConnectionError,
   resolveOutboundRequestUrl,
 } from "./external-fetch.js";
+import type { SettingsReader, SettingsWriter } from "../storage/local/settings-store.js";
 import {
   loadMcpServers,
   type McpServerConfig,
-  type McpConfigStore,
 } from "./mcp-config.js";
 
 const MCP_CLIENT_NAME = APP_NAME;
@@ -333,8 +332,8 @@ function matchesSearch(tool: McpToolDescriptor, query: string): boolean {
 async function defaultGetRuntimeConfig(): Promise<McpRuntimeConfig> {
   const storageModule = await import("../storage/local/app-storage.js");
   const settingsStore = storageModule.getAppStorage().settings;
-  const configStore: McpConfigStore = settingsStore;
-  const proxyStore: ProxyAwareSettingsStore = settingsStore;
+  const configStore: SettingsWriter = settingsStore;
+  const proxyStore: SettingsReader = settingsStore;
 
   const [servers, proxyBaseUrl] = await Promise.all([
     loadMcpServers(configStore),

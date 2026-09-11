@@ -356,13 +356,13 @@ async function defaultGetBridgeConfig(): Promise<TmuxBridgeConfig | null> {
     const storageModule = await import("../storage/local/app-storage.js");
     const settings = storageModule.getAppStorage().settings;
 
-    const urlValue = await settings.get<string>(TMUX_BRIDGE_URL_SETTING_KEY);
+    const urlValue = await settings.get(TMUX_BRIDGE_URL_SETTING_KEY);
     const configuredUrl = typeof urlValue === "string" ? urlValue.trim() : "";
     if (configuredUrl.length > 0) {
       rawUrl = configuredUrl;
     }
 
-    const tokenValue = await settings.get<string>(TMUX_BRIDGE_TOKEN_SETTING_KEY);
+    const tokenValue = await settings.get(TMUX_BRIDGE_TOKEN_SETTING_KEY);
     token = typeof tokenValue === "string" && tokenValue.trim().length > 0
       ? tokenValue.trim()
       : undefined;

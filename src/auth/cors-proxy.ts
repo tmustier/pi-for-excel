@@ -17,13 +17,10 @@ import {
   validateOfficeProxyUrl,
 } from "./proxy-validation.js";
 import { rewriteDevProxyUrl } from "./dev-rewrites.js";
+import type { SettingsReader } from "../storage/local/settings-store.js";
 
 /** The original, un-patched fetch — use for requests that should bypass the proxy */
 export let originalFetch: typeof window.fetch;
-
-export interface CorsProxySettingsReader {
-  get(key: string): Promise<unknown>;
-}
 
 type ProxySettingsCache = {
   checkedAt: number;
@@ -42,7 +39,7 @@ function parseProxyEnabled(value: unknown): boolean {
 }
 
 export async function readCorsProxySettings(
-  settings: CorsProxySettingsReader,
+  settings: SettingsReader,
 ): Promise<{ enabled: boolean; url: string }> {
   try {
     const [enabled, url] = await Promise.all([
@@ -59,7 +56,7 @@ export async function readCorsProxySettings(
 }
 
 async function getEnabledProxyUrl(
-  injectedSettings?: CorsProxySettingsReader,
+  injectedSettings?: SettingsReader,
 ): Promise<string | undefined> {
   // OAuth flows are infrequent, but fetch() is frequent; cache for a short time.
   const now = Date.now();
@@ -143,7 +140,7 @@ function stripAnthropicBrowserHeader(init?: RequestInit): RequestInit | undefine
 /**
  * Install the fetch interceptor. Call once at boot.
  */
-export function installFetchInterceptor(settings?: CorsProxySettingsReader): void {
+export function installFetchInterceptor(settings?: SettingsReader): void {
   originalFetch = window.fetch.bind(window);
 
   window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {

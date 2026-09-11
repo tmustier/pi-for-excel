@@ -5,11 +5,11 @@ import {
   isApiKeyRequired,
   loadWebSearchProviderConfig,
   WEB_SEARCH_PROVIDERS,
-  type WebSearchConfigStore,
   type WebSearchProvider,
   type WebSearchProviderConfig,
 } from "./web-search-config.js";
 import type { WebSearchDetails } from "./tool-details.js";
+import type { SettingsAccess } from "../storage/local/settings-store.js";
 
 export type WebSearchSetupMode =
   | { type: "needs_key" }
@@ -53,7 +53,7 @@ function findAlternativeProvider(
 
 export async function detectWebSearchSetupContext(
   details: WebSearchDetails,
-  settings: WebSearchConfigStore,
+  settings: SettingsAccess,
   deps?: WebSearchSetupDetectionDeps,
 ): Promise<WebSearchSetupContext> {
   const [providerConfig, proxyBaseUrl] = await Promise.all([

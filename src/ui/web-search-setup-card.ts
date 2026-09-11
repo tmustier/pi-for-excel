@@ -20,7 +20,6 @@ import {
   checkApiKeyFormat,
   saveWebSearchApiKey,
   WEB_SEARCH_PROVIDER_INFO,
-  type WebSearchConfigStore,
   type WebSearchProvider,
 } from "../tools/web-search-config.js";
 import { isWebSearchDetails, type WebSearchDetails } from "../tools/tool-details.js";
@@ -29,6 +28,7 @@ import { createCopyableCommand } from "./command-copy.js";
 import { AlertTriangle, Search, lucide } from "./lucide-icons.js";
 import { showToast } from "./toast.js";
 import { t } from "../language/index.js";
+import type { SettingsAccess } from "../storage/local/settings-store.js";
 
 const PROXY_COMMAND = "npx pi-for-excel-proxy";
 
@@ -111,7 +111,7 @@ function createProxyStep(options: ProxyStepOptions): HTMLDivElement {
 function createKeyStep(
   provider: WebSearchProvider,
   stepNumber: number | null,
-  settings: WebSearchConfigStore,
+  settings: SettingsAccess,
   proxyBaseUrl: string | undefined,
   onSaved: () => void,
 ): HTMLDivElement {
@@ -219,7 +219,7 @@ function createKeyStep(
 
 function buildCardContent(
   context: WebSearchSetupContext,
-  settings: WebSearchConfigStore,
+  settings: SettingsAccess,
   onDismiss: () => void,
 ): { title: string; body: DocumentFragment } {
   const body = document.createDocumentFragment();

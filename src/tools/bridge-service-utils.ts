@@ -46,7 +46,7 @@ export async function getBridgeSetting(settingKey: string): Promise<string | und
   try {
     const storageModule = await import("../storage/local/app-storage.js");
     const storage = storageModule.getAppStorage();
-    const value = await storage.settings.get<string>(settingKey);
+    const value = await storage.settings.get(settingKey);
     if (typeof value !== "string") {
       return undefined;
     }

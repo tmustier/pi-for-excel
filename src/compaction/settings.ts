@@ -1,8 +1,6 @@
-export const COMPACTION_ENABLED_SETTING_KEY = "compaction.enabled";
+import type { SettingsReader } from "../storage/local/settings-store.js";
 
-export interface CompactionSettingsStore {
-  get(key: string): Promise<unknown>;
-}
+export const COMPACTION_ENABLED_SETTING_KEY = "compaction.enabled";
 
 /**
  * Reads the persisted auto-compaction preference.
@@ -11,7 +9,7 @@ export interface CompactionSettingsStore {
  * cannot be read. Only persisted boolean values override that safe default.
  */
 export async function readAutoCompactionEnabled(
-  settings: CompactionSettingsStore,
+  settings: SettingsReader,
 ): Promise<boolean> {
   try {
     const value = await settings.get(COMPACTION_ENABLED_SETTING_KEY);

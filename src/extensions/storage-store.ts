@@ -1,3 +1,5 @@
+import type { SettingsWriter } from "../storage/local/settings-store.js";
+
 function isExtensionsStorageStorePayloadShape(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -10,11 +12,6 @@ const MAX_EXTENSION_STORAGE_BYTES = 1_000_000;
 interface ExtensionStorageDocument {
   version: number;
   items: Record<string, Record<string, unknown>>;
-}
-
-export interface ExtensionStorageSettings {
-  get(key: string): Promise<unknown>;
-  set(key: string, value: unknown): Promise<void>;
 }
 
 function normalizeStorageDocument(raw: unknown): ExtensionStorageDocument {
@@ -41,7 +38,7 @@ function normalizeStorageDocument(raw: unknown): ExtensionStorageDocument {
   };
 }
 
-async function readStorageDocument(settings: ExtensionStorageSettings): Promise<ExtensionStorageDocument> {
+async function readStorageDocument(settings: SettingsWriter): Promise<ExtensionStorageDocument> {
   try {
     const raw = await settings.get(EXTENSION_STORAGE_KEY);
     return normalizeStorageDocument(raw);
@@ -51,14 +48,14 @@ async function readStorageDocument(settings: ExtensionStorageSettings): Promise<
 }
 
 async function loadStorageDocumentForUpdate(
-  settings: ExtensionStorageSettings,
+  settings: SettingsWriter,
 ): Promise<ExtensionStorageDocument> {
   const raw = await settings.get(EXTENSION_STORAGE_KEY);
   return normalizeStorageDocument(raw);
 }
 
 async function saveStorageDocument(
-  settings: ExtensionStorageSettings,
+  settings: SettingsWriter,
   document: ExtensionStorageDocument,
 ): Promise<void> {
   await settings.set(EXTENSION_STORAGE_KEY, {
@@ -81,7 +78,7 @@ function calculateSerializedSize(value: unknown): number {
 }
 
 export async function getExtensionStorageValue(
-  settings: ExtensionStorageSettings,
+  settings: SettingsWriter,
   extensionId: string,
   key: string,
 ): Promise<unknown> {
@@ -91,7 +88,7 @@ export async function getExtensionStorageValue(
 }
 
 export async function setExtensionStorageValue(
-  settings: ExtensionStorageSettings,
+  settings: SettingsWriter,
   extensionId: string,
   key: string,
   value: unknown,
@@ -112,7 +109,7 @@ export async function setExtensionStorageValue(
 }
 
 export async function deleteExtensionStorageValue(
-  settings: ExtensionStorageSettings,
+  settings: SettingsWriter,
   extensionId: string,
   key: string,
 ): Promise<void> {
@@ -136,7 +133,7 @@ export async function deleteExtensionStorageValue(
 }
 
 export async function listExtensionStorageKeys(
-  settings: ExtensionStorageSettings,
+  settings: SettingsWriter,
   extensionId: string,
 ): Promise<string[]> {
   const document = await readStorageDocument(settings);
@@ -145,7 +142,7 @@ export async function listExtensionStorageKeys(
 }
 
 export async function clearExtensionStorage(
-  settings: ExtensionStorageSettings,
+  settings: SettingsWriter,
   extensionId: string,
 ): Promise<void> {
   const document = await loadStorageDocumentForUpdate(settings);

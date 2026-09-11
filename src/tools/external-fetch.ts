@@ -7,10 +7,7 @@ import {
   DEFAULT_PROXY_URL,
   validateOfficeProxyUrl,
 } from "../auth/proxy-validation.js";
-
-export interface ProxyAwareSettingsStore {
-  get(key: string): Promise<unknown>;
-}
+import type { SettingsReader } from "../storage/local/settings-store.js";
 
 export interface ResolvedOutboundRequest {
   requestUrl: string;
@@ -29,7 +26,7 @@ function parseEnabledFlag(value: unknown): boolean {
 }
 
 export async function getEnabledProxyBaseUrl(
-  settings: ProxyAwareSettingsStore,
+  settings: SettingsReader,
 ): Promise<string | undefined> {
   try {
     const enabledRaw = await settings.get("proxy.enabled");

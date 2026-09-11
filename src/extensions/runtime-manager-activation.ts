@@ -33,7 +33,8 @@ import {
   qualifyExtensionConnectionId,
 } from "./owner-identifiers.js";
 import type { SandboxActivationOptions } from "./sandbox-runtime.js";
-import type { ExtensionSettingsStore, StoredExtensionEntry } from "./store.js";
+import type { StoredExtensionEntry } from "./store.js";
+import type { SettingsWriter } from "../storage/local/settings-store.js";
 
 type HostActivationBridge = Pick<
   CreateExtensionAPIOptions,
@@ -239,7 +240,7 @@ export interface RuntimeManagerActivationBridge {
 
 export interface BuildRuntimeManagerActivationBridgeOptions {
   entry: StoredExtensionEntry;
-  settings: ExtensionSettingsStore;
+  settings: SettingsWriter;
   connectionManager: ConnectionManager;
   getRequiredActiveAgent: () => Agent;
   afterInjectAgentContext?: () => Promise<void> | void;

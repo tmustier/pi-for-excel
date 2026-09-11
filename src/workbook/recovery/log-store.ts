@@ -11,15 +11,11 @@ import {
   MAX_RECOVERY_ENTRIES,
   RETENTION_LIMIT_SETTING_KEY,
 } from "./constants.js";
+import type { SettingsWriter } from "../../storage/local/settings-store.js";
 
 export const RECOVERY_SETTING_KEY = "workbook.recovery-snapshots.v1";
 
-export interface SettingsStoreLike {
-  get<T>(key: string): Promise<T | null>;
-  set(key: string, value: unknown): Promise<void>;
-}
-
-function isSettingsStoreLike(value: unknown): value is SettingsStoreLike {
+function isSettingsStoreLike(value: unknown): value is SettingsWriter {
   if (!isWorkbookRecoveryLogStorePayloadShape(value)) return false;
 
   return (
@@ -28,7 +24,7 @@ function isSettingsStoreLike(value: unknown): value is SettingsStoreLike {
   );
 }
 
-export async function defaultGetSettingsStore(): Promise<SettingsStoreLike | null> {
+export async function defaultGetSettingsStore(): Promise<SettingsWriter | null> {
   try {
     const storageModule = await import("../../storage/local/app-storage.js");
     const appStorage = storageModule.getAppStorage();
@@ -40,17 +36,17 @@ export async function defaultGetSettingsStore(): Promise<SettingsStoreLike | nul
 }
 
 export async function readPersistedWorkbookRecoveryPayload(
-  settings: SettingsStoreLike | null,
+  settings: SettingsWriter | null,
 ): Promise<unknown> {
   if (!settings) {
     return null;
   }
 
-  return settings.get<unknown>(RECOVERY_SETTING_KEY);
+  return settings.get(RECOVERY_SETTING_KEY);
 }
 
 export async function writePersistedWorkbookRecoveryPayload(
-  settings: SettingsStoreLike | null,
+  settings: SettingsWriter | null,
   payload: unknown,
 ): Promise<void> {
   if (!settings) {
@@ -73,7 +69,7 @@ export async function readRetentionLimit(): Promise<number> {
   if (!settings) return MAX_RECOVERY_ENTRIES;
 
   try {
-    const raw = await settings.get<unknown>(RETENTION_LIMIT_SETTING_KEY);
+    const raw = await settings.get(RETENTION_LIMIT_SETTING_KEY);
     return clampRetentionLimit(raw);
   } catch {
     return MAX_RECOVERY_ENTRIES;

@@ -1,11 +1,11 @@
 import { APP_NAME, APP_VERSION } from "../../app/metadata.js";
-import { type IntegrationSettingsStore } from "../../integrations/store.js";
 import { getEnabledProxyBaseUrl, resolveOutboundRequestUrl } from "../../tools/external-fetch.js";
 import { type McpServerConfig } from "../../tools/mcp-config.js";
 import {
   getHttpErrorReason,
   runWithTimeoutAbort,
 } from "../../utils/network.js";
+import type { SettingsWriter } from "../../storage/local/settings-store.js";
 function isExtensionsHubMcpProbePayloadShape(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -25,7 +25,7 @@ async function postJsonRpc(args: {
   server: McpServerConfig;
   method: string;
   params?: unknown;
-  settings: IntegrationSettingsStore;
+  settings: SettingsWriter;
   expectResponse?: boolean;
 }): Promise<{ response: unknown; proxied: boolean; proxyBaseUrl?: string } | null> {
   const { server, method, params, settings, expectResponse = true } = args;
@@ -98,7 +98,7 @@ async function postJsonRpc(args: {
 
 export async function probeMcpServer(
   server: McpServerConfig,
-  settings: IntegrationSettingsStore,
+  settings: SettingsWriter,
 ): Promise<{ toolCount: number; proxied: boolean; proxyBaseUrl?: string }> {
   await postJsonRpc({
     server,

@@ -33,6 +33,7 @@ import {
   type WorkspaceFileWorkbookTag,
   type WorkspaceSnapshot,
 } from "./types.js";
+import type { SettingsAccess } from "../storage/local/settings-store.js";
 
 const NATIVE_HANDLE_SETTING_KEY = "files.workspace.nativeHandle.v1";
 const METADATA_SETTING_KEY = "files.workspace.metadata.v1";
@@ -332,13 +333,7 @@ function createAuditEntryId(): string {
   return `audit_${Date.now().toString(36)}_${randomChunk}`;
 }
 
-export interface FilesWorkspaceSettingsStore {
-  get<T>(key: string): Promise<T | null>;
-  set(key: string, value: unknown): Promise<void>;
-  delete(key: string): Promise<void>;
-}
-
-function isSettingsStoreLike(value: unknown): value is FilesWorkspaceSettingsStore {
+function isSettingsStoreLike(value: unknown): value is SettingsAccess {
   if (!isFilesWorkspacePayloadShape(value)) return false;
 
   return (
@@ -348,7 +343,7 @@ function isSettingsStoreLike(value: unknown): value is FilesWorkspaceSettingsSto
   );
 }
 
-async function getSettingsStore(): Promise<FilesWorkspaceSettingsStore | null> {
+async function getSettingsStore(): Promise<SettingsAccess | null> {
   try {
     const storageModule = await import("../storage/local/app-storage.js");
     const appStorage = storageModule.getAppStorage();
@@ -364,7 +359,7 @@ async function readPersistedNativeHandle(): Promise<FileSystemDirectoryHandle | 
   if (!settings) return null;
 
   try {
-    const stored = await settings.get<unknown>(NATIVE_HANDLE_SETTING_KEY);
+    const stored = await settings.get(NATIVE_HANDLE_SETTING_KEY);
     return isDirectoryHandle(stored) ? stored : null;
   } catch {
     return null;
@@ -569,7 +564,7 @@ export function buildWorkspaceContextSummary(args: WorkspaceContextSummaryArgs):
 export interface FilesWorkspaceOptions {
   initialBackend?: WorkspaceBackend;
   initialWorkspaceBackend?: WorkspaceBackend;
-  settings?: FilesWorkspaceSettingsStore | null;
+  settings?: SettingsAccess | null;
 }
 
 export class FilesWorkspace {
@@ -586,7 +581,7 @@ export class FilesWorkspace {
   private auditLoaded = false;
   private auditEntries: FilesWorkspaceAuditEntry[] = [];
 
-  private readonly settings: FilesWorkspaceSettingsStore | null | undefined;
+  private readonly settings: SettingsAccess | null | undefined;
   private readonly scratchCleanupByBackend = new WeakMap<WorkspaceBackend, Promise<void>>();
 
   constructor(options: FilesWorkspaceOptions = {}) {
@@ -745,7 +740,7 @@ export class FilesWorkspace {
     dispatchWorkspaceChanged({ reason: "backend" });
   }
 
-  private resolveSettings(): Promise<FilesWorkspaceSettingsStore | null> {
+  private resolveSettings(): Promise<SettingsAccess | null> {
     return this.settings === undefined ? getSettingsStore() : Promise.resolve(this.settings);
   }
 
@@ -759,7 +754,7 @@ export class FilesWorkspace {
     }
 
     try {
-      const raw = await settings.get<unknown>(METADATA_SETTING_KEY);
+      const raw = await settings.get(METADATA_SETTING_KEY);
       const parsed = parsePersistedMetadata(raw);
       this.metadataByPath.clear();
       for (const [path, tag] of parsed) {
@@ -803,7 +798,7 @@ export class FilesWorkspace {
     }
 
     try {
-      const raw = await settings.get<unknown>(AUDIT_TRAIL_SETTING_KEY);
+      const raw = await settings.get(AUDIT_TRAIL_SETTING_KEY);
       this.auditEntries = parsePersistedAuditTrail(raw);
       this.auditLoaded = true;
       return true;

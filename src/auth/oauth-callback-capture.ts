@@ -101,10 +101,10 @@ function wait(ms: number, signal: AbortSignal | undefined): Promise<void> {
 
 async function getEnabledLocalProxyUrl(): Promise<string | null> {
   const storage = getAppStorage();
-  const enabled = await storage.settings.get<boolean>("proxy.enabled");
+  const enabled = await storage.settings.get("proxy.enabled");
   if (!enabled) return null;
 
-  const rawUrl = await storage.settings.get<string>("proxy.url");
+  const rawUrl = await storage.settings.get("proxy.url");
   const proxyUrl = validateOfficeProxyUrl(resolveConfiguredProxyUrl(rawUrl));
   return isLoopbackProxyUrl(proxyUrl) ? proxyUrl : null;
 }

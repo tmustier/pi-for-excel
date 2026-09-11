@@ -15,15 +15,11 @@ import {
   type StoredExtensionPermissions,
   type StoredExtensionTrust,
 } from "./permissions.js";
+import type { SettingsWriter } from "../storage/local/settings-store.js";
 
 export const EXTENSIONS_REGISTRY_STORAGE_KEY = "extensions.registry.v2";
 export const LEGACY_EXTENSIONS_REGISTRY_STORAGE_KEY = "extensions.registry.v1";
 const EXTENSIONS_REGISTRY_VERSION = 2;
-
-export interface ExtensionSettingsStore {
-  get(key: string): Promise<unknown>;
-  set(key: string, value: unknown): Promise<void>;
-}
 
 export const BUILTIN_SNAKE_EXTENSION_ID = "builtin.snake";
 const BUILTIN_SNAKE_EXTENSION_NAME = "Snake";
@@ -275,7 +271,7 @@ export function createDefaultExtensionEntries(
 }
 
 export async function saveStoredExtensions(
-  settings: ExtensionSettingsStore,
+  settings: SettingsWriter,
   items: StoredExtensionEntry[],
 ): Promise<void> {
   await settings.set(EXTENSIONS_REGISTRY_STORAGE_KEY, createRegistryDocument(items));
@@ -288,7 +284,7 @@ export async function saveStoredExtensions(
  * Legacy `extensions.registry.v1` data is migrated to `extensions.registry.v2`.
  * Storage read failures propagate so defaults cannot replace an unread registry.
  */
-export async function loadStoredExtensions(settings: ExtensionSettingsStore): Promise<StoredExtensionEntry[]> {
+export async function loadStoredExtensions(settings: SettingsWriter): Promise<StoredExtensionEntry[]> {
   const normalizedCurrent = normalizeDocument(await settings.get(EXTENSIONS_REGISTRY_STORAGE_KEY));
 
   if (normalizedCurrent && normalizedCurrent.version >= EXTENSIONS_REGISTRY_VERSION) {

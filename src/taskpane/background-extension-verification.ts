@@ -2,7 +2,6 @@ import type { ConnectionManager } from "../connections/manager.js";
 import {
   loadConnectionStoreDocumentForUpdate,
   saveConnectionStoreDocument,
-  type ConnectionSettingsStore,
 } from "../connections/store.js";
 import {
   ALL_EXTENSION_CAPABILITIES,
@@ -21,6 +20,7 @@ import {
 import type { BrowserModelRuntime } from "../models/browser-model-runtime.js";
 import { getAppStorage } from "../storage/local/app-storage.js";
 import type { SessionRuntime } from "./session-runtime-manager.js";
+import type { SettingsWriter } from "../storage/local/settings-store.js";
 
 export const EXTENSION_VERIFICATION_COMMAND_TYPES = [
   "assertLastAssistantText",
@@ -294,7 +294,7 @@ function setExperiment(payload: unknown): JsonRecord {
 
 export async function stageInlineExtensionUpgrade(
   payload: unknown,
-  settings: ConnectionSettingsStore = getAppStorage().settings,
+  settings: SettingsWriter = getAppStorage().settings,
 ): Promise<JsonRecord> {
   const extensionId = stringField(payload, "extensionId");
   const code = stringField(payload, "code");
