@@ -51,7 +51,24 @@ Excel opens the pane on document open and the `Open Pi` ribbon button appears fo
 
 If `clients` is still empty, inspect Excel with `computer_use` / `sky.get_app_state`. Check the workbook, pane, manifest URL and server before changing caches. For a pane showing a network error, use a semantic accessibility `AXPress` on Try Again after starting the server.
 
-Use background semantic accessibility actions only. If an action requires foreground focus or raw keyboard/mouse input, report the blocker. Record the foreground app and window before and after the test.
+Use background semantic accessibility actions only. Record the foreground app and window before and after the test.
+
+### Before you call it blocked
+
+Everything below has looked like a foreground-only step and was worked around in the background. Report a blocker only after these are exhausted, and say which one you hit.
+
+| Looks like | Is | Do |
+|---|---|---|
+| No `Open Pi` button on the ribbon after Excel relaunched; manifest is intact | Sideloaded add-ins are absent from the ribbon cache until activated once per Excel process | `scratch-workbook.py create` and `open -g` into it; the pane opens from the document and the button appears |
+| Home-tab *Add-ins* flyout does not open (AXPress toggles the button, no popover window) | It does not render for a background app | Not needed; use the document bootstrap above |
+| `sky.get_app_state` fails with `cgWindowNotFound`, or Excel lists `AXApplication` as its only window | Seen once right after `open -g` with no document | Wait for the launch to settle and query again; otherwise quit Excel and `open -g` straight into the scratch workbook, which exposed a normal `AXStandardWindow` |
+| `computer_use` click does nothing | `element_index` was passed as a number | Pass it as a string, e.g. `"63"` |
+| `setTimeout is not defined` inside `computer_use` | The JS sandbox has no timers | Sequence `sky` calls with `await`; wait in the shell (`sleep`) between calls |
+| AppleScript `save workbook as` returns `Parameter error (-50)` | Path built from `POSIX path of (path to home folder)` | Pass a literal absolute path string, inside the Excel container |
+| Pane cannot be reloaded after switching the Vite worktree | The document auto-open fires once per process | `Close Pi for Excel` then `Open Pi` through `computer_use` |
+| Persisted state cannot be checked without trusting the pane | It can | `read-taskpane-setting.py <key>` decodes the record from WebKit's IndexedDB |
+
+Opening a workbook does not activate Excel: both `open -g -a "Microsoft Excel" <file>` and `osascript -e 'tell application "Microsoft Excel" to open POSIX file "…"'` leave the frontmost app unchanged.
 
 ## Run the test
 

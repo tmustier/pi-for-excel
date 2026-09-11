@@ -86,6 +86,7 @@ Use [Behavior tests and acceptance gates](./testing.md) for contract selection, 
 
 - Accept behavior changes and dependency upgrades through a real taskpane prompt → model → tools → workbook test, with independent read-back and scratch cleanup. Keep the host in the background.
 - Unit tests, CI, builds and direct host probes support this acceptance test. If it is blocked, report the missing coverage and obtain an explicit waiver before accepting the change. Documentation-only changes need no runtime test.
+- Blocked means the skill's "Before you call it blocked" table is exhausted. A missing ribbon button, an unopenable Add-ins flyout, or an accessibility tree that needs a moment are documented non-blockers with background workarounds.
 - For prompt/context/tool-disclosure/session wiring, run `npm run test:context`.
 - For proxy/bridge/auth/HTML safety paths, run `npm run test:security`.
 - For model/provider registry changes, run `npm run test:models` and consult `docs/model-updates.md`.
