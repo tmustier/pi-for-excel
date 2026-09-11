@@ -13,6 +13,7 @@ import {
   type ExecutionMode,
 } from "../execution/mode.js";
 import type { WorkbookCellChange } from "./cell-diff.js";
+import type { SettingsAccess } from "../storage/local/settings-store.js";
 
 const AUDIT_SETTING_KEY = "workbook.change-audit.v1";
 const MAX_AUDIT_ENTRIES = 500;
@@ -58,15 +59,9 @@ export interface AppendWorkbookChangeAuditEntryArgs {
   executionMode?: ExecutionMode;
 }
 
-interface SettingsStoreLike {
-  get(key: string): Promise<unknown>;
-  set(key: string, value: unknown): Promise<void>;
-  delete(key: string): Promise<void>;
-}
-
 interface WorkbookChangeAuditLogDependencies {
-  settings: SettingsStoreLike | null;
-  getSettingsStore: () => Promise<SettingsStoreLike | null>;
+  settings: SettingsAccess | null;
+  getSettingsStore: () => Promise<SettingsAccess | null>;
   getWorkbookContext: () => Promise<WorkbookContext>;
   now: () => number;
   createId: () => string;
@@ -94,7 +89,7 @@ function defaultCreateId(): string {
   return `change_${Date.now().toString(36)}_${randomChunk}`;
 }
 
-function isSettingsStoreLike(value: unknown): value is SettingsStoreLike {
+function isSettingsStoreLike(value: unknown): value is SettingsAccess {
   if (!isAuditWorkbookChangeAuditPayloadShape(value)) return false;
 
   return (
@@ -104,7 +99,7 @@ function isSettingsStoreLike(value: unknown): value is SettingsStoreLike {
   );
 }
 
-async function defaultGetSettingsStore(): Promise<SettingsStoreLike | null> {
+async function defaultGetSettingsStore(): Promise<SettingsAccess | null> {
   try {
     const storageModule = await import("../storage/local/app-storage.js");
     const appStorage = storageModule.getAppStorage();

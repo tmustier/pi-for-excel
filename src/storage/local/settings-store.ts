@@ -8,7 +8,27 @@
 import { Store } from "./store.js";
 import type { StoreConfig } from "./types.js";
 
-export class SettingsStore extends Store {
+/**
+ * Read side of the settings bag. Settings are a key-value bag written by many
+ * features, so a read is `unknown` by contract: the feature that owns the key
+ * parses it at this seam. Features depend on this contract rather than the
+ * class so tests can pass an in-memory store.
+ */
+export interface SettingsReader {
+  get(key: string): Promise<unknown>;
+}
+
+/** Read and write side of the settings bag. */
+export interface SettingsWriter extends SettingsReader {
+  set(key: string, value: unknown): Promise<void>;
+}
+
+/** Full access to the settings bag, including key removal. */
+export interface SettingsAccess extends SettingsWriter {
+  delete(key: string): Promise<void>;
+}
+
+export class SettingsStore extends Store implements SettingsAccess {
   getConfig(): StoreConfig {
     return {
       name: "settings",
@@ -16,11 +36,11 @@ export class SettingsStore extends Store {
     };
   }
 
-  async get<T = unknown>(key: string): Promise<T | null> {
-    return this.getBackend().get<T>("settings", key);
+  async get(key: string): Promise<unknown> {
+    return this.getBackend().get<unknown>("settings", key);
   }
 
-  async set<T = unknown>(key: string, value: T): Promise<void> {
+  async set(key: string, value: unknown): Promise<void> {
     await this.getBackend().set("settings", key, value);
   }
 

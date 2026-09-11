@@ -21,7 +21,6 @@ import {
   getEnabledProxyBaseUrl,
   isLikelyProxyConnectionError,
   resolveOutboundRequestUrl,
-  type ProxyAwareSettingsStore,
 } from "./external-fetch.js";
 import {
   getApiKeyForProvider,
@@ -32,6 +31,7 @@ import {
   type WebSearchProviderInfo,
   WEB_SEARCH_PROVIDER_INFO,
 } from "./web-search-config.js";
+import type { SettingsReader } from "../storage/local/settings-store.js";
 
 const WEB_SEARCH_TIMEOUT_MS = 12_000;
 
@@ -669,7 +669,7 @@ function buildResultMarkdown(args: {
 
 async function defaultGetConfig(): Promise<WebSearchToolConfig> {
   const storageModule = await import("../storage/local/app-storage.js");
-  const settings: ProxyAwareSettingsStore = storageModule.getAppStorage().settings;
+  const settings: SettingsReader = storageModule.getAppStorage().settings;
 
   const [providerConfig, proxyBaseUrl] = await Promise.all([
     loadWebSearchProviderConfig(settings),

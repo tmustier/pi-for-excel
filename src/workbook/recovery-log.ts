@@ -24,7 +24,6 @@ import {
 import {
   defaultGetSettingsStore,
   readPersistedWorkbookRecoveryPayload,
-  type SettingsStoreLike,
   writePersistedWorkbookRecoveryPayload,
 } from "./recovery/log-store.js";
 import {
@@ -56,6 +55,7 @@ import {
 } from "./recovery/grid.js";
 import { estimateModifyStructureCellCount } from "./recovery/structure-state.js";
 import { MAX_RECOVERY_CELLS, MAX_RECOVERY_ENTRIES } from "./recovery/constants.js";
+import type { SettingsWriter } from "../storage/local/settings-store.js";
 
 export { MAX_RECOVERY_CELLS };
 
@@ -168,8 +168,8 @@ interface WorkbookRangeState {
 }
 
 interface WorkbookRecoveryLogDependencies {
-  settings: SettingsStoreLike | null;
-  getSettingsStore: () => Promise<SettingsStoreLike | null>;
+  settings: SettingsWriter | null;
+  getSettingsStore: () => Promise<SettingsWriter | null>;
   getWorkbookContext: () => Promise<WorkbookContext>;
   getDocumentInstance: () => DocumentInstanceIdentity | null;
   now: () => number;

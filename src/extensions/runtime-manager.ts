@@ -46,7 +46,6 @@ import {
 import {
   loadStoredExtensions,
   saveStoredExtensions,
-  type ExtensionSettingsStore,
   type StoredExtensionEntry,
   type StoredExtensionSource,
 } from "./store.js";
@@ -84,6 +83,7 @@ import type {
   BrowserModelRuntime,
   BrowserProviderRegistration,
 } from "../models/browser-model-runtime.js";
+import type { SettingsWriter } from "../storage/local/settings-store.js";
 
 type AnyAgentTool = AgentTool;
 
@@ -171,7 +171,7 @@ export interface ExtensionRuntimeStatus {
 }
 
 export interface ExtensionRuntimeManagerOptions {
-  settings: ExtensionSettingsStore;
+  settings: SettingsWriter;
   connectionManager: ConnectionManager;
   modelRuntime: BrowserModelRuntime;
   getActiveAgent: () => Agent | null;
@@ -185,7 +185,7 @@ export interface ExtensionRuntimeManagerOptions {
 }
 
 export class ExtensionRuntimeManager {
-  private readonly settings: ExtensionSettingsStore;
+  private readonly settings: SettingsWriter;
   private readonly connectionManager: ConnectionManager;
   private readonly modelRuntime: BrowserModelRuntime;
   private readonly getActiveAgent: () => Agent | null;

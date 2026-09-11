@@ -6,9 +6,8 @@
  */
 
 import { INTEGRATION_IDS } from "../../integrations/catalog.js";
-import type { IntegrationSettingsStore } from "../../integrations/store.js";
-import type { WebSearchConfigStore } from "../../tools/web-search-config.js";
-import type { McpConfigStore, McpServerConfig } from "../../tools/mcp-config.js";
+import type { SettingsAccess } from "../../storage/local/settings-store.js";
+import type { McpServerConfig } from "../../tools/mcp-config.js";
 import {
   getExternalToolsEnabled,
   getSessionIntegrationIds,
@@ -66,10 +65,6 @@ import { t } from "../../language/index.js";
 import type { ExtensionsHubDependencies } from "./settings-pages/dependencies.js";
 import { renderExtensionConnectionsSection } from "./extensions-hub-extension-connections.js";
 
-type SettingsStore = IntegrationSettingsStore & WebSearchConfigStore & McpConfigStore & {
-  delete?: (key: string) => Promise<void>;
-};
-
 // ── Helpers ─────────────────────────────────────────
 
 function normalizeProvider(value: string): WebSearchProvider {
@@ -78,7 +73,7 @@ function normalizeProvider(value: string): WebSearchProvider {
 }
 
 export async function readBridgeUrls(
-  settings: SettingsStore,
+  settings: SettingsAccess,
 ): Promise<{ pythonUrl: string; tmuxUrl: string }> {
   try {
     const [pythonUrl, tmuxUrl] = await Promise.all([
@@ -185,7 +180,7 @@ function createBridgeSetupCommand(command: string): HTMLDivElement {
 
 export async function renderConnectionsTab(args: {
   container: HTMLElement;
-  settings: SettingsStore;
+  settings: SettingsAccess;
   deps: ExtensionsHubDependencies;
   isBusy: () => boolean;
   runMutation: (action: () => Promise<void>, reason: "toggle" | "scope" | "external-toggle" | "config", msg?: string) => Promise<void>;
@@ -556,7 +551,7 @@ export async function renderConnectionsTab(args: {
 
 function renderMcpServerCard(
   server: McpServerConfig,
-  settings: SettingsStore,
+  settings: SettingsAccess,
   isBusy: () => boolean,
   runMutation: (action: () => Promise<void>, reason: "toggle" | "scope" | "external-toggle" | "config", msg?: string) => Promise<void>,
 ): HTMLElement {
@@ -645,7 +640,7 @@ function renderBridgeCard(args: {
   placeholder: string;
   currentUrl: string;
   hasCustomUrl: boolean;
-  settings: SettingsStore;
+  settings: SettingsAccess;
   runMutation: (action: () => Promise<void>, reason: "toggle" | "scope" | "external-toggle" | "config", msg?: string) => Promise<void>;
 }): HTMLElement {
   const card = createItemCard({
@@ -689,11 +684,7 @@ function renderBridgeCard(args: {
 
     void args.runMutation(async () => {
       if (useDefaultUrl) {
-        if (typeof args.settings.delete === "function") {
-          await args.settings.delete(args.settingKey);
-        } else {
-          await args.settings.set(args.settingKey, "");
-        }
+        await args.settings.delete(args.settingKey);
       } else {
         await args.settings.set(args.settingKey, normalizedCandidateUrl);
       }

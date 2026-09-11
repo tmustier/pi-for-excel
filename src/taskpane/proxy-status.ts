@@ -6,6 +6,7 @@
  */
 
 import { DEFAULT_PROXY_URL, normalizeProxyUrl } from "../auth/proxy-validation.js";
+import type { SettingsReader } from "../storage/local/settings-store.js";
 
 const CHECK_INTERVAL_MS = 30_000;
 const CHECK_TIMEOUT_MS = 1_500;
@@ -41,14 +42,10 @@ function dispatchProxyStateChanged(state: ProxyState): void {
   document.dispatchEvent(new CustomEvent("pi:proxy-state-changed", { detail: { state } }));
 }
 
-interface ProxySettingsReader {
-  get<T>(key: string): Promise<T | null>;
-}
-
-export async function checkProxyOnce(settings: ProxySettingsReader): Promise<ProxyState> {
+export async function checkProxyOnce(settings: SettingsReader): Promise<ProxyState> {
   let proxyUrl: string = DEFAULT_PROXY_URL;
   try {
-    const raw = await settings.get<string>("proxy.url");
+    const raw = await settings.get("proxy.url");
     const stored = typeof raw === "string" ? raw.trim() : "";
     if (stored.length > 0) {
       proxyUrl = stored;
@@ -68,7 +65,7 @@ export async function checkProxyOnce(settings: ProxySettingsReader): Promise<Pro
   return newState;
 }
 
-export function startProxyPolling(settings: ProxySettingsReader): () => void {
+export function startProxyPolling(settings: SettingsReader): () => void {
   void checkProxyOnce(settings);
 
   intervalId = setInterval(() => {

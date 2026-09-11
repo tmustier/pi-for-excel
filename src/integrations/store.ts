@@ -12,13 +12,9 @@
  */
 
 import { getDefaultEnabledIntegrationIds } from "./catalog.js";
+import type { SettingsWriter } from "../storage/local/settings-store.js";
 
 export type IntegrationScope = "session" | "workbook";
-
-export interface IntegrationSettingsStore {
-  get(key: string): Promise<unknown>;
-  set(key: string, value: unknown): Promise<void>;
-}
 
 export interface SessionIntegrationIdsOptions {
   /**
@@ -84,7 +80,7 @@ export function normalizeIntegrationIds(raw: unknown, knownIntegrationIds: reado
 }
 
 async function readScopeIntegrationIds(
-  settings: IntegrationSettingsStore,
+  settings: SettingsWriter,
   scope: IntegrationScope,
   identifier: string,
   knownIntegrationIds: readonly string[],
@@ -108,7 +104,7 @@ async function readScopeIntegrationIds(
 }
 
 async function setScopeIntegrationIds(
-  settings: IntegrationSettingsStore,
+  settings: SettingsWriter,
   scope: IntegrationScope,
   identifier: string,
   integrationIds: readonly string[],
@@ -123,7 +119,7 @@ async function setScopeIntegrationIds(
 }
 
 export async function getSessionIntegrationIds(
-  settings: IntegrationSettingsStore,
+  settings: SettingsWriter,
   sessionId: string,
   knownIntegrationIds: readonly string[],
   options?: SessionIntegrationIdsOptions,
@@ -138,7 +134,7 @@ export async function getSessionIntegrationIds(
 }
 
 export async function setSessionIntegrationIds(
-  settings: IntegrationSettingsStore,
+  settings: SettingsWriter,
   sessionId: string,
   integrationIds: readonly string[],
   knownIntegrationIds: readonly string[],
@@ -147,7 +143,7 @@ export async function setSessionIntegrationIds(
 }
 
 export async function getWorkbookIntegrationIds(
-  settings: IntegrationSettingsStore,
+  settings: SettingsWriter,
   workbookId: string,
   knownIntegrationIds: readonly string[],
 ): Promise<string[]> {
@@ -155,7 +151,7 @@ export async function getWorkbookIntegrationIds(
 }
 
 export async function setWorkbookIntegrationIds(
-  settings: IntegrationSettingsStore,
+  settings: SettingsWriter,
   workbookId: string,
   integrationIds: readonly string[],
   knownIntegrationIds: readonly string[],
@@ -164,7 +160,7 @@ export async function setWorkbookIntegrationIds(
 }
 
 export async function setIntegrationEnabledInScope(args: {
-  settings: IntegrationSettingsStore;
+  settings: SettingsWriter;
   scope: IntegrationScope;
   identifier: string;
   integrationId: string;
@@ -192,7 +188,7 @@ export async function setIntegrationEnabledInScope(args: {
 }
 
 export async function resolveConfiguredIntegrationIds(args: {
-  settings: IntegrationSettingsStore;
+  settings: SettingsWriter;
   sessionId: string;
   workbookId: string | null;
   knownIntegrationIds: readonly string[];
@@ -231,7 +227,7 @@ function parseStoredBoolean(value: unknown): boolean {
   return false;
 }
 
-export async function getExternalToolsEnabled(settings: IntegrationSettingsStore): Promise<boolean> {
+export async function getExternalToolsEnabled(settings: SettingsWriter): Promise<boolean> {
   const raw = await settings.get(EXTERNAL_TOOLS_ENABLED_SETTING_KEY);
   // Default ON so web search is available once a provider API key is configured.
   if (raw == null) return true;
@@ -239,7 +235,7 @@ export async function getExternalToolsEnabled(settings: IntegrationSettingsStore
 }
 
 export async function setExternalToolsEnabled(
-  settings: IntegrationSettingsStore,
+  settings: SettingsWriter,
   enabled: boolean,
 ): Promise<void> {
   await settings.set(EXTERNAL_TOOLS_ENABLED_SETTING_KEY, enabled ? "1" : "0");

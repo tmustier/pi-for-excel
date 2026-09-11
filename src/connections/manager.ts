@@ -2,7 +2,6 @@ import {
   loadConnectionStoreDocument,
   loadConnectionStoreDocumentForUpdate,
   saveConnectionStoreDocument,
-  type ConnectionSettingsStore,
   type StoredConnectionRecord,
 } from "./store.js";
 import type {
@@ -14,6 +13,7 @@ import type {
   ConnectionState,
   ConnectionStatus,
 } from "./types.js";
+import type { SettingsWriter } from "../storage/local/settings-store.js";
 
 interface RegisteredConnectionDefinition extends ConnectionDefinition {
   ownerId: string;
@@ -309,7 +309,7 @@ function toPublicConnectionDefinition(
 }
 
 async function mutateConnectionRecord(args: {
-  settings: ConnectionSettingsStore;
+  settings: SettingsWriter;
   connectionId: string;
   mutator: (record: StoredConnectionRecord | undefined) => StoredConnectionRecord | null;
 }): Promise<boolean> {
@@ -339,11 +339,11 @@ async function mutateConnectionRecord(args: {
 }
 
 export class ConnectionManager {
-  private readonly settings: ConnectionSettingsStore;
+  private readonly settings: SettingsWriter;
   private readonly definitions = new Map<string, RegisteredConnectionDefinition>();
   private readonly listeners = new Set<ConnectionManagerListener>();
 
-  constructor(options: { settings: ConnectionSettingsStore }) {
+  constructor(options: { settings: SettingsWriter }) {
     this.settings = options.settings;
   }
 

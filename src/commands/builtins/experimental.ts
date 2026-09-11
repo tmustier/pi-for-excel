@@ -200,7 +200,7 @@ async function defaultGetBridgeUrl(settingKey: string): Promise<string | undefin
 
   try {
     const settings = await getSettingsStore();
-    const value = await settings.get<string>(settingKey);
+    const value = await settings.get(settingKey);
     if (typeof value !== "string") return fallbackUrl;
 
     const trimmed = value.trim();

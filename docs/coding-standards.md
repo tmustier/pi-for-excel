@@ -78,6 +78,7 @@ The `check:innerhtml` script keeps raw `.innerHTML` out of application code.
 - Use bounded concurrency for unbounded/user-sized collections.
 - Keep retryable mutations idempotent or tied to stable logical identity.
 - Do not add hidden globals for time, randomness, IDs, workbook state, providers, or settings when a seam can pass the dependency explicitly.
+- Take settings as `SettingsReader` / `SettingsWriter` / `SettingsAccess` from `src/storage/local/settings-store.ts`; do not redeclare the `get`/`set`/`delete` shape locally. A read is `unknown` by contract, and the feature that owns the key parses it.
 
 ## Tests and verification
 

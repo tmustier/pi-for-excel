@@ -54,13 +54,15 @@ migrations stay explicit.
 
 ### Caller-selected `get<T>()` for persisted settings
 
-`src/storage/local/settings-store.ts` still exposes `get<T = DynamicValue>()`
-and the IndexedDB backend asserts the result to whatever the caller asked for.
-Feature-owned readers exist for compaction, proxy and several other keys
-(`tests/storage-ownership-contract.test.ts` covers them), but the generic
-accessor remains the default path.
+Done (2026-09-11): `SettingsStore.get(key)` returns `unknown` and the caller
+parses it. The 17 structural copies of that contract across features were
+replaced by `SettingsReader` / `SettingsWriter` / `SettingsAccess` exported
+from `src/storage/local/settings-store.ts`; the optional `delete?` variants and
+their `set(key, "")` fallbacks went with them.
 
-Probe: `rg -n 'get<T' src/storage/local/settings-store.ts`
+Probe: `rg -n 'get<T' src/storage/local/settings-store.ts` (expect none) and
+`rg -n 'get\(key: string\): Promise<unknown>' src` (expect the shared contract
+and the extension `StorageAPI` only).
 
 ### Guidance still describes the old policy
 

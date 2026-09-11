@@ -13,12 +13,7 @@ function isAuthOauthStoragePayloadShape(value: unknown): value is Record<string,
  */
 
 import type { OAuthCredentials } from "@earendil-works/pi-ai";
-export interface OAuthSettingsStore {
-  get(key: string): Promise<unknown>;
-  set(key: string, value: unknown): Promise<void>;
-  delete(key: string): Promise<void>;
-}
-
+import type { SettingsAccess } from "../storage/local/settings-store.js";
 export function isOAuthCredentials(value: unknown): value is OAuthCredentials {
   return (
     isAuthOauthStoragePayloadShape(value) &&
@@ -36,7 +31,7 @@ function oauthSettingsKey(providerId: string): string {
  * Load OAuth credentials from IndexedDB settings.
  */
 export async function loadOAuthCredentials(
-  settings: OAuthSettingsStore,
+  settings: SettingsAccess,
   providerId: string,
 ): Promise<OAuthCredentials | null> {
   try {
@@ -48,7 +43,7 @@ export async function loadOAuthCredentials(
 }
 
 export async function saveOAuthCredentials(
-  settings: OAuthSettingsStore,
+  settings: SettingsAccess,
   providerId: string,
   credentials: OAuthCredentials,
 ): Promise<void> {
@@ -56,7 +51,7 @@ export async function saveOAuthCredentials(
 }
 
 export async function clearOAuthCredentials(
-  settings: OAuthSettingsStore,
+  settings: SettingsAccess,
   providerId: string,
 ): Promise<void> {
   await settings.delete(oauthSettingsKey(providerId));

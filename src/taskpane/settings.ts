@@ -4,18 +4,11 @@ import {
 } from "../auth/proxy-validation.js";
 import type { SpreadsheetHostKind } from "../host/index.js";
 import type { SupportedLanguage } from "../language/index.js";
+import type { SettingsReader, SettingsWriter } from "../storage/local/settings-store.js";
 
 export const TASKPANE_LANGUAGE_SETTING_KEY = "language";
 export const TASKPANE_PROXY_ENABLED_SETTING_KEY = "proxy.enabled";
 export const TASKPANE_PROXY_URL_SETTING_KEY = "proxy.url";
-
-export interface TaskpaneSettingsStore {
-  get(key: string): Promise<unknown>;
-}
-
-interface WritableTaskpaneSettingsStore extends TaskpaneSettingsStore {
-  set(key: string, value: unknown): Promise<void>;
-}
 
 export interface TaskpaneProxySettings {
   enabled: boolean;
@@ -34,7 +27,7 @@ function parseProxyEnabled(value: unknown): boolean {
  * cannot be read. Persisted values retain their existing string format.
  */
 export async function readTaskpaneLanguage(
-  settings: TaskpaneSettingsStore,
+  settings: SettingsReader,
 ): Promise<SupportedLanguage> {
   try {
     const value = await settings.get(TASKPANE_LANGUAGE_SETTING_KEY);
@@ -53,7 +46,7 @@ export async function readTaskpaneLanguage(
  * for persisted non-boolean values.
  */
 export async function readTaskpaneProxySettings(
-  settings: TaskpaneSettingsStore,
+  settings: SettingsReader,
 ): Promise<TaskpaneProxySettings> {
   const [enabled, url] = await Promise.all([
     settings.get(TASKPANE_PROXY_ENABLED_SETTING_KEY),
@@ -67,7 +60,7 @@ export async function readTaskpaneProxySettings(
 }
 
 export async function ensureDefaultProxyUrl(
-  settings: WritableTaskpaneSettingsStore,
+  settings: SettingsWriter,
   hostKind: SpreadsheetHostKind,
 ): Promise<void> {
   try {
