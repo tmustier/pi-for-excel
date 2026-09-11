@@ -13,16 +13,20 @@ import {
   normalizeOptionalString,
   normalizeUnderline,
 } from "./conditional-format-normalization.js";
-import type { RecoveryConditionalFormatRule } from "./types.js";
+import type {
+  RecoveryConditionalFormatRule,
+  RecoveryConditionalFormatRuleOfType,
+  RecoveryConditionalFormatRuleType,
+} from "./types.js";
 
 export interface ConditionalFormatRuleCaptureContext {
   stopIfTrue?: boolean;
   appliesToAddress?: string;
 }
 
-interface ConditionalFormatRuleCaptureSuccess {
+interface ConditionalFormatRuleCaptureSuccess<T extends RecoveryConditionalFormatRuleType> {
   supported: true;
-  rule: RecoveryConditionalFormatRule;
+  rule: RecoveryConditionalFormatRuleOfType<T>;
 }
 
 interface ConditionalFormatRuleCaptureFailure {
@@ -30,18 +34,27 @@ interface ConditionalFormatRuleCaptureFailure {
   reason: string;
 }
 
-export type ConditionalFormatRuleCaptureResult =
-  | ConditionalFormatRuleCaptureSuccess
+export type ConditionalFormatRuleCaptureResult<T extends RecoveryConditionalFormatRuleType> =
+  | ConditionalFormatRuleCaptureSuccess<T>
   | ConditionalFormatRuleCaptureFailure;
 
-export interface ConditionalFormatRuleHandler {
+/**
+ * Capture and apply for one rule type. `apply` receives the rule variant for
+ * its type, so the required fields are present by construction: the codec
+ * already rejected persisted rules that lack them.
+ */
+export interface ConditionalFormatRuleHandler<T extends RecoveryConditionalFormatRuleType> {
   loadForCapture: (conditionalFormat: Excel.ConditionalFormat) => void;
   capture: (
     conditionalFormat: Excel.ConditionalFormat,
     captureContext: ConditionalFormatRuleCaptureContext,
-  ) => ConditionalFormatRuleCaptureResult;
-  apply: (range: Excel.Range, targetAddress: string, rule: RecoveryConditionalFormatRule) => void;
+  ) => ConditionalFormatRuleCaptureResult<T>;
+  apply: (range: Excel.Range, targetAddress: string, rule: RecoveryConditionalFormatRuleOfType<T>) => void;
 }
+
+export type ConditionalFormatRuleHandlers<T extends RecoveryConditionalFormatRuleType> = {
+  [K in T]: ConditionalFormatRuleHandler<K>;
+};
 
 function captureRuleFormatting(format: Excel.ConditionalRangeFormat): {
   fillColor?: string;
@@ -72,10 +85,10 @@ function captureRuleFormatting(format: Excel.ConditionalRangeFormat): {
   return formatting;
 }
 
-export function attachConditionalFormatCaptureContext(
-  rule: RecoveryConditionalFormatRule,
+export function attachConditionalFormatCaptureContext<R extends RecoveryConditionalFormatRule>(
+  rule: R,
   captureContext: ConditionalFormatRuleCaptureContext,
-): RecoveryConditionalFormatRule {
+): R {
   if (captureContext.stopIfTrue !== undefined) {
     rule.stopIfTrue = captureContext.stopIfTrue;
   }
@@ -108,7 +121,7 @@ function applyRuleFormatting(format: Excel.ConditionalRangeFormat, rule: Recover
 }
 
 type BasicConditionalFormatRuleType = Extract<
-  RecoveryConditionalFormatRule["type"],
+  RecoveryConditionalFormatRuleType,
   "custom" | "cell_value" | "text_comparison" | "top_bottom" | "preset_criteria"
 >;
 
@@ -138,10 +151,6 @@ export const BASIC_CONDITIONAL_FORMAT_RULE_HANDLERS = {
       };
     },
     apply(range, targetAddress, rule) {
-      if (typeof rule.formula !== "string") {
-        throw new Error("Conditional format checkpoint is invalid: custom rule formula is missing.");
-      }
-
       const conditionalFormat = range.conditionalFormats.add(Excel.ConditionalFormatType.custom);
       conditionalFormat.custom.rule.formula = rule.formula;
       applyRuleFormatting(conditionalFormat.custom.format, rule);
@@ -192,10 +201,6 @@ export const BASIC_CONDITIONAL_FORMAT_RULE_HANDLERS = {
       };
     },
     apply(range, targetAddress, rule) {
-      if (!rule.operator || typeof rule.formula1 !== "string") {
-        throw new Error("Conditional format checkpoint is invalid: cell value rule is incomplete.");
-      }
-
       const conditionalFormat = range.conditionalFormats.add(Excel.ConditionalFormatType.cellValue);
       const cellValueRule: Excel.ConditionalCellValueRule = {
         operator: rule.operator,
@@ -252,10 +257,6 @@ export const BASIC_CONDITIONAL_FORMAT_RULE_HANDLERS = {
       };
     },
     apply(range, targetAddress, rule) {
-      if (!rule.textOperator || typeof rule.text !== "string") {
-        throw new Error("Conditional format checkpoint is invalid: text-comparison rule is incomplete.");
-      }
-
       const conditionalFormat = range.conditionalFormats.add(Excel.ConditionalFormatType.containsText);
       const textRule: Excel.ConditionalTextComparisonRule = {
         operator: rule.textOperator,
@@ -308,10 +309,6 @@ export const BASIC_CONDITIONAL_FORMAT_RULE_HANDLERS = {
       };
     },
     apply(range, targetAddress, rule) {
-      if (!rule.topBottomType || typeof rule.rank !== "number" || !Number.isFinite(rule.rank)) {
-        throw new Error("Conditional format checkpoint is invalid: top/bottom rule is incomplete.");
-      }
-
       const conditionalFormat = range.conditionalFormats.add(Excel.ConditionalFormatType.topBottom);
       const topBottomRule: Excel.ConditionalTopBottomRule = {
         type: rule.topBottomType,
@@ -355,10 +352,6 @@ export const BASIC_CONDITIONAL_FORMAT_RULE_HANDLERS = {
       };
     },
     apply(range, targetAddress, rule) {
-      if (!rule.presetCriterion) {
-        throw new Error("Conditional format checkpoint is invalid: preset-criteria rule is incomplete.");
-      }
-
       const conditionalFormat = range.conditionalFormats.add(Excel.ConditionalFormatType.presetCriteria);
       const presetRule: Excel.ConditionalPresetCriteriaRule = {
         criterion: rule.presetCriterion,
@@ -374,4 +367,4 @@ export const BASIC_CONDITIONAL_FORMAT_RULE_HANDLERS = {
       conditionalFormat.setRanges(targetAddress);
     },
   },
-} satisfies Record<BasicConditionalFormatRuleType, ConditionalFormatRuleHandler>;
+} satisfies ConditionalFormatRuleHandlers<BasicConditionalFormatRuleType>;

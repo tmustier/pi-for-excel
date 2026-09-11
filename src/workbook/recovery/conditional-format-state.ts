@@ -5,7 +5,7 @@ import { cloneRecoveryConditionalFormatRules } from "./clone.js";
 import {
   BASIC_CONDITIONAL_FORMAT_RULE_HANDLERS,
   type ConditionalFormatRuleCaptureContext,
-  type ConditionalFormatRuleHandler,
+  type ConditionalFormatRuleHandlers,
 } from "./conditional-format-handlers-basic.js";
 import { ADVANCED_CONDITIONAL_FORMAT_RULE_HANDLERS } from "./conditional-format-handlers-advanced.js";
 import type {
@@ -29,7 +29,7 @@ interface LoadedConditionalFormatEntry {
 const CONDITIONAL_FORMAT_RULE_HANDLERS = {
   ...BASIC_CONDITIONAL_FORMAT_RULE_HANDLERS,
   ...ADVANCED_CONDITIONAL_FORMAT_RULE_HANDLERS,
-} satisfies Record<RecoveryConditionalFormatRuleType, ConditionalFormatRuleHandler>;
+} satisfies ConditionalFormatRuleHandlers<RecoveryConditionalFormatRuleType>;
 
 async function captureConditionalFormatRulesInRange(
   context: Excel.RequestContext,
@@ -107,8 +107,27 @@ function applyConditionalFormatRule(
   rule: RecoveryConditionalFormatRule,
 ): void {
   const targetAddress = resolveConditionalFormatTargetAddress(fallbackAddress, rule);
-  const handler = CONDITIONAL_FORMAT_RULE_HANDLERS[rule.type];
-  handler.apply(range, targetAddress, rule);
+  const handlers = CONDITIONAL_FORMAT_RULE_HANDLERS;
+
+  // Each case narrows `rule` to the variant its handler accepts.
+  switch (rule.type) {
+    case "custom":
+      return handlers.custom.apply(range, targetAddress, rule);
+    case "cell_value":
+      return handlers.cell_value.apply(range, targetAddress, rule);
+    case "text_comparison":
+      return handlers.text_comparison.apply(range, targetAddress, rule);
+    case "top_bottom":
+      return handlers.top_bottom.apply(range, targetAddress, rule);
+    case "preset_criteria":
+      return handlers.preset_criteria.apply(range, targetAddress, rule);
+    case "data_bar":
+      return handlers.data_bar.apply(range, targetAddress, rule);
+    case "color_scale":
+      return handlers.color_scale.apply(range, targetAddress, rule);
+    case "icon_set":
+      return handlers.icon_set.apply(range, targetAddress, rule);
+  }
 }
 
 export async function captureConditionalFormatState(address: string): Promise<RecoveryConditionalFormatCaptureResult> {
