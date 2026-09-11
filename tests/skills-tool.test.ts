@@ -4,11 +4,7 @@ import { test } from "node:test";
 import type { AgentSkillDefinition } from "../src/skills/types.ts";
 import { createSkillReadCache } from "../src/skills/read-cache.ts";
 import {
-  isSkillsErrorDetails,
-  isSkillsInstallDetails,
-  isSkillsListDetails,
-  isSkillsReadDetails,
-  isSkillsUninstallDetails,
+  decodeToolDetailsOfKind,
 } from "../src/tools/tool-details.ts";
 import { createSkillsTool } from "../src/tools/skills.ts";
 
@@ -47,13 +43,13 @@ void test("skills list renders provenance and structured list details", async ()
   assert.match(text, /Available Agent Skills \(1\)/);
   assert.match(text, /source: bundled/i);
 
-  assert.ok(isSkillsListDetails(result.details));
-  if (!isSkillsListDetails(result.details)) return;
+  const resultDetails = decodeToolDetailsOfKind(result.details, "skills_list");
+  assert.ok(resultDetails);
 
-  assert.equal(result.details.count, 1);
-  assert.equal(result.details.externalDiscoveryEnabled, false);
-  assert.deepEqual(result.details.names, ["web-search"]);
-  assert.deepEqual(result.details.entries[0], {
+  assert.equal(resultDetails.count, 1);
+  assert.equal(resultDetails.externalDiscoveryEnabled, false);
+  assert.deepEqual(resultDetails.names, ["web-search"]);
+  assert.deepEqual(resultDetails.entries[0], {
     name: "web-search",
     sourceKind: "bundled",
     location: "skills/web-search/SKILL.md",
@@ -76,16 +72,17 @@ void test("skills read uses session cache and reports cacheHit details", async (
   const first = await tool.execute("call-read-1", { action: "read", name: "web-search" });
   const second = await tool.execute("call-read-2", { action: "read", name: "web-search" });
 
-  assert.ok(isSkillsReadDetails(first.details));
-  assert.ok(isSkillsReadDetails(second.details));
-  if (!isSkillsReadDetails(first.details) || !isSkillsReadDetails(second.details)) return;
+  const firstDetails = decodeToolDetailsOfKind(first.details, "skills_read");
+  const secondDetails = decodeToolDetailsOfKind(second.details, "skills_read");
+  assert.ok(firstDetails);
+  assert.ok(secondDetails);
 
-  assert.equal(first.details.cacheHit, false);
-  assert.equal(second.details.cacheHit, true);
-  assert.equal(first.details.sourceKind, "bundled");
-  assert.equal(second.details.sourceKind, "bundled");
-  assert.equal(second.details.location, "skills/web-search/SKILL.md");
-  assert.equal(second.details.readCount, 1);
+  assert.equal(firstDetails.cacheHit, false);
+  assert.equal(secondDetails.cacheHit, true);
+  assert.equal(firstDetails.sourceKind, "bundled");
+  assert.equal(secondDetails.sourceKind, "bundled");
+  assert.equal(secondDetails.location, "skills/web-search/SKILL.md");
+  assert.equal(secondDetails.readCount, 1);
 });
 
 void test("skills read with refresh=true bypasses cache and reports refreshed details", async () => {
@@ -108,12 +105,12 @@ void test("skills read with refresh=true bypasses cache and reports refreshed de
     refresh: true,
   });
 
-  assert.ok(isSkillsReadDetails(refreshed.details));
-  if (!isSkillsReadDetails(refreshed.details)) return;
+  const refreshedDetails = decodeToolDetailsOfKind(refreshed.details, "skills_read");
+  assert.ok(refreshedDetails);
 
-  assert.equal(refreshed.details.cacheHit, false);
-  assert.equal(refreshed.details.refreshed, true);
-  assert.equal(refreshed.details.readCount, 2);
+  assert.equal(refreshedDetails.cacheHit, false);
+  assert.equal(refreshedDetails.refreshed, true);
+  assert.equal(refreshedDetails.readCount, 2);
 });
 
 void test("skills read cache is session-scoped", async () => {
@@ -133,11 +130,11 @@ void test("skills read cache is session-scoped", async () => {
   currentSession = "session-b";
   const second = await tool.execute("call-read-b", { action: "read", name: "web-search" });
 
-  assert.ok(isSkillsReadDetails(second.details));
-  if (!isSkillsReadDetails(second.details)) return;
+  const secondDetails = decodeToolDetailsOfKind(second.details, "skills_read");
+  assert.ok(secondDetails);
 
-  assert.equal(second.details.cacheHit, false);
-  assert.equal(second.details.readCount, 1);
+  assert.equal(secondDetails.cacheHit, false);
+  assert.equal(secondDetails.readCount, 1);
 });
 
 void test("skills read without name returns structured error details", async () => {
@@ -153,11 +150,11 @@ void test("skills read without name returns structured error details", async () 
   const text = result.content[0]?.type === "text" ? result.content[0].text : "";
 
   assert.match(text, /name is required/i);
-  assert.ok(isSkillsErrorDetails(result.details));
-  if (!isSkillsErrorDetails(result.details)) return;
+  const resultDetails = decodeToolDetailsOfKind(result.details, "skills_error");
+  assert.ok(resultDetails);
 
-  assert.equal(result.details.externalDiscoveryEnabled, false);
-  assert.deepEqual(result.details.availableNames, ["web-search"]);
+  assert.equal(resultDetails.externalDiscoveryEnabled, false);
+  assert.deepEqual(resultDetails.availableNames, ["web-search"]);
 });
 
 void test("skills list includes external entries when discovery is enabled", async () => {
@@ -171,12 +168,12 @@ void test("skills list includes external entries when discovery is enabled", asy
 
   const result = await tool.execute("call-list-ext", { action: "list" });
 
-  assert.ok(isSkillsListDetails(result.details));
-  if (!isSkillsListDetails(result.details)) return;
+  const resultDetails = decodeToolDetailsOfKind(result.details, "skills_list");
+  assert.ok(resultDetails);
 
-  assert.equal(result.details.externalDiscoveryEnabled, true);
-  assert.deepEqual(result.details.names, ["custom-skill", "web-search"]);
-  assert.equal(result.details.entries.find((entry) => entry.name === "custom-skill")?.sourceKind, "external");
+  assert.equal(resultDetails.externalDiscoveryEnabled, true);
+  assert.deepEqual(resultDetails.names, ["custom-skill", "web-search"]);
+  assert.equal(resultDetails.entries.find((entry) => entry.name === "custom-skill")?.sourceKind, "external");
 });
 
 void test("skills read resolves external skill when discovery is enabled", async () => {
@@ -193,11 +190,11 @@ void test("skills read resolves external skill when discovery is enabled", async
   const text = result.content[0]?.type === "text" ? result.content[0].text : "";
   assert.match(text, /Custom Skill/);
 
-  assert.ok(isSkillsReadDetails(result.details));
-  if (!isSkillsReadDetails(result.details)) return;
+  const resultDetails = decodeToolDetailsOfKind(result.details, "skills_read");
+  assert.ok(resultDetails);
 
-  assert.equal(result.details.sourceKind, "external");
-  assert.equal(result.details.location, CUSTOM_EXTERNAL_SKILL.location);
+  assert.equal(resultDetails.sourceKind, "external");
+  assert.equal(resultDetails.location, CUSTOM_EXTERNAL_SKILL.location);
 });
 
 void test("skills tool exposes no skills when activation state is unreadable", async () => {
@@ -238,20 +235,20 @@ void test("skills list/read exclude disabled skills", async () => {
 
   const listResult = await tool.execute("call-list-disabled", { action: "list" });
 
-  assert.ok(isSkillsListDetails(listResult.details));
-  if (!isSkillsListDetails(listResult.details)) return;
+  const listResultDetails = decodeToolDetailsOfKind(listResult.details, "skills_list");
+  assert.ok(listResultDetails);
 
-  assert.deepEqual(listResult.details.names, ["web-search"]);
+  assert.deepEqual(listResultDetails.names, ["web-search"]);
 
   const readResult = await tool.execute("call-read-disabled", {
     action: "read",
     name: "custom-skill",
   });
 
-  assert.ok(isSkillsErrorDetails(readResult.details));
-  if (!isSkillsErrorDetails(readResult.details)) return;
+  const readResultDetails = decodeToolDetailsOfKind(readResult.details, "skills_error");
+  assert.ok(readResultDetails);
 
-  assert.match(readResult.details.message, /Skill not found: `custom-skill`/);
+  assert.match(readResultDetails.message, /Skill not found: `custom-skill`/);
 });
 
 void test("skills read ignores stale cache entries when skill becomes disabled", async () => {
@@ -274,10 +271,10 @@ void test("skills read ignores stale cache entries when skill becomes disabled",
     name: "web-search",
   });
 
-  assert.ok(isSkillsReadDetails(firstRead.details));
-  if (!isSkillsReadDetails(firstRead.details)) return;
+  const firstReadDetails = decodeToolDetailsOfKind(firstRead.details, "skills_read");
+  assert.ok(firstReadDetails);
 
-  assert.equal(firstRead.details.cacheHit, false);
+  assert.equal(firstReadDetails.cacheHit, false);
 
   disabled = true;
 
@@ -286,10 +283,10 @@ void test("skills read ignores stale cache entries when skill becomes disabled",
     name: "web-search",
   });
 
-  assert.ok(isSkillsErrorDetails(secondRead.details));
-  if (!isSkillsErrorDetails(secondRead.details)) return;
+  const secondReadDetails = decodeToolDetailsOfKind(secondRead.details, "skills_error");
+  assert.ok(secondReadDetails);
 
-  assert.match(secondRead.details.message, /Skill not found: `web-search`/);
+  assert.match(secondReadDetails.message, /Skill not found: `web-search`/);
 });
 
 void test("skills install writes external skill and emits structured install details", async () => {
@@ -325,11 +322,11 @@ void test("skills install writes external skill and emits structured install det
   assert.equal(installedMarkdown, markdown);
   assert.equal(changedReason, "catalog");
 
-  assert.ok(isSkillsInstallDetails(result.details));
-  if (!isSkillsInstallDetails(result.details)) return;
+  const resultDetails = decodeToolDetailsOfKind(result.details, "skills_install");
+  assert.ok(resultDetails);
 
-  assert.equal(result.details.skillName, "custom-skill");
-  assert.equal(result.details.location, "skills/external/custom-skill/SKILL.md");
+  assert.equal(resultDetails.skillName, "custom-skill");
+  assert.equal(resultDetails.location, "skills/external/custom-skill/SKILL.md");
 });
 
 void test("skills install requires markdown", async () => {
@@ -344,11 +341,11 @@ void test("skills install requires markdown", async () => {
     name: "custom-skill",
   });
 
-  assert.ok(isSkillsErrorDetails(result.details));
-  if (!isSkillsErrorDetails(result.details)) return;
+  const resultDetails = decodeToolDetailsOfKind(result.details, "skills_error");
+  assert.ok(resultDetails);
 
-  assert.equal(result.details.action, "install");
-  assert.match(result.details.message, /markdown is required/i);
+  assert.equal(resultDetails.action, "install");
+  assert.match(resultDetails.message, /markdown is required/i);
 });
 
 void test("skills uninstall reports removed state and emits refresh only when removed", async () => {
@@ -369,20 +366,20 @@ void test("skills uninstall reports removed state and emits refresh only when re
     name: "custom-skill",
   });
 
-  assert.ok(isSkillsUninstallDetails(removed.details));
-  if (!isSkillsUninstallDetails(removed.details)) return;
+  const removedDetails = decodeToolDetailsOfKind(removed.details, "skills_uninstall");
+  assert.ok(removedDetails);
 
-  assert.equal(removed.details.skillName, "custom-skill");
-  assert.equal(removed.details.removed, true);
+  assert.equal(removedDetails.skillName, "custom-skill");
+  assert.equal(removedDetails.removed, true);
 
   const missing = await tool.execute("call-uninstall-no", {
     action: "uninstall",
     name: "missing-skill",
   });
 
-  assert.ok(isSkillsUninstallDetails(missing.details));
-  if (!isSkillsUninstallDetails(missing.details)) return;
+  const missingDetails = decodeToolDetailsOfKind(missing.details, "skills_uninstall");
+  assert.ok(missingDetails);
 
-  assert.equal(missing.details.removed, false);
+  assert.equal(missingDetails.removed, false);
   assert.equal(changedCount, 1);
 });

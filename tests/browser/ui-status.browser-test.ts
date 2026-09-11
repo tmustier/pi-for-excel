@@ -103,8 +103,12 @@ void test("the setup card renders the seven bridge-result states", async () => {
         const host = document.createElement("div");
         host.id = "bridge-fixture";
         document.body.appendChild(host);
-        const card = await import("/src/ui/bridge-setup-card.ts");
-        if (card.shouldShowBridgeSetupCard(details)) card.mountBridgeSetupCard(host, details);
+        const [card, { decodeToolDetails }] = await Promise.all([
+          import("/src/ui/bridge-setup-card.ts"),
+          import("/src/tools/tool-details.ts"),
+        ]);
+        const decoded = decodeToolDetails(details);
+        if (decoded && card.shouldShowBridgeSetupCard(decoded)) card.mountBridgeSetupCard(host, decoded);
       }, row.details);
       const setup = page.locator("#bridge-fixture .pi-bridge-setup");
       if (row.title === null) {

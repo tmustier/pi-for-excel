@@ -2,24 +2,30 @@
  * Workbook cell change diff helpers.
  */
 
+import { Type, type Static } from "typebox";
+
 import { cellAddress, parseCell, qualifiedAddress } from "../excel/helpers.js";
 
 const DEFAULT_SAMPLE_LIMIT = 12;
 const DEFAULT_PREVIEW_CHARS = 80;
 
-export interface WorkbookCellChange {
-  address: string;
-  beforeValue: string;
-  afterValue: string;
-  beforeFormula?: string;
-  afterFormula?: string;
-}
+export const workbookCellChangeSchema = Type.Object({
+  address: Type.String(),
+  beforeValue: Type.String(),
+  afterValue: Type.String(),
+  beforeFormula: Type.Optional(Type.String()),
+  afterFormula: Type.Optional(Type.String()),
+});
 
-export interface WorkbookCellChangeSummary {
-  changedCount: number;
-  truncated: boolean;
-  sample: WorkbookCellChange[];
-}
+export type WorkbookCellChange = Static<typeof workbookCellChangeSchema>;
+
+export const workbookCellChangeSummarySchema = Type.Object({
+  changedCount: Type.Number(),
+  truncated: Type.Boolean(),
+  sample: Type.Array(workbookCellChangeSchema),
+});
+
+export type WorkbookCellChangeSummary = Static<typeof workbookCellChangeSummarySchema>;
 
 export interface BuildWorkbookCellChangeSummaryArgs {
   sheetName: string;

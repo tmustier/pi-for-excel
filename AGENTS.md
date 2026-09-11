@@ -42,7 +42,7 @@ Notes for agents working in this repo.
 - Keep human-readable output in `result.content`.
 - Put stable machine metadata in `result.details`.
 - UI should prefer `details`, with fallback for older persisted sessions.
-- Reuse guards/types from `src/tools/tool-details.ts`.
+- Every details payload is a TypeBox schema in `src/tools/tool-details.ts` with its type as `Static<>`; add a new payload there and to `toolDetailsSchemasByKind`. The UI decodes `result.details` once with `decodeToolDetails()` and switches on `kind`; do not add per-kind `isXDetails` guards.
 
 ### Workbook identity + session restore
 - Never persist raw `Office.context.document.url`.

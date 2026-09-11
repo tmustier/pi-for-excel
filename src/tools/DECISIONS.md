@@ -116,6 +116,13 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 - **Execution policy:** classified as read/none for workbook coordinator purposes (it mutates prompt metadata, not workbook cells/structure).
 - **Rationale:** AGENTS.md-style persistent guidance without creating a separate workbook mutation path.
 
+## Tool details are schemas, decoded once at the UI seam
+- **Contract:** each `details` payload is a TypeBox schema in `src/tools/tool-details.ts`; the exported type is `Static<>` of the schema, so tools that construct the payload are checked against the same shape the UI validates at runtime.
+- **Seam:** `ToolResultMessage.details` reaches the renderer as `unknown` (older persisted sessions may carry any shape). `decodeToolDetails()` runs once per tool card and returns the `ExcelToolDetails` union or `undefined`; everything inward takes the union and switches on `kind`. A payload that fails its schema renders generically rather than partially.
+- **Extras:** schemas allow additional properties so cross-cutting metadata (`outputTruncation`) can be merged into any payload without each schema knowing about it.
+- **Cell values:** `read_range_csv.values` and `trace_dependencies` node values stay `unknown` until the host adapters type `range.values`; that is the host-boundary item in `docs/clean-base-followups.md`.
+- **No compiled validators:** `Value.Check` only. `typebox/compile` generates code at runtime, which the Office WebView CSP forbids. A decode costs roughly 10–20 µs.
+
 ## Global tool output truncation (Pi-style guardrail)
 - **Scope:** applied as a runtime wrapper around all registered tools (core + integrations + extensions) before tool results are persisted to message history.
 - **Limits:** **50KB** UTF-8 bytes and **2000 lines** (whichever is hit first), aligned with pi-coding-agent defaults. For models with context windows **below 128k**, limits scale linearly with the window (floors: **8KB** / **200 lines**) — resolved per execution from the active model via `src/context/window-budgets.ts` (#566).

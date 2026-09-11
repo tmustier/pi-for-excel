@@ -3,7 +3,7 @@ import { test } from "node:test";
 
 import { createAllTools } from "../src/tools/index.ts";
 import { applyExperimentalToolGates } from "../src/tools/experimental-tool-gates.ts";
-import { isTmuxBridgeDetails } from "../src/tools/tool-details.ts";
+import { decodeToolDetailsOfKind } from "../src/tools/tool-details.ts";
 
 async function runtimeTools(dependencies: Parameters<typeof applyExperimentalToolGates>[1] = {}) {
   return applyExperimentalToolGates(createAllTools({ hostKind: "office" }), dependencies);
@@ -25,13 +25,11 @@ void test("the model-visible tmux tool re-checks bridge availability for each ex
   const tmux = findTool(tools, "tmux");
 
   const unreachable = await tmux.execute("call-unreachable", { action: "list_sessions" });
-  assert.ok(isTmuxBridgeDetails(unreachable.details));
-  assert.equal(unreachable.details.gateReason, "bridge_unreachable");
+  assert.equal(decodeToolDetailsOfKind(unreachable.details, "tmux_bridge")?.gateReason, "bridge_unreachable");
 
   bridgeUrl = undefined;
   const missing = await tmux.execute("call-missing", { action: "list_sessions" });
-  assert.ok(isTmuxBridgeDetails(missing.details));
-  assert.equal(missing.details.gateReason, "missing_bridge_url");
+  assert.equal(decodeToolDetailsOfKind(missing.details, "tmux_bridge")?.gateReason, "missing_bridge_url");
 });
 
 void test("the model-visible files and Office.js tools remain available without feature flags", async () => {

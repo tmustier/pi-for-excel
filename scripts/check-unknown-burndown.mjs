@@ -12,7 +12,7 @@
  */
 import { spawnSync } from "node:child_process";
 
-const BASELINE = 439; // 2026-09-11: 373 no-unknown-parameters, 66 no-unknown-returns, 0 no-unknown-type-aliases
+const BASELINE = 430; // 2026-09-11: 364 no-unknown-parameters, 66 no-unknown-returns, 0 no-unknown-type-aliases
 
 const result = spawnSync(
   "npx",

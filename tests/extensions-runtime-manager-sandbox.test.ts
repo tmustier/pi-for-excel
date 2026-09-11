@@ -19,7 +19,7 @@ import {
 import { BrowserModelRuntime } from "../src/models/browser-model-runtime.ts";
 import type { ProviderKeysStoreLike } from "../src/storage/local/provider-credentials-store.ts";
 import { failOnUnexpectedStream } from "./fail-on-unexpected-stream.ts";
-import { isConnectionToolErrorDetails } from "../src/tools/tool-details.ts";
+import { decodeToolDetailsOfKind } from "../src/tools/tool-details.ts";
 import { withConnectionPreflight } from "../src/tools/with-connection-preflight.ts";
 import {
   SANDBOX_BOOTSTRAP_KIND,
@@ -1298,11 +1298,10 @@ void test("connection preflight blocks missing connections before tool execution
   const result = await tools[0].execute("tool-call-1", { company: "Acme" });
 
   assert.equal(executed, false);
-  assert.equal(isConnectionToolErrorDetails(result.details), true);
-  if (isConnectionToolErrorDetails(result.details)) {
-    assert.equal(result.details.errorCode, "missing_connection");
-    assert.equal(result.details.connectionId, "ext.apollo.apollo");
-  }
+  const connectionError = decodeToolDetailsOfKind(result.details, "connection_error");
+  assert.ok(connectionError);
+  assert.equal(connectionError.errorCode, "missing_connection");
+  assert.equal(connectionError.connectionId, "ext.apollo.apollo");
 });
 
 void test("connection preflight maps runtime auth failures to connection_auth_failed", async () => {
@@ -1340,12 +1339,10 @@ void test("connection preflight maps runtime auth failures to connection_auth_fa
   });
 
   const result = await tools[0].execute("tool-call-2", { company: "Acme" });
-  assert.equal(isConnectionToolErrorDetails(result.details), true);
-
-  if (isConnectionToolErrorDetails(result.details)) {
-    assert.equal(result.details.errorCode, "connection_auth_failed");
-    assert.ok(!result.details.reason?.includes("top-secret-api-key"));
-  }
+  const connectionError = decodeToolDetailsOfKind(result.details, "connection_error");
+  assert.ok(connectionError);
+  assert.equal(connectionError.errorCode, "connection_auth_failed");
+  assert.ok(!connectionError.reason?.includes("top-secret-api-key"));
 
   const text = result.content[0]?.type === "text" ? result.content[0].text : "";
   assert.ok(!text.includes("top-secret-api-key"));
@@ -1392,13 +1389,11 @@ void test("connection preflight still redacts auth failures when status persiste
   });
 
   const result = await tools[0].execute("tool-call-2b", { company: "Acme" });
-  assert.equal(isConnectionToolErrorDetails(result.details), true);
-
-  if (isConnectionToolErrorDetails(result.details)) {
-    assert.equal(result.details.errorCode, "connection_auth_failed");
-    assert.equal(result.details.status, "error");
-    assert.ok(!result.details.reason?.includes("top-secret-api-key"));
-  }
+  const connectionError = decodeToolDetailsOfKind(result.details, "connection_error");
+  assert.ok(connectionError);
+  assert.equal(connectionError.errorCode, "connection_auth_failed");
+  assert.equal(connectionError.status, "error");
+  assert.ok(!connectionError.reason?.includes("top-secret-api-key"));
 
   const text = result.content[0]?.type === "text" ? result.content[0].text : "";
   assert.ok(!text.includes("top-secret-api-key"));
@@ -1453,13 +1448,11 @@ void test("connection preflight attributes auth failures to the matching require
   });
 
   const result = await tools[0].execute("tool-call-3", { dryRun: false });
-  assert.equal(isConnectionToolErrorDetails(result.details), true);
-
-  if (isConnectionToolErrorDetails(result.details)) {
-    assert.equal(result.details.errorCode, "connection_auth_failed");
-    assert.equal(result.details.connectionId, "ext.multi.billing");
-    assert.ok(!result.details.reason?.includes("billing-key"));
-  }
+  const connectionError = decodeToolDetailsOfKind(result.details, "connection_error");
+  assert.ok(connectionError);
+  assert.equal(connectionError.errorCode, "connection_auth_failed");
+  assert.equal(connectionError.connectionId, "ext.multi.billing");
+  assert.ok(!connectionError.reason?.includes("billing-key"));
 
   const crmState = await connectionManager.getState("ext.multi.crm");
   const billingState = await connectionManager.getState("ext.multi.billing");
