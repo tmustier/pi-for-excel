@@ -89,22 +89,10 @@ function defaultCreateId(): string {
   return `change_${Date.now().toString(36)}_${randomChunk}`;
 }
 
-function isSettingsStoreLike(value: unknown): value is SettingsAccess {
-  if (!isAuditWorkbookChangeAuditPayloadShape(value)) return false;
-
-  return (
-    typeof value.get === "function" &&
-    typeof value.set === "function" &&
-    typeof value.delete === "function"
-  );
-}
-
 async function defaultGetSettingsStore(): Promise<SettingsAccess | null> {
   try {
     const storageModule = await import("../storage/local/app-storage.js");
-    const appStorage = storageModule.getAppStorage();
-    const settings = isAuditWorkbookChangeAuditPayloadShape(appStorage) ? appStorage.settings : null;
-    return isSettingsStoreLike(settings) ? settings : null;
+    return storageModule.getAppStorage().settings;
   } catch {
     return null;
   }

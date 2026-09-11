@@ -1,7 +1,3 @@
-function isFilesWorkspacePayloadShape(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 /**
  * Files workspace manager.
  *
@@ -20,6 +16,15 @@ import { resolveSafeBlobUrlMimeType } from "./blob-url-safety.js";
 import { inferMimeType, isTextMimeType } from "./mime.js";
 import { getWorkspaceBaseName, normalizeWorkspacePath } from "./path.js";
 import {
+  FilesWorkspaceAuditEntrySchema,
+  NormalizedWorkspacePathSchema,
+  type PersistedAuditTrail,
+  PersistedAuditTrailSchema,
+  type PersistedWorkspaceMetadata,
+  PersistedWorkspaceMetadataSchema,
+  WorkspaceFileWorkbookTagSchema,
+} from "./persisted-schemas.js";
+import {
   FILES_WORKSPACE_CHANGED_EVENT,
   type FilesWorkspaceAuditAction,
   type FilesWorkspaceAuditActor,
@@ -34,6 +39,7 @@ import {
   type WorkspaceSnapshot,
 } from "./types.js";
 import type { SettingsAccess } from "../storage/local/settings-store.js";
+import { Value } from "typebox/value";
 
 const NATIVE_HANDLE_SETTING_KEY = "files.workspace.nativeHandle.v1";
 const METADATA_SETTING_KEY = "files.workspace.metadata.v1";
@@ -77,38 +83,22 @@ interface DirectoryPermissionHandle {
   requestPermission(descriptor?: FileSystemHandlePermissionDescriptor): Promise<PermissionState>;
 }
 
-interface PersistedWorkspaceMetadata {
-  version: 1;
-  byPath: Record<string, WorkspaceFileWorkbookTag>;
-}
-
-interface PersistedAuditTrail {
-  version: 1;
-  entries: FilesWorkspaceAuditEntry[];
-}
-
 function isDirectoryPickerHost(value: unknown): value is DirectoryPickerHost {
-  if (!isFilesWorkspacePayloadShape(value)) return false;
-  return typeof value.showDirectoryPicker === "function";
+  return typeof value === "object" && value !== null
+    && "showDirectoryPicker" in value && typeof value.showDirectoryPicker === "function";
 }
 
 function isDirectoryHandle(value: unknown): value is FileSystemDirectoryHandle {
-  if (!isFilesWorkspacePayloadShape(value)) return false;
-  return (
-    value.kind === "directory" &&
-    typeof value.getDirectoryHandle === "function" &&
-    typeof value.getFileHandle === "function" &&
-    typeof value.queryPermission === "function"
-  );
+  return typeof value === "object" && value !== null
+    && "kind" in value && value.kind === "directory"
+    && "getDirectoryHandle" in value && typeof value.getDirectoryHandle === "function"
+    && "getFileHandle" in value && typeof value.getFileHandle === "function"
+    && "queryPermission" in value && typeof value.queryPermission === "function";
 }
 
-function isDirectoryPermissionHandle(value: unknown): value is DirectoryPermissionHandle {
-  if (!isFilesWorkspacePayloadShape(value)) return false;
-
-  return (
-    typeof value.queryPermission === "function" &&
-    typeof value.requestPermission === "function"
-  );
+function isDirectoryPermissionHandle(value: FileSystemDirectoryHandle): value is FileSystemDirectoryHandle & DirectoryPermissionHandle {
+  return "queryPermission" in value && typeof value.queryPermission === "function"
+    && "requestPermission" in value && typeof value.requestPermission === "function";
 }
 
 function dispatchWorkspaceChanged(detail: FilesWorkspaceChangedDetail): void {
@@ -147,14 +137,6 @@ function tryOpenDownloadWindow(url: string, pendingWindow: Window | null): boole
   return window.open(url, "_blank") !== null;
 }
 
-function isNonEmptyString(value: unknown): value is string {
-  return typeof value === "string" && value.trim().length > 0;
-}
-
-function isFiniteNumber(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value);
-}
-
 function isMissingWorkspaceFileError(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
 
@@ -179,38 +161,6 @@ function isMissingWorkspaceFileError(error: unknown): boolean {
   return /\b(can\s?not|cannot|can't)\s+be\s+found\b/u.test(message);
 }
 
-function isWorkspaceBackendKind(value: unknown): value is WorkspaceBackendKind {
-  return value === "native-directory" || value === "opfs" || value === "memory";
-}
-
-function isFilesWorkspaceAuditActor(value: unknown): value is FilesWorkspaceAuditActor {
-  return value === "assistant" || value === "user" || value === "system";
-}
-
-function isFilesWorkspaceAuditAction(value: unknown): value is FilesWorkspaceAuditAction {
-  return (
-    value === "list" ||
-    value === "read" ||
-    value === "write" ||
-    value === "delete" ||
-    value === "rename" ||
-    value === "import" ||
-    value === "connect_native" ||
-    value === "disconnect_native" ||
-    value === "clear_audit"
-  );
-}
-
-function sanitizeOptionalPath(value: unknown): string | undefined {
-  if (!isNonEmptyString(value)) return undefined;
-
-  try {
-    return normalizeWorkspacePath(value);
-  } catch {
-    return undefined;
-  }
-}
-
 function requestedLocationArgs(
   locationKind: WorkspaceFileLocationKind | undefined,
 ): { requestedLocationKind?: WorkspaceFileLocationKind } {
@@ -221,101 +171,31 @@ function requestedLocationArgs(
   return { requestedLocationKind: locationKind };
 }
 
-function parseWorkbookTag(value: unknown): WorkspaceFileWorkbookTag | null {
-  if (!isFilesWorkspacePayloadShape(value)) return null;
-
-  const workbookId = typeof value.workbookId === "string"
-    ? value.workbookId.trim()
-    : "";
-  if (workbookId.length === 0) return null;
-
-  const workbookLabel = typeof value.workbookLabel === "string"
-    ? value.workbookLabel.trim()
-    : "";
-  if (workbookLabel.length === 0) return null;
-
-  const taggedAt = isFiniteNumber(value.taggedAt)
-    ? value.taggedAt
-    : Date.now();
-
-  return {
-    workbookId,
-    workbookLabel,
-    taggedAt,
-  };
-}
-
 function parsePersistedMetadata(value: unknown): Map<string, WorkspaceFileWorkbookTag> {
   const byPath = new Map<string, WorkspaceFileWorkbookTag>();
-  if (!isFilesWorkspacePayloadShape(value)) return byPath;
+  if (!Value.Check(PersistedWorkspaceMetadataSchema, value)) return byPath;
 
-  const rawByPath = value.byPath;
-  if (!isFilesWorkspacePayloadShape(rawByPath)) return byPath;
-
-  for (const [rawPath, rawTag] of Object.entries(rawByPath)) {
-    const normalizedPath = sanitizeOptionalPath(rawPath);
-    if (!normalizedPath) continue;
-
-    const tag = parseWorkbookTag(rawTag);
-    if (!tag) continue;
-
-    byPath.set(normalizedPath, tag);
+  for (const [path, tag] of Object.entries(value.byPath)) {
+    if (Value.Check(NormalizedWorkspacePathSchema, path) && Value.Check(WorkspaceFileWorkbookTagSchema, tag)) {
+      byPath.set(path, tag);
+    }
   }
 
   return byPath;
 }
 
-function parseAuditEntry(value: unknown): FilesWorkspaceAuditEntry | null {
-  if (!isFilesWorkspacePayloadShape(value)) return null;
-
-  if (!isFilesWorkspaceAuditAction(value.action)) return null;
-  if (!isFilesWorkspaceAuditActor(value.actor)) return null;
-  if (!isWorkspaceBackendKind(value.backend)) return null;
-  if (!isNonEmptyString(value.source)) return null;
-
-  const at = isFiniteNumber(value.at) ? value.at : Date.now();
-  const id = isNonEmptyString(value.id) ? value.id : createAuditEntryId();
-
-  const path = sanitizeOptionalPath(value.path);
-  const fromPath = sanitizeOptionalPath(value.fromPath);
-  const toPath = sanitizeOptionalPath(value.toPath);
-
-  const bytes = isFiniteNumber(value.bytes) ? value.bytes : undefined;
-  const workbookId = isNonEmptyString(value.workbookId) ? value.workbookId.trim() : undefined;
-  const workbookLabel = isNonEmptyString(value.workbookLabel) ? value.workbookLabel.trim() : undefined;
-
-  const entry: FilesWorkspaceAuditEntry = {
-    id,
-    at,
-    action: value.action,
-    actor: value.actor,
-    source: value.source.trim(),
-    backend: value.backend,
-  };
-
-  if (path !== undefined) entry.path = path;
-  if (fromPath !== undefined) entry.fromPath = fromPath;
-  if (toPath !== undefined) entry.toPath = toPath;
-  if (bytes !== undefined) entry.bytes = bytes;
-  if (workbookId !== undefined) entry.workbookId = workbookId;
-  if (workbookLabel !== undefined) entry.workbookLabel = workbookLabel;
-
-  return entry;
-}
-
 function parsePersistedAuditTrail(value: unknown): FilesWorkspaceAuditEntry[] {
-  if (!isFilesWorkspacePayloadShape(value)) return [];
+  if (!Value.Check(PersistedAuditTrailSchema, value)) return [];
 
-  const entriesRaw = value.entries;
-  if (!Array.isArray(entriesRaw)) return [];
-
-  const parsedEntries: FilesWorkspaceAuditEntry[] = [];
-  for (const entryRaw of entriesRaw) {
-    const parsed = parseAuditEntry(entryRaw);
-    if (parsed) parsedEntries.push(parsed);
+  const entries: FilesWorkspaceAuditEntry[] = [];
+  for (const entry of value.entries) {
+    if (!Value.Check(FilesWorkspaceAuditEntrySchema, entry)) continue;
+    // Clean only removes properties the schema does not declare, so a value
+    // that passed the check is still an entry afterwards.
+    entries.push(Value.Clean(FilesWorkspaceAuditEntrySchema, entry) as FilesWorkspaceAuditEntry);
   }
 
-  return parsedEntries
+  return entries
     .sort((a, b) => b.at - a.at)
     .slice(0, MAX_AUDIT_ENTRIES);
 }
@@ -333,22 +213,10 @@ function createAuditEntryId(): string {
   return `audit_${Date.now().toString(36)}_${randomChunk}`;
 }
 
-function isSettingsStoreLike(value: unknown): value is SettingsAccess {
-  if (!isFilesWorkspacePayloadShape(value)) return false;
-
-  return (
-    typeof value.get === "function" &&
-    typeof value.set === "function" &&
-    typeof value.delete === "function"
-  );
-}
-
 async function getSettingsStore(): Promise<SettingsAccess | null> {
   try {
     const storageModule = await import("../storage/local/app-storage.js");
-    const appStorage = storageModule.getAppStorage();
-    const settings = isFilesWorkspacePayloadShape(appStorage) ? appStorage.settings : null;
-    return isSettingsStoreLike(settings) ? settings : null;
+    return storageModule.getAppStorage().settings;
   } catch {
     return null;
   }

@@ -1,20 +1,25 @@
 /**
  * Workspace file subsystem shared types.
+ *
+ * The persisted records (workbook tags, audit entries) and their enums are
+ * `Static<>` of the schemas in `./persisted-schemas.ts`.
  */
 
-export type WorkspaceBackendKind = "native-directory" | "opfs" | "memory";
+import type { WorkspaceBackendKind, WorkspaceFileWorkbookTag } from "./persisted-schemas.js";
+
+export type {
+  FilesWorkspaceAuditAction,
+  FilesWorkspaceAuditActor,
+  FilesWorkspaceAuditEntry,
+  WorkspaceBackendKind,
+  WorkspaceFileWorkbookTag,
+} from "./persisted-schemas.js";
 
 export type WorkspaceFileKind = "text" | "binary";
 
 export type WorkspaceFileSourceKind = "workspace" | "builtin-doc";
 
 export type WorkspaceFileLocationKind = "workspace" | "native-directory" | "builtin-doc";
-
-export interface WorkspaceFileWorkbookTag {
-  workbookId: string;
-  workbookLabel: string;
-  taggedAt: number;
-}
 
 export interface WorkspaceFileEntry {
   path: string;
@@ -47,34 +52,6 @@ export interface WorkspaceSnapshot {
   backend: WorkspaceBackendStatus;
   files: WorkspaceFileEntry[];
   signature: string;
-}
-
-export type FilesWorkspaceAuditActor = "assistant" | "user" | "system";
-
-export type FilesWorkspaceAuditAction =
-  | "list"
-  | "read"
-  | "write"
-  | "delete"
-  | "rename"
-  | "import"
-  | "connect_native"
-  | "disconnect_native"
-  | "clear_audit";
-
-export interface FilesWorkspaceAuditEntry {
-  id: string;
-  at: number;
-  action: FilesWorkspaceAuditAction;
-  actor: FilesWorkspaceAuditActor;
-  source: string;
-  backend: WorkspaceBackendKind;
-  path?: string;
-  fromPath?: string;
-  toPath?: string;
-  bytes?: number;
-  workbookId?: string;
-  workbookLabel?: string;
 }
 
 export const FILES_WORKSPACE_CHANGED_EVENT = "pi:files-workspace-changed";

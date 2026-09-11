@@ -50,6 +50,21 @@ Suggested order from here: persisted DTOs (largest, and it removes `get<T>`);
 then extensions and bridge; then errors; then host. Lower the ratchet baseline
 with each.
 
+Persisted DTOs done so far: tool `details` (`src/tools/tool-details.ts`),
+recovery snapshots (`src/workbook/recovery/schemas.ts`), files-workspace
+metadata and audit trail (`src/files/persisted-schemas.ts`, contract test
+`tests/files-workspace-persisted.test.ts`). Each follows the same policy: the
+module is the only writer, so an entry that fails its schema is dropped, not
+repaired; undeclared properties are stripped on load.
+
+Not converted on purpose: `src/conventions/store.ts`. Its normalizers are the
+contract (`rgb(...)` and `#fff` colours are rewritten to `#RRGGBB`, strings
+trimmed, out-of-range numbers dropped field by field) and
+`tests/conventions-store.test.ts` pins that policy. A schema would either
+replace field-level repair with section-level drop, which loses user
+conventions over one bad colour, or restate the same normalizers behind a
+codec. The `unknown` parameters there are the seam.
+
 Constraints from the plan that still apply: no runtime code generation (Office
 WebView CSP); schema strictness must not discard recoverable persisted data, so
 migrations stay explicit.

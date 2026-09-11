@@ -1,7 +1,3 @@
-function isWorkbookRecoveryLogStorePayloadShape(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 /**
  * Persistence helpers for workbook recovery snapshots.
  */
@@ -15,21 +11,10 @@ import type { SettingsWriter } from "../../storage/local/settings-store.js";
 
 export const RECOVERY_SETTING_KEY = "workbook.recovery-snapshots.v1";
 
-function isSettingsStoreLike(value: unknown): value is SettingsWriter {
-  if (!isWorkbookRecoveryLogStorePayloadShape(value)) return false;
-
-  return (
-    typeof value.get === "function" &&
-    typeof value.set === "function"
-  );
-}
-
 export async function defaultGetSettingsStore(): Promise<SettingsWriter | null> {
   try {
     const storageModule = await import("../../storage/local/app-storage.js");
-    const appStorage = storageModule.getAppStorage();
-    const settings = isWorkbookRecoveryLogStorePayloadShape(appStorage) ? appStorage.settings : null;
-    return isSettingsStoreLike(settings) ? settings : null;
+    return storageModule.getAppStorage().settings;
   } catch {
     return null;
   }
