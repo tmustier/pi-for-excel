@@ -1,6 +1,9 @@
 /** Shared helpers and types for structure-state capture/apply. */
 
+import { Value } from "typebox/value";
+
 import { gridStats } from "./grid.js";
+import { RecoverySheetVisibilitySchema } from "./schemas.js";
 import type {
   RecoveryModifyStructureState,
   RecoverySheetVisibility,
@@ -54,7 +57,7 @@ export type StructureValueDataCaptureResult =
   };
 
 export function isRecoverySheetVisibility(value: unknown): value is RecoverySheetVisibility {
-  return value === "Visible" || value === "Hidden" || value === "VeryHidden";
+  return Value.Check(RecoverySheetVisibilitySchema, value);
 }
 
 export function normalizePositiveInteger(value: number): number | null {

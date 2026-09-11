@@ -2,18 +2,15 @@
 
 import {
   attachConditionalFormatCaptureContext,
-  type ConditionalFormatRuleHandler,
+  type ConditionalFormatRuleHandlers,
 } from "./conditional-format-handlers-basic.js";
 import {
   captureColorScaleCriterion,
   captureDataBarRule,
   captureIconCriterion,
-  isRecoveryConditionalColorScaleState,
   isRecoveryConditionalDataBarAxisFormat,
   isRecoveryConditionalDataBarDirection,
-  isRecoveryConditionalDataBarState,
   isRecoveryConditionalIconSet,
-  isRecoveryConditionalIconSetState,
   normalizeOptionalBoolean,
   normalizeOptionalString,
   toColorScaleCriterion,
@@ -22,11 +19,14 @@ import {
 } from "./conditional-format-normalization.js";
 import type {
   RecoveryConditionalColorScaleCriterion,
-  RecoveryConditionalFormatRule,
+  RecoveryConditionalColorScaleState,
+  RecoveryConditionalDataBarState,
+  RecoveryConditionalFormatRuleType,
+  RecoveryConditionalIconCriterion,
 } from "./types.js";
 
 type AdvancedConditionalFormatRuleType = Extract<
-  RecoveryConditionalFormatRule["type"],
+  RecoveryConditionalFormatRuleType,
   "data_bar" | "color_scale" | "icon_set"
 >;
 
@@ -120,7 +120,7 @@ export const ADVANCED_CONDITIONAL_FORMAT_RULE_HANDLERS = {
         };
       }
 
-      const dataBarState: NonNullable<RecoveryConditionalFormatRule["dataBar"]> = {
+      const dataBarState: RecoveryConditionalDataBarState = {
         axisFormat,
         barDirection,
         showDataBarOnly,
@@ -155,10 +155,6 @@ export const ADVANCED_CONDITIONAL_FORMAT_RULE_HANDLERS = {
       };
     },
     apply(range, targetAddress, rule) {
-      if (!isRecoveryConditionalDataBarState(rule.dataBar)) {
-        throw new Error("Conditional format checkpoint is invalid: data-bar rule is incomplete.");
-      }
-
       const conditionalFormat = range.conditionalFormats.add(Excel.ConditionalFormatType.dataBar);
       const state = rule.dataBar;
       const dataBar = conditionalFormat.dataBar;
@@ -230,7 +226,7 @@ export const ADVANCED_CONDITIONAL_FORMAT_RULE_HANDLERS = {
         midpoint = capturedMidpoint;
       }
 
-      const colorScale: NonNullable<RecoveryConditionalFormatRule["colorScale"]> = {
+      const colorScale: RecoveryConditionalColorScaleState = {
         minimum,
         maximum,
       };
@@ -247,10 +243,6 @@ export const ADVANCED_CONDITIONAL_FORMAT_RULE_HANDLERS = {
       };
     },
     apply(range, targetAddress, rule) {
-      if (!isRecoveryConditionalColorScaleState(rule.colorScale)) {
-        throw new Error("Conditional format checkpoint is invalid: color-scale rule is incomplete.");
-      }
-
       const conditionalFormat = range.conditionalFormats.add(Excel.ConditionalFormatType.colorScale);
       const state = rule.colorScale;
       const criteria: Excel.ConditionalColorScaleCriteria = {
@@ -309,7 +301,7 @@ export const ADVANCED_CONDITIONAL_FORMAT_RULE_HANDLERS = {
         };
       }
 
-      const criteria: NonNullable<RecoveryConditionalFormatRule["iconSet"]>["criteria"] = [];
+      const criteria: RecoveryConditionalIconCriterion[] = [];
       for (const criterion of criteriaRaw) {
         const captured = captureIconCriterion(criterion);
         if (!captured) {
@@ -336,10 +328,6 @@ export const ADVANCED_CONDITIONAL_FORMAT_RULE_HANDLERS = {
       };
     },
     apply(range, targetAddress, rule) {
-      if (!isRecoveryConditionalIconSetState(rule.iconSet)) {
-        throw new Error("Conditional format checkpoint is invalid: icon-set rule is incomplete.");
-      }
-
       const conditionalFormat = range.conditionalFormats.add(Excel.ConditionalFormatType.iconSet);
       const state = rule.iconSet;
       conditionalFormat.iconSet.style = state.style;
@@ -354,4 +342,4 @@ export const ADVANCED_CONDITIONAL_FORMAT_RULE_HANDLERS = {
       conditionalFormat.setRanges(targetAddress);
     },
   },
-} satisfies Record<AdvancedConditionalFormatRuleType, ConditionalFormatRuleHandler>;
+} satisfies ConditionalFormatRuleHandlers<AdvancedConditionalFormatRuleType>;

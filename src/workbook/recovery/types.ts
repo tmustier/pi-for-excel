@@ -28,6 +28,7 @@ export type {
   RecoveryConditionalDataBarState,
   RecoveryConditionalFormatCaptureResult,
   RecoveryConditionalFormatRule,
+  RecoveryConditionalFormatRuleOfType,
   RecoveryConditionalFormatRuleType,
   RecoveryConditionalIcon,
   RecoveryConditionalIconCriterion,

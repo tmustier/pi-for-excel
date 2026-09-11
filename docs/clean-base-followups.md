@@ -30,15 +30,15 @@ Still to do: parse boundary values into domain types so the count falls.
 Probe:
 
 ```bash
-npm run check:unknown-burndown                                                  # 461 at the alias deletion; 430 after settings contract + tool-details
-rg -c '^(export )?function is\w+\(\w+: unknown' src | awk -F: '{s+=$2} END{print s}'  # 233 hand-written guards; 179 after tool-details
+npm run check:unknown-burndown                                                  # 461 at the alias deletion; 430 after settings contract + tool-details; 425 after recovery
+rg -c '^(export )?function is\w+\(\w+: unknown' src | awk -F: '{s+=$2} END{print s}'  # 233 hand-written guards; 179 after tool-details; 124 after recovery (2 are schema refinements)
 ```
 
 Where the uses are, and what proper typing means for each:
 
 | Category | Approx. uses | Target |
 | --- | ---: | --- |
-| Hand-written guard functions (`isOptionalString(value: unknown): value is ...`), concentrated in `src/workbook/recovery/*`, `src/files/workspace.ts`, `src/conventions/store.ts` (`src/tools/tool-details.ts` done 2026-09-10: 54 guards → schemas, `decodeToolDetails` at the renderer seam) | 630 → ~500 | One TypeBox schema per DTO, `Static<>` for the type, one `decode(schema, raw)` helper at the boundary. Delete the guards; do not rename them. |
+| Hand-written guard functions (`isOptionalString(value: unknown): value is ...`), now mostly `src/files/workspace.ts`, `src/conventions/store.ts` and Office.js host-value normalisers (`src/tools/tool-details.ts` done 2026-09-10: 54 guards → schemas, `decodeToolDetails` at the renderer seam; `src/workbook/recovery/*` persisted states done 2026-09-11: `recovery/schemas.ts`, `guards.ts` deleted, codec decodes one `PersistedWorkbookRecoverySnapshotSchema` union) | 630 → ~400 | One TypeBox schema per DTO, `Static<>` for the type, one `decode(schema, raw)` helper at the boundary. Delete the guards; do not rename them. |
 | `DynamicObject` shape guards | 115 | Falls out of the schema work. |
 | Extension sandbox and bridge payloads | 90 | `JsonValue` (`src/utils/json.ts`) where the protocol is JSON; TypeBox for structured messages. |
 | UI rendering of tool `details` | 90 | Done 2026-09-10: `src/ui/tool-renderers.ts`, `bridge-setup-card.ts` and `web-search-setup-card.ts` take `ExcelToolDetails` and switch on `kind`. |
