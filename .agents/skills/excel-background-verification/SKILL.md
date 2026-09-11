@@ -67,6 +67,7 @@ Everything below has looked like a foreground-only step and was worked around in
 | AppleScript `save workbook as` returns `Parameter error (-50)` | Path built from `POSIX path of (path to home folder)` | Pass a literal absolute path string, inside the Excel container |
 | Pane cannot be reloaded after switching the Vite worktree | The document auto-open fires once per process | `Close Pi for Excel` then `Open Pi` through `computer_use` |
 | Persisted state cannot be checked without trusting the pane | It can | `read-taskpane-setting.py <key>` decodes the record from WebKit's IndexedDB |
+| `computer_use` returns `codex app-server exited before returning a response` on every call | The tool's own server is down; Excel is fine | Read the tree with `scripts/axdump.swift` (below); pressing buttons waits for the tool to come back |
 
 Opening a workbook does not activate Excel: both `open -g -a "Microsoft Excel" <file>` and `osascript -e 'tell application "Microsoft Excel" to open POSIX file "…"'` leave the frontmost app unchanged.
 
@@ -134,6 +135,16 @@ python3 .agents/skills/excel-background-verification/scripts/read-taskpane-setti
 It copies the database and its WAL and decodes one record to JSON, so a before/after diff shows exactly which entries a change dropped, kept or rewrote.
 
 Rendered tool cards are visible in the pane's accessibility tree (`HTML content` under the `Pi for Excel` container), which is how to assert diff tables, trees and images. The dump truncates on long chats; scroll the `HTML content` element with `sky.scroll` or start a fresh chat with `submitInput` `{"text":"/new"}`. Slash commands such as `/new` and `/history` go through the real composer with `submitInput`; `submitPrompt` sends text to the model.
+
+When `computer_use` is unavailable, the same tree is readable without it. System Events stops at the web area, so use the `AXUIElement` walker:
+
+```bash
+swiftc -O -o /tmp/axdump .agents/skills/excel-background-verification/scripts/axdump.swift
+/tmp/axdump "Microsoft Excel" > "$RUN_DIR/pane-ax.txt"
+rg -n 'AXTable|AXLink|AXPreformattedStyleGroup|value="' "$RUN_DIR/pane-ax.txt" | tail -60
+```
+
+It prints role, subrole, title, value, description and URL per element, indented by depth, and does not press anything.
 
 ## Report and clean up
 
