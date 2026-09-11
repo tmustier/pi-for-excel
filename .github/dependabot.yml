@@ -13,6 +13,10 @@ updates:
       - dependency-name: "eslint"
         update-types:
           - "version-update:semver-major"
+      # typebox is pinned to the exact version @earendil-works/pi-ai depends on
+      # so one copy ships (scripts/check-pi-deps-lockstep.mjs fails otherwise).
+      # It moves only when pi-ai moves, in the pi-stack bump.
+      - dependency-name: "typebox"
     groups:
       pi-stack:
         patterns:

@@ -56,7 +56,8 @@ Prices are registry values in USD per million tokens. All three models:
   - `@earendil-works/pi-ai`
   - `@earendil-works/pi-agent-core`
 - `.github/workflows/dependabot-pi-automerge.yml` auto-approves + enables auto-merge for that Dependabot group (merge still waits for green checks).
-- `npm run check` includes `scripts/check-pi-deps-lockstep.mjs`, which enforces the dependency policy below (`pi-ai` === `pi-agent-core`, exact pins, single shared `pi-ai` copy in the lockfile).
+- `npm run check` includes `scripts/check-pi-deps-lockstep.mjs`, which enforces the dependency policy below (`pi-ai` === `pi-agent-core`, exact pins, single shared `pi-ai` copy in the lockfile, `typebox` pinned to the version `pi-ai` depends on).
+- Dependabot ignores `typebox`: it is bumped by hand as part of a pi-stack bump, to whatever `npm view @earendil-works/pi-ai@<version> dependencies.typebox` says. A Dependabot PR that bumps `typebox` on its own fails the lockstep check by design.
 
 ## Step-by-step
 
@@ -94,6 +95,7 @@ npm view @earendil-works/pi-agent-core versions --json
 
 ```bash
 npm install @earendil-works/pi-ai@<version> @earendil-works/pi-agent-core@<version> --save-exact
+npm install typebox@"$(npm view @earendil-works/pi-ai@<version> dependencies.typebox)" --save-exact
 ```
 
 ### 4) Verify the new model IDs exist in the registry
