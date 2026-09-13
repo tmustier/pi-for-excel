@@ -999,6 +999,8 @@
   "textInput.save": "保存",
   "textInput.unavailable": "文本输入对话框在当前环境中不可用。",
   "tools.action.overview": "概览",
+  "tools.action.runOfficeJs": "运行 Office.js",
+  "tools.action.runWpsJs": "运行 WPS JSAPI",
   "tools.workbookOverview": "工作簿概览",
   "web-search-setup.check-config": "请在 /tools 中检查你的 API 密钥和代理配置。",
   "web-search-setup.check-failed": "当前无法检查帮助程序状态。",

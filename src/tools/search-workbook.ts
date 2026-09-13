@@ -6,8 +6,15 @@
  */
 
 import { Type, type Static } from "typebox";
+import { Value } from "typebox/value";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
-import { excelRun, qualifiedAddress, parseCell, colToLetter } from "../excel/helpers.js";
+import {
+  colToLetter,
+  excelRun,
+  parseCell,
+  parseRangeRef,
+  qualifiedAddress,
+} from "../excel/helpers.js";
 import { getErrorMessage } from "../utils/errors.js";
 
 const schema = Type.Object({
@@ -51,13 +58,166 @@ const schema = Type.Object({
 });
 
 type Params = Static<typeof schema>;
+const searchCellMatrixSchema = Type.Array(Type.Array(Type.Union([
+  Type.String(),
+  Type.Number(),
+  Type.Boolean(),
+  Type.Null(),
+])));
+type SearchCellValue = Static<typeof searchCellMatrixSchema>[number][number] | undefined;
 
 interface SearchMatch {
   sheet: string;
   address: string;
-  value: unknown;
+  value: SearchCellValue;
   formula?: string;
   context?: string;
+}
+
+interface SearchRangeOptions {
+  sheetName: string;
+  values: SearchCellValue[][];
+  formulas: SearchCellValue[][];
+  start: { col: number; row: number };
+  searchFormulas: boolean;
+  queryLower: string;
+  regex?: RegExp;
+  contextRows: number;
+  offset: number;
+  matchesBeforeRange: number;
+  resultCapacity: number;
+}
+
+interface SearchRangeResult {
+  matches: SearchMatch[];
+  totalMatches: number;
+  hasMore: boolean;
+}
+
+function searchableValue(value: SearchCellValue): string | null {
+  if (value === null || value === undefined || value === "") return null;
+  return typeof value === "string" ? value : String(value);
+}
+
+function searchTarget(
+  value: SearchCellValue,
+  formula: SearchCellValue,
+  searchFormulas: boolean,
+): string | null {
+  if (searchFormulas) {
+    return typeof formula === "string" && formula.startsWith("=") ? formula : null;
+  }
+
+  return searchableValue(value);
+}
+
+function textMatches(target: string, queryLower: string, regex: RegExp | undefined): boolean {
+  return regex ? regex.test(target) : target.toLowerCase().includes(queryLower);
+}
+
+function contextCellText(value: SearchCellValue): string {
+  const text = searchableValue(value) ?? "";
+  const bounded = text.length > 20 ? `${text.substring(0, 20)}…` : text;
+  return bounded.replace(/\|/g, "\\|");
+}
+
+function buildContextPreview(
+  values: SearchCellValue[][],
+  start: { col: number; row: number },
+  matchRow: number,
+  matchColumn: number,
+  contextRows: number,
+): string {
+  const rowStart = Math.max(0, matchRow - contextRows);
+  const rowEnd = Math.min(values.length - 1, matchRow + contextRows);
+  const columnStart = Math.max(0, matchColumn - 10);
+  const firstValueRow = values[0] ?? [];
+  const columnEnd = Math.min(firstValueRow.length - 1, matchColumn + 10);
+
+  const lines: string[] = [];
+  const header = [""];
+  for (let column = columnStart; column <= columnEnd; column += 1) {
+    header.push(colToLetter(start.col + column));
+  }
+  lines.push(`| ${header.join(" | ")} |`);
+  lines.push(`|${header.map(() => "---").join("|")}|`);
+
+  for (let row = rowStart; row <= rowEnd; row += 1) {
+    const cells = [String(start.row + row)];
+    const contextRow = values[row] ?? [];
+    for (let column = columnStart; column <= columnEnd; column += 1) {
+      cells.push(contextCellText(contextRow[column]));
+    }
+    const marker = row === matchRow ? " ◀" : "";
+    lines.push(`| ${cells.join(" | ")} |${marker}`);
+  }
+
+  return lines.map((line) => `  ${line}`).join("\n");
+}
+
+function searchLoadedRange(options: SearchRangeOptions): SearchRangeResult {
+  const matches: SearchMatch[] = [];
+  let totalMatches = options.matchesBeforeRange;
+
+  for (let row = 0; row < options.values.length; row += 1) {
+    const valueRow = options.values[row] ?? [];
+    const formulaRow = options.formulas[row] ?? [];
+
+    for (let column = 0; column < valueRow.length; column += 1) {
+      const value = valueRow[column];
+      const formula = formulaRow[column];
+      const target = searchTarget(value, formula, options.searchFormulas);
+      if (target === null || !textMatches(target, options.queryLower, options.regex)) continue;
+
+      totalMatches += 1;
+      if (totalMatches <= options.offset) continue;
+      if (matches.length >= options.resultCapacity) {
+        return { matches, totalMatches, hasMore: true };
+      }
+
+      const formulaText = typeof formula === "string" && formula.startsWith("=") ? formula : undefined;
+      const match: SearchMatch = {
+        sheet: options.sheetName,
+        address: `${colToLetter(options.start.col + column)}${options.start.row + row}`,
+        value,
+        ...(formulaText !== undefined ? { formula: formulaText } : {}),
+      };
+
+      if (options.contextRows > 0) {
+        match.context = buildContextPreview(
+          options.values,
+          options.start,
+          row,
+          column,
+          options.contextRows,
+        );
+      }
+
+      matches.push(match);
+    }
+  }
+
+  return { matches, totalMatches, hasMore: false };
+}
+
+function renderSearchMatches(matches: SearchMatch[], query: string, hasMore: boolean, offset: number): string {
+  const lines: string[] = [];
+  const limitNote = hasMore ? " (limit reached)" : "";
+  const offsetNote = offset > 0 ? ` (offset ${offset})` : "";
+  lines.push(`**${matches.length} match(es)** for "${query}"${limitNote}${offsetNote}:`);
+  lines.push("");
+
+  for (const match of matches) {
+    const address = qualifiedAddress(match.sheet, match.address);
+    const value = typeof match.value === "string" && match.value.length > 60
+      ? `${match.value.substring(0, 60)}…`
+      : String(match.value);
+    const formula = match.formula ? ` ← ${match.formula}` : "";
+    lines.push(`- **${address}**: ${value}${formula}`);
+    if (match.context) lines.push(match.context);
+  }
+
+  return lines.join("\n");
 }
 
 export function createSearchWorkbookTool(): AgentTool<typeof schema> {
@@ -114,13 +274,11 @@ export function createSearchWorkbookTool(): AgentTool<typeof schema> {
 
             if (used.isNullObject) continue;
 
-            const values = used.values;
-            const formulas = used.formulas;
+            const values = Value.Parse(searchCellMatrixSchema, used.values);
+            const formulas = Value.Parse(searchCellMatrixSchema, used.formulas);
 
             // Parse start address for cell computation
-            const addr = used.address;
-            const bangIndex = addr.indexOf("!");
-            const cellPart = bangIndex >= 0 ? addr.slice(bangIndex + 1) : addr;
+            const cellPart = parseRangeRef(used.address).address;
             const colonIndex = cellPart.indexOf(":");
             const startCell = colonIndex >= 0 ? cellPart.slice(0, colonIndex) : cellPart;
             let start;
@@ -130,80 +288,24 @@ export function createSearchWorkbookTool(): AgentTool<typeof schema> {
               continue;
             }
 
-            for (let r = 0; r < values.length; r++) {
-              const valueRow = values[r] ?? [];
-              const formulaRow = formulas[r] ?? [];
-              for (let c = 0; c < valueRow.length; c++) {
-                const value: unknown = valueRow[c];
-                const formula: unknown = formulaRow[c];
-
-                let match = false;
-                if (searchFormulas) {
-                  if (typeof formula !== "string" || formula.length === 0) continue;
-                  const target = formula;
-                  match = regex ? regex.test(target) : target.toLowerCase().includes(queryLower);
-                } else {
-                  if (value === null || value === undefined || value === "") continue;
-                  const target = typeof value === "string" ? value : typeof value === "number" || typeof value === "boolean" ? String(value) : JSON.stringify(value);
-                  match = regex ? regex.test(target) : target.toLowerCase().includes(queryLower);
-                }
-
-                if (match) {
-                  totalMatches += 1;
-                  if (totalMatches <= offset) continue;
-
-                  const cellAddr = `${colToLetter(start.col + c)}${start.row + r}`;
-
-                  const formulaText = typeof formula === "string" && formula.startsWith("=") ? formula : undefined;
-                  const matchEntry: SearchMatch = {
-                    sheet: sheet.name,
-                    address: cellAddr,
-                    value,
-                    ...(formulaText !== undefined ? { formula: formulaText } : {}),
-                  };
-                  allMatches.push(matchEntry);
-
-                  if (contextRows > 0) {
-                    const rStart = Math.max(0, r - contextRows);
-                    const rEnd = Math.min(values.length - 1, r + contextRows);
-                    const colRadius = 10;
-                    const cStart = Math.max(0, c - colRadius);
-                    const firstValueRow = values[0] ?? [];
-                    const cEnd = Math.min(firstValueRow.length - 1, c + colRadius);
-
-                    const ctxLines: string[] = [];
-                    const hdr: string[] = [""];
-                    for (let ci = cStart; ci <= cEnd; ci++) {
-                      hdr.push(colToLetter(start.col + ci));
-                    }
-                    ctxLines.push("| " + hdr.join(" | ") + " |");
-                    ctxLines.push("|" + hdr.map(() => "---").join("|") + "|");
-
-                    for (let ri = rStart; ri <= rEnd; ri++) {
-                      const cells: string[] = [String(start.row + ri)];
-                      const contextRow = values[ri] ?? [];
-                      for (let ci = cStart; ci <= cEnd; ci++) {
-                        const v: unknown = contextRow[ci];
-                        let s = v === null || v === undefined || v === "" ? "" : typeof v === "string" ? v : typeof v === "number" || typeof v === "boolean" ? String(v) : JSON.stringify(v);
-                        if (s.length > 20) s = s.substring(0, 20) + "…";
-                        s = s.replace(/\|/g, "\\|");
-                        cells.push(s);
-                      }
-                      const marker = ri === r ? " ◀" : "";
-                      ctxLines.push("| " + cells.join(" | ") + " |" + marker);
-                    }
-
-                    matchEntry.context = ctxLines
-                      .map((l) => "  " + l)
-                      .join("\n");
-                  }
-
-                  if (allMatches.length >= maxResults) {
-                    hasMore = true;
-                    break outer;
-                  }
-                }
-              }
+            const rangeResult = searchLoadedRange({
+              sheetName: sheet.name,
+              values,
+              formulas,
+              start,
+              searchFormulas,
+              queryLower,
+              ...(regex !== undefined ? { regex } : {}),
+              contextRows,
+              offset,
+              matchesBeforeRange: totalMatches,
+              resultCapacity: maxResults - allMatches.length,
+            });
+            allMatches.push(...rangeResult.matches);
+            totalMatches = rangeResult.totalMatches;
+            if (rangeResult.hasMore) {
+              hasMore = true;
+              break outer;
             }
           }
           return { matches: allMatches, hasMore, totalMatches };
@@ -223,26 +325,8 @@ export function createSearchWorkbookTool(): AgentTool<typeof schema> {
           };
         }
 
-        const lines: string[] = [];
-        const limitNote = hasMore ? " (limit reached)" : "";
-        const offsetNote = offset > 0 ? ` (offset ${offset})` : "";
-        lines.push(`**${matches.length} match(es)** for "${params.query}"${limitNote}${offsetNote}:`);
-        lines.push("");
-
-        for (const m of matches) {
-          const addr = qualifiedAddress(m.sheet, m.address);
-          const val = typeof m.value === "string" && m.value.length > 60
-            ? m.value.substring(0, 60) + "…"
-            : String(m.value);
-          const formulaStr = m.formula ? ` ← ${m.formula}` : "";
-          lines.push(`- **${addr}**: ${val}${formulaStr}`);
-          if (m.context) {
-            lines.push(m.context);
-          }
-        }
-
         return {
-          content: [{ type: "text", text: lines.join("\n") }],
+          content: [{ type: "text", text: renderSearchMatches(matches, params.query, hasMore, offset) }],
           details: undefined,
         };
       } catch (e) {

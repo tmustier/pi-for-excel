@@ -12,7 +12,7 @@ import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import type { WriteCellsDetails } from "./tool-details.js";
 import {
   excelRun, getRange, qualifiedAddress, parseCell,
-  colToLetter, computeRangeAddress, padValues,
+  colToLetter, computeRangeAddress, padValues, parseRangeRef,
 } from "../excel/helpers.js";
 import { buildWorkbookCellChangeSummary } from "../audit/cell-diff.js";
 import { getWorkbookChangeAuditLog } from "../audit/workbook-change-audit.js";
@@ -130,10 +130,7 @@ export function createWriteCellsTool(
 
         const { padded, rows, cols } = padValues(params.values);
 
-        const bangIndex = params.start_cell.indexOf("!");
-        const startCellRef = bangIndex >= 0
-          ? params.start_cell.slice(bangIndex + 1)
-          : params.start_cell;
+        const startCellRef = parseRangeRef(params.start_cell).address;
 
         if (startCellRef.includes(":")) {
           return {

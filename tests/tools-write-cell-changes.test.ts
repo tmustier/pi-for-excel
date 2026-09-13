@@ -114,3 +114,17 @@ void test("write_cells reports value and formula changes with a bounded sample",
     assert.equal(result.details.changes?.sample.at(-1)?.address, `Sheet1!${columnName(11)}1`);
   });
 });
+
+void test("write_cells accepts a quoted sheet name containing an exclamation mark", async () => {
+  await withWriteHost(async () => {
+    const result = await createWriteCellsTool().execute("write-quoted-bang", {
+      start_cell: "'Q1!Ops'!A1",
+      values: [["ready"]],
+    });
+
+    const first = result.content[0];
+    assert.equal(first?.type, "text");
+    if (first?.type === "text") assert.doesNotMatch(first.text, /^Error/u);
+    assert.equal(result.details.changes?.changedCount, 1);
+  });
+});

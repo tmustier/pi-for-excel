@@ -35,7 +35,7 @@ export async function excelRun<T>(fn: (context: Excel.RequestContext) => Promise
 /** Parse "Sheet1!A1:B5" → { sheet: "Sheet1", address: "A1:B5" } */
 export function parseRangeRef(ref: string): RangeRef {
   if (ref.includes("!")) {
-    const idx = ref.indexOf("!");
+    const idx = ref.lastIndexOf("!");
     const sheet = ref
       .substring(0, idx)
       .replace(/^'|'$/g, "")
@@ -57,9 +57,9 @@ export function getRange(context: Excel.RequestContext, ref: string): { sheet: E
 /** Build a fully-qualified address like "Sheet1!A1:B5" */
 export function qualifiedAddress(sheetName: string, address: string): string {
   // Strip sheet prefix if already in the address
-  const clean = address.includes("!") ? address.slice(address.indexOf("!") + 1) : address;
+  const clean = address.includes("!") ? address.slice(address.lastIndexOf("!") + 1) : address;
   const escaped = sheetName.replace(/'/g, "''");
-  const needsQuote = /[\s']/.test(sheetName);
+  const needsQuote = /[\s'!]/.test(sheetName);
   const quoted = needsQuote ? `'${escaped}'` : sheetName;
   return `${quoted}!${clean}`;
 }

@@ -11,6 +11,11 @@
 import { type Static, Type } from "typebox";
 
 import { StringEnum } from "../../tools/string-enum.js";
+import {
+  addressIsWithinColumnBand,
+  addressIsWithinRowBand,
+  addressMatchesRangeShape,
+} from "./address.js";
 
 // ---------------------------------------------------------------------------
 // Conditional formats
@@ -318,8 +323,9 @@ export const RecoveryStructureValueRangeStateSchema = Type.Refine(
   }),
   (state) =>
     gridMatches(state.values, state.rowCount, state.columnCount) &&
-    gridMatches(state.formulas, state.rowCount, state.columnCount),
-  () => "values and formulas grids must be rowCount x columnCount",
+    gridMatches(state.formulas, state.rowCount, state.columnCount) &&
+    addressMatchesRangeShape(state.address, state.rowCount, state.columnCount),
+  () => "address, values and formulas must match rowCount x columnCount",
 );
 
 const sheetIdentity = { sheetId: Type.String(), sheetName: Type.String() };
@@ -337,17 +343,25 @@ export const RecoveryModifyStructureStateSchema = Type.Union([
     dataRange: Type.Optional(RecoveryStructureValueRangeStateSchema),
   }),
   Type.Object({ kind: Type.Literal("rows_absent"), ...rowOrColumnRun, allowDataDelete: Type.Optional(Type.Boolean()) }),
-  Type.Object({
-    kind: Type.Literal("rows_present"),
-    ...rowOrColumnRun,
-    dataRange: Type.Optional(RecoveryStructureValueRangeStateSchema),
-  }),
+  Type.Refine(
+    Type.Object({
+      kind: Type.Literal("rows_present"),
+      ...rowOrColumnRun,
+      dataRange: Type.Optional(RecoveryStructureValueRangeStateSchema),
+    }),
+    (state) => !state.dataRange || addressIsWithinRowBand(state.dataRange.address, state.position, state.count),
+    () => "captured data range must be within the restored row run",
+  ),
   Type.Object({ kind: Type.Literal("columns_absent"), ...rowOrColumnRun, allowDataDelete: Type.Optional(Type.Boolean()) }),
-  Type.Object({
-    kind: Type.Literal("columns_present"),
-    ...rowOrColumnRun,
-    dataRange: Type.Optional(RecoveryStructureValueRangeStateSchema),
-  }),
+  Type.Refine(
+    Type.Object({
+      kind: Type.Literal("columns_present"),
+      ...rowOrColumnRun,
+      dataRange: Type.Optional(RecoveryStructureValueRangeStateSchema),
+    }),
+    (state) => !state.dataRange || addressIsWithinColumnBand(state.dataRange.address, state.position, state.count),
+    () => "captured data range must be within the restored column run",
+  ),
 ]);
 
 // ---------------------------------------------------------------------------

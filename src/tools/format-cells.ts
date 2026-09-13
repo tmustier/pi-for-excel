@@ -21,7 +21,7 @@ import {
 import { finalizeMutationOperation, finalizeMutationRecoveryStep } from "./mutation/finalize.js";
 import { appendMutationResultNote } from "./mutation/result-note.js";
 import type { MutationFinalizeDependencies } from "./mutation/types.js";
-import type { BorderWeight, CellStyle } from "../conventions/index.js";
+import type { BorderWeight, CellStyle, ResolvedCellStyle } from "../conventions/index.js";
 import {
   buildBorderInstructions,
   normalizeBorderParams,
@@ -230,6 +230,243 @@ function buildFormatCheckpointPlan(
   };
 }
 
+interface FormatMutationResult {
+  sheetName: string;
+  address: string;
+  applied: string[];
+  warnings: string[];
+  isMultiRange: boolean;
+  cellCount: number;
+}
+
+function recordAppliedStyles(params: Params, applied: string[]): void {
+  if (!params.style) return;
+  const names = Array.isArray(params.style) ? params.style : [params.style];
+  applied.push(`style ${names.join(" + ")}`);
+}
+
+function applyFontAndFill(
+  format: Excel.RangeFormat,
+  props: CellStyle,
+  hasNamedStyle: boolean,
+  applied: string[],
+): void {
+  if (props.bold !== undefined) {
+    format.font.bold = props.bold;
+    if (!hasNamedStyle) applied.push(props.bold ? "bold" : "not bold");
+  }
+  if (props.italic !== undefined) {
+    format.font.italic = props.italic;
+    if (!hasNamedStyle) applied.push(props.italic ? "italic" : "not italic");
+  }
+  if (props.underline !== undefined) {
+    format.font.underline = props.underline ? "Single" : "None";
+    if (!hasNamedStyle) applied.push(props.underline ? "underline" : "no underline");
+  }
+  if (props.fontColor) {
+    format.font.color = props.fontColor;
+    if (!hasNamedStyle) applied.push(`font color ${props.fontColor}`);
+  }
+  if (props.fontSize) {
+    format.font.size = props.fontSize;
+    if (!hasNamedStyle) applied.push(`${props.fontSize}pt`);
+  }
+  if (props.fontName) {
+    format.font.name = props.fontName;
+    if (!hasNamedStyle) applied.push(`font ${props.fontName}`);
+  }
+  if (props.fillColor) {
+    format.fill.color = props.fillColor;
+    if (!hasNamedStyle) applied.push(`fill ${props.fillColor}`);
+  }
+}
+
+function applyNumberFormat(
+  resolved: FormatResolution,
+  numberFormat: string | undefined,
+  hasNamedStyle: boolean,
+  applied: string[],
+): void {
+  if (!numberFormat) return;
+
+  if (resolved.isMultiRange) {
+    for (const area of resolved.target.areas.items) {
+      area.numberFormat = Array.from({ length: area.rowCount }, () =>
+        Array.from({ length: area.columnCount }, () => numberFormat));
+    }
+  } else {
+    resolved.target.numberFormat = Array.from({ length: resolved.target.rowCount }, () =>
+      Array.from({ length: resolved.target.columnCount }, () => numberFormat));
+  }
+
+  if (!hasNamedStyle) applied.push(`format "${numberFormat}"`);
+}
+
+function applyAlignment(
+  format: Excel.RangeFormat,
+  props: CellStyle,
+  hasNamedStyle: boolean,
+  applied: string[],
+): void {
+  if (props.horizontalAlignment) {
+    if (!isHorizontalAlignment(props.horizontalAlignment)) {
+      throw new Error(
+        `Invalid horizontal_alignment "${String(props.horizontalAlignment)}". Use Left, Center, Right, or General.`,
+      );
+    }
+    format.horizontalAlignment = props.horizontalAlignment;
+    if (!hasNamedStyle) applied.push(`align ${props.horizontalAlignment.toLowerCase()}`);
+  }
+
+  if (props.verticalAlignment) {
+    if (!isVerticalAlignment(props.verticalAlignment)) {
+      throw new Error(
+        `Invalid vertical_alignment "${String(props.verticalAlignment)}". Use Top, Center, or Bottom.`,
+      );
+    }
+    format.verticalAlignment = props.verticalAlignment;
+    if (!hasNamedStyle) applied.push(`v-align ${props.verticalAlignment.toLowerCase()}`);
+  }
+
+  if (props.wrapText !== undefined) {
+    format.wrapText = props.wrapText;
+    if (!hasNamedStyle) applied.push(props.wrapText ? "wrap" : "no wrap");
+  }
+}
+
+function applyDimensions(
+  target: Excel.Range | Excel.RangeAreas,
+  format: Excel.RangeFormat,
+  params: Params,
+  props: CellStyle,
+  warnings: string[],
+  applied: string[],
+): Excel.RangeFormat | null {
+  let columnWidthFormat: Excel.RangeFormat | null = null;
+
+  if (params.column_width !== undefined) {
+    if (props.fontName && props.fontName !== DEFAULT_FONT_NAME) {
+      warnings.push(
+        `Column width assumes ${DEFAULT_FONT_NAME} ${DEFAULT_FONT_SIZE}; using ${props.fontName} may differ.`,
+      );
+    }
+    if (props.fontSize && props.fontSize !== DEFAULT_FONT_SIZE) {
+      warnings.push(
+        `Column width assumes ${DEFAULT_FONT_NAME} ${DEFAULT_FONT_SIZE}; using ${props.fontSize}pt may differ.`,
+      );
+    }
+
+    const columnTarget = target.getEntireColumn();
+    columnTarget.format.columnWidth = params.column_width * POINTS_PER_CHAR_ARIAL_10;
+    columnTarget.format.load("columnWidth");
+    columnWidthFormat = columnTarget.format;
+    applied.push(`col width ${params.column_width}`);
+  }
+
+  if (params.row_height !== undefined) {
+    target.getEntireRow().format.rowHeight = params.row_height;
+    applied.push(`row height ${params.row_height}`);
+  }
+
+  if (params.auto_fit) {
+    format.autofitColumns();
+    format.autofitRows();
+    applied.push("auto-fit");
+  }
+
+  return columnWidthFormat;
+}
+
+function applyMerge(resolved: FormatResolution, merge: boolean | undefined, applied: string[]): void {
+  if (merge === undefined) return;
+
+  if (resolved.isMultiRange) {
+    for (const area of resolved.target.areas.items) {
+      if (merge) area.merge();
+      else area.unmerge();
+    }
+  } else if (merge) {
+    resolved.target.merge();
+  } else {
+    resolved.target.unmerge();
+  }
+
+  applied.push(merge ? "merged" : "unmerged");
+}
+
+function formatTargetCellCount(resolved: FormatResolution): number {
+  return resolved.isMultiRange
+    ? resolved.target.areas.items.reduce(
+      (total, area) => total + area.rowCount * area.columnCount,
+      0,
+    )
+    : resolved.target.rowCount * resolved.target.columnCount;
+}
+
+function appendColumnWidthWarning(
+  columnWidthFormat: Excel.RangeFormat | null,
+  requestedColumnWidth: number | undefined,
+  warnings: string[],
+): void {
+  if (!columnWidthFormat || typeof requestedColumnWidth !== "number") return;
+  const actualPoints = columnWidthFormat.columnWidth;
+  if (typeof actualPoints !== "number") {
+    warnings.push("Column widths are not uniform; Excel returned no single width value.");
+    return;
+  }
+
+  const actualChars = actualPoints / POINTS_PER_CHAR_ARIAL_10;
+  if (Math.abs(actualChars - requestedColumnWidth) > 0.1) {
+    warnings.push(`Requested column width ${requestedColumnWidth}, Excel applied ${actualChars.toFixed(2)}.`);
+  }
+}
+
+async function applyResolvedFormatting(
+  context: Excel.RequestContext,
+  params: Params,
+  borders: NormalizedBorderParams,
+  style: ResolvedCellStyle,
+): Promise<FormatMutationResult> {
+  const resolved = resolveFormatTarget(context, params.range);
+  resolved.sheet.load("name");
+  resolved.target.load("address");
+  if (resolved.isMultiRange) resolved.target.areas.load("items/rowCount,items/columnCount");
+  else resolved.target.load("rowCount,columnCount");
+  await context.sync();
+
+  const applied: string[] = [];
+  const warnings = [...style.warnings];
+  const format = resolved.target.format;
+  const hasNamedStyle = Boolean(params.style);
+
+  recordAppliedStyles(params, applied);
+  applyFontAndFill(format, style.properties, hasNamedStyle, applied);
+  applyNumberFormat(resolved, style.excelNumberFormat, hasNamedStyle, applied);
+  applyAlignment(format, style.properties, hasNamedStyle, applied);
+  const columnWidthFormat = applyDimensions(
+    resolved.target,
+    format,
+    params,
+    style.properties,
+    warnings,
+    applied,
+  );
+  applyBorders(format, borders, style.properties, params.border_color, applied);
+  applyMerge(resolved, params.merge, applied);
+
+  await context.sync();
+  appendColumnWidthWarning(columnWidthFormat, params.column_width, warnings);
+
+  return {
+    sheetName: resolved.sheet.name,
+    address: resolved.target.address,
+    applied,
+    warnings,
+    isMultiRange: resolved.isMultiRange,
+    cellCount: formatTargetCellCount(resolved),
+  };
+}
+
 const mutationFinalizeDependencies: MutationFinalizeDependencies = {
   appendAuditEntry: (entry) => getWorkbookChangeAuditLog().append(entry),
 };
@@ -315,195 +552,8 @@ export function createFormatCellsTool(): AgentTool<typeof schema, FormatCellsDet
           }
         }
 
-        const result = await excelRun(async (context) => {
-          const resolved = resolveFormatTarget(context, params.range);
-          resolved.sheet.load("name");
-          resolved.target.load("address");
-
-          const requestedColumnWidth = params.column_width;
-
-          if (!resolved.isMultiRange) {
-            resolved.target.load("rowCount,columnCount");
-          } else {
-            resolved.target.areas.load("items/rowCount,items/columnCount");
-          }
-
-          await context.sync();
-
-          const sheet = resolved.sheet;
-          const target = resolved.target;
-          const isMultiRange = resolved.isMultiRange;
-
-          const cellCount = isMultiRange
-            ? resolved.target.areas.items.reduce((total, area) => total + (area.rowCount * area.columnCount), 0)
-            : resolved.target.rowCount * resolved.target.columnCount;
-
-          const applied: string[] = [];
-          const warnings: string[] = [...styleResult.warnings];
-          const formatTarget = target.format;
-          let columnWidthFormat: Excel.RangeFormat | null = null;
-
-          // Report which styles were applied
-          if (params.style) {
-            const names = Array.isArray(params.style) ? params.style : [params.style];
-            applied.push(`style ${names.join(" + ")}`);
-          }
-
-          // Font properties (from resolved style + overrides)
-          if (props.bold !== undefined) {
-            formatTarget.font.bold = props.bold;
-            if (!params.style) applied.push(props.bold ? "bold" : "not bold");
-          }
-          if (props.italic !== undefined) {
-            formatTarget.font.italic = props.italic;
-            if (!params.style) applied.push(props.italic ? "italic" : "not italic");
-          }
-          if (props.underline !== undefined) {
-            formatTarget.font.underline = props.underline ? "Single" : "None";
-            if (!params.style) applied.push(props.underline ? "underline" : "no underline");
-          }
-          if (props.fontColor) {
-            formatTarget.font.color = props.fontColor;
-            if (!params.style) applied.push(`font color ${props.fontColor}`);
-          }
-          if (props.fontSize) {
-            formatTarget.font.size = props.fontSize;
-            if (!params.style) applied.push(`${props.fontSize}pt`);
-          }
-          if (props.fontName) {
-            formatTarget.font.name = props.fontName;
-            if (!params.style) applied.push(`font ${props.fontName}`);
-          }
-
-          // Fill (from resolved style + overrides)
-          if (props.fillColor) {
-            formatTarget.fill.color = props.fillColor;
-            if (!params.style) applied.push(`fill ${props.fillColor}`);
-          }
-
-          // Number format (from resolved style or raw)
-          if (styleResult.excelNumberFormat) {
-            const numberFormat = styleResult.excelNumberFormat;
-            if (!resolved.isMultiRange) {
-              const range = resolved.target;
-              const formatMatrix = Array.from({ length: range.rowCount }, () =>
-                Array.from({ length: range.columnCount }, () => numberFormat),
-              );
-              range.numberFormat = formatMatrix;
-            } else {
-              const areas = resolved.target;
-              for (const area of areas.areas.items) {
-                const formatMatrix = Array.from({ length: area.rowCount }, () =>
-                  Array.from({ length: area.columnCount }, () => numberFormat),
-                );
-                area.numberFormat = formatMatrix;
-              }
-            }
-            if (!params.style) applied.push(`format "${numberFormat}"`);
-          }
-
-          // Alignment (from resolved style + overrides)
-          if (props.horizontalAlignment) {
-            const hAlign = props.horizontalAlignment;
-            if (!isHorizontalAlignment(hAlign)) {
-              throw new Error(
-                `Invalid horizontal_alignment "${String(hAlign)}". Use Left, Center, Right, or General.`,
-              );
-            }
-            formatTarget.horizontalAlignment = hAlign;
-            if (!params.style) applied.push(`align ${hAlign.toLowerCase()}`);
-          }
-          if (props.verticalAlignment) {
-            const vAlign = props.verticalAlignment;
-            if (!isVerticalAlignment(vAlign)) {
-              throw new Error(
-                `Invalid vertical_alignment "${String(vAlign)}". Use Top, Center, or Bottom.`,
-              );
-            }
-            formatTarget.verticalAlignment = vAlign;
-            if (!params.style) applied.push(`v-align ${vAlign.toLowerCase()}`);
-          }
-          if (props.wrapText !== undefined) {
-            formatTarget.wrapText = props.wrapText;
-            if (!params.style) applied.push(props.wrapText ? "wrap" : "no wrap");
-          }
-
-          // Dimensions (not part of styles — always from direct params)
-          if (params.column_width !== undefined) {
-            const columnTarget = target.getEntireColumn();
-
-            if (props.fontName && props.fontName !== DEFAULT_FONT_NAME) {
-              warnings.push(
-                `Column width assumes ${DEFAULT_FONT_NAME} ${DEFAULT_FONT_SIZE}; using ${props.fontName} may differ.`
-              );
-            }
-            if (props.fontSize && props.fontSize !== DEFAULT_FONT_SIZE) {
-              warnings.push(
-                `Column width assumes ${DEFAULT_FONT_NAME} ${DEFAULT_FONT_SIZE}; using ${props.fontSize}pt may differ.`
-              );
-            }
-
-            columnTarget.format.columnWidth = params.column_width * POINTS_PER_CHAR_ARIAL_10;
-            columnTarget.format.load("columnWidth");
-            columnWidthFormat = columnTarget.format;
-            applied.push(`col width ${params.column_width}`);
-          }
-          if (params.row_height !== undefined) {
-            const rowTarget = target.getEntireRow();
-            rowTarget.format.rowHeight = params.row_height;
-            applied.push(`row height ${params.row_height}`);
-          }
-          if (params.auto_fit) {
-            formatTarget.autofitColumns();
-            formatTarget.autofitRows();
-            applied.push("auto-fit");
-          }
-
-          // Borders — resolve from: individual edge params > style edges > `borders` shorthand
-          applyBorders(formatTarget, normalizedBorders, props, params.border_color, applied);
-
-          // Merge
-          if (params.merge !== undefined) {
-            if (resolved.isMultiRange) {
-              const areas = resolved.target;
-              for (const area of areas.areas.items) {
-                if (params.merge) {
-                  area.merge();
-                } else {
-                  area.unmerge();
-                }
-              }
-              applied.push(params.merge ? "merged" : "unmerged");
-            } else if (params.merge) {
-              const range = resolved.target;
-              range.merge();
-              applied.push("merged");
-            } else {
-              const range = resolved.target;
-              range.unmerge();
-              applied.push("unmerged");
-            }
-          }
-
-          await context.sync();
-
-          if (columnWidthFormat && typeof requestedColumnWidth === "number") {
-            const actualPoints = columnWidthFormat.columnWidth;
-            if (typeof actualPoints === "number") {
-              const actualChars = actualPoints / POINTS_PER_CHAR_ARIAL_10;
-              const delta = Math.abs(actualChars - requestedColumnWidth);
-              if (delta > 0.1) {
-                warnings.push(
-                  `Requested column width ${requestedColumnWidth}, Excel applied ${actualChars.toFixed(2)}.`
-                );
-              }
-            } else {
-              warnings.push("Column widths are not uniform; Excel returned no single width value.");
-            }
-          }
-
-          return { sheetName: sheet.name, address: target.address, applied, warnings, isMultiRange, cellCount };
-        });
+        const result = await excelRun((context) =>
+          applyResolvedFormatting(context, params, normalizedBorders, styleResult));
 
         const fullAddr = result.isMultiRange
           ? result.address
