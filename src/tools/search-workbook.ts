@@ -118,7 +118,7 @@ function textMatches(target: string, queryLower: string, regex: RegExp | undefin
 function contextCellText(value: SearchCellValue): string {
   const text = searchableValue(value) ?? "";
   const bounded = text.length > 20 ? `${text.substring(0, 20)}…` : text;
-  return bounded.replace(/\|/g, "\\|");
+  return bounded.replace(/\\/g, "\\\\").replace(/\|/g, "\\|");
 }
 
 function buildContextPreview(

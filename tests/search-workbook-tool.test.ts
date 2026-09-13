@@ -146,7 +146,7 @@ void test("search context shows surrounding rows and escapes table separators", 
     {
       name: "Data",
       address: "Data!B4:C6",
-      values: [["before", 1], ["target|value", 2], ["after", 3]],
+      values: [["before", 1], ["target\\|value", 2], ["after", 3]],
     },
   ], () => createSearchWorkbookTool().execute("search-with-context", {
     query: "target",
@@ -155,6 +155,6 @@ void test("search context shows surrounding rows and escapes table separators", 
 
   const text = firstText(result);
   assert.match(text, /\| 4 \| before \| 1 \|/u);
-  assert.match(text, /\| 5 \| target\\\|value \| 2 \| ◀/u);
+  assert.ok(text.includes(`| 5 | target${"\\".repeat(3)}|value | 2 | ◀`));
   assert.match(text, /\| 6 \| after \| 3 \|/u);
 });
