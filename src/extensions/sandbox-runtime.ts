@@ -764,16 +764,8 @@ class SandboxRuntimeHost {
     this.assertCapability("ui.overlay");
     const payload = asSandboxPayload(request.params, "overlay_show_text params");
     const fallbackNode = createTextOnlyUiNode(sanitizeText(payload.text));
-    const actionIds = showOverlayNode(fallbackNode, () => {
-      // Legacy text-only overlays have no actions.
-    });
+    const actionIds = showOverlayNode(fallbackNode, () => undefined);
     this.replaceActionIds(this.overlayActionIds, actionIds);
-  }
-
-  private dismissSandboxOverlay(): void {
-    this.assertCapability("ui.overlay");
-    this.overlayActionIds.clear();
-    dismissOverlay();
   }
 
   private showSandboxWidget(request: SandboxRequestEnvelope): void {
@@ -801,9 +793,7 @@ class SandboxRuntimeHost {
     this.assertCapability("ui.widget");
     const payload = asSandboxPayload(request.params, "widget_show_text params");
     const fallbackNode = createTextOnlyUiNode(sanitizeText(payload.text));
-    const noAction = () => {
-      // Legacy text-only widgets have no actions.
-    };
+    const noAction = () => undefined;
     const actionIds = this.widgetApiV2Enabled
       ? upsertSandboxWidgetNode({
         ownerId: this.widgetOwnerId,
@@ -815,13 +805,6 @@ class SandboxRuntimeHost {
       })
       : showWidgetNode(fallbackNode, noAction);
     this.replaceWidgetActionIds(LEGACY_WIDGET_ID, actionIds);
-  }
-
-  private dismissSandboxWidget(): void {
-    this.assertCapability("ui.widget");
-    this.clearWidgetActionIds(LEGACY_WIDGET_ID);
-    if (this.widgetApiV2Enabled) removeExtensionWidget(this.widgetOwnerId, LEGACY_WIDGET_ID);
-    else dismissWidget();
   }
 
   private upsertSandboxWidget(request: SandboxRequestEnvelope): void {
@@ -871,15 +854,6 @@ class SandboxRuntimeHost {
     removeExtensionWidget(this.widgetOwnerId, widgetId);
   }
 
-  private clearSandboxWidgets(): void {
-    this.assertCapability("ui.widget");
-    if (!this.widgetApiV2Enabled) {
-      throw new Error("Widget API v2 is disabled. Enable /experimental on extension-widget-v2.");
-    }
-    this.clearAllWidgetActionIds();
-    clearExtensionWidgets(this.widgetOwnerId);
-  }
-
   private subscribeSandboxAgentEvents(request: SandboxRequestEnvelope): void {
     this.assertCapability("agent.events.read");
     const payload = asSandboxPayload(request.params, "subscribe_agent_events params");
@@ -890,14 +864,6 @@ class SandboxRuntimeHost {
       this.sendEvent("agent_event", { subscriptionId, event: agentEvent });
     });
     this.eventSubscriptions.set(subscriptionId, unsubscribe);
-  }
-
-  private unsubscribeSandboxAgentEvents(payload: Record<string, unknown>): void {
-    const subscriptionId = asNonEmptyString(payload.subscriptionId, "subscriptionId");
-    const unsubscribe = this.eventSubscriptions.get(subscriptionId);
-    if (!unsubscribe) return;
-    this.eventSubscriptions.delete(subscriptionId);
-    unsubscribe();
   }
 
   private async handleSandboxRequest(envelope: SandboxRequestEnvelope): Promise<void> {
@@ -1231,7 +1197,9 @@ class SandboxRuntimeHost {
         }
 
         case "overlay_dismiss": {
-          this.dismissSandboxOverlay();
+          this.assertCapability("ui.overlay");
+          this.overlayActionIds.clear();
+          dismissOverlay();
           this.sendResponse(requestId, true, null);
           return;
         }
@@ -1249,7 +1217,10 @@ class SandboxRuntimeHost {
         }
 
         case "widget_dismiss": {
-          this.dismissSandboxWidget();
+          this.assertCapability("ui.widget");
+          this.clearWidgetActionIds(LEGACY_WIDGET_ID);
+          if (this.widgetApiV2Enabled) removeExtensionWidget(this.widgetOwnerId, LEGACY_WIDGET_ID);
+          else dismissWidget();
           this.sendResponse(requestId, true, null);
           return;
         }
@@ -1267,7 +1238,12 @@ class SandboxRuntimeHost {
         }
 
         case "widget_clear": {
-          this.clearSandboxWidgets();
+          this.assertCapability("ui.widget");
+          if (!this.widgetApiV2Enabled) {
+            throw new Error("Widget API v2 is disabled. Enable /experimental on extension-widget-v2.");
+          }
+          this.clearAllWidgetActionIds();
+          clearExtensionWidgets(this.widgetOwnerId);
           this.sendResponse(requestId, true, null);
           return;
         }
@@ -1279,7 +1255,13 @@ class SandboxRuntimeHost {
         }
 
         case "unsubscribe_agent_events": {
-          this.unsubscribeSandboxAgentEvents(asSandboxPayload(params, "unsubscribe_agent_events params"));
+          const payload = asSandboxPayload(params, "unsubscribe_agent_events params");
+          const subscriptionId = asNonEmptyString(payload.subscriptionId, "subscriptionId");
+          const unsubscribe = this.eventSubscriptions.get(subscriptionId);
+          if (unsubscribe) {
+            this.eventSubscriptions.delete(subscriptionId);
+            unsubscribe();
+          }
           this.sendResponse(requestId, true, null);
           return;
         }

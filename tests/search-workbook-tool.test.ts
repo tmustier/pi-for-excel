@@ -158,3 +158,39 @@ void test("search context shows surrounding rows and escapes table separators", 
   assert.ok(text.includes(`| 5 | target${"\\".repeat(3)}|value | 2 | ◀`));
   assert.match(text, /\| 6 \| after \| 3 \|/u);
 });
+
+void test("search returns an early match without traversing every loaded cell during validation", async () => {
+  let cellReads = 0;
+  const row = new Array<string>(1_000);
+  for (let column = 0; column < row.length; column += 1) {
+    Object.defineProperty(row, column, {
+      configurable: true,
+      enumerable: true,
+      get: () => {
+        cellReads += 1;
+        return column < 2 ? "needle" : "";
+      },
+    });
+  }
+
+  const values = Array.from({ length: 1_000 }, () => row);
+  const formulaRow = Array.from({ length: 1_000 }, () => "");
+  const formulas = Array.from({ length: 1_000 }, () => formulaRow);
+
+  await withSearchWorkbook([
+    {
+      name: "Large",
+      address: "Large!A1:ALL1000",
+      values,
+      formulas,
+    },
+  ], async () => {
+    const result = await createSearchWorkbookTool().execute("search-large-grid", {
+      query: "needle",
+      max_results: 1,
+    });
+
+    assert.match(firstText(result), /1 match\(es\).*limit reached/u);
+    assert.ok(cellReads < 10, `Search read ${cellReads} cells before returning the first result.`);
+  });
+});

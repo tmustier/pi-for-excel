@@ -105,24 +105,6 @@ type CapturedFormatArea =
   | { supported: true; state: RecoveryFormatAreaState }
   | { supported: false; reason: string };
 
-function needsFontLoad(selection: RecoveryFormatSelection): boolean {
-  return selection.fontColor === true ||
-    selection.bold === true ||
-    selection.italic === true ||
-    selection.underlineStyle === true ||
-    selection.fontName === true ||
-    selection.fontSize === true;
-}
-
-function needsBorderLoad(selection: RecoveryFormatSelection): boolean {
-  return selection.borderTop === true ||
-    selection.borderBottom === true ||
-    selection.borderLeft === true ||
-    selection.borderRight === true ||
-    selection.borderInsideHorizontal === true ||
-    selection.borderInsideVertical === true;
-}
-
 function prepareFormatAreaCapture(
   area: Excel.Range,
   sheetName: string,
@@ -138,10 +120,22 @@ function prepareFormatAreaCapture(
     mergedAreaAddresses: [],
     borders: {},
   };
+  const loadFont = selection.fontColor === true ||
+    selection.bold === true ||
+    selection.italic === true ||
+    selection.underlineStyle === true ||
+    selection.fontName === true ||
+    selection.fontSize === true;
+  const loadBorders = selection.borderTop === true ||
+    selection.borderBottom === true ||
+    selection.borderLeft === true ||
+    selection.borderRight === true ||
+    selection.borderInsideHorizontal === true ||
+    selection.borderInsideVertical === true;
 
   if (selection.numberFormat === true) area.load("numberFormat");
   if (selection.fillColor === true) area.format.fill.load("color");
-  if (needsFontLoad(selection)) area.format.font.load("color,bold,italic,underline,name,size");
+  if (loadFont) area.format.font.load("color,bold,italic,underline,name,size");
   if (selection.horizontalAlignment === true || selection.verticalAlignment === true || selection.wrapText === true) {
     area.format.load("horizontalAlignment,verticalAlignment,wrapText");
   }
@@ -168,7 +162,7 @@ function prepareFormatAreaCapture(
     prepared.mergedAreas = mergedAreas;
   }
 
-  if (needsBorderLoad(selection)) {
+  if (loadBorders) {
     for (const borderKey of RECOVERY_BORDER_KEYS) {
       if (selection[borderKey] !== true) continue;
       const border = area.format.borders.getItem(BORDER_KEY_TO_EDGE[borderKey]);
@@ -190,10 +184,7 @@ async function loadMergedAreaAddresses(
 
   for (const prepared of preparedAreas) {
     const mergedAreas = prepared.mergedAreas;
-    if (!mergedAreas || mergedAreas.isNullObject) {
-      prepared.mergedAreaAddresses = [];
-      continue;
-    }
+    if (!mergedAreas || mergedAreas.isNullObject) continue;
     mergedAreas.areas.load("items/address");
   }
 
@@ -201,10 +192,7 @@ async function loadMergedAreaAddresses(
 
   for (const prepared of preparedAreas) {
     const mergedAreas = prepared.mergedAreas;
-    if (!mergedAreas || mergedAreas.isNullObject) {
-      prepared.mergedAreaAddresses = [];
-      continue;
-    }
+    if (!mergedAreas || mergedAreas.isNullObject) continue;
     prepared.mergedAreaAddresses = dedupeRecoveryAddresses(
       mergedAreas.areas.items.map((areaRange) => qualifyAddressWithSheet(sheetName, areaRange.address)),
     );
@@ -315,9 +303,6 @@ function captureDimensionFormatState(
       }
       columnWidths.push(width);
     }
-    if (columnWidths.length !== prepared.columnCount) {
-      return "Format checkpoint capture failed: column-width count mismatch.";
-    }
     areaState.columnWidths = columnWidths;
   }
 
@@ -329,9 +314,6 @@ function captureDimensionFormatState(
         return "Format checkpoint capture failed: row height is mixed or unsupported.";
       }
       rowHeights.push(height);
-    }
-    if (rowHeights.length !== prepared.rowCount) {
-      return "Format checkpoint capture failed: row-height count mismatch.";
     }
     areaState.rowHeights = rowHeights;
   }
@@ -379,13 +361,6 @@ async function captureFormatRangeStateWithSelection(
   selection: RecoveryFormatSelection,
   maxCellCount?: number,
 ): Promise<RecoveryFormatCaptureResult> {
-  if (!hasSelectedFormatProperty(selection)) {
-    return {
-      supported: false,
-      reason: "No restorable format properties were selected.",
-    };
-  }
-
   const captureCellCount = estimateFormatCaptureCellCount(target.areas, selection);
 
   if (typeof maxCellCount === "number" && Number.isFinite(maxCellCount) && captureCellCount > maxCellCount) {
@@ -419,66 +394,66 @@ async function captureFormatRangeStateWithSelection(
 }
 
 function applyFormatRangeStateToArea(range: Excel.Range, state: RecoveryFormatAreaState): void {
-  if (state.numberFormat) {
+  if (state.numberFormat !== undefined) {
     range.numberFormat = cloneStringGrid(state.numberFormat);
   }
 
-  if (typeof state.fillColor === "string") {
+  if (state.fillColor !== undefined) {
     range.format.fill.color = state.fillColor;
   }
 
-  if (typeof state.fontColor === "string") {
+  if (state.fontColor !== undefined) {
     range.format.font.color = state.fontColor;
   }
 
-  if (typeof state.bold === "boolean") {
+  if (state.bold !== undefined) {
     range.format.font.bold = state.bold;
   }
 
-  if (typeof state.italic === "boolean") {
+  if (state.italic !== undefined) {
     range.format.font.italic = state.italic;
   }
 
-  if (typeof state.underlineStyle === "string") {
+  if (state.underlineStyle !== undefined) {
     if (!isRecoveryUnderlineStyle(state.underlineStyle)) {
       throw new Error("Format checkpoint is invalid: underline style is unsupported.");
     }
     range.format.font.underline = state.underlineStyle;
   }
 
-  if (typeof state.fontName === "string") {
+  if (state.fontName !== undefined) {
     range.format.font.name = state.fontName;
   }
 
-  if (typeof state.fontSize === "number") {
+  if (state.fontSize !== undefined) {
     range.format.font.size = state.fontSize;
   }
 
-  if (typeof state.horizontalAlignment === "string") {
+  if (state.horizontalAlignment !== undefined) {
     if (!isRecoveryHorizontalAlignment(state.horizontalAlignment)) {
       throw new Error("Format checkpoint is invalid: horizontal alignment is unsupported.");
     }
     range.format.horizontalAlignment = state.horizontalAlignment;
   }
 
-  if (typeof state.verticalAlignment === "string") {
+  if (state.verticalAlignment !== undefined) {
     if (!isRecoveryVerticalAlignment(state.verticalAlignment)) {
       throw new Error("Format checkpoint is invalid: vertical alignment is unsupported.");
     }
     range.format.verticalAlignment = state.verticalAlignment;
   }
 
-  if (typeof state.wrapText === "boolean") {
+  if (state.wrapText !== undefined) {
     range.format.wrapText = state.wrapText;
   }
 
-  if (Array.isArray(state.columnWidths)) {
+  if (state.columnWidths !== undefined) {
     for (const [columnIndex, width] of state.columnWidths.entries()) {
       range.getColumn(columnIndex).format.columnWidth = width;
     }
   }
 
-  if (Array.isArray(state.rowHeights)) {
+  if (state.rowHeights !== undefined) {
     for (const [rowIndex, height] of state.rowHeights.entries()) {
       range.getRow(rowIndex).format.rowHeight = height;
     }
@@ -493,13 +468,6 @@ function applyFormatRangeStateToArea(range: Excel.Range, state: RecoveryFormatAr
   }
 }
 
-function captureFormatRangeStateUnsupported(reason: string): RecoveryFormatCaptureResult {
-  return {
-    supported: false,
-    reason,
-  };
-}
-
 export interface CaptureFormatCellsStateOptions {
   maxCellCount?: number;
 }
@@ -510,7 +478,10 @@ export async function captureFormatCellsState(
   options: CaptureFormatCellsStateOptions = {},
 ): Promise<RecoveryFormatCaptureResult> {
   if (!hasSelectedFormatProperty(selection)) {
-    return captureFormatRangeStateUnsupported("No restorable format properties were selected.");
+    return {
+      supported: false,
+      reason: "No restorable format properties were selected.",
+    };
   }
 
   return excelRun<RecoveryFormatCaptureResult>(async (context) => {
@@ -550,22 +521,14 @@ export async function applyFormatCellsState(
       const { areaState, range } = loaded;
 
       const requiresExactShape =
-        typeof areaState.numberFormat !== "undefined" ||
-        typeof areaState.columnWidths !== "undefined" ||
-        typeof areaState.rowHeights !== "undefined";
+        areaState.numberFormat !== undefined ||
+        areaState.columnWidths !== undefined ||
+        areaState.rowHeights !== undefined;
 
       if (requiresExactShape) {
         if (range.rowCount !== areaState.rowCount || range.columnCount !== areaState.columnCount) {
           throw new Error("Format checkpoint range shape changed and cannot be restored safely.");
         }
-      }
-
-      if (Array.isArray(areaState.columnWidths) && areaState.columnWidths.length !== areaState.columnCount) {
-        throw new Error("Format checkpoint is invalid: column-width data does not match range shape.");
-      }
-
-      if (Array.isArray(areaState.rowHeights) && areaState.rowHeights.length !== areaState.rowCount) {
-        throw new Error("Format checkpoint is invalid: row-height data does not match range shape.");
       }
 
       applyFormatRangeStateToArea(range, areaState);

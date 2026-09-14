@@ -3,7 +3,6 @@
 import { excelRun } from "../../excel/helpers.js";
 import { cloneRecoveryModifyStructureState } from "./clone.js";
 import { toRestoreValues } from "./grid.js";
-import { addressIsWithinColumnBand, addressIsWithinRowBand } from "./address.js";
 import {
   columnNumberToLetter,
   isRecoverySheetVisibility,
@@ -186,10 +185,6 @@ async function applySheetPresentState(
   context: Excel.RequestContext,
   targetState: RecoverySheetPresentState,
 ): Promise<RecoveryModifyStructureState> {
-  if (targetState.dataRange && !isStructureValueRangeStateShapeValid(targetState.dataRange)) {
-    throw new Error("Structure checkpoint is invalid: captured data range is inconsistent.");
-  }
-
   const existing = await loadSheetByIdOrName(context, targetState.sheetId, targetState.sheetName);
 
   if (!existing) {
@@ -245,12 +240,6 @@ async function applyRowsState(
   const count = normalizePositiveInteger(targetState.count);
   if (position === null || count === null) {
     throw new Error("Structure checkpoint is invalid: row position/count is invalid.");
-  }
-  if (targetState.kind === "rows_present" && targetState.dataRange && (
-    !isStructureValueRangeStateShapeValid(targetState.dataRange) ||
-    !addressIsWithinRowBand(targetState.dataRange.address, position, count)
-  )) {
-    throw new Error("Structure checkpoint is invalid: captured data range is outside the restored rows.");
   }
 
   const sheet = await loadSheetById(context, targetState.sheetId);
@@ -324,12 +313,6 @@ async function applyColumnsState(
   const count = normalizePositiveInteger(targetState.count);
   if (position === null || count === null) {
     throw new Error("Structure checkpoint is invalid: column position/count is invalid.");
-  }
-  if (targetState.kind === "columns_present" && targetState.dataRange && (
-    !isStructureValueRangeStateShapeValid(targetState.dataRange) ||
-    !addressIsWithinColumnBand(targetState.dataRange.address, position, count)
-  )) {
-    throw new Error("Structure checkpoint is invalid: captured data range is outside the restored columns.");
   }
 
   const sheet = await loadSheetById(context, targetState.sheetId);

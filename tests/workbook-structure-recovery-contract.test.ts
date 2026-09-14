@@ -5,8 +5,10 @@ import { createModifyStructureTool } from "../src/tools/modify-structure.ts";
 import { createWorkbookHistoryTool } from "../src/tools/workbook-history.ts";
 import type { WorkbookContext } from "../src/workbook/context.ts";
 import { WorkbookRecoveryLog } from "../src/workbook/recovery-log.ts";
+import type { RecoveryStructureValueRangeState } from "../src/workbook/recovery-states.ts";
 import {
   createInMemorySettingsStore,
+  type InMemorySettingsStore,
   RECOVERY_SETTING_KEY,
 } from "./fixtures/recovery-log.ts";
 
@@ -24,290 +26,27 @@ function firstText(result: { content: Array<{ type: string; text?: string }> }):
   return block.text;
 }
 
-void test("restoring an inconsistent row backup leaves workbook structure unchanged", async () => {
-  const settings = createInMemorySettingsStore();
-  await settings.set(RECOVERY_SETTING_KEY, {
-    version: 1,
-    snapshots: [{
-      id: "rows-with-invalid-address-shape",
-      at: 1,
-      toolName: "modify_structure",
-      toolCallId: "delete-rows",
-      address: "Data!5:5",
-      workbookId: workbook.workbookId,
-      snapshotKind: "modify_structure_state",
-      modifyStructureState: {
-        kind: "rows_present",
-        sheetId: "sheet-data",
-        sheetName: "Data",
-        position: 5,
-        count: 1,
-        dataRange: {
-          address: "A5:B6",
-          rowCount: 1,
-          columnCount: 2,
-          values: [[10, 20]],
-          formulas: [["", ""]],
-        },
-      },
-    }],
-  });
-
-  let insertedRows = 0;
-  const sheet = {
-    id: "sheet-data",
-    name: "Data",
-    visibility: "Visible",
-    position: 0,
-    isNullObject: false,
-    load: (_properties: string | string[]) => undefined,
-    getRange: (address: string) => ({
-      rowCount: address === "A5:B6" ? 2 : 1,
-      columnCount: address === "A5:B6" ? 2 : 16_384,
-      load: (_properties: string | string[]) => undefined,
-      insert: (direction: string) => {
-        assert.equal(direction, "Down");
-        insertedRows += 1;
-      },
-    }),
-  };
-  const context = {
-    workbook: {
-      worksheets: {
-        getItemOrNullObject: (reference: string) => {
-          assert.equal(reference, "sheet-data");
-          return sheet;
-        },
-      },
-    },
-    sync: () => Promise.resolve(),
-  };
-
+function createHistory(settings: InMemorySettingsStore): ReturnType<typeof createWorkbookHistoryTool> {
   const log = new WorkbookRecoveryLog({
     getSettingsStore: () => Promise.resolve(settings),
     getWorkbookContext: () => Promise.resolve(workbook),
     applySnapshot: () => Promise.resolve({ values: [[1]], formulas: [[1]] }),
   });
-  const history = createWorkbookHistoryTool({
+  return createWorkbookHistoryTool({
     getRecoveryLog: () => log,
     appendAuditEntry: () => Promise.resolve(),
   });
+}
 
-  const hadExcel = Reflect.has(globalThis, "Excel");
-  const previousExcel = Reflect.get(globalThis, "Excel");
-  Reflect.set(globalThis, "Excel", {
-    run: <TResult>(callback: (host: unknown) => Promise<TResult>): Promise<TResult> => callback(context),
-  });
-
-  try {
-    const result = await history.execute("restore-invalid-rows", {
-      action: "restore",
-      snapshot_id: "rows-with-invalid-address-shape",
-    });
-
-    assert.match(firstText(result), /^Error:/u);
-    assert.equal(insertedRows, 0);
-  } finally {
-    if (hadExcel) Reflect.set(globalThis, "Excel", previousExcel);
-    else Reflect.deleteProperty(globalThis, "Excel");
-  }
-});
-
-void test("restoring a row backup that targets a different row leaves workbook structure unchanged", async () => {
-  const settings = createInMemorySettingsStore();
+async function storeDeletedRow(
+  settings: InMemorySettingsStore,
+  id: string,
+  dataRange: RecoveryStructureValueRangeState,
+): Promise<void> {
   await settings.set(RECOVERY_SETTING_KEY, {
     version: 1,
     snapshots: [{
-      id: "rows-with-displaced-data",
-      at: 1,
-      toolName: "modify_structure",
-      toolCallId: "delete-rows",
-      address: "Data!5:5",
-      workbookId: workbook.workbookId,
-      snapshotKind: "modify_structure_state",
-      modifyStructureState: {
-        kind: "rows_present",
-        sheetId: "sheet-data",
-        sheetName: "Data",
-        position: 5,
-        count: 1,
-        dataRange: {
-          address: "A6:B6",
-          rowCount: 1,
-          columnCount: 2,
-          values: [[10, 20]],
-          formulas: [["", ""]],
-        },
-      },
-    }],
-  });
-
-  let insertedRows = 0;
-  const sheet = {
-    id: "sheet-data",
-    name: "Data",
-    visibility: "Visible",
-    position: 0,
-    isNullObject: false,
-    load: (_properties: string | string[]) => undefined,
-    getRange: (_address: string) => ({
-      rowCount: 1,
-      columnCount: 2,
-      load: (_properties: string | string[]) => undefined,
-      insert: () => {
-        insertedRows += 1;
-      },
-    }),
-  };
-  const context = {
-    workbook: {
-      worksheets: {
-        getItemOrNullObject: (_reference: string) => sheet,
-      },
-    },
-    sync: () => Promise.resolve(),
-  };
-  const log = new WorkbookRecoveryLog({
-    getSettingsStore: () => Promise.resolve(settings),
-    getWorkbookContext: () => Promise.resolve(workbook),
-    applySnapshot: () => Promise.resolve({ values: [[1]], formulas: [[1]] }),
-  });
-  const history = createWorkbookHistoryTool({
-    getRecoveryLog: () => log,
-    appendAuditEntry: () => Promise.resolve(),
-  });
-
-  const hadExcel = Reflect.has(globalThis, "Excel");
-  const previousExcel = Reflect.get(globalThis, "Excel");
-  Reflect.set(globalThis, "Excel", {
-    run: <TResult>(callback: (host: unknown) => Promise<TResult>): Promise<TResult> => callback(context),
-  });
-
-  try {
-    const result = await history.execute("restore-displaced-rows", {
-      action: "restore",
-      snapshot_id: "rows-with-displaced-data",
-    });
-
-    assert.match(firstText(result), /^Error:/u);
-    assert.equal(insertedRows, 0);
-  } finally {
-    if (hadExcel) Reflect.set(globalThis, "Excel", previousExcel);
-    else Reflect.deleteProperty(globalThis, "Excel");
-  }
-});
-
-void test("duplicating a sheet to an existing name leaves the workbook unchanged", async () => {
-  let copiesCreated = 0;
-  const existing = {
-    isNullObject: false,
-    load: (_properties: string | string[]) => undefined,
-  };
-  const source = {
-    copy: (position: string) => {
-      assert.equal(position, "End");
-      copiesCreated += 1;
-      return {
-        id: "copied-sheet",
-        get name() {
-          return "Source (2)";
-        },
-        set name(_value: string) {
-          throw new Error("A worksheet named Existing already exists.");
-        },
-        load: (_properties: string | string[]) => undefined,
-      };
-    },
-  };
-  const context = {
-    workbook: {
-      worksheets: {
-        getItem: (name: string) => {
-          assert.equal(name, "Source");
-          return source;
-        },
-        getItemOrNullObject: (name: string) => {
-          assert.equal(name, "Existing");
-          return existing;
-        },
-      },
-    },
-    sync: () => Promise.resolve(),
-  };
-
-  const hadExcel = Reflect.has(globalThis, "Excel");
-  const previousExcel = Reflect.get(globalThis, "Excel");
-  Reflect.set(globalThis, "Excel", {
-    run: <TResult>(callback: (host: unknown) => Promise<TResult>): Promise<TResult> => callback(context),
-  });
-
-  try {
-    const result = await createModifyStructureTool().execute("duplicate-existing-name", {
-      action: "duplicate_sheet",
-      sheet: "Source",
-      new_name: "Existing",
-    });
-
-    assert.match(firstText(result), /^Error:/u);
-    assert.equal(copiesCreated, 0);
-  } finally {
-    if (hadExcel) Reflect.set(globalThis, "Excel", previousExcel);
-    else Reflect.deleteProperty(globalThis, "Excel");
-  }
-});
-
-void test("a completed sheet duplicate is reported as success when backup inspection fails", async () => {
-  let copiesCreated = 0;
-  const copy = {
-    id: "copied-sheet",
-    name: "Source (2)",
-    load: (_properties: string | string[]) => undefined,
-    getUsedRangeOrNullObject: () => {
-      throw new Error("Used-range inspection unavailable");
-    },
-  };
-  const source = {
-    copy: () => {
-      copiesCreated += 1;
-      return copy;
-    },
-  };
-  const context = {
-    workbook: {
-      worksheets: {
-        getItem: (_name: string) => source,
-      },
-    },
-    sync: () => Promise.resolve(),
-  };
-
-  const hadExcel = Reflect.has(globalThis, "Excel");
-  const previousExcel = Reflect.get(globalThis, "Excel");
-  Reflect.set(globalThis, "Excel", {
-    run: <TResult>(callback: (host: unknown) => Promise<TResult>): Promise<TResult> => callback(context),
-  });
-
-  try {
-    const result = await createModifyStructureTool().execute("duplicate-without-inspection", {
-      action: "duplicate_sheet",
-      sheet: "Source",
-    });
-
-    assert.match(firstText(result), /^Duplicated "Source" as "Source \(2\)"\./u);
-    assert.match(firstText(result), /Backup not created/u);
-    assert.equal(copiesCreated, 1);
-  } finally {
-    if (hadExcel) Reflect.set(globalThis, "Excel", previousExcel);
-    else Reflect.deleteProperty(globalThis, "Excel");
-  }
-});
-
-void test("restoring a deleted row reinserts its captured values", async () => {
-  const settings = createInMemorySettingsStore();
-  await settings.set(RECOVERY_SETTING_KEY, {
-    version: 1,
-    snapshots: [{
-      id: "deleted-row",
+      id,
       at: 1,
       toolName: "modify_structure",
       toolCallId: "delete-row",
@@ -320,19 +59,166 @@ void test("restoring a deleted row reinserts its captured values", async () => {
         sheetName: "Data",
         position: 5,
         count: 1,
-        dataRange: {
-          address: "A5:B5",
-          rowCount: 1,
-          columnCount: 2,
-          values: [[10, 20]],
-          formulas: [["", ""]],
-        },
+        dataRange,
       },
     }],
   });
+}
+
+async function withExcel<TContext, TResult>(
+  context: TContext,
+  action: () => Promise<TResult>,
+): Promise<TResult> {
+  const hadExcel = Reflect.has(globalThis, "Excel");
+  const previousExcel = Reflect.get(globalThis, "Excel");
+  Reflect.set(globalThis, "Excel", {
+    run: (callback: (host: TContext) => Promise<TResult>): Promise<TResult> => callback(context),
+  });
+
+  try {
+    return await action();
+  } finally {
+    if (hadExcel) Reflect.set(globalThis, "Excel", previousExcel);
+    else Reflect.deleteProperty(globalThis, "Excel");
+  }
+}
+
+void test("an inconsistent persisted row backup never reaches the workbook host", async () => {
+  const settings = createInMemorySettingsStore();
+  await storeDeletedRow(settings, "rows-with-invalid-address-shape", {
+    address: "A5:B6",
+    rowCount: 1,
+    columnCount: 2,
+    values: [[10, 20]],
+    formulas: [["", ""]],
+  });
+
+  let workbookTouched = false;
+  const context = {
+    workbook: {
+      worksheets: {
+        getItemOrNullObject: () => {
+          workbookTouched = true;
+          throw new Error("Invalid backup reached the workbook host.");
+        },
+      },
+    },
+  };
+
+  const result = await withExcel(context, () => createHistory(settings).execute("restore-invalid-rows", {
+    action: "restore",
+    snapshot_id: "rows-with-invalid-address-shape",
+  }));
+
+  assert.match(firstText(result), /^Error:/u);
+  assert.equal(workbookTouched, false);
+});
+
+void test("a persisted row backup for a different row never reaches the workbook host", async () => {
+  const settings = createInMemorySettingsStore();
+  await storeDeletedRow(settings, "rows-with-displaced-data", {
+    address: "A6:B6",
+    rowCount: 1,
+    columnCount: 2,
+    values: [[10, 20]],
+    formulas: [["", ""]],
+  });
+
+  let workbookTouched = false;
+  const context = {
+    workbook: {
+      worksheets: {
+        getItemOrNullObject: () => {
+          workbookTouched = true;
+          throw new Error("Invalid backup reached the workbook host.");
+        },
+      },
+    },
+  };
+
+  const result = await withExcel(context, () => createHistory(settings).execute("restore-displaced-rows", {
+    action: "restore",
+    snapshot_id: "rows-with-displaced-data",
+  }));
+
+  assert.match(firstText(result), /^Error:/u);
+  assert.equal(workbookTouched, false);
+});
+
+void test("duplicating a sheet to an existing name leaves the workbook unchanged", async () => {
+  let copiesCreated = 0;
+  const context = {
+    workbook: {
+      worksheets: {
+        getItem: () => ({
+          copy: () => {
+            copiesCreated += 1;
+          },
+        }),
+        getItemOrNullObject: () => ({
+          isNullObject: false,
+          load: () => undefined,
+        }),
+      },
+    },
+    sync: () => Promise.resolve(),
+  };
+
+  const result = await withExcel(context, () => createModifyStructureTool().execute("duplicate-existing-name", {
+    action: "duplicate_sheet",
+    sheet: "Source",
+    new_name: "Existing",
+  }));
+
+  assert.match(firstText(result), /^Error:/u);
+  assert.equal(copiesCreated, 0);
+});
+
+void test("a completed sheet duplicate stays successful when backup inspection fails", async () => {
+  let copiesCreated = 0;
+  const context = {
+    workbook: {
+      worksheets: {
+        getItem: () => ({
+          copy: () => {
+            copiesCreated += 1;
+            return {
+              id: "copied-sheet",
+              name: "Source (2)",
+              load: () => undefined,
+              getUsedRangeOrNullObject: () => {
+                throw new Error("Used-range inspection unavailable");
+              },
+            };
+          },
+        }),
+      },
+    },
+    sync: () => Promise.resolve(),
+  };
+
+  const result = await withExcel(context, () => createModifyStructureTool().execute("duplicate-without-inspection", {
+    action: "duplicate_sheet",
+    sheet: "Source",
+  }));
+
+  assert.match(firstText(result), /^Duplicated "Source" as "Source \(2\)"\./u);
+  assert.match(firstText(result), /Backup not created/u);
+  assert.equal(copiesCreated, 1);
+});
+
+void test("restoring a deleted row reinserts its captured values", async () => {
+  const settings = createInMemorySettingsStore();
+  await storeDeletedRow(settings, "deleted-row", {
+    address: "A5:B5",
+    rowCount: 1,
+    columnCount: 2,
+    values: [[10, 20]],
+    formulas: [["", ""]],
+  });
 
   let insertedRows = 0;
-  let restoredValues: unknown[][] = [];
+  let restoredValues: Array<Array<string | number>> = [];
   const rowRange = {
     insert: (direction: string) => {
       assert.equal(direction, "Down");
@@ -342,8 +228,8 @@ void test("restoring a deleted row reinserts its captured values", async () => {
   const dataRange = {
     rowCount: 1,
     columnCount: 2,
-    load: (_properties: string | string[]) => undefined,
-    set values(value: unknown[][]) {
+    load: () => undefined,
+    set values(value: Array<Array<string | number>>) {
       restoredValues = value;
     },
   };
@@ -353,44 +239,24 @@ void test("restoring a deleted row reinserts its captured values", async () => {
     visibility: "Visible",
     position: 0,
     isNullObject: false,
-    load: (_properties: string | string[]) => undefined,
+    load: () => undefined,
     getRange: (address: string) => address === "5:5" ? rowRange : dataRange,
   };
   const context = {
     workbook: {
       worksheets: {
-        getItemOrNullObject: (_reference: string) => sheet,
+        getItemOrNullObject: () => sheet,
       },
     },
     sync: () => Promise.resolve(),
   };
-  const log = new WorkbookRecoveryLog({
-    getSettingsStore: () => Promise.resolve(settings),
-    getWorkbookContext: () => Promise.resolve(workbook),
-    applySnapshot: () => Promise.resolve({ values: [[1]], formulas: [[1]] }),
-  });
-  const history = createWorkbookHistoryTool({
-    getRecoveryLog: () => log,
-    appendAuditEntry: () => Promise.resolve(),
-  });
 
-  const hadExcel = Reflect.has(globalThis, "Excel");
-  const previousExcel = Reflect.get(globalThis, "Excel");
-  Reflect.set(globalThis, "Excel", {
-    run: <TResult>(callback: (host: unknown) => Promise<TResult>): Promise<TResult> => callback(context),
-  });
+  const result = await withExcel(context, () => createHistory(settings).execute("restore-deleted-row", {
+    action: "restore",
+    snapshot_id: "deleted-row",
+  }));
 
-  try {
-    const result = await history.execute("restore-deleted-row", {
-      action: "restore",
-      snapshot_id: "deleted-row",
-    });
-
-    assert.match(firstText(result), /^✅ Restored backup/u);
-    assert.equal(insertedRows, 1);
-    assert.deepEqual(restoredValues, [[10, 20]]);
-  } finally {
-    if (hadExcel) Reflect.set(globalThis, "Excel", previousExcel);
-    else Reflect.deleteProperty(globalThis, "Excel");
-  }
+  assert.match(firstText(result), /^✅ Restored backup/u);
+  assert.equal(insertedRows, 1);
+  assert.deepEqual(restoredValues, [[10, 20]]);
 });

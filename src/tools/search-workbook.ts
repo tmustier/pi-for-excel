@@ -58,18 +58,19 @@ const schema = Type.Object({
 });
 
 type Params = Static<typeof schema>;
-const searchCellMatrixSchema = Type.Array(Type.Array(Type.Union([
-  Type.String(),
-  Type.Number(),
-  Type.Boolean(),
-  Type.Null(),
-])));
-type SearchCellValue = Static<typeof searchCellMatrixSchema>[number][number] | undefined;
+type SearchCellValue = string | number | boolean | null;
+type LoadedSearchCell = SearchCellValue | undefined;
+
+const searchCellMatrixSchema = Type.Refine(
+  Type.Unsafe<SearchCellValue[][]>({}),
+  (value) => Array.isArray(value) && value.every(Array.isArray),
+  () => "search cell matrix must be an array of rows",
+);
 
 interface SearchMatch {
   sheet: string;
   address: string;
-  value: SearchCellValue;
+  value: LoadedSearchCell;
   formula?: string;
   context?: string;
 }
@@ -94,28 +95,12 @@ interface SearchRangeResult {
   hasMore: boolean;
 }
 
-function searchableValue(value: SearchCellValue): string | null {
+function searchableValue(value: LoadedSearchCell): string | null {
   if (value === null || value === undefined || value === "") return null;
   return typeof value === "string" ? value : String(value);
 }
 
-function searchTarget(
-  value: SearchCellValue,
-  formula: SearchCellValue,
-  searchFormulas: boolean,
-): string | null {
-  if (searchFormulas) {
-    return typeof formula === "string" && formula.startsWith("=") ? formula : null;
-  }
-
-  return searchableValue(value);
-}
-
-function textMatches(target: string, queryLower: string, regex: RegExp | undefined): boolean {
-  return regex ? regex.test(target) : target.toLowerCase().includes(queryLower);
-}
-
-function contextCellText(value: SearchCellValue): string {
+function contextCellText(value: LoadedSearchCell): string {
   const text = searchableValue(value) ?? "";
   const bounded = text.length > 20 ? `${text.substring(0, 20)}…` : text;
   return bounded.replace(/\\/g, "\\\\").replace(/\|/g, "\\|");
@@ -166,8 +151,14 @@ function searchLoadedRange(options: SearchRangeOptions): SearchRangeResult {
     for (let column = 0; column < valueRow.length; column += 1) {
       const value = valueRow[column];
       const formula = formulaRow[column];
-      const target = searchTarget(value, formula, options.searchFormulas);
-      if (target === null || !textMatches(target, options.queryLower, options.regex)) continue;
+      const target = options.searchFormulas
+        ? (typeof formula === "string" && formula.startsWith("=") ? formula : null)
+        : searchableValue(value);
+      if (target === null) continue;
+      const matchesQuery = options.regex
+        ? options.regex.test(target)
+        : target.toLowerCase().includes(options.queryLower);
+      if (!matchesQuery) continue;
 
       totalMatches += 1;
       if (totalMatches <= options.offset) continue;
@@ -267,7 +258,7 @@ export function createSearchWorkbookTool(): AgentTool<typeof schema> {
             ? sheets.items.filter((s) => s.name === params.sheet)
             : sheets.items.filter((s) => s.visibility === "Visible");
 
-          outer: for (const sheet of targetSheets) {
+          for (const sheet of targetSheets) {
             const used = sheet.getUsedRangeOrNullObject();
             used.load("values,formulas,address");
             await context.sync();
@@ -277,7 +268,6 @@ export function createSearchWorkbookTool(): AgentTool<typeof schema> {
             const values = Value.Parse(searchCellMatrixSchema, used.values);
             const formulas = Value.Parse(searchCellMatrixSchema, used.formulas);
 
-            // Parse start address for cell computation
             const cellPart = parseRangeRef(used.address).address;
             const colonIndex = cellPart.indexOf(":");
             const startCell = colonIndex >= 0 ? cellPart.slice(0, colonIndex) : cellPart;
@@ -305,7 +295,7 @@ export function createSearchWorkbookTool(): AgentTool<typeof schema> {
             totalMatches = rangeResult.totalMatches;
             if (rangeResult.hasMore) {
               hasMore = true;
-              break outer;
+              break;
             }
           }
           return { matches: allMatches, hasMore, totalMatches };

@@ -49,7 +49,7 @@ function parseCellRangeBounds(address: string): {
   end: { column: number; row: number };
 } | null {
   const parts = localAddressPart(address).split(":");
-  if (parts.length < 1 || parts.length > 2) return null;
+  if (parts.length > 2) return null;
 
   const start = parseCellCoordinates(parts[0] ?? "");
   const end = parseCellCoordinates(parts[1] ?? parts[0] ?? "");

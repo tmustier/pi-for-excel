@@ -83,57 +83,6 @@ interface StructureMutationResult {
   checkpointUnavailableReason?: string;
 }
 
-type SupportedStructureCheckpointAction =
-  | "rename_sheet"
-  | "hide_sheet"
-  | "unhide_sheet"
-  | "insert_rows"
-  | "delete_rows"
-  | "insert_columns"
-  | "delete_columns"
-  | "add_sheet"
-  | "delete_sheet"
-  | "duplicate_sheet";
-
-type PreMutationCapturedStructureCheckpointAction = "rename_sheet" | "hide_sheet" | "unhide_sheet";
-
-function supportedCheckpointActionFor(
-  action: Params["action"],
-): SupportedStructureCheckpointAction | null {
-  if (
-    action === "rename_sheet" ||
-    action === "hide_sheet" ||
-    action === "unhide_sheet" ||
-    action === "insert_rows" ||
-    action === "delete_rows" ||
-    action === "insert_columns" ||
-    action === "delete_columns" ||
-    action === "add_sheet" ||
-    action === "delete_sheet" ||
-    action === "duplicate_sheet"
-  ) {
-    return action;
-  }
-
-  return null;
-}
-
-function preMutationCheckpointKindFor(
-  action: PreMutationCapturedStructureCheckpointAction,
-): "sheet_name" | "sheet_visibility" {
-  return action === "rename_sheet" ? "sheet_name" : "sheet_visibility";
-}
-
-function unsupportedStructureCheckpointReason(action: Params["action"]): string {
-  return `Checkpoint capture is not yet supported for modify_structure action \`${action}\`.`;
-}
-
-function structureMutationCount(params: Params): number {
-  return typeof params.count === "number" && Number.isFinite(params.count) && params.count > 0
-    ? Math.floor(params.count)
-    : 1;
-}
-
 function targetSheet(context: Excel.RequestContext, sheetName: string | undefined): Excel.Worksheet {
   return sheetName
     ? context.workbook.worksheets.getItem(sheetName)
@@ -437,7 +386,9 @@ async function executeStructureMutation(
   context: Excel.RequestContext,
   params: Params,
 ): Promise<StructureMutationResult> {
-  const count = structureMutationCount(params);
+  const count = typeof params.count === "number" && Number.isFinite(params.count) && params.count > 0
+    ? Math.floor(params.count)
+    : 1;
   switch (params.action) {
     case "insert_rows": return insertRows(context, params, count);
     case "delete_rows": return deleteRows(context, params, count);
@@ -470,11 +421,8 @@ export function createModifyStructureTool(): AgentTool<typeof schema, ModifyStru
       params: Params,
     ): Promise<AgentToolResult<ModifyStructureDetails>> => {
       try {
-        const checkpointAction = supportedCheckpointActionFor(params.action);
         let preMutationCheckpointState: RecoveryModifyStructureState | null = null;
-        let checkpointUnavailableReason = checkpointAction
-          ? null
-          : unsupportedStructureCheckpointReason(params.action);
+        let checkpointUnavailableReason: string | null = null;
 
         if (
           (params.action === "rename_sheet" || params.action === "hide_sheet" || params.action === "unhide_sheet") &&
@@ -482,7 +430,7 @@ export function createModifyStructureTool(): AgentTool<typeof schema, ModifyStru
           params.sheet.trim().length > 0
         ) {
           preMutationCheckpointState = await captureModifyStructureState({
-            kind: preMutationCheckpointKindFor(params.action),
+            kind: params.action === "rename_sheet" ? "sheet_name" : "sheet_visibility",
             sheetRef: params.sheet,
           });
 
@@ -504,11 +452,9 @@ export function createModifyStructureTool(): AgentTool<typeof schema, ModifyStru
 
         const checkpointAddress = result.outputAddress ?? params.sheet ?? params.action;
         const checkpointState = result.checkpointState ?? preMutationCheckpointState;
-        const recoveryUnavailableReason = checkpointAction && checkpointState
+        const recoveryUnavailableReason = checkpointState
           ? CHECKPOINT_SKIPPED_REASON
-          : (checkpointAction
-            ? (result.checkpointUnavailableReason ?? checkpointUnavailableReason ?? CHECKPOINT_SKIPPED_REASON)
-            : unsupportedStructureCheckpointReason(params.action));
+          : (result.checkpointUnavailableReason ?? checkpointUnavailableReason ?? CHECKPOINT_SKIPPED_REASON);
 
         await finalizeMutationOperation(mutationFinalizeDependencies, {
           auditEntry: {
@@ -523,7 +469,7 @@ export function createModifyStructureTool(): AgentTool<typeof schema, ModifyStru
           recovery: {
             result: toolResult,
             appendRecoverySnapshot: () => {
-              if (!checkpointAction || !checkpointState) {
+              if (!checkpointState) {
                 return Promise.resolve(null);
               }
 

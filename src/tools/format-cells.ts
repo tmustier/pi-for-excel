@@ -239,12 +239,6 @@ interface FormatMutationResult {
   cellCount: number;
 }
 
-function recordAppliedStyles(params: Params, applied: string[]): void {
-  if (!params.style) return;
-  const names = Array.isArray(params.style) ? params.style : [params.style];
-  applied.push(`style ${names.join(" + ")}`);
-}
-
 function applyFontAndFill(
   format: Excel.RangeFormat,
   props: CellStyle,
@@ -394,33 +388,6 @@ function applyMerge(resolved: FormatResolution, merge: boolean | undefined, appl
   applied.push(merge ? "merged" : "unmerged");
 }
 
-function formatTargetCellCount(resolved: FormatResolution): number {
-  return resolved.isMultiRange
-    ? resolved.target.areas.items.reduce(
-      (total, area) => total + area.rowCount * area.columnCount,
-      0,
-    )
-    : resolved.target.rowCount * resolved.target.columnCount;
-}
-
-function appendColumnWidthWarning(
-  columnWidthFormat: Excel.RangeFormat | null,
-  requestedColumnWidth: number | undefined,
-  warnings: string[],
-): void {
-  if (!columnWidthFormat || typeof requestedColumnWidth !== "number") return;
-  const actualPoints = columnWidthFormat.columnWidth;
-  if (typeof actualPoints !== "number") {
-    warnings.push("Column widths are not uniform; Excel returned no single width value.");
-    return;
-  }
-
-  const actualChars = actualPoints / POINTS_PER_CHAR_ARIAL_10;
-  if (Math.abs(actualChars - requestedColumnWidth) > 0.1) {
-    warnings.push(`Requested column width ${requestedColumnWidth}, Excel applied ${actualChars.toFixed(2)}.`);
-  }
-}
-
 async function applyResolvedFormatting(
   context: Excel.RequestContext,
   params: Params,
@@ -439,7 +406,10 @@ async function applyResolvedFormatting(
   const format = resolved.target.format;
   const hasNamedStyle = Boolean(params.style);
 
-  recordAppliedStyles(params, applied);
+  if (params.style) {
+    const names = Array.isArray(params.style) ? params.style : [params.style];
+    applied.push(`style ${names.join(" + ")}`);
+  }
   applyFontAndFill(format, style.properties, hasNamedStyle, applied);
   applyNumberFormat(resolved, style.excelNumberFormat, hasNamedStyle, applied);
   applyAlignment(format, style.properties, hasNamedStyle, applied);
@@ -455,7 +425,24 @@ async function applyResolvedFormatting(
   applyMerge(resolved, params.merge, applied);
 
   await context.sync();
-  appendColumnWidthWarning(columnWidthFormat, params.column_width, warnings);
+  if (columnWidthFormat && typeof params.column_width === "number") {
+    const actualPoints = columnWidthFormat.columnWidth;
+    if (typeof actualPoints !== "number") {
+      warnings.push("Column widths are not uniform; Excel returned no single width value.");
+    } else {
+      const actualChars = actualPoints / POINTS_PER_CHAR_ARIAL_10;
+      if (Math.abs(actualChars - params.column_width) > 0.1) {
+        warnings.push(`Requested column width ${params.column_width}, Excel applied ${actualChars.toFixed(2)}.`);
+      }
+    }
+  }
+
+  const cellCount = resolved.isMultiRange
+    ? resolved.target.areas.items.reduce(
+      (total, area) => total + area.rowCount * area.columnCount,
+      0,
+    )
+    : resolved.target.rowCount * resolved.target.columnCount;
 
   return {
     sheetName: resolved.sheet.name,
@@ -463,7 +450,7 @@ async function applyResolvedFormatting(
     applied,
     warnings,
     isMultiRange: resolved.isMultiRange,
-    cellCount: formatTargetCellCount(resolved),
+    cellCount,
   };
 }
 

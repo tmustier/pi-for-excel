@@ -9,8 +9,10 @@ import {
   type SandboxActivationOptions,
 } from "../src/extensions/sandbox-runtime.ts";
 import {
+  isSandboxEnvelope,
   SANDBOX_BOOTSTRAP_KIND,
   SANDBOX_CHANNEL,
+  type SandboxResponseEnvelope,
 } from "../src/extensions/sandbox/protocol.ts";
 
 interface SandboxHarness {
@@ -132,15 +134,13 @@ async function openSandbox(
     close: async () => {
       const onDeactivate = (event: MessageEvent<unknown>) => {
         const request = event.data;
-        if (typeof request !== "object" || request === null || Array.isArray(request)) return;
-        const payload = request as Record<string, unknown>;
-        if (payload.kind !== "request" || payload.method !== "deactivate") return;
+        if (!isSandboxEnvelope(request) || request.kind !== "request" || request.method !== "deactivate") return;
         port.postMessage({
           channel: SANDBOX_CHANNEL,
           instanceId: options.instanceId,
           direction: "sandbox_to_host",
           kind: "response",
-          requestId: payload.requestId,
+          requestId: request.requestId,
           ok: true,
           result: null,
         });
@@ -163,16 +163,14 @@ function sendRequest(
   harness: SandboxHarness,
   method: string,
   params: unknown,
-): Promise<Record<string, unknown>> {
+): Promise<SandboxResponseEnvelope> {
   const requestId = `${method}-request`;
   return new Promise((resolve) => {
     const onMessage = (event: MessageEvent<unknown>) => {
       const response = event.data;
-      if (typeof response !== "object" || response === null || Array.isArray(response)) return;
-      const payload = response as Record<string, unknown>;
-      if (payload.kind !== "response" || payload.requestId !== requestId) return;
+      if (!isSandboxEnvelope(response) || response.kind !== "response" || response.requestId !== requestId) return;
       harness.port.removeEventListener("message", onMessage);
-      resolve(payload);
+      resolve(response);
     };
     harness.port.addEventListener("message", onMessage);
     harness.port.postMessage({
@@ -305,11 +303,10 @@ void test("deactivating a sandbox extension releases its agent-event subscriptio
 });
 
 void test("a sandbox extension can register and invoke a connection-qualified tool", async () => {
-  let registeredTool: AgentTool<TSchema, unknown> | null = null;
-  const getRegisteredTool = (): AgentTool<TSchema, unknown> | null => registeredTool;
+  const registrationState: { tool: AgentTool<TSchema, unknown> | null } = { tool: null };
   const harness = await openSandbox({
     registerTool: (tool) => {
-      registeredTool = tool;
+      registrationState.tool = tool;
     },
   });
 
@@ -323,7 +320,7 @@ void test("a sandbox extension can register and invoke a connection-qualified to
     });
 
     assert.equal(registration.ok, true);
-    const tool = getRegisteredTool();
+    const tool = registrationState.tool;
     assert.ok(tool);
     assert.deepEqual(Reflect.get(tool, "requiresConnection"), [
       "ext.sandbox.contract.crm",
@@ -333,15 +330,13 @@ void test("a sandbox extension can register and invoke a connection-qualified to
     const invocation = new Promise<void>((resolve) => {
       harness.port.addEventListener("message", (event: MessageEvent<unknown>) => {
         const request = event.data;
-        if (typeof request !== "object" || request === null || Array.isArray(request)) return;
-        const payload = request as Record<string, unknown>;
-        if (payload.kind !== "request" || payload.method !== "invoke_tool") return;
+        if (!isSandboxEnvelope(request) || request.kind !== "request" || request.method !== "invoke_tool") return;
         harness.port.postMessage({
           channel: SANDBOX_CHANNEL,
           instanceId: "ext.sandbox.contract",
           direction: "sandbox_to_host",
           kind: "response",
-          requestId: payload.requestId,
+          requestId: request.requestId,
           ok: true,
           result: { content: [{ type: "text", text: "Acme found" }] },
         });
