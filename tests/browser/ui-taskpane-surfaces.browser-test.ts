@@ -187,3 +187,42 @@ void test("a transform bridge outage renders its setup card", async () => {
     assert.match(await setupCard.innerText(), /python transform.*unavailable/i);
   });
 });
+
+void test("direct JavaScript tool cards identify the host runtime being used", async () => {
+  await withTaskpane(async (page) => {
+    await page.evaluate(`
+      (async () => {
+        const sidebar = document.querySelector("pi-sidebar");
+        sidebar.agent.state.messages.push(
+          {
+            role: "assistant",
+            content: [
+              { type: "toolCall", id: "office-js", name: "execute_office_js", arguments: { explanation: "Inspect workbook metadata", code: "return {};" } },
+              { type: "toolCall", id: "wps-js", name: "execute_wps_js", arguments: { explanation: "Inspect workbook metadata", code: "return {};" } },
+            ],
+            api: "openai-responses",
+            provider: "openai",
+            model: "browser-fixture",
+            usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+            stopReason: "toolUse",
+            timestamp: 1,
+          },
+          { role: "toolResult", toolCallId: "office-js", toolName: "execute_office_js", content: [], isError: false, timestamp: 2 },
+          { role: "toolResult", toolCallId: "wps-js", toolName: "execute_wps_js", content: [], isError: false, timestamp: 3 },
+        );
+        sidebar.syncFromAgent();
+        await sidebar.updateComplete;
+        await document.querySelector("message-list").updateComplete;
+        for (const element of document.querySelectorAll("assistant-message, tool-message")) {
+          await element.updateComplete;
+        }
+      })()
+    `);
+
+    const titles = await page.locator(".pi-tool-card__title").allTextContents();
+    assert.deepEqual(titles, [
+      "Run Office.js Inspect workbook metadata",
+      "Run WPS JSAPI Inspect workbook metadata",
+    ]);
+  });
+});

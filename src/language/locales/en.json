@@ -999,6 +999,8 @@
   "textInput.save": "Save",
   "textInput.unavailable": "Text input dialog is not available in the current environment.",
   "tools.action.overview": "Overview",
+  "tools.action.runOfficeJs": "Run Office.js",
+  "tools.action.runWpsJs": "Run WPS JSAPI",
   "tools.workbookOverview": "Workbook Overview",
   "web-search-setup.check-config": "Check your API key and proxy configuration in /tools.",
   "web-search-setup.check-failed": "Could not check helper status right now.",
