@@ -53,6 +53,7 @@ export interface BrowserProviderModelDefinition {
   thinkingLevelMap?: Model<Api>["thinkingLevelMap"];
   cost?: Model<Api>["cost"];
   input?: readonly ("text" | "image")[];
+  inputLimits?: Model<Api>["inputLimits"];
   contextWindow?: number;
   maxTokens?: number;
 }
@@ -187,6 +188,9 @@ function createModel(args: {
     reasoning: args.definition.reasoning ?? false,
     ...(args.definition.thinkingLevelMap !== undefined ? { thinkingLevelMap: args.definition.thinkingLevelMap } : {}),
     input: args.definition.input ? [...args.definition.input] : ["text"],
+    ...(args.definition.inputLimits !== undefined
+      ? { inputLimits: structuredClone(args.definition.inputLimits) }
+      : {}),
     cost: args.definition.cost ?? {
       input: 0,
       output: 0,
@@ -222,6 +226,7 @@ function sanitizeCatalogEntry(
           name: model.name,
           reasoning: model.reasoning,
           input: model.input,
+          inputLimits: model.inputLimits,
           contextWindow: model.contextWindow,
           maxTokens: model.maxTokens,
         },
@@ -459,6 +464,7 @@ function createRegisteredProvider(
               id: modelId,
               ...(template?.reasoning !== undefined ? { reasoning: template.reasoning } : {}),
               ...(template?.input !== undefined ? { input: template.input } : {}),
+              ...(template?.inputLimits !== undefined ? { inputLimits: template.inputLimits } : {}),
               ...(template?.contextWindow !== undefined ? { contextWindow: template.contextWindow } : {}),
               ...(template?.maxTokens !== undefined ? { maxTokens: template.maxTokens } : {}),
             },
@@ -483,6 +489,7 @@ function customProviderRegistrations(provider: CustomProvider): BrowserProviderR
       ...(model.thinkingLevelMap !== undefined ? { thinkingLevelMap: model.thinkingLevelMap } : {}),
       cost: model.cost,
       input: model.input,
+      ...(model.inputLimits !== undefined ? { inputLimits: model.inputLimits } : {}),
       contextWindow: model.contextWindow,
       maxTokens: model.maxTokens,
     });

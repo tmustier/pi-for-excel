@@ -53,6 +53,13 @@ const knownRegistryModel: Model<Api> = {
     high: "high",
   },
   input: ["text", "image"],
+  inputLimits: {
+    maxRequestBytes: 33_554_432,
+    images: {
+      maxPerRequest: 600,
+      resize: { maxWidth: 2_000, maxHeight: 2_000, maxBytes: 4_718_592, jpegQuality: 80 },
+    },
+  },
   cost: {
     input: 2,
     output: 10,
@@ -137,6 +144,7 @@ void test("saveOpenAiGatewayConfig uses matched registry metadata by default", a
   assert.equal(storedModel?.reasoning, true);
   assert.deepEqual(storedModel?.thinkingLevelMap, knownRegistryModel.thinkingLevelMap);
   assert.deepEqual(storedModel?.input, ["text", "image"]);
+  assert.deepEqual(storedModel?.inputLimits, knownRegistryModel.inputLimits);
   assert.deepEqual(storedModel?.cost, knownRegistryModel.cost);
   assert.equal(storedModel?.headers, undefined);
   assert.equal(storedModel?.compat, undefined);
@@ -181,6 +189,7 @@ void test("saveOpenAiGatewayConfig rejects mismatched metadata and manual gatewa
     assert.equal(saved.contextWindow, DEFAULT_OPENAI_GATEWAY_CONTEXT_WINDOW);
     assert.equal(storedModel?.reasoning, false);
     assert.deepEqual(storedModel?.input, ["text"]);
+    assert.equal(storedModel?.inputLimits, undefined);
     assert.deepEqual(storedModel?.cost, {
       input: 0,
       output: 0,

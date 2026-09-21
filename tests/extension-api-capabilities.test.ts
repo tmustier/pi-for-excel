@@ -424,6 +424,7 @@ void test("createExtensionAPI connection APIs enforce capability and owner-quali
 void test("createExtensionAPI gates and owner-qualifies model provider registration", async () => {
   let registeredProviderId = "";
   let registeredConnectionId = "";
+  let registeredInputLimits: unknown;
   let unregisteredProviderId = "";
   let refreshCalls = 0;
 
@@ -435,6 +436,7 @@ void test("createExtensionAPI gates and owner-qualifies model provider registrat
     registerModelProvider: (definition) => {
       registeredProviderId = definition.id;
       registeredConnectionId = definition.connection ?? "";
+      registeredInputLimits = definition.models[0]?.inputLimits;
       return definition.id;
     },
     unregisterModelProvider: (providerId) => {
@@ -455,7 +457,18 @@ void test("createExtensionAPI gates and owner-qualifies model provider registrat
     api: "openai-responses",
     baseUrl: "https://models.example.com/v1",
     modelsUrl: "https://models.example.com/v1/models",
-    models: [{ id: "acme-1", contextWindow: 128_000, maxTokens: 16_000 }],
+    models: [{
+      id: "acme-1",
+      contextWindow: 128_000,
+      maxTokens: 16_000,
+      inputLimits: {
+        maxRequestBytes: 8_388_608,
+        images: {
+          maxPerRequest: 8,
+          resize: { maxWidth: 1_024, maxHeight: 768, maxBytes: 1_048_576, jpegQuality: 72 },
+        },
+      },
+    }],
     connection: "account",
     apiKeySecret: "apiKey",
   });
@@ -465,6 +478,13 @@ void test("createExtensionAPI gates and owner-qualifies model provider registrat
   assert.equal(providerId, "ext.models.acme");
   assert.equal(registeredProviderId, "ext.models.acme");
   assert.equal(registeredConnectionId, "ext.models.account");
+  assert.deepEqual(registeredInputLimits, {
+    maxRequestBytes: 8_388_608,
+    images: {
+      maxPerRequest: 8,
+      resize: { maxWidth: 1_024, maxHeight: 768, maxBytes: 1_048_576, jpegQuality: 72 },
+    },
+  });
   assert.equal(unregisteredProviderId, "ext.models.acme");
   assert.equal(refreshCalls, 1);
 

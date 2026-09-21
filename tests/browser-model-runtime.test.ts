@@ -178,6 +178,13 @@ function gatewayProvider(options?: {
       baseUrl,
       reasoning: false,
       input: ["text"],
+      inputLimits: {
+        maxRequestBytes: 8_388_608,
+        images: {
+          maxPerRequest: 12,
+          resize: { maxWidth: 640, maxHeight: 480, maxBytes: 524_288, jpegQuality: 71 },
+        },
+      },
       cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
       contextWindow: 65_536,
       maxTokens: 8_192,
@@ -232,6 +239,10 @@ void test("discovery-enabled custom providers merge remote model ids and persist
   assert.deepEqual(
     catalogs.entries.get("Gateway · Acme")?.models.map((model) => model.id),
     ["remote-a", "remote-b"],
+  );
+  assert.deepEqual(
+    runtime.models.getModel("Gateway · Acme", "remote-a")?.inputLimits,
+    gatewayProvider().models?.[0]?.inputLimits,
   );
 });
 
@@ -372,6 +383,7 @@ void test("cached discovery is rebound to the current provider transport", async
   await second.refresh({ allowNetwork: false });
 
   const restored = second.models.getModel(providerId, "cached-model");
+  assert.deepEqual(restored?.inputLimits, updated.models?.[0]?.inputLimits);
   assert.equal(restored?.api, "openai-responses");
   assert.equal(restored?.baseUrl, "https://new-gateway.example.com/v2");
   assert.equal(restored?.headers, undefined);
@@ -456,7 +468,12 @@ void test("extension providers are owner-scoped and can resolve host-owned crede
     name: "Example provider",
     api: "openai-responses",
     baseUrl: "https://models.example.com/v1",
-    models: [{ id: "example-model", contextWindow: 128_000, maxTokens: 16_000 }],
+    models: [{
+      id: "example-model",
+      contextWindow: 128_000,
+      maxTokens: 16_000,
+      inputLimits: { images: { resize: { maxWidth: 1_024 } } },
+    }],
     modelsUrl: "https://models.example.com/v1/models",
     resolveApiKey: () => Promise.resolve("host-owned-secret"),
   };
@@ -466,7 +483,10 @@ void test("extension providers are owner-scoped and can resolve host-owned crede
   assert.equal(runtime.shouldProxyProvider(registration.id), true);
   assert.equal(runtime.shouldProxyProvider("openai"), false);
   assert.equal((await runtime.models.getAuth(registration.id))?.auth.apiKey, "host-owned-secret");
-  assert.ok((await runtime.models.getAvailable(registration.id)).some((model) => model.id === "example-model"));
+  const extensionModel = (await runtime.models.getAvailable(registration.id)).find(
+    (model) => model.id === "example-model",
+  );
+  assert.deepEqual(extensionModel?.inputLimits, registration.models[0]?.inputLimits);
 
   await assert.rejects(
     runtime.unregisterExtensionProvider("ext.someone-else", registration.id),

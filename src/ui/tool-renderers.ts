@@ -76,7 +76,7 @@ function safeParseParams(params: unknown): Record<string, unknown> {
   return {};
 }
 
-function splitToolResultContent(result: ToolResultMessage<unknown>): {
+function splitToolResultContent(result: ToolResultMessage): {
   text: string;
   images: ImageContent[];
 } {
@@ -1063,11 +1063,11 @@ function describeToolCall(
 
 /* ── Renderer ───────────────────────────────────────────────── */
 
-function createExcelMarkdownRenderer(toolName: SupportedToolName): ToolRenderer<unknown, unknown> {
+function createExcelMarkdownRenderer(toolName: SupportedToolName): ToolRenderer {
   return {
     render(
       params: unknown,
-      result: ToolResultMessage<unknown> | undefined,
+      result: ToolResultMessage | undefined,
       isStreaming?: boolean,
     ): ToolRenderResult {
       const state: ToolState = result

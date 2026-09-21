@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { createModels, fauxAssistantMessage, fauxProvider, type Context, type Tool } from "@earendil-works/pi-ai";
+import {
+  createModels,
+  fauxAssistantMessage,
+  fauxProvider,
+  getCurrentTools,
+  type Context,
+  type Tool,
+} from "@earendil-works/pi-ai";
 import { Type } from "typebox";
 
 import { createOfficeStreamFn } from "../src/auth/stream-proxy.ts";
@@ -17,7 +24,8 @@ async function toolsSent(context: Context): Promise<string[] | undefined> {
   models.setProvider(faux.provider);
   let sentTools: string[] | undefined;
   faux.setResponses([(request) => {
-    sentTools = request.tools?.map((tool) => tool.name);
+    const tools = getCurrentTools(request.messages);
+    sentTools = tools.length > 0 ? tools.map((tool) => tool.name) : undefined;
     return fauxAssistantMessage("done");
   }]);
   const hadDocument = Reflect.has(globalThis, "document");

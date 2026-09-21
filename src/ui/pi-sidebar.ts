@@ -9,7 +9,7 @@
 import { html, LitElement, nothing, type PropertyValues } from "lit";
 import { icon } from "./icons.js";
 import { customElement, property, query, state } from "lit/decorators.js";
-import type { Agent, AgentEvent } from "@earendil-works/pi-agent-core";
+import type { Agent, AgentEvent, AgentMessage } from "@earendil-works/pi-agent-core";
 import type { ToolResultMessage } from "@earendil-works/pi-ai";
 import type { StreamingMessageContainer } from "./messages/streaming-message-container.js";
 import { Archive, ChevronRight, FileText, Keyboard, Puzzle, RotateCcw, Ruler, Settings, Wrench } from "lucide";
@@ -27,6 +27,10 @@ import {
   type PayloadStats,
 } from "../auth/stream-proxy.js";
 import { t } from "../language/index.js";
+
+function hasRenderableMessages(messages: readonly AgentMessage[]): boolean {
+  return messages.some((message) => message.role !== "system" && message.role !== "artifact");
+}
 
 export interface EmptyHint {
   /** Short text shown on the button. */
@@ -243,7 +247,7 @@ export class PiSidebar extends LitElement {
   /** Force re-sync from agent state (e.g. after replaceMessages). */
   syncFromAgent(): void {
     if (!this.agent) return;
-    this._hasMessages = this.agent.state.messages.length > 0;
+    this._hasMessages = hasRenderableMessages(this.agent.state.messages);
     this._isStreaming = this.agent.state.isStreaming;
     this.requestUpdate();
   }
@@ -333,14 +337,14 @@ export class PiSidebar extends LitElement {
     const agent = this.agent;
     if (!agent) return;
 
-    this._hasMessages = agent.state.messages.length > 0;
+    this._hasMessages = hasRenderableMessages(agent.state.messages);
     this._isStreaming = agent.state.isStreaming;
 
     this._unsubscribe = agent.subscribe((ev: AgentEvent) => {
       switch (ev.type) {
         case "message_start":
         case "message_end":
-          this._hasMessages = agent.state.messages.length > 0;
+          this._hasMessages = hasRenderableMessages(agent.state.messages);
           this._isStreaming = agent.state.isStreaming;
           this.requestUpdate();
           break;
@@ -676,8 +680,8 @@ export class PiSidebar extends LitElement {
     this._detachTabContextMenuDocumentListener();
   }
 
-  private _buildToolResultsMap(): Map<string, ToolResultMessage<unknown>> {
-    const map = new Map<string, ToolResultMessage<unknown>>();
+  private _buildToolResultsMap(): Map<string, ToolResultMessage> {
+    const map = new Map<string, ToolResultMessage>();
     if (!this.agent) return map;
     for (const msg of this.agent.state.messages) {
       if (msg.role === "toolResult") map.set(msg.toolCallId, msg);
@@ -693,7 +697,7 @@ export class PiSidebar extends LitElement {
 
     // Derive from agent state directly — _hasMessages may lag behind after
     // batch operations like replaceMessages() that don't fire per-message events.
-    const hasMessages = this._hasMessages || state.messages.length > 0;
+    const hasMessages = this._hasMessages || hasRenderableMessages(state.messages);
 
     return html`
       ${this._renderSessionTabs()}
@@ -702,7 +706,7 @@ export class PiSidebar extends LitElement {
         <div class="pi-messages__inner">
           ${hasMessages ? html`
             <message-list
-              .messages=${state.messages}
+              .messages=${state.messages.slice()}
               .tools=${state.tools}
               .pendingToolCalls=${state.pendingToolCalls}
               .isStreaming=${state.isStreaming}

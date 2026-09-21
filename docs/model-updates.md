@@ -23,7 +23,7 @@ Do not use Pi coding-agent's Node/file `ModelRuntime` directly in the Office Web
 
 Manual gateway metadata is a save-time snapshot. Existing entries retain saved limits until edited; clear the context field when re-saving to use current registry defaults. Other manual gateway snapshots are excluded from metadata lookup.
 
-### Current GPT-5.6 registry snapshot (`pi-ai` 0.85.1)
+### Current GPT-5.6 registry snapshot (`pi-ai` 0.87.0)
 
 Upstream exposes exactly three IDs on both `openai` and `openai-codex`; there is deliberately no bare `gpt-5.6` alias:
 

@@ -5,6 +5,7 @@ import type {
   AgentToolResult,
   AgentToolUpdateCallback,
 } from "@earendil-works/pi-agent-core";
+import type { ModelInputLimits } from "@earendil-works/pi-ai";
 import type { Static, TSchema } from "typebox";
 
 import type {
@@ -90,6 +91,7 @@ export interface ExtensionModelDefinition {
   name?: string;
   reasoning?: boolean;
   input?: readonly ("text" | "image")[];
+  inputLimits?: ModelInputLimits;
   contextWindow?: number;
   maxTokens?: number;
 }
