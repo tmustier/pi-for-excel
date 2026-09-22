@@ -10,7 +10,6 @@ import { failOnUnexpectedStream } from "./fail-on-unexpected-stream.ts";
 
 class TestAgent extends Agent {
   promptCalls: string[] = [];
-  promptImageCalls: Array<ImageContent[] | undefined> = [];
   continueCalls = 0;
   waitForIdleCalls = 0;
   onPrompt?: (text: string) => void;
@@ -45,11 +44,10 @@ class TestAgent extends Agent {
   override prompt(input: string, images?: ImageContent[]): Promise<void>;
   override prompt(
     input: string | AgentMessage | AgentMessage[],
-    images?: ImageContent[],
+    _images?: ImageContent[],
   ): Promise<void> {
     if (typeof input === "string") {
       this.promptCalls.push(input);
-      this.promptImageCalls.push(images);
       this.onPrompt?.(input);
     }
 

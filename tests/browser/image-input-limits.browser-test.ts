@@ -63,7 +63,6 @@ void test("browser image worker matches Pi limits without blocking the WebView",
     const result = await opened.page.evaluate(`
       (async () => {
         const {
-          normalizePromptImages,
           normalizeToolResultImages,
           processImageInput,
         } = await import("/src/messages/image-input-limits.ts");
@@ -107,9 +106,11 @@ void test("browser image worker matches Pi limits without blocking the WebView",
           },
         };
         const input = { type: "image", data: original, mimeType: "image/png" };
-        const normalized = await normalizePromptImages([input], model);
-        const disabled = await normalizePromptImages([input], model, { autoResizeImages: false });
-        const resized = normalized.images[0];
+        const normalized = await processImageInput(input, {
+          resizeOptions: model.inputLimits.images.resize,
+        });
+        const disabled = await processImageInput(input, { autoResizeImages: false });
+        const resized = normalized.image;
 
         const toolResult = await normalizeToolResultImages([
           { type: "text", text: "before" },
@@ -166,11 +167,13 @@ void test("browser image worker matches Pi limits without blocking the WebView",
         bmpView.setUint16(28, 24, true);
         bmpView.setUint32(34, 4, true);
         bmp[56] = 0xff;
-        const converted = await processImageInput({
+        const bmpInput = {
           type: "image",
           data: btoa(String.fromCharCode(...bmp)),
           mimeType: "image/bmp",
-        }, { autoResizeImages: false });
+        };
+        const converted = await processImageInput(bmpInput, { autoResizeImages: false });
+        const convertedWithResize = await processImageInput(bmpInput);
 
         const orientedJpeg = "/9j/4QBDaHR0cDovL25zLmFkb2JlLmNvbS94YXAvMS4wLwA8eDp4bXBtZXRhIHhtbG5zOng9ImFkb2JlOm5zOm1ldGEiLz7/4QAiRXhpZgAASUkqAAgAAAABABIBAwABAAAABgAAAAAAAAD/4AAQSkZJRgABAgAAAQABAAD/wAARCAABAAIDAREAAhEBAxEB/9sAQwADAgIDAgIDAwMDBAMDBAUIBQUEBAUKBwcGCAwKDAwLCgsLDQ4SEA0OEQ4LCxAWEBETFBUVFQwPFxgWFBgSFBUU/9sAQwEDBAQFBAUJBQUJFA0LDRQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQU/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD4H8Q/8h/Uv+vmX/0M1/o1wJ/ySWU/9g1D/wBNRMOM/wDkp8z/AOv9b/05I//Z";
         const oriented = await processImageInput({
@@ -247,7 +250,7 @@ void test("browser image worker matches Pi limits without blocking the WebView",
             hintText: normalized.hints.join("\\n"),
           },
           disabled: {
-            unchanged: disabled.images[0].data === original,
+            unchanged: disabled.image.data === original,
             hints: disabled.hints,
           },
           toolResult: {
@@ -268,6 +271,11 @@ void test("browser image worker matches Pi limits without blocking the WebView",
             dimensions: await imageDimensions(converted.image),
             hints: converted.hints,
           } : converted,
+          convertedWithResize: convertedWithResize.ok ? {
+            mimeType: convertedWithResize.image.mimeType,
+            dimensions: await imageDimensions(convertedWithResize.image),
+            hints: convertedWithResize.hints,
+          } : convertedWithResize,
           oriented: oriented.ok ? {
             dimensions: await imageDimensions(oriented.image),
             hints: oriented.hints,
@@ -314,11 +322,13 @@ void test("browser image worker matches Pi limits without blocking the WebView",
       ok: false,
       message: "[Image omitted: could not be converted to a supported inline image format.]",
     });
-    assert.deepEqual(result.converted, {
+    const convertedBmp = {
       mimeType: "image/png",
       dimensions: { width: 1, height: 1 },
       hints: ["[Image converted from image/bmp to image/png.]"],
-    });
+    };
+    assert.deepEqual(result.converted, convertedBmp);
+    assert.deepEqual(result.convertedWithResize, convertedBmp);
     assert.deepEqual(result.oriented, {
       dimensions: { width: 1, height: 2 },
       hints: [

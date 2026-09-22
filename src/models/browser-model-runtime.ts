@@ -189,7 +189,7 @@ function createModel(args: {
     ...(args.definition.thinkingLevelMap !== undefined ? { thinkingLevelMap: args.definition.thinkingLevelMap } : {}),
     input: args.definition.input ? [...args.definition.input] : ["text"],
     ...(args.definition.inputLimits !== undefined
-      ? { inputLimits: structuredClone(args.definition.inputLimits) }
+      ? { inputLimits: args.definition.inputLimits }
       : {}),
     cost: args.definition.cost ?? {
       input: 0,

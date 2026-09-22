@@ -11,7 +11,7 @@ function isTaskpaneInitPayloadShape(value: unknown): value is Record<string, unk
 
 import { html, render } from "lit";
 import { Agent } from "@earendil-works/pi-agent-core";
-import { toToolDeclaration } from "@earendil-works/pi-ai";
+import { getCurrentSystemMessage, toToolDeclaration } from "@earendil-works/pi-ai";
 import { getAppStorage } from "../storage/local/app-storage.js";
 import type { SessionData } from "../storage/local/types.js";
 
@@ -30,10 +30,7 @@ import {
   PI_EXPERIMENTAL_TOOL_CONFIG_CHANGED_EVENT,
 } from "../experiments/events.js";
 import { createConvertToLlm } from "../messages/convert-to-llm.js";
-import {
-  installPromptImageNormalization,
-  installToolResultImageNormalization,
-} from "../messages/image-input-limits.js";
+import { installImageInputNormalization } from "../messages/image-input-limits.js";
 import { effectiveToolOutputLimits } from "../context/window-budgets.js";
 import { findTrailingContextOverflowError } from "../compaction/overflow-recovery.js";
 import { readAutoCompactionEnabled } from "../compaction/settings.js";
@@ -218,9 +215,9 @@ function clearErrorBanner(errorRoot: HTMLElement): void {
 export async function initTaskpane(opts: {
   appEl: HTMLElement;
   errorRoot: HTMLElement;
-  autoResizeImages?: boolean;
+  autoResizeImages: boolean;
 }): Promise<void> {
-  const { appEl, errorRoot } = opts;
+  const { appEl, errorRoot, autoResizeImages } = opts;
 
   const changeTracker = new ChangeTracker();
   const spreadsheetHost = getCurrentSpreadsheetHost();
@@ -248,9 +245,8 @@ export async function initTaskpane(opts: {
     console.warn("[pi] Failed to migrate legacy MCP bearer tokens:", error);
   }
 
-  // 1b. Pi behavior settings default to enabled.
+  // 1b. Auto-compaction (Pi defaults to enabled)
   const autoCompactEnabled = await readAutoCompactionEnabled(settings);
-  const getAutoResizeImages = (): boolean => opts.autoResizeImages ?? true;
 
   // 1c. Security warning: remote proxies can see your prompts + credentials.
   const initialProxySettings = await readTaskpaneProxySettings(settings);
@@ -926,11 +922,8 @@ export async function initTaskpane(opts: {
     });
 
     runtimeAgent = agent;
-    const uninstallPromptImageNormalization = installPromptImageNormalization(agent, {
-      getAutoResizeImages,
-    });
-    const uninstallToolResultImageNormalization = installToolResultImageNormalization(agent, {
-      getAutoResizeImages,
+    const uninstallImageInputNormalization = installImageInputNormalization(agent, {
+      autoResizeImages,
     });
     let currentRuntimeToolsFingerprint = createRuntimeToolFingerprint(initialCapabilities.tools);
     let currentExtensionToolRevision = initialCapabilities.extensionToolRevision;
@@ -956,7 +949,9 @@ export async function initTaskpane(opts: {
         currentExtensionToolRevision = nextExtensionToolRevision;
       }
 
-      if (next.systemPrompt !== agent.state.systemPrompt) {
+      const currentRuntimeSystemPrompt = getCurrentSystemMessage(agent.state.messages)
+        ?.sections?.[RUNTIME_SYSTEM_PROMPT_SECTION];
+      if (next.systemPrompt !== currentRuntimeSystemPrompt) {
         agent.state.messages = [
           ...agent.state.messages,
           {
@@ -1083,8 +1078,7 @@ export async function initTaskpane(opts: {
         unsubscribeErrorTracking();
         queueDisplay.detach();
         actionQueue.shutdown();
-        uninstallPromptImageNormalization();
-        uninstallToolResultImageNormalization();
+        uninstallImageInputNormalization();
         agent.abort();
         persistence.dispose();
       },

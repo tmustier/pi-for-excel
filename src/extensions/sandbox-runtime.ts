@@ -11,7 +11,6 @@ function isExtensionsSandboxRuntimePayloadShape(value: unknown): value is Record
  */
 
 import type { AgentEvent, AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
-import type { ModelInputLimits } from "@earendil-works/pi-ai";
 import type { TSchema } from "typebox";
 
 import type {
@@ -26,6 +25,7 @@ import type {
   SkillSummary,
 } from "../commands/extension-api.js";
 import type { ConnectionState, ConnectionStatus } from "../connections/types.js";
+import { decodeModelInputLimits } from "../models/input-limits.js";
 import type { ToolConnectionMetadata } from "../tools/connection-requirements.js";
 import type { ExtensionCapability } from "./permissions.js";
 import {
@@ -259,87 +259,6 @@ function parseConnectionDefinition(value: unknown): ExtensionConnectionDefinitio
   };
 }
 
-function parseOptionalPositiveInteger(
-  value: number | null | undefined,
-  label: string,
-  maximum?: number,
-): number | undefined {
-  if (value === undefined) return undefined;
-  if (
-    value === null
-    || !Number.isInteger(value)
-    || value < 1
-    || (maximum !== undefined && value > maximum)
-  ) {
-    const range = maximum === undefined ? "a positive integer" : `an integer from 1 to ${maximum}`;
-    throw new Error(`${label} must be ${range}.`);
-  }
-  return value;
-}
-
-function parseModelInputLimits(
-  payload: Record<string, unknown> | undefined,
-  label: string,
-): ModelInputLimits | undefined {
-  if (payload === undefined) return undefined;
-  const maxRequestBytes = parseOptionalPositiveInteger(
-    asFiniteNumberOrNullOrUndefined(payload.maxRequestBytes),
-    `${label}.maxRequestBytes`,
-  );
-
-  let images: ModelInputLimits["images"];
-  if (payload.images !== undefined) {
-    const rawImages = asSandboxPayload(payload.images, `${label}.images`);
-    const maxPerMessage = parseOptionalPositiveInteger(
-      asFiniteNumberOrNullOrUndefined(rawImages.maxPerMessage),
-      `${label}.images.maxPerMessage`,
-    );
-    const maxPerRequest = parseOptionalPositiveInteger(
-      asFiniteNumberOrNullOrUndefined(rawImages.maxPerRequest),
-      `${label}.images.maxPerRequest`,
-    );
-
-    let resize: NonNullable<ModelInputLimits["images"]>["resize"];
-    if (rawImages.resize !== undefined) {
-      const rawResize = asSandboxPayload(rawImages.resize, `${label}.images.resize`);
-      const maxWidth = parseOptionalPositiveInteger(
-        asFiniteNumberOrNullOrUndefined(rawResize.maxWidth),
-        `${label}.images.resize.maxWidth`,
-      );
-      const maxHeight = parseOptionalPositiveInteger(
-        asFiniteNumberOrNullOrUndefined(rawResize.maxHeight),
-        `${label}.images.resize.maxHeight`,
-      );
-      const maxBytes = parseOptionalPositiveInteger(
-        asFiniteNumberOrNullOrUndefined(rawResize.maxBytes),
-        `${label}.images.resize.maxBytes`,
-      );
-      const jpegQuality = parseOptionalPositiveInteger(
-        asFiniteNumberOrNullOrUndefined(rawResize.jpegQuality),
-        `${label}.images.resize.jpegQuality`,
-        100,
-      );
-      resize = {
-        ...(maxWidth !== undefined ? { maxWidth } : {}),
-        ...(maxHeight !== undefined ? { maxHeight } : {}),
-        ...(maxBytes !== undefined ? { maxBytes } : {}),
-        ...(jpegQuality !== undefined ? { jpegQuality } : {}),
-      };
-    }
-
-    images = {
-      ...(resize !== undefined ? { resize } : {}),
-      ...(maxPerMessage !== undefined ? { maxPerMessage } : {}),
-      ...(maxPerRequest !== undefined ? { maxPerRequest } : {}),
-    };
-  }
-
-  return {
-    ...(maxRequestBytes !== undefined ? { maxRequestBytes } : {}),
-    ...(images !== undefined ? { images } : {}),
-  };
-}
-
 function parseModelProviderDefinition(value: unknown): ExtensionModelProviderDefinition {
   const payload = asSandboxPayload(value, "model provider definition");
   const id = asNonEmptyString(payload.id, "provider.id");
@@ -379,13 +298,17 @@ function parseModelProviderDefinition(value: unknown): ExtensionModelProviderDef
       }
     }
 
-    const inputLimitsLabel = `provider.models[${index}].inputLimits`;
-    const inputLimits = parseModelInputLimits(
-      model.inputLimits === undefined
-        ? undefined
-        : asSandboxPayload(model.inputLimits, inputLimitsLabel),
-      inputLimitsLabel,
-    );
+    const inputLimitsValue = model.inputLimits;
+    const inputLimits = inputLimitsValue === undefined
+      ? undefined
+      : typeof inputLimitsValue === "object" && inputLimitsValue !== null
+        ? decodeModelInputLimits(inputLimitsValue)
+        : null;
+    if (inputLimits === null) {
+      throw new Error(
+        `provider.models[${index}].inputLimits must contain positive integer limits with jpegQuality at most 100.`,
+      );
+    }
     const contextWindow = asFiniteNumberOrNullOrUndefined(model.contextWindow);
     const maxTokens = asFiniteNumberOrNullOrUndefined(model.maxTokens);
     if (contextWindow === null || maxTokens === null) {

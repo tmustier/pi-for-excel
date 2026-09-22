@@ -13,18 +13,12 @@ import type {
   ImageWorkerResponse,
 } from "./image-input-worker.js";
 
-/** Pi 0.87's conservative cache-safe image resize profile. */
 export const DEFAULT_IMAGE_RESIZE_OPTIONS = {
   maxWidth: 2_000,
   maxHeight: 2_000,
   maxBytes: 4.5 * 1024 * 1024,
   jpegQuality: 80,
 } as const satisfies Required<ModelImageResizeOptions>;
-
-/** Resolve the build/bootstrap image policy; Pi defaults auto-resize to enabled. */
-export function resolveImageAutoResizeEnabled(raw: string | undefined): boolean {
-  return raw?.trim().toLowerCase() !== "false";
-}
 
 export type ProcessedImageInput = {
   ok: true;
@@ -36,6 +30,7 @@ export type ProcessedImageInput = {
 };
 
 type ImageLimitModel = Pick<Model<Api>, "inputLimits">;
+type SupportedImageMimeType = NonNullable<ImageWorkerRequest["passThroughMimeType"]>;
 
 type ImageProcessingOptions = {
   autoResizeImages?: boolean;
@@ -55,26 +50,11 @@ interface ImageNormalizationOptions {
 }
 
 interface InstalledImageNormalizationOptions {
-  getAutoResizeImages?: () => boolean;
+  autoResizeImages?: boolean;
   processor?: ImageInputProcessor;
 }
 
-function normalizedMimeType(mimeType: string): ImageContent["mimeType"] | null {
-  const baseType = mimeType.split(";")[0]?.trim().toLowerCase();
-  if (baseType === "image/png" || baseType === "image/gif" || baseType === "image/webp") {
-    return baseType;
-  }
-  if (baseType === "image/jpeg" || baseType === "image/jpg") {
-    return "image/jpeg";
-  }
-  return null;
-}
-
-function baseMimeType(mimeType: string): string {
-  return mimeType.split(";")[0]?.trim().toLowerCase() ?? mimeType.toLowerCase();
-}
-
-function createAbortError(): Error {
+function createAbortError(): DOMException {
   return new DOMException("Image processing aborted.", "AbortError");
 }
 
@@ -83,72 +63,40 @@ function runImageWorker(
   signal?: AbortSignal,
 ): Promise<ImageWorkerResponse> {
   if (signal?.aborted) return Promise.reject(createAbortError());
-  if (typeof Worker === "undefined") {
-    return Promise.resolve({ ok: false, reason: "decode" });
-  }
+  if (typeof Worker === "undefined") return Promise.resolve({ ok: false, reason: "decode" });
 
   return new Promise<ImageWorkerResponse>((resolve, reject) => {
-    let settled = false;
     let worker: Worker;
     try {
-      worker = new Worker(
-        new URL("./image-input-worker.ts", import.meta.url),
-        { type: "module" },
-      );
+      worker = new Worker(new URL("./image-input-worker.ts", import.meta.url), { type: "module" });
     } catch {
       resolve({ ok: false, reason: "decode" });
       return;
     }
 
-    const cleanup = (): void => {
-      signal?.removeEventListener("abort", onAbort);
-      worker.terminate();
-    };
-    const settle = (response: ImageWorkerResponse): void => {
+    let settled = false;
+    const finish = (response: ImageWorkerResponse): void => {
       if (settled) return;
       settled = true;
-      cleanup();
+      signal?.removeEventListener("abort", abort);
+      worker.terminate();
       resolve(response);
     };
-    const fail = (error: Error): void => {
+    const abort = (): void => {
       if (settled) return;
       settled = true;
-      cleanup();
-      reject(error);
+      worker.terminate();
+      reject(createAbortError());
     };
-    const onAbort = (): void => fail(createAbortError());
 
-    worker.addEventListener("message", (event: MessageEvent<ImageWorkerResponse>) => {
-      settle(event.data);
-    }, { once: true });
-    worker.addEventListener("error", () => {
-      settle({ ok: false, reason: "decode" });
-    }, { once: true });
-    signal?.addEventListener("abort", onAbort, { once: true });
+    worker.onmessage = (event: MessageEvent<ImageWorkerResponse>) => finish(event.data);
+    worker.onerror = () => finish({ ok: false, reason: "decode" });
+    signal?.addEventListener("abort", abort, { once: true });
     worker.postMessage(request);
   });
 }
 
-function dimensionHint(
-  originalWidth: number,
-  originalHeight: number,
-  width: number,
-  height: number,
-): string {
-  const scale = originalWidth / width;
-  return (
-    `[Image: original ${originalWidth}x${originalHeight}, displayed at ${width}x${height}. `
-    + `Multiply coordinates by ${scale.toFixed(2)} to map to original image.]`
-  );
-}
-
-/**
- * Normalize one newly attached image before it enters Agent history.
- *
- * Decode, resize, candidate encoding and base64 conversion run in a dedicated
- * browser worker. Only the accepted candidate crosses back to the Office
- * WebView thread, and aborting terminates the worker immediately.
- */
+/** Normalize one image in a worker before it enters Agent history. */
 export async function processImageInput(
   image: ImageContent,
   options: ImageProcessingOptions = {},
@@ -156,71 +104,67 @@ export async function processImageInput(
   if (options.signal?.aborted) throw createAbortError();
 
   const autoResizeImages = options.autoResizeImages ?? true;
-  const supportedMimeType = normalizedMimeType(image.mimeType);
-
-  if (!autoResizeImages && supportedMimeType) {
-    if (supportedMimeType === image.mimeType) {
-      return { ok: true, image, hints: [] };
-    }
+  const originalMimeType = image.mimeType.split(";")[0]?.trim().toLowerCase()
+    ?? image.mimeType.toLowerCase();
+  let passThroughMimeType: SupportedImageMimeType | null = null;
+  if (originalMimeType === "image/jpg") {
+    passThroughMimeType = "image/jpeg";
+  } else if (
+    originalMimeType === "image/png"
+    || originalMimeType === "image/jpeg"
+    || originalMimeType === "image/gif"
+    || originalMimeType === "image/webp"
+  ) {
+    passThroughMimeType = originalMimeType;
+  }
+  if (!autoResizeImages && passThroughMimeType) {
     return {
       ok: true,
-      image: { ...image, mimeType: supportedMimeType },
+      image: passThroughMimeType === image.mimeType
+        ? image
+        : { ...image, mimeType: passThroughMimeType },
       hints: [],
     };
   }
 
-  const limits = { ...DEFAULT_IMAGE_RESIZE_OPTIONS, ...options.resizeOptions };
   const result = await runImageWorker({
     data: image.data,
     mimeType: image.mimeType,
     autoResizeImages,
-    canPassThrough: supportedMimeType !== null,
-    limits,
+    passThroughMimeType,
+    limits: { ...DEFAULT_IMAGE_RESIZE_OPTIONS, ...options.resizeOptions },
   }, options.signal);
 
   if (!result.ok) {
-    return result.reason === "size"
-      ? {
-          ok: false,
-          message: "[Image omitted: could not be resized below the inline image size limit.]",
-        }
-      : {
-          ok: false,
-          message: "[Image omitted: could not be converted to a supported inline image format.]",
-        };
-  }
-
-  if (result.unchanged) {
-    if (supportedMimeType === image.mimeType) {
-      return { ok: true, image, hints: [] };
-    }
-    if (supportedMimeType) {
-      return {
-        ok: true,
-        image: { ...image, mimeType: supportedMimeType },
-        hints: [],
-      };
-    }
+    return {
+      ok: false,
+      message: result.reason === "size"
+        ? "[Image omitted: could not be resized below the inline image size limit.]"
+        : "[Image omitted: could not be converted to a supported inline image format.]",
+    };
   }
 
   if (result.unchanged) {
     return {
-      ok: false,
-      message: "[Image omitted: could not be converted to a supported inline image format.]",
+      ok: true,
+      image: result.mimeType === image.mimeType
+        ? image
+        : { ...image, mimeType: result.mimeType },
+      hints: [],
     };
   }
 
   const hints: string[] = [];
-  if (!supportedMimeType) {
-    hints.push(`[Image converted from ${baseMimeType(image.mimeType)} to ${result.image.mimeType}.]`);
+  if (!passThroughMimeType) {
+    hints.push(`[Image converted from ${originalMimeType} to ${result.image.mimeType}.]`);
   }
   if (result.image.wasResized) {
-    hints.push(dimensionHint(
-      result.image.originalWidth,
-      result.image.originalHeight,
-      result.image.width,
-      result.image.height,
-    ));
+    const scale = result.image.originalWidth / result.image.width;
+    hints.push(
+      `[Image: original ${result.image.originalWidth}x${result.image.originalHeight}, `
+      + `displayed at ${result.image.width}x${result.image.height}. `
+      + `Multiply coordinates by ${scale.toFixed(2)} to map to original image.]`,
+    );
   }
 
   return {
@@ -234,43 +178,17 @@ export async function processImageInput(
   };
 }
 
-async function processWithModel(
+function processWithModel(
   image: ImageContent,
   model: ImageLimitModel,
   options: ImageNormalizationOptions,
 ): Promise<ProcessedImageInput> {
-  const processor = options.processor ?? processImageInput;
   const resizeOptions = model.inputLimits?.images?.resize;
-  return await processor(image, {
-    ...(options.autoResizeImages !== undefined
-      ? { autoResizeImages: options.autoResizeImages }
-      : {}),
+  return (options.processor ?? processImageInput)(image, {
+    autoResizeImages: options.autoResizeImages ?? true,
     ...(resizeOptions !== undefined ? { resizeOptions } : {}),
     ...(options.signal !== undefined ? { signal: options.signal } : {}),
   });
-}
-
-export async function normalizePromptImages(
-  images: readonly ImageContent[] | undefined,
-  model: ImageLimitModel,
-  options: ImageNormalizationOptions = {},
-): Promise<{ images: ImageContent[]; hints: string[] }> {
-  if (!images) return { images: [], hints: [] };
-
-  const normalizedImages: ImageContent[] = [];
-  const hints: string[] = [];
-
-  for (const image of images) {
-    const processed = await processWithModel(image, model, options);
-    if (!processed.ok) {
-      hints.push(processed.message);
-      continue;
-    }
-    normalizedImages.push(processed.image);
-    hints.push(...processed.hints);
-  }
-
-  return { images: normalizedImages, hints };
 }
 
 async function normalizePromptContent(
@@ -302,57 +220,7 @@ async function normalizePromptContent(
   return normalized;
 }
 
-function appendHints(
-  content: string | (TextContent | ImageContent)[],
-  hints: readonly string[],
-): string | (TextContent | ImageContent)[] {
-  if (hints.length === 0) return content;
-  const hintText = hints.join("\n");
-  if (typeof content === "string") {
-    return content.length > 0 ? `${content}\n\n${hintText}` : hintText;
-  }
-  return [...content, { type: "text", text: hintText }];
-}
-
-async function normalizeAttachments(
-  attachments: readonly Attachment[] | undefined,
-  model: ImageLimitModel,
-  options: ImageNormalizationOptions,
-): Promise<{ attachments: Attachment[] | undefined; hints: string[] }> {
-  if (!attachments?.some((attachment) => attachment.type === "image")) {
-    return { attachments: attachments ? [...attachments] : undefined, hints: [] };
-  }
-
-  const normalized: Attachment[] = [];
-  const hints: string[] = [];
-  for (const attachment of attachments) {
-    if (attachment.type !== "image") {
-      normalized.push(attachment);
-      continue;
-    }
-
-    const processed = await processWithModel({
-      type: "image",
-      data: attachment.content,
-      mimeType: attachment.mimeType,
-    }, model, options);
-    if (!processed.ok) {
-      hints.push(processed.message);
-      continue;
-    }
-
-    normalized.push({
-      ...attachment,
-      content: processed.image.data,
-      mimeType: processed.image.mimeType,
-    });
-    hints.push(...processed.hints);
-  }
-
-  return { attachments: normalized, hints };
-}
-
-async function normalizePromptMessageInPlace(
+async function normalizePromptMessage(
   message: AgentMessage,
   model: ImageLimitModel,
   options: ImageNormalizationOptions,
@@ -361,60 +229,46 @@ async function normalizePromptMessageInPlace(
     message.content = await normalizePromptContent(message.content, model, options);
     return;
   }
-  if (message.role !== "user-with-attachments" || message.imageInputsNormalized === true) {
-    return;
+  if (message.role !== "user-with-attachments" || message.imageInputsNormalized === true) return;
+
+  message.content = await normalizePromptContent(message.content, model, options);
+  const hints: string[] = [];
+  if (message.attachments?.some((attachment) => attachment.type === "image")) {
+    const attachments: Attachment[] = [];
+    for (const attachment of message.attachments) {
+      if (attachment.type !== "image") {
+        attachments.push(attachment);
+        continue;
+      }
+
+      const processed = await processWithModel({
+        type: "image",
+        data: attachment.content,
+        mimeType: attachment.mimeType,
+      }, model, options);
+      if (!processed.ok) {
+        hints.push(processed.message);
+        continue;
+      }
+      attachments.push({
+        ...attachment,
+        content: processed.image.data,
+        mimeType: processed.image.mimeType,
+      });
+      hints.push(...processed.hints);
+    }
+    message.attachments = attachments;
   }
 
-  const normalizedContent = await normalizePromptContent(message.content, model, options);
-  const normalizedAttachments = await normalizeAttachments(message.attachments, model, options);
-  message.content = appendHints(normalizedContent, normalizedAttachments.hints);
-  if (normalizedAttachments.attachments) {
-    message.attachments = normalizedAttachments.attachments;
-  } else {
-    delete message.attachments;
+  if (hints.length > 0) {
+    const hintText = hints.join("\n");
+    if (typeof message.content === "string") {
+      message.content = message.content.length > 0 ? `${message.content}\n\n${hintText}` : hintText;
+    } else {
+      message.content = [...message.content, { type: "text", text: hintText }];
+    }
   }
   message.imageInputsNormalized = true;
-}
-
-/** Normalize image-bearing prompt messages at the low-level Agent API boundary. */
-export function installPromptImageNormalization(
-  agent: Agent,
-  options: InstalledImageNormalizationOptions = {},
-): () => void {
-  const normalize = async (message: AgentMessage, signal?: AbortSignal): Promise<void> => {
-    await normalizePromptMessageInPlace(message, agent.state.model, {
-      autoResizeImages: options.getAutoResizeImages?.() ?? true,
-      ...(options.processor !== undefined ? { processor: options.processor } : {}),
-      ...(signal !== undefined ? { signal } : {}),
-    });
-  };
-
-  const unsubscribe = agent.subscribe(async (event, signal) => {
-    if (event.type !== "message_end") return;
-    if (event.message.role !== "user" && event.message.role !== "user-with-attachments") return;
-    await normalize(event.message, signal);
-  });
-
-  const previousTransform = agent.transformContext;
-  const transform: NonNullable<Agent["transformContext"]> = async (messages, signal) => {
-    for (const message of messages) {
-      if (message.role === "user-with-attachments" && message.imageInputsNormalized !== true) {
-        await normalize(message, signal);
-      }
-    }
-    return previousTransform ? await previousTransform(messages, signal) : messages;
-  };
-  agent.transformContext = transform;
-
-  return () => {
-    unsubscribe();
-    if (agent.transformContext !== transform) return;
-    if (previousTransform) {
-      agent.transformContext = previousTransform;
-    } else {
-      delete agent.transformContext;
-    }
-  };
 }
 
 export async function normalizeToolResultImages(
@@ -426,7 +280,6 @@ export async function normalizeToolResultImages(
 
   const normalized: (TextContent | ImageContent)[] = [];
   let changed = false;
-
   for (const block of content) {
     if (block.type !== "image") {
       normalized.push(block);
@@ -435,11 +288,9 @@ export async function normalizeToolResultImages(
 
     const processed = await processWithModel(block, model, options);
     if (!processed.ok) {
-      // Pi preserves tool images when the resize backend cannot process them.
       normalized.push(block);
       continue;
     }
-
     if (
       processed.image.data === block.data
       && processed.image.mimeType === block.mimeType
@@ -455,37 +306,63 @@ export async function normalizeToolResultImages(
     }
     changed = true;
   }
-
   return changed ? normalized : content;
 }
 
-/** Install one-time tool-result image normalization on a low-level Agent. */
-export function installToolResultImageNormalization(
+/** Install prompt and tool-result normalization at the low-level Agent ingress. */
+export function installImageInputNormalization(
   agent: Agent,
   options: InstalledImageNormalizationOptions = {},
 ): () => void {
-  const previous = agent.afterToolCall;
-  const hook: Agent["afterToolCall"] = async (context, signal) => {
-    const previousResult = await previous?.(context, signal);
-    const content = previousResult?.content ?? context.result.content;
-    const normalized = await normalizeToolResultImages(content, agent.state.model, {
-      autoResizeImages: options.getAutoResizeImages?.() ?? true,
+  const normalize = (message: AgentMessage, signal?: AbortSignal): Promise<void> => {
+    return normalizePromptMessage(message, agent.state.model, {
+      autoResizeImages: options.autoResizeImages ?? true,
       ...(options.processor !== undefined ? { processor: options.processor } : {}),
       ...(signal !== undefined ? { signal } : {}),
     });
-
-    if (normalized.length === content.length && normalized.every((block, index) => block === content[index])) {
-      return previousResult;
-    }
-
-    return { ...previousResult, content: normalized };
   };
 
-  agent.afterToolCall = hook;
+  const unsubscribe = agent.subscribe((event, signal) => {
+    if (
+      event.type !== "message_end"
+      || (event.message.role !== "user" && event.message.role !== "user-with-attachments")
+    ) {
+      return;
+    }
+    return normalize(event.message, signal);
+  });
+
+  const previousTransform = agent.transformContext;
+  agent.transformContext = async (messages, signal) => {
+    for (const message of messages) {
+      if (message.role === "user-with-attachments" && message.imageInputsNormalized !== true) {
+        await normalize(message, signal);
+      }
+    }
+    return previousTransform ? await previousTransform(messages, signal) : messages;
+  };
+
+  const previousAfterToolCall = agent.afterToolCall;
+  agent.afterToolCall = async (context, signal) => {
+    const previousResult = await previousAfterToolCall?.(context, signal);
+    const content = previousResult?.content ?? context.result.content;
+    const normalized = await normalizeToolResultImages(content, agent.state.model, {
+      autoResizeImages: options.autoResizeImages ?? true,
+      ...(options.processor !== undefined ? { processor: options.processor } : {}),
+      ...(signal !== undefined ? { signal } : {}),
+    });
+    return normalized === content ? previousResult : { ...previousResult, content: normalized };
+  };
+
   return () => {
-    if (agent.afterToolCall !== hook) return;
-    if (previous) {
-      agent.afterToolCall = previous;
+    unsubscribe();
+    if (previousTransform) {
+      agent.transformContext = previousTransform;
+    } else {
+      delete agent.transformContext;
+    }
+    if (previousAfterToolCall) {
+      agent.afterToolCall = previousAfterToolCall;
     } else {
       delete agent.afterToolCall;
     }

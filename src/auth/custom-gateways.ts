@@ -214,7 +214,7 @@ function createGatewayModel(args: {
       : {}),
     input: registryModel?.input ?? ["text"],
     ...(registryModel?.inputLimits !== undefined
-      ? { inputLimits: structuredClone(registryModel.inputLimits) }
+      ? { inputLimits: registryModel.inputLimits }
       : {}),
     cost: registryModel?.cost ?? {
       input: 0,

@@ -18,11 +18,8 @@ import type { UserMessageWithAttachments } from "../src/messages/attachments.ts"
 import { createConvertToLlm } from "../src/messages/convert-to-llm.ts";
 import {
   DEFAULT_IMAGE_RESIZE_OPTIONS,
-  installPromptImageNormalization,
-  installToolResultImageNormalization,
-  normalizePromptImages,
+  installImageInputNormalization,
   normalizeToolResultImages,
-  resolveImageAutoResizeEnabled,
   type ImageInputProcessor,
 } from "../src/messages/image-input-limits.ts";
 
@@ -66,50 +63,6 @@ void test("Pi conservative image defaults remain exact", () => {
   });
 });
 
-void test("image auto-resize bootstrap config defaults on and only literal false disables it", () => {
-  for (const value of [undefined, "", "0", "disabled", "true"]) {
-    assert.equal(resolveImageAutoResizeEnabled(value), true, String(value));
-  }
-  assert.equal(resolveImageAutoResizeEnabled("false"), false);
-  assert.equal(resolveImageAutoResizeEnabled(" FALSE "), false);
-});
-
-void test("prompt normalization uses model limits, host resize setting, and AbortSignal", async () => {
-  const abortController = new AbortController();
-  const calls: Array<{
-    autoResizeImages: boolean | undefined;
-    maxWidth: number | undefined;
-    signal: AbortSignal | undefined;
-  }> = [];
-  const processor: ImageInputProcessor = (image, options) => {
-    calls.push({
-      autoResizeImages: options?.autoResizeImages,
-      maxWidth: options?.resizeOptions?.maxWidth,
-      signal: options?.signal,
-    });
-    return Promise.resolve({
-      ok: true,
-      image: { ...image, data: `processed-${calls.length}` },
-      hints: [],
-    });
-  };
-  const model = modelWithResize(456);
-
-  const enabled = await normalizePromptImages([IMAGE], model, { processor });
-  const disabled = await normalizePromptImages([IMAGE], model, {
-    autoResizeImages: false,
-    processor,
-    signal: abortController.signal,
-  });
-
-  assert.deepEqual(calls, [
-    { autoResizeImages: undefined, maxWidth: 456, signal: undefined },
-    { autoResizeImages: false, maxWidth: 456, signal: abortController.signal },
-  ]);
-  assert.equal(enabled.images[0]?.data, "processed-1");
-  assert.equal(disabled.images[0]?.data, "processed-2");
-});
-
 void test("low-level Agent normalizes image-array prompts at the real prompt API boundary", async () => {
   const faux = fauxProvider({
     provider: "faux-images",
@@ -139,10 +92,12 @@ void test("low-level Agent normalizes image-array prompts at the real prompt API
   });
 
   let calls = 0;
-  const uninstall = installPromptImageNormalization(agent, {
+  const uninstall = installImageInputNormalization(agent, {
     processor: (image, options) => {
       calls += 1;
+      assert.equal(options?.autoResizeImages, true);
       assert.equal(options?.resizeOptions?.maxWidth, 456);
+      assert.equal(options?.signal?.aborted, false);
       return Promise.resolve({
         ok: true,
         image: { ...image, data: "normalized-api-image", mimeType: "image/jpeg" },
@@ -209,8 +164,8 @@ void test("low-level Agent normalizes user-with-attachments at the real prompt A
       hints: ["[attachment normalized]"],
     });
   };
-  const uninstall = installPromptImageNormalization(agent, {
-    getAutoResizeImages: () => false,
+  const uninstall = installImageInputNormalization(agent, {
+    autoResizeImages: false,
     processor,
   });
 
@@ -291,7 +246,7 @@ void test("restored user-with-attachments history is normalized once before API 
   });
 
   let calls = 0;
-  const uninstall = installPromptImageNormalization(agent, {
+  const uninstall = installImageInputNormalization(agent, {
     processor: (image, options) => {
       calls += 1;
       assert.equal(options?.resizeOptions?.maxWidth, 222);
@@ -394,7 +349,7 @@ void test("low-level Agent normalizes each new tool image once and does not rewr
       hints: [],
     });
   };
-  const uninstall = installToolResultImageNormalization(agent, { processor });
+  const uninstall = installImageInputNormalization(agent, { processor });
 
   await agent.prompt("capture it");
   const storedToolResult = agent.state.messages.find((message) => message.role === "toolResult");
