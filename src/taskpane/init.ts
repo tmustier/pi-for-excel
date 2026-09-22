@@ -11,6 +11,7 @@ function isTaskpaneInitPayloadShape(value: unknown): value is Record<string, unk
 
 import { html, render } from "lit";
 import { Agent } from "@earendil-works/pi-agent-core";
+import { getCurrentSystemMessage, toToolDeclaration } from "@earendil-works/pi-ai";
 import { getAppStorage } from "../storage/local/app-storage.js";
 import type { SessionData } from "../storage/local/types.js";
 
@@ -29,6 +30,7 @@ import {
   PI_EXPERIMENTAL_TOOL_CONFIG_CHANGED_EVENT,
 } from "../experiments/events.js";
 import { createConvertToLlm } from "../messages/convert-to-llm.js";
+import { installImageInputNormalization } from "../messages/image-input-limits.js";
 import { effectiveToolOutputLimits } from "../context/window-budgets.js";
 import { findTrailingContextOverflowError } from "../compaction/overflow-recovery.js";
 import { readAutoCompactionEnabled } from "../compaction/settings.js";
@@ -200,6 +202,8 @@ import {
 import { bindRuntimeSidebar } from "./runtime-sidebar-binding.js";
 import { doesOverlayClaimEscape } from "../utils/escape-guard.js";
 
+const RUNTIME_SYSTEM_PROMPT_SECTION = "pi-for-excel-runtime";
+
 function showErrorBanner(errorRoot: HTMLElement, message: string): void {
   render(renderError(message), errorRoot);
 }
@@ -211,8 +215,9 @@ function clearErrorBanner(errorRoot: HTMLElement): void {
 export async function initTaskpane(opts: {
   appEl: HTMLElement;
   errorRoot: HTMLElement;
+  autoResizeImages: boolean;
 }): Promise<void> {
-  const { appEl, errorRoot } = opts;
+  const { appEl, errorRoot, autoResizeImages } = opts;
 
   const changeTracker = new ChangeTracker();
   const spreadsheetHost = getCurrentSpreadsheetHost();
@@ -898,10 +903,15 @@ export async function initTaskpane(opts: {
 
     const agent = new Agent({
       initialState: {
-        systemPrompt: initialCapabilities.systemPrompt,
         model: initialModel,
         thinkingLevel: initialModel.reasoning ? "high" : "off",
-        messages: [],
+        messages: [{
+          role: "system",
+          content: "",
+          sections: { [RUNTIME_SYSTEM_PROMPT_SECTION]: initialCapabilities.systemPrompt },
+          toolsAdded: initialCapabilities.tools.map(toToolDeclaration),
+          timestamp: 0,
+        }],
         tools: initialCapabilities.tools,
       },
       convertToLlm: createConvertToLlm({
@@ -912,7 +922,9 @@ export async function initTaskpane(opts: {
     });
 
     runtimeAgent = agent;
-    let currentRuntimeSystemPrompt = initialCapabilities.systemPrompt;
+    const uninstallImageInputNormalization = installImageInputNormalization(agent, {
+      autoResizeImages,
+    });
     let currentRuntimeToolsFingerprint = createRuntimeToolFingerprint(initialCapabilities.tools);
     let currentExtensionToolRevision = initialCapabilities.extensionToolRevision;
 
@@ -937,9 +949,18 @@ export async function initTaskpane(opts: {
         currentExtensionToolRevision = nextExtensionToolRevision;
       }
 
+      const currentRuntimeSystemPrompt = getCurrentSystemMessage(agent.state.messages)
+        ?.sections?.[RUNTIME_SYSTEM_PROMPT_SECTION];
       if (next.systemPrompt !== currentRuntimeSystemPrompt) {
-        agent.state.systemPrompt = next.systemPrompt;
-        currentRuntimeSystemPrompt = next.systemPrompt;
+        agent.state.messages = [
+          ...agent.state.messages,
+          {
+            role: "system",
+            content: "",
+            sections: { [RUNTIME_SYSTEM_PROMPT_SECTION]: next.systemPrompt },
+            timestamp: Date.now(),
+          },
+        ];
       }
     };
 
@@ -1057,6 +1078,7 @@ export async function initTaskpane(opts: {
         unsubscribeErrorTracking();
         queueDisplay.detach();
         actionQueue.shutdown();
+        uninstallImageInputNormalization();
         agent.abort();
         persistence.dispose();
       },

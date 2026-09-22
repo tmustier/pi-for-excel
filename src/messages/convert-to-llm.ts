@@ -22,7 +22,7 @@ import { shapeToolResultsForLlm } from "./tool-result-shaping.js";
  * Standard AgentMessage → LLM Message conversion:
  * - artifact messages are UI/session-only and filtered out
  * - user-with-attachments becomes a plain user message with content blocks
- * - user/assistant/toolResult pass through
+ * - system/user/assistant/toolResult pass through
  * - unknown custom roles are dropped
  */
 function convertStandardMessagesToLlm(messages: AgentMessage[]): Message[] {
@@ -51,7 +51,12 @@ function convertStandardMessagesToLlm(messages: AgentMessage[]): Message[] {
       continue;
     }
 
-    if (message.role === "user" || message.role === "assistant" || message.role === "toolResult") {
+    if (
+      message.role === "system"
+      || message.role === "user"
+      || message.role === "assistant"
+      || message.role === "toolResult"
+    ) {
       converted.push(message);
     }
   }

@@ -103,7 +103,6 @@ export async function maybeAutoCompactBeforeContinuation(args: {
 
   return {
     context: {
-      systemPrompt: agent.state.systemPrompt,
       messages: agent.state.messages.slice(),
       tools: agent.state.tools.slice(),
     },

@@ -9,6 +9,7 @@
  */
 
 import type { Agent, AgentEvent, AgentTool } from "@earendil-works/pi-agent-core";
+import { normalizeContext } from "@earendil-works/pi-ai";
 import { t } from "../language/index.js";
 
 import type { ConnectionManager } from "../connections/manager.js";
@@ -467,10 +468,10 @@ export class ExtensionRuntimeManager {
 
     const stream = await agent.streamFunction(
       model,
-      {
+      normalizeContext({
         ...(request.systemPrompt !== undefined ? { systemPrompt: request.systemPrompt } : {}),
         messages: parseLlmMessages(request.messages, model),
-      },
+      }),
       {
         apiKey,
         sessionId: createExtensionLlmCompletionSessionId({

@@ -860,6 +860,7 @@ void test("sandbox activation uses a script-only iframe and dedicated, direction
   let iframe: HTMLElement | null = null;
   let sandboxPort: MessagePort | null = null;
   let activationSettled = false;
+  let registeredModelInputLimits: unknown;
   const getIframe = (): HTMLElement | null => iframe;
   const getSandboxPort = (): MessagePort | null => sandboxPort;
 
@@ -931,10 +932,13 @@ void test("sandbox activation uses a script-only iframe and dedicated, direction
     markConnectionValidated: () => Promise.resolve(),
     markConnectionInvalid: () => Promise.resolve(),
     markConnectionStatus: () => Promise.resolve(),
-    registerModelProvider: () => "provider-id",
+    registerModelProvider: (definition) => {
+      registeredModelInputLimits = definition.models[0]?.inputLimits;
+      return "provider-id";
+    },
     unregisterModelProvider: () => {},
     refreshModelProviders: () => Promise.resolve(),
-    isCapabilityEnabled: () => false,
+    isCapabilityEnabled: (capability) => capability === "models.register",
     formatCapabilityError: (capability) => `Denied ${capability}`,
     toast: () => {},
   };
@@ -977,6 +981,54 @@ void test("sandbox activation uses a script-only iframe and dedicated, direction
       data: null,
     });
     const handle = await activation;
+
+    const providerResponse = new Promise<Record<string, unknown>>((resolve) => {
+      transferredPort.addEventListener("message", (event: MessageEvent<unknown>) => {
+        const envelope = event.data;
+        if (typeof envelope !== "object" || envelope === null || Array.isArray(envelope)) return;
+        const payload = envelope as Record<string, unknown>;
+        if (payload.kind !== "response" || payload.requestId !== "provider-1") return;
+        resolve(payload);
+      });
+      transferredPort.start();
+    });
+    transferredPort.postMessage({
+      channel: SANDBOX_CHANNEL,
+      instanceId: options.instanceId,
+      direction: "sandbox_to_host",
+      kind: "request",
+      requestId: "provider-1",
+      method: "model_provider_register",
+      params: {
+        definition: {
+          id: "images",
+          name: "Image provider",
+          api: "openai-responses",
+          baseUrl: "https://images.example.com/v1",
+          allowKeyless: true,
+          models: [{
+            id: "image-model",
+            inputLimits: {
+              maxRequestBytes: 8_388_608,
+              images: {
+                maxPerMessage: 4,
+                maxPerRequest: 6,
+                resize: { maxWidth: 900, maxHeight: 700, maxBytes: 1_048_576, jpegQuality: 75 },
+              },
+            },
+          }],
+        },
+      },
+    });
+    assert.equal((await providerResponse).ok, true);
+    assert.deepEqual(registeredModelInputLimits, {
+      maxRequestBytes: 8_388_608,
+      images: {
+        maxPerMessage: 4,
+        maxPerRequest: 6,
+        resize: { maxWidth: 900, maxHeight: 700, maxBytes: 1_048_576, jpegQuality: 75 },
+      },
+    });
 
     const deactivateRequest = new Promise<Record<string, unknown>>((resolve) => {
       transferredPort.addEventListener("message", (event: MessageEvent<unknown>) => {
@@ -1519,7 +1571,15 @@ void test("extension model providers use host-owned connection secrets and unloa
         name: "Acme models",
         api: "openai-responses",
         baseUrl: "https://models.example.com/v1",
-        models: [{ id: "baseline-model", contextWindow: 128_000, maxTokens: 16_000 }],
+        models: [{
+          id: "baseline-model",
+          contextWindow: 128_000,
+          maxTokens: 16_000,
+          inputLimits: {
+            maxRequestBytes: 8_388_608,
+            images: { maxPerRequest: 6, resize: { maxWidth: 900, jpegQuality: 75 } },
+          },
+        }],
         connection: "account",
         apiKeySecret: "apiKey",
       });
@@ -1538,6 +1598,13 @@ void test("extension model providers use host-owned connection secrets and unloa
   assert.deepEqual(
     modelRuntime.models.getModels(providerId).map((model) => model.id),
     ["baseline-model", "discovered-model"],
+  );
+  assert.deepEqual(
+    modelRuntime.models.getModel(providerId, "discovered-model")?.inputLimits,
+    {
+      maxRequestBytes: 8_388_608,
+      images: { maxPerRequest: 6, resize: { maxWidth: 900, jpegQuality: 75 } },
+    },
   );
   assert.deepEqual(manager.list()[0]?.modelProviderIds, [providerId]);
 

@@ -5,6 +5,7 @@ import type {
   ModelsStoreEntry,
 } from "@earendil-works/pi-ai";
 
+import { decodeModelInputLimits } from "../../models/input-limits.js";
 import { Store } from "./store.js";
 import type { StoreConfig } from "./types.js";
 
@@ -62,6 +63,12 @@ function parseModel(value: unknown): Model<Api> | null {
   const input = parseInputKinds(value.input);
   const cost = parseCost(value.cost);
   const headers = parseHeaders(value.headers);
+  const inputLimitsValue = value.inputLimits;
+  const inputLimits = inputLimitsValue === undefined
+    ? undefined
+    : typeof inputLimitsValue === "object" && inputLimitsValue !== null
+      ? decodeModelInputLimits(inputLimitsValue)
+      : null;
 
   if (
     typeof id !== "string"
@@ -75,6 +82,7 @@ function parseModel(value: unknown): Model<Api> | null {
     || !input
     || !cost
     || headers === null
+    || inputLimits === null
   ) {
     return null;
   }
@@ -90,6 +98,7 @@ function parseModel(value: unknown): Model<Api> | null {
     cost,
     contextWindow,
     maxTokens,
+    ...(inputLimits !== undefined ? { inputLimits } : {}),
     ...(headers !== undefined ? { headers } : {}),
   };
 }

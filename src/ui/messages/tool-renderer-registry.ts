@@ -19,10 +19,10 @@ export interface ToolRenderResult {
   isCustom: boolean;
 }
 
-export interface ToolRenderer<TParams = unknown, TDetails = unknown> {
+export interface ToolRenderer<TParams = unknown> {
   render(
     params: TParams | undefined,
-    result: ToolResultMessage<TDetails> | undefined,
+    result: ToolResultMessage | undefined,
     isStreaming?: boolean,
   ): ToolRenderResult;
 }
@@ -80,7 +80,7 @@ function renderFallbackSection(label: string, code: string, language: string): T
 
 function renderDefaultTool(
   params: unknown,
-  result: ToolResultMessage<unknown> | undefined,
+  result: ToolResultMessage | undefined,
   isStreaming: boolean,
 ): ToolRenderResult {
   const state: FallbackState = result
@@ -145,7 +145,7 @@ function renderDefaultTool(
 export function renderTool(
   toolName: string,
   params: unknown,
-  result: ToolResultMessage<unknown> | undefined,
+  result: ToolResultMessage | undefined,
   isStreaming: boolean,
 ): ToolRenderResult {
   const renderer = getToolRenderer(toolName);

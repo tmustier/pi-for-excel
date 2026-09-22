@@ -368,6 +368,31 @@ void test("disposed persistence drops later agent message events", async () => {
   assert.doesNotMatch(transcriptText(restarted), /must-not-persist/);
 });
 
+void test("persisted model catalogues retain valid input limits and drop malformed entries", async () => {
+  const backend = new MemoryStorageBackend();
+  const { modelCatalogs } = initAppStorage(APP_STORAGE_DATABASE_NAME, backend);
+  const model = fauxProvider().getModel();
+  const inputLimits = {
+    maxRequestBytes: 8_388_608,
+    images: {
+      maxPerRequest: 6,
+      resize: { maxWidth: 900, maxHeight: 700, maxBytes: 1_048_576, jpegQuality: 75 },
+    },
+  };
+
+  await modelCatalogs.write("faux", {
+    models: [
+      { ...model, id: "valid", inputLimits },
+      { ...model, id: "invalid", inputLimits: { images: { resize: { jpegQuality: 101 } } } },
+    ],
+  });
+
+  const restored = await modelCatalogs.read("faux");
+  assert.ok(restored);
+  assert.deepEqual(restored.models.map((entry) => entry.id), ["valid"]);
+  assert.deepEqual(restored.models[0]?.inputLimits, inputLimits);
+});
+
 void test("database identity and persisted store/key formats stay stable", async () => {
   const config = getAppStorageConfig();
   assert.equal(config.dbName, APP_STORAGE_DATABASE_NAME);

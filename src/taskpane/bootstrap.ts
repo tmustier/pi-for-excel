@@ -76,7 +76,11 @@ export function bootstrapTaskpane(): void {
       console.error("[pi] Init error: Taskpane initialization timed out after 60000ms");
     }, 60_000);
 
-    void initTaskpane({ appEl, errorRoot })
+    void initTaskpane({
+      appEl,
+      errorRoot,
+      autoResizeImages: import.meta.env.VITE_PI_AUTO_RESIZE_IMAGES !== "false",
+    })
       .then(() => {
         if (!markInitComplete()) return;
         clearTimeout(slowInitTimer);

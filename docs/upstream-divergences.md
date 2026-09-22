@@ -222,7 +222,7 @@ record.
 
 ## 9. OpenRouter native Anthropic compatibility
 
-Pi AI 0.85.1 advertises `supportsMidConvoEffort` on OpenRouter Claude models. The live OpenRouter route tested on 8 September 2026 rejected the resulting `configuration_update` with HTTP 400, including in a fresh Opus 5 chat.
+Pi AI 0.87.0 advertises `supportsMidConvoEffort` on OpenRouter Claude models. The live OpenRouter route tested on 8 September 2026 rejected the resulting `configuration_update` with HTTP 400, including in a fresh Opus 5 chat.
 
 Pi for Excel disables that flag at the stream boundary for OpenRouter's `anthropic-messages` models. It retains the registry's native API, context limits, pricing, thinking levels and ordinary adaptive effort. Registry objects are not mutated. Browser requests on this route use the configured proxy because direct requests failed with a browser connection error. The default proxy permits the exact `openrouter.ai` host; explicit operator allowlists still take precedence.
 

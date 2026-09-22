@@ -6,7 +6,14 @@ function isCommandsBuiltinsExportPayloadShape(value: unknown): value is Record<s
  * Builtin export/compaction commands.
  */
 
-import type { Api, Model, StopReason, Usage } from "@earendil-works/pi-ai";
+import {
+  getCurrentSystemMessage,
+  normalizeContext,
+  type Api,
+  type Model,
+  type StopReason,
+  type Usage,
+} from "@earendil-works/pi-ai";
 import type { Agent, AgentMessage } from "@earendil-works/pi-agent-core";
 
 import type { SlashCommand } from "../types.js";
@@ -504,10 +511,12 @@ export function createExportCommands(getActiveAgent: ActiveAgentProvider): Slash
  */
 export async function runCompactCommand(agent: Agent, args: string): Promise<void> {
   const allMessages = agent.state.messages;
+  const currentSystemMessage = getCurrentSystemMessage(allMessages);
+  const conversationMessages = allMessages.filter((message) => message.role !== "system");
   const {
     archivedMessages: existingArchivedMessages,
     messagesWithoutArchived,
-  } = splitArchivedMessages(allMessages);
+  } = splitArchivedMessages(conversationMessages);
 
   if (messagesWithoutArchived.length < 4) {
     showToast(t("export.toast.compact.few_messages"));
@@ -589,7 +598,7 @@ export async function runCompactCommand(agent: Agent, args: string): Promise<voi
 
     const stream = await agent.streamFunction(
       model,
-      {
+      normalizeContext({
         systemPrompt: SUMMARIZATION_SYSTEM_PROMPT,
         messages: [
           {
@@ -598,7 +607,7 @@ export async function runCompactCommand(agent: Agent, args: string): Promise<voi
             timestamp: Date.now(),
           },
         ],
-      },
+      }),
       {
         apiKey,
         ...(agent.sessionId !== undefined ? { sessionId: agent.sessionId } : {}),
@@ -674,7 +683,12 @@ export async function runCompactCommand(agent: Agent, args: string): Promise<voi
       timestamp: now,
     });
 
-    agent.state.messages = [archived, compacted, ...out.keptMessages];
+    agent.state.messages = [
+      ...(currentSystemMessage ? [currentSystemMessage] : []),
+      archived,
+      compacted,
+      ...out.keptMessages,
+    ];
 
     const iface = document.querySelector<PiSidebar>("pi-sidebar");
     iface?.requestUpdate();

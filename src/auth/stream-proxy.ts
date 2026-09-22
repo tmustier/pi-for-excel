@@ -9,7 +9,11 @@
  */
 
 import { uuidv7 } from "@earendil-works/pi-agent-core";
-import { hasApi } from "@earendil-works/pi-ai";
+import {
+  getCurrentSystemPrompt,
+  getCurrentTools,
+  hasApi,
+} from "@earendil-works/pi-ai";
 import type {
   Api,
   AssistantMessageEventStream,
@@ -17,6 +21,7 @@ import type {
   Model,
   Models,
   StreamOptions,
+  TranscriptContext,
 } from "@earendil-works/pi-ai";
 
 import { isDebugEnabled } from "../debug/debug.js";
@@ -37,7 +42,7 @@ import {
 export type GetProxyUrl = () => Promise<string | undefined>;
 type OfficeStreamFn = (
   model: Model<Api>,
-  context: Context,
+  context: TranscriptContext,
   options?: StreamOptions,
 ) => Promise<AssistantMessageEventStream>;
 
@@ -172,7 +177,7 @@ function normalizeGoogleOAuthModel(modelsRuntime: Models, model: Model<Api>): Mo
  * capability gating. Continuations still receive a deterministic tool bundle
  * so the agent can complete multi-step tool loops in a single turn.
  */
-function isToolContinuation(messages: Context["messages"]): boolean {
+function isToolContinuation(messages: TranscriptContext["messages"]): boolean {
   if (messages.length === 0) return false;
   const last = messages[messages.length - 1];
   if (!last) return false;
@@ -560,31 +565,21 @@ export function createOfficeStreamFn(
   modelsRuntime: Models,
   isRuntimeProvider?: (providerId: string) => boolean,
 ): OfficeStreamFn {
-  return async (model: Model<Api>, context: Context, options?: StreamOptions) => {
+  return async (model: Model<Api>, context: TranscriptContext, options?: StreamOptions) => {
     const continuation = isToolContinuation(context.messages);
+    const replayedContext: Context = {
+      systemPrompt: getCurrentSystemPrompt(context.messages),
+      messages: context.messages,
+      tools: getCurrentTools(context.messages),
+    };
 
-    // Always expose tools (via deterministic bundle selection), including
-    // continuation calls after tool results. This preserves full agent loops.
-    const toolSelection = selectToolBundle(context);
-
-    const effectiveContext = (() => {
-      if (toolSelection.tools === context.tools) {
-        return context;
-      }
-
-      if (toolSelection.tools !== undefined) {
-        return { ...context, tools: toolSelection.tools };
-      }
-
-      const { tools: _tools, ...contextWithoutTools } = context;
-      return contextWithoutTools;
-    })();
+    const toolSelection = selectToolBundle(replayedContext);
 
     const normalizedModel = normalizeOpenRouterModel(normalizeGoogleOAuthModel(modelsRuntime, model));
 
     const callRecord = recordCall(
       normalizedModel,
-      effectiveContext,
+      replayedContext,
       options,
       continuation,
       toolSelection.bundleId,
@@ -608,11 +603,11 @@ export function createOfficeStreamFn(
           "Enable Proxy in Settings and run: npx -y pi-for-excel-proxy@latest",
         );
       }
-      return modelsRuntime.streamSimple(normalizedModel, effectiveContext, effectiveOptions);
+      return modelsRuntime.streamSimple(normalizedModel, context, effectiveOptions);
     }
 
     if (!needsOpenRouterProxy && !shouldProxyProvider(normalizedModel.provider, options?.apiKey, isRuntimeProvider)) {
-      return modelsRuntime.streamSimple(normalizedModel, effectiveContext, effectiveOptions);
+      return modelsRuntime.streamSimple(normalizedModel, context, effectiveOptions);
     }
 
     // Guardrails: fail fast for known-bad proxy configs (e.g., HTTP proxy from HTTPS taskpane).
@@ -640,7 +635,7 @@ export function createOfficeStreamFn(
       : effectiveOptions;
     return modelsRuntime.streamSimple(
       applyProxy(normalizedModel, validated, proxyTransport),
-      effectiveContext,
+      context,
       proxiedOptions,
     );
   };

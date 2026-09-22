@@ -25,6 +25,7 @@ import type {
   SkillSummary,
 } from "../commands/extension-api.js";
 import type { ConnectionState, ConnectionStatus } from "../connections/types.js";
+import { decodeModelInputLimits } from "../models/input-limits.js";
 import type { ToolConnectionMetadata } from "../tools/connection-requirements.js";
 import type { ExtensionCapability } from "./permissions.js";
 import {
@@ -297,6 +298,17 @@ function parseModelProviderDefinition(value: unknown): ExtensionModelProviderDef
       }
     }
 
+    const inputLimitsValue = model.inputLimits;
+    const inputLimits = inputLimitsValue === undefined
+      ? undefined
+      : typeof inputLimitsValue === "object" && inputLimitsValue !== null
+        ? decodeModelInputLimits(inputLimitsValue)
+        : null;
+    if (inputLimits === null) {
+      throw new Error(
+        `provider.models[${index}].inputLimits must contain positive integer limits with jpegQuality at most 100.`,
+      );
+    }
     const contextWindow = asFiniteNumberOrNullOrUndefined(model.contextWindow);
     const maxTokens = asFiniteNumberOrNullOrUndefined(model.maxTokens);
     if (contextWindow === null || maxTokens === null) {
@@ -308,6 +320,7 @@ function parseModelProviderDefinition(value: unknown): ExtensionModelProviderDef
       ...(modelName !== undefined ? { name: modelName } : {}),
       ...(reasoning !== undefined ? { reasoning } : {}),
       ...(input !== undefined ? { input } : {}),
+      ...(inputLimits !== undefined ? { inputLimits } : {}),
       ...(contextWindow !== undefined ? { contextWindow } : {}),
       ...(maxTokens !== undefined ? { maxTokens } : {}),
     };
