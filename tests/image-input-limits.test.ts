@@ -20,6 +20,7 @@ import {
   DEFAULT_IMAGE_RESIZE_OPTIONS,
   installImageInputNormalization,
   normalizeToolResultImages,
+  processImageInput,
   type ImageInputProcessor,
 } from "../src/messages/image-input-limits.ts";
 
@@ -61,6 +62,51 @@ void test("Pi conservative image defaults remain exact", () => {
     maxBytes: 4_718_592,
     jpegQuality: 80,
   });
+});
+
+void test("conversion hints require a non-empty source MIME type", async () => {
+  const workerDescriptor = Object.getOwnPropertyDescriptor(globalThis, "Worker");
+  Object.defineProperty(globalThis, "Worker", {
+    configurable: true,
+    value: class {
+      onmessage: ((event: MessageEvent) => void) | null = null;
+
+      postMessage(): void {
+        this.onmessage?.(new MessageEvent("message", {
+          data: {
+            ok: true,
+            unchanged: false,
+            image: {
+              data: "converted-base64",
+              mimeType: "image/png",
+              originalWidth: 1,
+              originalHeight: 1,
+              width: 1,
+              height: 1,
+              wasResized: false,
+            },
+          },
+        }));
+      }
+
+      terminate(): void {}
+    },
+  });
+
+  try {
+    for (const mimeType of ["", " \t"]) {
+      const processed = await processImageInput({ ...IMAGE, mimeType });
+      assert.equal(processed.ok, true);
+      if (!processed.ok) assert.fail("expected converted image");
+      assert.deepEqual(processed.hints, []);
+    }
+  } finally {
+    if (workerDescriptor) {
+      Object.defineProperty(globalThis, "Worker", workerDescriptor);
+    } else {
+      Reflect.deleteProperty(globalThis, "Worker");
+    }
+  }
 });
 
 void test("low-level Agent normalizes image-array prompts at the real prompt API boundary", async () => {

@@ -150,7 +150,7 @@ export async function processImageInput(
   }
 
   const hints: string[] = [];
-  if (!passThroughMimeType) {
+  if (!passThroughMimeType && originalMimeType) {
     hints.push(`[Image converted from ${originalMimeType} to ${result.image.mimeType}.]`);
   }
   if (result.image.wasResized) {
