@@ -49,11 +49,6 @@ interface ImageNormalizationOptions {
   signal?: AbortSignal;
 }
 
-interface InstalledImageNormalizationOptions {
-  autoResizeImages?: boolean;
-  processor?: ImageInputProcessor;
-}
-
 function createAbortError(): DOMException {
   return new DOMException("Image processing aborted.", "AbortError");
 }
@@ -312,14 +307,15 @@ export async function normalizeToolResultImages(
 /** Install prompt and tool-result normalization at the low-level Agent ingress. */
 export function installImageInputNormalization(
   agent: Agent,
-  options: InstalledImageNormalizationOptions = {},
+  options: Pick<ImageNormalizationOptions, "autoResizeImages" | "processor"> = {},
 ): () => void {
+  const processingOptions = (signal?: AbortSignal): ImageNormalizationOptions => ({
+    ...options,
+    autoResizeImages: options.autoResizeImages ?? true,
+    ...(signal ? { signal } : {}),
+  });
   const normalize = (message: AgentMessage, signal?: AbortSignal): Promise<void> => {
-    return normalizePromptMessage(message, agent.state.model, {
-      autoResizeImages: options.autoResizeImages ?? true,
-      ...(options.processor !== undefined ? { processor: options.processor } : {}),
-      ...(signal !== undefined ? { signal } : {}),
-    });
+    return normalizePromptMessage(message, agent.state.model, processingOptions(signal));
   };
 
   const unsubscribe = agent.subscribe((event, signal) => {
@@ -346,11 +342,11 @@ export function installImageInputNormalization(
   agent.afterToolCall = async (context, signal) => {
     const previousResult = await previousAfterToolCall?.(context, signal);
     const content = previousResult?.content ?? context.result.content;
-    const normalized = await normalizeToolResultImages(content, agent.state.model, {
-      autoResizeImages: options.autoResizeImages ?? true,
-      ...(options.processor !== undefined ? { processor: options.processor } : {}),
-      ...(signal !== undefined ? { signal } : {}),
-    });
+    const normalized = await normalizeToolResultImages(
+      content,
+      agent.state.model,
+      processingOptions(signal),
+    );
     return normalized === content ? previousResult : { ...previousResult, content: normalized };
   };
 
