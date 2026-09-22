@@ -31,6 +31,8 @@ export interface SettingsPagesDependencies {
   setExecutionMode?: (mode: ExecutionMode) => Promise<void>;
   getModelSwitchBehavior?: () => ModelSwitchBehavior;
   setModelSwitchBehavior?: (behavior: ModelSwitchBehavior) => Promise<void>;
+  getAutoResizeImages?: () => boolean;
+  setAutoResizeImages?: (enabled: boolean) => Promise<void>;
   models?: Pick<Models, "getModels">;
   extensionsHub?: ExtensionsHubDependencies;
   onRulesSaved?: () => Promise<void> | void;

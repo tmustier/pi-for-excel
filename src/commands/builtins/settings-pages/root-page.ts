@@ -186,6 +186,41 @@ function buildBehaviorGroup(ctx: SettingsPageContext): HTMLElement {
     });
   }
 
+  // ── Image input limits ──
+  const imageResizeToggle = createSettingToggleRow({
+    label: t("settings.section.images.auto_resize_label"),
+    sublabel: t("settings.section.images.auto_resize_sublabel"),
+  });
+
+  const getAutoResizeImages = deps.getAutoResizeImages;
+  const setAutoResizeImages = deps.setAutoResizeImages;
+
+  if (!getAutoResizeImages || !setAutoResizeImages) {
+    imageResizeToggle.input.disabled = true;
+  } else {
+    let autoResizeImages = getAutoResizeImages();
+    imageResizeToggle.input.checked = autoResizeImages;
+
+    imageResizeToggle.input.addEventListener("change", () => {
+      const enabled = imageResizeToggle.input.checked;
+      if (enabled === autoResizeImages) return;
+
+      imageResizeToggle.input.disabled = true;
+      void setAutoResizeImages(enabled).then(
+        () => {
+          autoResizeImages = enabled;
+          showToast(enabled ? t("settings.toast.image_resize_on") : t("settings.toast.image_resize_off"));
+        },
+        () => {
+          imageResizeToggle.input.checked = autoResizeImages;
+          showToast(t("settings.toast.image_resize_failed"));
+        },
+      ).finally(() => {
+        imageResizeToggle.input.disabled = false;
+      });
+    });
+  }
+
   // ── Language ──
   const languageRow = createSettingSelectRow({
     label: t("settings.section.language.label"),
@@ -210,7 +245,7 @@ function buildBehaviorGroup(ctx: SettingsPageContext): HTMLElement {
     },
   });
 
-  group.list.append(autoApply.root, forkToggle.root, languageRow.root);
+  group.list.append(autoApply.root, forkToggle.root, imageResizeToggle.root, languageRow.root);
   return group.root;
 }
 

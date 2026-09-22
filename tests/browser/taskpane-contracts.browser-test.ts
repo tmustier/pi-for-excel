@@ -478,6 +478,22 @@ void test("Settings guards unsaved navigation and exposes shared behavior contro
     const settings = page.locator("#pi-settings-overlay");
     await settings.getByText("Auto mode", { exact: true }).waitFor({ state: "visible", timeout: 5_000 });
     await settings.getByText("Fork model switch into new tab", { exact: true }).waitFor({ state: "visible" });
+
+    const imageResizeRow = settings.locator(".pi-set-row", { hasText: "Auto-resize images" });
+    const imageResizeToggle = imageResizeRow.locator('input[type="checkbox"]');
+    assert.equal(await imageResizeToggle.isChecked(), true);
+    await imageResizeRow.locator("label.pi-toggle").click();
+    for (let attempt = 0; attempt < 20 && await imageResizeToggle.isDisabled(); attempt += 1) {
+      await page.waitForTimeout(10);
+    }
+    assert.equal(await imageResizeToggle.isChecked(), false);
+
+    await page.reload();
+    await enterCommand(page, "/settings");
+    await settings.getByText("Auto-resize images", { exact: true }).waitFor({ state: "visible" });
+    assert.equal(await imageResizeToggle.isChecked(), false);
+    await imageResizeRow.locator("label.pi-toggle").click();
+
     await settings.getByRole("button", { name: /Rules & conventions/ }).click();
 
     const rules = page.getByPlaceholder(/Your preferences and habits/);

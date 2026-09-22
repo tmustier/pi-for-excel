@@ -360,39 +360,6 @@ void test("prompt ending in context overflow triggers compact-and-retry once", a
   queue.shutdown();
 });
 
-void test("new prompt images are normalized once before entering Agent history", async () => {
-  const model: Model<Api> = {
-    ...createSmallContextModel(),
-    input: ["text", "image"],
-    inputLimits: { images: { resize: { maxWidth: 321 } } },
-  };
-  const agent = new TestAgent(model);
-  const seenWidths: Array<number | undefined> = [];
-  const queue = createActionQueue({
-    agent,
-    autoCompactEnabled: false,
-    runCompact: async () => {},
-    imageProcessor: (image, options) => {
-      seenWidths.push(options?.resizeOptions?.maxWidth);
-      return Promise.resolve({
-        ok: true,
-        image: { ...image, data: "resized" },
-        hints: ["[resized once]"],
-      });
-    },
-    sidebar: { setBusyIndicator: () => {} },
-    queueDisplay: { setActionQueue: () => {} },
-  });
-
-  queue.enqueuePrompt("inspect", [{ type: "image", data: "original", mimeType: "image/png" }]);
-  await waitForCondition(() => agent.promptCalls.length === 1 && !queue.isBusy());
-
-  assert.deepEqual(seenWidths, [321]);
-  assert.equal(agent.promptCalls[0], "inspect\n\n[resized once]");
-  assert.equal(agent.promptImageCalls[0]?.[0]?.data, "resized");
-  queue.shutdown();
-});
-
 void test("shutdown uninstalls the mid-turn prepareNextTurn hook", () => {
   const agent = new TestAgent();
   const queue = createActionQueue({

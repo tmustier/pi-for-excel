@@ -30,7 +30,12 @@ import {
   PI_EXPERIMENTAL_TOOL_CONFIG_CHANGED_EVENT,
 } from "../experiments/events.js";
 import { createConvertToLlm } from "../messages/convert-to-llm.js";
-import { installToolResultImageNormalization } from "../messages/image-input-limits.js";
+import {
+  IMAGE_AUTO_RESIZE_SETTING_KEY,
+  installPromptImageNormalization,
+  installToolResultImageNormalization,
+  readImageAutoResizeEnabled,
+} from "../messages/image-input-limits.js";
 import { effectiveToolOutputLimits } from "../context/window-budgets.js";
 import { findTrailingContextOverflowError } from "../compaction/overflow-recovery.js";
 import { readAutoCompactionEnabled } from "../compaction/settings.js";
@@ -215,8 +220,6 @@ function clearErrorBanner(errorRoot: HTMLElement): void {
 export async function initTaskpane(opts: {
   appEl: HTMLElement;
   errorRoot: HTMLElement;
-  /** Host equivalent of Pi's global images.autoResize setting. */
-  autoResizeImages?: boolean;
 }): Promise<void> {
   const { appEl, errorRoot } = opts;
 
@@ -246,8 +249,14 @@ export async function initTaskpane(opts: {
     console.warn("[pi] Failed to migrate legacy MCP bearer tokens:", error);
   }
 
-  // 1b. Auto-compaction (Pi defaults to enabled)
+  // 1b. Pi behavior settings default to enabled.
   const autoCompactEnabled = await readAutoCompactionEnabled(settings);
+  let autoResizeImages = await readImageAutoResizeEnabled(settings);
+  const getAutoResizeImages = (): boolean => autoResizeImages;
+  const setAutoResizeImages = async (enabled: boolean): Promise<void> => {
+    await settings.set(IMAGE_AUTO_RESIZE_SETTING_KEY, enabled);
+    autoResizeImages = enabled;
+  };
 
   // 1c. Security warning: remote proxies can see your prompts + credentials.
   const initialProxySettings = await readTaskpaneProxySettings(settings);
@@ -923,10 +932,11 @@ export async function initTaskpane(opts: {
     });
 
     runtimeAgent = agent;
+    const uninstallPromptImageNormalization = installPromptImageNormalization(agent, {
+      getAutoResizeImages,
+    });
     const uninstallToolResultImageNormalization = installToolResultImageNormalization(agent, {
-      ...(opts.autoResizeImages !== undefined
-        ? { autoResizeImages: opts.autoResizeImages }
-        : {}),
+      getAutoResizeImages,
     });
     let currentRuntimeToolsFingerprint = createRuntimeToolFingerprint(initialCapabilities.tools);
     let currentExtensionToolRevision = initialCapabilities.extensionToolRevision;
@@ -995,9 +1005,6 @@ export async function initTaskpane(opts: {
       queueDisplay,
       autoCompactEnabled,
       runCompact: () => runCompactCommand(agent, ""),
-      ...(opts.autoResizeImages !== undefined
-        ? { autoResizeImages: opts.autoResizeImages }
-        : {}),
     });
 
     const persistence = await setupSessionPersistence({
@@ -1082,6 +1089,7 @@ export async function initTaskpane(opts: {
         unsubscribeErrorTracking();
         queueDisplay.detach();
         actionQueue.shutdown();
+        uninstallPromptImageNormalization();
         uninstallToolResultImageNormalization();
         agent.abort();
         persistence.dispose();
@@ -1530,6 +1538,8 @@ export async function initTaskpane(opts: {
     setExecutionMode,
     getModelSwitchBehavior,
     setModelSwitchBehavior,
+    getAutoResizeImages,
+    setAutoResizeImages,
     models: modelRuntime.models,
     onRulesSaved: async () => {
       await refreshWorkbookState();

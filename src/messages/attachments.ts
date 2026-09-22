@@ -33,6 +33,8 @@ export type UserMessageWithAttachments = {
   content: string | (TextContent | ImageContent)[];
   timestamp: number;
   attachments?: Attachment[];
+  /** Images were normalized once at prompt ingress and must not change with later model switches. */
+  imageInputsNormalized?: boolean;
 };
 
 export interface ArtifactMessage {

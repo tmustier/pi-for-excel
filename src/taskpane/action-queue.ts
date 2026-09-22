@@ -14,14 +14,9 @@
  */
 
 import type { Agent } from "@earendil-works/pi-agent-core";
-import type { ImageContent } from "@earendil-works/pi-ai";
 import { t } from "../language/index.js";
 
 import { commandRegistry } from "../commands/types.js";
-import {
-  normalizePromptImages,
-  type ImageInputProcessor,
-} from "../messages/image-input-limits.js";
 import {
   maybeAutoCompactBeforeContinuation,
   maybeAutoCompactBeforePrompt,
@@ -29,11 +24,11 @@ import {
 import { recoverFromContextOverflow } from "../compaction/overflow-recovery.js";
 
 export type QueuedAction =
-  | { type: "prompt"; text: string; images?: ImageContent[] }
+  | { type: "prompt"; text: string }
   | { type: "command"; name: string; args: string };
 
 export interface ActionQueue {
-  enqueuePrompt: (text: string, images?: ImageContent[]) => void;
+  enqueuePrompt: (text: string) => void;
   enqueueCommand: (name: string, args: string) => void;
   drainQueuedActions: () => QueuedAction[];
   isBusy: () => boolean;
@@ -55,9 +50,6 @@ export function createActionQueue(opts: {
   autoCompactEnabled: boolean;
   /** Runs compaction for this queue's agent (not the active tab's agent). */
   runCompact: () => Promise<void>;
-  /** Mirrors Pi's global images.autoResize=false behavior when disabled by a host. */
-  autoResizeImages?: boolean;
-  imageProcessor?: ImageInputProcessor;
 }): ActionQueue {
   const { agent, sidebar, queueDisplay, autoCompactEnabled } = opts;
 
@@ -159,19 +151,7 @@ export function createActionQueue(opts: {
         });
 
         if (closed) break;
-        const normalized = await normalizePromptImages(next.images, agent.state.model, {
-          ...(opts.autoResizeImages !== undefined
-            ? { autoResizeImages: opts.autoResizeImages }
-            : {}),
-          ...(opts.imageProcessor !== undefined ? { processor: opts.imageProcessor } : {}),
-        });
-        const promptText = normalized.hints.length > 0
-          ? `${next.text}\n\n${normalized.hints.join("\n")}`
-          : next.text;
-        await agent.prompt(
-          promptText,
-          normalized.images.length > 0 ? normalized.images : undefined,
-        );
+        await agent.prompt(next.text);
 
         if (closed) break;
         if (autoCompactEnabled) {
@@ -190,17 +170,13 @@ export function createActionQueue(opts: {
     }
   }
 
-  const enqueuePrompt = (text: string, images?: ImageContent[]) => {
+  const enqueuePrompt = (text: string) => {
     if (closed) return;
 
     const trimmed = text.trim();
-    if (!trimmed && (!images || images.length === 0)) return;
+    if (!trimmed) return;
 
-    actions.push({
-      type: "prompt",
-      text: trimmed,
-      ...(images && images.length > 0 ? { images: [...images] } : {}),
-    });
+    actions.push({ type: "prompt", text: trimmed });
     syncDisplay();
     void process();
   };
