@@ -423,3 +423,146 @@ void test("low-level Agent normalizes each new tool image once and does not rewr
 
   uninstall();
 });
+
+void test("restored tool-result images are normalized once before resumed requests", async () => {
+  const faux = fauxProvider({
+    provider: "faux-images",
+    models: [{
+      id: "image-model",
+      input: ["text", "image"],
+      inputLimits: modelWithResize(900).inputLimits,
+      contextWindow: 32_000,
+      maxTokens: 4_096,
+    }],
+  });
+  const models = createModels();
+  models.setProvider(faux.provider);
+  faux.setResponses([
+    fauxAssistantMessage("resumed"),
+    fauxAssistantMessage("continued"),
+  ]);
+
+  const restored = {
+    role: "toolResult" as const,
+    toolCallId: "restored-call",
+    toolName: "charts",
+    content: [IMAGE],
+    isError: false,
+    timestamp: 1,
+  };
+  const requests: TranscriptContext[] = [];
+  const agent = new Agent({
+    initialState: {
+      model: faux.getModel(),
+      messages: [],
+      tools: [],
+    },
+    streamFn: (model, context, options) => {
+      requests.push(structuredClone(context));
+      return models.streamSimple(model, context, options);
+    },
+  });
+
+  let calls = 0;
+  const uninstall = installImageInputNormalization(agent, {
+    processor: (image, options) => {
+      calls += 1;
+      assert.equal(options?.resizeOptions?.maxWidth, 900);
+      return Promise.resolve({
+        ok: true,
+        image: { ...image, data: "restored-tool-image-normalized" },
+        hints: ["[restored tool image normalized]"],
+      });
+    },
+  });
+
+  agent.state.messages = [restored];
+  await agent.continue();
+  assert.equal(calls, 1);
+  assert.equal(restored.content[0]?.type, "image");
+  assert.equal(
+    restored.content[0]?.type === "image" ? restored.content[0].data : "",
+    "restored-tool-image-normalized",
+  );
+  assert.equal(requests[0]?.messages[0]?.role, "toolResult");
+  assert.match(JSON.stringify(requests[0]), /restored-tool-image-normalized/u);
+  assert.doesNotMatch(JSON.stringify(requests[0]), /original-base64/u);
+
+  agent.state.model = {
+    ...agent.state.model,
+    inputLimits: { images: { resize: { maxWidth: 300 } } },
+  };
+  await agent.prompt("continue");
+  assert.equal(calls, 1);
+  assert.match(JSON.stringify(requests[1]), /restored-tool-image-normalized/u);
+
+  uninstall();
+});
+
+void test("aborting prompt image normalization removes the raw image from replayable history", async () => {
+  const faux = fauxProvider({
+    provider: "faux-images",
+    models: [{
+      id: "image-model",
+      input: ["text", "image"],
+      inputLimits: modelWithResize(700).inputLimits,
+      contextWindow: 32_000,
+      maxTokens: 4_096,
+    }],
+  });
+  const models = createModels();
+  models.setProvider(faux.provider);
+  const requests: TranscriptContext[] = [];
+  const agent = new Agent({
+    initialState: {
+      model: faux.getModel(),
+      messages: [],
+      tools: [],
+    },
+    streamFn: (model, context, options) => {
+      requests.push(structuredClone(context));
+      return models.streamSimple(model, context, options);
+    },
+  });
+
+  let processorStarted = (): void => {};
+  const started = new Promise<void>((resolve) => {
+    processorStarted = resolve;
+  });
+  const uninstall = installImageInputNormalization(agent, {
+    processor: (_image, options) => new Promise((_resolve, reject) => {
+      processorStarted();
+      options?.signal?.addEventListener("abort", () => {
+        reject(new DOMException("Image processing aborted.", "AbortError"));
+      }, { once: true });
+    }),
+  });
+
+  const prompt = agent.prompt("inspect this", [IMAGE]);
+  await started;
+  agent.abort();
+  await prompt;
+
+  assert.equal(requests.length, 0);
+  assert.doesNotMatch(JSON.stringify(agent.state.messages), /original-base64/u);
+  const stored = agent.state.messages.find((message) => message.role === "user");
+  assert.equal(stored?.role, "user");
+  if (stored?.role !== "user" || typeof stored.content === "string") {
+    assert.fail("expected sanitized user prompt");
+  }
+  assert.deepEqual(stored.content, [
+    { type: "text", text: "inspect this" },
+    { type: "text", text: "[Image omitted: processing was aborted.]" },
+  ]);
+  const aborted = agent.state.messages.at(-1);
+  assert.equal(aborted?.role, "assistant");
+  if (aborted?.role !== "assistant") assert.fail("expected aborted assistant message");
+  assert.equal(aborted.stopReason, "aborted");
+
+  faux.setResponses([fauxAssistantMessage("continued")]);
+  await agent.prompt("continue after abort");
+  assert.equal(requests.length, 1);
+  assert.doesNotMatch(JSON.stringify(requests[0]), /original-base64/u);
+
+  uninstall();
+});

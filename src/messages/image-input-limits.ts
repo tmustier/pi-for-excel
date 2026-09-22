@@ -91,7 +91,7 @@ function runImageWorker(
   });
 }
 
-/** Normalize one image in a worker before it enters Agent history. */
+/** Normalize one image before it is sent to the model or retained in replayable history. */
 export async function processImageInput(
   image: ImageContent,
   options: ImageProcessingOptions = {},
@@ -309,30 +309,64 @@ export function installImageInputNormalization(
   agent: Agent,
   options: Pick<ImageNormalizationOptions, "autoResizeImages" | "processor"> = {},
 ): () => void {
+  const normalizedPromptMessages = new WeakSet<AgentMessage>();
+  const normalizedToolResultContent = new WeakSet<(TextContent | ImageContent)[]>();
   const processingOptions = (signal?: AbortSignal): ImageNormalizationOptions => ({
     ...options,
     autoResizeImages: options.autoResizeImages ?? true,
     ...(signal ? { signal } : {}),
   });
-  const normalize = (message: AgentMessage, signal?: AbortSignal): Promise<void> => {
-    return normalizePromptMessage(message, agent.state.model, processingOptions(signal));
+  const normalize = async (message: AgentMessage, signal?: AbortSignal): Promise<void> => {
+    await normalizePromptMessage(message, agent.state.model, processingOptions(signal));
+    normalizedPromptMessages.add(message);
   };
 
-  const unsubscribe = agent.subscribe((event, signal) => {
+  const unsubscribe = agent.subscribe(async (event, signal) => {
     if (
       event.type !== "message_end"
       || (event.message.role !== "user" && event.message.role !== "user-with-attachments")
     ) {
       return;
     }
-    return normalize(event.message, signal);
+
+    try {
+      await normalize(event.message, signal);
+    } catch (error) {
+      if (signal.aborted) {
+        await normalizePromptMessage(event.message, agent.state.model, {
+          ...processingOptions(),
+          processor: () => Promise.resolve({
+            ok: false,
+            message: "[Image omitted: processing was aborted.]",
+          }),
+        });
+        normalizedPromptMessages.add(event.message);
+      }
+      throw error;
+    }
   });
 
   const previousTransform = agent.transformContext;
   agent.transformContext = async (messages, signal) => {
     for (const message of messages) {
-      if (message.role === "user-with-attachments" && message.imageInputsNormalized !== true) {
+      if (
+        (message.role === "user" || message.role === "user-with-attachments")
+        && !normalizedPromptMessages.has(message)
+      ) {
         await normalize(message, signal);
+        continue;
+      }
+
+      if (message.role === "toolResult" && !normalizedToolResultContent.has(message.content)) {
+        const normalized = await normalizeToolResultImages(
+          message.content,
+          agent.state.model,
+          processingOptions(signal),
+        );
+        if (normalized !== message.content) {
+          message.content = normalized;
+        }
+        normalizedToolResultContent.add(message.content);
       }
     }
     return previousTransform ? await previousTransform(messages, signal) : messages;
@@ -347,6 +381,7 @@ export function installImageInputNormalization(
       agent.state.model,
       processingOptions(signal),
     );
+    normalizedToolResultContent.add(normalized);
     return normalized === content ? previousResult : { ...previousResult, content: normalized };
   };
 
