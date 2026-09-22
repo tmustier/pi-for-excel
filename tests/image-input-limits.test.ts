@@ -18,12 +18,11 @@ import type { UserMessageWithAttachments } from "../src/messages/attachments.ts"
 import { createConvertToLlm } from "../src/messages/convert-to-llm.ts";
 import {
   DEFAULT_IMAGE_RESIZE_OPTIONS,
-  IMAGE_AUTO_RESIZE_SETTING_KEY,
   installPromptImageNormalization,
   installToolResultImageNormalization,
   normalizePromptImages,
   normalizeToolResultImages,
-  readImageAutoResizeEnabled,
+  resolveImageAutoResizeEnabled,
   type ImageInputProcessor,
 } from "../src/messages/image-input-limits.ts";
 
@@ -67,22 +66,12 @@ void test("Pi conservative image defaults remain exact", () => {
   });
 });
 
-void test("image auto-resize setting defaults on and accepts only persisted booleans", async () => {
-  const read = async (value: unknown, shouldThrow = false): Promise<boolean> => {
-    return await readImageAutoResizeEnabled({
-      get: (key) => {
-        assert.equal(key, IMAGE_AUTO_RESIZE_SETTING_KEY);
-        if (shouldThrow) return Promise.reject(new Error("storage unavailable"));
-        return Promise.resolve(value);
-      },
-    });
-  };
-
-  assert.equal(await read(undefined), true);
-  assert.equal(await read("false"), true);
-  assert.equal(await read(false), false);
-  assert.equal(await read(true), true);
-  assert.equal(await read(undefined, true), true);
+void test("image auto-resize bootstrap config defaults on and only literal false disables it", () => {
+  for (const value of [undefined, "", "0", "disabled", "true"]) {
+    assert.equal(resolveImageAutoResizeEnabled(value), true, String(value));
+  }
+  assert.equal(resolveImageAutoResizeEnabled("false"), false);
+  assert.equal(resolveImageAutoResizeEnabled(" FALSE "), false);
 });
 
 void test("prompt normalization uses model limits, host resize setting, and AbortSignal", async () => {
@@ -119,6 +108,65 @@ void test("prompt normalization uses model limits, host resize setting, and Abor
   ]);
   assert.equal(enabled.images[0]?.data, "processed-1");
   assert.equal(disabled.images[0]?.data, "processed-2");
+});
+
+void test("low-level Agent normalizes image-array prompts at the real prompt API boundary", async () => {
+  const faux = fauxProvider({
+    provider: "faux-images",
+    models: [{
+      id: "image-model",
+      input: ["text", "image"],
+      inputLimits: modelWithResize(456).inputLimits,
+      contextWindow: 32_000,
+      maxTokens: 4_096,
+    }],
+  });
+  const models = createModels();
+  models.setProvider(faux.provider);
+  faux.setResponses([fauxAssistantMessage("done")]);
+
+  const requests: TranscriptContext[] = [];
+  const agent = new Agent({
+    initialState: {
+      model: faux.getModel(),
+      messages: [],
+      tools: [],
+    },
+    streamFn: (model, context, options) => {
+      requests.push(structuredClone(context));
+      return models.streamSimple(model, context, options);
+    },
+  });
+
+  let calls = 0;
+  const uninstall = installPromptImageNormalization(agent, {
+    processor: (image, options) => {
+      calls += 1;
+      assert.equal(options?.resizeOptions?.maxWidth, 456);
+      return Promise.resolve({
+        ok: true,
+        image: { ...image, data: "normalized-api-image", mimeType: "image/jpeg" },
+        hints: ["[api image normalized]"],
+      });
+    },
+  });
+
+  await agent.prompt("inspect this", [IMAGE]);
+
+  assert.equal(calls, 1);
+  const stored = agent.state.messages.find((message) => message.role === "user");
+  assert.equal(stored?.role, "user");
+  if (stored?.role !== "user" || typeof stored.content === "string") {
+    assert.fail("expected stored image-array prompt");
+  }
+  assert.deepEqual(stored.content, [
+    { type: "text", text: "inspect this" },
+    { type: "text", text: "[api image normalized]" },
+    { type: "image", data: "normalized-api-image", mimeType: "image/jpeg" },
+  ]);
+  assert.deepEqual(requests[0]?.messages[0], stored);
+
+  uninstall();
 });
 
 void test("low-level Agent normalizes user-with-attachments at the real prompt API boundary", async () => {

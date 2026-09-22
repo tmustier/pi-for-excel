@@ -31,10 +31,8 @@ import {
 } from "../experiments/events.js";
 import { createConvertToLlm } from "../messages/convert-to-llm.js";
 import {
-  IMAGE_AUTO_RESIZE_SETTING_KEY,
   installPromptImageNormalization,
   installToolResultImageNormalization,
-  readImageAutoResizeEnabled,
 } from "../messages/image-input-limits.js";
 import { effectiveToolOutputLimits } from "../context/window-budgets.js";
 import { findTrailingContextOverflowError } from "../compaction/overflow-recovery.js";
@@ -220,6 +218,7 @@ function clearErrorBanner(errorRoot: HTMLElement): void {
 export async function initTaskpane(opts: {
   appEl: HTMLElement;
   errorRoot: HTMLElement;
+  autoResizeImages?: boolean;
 }): Promise<void> {
   const { appEl, errorRoot } = opts;
 
@@ -251,12 +250,7 @@ export async function initTaskpane(opts: {
 
   // 1b. Pi behavior settings default to enabled.
   const autoCompactEnabled = await readAutoCompactionEnabled(settings);
-  let autoResizeImages = await readImageAutoResizeEnabled(settings);
-  const getAutoResizeImages = (): boolean => autoResizeImages;
-  const setAutoResizeImages = async (enabled: boolean): Promise<void> => {
-    await settings.set(IMAGE_AUTO_RESIZE_SETTING_KEY, enabled);
-    autoResizeImages = enabled;
-  };
+  const getAutoResizeImages = (): boolean => opts.autoResizeImages ?? true;
 
   // 1c. Security warning: remote proxies can see your prompts + credentials.
   const initialProxySettings = await readTaskpaneProxySettings(settings);
@@ -1538,8 +1532,6 @@ export async function initTaskpane(opts: {
     setExecutionMode,
     getModelSwitchBehavior,
     setModelSwitchBehavior,
-    getAutoResizeImages,
-    setAutoResizeImages,
     models: modelRuntime.models,
     onRulesSaved: async () => {
       await refreshWorkbookState();

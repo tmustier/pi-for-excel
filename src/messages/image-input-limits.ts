@@ -7,7 +7,6 @@ import type {
   TextContent,
 } from "@earendil-works/pi-ai";
 
-import type { SettingsReader } from "../storage/local/settings-store.js";
 import type { Attachment } from "./attachments.js";
 import type {
   ImageWorkerRequest,
@@ -22,7 +21,10 @@ export const DEFAULT_IMAGE_RESIZE_OPTIONS = {
   jpegQuality: 80,
 } as const satisfies Required<ModelImageResizeOptions>;
 
-export const IMAGE_AUTO_RESIZE_SETTING_KEY = "images.autoResize";
+/** Resolve the build/bootstrap image policy; Pi defaults auto-resize to enabled. */
+export function resolveImageAutoResizeEnabled(raw: string | undefined): boolean {
+  return raw?.trim().toLowerCase() !== "false";
+}
 
 export type ProcessedImageInput = {
   ok: true;
@@ -230,17 +232,6 @@ export async function processImageInput(
     },
     hints,
   };
-}
-
-export async function readImageAutoResizeEnabled(
-  settings: SettingsReader,
-): Promise<boolean> {
-  try {
-    const value = await settings.get(IMAGE_AUTO_RESIZE_SETTING_KEY);
-    return typeof value === "boolean" ? value : true;
-  } catch {
-    return true;
-  }
 }
 
 async function processWithModel(

@@ -68,16 +68,18 @@ At startup the proxy logs its effective client, origin, and target policies — 
 
 ## 2) Build an org-configured add-in
 
-Central deployments self-host the static build (fork or CI job). Two build-time env vars configure the client:
+Central deployments self-host the static build (fork or CI job). Three build-time env vars configure the client:
 
 | Variable | Example | Effect |
 |---|---|---|
 | `VITE_PI_DEFAULT_PROXY_URL` | `https://pi-proxy.example.com:3003` | Default proxy URL baked into the build (users can still change it in `/settings`). Must be `https://`. |
 | `VITE_PI_ALLOWED_PROVIDERS` | `deepseek,openai` | Only show these provider ids in the connect UI. Ids match `ALL_PROVIDERS` in `src/ui/provider-login.ts` (e.g. `anthropic`, `openai-codex`, `openai`, `google`, `deepseek`, `mistral`, `groq`, `xai`, ...). **UI filter only** — pair it with `ALLOWED_TARGET_HOSTS` on the proxy for actual enforcement. |
+| `VITE_PI_AUTO_RESIZE_IMAGES` | `false` | Disable Pi's default normalization of new prompt and tool-result images to the selected model's limits. Only the literal value `false` disables it. |
 
 ```bash
 VITE_PI_DEFAULT_PROXY_URL=https://pi-proxy.example.com:3003 \
 VITE_PI_ALLOWED_PROVIDERS=deepseek,openai \
+VITE_PI_AUTO_RESIZE_IMAGES=false \
 npm run build
 ```
 

@@ -16,6 +16,7 @@ import {
   setCurrentSpreadsheetHost,
 } from "../host/index.js";
 import { t } from "../language/index.js";
+import { resolveImageAutoResizeEnabled } from "../messages/image-input-limits.js";
 import { renderLoading, renderError } from "../ui/loading.js";
 import { getErrorMessage } from "../utils/errors.js";
 
@@ -33,7 +34,9 @@ function showFatalError(errorRoot: HTMLElement, message: string): void {
   render(renderError(message), errorRoot);
 }
 
-export function bootstrapTaskpane(): void {
+export function bootstrapTaskpane(options: {
+  autoResizeImages?: boolean;
+} = {}): void {
   const appEl = getRequiredElement<HTMLElement>("app");
   const loadingRoot = getRequiredElement<HTMLElement>("loading-root");
   const errorRoot = getRequiredElement<HTMLElement>("error-root");
@@ -76,7 +79,10 @@ export function bootstrapTaskpane(): void {
       console.error("[pi] Init error: Taskpane initialization timed out after 60000ms");
     }, 60_000);
 
-    void initTaskpane({ appEl, errorRoot })
+    const autoResizeImages = options.autoResizeImages ?? resolveImageAutoResizeEnabled(
+      typeof import.meta.env === "undefined" ? undefined : import.meta.env.VITE_PI_AUTO_RESIZE_IMAGES,
+    );
+    void initTaskpane({ appEl, errorRoot, autoResizeImages })
       .then(() => {
         if (!markInitComplete()) return;
         clearTimeout(slowInitTimer);

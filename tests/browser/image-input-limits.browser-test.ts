@@ -4,13 +4,57 @@ import { after, before, test } from "node:test";
 import { openTaskpane, startTaskpaneServer, type TaskpaneServer } from "./harness.ts";
 
 let env: TaskpaneServer;
+let previousAutoResizeConfig: string | undefined;
 
 before(async () => {
+  previousAutoResizeConfig = process.env.VITE_PI_AUTO_RESIZE_IMAGES;
+  process.env.VITE_PI_AUTO_RESIZE_IMAGES = "false";
   env = await startTaskpaneServer();
 });
 
 after(async () => {
   await env.close();
+  if (previousAutoResizeConfig === undefined) {
+    delete process.env.VITE_PI_AUTO_RESIZE_IMAGES;
+  } else {
+    process.env.VITE_PI_AUTO_RESIZE_IMAGES = previousAutoResizeConfig;
+  }
+});
+
+void test("bootstrap image config reaches the installed tool-result hook", async () => {
+  const opened = await openTaskpane(env, { clientId: "image-config-browser-client" });
+  try {
+    const workerStarts = await opened.page.evaluate(`
+      (async () => {
+        const sidebar = document.querySelector("pi-sidebar");
+        const agent = sidebar?.agent;
+        if (!agent?.afterToolCall) throw new Error("image normalization hook was not installed");
+
+        const OriginalWorker = globalThis.Worker;
+        let starts = 0;
+        globalThis.Worker = class {
+          constructor() {
+            starts += 1;
+            throw new Error("worker should not start when bootstrap disables auto-resize");
+          }
+        };
+        try {
+          await agent.afterToolCall({
+            result: {
+              content: [{ type: "image", data: "invalid-image", mimeType: "image/png" }],
+            },
+          }, new AbortController().signal);
+          return starts;
+        } finally {
+          globalThis.Worker = OriginalWorker;
+        }
+      })()
+    `);
+
+    assert.equal(workerStarts, 0);
+  } finally {
+    await opened.finish();
+  }
 });
 
 void test("browser image worker matches Pi limits without blocking the WebView", async () => {
