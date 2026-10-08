@@ -51,7 +51,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.124.0",
-    "@earendil-works/pi-agent-core": "0.87.0",
+    "@earendil-works/pi-agent-core": "1.0.3",
     "@earendil-works/pi-ai": "0.87.0",
     "highlight.js": "^11.12.0",
     "lit": "^3.3.3",
