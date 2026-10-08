@@ -27,6 +27,11 @@ import {
   loadMcpServers,
   type McpServerConfig,
 } from "./mcp-config.js";
+import {
+  buildMcpRequestHeaders,
+  MCP_SESSION_ID_HEADER,
+  parseMcpResponseBody,
+} from "./mcp-transport.js";
 
 const MCP_CLIENT_NAME = APP_NAME;
 const MCP_CLIENT_VERSION = APP_VERSION;
@@ -346,6 +351,9 @@ async function defaultGetRuntimeConfig(): Promise<McpRuntimeConfig> {
   };
 }
 
+/** Session ids that servers assigned on `initialize`, keyed by server id. */
+const mcpSessionIds = new Map<string, string>();
+
 async function defaultCallJsonRpc(args: {
   server: McpServerConfig;
   method: string;
@@ -361,22 +369,24 @@ async function defaultCallJsonRpc(args: {
     ...proxyBaseUrlArg(proxyBaseUrl),
   });
 
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    Accept: "application/json",
-  };
-
-  if (server.token) {
-    headers.Authorization = `Bearer ${server.token}`;
+  if (method === "initialize") {
+    mcpSessionIds.delete(server.id);
   }
 
+  const sessionId = mcpSessionIds.get(server.id);
+  const headers = buildMcpRequestHeaders({
+    ...(server.token ? { token: server.token } : {}),
+    ...(sessionId !== undefined ? { sessionId } : {}),
+  });
+
+  const requestId = expectResponse ? crypto.randomUUID() : undefined;
   const requestBody: Record<string, unknown> = {
     jsonrpc: "2.0",
     method,
   };
 
-  if (expectResponse) {
-    requestBody.id = crypto.randomUUID();
+  if (requestId !== undefined) {
+    requestBody.id = requestId;
   }
 
   if (params !== undefined) {
@@ -401,6 +411,11 @@ async function defaultCallJsonRpc(args: {
         throw new Error(`MCP request failed (${response.status}): ${reason}`);
       }
 
+      const assignedSessionId = response.headers.get(MCP_SESSION_ID_HEADER);
+      if (assignedSessionId) {
+        mcpSessionIds.set(server.id, assignedSessionId);
+      }
+
       if (!expectResponse) {
         return {
           result: null,
@@ -410,7 +425,7 @@ async function defaultCallJsonRpc(args: {
       }
 
       const body = await response.text();
-      const payload: unknown = body.trim().length > 0 ? JSON.parse(body) : null;
+      const payload = parseMcpResponseBody(body, response.headers.get("Content-Type"), requestId);
 
       const rpcError = parseJsonRpcError(payload);
       if (rpcError) {
