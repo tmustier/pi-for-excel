@@ -24,7 +24,7 @@ async function withTaskpane(run: (page: Page) => Promise<void>): Promise<void> {
   }
 }
 
-/** Text of the nodes the browser exposes to assistive technology (ignored nodes, such as inert ones, excluded). */
+/** Names exposed to assistive technology. */
 async function exposedAccessibleText(page: Page): Promise<string[]> {
   const cdp = await page.context().newCDPSession(page);
   try {
@@ -57,7 +57,6 @@ void test("custom gateway deletion persists only after overlay confirmation", as
     const confirmation = page.locator("#pi-confirm-dialog-overlay");
     await confirmation.waitFor({ state: "visible" });
     // Assistive technology sees only the topmost dialog, not the settings under it.
-    assert.equal(await settings.evaluate((element) => element instanceof HTMLElement && element.inert), true);
     const exposedText = await exposedAccessibleText(page);
     assert.equal(exposedText.includes("Delete custom gateway?"), true);
     assert.equal(exposedText.includes("Configured gateways"), false);
@@ -65,7 +64,7 @@ void test("custom gateway deletion persists only after overlay confirmation", as
     await confirmation.waitFor({ state: "detached" });
     await page.waitForTimeout(250);
     assert.equal(await gateway.isVisible(), true);
-    assert.equal(await settings.evaluate((element) => element instanceof HTMLElement && element.inert), false);
+    assert.equal((await exposedAccessibleText(page)).includes("Configured gateways"), true);
 
     await settings.getByRole("button", { name: "Delete" }).click();
     await confirmation.getByRole("button", { name: "Delete" }).click();

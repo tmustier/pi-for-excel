@@ -90,10 +90,6 @@ import type { SettingsWriter } from "../storage/local/settings-store.js";
 
 type AnyAgentTool = AgentTool;
 
-/** Installed (non-builtin) extensions get `ext.<uuid>` ids; their connections are `ext.<uuid>.<name>`. */
-const INSTALLED_EXTENSION_ID_PREFIX = "ext.";
-
-/** Set once the one-time cleanup of secrets left by earlier uninstalls has run. */
 const ORPHANED_CONNECTIONS_CLEANED_KEY = "extensions.orphaned-connections-cleaned.v1";
 
 interface ExtensionToolExecutionBoundary {
@@ -292,10 +288,17 @@ export class ExtensionRuntimeManager {
       return;
     }
 
-    // Read before loading: loading may replace an unreadable registry with defaults.
-    const intactInstalledIds = await readIntactStoredExtensionIds(this.settings);
+    // Finish or skip the migration before loading can replace an unreadable registry.
+    if ((await this.settings.get(ORPHANED_CONNECTIONS_CLEANED_KEY)) !== true) {
+      const installedIds = await readIntactStoredExtensionIds(this.settings);
+      if (installedIds) {
+        await this.connectionManager.deleteStoredRecords((connectionId) =>
+          connectionId.startsWith("ext.")
+          && !installedIds.some((entryId) => isExtensionOwnedId(entryId, connectionId)));
+      }
+      await this.settings.set(ORPHANED_CONNECTIONS_CLEANED_KEY, true);
+    }
     this.entries = await loadStoredExtensions(this.settings);
-    await this.deleteOrphanedConnectionRecordsOnce(intactInstalledIds);
 
     for (const entry of this.entries) {
       if (!entry.enabled) {
@@ -391,31 +394,6 @@ export class ExtensionRuntimeManager {
 
     await this.persistEntries();
     this.notify();
-  }
-
-  /**
-   * One-time cleanup of secrets left by extensions uninstalled before uninstall
-   * deleted them. Each install gets a new id, so nothing else can reach them.
-   * Uninstall now cleans up after itself, so this runs once, and only when the
-   * stored registry read back intact: a missing, unreadable or partly invalid
-   * registry would make installed extensions look uninstalled.
-   */
-  private async deleteOrphanedConnectionRecordsOnce(
-    intactInstalledIds: ReadonlySet<string> | null,
-  ): Promise<void> {
-    if (!intactInstalledIds) return;
-    try {
-      if ((await this.settings.get(ORPHANED_CONNECTIONS_CLEANED_KEY)) === true) return;
-      const installedIds = Array.from(intactInstalledIds);
-      await this.connectionManager.deleteStoredRecords((connectionId) =>
-        connectionId.startsWith(INSTALLED_EXTENSION_ID_PREFIX)
-        && !installedIds.some((entryId) => isExtensionOwnedId(entryId, connectionId)));
-      await this.settings.set(ORPHANED_CONNECTIONS_CLEANED_KEY, true);
-    } catch (error) {
-      console.warn(
-        `[pi] Failed to remove stored connections of uninstalled extensions: ${getRuntimeManagerErrorMessage(error)}`,
-      );
-    }
   }
 
   async installFromUrl(name: string, url: string): Promise<string> {
@@ -637,7 +615,7 @@ export class ExtensionRuntimeManager {
     source: StoredExtensionSource;
   }): Promise<string> {
     const now = new Date().toISOString();
-    const id = `${INSTALLED_EXTENSION_ID_PREFIX}${crypto.randomUUID()}`;
+    const id = `ext.${crypto.randomUUID()}`;
 
     const trust = deriveStoredExtensionTrust(id, input.source);
     const entry: StoredExtensionEntry = {

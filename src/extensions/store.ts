@@ -277,29 +277,22 @@ export async function saveStoredExtensions(
   await settings.set(EXTENSIONS_REGISTRY_STORAGE_KEY, createRegistryDocument(items));
 }
 
-/**
- * IDs in the stored registry, or null unless it is a current document whose
- * every entry is valid. Unlike `loadStoredExtensions`, this never falls back
- * to defaults or drops entries it cannot read, so callers can treat an ID
- * missing from the result as uninstalled. Read it before `loadStoredExtensions`,
- * which may replace an unreadable registry with defaults.
- */
+/** Read before loading defaults: only an intact registry can prove an extension was uninstalled. */
 export async function readIntactStoredExtensionIds(
   settings: SettingsWriter,
-): Promise<ReadonlySet<string> | null> {
+): Promise<string[] | null> {
   const raw = await settings.get(EXTENSIONS_REGISTRY_STORAGE_KEY);
-  const document = normalizeDocument(raw);
-  if (
-    !document
-    || document.version < EXTENSIONS_REGISTRY_VERSION
-    || !isExtensionsStorePayloadShape(raw)
-    || !Array.isArray(raw.items)
-    || raw.items.length !== document.items.length
-  ) {
-    return null;
-  }
+  if (!isExtensionsStorePayloadShape(raw)
+    || raw.version !== EXTENSIONS_REGISTRY_VERSION
+    || !Array.isArray(raw.items)) return null;
 
-  return new Set(document.items.map((entry) => entry.id));
+  const ids: string[] = [];
+  for (const item of raw.items) {
+    const entry = normalizeEntry(item);
+    if (!entry) return null;
+    ids.push(entry.id);
+  }
+  return ids;
 }
 
 /**

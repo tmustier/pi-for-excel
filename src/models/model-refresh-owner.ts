@@ -56,7 +56,6 @@ export class ModelRefreshOwner {
   private refreshPromise: Promise<void> | null = null;
   private requestedSync = false;
   private requestedNetwork = false;
-  private activeSync = false;
   private activeNetwork = false;
   private activeProviderRevision = 0;
 
@@ -167,7 +166,6 @@ export class ModelRefreshOwner {
 
     this.refreshPromise = this.runRefreshes().finally(() => {
       this.refreshPromise = null;
-      this.activeSync = false;
       this.activeNetwork = false;
     });
     return this.refreshPromise;
@@ -184,7 +182,6 @@ export class ModelRefreshOwner {
       const allowNetwork = this.requestedNetwork;
       this.requestedSync = false;
       this.requestedNetwork = false;
-      this.activeSync = syncConfiguredProviders;
       this.activeNetwork = allowNetwork;
 
       if (syncConfiguredProviders) {
@@ -199,7 +196,6 @@ export class ModelRefreshOwner {
       });
       await this.publish(Array.from(result.errors.keys()).sort());
 
-      this.activeSync = false;
       this.activeNetwork = false;
     } while (this.requestedSync || this.requestedNetwork || this.providersChangedDuringPass());
   }

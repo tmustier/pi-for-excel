@@ -182,32 +182,57 @@ void test("startup deletes stored connections of extensions that are no longer i
   ]);
 });
 
-void test("startup keeps stored connections when the extension registry is missing", async () => {
-  const settings = new MemorySettingsStore();
-  const keptId = "ext.00000000-0000-4000-8000-000000000001.account";
-  await saveConnectionStoreDocument(settings, {
-    [keptId]: { status: "connected", secrets: { apiKey: "installed-secret" } },
-  });
-
-  await createManagerWithConnection(settings, new ConnectionManager({ settings })).initialize();
-
-  assert.deepEqual(Object.keys(await loadConnectionStoreDocument(settings)), [keptId]);
-});
-
-void test("startup keeps stored connections when an extension registry entry is unreadable", async () => {
-  const settings = new MemorySettingsStore();
-  const unreadableId = "ext.00000000-0000-4000-8000-000000000002";
-  await settings.set(EXTENSIONS_REGISTRY_STORAGE_KEY, {
+for (const { name, registry } of [
+  { name: "missing", registry: null },
+  { name: "malformed", registry: { version: 2, items: "unreadable" } },
+  { name: "future-version", registry: { version: 3, items: [] } },
+  { name: "partly unreadable", registry: {
     version: 2,
-    items: [{ id: unreadableId, name: "Written by a newer version", source: { kind: "future-kind" } }],
-  });
-  await saveConnectionStoreDocument(settings, {
-    [`${unreadableId}.account`]: { status: "connected", secrets: { apiKey: "installed-secret" } },
-  });
+    items: [{ id: "ext.kept", name: "Newer extension", source: { kind: "future-kind" } }],
+  } },
+]) {
+  void test(`startup preserves credentials across reloads with a ${name} registry`, async () => {
+    const settings = new MemorySettingsStore();
+    await settings.set(EXTENSIONS_REGISTRY_STORAGE_KEY, registry);
+    const connections = {
+      "ext.kept.account": { status: "connected" as const, secrets: { apiKey: "installed-secret" } },
+    };
+    await saveConnectionStoreDocument(settings, connections);
 
-  await createManagerWithConnection(settings, new ConnectionManager({ settings })).initialize();
+    for (let launch = 0; launch < 2; launch += 1) {
+      await createManagerWithConnection(settings, new ConnectionManager({ settings })).initialize();
+      assert.deepEqual(await loadConnectionStoreDocument(settings), connections);
+    }
+  });
+}
 
-  assert.deepEqual(Object.keys(await loadConnectionStoreDocument(settings)), [`${unreadableId}.account`]);
+void test("failed migration persistence cannot replace a missing registry with defaults", async () => {
+  class FailingWrites extends MemorySettingsStore {
+    failWrites = false;
+
+    override set(key: string, value: unknown): Promise<void> {
+      return this.failWrites
+        ? Promise.reject(new Error("storage unavailable"))
+        : super.set(key, value);
+    }
+  }
+  const settings = new FailingWrites();
+  const connections = {
+    "ext.kept.account": { status: "connected" as const, secrets: { apiKey: "installed-secret" } },
+  };
+  await saveConnectionStoreDocument(settings, connections);
+  settings.failWrites = true;
+  await assert.rejects(
+    createManagerWithConnection(settings, new ConnectionManager({ settings })).initialize(),
+    /storage unavailable/u,
+  );
+  assert.equal(await settings.get(EXTENSIONS_REGISTRY_STORAGE_KEY), null);
+
+  settings.failWrites = false;
+  for (let launch = 0; launch < 2; launch += 1) {
+    await createManagerWithConnection(settings, new ConnectionManager({ settings })).initialize();
+    assert.deepEqual(await loadConnectionStoreDocument(settings), connections);
+  }
 });
 
 void test("startup cleanup of uninstalled extensions' connections runs only once", async () => {
