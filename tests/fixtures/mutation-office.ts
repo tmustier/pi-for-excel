@@ -8,6 +8,8 @@ export function mutationOfficeFixture(initial: Grid = [["old", 17], ["anchor", 2
   const commands: (() => void)[] = [];
   let writes = 0;
   let onWrite = (): void => {};
+  let onRangeLoad = (_address: string, _properties: string): void => {};
+  let usedRangeAddress: string | null = null;
   let failAfterWrite = false;
   const load = (): void => {};
   const bounds = (address: string) => {
@@ -27,7 +29,8 @@ export function mutationOfficeFixture(initial: Grid = [["old", 17], ["anchor", 2
     const raw = () => Array.from({ length: b.rows }, (_, r) =>
       Array.from({ length: b.columns }, (_, c) => data[b.row + r]?.[b.column + c] ?? ""));
     return {
-      load, isNullObject: false, rowIndex: b.row, columnIndex: b.column,
+      load: (properties: string): void => { onRangeLoad(address, properties); },
+      isNullObject: false, rowIndex: b.row, columnIndex: b.column,
       rowCount: b.rows, columnCount: b.columns,
       get address() { return `${sheet.name}!${parseRangeRef(address).address}`; },
       get values(): Grid { return raw().map((row) => row.map((cell) => cell === "=1+1" ? 2 : cell)); },
@@ -59,7 +62,7 @@ export function mutationOfficeFixture(initial: Grid = [["old", 17], ["anchor", 2
     load, id: "sheet-1", name: "Original", position: 0, visibility: "Visible", isNullObject: false,
     tables: { load, items: [table] },
     getRange: range,
-    getUsedRangeOrNullObject: () => range(`A1:${colToLetter(data.reduce((max, row) => Math.max(max, row.length), 1) - 1)}${Math.max(data.length, 1)}`),
+    getUsedRangeOrNullObject: () => range(usedRangeAddress ?? `A1:${colToLetter(data.reduce((max, row) => Math.max(max, row.length), 1) - 1)}${Math.max(data.length, 1)}`),
   };
   const worksheets = { load, items: [sheet], getActiveWorksheet: () => sheet,
     getItem: (id: string) => {
@@ -87,6 +90,8 @@ export function mutationOfficeFixture(initial: Grid = [["old", 17], ["anchor", 2
   return { sheet, table, names: () => structuredClone(names.items), read: () => structuredClone(data), writes: () => writes,
     edit: (grid: Grid) => { data = structuredClone(grid); },
     onWrite: (callback: () => void) => { onWrite = callback; },
+    onRangeLoad: (callback: (address: string, properties: string) => void) => { onRangeLoad = callback; },
+    setUsedRange: (address: string) => { usedRangeAddress = address; },
     failAfterWrite: () => { failAfterWrite = true; },
     excel: { run: <T>(action: (ctx: typeof context) => Promise<T>): Promise<T> => action(context) },
   };
