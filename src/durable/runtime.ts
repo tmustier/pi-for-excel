@@ -7,6 +7,7 @@ import type { createOfficeStreamFn } from "../auth/stream-proxy.js";
 import type { AnyCoreTool, CoreToolName } from "../tools/registry.js";
 import type { WriteCellsHooks } from "../tools/write-cells.js";
 import { createMutationController, type MutationRecord } from "./mutations.js";
+import { protectModelStream, type ModelRecoveryLifecycle } from "./model-recovery.js";
 
 // Workbook-read-only tools only. Mixed-action tools and external/local side
 // effects stay unsafe, even when workbook coordination classifies them as reads.
@@ -28,9 +29,19 @@ export function adaptTools(tools: readonly AnyCoreTool[]): ToolRegistration[] {
 }
 
 /** Keep credentials in closures, never in Durable's persisted stream settings. */
-export function routeModels(models: Models, streamFn: ReturnType<typeof createOfficeStreamFn>): Models {
+export function routeModels(
+  models: Models,
+  streamFn: ReturnType<typeof createOfficeStreamFn>,
+  getRecoveryLifecycle?: () => ModelRecoveryLifecycle | undefined,
+): Models {
   const streamSimple: Models["streamSimple"] = (model, transcript, options) => {
     const output = createAssistantMessageEventStream();
+    const failure = (): AssistantMessage => ({
+      role: "assistant", content: [], api: model.api, provider: model.provider, model: model.id,
+      stopReason: "error", errorMessage: "Browser model transport failed. Check provider connection and proxy.",
+      timestamp: Date.now(), usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+    });
     void (async () => {
       try {
         const auth = await models.getAuth(model);
@@ -40,16 +51,12 @@ export function routeModels(models: Models, streamFn: ReturnType<typeof createOf
         for await (const event of source) output.push(event);
         output.end(await source.result());
       } catch {
-        const error: AssistantMessage = {
-          role: "assistant", content: [], api: model.api, provider: model.provider, model: model.id,
-          stopReason: "error", errorMessage: "Browser model transport failed. Check provider connection and proxy.",
-          timestamp: Date.now(), usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0,
-            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
-        };
+        const error = failure();
         output.push({ type: "error", reason: "error", error });
       }
     })();
-    return output;
+    const lifecycle = getRecoveryLifecycle?.();
+    return lifecycle ? protectModelStream(output, lifecycle, failure) : output;
   };
   return {
     getProviders: models.getProviders.bind(models), getProvider: models.getProvider.bind(models),
@@ -79,6 +86,8 @@ export async function openDurableRuntime(options: {
   model: { provider: string; modelId: string };
   buildCapabilities: (hooks: WriteCellsHooks) => Promise<{ tools: AnyCoreTool[]; systemPrompt: string }>;
   allowFaultInjection?: boolean;
+  /** Runs before root setup or scheduling, so browser lifecycle owns this exact Harness. */
+  onOpened?: (harness: Harness) => void;
 }): Promise<{
   harness: Harness;
   conversation: Awaited<ReturnType<Harness["root"]>>;
@@ -91,6 +100,7 @@ export async function openDurableRuntime(options: {
     settings: { toolExecution: "sequential", compaction: { enabled: false } },
   }, context);
   try {
+    options.onOpened?.(harness);
     const conversation = await harness.root(context, { agent: { model: options.model } });
     const mutations = createMutationController({
       workbookId: options.workbookId,

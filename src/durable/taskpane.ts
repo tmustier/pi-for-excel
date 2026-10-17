@@ -12,6 +12,7 @@ import type { WorkbookContext } from "../workbook/context.js";
 import { openIndexedDbStorage } from "./indexeddb-storage.js";
 import { openDurableRuntime, routeModels } from "./runtime.js";
 import { importLegacySession } from "./session-import.js";
+import { createModelRecoveryLifecycle, type ModelRecoveryLifecycle } from "./model-recovery.js";
 
 const payloadSchema = Type.Object({
   text: Type.Optional(Type.String({ minLength: 1 })),
@@ -35,6 +36,7 @@ export async function createDurableTaskpane(options: {
   allowFaultInjection: boolean;
 }): Promise<DurableTaskpane> {
   let runtime: Awaited<ReturnType<typeof openDurableRuntime>> | undefined;
+  let lifecycle: ModelRecoveryLifecycle | undefined;
   let failure: string | undefined;
   const workbook = await options.getWorkbookContext();
   const active = options.getActiveRuntime();
@@ -43,7 +45,12 @@ export async function createDurableTaskpane(options: {
     if (!active?.buildDurableCapabilities) throw new Error("Taskpane capabilities unavailable");
     runtime = await openDurableRuntime({
       storage: await openIndexedDbStorage(`pi-for-excel-durable:${workbook.workbookId}`),
-      models: routeModels(options.models, options.streamFn),
+      models: routeModels(options.models, options.streamFn, () => lifecycle),
+      onOpened: (harness) => {
+        const recovery = createModelRecoveryLifecycle(() => harness.close(context));
+        lifecycle = recovery;
+        void harness.closed.then(() => recovery.dispose());
+      },
       workbookId: workbook.workbookId,
       model: { provider: active.agent.state.model.provider, modelId: active.agent.state.model.id },
       buildCapabilities: async (hooks) => {
