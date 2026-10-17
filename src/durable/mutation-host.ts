@@ -13,6 +13,7 @@ import { localAddressPart, splitRangeList } from "../workbook/recovery/address.j
 import type { MutationHost, MutationObservation, MutationPlan } from "./mutations.js";
 
 const gridSchema = Type.Array(Type.Array(Type.Union([Type.String(), Type.Number(), Type.Boolean(), Type.Null()])));
+const cellStateSchema = Type.Array(Type.Object({ range: Type.String(), content: gridSchema }));
 const paramsSchema = Type.Object({
   action: Type.Optional(Type.String()), sheet: Type.Optional(Type.String()),
   range: Type.Optional(Type.String()), start_cell: Type.Optional(Type.String()),
@@ -318,10 +319,13 @@ export function createWorkbookMutationHost(options: {
       }
       const before = await observe(target, call.toolName);
       let expected: MutationObservation | null = null;
-      if (call.toolName === "write_cells" && before.complete && params.values?.length && target.ranges[0]) {
+      if (call.toolName === "write_cells" && before.complete && params.values?.length
+        && Value.Check(cellStateSchema, before.state) && before.state.length === 1) {
         const width = params.values.reduce((max, row) => Math.max(max, row.length), 0);
         const padded = params.values.map((row) => Array.from({ length: width }, (_, index) => row[index] ?? ""));
-        expected = { ...before, state: [{ range: target.ranges[0], content: padded }] };
+        // Office canonicalizes addresses (e.g. $A$1:A1 to A1). Preserve the
+        // observed address rather than comparing host spelling to our builder's.
+        expected = { ...before, state: before.state.map(({ range }) => ({ range, content: padded })) };
       }
       if (call.toolName === "modify_structure" && before.complete && Value.Check(identitiesSchema, before.structure)) {
         const identities = structuredClone(before.structure);

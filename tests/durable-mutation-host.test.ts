@@ -59,6 +59,35 @@ void test("actual write_cells + production observer: formula proof, stable IDs, 
   });
 });
 
+void test("singleton writes reconcile canonical host addresses after sync, including anchored and quoted references", async () => {
+  for (const start_cell of ["A1", "'O''Brien! Data'!$A$1"]) {
+    await withOffice(async (f) => {
+      f.sheet.name = "O'Brien! Data";
+      const j = journal();
+      j.controller.configureFault("afterDispatch");
+      const params = { start_cell, values: [[53]], allow_overwrite: true };
+      const execution = j.write.execute("single", params);
+      try {
+        for (let i = 0; i < 100 && !j.controller.status().paused; i++) await new Promise<void>((resolve) => setImmediate(resolve));
+        assert.equal(j.controller.status().paused, "afterDispatch");
+        assert.deepEqual(j.records.get("single")?.before.state, [{ range: "A1", content: [["old"]] }]);
+        assert.equal((await j.controller.reconcile("single")).classification, "applied");
+        assert.deepEqual(f.read(), [[53, 17], ["anchor", 29]]);
+      } finally {
+        j.controller.resume();
+        await execution;
+      }
+      await assert.rejects(j.write.execute("single", params), /replay/u);
+      f.edit([[99, 17], ["anchor", 29]]);
+      const review = await j.controller.reconcile("single");
+      assert.equal(review.classification, "conflict");
+      await j.controller.resolve("single", review.observationToken);
+      assert.deepEqual(f.read(), [[99, 17], ["anchor", 29]]);
+      assert.equal(f.writes(), 1);
+    });
+  }
+});
+
 for (const action of ["insert_rows", "delete_rows", "insert_columns", "delete_columns"]) {
   void test(`actual modify_structure ${action}: sync applies once, interruption stays uncertain`, async () => {
     await withOffice(async (f) => {

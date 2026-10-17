@@ -32,7 +32,12 @@ export function mutationOfficeFixture(initial: Grid = [["old", 17], ["anchor", 2
       load: (properties: string): void => { onRangeLoad(address, properties); },
       isNullObject: false, rowIndex: b.row, columnIndex: b.column,
       rowCount: b.rows, columnCount: b.columns,
-      get address() { return `${sheet.name}!${parseRangeRef(address).address}`; },
+      get address() {
+        const first = `${colToLetter(b.column)}${b.row + 1}`;
+        const last = `${colToLetter(b.column + b.columns - 1)}${b.row + b.rows}`;
+        const local = b.band === "cells" ? (first === last ? first : `${first}:${last}`) : parseRangeRef(address).address;
+        return `'${sheet.name.replace(/'/gu, "''")}'!${local}`;
+      },
       get values(): Grid { return raw().map((row) => row.map((cell) => cell === "=1+1" ? 2 : cell)); },
       set values(value: Grid) {
         const copied = structuredClone(value);
