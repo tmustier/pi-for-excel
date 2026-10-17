@@ -12,7 +12,7 @@ import {
   openIndexedDbStorage,
   DurableStorageError,
   deleteDurableWorkbookStorage,
-} from "./durable/indexeddb-storage";
+} from "./durable/indexeddb-storage.js";
 
 const storage = await openIndexedDbStorage(databaseName, {
   expectedDatabaseId, // omit only on first creation/adoption
@@ -58,8 +58,9 @@ partition changes, hardware failure, or an Office-specific lifecycle event.
 removes redundant journal batches, atomically advancing the checkpoint marker.
 It is optional maintenance: successful commits already persist the materialized
 records, document revisions, request lookup, allocator and sequence atomically.
-The backend also prunes automatically every 64 commits. Never treat a
-maintenance failure as permission to resubmit an already committed mutation.
+The backend also prunes automatically every 64 commits
+(agent default, not requested). Never treat a maintenance failure as permission
+to resubmit an already committed mutation.
 
 ## Durable representation and bounds
 
@@ -90,14 +91,15 @@ Pagehide closes storage; a restored back/forward-cache page reloads.
 
 Open reads metadata, store counts, and at most 63 retained journal batches,
 one batch at a time. It does not load records or historical document revisions.
-Scans read cursor pages of 64 rows and stop at the requested result limit plus
-one. Filtering can visit many pages; those pages are not retained. Fork reads
-retain the ancestry chain, not ancestor transcripts. No pagination limit is
+Scans read cursor pages of 64 rows (agent default, not requested) and stop at the
+requested result limit plus one. Filtering can visit many pages; those pages
+are not retained. Fork reads retain the ancestry chain, not ancestor transcripts.
+No pagination limit is
 silently substituted for the caller's limit.
 
-Every 64 document delta batches the backend stores a materialized physical
-checkpoint at that revision's original sequence. Historical revisions before
-it remain intact. A historical/current read selects the latest physical base
+Every 64 document delta batches (agent default, not requested) the backend stores
+a materialized physical checkpoint at that revision's original sequence.
+Historical revisions before it remain intact. A historical/current read selects the latest physical base
 at or before the requested sequence and replays at most 63 following delta
 batches. **The stored logical `deltasSinceBase` does not reset at a physical
 checkpoint.** Only a Session-supplied base resets it. This preserves upstream

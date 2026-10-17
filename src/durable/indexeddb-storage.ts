@@ -13,14 +13,16 @@ import { Value } from "typebox/value";
 import {
   completed, digest, counterSchema, conversationSchema, entrySchema, taskSchema,
   submissionSchema, documentSchema, contentSchema, journalSchema, writesSchema,
-} from "./storage-codec";
-import { acquireStorageLock, DurableStorageError, requestStoragePersistence } from "./storage-lifecycle";
+} from "./storage-codec.js";
+import { acquireStorageLock, DurableStorageError, requestStoragePersistence } from "./storage-lifecycle.js";
 
-export { DurableStorageError, deleteDurableWorkbookStorage } from "./storage-lifecycle";
+export { DurableStorageError, deleteDurableWorkbookStorage } from "./storage-lifecycle.js";
 
 const STORES = ["meta", "journal", "records", "revisions", "requests"];
 // Physical batching policies, never limits on history or on returned content.
+// # agent-default (not a user rule): 2026-10-17
 const CHECKPOINT_INTERVAL = 64;
+// # agent-default (not a user rule): 2026-10-17
 const READ_PAGE = 64;
 const natural = Type.Integer({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER });
 const manifestSchema = Type.Object({
