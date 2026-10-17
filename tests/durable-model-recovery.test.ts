@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createAssistantMessageEventStream, type AssistantMessage } from "@earendil-works/pi-ai";
+import { createAssistantMessageEventStream, isRetryableAssistantError, type AssistantMessage } from "@earendil-works/pi-ai";
 import { fauxAssistantMessage } from "@earendil-works/pi-ai/providers/faux";
 import {
   createModelRecoveryLifecycle,
@@ -52,11 +52,11 @@ void test("WebKit's terminal fetch error yields to an already pending unload", a
   lifecycle.dispose();
 });
 
-void test("ordinary provider errors are not suppressed or retried", async () => {
+void test("ordinary provider errors are not suppressed or reclassified", async () => {
   const lifecycle = createModelRecoveryLifecycle(() => Promise.resolve(), new EventTarget());
   const source = createAssistantMessageEventStream();
   const protectedStream = protectModelStream(source, lifecycle, transportFailure);
-  const failure = transportFailure();
+  const failure = { ...transportFailure(), errorMessage: "Forbidden" };
   source.push({ type: "error", reason: "error", error: failure });
   for await (const event of protectedStream) assert.equal(event.type, "error");
   assert.deepEqual(await protectedStream.result(), failure);
@@ -82,4 +82,19 @@ void test("disposing a closed harness removes navigation handlers", () => {
   lifecycle.dispose();
   prepareDurableReload(target);
   assert.equal(closes, 0);
+});
+
+void test("native WebKit fetch cancellation remains a retryable pending request without an unload event", async () => {
+  const lifecycle = createModelRecoveryLifecycle(() => Promise.resolve(), new EventTarget());
+  const source = createAssistantMessageEventStream();
+  const stream = protectModelStream(source, lifecycle, transportFailure);
+  const error = transportFailure();
+  assert.equal(isRetryableAssistantError(error), false, "upstream does not recognize WebKit wording");
+  source.push({ type: "error", reason: "error", error });
+  for await (const event of stream) assert.equal(event.type, "error");
+  const result = await stream.result();
+  assert.equal(result.errorMessage, "Network error: Load failed");
+  assert.equal(isRetryableAssistantError(result), true);
+  assert.equal(lifecycle.suspending, false);
+  lifecycle.dispose();
 });

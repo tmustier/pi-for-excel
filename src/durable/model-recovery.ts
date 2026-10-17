@@ -72,7 +72,21 @@ export function protectModelStream(
         }
       }
       if (lifecycle.suspending) continue;
-      output.push(event);
+      // Native Office pane closure can cancel fetch before WebKit delivers any
+      // unload event. WebKit calls this network failure "Load failed", which
+      // pi-ai 1.3's retry classifier does not recognize. Keep the actual error
+      // visible, but classify it as a network error so Durable persists a retry
+      // checkpoint rather than irreversibly answering the queued submission.
+      // Use Durable's existing retry policy; never reinterpret auth/provider
+      // errors, explicit cancellation, or successful terminal messages.
+      if (event.type === "error" && event.reason === "error"
+        && /^(?:TypeError: )?Load failed\.?$/u.test(event.error.errorMessage ?? "")) {
+        output.push({ ...event, error: { ...event.error,
+          errorMessage: `Network error: ${event.error.errorMessage}`,
+        } });
+      } else {
+        output.push(event);
+      }
     }
     const result = await source.result();
     output.end(lifecycle.suspending ? cancelled(result) : result);
