@@ -1,6 +1,6 @@
 # Pi 1.3 upgrade and Pi Durable evaluation
 
-**Status:** Step 1 in progress, step 2 not started
+**Status:** Step 1 implemented and tested in Excel, step 2 not started
 **Written:** 2026-10-17
 
 ## Summary
@@ -68,6 +68,19 @@ Durable is labeled experimental, and its API has had breaking changes since 1.0.
 4. Review the 0.87 to 1.3 changelogs for behavior that our model ordering, thinking levels, and transport code depend on, and extend the OpenAI ordering rules to GPT-6 so GPT-6.1 Sol becomes the default.
 5. Run `npm run check`, `npm run build`, `npm test`, `npm run test:models`, `npm run test:context`, and `npm run test:security`.
 6. Run a real prompt through the taskpane in Excel with a current model, let the model call workbook tools, and check the workbook independently.
+
+### Step 1 results
+
+The deterministic suites pass: `npm run check`, `npm run build`, `npm test` (820 tests), `npm run test:models`, `npm run test:context`, `npm run test:security`, and `npm run test:browser` (87 tests). One browser test failed after the upgrade because GPT-6.1 Sol has no `off` thinking level, so the thinking popover was shorter and was not clamped. The popover positioning used `offsetHeight`, which rounds, and the popover ended 0.17 pixels past its inset. It now uses the fractional size from `getBoundingClientRect()`.
+
+We ran the Excel test on 17 October 2026 in Excel for Mac, with the pane in the background and the bridge reading the workbook independently:
+
+1. With no model chosen, the pane selected `openai-codex/gpt-6.1-sol` at the `high` thinking level. The model called `get_workbook_overview`, `modify_structure`, `read_range` and `write_cells` to create `_pi_e2e_smoke`, write 2 and 3 into A1:A2, and write `=SUM(A1:A2)` into A3. The bridge read back 2, 3 and 5, with the formula kept in A3.
+2. After a long filler message, `/compact` summarized the first turn. The session saved in IndexedDB holds a `compactionSummary` record with the same four fields as before the upgrade, and the card rendered. Asked to answer without tools, the model gave the sheet name and formula from the summary.
+3. The session switched in place to `anthropic/claude-opus-5-5`. The model wrote `=A3*2` into B3, and the bridge read back 10 with the other cells unchanged. Most of the request came from the prompt cache.
+4. The model deleted `_pi_e2e_smoke`, and the bridge confirmed that only `Sheet1` remained.
+
+We did not test GPT-6 Luna or Astra over ChatGPT, the GPT-5.6 Luna WebSocket bridge, custom gateways, extension providers, or Google providers.
 
 ### Step 2: Durable prototype
 
