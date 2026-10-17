@@ -1,11 +1,11 @@
 import type {
-  Agent,
-  AgentEvent,
   AgentTool,
   AgentToolResult,
   AgentToolUpdateCallback,
 } from "@earendil-works/pi-agent-core";
 import type { ModelInputLimits } from "@earendil-works/pi-ai";
+import type { AgentEvent, Conversation } from "@earendil-works/pi-durable";
+import type { ConversationPresenter, ConversationSnapshot } from "../durable/conversation-view.js";
 import type { Static, TSchema } from "typebox";
 
 import type {
@@ -209,10 +209,11 @@ export interface ClipboardAPI {
 }
 
 export interface ExtensionAgentAPI {
-  readonly raw: Agent;
-  injectContext(content: string): void;
-  steer(content: string): void;
-  followUp(content: string): void;
+  readonly raw: Conversation;
+  readonly snapshot: ConversationSnapshot;
+  injectContext(content: string): Promise<void>;
+  steer(content: string): Promise<void>;
+  followUp(content: string): Promise<void>;
 }
 
 export interface SkillSummary {
@@ -268,7 +269,7 @@ export interface ExcelExtensionAPI {
 }
 
 export interface CreateExtensionAPIOptions {
-  getAgent: () => Agent;
+  getActiveConversation: () => ConversationPresenter;
   registerCommand?: (name: string, cmd: ExtensionCommand) => void;
   registerTool?: (tool: AgentTool) => void;
   unregisterTool?: (name: string) => void;
@@ -293,9 +294,9 @@ export interface CreateExtensionAPIOptions {
   storageDelete?: (key: string) => Promise<void>;
   storageKeys?: () => Promise<string[]>;
   clipboardWriteText?: (text: string) => Promise<void>;
-  injectAgentContext?: (content: string) => void;
-  steerAgent?: (content: string) => void;
-  followUpAgent?: (content: string) => void;
+  injectAgentContext?: (content: string) => Promise<void>;
+  steerAgent?: (content: string) => Promise<void>;
+  followUpAgent?: (content: string) => Promise<void>;
   listSkills?: () => Promise<SkillSummary[]>;
   readSkill?: (name: string) => Promise<string>;
   installSkill?: (name: string, markdown: string) => Promise<void>;

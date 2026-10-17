@@ -6,35 +6,34 @@ let env: TaskpaneServer;
 before(async () => { env = await startTaskpaneServer(); });
 after(async () => { await env.close(); });
 
-void test("default taskpane does not load Durable; bridge flag plus reload loads only the opt-in prototype", async () => {
-  const requests: string[] = [];
-  const opened = await openTaskpane(env, { prepareContext: (browser) => {
-    browser.on("request", (request) => { if (request.url().includes("/src/durable/")) requests.push(request.url()); });
-    return Promise.resolve();
-  } });
-  try {
-    assert.deepEqual(requests, []);
-    await Promise.all([
-      opened.page.waitForResponse((response) => /\/src\/durable\/runtime\.(js|ts)/u.test(response.url())),
-      opened.page.evaluate(`(async () => {
-      const { executeExtensionVerificationCommand: command } = await import('/src/taskpane/background-extension-verification.ts');
-      await command('setExperiment', {feature:'durable_runtime', enabled:true}, {});
-      await command('reloadTaskpane', {}, {});
-    })()`),
-    ]);
-    assert.ok(requests.some((name) => /\/src\/durable\/taskpane\.(js|ts)/u.test(name)));
-    // No saved workbook exists here. Fail closed without opening writable storage.
-    assert.equal((await opened.page.evaluate(() => indexedDB.databases())).some((db) => db.name?.startsWith("pi-for-excel-durable")), false);
-  } finally { await opened.finish(); }
-});
+for (const stored of [null, "false", "0"] as const) {
+  void test(`taskpane always loads Durable with retired runtime preference ${String(stored)}`, async () => {
+    const requests: string[] = [];
+    const opened = await openTaskpane(env, { prepareContext: async (browser) => {
+      browser.on("request", (request) => { if (request.url().includes("/src/durable/")) requests.push(request.url()); });
+      await browser.addInitScript((value) => {
+        if (value !== null) localStorage.setItem("pi.experimental.durableRuntime", value);
+      }, stored);
+    } });
+    try {
+      assert.ok(requests.some((name) => /\/src\/durable\/taskpane\.(js|ts)/u.test(name)));
+      assert.ok(requests.some((name) => /\/src\/durable\/runtime\.(js|ts)/u.test(name)));
+      assert.equal(await opened.page.evaluate(`(async () => {
+        const { resolveExperimentalFeature, getExperimentalFeatureSlugs } = await import('/src/experiments/flags.ts');
+        return resolveExperimentalFeature('durable-runtime') === null && !getExperimentalFeatureSlugs().includes('durable-runtime');
+      })()`), true);
+      const input = opened.page.locator("pi-input textarea");
+      await input.fill("Chat remains available");
+      assert.equal(await input.inputValue(), "Chat remains available");
+      assert.equal(await input.isEnabled(), true);
+    } finally { await opened.finish(); }
+  });
+}
 
 // A provider boundary stub, not a replacement scheduler. Durable, IndexedDB,
 // fault records and tool adaptation are the production implementations.
 const boot = `(async () => {
-  const { isExperimentalFeatureEnabled, setExperimentalFeatureEnabled } = await import('/src/experiments/flags.ts');
   const { executeExtensionVerificationCommand: command } = await import('/src/taskpane/background-extension-verification.ts');
-  await command('setExperiment', {feature: 'durable_runtime', enabled: true}, {});
-  if (!isExperimentalFeatureEnabled('durable_runtime')) throw new Error('flag did not persist');
   const { openDurableRuntime } = await import('/src/durable/runtime.ts');
   const { openIndexedDbStorage } = await import('/src/durable/indexeddb-storage.ts');
   const { createModels } = await import('/node_modules/@earendil-works/pi-ai/dist/models.js');
@@ -108,7 +107,6 @@ void test("verification bridge routes Durable submit, fault, status and resume t
       const { createModels } = await import('/node_modules/@earendil-works/pi-ai/dist/models.js');
       const { fauxProvider, fauxAssistantMessage, fauxToolCall } = await import('/node_modules/@earendil-works/pi-ai/dist/providers/faux.js');
       const { Type } = await import('/node_modules/typebox/build/index.mjs');
-      await command('setExperiment', {feature:'durable_runtime', enabled:true}, {});
       const faux = fauxProvider({tokensPerSecond: Infinity});
       faux.setResponses([fauxAssistantMessage(fauxToolCall('write_cells', {}, {id:'bridge-call'}), {stopReason:'toolUse'}), fauxAssistantMessage('bridge complete')]);
       const models = createModels(); models.setProvider(faux.provider);

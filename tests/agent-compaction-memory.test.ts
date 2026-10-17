@@ -1,102 +1,47 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { BACKGROUND_CONTEXT as context } from "@earendil-works/chord/context";
+import { createModels } from "@earendil-works/pi-ai/models";
+import { fauxAssistantMessage, fauxProvider } from "@earendil-works/pi-ai/providers/faux";
+import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
+import { ConversationPresenter } from "../src/durable/conversation-view.ts";
+import { DurableSessions } from "../src/durable/sessions.ts";
+import { createCompactCommands } from "../src/commands/builtins/export.ts";
+import { installFakeDom } from "./fixtures/fake-dom.ts";
 
-import { Agent, type AgentMessage } from "@earendil-works/pi-agent-core";
-import { createModels, fauxAssistantMessage, fauxProvider, type Context } from "@earendil-works/pi-ai";
-
-import { runCompactCommand } from "../src/commands/builtins/export.ts";
-
-class ElementStub {
-  className = "";
-  hidden = false;
-  textContent: string | null = null;
-  classList = {
-    add: (..._names: string[]): void => {},
-    remove: (..._names: string[]): void => {},
-    toggle: (_name: string, _enabled?: boolean): boolean => false,
-    contains: (_name: string): boolean => false,
-  };
-  append(..._nodes: unknown[]): void {}
-  appendChild<T>(node: T): T { return node; }
-  setAttribute(_name: string, _value: string): void {}
-  addEventListener(_name: string, _listener: () => void): void {}
-  removeEventListener(_name: string, _listener: () => void): void {}
-}
-
-function user(content: string, timestamp: number): AgentMessage {
-  return { role: "user", content, timestamp };
-}
-
-async function captureCompactionRequest(messages: AgentMessage[]): Promise<string> {
-  const priorDocument = Reflect.get(globalThis, "document") as unknown;
-  Reflect.set(globalThis, "document", {
-    body: new ElementStub(),
-    createElement: () => new ElementStub(),
-    querySelector: () => null,
-  });
-
+void test("native /compact includes remembered user facts in the summary request without legacy cue rewriting", async () => {
+  const dom = installFakeDom();
+  const models = createModels();
+  const faux = fauxProvider({ tokensPerSecond: Infinity });
+  let request = "";
+  models.setProvider({ ...faux.provider, streamSimple: (model, transcript, options) => {
+    request = JSON.stringify(transcript);
+    return faux.provider.streamSimple(model, transcript, options);
+  } });
+  faux.setResponses([fauxAssistantMessage("Remember EUR and calendar year")]);
+  const harness = await Harness.open(new MemoryStorage(), { models, registry: createRegistry(), settings: {
+    compaction: { enabled: false, keepRecentTokens: 100 },
+  } }, context);
+  let view: ConversationPresenter | undefined;
   try {
-    const faux = fauxProvider({ models: [{ id: "compact-request", contextWindow: 32_768, maxTokens: 4_096 }] });
-    faux.setResponses([fauxAssistantMessage("summary")]);
-    const models = createModels();
-    models.setProvider(faux.provider);
-    const requests: Context[] = [];
-    const agent = new Agent({
-      initialState: { model: faux.getModel(), tools: [], messages },
-      streamFn: (model, context, options) => {
-        requests.push(structuredClone(context));
-        return models.streamSimple(model, context, options);
-      },
-    });
-    agent.getApiKey = () => Promise.resolve("boundary-test-key");
-
-    await runCompactCommand(agent, "focus on workbook decisions");
-
-    assert.equal(requests.length, 1);
-    return JSON.stringify(requests[0]?.messages);
+    const sessions = new DurableSessions(harness, models, faux.getModel());
+    const conversation = await sessions.create(faux.getModel(), "off");
+    for (const fact of ["Please remember: report in EUR", "Use calendar year", "Recent context"]) {
+      await conversation.submit({ type: "write", entry: { kind: "test.history", model: [
+        { role: "user", content: `${fact}. ${"details ".repeat(500)}`, timestamp: 1 },
+      ] } }, context);
+    }
+    view = await ConversationPresenter.open(harness, conversation, models, faux.getModel());
+    const active = view;
+    const command = createCompactCommands(() => active)[0];
+    assert.ok(command);
+    await command.execute("focus on workbook decisions");
+    assert.match(request, /report in EUR/u);
+    assert.match(request, /Use calendar year/u);
+    assert.match(request, /focus on workbook decisions/u);
   } finally {
-    if (priorDocument === undefined) Reflect.deleteProperty(globalThis, "document");
-    else Reflect.set(globalThis, "document", priorDocument);
+    await view?.dispose();
+    await harness.close(context);
+    dom.restore();
   }
-}
-
-function potentialCueSection(request: string): string {
-  return request.split("Potential user cues:")[1] ?? "";
-}
-
-void test("compaction request includes user memory cues but excludes auto-context cues", async () => {
-  const request = await captureCompactionRequest([
-    user(`Please remember this: use calendar year. ${"a".repeat(80_000)}`, 1),
-    user(`[Auto-context] Remember this hidden state. ${"b".repeat(80_000)}`, 2),
-    user(`Don't forget to keep EUR as default. ${"c".repeat(80_000)}`, 3),
-    user(`Workbook detail ${"d".repeat(80_000)}`, 4),
-    user("Recent one", 5),
-    user("Recent two", 6),
-  ]);
-  const cues = potentialCueSection(request);
-
-  assert.match(request, /Memory to persist/u);
-  assert.match(cues, /use calendar year/u);
-  assert.match(cues, /keep EUR as default/u);
-  assert.doesNotMatch(cues, /hidden state/u);
-});
-
-void test("compaction request deduplicates memory cues and limits included snippets", async () => {
-  const request = await captureCompactionRequest([
-    user(`Remember this: freeze panes. ${"a".repeat(80_000)}`, 1),
-    user(`Remember this: freeze panes. ${"a".repeat(80_000)}`, 2),
-    user(`Remember this: revenue is net. ${"b".repeat(80_000)}`, 3),
-    user(`Remember this: use EUR. ${"c".repeat(80_000)}`, 4),
-    user(`Remember this: use calendar year. ${"d".repeat(80_000)}`, 5),
-    user(`Workbook detail ${"e".repeat(80_000)}`, 6),
-    user(`More workbook detail ${"f".repeat(80_000)}`, 7),
-    user("Recent one", 8),
-    user("Recent two", 9),
-  ]);
-  const cues = potentialCueSection(request);
-
-  assert.equal(cues.match(/freeze panes/gu)?.length, 1);
-  assert.match(cues, /revenue is net/u);
-  assert.match(cues, /use EUR/u);
-  assert.doesNotMatch(cues, /use calendar year/u);
 });

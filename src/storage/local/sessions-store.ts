@@ -48,6 +48,11 @@ export class SessionsStore extends Store {
     return this.getBackend().get<SessionData>("sessions", id);
   }
 
+  /** Enumerate original snapshots, including ones missing their metadata row. */
+  async getSessionIds(): Promise<string[]> {
+    return this.getBackend().keys("sessions");
+  }
+
   async getMetadata(id: string): Promise<SessionMetadata | null> {
     return this.getBackend().get<SessionMetadata>("sessions-metadata", id);
   }

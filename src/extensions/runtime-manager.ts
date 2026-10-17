@@ -8,7 +8,10 @@
  * - expose extension tool list so runtimes can refresh Agent toolsets
  */
 
-import type { Agent, AgentEvent, AgentTool } from "@earendil-works/pi-agent-core";
+import type { AgentTool } from "@earendil-works/pi-agent-core";
+import type { AgentEvent } from "@earendil-works/pi-durable";
+import type { ConversationPresenter } from "../durable/conversation-view.js";
+import type { createOfficeStreamFn } from "../auth/stream-proxy.js";
 import { normalizeContext } from "@earendil-works/pi-ai";
 import { t } from "../language/index.js";
 
@@ -175,7 +178,8 @@ export interface ExtensionRuntimeManagerOptions {
   settings: SettingsWriter;
   connectionManager: ConnectionManager;
   modelRuntime: BrowserModelRuntime;
-  getActiveAgent: () => Agent | null;
+  getActiveConversation: () => ConversationPresenter | null;
+  streamFn: ReturnType<typeof createOfficeStreamFn>;
   refreshRuntimeTools: () => Promise<void>;
   refreshRuntimeModels: () => Promise<void>;
   reservedToolNames: ReadonlySet<string>;
@@ -189,7 +193,8 @@ export class ExtensionRuntimeManager {
   private readonly settings: SettingsWriter;
   private readonly connectionManager: ConnectionManager;
   private readonly modelRuntime: BrowserModelRuntime;
-  private readonly getActiveAgent: () => Agent | null;
+  private readonly getActiveConversation: () => ConversationPresenter | null;
+  private readonly streamFn: ReturnType<typeof createOfficeStreamFn>;
   private readonly refreshRuntimeTools: () => Promise<void>;
   private readonly refreshRuntimeModels: () => Promise<void>;
   private readonly reservedToolNames: ReadonlySet<string>;
@@ -213,7 +218,8 @@ export class ExtensionRuntimeManager {
     this.settings = options.settings;
     this.connectionManager = options.connectionManager;
     this.modelRuntime = options.modelRuntime;
-    this.getActiveAgent = options.getActiveAgent;
+    this.getActiveConversation = options.getActiveConversation;
+    this.streamFn = options.streamFn;
     this.refreshRuntimeTools = options.refreshRuntimeTools;
     this.refreshRuntimeModels = options.refreshRuntimeModels;
     this.reservedToolNames = options.reservedToolNames;
@@ -432,8 +438,8 @@ export class ExtensionRuntimeManager {
     await saveStoredExtensions(this.settings, this.entries);
   }
 
-  private getRequiredActiveAgent(): Agent {
-    const activeAgent = this.getActiveAgent();
+  private getRequiredActiveConversation(): ConversationPresenter {
+    const activeAgent = this.getActiveConversation();
     if (!activeAgent) {
       throw new Error("No active runtime available for extension activation");
     }
@@ -445,20 +451,20 @@ export class ExtensionRuntimeManager {
     entry: StoredExtensionEntry,
     request: LlmCompletionRequest,
   ): Promise<LlmCompletionResult> {
-    const agent = this.getRequiredActiveAgent();
+    const presenter = this.getRequiredActiveConversation();
 
-    if (!isApiModel(agent.state.model)) {
+    if (!isApiModel(presenter.current.model)) {
       throw new Error("Active model is unavailable for extension LLM completion.");
     }
 
     const model = resolveModelForCompletion({
       models: this.modelRuntime.models,
-      fallbackModel: agent.state.model,
+      fallbackModel: presenter.current.model,
       ...(request.model !== undefined ? { requestedModel: request.model } : {}),
     });
 
-    const apiKey = agent.getApiKey ? await agent.getApiKey(model.provider) : undefined;
-    if (!apiKey) {
+    const auth = await this.modelRuntime.models.getAuth(model);
+    if (!auth) {
       throw new Error(t("runtime.error.noApiKey", { provider: model.provider }));
     }
 
@@ -466,16 +472,16 @@ export class ExtensionRuntimeManager {
       throw new Error("llm.complete requires a messages array.");
     }
 
-    const stream = await agent.streamFunction(
+    const stream = await this.streamFn(
       model,
       normalizeContext({
         ...(request.systemPrompt !== undefined ? { systemPrompt: request.systemPrompt } : {}),
         messages: parseLlmMessages(request.messages, model),
       }),
       {
-        apiKey,
+        ...(auth.auth.apiKey !== undefined ? { apiKey: auth.auth.apiKey } : {}),
         sessionId: createExtensionLlmCompletionSessionId({
-          agentSessionId: agent.sessionId,
+          agentSessionId: presenter.current.providerSessionId,
           extensionId: entry.id,
         }),
         ...(request.maxTokens !== undefined ? { maxTokens: request.maxTokens } : {}),
@@ -895,7 +901,7 @@ export class ExtensionRuntimeManager {
     const refreshModelProviders = (): Promise<void> => this.refreshRuntimeModels();
 
     const subscribeAgentEvents = (handler: (ev: AgentEvent) => void): (() => void) => {
-      const unsubscribe = this.getRequiredActiveAgent().subscribe(handler);
+      const unsubscribe = this.getRequiredActiveConversation().onEvent(handler);
       state.eventUnsubscribers.add(unsubscribe);
 
       return () => {
@@ -928,7 +934,7 @@ export class ExtensionRuntimeManager {
       entry,
       settings: this.settings,
       connectionManager: this.connectionManager,
-      getRequiredActiveAgent: () => this.getRequiredActiveAgent(),
+      getActiveConversation: () => this.getRequiredActiveConversation(),
       ...(this.afterInjectAgentContext !== undefined
         ? { afterInjectAgentContext: this.afterInjectAgentContext }
         : {}),

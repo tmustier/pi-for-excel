@@ -188,7 +188,8 @@ When Pi for Excel's CORS proxy is enabled, extension-provider discovery and infe
 
 ### `agent`
 Agent API surface:
-- `agent.raw` (host runtime only; capability-gated)
+- `agent.raw` (host runtime only; capability-gated): the actual upstream Durable `Conversation`, not an Agent or execution shim.
+- `agent.snapshot` (host runtime only; `agent.read`): current read projection (`messages`, `model`, `thinkingLevel`, `busy`, `providerSessionId`, `inbox`, `live`, `streamingMessage`). Use this instead of `agent.raw.state`.
 - `agent.injectContext(content)`
 - `agent.steer(content)`
 - `agent.followUp(content)`
@@ -201,7 +202,8 @@ Cache/prompt-shape guidance for extension authors:
 - Host runtime uses an extension-scoped side session key for `llm.complete`, so side-call churn is isolated from the primary runtime session telemetry.
 - Keep `systemPrompt` short and stable across repeated extension calls when possible.
 - Put volatile data in `messages` rather than rewriting `systemPrompt` every call.
-- Use `agent.injectContext` / `agent.steer` when you need to influence the primary runtime conversation instead of emulating it through `llm.complete`.
+- Await `agent.injectContext`, `agent.steer`, and `agent.followUp`: failures reject and successful calls acknowledge durable admission/persistence, not completion of the resulting run. `injectContext` submits a passive write without starting a run; `steer` and `followUp` submit native input with `whenBusy: "steer"` and `whenBusy: "followUp"` respectively (idle input starts a run).
+- `onAgentEvent` forwards upstream `@earendil-works/pi-durable` `AgentEvent` objects unchanged, including in the sandbox. These are not legacy Agent events: `message_end.entry` contains the committed message-bearing entry; `entry_appended` is for entries without a model message. Other native events include `inbox_update`, `agent_changed`, and `snapshot`. Native `turn_end` has no legacy message array; native `message_update` carries `changes` and `usage`, not an Agent `assistantMessageEvent`. No synthetic Agent events are emitted.
 
 ### `http.fetch(url, options?)`
 Host-mediated outbound HTTP fetch with security policy enforcement.
@@ -342,14 +344,14 @@ export function activate(api) {
     },
   });
 
-  const onTurnEnd = api.onAgentEvent((ev) => {
-    if (ev.type === "turn_end") {
-      // optional event handling
+  const unsubscribeEvents = api.onAgentEvent((ev) => {
+    if (ev.type === "message_end") {
+      // ev.entry is the committed Durable transcript entry.
     }
   });
 
   return () => {
-    onTurnEnd();
+    unsubscribeEvents();
     api.widget.clear();
     api.overlay.dismiss();
   };

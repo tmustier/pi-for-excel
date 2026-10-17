@@ -1,251 +1,57 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { BACKGROUND_CONTEXT as context } from "@earendil-works/chord/context";
+import { createModels, fauxProvider } from "@earendil-works/pi-ai";
+import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
+import { ConversationPresenter } from "../src/durable/conversation-view.ts";
+import { DurableSessions } from "../src/durable/sessions.ts";
+import { createQueueDisplay } from "../src/taskpane/queue-display.ts";
+import { SessionRuntimeManager } from "../src/taskpane/session-runtime-manager.ts";
 
-import { Agent } from "@earendil-works/pi-agent-core";
-import { createModels, fauxAssistantMessage, fauxProvider } from "@earendil-works/pi-ai";
-import { getBuiltinModel } from "@earendil-works/pi-ai/providers/all";
-
-import { settingsBackedSessionStorage } from "../src/host/session-storage.ts";
-import { initAppStorage } from "../src/storage/init-app-storage.ts";
-import type { StorageBackend, StorageTransaction } from "../src/storage/local/types.ts";
-import type { ActionQueue } from "../src/taskpane/action-queue.ts";
-import type { QueueDisplay } from "../src/taskpane/queue-display.ts";
-import {
-  SessionRuntimeManager,
-  type SessionRuntime,
-} from "../src/taskpane/session-runtime-manager.ts";
-import { setupSessionPersistence } from "../src/taskpane/sessions.ts";
-
-class MemoryStorageBackend implements StorageBackend {
-  private readonly stores = new Map<string, Map<string, unknown>>();
-
-  private store(name: string): Map<string, unknown> {
-    const existing = this.stores.get(name);
-    if (existing) return existing;
-    const created = new Map<string, unknown>();
-    this.stores.set(name, created);
-    return created;
-  }
-
-  get<T = unknown>(storeName: string, key: string): Promise<T | null> {
-    const value = this.store(storeName).get(key);
-    return Promise.resolve(value === undefined ? null : structuredClone(value) as T);
-  }
-
-  set<T = unknown>(storeName: string, key: string, value: T): Promise<void> {
-    this.store(storeName).set(key, structuredClone(value));
-    return Promise.resolve();
-  }
-
-  delete(storeName: string, key: string): Promise<void> {
-    this.store(storeName).delete(key);
-    return Promise.resolve();
-  }
-
-  keys(storeName: string, prefix?: string): Promise<string[]> {
-    const keys = [...this.store(storeName).keys()];
-    return Promise.resolve(prefix ? keys.filter((key) => key.startsWith(prefix)) : keys);
-  }
-
-  getAllFromIndex<T = unknown>(storeName: string): Promise<T[]> {
-    return Promise.resolve([...this.store(storeName).values()].map((value) => structuredClone(value)) as T[]);
-  }
-
-  clear(storeName: string): Promise<void> {
-    this.store(storeName).clear();
-    return Promise.resolve();
-  }
-
-  has(storeName: string, key: string): Promise<boolean> {
-    return Promise.resolve(this.store(storeName).has(key));
-  }
-
-  transaction<T>(
-    _storeNames: string[],
-    _mode: "readonly" | "readwrite",
-    operation: (tx: StorageTransaction) => Promise<T>,
-  ): Promise<T> {
-    return operation({
-      get: <V = unknown>(storeName: string, key: string) => this.get<V>(storeName, key),
-      set: <V = unknown>(storeName: string, key: string, value: V) => this.set(storeName, key, value),
-      delete: (storeName: string, key: string) => this.delete(storeName, key),
-    });
-  }
-
-  getQuotaInfo(): Promise<{ usage: number; quota: number; percent: number }> {
-    return Promise.resolve({ usage: 0, quota: 0, percent: 0 });
-  }
-
-  requestPersistence(): Promise<boolean> {
-    return Promise.resolve(true);
-  }
-}
-
-const actionQueue: ActionQueue = {
-  enqueuePrompt: () => {},
-  enqueueCommand: () => {},
-  drainQueuedActions: () => [],
-  isBusy: () => false,
-  shutdown: () => {},
-};
-
-function createQueueDisplay(): QueueDisplay {
-  return {
-    add: () => {},
-    clear: () => {},
-    drainQueuedMessages: () => [],
-    setActionQueue: () => {},
-    attach: () => {},
-    detach: () => {},
-  };
-}
-
-interface RuntimeEnvironment {
-  manager: SessionRuntimeManager;
-  sessions: ReturnType<typeof initAppStorage>["sessions"];
-  createRuntime: (autoRestoreLatest?: boolean) => Promise<SessionRuntime>;
-  respond: (text: string) => void;
-}
-
-function createEnvironment(backend: StorageBackend): RuntimeEnvironment {
-  const { sessions, settings } = initAppStorage("session-model-switch-test", backend);
-  const faux = fauxProvider();
-  const models = createModels();
-  models.setProvider(faux.provider);
-  let nextRuntimeNumber = 1;
-
-  const createRuntime = async (autoRestoreLatest = false): Promise<SessionRuntime> => {
-    const agent = new Agent({
-      initialState: {
-        model: getBuiltinModel("openai", "gpt-5.6-sol"),
-        messages: [],
-        tools: [],
-      },
-      streamFn: (model, context, options) => models.streamSimple(model, context, options),
-    });
-    const persistence = await setupSessionPersistence({
-      agent,
-      sessions,
-      settings,
-      models,
-      autoRestoreLatest,
-      spreadsheetHost: {
-        getWorkbookContext: () => Promise.resolve({
-          workbookId: "url_sha256:model-switch-workbook",
-          workbookName: null,
-          source: "document.url",
-        }),
-        sessionStorage: settingsBackedSessionStorage,
-      },
-    });
-    const runtimeId = `runtime-${nextRuntimeNumber}`;
-    nextRuntimeNumber += 1;
-    return {
-      runtimeId,
-      agent,
-      actionQueue,
-      queueDisplay: createQueueDisplay(),
-      persistence,
-      lockState: "idle",
-      refreshCapabilities: () => Promise.resolve(),
-      dispose: () => persistence.dispose(),
-    };
-  };
-
-  const manager = new SessionRuntimeManager({
-    createRuntime: () => createRuntime(false),
+for (const behavior of ["inPlace", "fork"] as const) {
+  void test(`${behavior} model selection survives native projection reattachment`, async () => {
+    const models = createModels();
+    const faux = fauxProvider({ models: [{ id: "original" }, { id: "selected" }] });
+    models.setProvider(faux.provider);
+    const originalModel = faux.getModel("original");
+    const selectedModel = faux.getModel("selected");
+    const harness = await Harness.open(new MemoryStorage(), { models, registry: createRegistry() }, context);
+    const sessions = new DurableSessions(harness, models, originalModel);
+    const views: ConversationPresenter[] = [];
+    const manager = new SessionRuntimeManager({ sessions, createRuntime: async (options) => {
+      const conversation = options.conversationId ? await sessions.resolve(options.conversationId)
+        : await sessions.create(originalModel, "off");
+      assert.ok(conversation);
+      const view = await ConversationPresenter.open(harness, conversation, models, originalModel);
+      views.push(view);
+      return { runtimeId: `tab-${views.length}`, view, tools: [], queueDisplay: createQueueDisplay({ view }),
+        title: "", hasExplicitTitle: false, lockState: "idle", refreshCapabilities: async () => {},
+        dispose: () => { void view.dispose(); } };
+    } });
+    try {
+      const conversation = await sessions.create(originalModel, "off");
+      await harness.commit((tx) => tx.appendEntry(conversation.id, {
+        kind: "test.message", model: [{ role: "user", content: "Original question", timestamp: 1 }],
+      }), context);
+      const original = await manager.createRuntime({ activate: true, autoRestoreLatest: false, conversationId: String(conversation.id) });
+      const result = await manager.selectModel({ runtimeId: original.runtimeId, nextModel: selectedModel, behavior });
+      assert.equal(result.outcome, behavior === "fork" ? "forked" : "updated");
+      const selected = result.outcome === "forked" ? result.runtime : original;
+      const id = String(selected.view.conversation.id);
+      if (behavior === "fork") assert.notEqual(id, String(conversation.id));
+      else assert.equal(id, String(conversation.id));
+      await selected.view.dispose();
+      const reopened = await manager.createRuntime({ activate: true, autoRestoreLatest: false, conversationId: id });
+      assert.equal(reopened.view.current.model.id, selectedModel.id);
+      assert.match(JSON.stringify(reopened.view.current.messages), /Original question/);
+      assert.equal((await sessions.loadSession(String(conversation.id)))?.model.id,
+        behavior === "fork" ? originalModel.id : selectedModel.id);
+      const refreshedMetadata = { ...selectedModel, reasoning: !selectedModel.reasoning };
+      assert.equal((await manager.selectModel({ runtimeId: reopened.runtimeId, nextModel: refreshedMetadata, behavior: "fork" })).outcome, "updated");
+      assert.equal(String(reopened.view.conversation.id), id, "metadata refresh never forks");
+    } finally {
+      for (const view of views) await view.dispose();
+      await harness.close(context);
+    }
   });
-  return {
-    manager,
-    sessions,
-    createRuntime,
-    respond: (text: string) => faux.setResponses([fauxAssistantMessage(text)]),
-  };
 }
-
-async function seedConversation(environment: RuntimeEnvironment): Promise<SessionRuntime> {
-  const runtime = await environment.createRuntime();
-  environment.manager.registerRuntime(runtime, { activate: true });
-  environment.respond("original answer");
-  await runtime.agent.prompt("original question");
-  await runtime.persistence.saveSession({ force: true });
-  return runtime;
-}
-
-async function restartSession(
-  environment: RuntimeEnvironment,
-  sessionId: string,
-): Promise<SessionRuntime> {
-  const saved = await environment.sessions.loadSession(sessionId);
-  assert.ok(saved);
-  const restarted = await environment.createRuntime();
-  await restarted.persistence.applyLoadedSession(saved);
-  return restarted;
-}
-
-void test("in-place model switch keeps the session and restores its selected model", async () => {
-  const environment = createEnvironment(new MemoryStorageBackend());
-  const original = await seedConversation(environment);
-  const originalSessionId = original.persistence.getSessionId();
-
-  const result = await environment.manager.selectModel({
-    runtimeId: original.runtimeId,
-    nextModel: getBuiltinModel("openai-codex", "gpt-5.6-sol"),
-    behavior: "inPlace",
-  });
-  assert.equal(result.outcome, "updated");
-  original.dispose();
-
-  const restarted = await restartSession(environment, originalSessionId);
-  assert.equal(restarted.persistence.getSessionId(), originalSessionId);
-  assert.equal(restarted.agent.state.model.provider, "openai-codex");
-  assert.match(JSON.stringify(restarted.agent.state.messages), /original question/u);
-});
-
-void test("fork model switch preserves the source session and restores a new selected-model session", async () => {
-  const environment = createEnvironment(new MemoryStorageBackend());
-  const original = await seedConversation(environment);
-  const originalSessionId = original.persistence.getSessionId();
-
-  const result = await environment.manager.selectModel({
-    runtimeId: original.runtimeId,
-    nextModel: getBuiltinModel("openai-codex", "gpt-5.6-sol"),
-    behavior: "fork",
-  });
-  assert.equal(result.outcome, "forked");
-  if (result.outcome !== "forked") return;
-  const forkSessionId = result.runtime.persistence.getSessionId();
-  assert.notEqual(forkSessionId, originalSessionId);
-  original.dispose();
-  result.runtime.dispose();
-
-  const restartedSource = await restartSession(environment, originalSessionId);
-  const restartedFork = await restartSession(environment, forkSessionId);
-  assert.equal(restartedSource.agent.state.model.provider, "openai");
-  assert.equal(restartedFork.agent.state.model.provider, "openai-codex");
-  assert.match(JSON.stringify(restartedFork.agent.state.messages), /original question/u);
-});
-
-void test("re-selecting the same model with changed metadata updates and persists the session", async () => {
-  const environment = createEnvironment(new MemoryStorageBackend());
-  const original = await seedConversation(environment);
-  const originalSessionId = original.persistence.getSessionId();
-  const current = original.agent.state.model;
-  const refreshed = {
-    ...current,
-    reasoning: !current.reasoning,
-    cost: { ...current.cost, input: current.cost.input + 1 },
-  };
-
-  const result = await environment.manager.selectModel({
-    runtimeId: original.runtimeId,
-    nextModel: refreshed,
-    behavior: "inPlace",
-  });
-  assert.equal(result.outcome, "updated");
-  original.dispose();
-
-  const restarted = await restartSession(environment, originalSessionId);
-  assert.equal(restarted.agent.state.model.reasoning, refreshed.reasoning);
-  assert.equal(restarted.agent.state.model.cost.input, refreshed.cost.input);
-});

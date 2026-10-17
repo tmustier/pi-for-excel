@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { getCompactionThresholds } from "../src/compaction/defaults.ts";
 
 // Policy table: published compaction budgets. The 200k consumer contract is
-// independently exercised through the agent request seam in agent-request.test.ts.
+// independently exercised through real Harness requests in durable-compaction-policy.test.ts.
 void test("compaction thresholds follow the published context-window policy", () => {
   const cases = [
     {

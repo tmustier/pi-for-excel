@@ -1,22 +1,23 @@
 /**
  * Small DOM-only queue display for queued steering / follow-up messages.
  *
- * Stores queue state per runtime, and can attach/detach to the visible sidebar.
+ * Projects the committed inbox, and can attach/detach to the visible sidebar.
  *
  * Security note: avoid `innerHTML` so queued text can't inject markup.
  */
 
-import type { Agent } from "@earendil-works/pi-agent-core";
+import { BACKGROUND_CONTEXT as context } from "@earendil-works/chord/context";
+import type { SubmissionId, UserInput } from "@earendil-works/pi-durable";
+import type { ConversationPresenter } from "../durable/conversation-view.js";
+import { editQueuedInput, takeQueuedInputs, type QueuedInput } from "../durable/inbox.js";
 
 import type { PiSidebar } from "../ui/pi-sidebar.js";
 import { extractTextFromContent } from "../utils/content.js";
 import { t } from "../language/index.js";
 
 export type QueuedMessageType = "steer" | "follow-up";
-export type QueuedActionType = "prompt" | "command";
 
 export type QueuedMessageItem = { type: QueuedMessageType; text: string };
-type QueuedActionItem = { type: QueuedActionType; label: string; text: string };
 
 function getQueuedRestoreShortcutHint(): string {
   if (typeof navigator === "undefined") {
@@ -53,21 +54,17 @@ function renderQueuedItem({ type, text }: QueuedMessageItem): HTMLElement {
 }
 
 export type QueueDisplay = {
-  add: (type: QueuedMessageType, text: string) => void;
-  clear: () => void;
-  drainQueuedMessages: () => QueuedMessageItem[];
-  setActionQueue: (items: Array<{ type: QueuedActionType; label: string; text: string }>) => void;
+  takeQueuedInputs: () => Promise<QueuedInput[]>;
+  editQueuedInput: (id: SubmissionId, content: UserInput) => Promise<boolean>;
   attach: (sidebar: PiSidebar) => void;
   detach: () => void;
+  dispose: () => void;
 };
 
 export function createQueueDisplay(opts: {
-  agent: Agent;
+  view: ConversationPresenter;
 }): QueueDisplay {
-  const { agent } = opts;
-
-  const queued: QueuedMessageItem[] = [];
-  let queuedActions: QueuedActionItem[] = [];
+  const { view } = opts;
   let attachedSidebar: PiSidebar | null = null;
 
   function findContainer(sidebar: PiSidebar): HTMLElement | null {
@@ -85,7 +82,8 @@ export function createQueueDisplay(opts: {
 
     let container = findContainer(attachedSidebar);
 
-    if (queued.length === 0 && queuedActions.length === 0) {
+    const queued = view.current.inbox.filter((item) => item.mode !== "write");
+    if (queued.length === 0) {
       container?.remove();
       return;
     }
@@ -106,24 +104,10 @@ export function createQueueDisplay(opts: {
     const fragment = document.createDocumentFragment();
 
     for (const item of queued) {
-      fragment.appendChild(renderQueuedItem(item));
-    }
-
-    for (const action of queuedActions) {
-      const itemEl = document.createElement("div");
-      itemEl.className = "pi-queue__item";
-
-      const labelEl = document.createElement("span");
-      labelEl.className = "pi-queue__label pi-queue__label--action";
-      labelEl.textContent = action.label;
-
-      const truncated = action.text.length > 50 ? action.text.slice(0, 47) + "…" : action.text;
-      const textEl = document.createElement("span");
-      textEl.className = "pi-queue__text";
-      textEl.textContent = truncated;
-
-      itemEl.append(labelEl, textEl);
-      fragment.appendChild(itemEl);
+      fragment.appendChild(renderQueuedItem({
+        type: item.mode === "steer" ? "steer" : "follow-up",
+        text: extractTextFromContent(item.content),
+      }));
     }
 
     const hintEl = document.createElement("div");
@@ -132,32 +116,6 @@ export function createQueueDisplay(opts: {
     fragment.appendChild(hintEl);
 
     container.replaceChildren(fragment);
-  }
-
-  function add(type: QueuedMessageType, text: string): void {
-    queued.push({ type, text });
-    updateQueueDisplay();
-  }
-
-  function clear(): void {
-    queued.length = 0;
-    updateQueueDisplay();
-  }
-
-  function drainQueuedMessages(): QueuedMessageItem[] {
-    if (queued.length === 0) {
-      return [];
-    }
-
-    const drained = [...queued];
-    queued.length = 0;
-    updateQueueDisplay();
-    return drained;
-  }
-
-  function setActionQueue(items: QueuedActionItem[]): void {
-    queuedActions = items;
-    updateQueueDisplay();
   }
 
   function attach(sidebar: PiSidebar): void {
@@ -176,23 +134,11 @@ export function createQueueDisplay(opts: {
     attachedSidebar = null;
   }
 
-  agent.subscribe((ev) => {
-    if (queued.length === 0) return;
-
-    if (ev.type === "message_start" && ev.message.role === "user") {
-      const msgText = extractTextFromContent(ev.message.content);
-      const idx = queued.findIndex((q) => q.text === msgText);
-      if (idx !== -1) {
-        queued.splice(idx, 1);
-        updateQueueDisplay();
-      }
-    }
-
-    // Only clear steer/follow-up on agent end. Action queue is owned elsewhere.
-    if (ev.type === "agent_end" && queued.length > 0) {
-      clear();
-    }
-  });
-
-  return { add, clear, drainQueuedMessages, setActionQueue, attach, detach };
+  const unsubscribe = view.subscribe(updateQueueDisplay);
+  return {
+    attach, detach,
+    dispose: () => { detach(); unsubscribe(); },
+    takeQueuedInputs: () => takeQueuedInputs(view.conversation, context),
+    editQueuedInput: (id, content) => editQueuedInput(view.conversation, id, content, context),
+  };
 }

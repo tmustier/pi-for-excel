@@ -9,7 +9,8 @@
 import { html, LitElement, nothing, type PropertyValues } from "lit";
 import { icon } from "./icons.js";
 import { customElement, property, query, state } from "lit/decorators.js";
-import type { Agent, AgentEvent, AgentMessage } from "@earendil-works/pi-agent-core";
+import type { AgentTool, AgentMessage } from "@earendil-works/pi-agent-core";
+import type { ConversationPresenter } from "../durable/conversation-view.js";
 import type { ToolResultMessage } from "@earendil-works/pi-ai";
 import type { StreamingMessageContainer } from "./messages/streaming-message-container.js";
 import { Archive, ChevronRight, FileText, Keyboard, Puzzle, RotateCcw, Ruler, Settings, Wrench } from "lucide";
@@ -126,7 +127,8 @@ const INNER_SCROLLABLE_SELECTOR =
 
 @customElement("pi-sidebar")
 export class PiSidebar extends LitElement {
-  @property({ attribute: false }) agent?: Agent;
+  @property({ attribute: false }) view?: ConversationPresenter;
+  @property({ attribute: false }) tools: AgentTool[] = [];
   @property({ attribute: false }) emptyHints: EmptyHint[] = [];
   @property({ attribute: false }) onSend?: (text: string) => void;
   @property({ attribute: false }) onAbort?: () => void;
@@ -244,11 +246,13 @@ export class PiSidebar extends LitElement {
     return false;
   }
 
-  /** Force re-sync from agent state (e.g. after replaceMessages). */
-  syncFromAgent(): void {
-    if (!this.agent) return;
-    this._hasMessages = hasRenderableMessages(this.agent.state.messages);
-    this._isStreaming = this.agent.state.isStreaming;
+  /** Re-render the current committed Durable projection. */
+  syncFromConversation(): void {
+    const snapshot = this.view?.current;
+    this._hasMessages = snapshot !== undefined && (
+      hasRenderableMessages(snapshot.messages) || snapshot.streamingMessage !== undefined
+    );
+    this._isStreaming = snapshot?.busy ?? false;
     this.requestUpdate();
   }
 
@@ -283,6 +287,7 @@ export class PiSidebar extends LitElement {
     document.addEventListener("keydown", this._onEscapeKey);
     window.addEventListener("resize", this._onWindowResize);
     this._onPayloadUpdate();
+    this._setupSubscription();
   }
 
   override disconnectedCallback() {
@@ -311,7 +316,7 @@ export class PiSidebar extends LitElement {
   }
 
   override willUpdate(changed: PropertyValues<this>) {
-    if (changed.has("agent")) this._setupSubscription();
+    if (changed.has("view")) this._setupSubscription();
   }
 
   override firstUpdated() {
@@ -321,6 +326,9 @@ export class PiSidebar extends LitElement {
   override updated(_changed: PropertyValues<this>) {
     this._ensureMessageEnhancements();
     this._updateSessionTabOverflow();
+    // Apply after render so late attachment and tab switches hydrate the newly
+    // mounted container without needing another generation event.
+    this._streamingContainer?.setMessage(this.view?.current.streamingMessage ?? null, true);
 
     if (this._isStreaming !== this._wasStreaming) {
       this._wasStreaming = this._isStreaming;
@@ -334,43 +342,8 @@ export class PiSidebar extends LitElement {
 
   private _setupSubscription() {
     this._unsubscribe?.();
-    const agent = this.agent;
-    if (!agent) return;
-
-    this._hasMessages = hasRenderableMessages(agent.state.messages);
-    this._isStreaming = agent.state.isStreaming;
-
-    this._unsubscribe = agent.subscribe((ev: AgentEvent) => {
-      switch (ev.type) {
-        case "message_start":
-        case "message_end":
-          this._hasMessages = hasRenderableMessages(agent.state.messages);
-          this._isStreaming = agent.state.isStreaming;
-          this.requestUpdate();
-          break;
-        case "turn_start":
-        case "turn_end":
-        case "agent_start":
-          this._isStreaming = agent.state.isStreaming;
-          this.requestUpdate();
-          break;
-        case "agent_end":
-          this._isStreaming = false;
-          if (this._streamingContainer) {
-            this._streamingContainer.isStreaming = false;
-            this._streamingContainer.setMessage(null, true);
-          }
-          this.requestUpdate();
-          break;
-        case "message_update":
-          if (this._streamingContainer) {
-            const streaming = agent.state.isStreaming;
-            this._streamingContainer.isStreaming = streaming;
-            this._streamingContainer.setMessage(ev.message, !streaming);
-          }
-          break;
-      }
-    });
+    this._unsubscribe = this.view?.subscribe(() => this.syncFromConversation());
+    this.syncFromConversation();
   }
 
   private _ensureMessageEnhancements() {
@@ -682,21 +655,19 @@ export class PiSidebar extends LitElement {
 
   private _buildToolResultsMap(): Map<string, ToolResultMessage> {
     const map = new Map<string, ToolResultMessage>();
-    if (!this.agent) return map;
-    for (const msg of this.agent.state.messages) {
+    if (!this.view) return map;
+    for (const msg of this.view.current.messages) {
       if (msg.role === "toolResult") map.set(msg.toolCallId, msg);
     }
     return map;
   }
 
   override render() {
-    const agent = this.agent;
-    if (!agent) return html``;
-    const state = agent.state;
+    const view = this.view;
+    if (!view) return html``;
+    const state = view.current;
     const toolResultsById = this._buildToolResultsMap();
-
-    // Derive from agent state directly — _hasMessages may lag behind after
-    // batch operations like replaceMessages() that don't fire per-message events.
+    const compacting = (state.live.compactions?.length ?? 0) > 0;
     const hasMessages = this._hasMessages || hasRenderableMessages(state.messages);
 
     return html`
@@ -707,15 +678,15 @@ export class PiSidebar extends LitElement {
           ${hasMessages ? html`
             <message-list
               .messages=${state.messages.slice()}
-              .tools=${state.tools}
+              .tools=${this.tools}
               .pendingToolCalls=${state.pendingToolCalls}
-              .isStreaming=${state.isStreaming}
+              .isStreaming=${state.busy}
             ></message-list>
             ${this._renderContextPill()}
             <streaming-message-container
-              class="${state.isStreaming ? "" : "hidden"}"
-              .tools=${state.tools}
-              .isStreaming=${state.isStreaming}
+              class="${state.streamingMessage ? "" : "hidden"}"
+              .tools=${this.tools}
+              .isStreaming=${state.busy}
               .pendingToolCalls=${state.pendingToolCalls}
               .toolResultsById=${toolResultsById}
             ></streaming-message-container>
@@ -724,9 +695,9 @@ export class PiSidebar extends LitElement {
         ${!hasMessages ? this._renderEmptyState() : ""}
       </div>
       <pi-working-indicator
-        .active=${this._isStreaming || this._busyLabel !== null}
-        .primaryText=${this._isStreaming ? undefined : (this._busyLabel ?? undefined)}
-        .hintText=${this._isStreaming ? undefined : (this._busyHint ?? undefined)}
+        .active=${compacting || this._isStreaming || this._busyLabel !== null}
+        .primaryText=${compacting ? t("action-queue.compacting") : this._isStreaming ? undefined : (this._busyLabel ?? undefined)}
+        .hintText=${compacting ? t("action-queue.compactingHint") : this._isStreaming ? undefined : (this._busyHint ?? undefined)}
       ></pi-working-indicator>
       <div id="pi-widget-slot" class="pi-widget-slot" style="display:none"></div>
       <div class="pi-input-area">
@@ -1031,7 +1002,7 @@ export class PiSidebar extends LitElement {
   }
 
   private _copyToolsJson() {
-    const sessionId = this.agent?.sessionId;
+    const sessionId = this.view?.current.providerSessionId;
     const ctx = getLastContext(sessionId);
     if (!ctx?.tools) return;
     const json = JSON.stringify(ctx.tools, null, 2);
@@ -1041,7 +1012,7 @@ export class PiSidebar extends LitElement {
   private _renderContextPill() {
     if (!this._payloadStats) return nothing;
 
-    const sessionId = this.agent?.sessionId;
+    const sessionId = this.view?.current.providerSessionId;
     const sessionSnapshots = sessionId
       ? this._payloadSnapshots.filter((snapshot) => snapshot.sessionId === sessionId)
       : this._payloadSnapshots;

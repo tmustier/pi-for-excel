@@ -70,8 +70,7 @@ function usage() {
   PI_BACKGROUND_VERIFY_TOKEN=<token> PI_BACKGROUND_VERIFY_HOST=localhost node scripts/background-verify-bridge-server.mjs command modelsList '{"provider":"ext.example.probe"}'
   PI_BACKGROUND_VERIFY_TOKEN=<token> PI_BACKGROUND_VERIFY_HOST=localhost node scripts/background-verify-bridge-server.mjs command listCharts
 
-  # Isolated Durable prototype. Reload using the existing command after setting the flag.
-  node scripts/background-verify-bridge-server.mjs command setExperiment '{"feature":"durable_runtime","enabled":true}'
+  # Durable is the sole taskpane runtime; no experiment toggle is needed.
   node scripts/background-verify-bridge-server.mjs command reloadTaskpane
   node scripts/background-verify-bridge-server.mjs command durableFault '{"point":"beforeSync"}'
   node scripts/background-verify-bridge-server.mjs command durableSubmit '{"text":"Write 7 into Sheet1!A1","requestId":"durable-probe-1"}'

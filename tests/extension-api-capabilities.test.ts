@@ -12,7 +12,7 @@ function createCapabilityGate(allowed: ReadonlySet<ExtensionCapability>) {
 
 void test("createExtensionAPI denies registerCommand when capability is blocked", () => {
   const api = createExtensionAPI({
-    getAgent: () => {
+    getActiveConversation: () => {
       throw new Error("getAgent should not be called");
     },
     registerCommand: () => {
@@ -42,7 +42,7 @@ void test("createExtensionAPI denies registerCommand when capability is blocked"
 
 void test("createExtensionAPI denies registerTool when capability is blocked", () => {
   const api = createExtensionAPI({
-    getAgent: () => {
+    getActiveConversation: () => {
       throw new Error("getAgent should not be called");
     },
     registerTool: () => {
@@ -80,7 +80,7 @@ void test("createExtensionAPI denies raw agent access before getAgent call", () 
   let getAgentCalls = 0;
 
   const api = createExtensionAPI({
-    getAgent: () => {
+    getActiveConversation: () => {
       getAgentCalls += 1;
       throw new Error("getAgent should not be called");
     },
@@ -107,7 +107,7 @@ void test("createExtensionAPI denies raw agent access before getAgent call", () 
 
 void test("createExtensionAPI denies onAgentEvent when agent.events.read is blocked", () => {
   const api = createExtensionAPI({
-    getAgent: () => {
+    getActiveConversation: () => {
       throw new Error("getAgent should not be called");
     },
     subscribeAgentEvents: () => {
@@ -138,7 +138,7 @@ void test("createExtensionAPI registerTool forwards metadata to host registrar",
   let registeredDescription = "";
 
   const api = createExtensionAPI({
-    getAgent: () => {
+    getActiveConversation: () => {
       throw new Error("getAgent should not be called");
     },
     registerTool: (tool) => {
@@ -177,7 +177,7 @@ void test("createExtensionAPI registerTool fails fast when execute is missing", 
   let registerCalls = 0;
 
   const api = createExtensionAPI({
-    getAgent: () => {
+    getActiveConversation: () => {
       throw new Error("getAgent should not be called");
     },
     registerTool: () => {
@@ -217,7 +217,7 @@ void test("createExtensionAPI registerTool fails fast when execute is missing", 
 
 void test("createExtensionAPI denies llm.complete when capability is blocked", async () => {
   const api = createExtensionAPI({
-    getAgent: () => {
+    getActiveConversation: () => {
       throw new Error("getAgent should not be called");
     },
     llmComplete: () => Promise.resolve({
@@ -253,7 +253,7 @@ void test("createExtensionAPI forwards dynamic tools, storage, and agent steerin
   const storage = new Map<string, unknown>();
 
   const api = createExtensionAPI({
-    getAgent: () => {
+    getActiveConversation: () => {
       throw new Error("getAgent should not be called");
     },
     unregisterTool: (name) => {
@@ -261,12 +261,15 @@ void test("createExtensionAPI forwards dynamic tools, storage, and agent steerin
     },
     injectAgentContext: (content) => {
       injectedContext = content;
+      return Promise.resolve();
     },
     steerAgent: (content) => {
       steeredMessage = content;
+      return Promise.resolve();
     },
     followUpAgent: (content) => {
       followUpMessage = content;
+      return Promise.resolve();
     },
     storageGet: (key) => Promise.resolve(storage.get(key)),
     storageSet: (key, value) => {
@@ -292,9 +295,9 @@ void test("createExtensionAPI forwards dynamic tools, storage, and agent steerin
   });
 
   api.unregisterTool("my-tool");
-  api.agent.injectContext("context please");
-  api.agent.steer("stop and rethink");
-  api.agent.followUp("run review pass");
+  await api.agent.injectContext("context please");
+  await api.agent.steer("stop and rethink");
+  await api.agent.followUp("run review pass");
 
   await api.storage.set("alpha", 42);
   assert.equal(await api.storage.get("alpha"), 42);
@@ -312,7 +315,7 @@ void test("createExtensionAPI forwards qualified connection requirements on tool
   let registeredRequirements: unknown;
 
   const api = createExtensionAPI({
-    getAgent: () => {
+    getActiveConversation: () => {
       throw new Error("getAgent should not be called");
     },
     extensionOwnerId: "ext.apollo",
@@ -344,7 +347,7 @@ void test("createExtensionAPI connection APIs enforce capability and owner-quali
   let savedSecrets: Record<string, string> | null = null;
 
   const api = createExtensionAPI({
-    getAgent: () => {
+    getActiveConversation: () => {
       throw new Error("getAgent should not be called");
     },
     extensionOwnerId: "ext.apollo",
@@ -384,7 +387,7 @@ void test("createExtensionAPI connection APIs enforce capability and owner-quali
 
   let requestedSecretsConnectionId = "";
   const secretsApi = createExtensionAPI({
-    getAgent: () => {
+    getActiveConversation: () => {
       throw new Error("getAgent should not be called");
     },
     extensionOwnerId: "ext.apollo",
@@ -402,7 +405,7 @@ void test("createExtensionAPI connection APIs enforce capability and owner-quali
   assert.deepEqual(secrets, { apiKey: "from-store" });
 
   const deniedApi = createExtensionAPI({
-    getAgent: () => {
+    getActiveConversation: () => {
       throw new Error("getAgent should not be called");
     },
     listConnections: () => Promise.resolve([]),
@@ -428,7 +431,7 @@ void test("createExtensionAPI gates and owner-qualifies model provider registrat
   let refreshCalls = 0;
 
   const api = createExtensionAPI({
-    getAgent: () => {
+    getActiveConversation: () => {
       throw new Error("getAgent should not be called");
     },
     extensionOwnerId: "ext.models",
@@ -469,7 +472,7 @@ void test("createExtensionAPI gates and owner-qualifies model provider registrat
   assert.equal(refreshCalls, 1);
 
   const deniedApi = createExtensionAPI({
-    getAgent: () => {
+    getActiveConversation: () => {
       throw new Error("getAgent should not be called");
     },
     registerModelProvider: () => {

@@ -11,6 +11,13 @@ import { setDebugEnabled } from "../src/debug/debug.ts";
 import { ProviderCredentialsStore } from "../src/storage/local/provider-credentials-store.ts";
 import { createAssistantMessageEventStream } from "@earendil-works/pi-ai";
 import { createModelRecoveryLifecycle, prepareDurableReload, type ModelRecoveryLifecycle } from "../src/durable/model-recovery.ts";
+import { createWorkbookCoordinator } from "../src/workbook/coordinator.ts";
+import type { MutationHost } from "../src/durable/mutations.ts";
+
+const mutationHost: MutationHost = {
+  prepare: () => Promise.reject(new Error("Unexpected workbook mutation")),
+  observe: () => Promise.reject(new Error("Unexpected workbook observation")),
+};
 
 for (const navigation of ["beforeunload", "pagehide", "explicit reload", "none"]) {
   void test(`routed Durable request remains recoverable after ${navigation}`, async () => {
@@ -30,15 +37,16 @@ for (const navigation of ["beforeunload", "pagehide", "explicit reload", "none"]
     const requestStarted = new Promise<void>((resolve) => { started = resolve; });
     const source = createAssistantMessageEventStream();
     const runtime = await openDurableRuntime({
-      storage, workbookId: "recovery", model: { provider: model.provider, modelId: model.id },
+      storage, workbookId: "recovery", mutationHost, coordinator: createWorkbookCoordinator(), autoCompaction: false,
       models: routeModels(models, () => { started?.(); return source; }, () => lifecycle),
       onOpened: (harness) => {
         lifecycle = createModelRecoveryLifecycle(() => harness.close(context), target);
       },
-      buildCapabilities: () => Promise.resolve({ tools: [], systemPrompt: "Recovery test" }),
     });
+    const conversation = await runtime.harness.root(context, { agent: { model: { provider: model.provider, modelId: model.id } } });
+    await runtime.install(conversation, { tools: [], systemPrompt: "Recovery test" }, (messages) => Promise.resolve(messages));
     try {
-      const submitted = await runtime.conversation.submit({ type: "input", content: "Resume me", requestId: "once" }, context);
+      const submitted = await conversation.submit({ type: "input", content: "Resume me", requestId: "once" }, context);
       await requestStarted;
       source.push({ type: "error", reason: "error", error: {
         ...fauxAssistantMessage(""), stopReason: "error", errorMessage: "Load failed",
@@ -46,7 +54,7 @@ for (const navigation of ["beforeunload", "pagehide", "explicit reload", "none"]
       if (navigation === "none") {
         const settled = await submitted.wait(context);
         assert.equal(settled.status, "unanswered");
-        assert.match(JSON.stringify(await runtime.conversation.context(context)), /Load failed/);
+        assert.match(JSON.stringify(await conversation.context(context)), /Load failed/);
         return;
       }
       setTimeout(() => {
@@ -54,18 +62,20 @@ for (const navigation of ["beforeunload", "pagehide", "explicit reload", "none"]
         else target.dispatchEvent(new Event(navigation));
       }, 0);
       await runtime.harness.closed;
+      assert.equal((await storage.submission(submitted.id, context))?.status, "placed");
       lifecycle?.dispose();
       faux.setResponses([fauxAssistantMessage("Recovered answer")]);
       const reopened = await openDurableRuntime({
-        storage, workbookId: "recovery", model: { provider: model.provider, modelId: model.id }, models,
-        buildCapabilities: () => Promise.resolve({ tools: [], systemPrompt: "Recovery test" }),
+        storage, workbookId: "recovery", models, mutationHost, coordinator: createWorkbookCoordinator(), autoCompaction: false,
       });
+      const restored = await reopened.harness.root(context);
+      await reopened.install(restored, { tools: [], systemPrompt: "Recovery test" }, (messages) => Promise.resolve(messages));
       try {
-        assert.equal(reopened.conversation.id, runtime.conversation.id);
+        assert.equal(restored.id, conversation.id);
         const receipt = await reopened.harness.submission(submitted.id, context);
         assert.ok(receipt);
         assert.equal((await receipt.wait(context)).status, "done");
-        const entries = (await reopened.conversation.entries({}, 100, undefined, context)).items;
+        const entries = (await restored.entries({}, 100, undefined, context)).items;
         assert.equal(entries.filter((entry) => entry.kind === "pi.user").length, 1);
         assert.match(JSON.stringify(entries), /Recovered answer/);
         assert.doesNotMatch(JSON.stringify(entries), /Load failed/);
@@ -131,12 +141,14 @@ for (const provider of ["direct-test", "anthropic", "openai-codex"]) {
     const model = faux.getModel();
     const runtime = await openDurableRuntime({
       storage: new MemoryStorage(), workbookId: "transport-test",
-      model: { provider, modelId: model.id },
+      mutationHost, coordinator: createWorkbookCoordinator(), autoCompaction: false,
       models: routeModels(models, createOfficeStreamFn(() => Promise.resolve("https://localhost:3456"), models)),
-      buildCapabilities: () => Promise.resolve({ tools: [], systemPrompt: "Transport test" }),
     });
+    const conversation = await runtime.harness.root(context, { agent: { model: { provider, modelId: model.id } } });
+    const capabilities = { tools: [], systemPrompt: "Transport test" };
+    await runtime.install(conversation, capabilities, (messages) => Promise.resolve(messages));
     try {
-      const submission = await runtime.conversation.submit({ type: "input", content: "Hello" }, context);
+      const submission = await conversation.submit({ type: "input", content: "Hello" }, context);
       assert.equal((await submission.wait(context)).status, "done");
       assert.equal(captured.length, 1);
       const request = captured[0];
@@ -150,13 +162,13 @@ for (const provider of ["direct-test", "anthropic", "openai-codex"]) {
         assert.equal(request.transport, "sse");
         assert.match(request.sessionId, /^[0-9a-f]{8}-[0-9a-f]{4}-7/);
       }
-      await runtime.refresh();
-      const repeated = await runtime.conversation.submit({ type: "input", content: "Again" }, context);
+      await runtime.install(conversation, capabilities, (messages) => Promise.resolve(messages));
+      const repeated = await conversation.submit({ type: "input", content: "Again" }, context);
       assert.equal((await repeated.wait(context)).status, "done");
       assert.equal(captured[1]?.sessionId, request.sessionId);
       assert.deepEqual(getPayloadSnapshots().filter((snapshot) => snapshot.sessionId === request.sessionId)
         .map((snapshot) => snapshot.prefixChangeReasons), [[], []]);
-      assert.doesNotMatch(JSON.stringify(await runtime.status()), /synthetic-test/);
+      assert.doesNotMatch(JSON.stringify(await runtime.status(conversation)), /synthetic-test/);
     } finally { await runtime.harness.close(context); }
   });
 }

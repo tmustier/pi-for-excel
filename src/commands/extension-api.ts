@@ -23,7 +23,7 @@
  * ```
  */
 
-import type { AgentEvent } from "@earendil-works/pi-agent-core";
+import type { AgentEvent } from "@earendil-works/pi-durable";
 
 import {
   ALLOW_REMOTE_EXTENSION_URLS_STORAGE_KEY,
@@ -295,7 +295,7 @@ export function createExtensionAPI(options: CreateExtensionAPIOptions): ExcelExt
   const unregisterModelProvider = options.unregisterModelProvider;
   const refreshModelProviders = options.refreshModelProviders;
   const subscribeAgentEvents = options.subscribeAgentEvents
-    ?? ((handler: (ev: AgentEvent) => void) => options.getAgent().subscribe(handler));
+    ?? ((handler: (ev: AgentEvent) => void) => options.getActiveConversation().onEvent(handler));
   const llmComplete = options.llmComplete;
   const httpFetch = options.httpFetch;
   const storageGet = options.storageGet;
@@ -547,37 +547,42 @@ export function createExtensionAPI(options: CreateExtensionAPIOptions): ExcelExt
       get raw() {
         assertCapability("agent.read");
         assertCapability("agent.events.read");
-        return options.getAgent();
+        return options.getActiveConversation().conversation;
       },
 
-      injectContext(content: string) {
+      get snapshot() {
+        assertCapability("agent.read");
+        return options.getActiveConversation().current;
+      },
+
+      async injectContext(content: string) {
         assertCapability("agent.context.write");
 
         if (!injectAgentContext) {
           throw new Error("Extension host does not support agent.injectContext()");
         }
 
-        injectAgentContext(content);
+        await injectAgentContext(content);
       },
 
-      steer(content: string) {
+      async steer(content: string) {
         assertCapability("agent.steer");
 
         if (!steerAgent) {
           throw new Error("Extension host does not support agent.steer()");
         }
 
-        steerAgent(content);
+        await steerAgent(content);
       },
 
-      followUp(content: string) {
+      async followUp(content: string) {
         assertCapability("agent.followup");
 
         if (!followUpAgent) {
           throw new Error("Extension host does not support agent.followUp()");
         }
 
-        followUpAgent(content);
+        await followUpAgent(content);
       },
     },
 

@@ -11,7 +11,7 @@ function createCapabilityGate(allowed: ReadonlySet<ExtensionCapability>) {
 
 void test("widget v2 methods throw clear guidance when experiment is disabled", () => {
   const api = createExtensionAPI({
-    getAgent: () => {
+    getActiveConversation: () => {
       throw new Error("getAgent should not be called");
     },
     widgetApiV2Enabled: false,
@@ -43,7 +43,7 @@ void test("widget v2 methods throw clear guidance when experiment is disabled", 
 
 void test("widget v2 methods still enforce ui.widget capability when enabled", () => {
   const api = createExtensionAPI({
-    getAgent: () => {
+    getActiveConversation: () => {
       throw new Error("getAgent should not be called");
     },
     widgetApiV2Enabled: true,
@@ -65,4 +65,3 @@ void test("widget v2 methods still enforce ui.widget capability when enabled", (
     /DENIED:ui\.widget/,
   );
 });
-

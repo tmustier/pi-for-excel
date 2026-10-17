@@ -1,40 +1,16 @@
-function isCommandsBuiltinsExportPayloadShape(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-/**
- * Builtin export/compaction commands.
- */
-
-import {
-  getCurrentSystemMessage,
-  normalizeContext,
-  type Api,
-  type Model,
-  type StopReason,
-  type Usage,
-} from "@earendil-works/pi-ai";
-import type { Agent, AgentMessage } from "@earendil-works/pi-agent-core";
-
+/** Builtin export and native Durable compaction commands. */
+import { BACKGROUND_CONTEXT as context } from "@earendil-works/chord/context";
+import type { AgentMessage } from "@earendil-works/pi-agent-core";
+import type { StopReason, Usage } from "@earendil-works/pi-ai";
+import type { ConversationPresenter } from "../../durable/conversation-view.js";
+import type { DurableSessions } from "../../durable/sessions.js";
 import type { SlashCommand } from "../types.js";
-import type { ActiveAgentProvider } from "./model.js";
+import type { ActiveConversationProvider } from "./model.js";
 import { showToast } from "../../ui/toast.js";
 import { t } from "../../language/index.js";
-import { createCompactionSummaryMessage } from "../../messages/compaction.js";
-import {
-  createArchivedMessagesMessage,
-  splitArchivedMessages,
-} from "../../messages/archived-history.js";
 import { getErrorMessage } from "../../utils/errors.js";
-import { extractTextBlocks, summarizeContentForTranscript } from "../../utils/content.js";
-import type { PiSidebar } from "../../ui/pi-sidebar.js";
+import { summarizeContentForTranscript } from "../../utils/content.js";
 import { getWorkbookChangeAuditLog } from "../../audit/workbook-change-audit.js";
-import { effectiveKeepRecentTokens, effectiveReserveTokens } from "../../compaction/defaults.js";
-import {
-  buildCompactionMemoryFocusInstruction,
-  collectCompactionMemoryCues,
-  mergeCompactionAdditionalFocus,
-} from "../../compaction/memory-nudge.js";
 
 type TranscriptEntry = {
   role: AgentMessage["role"];
@@ -43,40 +19,12 @@ type TranscriptEntry = {
   stopReason?: StopReason;
 };
 
-function isApiModel(model: unknown): model is Model<Api> {
-  if (!isCommandsBuiltinsExportPayloadShape(model)) return false;
-
-  return (
-    typeof model.id === "string" &&
-    typeof model.name === "string" &&
-    typeof model.provider === "string" &&
-    typeof model.api === "string"
-  );
-}
-
-function hasContent(message: AgentMessage): message is AgentMessage & { content: unknown } {
-  return isCommandsBuiltinsExportPayloadShape(message) && "content" in message;
-}
-
 function messageToTranscriptText(message: AgentMessage): string {
   if (message.role === "archivedMessages") {
     return `[archived history: ${message.archivedChatMessageCount} chat messages]`;
   }
-
   if (message.role === "compactionSummary") return message.summary;
-  if (hasContent(message)) return summarizeContentForTranscript(message.content);
-  return "";
-}
-
-function countChatMessages(messages: AgentMessage[]): number {
-  let count = 0;
-  for (const m of messages) {
-    const role = m.role;
-    if (role === "user" || role === "assistant" || role === "user-with-attachments") {
-      count += 1;
-    }
-  }
-  return count;
+  return "content" in message ? summarizeContentForTranscript(message.content) : "";
 }
 
 type ExportDestination = "clipboard" | "download";
@@ -91,9 +39,7 @@ function parseExportDestination(raw: string, fallback: ExportDestination): Expor
 function triggerJsonDownload(fileName: string, content: string): void {
   const blob = new Blob([content], { type: "application/json" });
   const url = URL.createObjectURL(blob);
-
-  // Try window.open() first for Office WebView (WKWebView) compatibility.
-  // Fall back to <a download> if popup is blocked (lost user activation).
+  // Office WebViews may need a popup rather than an anchor download.
   const opened = window.open(url, "_blank");
   if (!opened) {
     const anchor = document.createElement("a");
@@ -105,620 +51,123 @@ function triggerJsonDownload(fileName: string, content: string): void {
     anchor.click();
     anchor.remove();
   }
-
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
 async function exportWorkbookAuditLog(rawArgs: string): Promise<void> {
   const destination = parseExportDestination(rawArgs, "download");
-
   const entries = await getWorkbookChangeAuditLog().list(500);
-  const payload = {
-    exported: new Date().toISOString(),
-    count: entries.length,
-    entries,
-  };
-
-  const json = JSON.stringify(payload, null, 2);
-
+  const json = JSON.stringify({ exported: new Date().toISOString(), count: entries.length, entries }, null, 2);
   if (destination === "clipboard") {
     await navigator.clipboard.writeText(json);
     showToast(t("export.toast.audit_copied", {
-      count: String(entries.length),
-      size: (json.length / 1024).toFixed(0),
+      count: String(entries.length), size: (json.length / 1024).toFixed(0),
     }));
     return;
   }
-
   triggerJsonDownload(`pi-audit-log-${new Date().toISOString().slice(0, 10)}.json`, json);
   showToast(t("export.toast.audit_downloaded", { count: String(entries.length) }));
 }
 
-// =============================================================================
-// Compaction helpers
-// =============================================================================
-
-// Mirrors pi-coding-agent defaults (see docs/compaction.md in pi-coding-agent).
-
-const SUMMARIZATION_SYSTEM_PROMPT =
-  "You are a context summarization assistant. Your task is to read a conversation between a user and an AI assistant, then produce a structured summary following the exact format specified.\n\n" +
-  "Do NOT continue the conversation. Do NOT respond to any questions in the conversation. ONLY output the structured summary.";
-
-const SUMMARIZATION_PROMPT = `The messages above are a conversation to summarize. Create a structured context checkpoint summary that another LLM will use to continue the work.
-
-Use this EXACT format:
-
-## Goal
-[What is the user trying to accomplish? Can be multiple items if the session covers different tasks.]
-
-## Constraints & Preferences
-- [Any constraints, preferences, or requirements mentioned by user]
-- [Or "(none)" if none were mentioned]
-
-## Progress
-### Done
-- [x] [Completed tasks/changes]
-
-### In Progress
-- [ ] [Current work]
-
-### Blocked
-- [Issues preventing progress, if any]
-
-## Key Decisions
-- **[Decision]**: [Brief rationale]
-
-## Next Steps
-1. [Ordered list of what should happen next]
-
-## Critical Context
-- [Any data, examples, or references needed to continue]
-- [Or "(none)" if not applicable]
-
-Keep each section concise. Preserve exact identifiers (sheet names, cell addresses, tool names, error messages).`;
-
-const UPDATE_SUMMARIZATION_PROMPT = `The messages above are NEW conversation messages to incorporate into the existing summary provided in <previous-summary> tags.
-
-Update the existing structured summary with new information. RULES:
-- PRESERVE all existing information from the previous summary
-- ADD new progress, decisions, and context from the new messages
-- UPDATE the Progress section: move items from "In Progress" to "Done" when completed
-- UPDATE "Next Steps" based on what was accomplished
-- PRESERVE exact identifiers (sheet names, cell addresses, tool names, error messages)
-- If something is no longer relevant, you may remove it
-
-Use this EXACT format:
-
-## Goal
-[Preserve existing goals, add new ones if the task expanded]
-
-## Constraints & Preferences
-- [Preserve existing, add new ones discovered]
-
-## Progress
-### Done
-- [x] [Include previously done items AND newly completed items]
-
-### In Progress
-- [ ] [Current work - update based on progress]
-
-### Blocked
-- [Current blockers - remove if resolved]
-
-## Key Decisions
-- **[Decision]**: [Brief rationale] (preserve all previous, add new)
-
-## Next Steps
-1. [Update based on current state]
-
-## Critical Context
-- [Preserve important context, add new if needed]
-
-Keep each section concise. Preserve exact identifiers (sheet names, cell addresses, tool names, error messages).`;
-
-type SerializeLimits = {
-  maxUserChars: number;
-  maxAssistantChars: number;
-  maxToolResultChars: number;
-};
-
-function truncateMiddle(text: string, maxChars: number): string {
-  if (maxChars <= 0) return "";
-  if (text.length <= maxChars) return text;
-
-  const marker = "\n…[truncated]…\n";
-  const keep = Math.max(0, maxChars - marker.length);
-  const head = Math.floor(keep / 2);
-  const tail = keep - head;
-
-  return text.slice(0, head) + marker + text.slice(text.length - tail);
-}
-
-function estimateTokens(message: AgentMessage): number {
-  // Conservative heuristic from pi-coding-agent: tokens ≈ chars / 4
-  const charsPerToken = 4;
-  let chars = 0;
-
-  if (message.role === "artifact") {
-    // UI-only, not part of LLM context (defaultConvertToLlm filters it out).
-    return 0;
-  }
-
-  if (message.role === "compactionSummary") {
-    return Math.ceil(message.summary.length / charsPerToken);
-  }
-
-  if (message.role === "user" || message.role === "user-with-attachments") {
-    const content = message.content;
-    if (typeof content === "string") {
-      chars += content.length;
-    } else if (Array.isArray(content)) {
-      for (const block of content) {
-        if (block.type === "text") chars += block.text.length;
-        if (block.type === "image") chars += 4800; // ~1200 tokens
-      }
-    }
-    return Math.ceil(chars / charsPerToken);
-  }
-
-  if (message.role === "assistant") {
-    for (const block of message.content) {
-      if (block.type === "text") chars += block.text.length;
-      else if (block.type === "thinking") chars += block.thinking.length;
-      else if (block.type === "toolCall") {
-        chars += block.name.length;
+export function createExportCommands(
+  getActiveConversation: ActiveConversationProvider,
+  getSessions: () => DurableSessions,
+): SlashCommand[] {
+  return [{
+    name: "export",
+    description: t("command.export.json"),
+    source: "builtin",
+    execute: async (args: string) => {
+      const parts = args.trim().split(/\s+/u).filter((part) => part.length > 0);
+      const mode = parts[0]?.toLowerCase();
+      if (mode === "audit" || mode === "audit-log") {
         try {
-          chars += JSON.stringify(block.arguments).length;
-        } catch {
-          // ignore
+          await exportWorkbookAuditLog(parts.slice(1).join(" "));
+        } catch (error) {
+          showToast(t("export.toast.audit_export_failed", { error: getErrorMessage(error) }));
         }
+        return;
       }
-    }
-    return Math.ceil(chars / charsPerToken);
-  }
-
-  if (message.role === "toolResult") {
-    for (const block of message.content) {
-      if (block.type === "text") chars += block.text.length;
-      if (block.type === "image") chars += 4800;
-    }
-    return Math.ceil(chars / charsPerToken);
-  }
-
-  // Unknown custom message types: ignore.
-  return 0;
-}
-
-function getPreviousCompaction(messages: AgentMessage[]): { boundaryStart: number; previousSummary?: string } {
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const m = messages[i];
-    if (m?.role === "compactionSummary") {
-      return { boundaryStart: i + 1, previousSummary: m.summary };
-    }
-  }
-  return { boundaryStart: 0 };
-}
-
-function findCutIndex(messages: AgentMessage[], boundaryStart: number, keepRecentTokens: number): number {
-  let accumulated = 0;
-
-  for (let i = messages.length - 1; i >= boundaryStart; i--) {
-    const message = messages[i];
-    if (!message) {
-      continue;
-    }
-
-    accumulated += estimateTokens(message);
-    if (accumulated >= keepRecentTokens) {
-      let cut = i;
-      // Never start kept context with a tool result.
-      while (cut > boundaryStart && messages[cut]?.role === "toolResult") {
-        cut -= 1;
+      const view = getActiveConversation();
+      if (!view) {
+        showToast(t("export.toast.no_session"));
+        return;
       }
-      return cut;
-    }
-  }
-
-  return boundaryStart;
-}
-
-function serializeConversation(messages: AgentMessage[], limits: SerializeLimits): string {
-  const parts: string[] = [];
-
-  for (const msg of messages) {
-    if (msg.role === "artifact") continue;
-
-    if (msg.role === "user" || msg.role === "user-with-attachments") {
-      const raw = typeof msg.content === "string" ? msg.content : extractTextBlocks(msg.content);
-      const text = truncateMiddle(raw, limits.maxUserChars);
-      if (text.trim().length > 0) parts.push(`[User]: ${text}`);
-      continue;
-    }
-
-    if (msg.role === "assistant") {
-      const textParts: string[] = [];
-      const thinkingParts: string[] = [];
-      const toolCalls: string[] = [];
-
-      for (const block of msg.content) {
-        if (block.type === "text") {
-          textParts.push(block.text);
-        } else if (block.type === "thinking") {
-          thinkingParts.push(block.thinking);
-        } else if (block.type === "toolCall") {
-          let args = "";
-          try {
-            args = JSON.stringify(block.arguments);
-          } catch {
-            args = "{}";
-          }
-          toolCalls.push(`${block.name}(${args})`);
+      // Export the immutable catalogue timeline, never the active UI projection.
+      const session = await getSessions().loadSession(String(view.conversation.id));
+      if (!session) {
+        showToast(t("export.toast.no_session"));
+        return;
+      }
+      const msgs = session.messages;
+      if (msgs.length === 0) {
+        showToast(t("export.toast.no_messages"));
+        return;
+      }
+      const transcript: TranscriptEntry[] = msgs.map((message) => ({
+        role: message.role,
+        text: messageToTranscriptText(message),
+        ...(message.role === "assistant" ? { usage: message.usage, stopReason: message.stopReason } : {}),
+      }));
+      const json = JSON.stringify({
+        exported: new Date().toISOString(),
+        id: session.id, title: session.title, createdAt: session.createdAt, lastModified: session.lastModified,
+        model: session.model ? { id: session.model.id, name: session.model.name, provider: session.model.provider } : null,
+        thinkingLevel: session.thinkingLevel,
+        messageCount: msgs.length, transcript, raw: msgs,
+      }, null, 2);
+      if (parseExportDestination(args, "clipboard") === "clipboard") {
+        try {
+          await navigator.clipboard.writeText(json);
+          showToast(t("export.toast.transcript_copied", {
+            count: String(msgs.length), size: (json.length / 1024).toFixed(0),
+          }));
+        } catch (error) {
+          showToast(t("export.toast.copy_failed", { error: getErrorMessage(error) }));
         }
+        return;
       }
-
-      if (thinkingParts.length > 0) {
-        const t = truncateMiddle(thinkingParts.join("\n"), limits.maxAssistantChars);
-        parts.push(`[Assistant thinking]: ${t}`);
-      }
-
-      if (textParts.length > 0) {
-        const t = truncateMiddle(textParts.join("\n"), limits.maxAssistantChars);
-        parts.push(`[Assistant]: ${t}`);
-      }
-
-      if (toolCalls.length > 0) {
-        const t = truncateMiddle(toolCalls.join("; "), limits.maxAssistantChars);
-        parts.push(`[Assistant tool calls]: ${t}`);
-      }
-
-      continue;
-    }
-
-    if (msg.role === "toolResult") {
-      const raw = extractTextBlocks(msg.content);
-      const text = truncateMiddle(raw, limits.maxToolResultChars);
-      const label = `${msg.toolName}${msg.isError ? " (error)" : ""}`;
-      if (text.trim().length > 0) {
-        parts.push(`[Tool result ${label}]: ${text}`);
-      }
-      continue;
-    }
-
-    // Ignore other message types.
-  }
-
-  return parts.join("\n\n");
-}
-
-function buildSummarizationPrompt(args: {
-  conversationText: string;
-  previousSummary?: string;
-  customInstructions?: string;
-}): string {
-  const base = args.previousSummary ? UPDATE_SUMMARIZATION_PROMPT : SUMMARIZATION_PROMPT;
-  const withFocus = args.customInstructions
-    ? `${base}\n\nAdditional focus: ${args.customInstructions}`
-    : base;
-
-  let prompt = `<conversation>\n${args.conversationText}\n</conversation>\n\n`;
-
-  if (args.previousSummary) {
-    prompt += `<previous-summary>\n${args.previousSummary}\n</previous-summary>\n\n`;
-  }
-
-  prompt += withFocus;
-  return prompt;
-}
-
-function isPromptTooLongError(err: unknown): boolean {
-  const msg = getErrorMessage(err).toLowerCase();
-  return (
-    msg.includes("prompt is too long") ||
-    msg.includes("context_length_exceeded") ||
-    (msg.includes("maximum") && msg.includes("tokens"))
-  );
-}
-
-export function createExportCommands(getActiveAgent: ActiveAgentProvider): SlashCommand[] {
-  return [
-    {
-      name: "export",
-      description: t("command.export.json"),
-      source: "builtin",
-      execute: async (args: string) => {
-        const parts = args.trim().split(/\s+/u).filter((part) => part.length > 0);
-        const mode = parts[0]?.toLowerCase();
-
-        if (mode === "audit" || mode === "audit-log") {
-          try {
-            await exportWorkbookAuditLog(parts.slice(1).join(" "));
-          } catch (error) {
-            showToast(t("export.toast.audit_export_failed", { error: getErrorMessage(error) }));
-          }
-          return;
-        }
-
-        const agent = getActiveAgent();
-        if (!agent) {
-          showToast(t("export.toast.no_session"));
-          return;
-        }
-
-        const msgs = agent.state.messages;
-        if (msgs.length === 0) {
-          showToast(t("export.toast.no_messages"));
-          return;
-        }
-
-        const transcript: TranscriptEntry[] = msgs.map((m) => {
-          const text = messageToTranscriptText(m);
-          if (m.role === "assistant") {
-            return {
-              role: m.role,
-              text,
-              usage: m.usage,
-              stopReason: m.stopReason,
-            };
-          }
-          return { role: m.role, text };
-        });
-
-        const exportData = {
-          exported: new Date().toISOString(),
-          model: agent.state.model
-            ? {
-              id: agent.state.model.id,
-              name: agent.state.model.name,
-              provider: agent.state.model.provider,
-            }
-            : null,
-          thinkingLevel: agent.state.thinkingLevel,
-          messageCount: msgs.length,
-          transcript,
-          // Also include raw messages for full fidelity debugging
-          raw: msgs,
-        };
-
-        const json = JSON.stringify(exportData, null, 2);
-        const destination = parseExportDestination(args, "clipboard");
-
-        if (destination === "clipboard") {
-          try {
-            await navigator.clipboard.writeText(json);
-            showToast(t("export.toast.transcript_copied", {
-              count: String(msgs.length),
-              size: (json.length / 1024).toFixed(0),
-            }));
-          } catch (error) {
-            showToast(t("export.toast.copy_failed", { error: getErrorMessage(error) }));
-          }
-          return;
-        }
-
-        triggerJsonDownload(`pi-session-${new Date().toISOString().slice(0, 10)}.json`, json);
-        showToast(t("export.toast.transcript_downloaded", { count: String(msgs.length) }));
-      },
+      triggerJsonDownload(`pi-session-${new Date().toISOString().slice(0, 10)}.json`, json);
+      showToast(t("export.toast.transcript_downloaded", { count: String(msgs.length) }));
     },
-  ];
+  }];
 }
 
-/**
- * Run compaction for a specific agent.
- *
- * Used by the `/compact` slash command (with the active agent) and by
- * auto-compaction / overflow recovery (with the agent that owns the run, which
- * may not be the active tab).
- */
-export async function runCompactCommand(agent: Agent, args: string): Promise<void> {
-  const allMessages = agent.state.messages;
-  const currentSystemMessage = getCurrentSystemMessage(allMessages);
-  const conversationMessages = allMessages.filter((message) => message.role !== "system");
-  const {
-    archivedMessages: existingArchivedMessages,
-    messagesWithoutArchived,
-  } = splitArchivedMessages(conversationMessages);
-
-  if (messagesWithoutArchived.length < 4) {
-    showToast(t("export.toast.compact.few_messages"));
-    return;
-  }
-
+/** Admission is not completion: wait for the native task's committed outcome. */
+export async function runCompactCommand(view: ConversationPresenter, args: string): Promise<void> {
   showToast(t("export.toast.compact.compacting"), 60000);
-
-  const now = Date.now();
-  const model = agent.state.model;
-  if (!isApiModel(model)) {
-    showToast(t("export.toast.compact.no_model"));
-    return;
-  }
-
-  // IMPORTANT: use the agent's configured stream function + API key resolver.
-  // Calling pi-ai's completeSimple() directly bypasses:
-  // - our CORS proxy logic (streamFunction)
-  // - our API key/OAuth resolution (agent.getApiKey)
-  // and can crash in browser WebViews due to env key fallbacks using `process`.
-  const apiKey = agent.getApiKey ? await agent.getApiKey(model.provider) : undefined;
-  if (!apiKey) {
-    showToast(t("export.toast.compact.no_api_key", { provider: model.provider }));
-    return;
-  }
-
-  const contextWindow = model.contextWindow || 200000;
-
-  // Pi uses reserveTokens to ensure we don't run out of room for the model's response.
-  const reserveTokens = effectiveReserveTokens(contextWindow);
-  const keepRecentTokens = effectiveKeepRecentTokens(contextWindow, reserveTokens);
-
-  const maxTokens = Math.max(
-    256,
-    Math.min(model.maxTokens, Math.floor(0.8 * reserveTokens)),
-  );
-
-  const { boundaryStart, previousSummary } = getPreviousCompaction(messagesWithoutArchived);
-  const userCompactionFocus = args.trim() || undefined;
-  let memoryNudgeShown = false;
-
-  const runOnce = async (limits: SerializeLimits, keepRecentOverride?: number): Promise<{
-    summary: string;
-    keptMessages: AgentMessage[];
-    messagesToArchive: AgentMessage[];
-    summarizedCount: number;
-    summarizedTokens: number;
-  }> => {
-    const keepRecent = keepRecentOverride ?? keepRecentTokens;
-    const cutIndex = findCutIndex(messagesWithoutArchived, boundaryStart, keepRecent);
-    const messagesToSummarize = messagesWithoutArchived.slice(boundaryStart, cutIndex);
-    const keptMessages = messagesWithoutArchived.slice(cutIndex);
-
-    if (messagesToSummarize.length === 0) {
-      throw new Error("Nothing to compact");
-    }
-
-    const memoryCues = collectCompactionMemoryCues(messagesToSummarize);
-    if (memoryCues.cueCount > 0 && !memoryNudgeShown) {
-      const cueLabel = memoryCues.cueCount === 1 ? "cue" : "cues";
-      showToast(
-        t("export.toast.compact.memory_nudge", { count: memoryCues.cueCount, cue: cueLabel }),
-        12000,
-      );
-      memoryNudgeShown = true;
-    }
-
-    const conversationText = serializeConversation(messagesToSummarize, limits);
-    const memoryFocus = buildCompactionMemoryFocusInstruction(memoryCues);
-    const customInstructions = mergeCompactionAdditionalFocus(
-      userCompactionFocus,
-      memoryFocus,
-    );
-    const promptText = buildSummarizationPrompt({
-      conversationText,
-      ...(previousSummary !== undefined ? { previousSummary } : {}),
-      ...(customInstructions !== undefined ? { customInstructions } : {}),
-    });
-
-    const stream = await agent.streamFunction(
-      model,
-      normalizeContext({
-        systemPrompt: SUMMARIZATION_SYSTEM_PROMPT,
-        messages: [
-          {
-            role: "user",
-            content: [{ type: "text", text: promptText }],
-            timestamp: Date.now(),
-          },
-        ],
-      }),
-      {
-        apiKey,
-        ...(agent.sessionId !== undefined ? { sessionId: agent.sessionId } : {}),
-        maxTokens,
-        // Match pi-coding-agent: don't force temperature when using reasoning,
-        // since Anthropic requires temperature=1 when thinking is enabled.
-        reasoning: "high",
-      },
-    );
-
-    const result = await stream.result();
-
-    if (result.stopReason === "error") {
-      throw new Error(result.errorMessage || t("export.toast.compact.failed_error"));
-    }
-
-    const summary = extractTextBlocks(result.content).trim() || t("export.toast.compact.summary_unavailable");
-
-    return {
-      summary,
-      keptMessages,
-      messagesToArchive: messagesToSummarize,
-      summarizedCount: countChatMessages(messagesToSummarize),
-      summarizedTokens: messagesToSummarize.reduce(
-        (total, message) => total + estimateTokens(message),
-        0,
-      ),
-    };
-  };
-
-  const defaultLimits: SerializeLimits = {
-    maxUserChars: 4000,
-    maxAssistantChars: 8000,
-    maxToolResultChars: 8000,
-  };
-
-  const aggressiveLimits: SerializeLimits = {
-    maxUserChars: 1200,
-    maxAssistantChars: 2500,
-    maxToolResultChars: 2500,
-  };
-
   try {
-    let out: {
-      summary: string;
-      keptMessages: AgentMessage[];
-      messagesToArchive: AgentMessage[];
-      summarizedCount: number;
-      summarizedTokens: number;
-    };
-
-    try {
-      out = await runOnce(defaultLimits);
-    } catch (e) {
-      if (!isPromptTooLongError(e)) throw e;
-
-      // Retry once with more aggressive truncation + keeping a larger recent tail.
-      showToast(t("export.toast.compact.retrying"), 60000);
-
-      const keepMoreRecent = Math.min(contextWindow, keepRecentTokens * 2);
-      out = await runOnce(aggressiveLimits, keepMoreRecent);
-    }
-
-    const archived = createArchivedMessagesMessage({
-      existingArchivedMessages,
-      newlyArchivedMessages: out.messagesToArchive,
-      timestamp: now,
-    });
-
-    const compacted = createCompactionSummaryMessage({
-      summary: out.summary,
-      tokensBefore: out.summarizedTokens,
-      timestamp: now,
-    });
-
-    agent.state.messages = [
-      ...(currentSystemMessage ? [currentSystemMessage] : []),
-      archived,
-      compacted,
-      ...out.keptMessages,
-    ];
-
-    const iface = document.querySelector<PiSidebar>("pi-sidebar");
-    iface?.requestUpdate();
-
-    showToast(t("export.toast.compact.summarized", { count: out.summarizedCount }));
-  } catch (e) {
-    const msg = getErrorMessage(e);
-    if (msg === "Nothing to compact") {
-      showToast(t("export.toast.compact.nothing"));
+    // Durable owns busy admission and summary placement; do not abort or drain its inbox.
+    const task = await view.conversation.compact(args.trim() || undefined, context);
+    const settled = await view.harness.waitForTask(task, context);
+    const outcome = settled.state.outcome;
+    if (outcome.status !== "completed") {
+      const msg = outcome.status === "failed" ? outcome.error.message
+        : outcome.reason ?? t("export.toast.compact.failed_error");
+      showToast(t("export.toast.compact.failed", { msg }));
       return;
     }
-    showToast(t("export.toast.compact.failed", { msg }));
+    const result = outcome.result;
+    showToast(result.entryId || result.submissionId
+      ? `${t("status-popovers.compactTitle")} ✓`
+      : t("export.toast.compact.nothing"));
+  } catch (error) {
+    showToast(t("export.toast.compact.failed", { msg: getErrorMessage(error) }));
   }
 }
 
-export function createCompactCommands(getActiveAgent: ActiveAgentProvider): SlashCommand[] {
-  return [
-    {
-      name: "compact",
-      description: t("command.export.summarize"),
-      source: "builtin",
-      execute: async (args: string) => {
-        const agent = getActiveAgent();
-        if (!agent) {
-          showToast(t("export.toast.no_session"));
-          return;
-        }
-
-        await runCompactCommand(agent, args);
-      },
+export function createCompactCommands(getActiveConversation: ActiveConversationProvider): SlashCommand[] {
+  return [{
+    name: "compact",
+    description: t("command.export.summarize"),
+    source: "builtin",
+    execute: async (args: string) => {
+      const view = getActiveConversation();
+      if (!view) {
+        showToast(t("export.toast.no_session"));
+        return;
+      }
+      await runCompactCommand(view, args);
     },
-  ];
+  }];
 }

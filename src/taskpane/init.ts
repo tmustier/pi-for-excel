@@ -10,9 +10,13 @@ function isTaskpaneInitPayloadShape(value: unknown): value is Record<string, unk
  */
 
 import { html, render } from "lit";
-import { Agent } from "@earendil-works/pi-agent-core";
-import { getCurrentSystemMessage, toToolDeclaration } from "@earendil-works/pi-ai";
-import { getAppStorage } from "../storage/local/app-storage.js";
+import { BACKGROUND_CONTEXT as durableContext } from "@earendil-works/chord/context";
+import type { Api, Model } from "@earendil-works/pi-ai";
+import { ConversationPresenter } from "../durable/conversation-view.js";
+import { createDurableTaskpane } from "../durable/taskpane.js";
+import type { DurableCapabilities } from "../durable/runtime.js";
+import type { WorkbookMutationGate } from "../tools/mutation/gate.js";
+import { SessionInfoDoc } from "../durable/sessions.js";
 import type { SessionData } from "../storage/local/types.js";
 
 import { createOfficeStreamFn } from "../auth/stream-proxy.js";
@@ -29,12 +33,9 @@ import {
   PI_EXPERIMENTAL_FEATURE_CHANGED_EVENT,
   PI_EXPERIMENTAL_TOOL_CONFIG_CHANGED_EVENT,
 } from "../experiments/events.js";
-import { createConvertToLlm } from "../messages/convert-to-llm.js";
-import { installImageInputNormalization } from "../messages/image-input-limits.js";
+import { normalizePromptContent } from "../messages/image-input-limits.js";
 import { effectiveToolOutputLimits } from "../context/window-budgets.js";
-import { findTrailingContextOverflowError } from "../compaction/overflow-recovery.js";
 import { readAutoCompactionEnabled } from "../compaction/settings.js";
-import { runCompactCommand } from "../commands/builtins/export.js";
 import { getFilesWorkspace } from "../files/workspace.js";
 import { ConnectionManager } from "../connections/manager.js";
 import { createAllTools } from "../tools/index.js";
@@ -155,12 +156,8 @@ import {
 import { createContextInjector } from "./context-injection.js";
 import { getThinkingLevels, installKeyboardShortcuts } from "./keyboard-shortcuts.js";
 import { createQueueDisplay } from "./queue-display.js";
-import { createActionQueue } from "./action-queue.js";
 import { maybeStartBackgroundVerificationBridge } from "./background-verification-bridge.js";
-import { isExperimentalFeatureEnabled } from "../experiments/flags.js";
-import type { WriteCellsHooks } from "../tools/write-cells.js";
 import { RecentlyClosedStack, type RecentlyClosedItem } from "./recently-closed.js";
-import { setupSessionPersistence } from "./sessions.js";
 import {
   loadWorkbookTabLayout,
   saveWorkbookTabLayout,
@@ -204,8 +201,6 @@ import {
 import { bindRuntimeSidebar } from "./runtime-sidebar-binding.js";
 import { doesOverlayClaimEscape } from "../utils/escape-guard.js";
 
-const RUNTIME_SYSTEM_PROMPT_SECTION = "pi-for-excel-runtime";
-
 function showErrorBanner(errorRoot: HTMLElement, message: string): void {
   render(renderError(message), errorRoot);
 }
@@ -225,7 +220,7 @@ export async function initTaskpane(opts: {
   const spreadsheetHost = getCurrentSpreadsheetHost();
 
   // 1. Storage
-  const { providerKeys, sessions, settings, customProviders, modelCatalogs } = initAppStorage();
+  const { providerKeys, settings, customProviders, modelCatalogs } = initAppStorage();
 
   // Initialize language from storage
   initLanguage(await readTaskpaneLanguage(settings));
@@ -330,11 +325,24 @@ export async function initTaskpane(opts: {
   // 4. Shared runtime dependencies
   // Workbook structure context is injected separately by transformContext.
 
-  const streamFn = createOfficeStreamFn(
+  const officeStreamFn = createOfficeStreamFn(
     getConfiguredProxyUrl,
     modelRuntime.models,
     (providerId) => modelRuntime.shouldProxyProvider(providerId),
   );
+  const streamFn: ReturnType<typeof createOfficeStreamFn> = async (model, transcript, options) => {
+    let auth = await modelRuntime.models.getAuth(model);
+    if (!auth) {
+      if (modelRuntime.isExtensionProvider(model.provider)) {
+        throw new Error(t("runtime.error.noApiKey", { provider: model.provider }));
+      }
+      const success = await promptForProviderConnection(model.provider);
+      await modelRefreshOwner.refreshConfiguredProviders(false);
+      if (!success) throw new Error(t("runtime.error.noApiKey", { provider: model.provider }));
+      auth = await modelRuntime.models.getAuth(model);
+    }
+    return officeStreamFn(model, transcript, { ...options, ...(auth ? { apiKey: auth.auth.apiKey } : {}) });
+  };
 
   const workbookCoordinator = createWorkbookCoordinator();
 
@@ -499,30 +507,63 @@ export async function initTaskpane(opts: {
     }
   };
 
+  const activeRuntimeOwner: { current: SessionRuntimeManager | null } = { current: null };
+  const getActiveRuntime = (): SessionRuntime | null => activeRuntimeOwner.current?.getActiveRuntime() ?? null;
+  const durable = await createDurableTaskpane({
+    models: modelRuntime.models,
+    streamFn,
+    host: spreadsheetHost,
+    coordinator: workbookCoordinator,
+    defaultModel: modelRefreshOwner.snapshot().defaultModel,
+    autoCompaction: autoCompactEnabled,
+    allowFaultInjection: import.meta.env.DEV,
+    getActiveRuntime,
+    onStorageWarning: (message: string) => showToast(message),
+  });
+  const sessions = durable.sessions;
   const runtimeManager = new SessionRuntimeManager({
+    sessions,
     createRuntime: buildSessionRuntime,
     warnCapabilityRefresh: (error) => {
       console.warn("[pi] Failed to refresh runtime capabilities:", error);
     },
   });
-  const abortedAgents = new WeakSet<Agent>();
+  activeRuntimeOwner.current = runtimeManager;
   const recentlyClosed = new RecentlyClosedStack(10);
+  const hiddenRuntimes: SessionRuntime[] = [];
+  let capabilitiesReady = false;
+  let workbookSealed = false;
+  const requireWorkbookAssociation = async (): Promise<void> => {
+    if (workbookSealed) throw new Error("Workbook changed. Reload Pi before continuing.");
+    try {
+      const association = await durable.resolveAssociation();
+      if (association.scopeId === durable.association.scopeId) return;
+    } catch (error) {
+      workbookSealed = true;
+      capabilitiesReady = false;
+      // This guard also runs inside tasks: never join the calling task here.
+      void durable.runtime.harness.close(durableContext);
+      showErrorBanner(errorRoot, "Workbook changed. Reload Pi before continuing.");
+      throw error;
+    }
+    workbookSealed = true;
+    capabilitiesReady = false;
+    void durable.runtime.harness.close(durableContext);
+    showErrorBanner(errorRoot, "Workbook changed. Reload Pi before continuing.");
+    throw new Error("Workbook changed. Reload Pi before continuing.");
+  };
 
-  const getActiveRuntime = () => runtimeManager.getActiveRuntime();
-  const getActiveAgent = () => getActiveRuntime()?.agent ?? null;
+  const getActiveConversation = () => getActiveRuntime()?.view ?? null;
   const getActiveQueueDisplay = () => getActiveRuntime()?.queueDisplay ?? null;
-  const getActiveActionQueue = () => getActiveRuntime()?.actionQueue ?? null;
   const getActiveLockState = () => getActiveRuntime()?.lockState ?? "idle";
 
   listModelRefreshRuntimes = () => runtimeManager.listRuntimes().map((runtime) => ({
     runtimeId: runtime.runtimeId,
-    model: runtime.agent.state.model,
-    isBusy: runtime.agent.state.isStreaming || runtime.actionQueue.isBusy(),
+    model: runtime.view.current.model,
+    isBusy: runtime.view.current.busy || runtime.view.current.inbox.length > 0,
     applyModel: (model, thinkingLevel) => {
-      runtime.agent.state.model = model;
-      if (thinkingLevel !== undefined) {
-        runtime.agent.state.thinkingLevel = thinkingLevel;
-      }
+      void runtime.view.conversation.configure({ model: { provider: model.provider, modelId: model.id },
+        ...(thinkingLevel !== undefined ? { thinkingLevel } : {}) }, durableContext).then(() => runtime.view.refresh());
       document.dispatchEvent(new CustomEvent("pi:status-update"));
       if (runtime.runtimeId === getActiveRuntime()?.runtimeId) {
         requestAnimationFrame(() => sidebar.requestUpdate());
@@ -555,10 +596,8 @@ export async function initTaskpane(opts: {
 
   const restoreCheckpointById = async (snapshotId: string): Promise<void> => {
     const activeRuntime = getActiveRuntime();
-    const sessionId = activeRuntime?.persistence.getSessionId() ?? crypto.randomUUID();
-
-    const workbookId = await resolveWorkbookId();
-    const coordinatorWorkbookId = workbookId ?? "workbook:unknown";
+    const sessionId = activeRuntime ? String(activeRuntime.view.conversation.id) : crypto.randomUUID();
+    const coordinatorWorkbookId = durable.association.scopeId;
 
     const restored = await workbookCoordinator.runWrite(
       {
@@ -595,8 +634,8 @@ export async function initTaskpane(opts: {
     const activeRuntime = runtimeManager.getActiveRuntime();
 
     return {
-      sessionIds: runtimes.map((runtime) => runtime.persistence.getSessionId()),
-      activeSessionId: activeRuntime?.persistence.getSessionId() ?? null,
+      sessionIds: runtimes.map((runtime) => String(runtime.view.conversation.id)),
+      activeSessionId: activeRuntime ? String(activeRuntime.view.conversation.id) : null,
     };
   };
 
@@ -661,8 +700,9 @@ export async function initTaskpane(opts: {
     document.dispatchEvent(new CustomEvent("pi:status-update"));
   });
 
-  const refreshCapabilitiesForAllRuntimes = (): Promise<void> => {
-    return runtimeManager.refreshCapabilities();
+  const refreshCapabilitiesForAllRuntimes = async (): Promise<void> => {
+    await runtimeManager.refreshCapabilities();
+    for (const runtime of hiddenRuntimes) await runtime.refreshCapabilities();
   };
 
   const reservedToolNames = new Set([
@@ -674,7 +714,8 @@ export async function initTaskpane(opts: {
     settings,
     connectionManager,
     modelRuntime,
-    getActiveAgent,
+    getActiveConversation,
+    streamFn,
     refreshRuntimeTools: refreshCapabilitiesForAllRuntimes,
     refreshRuntimeModels: () => modelRefreshOwner.refresh(true),
     reservedToolNames,
@@ -684,10 +725,9 @@ export async function initTaskpane(opts: {
         return;
       }
 
-      sidebar.syncFromAgent();
+      await activeRuntime.view.refresh();
       sidebar.requestUpdate();
       document.dispatchEvent(new CustomEvent("pi:status-update"));
-      await activeRuntime.persistence.saveSession({ force: true });
     },
   });
 
@@ -700,6 +740,12 @@ export async function initTaskpane(opts: {
   });
 
   const refreshWorkbookState = async () => {
+    try {
+      await requireWorkbookAssociation();
+    } catch (error) {
+      showErrorBanner(errorRoot, error instanceof Error ? error.message : t("init.unknownError"));
+      return;
+    }
     await resolveWorkbookContext();
     sidebar.requestUpdate();
 
@@ -790,14 +836,17 @@ export async function initTaskpane(opts: {
     optsForRuntime: CreateRuntimeOptions,
   ): Promise<SessionRuntime> {
     const runtimeId = crypto.randomUUID();
-    let runtimeSessionId: string = crypto.randomUUID();
+    const initialModel = getActiveRuntime()?.view.current.model ?? modelRefreshOwner.snapshot().defaultModel;
+    const latestId = optsForRuntime.autoRestoreLatest ? (await sessions.getAllMetadata())[0]?.id : undefined;
+    const requestedId = optsForRuntime.conversationId ?? latestId;
+    const conversation = requestedId ? await sessions.resolve(requestedId)
+      : await sessions.create(initialModel, initialModel.reasoning ? "high" : "off");
+    if (!conversation) throw new Error(`Conversation not found: ${requestedId}`);
+    const runtimeSessionId = String(conversation.id);
     const runtimeSkillReadCache = createSkillReadCache();
+    const view = await ConversationPresenter.open(durable.runtime.harness, conversation, modelRuntime.models, initialModel);
 
-    let runtimeAgent: Agent | null = null;
-
-    const buildRuntimeCapabilities = async (sessionId: string, writeCellsHooks?: WriteCellsHooks): Promise<{
-      tools: ReturnType<typeof withWorkbookCoordinator>;
-      systemPrompt: string;
+    const buildRuntimeCapabilities = async (sessionId: string): Promise<DurableCapabilities & {
       extensionToolRevision: number;
     }> => {
       const workbookId = await resolveWorkbookId();
@@ -809,9 +858,8 @@ export async function initTaskpane(opts: {
       const coreTools = createAllTools({
         hostKind: spreadsheetHost.kind,
         getExtensionManager: () => extensionManager,
-        getSessionId: () => runtimeAgent?.sessionId ?? runtimeSessionId,
+        getSessionId: () => runtimeSessionId,
         skillReadCache: runtimeSkillReadCache,
-        ...(writeCellsHooks ? { writeCellsHooks } : {}),
       }).filter(isRuntimeAgentTool);
 
       const gatedCoreTools = await applyExperimentalToolGates(coreTools, {
@@ -852,20 +900,24 @@ export async function initTaskpane(opts: {
 
       const requiredConnectionIds = collectRequiredConnectionIds(runtimeTools);
 
+      const bindMutationGate = (mutationGate: WorkbookMutationGate, mutationId: string): ReturnType<typeof withWorkbookCoordinator> => {
       const coordinatedTools = withWorkbookCoordinator(
         runtimeTools,
         workbookCoordinator,
         {
-          getWorkbookId: resolveWorkbookId,
-          getSessionId: () => runtimeAgent?.sessionId ?? runtimeSessionId,
+          getWorkbookId: () => Promise.resolve(durable.association.scopeId),
+          getSessionId: () => runtimeSessionId,
         },
         {
           onWriteCommitted: (event) => {
             if (event.impact !== "structure") return;
             invalidateBlueprint(event.workbookId);
+            invalidateBlueprint(workbookId);
           },
         },
         {
+          mutationGate,
+          getMutationId: () => mutationId,
           getExecutionMode: () => Promise.resolve(getExecutionMode()),
           requestMutationApproval: (request) => {
             return requestRuntimeToolApproval({
@@ -881,11 +933,17 @@ export async function initTaskpane(opts: {
         connectionManager,
       });
 
-      const tools = applyToolOutputTruncation(preflightTools, {
+      const truncatedTools = applyToolOutputTruncation(preflightTools, {
         // Scale caps with the active model's context window (#566).
-        limits: () => effectiveToolOutputLimits(runtimeAgent?.state.model.contextWindow),
+        limits: () => effectiveToolOutputLimits(view.current.model.contextWindow),
         saveTruncatedOutput: saveTruncatedToolOutputToWorkspace,
       });
+      return truncatedTools.map((tool) => ({ ...tool, execute: async (...args: Parameters<typeof tool.execute>) => {
+        await requireWorkbookAssociation();
+        return tool.execute(...args);
+      } }));
+      };
+      const tools = bindMutationGate(durable.runtime.mutations, "");
 
       const systemPrompt = await buildRuntimeSystemPrompt({
         workbookId,
@@ -895,47 +953,25 @@ export async function initTaskpane(opts: {
 
       return {
         tools,
+        bindMutationGate,
         systemPrompt,
         extensionToolRevision,
       };
     };
 
-    const initialModel = getActiveRuntime()?.agent.state.model
-      ?? modelRefreshOwner.snapshot().defaultModel;
     const initialCapabilities = await buildRuntimeCapabilities(runtimeSessionId);
-
-    const agent = new Agent({
-      initialState: {
-        model: initialModel,
-        thinkingLevel: initialModel.reasoning ? "high" : "off",
-        messages: [{
-          role: "system",
-          content: "",
-          sections: { [RUNTIME_SYSTEM_PROMPT_SECTION]: initialCapabilities.systemPrompt },
-          toolsAdded: initialCapabilities.tools.map(toToolDeclaration),
-          timestamp: 0,
-        }],
-        tools: initialCapabilities.tools,
-      },
-      convertToLlm: createConvertToLlm({
-        getContextWindow: () => runtimeAgent?.state.model.contextWindow,
-      }),
-      transformContext: createContextInjector(changeTracker),
-      streamFn,
-    });
-
-    runtimeAgent = agent;
-    const uninstallImageInputNormalization = installImageInputNormalization(agent, {
-      autoResizeImages,
-    });
+    const injectContext = createContextInjector(changeTracker);
+    const transformContext: typeof injectContext = async (messages, signal) => {
+      await requireWorkbookAssociation();
+      return injectContext(messages, signal);
+    };
+    await durable.runtime.install(conversation, initialCapabilities, transformContext);
     let currentRuntimeToolsFingerprint = createRuntimeToolFingerprint(initialCapabilities.tools);
     let currentExtensionToolRevision = initialCapabilities.extensionToolRevision;
+    let currentSystemPrompt = initialCapabilities.systemPrompt;
 
     const refreshRuntimeCapabilities = async () => {
-      const nextSessionId = runtimeAgent?.sessionId ?? runtimeSessionId;
-      runtimeSessionId = nextSessionId;
-
-      const next = await buildRuntimeCapabilities(nextSessionId);
+      const next = await buildRuntimeCapabilities(runtimeSessionId);
       const nextToolsFingerprint = createRuntimeToolFingerprint(next.tools);
       const nextExtensionToolRevision = next.extensionToolRevision;
 
@@ -945,148 +981,53 @@ export async function initTaskpane(opts: {
           nextFingerprint: nextToolsFingerprint,
           previousExtensionToolRevision: currentExtensionToolRevision,
           nextExtensionToolRevision,
-        })
+        }) || next.systemPrompt !== currentSystemPrompt
       ) {
-        agent.state.tools = next.tools;
+        await durable.runtime.install(conversation, next, transformContext);
+        runtime.tools = next.tools;
         currentRuntimeToolsFingerprint = nextToolsFingerprint;
         currentExtensionToolRevision = nextExtensionToolRevision;
-      }
-
-      const currentRuntimeSystemPrompt = getCurrentSystemMessage(agent.state.messages)
-        ?.sections?.[RUNTIME_SYSTEM_PROMPT_SECTION];
-      if (next.systemPrompt !== currentRuntimeSystemPrompt) {
-        agent.state.messages = [
-          ...agent.state.messages,
-          {
-            role: "system",
-            content: "",
-            sections: { [RUNTIME_SYSTEM_PROMPT_SECTION]: next.systemPrompt },
-            timestamp: Date.now(),
-          },
-        ];
+        currentSystemPrompt = next.systemPrompt;
       }
     };
-
-    // API key resolution
-    agent.getApiKey = async (provider: string) => {
-      const resolvedAuth = await modelRuntime.models.getAuth(provider);
-      if (resolvedAuth) return resolvedAuth.auth.apiKey;
-
-      // Extension provider credentials are configured through their host-owned
-      // connection cards, never through the generic API-key dialog.
-      if (modelRuntime.isExtensionProvider(provider)) {
-        showErrorBanner(errorRoot, t("runtime.error.noApiKey", { provider }));
-        return undefined;
+    const queueDisplay = createQueueDisplay({ view });
+    const unsubscribeErrorTracking = view.onEvent((event) => {
+      if (event.type === "run_end") window.setTimeout(() => modelRefreshOwner.reconcileRuntimes(), 0);
+      if (getActiveRuntime()?.runtimeId !== runtimeId) return;
+      if (event.type === "message_start" && event.message.role === "user") clearErrorBanner(errorRoot);
+      if (event.type === "task_failed" && !/abort|cancel/i.test(event.message)) {
+        showErrorBanner(errorRoot, t("init.llmError", { error: event.message }));
       }
-
-      const success = await promptForProviderConnection(provider);
-      await modelRefreshOwner.refreshConfiguredProviders(false);
-      if (success) {
-        clearErrorBanner(errorRoot);
-        return (await getAppStorage().providerKeys.get(provider)) ?? undefined;
-      }
-
-      showErrorBanner(errorRoot, `API key required for ${provider}.`);
-      return undefined;
-    };
-
-    const queueDisplay = createQueueDisplay({ agent });
-    const actionQueue = createActionQueue({
-      agent,
-      sidebar,
-      queueDisplay,
-      autoCompactEnabled,
-      runCompact: () => runCompactCommand(agent, ""),
-    });
-
-    const persistence = await setupSessionPersistence({
-      agent,
-      sessions,
-      settings,
-      models: modelRuntime.models,
-      initialSessionId: runtimeSessionId,
-      autoRestoreLatest: optsForRuntime.autoRestoreLatest,
-    });
-
-    runtimeSessionId = persistence.getSessionId();
-    await refreshRuntimeCapabilities();
-
-    let observedSessionId = runtimeSessionId;
-    const unsubscribeSessionCapabilitySync = persistence.subscribe(() => {
-      const nextSessionId = persistence.getSessionId();
-      if (nextSessionId === observedSessionId) return;
-
-      runtimeSkillReadCache.clearSession(observedSessionId);
-      observedSessionId = nextSessionId;
-      runtimeSessionId = nextSessionId;
-      void refreshRuntimeCapabilities();
-    });
-
-    const unsubscribeErrorTracking = agent.subscribe((ev) => {
-      const isActiveRuntime = runtimeManager.getActiveRuntime()?.runtimeId === runtimeId;
-
-      if (ev.type === "message_start" && ev.message.role === "user" && isActiveRuntime) {
-        clearErrorBanner(errorRoot);
-      }
-
-      if (ev.type !== "agent_end") return;
-
-      // Provider refreshes intentionally skip working runtimes. Re-run the
-      // reconciliation after the action queue unwinds so an extension that
-      // unloads mid-turn cannot leave its now-missing provider selected.
-      window.setTimeout(() => modelRefreshOwner.reconcileRuntimes(), 0);
-
-      const wasUserAbort = abortedAgents.has(agent);
-      abortedAgents.delete(agent);
-
-      if (!isActiveRuntime) return;
-
-      const errorMessage = agent.state.errorMessage;
-      if (errorMessage) {
-        const isAbort = wasUserAbort || /abort/i.test(errorMessage) || /cancel/i.test(errorMessage);
-        if (!isAbort) {
-          const err = errorMessage;
-          if (findTrailingContextOverflowError(agent.state)) {
-            showErrorBanner(
-              errorRoot,
-              autoCompactEnabled
-                ? "Context window exceeded — Pi will try compacting older history and retrying once. If this error persists, run /compact, scope your request to a smaller range, or use a larger-context model."
-                : "Context window exceeded. Run /compact to free up context, scope your request to a smaller range, or use a larger-context model.",
-            );
-          } else if (isLikelyCorsErrorMessage(err)) {
-            showErrorBanner(
-              errorRoot,
-              `Network error (likely CORS). If you're using OAuth, enable /settings → Proxy with ${DEFAULT_PROXY_URL} and retry. Guide: ${PROXY_HELPER_DOCS_URL}`,
-            );
-          } else {
-            showErrorBanner(errorRoot, t("init.llmError", { error: err }));
-          }
+      if (event.type === "message_end") {
+        for (const message of event.entry.model ?? []) {
+          if (message.role !== "assistant" || !message.errorMessage) continue;
+          const error = message.errorMessage;
+          if (!/abort|cancel/i.test(error)) showErrorBanner(errorRoot,
+            isLikelyCorsErrorMessage(error)
+              ? `Network error (likely CORS). If you're using OAuth, enable /settings → Proxy with ${DEFAULT_PROXY_URL} and retry. Guide: ${PROXY_HELPER_DOCS_URL}`
+              : t("init.llmError", { error }));
         }
-      } else {
-        clearErrorBanner(errorRoot);
       }
     });
-
-    return {
+    const metadata = await sessions.metadata(runtimeSessionId);
+    const info = await durable.runtime.harness.snapshot(SessionInfoDoc, conversation.id, durableContext);
+    const runtime: SessionRuntime = {
       runtimeId,
-      agent,
-      actionQueue,
+      view,
+      tools: initialCapabilities.tools,
       queueDisplay,
-      persistence,
+      title: metadata?.title ?? "",
+      hasExplicitTitle: info?.explicitTitle ?? false,
       lockState: "idle",
       refreshCapabilities: refreshRuntimeCapabilities,
-      buildDurableCapabilities: (hooks) => buildRuntimeCapabilities(runtimeSessionId, hooks),
       dispose: () => {
         runtimeSkillReadCache.clearAll();
-        unsubscribeSessionCapabilitySync();
         unsubscribeErrorTracking();
-        queueDisplay.detach();
-        actionQueue.shutdown();
-        uninstallImageInputNormalization();
-        agent.abort();
-        persistence.dispose();
+        queueDisplay.dispose();
+        void view.dispose();
       },
     };
+    return runtime;
   }
 
   const createRuntimeFromUi = async (): Promise<SessionRuntime | null> => {
@@ -1118,18 +1059,13 @@ export async function initTaskpane(opts: {
     let firstRuntime: SessionRuntime | null = null;
 
     for (const sessionId of savedLayout.sessionIds) {
+      const conversation = await sessions.resolve(sessionId);
+      if (!conversation) continue;
       const runtime = await runtimeManager.createRuntime({
         activate: false,
         autoRestoreLatest: false,
+        conversationId: String(conversation.id),
       });
-
-      const sessionData = await sessions.loadSession(sessionId);
-      if (sessionData) {
-        await runtime.persistence.applyLoadedSession(sessionData);
-      } else {
-        // Keep blank tabs durable across reloads.
-        await runtime.persistence.saveSession({ force: true });
-      }
 
       if (!firstRuntime) {
         firstRuntime = runtime;
@@ -1152,9 +1088,7 @@ export async function initTaskpane(opts: {
   };
 
   const syncRuntimeAfterSessionLoad = (runtime: SessionRuntime): void => {
-    runtime.queueDisplay.clear();
-    runtime.queueDisplay.setActionQueue([]);
-    sidebar.syncFromAgent();
+    void runtime.view.refresh();
     sidebar.requestUpdate();
     document.dispatchEvent(new CustomEvent("pi:model-changed"));
     document.dispatchEvent(new CustomEvent("pi:status-update"));
@@ -1167,29 +1101,30 @@ export async function initTaskpane(opts: {
       return;
     }
 
-    const busy = activeRuntime.agent.state.isStreaming || activeRuntime.actionQueue.isBusy();
+    const busy = activeRuntime.view.current.busy || activeRuntime.view.current.inbox.length > 0;
     if (busy) {
       showToast(t("init.currentTabBusy"));
       return;
     }
 
-    await activeRuntime.persistence.applyLoadedSession(sessionData);
-    syncRuntimeAfterSessionLoad(activeRuntime);
+    const replacement = await openSessionInNewTab(sessionData);
+    runtimeManager.closeRuntime(activeRuntime.runtimeId);
+    syncRuntimeAfterSessionLoad(replacement);
   };
 
   const openSessionInNewTab = async (sessionData: SessionData): Promise<SessionRuntime> => {
     const runtime = await runtimeManager.createRuntime({
       activate: true,
       autoRestoreLatest: false,
+      conversationId: sessionData.id,
     });
-
-    await runtime.persistence.applyLoadedSession(sessionData);
     syncRuntimeAfterSessionLoad(runtime);
     return runtime;
   };
 
   const openResumePicker = async (defaultTarget: ResumeDialogTarget = "new_tab"): Promise<void> => {
     await showResumeDialog({
+      sessions,
       defaultTarget,
       onOpenInNewTab: async (sessionData: SessionData) => {
         await openSessionInNewTab(sessionData);
@@ -1322,28 +1257,12 @@ export async function initTaskpane(opts: {
       return false;
     }
 
-    if (runtime.agent.state.isStreaming) {
-      const proceed = await requestConfirmationDialog({
-        title: t("init.confirm.stopAndCloseTitle"),
-        message: t("init.confirm.stopAndCloseMessage"),
-        confirmLabel: t("init.confirm.stopAndClose"),
-        cancelLabel: t("init.confirm.keepOpen"),
-        confirmButtonTone: "danger",
-      });
-      if (!proceed) return false;
-
-      abortedAgents.add(runtime.agent);
-      runtime.agent.abort();
-    }
-
-    await runtime.persistence.saveSession({ force: true });
-
     const closeTitle = runtimeManager.snapshotTabs().find((tab) => tab.runtimeId === runtimeId)?.title
-      ?? formatSessionTitle(runtime.persistence.getSessionTitle());
+      ?? formatSessionTitle(runtime.title);
 
     const closedItem: RecentlyClosedItem = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
-      sessionId: runtime.persistence.getSessionId(),
+      sessionId: String(runtime.view.conversation.id),
       title: closeTitle,
       closedAt: new Date().toISOString(),
       workbookId: await resolveWorkbookId(),
@@ -1374,15 +1293,15 @@ export async function initTaskpane(opts: {
       return;
     }
 
-    if (runtime.agent.state.isStreaming || runtime.actionQueue.isBusy()) {
+    if (runtime.view.current.busy || runtime.view.current.inbox.length > 0) {
       showToast(t("init.waitBeforeRenaming"));
       return;
     }
 
     const currentTitle = runtimeManager.snapshotTabs().find((tab) => tab.runtimeId === runtimeId)?.title
-      ?? formatSessionTitle(runtime.persistence.getSessionTitle());
-    const defaultTitle = runtime.persistence.hasExplicitTitle()
-      ? runtime.persistence.getSessionTitle().trim()
+      ?? formatSessionTitle(runtime.title);
+    const defaultTitle = runtime.hasExplicitTitle
+      ? runtime.title.trim()
       : currentTitle;
 
     const nextTitleRaw = window.prompt("Rename tab", defaultTitle);
@@ -1391,7 +1310,7 @@ export async function initTaskpane(opts: {
     }
 
     const nextTitle = nextTitleRaw.trim();
-    await runtime.persistence.renameSession(nextTitle);
+    await runtimeManager.renameRuntime(runtimeId, nextTitle);
     sidebar.requestUpdate();
     document.dispatchEvent(new CustomEvent("pi:status-update"));
 
@@ -1405,33 +1324,25 @@ export async function initTaskpane(opts: {
 
   const resolveRuntimeTabTitle = (runtimeId: string, runtime: SessionRuntime): string => {
     return runtimeManager.snapshotTabs().find((tab) => tab.runtimeId === runtimeId)?.title
-      ?? formatSessionTitle(runtime.persistence.getSessionTitle());
+      ?? formatSessionTitle(runtime.title);
   };
 
-  type RuntimeModel = Agent["state"]["model"];
+  type RuntimeModel = Model<Api>;
 
   const cloneRuntimeToNewTab = async (args: {
     sourceRuntime: SessionRuntime;
     targetModel: RuntimeModel;
     targetTitle: string;
   }): Promise<SessionRuntime> => {
+    const fork = await sessions.fork(String(args.sourceRuntime.view.conversation.id), args.targetModel, args.targetTitle);
     const clonedRuntime = await runtimeManager.createRuntime({
       activate: true,
       autoRestoreLatest: false,
+      conversationId: String(fork.id),
     });
-
-    clonedRuntime.agent.state.messages = structuredClone(args.sourceRuntime.agent.state.messages);
-    clonedRuntime.agent.state.model = args.targetModel;
-    clonedRuntime.agent.state.thinkingLevel = args.sourceRuntime.agent.state.thinkingLevel;
-
-    await clonedRuntime.persistence.renameSession(args.targetTitle);
-    clonedRuntime.queueDisplay.clear();
-    clonedRuntime.queueDisplay.setActionQueue([]);
-    sidebar.syncFromAgent();
     sidebar.requestUpdate();
     document.dispatchEvent(new CustomEvent("pi:model-changed"));
     document.dispatchEvent(new CustomEvent("pi:status-update"));
-    await clonedRuntime.persistence.saveSession({ force: true });
 
     return clonedRuntime;
   };
@@ -1443,7 +1354,7 @@ export async function initTaskpane(opts: {
       return;
     }
 
-    if (sourceRuntime.agent.state.isStreaming || sourceRuntime.actionQueue.isBusy()) {
+    if (sourceRuntime.view.current.busy || sourceRuntime.view.current.inbox.length > 0) {
       showToast(t("init.waitBeforeDuplicating"));
       return;
     }
@@ -1453,7 +1364,7 @@ export async function initTaskpane(opts: {
 
     await cloneRuntimeToNewTab({
       sourceRuntime,
-      targetModel: sourceRuntime.agent.state.model,
+      targetModel: sourceRuntime.view.current.model,
       targetTitle: duplicateTitle,
     });
 
@@ -1535,7 +1446,10 @@ export async function initTaskpane(opts: {
       await refreshWorkbookState();
     },
     extensionsHub: {
-      getActiveSessionId: () => getActiveRuntime()?.persistence.getSessionId() ?? null,
+      getActiveSessionId: () => {
+        const runtime = getActiveRuntime();
+        return runtime ? String(runtime.view.conversation.id) : null;
+      },
       resolveWorkbookContext: async () => {
         const workbookContext = await resolveWorkbookContext();
         return {
@@ -1592,7 +1506,7 @@ export async function initTaskpane(opts: {
     if (result.outcome === "unchanged") return;
 
     if (result.outcome === "forked") {
-      sidebar.syncFromAgent();
+      sidebar.requestUpdate();
       showToast(t("init.openedInNewTab", { title: result.title }));
     }
     document.dispatchEvent(new CustomEvent("pi:model-changed"));
@@ -1608,7 +1522,7 @@ export async function initTaskpane(opts: {
     }
 
     const targetRuntimeId = activeRuntime.runtimeId;
-    const currentModel = activeRuntime.agent.state.model;
+    const currentModel = activeRuntime.view.current.model;
 
     void (async () => {
       try {
@@ -1634,7 +1548,8 @@ export async function initTaskpane(opts: {
   };
 
   registerBuiltins({
-    getActiveAgent,
+    getActiveConversation,
+    getSessions: () => sessions,
     openModelSelector,
     renameActiveSession: async (title: string) => {
       const activeRuntime = getActiveRuntime();
@@ -1643,7 +1558,7 @@ export async function initTaskpane(opts: {
         return;
       }
 
-      await activeRuntime.persistence.renameSession(title);
+      await runtimeManager.renameRuntime(activeRuntime.runtimeId, title);
     },
     createRuntime: async () => {
       await createRuntimeFromUi();
@@ -1684,6 +1599,7 @@ export async function initTaskpane(opts: {
 
   // Slash commands chosen from the popup menu dispatch this event.
   const onCommandRun: EventListener = (event) => {
+    if (!capabilitiesReady) return;
     if (!(event instanceof CustomEvent)) return;
     if (!isTaskpaneInitPayloadShape(event.detail)) return;
 
@@ -1697,14 +1613,16 @@ export async function initTaskpane(opts: {
       return;
     }
 
-    const busy = activeRuntime.agent.state.isStreaming || activeRuntime.actionQueue.isBusy();
+    const busy = activeRuntime.view.current.busy || activeRuntime.view.current.inbox.length > 0;
+    if (name === "compact") {
+      void activeRuntime.view.conversation.compact(args.trim() || undefined, durableContext)
+        .catch(() => showToast(t("slash-command.toast.failed")));
+      return;
+    }
     const result = executeSlashCommand({
       name,
       args,
       busy,
-      enqueueCommand: (commandName: string, commandArgs: string) => {
-        activeRuntime.actionQueue.enqueueCommand(commandName, commandArgs);
-      },
       onError: () => {
         showToast(t("slash-command.toast.failed"));
       },
@@ -1726,20 +1644,25 @@ export async function initTaskpane(opts: {
   document.addEventListener("pi:command-run", onCommandRun);
 
   sidebar.onSend = (text) => {
+    if (!capabilitiesReady) return;
     clearErrorBanner(errorRoot);
     const activeRuntime = getActiveRuntime();
     if (!activeRuntime) {
       showToast(t("init.noActiveSession"));
       return;
     }
-    activeRuntime.actionQueue.enqueuePrompt(text);
+    void (async () => {
+      await requireWorkbookAssociation();
+      const content = await normalizePromptContent(text, activeRuntime.view.current.model, { autoResizeImages });
+      await activeRuntime.view.conversation.submit({ type: "input", content, requestId: crypto.randomUUID() }, durableContext);
+    })().catch((error: unknown) => showErrorBanner(errorRoot, error instanceof Error ? error.message : t("init.unknownError")));
   };
 
   sidebar.onAbort = () => {
+    if (!capabilitiesReady) return;
     const activeRuntime = getActiveRuntime();
     if (!activeRuntime) return;
-    abortedAgents.add(activeRuntime.agent);
-    activeRuntime.agent.abort();
+    void activeRuntime.view.conversation.abort(durableContext);
   };
 
   sidebar.onCreateTab = () => {
@@ -1816,6 +1739,18 @@ export async function initTaskpane(opts: {
     await runtimeManager.createRuntime({ activate: true, autoRestoreLatest: true });
   }
 
+  // Install every pending conversation's capabilities before enabling scheduling.
+  // Closed tabs may still own work; their projections are not added to the tab strip.
+  const inspection = await durable.runtime.harness.inspect(durableContext);
+  const pendingIds = new Set([
+    ...inspection.tasks.map((task) => String(task.record.conversationId)),
+    ...inspection.submissions.map((submission) => String(submission.conversationId)),
+  ]);
+  for (const conversationId of pendingIds) {
+    if (runtimeManager.findRuntimeBySessionId(conversationId)) continue;
+    hiddenRuntimes.push(await buildSessionRuntime({ activate: false, autoRestoreLatest: false, conversationId }));
+  }
+
   const startupTabLayout = snapshotRuntimeTabLayout();
   tabLayoutPersistence.enable(tabLayoutReadSucceeded ? undefined : startupTabLayout);
   tabLayoutPersistence.persist(startupTabLayout);
@@ -1873,15 +1808,17 @@ export async function initTaskpane(opts: {
     console.warn("[pi] Extension initialization did not complete during startup:", error);
   }
 
+  await refreshCapabilitiesForAllRuntimes();
+  await requireWorkbookAssociation();
+  await durable.runtime.acknowledgeCommittedResults();
+  durable.runtime.harness.resume();
+  capabilitiesReady = true;
+
   // ── Keyboard shortcuts ──
   installKeyboardShortcuts({
-    getActiveAgent,
+    getActiveConversation,
     getActiveQueueDisplay,
-    getActiveActionQueue,
     sidebar,
-    markUserAborted: (agent: Agent) => {
-      abortedAgents.add(agent);
-    },
     onCreateTab: () => {
       void createRuntimeFromUi();
     },
@@ -1926,7 +1863,7 @@ export async function initTaskpane(opts: {
 
   // ── Status bar ──
   injectStatusBar({
-    getActiveAgent,
+    getActiveConversation,
     getLockState: getActiveLockState,
     getExecutionMode,
   });
@@ -1953,7 +1890,7 @@ export async function initTaskpane(opts: {
     const trigger = target.closest(".pi-status-thinking");
     if (!trigger) return;
 
-    const activeAgent = getActiveAgent();
+    const activeAgent = getActiveConversation();
     if (!activeAgent) {
       showToast(t("init.noActiveSession"));
       return;
@@ -1965,10 +1902,10 @@ export async function initTaskpane(opts: {
       anchor: trigger,
       description,
       levels: getThinkingLevels(activeAgent),
-      activeLevel: activeAgent.state.thinkingLevel,
+      activeLevel: activeAgent.current.thinkingLevel,
       onSelectLevel: (level) => {
-        if (activeAgent.state.thinkingLevel === level) return;
-        activeAgent.state.thinkingLevel = level;
+        if (activeAgent.current.thinkingLevel === level) return;
+        void activeAgent.conversation.configure({ thinkingLevel: level }, durableContext).then(() => activeAgent.refresh());
         document.dispatchEvent(new CustomEvent("pi:status-update"));
       },
     });
@@ -2005,15 +1942,6 @@ export async function initTaskpane(opts: {
   };
 
   // ── Dev-only background verification bridge ──
-  const durable = isExperimentalFeatureEnabled("durable_runtime")
-    ? await import("../durable/taskpane.js").then((module) => module.createDurableTaskpane({
-      getActiveRuntime,
-      models: modelRuntime.models,
-      streamFn,
-      getWorkbookContext: resolveWorkbookContext,
-      allowFaultInjection: import.meta.env.DEV,
-    }))
-    : undefined;
   const backgroundVerificationBridge = maybeStartBackgroundVerificationBridge({
     sidebar,
     getWorkbookContext: resolveWorkbookContext,
@@ -2021,7 +1949,7 @@ export async function initTaskpane(opts: {
     extensionManager,
     connectionManager,
     modelRuntime,
-    ...(durable ? { durable } : {}),
+    durable,
     refreshModels: async (allowNetwork) => {
       await modelRefreshOwner.refresh(allowNetwork);
       return { errors: [...modelRefreshOwner.snapshot().providerErrors] };

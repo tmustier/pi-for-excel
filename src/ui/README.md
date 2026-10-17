@@ -20,7 +20,12 @@ The sidebar UI is first-party end to end:
 └────────────────────────────────────────────────────┘
 ```
 
-`pi-sidebar` subscribes to the `Agent` directly and passes messages/tools/streaming state down as properties to the message components.
+`pi-sidebar.view` subscribes to a `ConversationPresenter`, a read-only projection
+of committed Durable data. It renders `view.current` history, pending tools and
+live generation partials (including on late attachment or tab switches), and
+derives compaction progress from `current.live.compactions`. Runtime wiring
+passes the separate `sidebar.tools` UI tool definitions. The sidebar neither
+executes a conversation nor consumes synthetic Agent events.
 
 ### Message component modules (`src/ui/messages/`)
 
@@ -124,7 +129,7 @@ Message components use Light DOM (`createRenderRoot() { return this; }`), so the
 
 | File | Replaces | Notes |
 |---|---|---|
-| `pi-sidebar.ts` | ChatPanel + AgentInterface | Owns layout, subscribes to Agent, renders message-list + streaming container + working indicator |
+| `pi-sidebar.ts` | ChatPanel + AgentInterface | Owns layout, subscribes to ConversationPresenter, renders message-list + streaming container + working indicator |
 | `pi-input.ts` | MessageEditor | Auto-growing textarea, send/abort buttons, `+` input actions menu, file import affordances; fires `pi-send` / `pi-abort` / `pi-files-drop` / `pi-input-action` events |
 | `messages/*` | pi-web-ui Messages, MessageList, StreamingMessageContainer, ThinkingBlock, AttachmentTile + mini-lit MarkdownBlock/CodeBlock | First-party message rendering (see table above) |
 | `icons.ts` | mini-lit `icon`/`iconDOM` | Lucide icon helpers sized via SVG attributes |
@@ -137,10 +142,13 @@ Message components use Light DOM (`createRenderRoot() { return this; }`), so the
 | `overlay-dialog.ts` | — | Shared overlay lifecycle helper (single-instance toggle, Escape/backdrop close, focus restore) + shared overlay chrome/DOM builders (`createOverlayCloseButton`, `createOverlayHeader`, `createOverlayButton`, `createOverlayInput`, `createOverlaySectionTitle`) |
 | `overlay-ids.ts` | — | Shared overlay id constants used across builtins/extensions/taskpane |
 
-## Wiring (taskpane.ts)
+## Wiring (taskpane runtime)
 
-`taskpane.ts` creates the `Agent`, mounts `PiSidebar`, and wires:
-- `sidebar.onSend` / `sidebar.onAbort` → agent.prompt() / agent.abort()
+Taskpane initialization and runtime-sidebar binding mount `PiSidebar` and wire:
+- `sidebar.view` → active runtime's `ConversationPresenter`; `sidebar.tools` → runtime UI tool definitions
+- `sidebar.syncFromConversation()` → explicit re-render of the current committed projection when needed
+- `sidebar.onSend` / `sidebar.onAbort` → runtime submission/abort handling on the actual Durable `Conversation`
+- Status bar → active presenter provider (`getActiveConversation`), reading `current` and subscribing to committed snapshots
 - Keyboard shortcuts (Enter, Escape, Shift+Tab for thinking) via `document.addEventListener("keydown")`
 - Slash command menu via `wireCommandMenu(sidebar.getTextarea())`
-- Session persistence (auto-save on message_end, auto-restore latest on init)
+- Durable harness owns conversation persistence and live state; UI archive buckets remain presentation-only and do not count toward context estimates

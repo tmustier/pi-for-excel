@@ -1,79 +1,99 @@
+// Command contracts use a real native Harness; the DOM double only captures toasts.
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { after, test } from "node:test";
+import { copyJson } from "@earendil-works/chord";
+import { BACKGROUND_CONTEXT as context } from "@earendil-works/chord/context";
+import { createModels } from "@earendil-works/pi-ai/models";
+import { fauxAssistantMessage, fauxProvider } from "@earendil-works/pi-ai/providers/faux";
+import { CompactionEntry, createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
+import { ConversationPresenter, readConversationHistory } from "../src/durable/conversation-view.ts";
+import { DurableSessions } from "../src/durable/sessions.ts";
+import { createCompactCommands, createExportCommands } from "../src/commands/builtins/export.ts";
+import { installFakeDom } from "./fixtures/fake-dom.ts";
 
-import { Agent, type AgentMessage } from "@earendil-works/pi-agent-core";
-import { createModels, fauxAssistantMessage, fauxProvider, type Context } from "@earendil-works/pi-ai";
+// The shared toast component retains its DOM node across command invocations.
+const dom = installFakeDom();
+after(() => dom.restore());
 
-import { runCompactCommand } from "../src/commands/builtins/export.ts";
-
-class ElementStub {
-  id = "";
-  className = "";
-  hidden = false;
-  textContent: string | null = null;
-  type = "";
-  classList = {
-    add: (..._names: string[]): void => {},
-    remove: (..._names: string[]): void => {},
-    toggle: (_name: string, _enabled?: boolean): boolean => false,
-    contains: (_name: string): boolean => false,
-  };
-  append(..._nodes: unknown[]): void {}
-  appendChild<T>(node: T): T { return node; }
-  setAttribute(_name: string, _value: string): void {}
-  addEventListener(_name: string, _listener: () => void): void {}
-  removeEventListener(_name: string, _listener: () => void): void {}
-}
-
-function user(content: string, timestamp: number): AgentMessage {
-  return { role: "user", content, timestamp };
-}
-
-void test("compact sends user memory cues to the summarizing model", async () => {
-  const priorDocument = Reflect.get(globalThis, "document") as unknown;
-  const body = new ElementStub();
-  Reflect.set(globalThis, "document", {
-    body,
-    createElement: () => new ElementStub(),
-    querySelector: () => null,
-  });
-
+void test("/export includes reset-hidden immutable history and catalogue metadata", async () => {
+  const models = createModels();
+  const faux = fauxProvider({ tokensPerSecond: Infinity });
+  models.setProvider(faux.provider);
+  const harness = await Harness.open(new MemoryStorage(), { models, registry: createRegistry() }, context);
+  let view: ConversationPresenter | undefined;
+  const previousNavigator = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+  let copied = "";
+  Object.defineProperty(globalThis, "navigator", { configurable: true, value: {
+    clipboard: { writeText: (value: string) => { copied = value; return Promise.resolve(); } },
+  } });
   try {
-    const faux = fauxProvider({ models: [{ id: "compact-request", contextWindow: 32_768, maxTokens: 4_096 }] });
-    faux.setResponses([fauxAssistantMessage("A concise summary")]);
-    const models = createModels();
-    models.setProvider(faux.provider);
-    const requests: Context[] = [];
-    const model = faux.getModel();
-    const agent = new Agent({
-      initialState: {
-        model,
-        tools: [],
-        messages: [
-          user(`Please remember this: report in EUR. ${"a".repeat(30_000)}`, 1),
-          user(`Earlier workbook detail ${"b".repeat(30_000)}`, 2),
-          user(`Another workbook detail ${"c".repeat(30_000)}`, 3),
-          user(`More workbook detail ${"d".repeat(30_000)}`, 4),
-          user("Recent instruction one", 5),
-          user("Recent instruction two", 6),
-        ],
-      },
-      streamFn: (requestModel, context, options) => {
-        requests.push(structuredClone(context));
-        return models.streamSimple(requestModel, context, options);
-      },
-    });
-    agent.getApiKey = () => Promise.resolve("boundary-test-key");
-
-    await runCompactCommand(agent, "focus on formulas");
-
-    assert.equal(requests.length, 1);
-    const requestText = JSON.stringify(requests[0]?.messages);
-    assert.match(requestText, /focus on formulas/u);
-    assert.match(requestText, /Memory to persist/u);
-    assert.match(requestText, /report in EUR/u);
+    const sessions = new DurableSessions(harness, models, faux.getModel());
+    const conversation = await sessions.create(faux.getModel(), "off", "Native export");
+    await conversation.submit({ type: "write", entry: { kind: "test.history", model: [
+      { role: "user", content: "hidden original", timestamp: 1000 },
+    ] } }, context);
+    await conversation.reset(undefined, context);
+    view = await ConversationPresenter.open(harness, conversation, models, faux.getModel());
+    const active = view;
+    const command = createExportCommands(() => active, () => sessions)[0];
+    assert.ok(command);
+    await command.execute("clipboard");
+    const expected = await sessions.loadSession(String(conversation.id));
+    assert.ok(expected);
+    const exported = copyJson(JSON.parse(copied));
+    assert.ok(exported && typeof exported === "object" && !Array.isArray(exported));
+    assert.deepEqual(exported.raw, expected.messages);
+    assert.equal(exported.title, "Native export");
+    assert.equal(exported.id, String(conversation.id));
+    assert.deepEqual(exported.transcript, [{ role: "user", text: "hidden original" }]);
   } finally {
-    if (priorDocument === undefined) Reflect.deleteProperty(globalThis, "document");
-    else Reflect.set(globalThis, "document", priorDocument);
+    await view?.dispose();
+    await harness.close(context);
+    if (previousNavigator) Object.defineProperty(globalThis, "navigator", previousNavigator);
+    else Reflect.deleteProperty(globalThis, "navigator");
   }
 });
+
+for (const failure of [false, true]) {
+  void test(`/compact waits for native ${failure ? "failure" : "summary"} and forwards focus`, async () => {
+    const models = createModels();
+    const faux = fauxProvider({ tokensPerSecond: Infinity });
+    let prompt = "";
+    models.setProvider({ ...faux.provider, streamSimple: (model, transcript, options) => {
+      prompt = JSON.stringify(transcript);
+      return faux.provider.streamSimple(model, transcript, options);
+    } });
+    faux.setResponses([failure
+      ? fauxAssistantMessage("", { stopReason: "error", errorMessage: "native summary failed" })
+      : fauxAssistantMessage("native summary")]);
+    const harness = await Harness.open(new MemoryStorage(), { models, registry: createRegistry(), settings: {
+      compaction: { enabled: false, keepRecentTokens: 100 },
+    } }, context);
+    let view: ConversationPresenter | undefined;
+    try {
+      const sessions = new DurableSessions(harness, models, faux.getModel());
+      const conversation = await sessions.create(faux.getModel(), "off");
+      view = await ConversationPresenter.open(harness, conversation, models, faux.getModel());
+      const active = view;
+      const command = createCompactCommands(() => active)[0];
+      assert.ok(command);
+      await command.execute("");
+      assert.equal(prompt, "", "empty native context needs no summary request");
+      assert.match(dom.document.getElementById("pi-toast")?.children[0]?.children[0]?.textContent ?? "", /Nothing to compact/u);
+      for (let i = 0; i < 6; i++) {
+        await conversation.submit({ type: "write", entry: { kind: "test.history", model: [
+          { role: "user", content: "history ".repeat(500), timestamp: i },
+        ] } }, context);
+      }
+      await command.execute("  preserve formulas  ");
+      assert.match(prompt, /preserve formulas/u);
+      const summaries = (await readConversationHistory(conversation)).filter(CompactionEntry.is);
+      assert.equal(summaries.length, failure ? 0 : 1);
+      const toast = dom.document.getElementById("pi-toast")?.children[0]?.children[0]?.textContent ?? "";
+      assert.match(toast, failure ? /native summary failed/u : /✓/u);
+    } finally {
+      await view?.dispose();
+      await harness.close(context);
+    }
+  });
+}

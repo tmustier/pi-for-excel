@@ -7,6 +7,13 @@ import { fauxAssistantMessage, fauxProvider } from "@earendil-works/pi-ai/provid
 import { MemoryStorage } from "@earendil-works/pi-durable";
 import { createModelRecoveryLifecycle } from "../src/durable/model-recovery.ts";
 import { openDurableRuntime, routeModels } from "../src/durable/runtime.ts";
+import { createWorkbookCoordinator } from "../src/workbook/coordinator.ts";
+import type { MutationHost } from "../src/durable/mutations.ts";
+
+const mutationHost: MutationHost = {
+  prepare: () => Promise.reject(new Error("Unexpected workbook mutation")),
+  observe: () => Promise.reject(new Error("Unexpected workbook observation")),
+};
 
 void test("native cancellation without any lifecycle event persists a resumable retry instead of a final failed submission", { timeout: 15000 }, async () => {
   // A disposable backend kept across two Harness instances. Browser and Excel
@@ -23,10 +30,11 @@ void test("native cancellation without any lifecycle event persists a resumable 
   const lifecycle = createModelRecoveryLifecycle(() => Promise.resolve(), target);
   const source = createAssistantMessageEventStream();
   const runtime = await openDurableRuntime({
-    storage, workbookId: "native-recovery", model: { provider: model.provider, modelId: model.id },
+    storage, workbookId: "native-recovery", mutationHost, coordinator: createWorkbookCoordinator(), autoCompaction: false,
     models: routeModels(models, () => source, () => lifecycle),
-    buildCapabilities: () => Promise.resolve({ tools: [], systemPrompt: "Test request recovery." }),
   });
+  const conversation = await runtime.harness.root(context, { agent: { model: { provider: model.provider, modelId: model.id } } });
+  await runtime.install(conversation, { tools: [], systemPrompt: "Test request recovery." }, (messages) => Promise.resolve(messages));
   let published: (() => void) | undefined;
   const networkErrorCommitted = new Promise<void>((resolve) => { published = resolve; });
   const unsubscribe = runtime.harness.subscribeCommits((publication) => {
@@ -36,7 +44,7 @@ void test("native cancellation without any lifecycle event persists a resumable 
   });
   let submissionId;
   try {
-    const submitted = await runtime.conversation.submit({
+    const submitted = await conversation.submit({
       type: "input", content: "Finish this request after the pane returns.", requestId: "native-once",
     }, context);
     submissionId = submitted.id;
@@ -58,14 +66,16 @@ void test("native cancellation without any lifecycle event persists a resumable 
   assert.ok(submissionId);
   faux.setResponses([fauxAssistantMessage("Recovered after native pane closure.")]);
   const reopened = await openDurableRuntime({
-    storage, models, workbookId: "native-recovery", model: { provider: model.provider, modelId: model.id },
-    buildCapabilities: () => Promise.resolve({ tools: [], systemPrompt: "Test request recovery." }),
+    storage, models, workbookId: "native-recovery", mutationHost, coordinator: createWorkbookCoordinator(), autoCompaction: false,
   });
+  const restored = await reopened.harness.root(context);
+  await reopened.install(restored, { tools: [], systemPrompt: "Test request recovery." }, (messages) => Promise.resolve(messages));
   try {
+    assert.equal(restored.id, conversation.id);
     const original = await reopened.harness.submission(submissionId, context);
     assert.ok(original);
     assert.equal((await original.wait(context)).status, "done");
-    const entries = (await reopened.conversation.entries({}, 100, undefined, context)).items;
+    const entries = (await restored.entries({}, 100, undefined, context)).items;
     assert.equal(entries.filter((entry) => entry.kind === "pi.user").length, 1);
     assert.match(JSON.stringify(entries), /Recovered after native pane closure/);
     assert.match(JSON.stringify(entries), /Network error: Load failed/);
