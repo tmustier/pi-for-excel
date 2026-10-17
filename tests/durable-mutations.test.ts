@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Type } from "typebox";
-import type { AgentTool } from "@earendil-works/pi-agent-core";
+import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import type { JsonValue } from "@earendil-works/chord";
 import { createMutationController, parseMutationRecord, type MutationRecord, type MutationObservation,
   type MutationHost, type MutationFaultPoint } from "../src/durable/mutations.ts";
@@ -11,11 +11,11 @@ import { getToolExecutionMode } from "../src/tools/execution-policy.ts";
 import { CORE_TOOL_NAMES } from "../src/tools/names.ts";
 import { createWorkbookMutationHost } from "../src/durable/mutation-host.ts";
 
-function fixture(requiresReview = false) {
+function fixture(incomplete = false) {
   const records = new Map<string, MutationRecord>();
   const observation: MutationObservation = {
     workbookId: "book", structure: [{ id: "sheet-id", tables: [{ id: "table-id", range: "B2:D9" }] }],
-    state: [["old", 17]], complete: !requiresReview, limitation: requiresReview ? "Unbounded effects" : null,
+    state: [["old", 17]], complete: !incomplete, limitation: incomplete ? "Unbounded effects" : null,
   };
   let effects = 0;
   let failSave: MutationRecord["phase"] | null = null;
@@ -28,19 +28,21 @@ function fixture(requiresReview = false) {
     },
     save: (record: MutationRecord) => {
       if (failSave === record.phase) return Promise.reject(new Error("commit unavailable"));
-      records.set(record.toolCallId, structuredClone(record));
+      records.set(record.mutationId, structuredClone(record));
       return Promise.resolve();
     },
   };
   const host: MutationHost = {
     prepare: (call) => Promise.resolve({ intent: call.params, target: { sheetId: "sheet-id" },
-      before: structuredClone(observation), expected: { ...structuredClone(observation), state: [["new", 23]] }, requiresReview }),
+      before: structuredClone(observation), expected: { ...structuredClone(observation), state: [["new", 23]] } }),
     observe: () => Promise.resolve(structuredClone(observation)),
   };
   const coordinator = createWorkbookCoordinator();
   const open = () => createMutationController({ workbookId: "book", store, host, coordinator, allowFaultInjection: true });
   const controller = open();
-  const tool = (name = "write_cells", failure = false, gate = controller) => {
+  const tool = (name = "write_cells", failure = false, gate = controller,
+    receipt: AgentToolResult<JsonValue> = { content: [{ type: "text", text: "host returned" }], details: {} },
+    getMutationId = (id: string): string => id) => {
     const original: AgentTool = { name, label: name, description: name, parameters: Type.Object({}),
       execute: () => {
         // Independently assert the write-ahead invariant at the external side-effect boundary.
@@ -48,11 +50,11 @@ function fixture(requiresReview = false) {
         effects += 1;
         observation.state = [["new", 23]];
         if (failure) return Promise.reject(new Error("host disconnected after applying change"));
-        return Promise.resolve({ content: [{ type: "text", text: "host returned" }], details: {} });
+        return Promise.resolve(receipt);
       } };
     const wrapped = withWorkbookCoordinator([original], coordinator,
       { getWorkbookId: () => Promise.resolve("book"), getSessionId: () => "session" }, undefined,
-      { mutationGate: gate })[0];
+      { mutationGate: gate, getMutationId })[0];
     assert.ok(wrapped);
     return wrapped;
   };
@@ -140,16 +142,53 @@ void test("failure before dispatch is nonmutating; uncertain commit/read failure
   assert.equal(f.effects(), 0);
 });
 
-void test("unknown effects remain pending after result commit, and incomplete equal snapshots never prove success", async () => {
-  const f = fixture(true);
-  await f.tool("extension_custom").execute("generic", {});
-  await f.controller.resultCommitted("generic");
-  assert.equal((await f.controller.pending()).length, 1);
-  assert.equal((await f.controller.reconcile("generic")).classification, "conflict");
-  const review = await f.controller.reconcile("generic");
-  await f.controller.resolve("generic", review.observationToken);
-  assert.equal(f.effects(), 1);
-  assert.equal((await f.controller.pending()).length, 0);
+for (const [kind, name] of [["browser", "extension_custom"], ["wps", "execute_wps_js"]] as const) {
+  void test(`${name}: two successful committed results proceed despite incomplete observations`, async () => {
+    const f = fixture(true);
+    Object.assign(f.host, createWorkbookMutationHost({ kind, getWorkbookId: () => Promise.resolve("book") }));
+    for (const id of ["first", "second"]) {
+      await f.tool(name).execute(id, {});
+      assert.equal((await f.controller.reconcile(id)).classification, "conflict");
+      assert.equal((await f.controller.pending()).length, 1);
+      await assert.rejects(f.tool(name).execute("too-early", {}), /pending/u);
+      await f.controller.resultCommitted(id);
+      assert.deepEqual(await f.open().pending(), []);
+      await assert.rejects(f.tool(name).execute(id, {}), /replay/u);
+    }
+    assert.equal(f.effects(), 2);
+  });
+}
+
+void test("failed receipts stay pending after commit, including structured errors without error text", async () => {
+  const receipts: AgentToolResult<JsonValue>[] = [
+    { content: [{ type: "text", text: "Error executing WPS JSAPI: disconnected" }], details: {} },
+    { content: [{ type: "text", text: "Host returned" }], details: { kind: "python_transform_range", blocked: false, error: "Partial write" } },
+    { content: [], details: { kind: "mcp_gateway", operation: "call_tool", ok: false } },
+    { content: [], details: { kind: "workbook_history", action: "restore", error: "Restore incomplete" } },
+  ];
+  for (const receipt of receipts) {
+    const f = fixture(true);
+    await f.tool("extension_custom", false, f.controller, receipt).execute("failed", {});
+    await f.controller.resultCommitted("failed");
+    assert.equal((await f.open().pending()).length, 1);
+    await assert.rejects(f.tool().execute("next", {}), /pending/u);
+    const review = await f.controller.reconcile("failed");
+    await f.controller.resolve("failed", review.observationToken);
+    assert.equal(f.effects(), 1);
+  }
+});
+
+void test("logical task IDs distinguish reused provider IDs while blocking same-task replay", async () => {
+  const f = fixture();
+  for (const taskId of ["conversation-a/task-1", "conversation-a/task-2", "conversation-b/task-1"]) {
+    const tool = f.tool("write_cells", false, f.controller, undefined, () => taskId);
+    await tool.execute("provider-reused-id", {});
+    await f.controller.resultCommitted(taskId);
+    assert.equal(f.records.get(taskId)?.toolCallId, "provider-reused-id");
+    await assert.rejects(tool.execute("provider-reused-id", {}), /replay/u);
+  }
+  assert.equal(f.effects(), 3);
+  assert.equal(f.records.size, 3);
 });
 
 void test("structural identity changes invalidate matching cell contents", async () => {
@@ -166,9 +205,25 @@ void test("malformed or legacy journal records cannot become absent or completed
 
 void test("production generic/WPS intent omits executable code and cannot claim applied/unchanged", async () => {
   const host = createWorkbookMutationHost({ kind: "wps", getWorkbookId: () => Promise.resolve("book") });
-  const plan = await host.prepare({ toolCallId: "generic", toolName: "execute_wps_js", workbookId: "book", sessionId: "s",
+  const plan = await host.prepare({ mutationId: "task/generic", toolCallId: "generic", toolName: "execute_wps_js", workbookId: "book", sessionId: "s",
     params: { code: "sensitive arbitrary script", password: "sensitive argument" } });
   assert.equal(plan.before.complete, false);
-  assert.equal(plan.requiresReview, true);
   assert.doesNotMatch(JSON.stringify(plan), /sensitive/u);
 });
+
+for (const incomplete of [false, true]) {
+  void test(`prepared intent reports conflict for user edits or incomplete observations (${incomplete})`, async () => {
+    const f = fixture(incomplete);
+    f.failSave("dispatched");
+    await assert.rejects(f.tool().execute("prepared", {}), /commit unavailable/u);
+    f.failSave(null);
+    if (!incomplete) f.edit([["user edit", 99]]);
+    const review = await f.controller.reconcile("prepared");
+    assert.equal(review.classification, "conflict");
+    assert.match(review.reason, /never entered/u);
+    await f.controller.resolve("prepared", review.observationToken);
+    assert.equal(f.effects(), 0);
+    assert.deepEqual((await f.controller.reconcile("prepared")).observation.state,
+      incomplete ? [["old", 17]] : [["user edit", 99]]);
+  });
+}

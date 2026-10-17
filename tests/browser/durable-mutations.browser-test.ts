@@ -21,7 +21,7 @@ const boot = `(async () => {
   window.Excel = window.host.excel;
   const db = await new Promise((resolve, reject) => {
     const request = indexedDB.open('mutation-journal-test', 1);
-    request.onupgradeneeded = () => request.result.createObjectStore('records', {keyPath:'toolCallId'});
+    request.onupgradeneeded = () => request.result.createObjectStore('records', {keyPath:'mutationId'});
     request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error);
   });
   const transaction = (mode, work) => new Promise((resolve, reject) => {
@@ -38,7 +38,8 @@ const boot = `(async () => {
   window.mutations = createMutationController({workbookId:'book', store, coordinator,
     host:createWorkbookMutationHost({kind:'office', getWorkbookId:async ()=>'book'}), allowFaultInjection:true});
   window.wrap = tool => withWorkbookCoordinator([tool], coordinator,
-    {getWorkbookId:async ()=>'book', getSessionId:()=>'s'}, undefined, {mutationGate:window.mutations})[0];
+    {getWorkbookId:async ()=>'book', getSessionId:()=>'s'}, undefined,
+    {mutationGate:window.mutations, getMutationId:id=>id})[0];
   window.tool = window.wrap(createWriteCellsTool({
     appendAuditEntry:async () => {}, appendRecoverySnapshot:async () => null
   }));
@@ -99,7 +100,6 @@ void test("real Office JS runner journals named-item changes but never treats th
       const tool = window.wrap(createExecuteOfficeJsTool());
       const result = await tool.execute('named-item', {explanation:'Create revenue name',
         code:'context.workbook.names.add("Revenue", "=Original!$A$1"); await context.sync(); return 42;'});
-      await window.mutations.resultCommitted('named-item');
       return {result, pending:await window.mutations.pending(), review:await window.mutations.reconcile('named-item'),
         writes:window.host.writes(), names:window.host.names()};
     })()`);
@@ -111,5 +111,9 @@ void test("real Office JS runner journals named-item changes but never treats th
     assert.doesNotMatch(JSON.stringify(result.pending), /context\.workbook\.names\.add/u);
     await assert.rejects(opened.page.evaluate(`window.write('new-call')`), /pending/u);
     assert.equal(await opened.page.evaluate(`window.host.writes()`), 1);
+    await opened.page.evaluate(`window.mutations.resultCommitted('named-item')`);
+    assert.deepEqual(await opened.page.evaluate(`window.mutations.pending()`), []);
+    await opened.page.evaluate(`window.write('new-call')`);
+    assert.equal(await opened.page.evaluate(`window.host.writes()`), 2);
   } finally { await opened.finish(); }
 });

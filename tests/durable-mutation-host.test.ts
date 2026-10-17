@@ -24,12 +24,13 @@ function journal() {
   const host = createWorkbookMutationHost({ kind: "office", getWorkbookId: () => Promise.resolve("book") });
   const store = { load: (id: string) => Promise.resolve(structuredClone(records.get(id) ?? null)),
     list: () => Promise.resolve(structuredClone([...records.values()])),
-    save: (record: MutationRecord) => { records.set(record.toolCallId, structuredClone(record)); return Promise.resolve(); } };
+    save: (record: MutationRecord) => { records.set(record.mutationId, structuredClone(record)); return Promise.resolve(); } };
   const controller = createMutationController({ workbookId: "book", store, host, coordinator, allowFaultInjection: true });
   const tools = withWorkbookCoordinator([
     createWriteCellsTool({ appendAuditEntry: async () => {}, appendRecoverySnapshot: () => Promise.resolve(null) }),
     createModifyStructureTool(),
-  ], coordinator, { getWorkbookId: () => Promise.resolve("book"), getSessionId: () => "s" }, undefined, { mutationGate: controller });
+  ], coordinator, { getWorkbookId: () => Promise.resolve("book"), getSessionId: () => "s" }, undefined,
+  { mutationGate: controller, getMutationId: (id) => id });
   const write = tools[0], structure = tools[1];
   assert.ok(write && structure);
   return { records, controller, write, structure, host };
@@ -105,6 +106,9 @@ void test("changing the active sheet while intent commits blocks an unqualified 
     for (let i = 0; i < 100 && !j.controller.status().paused; i++) await new Promise<void>((resolve) => setImmediate(resolve));
     assert.equal(j.controller.status().paused, "beforeDispatch");
     activateOther();
+    const review = await j.controller.reconcile("write");
+    assert.equal(review.classification, "conflict");
+    assert.match(review.reason, /never entered/u);
     j.controller.resume();
     await rejected;
     assert.equal(f.writes(), 0);
