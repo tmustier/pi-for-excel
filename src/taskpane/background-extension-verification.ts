@@ -1,3 +1,4 @@
+import { prepareDurableReload } from "../durable/model-recovery.js";
 import type { ConnectionManager } from "../connections/manager.js";
 import {
   loadConnectionStoreDocumentForUpdate,
@@ -345,7 +346,10 @@ export async function stageInlineExtensionUpgrade(
 }
 
 function scheduleTaskpaneReload(): JsonRecord {
-  window.setTimeout(() => window.location.reload(), 100);
+  window.setTimeout(() => {
+    prepareDurableReload();
+    window.location.reload();
+  }, 100);
   return { scheduled: true };
 }
 
