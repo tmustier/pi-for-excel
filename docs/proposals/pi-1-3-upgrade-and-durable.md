@@ -1,6 +1,6 @@
 # Pi 1.3 upgrade and Pi Durable evaluation
 
-**Status:** Step 1 tested in Excel and merged (#765). Step 2 implemented, tested in Chromium and tested in Excel. Recovery after a pane reload does not work in Excel as built, so we should not migrate yet.
+**Status:** Step 1 tested in Excel and merged (#765). Step 2 implemented, tested in Chromium and tested in Excel. We have decided to migrate to Pi Durable (Step 3). The first task is to fix recovery after a pane reload, which does not work in Excel as built.
 **Written:** 2026-10-17
 
 ## Summary
@@ -8,6 +8,8 @@
 Pi for Excel ships `@earendil-works/pi-ai` and `@earendil-works/pi-agent-core` at 0.87.0, and the latest published versions are 1.3.0. We plan to upgrade the existing runtime to 1.3.0 first, and to evaluate Pi Durable separately in a prototype.
 
 We considered moving straight to Pi Durable, because the version gap means we have to do migration work anyway. The evidence below shows that the upgrade is small, while a Durable migration would replace our session, queue, and compaction code and would not solve the hardest Excel problem.
+
+After the upgrade and the prototype, we decided to migrate to Pi Durable. Step 3 below sets out the work.
 
 ## Why we upgrade first
 
@@ -93,6 +95,18 @@ The prototype must answer these questions before we decide to migrate:
 5. What happens when two panes open the same storage?
 
 The prototype should start with read-only tools and keep every mutating tool on Durable's default, which does not replay after a crash.
+
+### Step 3: migrate to Pi Durable
+
+The prototype answered the five questions well enough to decide. We will move the taskpane from `Agent` to Pi Durable. The work stays behind the `durable_runtime` flag until the last task in this list. Each task needs the automated suites and a model-driven Excel test before it counts as done.
+
+1. **Fix recovery after a pane reload.** When the pane reloads during a model reply, WebKit cancels the request, and Durable must leave the request unfinished instead of saving the error as the final answer. Fix this in our `Models` adapter first. If Durable itself needs a change, decide that separately. Done means a reload during a model reply resumes the run in Excel every time, with the same conversation and no duplicate tool calls.
+2. **Recover every workbook-changing tool.** Give each mutating tool what `write_cells` has now: an intent record before the Excel sync, and a check afterwards that reports `applied`, `unchanged` or `conflict` without writing. Inserts and structural changes also record stable sheet and table IDs and the surrounding contents. Never replay a mutation automatically. Show the user any uncertain or conflicting change and let them resolve it, then unblock later writes. Make the interrupted tool result clear enough that the model does not report success.
+3. **Make storage ready for real use.** Load and prune the journal so long conversations do not grow memory without limit. Request persistent storage, and handle eviction and corrupt data without losing the user's work silently. Clean up databases for workbooks that no longer exist.
+4. **Move existing sessions across.** On first open with Durable, import each workbook's existing sessions, including compacted and archived ones, and keep the originals until the migration is complete.
+5. **Move the UI onto Durable.** Chat rendering, history, tabs, compaction cards, export, queued prompts and tool disclosure read from Durable instead of `Agent`. Turn automatic compaction and overflow recovery back on, using Durable's compaction.
+6. **Move extensions onto Durable.** Give extensions that read agent state, events or messages a Durable-backed version of those APIs, and keep extension tools unsafe to replay by default.
+7. **Switch over.** Turn the flag on by default once tasks 1 to 6 pass in Excel. Remove the `Agent` runtime and the old session, queue and compaction code after a release with no regressions (agent default, not requested).
 
 ## Step 2 findings
 
