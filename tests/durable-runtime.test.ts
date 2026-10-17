@@ -9,6 +9,73 @@ import { createAllTools } from "../src/tools/index.ts";
 import { createOfficeStreamFn, getPayloadSnapshots } from "../src/auth/stream-proxy.ts";
 import { setDebugEnabled } from "../src/debug/debug.ts";
 import { ProviderCredentialsStore } from "../src/storage/local/provider-credentials-store.ts";
+import { createAssistantMessageEventStream } from "@earendil-works/pi-ai";
+import { createModelRecoveryLifecycle, prepareDurableReload, type ModelRecoveryLifecycle } from "../src/durable/model-recovery.ts";
+
+for (const navigation of ["beforeunload", "pagehide", "explicit reload", "none"]) {
+  void test(`routed Durable request remains recoverable after ${navigation}`, async () => {
+    // Keep the disposable memory store available to a second Harness, like a
+    // persistent backend reopened by a new page. This is not a storage test.
+    class ReopenableMemory extends MemoryStorage {
+      override async close(): Promise<void> {}
+    }
+    const storage = new ReopenableMemory();
+    const target = new EventTarget();
+    const models = createModels();
+    const faux = fauxProvider({ models: [{ id: "recovery" }], tokensPerSecond: Infinity });
+    models.setProvider(faux.provider);
+    const model = faux.getModel();
+    let lifecycle: ModelRecoveryLifecycle | undefined;
+    let started: (() => void) | undefined;
+    const requestStarted = new Promise<void>((resolve) => { started = resolve; });
+    const source = createAssistantMessageEventStream();
+    const runtime = await openDurableRuntime({
+      storage, workbookId: "recovery", model: { provider: model.provider, modelId: model.id },
+      models: routeModels(models, () => { started?.(); return source; }, () => lifecycle),
+      onOpened: (harness) => {
+        lifecycle = createModelRecoveryLifecycle(() => harness.close(context), target);
+      },
+      buildCapabilities: () => Promise.resolve({ tools: [], systemPrompt: "Recovery test" }),
+    });
+    try {
+      const submitted = await runtime.conversation.submit({ type: "input", content: "Resume me", requestId: "once" }, context);
+      await requestStarted;
+      source.push({ type: "error", reason: "error", error: {
+        ...fauxAssistantMessage(""), stopReason: "error", errorMessage: "Load failed",
+      } });
+      if (navigation === "none") {
+        const settled = await submitted.wait(context);
+        assert.equal(settled.status, "unanswered");
+        assert.match(JSON.stringify(await runtime.conversation.context(context)), /Load failed/);
+        return;
+      }
+      setTimeout(() => {
+        if (navigation === "explicit reload") prepareDurableReload(target);
+        else target.dispatchEvent(new Event(navigation));
+      }, 0);
+      await runtime.harness.closed;
+      lifecycle?.dispose();
+      faux.setResponses([fauxAssistantMessage("Recovered answer")]);
+      const reopened = await openDurableRuntime({
+        storage, workbookId: "recovery", model: { provider: model.provider, modelId: model.id }, models,
+        buildCapabilities: () => Promise.resolve({ tools: [], systemPrompt: "Recovery test" }),
+      });
+      try {
+        assert.equal(reopened.conversation.id, runtime.conversation.id);
+        const receipt = await reopened.harness.submission(submitted.id, context);
+        assert.ok(receipt);
+        assert.equal((await receipt.wait(context)).status, "done");
+        const entries = (await reopened.conversation.entries({}, 100, undefined, context)).items;
+        assert.equal(entries.filter((entry) => entry.kind === "pi.user").length, 1);
+        assert.match(JSON.stringify(entries), /Recovered answer/);
+        assert.doesNotMatch(JSON.stringify(entries), /Load failed/);
+      } finally { await reopened.harness.close(context); }
+    } finally {
+      lifecycle?.dispose();
+      await runtime.harness.close(context);
+    }
+  });
+}
 
 void test("only exclusively read-only workbook tools opt into Durable replay", () => {
   const tools = adaptTools(createAllTools());
