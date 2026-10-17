@@ -8,6 +8,7 @@
  */
 
 import { Type, type Static } from "typebox";
+import { Value } from "typebox/value";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import type { WriteCellsDetails } from "./tool-details.js";
 import {
@@ -82,7 +83,28 @@ type WriteCellsResult =
 type BlockedWriteCellsResult = Extract<WriteCellsResult, { blocked: true }>;
 type SuccessWriteCellsResult = Extract<WriteCellsResult, { blocked: false }>;
 
-interface WriteCellsToolDependencies {
+const mutationGridSchema = Type.Array(Type.Array(Type.Union([
+  Type.String(), Type.Number(), Type.Boolean(), Type.Null(),
+])));
+export type WriteCellsGrid = Static<typeof mutationGridSchema>;
+
+export interface WriteCellsIntent {
+  toolCallId: string;
+  sheetId: string;
+  sheetName: string;
+  range: string;
+  beforeValues: WriteCellsGrid;
+  beforeFormulas: WriteCellsGrid;
+  intendedValues: WriteCellsGrid;
+}
+
+export interface WriteCellsHooks {
+  beforeSync?: (intent: WriteCellsIntent) => Promise<void>;
+  afterSync?: (toolCallId: string) => Promise<void>;
+  beforeResult?: (toolCallId: string) => Promise<void>;
+}
+
+interface WriteCellsToolDependencies extends WriteCellsHooks {
   appendAuditEntry: MutationFinalizeDependencies["appendAuditEntry"];
   appendRecoverySnapshot: (
     args: AppendWorkbookRecoverySnapshotArgs,
@@ -120,6 +142,11 @@ export function createWriteCellsTool(
       toolCallId: string,
       params: Params,
     ): Promise<AgentToolResult<WriteCellsDetails>> => {
+      let committed = false;
+      let hookFailed = false;
+      const runHook = async (action: () => Promise<void>): Promise<void> => {
+        try { await action(); } catch (error) { hookFailed = true; throw error; }
+      };
       try {
         if (!params.values || params.values.length === 0) {
           return {
@@ -165,7 +192,7 @@ export function createWriteCellsTool(
 
         const result = await excelRun<WriteCellsResult>(async (context) => {
           const { sheet } = getRange(context, params.start_cell);
-          sheet.load("name");
+          sheet.load(dependencies.beforeSync ? "name,id" : "name");
 
           const rangeAddr = computeRangeAddress(startCellRef, rows, cols);
           const targetRange = sheet.getRange(rangeAddr);
@@ -189,9 +216,23 @@ export function createWriteCellsTool(
             }
           }
 
+          if (dependencies.beforeSync) {
+            if (!Value.Check(mutationGridSchema, beforeValues)
+              || !Value.Check(mutationGridSchema, beforeFormulas)
+              || !Value.Check(mutationGridSchema, padded)) {
+              throw new Error("Unsupported cell data for mutation recording");
+            }
+            await runHook(() => dependencies.beforeSync?.({
+              toolCallId, sheetId: sheet.id, sheetName: sheet.name, range: rangeAddr,
+              beforeValues, beforeFormulas, intendedValues: padded,
+            }) ?? Promise.resolve());
+          }
+
           // Write
           targetRange.values = padded;
           await context.sync();
+          committed = true;
+          if (dependencies.afterSync) await runHook(() => dependencies.afterSync?.(toolCallId) ?? Promise.resolve());
 
           // Read back to verify
           const verify = sheet.getRange(rangeAddr);
@@ -253,8 +294,17 @@ export function createWriteCellsTool(
           },
         });
 
+        if (dependencies.beforeResult) await runHook(() => dependencies.beforeResult?.(toolCallId) ?? Promise.resolve());
         return successResult;
       } catch (e) {
+        // Recording failures must reach the durable host, not become a failed-write receipt.
+        if (hookFailed) throw e;
+        if (committed && (dependencies.beforeSync || dependencies.afterSync || dependencies.beforeResult)) {
+          return {
+            content: [{ type: "text", text: "Cells were written, but post-write verification or bookkeeping did not complete. Read the range before retrying." }],
+            details: { kind: "write_cells", blocked: false },
+          };
+        }
         return {
           content: [{ type: "text", text: `Error writing cells: ${getErrorMessage(e)}` }],
           details: { kind: "write_cells", blocked: false },
@@ -494,4 +544,3 @@ function formatSuccess(result: SuccessWriteCellsResult, rows: number, cols: numb
 
   return { content: [{ type: "text", text: lines.join("\n") }], details };
 }
-

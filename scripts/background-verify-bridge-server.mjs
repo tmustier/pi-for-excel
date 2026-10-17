@@ -70,6 +70,13 @@ function usage() {
   PI_BACKGROUND_VERIFY_TOKEN=<token> PI_BACKGROUND_VERIFY_HOST=localhost node scripts/background-verify-bridge-server.mjs command modelsList '{"provider":"ext.example.probe"}'
   PI_BACKGROUND_VERIFY_TOKEN=<token> PI_BACKGROUND_VERIFY_HOST=localhost node scripts/background-verify-bridge-server.mjs command listCharts
 
+  # Isolated Durable prototype. Reload using the existing command after setting the flag.
+  node scripts/background-verify-bridge-server.mjs command setExperiment '{"feature":"durable_runtime","enabled":true}'
+  node scripts/background-verify-bridge-server.mjs command reloadTaskpane
+  node scripts/background-verify-bridge-server.mjs command durableFault '{"point":"beforeSync"}'
+  node scripts/background-verify-bridge-server.mjs command durableSubmit '{"text":"Write 7 into Sheet1!A1","requestId":"durable-probe-1"}'
+  node scripts/background-verify-bridge-server.mjs command durableStatus
+
   # With the real taskpane connected, run the complete sandbox extension-provider adversarial scenario:
   PI_BACKGROUND_VERIFY_TOKEN=<token> PI_BACKGROUND_VERIFY_HOST=localhost npm run smoke:extension-provider
 `;

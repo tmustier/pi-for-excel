@@ -10,6 +10,7 @@ import { ALLOW_REMOTE_EXTENSION_URLS_STORAGE_KEY } from "../commands/extension-s
 import { dispatchExperimentalFeatureChanged } from "./events.js";
 
 export type ExperimentalFeatureId =
+  | "durable_runtime"
   | "ui_dark_mode"
   | "remote_extension_urls"
   | "extension_permission_gates"
@@ -35,6 +36,15 @@ export interface ExperimentalFeatureDefinition {
 
 function getFeatures(): readonly ExperimentalFeatureDefinition[] {
   return [
+    {
+      id: "durable_runtime",
+      slug: "durable-runtime",
+      aliases: [],
+      title: t("experimental.durable.title"),
+      description: t("experimental.durable.desc"),
+      wiring: "wired",
+      storageKey: "pi.experimental.durableRuntime",
+    },
     {
       id: "ui_dark_mode",
       slug: "dark-mode",

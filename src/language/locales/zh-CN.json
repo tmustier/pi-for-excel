@@ -159,6 +159,8 @@
   "experimental.usage.tmux_status": "用法：/experimental tmux-status",
   "experimental.widget_v2.desc": "启用增量的多组件生命周期 API（upsert/remove/clear）并支持确定性定位",
   "experimental.widget_v2.title": "扩展组件 API v2",
+  "experimental.durable.title": "Durable 运行时原型",
+  "experimental.durable.desc": "通过验证桥启用独立的恢复原型。普通聊天不变。切换后请重新加载。",
   "export.toast.audit_copied": "审计日志已复制（{count} 条记录，{size}KB）",
   "export.toast.audit_downloaded": "已下载审计日志（{count} 条记录）",
   "export.toast.audit_export_failed": "审计导出失败：{error}",

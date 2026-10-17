@@ -3,6 +3,8 @@
  */
 
 import type { Agent } from "@earendil-works/pi-agent-core";
+import type { AnyCoreTool } from "../tools/registry.js";
+import type { WriteCellsHooks } from "../tools/write-cells.js";
 
 import {
   shouldForkModelSwitch,
@@ -24,6 +26,7 @@ export interface SessionRuntime {
   persistence: SessionPersistenceController;
   lockState: RuntimeLockState;
   refreshCapabilities: () => Promise<void>;
+  buildDurableCapabilities?: (hooks: WriteCellsHooks) => Promise<{ tools: AnyCoreTool[]; systemPrompt: string }>;
   dispose: () => void;
 }
 

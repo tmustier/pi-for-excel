@@ -21,6 +21,7 @@ import type { BrowserModelRuntime } from "../models/browser-model-runtime.js";
 import { getAppStorage } from "../storage/local/app-storage.js";
 import type { SessionRuntime } from "./session-runtime-manager.js";
 import type { SettingsWriter } from "../storage/local/settings-store.js";
+import type { DurableTaskpane } from "../durable/taskpane.js";
 
 export const EXTENSION_VERIFICATION_COMMAND_TYPES = [
   "assertLastAssistantText",
@@ -37,6 +38,12 @@ export const EXTENSION_VERIFICATION_COMMAND_TYPES = [
   "setExperiment",
   "stageInlineExtensionUpgrade",
   "reloadTaskpane",
+  "durableStatus",
+  "durableSubmit",
+  "durableFault",
+  "durableResumeFault",
+  "durableReconcile",
+  "durableImport",
 ] as const;
 
 export type ExtensionVerificationCommandType =
@@ -47,6 +54,7 @@ interface JsonRecord {
 }
 
 export interface ExtensionVerificationOptions {
+  durable?: DurableTaskpane;
   getActiveRuntime: () => SessionRuntime | null;
   extensionManager: ExtensionRuntimeManager;
   connectionManager: ConnectionManager;
@@ -147,6 +155,7 @@ function parseExtensionCapability(value: string): ExtensionCapability {
 
 function parseExperimentalFeatureId(value: string): ExperimentalFeatureId {
   switch (value) {
+    case "durable_runtime":
     case "ui_dark_mode":
     case "remote_extension_urls":
     case "extension_permission_gates":
@@ -350,6 +359,14 @@ export async function executeExtensionVerificationCommand(
   options: ExtensionVerificationOptions,
 ): Promise<unknown> {
   switch (type) {
+    case "durableStatus":
+    case "durableSubmit":
+    case "durableFault":
+    case "durableResumeFault":
+    case "durableReconcile":
+    case "durableImport":
+      if (!options.durable) throw new Error("Enable durable_runtime and reload the taskpane first");
+      return options.durable.execute(type, JSON.stringify(payload ?? {}));
     case "assertLastAssistantText":
       return assertLastAssistantText(payload, options);
     case "extensionInstallCode":

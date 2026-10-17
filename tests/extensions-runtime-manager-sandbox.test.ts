@@ -7,6 +7,11 @@ import {
   type TextContent,
 } from "@earendil-works/pi-ai";
 import { Agent } from "@earendil-works/pi-agent-core";
+import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
+import { MemoryStorage } from "@earendil-works/pi-durable";
+import { createAssistantMessageEventStream } from "@earendil-works/pi-ai";
+import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai/providers/faux";
+import { openDurableRuntime, routeModels } from "../src/durable/runtime.ts";
 
 import { ConnectionManager } from "../src/connections/manager.ts";
 import { CONNECTION_STORE_KEY } from "../src/connections/store.ts";
@@ -1583,6 +1588,10 @@ void test("extension model providers use host-owned connection secrets and unloa
         connection: "account",
         apiKeySecret: "apiKey",
       });
+      api.registerTool("durable_extension_probe", {
+        description: "Return an extension result", parameters: Type.Object({}),
+        execute: () => ({ content: [{ type: "text", text: "extension executed" }], details: undefined }),
+      });
 
       return {
         deactivate: () => Promise.resolve(),
@@ -1607,6 +1616,32 @@ void test("extension model providers use host-owned connection secrets and unloa
     },
   );
   assert.deepEqual(manager.list()[0]?.modelProviderIds, [providerId]);
+
+  // Same extension registry and provider credentials, a real Durable run, and
+  // a stub only at the outbound model stream boundary.
+  const routed = routeModels(modelRuntime.models, (model, transcript, options) => {
+    assert.equal(model.provider, providerId);
+    assert.equal(options?.apiKey, "host-secret");
+    const toolResult = transcript.messages.find((message) => message.role === "toolResult");
+    const message = toolResult
+      ? fauxAssistantMessage("extension completed")
+      : fauxAssistantMessage(fauxToolCall("durable_extension_probe", {}), { stopReason: "toolUse" });
+    const stream = createAssistantMessageEventStream();
+    stream.push({ type: "done", reason: toolResult ? "stop" : "toolUse", message });
+    return Promise.resolve(stream);
+  });
+  const durable = await openDurableRuntime({
+    storage: new MemoryStorage(), models: routed, workbookId: "extension-test",
+    model: { provider: providerId, modelId: "baseline-model" },
+    buildCapabilities: () => Promise.resolve({ tools: manager.getRegisteredTools(), systemPrompt: "Extension test" }),
+  });
+  try {
+    const submission = await durable.conversation.submit({ type: "input", content: "Call the extension" }, BACKGROUND_CONTEXT);
+    assert.equal((await submission.wait(BACKGROUND_CONTEXT)).status, "done");
+    const transcript = await durable.conversation.context(BACKGROUND_CONTEXT);
+    assert.match(JSON.stringify(transcript.messages), /extension executed/);
+    assert.doesNotMatch(JSON.stringify(transcript), /host-secret/);
+  } finally { await durable.harness.close(BACKGROUND_CONTEXT); }
 
   await manager.setExtensionEnabled("ext.provider.test", false);
   assert.equal(modelRuntime.models.getProvider(providerId), undefined);

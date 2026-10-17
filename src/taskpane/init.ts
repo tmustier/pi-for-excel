@@ -157,6 +157,8 @@ import { getThinkingLevels, installKeyboardShortcuts } from "./keyboard-shortcut
 import { createQueueDisplay } from "./queue-display.js";
 import { createActionQueue } from "./action-queue.js";
 import { maybeStartBackgroundVerificationBridge } from "./background-verification-bridge.js";
+import { isExperimentalFeatureEnabled } from "../experiments/flags.js";
+import type { WriteCellsHooks } from "../tools/write-cells.js";
 import { RecentlyClosedStack, type RecentlyClosedItem } from "./recently-closed.js";
 import { setupSessionPersistence } from "./sessions.js";
 import {
@@ -793,7 +795,7 @@ export async function initTaskpane(opts: {
 
     let runtimeAgent: Agent | null = null;
 
-    const buildRuntimeCapabilities = async (sessionId: string): Promise<{
+    const buildRuntimeCapabilities = async (sessionId: string, writeCellsHooks?: WriteCellsHooks): Promise<{
       tools: ReturnType<typeof withWorkbookCoordinator>;
       systemPrompt: string;
       extensionToolRevision: number;
@@ -809,6 +811,7 @@ export async function initTaskpane(opts: {
         getExtensionManager: () => extensionManager,
         getSessionId: () => runtimeAgent?.sessionId ?? runtimeSessionId,
         skillReadCache: runtimeSkillReadCache,
+        ...(writeCellsHooks ? { writeCellsHooks } : {}),
       }).filter(isRuntimeAgentTool);
 
       const gatedCoreTools = await applyExperimentalToolGates(coreTools, {
@@ -1072,6 +1075,7 @@ export async function initTaskpane(opts: {
       persistence,
       lockState: "idle",
       refreshCapabilities: refreshRuntimeCapabilities,
+      buildDurableCapabilities: (hooks) => buildRuntimeCapabilities(runtimeSessionId, hooks),
       dispose: () => {
         runtimeSkillReadCache.clearAll();
         unsubscribeSessionCapabilitySync();
@@ -2001,6 +2005,15 @@ export async function initTaskpane(opts: {
   };
 
   // ── Dev-only background verification bridge ──
+  const durable = isExperimentalFeatureEnabled("durable_runtime")
+    ? await import("../durable/taskpane.js").then((module) => module.createDurableTaskpane({
+      getActiveRuntime,
+      models: modelRuntime.models,
+      streamFn,
+      getWorkbookContext: resolveWorkbookContext,
+      allowFaultInjection: import.meta.env.DEV,
+    }))
+    : undefined;
   const backgroundVerificationBridge = maybeStartBackgroundVerificationBridge({
     sidebar,
     getWorkbookContext: resolveWorkbookContext,
@@ -2008,6 +2021,7 @@ export async function initTaskpane(opts: {
     extensionManager,
     connectionManager,
     modelRuntime,
+    ...(durable ? { durable } : {}),
     refreshModels: async (allowNetwork) => {
       await modelRefreshOwner.refresh(allowNetwork);
       return { errors: [...modelRefreshOwner.snapshot().providerErrors] };
