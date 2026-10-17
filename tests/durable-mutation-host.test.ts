@@ -115,3 +115,70 @@ void test("changing the active sheet while intent commits blocks an unqualified 
     assert.equal((await j.controller.pending()).length, 1);
   });
 });
+
+void test("one-cell write on a full-sheet synthetic used range loads only the target and adjacent cells", async () => {
+  await withOffice(async (f) => {
+    f.setUsedRange("A1:XFD1048576");
+    const loaded = new Set<string>();
+    f.onRangeLoad((address, properties) => {
+      if (!/values|formulas/u.test(properties)) return;
+      loaded.add(address);
+      // Prevent a broken observer from allocating the synthetic sheet in this test.
+      if (address === "A1:XFD1048576") throw new Error("Full-sheet data load forbidden");
+    });
+    const j = journal();
+    const params = { start_cell: "A1", values: [["replacement"]], allow_overwrite: true };
+    await j.write.execute("bounded", params);
+    assert.deepEqual([...loaded].sort(), ["A1:A1", "A2", "B1"]);
+    assert.deepEqual(f.read(), [["replacement", 17], ["anchor", 29]]);
+    assert.deepEqual(j.records.get("bounded")?.intent, params);
+    assert.equal((await j.controller.reconcile("bounded")).classification, "applied");
+    assert.match(j.records.get("bounded")?.before.limitation ?? "", /does not prove unrelated sheet state/u);
+    await assert.rejects(j.write.execute("bounded", params), /replay/u);
+    await assert.rejects(j.write.execute("retry", params), /pending/u);
+    assert.equal(f.writes(), 1);
+  });
+});
+
+void test("adjacent evidence preserves full multi-cell intent and respects the last Excel cell", async () => {
+  await withOffice(async (f) => {
+    const loaded = new Set<string>();
+    f.onRangeLoad((address, properties) => { if (/values|formulas/u.test(properties)) loaded.add(address); });
+    const j = journal();
+    const params = { start_cell: "C3", values: [[11, 12, 13], [21, 22, 23]] };
+    const plan = await j.host.prepare({ mutationId: "rectangle", toolCallId: "raw", toolName: "write_cells",
+      workbookId: "book", sessionId: "s", params });
+    assert.deepEqual(plan.intent, params);
+    assert.deepEqual(plan.expected?.state, [{ range: "C3:E4", content: params.values }]);
+    assert.deepEqual([...loaded].sort(), ["B3", "B4", "C2", "C3:E4", "C5", "E2", "E5", "F3", "F4"]);
+    loaded.clear();
+    await j.host.prepare({ mutationId: "edge", toolCallId: "raw", toolName: "write_cells",
+      workbookId: "book", sessionId: "s", params: { start_cell: "XFD1048576", values: [[31]] } });
+    assert.deepEqual([...loaded].sort(), ["XFC1048576", "XFD1048575", "XFD1048576:XFD1048576"]);
+  });
+});
+
+void test("structural evidence retains intended row/column regions and IDs without copying sheet contents", async () => {
+  await withOffice(async (f) => {
+    f.setUsedRange("A1:XFD1048576");
+    const dataLoads: string[] = [];
+    f.onRangeLoad((address, properties) => {
+      if (/values|formulas/u.test(properties)) {
+        dataLoads.push(address);
+        throw new Error("Structural journal must not copy sheet data");
+      }
+    });
+    const j = journal();
+    for (const action of ["insert_rows", "delete_rows", "insert_columns", "delete_columns", "duplicate_sheet", "delete_sheet"]) {
+      const params = { action, sheet: "Original", position: 3, count: 2 };
+      const plan = await j.host.prepare({ mutationId: action, toolCallId: "raw", toolName: "modify_structure",
+        workbookId: "book", sessionId: "s", params });
+      assert.deepEqual(plan.intent, params);
+      assert.deepEqual(plan.before.state, { affectedRanges: action.endsWith("rows") ? ["3:4"] : action.endsWith("columns") ? ["C:D"] : [] });
+      assert.match(JSON.stringify(plan.before.structure), /sheet-1/u);
+      assert.equal(plan.before.complete, false);
+      assert.equal(plan.expected, null);
+    }
+    assert.deepEqual(dataLoads, []);
+  });
+});
