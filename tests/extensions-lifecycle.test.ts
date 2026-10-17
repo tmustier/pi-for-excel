@@ -162,18 +162,69 @@ void test("startup deletes stored connections of extensions that are no longer i
   const installedId = await firstPane.installFromModuleSpecifier("Model account", "./model-account.js");
   await connectionManager.updateSecretsFromHost(`${installedId}.account`, { apiKey: "installed-secret" });
 
+  // Storage as an earlier version left it: the same registry, a secret left by
+  // an old uninstall, and no record that the cleanup has run.
   const goneId = "ext.00000000-0000-4000-8000-000000000000";
-  await saveConnectionStoreDocument(settings, {
+  const upgraded = new MemorySettingsStore();
+  await upgraded.set(EXTENSIONS_REGISTRY_STORAGE_KEY, await settings.get(EXTENSIONS_REGISTRY_STORAGE_KEY));
+  await saveConnectionStoreDocument(upgraded, {
     ...(await loadConnectionStoreDocument(settings)),
     [`${goneId}.account`]: { status: "connected", secrets: { apiKey: "orphaned-secret" } },
     "builtin.mcp.servers": { status: "connected", secrets: { token: "mcp-token" } },
   });
 
-  const reloadedPane = createManagerWithConnection(settings, new ConnectionManager({ settings }));
+  const reloadedPane = createManagerWithConnection(upgraded, new ConnectionManager({ settings: upgraded }));
   await reloadedPane.initialize();
 
-  assert.deepEqual(Object.keys(await loadConnectionStoreDocument(settings)).sort(), [
+  assert.deepEqual(Object.keys(await loadConnectionStoreDocument(upgraded)).sort(), [
     "builtin.mcp.servers",
     `${installedId}.account`,
   ]);
+});
+
+void test("startup keeps stored connections when the extension registry is missing", async () => {
+  const settings = new MemorySettingsStore();
+  const keptId = "ext.00000000-0000-4000-8000-000000000001.account";
+  await saveConnectionStoreDocument(settings, {
+    [keptId]: { status: "connected", secrets: { apiKey: "installed-secret" } },
+  });
+
+  await createManagerWithConnection(settings, new ConnectionManager({ settings })).initialize();
+
+  assert.deepEqual(Object.keys(await loadConnectionStoreDocument(settings)), [keptId]);
+});
+
+void test("startup keeps stored connections when an extension registry entry is unreadable", async () => {
+  const settings = new MemorySettingsStore();
+  const unreadableId = "ext.00000000-0000-4000-8000-000000000002";
+  await settings.set(EXTENSIONS_REGISTRY_STORAGE_KEY, {
+    version: 2,
+    items: [{ id: unreadableId, name: "Written by a newer version", source: { kind: "future-kind" } }],
+  });
+  await saveConnectionStoreDocument(settings, {
+    [`${unreadableId}.account`]: { status: "connected", secrets: { apiKey: "installed-secret" } },
+  });
+
+  await createManagerWithConnection(settings, new ConnectionManager({ settings })).initialize();
+
+  assert.deepEqual(Object.keys(await loadConnectionStoreDocument(settings)), [`${unreadableId}.account`]);
+});
+
+void test("startup cleanup of uninstalled extensions' connections runs only once", async () => {
+  const settings = new MemorySettingsStore();
+  await settings.set(EXTENSIONS_REGISTRY_STORAGE_KEY, { version: 2, items: [] });
+  const firstOrphan = "ext.00000000-0000-4000-8000-000000000003.account";
+  await saveConnectionStoreDocument(settings, {
+    [firstOrphan]: { status: "connected", secrets: { apiKey: "orphaned-secret" } },
+  });
+  await createManagerWithConnection(settings, new ConnectionManager({ settings })).initialize();
+  assert.deepEqual(await loadConnectionStoreDocument(settings), {});
+
+  const laterRecord = "ext.00000000-0000-4000-8000-000000000004.account";
+  await saveConnectionStoreDocument(settings, {
+    [laterRecord]: { status: "connected", secrets: { apiKey: "later-secret" } },
+  });
+  await createManagerWithConnection(settings, new ConnectionManager({ settings })).initialize();
+
+  assert.deepEqual(Object.keys(await loadConnectionStoreDocument(settings)), [laterRecord]);
 });
