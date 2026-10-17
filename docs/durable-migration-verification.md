@@ -46,6 +46,14 @@ Replacing the browser-task yield with a microtask makes the pending-unload regre
 
 The direct persistence reader has three fixture tests: listing excludes the ordinary settings database, binary WebKit keys decode, and unrelated or missing database requests fail. It never copies the ordinary pane database, which contains provider credentials.
 
+## IndexedDB version 2 in Excel
+
+Tested revision: `ae77d26`. Opening the same scratch workbook migrated its version-1 database into the new indexed representation. Before migration it had 576 journal batches. After migration, an independent WebKit SQLite read found 76 records, 530 document revisions and 9 request lookups. All counts matched the checksummed manifest. Both sequence and checkpoint were 576, and the redundant journal was empty.
+
+The old conversation ID, entry 76 and completed submission 69 survived. A subsequent live `openai-codex/gpt-6.1-sol` run, with high thinking and the three-cell reverse-order prompt above, resumed after another bridge reload. It called `read_range`, returned the expected values and left the cells unchanged. The version-2 backend's strict transaction durability option works in the tested WebKit host.
+
+Generation expectations, the storage UI, explicit cleanup, concurrent ownership and final runtime wiring still need integrated Excel acceptance. We did not simulate browser eviction, disk exhaustion or power loss in Excel.
+
 ## Remaining acceptance
 
 These checks establish recovery in the prototype path only. Repeat them after integrating the full runtime migration. Session migration, extension behavior, compaction, queues, mutation reconciliation and resolution, storage lifecycle, rendered UI, and all validation suites still need final integrated evidence before the migration is complete.
