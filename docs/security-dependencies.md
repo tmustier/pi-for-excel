@@ -2,7 +2,7 @@
 
 Last verified: 17 October 2026.
 
-The October refresh updates vulnerable transitive dependencies within the existing direct dependency ranges and moves the Axios override to 1.20.0. Pi, TypeScript and the Office tooling stay on their existing major versions. It includes the shell-quote, ip-address, proxy-addr and Handlebars fixes proposed in PRs #758, #759, #762 and #763.
+The October refresh updates vulnerable transitive dependencies within the existing direct dependency ranges and moves the Axios override to 1.20.0. Pi, TypeScript and the direct Office tooling dependencies stay on their existing major versions. It includes the shell-quote, ip-address, proxy-addr and Handlebars fixes proposed in PRs #758, #759, #762 and #763.
 
 ## Temporary node-forge patch
 
