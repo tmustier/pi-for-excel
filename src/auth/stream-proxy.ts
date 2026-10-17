@@ -8,11 +8,11 @@
  * We route requests through a user-configured local CORS proxy when enabled.
  */
 
-import { uuidv7 } from "@earendil-works/pi-agent-core";
 import {
   getCurrentSystemPrompt,
   getCurrentTools,
   hasApi,
+  uuidv7,
 } from "@earendil-works/pi-ai";
 import type {
   Api,

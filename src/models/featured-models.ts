@@ -8,7 +8,7 @@
  * - then "featured" models (latest per provider, pattern-based)
  *   - Anthropic: latest Fable first (post-4.x flagship family), then latest
  *     Sonnet if its version >= latest Opus, then latest Opus
- *   - OpenAI (API + ChatGPT): latest GPT-5 when its version >= latest Codex,
+ *   - OpenAI (API + ChatGPT): latest general GPT when its version >= latest Codex,
  *     then latest Codex
  *   - Google API-key: latest gemini-*-pro*
  *   - Google OAuth (Gemini CLI / Antigravity): prefer stable Gemini before previews

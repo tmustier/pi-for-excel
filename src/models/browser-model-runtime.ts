@@ -1,6 +1,7 @@
 import {
   createModels,
   createProvider,
+  isModelType,
   lazyApi,
   type Api,
   type ApiKeyAuth,
@@ -216,6 +217,8 @@ function sanitizeCatalogEntry(
 ): ModelsStoreEntry {
   const models: Model<Api>[] = [];
   for (const model of entry.models) {
+    // Dynamic browser providers only register chat transports.
+    if (!isModelType(model, "chat")) continue;
     try {
       models.push(createModel({
         providerId,

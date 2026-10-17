@@ -96,12 +96,15 @@ function positionPopover(popover: HTMLDivElement, anchor: Element): void {
   popover.style.visibility = "hidden";
   popover.style.maxHeight = `${Math.max(0, viewportHeight - 16)}px`;
 
+  // Use fractional sizes: offsetWidth/offsetHeight round, which can push the
+  // popover's edge past the inset by a sub-pixel amount.
+  const popoverRect = popover.getBoundingClientRect();
   const layout = resolveStatusPopoverLayout({
     anchor: anchorRect,
     viewportWidth,
     viewportHeight,
-    popoverWidth: popover.offsetWidth,
-    popoverHeight: popover.offsetHeight,
+    popoverWidth: popoverRect.width,
+    popoverHeight: popoverRect.height,
   });
 
   popover.style.left = `${layout.left}px`;

@@ -20,10 +20,11 @@ export function providerPriority(provider: string): number {
   return PROVIDER_ORDER[provider] ?? 999;
 }
 
-const OPENAI_CODEX_RE = /^gpt-5(?:\.(\d+))?-codex(?:-|$)/;
-const OPENAI_PLAIN_GPT_RE = /^gpt-5(?:\.(\d+))?$/;
-const OPENAI_GPT_RE = /^gpt-5(?:[.-]|$)/;
-const OPENAI_GPT_56_TIER_RE = /^gpt-5\.6-(sol|terra|luna)(?:-|$)/;
+// GPT-5 and later major versions (gpt-5.6-sol, gpt-6-astra, gpt-6.1-sol, ...).
+const OPENAI_CODEX_RE = /^gpt-(?:[5-9]|[1-9]\d+)(?:\.\d+)?-codex(?:-|$)/;
+const OPENAI_PLAIN_GPT_RE = /^gpt-(?:[5-9]|[1-9]\d+)(?:\.\d+)?$/;
+const OPENAI_GPT_RE = /^gpt-(?:[5-9]|[1-9]\d+)(?:[.-]|$)/;
+const OPENAI_GPT_TIER_RE = /^gpt-\d+(?:\.\d+)?-(sol|astra|terra|luna)(?:-|$)/;
 
 const MODEL_NAME_BOUNDARY = String.raw`(?:^|[\\/~.:])`;
 const MODEL_VERSION_BOUNDARY = String.raw`(?=$|[-/:])`;
@@ -58,7 +59,7 @@ export function isOpenAiGeneralGptModelId(id: string): boolean {
 }
 
 export function openAiFamilyPriority(id: string): number {
-  // Prefer the latest general GPT-5 model first, then other GPT-5 variants,
+  // Prefer the latest general GPT model first, then other GPT variants,
   // then Codex-specialized variants, then older o-series fallbacks.
   if (OPENAI_PLAIN_GPT_RE.test(id)) return 0;
   if (isOpenAiGeneralGptModelId(id)) return 1;
@@ -69,12 +70,16 @@ export function openAiFamilyPriority(id: string): number {
 }
 
 export function openAiVariantPriority(id: string): number {
-  // GPT-5.6 has no bare alias. Keep its three canonical tiers in the
-  // maintainer-preferred quality/cost order rather than alphabetic order.
-  const tier = id.match(OPENAI_GPT_56_TIER_RE)?.[1];
+  // GPT-5.6 and GPT-6 have no bare alias. Within one version, keep the named
+  // tiers in the maintainer-preferred order rather than alphabetic order:
+  // Sol is the default tier.
+  // agent-default (not a user rule): 2026-10-17 -- Astra (GPT-6's premium tier)
+  // sorts after Sol and before the cheaper Terra/Luna tiers.
+  const tier = id.match(OPENAI_GPT_TIER_RE)?.[1];
   if (tier === "sol") return 0;
-  if (tier === "terra") return 1;
-  if (tier === "luna") return 2;
+  if (tier === "astra") return 1;
+  if (tier === "terra") return 2;
+  if (tier === "luna") return 3;
   return 9;
 }
 

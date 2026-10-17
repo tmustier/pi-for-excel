@@ -1,6 +1,6 @@
 # Model / dependency update playbook
 
-**Last verified:** 2026-09-08
+**Last verified:** 2026-10-17
 
 This repo hardcodes a small set of "featured" and "preferred" model patterns for sorting and default selection. Static built-in models come from Pi AI, while custom and extension providers can add cached, dynamically discovered catalogues at runtime.
 
@@ -23,16 +23,17 @@ Do not use Pi coding-agent's Node/file `ModelRuntime` directly in the Office Web
 
 Manual gateway metadata is a save-time snapshot. Existing entries retain saved limits until edited; clear the context field when re-saving to use current registry defaults. Other manual gateway snapshots are excluded from metadata lookup.
 
-### Current GPT-5.6 registry snapshot (`pi-ai` 0.87.0)
+### Current GPT registry snapshot (`pi-ai` 1.3.0)
 
-Upstream exposes exactly three IDs on both `openai` and `openai-codex`; there is deliberately no bare `gpt-5.6` alias:
+The default OpenAI model is `gpt-6.1-sol` on both `openai` and `openai-codex`. Upstream also exposes `gpt-6-sol`, `gpt-6-astra` and `gpt-6-luna`, and there is deliberately no bare `gpt-6` alias. GPT-6.1 Sol has a 500,000-token context window through ChatGPT and 272,000 tokens through the OpenAI API, and neither route offers the `off` thinking level. Within one version the picker orders tiers Sol, Astra, Terra, Luna.
 
-| ID | Provider | Standard input / output | Cache read / write | Above 272k input / output | Above 272k cache read / write |
-|---|---|---:|---:|---:|---:|
-| `gpt-5.6-sol` | OpenAI API | $4 / $20 | $0.40 / $5 | $8 / $30 | $0.80 / $10 |
-| `gpt-5.6-sol` | ChatGPT | $5 / $30 | $0.50 / $6.25 | $10 / $45 | $1 / $12.50 |
-| `gpt-5.6-terra` | Both | $2 / $12 | $0.20 / $2.50 | $4 / $18 | $0.40 / $5 |
-| `gpt-5.6-luna` | Both | $0.20 / $1.20 | $0.02 / $0.25 | $0.40 / $1.80 | $0.04 / $0.50 |
+GPT-5.6 keeps exactly three IDs on both providers, with no bare `gpt-5.6` alias. Since `pi-ai` 1.x, ChatGPT and the OpenAI API share the same registry prices:
+
+| ID | Standard input / output | Cache read / write | Above 272k input / output | Above 272k cache read / write |
+|---|---:|---:|---:|---:|
+| `gpt-5.6-sol` | $4 / $20 | $0.40 / $5 | $8 / $30 | $0.80 / $10 |
+| `gpt-5.6-terra` | $2 / $12 | $0.20 / $2.50 | $4 / $18 | $0.40 / $5 |
+| `gpt-5.6-luna` | $0.20 / $1.20 | $0.02 / $0.25 | $0.40 / $1.80 | $0.04 / $0.50 |
 
 Prices are registry values in USD per million tokens. All three models:
 
@@ -42,7 +43,7 @@ Prices are registry values in USD per million tokens. All three models:
 - expose `off`, `low`, `medium`, `high`, `xhigh`, and `max` through the OpenAI API; `minimal` is explicitly unavailable
 - expose `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, and `max` through ChatGPT, with the add-in's `minimal` level mapped to upstream `low`
 
-`tests/model-ordering.test.ts` pins this metadata so a future registry change is reviewed rather than silently changing the UI/runtime contract.
+`tests/model-ordering.test.ts` checks default selection, tier ordering and supported GPT-6.1 Sol thinking controls through the app's public interfaces.
 
 ## When to run this
 
@@ -125,7 +126,7 @@ Files:
 - `src/models/thinking-levels.ts` (registry-driven thinking capabilities)
 - `src/taskpane/thinking-display.ts` (localized thinking labels/hints/colors)
 - `src/ui/model-selector-dialog.ts` (first-party model picker UI)
-- `tests/model-ordering.test.ts` (metadata + behavior regressions; run `npm run test:models` — requires Node 22.19+)
+- `tests/model-ordering.test.ts` (selection and thinking-control regressions; run `npm run test:models` — requires Node 22.19+)
 
 We intentionally avoid pinning exact versioned IDs now. Instead we:
 
@@ -139,9 +140,9 @@ We intentionally avoid pinning exact versioned IDs now. Instead we:
     - This is picker ordering only; default selection currently skips Fable because it is in the registry but unavailable for normal Anthropic use.
     - Version compare uses `parseMajorMinor()` where `claude-opus-4-6` → `46`, `claude-opus-4-7` → `47`, `claude-fable-5` → `50`.
     - Important: IDs like `claude-opus-4-20250514` are treated as **major only** (`40`) and the `YYYYMMDD` part is considered a separate date suffix by `modelRecencyScore()`.
-  - **OpenAI (`openai` + `openai-codex`):** latest general `gpt-5.x` *if* its version >= latest `gpt-5.x-codex`, then latest Codex
-    - GPT-5.6 has three explicit tiers and no bare alias. Same-version ordering is `gpt-5.6-sol` → `gpt-5.6-terra` → `gpt-5.6-luna`.
-    - `gpt-5.6-sol` scores as `56`; `gpt-5.5` scores as `55`; `gpt-5.3-codex` scores as `53`.
+  - **OpenAI (`openai` + `openai-codex`):** latest general GPT (`gpt-5.x`, `gpt-6.x`, and later majors) *if* its version >= latest Codex, then latest Codex
+    - GPT-5.6 and GPT-6 have named tiers and no bare alias. Same-version tier order is Sol, Astra, Terra, Luna, so GPT-5.6 orders as `gpt-5.6-sol` → `gpt-5.6-terra` → `gpt-5.6-luna`.
+    - `gpt-6.1-sol` scores as `61`; `gpt-6-sol` scores as `60`; `gpt-5.6-sol` scores as `56`; `gpt-5.5` scores as `55`; `gpt-5.3-codex` scores as `53`.
     - Major-only GPT-5 IDs are also handled (`gpt-5`, `gpt-5-pro`, `gpt-5-codex`).
     - Where a plain ID exists, it beats same-version suffixed variants (`gpt-5.5` before `gpt-5.5-pro`, `gpt-5` before `gpt-5-pro`).
   - **Google (API key):** latest `gemini-*-pro*` (regex: `/^gemini-.*-pro/i`)
@@ -150,7 +151,7 @@ We intentionally avoid pinning exact versioned IDs now. Instead we:
   The ordering logic is driven by:
   - `providerPriority()` (Anthropic → OpenAI Codex → OpenAI → Google → …)
   - `familyPriority()` / `openAiFamilyPriority()` (Opus/Sonnet/Haiku, GPT vs Codex, etc.)
-  - `openAiVariantPriority()` (explicit same-version GPT-5.6 tier order)
+  - `openAiVariantPriority()` (explicit same-version GPT tier order)
   - `parseMajorMinor()` + `modelRecencyScore()` (treats `4-6` / `4.6` as `46`, `5.6` as `56`, keeps embedded date suffixes such as `YYYYMMDD` separate, and ignores later date-like suffixes such as `gpt-4o-2024-11-20` or `gemini-2.5-pro-preview-06-05` when extracting the family version)
   - `compareModels()` (provider + family + recency tie-breaks; deterministic sorting)
 
@@ -158,8 +159,8 @@ We intentionally avoid pinning exact versioned IDs now. Instead we:
 
 - Pick the default model via provider-aware rules:
   - Anthropic is a small special-case: latest Opus by default while Fable is in the registry but unavailable; Sonnet and Fable remain fallbacks if Opus is absent.
-  - OpenAI (`openai` + `openai-codex`) prefers the newest general GPT-5 when it is at least as new as Codex, with Codex as fallback; current GPT-5.6 default is Sol
-  - otherwise `DEFAULT_MODEL_RULES` + `pickLatestMatchingModel()` (uses the injected `Models` runtime to find the newest available ID)
+  - OpenAI (`openai` + `openai-codex`) prefers the newest general GPT when it is at least as new as Codex, with Codex as fallback; the current default is GPT-6.1 Sol
+  - otherwise `DEFAULT_MODEL_RULES` filters and sorts the injected `Models` catalogue by recency
 
 - Populate thinking controls from `getSupportedThinkingLevels()` instead of provider-specific hardcoded lists. This keeps model-level maps authoritative and ensures `xhigh` and `max` remain distinct.
 
