@@ -4,6 +4,7 @@
 
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import type { TSchema } from "typebox";
+import { isJsonValue } from "@earendil-works/chord";
 
 import {
   formatExecutionModeLabel,
@@ -13,6 +14,7 @@ import type { WorkbookCoordinator, WorkbookOperationContext } from "../workbook/
 import { getErrorMessage } from "../utils/errors.js";
 import { getToolContextImpact, getToolExecutionMode, type ToolContextImpact } from "./execution-policy.js";
 import { isUnsupportedHostTool } from "./unsupported-host-tool.js";
+import type { WorkbookMutationGate } from "./mutation/gate.js";
 
 export interface WorkbookCoordinatorContextProvider {
   getWorkbookId: () => Promise<string | null>;
@@ -38,6 +40,8 @@ export interface MutationApprovalRequest {
 }
 
 export interface WorkbookExecutionPolicy {
+  /** Durable gate; entered under the existing write lock for every policy-classified mutation. */
+  mutationGate?: WorkbookMutationGate;
   /** Default: yolo */
   getExecutionMode?: () => Promise<ExecutionMode>;
   /**
@@ -178,9 +182,20 @@ function wrapTool<TParameters extends TSchema, TDetails>(
 
       const out = await coordinator.runWrite(
         context,
-        () => {
+        async () => {
           throwIfAborted(signal);
-          return tool.execute(toolCallId, params, signal, onUpdate);
+          const run = () => {
+            throwIfAborted(signal);
+            return tool.execute(toolCallId, params, signal, onUpdate);
+          };
+          if (!executionPolicy.mutationGate) return run();
+          if (!isJsonValue(params)) throw new Error("Mutation arguments must be JSON serializable");
+          // Identity may have changed while approval or another write held the queue.
+          const workbookId = await contextProvider.getWorkbookId();
+          if (workbookId !== contextWorkbookId) throw new Error("Workbook identity changed while mutation was queued");
+          return executionPolicy.mutationGate.execute({
+            toolCallId, toolName: tool.name, workbookId, sessionId, params,
+          }, run);
         },
       );
 

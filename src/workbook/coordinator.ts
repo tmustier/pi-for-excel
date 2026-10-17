@@ -14,6 +14,8 @@ export interface WorkbookOperationContext {
   opId: string;
   toolName?: string;
   expectedRevision?: number;
+  /** Serialize inspection/journal acknowledgement without claiming a workbook edit. */
+  journalOnly?: boolean;
 }
 
 export type WorkbookCoordinatorEvent =
@@ -180,7 +182,7 @@ export function createWorkbookCoordinator(): WorkbookCoordinator {
         execute: async () => {
           try {
             const result = await fn();
-            state.revision += 1;
+            if (!ctx.journalOnly) state.revision += 1;
             emit({
               type: "completed",
               operationType: "write",
