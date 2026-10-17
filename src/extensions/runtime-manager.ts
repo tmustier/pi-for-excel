@@ -73,6 +73,7 @@ import {
 } from "./runtime-manager-helpers.js";
 import { buildRuntimeManagerActivationBridge } from "./runtime-manager-activation.js";
 import {
+  isExtensionOwnedId,
   qualifyExtensionConnectionId,
   qualifyExtensionProviderId,
 } from "./owner-identifiers.js";
@@ -87,6 +88,9 @@ import type {
 import type { SettingsWriter } from "../storage/local/settings-store.js";
 
 type AnyAgentTool = AgentTool;
+
+/** Installed (non-builtin) extensions get `ext.<uuid>` ids; their connections are `ext.<uuid>.<name>`. */
+const INSTALLED_EXTENSION_ID_PREFIX = "ext.";
 
 interface ExtensionToolExecutionBoundary {
   execute?: unknown;
@@ -285,6 +289,7 @@ export class ExtensionRuntimeManager {
     }
 
     this.entries = await loadStoredExtensions(this.settings);
+    await this.deleteOrphanedConnectionRecords();
 
     for (const entry of this.entries) {
       if (!entry.enabled) {
@@ -371,12 +376,33 @@ export class ExtensionRuntimeManager {
 
     await this.deactivateEntry(entryId);
     this.connectionManager.unregisterDefinitionsByOwner(entryId);
+    await this.connectionManager.deleteStoredRecords(
+      (connectionId) => isExtensionOwnedId(entryId, connectionId),
+    );
     await clearExtensionStorage(this.settings, entryId);
     this.entries.splice(entryIndex, 1);
     this.lastErrors.delete(entryId);
 
     await this.persistEntries();
     this.notify();
+  }
+
+  /**
+   * Removes stored secrets of extensions that are no longer installed. Uninstall
+   * did not delete them before, and each install gets a new id, so nothing else
+   * can reach or clear them.
+   */
+  private async deleteOrphanedConnectionRecords(): Promise<void> {
+    const installedIds = this.entries.map((entry) => entry.id);
+    try {
+      await this.connectionManager.deleteStoredRecords((connectionId) =>
+        connectionId.startsWith(INSTALLED_EXTENSION_ID_PREFIX)
+        && !installedIds.some((entryId) => isExtensionOwnedId(entryId, connectionId)));
+    } catch (error) {
+      console.warn(
+        `[pi] Failed to remove stored connections of uninstalled extensions: ${getRuntimeManagerErrorMessage(error)}`,
+      );
+    }
   }
 
   async installFromUrl(name: string, url: string): Promise<string> {
@@ -598,7 +624,7 @@ export class ExtensionRuntimeManager {
     source: StoredExtensionSource;
   }): Promise<string> {
     const now = new Date().toISOString();
-    const id = `ext.${crypto.randomUUID()}`;
+    const id = `${INSTALLED_EXTENSION_ID_PREFIX}${crypto.randomUUID()}`;
 
     const trust = deriveStoredExtensionTrust(id, input.source);
     const entry: StoredExtensionEntry = {

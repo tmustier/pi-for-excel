@@ -58,6 +58,7 @@ export class ModelRefreshOwner {
   private requestedNetwork = false;
   private activeSync = false;
   private activeNetwork = false;
+  private activeProviderRevision = 0;
 
   constructor(options: {
     modelRuntime: BrowserModelRuntime;
@@ -155,7 +156,10 @@ export class ModelRefreshOwner {
     if (request.syncConfiguredProviders) {
       this.requestedSync = true;
     }
-    if (request.allowNetwork && (!this.activeNetwork || this.requestedSync)) {
+    if (
+      request.allowNetwork
+      && (!this.activeNetwork || this.requestedSync || this.providersChangedDuringPass())
+    ) {
       this.requestedNetwork = true;
     }
 
@@ -167,6 +171,11 @@ export class ModelRefreshOwner {
       this.activeNetwork = false;
     });
     return this.refreshPromise;
+  }
+
+  /** A provider registered after the active pass started is not covered by it. */
+  private providersChangedDuringPass(): boolean {
+    return this.modelRuntime.providerRevision !== this.activeProviderRevision;
   }
 
   private async runRefreshes(): Promise<void> {
@@ -182,6 +191,7 @@ export class ModelRefreshOwner {
         const customProviders = await this.loadCustomProviders();
         await this.modelRuntime.syncCustomProviders(customProviders);
       }
+      this.activeProviderRevision = this.modelRuntime.providerRevision;
 
       const result = await this.modelRuntime.refresh({
         allowNetwork,
@@ -191,7 +201,7 @@ export class ModelRefreshOwner {
 
       this.activeSync = false;
       this.activeNetwork = false;
-    } while (this.requestedSync || this.requestedNetwork);
+    } while (this.requestedSync || this.requestedNetwork || this.providersChangedDuringPass());
   }
 
   private async publish(providerErrors: readonly string[]): Promise<void> {

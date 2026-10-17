@@ -6,6 +6,7 @@ import { Type } from "typebox";
 
 import { commandRegistry } from "../src/commands/types.ts";
 import { ConnectionManager } from "../src/connections/manager.ts";
+import { loadConnectionStoreDocument, saveConnectionStoreDocument } from "../src/connections/store.ts";
 import { ExtensionRuntimeManager } from "../src/extensions/runtime-manager.ts";
 import { EXTENSIONS_REGISTRY_STORAGE_KEY } from "../src/extensions/store.ts";
 import { BrowserModelRuntime } from "../src/models/browser-model-runtime.ts";
@@ -101,4 +102,78 @@ void test("installing and uninstalling an extension exposes and removes its capa
   assert.equal(commandRegistry.get("audit_lookup"), undefined);
   assert.equal(modelRuntime.models.getProvider(`${extensionId}.audit-models`), undefined);
   assert.deepEqual(connectionManager.listRegisteredConnectionIds(), []);
+});
+
+function createManagerWithConnection(settings: MemorySettingsStore, connectionManager: ConnectionManager): ExtensionRuntimeManager {
+  return new ExtensionRuntimeManager({
+    settings,
+    connectionManager,
+    modelRuntime: new BrowserModelRuntime({
+      providerKeys: new EmptyProviderKeys(),
+      modelCatalogs: new InMemoryModelsStore(),
+      getProxyUrl: () => Promise.resolve(undefined),
+    }),
+    getActiveAgent: () => null,
+    refreshRuntimeTools: () => Promise.resolve(),
+    refreshRuntimeModels: () => Promise.resolve(),
+    reservedToolNames: new Set<string>(),
+    loadExtensionFromSource: (api) => {
+      api.connections.register({
+        id: "account",
+        title: "Model account",
+        capability: "model inference",
+        authKind: "api_key",
+        secretFields: [{ id: "apiKey", label: "API key", required: true }],
+      });
+      return Promise.resolve({ deactivate: () => Promise.resolve() });
+    },
+  });
+}
+
+void test("uninstalling an extension deletes its stored connection secrets", async () => {
+  const settings = new MemorySettingsStore();
+  await settings.set(EXTENSIONS_REGISTRY_STORAGE_KEY, { version: 2, items: [] });
+  const connectionManager = new ConnectionManager({ settings });
+  const manager = createManagerWithConnection(settings, connectionManager);
+  await manager.initialize();
+
+  const extensionId = await manager.installFromModuleSpecifier("Model account", "./model-account.js");
+  await connectionManager.updateSecretsFromHost(`${extensionId}.account`, { apiKey: "user-secret" });
+  await saveConnectionStoreDocument(settings, {
+    ...(await loadConnectionStoreDocument(settings)),
+    "builtin.mcp.servers": { status: "connected", secrets: { token: "mcp-token" } },
+  });
+  assert.deepEqual(Object.keys(await loadConnectionStoreDocument(settings)).sort(), [
+    "builtin.mcp.servers",
+    `${extensionId}.account`,
+  ]);
+
+  await manager.uninstallExtension(extensionId);
+
+  assert.deepEqual(Object.keys(await loadConnectionStoreDocument(settings)), ["builtin.mcp.servers"]);
+});
+
+void test("startup deletes stored connections of extensions that are no longer installed", async () => {
+  const settings = new MemorySettingsStore();
+  await settings.set(EXTENSIONS_REGISTRY_STORAGE_KEY, { version: 2, items: [] });
+  const connectionManager = new ConnectionManager({ settings });
+  const firstPane = createManagerWithConnection(settings, connectionManager);
+  await firstPane.initialize();
+  const installedId = await firstPane.installFromModuleSpecifier("Model account", "./model-account.js");
+  await connectionManager.updateSecretsFromHost(`${installedId}.account`, { apiKey: "installed-secret" });
+
+  const goneId = "ext.00000000-0000-4000-8000-000000000000";
+  await saveConnectionStoreDocument(settings, {
+    ...(await loadConnectionStoreDocument(settings)),
+    [`${goneId}.account`]: { status: "connected", secrets: { apiKey: "orphaned-secret" } },
+    "builtin.mcp.servers": { status: "connected", secrets: { token: "mcp-token" } },
+  });
+
+  const reloadedPane = createManagerWithConnection(settings, new ConnectionManager({ settings }));
+  await reloadedPane.initialize();
+
+  assert.deepEqual(Object.keys(await loadConnectionStoreDocument(settings)).sort(), [
+    "builtin.mcp.servers",
+    `${installedId}.account`,
+  ]);
 });
