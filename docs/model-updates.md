@@ -43,7 +43,7 @@ Prices are registry values in USD per million tokens. All three models:
 - expose `off`, `low`, `medium`, `high`, `xhigh`, and `max` through the OpenAI API; `minimal` is explicitly unavailable
 - expose `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, and `max` through ChatGPT, with the add-in's `minimal` level mapped to upstream `low`
 
-`tests/model-ordering.test.ts` pins this metadata, and the GPT-6.1 Sol metadata, so a future registry change is reviewed rather than silently changing the UI/runtime contract.
+`tests/model-ordering.test.ts` checks default selection, tier ordering and supported GPT-6.1 Sol thinking controls through the app's public interfaces.
 
 ## When to run this
 
@@ -126,7 +126,7 @@ Files:
 - `src/models/thinking-levels.ts` (registry-driven thinking capabilities)
 - `src/taskpane/thinking-display.ts` (localized thinking labels/hints/colors)
 - `src/ui/model-selector-dialog.ts` (first-party model picker UI)
-- `tests/model-ordering.test.ts` (metadata + behavior regressions; run `npm run test:models` — requires Node 22.19+)
+- `tests/model-ordering.test.ts` (selection and thinking-control regressions; run `npm run test:models` — requires Node 22.19+)
 
 We intentionally avoid pinning exact versioned IDs now. Instead we:
 
@@ -160,7 +160,7 @@ We intentionally avoid pinning exact versioned IDs now. Instead we:
 - Pick the default model via provider-aware rules:
   - Anthropic is a small special-case: latest Opus by default while Fable is in the registry but unavailable; Sonnet and Fable remain fallbacks if Opus is absent.
   - OpenAI (`openai` + `openai-codex`) prefers the newest general GPT when it is at least as new as Codex, with Codex as fallback; the current default is GPT-6.1 Sol
-  - otherwise `DEFAULT_MODEL_RULES` + `pickLatestMatchingModel()` (uses the injected `Models` runtime to find the newest available ID)
+  - otherwise `DEFAULT_MODEL_RULES` filters and sorts the injected `Models` catalogue by recency
 
 - Populate thinking controls from `getSupportedThinkingLevels()` instead of provider-specific hardcoded lists. This keeps model-level maps authoritative and ensures `xhigh` and `max` remain distinct.
 
