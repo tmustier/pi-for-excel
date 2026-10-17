@@ -42,6 +42,8 @@ export interface MutationApprovalRequest {
 export interface WorkbookExecutionPolicy {
   /** Durable gate; entered under the existing write lock for every policy-classified mutation. */
   mutationGate?: WorkbookMutationGate;
+  /** Required with mutationGate. Bind to the stable Durable invocation context, not mutable global state. */
+  getMutationId?: (toolCallId: string) => string;
   /** Default: yolo */
   getExecutionMode?: () => Promise<ExecutionMode>;
   /**
@@ -189,12 +191,14 @@ function wrapTool<TParameters extends TSchema, TDetails>(
             return tool.execute(toolCallId, params, signal, onUpdate);
           };
           if (!executionPolicy.mutationGate) return run();
+          const mutationId = executionPolicy.getMutationId?.(toolCallId);
+          if (!mutationId?.trim()) throw new Error("Durable mutation requires a stable logical mutationId");
           if (!isJsonValue(params)) throw new Error("Mutation arguments must be JSON serializable");
           // Identity may have changed while approval or another write held the queue.
           const workbookId = await contextProvider.getWorkbookId();
           if (workbookId !== contextWorkbookId) throw new Error("Workbook identity changed while mutation was queued");
           return executionPolicy.mutationGate.execute({
-            toolCallId, toolName: tool.name, workbookId, sessionId, params,
+            mutationId, toolCallId, toolName: tool.name, workbookId, sessionId, params,
           }, run);
         },
       );

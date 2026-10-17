@@ -3,6 +3,7 @@ import { Type, type Static } from "typebox";
 import { Value } from "typebox/value";
 import type { WorkbookCoordinator } from "../workbook/coordinator.js";
 import type { WorkbookMutationCall, WorkbookMutationGate } from "../tools/mutation/gate.js";
+import { decodeToolDetails } from "../tools/tool-details.js";
 
 export type MutationFaultPoint = "beforeDispatch" | "afterDispatch" | "beforeResult";
 export type MutationClassification = "applied" | "unchanged" | "conflict";
@@ -19,7 +20,7 @@ const observationSchema = Type.Object({
 export type MutationObservation = Static<typeof observationSchema>;
 const planSchema = Type.Object({
   intent: jsonSchema, target: jsonSchema, before: observationSchema,
-  expected: Type.Union([observationSchema, Type.Null()]), requiresReview: Type.Boolean(),
+  expected: Type.Union([observationSchema, Type.Null()]),
 });
 export type MutationPlan = Static<typeof planSchema>;
 const reconciliationSchema = Type.Object({
@@ -30,8 +31,11 @@ export type MutationReconciliation = Static<typeof reconciliationSchema>;
 
 /** The runtime may use this parser at its persisted document boundary. Invalid records block writes. */
 export const mutationRecordSchema = Type.Intersect([planSchema, Type.Object({
-  version: Type.Literal(2), toolCallId: Type.String({ minLength: 1 }), toolName: Type.String({ minLength: 1 }),
+  version: Type.Literal(3), mutationId: Type.String({ minLength: 1 }),
+  toolCallId: Type.String({ minLength: 1 }), toolName: Type.String({ minLength: 1 }),
   workbookId: Type.String({ minLength: 1 }), sessionId: Type.String(),
+  /** Failed receipt, not incomplete observation; remains pending even after result commit. */
+  requiresReview: Type.Boolean(),
   phase: Type.Union([Type.Literal("prepared"), Type.Literal("dispatched"), Type.Literal("returned"),
     Type.Literal("resultCommitted"), Type.Literal("resolved")]),
   after: Type.Union([observationSchema, Type.Null()]),
@@ -58,7 +62,7 @@ export interface MutationHost {
 }
 
 export interface MutationStore {
-  load(toolCallId: string): Promise<MutationRecord | null>;
+  load(mutationId: string): Promise<MutationRecord | null>;
   /** All records for this workbook, including other sessions; never truncate or apply retention. */
   list(): Promise<MutationRecord[]>;
   /** Resolve only after durable commit. Failed reads/writes must reject, never look absent. */
@@ -67,13 +71,13 @@ export interface MutationStore {
 
 export interface MutationController extends WorkbookMutationGate {
   pending(): Promise<MutationRecord[]>;
-  reconcile(toolCallId: string): Promise<MutationReconciliation>;
+  reconcile(mutationId: string): Promise<MutationReconciliation>;
   /** Explicit human acceptance of current state. Does not write the workbook or replay the call. */
-  resolve(toolCallId: string, observationToken: string): Promise<MutationReconciliation>;
+  resolve(mutationId: string, observationToken: string): Promise<MutationReconciliation>;
   /** Invoke only AFTER the tool result is committed; never from a tool-finally block. */
-  resultCommitted(toolCallId: string): Promise<void>;
+  resultCommitted(mutationId: string): Promise<void>;
   configureFault(point: MutationFaultPoint | null): void;
-  status(): { armed: MutationFaultPoint | null; paused: MutationFaultPoint | null; toolCallId: string | null };
+  status(): { armed: MutationFaultPoint | null; paused: MutationFaultPoint | null; mutationId: string | null; toolCallId: string | null };
   resume(): void;
 }
 
@@ -109,22 +113,25 @@ export function createMutationController(options: {
   let armed: MutationFaultPoint | null = null;
   let paused: MutationFaultPoint | null = null;
   let pausedCall: string | null = null;
+  let pausedMutation: string | null = null;
   let release: (() => void) | null = null;
   const active = new Set<string>();
 
-  const pause = async (point: MutationFaultPoint, id: string): Promise<void> => {
+  const pause = async (point: MutationFaultPoint, call: WorkbookMutationCall): Promise<void> => {
     if (armed !== point) return;
     armed = null;
     paused = point;
-    pausedCall = id;
+    pausedCall = call.toolCallId;
+    pausedMutation = call.mutationId;
     await new Promise<void>((resolve) => { release = resolve; });
     paused = null;
     pausedCall = null;
+    pausedMutation = null;
     release = null;
   };
   const load = async (id: string): Promise<MutationRecord> => {
     const record = parseMutationRecord(await options.store.load(id));
-    if (record.toolCallId !== id || record.workbookId !== options.workbookId) {
+    if (record.mutationId !== id || record.workbookId !== options.workbookId) {
       throw new Error("Mutation record unavailable for workbook");
     }
     return structuredClone(record);
@@ -132,7 +139,7 @@ export function createMutationController(options: {
   const pending = async (): Promise<MutationRecord[]> => {
     const records = (await options.store.list()).map(parseMutationRecord);
     // A mis-scoped store is an integration error, not permission to ignore another workbook.
-    if (records.some((record) => record.version !== 2 || record.workbookId !== options.workbookId)) {
+    if (records.some((record) => record.workbookId !== options.workbookId)) {
       throw new Error("Mutation store contains incompatible or cross-workbook records");
     }
     return structuredClone(records.filter(isPending));
@@ -145,8 +152,10 @@ export function createMutationController(options: {
     let classification: MutationClassification = "conflict";
     let reason = observation.limitation ?? "Current state does not prove the complete intended outcome or original state.";
     if (record.phase === "prepared") {
-      classification = "unchanged";
-      reason = "The execution boundary was never entered; this call made no workbook changes.";
+      classification = observation.complete && record.before.complete && same(observation, record.before) ? "unchanged" : "conflict";
+      reason = "The execution boundary was never entered; this call made no workbook changes. "
+        + (classification === "unchanged" ? "Current state matches the original state."
+          : "Current state differs from the original state or cannot be completely observed.");
     } else if (observation.complete && record.expected?.complete && same(observation, record.expected)) {
       classification = "applied";
       reason = "The complete intended postcondition matches at the recorded identities and structural context.";
@@ -172,19 +181,20 @@ export function createMutationController(options: {
     // Called INSIDE withWorkbookCoordinator's write lock, never recursively acquire that lock.
     execute: async (call, run) => {
       if (call.workbookId !== options.workbookId) throw new Error("Workbook identity changed before mutation");
-      if (await options.store.load(call.toolCallId)) throw new Error("Mutation already recorded; automatic replay is forbidden");
+      if (!call.mutationId?.trim()) throw new Error("Durable mutation requires a stable logical mutationId");
+      if (await options.store.load(call.mutationId)) throw new Error("Mutation already recorded; automatic replay is forbidden");
       if ((await pending()).length) throw new Error("Resolve pending workbook mutations before making another change");
       const plan = await options.host.prepare(call);
       if (plan.before.workbookId !== options.workbookId) throw new Error("Workbook identity changed while preparing mutation");
       let record: MutationRecord = structuredClone({
-        ...plan, version: 2, toolCallId: call.toolCallId, toolName: call.toolName,
+        ...plan, version: 3, mutationId: call.mutationId, toolCallId: call.toolCallId, toolName: call.toolName,
         workbookId: options.workbookId, sessionId: call.sessionId,
-        phase: "prepared", after: null, resolution: null,
+        phase: "prepared", after: null, resolution: null, requiresReview: false,
       });
-      active.add(call.toolCallId);
+      active.add(call.mutationId);
       try {
         await save(record);
-        await pause("beforeDispatch", call.toolCallId);
+        await pause("beforeDispatch", call);
         const current = await options.host.observe(structuredClone(record));
         if (!same(current, record.before)) {
           throw new Error("Workbook changed while mutation intent was being committed; review before continuing");
@@ -193,18 +203,27 @@ export function createMutationController(options: {
         record = { ...record, phase: "dispatched" };
         await save(record);
         const result = await run();
-        await pause("afterDispatch", call.toolCallId);
+        await pause("afterDispatch", call);
         const after = await options.host.observe(structuredClone(record));
         if (after.workbookId !== options.workbookId) throw new Error("Workbook identity changed after mutation");
         // Existing core tools return error receipts rather than throwing. A host sync may
         // already have applied part of the operation, so a committed error must not unblock retries.
-        const errorReceipt = result.content.some((block) => block.type === "text" && /^\s*(?:⚠️\s*)?Error\b/iu.test(block.text));
-        record = { ...record, phase: "returned", after, requiresReview: record.requiresReview || errorReceipt };
+        const details = decodeToolDetails(result.details);
+        const structuredError = details !== undefined && (
+          ("ok" in details && details.ok === false)
+          || ("error" in details && details.error !== undefined)
+          || ("blocked" in details && details.blocked)
+          || details.kind === "skills_error"
+        );
+        const errorReceipt = structuredError || result.content.some((block) => block.type === "text" && /^\s*(?:⚠️\s*)?Error\b/iu.test(block.text));
+        // Incomplete observation is not failed execution. Only a failed receipt
+        // keeps a normally returned call pending after its result is durably committed.
+        record = { ...record, phase: "returned", after, requiresReview: errorReceipt };
         await save(record);
-        await pause("beforeResult", call.toolCallId);
+        await pause("beforeResult", call);
         return result;
       } finally {
-        active.delete(call.toolCallId);
+        active.delete(call.mutationId);
       }
     },
     pending,
@@ -231,7 +250,7 @@ export function createMutationController(options: {
       if (paused !== null) throw new Error("Resume the paused mutation first");
       armed = point;
     },
-    status: () => ({ armed, paused, toolCallId: pausedCall }),
+    status: () => ({ armed, paused, mutationId: pausedMutation, toolCallId: pausedCall }),
     resume: () => { release?.(); },
   };
 }

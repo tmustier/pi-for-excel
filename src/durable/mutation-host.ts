@@ -325,7 +325,7 @@ export function createWorkbookMutationHost(options: {
           expected = { ...before, structure: identities };
         }
       }
-      return { target, before, expected, requiresReview: !structured || options.kind !== "office",
+      return { target, before, expected,
         intent: structured ? call.params : { toolName: call.toolName, scope: "unbounded", argumentsOmitted: true } };
     },
     observe: async (record) => {
