@@ -1,73 +1,231 @@
-import type { WriteCellsGrid, WriteCellsHooks, WriteCellsIntent } from "../tools/write-cells.js";
+import type { JsonValue } from "@earendil-works/chord";
+import { Type, type Static } from "typebox";
+import { Value } from "typebox/value";
+import type { WorkbookCoordinator } from "../workbook/coordinator.js";
+import type { WorkbookMutationCall, WorkbookMutationGate } from "../tools/mutation/gate.js";
 
-export type MutationFaultPoint = "beforeSync" | "afterSync" | "beforeResult";
+export type MutationFaultPoint = "beforeDispatch" | "afterDispatch" | "beforeResult";
 export type MutationClassification = "applied" | "unchanged" | "conflict";
-export type MutationRecord = { [K in keyof WriteCellsIntent]: WriteCellsIntent[K] } & {
-  /** Opaque workbook identity from getWorkbookContext; never a document URL. */
-  workbookId: string;
-  phase: "intended" | "synced" | "resultReady";
-};
-/** Parent supplies Conversation commit/defineDoc persistence. save must commit before resolving. */
+
+const jsonSchema = Type.Cyclic({ Json: Type.Union([
+  Type.String(), Type.Number(), Type.Boolean(), Type.Null(),
+  Type.Array(Type.Ref("Json")), Type.Record(Type.String(), Type.Ref("Json")),
+]) }, "Json");
+const observationSchema = Type.Object({
+  workbookId: Type.String({ minLength: 1 }), structure: jsonSchema, state: jsonSchema,
+  complete: Type.Boolean(), limitation: Type.Union([Type.String(), Type.Null()]),
+});
+/** Evidence is observational, not an undo snapshot or a command to replay. */
+export type MutationObservation = Static<typeof observationSchema>;
+const planSchema = Type.Object({
+  intent: jsonSchema, target: jsonSchema, before: observationSchema,
+  expected: Type.Union([observationSchema, Type.Null()]), requiresReview: Type.Boolean(),
+});
+export type MutationPlan = Static<typeof planSchema>;
+const reconciliationSchema = Type.Object({
+  classification: Type.Union([Type.Literal("applied"), Type.Literal("unchanged"), Type.Literal("conflict")]),
+  reason: Type.String(), observation: observationSchema, observationToken: Type.String({ minLength: 1 }),
+});
+export type MutationReconciliation = Static<typeof reconciliationSchema>;
+
+/** The runtime may use this parser at its persisted document boundary. Invalid records block writes. */
+export const mutationRecordSchema = Type.Intersect([planSchema, Type.Object({
+  version: Type.Literal(2), toolCallId: Type.String({ minLength: 1 }), toolName: Type.String({ minLength: 1 }),
+  workbookId: Type.String({ minLength: 1 }), sessionId: Type.String(),
+  phase: Type.Union([Type.Literal("prepared"), Type.Literal("dispatched"), Type.Literal("returned"),
+    Type.Literal("resultCommitted"), Type.Literal("resolved")]),
+  after: Type.Union([observationSchema, Type.Null()]),
+  resolution: Type.Union([reconciliationSchema, Type.Null()]),
+})]);
+export type MutationRecord = Static<typeof mutationRecordSchema>;
+
+export function parseMutationRecord(value: JsonValue): MutationRecord {
+  if (!Value.Check(mutationRecordSchema, value)) throw new Error("Invalid or incompatible mutation record; explicit recovery is required");
+  if ((value.phase === "resolved" && !value.resolution)
+    || ((value.phase === "returned" || value.phase === "resultCommitted") && !value.after)
+    || value.before.workbookId !== value.workbookId
+    || (value.expected && value.expected.workbookId !== value.workbookId)
+    || (value.after && value.after.workbookId !== value.workbookId)) {
+    throw new Error("Inconsistent mutation record; explicit recovery is required");
+  }
+  return value;
+}
+
+export interface MutationHost {
+  prepare(call: WorkbookMutationCall): Promise<MutationPlan>;
+  /** Must be read-only and resolve targets by stable identity, not their former names. */
+  observe(record: MutationRecord): Promise<MutationObservation>;
+}
+
 export interface MutationStore {
   load(toolCallId: string): Promise<MutationRecord | null>;
+  /** All records for this workbook, including other sessions; never truncate or apply retention. */
+  list(): Promise<MutationRecord[]>;
+  /** Resolve only after durable commit. Failed reads/writes must reject, never look absent. */
   save(record: MutationRecord): Promise<void>;
 }
-export interface MutationController {
-  hooks: WriteCellsHooks;
+
+export interface MutationController extends WorkbookMutationGate {
+  pending(): Promise<MutationRecord[]>;
+  reconcile(toolCallId: string): Promise<MutationReconciliation>;
+  /** Explicit human acceptance of current state. Does not write the workbook or replay the call. */
+  resolve(toolCallId: string, observationToken: string): Promise<MutationReconciliation>;
+  /** Invoke only AFTER the tool result is committed; never from a tool-finally block. */
+  resultCommitted(toolCallId: string): Promise<void>;
   configureFault(point: MutationFaultPoint | null): void;
   status(): { armed: MutationFaultPoint | null; paused: MutationFaultPoint | null; toolCallId: string | null };
   resume(): void;
-  reconcile(toolCallId: string, read: (target: MutationRecord) => Promise<{
-    values: WriteCellsGrid; formulas: WriteCellsGrid;
-  }>): Promise<MutationClassification>;
 }
 
-/** Records cell content only; callers must not supply credentials or raw workbook URLs. */
+function canonical(value: JsonValue): string {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
+  return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonical(value[key] ?? null)}`).join(",")}}`;
+}
+
+function observationValue(observation: MutationObservation): JsonValue {
+  return { ...observation };
+}
+
+function same(left: MutationObservation, right: MutationObservation): boolean {
+  return canonical(observationValue(left)) === canonical(observationValue(right));
+}
+
+function isPending(record: MutationRecord): boolean {
+  return record.phase !== "resolved" && (record.phase !== "resultCommitted" || record.requiresReview);
+}
+
+/** One controller per workbook, sharing the existing coordinator with every mutation producer. */
 export function createMutationController(options: {
   workbookId: string;
   store: MutationStore;
+  host: MutationHost;
+  coordinator: WorkbookCoordinator;
   allowFaultInjection?: boolean;
 }): MutationController {
+  if (!options.workbookId || options.workbookId === "workbook:unknown") {
+    throw new Error("Durable mutations require a stable workbook identity");
+  }
   let armed: MutationFaultPoint | null = null;
   let paused: MutationFaultPoint | null = null;
   let pausedCall: string | null = null;
   let release: (() => void) | null = null;
+  const active = new Set<string>();
 
-  const pause = async (point: MutationFaultPoint, toolCallId: string): Promise<void> => {
+  const pause = async (point: MutationFaultPoint, id: string): Promise<void> => {
     if (armed !== point) return;
     armed = null;
     paused = point;
-    pausedCall = toolCallId;
+    pausedCall = id;
     await new Promise<void>((resolve) => { release = resolve; });
     paused = null;
     pausedCall = null;
     release = null;
   };
   const load = async (id: string): Promise<MutationRecord> => {
-    const record = await options.store.load(id);
-    if (!record || record.workbookId !== options.workbookId) throw new Error("Mutation record unavailable for workbook");
-    return record;
+    const record = parseMutationRecord(await options.store.load(id));
+    if (record.toolCallId !== id || record.workbookId !== options.workbookId) {
+      throw new Error("Mutation record unavailable for workbook");
+    }
+    return structuredClone(record);
   };
-  const mark = async (id: string, phase: MutationRecord["phase"], point: MutationFaultPoint): Promise<void> => {
+  const pending = async (): Promise<MutationRecord[]> => {
+    const records = (await options.store.list()).map(parseMutationRecord);
+    // A mis-scoped store is an integration error, not permission to ignore another workbook.
+    if (records.some((record) => record.version !== 2 || record.workbookId !== options.workbookId)) {
+      throw new Error("Mutation store contains incompatible or cross-workbook records");
+    }
+    return structuredClone(records.filter(isPending));
+  };
+  const save = (record: MutationRecord): Promise<void> => options.store.save(structuredClone(parseMutationRecord(record)));
+  const reconcile = async (id: string): Promise<MutationReconciliation> => {
     const record = await load(id);
-    await options.store.save({ ...record, phase });
-    await pause(point, id);
+    const observation = await options.host.observe(structuredClone(record));
+    if (observation.workbookId !== options.workbookId) throw new Error("Workbook identity changed during reconciliation");
+    let classification: MutationClassification = "conflict";
+    let reason = observation.limitation ?? "Current state does not prove the complete intended outcome or original state.";
+    if (record.phase === "prepared") {
+      classification = "unchanged";
+      reason = "The execution boundary was never entered; this call made no workbook changes.";
+    } else if (observation.complete && record.expected?.complete && same(observation, record.expected)) {
+      classification = "applied";
+      reason = "The complete intended postcondition matches at the recorded identities and structural context.";
+    } else if (observation.complete && record.before.complete && same(observation, record.before)) {
+      classification = "unchanged";
+      reason = "The complete observed scope matches the original state; this is not permission to retry.";
+    }
+    const bytes = new TextEncoder().encode(canonical({
+      id, phase: record.phase, observation: observationValue(observation), classification,
+    }));
+    const digest = await crypto.subtle.digest("SHA-256", bytes);
+    const observationToken = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+    return { classification, reason, observation: structuredClone(observation), observationToken };
   };
+  const serialized = async <T>(id: string, action: () => Promise<T>): Promise<T> => {
+    const out = await options.coordinator.runWrite({
+      workbookId: options.workbookId, sessionId: "mutation-resolution", opId: id, journalOnly: true,
+    }, action);
+    return out.result;
+  };
+
   return {
-    hooks: {
-      beforeSync: async (intent) => {
-        if (await options.store.load(intent.toolCallId)) {
-          throw new Error("Mutation already recorded; reconcile before any retry");
+    // Called INSIDE withWorkbookCoordinator's write lock, never recursively acquire that lock.
+    execute: async (call, run) => {
+      if (call.workbookId !== options.workbookId) throw new Error("Workbook identity changed before mutation");
+      if (await options.store.load(call.toolCallId)) throw new Error("Mutation already recorded; automatic replay is forbidden");
+      if ((await pending()).length) throw new Error("Resolve pending workbook mutations before making another change");
+      const plan = await options.host.prepare(call);
+      if (plan.before.workbookId !== options.workbookId) throw new Error("Workbook identity changed while preparing mutation");
+      let record: MutationRecord = structuredClone({
+        ...plan, version: 2, toolCallId: call.toolCallId, toolName: call.toolName,
+        workbookId: options.workbookId, sessionId: call.sessionId,
+        phase: "prepared", after: null, resolution: null,
+      });
+      active.add(call.toolCallId);
+      try {
+        await save(record);
+        await pause("beforeDispatch", call.toolCallId);
+        const current = await options.host.observe(structuredClone(record));
+        if (!same(current, record.before)) {
+          throw new Error("Workbook changed while mutation intent was being committed; review before continuing");
         }
-        // Clone at the host boundary: later Office proxy changes cannot mutate the intent.
-        await options.store.save(structuredClone({
-          ...intent, workbookId: options.workbookId, phase: "intended" as const,
-        }));
-        await pause("beforeSync", intent.toolCallId);
-      },
-      afterSync: (id) => mark(id, "synced", "afterSync"),
-      beforeResult: (id) => mark(id, "resultReady", "beforeResult"),
+        // Commit before even entering host code: it may mutate synchronously (WPS/extensions).
+        record = { ...record, phase: "dispatched" };
+        await save(record);
+        const result = await run();
+        await pause("afterDispatch", call.toolCallId);
+        const after = await options.host.observe(structuredClone(record));
+        if (after.workbookId !== options.workbookId) throw new Error("Workbook identity changed after mutation");
+        // Existing core tools return error receipts rather than throwing. A host sync may
+        // already have applied part of the operation, so a committed error must not unblock retries.
+        const errorReceipt = result.content.some((block) => block.type === "text" && /^\s*(?:⚠️\s*)?Error\b/iu.test(block.text));
+        record = { ...record, phase: "returned", after, requiresReview: record.requiresReview || errorReceipt };
+        await save(record);
+        await pause("beforeResult", call.toolCallId);
+        return result;
+      } finally {
+        active.delete(call.toolCallId);
+      }
     },
+    pending,
+    reconcile,
+    resolve: (id, observationToken) => serialized(id, async () => {
+      if (active.has(id)) throw new Error("Cannot resolve a running mutation");
+      const record = await load(id);
+      if (!isPending(record)) throw new Error("Mutation is already settled");
+      const resolution = await reconcile(id);
+      if (resolution.observationToken !== observationToken) {
+        throw new Error("Workbook state changed since review; review the new observation before resolving");
+      }
+      await save({ ...record, phase: "resolved", resolution });
+      return resolution;
+    }),
+    resultCommitted: (id) => serialized(id, async () => {
+      const record = await load(id);
+      if (record.phase === "resultCommitted" || record.phase === "resolved") return;
+      if (record.phase !== "returned" || active.has(id)) throw new Error("Mutation has not returned a result");
+      await save({ ...record, phase: "resultCommitted" });
+    }),
     configureFault: (point) => {
       if (point !== null && options.allowFaultInjection !== true) throw new Error("Fault injection is disabled");
       if (paused !== null) throw new Error("Resume the paused mutation first");
@@ -75,18 +233,5 @@ export function createMutationController(options: {
     },
     status: () => ({ armed, paused, toolCallId: pausedCall }),
     resume: () => { release?.(); },
-    reconcile: async (id, read) => {
-      const record = await load(id);
-      const current = await read(structuredClone(record));
-      const content = (values: WriteCellsGrid, formulas: WriteCellsGrid): WriteCellsGrid =>
-        values.map((row, r) => row.map((value, c) => {
-          const formula = formulas[r]?.[c];
-          return typeof formula === "string" && formula.startsWith("=") ? formula : value ?? "";
-        }));
-      const actual = JSON.stringify(content(current.values, current.formulas));
-      if (actual === JSON.stringify(content(record.intendedValues, record.intendedValues))) return "applied";
-      if (actual === JSON.stringify(content(record.beforeValues, record.beforeFormulas))) return "unchanged";
-      return "conflict";
-    },
   };
 }
