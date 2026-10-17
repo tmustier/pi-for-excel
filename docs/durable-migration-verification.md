@@ -4,7 +4,7 @@ This records acceptance evidence as the migration proceeds. It is not acceptance
 
 ## Recovery in Excel
 
-Host: Excel for Mac 16.114 on macOS 26.3.1. Excel stayed in the background, with Rex in the foreground. Each run used a saved scratch workbook and the actual taskpane, credentials, proxy and model tools.
+Host: Excel for Mac 16.114 on macOS 26.3.1. Excel stayed in the background. The foreground app was Rex at the start and after the first bridge checks, and Google Chrome when the lane was released. Each run used a saved scratch workbook and the actual taskpane, credentials, proxy and model tools.
 
 ### Bridge reload
 
@@ -36,7 +36,7 @@ Prompt:
 
 We submitted the prompt, closed the actual pane through its native accessibility button while the reply was unfinished, then reopened it through Open Pi. The final clean-revision run resumed in the same conversation with one user entry and one `read_range` result. Its history contains the transient `Network error: Load failed` followed by a successful final answer, not a terminal failed submission. The final answer starts with the values in reverse order. An independent read confirmed the fixture was unchanged.
 
-Using `scripts/read-excel-durable.py`, we read the scratch workbook's WebKit SQLite database directly, including committed WAL data. The persisted submission (ID 69) has status `done`. Its journal also contains the transient network error, so this verifies recovery through the retry checkpoint rather than a request that happened to finish before closure. An earlier run of the same patch also finished after native close/reopen.
+Using `scripts/read-excel-durable.py`, we read the scratch workbook's WebKit SQLite database directly, including committed WAL data. The persisted submission (ID 69) has status `done`. Its journal also contains the transient network error, so this verifies recovery through the retry checkpoint rather than a request that happened to finish before closure. An earlier run of the same patch also finished after native close/reopen. At `f295f9e`, another run succeeded after keeping the native pane closed for 35 seconds before reopening it. The saved history again contains the transient network error followed by a successful answer.
 
 ### Regression evidence
 
