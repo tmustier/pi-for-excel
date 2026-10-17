@@ -5,13 +5,26 @@
  * custom AgentMessage role so we can:
  * - render it as a dedicated UI card (not an assistant text blob)
  * - keep the summary in LLM context via Agent.convertToLlm
+ *
+ * pi-agent-core declared this role until 1.0, when it removed its experimental
+ * harness. Persisted sessions still contain it, so the shape must not change.
  */
 
-import type { CompactionSummaryMessage } from "@earendil-works/pi-agent-core";
 import { t } from "../language/index.js";
 import type { UserMessage } from "@earendil-works/pi-ai";
 
-export type { CompactionSummaryMessage };
+export interface CompactionSummaryMessage {
+  role: "compactionSummary";
+  summary: string;
+  tokensBefore: number;
+  timestamp: number;
+}
+
+declare module "@earendil-works/pi-agent-core" {
+  interface CustomAgentMessages {
+    compactionSummary: CompactionSummaryMessage;
+  }
+}
 
 export const COMPACTION_SUMMARY_PREFIX =
   "The conversation history before this point was compacted into the following summary:\n\n<summary>\n";

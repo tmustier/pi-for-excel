@@ -68,13 +68,6 @@ const GPT_56_VARIANTS = [
       cacheWrite: 5,
       tiers: [{ inputTokensAbove: 272_000, input: 8, output: 30, cacheRead: 0.8, cacheWrite: 10 }],
     },
-    codexCost: {
-      input: 5,
-      output: 30,
-      cacheRead: 0.5,
-      cacheWrite: 6.25,
-      tiers: [{ inputTokensAbove: 272_000, input: 10, output: 45, cacheRead: 1, cacheWrite: 12.5 }],
-    },
   },
   {
     id: "gpt-5.6-terra",
@@ -163,7 +156,7 @@ void test("GPT-5.6 registry exposes the metadata used by the app", () => {
       assert.deepEqual(model.input, ["text", "image"]);
       assert.equal(model.contextWindow, 272_000);
       assert.equal(model.maxTokens, 128_000);
-      assert.deepEqual(model.cost, isCodex && "codexCost" in expected ? expected.codexCost : expected.cost);
+      assert.deepEqual(model.cost, expected.cost);
       assert.equal(model.thinkingLevelMap?.minimal, isCodex ? "low" : null);
       assert.equal(model.thinkingLevelMap?.xhigh, "xhigh");
       assert.equal(model.thinkingLevelMap?.max, "max");
@@ -182,6 +175,39 @@ void test("model selector orders all GPT-5.6 tiers as Sol, Terra, Luna", () => {
   assert.deepEqual(ordered.map((item) => item.id), GPT_56_IDS);
 });
 
+void test("GPT-6.1 Sol registry exposes the metadata used by the app", () => {
+  for (const provider of OPENAI_PROVIDERS) {
+    const isCodex = provider === "openai-codex";
+    const model = getModel(provider, "gpt-6.1-sol");
+    assert.equal(model.api, isCodex ? "openai-codex-responses" : "openai-responses");
+    assert.equal(model.reasoning, true);
+    assert.deepEqual(model.input, ["text", "image"]);
+    assert.equal(model.contextWindow, isCodex ? 500_000 : 272_000);
+    assert.equal(model.maxTokens, 128_000);
+    assert.deepEqual(
+      getThinkingLevelsForModel(model),
+      isCodex
+        ? ["minimal", "low", "medium", "high", "xhigh", "max"]
+        : ["low", "medium", "high", "xhigh", "max"],
+    );
+  }
+});
+
+void test("GPT-6 models count as general GPT models, not Codex", () => {
+  for (const id of ["gpt-6-sol", "gpt-6-astra", "gpt-6-luna", "gpt-6.1-sol"]) {
+    assert.equal(isOpenAiGeneralGptModelId(id), true, id);
+    assert.equal(isOpenAiCodexModelId(id), false, id);
+  }
+});
+
+void test("model selector orders GPT-6 tiers as Sol, Astra, Luna", () => {
+  const ids = ["gpt-6-luna", "gpt-6-astra", "gpt-6-sol"];
+  const items = ids.map((id) => ({ provider: "openai-codex", id, model: getModel("openai-codex", id) }));
+
+  const ordered = orderModelsForSelector(items, null);
+  assert.deepEqual(ordered.map((item) => item.id), ["gpt-6-sol", "gpt-6-astra", "gpt-6-luna"]);
+});
+
 void test("Claude Fable 5 registry metadata is usable by the add-in", () => {
   const fable = getModel("anthropic", "claude-fable-5");
   assert.equal(fable.provider, "anthropic");
@@ -197,14 +223,14 @@ void test("pickDefaultModel prefers the latest Opus for Anthropic-only setups", 
 
   const selected = pickDefaultModel(["anthropic"]);
   assert.equal(selected.provider, "anthropic");
-  assert.equal(selected.id, "claude-opus-5");
+  assert.equal(selected.id, "claude-opus-5-5");
 });
 
-void test("current OpenAI providers select GPT-5.6 Sol as the default", () => {
+void test("current OpenAI providers select GPT-6.1 Sol as the default", () => {
   for (const provider of OPENAI_PROVIDERS) {
     const selected = pickDefaultModel([provider]);
     assert.equal(selected.provider, provider);
-    assert.equal(selected.id, "gpt-5.6-sol");
+    assert.equal(selected.id, "gpt-6.1-sol");
   }
 });
 
@@ -243,7 +269,7 @@ void test("pickDefaultModel matches the current OpenAI default-selection contrac
 void test("pickDefaultModel falls back to the preferred hardcoded OpenAI default", () => {
   const selected = pickDefaultModel([]);
   assert.equal(selected.provider, "openai");
-  assert.equal(selected.id, "gpt-5.6-sol");
+  assert.equal(selected.id, "gpt-6.1-sol");
 });
 
 void test("pickDefaultModel never picks an unusable provider while a configured provider has models (#553)", () => {
@@ -265,13 +291,13 @@ void test("pickDefaultModel never picks an unusable provider while a configured 
 void test("pickDefaultModel tolerates unknown provider names", () => {
   const selected = pickDefaultModel(["some-custom-gateway"]);
   assert.equal(selected.provider, "openai");
-  assert.equal(selected.id, "gpt-5.6-sol");
+  assert.equal(selected.id, "gpt-6.1-sol");
 });
 
-void test("pickDefaultModel prefers GPT-5.6 Sol when OpenAI and Anthropic are both available", () => {
+void test("pickDefaultModel prefers GPT-6.1 Sol when OpenAI and Anthropic are both available", () => {
   const selected = pickDefaultModel(["anthropic", "openai"]);
   assert.equal(selected.provider, "openai");
-  assert.equal(selected.id, "gpt-5.6-sol");
+  assert.equal(selected.id, "gpt-6.1-sol");
 });
 
 void test("openai compareModels does not mistake dated GPT-4o ids for newer versions", () => {
