@@ -1,6 +1,6 @@
 # Pi 1.3 upgrade and Pi Durable evaluation
 
-**Status:** Step 1 tested in Excel. Step 2 implemented and tested in Chromium. Real Excel verification pending.
+**Status:** Step 1 tested in Excel and merged (#765). Step 2 implemented, tested in Chromium and tested in Excel. Recovery after a pane reload does not work in Excel as built, so we should not migrate yet.
 **Written:** 2026-10-17
 
 ## Summary
@@ -100,7 +100,7 @@ This is an evaluation of published Durable 1.3.0, not a taskpane migration. The 
 
 The implementation follows the README and source in the npm 1.3.0 tarball, including `Storage`, `MemoryStorage.prepareCommit`, `Harness`, `Models`, and the replay contract. It does not use features from upstream main. Automatic compaction is disabled in this prototype. There is no `compaction.modelOverrides` setting in 1.3.0.
 
-### 1. Recovery works in Chromium. Excel is not yet verified.
+### 1. Recovery works in Chromium. It does not work in Excel during a model request.
 
 `src/durable/indexeddb-storage.ts` implements the public storage interface. It uses a dedicated versioned IndexedDB database named `pi-for-excel-durable:<workbookId>`. The ID comes from the existing workbook identity helper. Raw workbook URLs are not stored. Unsaved workbooks are rejected.
 
@@ -165,6 +165,40 @@ The main entry grows by 1,310 bytes raw and about 600 bytes gzip, about 0.07 per
 
 `npm run check` and `npm run build` pass. The build has existing ineffective dynamic import warnings for extension modules and no new Node compatibility warning from Durable. `npm test` passes 854 tests. `npm run test:models` passes 38. `npm run test:context` passes 623. `npm run test:security` passes 87. `npm run test:browser` passes 102. These results include the final rebase. The flag was also rendered and inspected in the experimental settings panel at a narrow taskpane width with both states.
 
+### Excel results
+
+We ran these checks on Saturday 17 October 2026 in Excel for Mac 16.114 on macOS 26.3.1, with the pane in the background. We tested the branch as pushed before the final rebase onto `6aec0ea`, and did not rerun `b8fac3a` in Excel. Each scenario used its own saved scratch workbook, and the bridge read the cells independently.
+
+| Question | Result in Excel |
+| --- | --- |
+| 1. Recovery after a reload | Fails during a model request. Passes during a tool call. |
+| 2. Credentials and transport | Passes with live providers. |
+| 3. Interrupted writes | Passes at all three fault points, including the user edit control. |
+| 4. Existing sessions and extensions | Not tested in Excel. |
+| 5. Two panes | Passes. Storage also survives quitting Excel. |
+
+**1. Recovery.** We reloaded the pane 3 times while the model was replying. Each time, WebKit cancelled the request, the stream ended with the error "Load failed", and Durable committed that error as the final assistant message. The new pane opened the same conversation but had nothing left to resume. We also tried closing the harness on `pagehide`, before WebKit cancels the request, and got the same result, so we removed that change. Runs reloaded during a tool call did resume: Durable reported the interrupted tool to the model and the run continued. The Chromium recovery tests passed with a stub model stream, so they never exercised a real request being cancelled by the reload. Fixing this needs the transport error from an unloading page to leave the request pending, either in our `Models` adapter or upstream in Durable.
+
+**2. Credentials and transport.** `openai-codex/gpt-5.6-luna` completed real runs that read the workbook, and the proxy log showed each request going through the Codex WebSocket bridge. `anthropic/claude-opus-5-5` completed a run that called `read_range` and `get_workbook_overview`. Credentials came from the existing browser runtime.
+
+**3. Interrupted writes.** With `Sheet1!A1` set to 11 and the model asked to write 73:
+
+- `beforeSync`: the cell stayed at 11 and reconciliation returned `unchanged`.
+- `afterSync` and `beforeResult`: the cell was 73 and reconciliation returned `applied`.
+- In every case Durable reported the tool as interrupted after the reload, and Excel received no second write.
+- When we changed A1 to 99 by hand during an `afterSync` pause and then reloaded, reconciliation returned `conflict` and left 99 in place.
+- Later write attempts stayed blocked until the interrupted write was resolved, as designed.
+
+In one run the model told the user the write had succeeded, although the tool result said it was interrupted. The cell was correct in that run, but a migration would need the interrupted result to be clearer to the model.
+
+**4. Existing sessions and extensions.** We did not run `durableImport` or a Durable extension run in Excel. The evidence is still the unit and browser tests above.
+
+**5. Two panes.** Excel allows Web Locks in the pane, because the prototype refuses to open without them. We opened a second window on the same workbook and opened Pi in it. The second pane failed with "Durable storage is already owned by another pane", which also shows that the two panes share storage. After we closed the first window, the second pane stayed blocked until it reloaded. After the reload it owned the conversation, with all 19 entries intact. We also quit Excel completely and reopened the workbook, and the conversation and its entries were still there.
+
+**Flag off.** After turning `durable_runtime` off and reloading, `durableStatus` was rejected. Ordinary chat with `openai-codex/gpt-6.1-sol` created a sheet, wrote 2 and 3 and `=SUM(A1:A2)`, and the bridge read back 2, 3 and 5. The model then deleted the sheet.
+
+The test runs left five small Durable databases in the pane's IndexedDB, one per scratch workbook. They hold only test values, and nothing reads them while the flag is off.
+
 ### Run the remaining Excel checks on the Mac
 
 Use the existing `.agents/skills/excel-background-verification/SKILL.md` setup from this branch. Keep the bridge loopback only and token protected. Use a dev build, a trusted manifest and a newly saved scratch workbook. Do not clear WebKit data during a recovery test because that deletes the evidence. Do not use a valuable workbook. Keep ordinary chat idle throughout a prototype run.
@@ -204,7 +238,7 @@ Open two panes on the same saved workbook and verify that only one reports a usa
 
 Use `durableImport` with `{"sessionId":"EXISTING_LEGACY_SESSION_ID"}` to exercise a copied legacy session. Check compacted and archived originals through the converter tests and inspect the returned conversation in IndexedDB. Install a representative extension through the existing `extensionInstallCode` command, then submit through `durableSubmit`. Check both its provider and tool. Agent state dependent extension behavior is not supported in the prototype.
 
-Finally disable the flag with `setExperiment` and reload. Ordinary chat must still work and must not request any Durable module. Remaining unverified areas are real Office sync timing, live provider authentication and routing, Excel storage persistence and eviction, two real panes, and full extension and history UI compatibility.
+Finally disable the flag with `setExperiment` and reload. Ordinary chat must still work and must not request any Durable module. After the Excel results above, the remaining unverified areas are recovery once the reload problem is fixed, storage eviction, session import and extensions in Excel, and full extension and history UI compatibility.
 
 ## Sources
 
