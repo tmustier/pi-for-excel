@@ -4,69 +4,101 @@ import { test } from "node:test";
 import {
   buildMcpRequestHeaders,
   MCP_ACCEPT_HEADER,
-  parseMcpResponseBody,
+  readMcpResponse,
 } from "../src/tools/mcp-transport.ts";
 
-void test("MCP requests accept both JSON and SSE, as Streamable HTTP requires", () => {
-  const headers = buildMcpRequestHeaders({});
+const answer = { jsonrpc: "2.0", id: "req", result: { tools: [{ name: "搜索🦊" }] } };
+const json = JSON.stringify(answer);
 
-  assert.equal(headers.Accept, "application/json, text/event-stream");
+void test("MCP requests accept JSON and SSE with optional auth, session and protocol headers", () => {
+  assert.deepEqual(buildMcpRequestHeaders({}), {
+    "Content-Type": "application/json",
+    Accept: "application/json, text/event-stream",
+  });
+  const headers = buildMcpRequestHeaders({ token: "secret", sessionId: "session-1", protocolVersion: "2025-03-26" });
   assert.equal(headers.Accept, MCP_ACCEPT_HEADER);
-  assert.equal(headers["Content-Type"], "application/json");
-  assert.equal("Authorization" in headers, false);
-  assert.equal("Mcp-Session-Id" in headers, false);
-});
-
-void test("MCP request headers carry the bearer token and session id when known", () => {
-  const headers = buildMcpRequestHeaders({ token: "secret", sessionId: "session-1" });
-
   assert.equal(headers.Authorization, "Bearer secret");
   assert.equal(headers["Mcp-Session-Id"], "session-1");
+  assert.equal(headers["MCP-Protocol-Version"], "2025-03-26");
 });
 
-void test("a plain JSON response body is parsed as before", () => {
-  const payload = parseMcpResponseBody(
-    '{"jsonrpc":"2.0","id":"a","result":{"tools":[]}}',
-    "application/json",
-    "a",
-  );
-
-  assert.deepEqual(payload, { jsonrpc: "2.0", id: "a", result: { tools: [] } });
+void test("a plain JSON response body is parsed as before", async () => {
+  assert.deepEqual(await readMcpResponse(new Response(json), "req"), answer);
 });
 
-void test("an empty response body parses to null", () => {
-  assert.equal(parseMcpResponseBody("  ", "application/json", "a"), null);
+void test("JSON batches select only the matching response envelope", async () => {
+  const messages = [
+    { jsonrpc: "2.0", id: "req", method: "sampling/createMessage", params: {} },
+    { jsonrpc: "2.0", id: "other", result: {} },
+    answer,
+  ];
+  assert.deepEqual(await readMcpResponse(new Response(JSON.stringify(messages)), "req"), answer);
 });
 
-void test("an SSE response yields the JSON-RPC message that answers the request", () => {
-  const body = [
-    "event: message",
-    'data: {"jsonrpc":"2.0","method":"notifications/message","params":{"level":"info"}}',
-    "",
-    "event: message",
-    'data: {"jsonrpc":"2.0","id":"req-7","result":{"tools":[{"name":"search"}]}}',
-    "",
-    "",
-  ].join("\n");
-
-  const payload = parseMcpResponseBody(body, "text/event-stream; charset=utf-8", "req-7");
-
-  assert.deepEqual(payload, { jsonrpc: "2.0", id: "req-7", result: { tools: [{ name: "search" }] } });
+void test("empty, mismatched and invalid JSON responses fail rather than reporting success", async () => {
+  for (const body of ["", "  ", "null", "[]", '{"jsonrpc":"2.0","id":"other","result":{}}',
+    '{"jsonrpc":"1.0","id":"req","result":{}}',
+    '{"jsonrpc":"2.0","id":"req","result":{},"error":{"code":1,"message":"bad"}}',
+    '{"jsonrpc":"2.0","id":"req","method":"request","result":{}}',
+    '{"jsonrpc":"2.0","id":"req","error":{"message":"missing code"}}']) {
+    await assert.rejects(readMcpResponse(new Response(body), "req"), /Invalid MCP JSON-RPC response/);
+  }
 });
 
-void test("an SSE data field split over several lines is joined before parsing", () => {
-  const body = 'id: 1\r\ndata: {"jsonrpc":"2.0","id":"x",\r\ndata: "error":{"code":-32601,"message":"nope"}}\r\n\r\n';
+for (const newline of ["\n", "\r\n", "\r"]) {
+  void test(`SSE handles ${JSON.stringify(newline)} and UTF-8 split at every byte`, async () => {
+    const body = [
+      ": heartbeat", "event: message", "data: not-json", "", "data", "",
+      'data: {"jsonrpc":"2.0","method":"notifications/progress","params":{}}', "",
+      'data: {"jsonrpc":"2.0","id":"req","method":"sampling/createMessage"}', "",
+      'data: [{"jsonrpc":"2.0","id":"wrong","result":{}},',
+      `data: ${json}]`, "", "",
+    ].join(newline);
+    const bytes = new TextEncoder().encode(body);
+    let offset = 0;
+    let cancelled = false;
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (offset < bytes.length) controller.enqueue(bytes.slice(offset, ++offset));
+        // Intentionally never close: completing must not require EOF.
+      },
+      cancel() { cancelled = true; },
+    });
+    const response = new Response(stream, { headers: { "Content-Type": "text/event-stream; charset=utf-8" } });
+    assert.deepEqual(await readMcpResponse(response, "req"), answer);
+    assert.equal(cancelled, true);
+    assert.equal(stream.locked, false);
+  });
+}
 
-  const payload = parseMcpResponseBody(body, "text/event-stream", "x");
-
-  assert.deepEqual(payload, { jsonrpc: "2.0", id: "x", error: { code: -32601, message: "nope" } });
+void test("SSE error responses are selected after leading notifications", async () => {
+  const body = 'data: {"jsonrpc":"2.0","method":"notifications/message"}\n\n'
+    + 'data: {"jsonrpc":"2.0","id":"req",\ndata: "error":{"code":-32601,"message":"nope"}}\n\n';
+  assert.deepEqual(await readMcpResponse(new Response(body, { headers: { "Content-Type": "text/event-stream" } }), "req"), {
+    jsonrpc: "2.0", id: "req", error: { code: -32601, message: "nope" },
+  });
 });
 
-void test("an SSE stream with no answer to the request is reported, not returned as empty", () => {
-  const body = 'data: {"jsonrpc":"2.0","method":"notifications/progress","params":{}}\n\n';
+void test("SSE EOF without a matching complete event is an error", async () => {
+  for (const body of ["", `data: ${json}\n`, 'data: {"jsonrpc":"2.0","method":"notifications/progress"}\n\n']) {
+    await assert.rejects(readMcpResponse(new Response(body, { headers: { "Content-Type": "text/event-stream" } }), "req"),
+      /event stream without a JSON-RPC response/);
+  }
+});
 
-  assert.throws(
-    () => parseMcpResponseBody(body, "text/event-stream", "missing"),
-    /event stream without a JSON-RPC response/,
-  );
+void test("a hanging stream cancellation cannot delay a successful answer", async () => {
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) { controller.enqueue(new TextEncoder().encode(`data: ${json}\n\n`)); },
+    cancel() { return new Promise<void>(() => {}); },
+  });
+  assert.deepEqual(await readMcpResponse(new Response(stream, { headers: { "Content-Type": "text/event-stream" } }), "req"), answer);
+  assert.equal(stream.locked, false);
+});
+
+void test("stream read errors survive cleanup and release the reader lock", async () => {
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) { controller.error(new Error("broken stream")); },
+  });
+  await assert.rejects(readMcpResponse(new Response(stream, { headers: { "Content-Type": "text/event-stream" } }), "req"), /broken stream/);
+  assert.equal(stream.locked, false);
 });

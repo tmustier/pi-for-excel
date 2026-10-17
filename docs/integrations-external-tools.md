@@ -43,5 +43,7 @@ Active integrations contribute both:
 ## Notes
 
 - External requests may be sent directly or routed via the existing proxy settings (`proxy.enabled`, `proxy.url`).
-- MCP transport uses HTTP JSON-RPC requests against the configured server URL.
+- MCP transport uses Streamable HTTP POST requests against the configured server URL, accepting JSON or SSE responses. It selects the matching response from individual messages or batches and stops reading as soon as the complete response arrives, even if the server leaves the stream open.
+- MCP sessions and discovery caches belong to each chat's gateway instance. A URL, token or proxy change creates a new connection. Concurrent discovery requests share initialization; cancelling one caller does not cancel another. Connection probes use separate sessions and report protocol errors rather than a successful zero-tool result.
+- An HTTP 404 for a session invalidates that connection. The next explicit operation initializes a new session. Failed tool calls are never replayed automatically. GET subscriptions, server-request handlers and stream resumption are not implemented.
 - Tool execution policy classifies `web_search`, `fetch_page`, and `mcp` as read-only/non-workbook operations.
