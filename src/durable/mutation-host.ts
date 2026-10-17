@@ -1,7 +1,7 @@
 import { isJsonValue, type JsonValue } from "@earendil-works/chord";
 import { Type, type Static } from "typebox";
 import { Value } from "typebox/value";
-import { excelRun, parseRangeRef, parseCell, computeRangeAddress, qualifiedAddress } from "../excel/helpers.js";
+import { excelRun, parseRangeRef, parseCell, colToLetter, computeRangeAddress, qualifiedAddress } from "../excel/helpers.js";
 import { createRecoveryScopeResolver } from "../workbook/recovery-scope.js";
 import { CORE_TOOL_NAMES } from "../tools/names.js";
 import type { WorkbookMutationCall } from "../tools/mutation/gate.js";
@@ -18,6 +18,7 @@ const paramsSchema = Type.Object({
   range: Type.Optional(Type.String()), start_cell: Type.Optional(Type.String()),
   output_start_cell: Type.Optional(Type.String()), source_range: Type.Optional(Type.String()),
   name: Type.Optional(Type.String()), new_name: Type.Optional(Type.String()),
+  position: Type.Optional(Type.Number()), count: Type.Optional(Type.Number()),
   values: Type.Optional(gridSchema), content: Type.Optional(Type.String()),
 });
 const targetSchema = Type.Object({
@@ -111,6 +112,14 @@ async function targetFor(toolName: string, params: Params): Promise<Target> {
     throw new Error("Mutation observation requires unambiguous sheet references");
   }
   target.ranges = refs.map((part) => part.address);
+  if (toolName === "modify_structure" && params.position !== undefined) {
+    const end = params.position + (params.count ?? 1) - 1;
+    if (target.action === "insert_rows" || target.action === "delete_rows") {
+      target.ranges = [`${params.position}:${end}`];
+    } else if (target.action === "insert_columns" || target.action === "delete_columns") {
+      target.ranges = [`${colToLetter(params.position - 1)}:${colToLetter(end - 1)}`];
+    }
+  }
   await excelRun(async (context) => {
     const sheet = sheetName ? context.workbook.worksheets.getItemOrNullObject(sheetName)
       : context.workbook.worksheets.getActiveWorksheet();
@@ -136,34 +145,42 @@ const allFormats = {
   borderInsideHorizontal: true, borderInsideVertical: true,
 };
 
+/** At most eight adjacent cells per target, independent of the sheet's used area.
+ * These are structural warning signals, not persistent row/column identities or
+ * proof about unobserved cells. Never truncate the actual target or write intent.
+ */
 async function cellAnchors(sheetId: string, addresses: string[]): Promise<JsonValue> {
   const bounds = addresses.map((address) => {
     const [first, last] = address.split(":");
     return { first: parseCell(first ?? ""), last: parseCell(last ?? first ?? "") };
   });
-  return excelRun(async (context) => {
-    const used = context.workbook.worksheets.getItem(sheetId).getUsedRangeOrNullObject(true);
-    used.load("isNullObject");
-    await context.sync();
-    if (used.isNullObject) return [];
-    used.load("rowIndex,columnIndex,values,formulas");
-    await context.sync();
-    const values: unknown = used.values;
-    const formulas: unknown = used.formulas;
-    if (!Value.Check(gridSchema, values) || !Value.Check(gridSchema, formulas)) throw new Error("Unsupported anchor data");
-    const anchors: JsonValue[] = [];
-    for (const [r, row] of values.entries()) {
-      for (const [c, value] of row.entries()) {
-        const rowIndex = used.rowIndex + r + 1;
-        const columnIndex = used.columnIndex + c;
-        if (bounds.some((bound) => rowIndex >= bound.first.row && rowIndex <= bound.last.row
-          && columnIndex >= bound.first.col && columnIndex <= bound.last.col)) continue;
-        const formula = formulas[r]?.[c];
-        const cell = typeof formula === "string" && formula.startsWith("=") ? formula : value;
-        if (cell !== null && cell !== "") anchors.push([rowIndex, columnIndex, cell]);
-      }
+  const adjacent = new Set<string>();
+  for (const { first, last } of bounds) {
+    const candidates: [number, number][] = [
+      [first.row - 1, first.col], [first.row - 1, last.col],
+      [last.row + 1, first.col], [last.row + 1, last.col],
+      [first.row, first.col - 1], [last.row, first.col - 1],
+      [first.row, last.col + 1], [last.row, last.col + 1],
+    ];
+    for (const [row, col] of candidates) {
+      // Excel's physical sheet bounds, not a sample-size or intent cap.
+      if (row < 1 || row > 1_048_576 || col < 0 || col >= 16_384) continue;
+      if (bounds.some((bound) => row >= bound.first.row && row <= bound.last.row
+        && col >= bound.first.col && col <= bound.last.col)) continue;
+      adjacent.add(`${colToLetter(col)}${row}`);
     }
-    return anchors;
+  }
+  return excelRun(async (context) => {
+    const sheet = context.workbook.worksheets.getItem(sheetId);
+    const ranges = [...adjacent].map((address) => ({ address, range: sheet.getRange(address) }));
+    for (const { range } of ranges) range.load("values,formulas");
+    await context.sync();
+    return ranges.map(({ address, range }) => {
+      const values: unknown = range.values;
+      const formulas: unknown = range.formulas;
+      if (!Value.Check(gridSchema, values) || !Value.Check(gridSchema, formulas)) throw new Error("Unsupported anchor data");
+      return { range: address, content: content(values, formulas) };
+    });
   });
 }
 
@@ -210,7 +227,9 @@ async function observeTarget(workbookId: string, target: Target, toolName: strin
     // AutoFill also copies formatting; Python's output shape is determined only after running external code.
     return { ...base, state, structure: { sheets: json(identities), anchors: await cellAnchors(sheet.id, target.ranges) },
       complete: toolName === "write_cells" && state.length > 0,
-      limitation: toolName === "write_cells" ? null : "AutoFill formatting or dynamic Python output extends beyond the observed cell contents." };
+      limitation: toolName === "write_cells"
+        ? "Evidence covers target values/formulas, sheet/table metadata and up to eight adjacent cells per range. It does not prove unrelated sheet state or persistent row/column identity, and never authorizes replay."
+        : "AutoFill formatting or dynamic Python output extends beyond the observed cell contents." };
   }
   if (target.kind === "format") {
     const captures = [];
@@ -260,21 +279,10 @@ async function observeTarget(workbookId: string, target: Target, toolName: strin
   if (target.action === "rename_sheet" || target.action === "hide_sheet" || target.action === "unhide_sheet") {
     return { ...base, complete: true, limitation: null };
   }
-  // Structural insertion/deletion has no persistent row/column identity in Office.js.
-  // Capture all used value/formula data without the undo log's size/retention limits.
-  const state = await excelRun(async (context) => {
-    const range = context.workbook.worksheets.getItem(sheet.id).getUsedRangeOrNullObject(true);
-    range.load("isNullObject");
-    await context.sync();
-    if (range.isNullObject) return null;
-    range.load("address,values,formulas");
-    await context.sync();
-    const values: unknown = range.values;
-    const formulas: unknown = range.formulas;
-    if (!Value.Check(gridSchema, values) || !Value.Check(gridSchema, formulas)) throw new Error("Unsupported structural cell state");
-    return { range: localAddressPart(range.address), content: content(values, formulas) };
-  });
-  return { ...base, state, limitation: "Rows/columns lack stable identities; matching value data cannot prove insertion, deletion or copy did not occur." };
+  // Structural operations remain uncertain: copying the used sheet would be
+  // expensive without establishing persistent row/column identity either.
+  return { ...base, state: { affectedRanges: target.ranges },
+    limitation: "Only intended regions and sheet/table metadata are recorded; sheet contents are not copied. Rows/columns lack stable identities, so insertion, deletion or copy cannot be proved or automatically retried." };
 }
 
 /** Production read-only Office adapter; WPS/generic execution retains explicit uncertainty. */
