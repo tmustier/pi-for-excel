@@ -50,30 +50,30 @@
     "check:unknown-burndown": "node scripts/check-unknown-burndown.mjs"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.124.0",
+    "@anthropic-ai/sdk": "^0.134.0",
     "@earendil-works/pi-agent-core": "1.3.0",
     "@earendil-works/pi-ai": "1.3.0",
     "highlight.js": "^11.12.0",
     "lit": "^3.3.3",
-    "lucide": "^1.43.0",
-    "marked": "^18.0.12",
+    "lucide": "^1.57.0",
+    "marked": "^18.1.1",
     "typebox": "1.3.27",
-    "ws": "8.21.3"
+    "ws": "8.22.0"
   },
   "devDependencies": {
-    "@oxlint/plugins": "1.82.0",
-    "@types/node": "^26.5.0",
-    "@types/office-js": "^1.0.608",
-    "eslint": "^10.10.0",
+    "@oxlint/plugins": "1.88.0",
+    "@types/node": "^26.6.5",
+    "@types/office-js": "^1.0.612",
+    "eslint": "^10.12.0",
     "node-forge": "https://codeload.github.com/digitalbazaar/forge/tar.gz/f192c67ee5850e44296ef83d6a7b6df6552ba8bf",
     "office-addin-debugging": "^6.1.2",
     "office-addin-manifest": "^2.1.2",
-    "oxlint": "1.82.0",
-    "playwright": "1.63.0",
-    "portless": "0.15.6",
+    "oxlint": "1.88.0",
+    "playwright": "1.64.1",
+    "portless": "0.15.8",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.70.0",
-    "vite": "^8.2.2"
+    "typescript-eslint": "^8.71.2",
+    "vite": "^8.3.4"
   },
   "license": "MIT",
   "repository": {
