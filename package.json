@@ -67,7 +67,7 @@
     "eslint": "^10.10.0",
     "node-forge": "https://codeload.github.com/digitalbazaar/forge/tar.gz/f192c67ee5850e44296ef83d6a7b6df6552ba8bf",
     "office-addin-debugging": "^6.1.2",
-    "office-addin-manifest": "^2.1.2",
+    "office-addin-manifest": "^3.0.0",
     "oxlint": "1.82.0",
     "playwright": "1.63.0",
     "portless": "0.15.6",
