@@ -61,13 +61,13 @@ function operationLabel(review: MutationReview, record: MutationRecord | null): 
 }
 
 /** Sheet names come from the identities recorded with the original state, never from a name lookup. */
-function targetLabel(record: MutationRecord | null): string {
-  if (!record || !Value.Check(targetSchema, record.target) || !record.target.ranges.length) return t("durable.targetUnknown");
+export function mutationTargetLabel(record: MutationRecord | null): string {
+  if (!record || !Value.Check(targetSchema, record.target) || record.target.action === "add_sheet") return t("durable.targetUnknown");
   const { sheetId, ranges } = record.target;
   const structure = record.before.structure;
   const sheets = Value.Check(sheetsSchema, structure) ? structure : Value.Check(cellStructureSchema, structure) ? structure.sheets : [];
   const sheet = sheets.find((entry) => entry.id === sheetId)?.name;
-  return ranges.map((range) => sheet ? `${sheet}!${range}` : range).join(", ");
+  return ranges.length ? ranges.map((range) => sheet ? `${sheet}!${range}` : range).join(", ") : sheet ?? t("durable.targetUnknown");
 }
 
 function stageLabel(record: MutationRecord | null): string | null {
@@ -233,7 +233,7 @@ export function mountDurableControls(host: HTMLElement, runtime: DurableControls
     const body = text("div", "", "pi-durable-review");
     body.append(facts([
       [t("durable.operation"), operationLabel(item, record)],
-      [t("durable.target"), targetLabel(record)],
+      [t("durable.target"), mutationTargetLabel(record)],
       [t("durable.stage"), stageLabel(record)],
     ]), text("div", "", "pi-durable-alerts"));
     current.card.append(body);
@@ -250,7 +250,7 @@ export function mountDurableControls(host: HTMLElement, runtime: DurableControls
       for (const item of reviews) {
         const record = parseRecord(item);
         const row = text("div", "", "pi-durable-row");
-        row.append(text("span", `${operationLabel(item, record)} · ${targetLabel(record)}`));
+        row.append(text("span", `${operationLabel(item, record)} · ${mutationTargetLabel(record)}`));
         button(t("durable.inspect"), () => review(item), row, "pi-overlay-btn--compact");
         list.append(row);
       }
