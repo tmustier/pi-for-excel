@@ -8,6 +8,21 @@ import { decodeToolDetails } from "../tools/tool-details.js";
 export type MutationFaultPoint = "beforeDispatch" | "afterDispatch" | "beforeResult";
 export type MutationClassification = "applied" | "unchanged" | "conflict";
 
+/** Safe execution diagnostic for runtime/UI. Never carries the raw host/storage error or cause. */
+export class MutationExecutionError extends Error {
+  readonly mutationId: string;
+  readonly outcome: "not-executed" | "uncertain";
+
+  constructor(mutationId: string, outcome: MutationExecutionError["outcome"]) {
+    super(outcome === "uncertain"
+      ? "Workbook mutation may already have applied. Review the pending mutation before making further changes; do not retry automatically."
+      : "Workbook mutation was not executed: host execution was never entered. Review any pending intent before making further changes.");
+    this.name = "MutationExecutionError";
+    this.mutationId = mutationId;
+    this.outcome = outcome;
+  }
+}
+
 const jsonSchema = Type.Cyclic({ Json: Type.Union([
   Type.String(), Type.Number(), Type.Boolean(), Type.Null(),
   Type.Array(Type.Ref("Json")), Type.Record(Type.String(), Type.Ref("Json")),
@@ -184,15 +199,16 @@ export function createMutationController(options: {
       if (!call.mutationId?.trim()) throw new Error("Durable mutation requires a stable logical mutationId");
       if (await options.store.load(call.mutationId)) throw new Error("Mutation already recorded; automatic replay is forbidden");
       if ((await pending()).length) throw new Error("Resolve pending workbook mutations before making another change");
-      const plan = await options.host.prepare(call);
-      if (plan.before.workbookId !== options.workbookId) throw new Error("Workbook identity changed while preparing mutation");
-      let record: MutationRecord = structuredClone({
-        ...plan, version: 3, mutationId: call.mutationId, toolCallId: call.toolCallId, toolName: call.toolName,
-        workbookId: options.workbookId, sessionId: call.sessionId,
-        phase: "prepared", after: null, resolution: null, requiresReview: false,
-      });
+      let hostEntered = false;
       active.add(call.mutationId);
       try {
+        const plan = await options.host.prepare(call);
+        if (plan.before.workbookId !== options.workbookId) throw new Error("Workbook identity changed while preparing mutation");
+        let record: MutationRecord = structuredClone({
+          ...plan, version: 3, mutationId: call.mutationId, toolCallId: call.toolCallId, toolName: call.toolName,
+          workbookId: options.workbookId, sessionId: call.sessionId,
+          phase: "prepared", after: null, resolution: null, requiresReview: false,
+        });
         await save(record);
         await pause("beforeDispatch", call);
         const current = await options.host.observe(structuredClone(record));
@@ -202,6 +218,7 @@ export function createMutationController(options: {
         // Commit before even entering host code: it may mutate synchronously (WPS/extensions).
         record = { ...record, phase: "dispatched" };
         await save(record);
+        hostEntered = true;
         const result = await run();
         await pause("afterDispatch", call);
         const after = await options.host.observe(structuredClone(record));
@@ -222,6 +239,10 @@ export function createMutationController(options: {
         await save(record);
         await pause("beforeResult", call);
         return result;
+      } catch {
+        // Do not replace the durable intent, roll back, or expose exception details.
+        // A failed commit may itself have committed; leave that evidence untouched.
+        throw new MutationExecutionError(call.mutationId, hostEntered ? "uncertain" : "not-executed");
       } finally {
         active.delete(call.mutationId);
       }

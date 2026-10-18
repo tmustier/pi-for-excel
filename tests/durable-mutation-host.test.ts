@@ -131,7 +131,7 @@ void test("changing the active sheet while intent commits blocks an unqualified 
     const j = journal();
     j.controller.configureFault("beforeDispatch");
     const result = j.write.execute("write", { start_cell: "A1", values: [["new"]], allow_overwrite: true });
-    const rejected = assert.rejects(result, /Workbook changed/u);
+    const rejected = assert.rejects(result, /not executed/u);
     for (let i = 0; i < 100 && !j.controller.status().paused; i++) await new Promise<void>((resolve) => setImmediate(resolve));
     assert.equal(j.controller.status().paused, "beforeDispatch");
     activateOther();
