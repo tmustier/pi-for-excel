@@ -229,11 +229,26 @@ async function structuralNeighborhood(sheetId: string, addresses: string[]): Pro
         }
       }
     }
+    // agent-default (not a user rule): 2026-10-18 — sheet-wide actions sample
+    // the used extent's four corners and four edge midpoints (at most eight cells).
+    // An empty used extent has no contents to sample; retain its null geometry.
+    if (addresses.length === 0 && usedExtent) {
+      const top = usedExtent.rowIndex, bottom = top + usedExtent.rowCount - 1;
+      const left = usedExtent.columnIndex, right = left + usedExtent.columnCount - 1;
+      for (const row of [top, Math.floor((top + bottom) / 2), bottom]) {
+        for (const col of [left, Math.floor((left + right) / 2), right]) {
+          if (row !== top && row !== bottom && col !== left && col !== right) continue;
+          samples.add(`${colToLetter(col)}${row + 1}`);
+        }
+      }
+    }
     const ranges = [...samples].map((address) => ({ address, range: sheet.getRange(address) }));
     for (const { range } of ranges) range.load("values,formulas");
     await context.sync();
     return {
-      samplingPolicy: "agent-default: band before/first/last/after x used-axis first/middle/last; empty axis starts at A/1; at most 12 cells per band",
+      samplingPolicy: addresses.length > 0
+        ? "agent-default: band before/first/last/after x used-axis first/middle/last; empty axis starts at A/1; at most 12 cells per band"
+        : "agent-default: used-extent corners and edge midpoints; at most eight cells; no cells for an empty used extent",
       usedExtent,
       cells: ranges.map(({ address, range }) => ({ range: address, ...cellData(range) })),
     };
@@ -262,7 +277,8 @@ async function observeTarget(workbookId: string, target: Target, toolName: strin
     return base;
   }
   if (!sheet) {
-    return { ...base, state: { missingSheetId: target.sheetId }, limitation: "Recorded sheet identity is absent; names are not substitutes." };
+    return { ...base, state: { missingSheetId: target.sheetId },
+      limitation: "Recorded sheet identity is absent, so its contents cannot be read. Original samples remain in before evidence; names are not substitutes." };
   }
   const addresses = target.ranges.map((range) => qualifiedAddress(sheet.name, range));
   if (target.kind === "cells") {
@@ -328,18 +344,20 @@ async function observeTarget(workbookId: string, target: Target, toolName: strin
     });
     return { ...base, state, complete: true, limitation: null };
   }
+  base.state = { affectedRanges: target.ranges, neighborhood: await structuralNeighborhood(sheet.id, target.ranges) };
   if (target.action === "rename_sheet" || target.action === "hide_sheet" || target.action === "unhide_sheet") {
     return { ...base, complete: true, limitation: null };
   }
   if (toolName === "modify_structure" && target.ranges.length > 0
     && ["insert_rows", "delete_rows", "insert_columns", "delete_columns"].includes(target.action)) {
-    return { ...base, state: { affectedRanges: target.ranges, neighborhood: await structuralNeighborhood(sheet.id, target.ranges) },
+    return { ...base,
       limitation: "Evidence includes intended bands, sheet/table metadata and at most 12 sampled boundary/adjacent cells per band, with values and formulas. Samples are hints only: they omit unsampled contents and cannot establish stable row/column identities, applied or unchanged outcomes, or permission to replay." };
   }
-  // Structural operations remain uncertain: copying the used sheet would be
-  // expensive without establishing persistent row/column identity either.
-  return { ...base, state: { affectedRanges: target.ranges },
-    limitation: "Only intended regions and sheet/table metadata are recorded; sheet contents are not copied. Rows/columns lack stable identities, so insertion, deletion or copy cannot be proved or automatically retried." };
+  return { ...base,
+    limitation: "Evidence includes sheet/table metadata and at most eight used-extent boundary cells with values/formulas, not a full sheet snapshot. An empty used extent has no contents to sample. Samples never prove applied/unchanged or authorize replay. "
+      + (target.action === "add_sheet"
+        ? "The new sheet has no stable ID before creation; samples describe only the recorded existing context sheet, not the new sheet."
+        : "Samples follow the original sheet ID only. A deleted sheet cannot be read after deletion; its original samples remain in the journal's before evidence. Duplicated/new-sheet contents and side effects are not fully proved.") };
 }
 
 /** Production read-only Office adapter; WPS/generic execution retains explicit uncertainty. */

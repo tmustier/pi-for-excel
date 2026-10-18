@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { Value } from "typebox/value";
 import { createWriteCellsTool } from "../src/tools/write-cells.ts";
 import { createModifyStructureTool } from "../src/tools/modify-structure.ts";
 import { createWorkbookMutationHost } from "../src/durable/mutation-host.ts";
@@ -130,16 +131,26 @@ for (const action of ["insert_rows", "delete_rows", "insert_columns", "delete_co
   });
 }
 
-void test("production observer follows stable sheet identity for rename and detects name reuse", async () => {
-  await withOffice(async (f) => {
-    const j = journal();
-    await j.structure.execute("rename", { action: "rename_sheet", sheet: "Original", new_name: "Renamed" });
-    assert.equal(f.sheet.name, "Renamed");
-    assert.equal((await j.controller.reconcile("rename")).classification, "applied");
-    f.sheet.id = "replacement-id";
-    assert.equal((await j.controller.reconcile("rename")).classification, "conflict");
+for (const action of ["rename_sheet", "hide_sheet", "unhide_sheet"] as const) {
+  void test(`production observer retains samples and metadata proof for ${action}, and detects name reuse`, async () => {
+    await withOffice(async (f) => {
+      f.edit([["=1+1", 17], ["anchor", 29]]);
+      if (action === "unhide_sheet") f.sheet.visibility = "Hidden";
+      const j = journal();
+      await j.structure.execute("metadata", { action, sheet: "Original", new_name: "Renamed" });
+      if (action === "rename_sheet") assert.equal(f.sheet.name, "Renamed");
+      else assert.equal(f.sheet.visibility, action === "hide_sheet" ? "Hidden" : "Visible");
+      const record = j.records.get("metadata");
+      assert.ok(record);
+      assert.match(JSON.stringify(record.before.state), /"formulas":\[\["=1\+1"\]\]/u);
+      assert.deepEqual(record.after?.state, record.before.state);
+      assert.equal(record.before.complete, true);
+      assert.equal((await j.controller.reconcile("metadata")).classification, "applied");
+      f.sheet.id = "replacement-id";
+      assert.equal((await j.controller.reconcile("metadata")).classification, "conflict");
+    });
   });
-});
+}
 
 void test("changing the active sheet while intent commits blocks an unqualified write before dispatch", async () => {
   await withOffice(async (f) => {
@@ -324,5 +335,91 @@ void test("structural prepared evidence detects neighboring user edits but match
     assert.deepEqual(f.read(), [["user edit", 17], ["anchor", 29]]);
     assert.equal(f.writes(), 0);
     assert.equal((await j.controller.pending()).length, 1);
+  });
+});
+
+for (const action of ["delete_sheet", "duplicate_sheet", "add_sheet"] as const) {
+  void test(`actual ${action} retains bounded original-sheet samples before and after execution`, async () => {
+    await withOffice(async (f) => {
+      f.edit([["=1+1", 17], ["anchor", 29]]);
+      f.setUsedRange("A1:XFD1048576");
+      const loaded: string[] = [];
+      f.onRangeLoad((address, properties) => {
+        if (!/values|formulas/u.test(properties)) return;
+        loaded.push(address);
+        assert.match(address, /^[A-Z]+\d+$/u, "No whole-sheet content loads, including recovery capture");
+      });
+      const j = journal();
+      const params = action === "add_sheet" ? { action, new_name: "Created", position: 1 } : { action, sheet: "Original" };
+      assert.equal(Value.Check(createModifyStructureTool().parameters, params), true);
+      const sheets = await f.excel.run((context) => Promise.resolve(context.workbook.worksheets));
+      // Extend only the external Office seam for sheet lifecycle. The real tool,
+      // coordinator, observer and controller execute unchanged.
+      const other = { ...f.sheet, id: "sheet-2", name: "Other", position: 1,
+        tables: { ...f.sheet.tables, items: [] },
+        getRange: () => { throw new Error("Must not substitute another sheet for original samples"); } };
+      if (action === "delete_sheet") sheets.items.push(other);
+      let hostCalls = 0;
+      const enterHost = (): void => {
+        assert.equal(j.records.get(action)?.phase, "dispatched");
+        hostCalls += 1;
+      };
+      Reflect.set(f.sheet, "delete", () => { enterHost(); sheets.items.splice(0, 1); });
+      Reflect.set(f.sheet, "copy", () => { enterHost(); sheets.items.push(other); return other; });
+      Reflect.set(sheets, "add", (name: string) => { enterHost(); other.name = name; sheets.items.push(other); return other; });
+      await j.structure.execute(action, params);
+      assert.equal(hostCalls, 1);
+      const record = j.records.get(action);
+      assert.ok(record);
+      assert.equal(record.requiresReview, false, "The actual tool returned a successful receipt");
+      const sampleAddresses = ["A1", "LCB1", "XFD1", "A524288", "XFD524288", "A1048576", "LCB1048576", "XFD1048576"];
+      const beforeState = {
+        affectedRanges: [],
+        neighborhood: {
+          samplingPolicy: "agent-default: used-extent corners and edge midpoints; at most eight cells; no cells for an empty used extent",
+          usedExtent: { rowIndex: 0, columnIndex: 0, rowCount: 1048576, columnCount: 16384 },
+          cells: sampleAddresses.map((range) => ({ range, values: [[range === "A1" ? 2 : ""]], formulas: [[range === "A1" ? "=1+1" : ""]] })),
+        },
+      };
+      assert.deepEqual(record.before.state, beforeState);
+      assert.deepEqual(loaded, Array.from({ length: action === "delete_sheet" ? 2 : 3 }, () => sampleAddresses).flat());
+      assert.match(JSON.stringify(record.target), /"sheetId":"sheet-1"/u);
+      assert.match(JSON.stringify(record.before.structure), /table-1/u);
+      assert.equal(record.before.complete, false);
+      assert.equal(record.after?.complete, false);
+      assert.equal(record.expected, null);
+      if (action === "delete_sheet") {
+        assert.deepEqual(record.after?.state, { missingSheetId: "sheet-1" });
+        // Reusing the deleted sheet's name must not make it observable again.
+        other.name = "Original";
+      } else {
+        assert.deepEqual(record.after?.state, beforeState);
+        assert.match(record.after?.limitation ?? "", action === "add_sheet" ? /existing context sheet/u : /new-sheet contents/u);
+      }
+      const review = await j.controller.reconcile(action);
+      assert.equal(review.classification, "conflict");
+      if (action === "delete_sheet") assert.deepEqual(review.observation.state, { missingSheetId: "sheet-1" });
+      await assert.rejects(j.structure.execute("retry", params), /pending/u);
+      await j.controller.resolve(action, review.observationToken);
+      assert.deepEqual(j.records.get(action)?.before.state, beforeState);
+      await assert.rejects(j.structure.execute(action, params), /replay/u);
+      assert.equal(hostCalls, 1);
+    });
+  });
+}
+
+void test("an empty sheet records null used geometry rather than inventing sampled contents", async () => {
+  await withOffice(async (f) => {
+    const original = f.sheet.getUsedRangeOrNullObject;
+    f.sheet.getUsedRangeOrNullObject = () => ({ ...original(), isNullObject: true });
+    f.onRangeLoad((_address, properties) => assert.doesNotMatch(String(properties), /values|formulas/u));
+    const plan = await journal().host.prepare({ mutationId: "empty", toolCallId: "raw", toolName: "modify_structure",
+      workbookId: "book", sessionId: "s", params: { action: "duplicate_sheet", sheet: "Original" } });
+    assert.deepEqual(plan.before.state, { affectedRanges: [], neighborhood: {
+      samplingPolicy: "agent-default: used-extent corners and edge midpoints; at most eight cells; no cells for an empty used extent",
+      usedExtent: null, cells: [],
+    } });
+    assert.equal(plan.before.complete, false);
+    assert.match(plan.before.limitation ?? "", /empty used extent has no contents/u);
   });
 });
