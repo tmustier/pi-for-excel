@@ -54,6 +54,14 @@ The old conversation ID, entry 76 and completed submission 69 survived. A subseq
 
 Generation expectations, the storage UI, explicit cleanup, concurrent ownership and final runtime wiring still need integrated Excel acceptance. We did not simulate browser eviction, disk exhaustion or power loss in Excel.
 
+## Host access during final integration
+
+At 00:16 UTC on 18 October 2026, this session could no longer enumerate Excel's WebKit storage. Node and both Python interpreters returned filesystem permission errors. Apple Events to Excel also returned error -1743. Earlier direct SQLite reads above succeeded before the permission failure.
+
+The persistence inspector now reports denied access explicitly instead of letting `pathlib.glob` return an empty list and falsely implying no databases exist. Its permission regression fails against the previous implementation and passes with the fix; all four inspector tests pass locally. Accessibility remains usable, and the generated scratch workbook was closed through the native File menu without deleting app data.
+
+Implementation and isolated browser validation can continue. Fresh independent Excel persistence acceptance still requires restored host access; the earlier component results are not a waiver for the final runtime.
+
 ## Remaining acceptance
 
 These checks establish recovery in the prototype path only. Repeat them after integrating the full runtime migration. Session migration, extension behavior, compaction, queues, mutation reconciliation and resolution, storage lifecycle, rendered UI, and all validation suites still need final integrated evidence before the migration is complete.
