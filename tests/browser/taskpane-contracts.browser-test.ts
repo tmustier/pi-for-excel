@@ -249,7 +249,8 @@ void test("submitInput uses the composer path for commands and model messages", 
     await welcomeOverlay.waitFor({ state: "detached" });
     allowCommands = true;
 
-    const toast = page.locator("#pi-toast.visible .pi-toast__message");
+    // Boot may still be displaying its browser-storage notice when polling starts.
+    const toast = page.locator("#pi-toast.visible .pi-toast__message").filter({ hasText: /Backup command failed:/ });
     await toast.waitFor({ state: "visible", timeout: 5_000 });
     assert.match(await toast.innerText(), /Backup command failed: .*unavailable/i);
     allowPlainInput = true;
@@ -336,10 +337,31 @@ void test("local-service probes populate the first runtime capabilities", async 
     }
 
     await page.locator("pi-input textarea").waitFor({ state: "visible", timeout: 20_000 });
-    const systemPrompt = await page.evaluate(`document.querySelector("pi-sidebar")?.agent?.state?.systemPrompt ?? ""`);
+    const systemPrompt = await page.evaluate(`(async () => {
+      const view = document.querySelector("pi-sidebar").view;
+      const { BACKGROUND_CONTEXT: ctx } = await import("/node_modules/@earendil-works/chord/dist/context/index.js");
+      const { fauxProvider, fauxAssistantMessage } = await import("/node_modules/@earendil-works/pi-ai/dist/providers/faux.js");
+      const faux = fauxProvider({ tokensPerSecond: Infinity });
+      globalThis.browserTestModels.setProvider(faux.provider);
+      const model = faux.getModel();
+      faux.setResponses([fauxAssistantMessage("Capabilities checked")]);
+      await view.conversation.configure({ model: { provider: model.provider, modelId: model.id } }, ctx);
+      // Native prompt sections are committed on request preparation, not at boot.
+      const submission = await view.conversation.submit({ type: "input", content: "Check capabilities" }, ctx);
+      const outcome = await submission.wait(ctx);
+      if (outcome.status !== "done") throw new Error(JSON.stringify(outcome));
+      await view.refresh();
+      return view.current.systemPrompt ?? "";
+    })()`);
     assert.match(systemPrompt, /python 3\.browser\.12/);
     assert.match(systemPrompt, /tmux browser-sentinel/);
   }, async (context) => {
+    await context.route("**/src/models/browser-model-runtime.*", async (route) => {
+      const response = await route.fetch();
+      const source = await response.text();
+      assert.ok(source.includes("for (const provider of builtinProviders())"));
+      await route.fulfill({ response, body: source.replace("for (const provider of builtinProviders())", "globalThis.browserTestModels = this.models; for (const provider of builtinProviders())") });
+    });
     await context.route("https://localhost:3340/health", async (route) => {
       markProbeStarted();
       await waitForBrowserSignal(probesReleased, "Timed out waiting to release the Python health probe");
@@ -416,8 +438,11 @@ void test("paperclip, context disclosure, and non-streaming Escape remain operab
         const { getPayloadStats } = await import("/src/auth/stream-proxy.ts");
         Object.assign(getPayloadStats(), { calls: 1, messageCount: 1, messageChars: 7 });
         const sidebar = document.querySelector("pi-sidebar");
-        sidebar.agent.state.messages.push({ role: "user", content: "browser" });
-        sidebar.requestUpdate();
+        const { BACKGROUND_CONTEXT: ctx } = await import("/node_modules/@earendil-works/chord/dist/context/index.js");
+        await sidebar.view.conversation.commit(async tx => {
+          await tx.appendEntry(sidebar.view.conversation.id, { kind: "test.user", model: [{ role: "user", content: "browser", timestamp: 1 }] });
+        }, ctx);
+        await sidebar.view.refresh();
         document.dispatchEvent(new Event("pi:debug-changed"));
       })()
     `);

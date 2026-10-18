@@ -21,41 +21,77 @@ after(async () => {
   }
 });
 
-void test("bootstrap image config reaches the installed tool-result hook", async () => {
-  const opened = await openTaskpane(env, { clientId: "image-config-browser-client" });
+for (const autoResizeImages of [false, true]) {
+void test(`bootstrap autoResizeImages=${autoResizeImages} reaches the actual model request`, async () => {
+  process.env.VITE_PI_AUTO_RESIZE_IMAGES = String(autoResizeImages);
+  const server = await startTaskpaneServer();
+  const opened = await openTaskpane(server, {
+    clientId: "image-config-browser-client",
+    prepareContext: async (context) => {
+      await context.route("**/src/models/browser-model-runtime.*", async (route) => {
+        const response = await route.fetch();
+        const source = await response.text();
+        assert.ok(source.includes("for (const provider of builtinProviders())"));
+        await route.fulfill({ response, body: source.replace("for (const provider of builtinProviders())", "globalThis.browserTestModels = this.models; for (const provider of builtinProviders())") });
+      });
+    },
+  });
   try {
-    const workerStarts = await opened.page.evaluate(`
+    const result = await opened.page.evaluate(`
       (async () => {
-        const sidebar = document.querySelector("pi-sidebar");
-        const agent = sidebar?.agent;
-        if (!agent?.afterToolCall) throw new Error("image normalization hook was not installed");
+        const { fauxProvider, fauxAssistantMessage, fauxToolCall } = await import("/node_modules/@earendil-works/pi-ai/dist/providers/faux.js");
+        const { BACKGROUND_CONTEXT: ctx } = await import("/node_modules/@earendil-works/chord/dist/context/index.js");
+        const view = document.querySelector("pi-sidebar").view;
+        const faux = fauxProvider({ tokensPerSecond: Infinity, models: [{ id: "image-test", input: ["text", "image"], inputLimits: { images: { resize: { maxWidth: 40, maxHeight: 40, maxBytes: 100000, jpegQuality: 80 } } } }] });
+        let receivedImage = null;
+        faux.setResponses([async (request) => {
+          receivedImage = request.messages.find(message => message.role === "toolResult")?.content.find(block => block.type === "image");
+          return fauxAssistantMessage("done");
+        }]);
+        globalThis.browserTestModels.setProvider(faux.provider);
+        const model = faux.getModel();
+        await view.conversation.configure({ model: { provider: model.provider, modelId: model.id } }, ctx);
+        const canvas = document.createElement("canvas");
+        canvas.width = 120; canvas.height = 80;
+        const image = { type: "image", data: canvas.toDataURL("image/png").split(",")[1], mimeType: "image/png" };
+        await view.conversation.commit(async tx => {
+          await tx.appendEntry(view.conversation.id, { kind: "test.call", model: [fauxAssistantMessage(fauxToolCall("read_range", {}, { id: "image-call" }), { stopReason: "toolUse" })] });
+          await tx.appendEntry(view.conversation.id, { kind: "test.result", model: [{ role: "toolResult", toolCallId: "image-call", toolName: "read_range", content: [image], isError: false, timestamp: 0 }] });
+        }, ctx);
 
         const OriginalWorker = globalThis.Worker;
         let starts = 0;
-        globalThis.Worker = class {
+        if (!${autoResizeImages}) globalThis.Worker = class {
           constructor() {
             starts += 1;
             throw new Error("worker should not start when bootstrap disables auto-resize");
           }
         };
         try {
-          await agent.afterToolCall({
-            result: {
-              content: [{ type: "image", data: "invalid-image", mimeType: "image/png" }],
-            },
-          }, new AbortController().signal);
-          return starts;
+          const submission = await view.conversation.submit({ type: "input", content: "Inspect image" }, ctx);
+          const outcome = await submission.wait(ctx);
+          if (outcome.status !== "done") throw new Error(JSON.stringify(outcome));
+          if (!receivedImage) throw new Error("Tool image missing from provider request");
+          const decoded = new Image();
+          decoded.src = "data:" + receivedImage.mimeType + ";base64," + receivedImage.data;
+          await decoded.decode();
+          return { starts, unchanged: receivedImage.data === image.data, width: decoded.naturalWidth, height: decoded.naturalHeight };
         } finally {
           globalThis.Worker = OriginalWorker;
         }
       })()
     `);
 
-    assert.equal(workerStarts, 0);
+    assert.deepEqual(result, autoResizeImages
+      ? { starts: 0, unchanged: false, width: 40, height: 27 }
+      : { starts: 0, unchanged: true, width: 120, height: 80 });
   } finally {
     await opened.finish();
+    await server.close();
+    process.env.VITE_PI_AUTO_RESIZE_IMAGES = "false";
   }
 });
+}
 
 void test("browser image worker matches Pi limits without blocking the WebView", async () => {
   const opened = await openTaskpane(env, { clientId: "image-limits-browser-client" });

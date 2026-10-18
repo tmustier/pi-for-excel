@@ -10,7 +10,7 @@ import { html, LitElement, nothing, type PropertyValues } from "lit";
 import { icon } from "./icons.js";
 import { customElement, property, query, state } from "lit/decorators.js";
 import type { AgentTool, AgentMessage } from "@earendil-works/pi-agent-core";
-import type { ConversationPresenter } from "../durable/conversation-view.js";
+import type { ArchiveCursor, ConversationPresenter } from "../durable/conversation-view.js";
 import type { ToolResultMessage } from "@earendil-works/pi-ai";
 import type { StreamingMessageContainer } from "./messages/streaming-message-container.js";
 import { Archive, ChevronRight, FileText, Keyboard, Puzzle, RotateCcw, Ruler, Settings, Wrench } from "lucide";
@@ -18,6 +18,8 @@ import "./pi-input.js";
 import "./working-indicator.js";
 import { initToolGrouping } from "./tool-grouping.js";
 import type { PiInput } from "./pi-input.js";
+import { showToast } from "./toast.js";
+import { getErrorMessage } from "../utils/errors.js";
 import { isDebugEnabled, formatK } from "../debug/debug.js";
 import {
   getPayloadStats,
@@ -151,6 +153,10 @@ export class PiSidebar extends LitElement {
   @property({ attribute: false }) onOpenShortcuts?: () => void;
 
   @state() private _hasMessages = false;
+  @state() private _archiveMessages: AgentMessage[] = [];
+  @state() private _archiveLoading = false;
+  @state() private _archiveDone = false;
+  private _archiveCursor: ArchiveCursor | undefined;
   @state() private _isStreaming = false;
   @state() private _busyLabel: string | null = null;
   @state() private _busyHint: string | null = null;
@@ -316,7 +322,13 @@ export class PiSidebar extends LitElement {
   }
 
   override willUpdate(changed: PropertyValues<this>) {
-    if (changed.has("view")) this._setupSubscription();
+    if (changed.has("view")) {
+      this._archiveMessages = [];
+      this._archiveCursor = undefined;
+      this._archiveDone = false;
+      this._archiveLoading = false;
+      this._setupSubscription();
+    }
   }
 
   override firstUpdated() {
@@ -662,6 +674,23 @@ export class PiSidebar extends LitElement {
     return map;
   }
 
+  private async _loadArchivePage(): Promise<void> {
+    const view = this.view;
+    if (!view || this._archiveLoading) return;
+    this._archiveLoading = true;
+    try {
+      const page = await view.archivePage(this._archiveCursor);
+      if (this.view !== view) return;
+      this._archiveMessages = [...this._archiveMessages, ...page.messages];
+      this._archiveCursor = page.next;
+      this._archiveDone = page.next === undefined;
+    } catch (error) {
+      if (this.view === view) showToast(`${t("recovery.loadFailed")}: ${getErrorMessage(error)}`);
+    } finally {
+      if (this.view === view) this._archiveLoading = false;
+    }
+  }
+
   override render() {
     const view = this.view;
     if (!view) return html``;
@@ -675,6 +704,14 @@ export class PiSidebar extends LitElement {
       ${this._renderTabContextMenuOverlay()}
       <div class="pi-messages">
         <div class="pi-messages__inner">
+          ${state.hasArchive && !this._archiveDone ? html`
+            <button type="button" class="pi-tool-card__toggle" ?disabled=${this._archiveLoading}
+              @click=${() => this._loadArchivePage()}>${t("message-renderers.showEarlier")}</button>
+          ` : nothing}
+          ${this._archiveMessages.length ? html`
+            <message-list .messages=${this._archiveMessages} .tools=${this.tools}
+              .pendingToolCalls=${new Set<string>()} .isStreaming=${false}></message-list>
+          ` : nothing}
           ${hasMessages ? html`
             <message-list
               .messages=${state.messages.slice()}

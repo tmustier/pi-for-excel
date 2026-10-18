@@ -5,6 +5,8 @@ import type {
 } from "@earendil-works/pi-agent-core";
 import type { ModelInputLimits } from "@earendil-works/pi-ai";
 import type { AgentEvent, Conversation } from "@earendil-works/pi-durable";
+import type { AgentEvent as LegacyAgentEvent } from "@earendil-works/pi-agent-core";
+import type { ExtensionReadState } from "./extension-api-compat.js";
 import type { ConversationPresenter, ConversationSnapshot } from "../durable/conversation-view.js";
 import type { Static, TSchema } from "typebox";
 
@@ -209,7 +211,8 @@ export interface ClipboardAPI {
 }
 
 export interface ExtensionAgentAPI {
-  readonly raw: Conversation;
+  readonly raw: { readonly state: ExtensionReadState; subscribe(handler: (event: LegacyAgentEvent) => void): () => void };
+  readonly conversation: Conversation;
   readonly snapshot: ConversationSnapshot;
   injectContext(content: string): Promise<void>;
   steer(content: string): Promise<void>;
@@ -265,11 +268,13 @@ export interface ExcelExtensionAPI {
   /** Show a toast notification */
   toast(message: string): void;
   /** Subscribe to agent events */
-  onAgentEvent(handler: (ev: AgentEvent) => void): () => void;
+  onAgentEvent(handler: (ev: LegacyAgentEvent) => void): () => void;
+  onConversationEvent(handler: (ev: AgentEvent) => void): () => void;
 }
 
 export interface CreateExtensionAPIOptions {
   getActiveConversation: () => ConversationPresenter;
+  subscribeActiveConversation?: (listener: () => void) => () => void;
   registerCommand?: (name: string, cmd: ExtensionCommand) => void;
   registerTool?: (tool: AgentTool) => void;
   unregisterTool?: (name: string) => void;

@@ -98,6 +98,66 @@ void test("only exclusively read-only workbook tools opt into Durable replay", (
   }
 });
 
+void test("Durable preserves custom provider and model auth headers at provider dispatch without persisting secrets", async (t) => {
+  const originalDocument = Object.getOwnPropertyDescriptor(globalThis, "document");
+  Object.defineProperty(globalThis, "document", { configurable: true, value: new EventTarget() });
+  t.after(() => {
+    if (originalDocument) Object.defineProperty(globalThis, "document", originalDocument);
+    else Reflect.deleteProperty(globalThis, "document");
+  });
+  const secret = "custom-header-credential-secret";
+  const modelSecret = "custom-model-header-secret";
+  const provider = "custom-header-test";
+  const credentials = new ProviderCredentialsStore({
+    get: () => Promise.resolve(secret), set: async () => {}, delete: async () => {}, list: () => Promise.resolve([provider]),
+  });
+  const models = createModels({ credentials });
+  const faux = fauxProvider({ provider, models: [{ id: "headers" }], tokensPerSecond: Infinity });
+  const model = { ...faux.getModel(), headers: { "x-model-token": modelSecret, "x-header-precedence": "model" } };
+  const captured: Array<{ headers: Record<string, string> | undefined; transcript: string }> = [];
+  models.setProvider({ ...faux.provider, models: [model], getModels: () => [model],
+    auth: { apiKey: { name: "Custom header", resolve: ({ credential }) => Promise.resolve({
+      auth: { headers: { "x-provider-token": credential?.key ?? "missing", "x-header-precedence": "provider" } },
+    }) } },
+    streamSimple: (requestModel, transcript, options) => {
+      captured.push({ headers: options?.headers, transcript: JSON.stringify(transcript) });
+      return faux.provider.streamSimple(requestModel, transcript, options);
+    },
+  });
+  faux.setResponses([fauxAssistantMessage("header transport complete")]);
+  const storage = new MemoryStorage();
+  const writes: string[] = [];
+  const commit = storage.commit.bind(storage);
+  storage.commit = (batch, ctx) => {
+    writes.push(JSON.stringify(batch));
+    return commit(batch, ctx);
+  };
+  const runtime = await openDurableRuntime({
+    storage, workbookId: "header-test", mutationHost, coordinator: createWorkbookCoordinator(), autoCompaction: false,
+    models: routeModels(models, createOfficeStreamFn(() => Promise.resolve(undefined), models)),
+  });
+  try {
+    const conversation = await runtime.harness.root(context, { agent: { model: { provider, modelId: model.id } } });
+    await runtime.install(conversation, { tools: [], systemPrompt: "Header test" }, (messages) => Promise.resolve(messages));
+    const submission = await conversation.submit({ type: "input", content: "Hello headers" }, context);
+    assert.equal((await submission.wait(context)).status, "done");
+    assert.equal(captured.length, 1);
+    // This is the provider callback after the real underlying Models.applyAuth,
+    // not the Office wrapper's options (which only explicitly forward apiKey).
+    assert.deepEqual(captured[0]?.headers, {
+      "x-provider-token": secret, "x-model-token": modelSecret, "x-header-precedence": "model",
+    });
+    const status = JSON.stringify(await runtime.status(conversation));
+    assert.match(status, /header transport complete/);
+    assert.ok(writes.length > 0);
+    for (const value of [secret, modelSecret]) {
+      assert.ok(!writes.join("\n").includes(value), "No credential in any Durable storage commit");
+      assert.ok(!status.includes(value), "No credential in persisted conversation history");
+      assert.ok(!captured[0]?.transcript.includes(value), "No credential in provider transcript");
+    }
+  } finally { await runtime.harness.close(context); }
+});
+
 for (const provider of ["direct-test", "anthropic", "openai-codex"]) {
   void test(`Durable uses browser credentials and Office transport for ${provider}`, async (t) => {
     const originalDocument = Object.getOwnPropertyDescriptor(globalThis, "document");

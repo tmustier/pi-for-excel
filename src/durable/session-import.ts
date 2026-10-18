@@ -10,6 +10,7 @@ import type { SessionData } from "../storage/local/types.js";
 import type { SessionsStore } from "../storage/local/sessions-store.js";
 import type { SettingsWriter } from "../storage/local/settings-store.js";
 import { getSessionWorkbookId } from "../workbook/session-association.js";
+import { importedMetadata, SessionMetadataDoc, summarizeMessages, sessionModelIdentity, persistedModel } from "./session-metadata.js";
 
 /** Lossless for the JSON-persisted SessionData contract, not arbitrary JS objects.
  * Keep originals separate from the shaped, model-facing import contribution.
@@ -34,10 +35,68 @@ const ImportIndex = defineDocFamily<{ conversationId: ConversationId | null }, n
   initial: () => ({ conversationId: null }),
 });
 
+// Agent default (2026-10-18): 100 messages per cold import page, never a retention cap.
+const IMPORT_PAGE_SIZE = 100;
+
 export const LegacyContextEntry = defineEntry("excel.legacy-context");
+export const LegacyImportInfoDoc = defineDoc<{
+  checked: boolean;
+  prototypePages: number;
+  archivePages: number;
+  model: JsonValue;
+}>({
+  kind: "excel.legacy-import-info", version: 1, scope: "conversation", history: "latest", fork: "current",
+  initial: () => ({ checked: false, prototypePages: 0, archivePages: 0, model: null }),
+});
+
+export const LegacyTimelinePage = defineDocFamily<{ messages: JsonRepresentation<AgentMessage>[] }, null>({
+  kind: "excel.legacy-timeline-page", version: 1, scope: "conversation", family: true,
+  history: "latest", fork: "current", initial: () => ({ messages: [] }),
+});
+
+/** Upgrade prototype document-only originals once. The immutable backup is never retired.
+ * Pages are UI-only: the original LegacyContextEntry still owns model context.
+ */
+export async function ensureImportMetadata(harness: Harness, conversation: Conversation, context: Context): Promise<void> {
+  if ((await harness.snapshot(LegacyImportInfoDoc, conversation.id, context))?.checked) return;
+  await harness.commit(async (tx) => {
+    const info = await tx.doc(LegacyImportInfoDoc, conversation.id);
+    if (info.checked) return;
+    const legacy = await tx.doc(LegacySessionDoc, conversation.id);
+    if (legacy.originalSessionJson) {
+      const original: JsonValue = copyJson(JSON.parse(legacy.originalSessionJson));
+      const model = original && typeof original === "object" && !Array.isArray(original) ? persistedModel(original.model ?? null) : undefined;
+      info.model = model ? copyJson(model, { omitUndefinedProperties: true }) : null;
+      const messages = originalMessages(original);
+      const first = await tx.scanEntries({ conversationId: conversation.id, order: "ascending" }, 1);
+      const prototype = first.items.some((entry) => LegacyContextEntry.is(entry));
+      if (prototype) {
+        let page: JsonRepresentation<AgentMessage>[] = [];
+        for (const message of flattenedMessages(messages)) {
+          page.push(copyJson(message, { omitUndefinedProperties: true }) as JsonRepresentation<AgentMessage>);
+          if (page.length === IMPORT_PAGE_SIZE) {
+            (await tx.doc(LegacyTimelinePage, conversation.id, String(info.prototypePages++), null)).messages = page;
+            page = [];
+          }
+        }
+        if (page.length) (await tx.doc(LegacyTimelinePage, conversation.id, String(info.prototypePages++), null)).messages = page;
+      }
+      const summary = await tx.doc(SessionMetadataDoc, conversation.id);
+      const imported = summarizeMessages(messages);
+      Object.assign(summary, imported, { importedUsage: imported.usage, legacyId: legacy.legacySessionId,
+        lastEntryId: Math.max(summary.lastEntryId, first.items[0]?.id ?? 0),
+        title: legacy.title || imported.title, createdAt: legacy.createdAt, lastModified: legacy.lastModified });
+    }
+    info.checked = true;
+  }, context);
+}
 /** Prototype imports stored originals in the document, not in each entry. */
 export function legacyOriginalMessages(originalSessionJson: string): AgentMessage[] {
   const original: JsonValue = copyJson(JSON.parse(originalSessionJson));
+  return originalMessages(original);
+}
+
+function originalMessages(original: JsonValue): AgentMessage[] {
   if (!original || typeof original !== "object" || Array.isArray(original) || !Array.isArray(original.messages)) {
     throw new Error("Invalid legacy session messages");
   }
@@ -49,7 +108,15 @@ export function legacyOriginalMessages(originalSessionJson: string): AgentMessag
 export const LegacyMessageEntry = defineEntry<{
   messageIndex: number;
   message: JsonRepresentation<AgentMessage>;
+  archived?: boolean;
 }>("excel.legacy-message");
+
+function* flattenedMessages(messages: readonly AgentMessage[]): Generator<AgentMessage> {
+  for (const message of messages) {
+    if (message.role === "archivedMessages") yield* flattenedMessages(message.archivedMessages);
+    else yield message;
+  }
+}
 
 /** Import every snapshot for this workbook, not only open tabs or metadata rows.
  * A null scope is the unlinked history library, never another workbook's history.
@@ -107,14 +174,35 @@ export async function importLegacySession(
     // One entry per original message gives Durable real cut/fork boundaries.
     // Archive buckets contribute no model content. Their original message data
     // remains in the timeline for rendering/export independently of context.
+    let lastEntryId = 0;
+    const importInfo = await tx.doc(LegacyImportInfoDoc, conversation.id);
+    let archivePage: JsonRepresentation<AgentMessage>[] = [];
+    const flushArchive = async (): Promise<void> => {
+      if (!archivePage.length) return;
+      (await tx.doc(LegacyTimelinePage, conversation.id, `archive-${importInfo.archivePages++}`, null)).messages = archivePage;
+      archivePage = [];
+    };
     for (const [messageIndex, message] of session.messages.entries()) {
       // SessionData is the typed legacy persistence contract. copyJson validates
       // JSON serializability and detaches it without changing that shape.
-      const stored = copyJson(message, { omitUndefinedProperties: true }) as JsonRepresentation<AgentMessage>;
-      await tx.appendEntry(LegacyMessageEntry, conversation.id, {
-        data: { messageIndex, message: stored }, model: convert([message]),
+      if (message.role === "archivedMessages") {
+        for (const archived of flattenedMessages(message.archivedMessages)) {
+          archivePage.push(copyJson(archived, { omitUndefinedProperties: true }) as JsonRepresentation<AgentMessage>);
+          if (archivePage.length === IMPORT_PAGE_SIZE) await flushArchive();
+        }
+      }
+      const archived = message.role === "archivedMessages";
+      const stored = copyJson(archived ? { ...message, archivedMessages: [] } : message,
+        { omitUndefinedProperties: true }) as JsonRepresentation<AgentMessage>;
+      const entry = await tx.appendEntry(LegacyMessageEntry, conversation.id, {
+        data: { messageIndex, message: stored, ...(archived ? { archived: true } : {}) }, model: convert([message]),
       });
+      lastEntryId = entry.id;
     }
+    await flushArchive();
+    Object.assign(await tx.doc(SessionMetadataDoc, conversation.id), importedMetadata(session), { lastEntryId });
+    importInfo.checked = true;
+    importInfo.model = copyJson(sessionModelIdentity(session.model), { omitUndefinedProperties: true });
     index.conversationId = conversation.id;
     return conversation.id;
   }, context);

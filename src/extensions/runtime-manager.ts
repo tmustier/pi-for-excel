@@ -10,6 +10,7 @@
 
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import type { AgentEvent } from "@earendil-works/pi-durable";
+import { subscribeActiveConversation } from "../commands/extension-api-compat.js";
 import type { ConversationPresenter } from "../durable/conversation-view.js";
 import type { createOfficeStreamFn } from "../auth/stream-proxy.js";
 import { normalizeContext } from "@earendil-works/pi-ai";
@@ -49,6 +50,7 @@ import {
 } from "./permissions.js";
 import {
   loadStoredExtensions,
+  readIntactStoredExtensionIds,
   saveStoredExtensions,
   type StoredExtensionEntry,
   type StoredExtensionSource,
@@ -76,6 +78,7 @@ import {
 } from "./runtime-manager-helpers.js";
 import { buildRuntimeManagerActivationBridge } from "./runtime-manager-activation.js";
 import {
+  isExtensionOwnedId,
   qualifyExtensionConnectionId,
   qualifyExtensionProviderId,
 } from "./owner-identifiers.js";
@@ -90,6 +93,8 @@ import type {
 import type { SettingsWriter } from "../storage/local/settings-store.js";
 
 type AnyAgentTool = AgentTool;
+
+const ORPHANED_CONNECTIONS_CLEANED_KEY = "extensions.orphaned-connections-cleaned.v1";
 
 interface ExtensionToolExecutionBoundary {
   execute?: unknown;
@@ -179,6 +184,7 @@ export interface ExtensionRuntimeManagerOptions {
   connectionManager: ConnectionManager;
   modelRuntime: BrowserModelRuntime;
   getActiveConversation: () => ConversationPresenter | null;
+  subscribeActiveConversation?: (listener: () => void) => () => void;
   streamFn: ReturnType<typeof createOfficeStreamFn>;
   refreshRuntimeTools: () => Promise<void>;
   refreshRuntimeModels: () => Promise<void>;
@@ -194,6 +200,7 @@ export class ExtensionRuntimeManager {
   private readonly connectionManager: ConnectionManager;
   private readonly modelRuntime: BrowserModelRuntime;
   private readonly getActiveConversation: () => ConversationPresenter | null;
+  private readonly onActiveConversationChanged: ((listener: () => void) => () => void) | undefined;
   private readonly streamFn: ReturnType<typeof createOfficeStreamFn>;
   private readonly refreshRuntimeTools: () => Promise<void>;
   private readonly refreshRuntimeModels: () => Promise<void>;
@@ -219,6 +226,7 @@ export class ExtensionRuntimeManager {
     this.connectionManager = options.connectionManager;
     this.modelRuntime = options.modelRuntime;
     this.getActiveConversation = options.getActiveConversation;
+    this.onActiveConversationChanged = options.subscribeActiveConversation;
     this.streamFn = options.streamFn;
     this.refreshRuntimeTools = options.refreshRuntimeTools;
     this.refreshRuntimeModels = options.refreshRuntimeModels;
@@ -290,6 +298,16 @@ export class ExtensionRuntimeManager {
       return;
     }
 
+    // Finish or skip the migration before loading can replace an unreadable registry.
+    if ((await this.settings.get(ORPHANED_CONNECTIONS_CLEANED_KEY)) !== true) {
+      const installedIds = await readIntactStoredExtensionIds(this.settings);
+      if (installedIds) {
+        await this.connectionManager.deleteStoredRecords((connectionId) =>
+          connectionId.startsWith("ext.")
+          && !installedIds.some((entryId) => isExtensionOwnedId(entryId, connectionId)));
+      }
+      await this.settings.set(ORPHANED_CONNECTIONS_CLEANED_KEY, true);
+    }
     this.entries = await loadStoredExtensions(this.settings);
 
     for (const entry of this.entries) {
@@ -377,6 +395,9 @@ export class ExtensionRuntimeManager {
 
     await this.deactivateEntry(entryId);
     this.connectionManager.unregisterDefinitionsByOwner(entryId);
+    await this.connectionManager.deleteStoredRecords(
+      (connectionId) => isExtensionOwnedId(entryId, connectionId),
+    );
     await clearExtensionStorage(this.settings, entryId);
     this.entries.splice(entryIndex, 1);
     this.lastErrors.delete(entryId);
@@ -901,7 +922,7 @@ export class ExtensionRuntimeManager {
     const refreshModelProviders = (): Promise<void> => this.refreshRuntimeModels();
 
     const subscribeAgentEvents = (handler: (ev: AgentEvent) => void): (() => void) => {
-      const unsubscribe = this.getRequiredActiveConversation().onEvent(handler);
+      const unsubscribe = subscribeActiveConversation(this.getActiveConversation, handler, this.onActiveConversationChanged);
       state.eventUnsubscribers.add(unsubscribe);
 
       return () => {

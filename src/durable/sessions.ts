@@ -2,27 +2,12 @@ import { copyJson, type JsonRepresentation, type JsonValue } from "@earendil-wor
 import { BACKGROUND_CONTEXT as context } from "@earendil-works/chord/context";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { Api, Model, Models, ModelThinkingLevel } from "@earendil-works/pi-ai";
-import { configure, defineDoc, type Conversation, type Cursor, type Harness } from "@earendil-works/pi-durable";
+import { configure, defineDoc, UsageDoc, type Conversation, type Cursor, type EntryId, type Harness } from "@earendil-works/pi-durable";
 import type { SessionData, SessionMetadata } from "../storage/local/types.js";
 import { extractTextFromContent } from "../utils/content.js";
 import { entryMessages, readConversationHistory } from "./conversation-view.js";
-import { LegacySessionDoc } from "./session-import.js";
-import { Type } from "typebox";
-import { Value } from "typebox/value";
-import { ModelCostSchema, ModelInputLimitsSchema, ModelPromptCacheSchema, ThinkingLevelMapSchema } from "@earendil-works/pi-ai/providers/model-schema";
-
-const persistedModelSchema = Type.Object({
-  id: Type.String(), name: Type.String(), api: Type.String(), provider: Type.String(), baseUrl: Type.String(),
-  reasoning: Type.Boolean(), input: Type.Array(Type.Union([Type.Literal("text"), Type.Literal("image")])),
-  cost: ModelCostSchema, contextWindow: Type.Number(), maxTokens: Type.Number(),
-  type: Type.Optional(Type.Literal("chat")), headers: Type.Optional(Type.Record(Type.String(), Type.String())),
-  inputLimits: Type.Optional(ModelInputLimitsSchema), promptCache: Type.Optional(ModelPromptCacheSchema),
-  thinkingLevelMap: Type.Optional(ThinkingLevelMapSchema),
-});
-
-function persistedModel(value: JsonValue): Model<Api> | undefined {
-  return Value.Check(persistedModelSchema, value) ? value : undefined;
-}
+import { ensureImportMetadata, LegacyContextEntry, LegacyImportInfoDoc, LegacyMessageEntry, LegacySessionDoc, legacyOriginalMessages } from "./session-import.js";
+import { indexCommittedEntries, SessionMetadataDoc, sessionModelIdentity, persistedModel } from "./session-metadata.js";
 
 export const SessionInfoDoc = defineDoc<{
   title: string;
@@ -48,17 +33,52 @@ export class DurableSessions {
   private readonly harness: Harness;
   private readonly models: Models;
   private readonly fallbackModel: Model<Api>;
+  private indexing: Promise<void> = Promise.resolve();
+  private readonly unsubscribe: () => void;
 
   constructor(harness: Harness, models: Models, fallbackModel: Model<Api>) {
     this.harness = harness;
     this.models = models;
     this.fallbackModel = fallbackModel;
+    this.unsubscribe = harness.subscribeCommits((publication) => {
+      const entries = publication.changes.flatMap((change) => change.type === "entry" ? [change.value] : []);
+      if (entries.length) {
+        this.indexing = this.indexing.then(() => indexCommittedEntries(harness, entries, entryMessages));
+        // Keep a failed index failed (metadata() surfaces it), without an
+        // unhandled rejection when nobody is currently listing sessions.
+        void this.indexing.catch(() => {});
+      }
+    });
+  }
+
+  dispose(): void { this.unsubscribe(); }
+
+  /** Explicit startup migration/recovery, before allowing conversation writes.
+   * Only the unindexed tail is read, one page at a time; no transcript cache is
+   * built. Kept separate from metadata()/header() so tab/list reads stay cold.
+   */
+  async reconcileMetadata(): Promise<void> {
+    await this.indexing;
+    for (const conversation of await this.conversations()) {
+      await ensureImportMetadata(this.harness, conversation, context);
+      const summary = await this.harness.snapshot(SessionMetadataDoc, conversation.id, context);
+      const minEntryId = ((summary?.lastEntryId ?? 0) + 1) as EntryId;
+      let cursor: Cursor | undefined;
+      do {
+        // Agent default (2026-10-18): 200 entries per index-repair batch, with no history cap.
+        const page = await conversation.entries({ minEntryId, order: "ascending" }, 200, cursor, context);
+        if (page.items.length) await indexCommittedEntries(this.harness, page.items, (entry) =>
+          summary?.legacyId && (LegacyMessageEntry.is(entry) || LegacyContextEntry.is(entry)) ? [] : entryMessages(entry));
+        cursor = page.next;
+      } while (cursor !== undefined);
+    }
   }
 
   private async conversations(): Promise<Conversation[]> {
     const result: Conversation[] = [];
     let cursor: Cursor | undefined;
     do {
+      // Agent default (2026-10-18): 200 catalogue rows per storage scan.
       const page = await this.harness.commit((tx) => tx.scanConversations({}, 200, cursor), context);
       for (const record of page.items) {
         if (record.owner) continue;
@@ -81,8 +101,9 @@ export class DurableSessions {
     if (direct) return direct;
     for (const conversation of conversations) {
       // Forks inherit import docs, but only the original owns the old tab ID.
-      const legacy = await this.harness.snapshot(LegacySessionDoc, conversation.id, context);
-      if (legacy?.legacySessionId === id) {
+      await ensureImportMetadata(this.harness, conversation, context);
+      const summary = await this.harness.snapshot(SessionMetadataDoc, conversation.id, context);
+      if (summary?.legacyId === id) {
         const raw = await this.harness.commit((tx) => tx.conversation(conversation.id), context);
         if (!raw?.parent) return conversation;
       }
@@ -97,7 +118,7 @@ export class DurableSessions {
       info.title = title ?? "";
       info.explicitTitle = title !== undefined;
       info.createdAt = info.lastModified = new Date().toISOString();
-      info.fallbackModel = copyJson(model, { omitUndefinedProperties: true }) as JsonRepresentation<Model<Api>>;
+      info.fallbackModel = copyJson(sessionModelIdentity(model), { omitUndefinedProperties: true }) as JsonRepresentation<Model<Api>>;
     } }, context);
   }
 
@@ -110,7 +131,9 @@ export class DurableSessions {
       conversation.agent(context), readConversationHistory(conversation),
     ]);
     if (info?.deleted) return null;
-    const messages = history.flatMap((entry) => entryMessages(entry, legacy?.originalSessionJson));
+    const importedMessages = legacy?.originalSessionJson && history.some((entry) => LegacyContextEntry.is(entry)
+      || (LegacyMessageEntry.is(entry) && entry.data?.archived)) ? legacyOriginalMessages(legacy.originalSessionJson) : undefined;
+    const messages = history.flatMap((entry) => entryMessages(entry, importedMessages));
     const flat = originals(messages);
     const first = flat.find((message) => message.role === "user" || message.role === "user-with-attachments");
     const firstText = first && "content" in first ? extractTextFromContent(first.content) : "";
@@ -126,33 +149,57 @@ export class DurableSessions {
     const model = (agent.model ? this.models.getModel(agent.model.provider, agent.model.modelId) : undefined)
       ?? fallback;
     return { id: String(conversation.id), title: info?.explicitTitle ? info.title : legacy?.title || firstText.slice(0, 80),
-      createdAt, lastModified, model, thinkingLevel: agent.thinkingLevel, messages };
+      createdAt, lastModified, model: sessionModelIdentity(model), thinkingLevel: agent.thinkingLevel, messages };
+  }
+
+  /** Initial tabs need identity/configuration, not an exported transcript. */
+  async header(id: string): Promise<Omit<SessionData, "messages"> | null> {
+    const metadata = await this.metadata(id);
+    if (!metadata) return null;
+    const conversation = await this.resolve(metadata.id);
+    if (!conversation) return null;
+    const [agent, info, imported] = await Promise.all([conversation.agent(context),
+      this.harness.snapshot(SessionInfoDoc, conversation.id, context),
+      this.harness.snapshot(LegacyImportInfoDoc, conversation.id, context)]);
+    const model = (agent.model ? this.models.getModel(agent.model.provider, agent.model.modelId) : undefined)
+      ?? persistedModel(info?.fallbackModel ?? null) ?? persistedModel(imported?.model ?? null) ?? this.fallbackModel;
+    return { id: metadata.id, title: metadata.title, createdAt: metadata.createdAt, lastModified: metadata.lastModified,
+      model, thinkingLevel: metadata.thinkingLevel };
   }
 
   async metadata(id: string): Promise<SessionMetadata | null> {
-    const session = await this.loadSession(id);
-    if (!session) return null;
-    const messages = originals(session.messages);
-    const usage: SessionMetadata["usage"] = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0,
-      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } };
-    // Originals occur once in the timeline. Never also sum model contributions
-    // (which can be reshaped copies of imported originals) or UI archive cards.
-    for (const message of messages) {
-      if (message.role !== "assistant") continue;
-      for (const key of ["input", "output", "cacheRead", "cacheWrite", "totalTokens"] as const) usage[key] += message.usage[key];
-      for (const key of ["input", "output", "cacheRead", "cacheWrite", "total"] as const) usage.cost[key] += message.usage.cost[key];
+    await this.indexing;
+    const conversation = await this.resolve(id);
+    if (!conversation) return null;
+    await ensureImportMetadata(this.harness, conversation, context);
+    const [info, summary, agent, nativeUsage] = await Promise.all([
+      this.harness.snapshot(SessionInfoDoc, conversation.id, context),
+      this.harness.snapshot(SessionMetadataDoc, conversation.id, context),
+      conversation.agent(context), this.harness.snapshot(UsageDoc, conversation.id, context),
+    ]);
+    if (info?.deleted) return null;
+    const data = summary ?? SessionMetadataDoc.definition.initial();
+    // Native spend includes summarization attempts which have no message entry.
+    // Prefer the native ledger when present; imported transcripts seed the index.
+    const hasNativeUsage = nativeUsage && (Object.keys(nativeUsage.models).length > 0 || Object.keys(nativeUsage.tools).length > 0);
+    const baseline = hasNativeUsage ? data.importedUsage ?? SessionMetadataDoc.definition.initial().usage : data.usage;
+    const usage = { ...baseline, cost: { ...baseline.cost } };
+    if (hasNativeUsage) for (const bucket of [nativeUsage.models, nativeUsage.tools]) for (const item of Object.values(bucket)) {
+      for (const key of ["input", "output", "cacheRead", "cacheWrite", "totalTokens"] as const) usage[key] += item[key];
+      for (const key of ["input", "output", "cacheRead", "cacheWrite", "total"] as const) usage.cost[key] += item.cost[key];
     }
-    return { id: session.id, title: session.title, createdAt: session.createdAt, lastModified: session.lastModified,
-      thinkingLevel: session.thinkingLevel, usage, messageCount: messages.length,
-      preview: messages.filter((message) => message.role === "user" || message.role === "assistant")
-        .map((message) => extractTextFromContent(message.content)).join("\n").slice(0, 2048) };
+    return { id: String(conversation.id), title: info?.explicitTitle ? info.title : data.title,
+      createdAt: info?.createdAt || data.createdAt, lastModified: [info?.lastModified ?? "", data.lastModified].sort().at(-1) ?? "",
+      thinkingLevel: agent.thinkingLevel, usage, messageCount: data.messageCount, preview: data.preview };
   }
 
   async getAllMetadata(): Promise<SessionMetadata[]> {
     const result: SessionMetadata[] = [];
     for (const conversation of await this.conversations()) {
       const metadata = await this.metadata(String(conversation.id));
-      if (metadata) result.push(metadata);
+      // Empty tabs remain addressable for restoration, but are not history.
+      // Explicitly named drafts have a title and remain discoverable.
+      if (metadata && (metadata.messageCount > 0 || metadata.title.trim())) result.push(metadata);
     }
     return result.sort((a, b) => b.lastModified.localeCompare(a.lastModified));
   }
@@ -180,7 +227,7 @@ export class DurableSessions {
 
   async fork(id: string, model?: Model<Api>, title?: string): Promise<Conversation> {
     const conversation = await this.resolve(id);
-    const session = await this.loadSession(id);
+    const session = await this.header(id);
     if (!conversation || !session) throw new Error(`Session not found: ${id}`);
     const active = await conversation.context(context);
     // Context puts the head marker first, even when compaction appended it
@@ -189,14 +236,19 @@ export class DurableSessions {
       (newest, entry) => !newest || entry.id > newest.id ? entry : newest, undefined);
     if (!latest) throw new Error("Cannot fork a session without a visible entry");
     const selected = model ?? session.model;
+    const inheritedUsage = (await this.metadata(id))?.usage;
     return conversation.fork(latest.id, { ownership: { kind: "ownerless" }, init: async (tx, fork) => {
       await configure(tx, fork, { model: { provider: selected.provider, modelId: selected.id } });
+      const summary = await tx.doc(SessionMetadataDoc, fork);
+      // pi.usage starts empty on a fork; inherited transcript spend is its baseline.
+      const baseline = inheritedUsage ?? summary.usage;
+      summary.importedUsage = { ...baseline, cost: { ...baseline.cost } };
       const info = await tx.doc(SessionInfoDoc, fork);
       info.title = title ?? session.title;
       info.explicitTitle = true;
       info.deleted = false;
       info.createdAt = info.lastModified = new Date().toISOString();
-      info.fallbackModel = copyJson(selected, { omitUndefinedProperties: true }) as JsonRepresentation<Model<Api>>;
+      info.fallbackModel = copyJson(sessionModelIdentity(selected), { omitUndefinedProperties: true }) as JsonRepresentation<Model<Api>>;
     } }, context);
   }
 }

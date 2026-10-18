@@ -24,6 +24,8 @@
  */
 
 import type { AgentEvent } from "@earendil-works/pi-durable";
+import type { AgentEvent as LegacyAgentEvent } from "@earendil-works/pi-agent-core";
+import { extensionReadState, legacyEventProjection, subscribeActiveConversation } from "./extension-api-compat.js";
 
 import {
   ALLOW_REMOTE_EXTENSION_URLS_STORAGE_KEY,
@@ -295,7 +297,16 @@ export function createExtensionAPI(options: CreateExtensionAPIOptions): ExcelExt
   const unregisterModelProvider = options.unregisterModelProvider;
   const refreshModelProviders = options.refreshModelProviders;
   const subscribeAgentEvents = options.subscribeAgentEvents
-    ?? ((handler: (ev: AgentEvent) => void) => options.getActiveConversation().onEvent(handler));
+    ?? ((handler: (ev: AgentEvent) => void) => subscribeActiveConversation(options.getActiveConversation, handler, options.subscribeActiveConversation));
+  const subscribeLegacyEvents = (handler: (event: LegacyAgentEvent) => void): (() => void) => {
+    let presenter = options.getActiveConversation();
+    let project = legacyEventProjection(presenter.current.streamingMessage);
+    return subscribeAgentEvents((event) => {
+      const current = options.getActiveConversation();
+      if (current !== presenter) { presenter = current; project = legacyEventProjection(); }
+      for (const projected of project(event)) handler(projected);
+    });
+  };
   const llmComplete = options.llmComplete;
   const httpFetch = options.httpFetch;
   const storageGet = options.storageGet;
@@ -545,6 +556,15 @@ export function createExtensionAPI(options: CreateExtensionAPIOptions): ExcelExt
 
     agent: {
       get raw() {
+        assertCapability("agent.read");
+        assertCapability("agent.events.read");
+        return Object.freeze({
+          get state() { return extensionReadState(options.getActiveConversation().current); },
+          subscribe: subscribeLegacyEvents,
+        });
+      },
+
+      get conversation() {
         assertCapability("agent.read");
         assertCapability("agent.events.read");
         return options.getActiveConversation().conversation;
@@ -798,7 +818,12 @@ export function createExtensionAPI(options: CreateExtensionAPIOptions): ExcelExt
       toast(message);
     },
 
-    onAgentEvent(handler: (ev: AgentEvent) => void) {
+    onAgentEvent(handler: (ev: LegacyAgentEvent) => void) {
+      assertCapability("agent.events.read");
+      return subscribeLegacyEvents(handler);
+    },
+
+    onConversationEvent(handler: (ev: AgentEvent) => void) {
       assertCapability("agent.events.read");
       return subscribeAgentEvents(handler);
     },

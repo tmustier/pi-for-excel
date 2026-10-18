@@ -117,7 +117,8 @@ shape.
 the exact published `@earendil-works/pi-durable@1.3.0` runtime JS and declarations
 at install time (`postinstall`; rerun after installs made with `--ignore-scripts`).
 It validates version and SHA-256 source bytes before writing anything, accepts
-only the pristine or exactly patched form, and is idempotent. Source maps retain
+only pristine, exactly patched, or the complete previous policy-only patch form,
+and is idempotent. Source maps retain
 the original upstream source; runtime line mappings in patched files can shift.
 No dependency upgrade or custom compaction controller is involved.
 
@@ -140,14 +141,40 @@ from `src/compaction/defaults.ts`. Wire it as `settings: { compactionForModel }`
 is intentional: the existing soft warning is UI guidance, not background compaction.
 Manual compaction continues to ignore `enabled`; native range selection, summary
 placement, task ownership/state machines and one-compaction overflow retry remain
-unchanged. Durable's native summarizer explicitly uses `cacheRetention: "none"`,
-unlike the legacy app summarizer's cache-retention forwarding; this patch does not
-claim identical cache behavior or change that native choice.
+unchanged.
+
+The patch adds a typed request-only `CompactionHooks.beforeSummary` hook. It receives
+`{ messages: readonly Message[], instructions?: string }` and returns the same shape
+(or `undefined` to leave it unchanged). It runs after reconstructing the immutable
+selected range, on every summary attempt/recovery, before native serialization.
+Register `hook(CompactionTask, { beforeSummary: compactionMemoryNudge })` in the
+conversation's existing Excel extension hooks, importing the pure helper from
+`src/durable/memory-nudge.ts`. The helper excludes `[Auto-context]` user messages,
+preserves manual focus, and restores the original memory guidance verbatim:
+behavioral rules belong in the instructions tool, workbook/domain facts belong in
+`notes/` or `workbooks/<name>/notes.md`, and Critical Context carries a
+`Memory to persist` list. Only user cues qualify; snippets are case-insensitively
+deduplicated, limited to three and bounded to 180 characters. No cue means no nudge.
+History, native summary placement, and kept context are not mutated.
+
+Native `cacheRetention: "none"` is now a fallback, not an override of explicit
+preferences: `settings.stream.cacheRetention` wins, followed by the provider's
+resolved `PI_CACHE_RETENTION=long`, then `none`. The latter uses pi-ai's existing
+provider-env resolver (scoped auth environment, then ambient environment), not a
+new application setting. This is resolved at each summary request boundary;
+credentials/environment are not copied into a task checkpoint. Inspection of
+`BrowserModelRuntime` and `createOfficeStreamFn` found no dedicated cache-retention
+UI setting: browser auth has no ambient environment, and Office forwards request
+options through its payload hook/proxy to `Models.streamSimple`. The existing
+`HarnessSettings.stream` request preference and provider auth configuration are the
+sources being preserved; no UI preference is invented. Explicit `none` also wins
+over a provider's long preference.
 
 **Removal condition:** remove the install patch when upstream supports per-request
-model policy at all three sites plus a separate hard cap, then migrate the callback
-to that supported API and retain the real-Harness regression tests in
-`tests/durable-compaction-policy.test.ts`.
+model policy at all three sites plus a separate hard cap, a request-source hook,
+and explicit cache-retention preference forwarding. Then migrate to those supported
+APIs and retain the real-Harness regression tests in
+`tests/durable-compaction-policy.test.ts` and `tests/agent-compaction-memory.test.ts`.
 
 ---
 

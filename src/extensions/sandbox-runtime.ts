@@ -12,6 +12,7 @@ function isExtensionsSandboxRuntimePayloadShape(value: unknown): value is Record
 
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import type { AgentEvent } from "@earendil-works/pi-durable";
+import { legacyEventProjection } from "../commands/extension-api-compat.js";
 import type { TSchema } from "typebox";
 
 import type {
@@ -874,8 +875,9 @@ class SandboxRuntimeHost {
     const subscriptionId = asNonEmptyString(payload.subscriptionId, "subscriptionId");
     if (this.eventSubscriptions.has(subscriptionId)) return;
 
+    const project = legacyEventProjection();
     const unsubscribe = this.options.subscribeAgentEvents((agentEvent) => {
-      this.sendEvent("agent_event", { subscriptionId, event: agentEvent });
+      for (const event of project(agentEvent)) this.sendEvent("agent_event", { subscriptionId, event });
     });
     this.eventSubscriptions.set(subscriptionId, unsubscribe);
   }

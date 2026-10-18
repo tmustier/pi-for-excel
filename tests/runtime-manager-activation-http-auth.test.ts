@@ -123,9 +123,9 @@ void test("injected extension context is available to the next agent request", a
 
   const api = createExtensionAPI(bridge.host);
   const events: AgentEvent[] = [];
-  const unsubscribe = api.onAgentEvent((event) => events.push(event));
+  const unsubscribe = api.onConversationEvent((event) => events.push(event));
   try {
-    assert.equal(api.agent.raw, conversation);
+    assert.equal(api.agent.conversation, conversation);
     await api.agent.injectContext("context please");
     assert.equal(presenter.current.busy, false);
     assert.match(JSON.stringify(api.agent.snapshot.messages), /context please/);

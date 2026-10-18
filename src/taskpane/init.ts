@@ -14,6 +14,9 @@ import { BACKGROUND_CONTEXT as durableContext } from "@earendil-works/chord/cont
 import type { Api, Model } from "@earendil-works/pi-ai";
 import { ConversationPresenter } from "../durable/conversation-view.js";
 import { createDurableTaskpane } from "../durable/taskpane.js";
+import { createRetainedHistoryCallbacks } from "../durable/retained-history.js";
+import { mountDurableControls } from "../ui/durable-controls.js";
+import { decodeToolDetails } from "../tools/tool-details.js";
 import type { DurableCapabilities } from "../durable/runtime.js";
 import type { WorkbookMutationGate } from "../tools/mutation/gate.js";
 import { SessionInfoDoc } from "../durable/sessions.js";
@@ -516,11 +519,25 @@ export async function initTaskpane(opts: {
     coordinator: workbookCoordinator,
     defaultModel: modelRefreshOwner.snapshot().defaultModel,
     autoCompaction: autoCompactEnabled,
+    autoResizeImages,
     allowFaultInjection: import.meta.env.DEV,
     getActiveRuntime,
     onStorageWarning: (message: string) => showToast(message),
   });
   const sessions = durable.sessions;
+  const durableControls = mountDurableControls(appEl, durable.runtime, createRetainedHistoryCallbacks({
+    current: durable.association,
+    harness: durable.runtime.harness,
+    sessions,
+    models: modelRuntime.models,
+    defaultModel: modelRefreshOwner.snapshot().defaultModel,
+    settings,
+  }));
+  const stopDurableControls = durable.runtime.harness.subscribeCommits((publication) => {
+    if (publication.changes.some((change) => change.type === "document" && change.value?.kind === "excel.pending-mutations")) void durableControls.refresh();
+  });
+  void durableControls.refresh();
+  void durable.runtime.harness.closed.then(() => { stopDurableControls(); durableControls.dispose(); });
   const runtimeManager = new SessionRuntimeManager({
     sessions,
     createRuntime: buildSessionRuntime,
@@ -596,21 +613,16 @@ export async function initTaskpane(opts: {
 
   const restoreCheckpointById = async (snapshotId: string): Promise<void> => {
     const activeRuntime = getActiveRuntime();
-    const sessionId = activeRuntime ? String(activeRuntime.view.conversation.id) : crypto.randomUUID();
-    const coordinatorWorkbookId = durable.association.scopeId;
-
-    const restored = await workbookCoordinator.runWrite(
-      {
-        workbookId: coordinatorWorkbookId,
-        sessionId,
-        opId: crypto.randomUUID(),
-        toolName: "workbook_history",
-      },
-      () => workbookRecoveryLog.restore(snapshotId),
-    );
-
-    const address = restored.result.address;
-    showToast(t("init.revertedAddress", { address }));
+    if (!activeRuntime) throw new Error("No active conversation");
+    await requireWorkbookAssociation();
+    await activeRuntime.refreshCapabilities();
+    const result = await durable.runtime.executeTool(activeRuntime.view.conversation,
+      "workbook_history", { action: "restore", snapshot_id: snapshotId });
+    const details = decodeToolDetails(result && typeof result === "object" && !Array.isArray(result) ? result.details : undefined);
+    if (details?.kind !== "workbook_history" || details.action !== "restore" || !details.address) {
+      throw new Error("Restore did not produce a confirmed receipt. Review workbook state before retrying.");
+    }
+    showToast(t("init.revertedAddress", { address: details.address }));
   };
 
   const toRecoveryCheckpointSummary = (
@@ -715,6 +727,14 @@ export async function initTaskpane(opts: {
     connectionManager,
     modelRuntime,
     getActiveConversation,
+    subscribeActiveConversation: (listener) => {
+      let previous = runtimeManager.getActiveRuntime()?.runtimeId;
+      return runtimeManager.subscribe((snapshot) => {
+        if (snapshot.activeRuntimeId === previous) return;
+        previous = snapshot.activeRuntimeId ?? undefined;
+        listener();
+      });
+    },
     streamFn,
     refreshRuntimeTools: refreshCapabilitiesForAllRuntimes,
     refreshRuntimeModels: () => modelRefreshOwner.refresh(true),
@@ -841,7 +861,7 @@ export async function initTaskpane(opts: {
     const requestedId = optsForRuntime.conversationId ?? latestId;
     const conversation = requestedId ? await sessions.resolve(requestedId)
       : await sessions.create(initialModel, initialModel.reasoning ? "high" : "off");
-    if (!conversation) throw new Error(`Conversation not found: ${requestedId}`);
+    if (!conversation) throw new Error(`Conversation not found: ${requestedId ?? ""}`);
     const runtimeSessionId = String(conversation.id);
     const runtimeSkillReadCache = createSkillReadCache();
     const view = await ConversationPresenter.open(durable.runtime.harness, conversation, modelRuntime.models, initialModel);
@@ -1112,7 +1132,7 @@ export async function initTaskpane(opts: {
     syncRuntimeAfterSessionLoad(replacement);
   };
 
-  const openSessionInNewTab = async (sessionData: SessionData): Promise<SessionRuntime> => {
+  const openSessionInNewTab = async (sessionData: Pick<SessionData, "id">): Promise<SessionRuntime> => {
     const runtime = await runtimeManager.createRuntime({
       activate: true,
       autoRestoreLatest: false,
@@ -1147,7 +1167,7 @@ export async function initTaskpane(opts: {
 
   const reopenRecentlyClosedItem = async (item: RecentlyClosedItem): Promise<ReopenRecentlyClosedResult> => {
     try {
-      const sessionData = await sessions.loadSession(item.sessionId);
+      const sessionData = await sessions.header(item.sessionId);
       if (!sessionData) {
         showToast(t("init.couldNotReopenSession"));
         return "missing";
@@ -1950,6 +1970,11 @@ export async function initTaskpane(opts: {
     connectionManager,
     modelRuntime,
     durable,
+    executeTool: async (runtime, name, args) => {
+      await requireWorkbookAssociation();
+      await runtime.refreshCapabilities();
+      return durable.runtime.executeTool(runtime.view.conversation, name, args);
+    },
     refreshModels: async (allowNetwork) => {
       await modelRefreshOwner.refresh(allowNetwork);
       return { errors: [...modelRefreshOwner.snapshot().providerErrors] };

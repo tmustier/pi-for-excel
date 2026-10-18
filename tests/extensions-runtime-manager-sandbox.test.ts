@@ -499,7 +499,7 @@ void test("host and sandbox bridges retain distinct authority and owner boundari
       refreshRuntimeTools: async () => {},
       reservedToolNames: new Set<string>(),
       loadExtensionFromSource: (api) => {
-        hostRawAgent = api.agent.raw;
+        hostRawAgent = api.agent.conversation;
         hostConnectionId = api.connections.register({
           id: "ext.other.host-secret",
           title: "Host connection",

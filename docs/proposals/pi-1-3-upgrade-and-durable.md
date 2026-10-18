@@ -108,6 +108,41 @@ The prototype answered the five questions well enough to decide. Pi Durable is n
 6. **Move extensions onto Durable.** Give extensions that read agent state, events or messages a Durable-backed version of those APIs, and keep extension tools unsafe to replay by default.
 7. **Switch over and remove the replaced path.** Ship only Durable, remove the runtime experiment from the catalogue/UI, and remove the old `Agent` session, queue and execution compaction implementations in this migration. Preserve user-facing regression coverage through native Harness tests, not tests that construct or monkeypatch the deleted runtime. Keep storage, provider, cache, context and imported-message contracts where they still apply.
 
+### Migration behavior
+
+- The workbook owns one Harness; tabs are native conversations. Input edits and
+  withdrawals update the native inbox atomically without changing queue position.
+  A first pending user message persists even without an assistant reply; unused
+  empty drafts remain restorable but do not clutter history.
+- Legacy imports retain the original JSON and convert the complete timeline.
+  Archived buckets live in cold pages, not empty-model active-entry payloads.
+  Streaming reads active context and live state; history lists read lightweight
+  metadata. Archive expansion is paged, and export/full-message extension reads
+  explicitly materialize history on demand.
+- Unsaved workbooks can chat. Document tokens support first-save continuity;
+  Save As separates execution ownership. Retained-history controls can copy
+  completed conversations without pending tasks. Unidentifiable WPS documents
+  require explicit retained-history selection rather than guessing ownership.
+  Missing, replaced or corrupt expected generations fail visibly; a declined
+  browser persistence request warns but does not disable chat.
+- Mutations use native task IDs, not provider call IDs. Keyed forensic records
+  remain retained while a small active index tracks unresolved work. Direct UI
+  restores and registered extension tools use the same dispatch gate. Acknowledging
+  inspected state never writes Excel, proves original success, or replays work.
+  Arbitrary trusted extension host-global calls remain outside this boundary.
+- Automatic compaction, overflow retry, Memory guidance and explicit cache
+  retention use native tasks plus the documented pinned local compaction patch.
+  A second overflow settles visibly rather than looping; cancellation leaves
+  subsequent input usable. Tool-result images honor bootstrap resizing and the
+  selected model's limits at the request boundary, including restored images.
+- Installed extension event subscribers retain the public legacy event payload
+  and read-state shapes through a read-only projection. New native access uses
+  `agent.conversation`; no Agent executor or mutable Agent state is retained.
+
+These are implementation contracts, not a declaration of integrated Excel
+acceptance. Chromium uses stub providers/Office hosts; live Mac Excel acceptance
+and independent workbook readback remain the coordinator's lane.
+
 ## Step 2 findings (historical prototype evidence)
 
 The following records the earlier evaluation of published Durable 1.3.0, not the current sole-runtime behavior. At that time the `durable_runtime` flag defaulted off, the taskpane made no request for a Durable module with it off, and normal chat still used Agent even with it on. Prototype runs were submitted through the background verification bridge. The prototype used a separate database and did not update existing session records. Flag-off results and prototype limitations below are historical observations, not current rollout instructions or proof of the completed migration.

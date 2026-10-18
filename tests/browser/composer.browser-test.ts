@@ -19,6 +19,15 @@ async function withTaskpane(run: (page: Page) => Promise<void>, viewportHeight =
   const opened = await openTaskpane(env, {
     viewport: { width: 420, height: viewportHeight },
     clientId: "composer-browser-client",
+    prepareContext: async (context) => {
+      // Capture the public model catalog at construction; execution remains production Durable.
+      await context.route("**/src/models/browser-model-runtime.*", async (route) => {
+        const response = await route.fetch();
+        const source = await response.text();
+        assert.ok(source.includes("for (const provider of builtinProviders())"));
+        await route.fulfill({ response, body: source.replace("for (const provider of builtinProviders())", "globalThis.browserTestModels = this.models; for (const provider of builtinProviders())") });
+      });
+    },
   });
   try {
     await run(opened.page);
@@ -31,17 +40,23 @@ void test("Alt+Up recalls queued actions into the composer in order", async () =
   await withTaskpane(async (page) => {
     await page.evaluate(`
       (async () => {
-        const { commandRegistry } = await import("/src/commands/types.ts");
-        commandRegistry.register({
-          name: "compact",
-          description: "Keep the action queue busy",
-          source: "builtin",
-          execute: () => new Promise(() => {}),
-        });
+        const { fauxProvider } = await import("/node_modules/@earendil-works/pi-ai/dist/providers/faux.js");
+        const { BACKGROUND_CONTEXT: ctx } = await import("/node_modules/@earendil-works/chord/dist/context/index.js");
+        const view = document.querySelector("pi-sidebar").view;
+        const faux = fauxProvider({ tokensPerSecond: Infinity });
+        faux.setResponses([async () => {
+          document.body.dataset.providerWaiting = "yes";
+          return new Promise(() => {});
+        }]);
+        globalThis.browserTestModels.setProvider(faux.provider);
+        const model = faux.getModel();
+        await view.conversation.configure({ model: { provider: model.provider, modelId: model.id } }, ctx);
+        await view.refresh();
+        await view.conversation.submit({ type: "input", content: "Keep generation busy" }, ctx);
       })()
     `);
 
-    await enterInput(page, "/compact");
+    await page.waitForFunction('document.body.dataset.providerWaiting === "yes"');
     await enterInput(page, "first queued action");
     await page.locator("#pi-queue-display").getByText("first queued action", { exact: true }).waitFor({ state: "visible" });
     await enterInput(page, "second queued action");
@@ -49,6 +64,7 @@ void test("Alt+Up recalls queued actions into the composer in order", async () =
 
     const input = page.locator("pi-input textarea");
     await input.press("Alt+ArrowUp");
+    await page.waitForFunction(() => document.querySelector<HTMLTextAreaElement>("pi-input textarea")?.value === "first queued action\n\nsecond queued action");
 
     assert.deepEqual(
       {

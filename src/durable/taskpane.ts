@@ -43,6 +43,7 @@ export async function createDurableTaskpane(options: {
   coordinator: WorkbookCoordinator;
   defaultModel: Model<Api>;
   autoCompaction: boolean;
+  autoResizeImages?: boolean;
   allowFaultInjection: boolean;
   onStorageWarning?: (message: string) => void;
 }): Promise<DurableTaskpane> {
@@ -66,7 +67,8 @@ export async function createDurableTaskpane(options: {
       workbookId: association.scopeId, coordinator: options.coordinator,
       mutationHost: createWorkbookMutationHost({ kind: options.host.kind,
         getWorkbookId: async () => (await resolveAssociation()).scopeId }),
-      autoCompaction: options.autoCompaction, allowFaultInjection: options.allowFaultInjection,
+      autoCompaction: options.autoCompaction, autoResizeImages: options.autoResizeImages ?? true,
+      allowFaultInjection: options.allowFaultInjection,
       onOpened: (harness) => {
         lifecycle = createModelRecoveryLifecycle(() => harness.close(context));
         const bound = lifecycle;
@@ -77,6 +79,8 @@ export async function createDurableTaskpane(options: {
       const workbook = await options.host.getWorkbookContext();
       await importWorkbookSessions(runtime.harness, app.sessions, app.settings, workbook.workbookId, context);
       const sessions = new DurableSessions(runtime.harness, options.models, options.defaultModel);
+      await sessions.reconcileMetadata();
+      void runtime.harness.closed.then(() => sessions.dispose());
       return { runtime, sessions, association, resolveAssociation,
         execute: async (command, payloadJson) => {
           const payload: unknown = JSON.parse(payloadJson);

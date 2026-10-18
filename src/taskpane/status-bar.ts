@@ -87,7 +87,7 @@ function renderStatusBar(
   // The projection contains only active context plus UI-only archive buckets,
   // which the estimator ignores. Durable does not expose a system prompt here;
   // provider usage remains the authoritative anchor once a turn completes.
-  const { totalTokens, lastUsage } = estimateContextTokens({ messages: state.messages, systemPrompt: "" });
+  const { totalTokens, lastUsage } = estimateContextTokens({ messages: state.messages, systemPrompt: state.systemPrompt ?? "" });
 
   const contextWindow = state.model?.contextWindow || 200000;
   const pct = contextWindow > 0 ? Math.round((totalTokens / contextWindow) * 100) : 0;

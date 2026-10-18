@@ -5,7 +5,8 @@
  * text blob.
  */
 
-import { html } from "lit";
+import { html, LitElement, nothing } from "lit";
+import { customElement, property, state } from "lit/decorators.js";
 import { createRef, ref } from "lit/directives/ref.js";
 import { registerMessageRenderer } from "./messages/message-renderer-registry.js";
 import { renderCollapsibleToolCardHeader } from "./tool-card-header.js";
@@ -20,10 +21,23 @@ import "./messages/message-list.js";
 
 const EMPTY_PENDING_TOOL_CALLS = new Set<string>();
 
-registerMessageRenderer("archivedMessages", {
-  render(message: ArchivedMessagesMessage) {
+@customElement("pi-archived-history")
+export class ArchivedHistoryElement extends LitElement {
+  @property({ attribute: false }) message?: ArchivedMessagesMessage;
+  @state() private expanded = false;
+  @state() private visible = 100;
+
+  protected override createRenderRoot(): HTMLElement { return this; }
+
+  override render() {
+    const message = this.message;
+    if (!message) return nothing;
     const contentRef = createRef<HTMLDivElement>();
     const chevronRef = createRef<HTMLElement>();
+    const toggleMessages = (): void => {
+      this.expanded = !this.expanded;
+      if (!this.expanded) this.visible = 100;
+    };
 
     const title = html`
       <span class="pi-tool-card__title">
@@ -35,13 +49,13 @@ registerMessageRenderer("archivedMessages", {
     return html`
       <div class="pi-message-gutter">
         <div class="pi-tool-card" data-state="complete" data-tool-name="archive_history">
-          <div class="pi-tool-card__header">
-            ${renderCollapsibleToolCardHeader("complete", title, contentRef, chevronRef, false)}
+          <div class="pi-tool-card__header" @click=${toggleMessages}>
+            ${renderCollapsibleToolCardHeader("complete", title, contentRef, chevronRef, this.expanded)}
           </div>
 
           <div
             ${ref(contentRef)}
-            class="pi-tool-card__body pi-tool-card__body--collapsed"
+            class="pi-tool-card__body ${this.expanded ? "" : "pi-tool-card__body--collapsed"}"
           >
             <div class="pi-tool-card__inner">
               <div class="pi-tool-card__detail">
@@ -50,15 +64,15 @@ registerMessageRenderer("archivedMessages", {
 
               <div class="pi-tool-card__section">
                 <div class="pi-tool-card__section-label">${t("message-renderers.archived")}</div>
-                ${message.archivedMessages.length === 0
+                ${!this.expanded ? nothing : message.archivedMessages.length === 0
                   ? html`<div class="pi-tool-card__plain-text">${t("message-renderers.noArchived")}</div>`
                   : html`
-                    <message-list
-                      .messages=${message.archivedMessages}
-                      .tools=${[]}
-                      .pendingToolCalls=${EMPTY_PENDING_TOOL_CALLS}
-                      .isStreaming=${false}
-                    ></message-list>
+                    <message-list .messages=${message.archivedMessages.slice(0, this.visible)}
+                      .tools=${[]} .pendingToolCalls=${EMPTY_PENDING_TOOL_CALLS} .isStreaming=${false}></message-list>
+                    ${this.visible < message.archivedMessages.length ? html`
+                      <button type="button" class="pi-tool-card__toggle" @click=${() => { this.visible += 100; }}>
+                        ${t("message-renderers.showEarlier")}
+                      </button>` : nothing}
                   `}
               </div>
             </div>
@@ -66,7 +80,11 @@ registerMessageRenderer("archivedMessages", {
         </div>
       </div>
     `;
-  },
+  }
+}
+
+registerMessageRenderer("archivedMessages", {
+  render: (message: ArchivedMessagesMessage) => html`<pi-archived-history .message=${message}></pi-archived-history>`,
 });
 
 registerMessageRenderer("compactionSummary", {
