@@ -84,7 +84,7 @@ visibility utilities that shell components toggle.
 > - `theme/preflight.css` (1b)
 > - `theme/base.css` (2)
 > - `theme/components.css` (3–10, import-only entrypoint) → imports `theme/components/{tabs,input,empty-state,working-indicator,widgets,status-bar,toasts,menus,welcome,files,welcome-login}.css`
-> - `theme/overlays.css` (10b) → imports `theme/overlays/{primitives,extensions,integrations,skills,provider-resume-shortcuts,recovery,experimental}.css`
+> - `theme/overlays.css` (10b) → imports `theme/overlays/{primitives,settings-shell,provider-resume-shortcuts,recovery,settings,experimental,durable}.css`
 > - `theme/content-overrides.css` (11) → imports `theme/content/{messages,tool-cards,csv-table,dependency-tree,tool-card-markdown,message-components}.css`
 > - `theme/dialogs.css` (12, stable selectors)
 > - `theme/queue.css` (13)
@@ -145,8 +145,8 @@ Message components use Light DOM (`createRenderRoot() { return this; }`), so the
 ## Wiring (taskpane runtime)
 
 Mount `mountDurableControls(host, runtime, history)` from `durable-controls.ts`
-outside the model transcript. It imports its own CSS and reads authoritative
-`runtime.reviews()` (including legacy evidence). The runtime type is
+outside the model transcript. Its styles live in `theme/overlays/durable.css`.
+It reads authoritative `runtime.reviews()` (including legacy evidence). The runtime type is
 `Pick<Awaited<ReturnType<typeof openDurableRuntime>>, 'reviews' | 'mutations' | 'harness'>`.
 Call the returned `refresh(): Promise<void>` after committed runtime changes;
 call `dispose(): void` before switching runtimes or removing the host.
