@@ -4,7 +4,8 @@
 
 import { commandRegistry, type SlashCommand } from "../types.js";
 
-import { createModelCommands, type ActiveAgentProvider } from "./model.js";
+import { createModelCommands, type ActiveConversationProvider } from "./model.js";
+import type { DurableSessions } from "../../durable/sessions.js";
 import { createSettingsCommands, type SettingsCommandActions } from "./settings.js";
 import { createExperimentalCommands } from "./experimental.js";
 import { createDebugCommands } from "./debug.js";
@@ -26,7 +27,8 @@ export interface BuiltinsContext
     ToolsCommandActions,
     SkillsCommandActions,
     FilesCommandActions {
-  getActiveAgent: ActiveAgentProvider;
+  getActiveConversation: ActiveConversationProvider;
+  getSessions: () => DurableSessions;
   openModelSelector: () => void;
 }
 
@@ -35,7 +37,7 @@ export function registerBuiltins(context: BuiltinsContext): void {
   // Keep registration order stable: this is the order shown in the command menu.
   const builtins: SlashCommand[] = [
     ...createModelCommands({
-      getActiveAgent: context.getActiveAgent,
+      getActiveConversation: context.getActiveConversation,
       openModelSelector: context.openModelSelector,
     }),
     ...createSettingsCommands(context),
@@ -45,13 +47,13 @@ export function registerBuiltins(context: BuiltinsContext): void {
     ...createFilesCommands(context),
     ...createExperimentalCommands(),
     ...createDebugCommands(),
-    ...createClipboardCommands(context.getActiveAgent),
-    ...createExportCommands(context.getActiveAgent),
+    ...createClipboardCommands(context.getActiveConversation),
+    ...createExportCommands(context.getActiveConversation, context.getSessions),
     ...createSessionIdentityCommands(context),
     ...createHelpCommands(),
     ...createExtensionsCommands(context),
     ...createSessionLifecycleCommands(context),
-    ...createCompactCommands(context.getActiveAgent),
+    ...createCompactCommands(context.getActiveConversation),
   ];
 
   for (const cmd of builtins) {

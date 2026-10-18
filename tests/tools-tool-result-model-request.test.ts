@@ -1,15 +1,19 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { Agent, type AgentMessage } from "@earendil-works/pi-agent-core";
+import { type AgentMessage } from "@earendil-works/pi-agent-core";
+import { BACKGROUND_CONTEXT as context } from "@earendil-works/chord/context";
+import { MemoryStorage } from "@earendil-works/pi-durable";
 import {
-  createModels,
-  fauxAssistantMessage,
-  fauxProvider,
   type Context,
 } from "@earendil-works/pi-ai";
+import { createModels } from "@earendil-works/pi-ai/models";
+import { fauxAssistantMessage, fauxProvider } from "@earendil-works/pi-ai/providers/faux";
 
-import { createConvertToLlm } from "../src/messages/convert-to-llm.ts";
+import { openDurableRuntime } from "../src/durable/runtime.ts";
+import { DurableSessions } from "../src/durable/sessions.ts";
+import { ConversationPresenter } from "../src/durable/conversation-view.ts";
+import { createWorkbookCoordinator } from "../src/workbook/coordinator.ts";
 
 type ToolResultMessage = Extract<AgentMessage, { role: "toolResult" }>;
 
@@ -34,24 +38,41 @@ function toolResult(
 }
 
 async function sendToModel(messages: AgentMessage[]): Promise<{ request: Context; history: AgentMessage[] }> {
-  const faux = fauxProvider({ models: [{ id: "tool-result-request", contextWindow: 32_000, maxTokens: 4_096 }] });
+  const faux = fauxProvider({ tokensPerSecond: Infinity, models: [{ id: "tool-result-request", contextWindow: 32_000, maxTokens: 4_096 }] });
   const models = createModels();
-  models.setProvider(faux.provider);
   faux.setResponses([fauxAssistantMessage("done")]);
   const requests: Context[] = [];
-  const agent = new Agent({
-    initialState: { model: faux.getModel(), messages, tools: [] },
-    convertToLlm: createConvertToLlm({ getContextWindow: () => 32_000 }),
-    streamFn: (model, context, options) => {
-      requests.push(structuredClone(context));
-      return models.streamSimple(model, context, options);
+  models.setProvider({ ...faux.provider,
+    streamSimple: (model, transcript, options) => {
+      requests.push(structuredClone(transcript));
+      return faux.provider.streamSimple(model, transcript, options);
     },
   });
-
-  await agent.prompt("continue");
-  const request = requests[0];
-  if (!request) throw new Error("Expected an outbound model request.");
-  return { request, history: agent.state.messages };
+  const runtime = await openDurableRuntime({ storage: new MemoryStorage(), models,
+    workbookId: "tool-result", coordinator: createWorkbookCoordinator(), autoCompaction: false,
+    mutationHost: { prepare: () => { throw new Error("Unexpected mutation"); }, observe: () => { throw new Error("Unexpected mutation"); } },
+  });
+  try {
+    const sessions = new DurableSessions(runtime.harness, models, faux.getModel());
+    const conversation = await sessions.create(faux.getModel(), "off");
+    await runtime.install(conversation, { tools: [], systemPrompt: "" }, (history) => Promise.resolve(history));
+    await runtime.harness.commit(async (tx) => {
+      for (const message of messages) {
+        if (message.role === "toolResult") await tx.appendEntry(conversation.id, {
+          kind: "test.calls", model: [{ ...fauxAssistantMessage(""),
+            content: [{ type: "toolCall", id: message.toolCallId, name: message.toolName, arguments: {} }], stopReason: "toolUse" }],
+        });
+        await tx.appendEntry(conversation.id, { kind: "test.history", model: [message] });
+      }
+    }, context);
+    const submission = await conversation.submit({ type: "input", content: "continue" }, context);
+    assert.equal((await submission.wait(context)).status, "done");
+    const request = requests[0];
+    if (!request) throw new Error("Expected an outbound model request.");
+    const presenter = await ConversationPresenter.open(runtime.harness, conversation, models, faux.getModel());
+    try { return { request, history: presenter.current.messages }; }
+    finally { await presenter.dispose(); }
+  } finally { await runtime.harness.close(context); }
 }
 
 function requestToolResult(request: Context, id: string): ToolResultMessage {

@@ -36,9 +36,9 @@ function defaultSandboxOptions(): SandboxActivationOptions {
     storageDelete: () => Promise.resolve(),
     storageKeys: () => Promise.resolve([]),
     clipboardWriteText: () => Promise.resolve(),
-    injectAgentContext: () => {},
-    steerAgent: () => {},
-    followUpAgent: () => {},
+    injectAgentContext: () => Promise.resolve(),
+    steerAgent: () => Promise.resolve(),
+    followUpAgent: () => Promise.resolve(),
     listSkills: () => Promise.resolve([]),
     readSkill: () => Promise.reject(new Error("not expected")),
     installSkill: () => Promise.resolve(),
@@ -282,6 +282,39 @@ void test("reading connection secrets requires the dedicated secret capability",
     assert.equal(secretReads, 0);
   } finally {
     await harness.close();
+  }
+});
+
+void test("sandbox conversation writes await persistence and forward failures", async () => {
+  for (const method of ["agent_inject_context", "agent_steer", "agent_follow_up"]) {
+    let release = () => {};
+    let started = () => {};
+    const pending = new Promise<void>((resolve) => { release = resolve; });
+    const invoked = new Promise<void>((resolve) => { started = resolve; });
+    const operation = async () => {
+      started();
+      await pending;
+      throw new Error("persistence refused");
+    };
+    const harness = await openSandbox({
+      injectAgentContext: operation, steerAgent: operation, followUpAgent: operation,
+    });
+    try {
+      let responded = false;
+      const response = sendRequest(harness, method, { content: "note" }).then((value) => {
+        responded = true;
+        return value;
+      });
+      await invoked;
+      assert.equal(responded, false);
+      release();
+      const result = await response;
+      assert.equal(result.ok, false);
+      assert.match(JSON.stringify(result), /persistence refused/);
+    } finally {
+      release();
+      await harness.close();
+    }
   }
 });
 

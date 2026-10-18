@@ -2,7 +2,8 @@
  * Status bar rendering + thinking level flash.
  */
 
-import type { Agent, ThinkingLevel } from "@earendil-works/pi-agent-core";
+import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
+import type { ConversationPresenter } from "../durable/conversation-view.js";
 
 import { t } from "../language/index.js";
 import { showToast } from "../ui/toast.js";
@@ -21,7 +22,7 @@ import {
 import type { RuntimeLockState } from "./session-runtime-manager.js";
 import { getThinkingLevelLabel } from "./thinking-display.js";
 
-export type ActiveAgentProvider = () => Agent | null;
+export type ActiveConversationProvider = () => ConversationPresenter | null;
 export type ActiveLockStateProvider = () => RuntimeLockState;
 export type ActiveExecutionModeProvider = () => ExecutionMode;
 
@@ -52,16 +53,16 @@ function adjustContextTooltipAlignment(statusBar: HTMLElement): void {
 }
 
 function renderStatusBar(
-  agent: Agent | null,
+  view: ConversationPresenter | null,
   lockState: RuntimeLockState,
   executionMode: ExecutionMode,
 ): void {
   const el = document.getElementById("pi-status-bar");
   if (!el) return;
 
-  if (!agent) {
+  if (!view) {
     const emptyMarkup = `<span class="pi-status-ctx">${escapeHtml(t("status.no_session"))}</span>`;
-    const emptySignature = "no-agent";
+    const emptySignature = "no-conversation";
     if (el.getAttribute("data-status-signature") !== emptySignature) {
       setSafeInnerHTML(el, emptyMarkup, "status bar empty-state markup with escaped locale text");
       el.setAttribute("data-status-signature", emptySignature);
@@ -69,7 +70,7 @@ function renderStatusBar(
     return;
   }
 
-  const state = agent.state;
+  const state = view.current;
 
   // Model alias
   const model = state.model;
@@ -83,7 +84,10 @@ function renderStatusBar(
   //
   // The most reliable signal we have in the UI is the last successful assistant
   // turn's usage, which already reflects the prompt size.
-  const { totalTokens, lastUsage } = estimateContextTokens(state);
+  // The projection contains only active context plus UI-only archive buckets,
+  // which the estimator ignores. Durable does not expose a system prompt here;
+  // provider usage remains the authoritative anchor once a turn completes.
+  const { totalTokens, lastUsage } = estimateContextTokens({ messages: state.messages, systemPrompt: state.systemPrompt ?? "" });
 
   const contextWindow = state.model?.contextWindow || 200000;
   const pct = contextWindow > 0 ? Math.round((totalTokens / contextWindow) * 100) : 0;
@@ -178,31 +182,31 @@ function renderStatusBar(
   adjustContextTooltipAlignment(el);
 }
 
-export function updateStatusBarForAgent(
-  agent: Agent,
+export function updateStatusBarForConversation(
+  view: ConversationPresenter,
   lockState: RuntimeLockState = "idle",
   executionMode: ExecutionMode = "yolo",
 ): void {
-  renderStatusBar(agent, lockState, executionMode);
+  renderStatusBar(view, lockState, executionMode);
 }
 
 export function updateStatusBar(
-  getActiveAgent: ActiveAgentProvider,
+  getActiveConversation: ActiveConversationProvider,
   getLockState?: ActiveLockStateProvider,
   getExecutionMode?: ActiveExecutionModeProvider,
 ): void {
-  const activeAgent = getActiveAgent();
+  const activeConversation = getActiveConversation();
   const lockState = getLockState ? getLockState() : "idle";
   const executionMode = getExecutionMode ? getExecutionMode() : "yolo";
-  renderStatusBar(activeAgent, lockState, executionMode);
+  renderStatusBar(activeConversation, lockState, executionMode);
 }
 
 export function injectStatusBar(opts: {
-  getActiveAgent: ActiveAgentProvider;
+  getActiveConversation: ActiveConversationProvider;
   getLockState?: ActiveLockStateProvider;
   getExecutionMode?: ActiveExecutionModeProvider;
 }): () => void {
-  const { getActiveAgent, getLockState, getExecutionMode } = opts;
+  const { getActiveConversation, getLockState, getExecutionMode } = opts;
 
   let unsubscribeActiveAgent: (() => void) | undefined;
   let hasDeferredRender = false;
@@ -226,7 +230,7 @@ export function injectStatusBar(opts: {
     }
 
     hasDeferredRender = false;
-    updateStatusBar(getActiveAgent, getLockState, getExecutionMode);
+    updateStatusBar(getActiveConversation, getLockState, getExecutionMode);
   };
 
   const markStatusBarInteractionStart = (): void => {
@@ -261,13 +265,13 @@ export function injectStatusBar(opts: {
     }
 
     hasDeferredRender = false;
-    updateStatusBar(getActiveAgent, getLockState, getExecutionMode);
+    updateStatusBar(getActiveConversation, getLockState, getExecutionMode);
   };
 
   const bindActiveAgent = () => {
     unsubscribeActiveAgent?.();
 
-    const activeAgent = getActiveAgent();
+    const activeAgent = getActiveConversation();
     if (activeAgent) {
       unsubscribeActiveAgent = activeAgent.subscribe(requestRender);
     } else {

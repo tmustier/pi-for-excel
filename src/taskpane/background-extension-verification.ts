@@ -1,4 +1,14 @@
 import { prepareDurableReload } from "../durable/model-recovery.js";
+import { entryMessages, readConversationHistory } from "../durable/conversation-view.js";
+import { BACKGROUND_CONTEXT as context } from "@earendil-works/chord/context";
+import { isJsonValue, type JsonValue } from "@earendil-works/chord";
+import type { AgentMessage } from "@earendil-works/pi-agent-core";
+import { LegacySessionDoc } from "../durable/session-import.js";
+import { InboxDoc } from "@earendil-works/pi-durable";
+import { Type } from "typebox";
+import { Value } from "typebox/value";
+import { StringEnum } from "../tools/string-enum.js";
+import type { DurableSessions } from "../durable/sessions.js";
 import type { ConnectionManager } from "../connections/manager.js";
 import {
   loadConnectionStoreDocumentForUpdate,
@@ -26,6 +36,13 @@ import type { DurableTaskpane } from "../durable/taskpane.js";
 
 export const EXTENSION_VERIFICATION_COMMAND_TYPES = [
   "assertLastAssistantText",
+  "getMessages",
+  "getPendingMessages",
+  "abort",
+  "configure",
+  "listSessions",
+  "exportTranscript",
+  "executeTool",
   "extensionInstallCode",
   "extensionList",
   "extensionSetCapability",
@@ -55,13 +72,26 @@ interface JsonRecord {
 }
 
 export interface ExtensionVerificationOptions {
-  durable?: DurableTaskpane;
+  durable: DurableTaskpane;
   getActiveRuntime: () => SessionRuntime | null;
+  getSessions?: () => DurableSessions;
+  /** Must dispatch through the installed Durable tool task, including mutation gates. */
+  executeTool?: (runtime: SessionRuntime, name: string, args: { [key: string]: JsonValue }) => Promise<JsonValue>;
   extensionManager: ExtensionRuntimeManager;
   connectionManager: ConnectionManager;
   modelRuntime: BrowserModelRuntime;
   refreshModels: (allowNetwork: boolean) => Promise<{ errors: string[] }>;
 }
+
+const configureSchema = Type.Object({
+  model: Type.Optional(Type.Object({ provider: Type.String(), modelId: Type.String() }, { additionalProperties: false })),
+  thinkingLevel: Type.Optional(StringEnum(["off", "minimal", "low", "medium", "high", "xhigh", "max"])),
+}, { additionalProperties: false });
+
+const executeToolSchema = Type.Object({
+  name: Type.String({ minLength: 1 }),
+  args: Type.Record(Type.String(), Type.Unknown()),
+}, { additionalProperties: false });
 
 function isPayloadShape(value: unknown): value is JsonRecord {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -98,11 +128,22 @@ export function isExtensionVerificationCommand(
   return EXTENSION_VERIFICATION_COMMAND_TYPES.some((command) => command === value);
 }
 
-function latestAssistantText(runtime: SessionRuntime | null): string | null {
+async function readRuntimeMessages(runtime: SessionRuntime): Promise<AgentMessage[]> {
+  const legacy = await runtime.view.harness.snapshot(LegacySessionDoc, runtime.view.conversation.id, context);
+  return (await readConversationHistory(runtime.view.conversation))
+    .flatMap((entry) => entryMessages(entry, legacy?.originalSessionJson));
+}
+
+function originalMessages(messages: readonly AgentMessage[]): AgentMessage[] {
+  return messages.flatMap((message) => message.role === "archivedMessages" ? originalMessages(message.archivedMessages) : [message]);
+}
+
+async function latestAssistantText(runtime: SessionRuntime | null): Promise<string | null> {
   if (!runtime) return null;
 
-  for (let index = runtime.agent.state.messages.length - 1; index >= 0; index -= 1) {
-    const message = runtime.agent.state.messages[index];
+  const messages = originalMessages(await readRuntimeMessages(runtime));
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
     if (!message || message.role !== "assistant") continue;
     return message.content
       .filter((part) => part.type === "text")
@@ -113,14 +154,14 @@ function latestAssistantText(runtime: SessionRuntime | null): string | null {
   return null;
 }
 
-function assertLastAssistantText(
+async function assertLastAssistantText(
   payload: unknown,
   options: ExtensionVerificationOptions,
-): JsonRecord {
+): Promise<JsonRecord> {
   const expected = stringField(payload, "expected");
   if (!expected) throw new Error("assertLastAssistantText requires payload.expected");
 
-  const actual = latestAssistantText(options.getActiveRuntime());
+  const actual = await latestAssistantText(options.getActiveRuntime());
   return {
     matches: actual === expected,
     expectedLength: expected.length,
@@ -156,7 +197,6 @@ function parseExtensionCapability(value: string): ExtensionCapability {
 
 function parseExperimentalFeatureId(value: string): ExperimentalFeatureId {
   switch (value) {
-    case "durable_runtime":
     case "ui_dark_mode":
     case "remote_extension_urls":
     case "extension_permission_gates":
@@ -363,13 +403,54 @@ export async function executeExtensionVerificationCommand(
   options: ExtensionVerificationOptions,
 ): Promise<unknown> {
   switch (type) {
+    case "listSessions":
+      return { sessions: await (options.getSessions?.() ?? options.durable.sessions).getAllMetadata() };
+    case "exportTranscript": {
+      const id = stringField(payload, "sessionId") ?? String(options.getActiveRuntime()?.view.conversation.id ?? "");
+      if (!id) throw new Error("exportTranscript requires an active conversation or sessionId");
+      const session = await (options.getSessions?.() ?? options.durable.sessions).loadSession(id);
+      if (!session) throw new Error(`Session not found: ${id}`);
+      return session;
+    }
+    case "getMessages":
+    case "getPendingMessages":
+    case "abort":
+    case "configure":
+    case "executeTool": {
+      const runtime = options.getActiveRuntime();
+      if (!runtime) throw new Error("No active conversation");
+      const conversation = runtime.view.conversation;
+      if (type === "getMessages") {
+        return { messages: await readRuntimeMessages(runtime) };
+      }
+      if (type === "getPendingMessages") {
+        return { pending: (await runtime.view.harness.snapshot(InboxDoc, conversation.id, context))?.items ?? [] };
+      }
+      if (type === "abort") {
+        await conversation.abort(context);
+        await runtime.view.refresh();
+        return { aborted: true };
+      }
+      if (type === "configure") {
+        if (!Value.Check(configureSchema, payload)) throw new Error("Invalid configure payload");
+        if (runtime.view.current.busy || runtime.view.current.inbox.length) throw new Error("An idle active chat is required.");
+        await conversation.configure(payload, context);
+        await runtime.view.refresh();
+        await runtime.refreshCapabilities();
+        return { configured: true };
+      }
+      if (!Value.Check(executeToolSchema, payload) || !isJsonValue(payload.args)) throw new Error("executeTool requires name and JSON args");
+      if (!runtime.tools.some((tool) => tool.name === payload.name)) throw new Error(`Tool not available: ${payload.name}`);
+      // Never fall back to runtime.tools[].execute: that skips Durable mutation admission.
+      if (!options.executeTool) throw new Error("Installed Durable tool execution is unavailable");
+      return options.executeTool(runtime, payload.name, payload.args);
+    }
     case "durableStatus":
     case "durableSubmit":
     case "durableFault":
     case "durableResumeFault":
     case "durableReconcile":
     case "durableImport":
-      if (!options.durable) throw new Error("Enable durable_runtime and reload the taskpane first");
       return options.durable.execute(type, JSON.stringify(payload ?? {}));
     case "assertLastAssistantText":
       return assertLastAssistantText(payload, options);

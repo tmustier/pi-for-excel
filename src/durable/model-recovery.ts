@@ -47,8 +47,8 @@ export function createModelRecoveryLifecycle(
 /**
  * WebKit can deliver a fetch error before its pagehide event. Yield terminal
  * errors to the browser event queue so an already pending unload can seal the
- * harness first. Ordinary network/authentication errors still reach Durable;
- * this is not an error retry or a heuristic based on the provider's wording.
+ * harness first. Ordinary provider/authentication errors still reach Durable.
+ * The exact WebKit fetch-cancellation wording is classified separately below.
  */
 export function protectModelStream(
   source: AssistantMessageEventStream,
@@ -79,10 +79,11 @@ export function protectModelStream(
       // checkpoint rather than irreversibly answering the queued submission.
       // Use Durable's existing retry policy; never reinterpret auth/provider
       // errors, explicit cancellation, or successful terminal messages.
-      if (event.type === "error" && event.reason === "error"
-        && /^(?:TypeError: )?Load failed\.?$/u.test(event.error.errorMessage ?? "")) {
+      const browserError = event.type === "error" ? event.error.errorMessage : undefined;
+      if (event.type === "error" && event.reason === "error" && typeof browserError === "string"
+        && /^(?:TypeError: )?Load failed\.?$/u.test(browserError)) {
         output.push({ ...event, error: { ...event.error,
-          errorMessage: `Network error: ${event.error.errorMessage}`,
+          errorMessage: `Network error: ${browserError}`,
         } });
       } else {
         output.push(event);

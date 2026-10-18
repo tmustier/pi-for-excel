@@ -1,8 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { setTimeout as delay } from "node:timers/promises";
 
-import { Agent } from "@earendil-works/pi-agent-core";
-import { createModels, fauxAssistantMessage, fauxProvider } from "@earendil-works/pi-ai";
+import { BACKGROUND_CONTEXT as context } from "@earendil-works/chord/context";
+import { createRegistry, Harness, InboxDoc, MemoryStorage, type AgentEvent } from "@earendil-works/pi-durable";
+import { ConversationPresenter } from "../src/durable/conversation-view.ts";
+import { createAssistantMessageEventStream, createModels, fauxAssistantMessage, fauxProvider } from "@earendil-works/pi-ai";
+import { createExtensionAPI } from "../src/commands/extension-api.ts";
 
 import { ConnectionManager } from "../src/connections/manager.ts";
 import { buildRuntimeManagerActivationBridge } from "../src/extensions/runtime-manager-activation.ts";
@@ -46,7 +50,7 @@ function buildBridge(args: {
   entry: StoredExtensionEntry;
   settings: MemorySettingsStore;
   connectionManager: ConnectionManager;
-  getRequiredActiveAgent?: () => Agent;
+  getActiveConversation?: () => ConversationPresenter;
   afterInjectAgentContext?: () => Promise<void> | void;
   runExtensionHttpFetch: (url: string, options?: {
     method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "HEAD";
@@ -61,7 +65,7 @@ function buildBridge(args: {
     body: string;
   }>;
 }) {
-  const getRequiredActiveAgent = args.getRequiredActiveAgent ?? (() => {
+  const getActiveConversation = args.getActiveConversation ?? (() => {
     throw new Error("agent access should not be used in this test");
   });
 
@@ -69,7 +73,7 @@ function buildBridge(args: {
     entry: args.entry,
     settings: args.settings,
     connectionManager: args.connectionManager,
-    getRequiredActiveAgent,
+    getActiveConversation,
     afterInjectAgentContext: args.afterInjectAgentContext,
     runExtensionLlmCompletion: () => Promise.resolve({
       content: "",
@@ -91,22 +95,24 @@ void test("injected extension context is available to the next agent request", a
   const connectionManager = new ConnectionManager({ settings });
   const faux = fauxProvider();
   const models = createModels();
-  models.setProvider(faux.provider);
   faux.setResponses([fauxAssistantMessage("done")]);
   let outboundContext = "";
-  const agent = new Agent({
-    initialState: { model: faux.getModel(), messages: [], tools: [] },
-    streamFn: (model, context, options) => {
-      outboundContext = JSON.stringify(context);
-      return models.streamSimple(model, context, options);
+  models.setProvider({ ...faux.provider,
+    streamSimple: (model, transcript, options) => {
+      outboundContext = JSON.stringify(transcript);
+      return faux.provider.streamSimple(model, transcript, options);
     },
   });
+  const harness = await Harness.open(new MemoryStorage(), { registry: createRegistry(), models }, context);
+  const model = faux.getModel();
+  const conversation = await harness.root(context, { agent: { model: { provider: model.provider, modelId: model.id } } });
+  const presenter = await ConversationPresenter.open(harness, conversation, models, model);
 
   const bridge = buildBridge({
     entry,
     settings,
     connectionManager,
-    getRequiredActiveAgent: () => agent,
+    getActiveConversation: () => presenter,
     runExtensionHttpFetch: () => Promise.resolve({
       status: 200,
       statusText: "OK",
@@ -115,10 +121,64 @@ void test("injected extension context is available to the next agent request", a
     }),
   });
 
-  bridge.host.injectAgentContext?.("context please");
-  await agent.prompt("continue");
+  const api = createExtensionAPI(bridge.host);
+  const events: AgentEvent[] = [];
+  const unsubscribe = api.onConversationEvent((event) => events.push(event));
+  try {
+    assert.equal(api.agent.conversation, conversation);
+    await api.agent.injectContext("context please");
+    assert.equal(presenter.current.busy, false);
+    assert.match(JSON.stringify(api.agent.snapshot.messages), /context please/);
+    const submission = await conversation.submit({ type: "input", content: "continue" }, context);
+    await submission.wait(context);
+    assert.match(outboundContext, /\[Extension Acme Extension\].*context please/u);
+    for (let attempt = 0; attempt < 100 && !events.some((event) => event.type === "message_end" && event.entry.kind === "extension.context"); attempt++) {
+      await delay(10);
+    }
+    assert.ok(events.some((event) => event.type === "message_end" && event.entry.kind === "extension.context"));
+  } finally {
+    unsubscribe();
+    await presenter.dispose();
+    await harness.close(context);
+  }
+});
 
-  assert.match(outboundContext, /\[Extension Acme Extension\].*context please/u);
+void test("extension input uses native busy admission modes and passive writes", async () => {
+  const settings = new MemorySettingsStore();
+  const models = createModels();
+  const faux = fauxProvider({ tokensPerSecond: Infinity });
+  const source = createAssistantMessageEventStream();
+  models.setProvider({ ...faux.provider, streamSimple: () => source });
+  const model = faux.getModel();
+  const harness = await Harness.open(new MemoryStorage(), { registry: createRegistry(), models }, context);
+  const conversation = await harness.root(context, { agent: { model: { provider: model.provider, modelId: model.id } } });
+  const presenter = await ConversationPresenter.open(harness, conversation, models, model);
+  const bridge = buildBridge({
+    entry: createEntry("ext.busy"), settings,
+    connectionManager: new ConnectionManager({ settings }),
+    getActiveConversation: () => presenter,
+    runExtensionHttpFetch: () => Promise.reject(new Error("not expected")),
+  });
+  const api = createExtensionAPI(bridge.host);
+  try {
+    await conversation.submit({ type: "input", content: "running" }, context);
+    await api.agent.steer("correct course");
+    await api.agent.followUp("next task");
+    await api.agent.injectContext("passive note");
+    const inbox = await harness.snapshot(InboxDoc, conversation.id, context);
+    assert.deepEqual(inbox?.items.map((item) => item.mode), ["steer", "followUp", "write"]);
+    assert.match(JSON.stringify(inbox), /correct course/);
+    assert.match(JSON.stringify(inbox), /next task/);
+    assert.match(JSON.stringify(inbox), /passive note/);
+    await conversation.abort(context);
+  } finally {
+    source.end(fauxAssistantMessage("Stopped"));
+    await presenter.dispose();
+    await harness.close(context);
+  }
+  await assert.rejects(api.agent.injectContext("closed write"));
+  await assert.rejects(api.agent.steer("closed input"));
+  await assert.rejects(api.agent.followUp("closed follow-up"));
 });
 
 void test("connection-aware http fetch injects auth header for allowed hosts", async () => {

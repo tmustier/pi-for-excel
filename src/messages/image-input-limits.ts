@@ -1,4 +1,4 @@
-import type { Agent, AgentMessage } from "@earendil-works/pi-agent-core";
+import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type {
   Api,
   ImageContent,
@@ -186,7 +186,7 @@ function processWithModel(
   });
 }
 
-async function normalizePromptContent(
+export async function normalizePromptContent(
   content: string | (TextContent | ImageContent)[],
   model: ImageLimitModel,
   options: ImageNormalizationOptions,
@@ -215,7 +215,7 @@ async function normalizePromptContent(
   return normalized;
 }
 
-async function normalizePromptMessage(
+export async function normalizePromptMessage(
   message: AgentMessage,
   model: ImageLimitModel,
   options: ImageNormalizationOptions,
@@ -302,100 +302,4 @@ export async function normalizeToolResultImages(
     changed = true;
   }
   return changed ? normalized : content;
-}
-
-/** Install prompt and tool-result normalization at the low-level Agent ingress. */
-export function installImageInputNormalization(
-  agent: Agent,
-  options: Pick<ImageNormalizationOptions, "autoResizeImages" | "processor"> = {},
-): () => void {
-  const normalizedPromptMessages = new WeakSet<AgentMessage>();
-  const normalizedToolResultContent = new WeakSet<(TextContent | ImageContent)[]>();
-  const processingOptions = (signal?: AbortSignal): ImageNormalizationOptions => ({
-    ...options,
-    autoResizeImages: options.autoResizeImages ?? true,
-    ...(signal ? { signal } : {}),
-  });
-  const normalize = async (message: AgentMessage, signal?: AbortSignal): Promise<void> => {
-    await normalizePromptMessage(message, agent.state.model, processingOptions(signal));
-    normalizedPromptMessages.add(message);
-  };
-
-  const unsubscribe = agent.subscribe(async (event, signal) => {
-    if (
-      event.type !== "message_end"
-      || (event.message.role !== "user" && event.message.role !== "user-with-attachments")
-    ) {
-      return;
-    }
-
-    try {
-      await normalize(event.message, signal);
-    } catch (error) {
-      if (signal.aborted) {
-        await normalizePromptMessage(event.message, agent.state.model, {
-          ...processingOptions(),
-          processor: () => Promise.resolve({
-            ok: false,
-            message: "[Image omitted: processing was aborted.]",
-          }),
-        });
-        normalizedPromptMessages.add(event.message);
-      }
-      throw error;
-    }
-  });
-
-  const previousTransform = agent.transformContext;
-  agent.transformContext = async (messages, signal) => {
-    for (const message of messages) {
-      if (
-        (message.role === "user" || message.role === "user-with-attachments")
-        && !normalizedPromptMessages.has(message)
-      ) {
-        await normalize(message, signal);
-        continue;
-      }
-
-      if (message.role === "toolResult" && !normalizedToolResultContent.has(message.content)) {
-        const normalized = await normalizeToolResultImages(
-          message.content,
-          agent.state.model,
-          processingOptions(signal),
-        );
-        if (normalized !== message.content) {
-          message.content = normalized;
-        }
-        normalizedToolResultContent.add(message.content);
-      }
-    }
-    return previousTransform ? await previousTransform(messages, signal) : messages;
-  };
-
-  const previousAfterToolCall = agent.afterToolCall;
-  agent.afterToolCall = async (context, signal) => {
-    const previousResult = await previousAfterToolCall?.(context, signal);
-    const content = previousResult?.content ?? context.result.content;
-    const normalized = await normalizeToolResultImages(
-      content,
-      agent.state.model,
-      processingOptions(signal),
-    );
-    normalizedToolResultContent.add(normalized);
-    return normalized === content ? previousResult : { ...previousResult, content: normalized };
-  };
-
-  return () => {
-    unsubscribe();
-    if (previousTransform) {
-      agent.transformContext = previousTransform;
-    } else {
-      delete agent.transformContext;
-    }
-    if (previousAfterToolCall) {
-      agent.afterToolCall = previousAfterToolCall;
-    } else {
-      delete agent.afterToolCall;
-    }
-  };
 }

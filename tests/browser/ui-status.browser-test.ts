@@ -11,16 +11,33 @@ before(async () => { env = await startTaskpaneServer(); });
 after(async () => { await env.close(); });
 
 async function withTaskpane(viewport: { width: number; height: number }, run: (page: Page) => Promise<void>): Promise<void> {
-  const opened = await openTaskpane(env, { viewport, clientId: "ui-status-browser" });
+  const opened = await openTaskpane(env, {
+    viewport, clientId: "ui-status-browser",
+    prepareContext: async (context) => {
+      // Expose the actual model catalog, not a replacement Agent or presenter.
+      await context.route("**/src/models/browser-model-runtime.*", async (route) => {
+        const response = await route.fetch();
+        const source = await response.text();
+        assert.ok(source.includes("for (const provider of builtinProviders())"));
+        await route.fulfill({ response, body: source.replace("for (const provider of builtinProviders())", "globalThis.browserTestModels = this.models; for (const provider of builtinProviders())") });
+      });
+    },
+  });
   try { await run(opened.page); } finally { await opened.finish(); }
 }
 
 async function setContextUsage(page: Page, percent: number): Promise<void> {
-  await page.evaluate((pct) => {
+  await page.evaluate(async (pct) => {
+    const { BACKGROUND_CONTEXT: ctx } = await import("/node_modules/@earendil-works/chord/dist/context/index.js");
+    const { fauxProvider } = await import("/node_modules/@earendil-works/pi-ai/dist/providers/faux.js");
     const sidebar = document.querySelector("pi-sidebar");
-    const agent = sidebar.agent;
-    agent.state.model = { ...agent.state.model, contextWindow: 100 };
-    agent.state.messages.push({
+    const view = sidebar.view;
+    const faux = fauxProvider({ models: [{ id: "status-fixture", contextWindow: 100 }] });
+    globalThis.browserTestModels.setProvider(faux.provider);
+    const model = faux.getModel();
+    await view.conversation.configure({ model: { provider: model.provider, modelId: model.id } }, ctx);
+    await view.conversation.commit(async tx => {
+      await tx.appendEntry(view.conversation.id, { kind: "test.usage", model: [{
       role: "assistant",
       content: [{ type: "text", text: "usage fixture" }],
       api: "openai-responses",
@@ -29,7 +46,9 @@ async function setContextUsage(page: Page, percent: number): Promise<void> {
       usage: { input: pct, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: pct, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
       stopReason: "stop",
       timestamp: Date.now(),
-    });
+      }] });
+    }, ctx);
+    await view.refresh();
     document.dispatchEvent(new CustomEvent("pi:status-update"));
   }, percent);
   await page.locator(".pi-status-ctx__pct").filter({ hasText: `${percent}%` }).waitFor({ state: "visible" });

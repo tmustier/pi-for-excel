@@ -106,7 +106,8 @@ void test("tool Markdown renders without its YAML frontmatter", async () => {
     await page.evaluate(`
       (async () => {
         const sidebar = document.querySelector("pi-sidebar");
-        sidebar.agent.state.messages.push(
+        const { BACKGROUND_CONTEXT: ctx } = await import("/node_modules/@earendil-works/chord/dist/context/index.js");
+        const messages = [
           {
             role: "assistant",
             content: [{ type: "toolCall", id: "markdown-tool", name: "skills", arguments: { action: "read", name: "browser-fixture" } }],
@@ -125,8 +126,11 @@ void test("tool Markdown renders without its YAML frontmatter", async () => {
             isError: false,
             timestamp: 2,
           },
-        );
-        sidebar.syncFromAgent();
+        ];
+        await sidebar.view.conversation.commit(async tx => {
+          for (const message of messages) await tx.appendEntry(sidebar.view.conversation.id, { kind: "test.message", model: [message] });
+        }, ctx);
+        await sidebar.view.refresh();
         await sidebar.updateComplete;
         await document.querySelector("message-list").updateComplete;
         await document.querySelector("assistant-message").updateComplete;
@@ -146,7 +150,8 @@ void test("a transform bridge outage renders its setup card", async () => {
     await page.evaluate(`
       (async () => {
         const sidebar = document.querySelector("pi-sidebar");
-        sidebar.agent.state.messages.push(
+        const { BACKGROUND_CONTEXT: ctx } = await import("/node_modules/@earendil-works/chord/dist/context/index.js");
+        const messages = [
           {
             role: "assistant",
             content: [{ type: "toolCall", id: "bridge-tool", name: "python_transform_range", arguments: { input_range: "A1:A2", output_range: "B1:B2", code: "result = data" } }],
@@ -173,8 +178,11 @@ void test("a transform bridge outage renders its setup card", async () => {
             isError: true,
             timestamp: 2,
           },
-        );
-        sidebar.syncFromAgent();
+        ];
+        await sidebar.view.conversation.commit(async tx => {
+          for (const message of messages) await tx.appendEntry(sidebar.view.conversation.id, { kind: "test.message", model: [message] });
+        }, ctx);
+        await sidebar.view.refresh();
         await sidebar.updateComplete;
         await document.querySelector("message-list").updateComplete;
         await document.querySelector("assistant-message").updateComplete;
@@ -193,7 +201,8 @@ void test("direct JavaScript tool cards identify the host runtime being used", a
     await page.evaluate(`
       (async () => {
         const sidebar = document.querySelector("pi-sidebar");
-        sidebar.agent.state.messages.push(
+        const { BACKGROUND_CONTEXT: ctx } = await import("/node_modules/@earendil-works/chord/dist/context/index.js");
+        const messages = [
           {
             role: "assistant",
             content: [
@@ -209,8 +218,11 @@ void test("direct JavaScript tool cards identify the host runtime being used", a
           },
           { role: "toolResult", toolCallId: "office-js", toolName: "execute_office_js", content: [], isError: false, timestamp: 2 },
           { role: "toolResult", toolCallId: "wps-js", toolName: "execute_wps_js", content: [], isError: false, timestamp: 3 },
-        );
-        sidebar.syncFromAgent();
+        ];
+        await sidebar.view.conversation.commit(async tx => {
+          for (const message of messages) await tx.appendEntry(sidebar.view.conversation.id, { kind: "test.message", model: [message] });
+        }, ctx);
+        await sidebar.view.refresh();
         await sidebar.updateComplete;
         await document.querySelector("message-list").updateComplete;
         for (const element of document.querySelectorAll("assistant-message, tool-message")) {

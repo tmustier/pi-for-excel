@@ -1,8 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { Agent } from "@earendil-works/pi-agent-core";
-
 import {
   getCrossWorkbookResumeConfirmMessage,
   getResumeTargetLabel,
@@ -21,7 +19,6 @@ import {
 } from "../src/taskpane/keyboard-shortcuts.ts";
 import { restoreQueuedMessagesToEditor } from "../src/taskpane/keyboard-shortcuts/editor-actions.ts";
 import { RecentlyClosedStack } from "../src/taskpane/recently-closed.ts";
-import { failOnUnexpectedStream } from "./fail-on-unexpected-stream.ts";
 
 void test("recently closed stack reopens newest first and enforces max size", () => {
   const stack = new RecentlyClosedStack(2);
@@ -568,17 +565,9 @@ void test("Alt+Up detection matches host fallbacks and rejects modified chords",
 });
 
 void test("queued restore prepends follow-up and compact queue items before draft text", () => {
-  const agent = new Agent({
-    streamFn: failOnUnexpectedStream,
-    initialState: {
-      messages: [],
-      tools: [],
-    },
-  });
-
   let clearQueueCalls = 0;
-  agent.clearAllQueues = () => {
-    clearQueueCalls += 1;
+  const agent = {
+    clearAllQueues: () => { clearQueueCalls += 1; },
   };
 
   const input = { value: "Draft note" };

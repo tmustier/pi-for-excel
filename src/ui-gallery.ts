@@ -18,6 +18,8 @@ import "./boot.js";
 import "./ui/register-components.js";
 
 import { createCopyableCommand } from "./ui/command-copy.js";
+import { mountDurableGallery } from "./ui-gallery-durable.js";
+import { t } from "./language/index.js";
 import { escapeHtml, setSafeInnerHTML } from "./utils/html.js";
 
 const galleryRoot = document.getElementById("gallery-root");
@@ -596,6 +598,10 @@ for (const [label, state] of [
   caption.textContent = label;
   activitySection.appendChild(caption);
   activitySection.appendChild(createActivityBlock(state));
+}
+
+for (const scenario of ["pending", "conflict", "error", "resolved", "storage"] as const) {
+  mountDurableGallery(section(`durable-${scenario}`, t("durable.storage")), scenario);
 }
 
 console.log("[ui-gallery] Rendered all sections");

@@ -10,7 +10,9 @@ function isExtensionsSandboxRuntimePayloadShape(value: unknown): value is Record
  * sanitized UI projection format (no raw HTML injection).
  */
 
-import type { AgentEvent, AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
+import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
+import type { AgentEvent } from "@earendil-works/pi-durable";
+import { legacyEventProjection } from "../commands/extension-api-compat.js";
 import type { TSchema } from "typebox";
 
 import type {
@@ -98,9 +100,9 @@ export interface SandboxActivationOptions {
   storageDelete: (key: string) => Promise<void>;
   storageKeys: () => Promise<string[]>;
   clipboardWriteText: (text: string) => Promise<void>;
-  injectAgentContext: (content: string) => void;
-  steerAgent: (content: string) => void;
-  followUpAgent: (content: string) => void;
+  injectAgentContext: (content: string) => Promise<void>;
+  steerAgent: (content: string) => Promise<void>;
+  followUpAgent: (content: string) => Promise<void>;
   listSkills: () => Promise<SkillSummary[]>;
   readSkill: (name: string) => Promise<string>;
   installSkill: (name: string, markdown: string) => Promise<void>;
@@ -873,8 +875,9 @@ class SandboxRuntimeHost {
     const subscriptionId = asNonEmptyString(payload.subscriptionId, "subscriptionId");
     if (this.eventSubscriptions.has(subscriptionId)) return;
 
+    const project = legacyEventProjection();
     const unsubscribe = this.options.subscribeAgentEvents((agentEvent) => {
-      this.sendEvent("agent_event", { subscriptionId, event: agentEvent });
+      for (const event of project(agentEvent)) this.sendEvent("agent_event", { subscriptionId, event });
     });
     this.eventSubscriptions.set(subscriptionId, unsubscribe);
   }
@@ -1003,7 +1006,7 @@ class SandboxRuntimeHost {
 
           const payload = asSandboxPayload(params, "agent_inject_context params");
           const content = asNonEmptyString(payload.content, "content");
-          this.options.injectAgentContext(content);
+          await this.options.injectAgentContext(content);
           this.sendResponse(requestId, true, null);
           return;
         }
@@ -1013,7 +1016,7 @@ class SandboxRuntimeHost {
 
           const payload = asSandboxPayload(params, "agent_steer params");
           const content = asNonEmptyString(payload.content, "content");
-          this.options.steerAgent(content);
+          await this.options.steerAgent(content);
           this.sendResponse(requestId, true, null);
           return;
         }
@@ -1023,7 +1026,7 @@ class SandboxRuntimeHost {
 
           const payload = asSandboxPayload(params, "agent_follow_up params");
           const content = asNonEmptyString(payload.content, "content");
-          this.options.followUpAgent(content);
+          await this.options.followUpAgent(content);
           this.sendResponse(requestId, true, null);
           return;
         }

@@ -1,124 +1,121 @@
 import { BACKGROUND_CONTEXT as context } from "@earendil-works/chord/context";
 import type { JsonValue } from "@earendil-works/chord";
-import type { Models } from "@earendil-works/pi-ai/models";
+import type { Api, Model, Models } from "@earendil-works/pi-ai";
 import { Type } from "typebox";
 import { Value } from "typebox/value";
 import type { createOfficeStreamFn } from "../auth/stream-proxy.js";
-import { excelRun } from "../excel/helpers.js";
-import { isExperimentalFeatureEnabled } from "../experiments/flags.js";
+import type { SpreadsheetHost } from "../host/types.js";
 import { getAppStorage } from "../storage/local/app-storage.js";
 import type { SessionRuntime } from "../taskpane/session-runtime-manager.js";
-import type { WorkbookContext } from "../workbook/context.js";
+import type { WorkbookCoordinator } from "../workbook/coordinator.js";
+import { createDurableWorkbookAssociationResolver, officeDurableDocumentAssociation,
+  type DurableWorkbookAssociation } from "../workbook/durable-association.js";
 import { openIndexedDbStorage } from "./indexeddb-storage.js";
 import { openDurableRuntime, routeModels } from "./runtime.js";
-import { importLegacySession } from "./session-import.js";
+import { importLegacySession, importWorkbookSessions } from "./session-import.js";
 import { createModelRecoveryLifecycle, type ModelRecoveryLifecycle } from "./model-recovery.js";
+import { createWorkbookMutationHost } from "./mutation-host.js";
+import { DurableSessions } from "./sessions.js";
 
 const payloadSchema = Type.Object({
   text: Type.Optional(Type.String({ minLength: 1 })),
   requestId: Type.Optional(Type.String({ minLength: 1 })),
-  point: Type.Optional(Type.Union([Type.Literal("beforeSync"), Type.Literal("afterSync"), Type.Literal("beforeResult"), Type.Null()])),
-  toolCallId: Type.Optional(Type.String({ minLength: 1 })),
+  point: Type.Optional(Type.Union([Type.Literal("beforeDispatch"), Type.Literal("afterDispatch"), Type.Literal("beforeResult"), Type.Null()])),
+  mutationId: Type.Optional(Type.String({ minLength: 1 })),
+  observationToken: Type.Optional(Type.String({ minLength: 1 })),
   sessionId: Type.Optional(Type.String({ minLength: 1 })),
 }, { additionalProperties: false });
-const gridSchema = Type.Array(Type.Array(Type.Union([Type.String(), Type.Number(), Type.Boolean(), Type.Null()])));
 
 export interface DurableTaskpane {
+  runtime: Awaited<ReturnType<typeof openDurableRuntime>>;
+  sessions: DurableSessions;
+  association: DurableWorkbookAssociation;
+  resolveAssociation(): Promise<DurableWorkbookAssociation>;
   execute(command: string, payloadJson: string): Promise<JsonValue>;
 }
 
-/** Evaluation controller, separate from the normal chat Agent and its persistence. */
+/** The single workbook execution owner, also used by the verification bridge. */
 export async function createDurableTaskpane(options: {
   getActiveRuntime: () => SessionRuntime | null;
   models: Models;
   streamFn: ReturnType<typeof createOfficeStreamFn>;
-  getWorkbookContext: () => Promise<WorkbookContext>;
+  host: SpreadsheetHost;
+  coordinator: WorkbookCoordinator;
+  defaultModel: Model<Api>;
+  autoCompaction: boolean;
+  autoResizeImages?: boolean;
   allowFaultInjection: boolean;
+  onStorageWarning?: (message: string) => void;
 }): Promise<DurableTaskpane> {
-  let runtime: Awaited<ReturnType<typeof openDurableRuntime>> | undefined;
+  const app = getAppStorage();
+  const resolveAssociation = createDurableWorkbookAssociationResolver({
+    host: options.host, settings: app.settings,
+    document: options.host.kind === "office" ? officeDurableDocumentAssociation() : null,
+  });
+  const association = await resolveAssociation();
+  const storage = await openIndexedDbStorage(association.databaseName,
+    association.expectedDatabaseId === null ? {} : { expectedDatabaseId: association.expectedDatabaseId });
   let lifecycle: ModelRecoveryLifecycle | undefined;
-  let failure: string | undefined;
-  const workbook = await options.getWorkbookContext();
-  const active = options.getActiveRuntime();
   try {
-    if (!workbook.workbookId) throw new Error("Save this workbook before opening the Durable prototype");
-    if (!active?.buildDurableCapabilities) throw new Error("Taskpane capabilities unavailable");
-    runtime = await openDurableRuntime({
-      storage: await openIndexedDbStorage(`pi-for-excel-durable:${workbook.workbookId}`),
-      models: routeModels(options.models, options.streamFn, () => lifecycle),
-      onOpened: (harness) => {
-        const recovery = createModelRecoveryLifecycle(() => harness.close(context));
-        lifecycle = recovery;
-        void harness.closed.then(() => recovery.dispose());
-      },
-      workbookId: workbook.workbookId,
-      model: { provider: active.agent.state.model.provider, modelId: active.agent.state.model.id },
-      buildCapabilities: async (hooks) => {
-        const capabilities = await active.buildDurableCapabilities?.(hooks);
-        if (!capabilities) throw new Error("Taskpane capabilities unavailable");
-        return { ...capabilities, tools: capabilities.tools.map((tool) => ({ ...tool,
-          execute: async (...args) => {
-            if (!isExperimentalFeatureEnabled("durable_runtime")
-              || (await options.getWorkbookContext()).workbookId !== workbook.workbookId) {
-              throw new Error("Durable workbook or flag changed; reload required");
-            }
-            return tool.execute(...args);
-          },
-        })) };
-      },
+    // Failure is fatal: never admit a task until its generation expectation is retained.
+    await association.rememberGeneration(storage.databaseId);
+    if (storage.persistence !== "persistent" || !association.documentBacked) {
+      options.onStorageWarning?.("Chat history uses browser storage. Keep exports: browser data clearing can remove history; persistence is not a backup.");
+    }
+    const runtime = await openDurableRuntime({
+      storage, models: routeModels(options.models, options.streamFn, () => lifecycle),
+      workbookId: association.scopeId, coordinator: options.coordinator,
+      mutationHost: createWorkbookMutationHost({ kind: options.host.kind,
+        getWorkbookId: async () => (await resolveAssociation()).scopeId }),
+      autoCompaction: options.autoCompaction, autoResizeImages: options.autoResizeImages ?? true,
       allowFaultInjection: options.allowFaultInjection,
+      onOpened: (harness) => {
+        lifecycle = createModelRecoveryLifecycle(() => harness.close(context));
+        const bound = lifecycle;
+        void harness.closed.then(() => bound.dispose());
+      },
     });
-  } catch (error) { failure = error instanceof Error ? error.message : "Durable could not open"; }
-  return {
-    execute: async (command, payloadJson) => {
-      if (!isExperimentalFeatureEnabled("durable_runtime")) throw new Error("Durable flag is off; reload to stop the prototype");
-      const payload: unknown = JSON.parse(payloadJson);
-      if (!Value.Check(payloadSchema, payload)) throw new Error("Invalid Durable command payload");
-      const input = payload;
-      if (!runtime) throw new Error(failure ?? "Durable unavailable");
-      if ((await options.getWorkbookContext()).workbookId !== workbook.workbookId) {
-        throw new Error("Workbook identity changed; reload before using Durable");
-      }
-      switch (command) {
-        case "durableStatus": return runtime.status();
-        case "durableFault":
-          if (input.point === undefined) throw new Error("durableFault requires point");
-          runtime.mutations.configureFault(input.point);
-          return runtime.mutations.status();
-        case "durableResumeFault": runtime.mutations.resume(); return { resumed: true };
-        case "durableSubmit": {
-          if (!input.text || !input.requestId) throw new Error("durableSubmit requires text and requestId");
-          if (active?.agent.state.isStreaming || active?.actionQueue.isBusy()) throw new Error("Normal chat is busy");
-          await runtime.refresh();
-          const model = active?.agent.state.model;
-          if (model) await runtime.conversation.configure({ model: { provider: model.provider, modelId: model.id },
-            thinkingLevel: active?.agent.state.thinkingLevel ?? "off" }, context);
-          const submission = await runtime.conversation.submit({ type: "input", content: input.text, requestId: input.requestId }, context);
-          return { submissionId: submission.id };
-        }
-        case "durableImport": {
-          if (!input.sessionId) throw new Error("durableImport requires sessionId");
-          const saved = await getAppStorage().sessions.get(input.sessionId);
-          if (!saved) throw new Error("Legacy session not found");
-          const imported = await importLegacySession(runtime.harness, saved, context);
-          return { conversationId: imported.id };
-        }
-        case "durableReconcile": {
-          if (!input.toolCallId) throw new Error("durableReconcile requires toolCallId");
-          const classification = await runtime.mutations.reconcile(input.toolCallId, (record) => excelRun(async (excel) => {
-            const sheet = excel.workbook.worksheets.getItem(record.sheetId);
-            const range = sheet.getRange(record.range);
-            range.load("values,formulas");
-            await excel.sync();
-            const values: unknown = range.values;
-            const formulas: unknown = range.formulas;
-            if (!Value.Check(gridSchema, values) || !Value.Check(gridSchema, formulas)) throw new Error("Invalid workbook read");
-            return { values, formulas };
-          }));
-          return { classification, wroteCells: false };
-        }
-        default: throw new Error("Unknown Durable command");
-      }
-    },
-  };
+    try {
+      const workbook = await options.host.getWorkbookContext();
+      await importWorkbookSessions(runtime.harness, app.sessions, app.settings, workbook.workbookId, context);
+      const sessions = new DurableSessions(runtime.harness, options.models, options.defaultModel);
+      await sessions.reconcileMetadata();
+      void runtime.harness.closed.then(() => sessions.dispose());
+      return { runtime, sessions, association, resolveAssociation,
+        execute: async (command, payloadJson) => {
+          const payload: unknown = JSON.parse(payloadJson);
+          if (!Value.Check(payloadSchema, payload)) throw new Error("Invalid Durable command payload");
+          if ((await resolveAssociation()).scopeId !== association.scopeId) throw new Error("Workbook changed; reload before continuing");
+          const active = options.getActiveRuntime();
+          if (!active) throw new Error("No active conversation");
+          const conversation = active.view.conversation;
+          switch (command) {
+            case "durableStatus": return runtime.status(conversation);
+            case "durableFault":
+              if (payload.point === undefined) throw new Error("durableFault requires point");
+              runtime.mutations.configureFault(payload.point);
+              return runtime.mutations.status();
+            case "durableResumeFault": runtime.mutations.resume(); return { resumed: true };
+            case "durableSubmit": {
+              if (!payload.text || !payload.requestId) throw new Error("durableSubmit requires text and requestId");
+              await active.refreshCapabilities();
+              const submission = await conversation.submit({ type: "input", content: payload.text, requestId: payload.requestId }, context);
+              return { submissionId: submission.id };
+            }
+            case "durableImport": {
+              if (!payload.sessionId) throw new Error("durableImport requires sessionId");
+              const saved = await app.sessions.get(payload.sessionId);
+              if (!saved) throw new Error("Legacy session not found");
+              return { conversationId: (await importLegacySession(runtime.harness, saved, context)).id };
+            }
+            case "durableReconcile": {
+              if (!payload.mutationId) throw new Error("durableReconcile requires mutationId");
+              return { ...await runtime.mutations.reconcile(payload.mutationId), wroteCells: false };
+            }
+            default: throw new Error("Unknown Durable command");
+          }
+        },
+      };
+    } catch (error) { await runtime.harness.close(context); throw error; }
+  } catch (error) { await storage.close(context); throw error; }
 }

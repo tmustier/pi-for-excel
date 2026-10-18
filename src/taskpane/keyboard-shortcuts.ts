@@ -4,7 +4,13 @@
  * Extracted from taskpane.ts to keep the entrypoint thin.
  */
 
-import type { Agent, ThinkingLevel } from "@earendil-works/pi-agent-core";
+import type { ModelThinkingLevel as ThinkingLevel } from "@earendil-works/pi-ai";
+import { BACKGROUND_CONTEXT as durableContext } from "@earendil-works/chord/context";
+import type { ConversationPresenter } from "../durable/conversation-view.js";
+import type { QueueDisplay } from "./queue-display.js";
+import { extractTextFromContent } from "../utils/content.js";
+import { normalizePromptContent } from "../messages/image-input-limits.js";
+import { executeSlashCommand } from "../commands/slash-command-execution.js";
 
 import { getThinkingLevelsForModel } from "../models/thinking-levels.js";
 import type { PiSidebar } from "../ui/pi-sidebar.js";
@@ -20,15 +26,8 @@ import {
   isCommandMenuVisible,
 } from "../commands/command-menu.js";
 
-import { flashThinkingLevel, updateStatusBarForAgent } from "./status-bar.js";
+import { flashThinkingLevel } from "./status-bar.js";
 import { THINKING_LEVEL_COLORS } from "./thinking-display.js";
-import {
-  handleSlashCommandExecution,
-  handleStreamingSteerOrFollowUp,
-  restoreQueuedMessagesToEditor,
-  type ActionQueue,
-  type QueueDisplay,
-} from "./keyboard-shortcuts/editor-actions.js";
 import { shouldHandleUndoCloseTabShortcut, textEntryHasContent } from "./keyboard-shortcuts/guards.js";
 import {
   getAdjacentTabDirectionFromShortcut,
@@ -57,7 +56,7 @@ export { shouldHandleUndoCloseTabShortcut } from "./keyboard-shortcuts/guards.js
 
 interface KeydownContext {
   event: KeyboardEvent;
-  agent: Agent | null;
+  agent: ConversationPresenter | null;
   textarea: HTMLTextAreaElement | undefined;
   keyTarget: Node | null;
   isInEditor: boolean;
@@ -65,6 +64,28 @@ interface KeydownContext {
 }
 
 type ShortcutHandler = (context: KeydownContext) => boolean;
+
+function reportKeyboardError(): void {
+  showToast(t("slash-command.toast.failed"));
+}
+
+/** Withdraw only inputs still queued at commit time; preserve inbox order. */
+export async function restoreQueuedMessagesToEditor(
+  sidebar: { getInput: () => { value: string } | undefined; getTextarea: () => HTMLTextAreaElement | undefined },
+  queueDisplay: Pick<QueueDisplay, "takeQueuedInputs"> | null,
+): Promise<number> {
+  const queued = await queueDisplay?.takeQueuedInputs() ?? [];
+  if (!queued.length) return 0;
+  const input = sidebar.getInput();
+  const textarea = sidebar.getTextarea();
+  const text = [...queued.map((item) => extractTextFromContent(item.content)), input?.value ?? textarea?.value ?? ""]
+    .filter((value) => value.trim().length > 0).join("\n\n");
+  if (input) input.value = text;
+  else if (textarea) textarea.value = text;
+  textarea?.focus();
+  textarea?.setSelectionRange(text.length, text.length);
+  return queued.length;
+}
 
 function isInsideSessionTabs(target: EventTarget | null | undefined): boolean {
   if (!(target instanceof Element)) {
@@ -122,7 +143,7 @@ function expandThinkingBlocks(): void {
 
 function buildKeydownContext(args: {
   event: KeyboardEvent;
-  agent: Agent | null;
+  agent: ConversationPresenter | null;
   sidebar: PiSidebar;
 }): KeydownContext {
   const { event, agent, sidebar } = args;
@@ -144,33 +165,31 @@ function buildKeydownContext(args: {
     textarea,
     keyTarget,
     isInEditor,
-    isStreaming: agent?.state.isStreaming ?? false,
+    isStreaming: agent?.current.busy ?? false,
   };
 }
 
-export function getThinkingLevels(agent: Agent): ThinkingLevel[] {
-  return getThinkingLevelsForModel(agent.state.model);
+export function getThinkingLevels(agent: ConversationPresenter): ThinkingLevel[] {
+  return getThinkingLevelsForModel(agent.current.model);
 }
 
-export function cycleThinkingLevel(agent: Agent): ThinkingLevel {
+export async function cycleThinkingLevel(agent: ConversationPresenter): Promise<ThinkingLevel> {
   const levels = getThinkingLevels(agent);
-  const current = agent.state.thinkingLevel;
+  const current = agent.current.thinkingLevel;
   const idx = levels.indexOf(current);
   const next = levels[(idx >= 0 ? idx + 1 : 0) % levels.length] ?? "off";
 
-  agent.state.thinkingLevel = next;
-  updateStatusBarForAgent(agent);
+  await agent.conversation.configure({ thinkingLevel: next }, durableContext);
   flashThinkingLevel(next, THINKING_LEVEL_COLORS[next]);
 
   return next;
 }
 
 export function installKeyboardShortcuts(opts: {
-  getActiveAgent: () => Agent | null;
+  getActiveConversation: () => ConversationPresenter | null;
   getActiveQueueDisplay: () => QueueDisplay | null;
-  getActiveActionQueue: () => ActionQueue | null;
   sidebar: PiSidebar;
-  markUserAborted: (agent: Agent) => void;
+  markUserAborted?: (view: ConversationPresenter) => void;
   onCreateTab?: () => void;
   onCloseActiveTab?: () => void;
   onReopenLastClosed?: () => void;
@@ -178,9 +197,8 @@ export function installKeyboardShortcuts(opts: {
   onSwitchAdjacentTab?: (direction: -1 | 1) => void;
 }): () => void {
   const {
-    getActiveAgent,
+    getActiveConversation,
     getActiveQueueDisplay,
-    getActiveActionQueue,
     sidebar,
     markUserAborted,
     onCreateTab,
@@ -189,6 +207,7 @@ export function installKeyboardShortcuts(opts: {
     canUndoCloseTab,
     onSwitchAdjacentTab,
   } = opts;
+  const submitting = new WeakSet<ConversationPresenter>();
 
   const shortcutHandlers: readonly ShortcutHandler[] = [
     (context) => {
@@ -235,7 +254,7 @@ export function installKeyboardShortcuts(opts: {
       return true;
     },
     (context) => {
-      const { event, isStreaming, agent, keyTarget, textarea } = context;
+      const { event, isStreaming, agent, keyTarget } = context;
       const isEscapeKey = event.key === "Escape" || event.key === "Esc";
       const escapeClaimedByOverlay = isEscapeKey && doesUiClaimStreamingEscape(keyTarget);
 
@@ -255,33 +274,20 @@ export function installKeyboardShortcuts(opts: {
       event.stopPropagation();
       event.stopImmediatePropagation();
 
-      restoreQueuedMessagesToEditor({
-        sidebar,
-        textarea,
-        agent,
-        queueDisplay: getActiveQueueDisplay(),
-        actionQueue: getActiveActionQueue(),
-        requeueCommands: false,
-      });
-
-      const preservedText = sidebar.getInput()?.value ?? textarea?.value ?? "";
-
-      markUserAborted(agent);
-      agent.abort();
-
-      if (preservedText.trim().length > 0) {
-        requestAnimationFrame(() => {
-          const activeInput = sidebar.getInput();
-          if (!activeInput) return;
-          if (activeInput.value.trim().length > 0) return;
-          activeInput.value = preservedText;
-        });
-      }
+      const queueDisplay = getActiveQueueDisplay();
+      markUserAborted?.(agent);
+      void (async () => {
+        try {
+          await restoreQueuedMessagesToEditor(sidebar, queueDisplay);
+        } finally {
+          await agent.conversation.abort(durableContext);
+        }
+      })().catch(reportKeyboardError);
 
       return true;
     },
     (context) => {
-      const { event, isInEditor, textarea, keyTarget, agent } = context;
+      const { event, isInEditor, keyTarget } = context;
       if (!isRestoreQueuedMessagesShortcut(event)) {
         return false;
       }
@@ -294,19 +300,10 @@ export function installKeyboardShortcuts(opts: {
       event.stopPropagation();
       event.stopImmediatePropagation();
 
-      const restoredCount = restoreQueuedMessagesToEditor({
-        sidebar,
-        textarea,
-        agent,
-        queueDisplay: getActiveQueueDisplay(),
-        actionQueue: getActiveActionQueue(),
-      });
-
-      if (restoredCount === 0) {
-        showToast(t("keyboard-shortcuts.toast.noQueuedMessages"));
-      } else {
-        showToast(t("shortcuts.toast.restoredQueued", { count: restoredCount, plural: restoredCount === 1 ? "" : "s" }));
-      }
+      void restoreQueuedMessagesToEditor(sidebar, getActiveQueueDisplay()).then((restoredCount) => {
+        showToast(restoredCount === 0 ? t("keyboard-shortcuts.toast.noQueuedMessages")
+          : t("shortcuts.toast.restoredQueued", { count: restoredCount, plural: restoredCount === 1 ? "" : "s" }));
+      }).catch(reportKeyboardError);
 
       return true;
     },
@@ -379,7 +376,7 @@ export function installKeyboardShortcuts(opts: {
       if (!(event.shiftKey && event.key === "Tab") || !agent) return false;
 
       event.preventDefault();
-      cycleThinkingLevel(agent);
+      void cycleThinkingLevel(agent).catch(reportKeyboardError);
       return true;
     },
     (context) => {
@@ -410,7 +407,7 @@ export function installKeyboardShortcuts(opts: {
 
     const context = buildKeydownContext({
       event,
-      agent: getActiveAgent(),
+      agent: getActiveConversation(),
       sidebar,
     });
 
@@ -420,28 +417,36 @@ export function installKeyboardShortcuts(opts: {
       }
     }
 
-    if (
-      handleSlashCommandExecution({
-        event,
-        textarea: context.textarea,
-        isInEditor: context.isInEditor,
-        isStreaming: context.isStreaming,
-        getActiveActionQueue,
-        sidebar,
-      })
-    ) {
-      return;
+    const { textarea, agent, isInEditor, isStreaming } = context;
+    if (!isInEditor || !textarea || event.key !== "Enter" || event.shiftKey) return;
+    const text = textarea.value.trim();
+    if (text.startsWith("/")) {
+      const [name = "", ...args] = text.slice(1).split(" ");
+      const result = executeSlashCommand({
+        name, args: args.join(" "), busy: isStreaming,
+        ...(agent ? { enqueueCommand: (_name: string, instructions: string) => {
+          if (agent) void agent.conversation.compact(instructions || undefined, durableContext).catch(reportKeyboardError);
+        } } : {}),
+        beforeExecute: () => { event.preventDefault(); event.stopImmediatePropagation(); hideCommandMenu(); sidebar.getInput()?.clear(); },
+        onError: reportKeyboardError,
+      });
+      if (result !== "not-found") {
+        event.preventDefault(); event.stopImmediatePropagation();
+        if (result === "busy-blocked") showToast(t("shortcuts.toast.cantRunBusy", { command: name }));
+        return;
+      }
     }
-
-    void handleStreamingSteerOrFollowUp({
-      event,
-      textarea: context.textarea,
-      isInEditor: context.isInEditor,
-      isStreaming: context.isStreaming,
-      agent: context.agent,
-      getActiveQueueDisplay,
-      sidebar,
-    });
+    if (!isStreaming || !agent || !text) return;
+    event.preventDefault(); event.stopImmediatePropagation();
+    if (submitting.has(agent)) return;
+    submitting.add(agent);
+    const input = sidebar.getInput();
+    const whenBusy = event.altKey ? "followUp" : "steer";
+    void normalizePromptContent(text, agent.current.model, {}).then(async (content) => {
+      await agent.conversation.submit({ type: "input", content, whenBusy }, durableContext);
+      // Do not erase text entered while admission was pending.
+      if (getActiveConversation() === agent && input?.value.trim() === text) input.clear();
+    }).catch(reportKeyboardError).finally(() => submitting.delete(agent));
   };
 
   document.addEventListener("keydown", onKeyDown, true);

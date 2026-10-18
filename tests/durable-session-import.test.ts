@@ -3,9 +3,10 @@ import { test } from "node:test";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { AgentDoc, createRegistry, Harness, MemoryStorage, ProviderDoc } from "@earendil-works/pi-durable";
-import { importLegacySession, LegacyContextEntry, LegacySessionDoc } from "../src/durable/session-import.ts";
+import { importLegacySession, importWorkbookSessions, LegacySessionDoc } from "../src/durable/session-import.ts";
 import { createConvertToLlm } from "../src/messages/convert-to-llm.ts";
 import type { SessionData } from "../src/storage/local/types.ts";
+import { sessionWorkbookKey } from "../src/workbook/session-association.ts";
 
 const context = BACKGROUND_CONTEXT;
 
@@ -41,8 +42,12 @@ void test("imports real Durable context and originals atomically, with concurren
     assert.equal(conversation.id, duplicate.id);
     const view = await conversation.context(context);
     assert.deepEqual(view.messages, createConvertToLlm({ getContextWindow: () => 32000 })(session.messages));
-    assert.equal(view.entries.length, 1);
-    assert.ok(view.entries.every(LegacyContextEntry.is));
+    const summaryEntry = view.entries.find((entry) => JSON.stringify(entry.model).includes("COMPACTED SUMMARY"));
+    assert.ok(summaryEntry);
+    const fork = await conversation.fork(summaryEntry.id, { ownership: { kind: "ownerless" } }, context);
+    const forkContext = await fork.context(context);
+    assert.match(JSON.stringify(forkContext.messages), /COMPACTED SUMMARY/);
+    assert.doesNotMatch(JSON.stringify(forkContext.messages), /Continue|ARCHIVE ONLY/);
     assert.match(JSON.stringify(view.messages), /COMPACTED SUMMARY/);
     assert.doesNotMatch(JSON.stringify(view.messages), /ARCHIVE ONLY/);
     const original = await harness.snapshot(LegacySessionDoc, conversation.id, context);
@@ -62,6 +67,42 @@ void test("imports real Durable context and originals atomically, with concurren
   } finally {
     await harness.close(context);
   }
+});
+
+void test("workbook migration imports every original, resumes partial batches, and keeps foreign and unlinked history separate", async () => {
+  const harness = await Harness.open(new MemoryStorage(), { models: createModels(), registry: createRegistry() }, context);
+  const originals = Array.from({ length: 105 }, (_, index) => ({ ...fixture(), id: `legacy-${index}` }));
+  const snapshots = new Map(originals.map((session) => [session.id, session]));
+  const settings = {
+    get: (key: string) => Promise.resolve(key === sessionWorkbookKey("legacy-103") ? "other" : key === sessionWorkbookKey("legacy-104") ? null : "current"),
+    set: () => { throw new Error("Migration must not write legacy settings"); },
+    delete: () => { throw new Error("Migration must not delete legacy settings"); },
+  };
+  let fail = true;
+  const sessions = {
+    getSessionIds: () => Promise.resolve([...snapshots.keys()]),
+    get: (id: string) => {
+      if (fail && id === "legacy-2") return Promise.reject(new Error("read unavailable"));
+      return Promise.resolve(snapshots.get(id) ?? null);
+    },
+  };
+  try {
+    await assert.rejects(importWorkbookSessions(harness, sessions, settings, "current", context), /read unavailable/);
+    const first = await importLegacySession(harness, originals[0] ?? fixture(), context);
+    fail = false;
+    const imported = await importWorkbookSessions(harness, sessions, settings, "current", context);
+    assert.equal(imported.size, 103);
+    assert.equal(imported.get("legacy-0"), first.id);
+    assert.equal(imported.has("legacy-103"), false);
+    assert.equal(imported.has("legacy-104"), false);
+    const library = await importWorkbookSessions(harness, sessions, settings, null, context);
+    assert.deepEqual([...library.keys()], ["legacy-104"]);
+    for (const [id, conversationId] of imported) {
+      assert.equal((await harness.snapshot(LegacySessionDoc, conversationId, context))?.originalSessionJson,
+        JSON.stringify(snapshots.get(id)));
+    }
+    assert.deepEqual([...snapshots.values()], originals);
+  } finally { await harness.close(context); }
 });
 
 void test("failed creation rolls back and permits a complete retry", async () => {

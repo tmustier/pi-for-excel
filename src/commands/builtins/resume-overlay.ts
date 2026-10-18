@@ -3,6 +3,7 @@
  */
 
 import type { SessionData, SessionMetadata } from "../../storage/local/types.js";
+import type { DurableSessions } from "../../durable/sessions.js";
 import { getAppStorage } from "../../storage/local/app-storage.js";
 
 import {
@@ -104,6 +105,7 @@ function buildWorkbookFilterRow(opts: {
 }
 
 export async function showResumeDialog(opts: {
+  sessions: DurableSessions;
   defaultTarget?: ResumeDialogTarget;
   onOpenInNewTab: (sessionData: SessionData) => Promise<void>;
   onReplaceCurrent: (sessionData: SessionData) => Promise<void>;
@@ -111,7 +113,7 @@ export async function showResumeDialog(opts: {
   onReopenRecentlyClosed?: (item: ResumeRecentlyClosedItem) => Promise<boolean>;
 }): Promise<void> {
   const storage = getAppStorage();
-  const allSessions = await storage.sessions.getAllMetadata();
+  const allSessions = await opts.sessions.getAllMetadata();
 
   const getRecentlyClosedItems = (): ResumeRecentlyClosedItem[] => {
     if (!opts.getRecentlyClosedItems) {
@@ -282,7 +284,7 @@ export async function showResumeDialog(opts: {
       return opts.onReopenRecentlyClosed(item);
     }
 
-    const sessionData = await storage.sessions.loadSession(item.sessionId);
+    const sessionData = await opts.sessions.loadSession(item.sessionId);
     if (!sessionData) {
       showToast(t("resume.couldNotReopen"));
       return false;
@@ -379,7 +381,7 @@ export async function showResumeDialog(opts: {
         }
       }
 
-      const sessionData = await storage.sessions.loadSession(id);
+      const sessionData = await opts.sessions.loadSession(id);
       if (!sessionData) {
         showToast(t("resume.sessionNotFound"));
         closeOverlay();

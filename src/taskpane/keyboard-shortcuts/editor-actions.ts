@@ -2,7 +2,7 @@
  * Editor-focused keyboard actions (slash commands + streaming steer/follow-up).
  */
 
-import type { Agent, AgentMessage } from "@earendil-works/pi-agent-core";
+import type { AgentMessage } from "@earendil-works/pi-agent-core";
 
 import type { PiSidebar } from "../../ui/pi-sidebar.js";
 import { showToast } from "../../ui/toast.js";
@@ -44,7 +44,7 @@ function mergeQueuedAndCurrentText(queuedTexts: string[], currentText: string): 
 export function restoreQueuedMessagesToEditor(args: {
   sidebar: SidebarInputHost;
   textarea: HTMLTextAreaElement | undefined;
-  agent: Agent | null;
+  agent: { clearAllQueues: () => void } | null;
   queueDisplay: QueueDisplay | null;
   actionQueue: ActionQueue | null;
   requeueCommands?: boolean;
@@ -198,7 +198,10 @@ export function handleStreamingSteerOrFollowUp(args: {
   textarea: HTMLTextAreaElement | undefined;
   isInEditor: boolean;
   isStreaming: boolean;
-  agent: Agent | null;
+  agent: {
+    followUp: (message: AgentMessage) => void;
+    steer: (message: AgentMessage) => void;
+  } | null;
   getActiveQueueDisplay: () => QueueDisplay | null;
   sidebar: PiSidebar;
 }): boolean {

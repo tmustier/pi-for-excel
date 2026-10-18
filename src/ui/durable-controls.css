@@ -1,0 +1,19 @@
+.pi-durable-controls,
+.pi-durable-dialog {
+  color: var(--foreground);
+  background: var(--background);
+  padding: 12px;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.pi-durable-controls { border: 1px solid var(--border); border-radius: var(--radius-md); }
+.pi-durable-dialog { width: min(100%, 350px); max-height: 90vh; overflow-y: auto; border-radius: var(--radius-xl); }
+.pi-durable-dialog p,
+.pi-durable-controls p { margin-block: 8px; }
+.pi-durable-dialog section { border-top: 1px solid var(--border); margin-top: 12px; padding-top: 12px; }
+.pi-durable-dialog button,
+.pi-durable-controls button { margin: 4px; white-space: normal; }
+.pi-durable-dialog pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; margin-block: 8px; }
+.pi-durable-controls [role="alert"]:not(:empty) { border-left: 3px solid var(--foreground); padding: 8px; }
+.pi-durable-dialog button:focus-visible,
+.pi-durable-controls button:focus-visible { outline: 2px solid var(--foreground); outline-offset: 2px; }

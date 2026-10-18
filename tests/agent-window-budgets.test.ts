@@ -1,12 +1,18 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { Agent, type AgentMessage, type AgentTool } from "@earendil-works/pi-agent-core";
+import { type AgentMessage, type AgentTool } from "@earendil-works/pi-agent-core";
+import { BACKGROUND_CONTEXT as context } from "@earendil-works/chord/context";
+import { MemoryStorage } from "@earendil-works/pi-durable";
 import { Type } from "typebox";
-import { createModels, fauxAssistantMessage, fauxProvider, type Context } from "@earendil-works/pi-ai";
+import type { Context } from "@earendil-works/pi-ai";
+import { createModels } from "@earendil-works/pi-ai/models";
+import { fauxAssistantMessage, fauxProvider } from "@earendil-works/pi-ai/providers/faux";
 
 import { effectiveToolOutputLimits } from "../src/context/window-budgets.ts";
-import { createConvertToLlm } from "../src/messages/convert-to-llm.ts";
+import { openDurableRuntime } from "../src/durable/runtime.ts";
+import { DurableSessions } from "../src/durable/sessions.ts";
+import { createWorkbookCoordinator } from "../src/workbook/coordinator.ts";
 import { applyToolOutputTruncation } from "../src/tools/output-truncation.ts";
 
 function toolResult(id: number, text: string): Extract<AgentMessage, { role: "toolResult" }> {
@@ -45,21 +51,31 @@ void test("agent requests apply full, scaled, and floor budgets for each model w
     const model = faux.getModel();
     Reflect.set(model, "contextWindow", scenario.window);
     const models = createModels();
-    models.setProvider(faux.provider);
     const requests: Context[] = [];
     const messages = Array.from({ length: 7 }, (_, index) => toolResult(index + 1, "z".repeat(1_500)));
-    const agent = new Agent({
-      initialState: { model, messages, tools: [] },
-      convertToLlm: createConvertToLlm({ getContextWindow: () => model.contextWindow }),
-      streamFn: (requestModel, context, options) => {
-        requests.push(structuredClone(context));
-        return models.streamSimple(requestModel, context, options);
-      },
+    models.setProvider({ ...faux.provider, streamSimple: (requestModel, transcript, options) => {
+      requests.push(structuredClone(transcript));
+      return faux.provider.streamSimple(requestModel, transcript, options);
+    },
     });
-    await agent.prompt("continue");
-    const request = requests[0];
-    if (!request) throw new Error("Expected outbound model request.");
-    const verbatim = request.messages.filter((message) => message.role === "toolResult" && JSON.stringify(message.content).includes("z".repeat(1_400)));
-    assert.equal(verbatim.length, scenario.kept, scenario.name);
+    const runtime = await openDurableRuntime({ storage: new MemoryStorage(), models,
+      workbookId: "budgets", coordinator: createWorkbookCoordinator(), autoCompaction: false,
+      mutationHost: { prepare: () => { throw new Error("Unexpected mutation"); }, observe: () => { throw new Error("Unexpected mutation"); } },
+    });
+    try {
+      const conversation = await new DurableSessions(runtime.harness, models, model).create(model, "off");
+      await runtime.install(conversation, { tools: [], systemPrompt: "" }, (history) => Promise.resolve(history));
+      await runtime.harness.commit(async (tx) => {
+        for (const message of messages) await tx.appendEntry(conversation.id, { kind: "test.history", model: [
+          { ...fauxAssistantMessage(""), stopReason: "toolUse", content: [{ type: "toolCall", id: message.toolCallId, name: message.toolName, arguments: {} }] }, message,
+        ] });
+      }, context);
+      const submission = await conversation.submit({ type: "input", content: "continue" }, context);
+      assert.equal((await submission.wait(context)).status, "done");
+      const request = requests[0];
+      if (!request) throw new Error("Expected outbound model request.");
+      const verbatim = request.messages.filter((message) => message.role === "toolResult" && JSON.stringify(message.content).includes("z".repeat(1_400)));
+      assert.equal(verbatim.length, scenario.kept, scenario.name);
+    } finally { await runtime.harness.close(context); }
   }
 });

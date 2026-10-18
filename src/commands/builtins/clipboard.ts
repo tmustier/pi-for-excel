@@ -2,10 +2,10 @@
  * Builtin clipboard commands.
  */
 
-import type { Agent, AgentMessage } from "@earendil-works/pi-agent-core";
+import type { AgentMessage } from "@earendil-works/pi-agent-core";
 
 import type { SlashCommand } from "../types.js";
-import type { ActiveAgentProvider } from "./model.js";
+import type { ActiveConversationProvider } from "./model.js";
 import { showToast } from "../../ui/toast.js";
 import { extractTextBlocks } from "../../utils/content.js";
 import { t } from "../../language/index.js";
@@ -21,24 +21,20 @@ function getLastAssistantText(messages: AgentMessage[]): string | null {
   return null;
 }
 
-function resolveAgent(getActiveAgent: ActiveAgentProvider): Agent | null {
-  return getActiveAgent();
-}
-
-export function createClipboardCommands(getActiveAgent: ActiveAgentProvider): SlashCommand[] {
+export function createClipboardCommands(getActiveConversation: ActiveConversationProvider): SlashCommand[] {
   return [
     {
       name: "copy",
       description: t("command.clipboard.desc"),
       source: "builtin",
       execute: () => {
-        const agent = resolveAgent(getActiveAgent);
+        const agent = getActiveConversation();
         if (!agent) {
           showToast(t("command.clipboard.no_session"));
           return;
         }
 
-        const text = getLastAssistantText(agent.state.messages);
+        const text = getLastAssistantText(agent.current.messages);
         if (text) {
           void navigator.clipboard.writeText(text).then(() => {
             showToast(t("clipboard.copied"));
