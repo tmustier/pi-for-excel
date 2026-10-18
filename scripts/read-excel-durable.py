@@ -34,6 +34,16 @@ def main() -> None:
     decoder_module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(decoder_module)
     output = []
+    # pathlib.glob suppresses PermissionError and would falsely report no data
+    # when macOS privacy permissions deny the Excel container. Probe access
+    # explicitly before enumerating the known WebKit database layout.
+    try:
+        next(CONTAINER.iterdir(), None)
+    except FileNotFoundError:
+        print("[]")
+        return
+    except PermissionError:
+        sys.exit("Cannot inspect Excel WebKit storage: filesystem permission was denied. No database absence can be inferred.")
     for path in sorted(CONTAINER.glob("*/*/IndexedDB/*/IndexedDB.sqlite3")):
         with sqlite3.connect(f"{path.as_uri()}?mode=ro", uri=True) as source:
             info = dict(source.execute("select key, value from IDBDatabaseInfo"))

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { chmodSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -29,9 +29,11 @@ function setup(t) {
   t.after(() => rmSync(home, { recursive: true, force: true }));
   const prepared = spawnSync("python3", ["-c", fixture, home], { encoding: "utf8" });
   assert.equal(prepared.status, 0, prepared.stderr);
-  return (...args) => spawnSync("python3", [reader, ...args], {
+  const run = (...args) => spawnSync("python3", [reader, ...args], {
     encoding: "utf8", env: { ...process.env, HOME: home, PYTHONDONTWRITEBYTECODE: "1" },
   });
+  run.home = home;
+  return run;
 }
 
 void test("independent Durable listing excludes legacy settings and returns only store counts", (t) => {
@@ -60,4 +62,16 @@ void test("independent Durable reader rejects legacy settings and absent databas
   const absent = run("--database", "pi-for-excel-durable:absent");
   assert.notEqual(absent.status, 0);
   assert.match(absent.stderr, /was not found/);
+});
+
+void test("denied filesystem access is not reported as absent Durable history", { skip: process.getuid?.() === 0 }, (t) => {
+  const run = setup(t);
+  const profile = join(run.home, "Library/Containers/com.microsoft.Excel/Data/Library/WebKit/WebsiteData/Default");
+  chmodSync(profile, 0);
+  try {
+    const denied = run();
+    assert.notEqual(denied.status, 0);
+    assert.match(denied.stderr, /permission was denied/);
+    assert.notEqual(denied.stdout.trim(), "[]");
+  } finally { chmodSync(profile, 0o700); }
 });
