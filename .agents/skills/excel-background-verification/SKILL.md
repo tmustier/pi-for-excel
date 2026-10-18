@@ -132,7 +132,7 @@ python3 .agents/skills/excel-background-verification/scripts/read-taskpane-setti
 python3 .agents/skills/excel-background-verification/scripts/read-taskpane-setting.py workbook.recovery-snapshots.v1
 ```
 
-It copies the database and its WAL and decodes one record to JSON, so a before/after diff shows exactly which entries a change dropped, kept or rewrote.
+It checks read-only IndexedDB metadata for the exact `pi-for-excel` database name and its `settings` store before copying the database and its WAL and decoding one record to JSON. If multiple origins qualify, it preserves the newest database-file selection policy among those app databases only; newer Durable workbook databases cannot win selection. A before/after diff shows exactly which entries a change dropped, kept or rewrote. Filesystem access failures are errors, not evidence of absent settings.
 
 Rendered tool cards are visible in the pane's accessibility tree (`HTML content` under the `Pi for Excel` container), which is how to assert diff tables, trees and images. The dump truncates on long chats; scroll the `HTML content` element with `sky.scroll` or start a fresh chat with `submitInput` `{"text":"/new"}`. Slash commands such as `/new` and `/history` go through the real composer with `submitInput`; `submitPrompt` sends text to the model.
 

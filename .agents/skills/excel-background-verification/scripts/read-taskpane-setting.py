@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Read a persisted taskpane setting straight from Excel's WebKit IndexedDB.
 
-The taskpane stores settings in the `settings` object store of its IndexedDB
-database. Excel for Mac keeps that database at
+The taskpane stores settings in the `settings` object store of its `pi-for-excel`
+IndexedDB database. Excel for Mac keeps that database at
 ~/Library/Containers/com.microsoft.Excel/Data/Library/WebKit/WebsiteData/…/IndexedDB/…/IndexedDB.sqlite3
 (plus a WAL that holds the latest writes). This script copies the database files
 and decodes one record outside the app, so a verification run can assert what
@@ -19,7 +19,9 @@ booleans, null/undefined, dates) and the string constant pool.
 from __future__ import annotations
 
 import argparse
+from contextlib import closing
 import json
+import os
 import shutil
 import sqlite3
 import struct
@@ -128,17 +130,56 @@ def decode_key(raw: str | bytes) -> str:
     return data.decode("latin-1")
 
 
-def copy_database() -> Path:
-    candidates = sorted(CONTAINER.glob("*/*/IndexedDB/*/IndexedDB.sqlite3"), key=lambda p: p.stat().st_mtime)
+def find_database() -> Path:
+    def fail_walk(error: OSError) -> None:
+        raise error
+
+    candidates: list[Path] = []
+    # Unlike pathlib.glob, walk propagates denied access, including nested origins.
+    # Keep traversal bounded to */*/IndexedDB/*/IndexedDB.sqlite3.
+    for root, directories, files in os.walk(CONTAINER, onerror=fail_walk):
+        directory = Path(root)
+        depth = len(directory.relative_to(CONTAINER).parts)
+        if depth == 2:
+            directories[:] = [name for name in directories if name == "IndexedDB"]
+        if depth == 4:
+            directories.clear()
+        if depth != 4 or "IndexedDB.sqlite3" not in files:
+            continue
+        path = directory / "IndexedDB.sqlite3"
+        with closing(sqlite3.connect(f"{path.as_uri()}?mode=ro", uri=True)) as connection:
+            row = connection.execute("select value from IDBDatabaseInfo where key = 'DatabaseName'").fetchone()
+            raw_name = row[0] if row else None
+            name = raw_name.decode("utf-16-le") if isinstance(raw_name, bytes) else raw_name
+            if name != "pi-for-excel":
+                continue
+            store = connection.execute("select id from ObjectStoreInfo where name = 'settings'").fetchone()
+            if store is not None:
+                candidates.append(path)
     if not candidates:
-        sys.exit(f"no IndexedDB.sqlite3 under {CONTAINER}; has the taskpane run in Excel?")
-    source = candidates[-1]
-    scratch = Path(tempfile.mkdtemp(prefix="pi-idb-"))
-    for suffix in ("", "-wal", "-shm"):
-        candidate = source.with_name(source.name + suffix)
-        if candidate.exists():
-            shutil.copy2(candidate, scratch / candidate.name)
-    return scratch / source.name
+        sys.exit("no `pi-for-excel` IndexedDB database with a `settings` object store; has the taskpane run in Excel?")
+    # Retain the helper's newest-file policy across origins, but only after exact
+    # app identity + store qualification. A newer Durable database is irrelevant.
+    return max(candidates, key=lambda path: (path.stat().st_mtime, str(path)))
+
+
+def copy_database() -> Path:
+    try:
+        source = find_database()
+        scratch = Path(tempfile.mkdtemp(prefix="pi-idb-"))
+        try:
+            for suffix in ("", "-wal", "-shm"):
+                candidate = source.with_name(source.name + suffix)
+                if candidate.exists():
+                    shutil.copy2(candidate, scratch / candidate.name)
+        except BaseException:
+            shutil.rmtree(scratch, ignore_errors=True)
+            raise
+        return scratch / source.name
+    except PermissionError:
+        sys.exit("Cannot inspect Excel WebKit storage: filesystem permission was denied. No database absence can be inferred.")
+    except FileNotFoundError:
+        sys.exit("Excel WebKit storage was not found or changed during inspection; has the taskpane run in Excel?")
 
 
 def main() -> None:
@@ -151,11 +192,11 @@ def main() -> None:
 
     database = copy_database()
     try:
-        connection = sqlite3.connect(database)
-        store = connection.execute("select id from ObjectStoreInfo where name = 'settings'").fetchone()
-        if store is None:
-            sys.exit("no `settings` object store in the taskpane database")
-        rows = connection.execute("select key, value from Records where objectStoreID = ?", (store[0],)).fetchall()
+        with closing(sqlite3.connect(database)) as connection:
+            store = connection.execute("select id from ObjectStoreInfo where name = 'settings'").fetchone()
+            if store is None:
+                sys.exit("no `settings` object store in the taskpane database")
+            rows = connection.execute("select key, value from Records where objectStoreID = ?", (store[0],)).fetchall()
     finally:
         shutil.rmtree(database.parent, ignore_errors=True)
 
