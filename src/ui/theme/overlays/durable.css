@@ -90,7 +90,21 @@
 .pi-durable-alerts:empty { display: none; }
 .pi-durable-alerts { display: flex; flex-direction: column; gap: 4px; }
 .pi-durable-alerts [role="alert"] { border-left: 3px solid var(--destructive); padding: 4px 8px; }
-.pi-durable-review-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+/* Keep decisions reachable with a long outcome and while scrolling expanded evidence. */
+.pi-durable-review-actions {
+  position: sticky;
+  /* Match the card inset so scrolled content cannot peek beyond the action surface. */
+  top: -12px;
+  bottom: -12px;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-inline: -12px;
+  padding: 8px 12px 12px;
+  border-top: 1px solid var(--border);
+  background: var(--background);
+}
 .pi-durable-review-actions button { white-space: normal; }
 .pi-durable-evidence > summary { cursor: pointer; color: var(--muted-foreground); font-size: var(--text-sm); }
 .pi-durable-evidence h4 { margin-top: 8px; font-size: var(--text-sm); font-weight: 600; }

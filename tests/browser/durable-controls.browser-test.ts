@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
+import { join } from "node:path";
 import { openBrowserPage, startTaskpaneServer, type TaskpaneServer } from "./harness.ts";
 
 let server: TaskpaneServer;
@@ -76,6 +77,88 @@ void test("stale acknowledgement is refused, reinspected, and needs a second exp
     assert.equal(await pendingInspect.evaluate((node) => node === document.activeElement), true);
   } finally { await opened.finish(); }
 });
+
+for (const height of [780, 680]) {
+  for (const scenario of ["pending", "conflict"]) {
+    void test(`review decisions stay visible with long reasons, stale refusal and expanded evidence: ${scenario} at 350x${height}`, async () => {
+      const opened = await openBrowserPage(server, { path: "src/ui-gallery.html", viewport: { width: 350, height } });
+      const { page } = opened;
+      try {
+        const section = page.locator(`[data-gallery="durable-${scenario}"]`);
+        await section.getByRole("button", { name: "Inspect", exact: true }).click();
+        const dialog = page.getByRole("dialog");
+        const acknowledge = dialog.getByRole("button", { name: "Acknowledge current state" });
+        await acknowledge.waitFor();
+        // Both real gallery outcomes include the full, multi-line evidence limits;
+        // the applied case also has a separate reason, as in the native review.
+        assert.match(await dialog.innerText(), /persistent row\/column identity, and never authorizes replay/);
+        const assertDecisionsVisible = async (state: string): Promise<void> => {
+          const screenshotDir = process.env.PI_DURABLE_SCREENSHOT_DIR;
+          if (screenshotDir) await page.screenshot({ path: join(screenshotDir, `${scenario}-${height}-${state}.png`) });
+          for (const name of ["Acknowledge current state", "Check again"]) {
+            const button = dialog.getByRole("button", { name, exact: true });
+            const visible = await button.evaluate((node) => {
+              const box = node.getBoundingClientRect();
+              const card = node.closest(".pi-durable-dialog")?.getBoundingClientRect();
+              return card && box.top >= Math.max(0, card.top) && box.bottom <= Math.min(innerHeight, card.bottom)
+                && box.left >= 0 && box.right <= innerWidth
+                && node.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2));
+            });
+            assert.equal(visible, true, `${name} must be visible and unobscured (${scenario}, ${height}, ${state})`);
+          }
+          assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+        };
+        const checkEvidence = async (state: string): Promise<void> => {
+          const warning = dialog.getByText(/^Acknowledging accepts the workbook as it is now/);
+          await warning.evaluate((node) => node.scrollIntoView({ block: "center" }));
+          const warningReadable = await warning.evaluate((node) => {
+            const box = node.getBoundingClientRect();
+            return node.contains(document.elementFromPoint(box.x + box.width / 2, box.top + 4))
+              && node.contains(document.elementFromPoint(box.x + box.width / 2, box.bottom - 4));
+          });
+          assert.equal(warningReadable, true, "the full acknowledgement warning remains reachable above the actions");
+          await assertDecisionsVisible(`${state}-warning`);
+          const evidence = dialog.getByRole("group").filter({ hasText: "Technical evidence" });
+          assert.equal(await evidence.evaluate((node) => node instanceof HTMLDetailsElement && !node.open), true);
+          const summary = evidence.locator("summary");
+          await summary.click();
+          assert.equal(await evidence.evaluate((node) => node instanceof HTMLDetailsElement && node.open), true);
+          await assertDecisionsVisible(`${state}-expanded`);
+          const observation = evidence.locator("pre").last();
+          assert.match(await observation.textContent() ?? "", /"observationToken": "gallery-/);
+          // Read right to the end of the full observation, not just the disclosure.
+          await observation.evaluate((node) => node.scrollIntoView({ block: "end" }));
+          const endVisible = await observation.evaluate((node) => {
+            const box = node.getBoundingClientRect();
+            return box.bottom > 0 && box.bottom <= innerHeight
+              && node.contains(document.elementFromPoint(box.x + box.width / 2, box.bottom - 4));
+          });
+          assert.equal(endVisible, true, "expanded evidence must remain readable through its final line");
+          await assertDecisionsVisible(`${state}-evidence-end`);
+        };
+        await assertDecisionsVisible("fresh");
+        if (scenario === "conflict") {
+          await acknowledge.click();
+          await dialog.getByRole("alert").waitFor();
+          await dialog.getByText("C4:D4: 1190, =C4*1.2").waitFor();
+          assert.match(await dialog.innerText(), /Acceptance invalidated/);
+          assert.equal(await page.evaluate(() => document.activeElement?.textContent), "Outcome uncertain");
+          assert.match(await section.textContent() ?? "", /Workbook changes awaiting review: 1\./);
+          await assertDecisionsVisible("stale");
+          await checkEvidence("stale");
+        } else {
+          await checkEvidence("fresh");
+        }
+        await dialog.getByRole("button", { name: "Check again", exact: true }).click();
+        await acknowledge.waitFor();
+        await assertDecisionsVisible("rechecked");
+        await acknowledge.click();
+        await dialog.waitFor({ state: "detached" });
+        await section.getByText("No workbook changes awaiting review.", { exact: true }).waitFor({ state: "attached" });
+      } finally { await opened.finish(); }
+    });
+  }
+}
 
 void test("inspection errors retain pending and offer no acknowledgement", async () => {
   const opened = await openBrowserPage(server, { path: "src/ui-gallery.html", viewport: TASKPANE });
