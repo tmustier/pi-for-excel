@@ -1,6 +1,6 @@
 # Pi 1.3 upgrade and Pi Durable migration
 
-Status: Step 1 merged in #765. PR #769 replaces the taskpane Agent runtime with Durable and includes the seven Step 3 implementation areas below. The reload recovery fix has passed component tests in Excel. Final acceptance of the integrated runtime remains open and currently needs restored Mac host access. See the [verification record](../durable-migration-verification.md).
+Status: Step 1 merged in #765. PR #769 replaces the taskpane Agent runtime with Durable and includes the seven Step 3 implementation areas below. Integrated live Excel testing now covers native recovery, mutation review, sandbox extensions, queues, history transfer and storage ownership. It found and fixed two runtime/UI regressions. Host access works again; GitGuardian fixture classification and explicit native-test limits remain. See the [native acceptance record](../durable-native-acceptance.md) and [earlier verification record](../durable-migration-verification.md).
 **Written:** 2026-10-17
 
 ## Summary
@@ -139,9 +139,11 @@ The prototype answered the five questions well enough to decide. Pi Durable is n
   and read-state shapes through a read-only projection. New native access uses
   `agent.conversation`; no Agent executor or mutable Agent state is retained.
 
-These are implementation contracts, not a declaration of integrated Excel
-acceptance. Chromium uses stub providers/Office hosts; live Mac Excel acceptance
-and independent workbook readback remain the coordinator's lane.
+These are implementation contracts, not a claim that every failure mode has
+been tested. Chromium uses stub providers/Office hosts. The coordinator's
+[integrated native run](../durable-native-acceptance.md) records real models,
+actual tools, independent workbook and SQLite readback, fault injection, and
+remaining native-test limits.
 
 ## Step 2 findings (historical prototype evidence)
 

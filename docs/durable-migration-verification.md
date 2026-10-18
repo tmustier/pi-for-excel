@@ -1,6 +1,6 @@
 # Durable migration verification
 
-This records acceptance evidence as the migration proceeds. It is not acceptance of the full migration. The final integrated runtime still needs the complete checks in the migration plan.
+This records acceptance evidence as the migration proceeds. The later [integrated native Excel run](durable-native-acceptance.md) restored host access, exercised live-model recovery and mutation classes, and found and fixed extension-refresh and narrow-review issues. It also records remaining limits; this is not blanket acceptance of every untested host or failure mode.
 
 ## Recovery in Excel
 
@@ -62,7 +62,7 @@ The persistence inspector now reports denied access explicitly instead of lettin
 
 A subsequent attempt exhausted the remaining background entry points. Creating a fresh scratch workbook in Excel's container failed with `PermissionError`. Creating a tagged workbook in the task's temporary directory succeeded, but opening it through background LaunchServices produced no bridge client. Computer Use then failed twice with `bootstrapTimedOut`, and the standalone accessibility reader reported no Excel windows. The first foreground observation was Excel, so the attempt could not establish background verification. No model prompt ran; the owned test servers were stopped and the shared lane released.
 
-Implementation and isolated browser validation can continue. Fresh independent Excel persistence acceptance still requires restored host access; the earlier component results are not a waiver for the final runtime.
+These were failures observed during the earlier attempt, not proof that Rex lacked Full Disk Access. On 18 October, fresh filesystem and Computer Use probes passed. The [later native run](durable-native-acceptance.md) completed independent WebKit persistence readback and integrated tests; host access is no longer the current blocker.
 
 ## Integrated automated verification
 
@@ -104,8 +104,8 @@ Visual review found consistent theme fonts, spacing, alignment and contrast, no 
 
 GitHub build/test, browser, code analysis and dependency checks pass at `99edcbb`. GitGuardian still reports 3 generic high-entropy incidents from earlier commits: 38341470, 38341471 and 38341472. They are literal synthetic observation markers in the gallery and its browser test, not authentication credentials. Commit `99edcbb` replaces them with readable fixture markers in the current tree; their older occurrences remain in history.
 
-The GitGuardian dashboard requested a new GitHub app authorization. That request was cancelled without granting permissions. The repository owner must classify these fixture incidents, or explicitly approve the required dashboard authorization. No broad scanner exclusion or history rewrite was applied.
+A follow-up independent review inspected all three original occurrences at `4139e5b`: two gallery observation markers and the browser assertion for one of them. None is an authentication credential. The remote findings still need classification. GitHub's authorization button for the existing GitGuardian app remained disabled in an unfocused window. The coordinator requested permission to briefly focus that login window; no disabled-control bypass, broad scanner exclusion or history rewrite was applied.
 
 ## Remaining acceptance
 
-The earlier live model checks establish recovery in the component path. Repeat them through ordinary chat on the final integrated runtime. Independently verify cells, formulas, structure and persisted data for session import/export, representative extensions, automatic/manual compaction and overflow, queues, every mutation recovery class and user conflict, provider/proxy/WebSocket transport, two-pane takeover and the storage lifecycle. Current Mac host access prevents those final checks. None is waived by the passing browser suites or screenshots.
+See the [integrated native acceptance record](durable-native-acceptance.md) for ordinary chat, explicit cancellation checkpoints, mutation recovery, user-edit conflicts, sandbox extension lifecycle, queued-prompt recovery, history transfer, compaction, ownership and storage tests. Automatic compaction and overflow used documented temporary fault injection with real models and tools; production context exhaustion was not induced. Remaining native limits and the outstanding GitGuardian classification are explicit there. No merge or deployment is authorised by these results.
