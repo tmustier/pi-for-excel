@@ -57,6 +57,15 @@ function content(values: Static<typeof gridSchema>, formulas: Static<typeof grid
   }));
 }
 
+function cellData(range: Excel.Range): { values: Static<typeof gridSchema>; formulas: Static<typeof gridSchema> } {
+  const values: unknown = range.values;
+  const formulas: unknown = range.formulas;
+  if (!Value.Check(gridSchema, values) || !Value.Check(gridSchema, formulas)) {
+    throw new Error("Unsupported workbook cell values");
+  }
+  return { values, formulas };
+}
+
 /** Read IDs and table extents; no name-based fallback on reconciliation. */
 async function structure(): Promise<SheetIdentity[]> {
   return excelRun(async (context) => {
@@ -114,7 +123,10 @@ async function targetFor(toolName: string, params: Params): Promise<Target> {
   }
   target.ranges = refs.map((part) => part.address);
   if (toolName === "modify_structure" && params.position !== undefined) {
-    const end = params.position + (params.count ?? 1) - 1;
+    // Match executeStructureMutation's normalization without changing the original intent.
+    const count = typeof params.count === "number" && Number.isFinite(params.count) && params.count > 0
+      ? Math.floor(params.count) : 1;
+    const end = params.position + count - 1;
     if (target.action === "insert_rows" || target.action === "delete_rows") {
       target.ranges = [`${params.position}:${end}`];
     } else if (target.action === "insert_columns" || target.action === "delete_columns") {
@@ -146,6 +158,7 @@ const allFormats = {
   borderInsideHorizontal: true, borderInsideVertical: true,
 };
 
+// agent-default (not a user rule): 2026-10-18 — sample target corners' immediate neighbors, at most eight cells.
 /** At most eight adjacent cells per target, independent of the sheet's used area.
  * These are structural warning signals, not persistent row/column identities or
  * proof about unobserved cells. Never truncate the actual target or write intent.
@@ -177,11 +190,53 @@ async function cellAnchors(sheetId: string, addresses: string[]): Promise<JsonVa
     for (const { range } of ranges) range.load("values,formulas");
     await context.sync();
     return ranges.map(({ address, range }) => {
-      const values: unknown = range.values;
-      const formulas: unknown = range.formulas;
-      if (!Value.Check(gridSchema, values) || !Value.Check(gridSchema, formulas)) throw new Error("Unsupported anchor data");
+      const { values, formulas } = cellData(range);
       return { range: address, content: content(values, formulas) };
     });
+  });
+}
+
+/** Sparse review hints, not a before image or persistent row/column identities. */
+async function structuralNeighborhood(sheetId: string, addresses: string[]): Promise<JsonValue> {
+  return excelRun(async (context) => {
+    const sheet = context.workbook.worksheets.getItem(sheetId);
+    const used = sheet.getUsedRangeOrNullObject();
+    // Read geometry only: never materialize the used area's contents in JavaScript.
+    used.load("isNullObject,rowIndex,columnIndex,rowCount,columnCount");
+    await context.sync();
+    const usedExtent = used.isNullObject ? null : {
+      rowIndex: used.rowIndex, columnIndex: used.columnIndex, rowCount: used.rowCount, columnCount: used.columnCount,
+    };
+    const samples = new Set<string>();
+    // agent-default (not a user rule): 2026-10-18 — before/first/last/after the intended band,
+    // crossed with first/middle/last used coordinate on the other axis (A or 1 if empty).
+    // At most 12 cells per band; deduplicate and omit only out-of-sheet neighbors.
+    for (const address of addresses) {
+      const [first = "", last = first] = address.split(":");
+      const rows = /^\d+$/u.test(first);
+      const start = rows ? Number(first) - 1 : parseCell(`${first}1`).col;
+      const end = rows ? Number(last) - 1 : parseCell(`${last}1`).col;
+      const crossStart = rows ? usedExtent?.columnIndex ?? 0 : usedExtent?.rowIndex ?? 0;
+      const crossCount = rows ? usedExtent?.columnCount ?? 1 : usedExtent?.rowCount ?? 1;
+      const crossEnd = crossStart + crossCount - 1;
+      for (const axis of [start - 1, start, end, end + 1]) {
+        for (const cross of [crossStart, Math.floor((crossStart + crossEnd) / 2), crossEnd]) {
+          const row = rows ? axis : cross;
+          const col = rows ? cross : axis;
+          // Excel physical bounds are platform invariants, not sampling limits.
+          if (row < 0 || row >= 1_048_576 || col < 0 || col >= 16_384) continue;
+          samples.add(`${colToLetter(col)}${row + 1}`);
+        }
+      }
+    }
+    const ranges = [...samples].map((address) => ({ address, range: sheet.getRange(address) }));
+    for (const { range } of ranges) range.load("values,formulas");
+    await context.sync();
+    return {
+      samplingPolicy: "agent-default: band before/first/last/after x used-axis first/middle/last; empty axis starts at A/1; at most 12 cells per band",
+      usedExtent,
+      cells: ranges.map(({ address, range }) => ({ range: address, ...cellData(range) })),
+    };
   });
 }
 
@@ -217,11 +272,7 @@ async function observeTarget(workbookId: string, target: Target, toolName: strin
       for (const range of ranges) range.load("values,formulas,address,rowCount,columnCount");
       await context.sync();
       return ranges.map((range) => {
-        const values: unknown = range.values;
-        const formulas: unknown = range.formulas;
-        if (!Value.Check(gridSchema, values) || !Value.Check(gridSchema, formulas)) {
-          throw new Error("Unsupported workbook cell values");
-        }
+        const { values, formulas } = cellData(range);
         return { range: localAddressPart(range.address), content: content(values, formulas) };
       });
     });
@@ -279,6 +330,11 @@ async function observeTarget(workbookId: string, target: Target, toolName: strin
   }
   if (target.action === "rename_sheet" || target.action === "hide_sheet" || target.action === "unhide_sheet") {
     return { ...base, complete: true, limitation: null };
+  }
+  if (toolName === "modify_structure" && target.ranges.length > 0
+    && ["insert_rows", "delete_rows", "insert_columns", "delete_columns"].includes(target.action)) {
+    return { ...base, state: { affectedRanges: target.ranges, neighborhood: await structuralNeighborhood(sheet.id, target.ranges) },
+      limitation: "Evidence includes intended bands, sheet/table metadata and at most 12 sampled boundary/adjacent cells per band, with values and formulas. Samples are hints only: they omit unsampled contents and cannot establish stable row/column identities, applied or unchanged outcomes, or permission to replay." };
   }
   // Structural operations remain uncertain: copying the used sheet would be
   // expensive without establishing persistent row/column identity either.
