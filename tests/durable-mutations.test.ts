@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { Type } from "typebox";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import type { JsonValue } from "@earendil-works/chord";
-import { createMutationController, parseMutationRecord, type MutationRecord, type MutationObservation,
+import { createMutationController, parseMutationRecord, MutationExecutionError, type MutationRecord, type MutationObservation,
   type MutationHost, type MutationFaultPoint } from "../src/durable/mutations.ts";
 import { createWorkbookCoordinator } from "../src/workbook/coordinator.ts";
 import { withWorkbookCoordinator } from "../src/tools/with-workbook-coordinator.ts";
@@ -117,7 +117,7 @@ mutationCases.push(["workbook_history", { action: "restore" }], ["python_transfo
 for (const [name, params] of mutationCases) {
   void test(`${name} ${JSON.stringify(params)}: host-side interruption cannot duplicate effects`, async () => {
     const f = fixture(true);
-    await assert.rejects(f.tool(name, true).execute("interrupted", params), /disconnected/u);
+    await assert.rejects(f.tool(name, true).execute("interrupted", params), /may already have applied/u);
     assert.equal(f.effects(), 1);
     const restarted = f.open();
     assert.equal((await restarted.reconcile("interrupted")).classification, "conflict");
@@ -131,7 +131,14 @@ void test("failure before dispatch is nonmutating; uncertain commit/read failure
   for (const phase of ["prepared", "dispatched", "returned"] satisfies MutationRecord["phase"][]) {
     const f = fixture();
     f.failSave(phase);
-    await assert.rejects(f.tool().execute("original", {}), /commit unavailable/u);
+    await assert.rejects(f.tool().execute("original", {}), (error: Error) => {
+      assert.ok(error instanceof MutationExecutionError);
+      assert.equal(error.mutationId, "original");
+      assert.equal(error.outcome, phase === "returned" ? "uncertain" : "not-executed");
+      assert.match(error.message, phase === "returned" ? /may already have applied/u : /not executed/u);
+      assert.doesNotMatch(error.message, /commit unavailable/u);
+      return true;
+    });
     assert.equal(f.effects(), phase === "returned" ? 1 : 0);
     f.failSave(null);
     if (phase !== "prepared") await assert.rejects(f.tool().execute("retry", {}), /pending/u);
@@ -141,6 +148,40 @@ void test("failure before dispatch is nonmutating; uncertain commit/read failure
   await assert.rejects(f.tool().execute("call", {}), /list unavailable/u);
   assert.equal(f.effects(), 0);
 });
+
+for (const failure of ["returned-save", "post-host-observation"]) {
+  void test(`${failure}: surface safe uncertainty and retain dispatched intent after host changes`, async () => {
+    const f = fixture();
+    const secret = "private-storage-url-and-token";
+    const save = f.store.save;
+    const observe = f.host.observe;
+    f.store.save = (record) => failure === "returned-save" && record.phase === "returned"
+      ? Promise.reject(new Error(secret, { cause: new Error(secret) })) : save(record);
+    f.host.observe = (record) => failure === "post-host-observation" && f.effects() > 0
+      ? Promise.reject(new Error(secret, { cause: new Error(secret) })) : observe(record);
+    await assert.rejects(f.tool().execute("uncertain", {}), (error: Error) => {
+      assert.ok(error instanceof MutationExecutionError);
+      assert.equal(error.outcome, "uncertain");
+      assert.equal(error.mutationId, "uncertain");
+      assert.match(error.message, /may already have applied/u);
+      assert.match(error.message, /review/iu);
+      assert.match(error.message, /do not retry automatically/iu);
+      assert.doesNotMatch(`${error.message} ${error.stack ?? ""} ${JSON.stringify(error)}`, /private-storage-url-and-token/u);
+      assert.equal(error.cause, undefined);
+      return true;
+    });
+    assert.equal(f.effects(), 1);
+    const record = f.records.get("uncertain");
+    assert.ok(record);
+    assert.equal(record.phase, "dispatched");
+    assert.deepEqual((await observe(record)).state, [["new", 23]]);
+    const recovered = f.open();
+    assert.equal((await recovered.pending()).length, 1);
+    await assert.rejects(f.tool("write_cells", false, recovered).execute("next", {}), /pending/u);
+    await assert.rejects(f.tool("write_cells", false, recovered).execute("uncertain", {}), /replay/u);
+    assert.equal(f.effects(), 1);
+  });
+}
 
 for (const [kind, name] of [["browser", "extension_custom"], ["wps", "execute_wps_js"]] as const) {
   void test(`${name}: two successful committed results proceed despite incomplete observations`, async () => {
@@ -215,7 +256,7 @@ for (const incomplete of [false, true]) {
   void test(`prepared intent reports conflict for user edits or incomplete observations (${incomplete})`, async () => {
     const f = fixture(incomplete);
     f.failSave("dispatched");
-    await assert.rejects(f.tool().execute("prepared", {}), /commit unavailable/u);
+    await assert.rejects(f.tool().execute("prepared", {}), /not executed/u);
     f.failSave(null);
     if (!incomplete) f.edit([["user edit", 99]]);
     const review = await f.controller.reconcile("prepared");
