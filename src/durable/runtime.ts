@@ -42,8 +42,8 @@ export function adaptTools(tools: readonly AnyCoreTool[], bind?: (tool: AnyCoreT
     ...(replaySafe.has(tool.name) ? { replay: "safe" as const } : {}),
     execute: async (args, api, ctx) => {
       let accepting = true;
-      // Agent default (2026-10-18): retain one latest pending snapshot while a
-      // progress commit runs, bounding callback bursts without delaying tools.
+      // agent-default (not a user rule): 2026-10-18
+      // Retain the latest pending snapshot during a commit to bound callback bursts.
       let pending: JsonValue | undefined;
       let writing = false;
       let drained = Promise.resolve();

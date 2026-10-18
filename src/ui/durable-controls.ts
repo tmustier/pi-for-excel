@@ -46,6 +46,7 @@ const cellStateSchema = Type.Array(Type.Object({
 const targetSchema = Type.Object({ sheetId: Type.Union([Type.String(), Type.Null()]), ranges: Type.Array(Type.String()), action: Type.String() });
 const sheetsSchema = Type.Array(Type.Object({ id: Type.String(), name: Type.String() }));
 const cellStructureSchema = Type.Object({ sheets: sheetsSchema });
+// agent-default (not a user rule): 2026-10-18 — expanded evidence retains every cell.
 const SUMMARY_CELLS = 6;
 
 function parseRecord(review: MutationReview): MutationRecord | null {
