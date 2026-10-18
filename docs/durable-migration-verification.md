@@ -100,6 +100,12 @@ The coordinator inspected narrow and desktop screenshots of the changed element 
 
 Visual review found consistent theme fonts, spacing, alignment and contrast, no horizontal overflow or broken images, and visible actions at narrow width. Evidence expansion, fresh inspection, unavailable inspection, stale-token refusal, successful acknowledgement and explicit obsolete-generation deletion pass browser interaction tests. Sheet-level reviews also display the name attached to the recorded original ID when no cell range exists. Five formatter regressions cover deletion, duplication, new-sheet identity, missing IDs and row bands; restoring the old guard makes the deletion and duplication assertions fail. The sheet review was rendered and inspected at narrow width.
 
+## External security check
+
+GitHub build/test, browser, code analysis and dependency checks pass at `99edcbb`. GitGuardian still reports 3 generic high-entropy incidents from earlier commits: 38341470, 38341471 and 38341472. They are literal synthetic observation markers in the gallery and its browser test, not authentication credentials. Commit `99edcbb` replaces them with readable fixture markers in the current tree; their older occurrences remain in history.
+
+The GitGuardian dashboard requested a new GitHub app authorization. That request was cancelled without granting permissions. The repository owner must classify these fixture incidents, or explicitly approve the required dashboard authorization. No broad scanner exclusion or history rewrite was applied.
+
 ## Remaining acceptance
 
 The earlier live model checks establish recovery in the component path. Repeat them through ordinary chat on the final integrated runtime. Independently verify cells, formulas, structure and persisted data for session import/export, representative extensions, automatic/manual compaction and overflow, queues, every mutation recovery class and user conflict, provider/proxy/WebSocket transport, two-pane takeover and the storage lifecycle. Current Mac host access prevents those final checks. None is waived by the passing browser suites or screenshots.
