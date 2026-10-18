@@ -46,6 +46,7 @@ import {
 } from "./permissions.js";
 import {
   loadStoredExtensions,
+  readIntactStoredExtensionIds,
   saveStoredExtensions,
   type StoredExtensionEntry,
   type StoredExtensionSource,
@@ -73,6 +74,7 @@ import {
 } from "./runtime-manager-helpers.js";
 import { buildRuntimeManagerActivationBridge } from "./runtime-manager-activation.js";
 import {
+  isExtensionOwnedId,
   qualifyExtensionConnectionId,
   qualifyExtensionProviderId,
 } from "./owner-identifiers.js";
@@ -87,6 +89,8 @@ import type {
 import type { SettingsWriter } from "../storage/local/settings-store.js";
 
 type AnyAgentTool = AgentTool;
+
+const ORPHANED_CONNECTIONS_CLEANED_KEY = "extensions.orphaned-connections-cleaned.v1";
 
 interface ExtensionToolExecutionBoundary {
   execute?: unknown;
@@ -284,6 +288,16 @@ export class ExtensionRuntimeManager {
       return;
     }
 
+    // Finish or skip the migration before loading can replace an unreadable registry.
+    if ((await this.settings.get(ORPHANED_CONNECTIONS_CLEANED_KEY)) !== true) {
+      const installedIds = await readIntactStoredExtensionIds(this.settings);
+      if (installedIds) {
+        await this.connectionManager.deleteStoredRecords((connectionId) =>
+          connectionId.startsWith("ext.")
+          && !installedIds.some((entryId) => isExtensionOwnedId(entryId, connectionId)));
+      }
+      await this.settings.set(ORPHANED_CONNECTIONS_CLEANED_KEY, true);
+    }
     this.entries = await loadStoredExtensions(this.settings);
 
     for (const entry of this.entries) {
@@ -371,6 +385,9 @@ export class ExtensionRuntimeManager {
 
     await this.deactivateEntry(entryId);
     this.connectionManager.unregisterDefinitionsByOwner(entryId);
+    await this.connectionManager.deleteStoredRecords(
+      (connectionId) => isExtensionOwnedId(entryId, connectionId),
+    );
     await clearExtensionStorage(this.settings, entryId);
     this.entries.splice(entryIndex, 1);
     this.lastErrors.delete(entryId);

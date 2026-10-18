@@ -277,6 +277,24 @@ export async function saveStoredExtensions(
   await settings.set(EXTENSIONS_REGISTRY_STORAGE_KEY, createRegistryDocument(items));
 }
 
+/** Read before loading defaults: only an intact registry can prove an extension was uninstalled. */
+export async function readIntactStoredExtensionIds(
+  settings: SettingsWriter,
+): Promise<string[] | null> {
+  const raw = await settings.get(EXTENSIONS_REGISTRY_STORAGE_KEY);
+  if (!isExtensionsStorePayloadShape(raw)
+    || raw.version !== EXTENSIONS_REGISTRY_VERSION
+    || !Array.isArray(raw.items)) return null;
+
+  const ids: string[] = [];
+  for (const item of raw.items) {
+    const entry = normalizeEntry(item);
+    if (!entry) return null;
+    ids.push(entry.id);
+  }
+  return ids;
+}
+
 /**
  * Load stored extensions from SettingsStore.
  *

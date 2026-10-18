@@ -416,6 +416,19 @@ export class ConnectionManager {
     }
   }
 
+  /** Deletes stored status and secrets for matching connections, whether or not they are registered. */
+  async deleteStoredRecords(shouldDelete: (connectionId: string) => boolean): Promise<void> {
+    const items = await loadConnectionStoreDocumentForUpdate(this.settings);
+    const doomed = Object.keys(items).filter(shouldDelete);
+    if (doomed.length === 0) return;
+
+    for (const connectionId of doomed) {
+      delete items[connectionId];
+    }
+    await saveConnectionStoreDocument(this.settings, items);
+    this.notify();
+  }
+
   hasDefinition(connectionId: string): boolean {
     const normalizedConnectionId = normalizeConnectionId(connectionId);
     return this.definitions.has(normalizedConnectionId);

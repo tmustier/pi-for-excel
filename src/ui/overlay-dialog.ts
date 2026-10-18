@@ -254,6 +254,20 @@ export function createOverlayDialog(options: OverlayDialogOptions): OverlayDialo
     card,
     close,
     mount: () => {
+      // WebKit exposes only one aria-modal dialog to assistive technology, and it
+      // may pick an older one, so make the overlays underneath inert until this
+      // one closes.
+      const covered = Array.from(document.body.children).filter(
+        (element): element is HTMLElement => element instanceof HTMLElement
+          && element !== overlay
+          && element.getAttribute("aria-modal") === "true"
+          && !element.inert,
+      );
+      for (const element of covered) element.inert = true;
+      cleanups.push(() => {
+        for (const element of covered) element.inert = false;
+      });
+
       document.body.appendChild(overlay);
     },
     addCleanup: (cleanup) => {

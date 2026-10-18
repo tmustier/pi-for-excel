@@ -797,6 +797,75 @@ void test("late credentials update idle runtimes and defer busy runtimes", async
   assert.equal(busyModel.provider, "openai-codex");
 });
 
+void test("a provider registered during a refresh pass gets its cached catalogue restored", async () => {
+  const providerId = "ext.example.probe";
+  const catalogs = new MemoryCatalogs();
+  catalogs.entries.set(providerId, {
+    models: [{
+      id: "cached-extension-model",
+      name: "Cached extension model",
+      api: "openai-completions",
+      provider: providerId,
+      baseUrl: "https://old-extension.example.com/v1",
+      reasoning: false,
+      input: ["text"],
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+      contextWindow: 32_768,
+      maxTokens: 4_096,
+    }],
+  });
+  let notifyGatewayDiscoveryStarted: () => void = () => {};
+  const gatewayDiscoveryStarted = new Promise<void>((resolve) => {
+    notifyGatewayDiscoveryStarted = resolve;
+  });
+  let releaseGatewayDiscovery: () => void = () => {};
+  const gatewayDiscoveryGate = new Promise<void>((resolve) => {
+    releaseGatewayDiscovery = resolve;
+  });
+  const runtime = createRuntime({
+    catalogs,
+    fetchFn: async (input) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      if (url.startsWith("https://new-extension.example.com/")) {
+        throw new Error("new extension endpoint is offline");
+      }
+      notifyGatewayDiscoveryStarted();
+      await gatewayDiscoveryGate;
+      return new Response(JSON.stringify({ data: [{ id: "network-model" }] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    },
+  });
+  const owner = new ModelRefreshOwner({
+    modelRuntime: runtime,
+    loadCustomProviders: () => Promise.resolve([gatewayProvider()]),
+    getRuntimes: () => [],
+  });
+
+  await owner.refreshConfiguredProviders(false);
+  const startupNetworkPass = owner.refresh(true);
+  await gatewayDiscoveryStarted;
+
+  // An extension activating mid-pass registers its provider, then asks for a refresh.
+  runtime.registerExtensionProvider("ext.example", {
+    id: providerId,
+    name: "Example extension provider",
+    api: "openai-completions",
+    baseUrl: "https://new-extension.example.com/v1",
+    models: [{ id: "baseline" }],
+    resolveApiKey: () => Promise.resolve("host-owned-secret"),
+  });
+  const activationRefresh = owner.refresh(true);
+  releaseGatewayDiscovery();
+  await Promise.all([startupNetworkPass, activationRefresh]);
+
+  const restored = runtime.models.getModel(providerId, "cached-extension-model");
+  assert.ok(restored, "the cached extension model should survive the coalesced refresh");
+  assert.equal(restored.baseUrl, "https://new-extension.example.com/v1");
+  assert.deepEqual(owner.snapshot().providerErrors, [providerId]);
+});
+
 void test("model refresh owner publishes cached startup before network discovery", async () => {
   const catalogs = new MemoryCatalogs();
   catalogs.entries.set("Gateway · Acme", {

@@ -532,6 +532,7 @@ export class BrowserModelRuntime {
   private readonly customProviderIds = new Set<string>();
   private readonly extensionProviderOwners = new Map<string, string>();
   private readonly dynamicProviderAbortControllers = new Map<string, AbortController>();
+  private dynamicProviderRevision = 0;
 
   constructor(options: CreateBrowserModelRuntimeOptions) {
     this.modelCatalogs = new BrowserModelCatalogsStore(options.modelCatalogs);
@@ -555,6 +556,14 @@ export class BrowserModelRuntime {
     }
   }
 
+  /**
+   * Increases whenever a custom or extension provider is registered or removed.
+   * A refresh pass only covers the providers registered when it started.
+   */
+  get providerRevision(): number {
+    return this.dynamicProviderRevision;
+  }
+
   private createDynamicProvider(registration: BrowserProviderRegistration): Provider {
     const controller = new AbortController();
     const provider = createRegisteredProvider(
@@ -566,12 +575,14 @@ export class BrowserModelRuntime {
 
     this.dynamicProviderAbortControllers.get(provider.id)?.abort();
     this.dynamicProviderAbortControllers.set(provider.id, controller);
+    this.dynamicProviderRevision += 1;
     return provider;
   }
 
   private stopDynamicProvider(providerId: string): void {
     this.dynamicProviderAbortControllers.get(providerId)?.abort();
     this.dynamicProviderAbortControllers.delete(providerId);
+    this.dynamicProviderRevision += 1;
   }
 
   async syncCustomProviders(customProviders: readonly CustomProvider[]): Promise<void> {
