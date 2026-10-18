@@ -2,7 +2,7 @@ import { BACKGROUND_CONTEXT as context } from "@earendil-works/chord/context";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { Api, AssistantMessage, Model, Models, ModelThinkingLevel, Tool } from "@earendil-works/pi-ai";
 import {
-  CompactionEntry, InboxDoc, LiveDoc, ProviderDoc, watchEvents,
+  CompactionEntry, InboxDoc, LiveDoc, ProviderDoc, SystemEntry, watchEvents,
   type AgentEvent, type AgentEventStream, type Conversation, type Cursor,
   type EntryRecord, type Harness, type InboxItem, type LiveState,
 } from "@earendil-works/pi-durable";
@@ -26,6 +26,9 @@ export async function readConversationHistory(conversation: Conversation): Promi
 
 /** UI projection only. Model context always comes from Conversation.context(). */
 export function entryMessages(entry: EntryRecord, originals?: string | readonly AgentMessage[]): AgentMessage[] {
+  // Native prompt bookkeeping is not a user-visible chat message. Keep it in
+  // Durable's model context and systemPrompt, but out of UI/export/statistics.
+  if (SystemEntry.is(entry)) return [];
   if (LegacyContextEntry.is(entry) && originals) return typeof originals === "string" ? legacyOriginalMessages(originals) : [...originals];
   if (LegacyMessageEntry.is(entry) && entry.data) {
     if (!entry.data.archived) return [entry.data.message];
