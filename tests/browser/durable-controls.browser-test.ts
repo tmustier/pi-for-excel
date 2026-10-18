@@ -29,7 +29,7 @@ void test("review summarizes the record, keeps forensics collapsed, and the acti
     assert.match(summary, /Now\s+C4:D4: 1175, =C4\*1\.2/);
     assert.match(summary, /never writes to the workbook, and does not prove the original operation succeeded/);
     // Forensic data is present but collapsed: no token, GUID or record JSON in the default view.
-    assert.doesNotMatch(summary, /observationToken|5d0c9a7e|4F1C2B9E|"version"/);
+    assert.doesNotMatch(summary, /observationToken|gallery-observation|4F1C2B9E|"version"/);
     const evidence = dialog.getByRole("group").filter({ hasText: "Technical evidence" });
     assert.equal(await evidence.evaluate((node) => node instanceof HTMLDetailsElement && !node.open), true);
     // The decision fits the taskpane without scrolling past evidence.
@@ -40,7 +40,7 @@ void test("review summarizes the record, keeps forensics collapsed, and the acti
     await page.keyboard.press("Tab");
     assert.equal(await page.evaluate(() => document.activeElement?.textContent), "Technical evidence");
     await page.keyboard.press("Enter");
-    await dialog.getByText(/"observationToken": "5d0c9a7e31b84f26a9e0c4d7b1f3e8a2-1"/).waitFor();
+    await dialog.getByText(/"observationToken": "gallery-observation-1"/).waitFor();
     await dialog.getByText(/mutation:7c1e0f4a-2b9d-4e63-a8f5-91d3c6b20e47/).first().waitFor();
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   } finally { await opened.finish(); }

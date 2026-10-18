@@ -29,9 +29,9 @@ export function mountDurableGallery(host: HTMLElement, scenario: "pending" | "co
   let observation = 1;
   let deleted = false;
   const reconciliation = (): MutationReconciliation => scenario === "conflict"
-    ? { classification: "conflict", reason: cellsLimitation, observation: cells(1160 + observation * 15), observationToken: `5d0c9a7e31b84f26a9e0c4d7b1f3e8a2-${observation}` }
+    ? { classification: "conflict", reason: cellsLimitation, observation: cells(1160 + observation * 15), observationToken: `gallery-observation-${observation}` }
     : { classification: "applied", reason: "The complete intended postcondition matches at the recorded identities and structural context.",
-      observation: cells(1200), observationToken: "a41f7c2e9d0b3865f1c7e4a2d9b06c3e" };
+      observation: cells(1200), observationToken: "gallery-completed-observation" };
   const unused = (): never => { throw new Error("Gallery must not execute runtime operations"); };
   const runtime: DurableControlsRuntime = {
     get harness() { return unused(); },
