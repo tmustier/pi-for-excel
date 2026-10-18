@@ -1,9 +1,9 @@
-import { isJsonValue, type JsonValue } from "@earendil-works/chord";
+import { copyJson, isJsonValue, type JsonValue } from "@earendil-works/chord";
 import { BACKGROUND_CONTEXT as context } from "@earendil-works/chord/context";
 import { createAssistantMessageEventStream, normalizeContext, type AssistantMessage } from "@earendil-works/pi-ai";
 import type { Models } from "@earendil-works/pi-ai/models";
 import { Value } from "typebox/value";
-import { createRegistry, defineDoc, defineDocFamily, defineEntry, defineTask, defineExtension, GenerationTask, CompactionTask, hook, Harness, section, ToolTask,
+import { createRegistry, defineDoc, defineDocFamily, defineEntry, defineTask, defineExtension, GenerationTask, CompactionTask, hook, Harness, LiveDoc, section, ToolTask,
   type Conversation, type Storage, type ToolRegistration, type ToolExecutionApi,
   type TaskId, type ConversationId, type ToolTaskResult, type Cursor } from "@earendil-works/pi-durable";
 import type { createOfficeStreamFn } from "../auth/stream-proxy.js";
@@ -19,6 +19,7 @@ import type { WorkbookMutationGate } from "../tools/mutation/gate.js";
 import { getToolExecutionMode } from "../tools/execution-policy.js";
 import { compactionMemoryNudge } from "./memory-nudge.js";
 import { normalizeToolResultImages } from "../messages/image-input-limits.js";
+import { TOOL_PROGRESS_KIND } from "../commands/extension-api-compat.js";
 
 export interface DurableCapabilities {
   tools: AnyCoreTool[];
@@ -34,12 +35,52 @@ const replaySafe: ReadonlySet<string> = new Set<CoreToolName>([
 ]);
 
 export function adaptTools(tools: readonly AnyCoreTool[], bind?: (tool: AnyCoreTool, api: ToolExecutionApi,
-  args: Parameters<AnyCoreTool["execute"]>[1], signal: AbortSignal | undefined) => Promise<Awaited<ReturnType<AnyCoreTool["execute"]>>>): ToolRegistration[] {
+  args: Parameters<AnyCoreTool["execute"]>[1], signal: AbortSignal | undefined,
+  onUpdate: Parameters<AnyCoreTool["execute"]>[3]) => Promise<Awaited<ReturnType<AnyCoreTool["execute"]>>>): ToolRegistration[] {
   return tools.map((tool) => ({
     name: tool.name, description: tool.description, parameters: tool.parameters,
     ...(replaySafe.has(tool.name) ? { replay: "safe" as const } : {}),
     execute: async (args, api, ctx) => {
-      const result = bind ? await bind(tool, api, args, ctx.abortSignal) : await tool.execute(api.callId, args, ctx.abortSignal);
+      let accepting = true;
+      // Agent default (2026-10-18): retain one latest pending snapshot while a
+      // progress commit runs, bounding callback bursts without delaying tools.
+      let pending: JsonValue | undefined;
+      let writing = false;
+      let drained = Promise.resolve();
+      const onUpdate: NonNullable<Parameters<AnyCoreTool["execute"]>[3]> = (partial) => {
+        if (!accepting || ctx.abortSignal?.aborted) return;
+        if (partial.details !== undefined && !isJsonValue(partial.details)) throw new Error("Tool progress details must be JSON serializable");
+        // Snapshot immediately: tools may reuse/mutate their progress object.
+        pending = copyJson({ kind: TOOL_PROGRESS_KIND, args, content: partial.content,
+          ...(partial.details !== undefined ? { details: partial.details } : {}) }, { omitUndefinedProperties: true });
+        if (writing) return;
+        writing = true;
+        drained = (async () => {
+          try {
+            while (pending !== undefined && !ctx.abortSignal?.aborted) {
+              const snapshot = pending;
+              pending = undefined;
+              // Native details() makes partial details a fallback final result.
+              // Commit only the running LiveDoc slot instead, so absent final
+              // details stay absent. This is also a replacement, not text append.
+              await api.commit(async (tx) => {
+                const live = await tx.doc(LiveDoc, api.conversationId);
+                const slot = [...live.tools ?? [], ...live.nestedTools ?? []].find((item) => item.taskId === api.taskId);
+                if (slot?.status === "running") slot.details = snapshot;
+              }, ctx);
+            }
+          } catch {
+            if (!ctx.abortSignal?.aborted) console.warn("[durable] Tool progress could not be saved; final receipt remains authoritative.");
+          } finally { writing = false; pending = undefined; }
+        })();
+      };
+      let result: Awaited<ReturnType<AnyCoreTool["execute"]>>;
+      try {
+        result = bind ? await bind(tool, api, args, ctx.abortSignal, onUpdate) : await tool.execute(api.callId, args, ctx.abortSignal, onUpdate);
+      } finally {
+        accepting = false;
+        await drained;
+      }
       const details = result.details;
       if (details !== undefined && !isJsonValue(details)) throw new Error("Tool details must be JSON serializable");
       return { output: result.content, ...(details !== undefined ? { details } : {}) };
@@ -147,7 +188,7 @@ export async function openDurableRuntime(options: {
 }> {
   const registry = createRegistry();
   const capabilitiesByConversation = new Map<ConversationId, DurableCapabilities>();
-  let invoke: (tool: AnyCoreTool, identity: { taskId: TaskId; conversationId: ConversationId; rawCallId: string }, args: Parameters<AnyCoreTool["execute"]>[1], signal?: AbortSignal, dispatch?: () => Promise<void>) => ReturnType<AnyCoreTool["execute"]>;
+  let invoke: (tool: AnyCoreTool, identity: { taskId: TaskId; conversationId: ConversationId; rawCallId: string }, args: Parameters<AnyCoreTool["execute"]>[1], signal?: AbortSignal, dispatch?: () => Promise<void>, onUpdate?: Parameters<AnyCoreTool["execute"]>[3]) => ReturnType<AnyCoreTool["execute"]>;
   const directTask = defineTask<{ name: string; args: JsonValue }, { phase: "ready" } | { phase: "dispatched" }, JsonValue>({
     name: "excel.direct-tool", version: 1, initial: () => ({ phase: "ready" }),
     phases: {
@@ -322,13 +363,13 @@ export async function openDurableRuntime(options: {
     // mutation until the previous ToolTask commits and its acknowledgement has
     // acquired/released the coordinator; reads and model requests stay parallel.
     let mutationAdmission = Promise.resolve();
-    invoke = async (tool, identity, args, signal, dispatch) => {
+    invoke = async (tool, identity, args, signal, dispatch, onUpdate) => {
       const capabilities = capabilitiesByConversation.get(identity.conversationId);
       const run = async (): ReturnType<AnyCoreTool["execute"]> => {
         if (signal?.aborted) throw new Error("Aborted");
         if (getToolExecutionMode(tool.name, args) === "read") {
           await dispatch?.();
-          return tool.execute(identity.rawCallId, args, signal);
+          return tool.execute(identity.rawCallId, args, signal, onUpdate);
         }
         if (!capabilities?.bindMutationGate) throw new Error("Mutation dispatch is not bound to its Durable task");
         const mutationId = `task:${identity.taskId}`;
@@ -338,7 +379,7 @@ export async function openDurableRuntime(options: {
         const bound = capabilities.bindMutationGate(mutations, mutationId).find((candidate) => candidate.name === tool.name);
         if (!bound) throw new Error("Mutation tool registration disappeared");
         await dispatch?.();
-        return bound.execute(identity.rawCallId, args, signal);
+        return bound.execute(identity.rawCallId, args, signal, onUpdate);
       };
       if (getToolExecutionMode(tool.name, args) === "read") return run();
       const previous = mutationAdmission;
@@ -355,8 +396,8 @@ export async function openDurableRuntime(options: {
       transformContext: (messages: AgentMessage[], signal?: AbortSignal) => Promise<AgentMessage[]>): Promise<void> => {
       const name = `excel:${conversation.id}`;
       capabilitiesByConversation.set(conversation.id, capabilities);
-      const extension = defineExtension({ name, tools: adaptTools(capabilities.tools, async (tool, api, args, signal) => {
-        return invoke(tool, { taskId: api.taskId, conversationId: api.conversationId, rawCallId: api.callId }, args, signal);
+      const extension = defineExtension({ name, tools: adaptTools(capabilities.tools, async (tool, api, args, signal, onUpdate) => {
+        return invoke(tool, { taskId: api.taskId, conversationId: api.conversationId, rawCallId: api.callId }, args, signal, undefined, onUpdate);
       }),
         sections: [section("excel", () => capabilities.systemPrompt, { tag: false })],
         hooks: [hook(CompactionTask, { beforeSummary: compactionMemoryNudge }),

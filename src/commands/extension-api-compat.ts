@@ -2,6 +2,19 @@ import type { AgentEvent as LegacyEvent, AgentState } from "@earendil-works/pi-a
 import type { AssistantMessage, AssistantMessageEvent, Tool } from "@earendil-works/pi-ai";
 import type { AgentEvent } from "@earendil-works/pi-durable";
 import type { ConversationSnapshot, ConversationPresenter } from "../durable/conversation-view.js";
+import { isJsonValue } from "@earendil-works/chord";
+import { Type } from "typebox";
+import { Value } from "typebox/value";
+
+export const TOOL_PROGRESS_KIND = "excel.agent-tool-progress";
+const toolProgressSchema = Type.Object({
+  kind: Type.Literal(TOOL_PROGRESS_KIND),
+  args: Type.Object({}, { additionalProperties: true }),
+  content: Type.Array(Type.Union([
+    Type.Object({ type: Type.Literal("text"), text: Type.String() }),
+    Type.Object({ type: Type.Literal("image"), data: Type.String(), mimeType: Type.String() }),
+  ])),
+});
 
 export type ExtensionReadState = Readonly<Pick<AgentState,
   "messages" | "model" | "thinkingLevel" | "systemPrompt" | "isStreaming" | "streamingMessage" | "pendingToolCalls" | "errorMessage">> & {
@@ -89,6 +102,14 @@ export function legacyEventProjection(initial?: AssistantMessage): (event: Agent
         return result;
       }
       case "tool_execution_start": return [event];
+      case "tool_execution_update": {
+        if (!Value.Check(toolProgressSchema, event.details)) return [];
+        const details = "details" in event.details ? event.details.details : undefined;
+        if (details !== undefined && !isJsonValue(details)) return [];
+        return [{ type: "tool_execution_update", toolCallId: event.toolCallId, toolName: event.toolName,
+          args: event.details.args,
+          partialResult: { content: event.details.content, ...(details !== undefined ? { details } : {}) } }];
+      }
       case "tool_execution_end": {
         const result = event.entry?.model?.find((message) => message.role === "toolResult");
         return result ? [{ type: "tool_execution_end", toolCallId: event.toolCallId, toolName: event.toolName, result, isError: result.isError }] : [];
