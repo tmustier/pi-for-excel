@@ -7,6 +7,7 @@ import { createModels } from "@earendil-works/pi-ai/models";
 import { fauxProvider, fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai/providers/faux";
 import { MemoryStorage, watchEvents } from "@earendil-works/pi-durable";
 import { openDurableRuntime } from "../src/durable/runtime.ts";
+import { DurableSessions } from "../src/durable/sessions.ts";
 import { legacyEventProjection } from "../src/commands/extension-api-compat.ts";
 import { createWorkbookCoordinator } from "../src/workbook/coordinator.ts";
 import { withWorkbookCoordinator } from "../src/tools/with-workbook-coordinator.ts";
@@ -79,6 +80,16 @@ for (const toolName of ["read_range", "extension_progress"]) {
       assert.deepEqual(receipt.content, final.content);
       assert.deepEqual(receipt.details, final.details);
       assert.doesNotMatch(JSON.stringify(receipt), /snapshot|agent-tool-progress/);
+      const catalogue = new DurableSessions(runtime.harness, models, model);
+      try {
+        const exported = await catalogue.loadSession(String(conversation.id));
+        assert.ok(exported);
+        const exportedReceipt = exported.messages.find((message) => message.role === "toolResult");
+        assert.ok(exportedReceipt?.role === "toolResult");
+        assert.deepEqual(exportedReceipt.content, final.content);
+        assert.deepEqual(exportedReceipt.details, final.details);
+        assert.doesNotMatch(JSON.stringify(exported), /snapshot|agent-tool-progress|image-data/);
+      } finally { catalogue.dispose(); }
       assert.ok(events.findIndex((event) => event === updates[1]) < events.findIndex((event) => event.type === "tool_execution_end"));
       late?.({ content: [{ type: "text", text: "stale-after-final" }], details: {} });
       await conversation.commit(() => {}, context);
