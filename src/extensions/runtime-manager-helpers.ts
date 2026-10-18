@@ -5,6 +5,7 @@ import type {
   Model,
   Models,
   Usage,
+  UserMessage,
 } from "@earendil-works/pi-ai";
 function isExtensionsRuntimeManagerHelpersPayloadShape(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -171,7 +172,7 @@ export function normalizeDownloadFilename(filename: string): string {
   return trimmed;
 }
 
-export function createExtensionAgentMessage(extensionName: string, label: string, content: string): Message {
+export function createExtensionAgentMessage(extensionName: string, label: string, content: string): UserMessage {
   const normalizedContent = normalizeCompletionMessageContent(content, label);
 
   return {

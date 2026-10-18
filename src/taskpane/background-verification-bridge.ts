@@ -177,12 +177,12 @@ function serializeError(error: unknown): JsonRecord {
 }
 
 function isRuntimeBusy(runtime: SessionRuntime | null): boolean {
-  return runtime ? runtime.agent.state.isStreaming || runtime.actionQueue.isBusy() : false;
+  return runtime ? runtime.view.current.busy || runtime.view.current.inbox.length > 0 : false;
 }
 
 function latestAssistantSummary(runtime: SessionRuntime): JsonRecord | null {
-  for (let index = runtime.agent.state.messages.length - 1; index >= 0; index -= 1) {
-    const message = runtime.agent.state.messages[index];
+  for (let index = runtime.view.current.messages.length - 1; index >= 0; index -= 1) {
+    const message = runtime.view.current.messages[index];
     if (!message || message.role !== "assistant") continue;
 
     const textLength = message.content.reduce((total, part) => (
@@ -205,12 +205,12 @@ function activeRuntimeSummary(runtime: SessionRuntime | null): JsonRecord | null
   if (!runtime) return null;
   return {
     runtimeId: runtime.runtimeId,
-    sessionId: runtime.agent.sessionId,
-    model: runtime.agent.state.model,
-    thinkingLevel: runtime.agent.state.thinkingLevel,
-    messageCount: runtime.agent.state.messages.length,
+    sessionId: String(runtime.view.conversation.id),
+    model: runtime.view.current.model,
+    thinkingLevel: runtime.view.current.thinkingLevel,
+    messageCount: runtime.view.current.messages.length,
     lastAssistant: latestAssistantSummary(runtime),
-    isStreaming: runtime.agent.state.isStreaming,
+    isStreaming: runtime.view.current.busy,
     isBusy: isRuntimeBusy(runtime),
   };
 }
@@ -224,7 +224,7 @@ async function waitForRuntimeIdle(
   let sawProgress = false;
   while (Date.now() - started < timeoutMs) {
     const runtime = getActiveRuntime();
-    const messageCount = runtime?.agent.state.messages.length ?? 0;
+    const messageCount = runtime?.view.current.messages.length ?? 0;
     const busy = isRuntimeBusy(runtime);
     sawProgress ||= messageCount > initialMessageCount || busy;
     if (sawProgress && !busy) {
@@ -334,8 +334,8 @@ async function selectModel(payload: unknown, options: BridgeOptions): Promise<Js
   const after = await waitForBridgeValue(() => {
     const activeRuntime = options.getActiveRuntime();
     if (
-      activeRuntime?.agent.state.model.provider !== provider
-      || activeRuntime.agent.state.model.id !== modelId
+      activeRuntime?.view.current.model.provider !== provider
+      || activeRuntime.view.current.model.id !== modelId
     ) {
       return null;
     }
@@ -367,7 +367,7 @@ async function submitPrompt(payload: unknown, options: BridgeOptions): Promise<J
   const waitForIdle = booleanField(payload, "waitForIdle") ?? true;
   const timeoutMs = Math.max(1_000, Math.min(120_000, numberField(payload, "timeoutMs") ?? 60_000));
   const before = activeRuntimeSummary(runtime);
-  const initialMessageCount = runtime?.agent.state.messages.length ?? 0;
+  const initialMessageCount = runtime?.view.current.messages.length ?? 0;
 
   options.sidebar.sendMessage(text);
 
@@ -832,14 +832,14 @@ async function executeCommand(command: BridgeCommand, options: BridgeOptions): P
       await setIntegrationEnabledInScope({
         settings: getAppStorage().settings,
         scope: "session",
-        identifier: runtime.persistence.getSessionId(),
+        identifier: String(runtime.view.conversation.id),
         integrationId: command.payload.integrationId,
         enabled: command.payload.enabled,
         knownIntegrationIds: INTEGRATION_IDS,
       });
       dispatchIntegrationsChanged({ reason: "scope" });
       await runtime.refreshCapabilities();
-      return { configured: true, sessionId: runtime.persistence.getSessionId(), ...command.payload };
+      return { configured: true, sessionId: String(runtime.view.conversation.id), ...command.payload };
     }
     case "selectModel":
       return await selectModel(command.payload, options);

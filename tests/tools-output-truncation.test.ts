@@ -1,11 +1,17 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { Agent, type AgentMessage, type AgentTool, type AgentToolResult } from "@earendil-works/pi-agent-core";
-import { createModels, fauxAssistantMessage, fauxProvider, type Context } from "@earendil-works/pi-ai";
+import { type AgentMessage, type AgentTool, type AgentToolResult } from "@earendil-works/pi-agent-core";
+import { BACKGROUND_CONTEXT as context } from "@earendil-works/chord/context";
+import { MemoryStorage } from "@earendil-works/pi-durable";
+import type { Context } from "@earendil-works/pi-ai";
+import { createModels } from "@earendil-works/pi-ai/models";
+import { fauxAssistantMessage, fauxProvider } from "@earendil-works/pi-ai/providers/faux";
 import { Type } from "typebox";
 
-import { createConvertToLlm } from "../src/messages/convert-to-llm.ts";
+import { openDurableRuntime } from "../src/durable/runtime.ts";
+import { DurableSessions } from "../src/durable/sessions.ts";
+import { createWorkbookCoordinator } from "../src/workbook/coordinator.ts";
 import { applyToolOutputTruncation } from "../src/tools/output-truncation.ts";
 import { getToolOutputTruncationDetails } from "../src/tools/tool-details.ts";
 
@@ -35,7 +41,6 @@ function text(result: Result): string {
 async function modelVisibleResult(name: string, result: Result): Promise<ToolResultMessage> {
   const faux = fauxProvider({ models: [{ id: "truncation", contextWindow: 128_000, maxTokens: 4_096 }] });
   const models = createModels();
-  models.setProvider(faux.provider);
   faux.setResponses([fauxAssistantMessage("done")]);
   let request: Context | undefined;
   const message: ToolResultMessage = {
@@ -47,20 +52,31 @@ async function modelVisibleResult(name: string, result: Result): Promise<ToolRes
     isError: false,
     timestamp: 1,
   };
-  const agent = new Agent({
-    initialState: { model: faux.getModel(), messages: [message], tools: [] },
-    convertToLlm: createConvertToLlm({ getContextWindow: () => 128_000 }),
-    streamFn: (model, context, options) => {
-      request = structuredClone(context);
-      return models.streamSimple(model, context, options);
-    },
+  models.setProvider({ ...faux.provider, streamSimple: (model, transcript, options) => {
+    request = structuredClone(transcript);
+    return faux.provider.streamSimple(model, transcript, options);
+  },
   });
-  await agent.prompt("continue");
-  const visible = request?.messages.find(
-    (candidate) => candidate.role === "toolResult" && candidate.toolCallId === "call-large",
-  );
-  if (!visible || visible.role !== "toolResult") throw new Error("Expected model-visible tool result");
-  return visible;
+  const runtime = await openDurableRuntime({ storage: new MemoryStorage(), models,
+    workbookId: "truncation", coordinator: createWorkbookCoordinator(), autoCompaction: false,
+    mutationHost: { prepare: () => { throw new Error("Unexpected mutation"); }, observe: () => { throw new Error("Unexpected mutation"); } },
+  });
+  try {
+    const conversation = await new DurableSessions(runtime.harness, models, faux.getModel()).create(faux.getModel(), "off");
+    await runtime.install(conversation, { tools: [], systemPrompt: "" }, (history) => Promise.resolve(history));
+    await runtime.harness.commit(async (tx) => {
+      await tx.appendEntry(conversation.id, { kind: "test.history", model: [
+        { ...fauxAssistantMessage(""), stopReason: "toolUse", content: [{ type: "toolCall", id: message.toolCallId, name, arguments: {} }] }, message,
+      ] });
+    }, context);
+    const submission = await conversation.submit({ type: "input", content: "continue" }, context);
+    assert.equal((await submission.wait(context)).status, "done");
+    const visible = request?.messages.find(
+      (candidate) => candidate.role === "toolResult" && candidate.toolCallId === "call-large",
+    );
+    if (!visible || visible.role !== "toolResult") throw new Error("Expected model-visible tool result");
+    return visible;
+  } finally { await runtime.harness.close(context); }
 }
 
 function visibleText(message: ToolResultMessage): string {

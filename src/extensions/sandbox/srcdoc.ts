@@ -850,21 +850,27 @@ export function buildSandboxSrcdoc(options: BuildSandboxSrcdocOptions): string {
             },
 
             injectContext(content) {
-              queueActivationOp(requestHost("agent_inject_context", {
+              const operation = requestHost("agent_inject_context", {
                 content: typeof content === "string" ? content : String(content),
-              }));
+              });
+              queueActivationOp(operation);
+              return operation;
             },
 
             steer(content) {
-              queueActivationOp(requestHost("agent_steer", {
+              const operation = requestHost("agent_steer", {
                 content: typeof content === "string" ? content : String(content),
-              }));
+              });
+              queueActivationOp(operation);
+              return operation;
             },
 
             followUp(content) {
-              queueActivationOp(requestHost("agent_follow_up", {
+              const operation = requestHost("agent_follow_up", {
                 content: typeof content === "string" ? content : String(content),
-              }));
+              });
+              queueActivationOp(operation);
+              return operation;
             },
           },
 

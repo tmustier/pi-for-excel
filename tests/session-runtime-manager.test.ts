@@ -1,182 +1,109 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-
-import { Agent } from "@earendil-works/pi-agent-core";
+import { BACKGROUND_CONTEXT as context } from "@earendil-works/chord/context";
 import { createModels, fauxProvider } from "@earendil-works/pi-ai";
+import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
+import { ConversationPresenter } from "../src/durable/conversation-view.ts";
+import { DurableSessions, SessionInfoDoc } from "../src/durable/sessions.ts";
+import { createQueueDisplay } from "../src/taskpane/queue-display.ts";
+import { SessionRuntimeManager, type SessionRuntime } from "../src/taskpane/session-runtime-manager.ts";
 
-import type { ActionQueue } from "../src/taskpane/action-queue.ts";
-import type { QueueDisplay } from "../src/taskpane/queue-display.ts";
-import {
-  SessionRuntimeManager,
-  type SessionRuntime,
-} from "../src/taskpane/session-runtime-manager.ts";
-import type { SessionPersistenceController } from "../src/taskpane/sessions.ts";
-
-interface RuntimeHarness {
-  runtime: SessionRuntime;
-  emitPersistenceChange: () => void;
-  getPersistenceSubscriberCount: () => number;
-  getDisposeCount: () => number;
-  getRefreshCount: () => number;
-}
-
-function createAgent(): Agent {
-  const faux = fauxProvider();
+void test("native runtime lifecycle owns tab identity, rename, subscriptions and capability refresh", async () => {
   const models = createModels();
+  const faux = fauxProvider();
   models.setProvider(faux.provider);
-  return new Agent({
-    initialState: {
-      model: faux.getModel(),
-      messages: [],
-      tools: [],
-    },
-    streamFn: (model, context, options) => models.streamSimple(model, context, options),
-  });
-}
-
-function createRuntimeHarness(runtimeId: string): RuntimeHarness {
-  const persistenceListeners = new Set<() => void>();
-  let disposeCount = 0;
-  let refreshCount = 0;
-  const agent = createAgent();
-
-  const persistence: SessionPersistenceController = {
-    getSessionId: () => `session-${runtimeId}`,
-    getSessionTitle: () => "",
-    getSessionCreatedAt: () => "2026-01-01T00:00:00.000Z",
-    hasExplicitTitle: () => false,
-    startNewSession: () => {},
-    renameSession: () => Promise.resolve(),
-    applyLoadedSession: () => Promise.resolve(),
-    restoreLatestSession: () => Promise.resolve(false),
-    saveSession: () => Promise.resolve(),
-    subscribe: (listener) => {
-      persistenceListeners.add(listener);
-      return () => {
-        persistenceListeners.delete(listener);
-      };
-    },
-    dispose: () => {},
-  };
-
-  const actionQueue: ActionQueue = {
-    enqueuePrompt: () => {},
-    enqueueCommand: () => {},
-    drainQueuedActions: () => [],
-    isBusy: () => false,
-    shutdown: () => {},
-  };
-
-  const queueDisplay: QueueDisplay = {
-    add: () => {},
-    clear: () => {},
-    drainQueuedMessages: () => [],
-    setActionQueue: () => {},
-    attach: () => {},
-    detach: () => {},
-  };
-
-  return {
-    runtime: {
-      runtimeId,
-      agent,
-      actionQueue,
-      queueDisplay,
-      persistence,
-      lockState: "idle",
-      refreshCapabilities: () => {
-        refreshCount += 1;
-        return Promise.resolve();
-      },
-      dispose: () => {
-        disposeCount += 1;
-      },
-    },
-    emitPersistenceChange: () => {
-      for (const listener of persistenceListeners) listener();
-    },
-    getPersistenceSubscriberCount: () => persistenceListeners.size,
-    getDisposeCount: () => disposeCount,
-    getRefreshCount: () => refreshCount,
-  };
-}
-
-void test("closing a runtime unsubscribes lifecycle persistence events before disposal", () => {
-  const first = createRuntimeHarness("first");
-  const second = createRuntimeHarness("second");
-  const manager = new SessionRuntimeManager({
-    createRuntime: () => Promise.reject(new Error("factory should not run")),
-  });
-
-  manager.registerRuntime(first.runtime, { activate: true });
-  manager.registerRuntime(second.runtime, { activate: false });
-
-  let snapshotCount = 0;
-  manager.subscribe(() => {
-    snapshotCount += 1;
-  });
-  first.emitPersistenceChange();
-  assert.equal(snapshotCount, 2);
-  assert.equal(first.getPersistenceSubscriberCount(), 1);
-
-  manager.closeRuntime("first");
-  const countAfterClose = snapshotCount;
-  assert.equal(first.getPersistenceSubscriberCount(), 0);
-  assert.equal(first.getDisposeCount(), 1);
-  assert.equal(manager.getActiveRuntime()?.runtimeId, "second");
-
-  first.emitPersistenceChange();
-  assert.equal(snapshotCount, countAfterClose);
+  const model = faux.getModel();
+  const harness = await Harness.open(new MemoryStorage(), { models, registry: createRegistry() }, context);
+  const sessions = new DurableSessions(harness, models, model);
+  const views: ConversationPresenter[] = [];
+  let refreshes = 0;
+  let disposals = 0;
+  const manager = new SessionRuntimeManager({ sessions, createRuntime: async (options) => {
+    const conversation = options.conversationId
+      ? await sessions.resolve(options.conversationId) : await sessions.create(model, "off");
+    assert.ok(conversation);
+    const view = await ConversationPresenter.open(harness, conversation, models, model);
+    views.push(view);
+    const runtime: SessionRuntime = {
+      runtimeId: `tab-${views.length}`, view, tools: [], title: "", hasExplicitTitle: false,
+      lockState: "idle", refreshCapabilities: () => { refreshes += 1; return Promise.resolve(); },
+      dispose: () => { disposals += 1; void view.dispose(); },
+      queueDisplay: createQueueDisplay({ view }),
+    };
+    return runtime;
+  } });
+  try {
+    // Startup refreshes can arrive before any tabs exist; they must not strand
+    // the in-flight slot and suppress later extension capability updates.
+    await manager.refreshCapabilities();
+    const first = await manager.createRuntime({ activate: true, autoRestoreLatest: false });
+    const second = await manager.createRuntime({ activate: false, autoRestoreLatest: false });
+    assert.deepEqual(manager.snapshotTabs().map((tab) => tab.title), ["Chat 1", "Chat 2"]);
+    assert.equal(manager.findRuntimeBySessionId(String(first.view.conversation.id)), first);
+    await manager.renameRuntime(first.runtimeId, "Renamed");
+    assert.equal(manager.snapshotTabs()[0]?.title, "Renamed");
+    assert.equal((await harness.snapshot(SessionInfoDoc, first.view.conversation.id, context))?.title, "Renamed");
+    await manager.refreshCapabilities();
+    assert.equal(refreshes, 2);
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    let passes = 0;
+    first.refreshCapabilities = async () => { passes += 1; if (passes === 1) await gate; };
+    const pending = manager.refreshCapabilities();
+    const coalesced = manager.refreshCapabilities();
+    release();
+    await Promise.all([pending, coalesced]);
+    assert.equal(passes, 2);
+    assert.equal(manager.moveRuntime(second.runtimeId, -1), true);
+    assert.deepEqual(manager.snapshotTabs().map((tab) => tab.title), ["Chat 2", "Renamed"]);
+    manager.setRuntimeLockState(first.runtimeId, "holding_lock");
+    assert.equal(manager.snapshotTabs()[1]?.lockState, "holding_lock");
+    let emissions = 0;
+    const unsubscribe = manager.subscribe(() => { emissions += 1; });
+    await first.view.refresh();
+    assert.equal(emissions, 2);
+    manager.closeRuntime(first.runtimeId);
+    const afterClose = emissions;
+    await first.view.refresh();
+    assert.equal(emissions, afterClose);
+    assert.equal(disposals, 1);
+    assert.equal(manager.getActiveRuntime(), second);
+    manager.closeRuntime(second.runtimeId);
+    assert.equal(disposals, 1, "last tab remains open");
+    unsubscribe();
+  } finally {
+    for (const view of views) await view.dispose();
+    await harness.close(context);
+  }
 });
 
-void test("capability refresh is owned by the lifecycle and visits every runtime", async () => {
-  const first = createRuntimeHarness("first");
-  const second = createRuntimeHarness("second");
-  const manager = new SessionRuntimeManager({
-    createRuntime: () => Promise.reject(new Error("factory should not run")),
-  });
-  manager.registerRuntime(first.runtime, { activate: true });
-  manager.registerRuntime(second.runtime, { activate: false });
-
-  await manager.refreshCapabilities();
-  assert.equal(first.getRefreshCount(), 1);
-  assert.equal(second.getRefreshCount(), 1);
-});
-
-void test("capability refresh requested during a pass runs again and a listener-triggered refresh is not lost", async () => {
-  const first = createRuntimeHarness("first");
-  const manager = new SessionRuntimeManager({
-    createRuntime: () => Promise.reject(new Error("factory should not run")),
-  });
-  manager.registerRuntime(first.runtime, { activate: true });
-
-  let release: () => void = () => {};
-  const gate = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  let refreshCount = 0;
-  first.runtime.refreshCapabilities = async () => {
-    refreshCount += 1;
-    if (refreshCount === 1) await gate;
-  };
-
-  const inFlight = manager.refreshCapabilities();
-  const coalesced = manager.refreshCapabilities();
-  release();
-  await Promise.all([inFlight, coalesced]);
-  assert.equal(refreshCount, 2, "a request during an in-flight pass must run a second pass");
-
-  let listenerRequests = 0;
-  let armed = false;
-  const unsubscribe = manager.subscribe(() => {
-    if (!armed || listenerRequests > 0) return;
-    listenerRequests += 1;
-    void manager.refreshCapabilities();
-  });
-  armed = true;
-  await manager.refreshCapabilities();
-  await new Promise<void>((resolve) => setTimeout(resolve, 0));
-  unsubscribe();
-  assert.equal(listenerRequests, 1);
-  assert.equal(refreshCount, 4, "a refresh requested from a snapshot listener must execute");
+void test("a refresh requested while an empty startup pass settles reaches newly registered tabs", async () => {
+  const models = createModels();
+  const faux = fauxProvider();
+  models.setProvider(faux.provider);
+  const model = faux.getModel();
+  const harness = await Harness.open(new MemoryStorage(), { models, registry: createRegistry() }, context);
+  const sessions = new DurableSessions(harness, models, model);
+  const conversation = await sessions.create(model, "off");
+  const view = await ConversationPresenter.open(harness, conversation, models, model);
+  let refreshes = 0;
+  const manager = new SessionRuntimeManager({ sessions, createRuntime: () => {
+    throw new Error("This contract registers an existing runtime");
+  } });
+  try {
+    const startup = manager.refreshCapabilities();
+    manager.registerRuntime({
+      runtimeId: "first-tab", view, tools: [], title: "", hasExplicitTitle: false,
+      lockState: "idle", refreshCapabilities: () => { refreshes += 1; return Promise.resolve(); },
+      dispose: () => {}, queueDisplay: createQueueDisplay({ view }),
+    });
+    const requested = manager.refreshCapabilities();
+    await Promise.all([startup, requested]);
+    assert.equal(refreshes, 1, "the coalesced caller awaits the newly requested pass");
+    await manager.refreshCapabilities();
+    assert.equal(refreshes, 2, "subsequent passes remain available");
+  } finally {
+    await view.dispose();
+    await harness.close(context);
+  }
 });

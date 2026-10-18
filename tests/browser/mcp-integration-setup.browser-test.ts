@@ -37,7 +37,11 @@ void test("the dev bridge configures MCP only in the active chat and rejects inv
     try { return await Promise.race([result, timeout]); }
     finally { clearTimeout(timer); }
   }
-  const hasMcp = 'document.querySelector("pi-sidebar").agent.state.tools.some(tool => tool.name === "mcp")';
+  const hasMcp = `(async () => {
+    const { BACKGROUND_CONTEXT: ctx } = await import("/node_modules/@earendil-works/chord/dist/context/index.js");
+    const agent = await document.querySelector("pi-sidebar").view.conversation.agent(ctx);
+    return agent.tools.some(tool => tool.name === "mcp");
+  })()`;
   try {
     const enabled: unknown = JSON.parse(await send({ integrationId: "mcp_tools", enabled: true }));
     assert.ok(Value.Check(Type.Object({
@@ -52,11 +56,11 @@ void test("the dev bridge configures MCP only in the active chat and rejects inv
     assert.match(await send({ integrationId: "mcp_tools", enabled: "true" }), /"ok":false/);
     assert.match(await send({ integrationId: "mcp_tools", enabled: true, scope: "workbook" }), /"ok":false/);
     await opened.page.getByRole("button", { name: "New tab" }).click();
-    await opened.page.waitForFunction(`!(${hasMcp})`);
+    await opened.page.waitForFunction(`(async () => !(await ${hasMcp}))()`);
     await opened.page.getByRole("button", { name: "Open tab Chat 1", exact: true }).click();
     await opened.page.waitForFunction(hasMcp);
     assert.match(await send({ integrationId: "mcp_tools", enabled: false }), /"configured":true/);
-    await opened.page.waitForFunction(`!(${hasMcp})`);
+    await opened.page.waitForFunction(`(async () => !(await ${hasMcp}))()`);
   } finally {
     await opened.finish();
     await env.close();

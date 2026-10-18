@@ -13,7 +13,7 @@ import type { TSchema } from "typebox";
 import type { SpreadsheetHostKind } from "../host/index.js";
 import { createGetWorkbookOverviewTool } from "./get-workbook-overview.js";
 import { createReadRangeTool } from "./read-range.js";
-import { createWriteCellsTool } from "./write-cells.js";
+import { createWriteCellsTool, type WriteCellsHooks } from "./write-cells.js";
 import { createFillFormulaTool } from "./fill-formula.js";
 import { createSearchWorkbookTool } from "./search-workbook.js";
 import { createModifyStructureTool } from "./modify-structure.js";
@@ -44,6 +44,7 @@ export type AnyCoreTool = AgentTool<TSchema, unknown>;
 export interface CreateCoreToolsOptions {
   hostKind?: SpreadsheetHostKind;
   skills?: SkillsToolDependencies;
+  writeCellsHooks?: WriteCellsHooks;
 }
 
 type CoreToolFactory = (options: CreateCoreToolsOptions) => AnyCoreTool;
@@ -51,7 +52,7 @@ type CoreToolFactory = (options: CreateCoreToolsOptions) => AnyCoreTool;
 const CORE_TOOL_FACTORIES = {
   get_workbook_overview: () => createGetWorkbookOverviewTool(),
   read_range: () => createReadRangeTool(),
-  write_cells: () => createWriteCellsTool(),
+  write_cells: (options) => createWriteCellsTool(options.writeCellsHooks),
   fill_formula: () => createFillFormulaTool(),
   search_workbook: () => createSearchWorkbookTool(),
   modify_structure: () => createModifyStructureTool(),

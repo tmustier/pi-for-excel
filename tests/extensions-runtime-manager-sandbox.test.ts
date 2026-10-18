@@ -6,7 +6,16 @@ import {
   type ImageContent,
   type TextContent,
 } from "@earendil-works/pi-ai";
-import { Agent } from "@earendil-works/pi-agent-core";
+import { ConversationPresenter } from "../src/durable/conversation-view.ts";
+import type { ExcelExtensionAPI } from "../src/commands/extension-api.ts";
+import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
+import { createRegistry, Harness, MemoryStorage, type Conversation } from "@earendil-works/pi-durable";
+import { createAssistantMessageEventStream } from "@earendil-works/pi-ai";
+import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai/providers/faux";
+import { openDurableRuntime, routeModels } from "../src/durable/runtime.ts";
+import { createWorkbookCoordinator } from "../src/workbook/coordinator.ts";
+import { withWorkbookCoordinator } from "../src/tools/with-workbook-coordinator.ts";
+import type { MutationObservation } from "../src/durable/mutations.ts";
 
 import { ConnectionManager } from "../src/connections/manager.ts";
 import { CONNECTION_STORE_KEY } from "../src/connections/store.ts";
@@ -197,7 +206,8 @@ void test("runtime manager retries initialization after a transient registry rea
   const manager = new ExtensionRuntimeManager({
     settings,
     connectionManager: createConnectionManager(settings),
-    getActiveAgent: () => null,
+    getActiveConversation: () => null,
+    streamFn: failOnUnexpectedStream,
     refreshRuntimeTools: () => Promise.resolve(),
     refreshRuntimeModels: () => Promise.resolve(),
     reservedToolNames: new Set<string>(),
@@ -243,7 +253,8 @@ void test("runtime manager passes sandbox activation options and runtime metadat
     const manager = new ExtensionRuntimeManager({
       settings,
       connectionManager: createConnectionManager(settings),
-      getActiveAgent: () => null,
+      getActiveConversation: () => null,
+      streamFn: failOnUnexpectedStream,
       refreshRuntimeTools: async () => {},
       reservedToolNames: new Set<string>(),
       activateInSandbox: (activation) => {
@@ -303,7 +314,8 @@ void test("untrusted extensions default to sandbox runtime when rollback kill sw
     const manager = new ExtensionRuntimeManager({
       settings,
       connectionManager: createConnectionManager(settings),
-      getActiveAgent: () => null,
+      getActiveConversation: () => null,
+      streamFn: failOnUnexpectedStream,
       refreshRuntimeTools: async () => {},
       reservedToolNames: new Set<string>(),
       loadExtensionFromSource: () => {
@@ -356,7 +368,8 @@ void test("rollback kill switch routes untrusted extensions back to host runtime
     const manager = new ExtensionRuntimeManager({
       settings,
       connectionManager: createConnectionManager(settings),
-      getActiveAgent: () => null,
+      getActiveConversation: () => null,
+      streamFn: failOnUnexpectedStream,
       refreshRuntimeTools: async () => {},
       reservedToolNames: new Set<string>(),
       loadExtensionFromSource: () => {
@@ -409,7 +422,8 @@ void test("trusted local-module extensions stay on host runtime even when sandbo
     const manager = new ExtensionRuntimeManager({
       settings,
       connectionManager: createConnectionManager(settings),
-      getActiveAgent: () => null,
+      getActiveConversation: () => null,
+      streamFn: failOnUnexpectedStream,
       refreshRuntimeTools: async () => {},
       reservedToolNames: new Set<string>(),
       loadExtensionFromSource: () => {
@@ -461,14 +475,17 @@ void test("host and sandbox bridges retain distinct authority and owner boundari
       ],
     });
 
-    const agent = new Agent({
-      streamFn: failOnUnexpectedStream,
-      initialState: {
-        messages: [],
-        tools: [],
-      },
+    const modelRuntime = new BrowserModelRuntime({
+      providerKeys: new EmptyProviderKeys(),
+      modelCatalogs: new InMemoryModelsStore(),
+      getProxyUrl: () => Promise.resolve(undefined),
     });
-    let hostRawAgent: Agent | null = null;
+    const model = modelRuntime.models.getAllModels()[0];
+    assert.ok(model);
+    const harness = await Harness.open(new MemoryStorage(), { registry: createRegistry(), models: modelRuntime.models }, BACKGROUND_CONTEXT);
+    const conversation = await harness.root(BACKGROUND_CONTEXT, { agent: { model: { provider: model.provider, modelId: model.id } } });
+    const presenter = await ConversationPresenter.open(harness, conversation, modelRuntime.models, model);
+    let hostRawAgent: Conversation | null = null;
     let hostConnectionId = "";
     let sandboxConnectionId = "";
     let sandboxHasRawAgentCallback = true;
@@ -476,11 +493,13 @@ void test("host and sandbox bridges retain distinct authority and owner boundari
     const manager = new ExtensionRuntimeManager({
       settings,
       connectionManager: createConnectionManager(settings),
-      getActiveAgent: () => agent,
+      getActiveConversation: () => presenter,
+      modelRuntime,
+      streamFn: failOnUnexpectedStream,
       refreshRuntimeTools: async () => {},
       reservedToolNames: new Set<string>(),
       loadExtensionFromSource: (api) => {
-        hostRawAgent = api.agent.raw;
+        hostRawAgent = api.agent.conversation;
         hostConnectionId = api.connections.register({
           id: "ext.other.host-secret",
           title: "Host connection",
@@ -493,7 +512,7 @@ void test("host and sandbox bridges retain distinct authority and owner boundari
         });
       },
       activateInSandbox: (activation) => {
-        sandboxHasRawAgentCallback = Reflect.has(activation, "getAgent");
+        sandboxHasRawAgentCallback = Reflect.has(activation, "getActiveConversation");
         sandboxConnectionId = activation.registerConnection({
           id: "ext.other.sandbox-secret",
           title: "Sandbox connection",
@@ -509,11 +528,13 @@ void test("host and sandbox bridges retain distinct authority and owner boundari
 
     await manager.initialize();
 
-    assert.equal(hostRawAgent, agent);
+    assert.equal(hostRawAgent, conversation);
     assert.equal(hostConnectionId, "ext.local.authority.ext.other.host-secret");
     assert.equal(sandboxHasRawAgentCallback, false);
     assert.equal(sandboxConnectionId, "ext.inline.authority.ext.other.sandbox-secret");
     assert.deepEqual(manager.list().map((status) => status.loaded), [true, true]);
+    await presenter.dispose();
+    await harness.close(BACKGROUND_CONTEXT);
   } finally {
     restoreLocalStorage();
   }
@@ -540,7 +561,8 @@ void test("host runtime extension tools include source provenance in description
     const manager = new ExtensionRuntimeManager({
       settings,
       connectionManager: createConnectionManager(settings),
-      getActiveAgent: () => null,
+      getActiveConversation: () => null,
+      streamFn: failOnUnexpectedStream,
       refreshRuntimeTools: async () => {},
       reservedToolNames: new Set<string>(),
       loadExtensionFromSource: (api) => {
@@ -612,7 +634,8 @@ void test("extension tool revision increments on schema-stable reloads", async (
     manager = new ExtensionRuntimeManager({
       settings,
       connectionManager: createConnectionManager(settings),
-      getActiveAgent: () => null,
+      getActiveConversation: () => null,
+      streamFn: failOnUnexpectedStream,
       refreshRuntimeTools: () => {
         if (!manager) {
           throw new Error("manager not initialized");
@@ -710,7 +733,8 @@ void test("host runtime extension tools tolerate missing descriptions", async ()
     const manager = new ExtensionRuntimeManager({
       settings,
       connectionManager: createConnectionManager(settings),
-      getActiveAgent: () => null,
+      getActiveConversation: () => null,
+      streamFn: failOnUnexpectedStream,
       refreshRuntimeTools: async () => {},
       reservedToolNames: new Set<string>(),
       loadExtensionFromSource: (api) => {
@@ -768,7 +792,8 @@ void test("host runtime extension tool errors include extension ownership contex
     const manager = new ExtensionRuntimeManager({
       settings,
       connectionManager: createConnectionManager(settings),
-      getActiveAgent: () => null,
+      getActiveConversation: () => null,
+      streamFn: failOnUnexpectedStream,
       refreshRuntimeTools: async () => {},
       reservedToolNames: new Set<string>(),
       loadExtensionFromSource: (api) => {
@@ -1094,7 +1119,8 @@ void test("sandbox activation failures are isolated per extension during initial
     const manager = new ExtensionRuntimeManager({
       settings,
       connectionManager: createConnectionManager(settings),
-      getActiveAgent: () => null,
+      getActiveConversation: () => null,
+      streamFn: failOnUnexpectedStream,
       refreshRuntimeTools: async () => {},
       reservedToolNames: new Set<string>(),
       activateInSandbox: (activation) => {
@@ -1160,7 +1186,8 @@ void test("sandbox capability denial surfaces deterministic permission error", a
     const manager = new ExtensionRuntimeManager({
       settings,
       connectionManager: createConnectionManager(settings),
-      getActiveAgent: () => null,
+      getActiveConversation: () => null,
+      streamFn: failOnUnexpectedStream,
       refreshRuntimeTools: async () => {},
       reservedToolNames: new Set<string>(),
       activateInSandbox: (activation) => {
@@ -1208,7 +1235,8 @@ void test("host runtime extensions can register required connections after tool 
     const manager = new ExtensionRuntimeManager({
       settings,
       connectionManager: createConnectionManager(settings),
-      getActiveAgent: () => null,
+      getActiveConversation: () => null,
+      streamFn: failOnUnexpectedStream,
       refreshRuntimeTools: async () => {},
       reservedToolNames: new Set<string>(),
       loadExtensionFromSource: (api) => {
@@ -1276,7 +1304,8 @@ void test("host runtime extensions fail activation when required connections wer
     const manager = new ExtensionRuntimeManager({
       settings,
       connectionManager: createConnectionManager(settings),
-      getActiveAgent: () => null,
+      getActiveConversation: () => null,
+      streamFn: failOnUnexpectedStream,
       refreshRuntimeTools: async () => {},
       reservedToolNames: new Set<string>(),
       loadExtensionFromSource: (api) => {
@@ -1540,17 +1569,30 @@ void test("extension model providers use host-owned connection secrets and unloa
   });
   const connectionManager = createConnectionManager(settings);
 
+  let activePresenter: ConversationPresenter | null = null;
+  let extensionApi: ExcelExtensionAPI | undefined;
   const manager = new ExtensionRuntimeManager({
     settings,
     connectionManager,
     modelRuntime,
-    getActiveAgent: () => null,
+    getActiveConversation: () => activePresenter,
+    streamFn: (model, _transcript, options) => {
+      assert.equal(model.provider, "ext.provider.test.acme");
+      assert.equal(options?.apiKey, "host-secret");
+      assert.ok(activePresenter);
+      assert.equal(options?.sessionId, `${activePresenter.current.providerSessionId}::ext-llm:ext.provider.test`);
+      const message = fauxAssistantMessage("side completion");
+      const stream = createAssistantMessageEventStream();
+      stream.push({ type: "done", reason: "stop", message });
+      return Promise.resolve(stream);
+    },
     refreshRuntimeTools: () => Promise.resolve(),
     refreshRuntimeModels: async () => {
       await modelRuntime.refresh({ allowNetwork: true });
     },
     reservedToolNames: new Set<string>(),
     loadExtensionFromSource: async (api) => {
+      extensionApi = api;
       api.connections.register({
         id: "account",
         title: "Model account",
@@ -1583,6 +1625,10 @@ void test("extension model providers use host-owned connection secrets and unloa
         connection: "account",
         apiKeySecret: "apiKey",
       });
+      api.registerTool("durable_extension_probe", {
+        description: "Return an extension result", parameters: Type.Object({}),
+        execute: () => ({ content: [{ type: "text", text: "extension executed" }], details: undefined }),
+      });
 
       return {
         deactivate: () => Promise.resolve(),
@@ -1607,6 +1653,57 @@ void test("extension model providers use host-owned connection secrets and unloa
     },
   );
   assert.deepEqual(manager.list()[0]?.modelProviderIds, [providerId]);
+
+  // Same extension registry and provider credentials, a real Durable run, and
+  // a stub only at the outbound model stream boundary.
+  const routed = routeModels(modelRuntime.models, (model, transcript, options) => {
+    assert.equal(model.provider, providerId);
+    assert.equal(options?.apiKey, "host-secret");
+    const toolResult = transcript.messages.find((message) => message.role === "toolResult");
+    const message = toolResult
+      ? fauxAssistantMessage("extension completed")
+      : fauxAssistantMessage(fauxToolCall("durable_extension_probe", {}), { stopReason: "toolUse" });
+    const stream = createAssistantMessageEventStream();
+    stream.push({ type: "done", reason: toolResult ? "stop" : "toolUse", message });
+    return Promise.resolve(stream);
+  });
+  const coordinator = createWorkbookCoordinator();
+  const observation: MutationObservation = { workbookId: "extension-test", structure: {}, state: {},
+    complete: false, limitation: "Extension effects cannot be inspected as workbook cells" };
+  const durable = await openDurableRuntime({
+    storage: new MemoryStorage(), models: routed, workbookId: "extension-test",
+    coordinator, autoCompaction: false,
+    mutationHost: {
+      prepare: (call) => Promise.resolve({ intent: call.params, target: {}, before: observation, expected: null }),
+      observe: () => Promise.resolve(observation),
+    },
+  });
+  const conversation = await durable.harness.root(BACKGROUND_CONTEXT, {
+    agent: { model: { provider: providerId, modelId: "baseline-model" } },
+  });
+  await durable.install(conversation, {
+    tools: manager.getRegisteredTools(), systemPrompt: "Extension test",
+    bindMutationGate: (gate, mutationId) => withWorkbookCoordinator(manager.getRegisteredTools(), coordinator, {
+      getWorkbookId: () => Promise.resolve("extension-test"), getSessionId: () => String(conversation.id),
+    }, undefined, { mutationGate: gate, getMutationId: () => mutationId }),
+  }, (messages) => Promise.resolve(messages));
+  try {
+    const model = modelRuntime.models.getModel(providerId, "baseline-model");
+    assert.ok(model);
+    activePresenter = await ConversationPresenter.open(durable.harness, conversation, modelRuntime.models, model);
+    const submission = await conversation.submit({ type: "input", content: "Call the extension" }, BACKGROUND_CONTEXT);
+    assert.equal((await submission.wait(BACKGROUND_CONTEXT)).status, "done");
+    const transcript = await conversation.context(BACKGROUND_CONTEXT);
+    assert.match(JSON.stringify(transcript.messages), /extension executed/);
+    assert.doesNotMatch(JSON.stringify(transcript), /host-secret/);
+    await activePresenter.refresh();
+    assert.ok(activePresenter.current.providerSessionId);
+    assert.ok(extensionApi);
+    assert.equal((await extensionApi.llm.complete({ messages: [{ role: "user", content: "side request" }] })).content, "side completion");
+  } finally {
+    await activePresenter?.dispose();
+    await durable.harness.close(BACKGROUND_CONTEXT);
+  }
 
   await manager.setExtensionEnabled("ext.provider.test", false);
   assert.equal(modelRuntime.models.getProvider(providerId), undefined);

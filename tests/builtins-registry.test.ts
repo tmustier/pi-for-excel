@@ -93,7 +93,8 @@ void test("command-layer contract: workspace commands complete, preserve failure
   let failFiles = false;
   let beforeExecuteCount = 0;
   const context: BuiltinsContext = {
-    getActiveAgent: () => null,
+    getActiveConversation: () => null,
+    getSessions: () => { throw new Error("No active sessions in this test"); },
     openModelSelector: () => {},
     openInstructionsEditor: () => Promise.resolve(),
     getExecutionMode: () => Promise.resolve("safe"),
@@ -266,7 +267,8 @@ void test("command-layer contract: recovery commands expose completion, errors, 
   const restoredBackupIds: Array<string | undefined> = [];
   const queuedCommands: Array<{ name: string; args: string }> = [];
   const context: BuiltinsContext = {
-    getActiveAgent: () => null,
+    getActiveConversation: () => null,
+    getSessions: () => { throw new Error("No active sessions in this test"); },
     openModelSelector: () => {},
     openInstructionsEditor: () => Promise.resolve(),
     getExecutionMode: () => Promise.resolve("safe"),

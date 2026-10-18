@@ -16,6 +16,8 @@ export function bindRuntimeSidebar(opts: {
     sidebar.sessionTabs = snapshot.tabs;
 
     if (snapshot.activeRuntimeId === renderedRuntimeId) {
+      const activeRuntime = runtimeManager.getActiveRuntime();
+      if (activeRuntime) sidebar.tools = activeRuntime.tools;
       sidebar.requestUpdate();
       return;
     }
@@ -28,8 +30,9 @@ export function bindRuntimeSidebar(opts: {
     renderedRuntimeId = snapshot.activeRuntimeId;
     const activeRuntime = runtimeManager.getActiveRuntime();
     if (activeRuntime) {
-      sidebar.agent = activeRuntime.agent;
-      sidebar.syncFromAgent();
+      sidebar.view = activeRuntime.view;
+      sidebar.tools = activeRuntime.tools;
+      sidebar.syncFromConversation();
     }
     sidebar.requestUpdate();
 

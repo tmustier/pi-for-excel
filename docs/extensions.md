@@ -188,7 +188,10 @@ When Pi for Excel's CORS proxy is enabled, extension-provider discovery and infe
 
 ### `agent`
 Agent API surface:
-- `agent.raw` (host runtime only; capability-gated)
+- `agent.raw` (host runtime only; capability-gated): read-only legacy adapter, with `state` and `subscribe(handler)`. State reads resolve the active tab each time, including on a retained `raw` reference. Supported fields: `messages`, `model`, `thinkingLevel`, `systemPrompt`, `isStreaming`, `streamingMessage`, `pendingToolCalls`, `errorMessage`, and `tools` metadata (name, description, parameters; no execution functions). Returned data is detached; changing it cannot change the conversation. `systemPrompt` is empty until a committed prompt baseline exists; messages are the loaded active projection, not the entire paged archive.
+- `agent.conversation` (host runtime only; capability-gated): the actual upstream Durable `Conversation`, with no execution shim. It resolves the active tab when accessed; a retained Conversation intentionally identifies that conversation.
+- `agent.snapshot` (host runtime only; `agent.read`): current native read projection (`messages`, `model`, `thinkingLevel`, `busy`, `providerSessionId`, `inbox`, `live`, `streamingMessage`).
+- Explicit breaking boundary: `raw` is not an Agent executor. `prompt`, `continue`, `abort`, `reset`, `replaceMessages`, `appendMessage`, `clearMessages`, `setModel`, `setThinkingLevel`, `setTools`, queue mutation/clearing and direct state assignment are unsupported, not simulated. Executable `raw.state.tools` and Agent runtime hooks are unavailable. Use registered tools, the mediated input APIs, or explicit native Conversation methods instead.
 - `agent.injectContext(content)`
 - `agent.steer(content)`
 - `agent.followUp(content)`
@@ -201,7 +204,10 @@ Cache/prompt-shape guidance for extension authors:
 - Host runtime uses an extension-scoped side session key for `llm.complete`, so side-call churn is isolated from the primary runtime session telemetry.
 - Keep `systemPrompt` short and stable across repeated extension calls when possible.
 - Put volatile data in `messages` rather than rewriting `systemPrompt` every call.
-- Use `agent.injectContext` / `agent.steer` when you need to influence the primary runtime conversation instead of emulating it through `llm.complete`.
+- Await `agent.injectContext`, `agent.steer`, and `agent.followUp`: failures reject and successful calls acknowledge durable admission/persistence, not completion of the resulting run. `injectContext` submits a passive write without starting a run; `steer` and `followUp` submit native input with `whenBusy: "steer"` and `whenBusy: "followUp"` respectively (idle input starts a run).
+- `onAgentEvent` preserves legacy `message_end.message` and `message_update.message` / `assistantMessageEvent` by projecting committed Durable events, including in the sandbox. Text/thinking deltas and completed blocks are projected; full-message replacements appear as `start` updates. Durable commits can coalesce provider tokens, so this is not a replay of every provider callback. Tool argument-path deltas have no exact legacy raw-JSON equivalent: the delta string is forwarded, while final arguments arrive on `toolcall_end`. Native retry, inbox, snapshot, compaction, nested-tool failures without results, and output-window trim events have no legacy equivalent and are not fabricated. Use the native event API for these.
+- Host `onConversationEvent` forwards upstream Durable events unchanged (`message_end.entry`, `message_update.changes`, etc.). Both host subscriptions follow the active tab and unsubscribe cleanly. Hosts can supply `subscribeActiveConversation(listener)` for synchronous rebinding; the compatibility fallback polls every 25 ms, filters old-tab events immediately, and can miss events in that rebinding window. Production hosts should supply the notifier.
+- Trusted host extensions retain global host capabilities unchanged (including browser and Office globals). Capability gates are not a security boundary for arbitrary trusted JavaScript: code can bypass mediated APIs. Registered tools execute through the current native runtime and its policy; no duplicate Agent executor is created for extensions.
 
 ### `http.fetch(url, options?)`
 Host-mediated outbound HTTP fetch with security policy enforcement.
@@ -342,14 +348,14 @@ export function activate(api) {
     },
   });
 
-  const onTurnEnd = api.onAgentEvent((ev) => {
-    if (ev.type === "turn_end") {
-      // optional event handling
+  const unsubscribeEvents = api.onAgentEvent((ev) => {
+    if (ev.type === "message_end") {
+      // ev.entry is the committed Durable transcript entry.
     }
   });
 
   return () => {
-    onTurnEnd();
+    unsubscribeEvents();
     api.widget.clear();
     api.overlay.dismiss();
   };

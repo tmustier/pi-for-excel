@@ -28,13 +28,16 @@ const rows = [
 void test("assistant tool Markdown renders all seven frontmatter forms correctly", async () => {
   for (const [index, row] of rows.entries()) {
     await withTaskpane(async (page) => {
-      await page.evaluate(({ index, markdown }) => {
+      await page.evaluate(async ({ index, markdown }) => {
+        const { BACKGROUND_CONTEXT: ctx } = await import("/node_modules/@earendil-works/chord/dist/context/index.js") as typeof import("@earendil-works/chord/context");
         const sidebar = document.querySelector("pi-sidebar");
-        sidebar.agent.state.messages.push(
+        await sidebar.view.conversation.commit(async tx => {
+          await tx.appendEntry(sidebar.view.conversation.id, { kind: "test.markdown", model: [
           { role: "assistant", content: [{ type: "toolCall", id: `markdown-${index}`, name: "skills", arguments: { action: "read", name: `fixture-${index}` } }], api: "openai-responses", provider: "openai", model: "fixture", usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } }, stopReason: "toolUse", timestamp: index * 2 + 1 },
           { role: "toolResult", toolCallId: `markdown-${index}`, toolName: "skills", content: [{ type: "text", text: markdown }], isError: false, timestamp: index * 2 + 2 },
-        );
-        sidebar.syncFromAgent();
+          ] });
+        }, ctx);
+        await sidebar.view.refresh();
       }, { index, markdown: row.markdown });
       const card = page.locator('.pi-tool-card[data-tool-name="skills"]');
       await card.locator(".pi-tool-card__header").click();

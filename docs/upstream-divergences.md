@@ -1,6 +1,6 @@
 # Upstream divergences from pi-mono
 
-**Last reviewed:** 2026-07-16
+Last reviewed: 2026-10-18
 
 This document records every place Pi for Excel intentionally diverges from
 [pi-mono](https://github.com/badlogic/pi-mono) / `@earendil-works/pi-coding-agent`
@@ -43,15 +43,15 @@ pi-mono parity (in-place), and kept fork as an advanced opt-in setting.
 
 | | pi-mono | Pi for Excel |
 |---|---|---|
-| When tools change | Direct `setTools()` on explicit user action | Event-driven capability refreshes; apply `setTools()` only when tool fingerprint or extension tool revision changes |
+| When tools change | Direct `setTools()` on explicit user action | Event-driven native registry updates when the tool fingerprint or extension tool revision changes |
 
 **Rationale:** This is not a disagreement with upstream — it's compensating for
 a different lifecycle. Pi-mono's tool set only changes when the user explicitly
 does something (e.g. `/tools`). In Excel, capability refresh passes run on many
 events (focus/visibility return, integrations/connections/skills/rules/execution-mode/experimental updates, extension activation).
 
-Each refresh rebuilds tool objects. Without a guard, every pass would assign
-`agent.state.tools = ...` even when schema metadata is identical.
+Each refresh rebuilds tool objects. Without a guard, every pass would replace
+the native registry capabilities even when schema metadata is identical.
 
 We therefore gate tool updates by:
 - stable metadata fingerprint (`name`, `label`, `description`, `parameters`)
@@ -113,21 +113,68 @@ The base reserve/keep-recent defaults still mirror pi-mono (16,384 / 20,000
 tokens). We only adjust *when* compaction fires, not the summarisation call
 shape.
 
-**Status:** Shipped. Documented in `docs/context-management-policy.md` (Slice 5)
-and `docs/compaction.md`. The call shape (isolated summarizer request) still
-matches upstream.
+**Durable migration:** `scripts/patch-durable-compaction.mjs` intentionally patches
+the exact published `@earendil-works/pi-durable@1.3.0` runtime JS and declarations
+at install time (`postinstall`; rerun after installs made with `--ignore-scripts`).
+It validates version and SHA-256 source bytes before writing anything, accepts
+only pristine, exactly patched, or the complete previous policy-only patch form,
+and is idempotent. Source maps retain
+the original upstream source; runtime line mappings in patched files can shift.
+No dependency upgrade or custom compaction controller is involved.
 
-**Files:** `src/compaction/defaults.ts` (`getCompactionThresholds`,
-`LARGE_CONTEXT_HARD_RATIO`, `XL_CONTEXT_HARD_RATIO`)
+Upstream 1.3.0 only offers harness-wide `HarnessSettings.compaction`; generation
+preparation, overflow classification and `CompactionTask.select` each consume it
+independently. Hooks run after policy-dependent decisions. The narrow additive API
+is `settings.compactionForModel?: (model: Model<Api>) => Partial<CompactionPolicy>`:
+a pure synchronous callback, passed through settings resolution, whose fresh result
+is merged over the default/global policy at each of those three consumption sites.
+Overflow uses the failed request's model, not a globally selected tab. The optional
+`hardTriggerTokens` caps the blocking threshold with
+`min(contextWindow - reserveTokens, hardTriggerTokens)`; omitting it preserves native
+behavior. It does not increase the summary's native `floor(0.8 * reserveTokens)`
+output budget (still clamped to the model's max output).
 
-Since #566, the *trigger points* are closer to upstream again: like pi-mono's
-agent-session, we now also check budgets mid-turn between tool-loop
-continuations (`Agent.prepareNextTurn`) and run one compact-and-retry recovery
-pass when a request fails with a context-overflow error
-(`src/compaction/overflow-recovery.ts`, using pi-ai's `isContextOverflow`).
-What still differs is the quality cap above and the simpler split-turn handling
-(our compaction cuts mid-turn via `findCutIndex` instead of generating separate
-history + turn-prefix summaries).
+The app callback in `src/durable/compaction-policy.ts` reuses
+`effectiveReserveTokens`, `effectiveKeepRecentTokens`, and `getCompactionThresholds`
+from `src/compaction/defaults.ts`. Wire it as `settings: { compactionForModel }` on
+`Harness.open`; global `compaction.enabled` remains available. `backgroundTokens: 0`
+is intentional: the existing soft warning is UI guidance, not background compaction.
+Manual compaction continues to ignore `enabled`; native range selection, summary
+placement, task ownership/state machines and one-compaction overflow retry remain
+unchanged.
+
+The patch adds a typed request-only `CompactionHooks.beforeSummary` hook. It receives
+`{ messages: readonly Message[], instructions?: string }` and returns the same shape
+(or `undefined` to leave it unchanged). It runs after reconstructing the immutable
+selected range, on every summary attempt/recovery, before native serialization.
+Register `hook(CompactionTask, { beforeSummary: compactionMemoryNudge })` in the
+conversation's existing Excel extension hooks, importing the pure helper from
+`src/durable/memory-nudge.ts`. The helper excludes `[Auto-context]` user messages,
+preserves manual focus, and restores the original memory guidance verbatim:
+behavioral rules belong in the instructions tool, workbook/domain facts belong in
+`notes/` or `workbooks/<name>/notes.md`, and Critical Context carries a
+`Memory to persist` list. Only user cues qualify; snippets are case-insensitively
+deduplicated, limited to three and bounded to 180 characters. No cue means no nudge.
+History, native summary placement, and kept context are not mutated.
+
+Native `cacheRetention: "none"` is now a fallback, not an override of explicit
+preferences: `settings.stream.cacheRetention` wins, followed by the provider's
+resolved `PI_CACHE_RETENTION=long`, then `none`. The latter uses pi-ai's existing
+provider-env resolver (scoped auth environment, then ambient environment), not a
+new application setting. This is resolved at each summary request boundary;
+credentials/environment are not copied into a task checkpoint. Inspection of
+`BrowserModelRuntime` and `createOfficeStreamFn` found no dedicated cache-retention
+UI setting: browser auth has no ambient environment, and Office forwards request
+options through its payload hook/proxy to `Models.streamSimple`. The existing
+`HarnessSettings.stream` request preference and provider auth configuration are the
+sources being preserved; no UI preference is invented. Explicit `none` also wins
+over a provider's long preference.
+
+**Removal condition:** remove the install patch when upstream supports per-request
+model policy at all three sites plus a separate hard cap, a request-source hook,
+and explicit cache-retention preference forwarding. Then migrate to those supported
+APIs and retain the real-Harness regression tests in
+`tests/durable-compaction-policy.test.ts` and `tests/agent-compaction-memory.test.ts`.
 
 ---
 
@@ -242,7 +289,8 @@ main runtime prefix) but **deferred** it — see
 
 ### Session ID stability
 
-Both keep `agent.sessionId` stable for the lifetime of a session. No divergence.
+Both keep the provider session ID stable for the lifetime of a chat conversation.
+Pi for Excel persists that identity and forwards it through the Models adapter.
 
 ### Tool disclosure on continuations
 

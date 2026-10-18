@@ -2,22 +2,22 @@
  * Builtin model-related commands.
  */
 
-import type { Agent } from "@earendil-works/pi-agent-core";
+import type { ConversationPresenter } from "../../durable/conversation-view.js";
 
 import type { SlashCommand } from "../types.js";
 import { showToast } from "../../ui/toast.js";
 import { t } from "../../language/index.js";
 
-export type ActiveAgentProvider = () => Agent | null;
+export type ActiveConversationProvider = () => ConversationPresenter | null;
 
 export interface ModelCommandActions {
-  getActiveAgent: ActiveAgentProvider;
+  getActiveConversation: ActiveConversationProvider;
   openModelSelector: () => void;
 }
 
 export function createModelCommands(actions: ModelCommandActions): SlashCommand[] {
   const runModelSelector = (): void => {
-    const agent = actions.getActiveAgent();
+    const agent = actions.getActiveConversation();
     if (!agent) {
       showToast(t("command.model.no_session"));
       return;

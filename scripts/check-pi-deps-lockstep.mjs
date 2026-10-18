@@ -3,10 +3,10 @@ import { promises as fs } from "node:fs";
 /**
  * Pi dependency policy:
  *
- * - `@earendil-works/pi-ai` and `@earendil-works/pi-agent-core` must stay in
+ * - `@earendil-works/pi-ai`, `@earendil-works/pi-agent-core`, and `@earendil-works/pi-durable` must stay in
  *   exact lockstep (same spec in package.json, same resolved version in
  *   package-lock.json).
- * - The lockfile must resolve exactly ONE copy of `pi-ai` and `pi-agent-core`
+ * - The lockfile must resolve exactly ONE copy of each of those Pi packages
  *   (no nested duplicates). Duplicate pi-ai copies mean two model registries
  *   that disagree about available models.
  *
@@ -18,7 +18,7 @@ import { promises as fs } from "node:fs";
  * first-party now; see docs/ui-ownership.md.)
  */
 
-const LOCKSTEP_PAIR = ["@earendil-works/pi-ai", "@earendil-works/pi-agent-core"];
+const LOCKSTEP_PAIR = ["@earendil-works/pi-ai", "@earendil-works/pi-agent-core", "@earendil-works/pi-durable"];
 const SCHEMA_PACKAGE = "typebox";
 const SINGLETON_PACKAGES = [...LOCKSTEP_PAIR, SCHEMA_PACKAGE];
 const PI_DEPENDENCIES = [...LOCKSTEP_PAIR, SCHEMA_PACKAGE];
@@ -48,7 +48,7 @@ function failIfNotLockstep(sourceName, entries) {
   for (const [name, version] of entries) {
     console.error(`  - ${name}: ${version}`);
   }
-  console.error("\nExpected pi-ai and pi-agent-core versions to match exactly.");
+  console.error("\nExpected pi-ai, pi-agent-core and pi-durable versions to match exactly.");
   return true;
 }
 
@@ -131,7 +131,7 @@ async function main() {
 
   const coreVersion = packageJsonEntries[0]?.[1] ?? "(unknown)";
   console.log(
-    `✓ Pi dependencies OK (pi-ai/pi-agent-core: ${coreVersion}, ${SCHEMA_PACKAGE}: ${packageJsonDependencies[SCHEMA_PACKAGE]}; single shared copies).`,
+    `✓ Pi dependencies OK (pi-ai/pi-agent-core/pi-durable: ${coreVersion}, ${SCHEMA_PACKAGE}: ${packageJsonDependencies[SCHEMA_PACKAGE]}; single shared copies).`,
   );
 }
 

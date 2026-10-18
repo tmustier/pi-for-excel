@@ -1,4 +1,5 @@
-import type { Agent } from "@earendil-works/pi-agent-core";
+import { BACKGROUND_CONTEXT as context } from "@earendil-works/chord/context";
+import type { ConversationPresenter } from "../durable/conversation-view.js";
 
 import type {
   CreateExtensionAPIOptions,
@@ -38,7 +39,7 @@ import type { SettingsWriter } from "../storage/local/settings-store.js";
 
 type HostActivationBridge = Pick<
   CreateExtensionAPIOptions,
-  | "getAgent"
+  | "getActiveConversation"
   | "llmComplete"
   | "httpFetch"
   | "storageGet"
@@ -242,7 +243,7 @@ export interface BuildRuntimeManagerActivationBridgeOptions {
   entry: StoredExtensionEntry;
   settings: SettingsWriter;
   connectionManager: ConnectionManager;
-  getRequiredActiveAgent: () => Agent;
+  getActiveConversation: () => ConversationPresenter;
   afterInjectAgentContext?: () => Promise<void> | void;
   runExtensionLlmCompletion: (request: LlmCompletionRequest) => Promise<LlmCompletionResult>;
   runExtensionHttpFetch: (url: string, options?: HttpRequestOptions) => Promise<HttpResponse>;
@@ -264,7 +265,7 @@ export function buildRuntimeManagerActivationBridge(
     entry,
     settings,
     connectionManager,
-    getRequiredActiveAgent,
+    getActiveConversation,
     afterInjectAgentContext,
     runExtensionLlmCompletion,
     runExtensionHttpFetch,
@@ -288,22 +289,19 @@ export function buildRuntimeManagerActivationBridge(
   const storageDelete = (key: string) => deleteExtensionStorageValue(settings, entry.id, key);
   const storageKeys = () => listExtensionStorageKeys(settings, entry.id);
 
-  const injectAgentContext = (content: string): void => {
-    const agent = getRequiredActiveAgent();
-    agent.state.messages.push(buildExtensionMessage("agent.injectContext content", content));
-    void Promise.resolve(afterInjectAgentContext?.()).catch((error: unknown) => {
-      console.warn("[pi] Failed to sync extension-injected context:", error);
-    });
+  const injectAgentContext = async (content: string): Promise<void> => {
+    const presenter = getActiveConversation();
+    await presenter.conversation.submit({ type: "write", entry: { kind: "extension.context", model: [buildExtensionMessage("agent.injectContext content", content)] } }, context);
+    await presenter.refresh();
+    await afterInjectAgentContext?.();
   };
 
-  const steerAgent = (content: string): void => {
-    const agent = getRequiredActiveAgent();
-    agent.steer(buildExtensionMessage("agent.steer content", content));
+  const steerAgent = async (content: string): Promise<void> => {
+    await getActiveConversation().conversation.submit({ type: "input", content: buildExtensionMessage("agent.steer content", content).content, whenBusy: "steer" }, context);
   };
 
-  const followUpAgent = (content: string): void => {
-    const agent = getRequiredActiveAgent();
-    agent.followUp(buildExtensionMessage("agent.followUp content", content));
+  const followUpAgent = async (content: string): Promise<void> => {
+    await getActiveConversation().conversation.submit({ type: "input", content: buildExtensionMessage("agent.followUp content", content).content, whenBusy: "followUp" }, context);
   };
 
   const listSkills = () => listExtensionSkillSummaries();
@@ -571,7 +569,7 @@ export function buildRuntimeManagerActivationBridge(
 
   const host: HostActivationBridge = {
     ...shared,
-    getAgent: getRequiredActiveAgent,
+    getActiveConversation,
     extensionOwnerId: entry.id,
   };
 

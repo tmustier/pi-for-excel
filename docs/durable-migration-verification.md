@@ -1,0 +1,111 @@
+# Durable migration verification
+
+This records acceptance evidence as the migration proceeds. The later [integrated native Excel run](durable-native-acceptance.md) restored host access, exercised live-model recovery and mutation classes, and found and fixed extension-refresh and narrow-review issues. It also records remaining limits; this is not blanket acceptance of every untested host or failure mode.
+
+## Recovery in Excel
+
+Host: Excel for Mac 16.114 on macOS 26.3.1. Excel stayed in the background. The foreground app was Rex at the start and after the first bridge checks, and Google Chrome when the lane was released. Each run used a saved scratch workbook and the actual taskpane, credentials, proxy and model tools.
+
+### Bridge reload
+
+Tested revision: `e5a1ab5` (the model recovery lifecycle integrated into the prototype).
+
+Models: `openai-codex/gpt-5.6-luna`, `openai-codex/gpt-6.1-sol`, and `anthropic/claude-opus-5-5`, all with high thinking.
+
+Fixture: `Sheet1!A1:A3` contained `alpha`, `beta`, `gamma`.
+
+Prompt:
+
+> Read Sheet1!A1:A3 using read_range and list the three values in reverse order, comma separated. Do not change the workbook.
+
+After submission, we reloaded through the existing `reloadTaskpane` bridge command while the latest request had no final assistant entry. The new pane opened the same conversation. The run called `read_range`, answered `gamma, beta, alpha`, and had exactly one user entry. An independent bridge read confirmed the three original cells were unchanged. This passed twice with GPT-5.6 Luna and once each with GPT-6.1 Sol and Claude Opus 5.5. Proxy logs confirmed Luna used the Codex WebSocket bridge.
+
+One additional Luna request returned `Forbidden` before the reload. That was a provider failure, not a successful recovery test, and was not counted among the passes.
+
+### Native pane close and reopen
+
+The native Close Pi for Excel button followed by Open Pi still failed at `e5a1ab5`: after a real `read_range` call, the model request ended with `Load failed`, and Durable saved it as the terminal answer.
+
+WebKit can report this error before delivering any unload event. Pi 1.3's existing transient-error classifier does not recognise the exact wording `Load failed`. Revision `7ebf7de` normalises only that network error to `Network error: Load failed`, retaining the original message while allowing Durable's existing retry policy to save a retry checkpoint. It does not reclassify authentication errors, provider errors generally, explicit cancellation, or successful messages. No mutation is replayed.
+
+Model: `openai-codex/gpt-6.1-sol`, high thinking. Same three-cell fixture.
+
+Prompt:
+
+> Read Sheet1!A1:A3 using read_range, list the values in reverse order, then write a detailed 1500-word explanation of how spreadsheet ranges work. Do not modify any cells.
+
+We submitted the prompt, closed the actual pane through its native accessibility button while the reply was unfinished, then reopened it through Open Pi. The final clean-revision run resumed in the same conversation with one user entry and one `read_range` result. Its history contains the transient `Network error: Load failed` followed by a successful final answer, not a terminal failed submission. The final answer starts with the values in reverse order. An independent read confirmed the fixture was unchanged.
+
+Using `scripts/read-excel-durable.py`, we read the scratch workbook's WebKit SQLite database directly, including committed WAL data. The persisted submission (ID 69) has status `done`. Its journal also contains the transient network error, so this verifies recovery through the retry checkpoint rather than a request that happened to finish before closure. An earlier run of the same patch also finished after native close/reopen. At `f295f9e`, another run succeeded after keeping the native pane closed for 35 seconds before reopening it. The saved history again contains the transient network error followed by a successful answer.
+
+### Regression evidence
+
+The lifecycle helper tests cover synchronous sealing before explicit reload, `beforeunload`, and `pagehide`; queued unload after a stream error; unchanged provider errors and successes; listener cleanup; and WebKit network-error classification.
+
+Replacing the browser-task yield with a microtask makes the pending-unload regression fail. Removing the WebKit classification makes the native-cancellation classifier regression fail. Both faults were reverted and the tests passed again. Routed real-Harness tests additionally reopen the same persisted logical submission without a duplicate user entry.
+
+The direct persistence reader has three fixture tests: listing excludes the ordinary settings database, binary WebKit keys decode, and unrelated or missing database requests fail. It never copies the ordinary pane database, which contains provider credentials.
+
+## IndexedDB version 2 in Excel
+
+Tested revision: `ae77d26`. Opening the same scratch workbook migrated its version-1 database into the new indexed representation. Before migration it had 576 journal batches. After migration, an independent WebKit SQLite read found 76 records, 530 document revisions and 9 request lookups. All counts matched the checksummed manifest. Both sequence and checkpoint were 576, and the redundant journal was empty.
+
+The old conversation ID, entry 76 and completed submission 69 survived. A subsequent live `openai-codex/gpt-6.1-sol` run, with high thinking and the three-cell reverse-order prompt above, resumed after another bridge reload. It called `read_range`, returned the expected values and left the cells unchanged. The version-2 backend's strict transaction durability option works in the tested WebKit host.
+
+Generation expectations, the storage UI, explicit cleanup, concurrent ownership and final runtime wiring still need integrated Excel acceptance. We did not simulate browser eviction, disk exhaustion or power loss in Excel.
+
+## Host access during final integration
+
+At 00:16 UTC on 18 October 2026, this session could no longer enumerate Excel's WebKit storage. Node and both Python interpreters returned filesystem permission errors. Apple Events to Excel also returned error -1743. Earlier direct SQLite reads above succeeded before the permission failure.
+
+The persistence inspector now reports denied access explicitly instead of letting `pathlib.glob` return an empty list and falsely implying no databases exist. Its permission regression fails against the previous implementation and passes with the fix; all four inspector tests pass locally. Accessibility still worked at that point, and the generated scratch workbook was closed through the native File menu without deleting app data.
+
+A subsequent attempt exhausted the remaining background entry points. Creating a fresh scratch workbook in Excel's container failed with `PermissionError`. Creating a tagged workbook in the task's temporary directory succeeded, but opening it through background LaunchServices produced no bridge client. Computer Use then failed twice with `bootstrapTimedOut`, and the standalone accessibility reader reported no Excel windows. The first foreground observation was Excel, so the attempt could not establish background verification. No model prompt ran; the owned test servers were stopped and the shared lane released.
+
+These were failures observed during the earlier attempt, not proof that Rex lacked Full Disk Access. On 18 October, fresh filesystem and Computer Use probes passed. The [later native run](durable-native-acceptance.md) completed independent WebKit persistence readback and integrated tests; host access is no longer the current blocker.
+
+## Integrated automated verification
+
+Runtime revision `b20d0c7` passes every required local suite. Documentation-only updates follow that revision.
+
+| Command | Result |
+| --- | --- |
+| `npm run check` | Pass |
+| `npm test` | 984 pass |
+| `npm run test:models` | 39 pass |
+| `npm run test:context` | 639 pass |
+| `npm run test:security` | 87 pass |
+| `npm run test:browser` | 122 pass |
+| `npm run build` | Pass |
+
+These checks exercise real Durable Harness instances with synthetic model and Office responses. They support the implementation but do not replace live model tests in Excel.
+
+| Step 3 requirement | Implementation and automated evidence |
+| --- | --- |
+| Interrupted model requests | `src/durable/model-recovery.ts`; model recovery and native recovery tests |
+| Mutation intent and explicit resolution | `mutations.ts`, `mutation-host.ts`, coordinator dispatch gate and mutation host/runtime/browser tests; review controls refuse stale observations |
+| Storage lifecycle | IndexedDB storage, codec and lifecycle modules; browser conformance, checkpoint, corruption, generation and ownership tests |
+| Existing sessions | Session import and retained-history modules; original JSON retention, compacted/archive import, duplicate import and cold-history tests |
+| Chat, tabs, history, export, queues and compaction | Native sessions, conversation projection, inbox and compaction policy; session, inbox, chat projection, compaction and taskpane browser tests |
+| Extension reads and events | Durable-backed extension API and read-only event projection; sandbox provider/tool tests and real-Harness partial tool update tests, including image content and final receipt/export isolation |
+| Sole runtime | Taskpane initialization and retired-flag browser tests; no Agent executor, replaced snapshot writer, action scheduler or execution compaction path remains |
+
+Structural observations now retain stable sheet/table IDs, full intended bands and sparse values/formulas around row/column boundaries or the used sheet extent. Geometry reads never load the whole used area's contents into JavaScript. The original samples survive sheet deletion and explicit resolution; sheet names never substitute for missing IDs. Sampling choices are labeled agent defaults. These hints cannot prove stable row identities or complete deletion/duplication outcomes and never authorize replay. All 20 mutation-host tests pass; the two follow-ups each include regressions that fail against their preceding implementation.
+
+## Rendered review controls
+
+The review dialog now leads with the operation, target, observation, cell values and acceptance warning. Full original and current evidence remains available in a collapsed disclosure. Acknowledgement still rechecks the observation and never writes the workbook or proves the original operation succeeded.
+
+The coordinator inspected narrow and desktop screenshots of the changed element and the actual taskpane bundle with the Chromium Office fixture. At 350 by 780 pixels, the fresh review card is 605 pixels tall and its acknowledgement button ends at 652 pixels. No card scrolling is needed. The idle controls strip uses 38 pixels, down from 103. The stale-observation state preserves the refusal, displays new values and requires a fresh acknowledgement. These are browser screenshots, not Excel screenshots. [Taskpane fixture screenshots](https://github.com/tmustier/pi-for-excel/pull/769#issuecomment-6244411874) and [coordinator screenshots and test results](https://github.com/tmustier/pi-for-excel/pull/769#issuecomment-6244693226).
+
+Visual review found consistent theme fonts, spacing, alignment and contrast, no horizontal overflow or broken images, and visible actions at narrow width. Evidence expansion, fresh inspection, unavailable inspection, stale-token refusal, successful acknowledgement and explicit obsolete-generation deletion pass browser interaction tests. Sheet-level reviews also display the name attached to the recorded original ID when no cell range exists. Five formatter regressions cover deletion, duplication, new-sheet identity, missing IDs and row bands; restoring the old guard makes the deletion and duplication assertions fail. The sheet review was rendered and inspected at narrow width.
+
+## External security check
+
+GitHub build/test, browser, code analysis and dependency checks pass at `99edcbb`. GitGuardian still reports 3 generic high-entropy incidents from earlier commits: 38341470, 38341471 and 38341472. They are literal synthetic observation markers in the gallery and its browser test, not authentication credentials. Commit `99edcbb` replaces them with readable fixture markers in the current tree; their older occurrences remain in history.
+
+A follow-up independent review inspected all three original occurrences at `4139e5b`: two gallery observation markers and the browser assertion for one of them. None is an authentication credential. The remote findings still need classification. GitHub's authorization button for the existing GitGuardian app remained disabled in an unfocused window. The coordinator requested permission to briefly focus that login window; no disabled-control bypass, broad scanner exclusion or history rewrite was applied.
+
+## Remaining acceptance
+
+See the [integrated native acceptance record](durable-native-acceptance.md) for ordinary chat, explicit cancellation checkpoints, mutation recovery, user-edit conflicts, sandbox extension lifecycle, queued-prompt recovery, history transfer, compaction, ownership and storage tests. Automatic compaction and overflow used documented temporary fault injection with real models and tools; production context exhaustion was not induced. Remaining native limits and the outstanding GitGuardian classification are explicit there. No merge or deployment is authorised by these results.

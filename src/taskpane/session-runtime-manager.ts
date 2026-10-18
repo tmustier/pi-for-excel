@@ -2,34 +2,39 @@
  * UI-independent lifecycle owner for taskpane session runtimes.
  */
 
-import type { Agent } from "@earendil-works/pi-agent-core";
+import { BACKGROUND_CONTEXT as context } from "@earendil-works/chord/context";
+import type { Api, Model } from "@earendil-works/pi-ai";
+import type { ConversationPresenter } from "../durable/conversation-view.js";
+import type { DurableSessions } from "../durable/sessions.js";
+import type { AnyCoreTool } from "../tools/registry.js";
 
 import {
   shouldForkModelSwitch,
   type ModelSwitchBehavior,
 } from "../models/switch-behavior.js";
 import { areRuntimeModelsEquivalent } from "../models/model-refresh-owner.js";
-import type { ActionQueue } from "./action-queue.js";
 import type { QueueDisplay } from "./queue-display.js";
-import type { SessionPersistenceController } from "./sessions.js";
 import { resolveTabTitle } from "./session-title.js";
 
 export type RuntimeLockState = "idle" | "waiting_for_lock" | "holding_lock";
 
 export interface SessionRuntime {
   runtimeId: string;
-  agent: Agent;
-  actionQueue: ActionQueue;
+  view: ConversationPresenter;
+  tools: AnyCoreTool[];
   queueDisplay: QueueDisplay;
-  persistence: SessionPersistenceController;
+  title: string;
+  hasExplicitTitle: boolean;
   lockState: RuntimeLockState;
   refreshCapabilities: () => Promise<void>;
+  /** Release UI projections only; never abort or close the Durable execution owner. */
   dispose: () => void;
 }
 
 export interface CreateRuntimeOptions {
   activate: boolean;
   autoRestoreLatest: boolean;
+  conversationId?: string;
 }
 
 export interface RuntimeTabSnapshot {
@@ -53,12 +58,12 @@ export type ModelSelectionResult =
   | { outcome: "forked"; runtime: SessionRuntime; title: string };
 
 interface RuntimeListeners {
-  unsubscribeAgent: () => void;
-  unsubscribePersistence: () => void;
+  unsubscribeView: () => void;
 }
 
 export class SessionRuntimeManager {
   private readonly createSessionRuntime: SessionRuntimeFactory;
+  private readonly sessions: DurableSessions;
   private readonly warnCapabilityRefresh: (error: unknown) => void;
   private readonly runtimes = new Map<string, SessionRuntime>();
   private readonly runtimeOrder: string[] = [];
@@ -73,9 +78,11 @@ export class SessionRuntimeManager {
 
   constructor(opts: {
     createRuntime: SessionRuntimeFactory;
+    sessions: DurableSessions;
     warnCapabilityRefresh?: (error: unknown) => void;
   }) {
     this.createSessionRuntime = opts.createRuntime;
+    this.sessions = opts.sessions;
     this.warnCapabilityRefresh = opts.warnCapabilityRefresh ?? (() => {});
   }
 
@@ -90,13 +97,10 @@ export class SessionRuntimeManager {
     this.runtimeDefaultTabNumbers.set(runtime.runtimeId, this.nextDefaultTabNumber);
     this.nextDefaultTabNumber += 1;
 
-    const unsubscribeAgent = runtime.agent.subscribe(() => {
+    const unsubscribeView = runtime.view.subscribe(() => {
       this.emit();
     });
-    const unsubscribePersistence = runtime.persistence.subscribe(() => {
-      this.emit();
-    });
-    this.runtimeListeners.set(runtime.runtimeId, { unsubscribeAgent, unsubscribePersistence });
+    this.runtimeListeners.set(runtime.runtimeId, { unsubscribeView });
 
     const shouldActivate = opts?.activate ?? this.activeRuntimeId === null;
     if (shouldActivate) {
@@ -130,8 +134,7 @@ export class SessionRuntimeManager {
     const wasActive = this.activeRuntimeId === runtimeId;
 
     const listeners = this.runtimeListeners.get(runtimeId);
-    listeners?.unsubscribeAgent();
-    listeners?.unsubscribePersistence();
+    listeners?.unsubscribeView();
     this.runtimeListeners.delete(runtimeId);
 
     runtime.dispose();
@@ -179,55 +182,68 @@ export class SessionRuntimeManager {
 
   async selectModel(args: {
     runtimeId: string;
-    nextModel: Agent["state"]["model"];
+    nextModel: Model<Api>;
     behavior: ModelSwitchBehavior;
   }): Promise<ModelSelectionResult> {
     const runtime = this.runtimes.get(args.runtimeId);
     if (!runtime) return { outcome: "missing" };
 
-    const currentModel = runtime.agent.state.model;
+    const currentModel = runtime.view.current.model;
     const sameIdentity = currentModel.provider === args.nextModel.provider
       && currentModel.id === args.nextModel.id;
     if (sameIdentity && areRuntimeModelsEquivalent(currentModel, args.nextModel)) {
       return { outcome: "unchanged" };
     }
 
-    if (runtime.agent.state.isStreaming || runtime.actionQueue.isBusy()) {
+    if (runtime.view.current.busy || runtime.view.current.inbox.length > 0) {
       return { outcome: "busy" };
     }
 
     if (sameIdentity || !shouldForkModelSwitch({
       behavior: args.behavior,
-      hasMessages: runtime.agent.state.messages.length > 0,
+      hasMessages: runtime.view.current.messages.length > 0,
     })) {
-      runtime.agent.state.model = args.nextModel;
-      await runtime.persistence.saveSession({ force: true });
+      await runtime.view.conversation.configure({
+        model: { provider: args.nextModel.provider, modelId: args.nextModel.id },
+      }, context);
+      await runtime.view.refresh();
       return { outcome: "updated" };
     }
 
     const sourceTitle = this.snapshotTabs()
       .find((tab) => tab.runtimeId === args.runtimeId)?.title ?? "Untitled";
     const title = `${sourceTitle} (${args.nextModel.id})`;
+    const fork = await this.sessions.fork(String(runtime.view.conversation.id), args.nextModel, title);
     const forkedRuntime = await this.createRuntime({
       activate: true,
       autoRestoreLatest: false,
+      conversationId: String(fork.id),
     });
-    forkedRuntime.agent.state.messages = structuredClone(runtime.agent.state.messages);
-    forkedRuntime.agent.state.model = args.nextModel;
-    forkedRuntime.agent.state.thinkingLevel = runtime.agent.state.thinkingLevel;
-    await forkedRuntime.persistence.renameSession(title);
-    forkedRuntime.queueDisplay.clear();
-    forkedRuntime.queueDisplay.setActionQueue([]);
-    await forkedRuntime.persistence.saveSession({ force: true });
 
     return { outcome: "forked", runtime: forkedRuntime, title };
+  }
+
+  async renameRuntime(runtimeId: string, title: string): Promise<void> {
+    const runtime = this.runtimes.get(runtimeId);
+    if (!runtime) return;
+    await this.sessions.renameSession(String(runtime.view.conversation.id), title);
+    runtime.title = title;
+    runtime.hasExplicitTitle = true;
+    this.emit();
   }
 
   refreshCapabilities(): Promise<void> {
     this.refreshRequested = true;
     if (this.refreshPromise) return this.refreshPromise;
 
-    this.refreshPromise = this.runCapabilityRefreshes();
+    this.refreshPromise = this.runCapabilityRefreshes().finally(() => {
+      // Even an empty pass must release the slot after its Promise is assigned.
+      // Release before notifying listeners so they can request a fresh pass.
+      this.refreshPromise = null;
+      // A request may arrive after the loop drains but before this continuation.
+      if (this.refreshRequested) return this.refreshCapabilities();
+      return this.emit();
+    });
     return this.refreshPromise;
   }
 
@@ -235,7 +251,7 @@ export class SessionRuntimeManager {
     for (const runtimeId of this.runtimeOrder) {
       const runtime = this.runtimes.get(runtimeId);
       if (!runtime) continue;
-      if (runtime.persistence.getSessionId() === sessionId) {
+      if (String(runtime.view.conversation.id) === sessionId) {
         return runtime;
       }
     }
@@ -271,13 +287,13 @@ export class SessionRuntimeManager {
     return this.listRuntimes().map((runtime, index) => ({
       runtimeId: runtime.runtimeId,
       title: resolveTabTitle({
-        hasExplicitTitle: runtime.persistence.hasExplicitTitle(),
-        sessionTitle: runtime.persistence.getSessionTitle(),
+        hasExplicitTitle: runtime.hasExplicitTitle,
+        sessionTitle: runtime.title,
         defaultTabNumber: this.runtimeDefaultTabNumbers.get(runtime.runtimeId) ?? (index + 1),
       }),
       isActive: runtime.runtimeId === this.activeRuntimeId,
-      isStreaming: runtime.agent.state.isStreaming,
-      isBusy: runtime.agent.state.isStreaming || runtime.actionQueue.isBusy(),
+      isStreaming: runtime.view.current.busy,
+      isBusy: runtime.view.current.busy || runtime.view.current.inbox.length > 0,
       lockState: runtime.lockState,
     }));
   }
@@ -291,27 +307,18 @@ export class SessionRuntimeManager {
   }
 
   private async runCapabilityRefreshes(): Promise<void> {
-    try {
-      while (this.refreshRequested) {
-        this.refreshRequested = false;
-        const runtimes = this.listRuntimes();
+    while (this.refreshRequested) {
+      this.refreshRequested = false;
+      const runtimes = this.listRuntimes();
 
-        for (const runtime of runtimes) {
-          try {
-            await runtime.refreshCapabilities();
-          } catch (error) {
-            this.warnCapabilityRefresh(error);
-          }
+      for (const runtime of runtimes) {
+        try {
+          await runtime.refreshCapabilities();
+        } catch (error) {
+          this.warnCapabilityRefresh(error);
         }
       }
-    } finally {
-      // Release the in-flight slot before notifying listeners so a refresh
-      // requested from a snapshot listener starts a new pass instead of being
-      // coalesced into this finished one.
-      this.refreshPromise = null;
     }
-
-    this.emit();
   }
 
   private emit(): void {

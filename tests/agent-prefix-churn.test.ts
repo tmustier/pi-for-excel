@@ -1,12 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { Agent, type AgentTool } from "@earendil-works/pi-agent-core";
-import {
-  createModels,
-  fauxAssistantMessage,
-  fauxProvider,
-} from "@earendil-works/pi-ai";
+import { type AgentTool } from "@earendil-works/pi-agent-core";
+import { BACKGROUND_CONTEXT as context } from "@earendil-works/chord/context";
+import { MemoryStorage, ProviderDoc } from "@earendil-works/pi-durable";
+import { openDurableRuntime, routeModels } from "../src/durable/runtime.ts";
+import { DurableSessions } from "../src/durable/sessions.ts";
+import { createWorkbookCoordinator } from "../src/workbook/coordinator.ts";
+import { createModels } from "@earendil-works/pi-ai/models";
+import { fauxAssistantMessage, fauxProvider } from "@earendil-works/pi-ai/providers/faux";
 import { Type } from "typebox";
 
 import {
@@ -52,46 +54,45 @@ void test("Agent transcript diagnostics report stable prefixes and model, prompt
       }),
     };
     const sessionId = "agent-transcript-prefix-regression";
-    const agent = new Agent({
-      initialState: {
-        model: faux.getModel("prefix-a"),
-        messages: [{ role: "system", content: "base", timestamp: 0 }],
-        tools: [searchTool],
-      },
-      streamFn: createOfficeStreamFn(() => Promise.resolve(undefined), models),
+    const runtime = await openDurableRuntime({ storage: new MemoryStorage(),
+      models: routeModels(models, createOfficeStreamFn(() => Promise.resolve(undefined), models)),
+      workbookId: "prefix", coordinator: createWorkbookCoordinator(), autoCompaction: false,
+      mutationHost: { prepare: () => { throw new Error("Unexpected mutation"); }, observe: () => { throw new Error("Unexpected mutation"); } },
     });
-    agent.sessionId = sessionId;
+    try {
+      const conversation = await new DurableSessions(runtime.harness, models, faux.getModel()).create(faux.getModel("prefix-a"), "off");
+      await runtime.harness.commit(async (tx) => { (await tx.doc(ProviderDoc, conversation.id)).sessionId = sessionId; }, context);
+      await runtime.install(conversation, { tools: [searchTool], systemPrompt: "base" }, (history) => Promise.resolve(history));
+      const prompt = async (content: string): Promise<void> => {
+        const submission = await conversation.submit({ type: "input", content }, context);
+        assert.equal((await submission.wait(context)).status, "done");
+      };
+      await prompt("first turn");
+      await prompt("stable turn");
+      await conversation.configure({ model: { provider: faux.getModel().provider, modelId: "prefix-b" } }, context);
+      await runtime.install(conversation, { tools: [], systemPrompt: "base\n\nchanged" }, (history) => Promise.resolve(history));
+      await prompt("changed turn");
 
-    await agent.prompt("first turn");
-    await agent.prompt("stable turn");
+      const snapshots = getPayloadSnapshots().filter(
+        (snapshot) => snapshot.sessionId === sessionId,
+      );
+      assert.deepEqual(
+        snapshots.map((snapshot) => snapshot.prefixChangeReasons),
+        [[], [], ["model", "systemPrompt", "tools"]],
+      );
+      assert.equal(snapshots[0]?.systemChars, "base".length);
+      assert.equal(snapshots[0]?.toolCount, 1);
+      assert.equal(snapshots[0]?.toolBundle, "full");
+      assert.equal(snapshots[0]?.toolsIncluded, true);
+      assert.equal(snapshots[2]?.systemChars, "base\n\nchanged".length);
+      assert.equal(snapshots[2]?.toolCount, 0);
+      assert.equal(snapshots[2]?.toolBundle, "none");
+      assert.equal(snapshots[2]?.toolsIncluded, false);
 
-    agent.state.model = faux.getModel("prefix-b");
-    agent.state.tools = [];
-    agent.state.messages = [
-      ...agent.state.messages,
-      { role: "system", content: "changed", timestamp: 1 },
-    ];
-    await agent.prompt("changed turn");
-
-    const snapshots = getPayloadSnapshots().filter(
-      (snapshot) => snapshot.sessionId === sessionId,
-    );
-    assert.deepEqual(
-      snapshots.map((snapshot) => snapshot.prefixChangeReasons),
-      [[], [], ["model", "systemPrompt", "tools"]],
-    );
-    assert.equal(snapshots[0]?.systemChars, "base".length);
-    assert.equal(snapshots[0]?.toolCount, 1);
-    assert.equal(snapshots[0]?.toolBundle, "full");
-    assert.equal(snapshots[0]?.toolsIncluded, true);
-    assert.equal(snapshots[2]?.systemChars, "base\n\nchanged".length);
-    assert.equal(snapshots[2]?.toolCount, 0);
-    assert.equal(snapshots[2]?.toolBundle, "none");
-    assert.equal(snapshots[2]?.toolsIncluded, false);
-
-    const captured = getLastContext(sessionId);
-    assert.equal(captured?.systemPrompt, "base\n\nchanged");
-    assert.deepEqual(captured?.tools, []);
+      const captured = getLastContext(sessionId);
+      assert.equal(captured?.systemPrompt, "base\n\nchanged");
+      assert.deepEqual(captured?.tools, []);
+    } finally { await runtime.harness.close(context); }
   } finally {
     setDebugEnabled(false);
     if (priorDocument === undefined) Reflect.deleteProperty(globalThis, "document"); else Reflect.set(globalThis, "document", priorDocument);

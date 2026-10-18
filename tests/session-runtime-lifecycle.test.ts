@@ -1,211 +1,77 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { BACKGROUND_CONTEXT as context } from "@earendil-works/chord/context";
+import { createAssistantMessageEventStream, createModels, fauxProvider, fauxAssistantMessage } from "@earendil-works/pi-ai";
+import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
+import { ConversationPresenter } from "../src/durable/conversation-view.ts";
+import { DurableSessions } from "../src/durable/sessions.ts";
+import { createQueueDisplay } from "../src/taskpane/queue-display.ts";
+import { SessionRuntimeManager } from "../src/taskpane/session-runtime-manager.ts";
 
-import { Agent } from "@earendil-works/pi-agent-core";
-import { createModels, fauxProvider } from "@earendil-works/pi-ai";
-import { getBuiltinModel } from "@earendil-works/pi-ai/providers/all";
-
-import { settingsBackedSessionStorage } from "../src/host/session-storage.ts";
-import { initAppStorage } from "../src/storage/init-app-storage.ts";
-import type { StorageBackend, StorageTransaction } from "../src/storage/local/types.ts";
-import type { ActionQueue } from "../src/taskpane/action-queue.ts";
-import type { QueueDisplay } from "../src/taskpane/queue-display.ts";
-import { SessionRuntimeManager, type SessionRuntime } from "../src/taskpane/session-runtime-manager.ts";
-import { setupSessionPersistence } from "../src/taskpane/sessions.ts";
-
-class MemoryStorageBackend implements StorageBackend {
-  private readonly stores = new Map<string, Map<string, unknown>>();
-
-  private store(name: string): Map<string, unknown> {
-    const existing = this.stores.get(name);
-    if (existing) return existing;
-    const created = new Map<string, unknown>();
-    this.stores.set(name, created);
-    return created;
-  }
-
-  get<T = unknown>(storeName: string, key: string): Promise<T | null> {
-    const value = this.store(storeName).get(key);
-    return Promise.resolve(value === undefined ? null : structuredClone(value) as T);
-  }
-
-  set<T = unknown>(storeName: string, key: string, value: T): Promise<void> {
-    this.store(storeName).set(key, structuredClone(value));
-    return Promise.resolve();
-  }
-
-  delete(storeName: string, key: string): Promise<void> {
-    this.store(storeName).delete(key);
-    return Promise.resolve();
-  }
-
-  keys(storeName: string, prefix?: string): Promise<string[]> {
-    const keys = [...this.store(storeName).keys()];
-    return Promise.resolve(prefix ? keys.filter((key) => key.startsWith(prefix)) : keys);
-  }
-
-  getAllFromIndex<T = unknown>(storeName: string): Promise<T[]> {
-    return Promise.resolve([...this.store(storeName).values()].map((value) => structuredClone(value)) as T[]);
-  }
-
-  clear(storeName: string): Promise<void> {
-    this.store(storeName).clear();
-    return Promise.resolve();
-  }
-
-  has(storeName: string, key: string): Promise<boolean> {
-    return Promise.resolve(this.store(storeName).has(key));
-  }
-
-  transaction<T>(
-    _storeNames: string[],
-    _mode: "readonly" | "readwrite",
-    operation: (tx: StorageTransaction) => Promise<T>,
-  ): Promise<T> {
-    return operation({
-      get: <V = unknown>(storeName: string, key: string) => this.get<V>(storeName, key),
-      set: <V = unknown>(storeName: string, key: string, value: V) => this.set(storeName, key, value),
-      delete: (storeName: string, key: string) => this.delete(storeName, key),
-    });
-  }
-
-  getQuotaInfo(): Promise<{ usage: number; quota: number; percent: number }> {
-    return Promise.resolve({ usage: 0, quota: 0, percent: 0 });
-  }
-
-  requestPersistence(): Promise<boolean> {
-    return Promise.resolve(true);
-  }
-}
-
-const actionQueue: ActionQueue = {
-  enqueuePrompt: () => {},
-  enqueueCommand: () => {},
-  drainQueuedActions: () => [],
-  isBusy: () => false,
-  shutdown: () => {},
-};
-
-function createQueueDisplay(): QueueDisplay {
-  return {
-    add: () => {},
-    clear: () => {},
-    drainQueuedMessages: () => [],
-    setActionQueue: () => {},
-    attach: () => {},
-    detach: () => {},
-  };
-}
-
-function createEnvironment() {
-  const backend = new MemoryStorageBackend();
-  const { sessions, settings } = initAppStorage("session-runtime-lifecycle", backend);
-  const faux = fauxProvider();
+void test("model selection configures native conversations and forks immutable ancestry", async () => {
   const models = createModels();
+  const faux = fauxProvider({ models: [{ id: "first" }, { id: "second" }] });
   models.setProvider(faux.provider);
-  let nextRuntime = 1;
-
-  const createRuntime = async (autoRestoreLatest: boolean): Promise<SessionRuntime> => {
-    const agent = new Agent({
-      initialState: {
-        model: getBuiltinModel("openai", "gpt-5.6-sol"),
-        messages: [],
-        tools: [],
-      },
-      streamFn: (model, context, options) => models.streamSimple(model, context, options),
-    });
-    const persistence = await setupSessionPersistence({
-      agent,
-      sessions,
-      settings,
-      models,
-      autoRestoreLatest,
-      spreadsheetHost: {
-        getWorkbookContext: () => Promise.resolve({
-          workbookId: "url_sha256:runtime-lifecycle-workbook",
-          workbookName: null,
-          source: "document.url",
-        }),
-        sessionStorage: settingsBackedSessionStorage,
-      },
-    });
-    const runtimeId = `runtime-${nextRuntime}`;
-    nextRuntime += 1;
-    return {
-      runtimeId,
-      agent,
-      persistence,
-      actionQueue,
-      queueDisplay: createQueueDisplay(),
-      lockState: "idle",
-      refreshCapabilities: () => Promise.resolve(),
-      dispose: () => persistence.dispose(),
-    };
-  };
-
-  const manager = new SessionRuntimeManager({
-    createRuntime: (options) => createRuntime(options.autoRestoreLatest),
-  });
-  return { manager, createRuntime };
-}
-
-void test("runtime tab snapshots follow create, switch, and close lifecycle", async () => {
-  const environment = createEnvironment();
-  const first = await environment.manager.createRuntime({ activate: true, autoRestoreLatest: false });
-  const second = await environment.manager.createRuntime({ activate: false, autoRestoreLatest: false });
-
-  assert.deepEqual(environment.manager.snapshot(), {
-    activeRuntimeId: first.runtimeId,
-    tabs: [
-      {
-        runtimeId: first.runtimeId,
-        title: "Chat 1",
-        isActive: true,
-        isStreaming: false,
-        isBusy: false,
-        lockState: "idle",
-      },
-      {
-        runtimeId: second.runtimeId,
-        title: "Chat 2",
-        isActive: false,
-        isStreaming: false,
-        isBusy: false,
-        lockState: "idle",
-      },
-    ],
-  });
-
-  environment.manager.switchRuntime(second.runtimeId);
-  environment.manager.closeRuntime(second.runtimeId);
-  assert.deepEqual(environment.manager.snapshot().tabs.map((tab) => ({
-    runtimeId: tab.runtimeId,
-    isActive: tab.isActive,
-  })), [{ runtimeId: first.runtimeId, isActive: true }]);
-});
-
-void test("fork preference updates an empty session in place and survives restart", async () => {
-  const environment = createEnvironment();
-  const runtime = await environment.manager.createRuntime({ activate: true, autoRestoreLatest: false });
-  const sessionId = runtime.persistence.getSessionId();
-
-  const result = await environment.manager.selectModel({
-    runtimeId: runtime.runtimeId,
-    nextModel: getBuiltinModel("openai-codex", "gpt-5.6-sol"),
-    behavior: "fork",
-  });
-  assert.equal(result.outcome, "updated");
-  assert.equal(environment.manager.snapshot().tabs.length, 1);
-  runtime.agent.state.messages.push({
-    role: "user",
-    content: "message after choosing the model",
-    timestamp: 1_789_030_800_000,
-  });
-  await runtime.persistence.saveSession({ force: true });
-  runtime.dispose();
-
-  const restarted = await environment.createRuntime(true);
-  assert.equal(restarted.persistence.getSessionId(), sessionId);
-  assert.equal(restarted.agent.state.model.provider, "openai-codex");
-  restarted.dispose();
+  const firstModel = faux.getModel("first");
+  const secondModel = faux.getModel("second");
+  const harness = await Harness.open(new MemoryStorage(), { models, registry: createRegistry() }, context);
+  const sessions = new DurableSessions(harness, models, firstModel);
+  const views: ConversationPresenter[] = [];
+  const manager = new SessionRuntimeManager({ sessions, createRuntime: async (options) => {
+    const conversation = options.conversationId ? await sessions.resolve(options.conversationId)
+      : await sessions.create(firstModel, "high");
+    assert.ok(conversation);
+    const view = await ConversationPresenter.open(harness, conversation, models, firstModel);
+    views.push(view);
+    const session = await sessions.loadSession(String(conversation.id));
+    return { runtimeId: `runtime-${views.length}`, view, tools: [], title: session?.title ?? "",
+      hasExplicitTitle: options.conversationId !== undefined, lockState: "idle",
+      refreshCapabilities: async () => {}, dispose: () => { void view.dispose(); },
+      queueDisplay: createQueueDisplay({ view }) };
+  } });
+  try {
+    const runtime = await manager.createRuntime({ activate: true, autoRestoreLatest: false });
+    assert.equal((await manager.selectModel({ runtimeId: runtime.runtimeId, nextModel: secondModel, behavior: "fork" })).outcome, "updated");
+    assert.equal((await runtime.view.conversation.agent(context)).model?.modelId, secondModel.id);
+    assert.equal((await manager.selectModel({ runtimeId: runtime.runtimeId, nextModel: secondModel, behavior: "fork" })).outcome, "unchanged");
+    await harness.commit((tx) => tx.appendEntry(runtime.view.conversation.id, {
+      kind: "test.message", model: [{ role: "user", content: "Keep immutable", timestamp: 1 }],
+    }), context);
+    // Reopen the projection to observe the complete committed timeline.
+    await runtime.view.dispose();
+    runtime.view = await ConversationPresenter.open(harness, runtime.view.conversation, models, firstModel);
+    views.push(runtime.view);
+    const result = await manager.selectModel({ runtimeId: runtime.runtimeId, nextModel: firstModel, behavior: "fork" });
+    assert.equal(result.outcome, "forked");
+    if (result.outcome !== "forked") throw new Error("Expected fork");
+    assert.equal((await harness.commit((tx) => tx.conversation(result.runtime.view.conversation.id), context))?.parent?.conversationId,
+      runtime.view.conversation.id);
+    assert.deepEqual(result.runtime.view.current.messages, runtime.view.current.messages);
+    assert.equal(result.runtime.view.current.thinkingLevel, "high");
+    assert.equal(result.runtime.view.current.model.id, firstModel.id);
+    assert.equal((await runtime.view.conversation.agent(context)).model?.modelId, secondModel.id);
+    assert.equal(manager.getActiveRuntime(), result.runtime);
+    assert.equal(manager.snapshotTabs()[1]?.title, result.title);
+    const source = createAssistantMessageEventStream();
+    let started: () => void = () => {};
+    const requestStarted = new Promise<void>((resolve) => { started = resolve; });
+    models.setProvider({ ...faux.provider, streamSimple: () => { started(); return source; } });
+    const running = await runtime.view.conversation.submit({ type: "input", content: "Continue after tab close" }, context);
+    await requestStarted;
+    const queued = await runtime.view.conversation.submit({ type: "input", content: "Queued" }, context);
+    await runtime.view.refresh();
+    assert.equal(manager.snapshotTabs()[0]?.isBusy, true);
+    assert.equal(runtime.view.current.inbox.length, 1);
+    assert.equal((await manager.selectModel({ runtimeId: runtime.runtimeId, nextModel: firstModel, behavior: "fork" })).outcome, "busy");
+    manager.closeRuntime(runtime.runtimeId);
+    // Closing the UI must not abort either active or queued Durable submissions.
+    faux.setResponses([fauxAssistantMessage("Queued completed")]);
+    models.setProvider(faux.provider);
+    source.push({ type: "done", reason: "stop", message: fauxAssistantMessage("Finished after closing") });
+    assert.equal((await running.wait(context)).status, "done");
+    assert.equal((await queued.wait(context)).status, "done");
+  } finally {
+    for (const view of views) await view.dispose();
+    await harness.close(context);
+  }
 });

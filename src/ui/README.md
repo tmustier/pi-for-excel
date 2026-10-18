@@ -20,7 +20,12 @@ The sidebar UI is first-party end to end:
 └────────────────────────────────────────────────────┘
 ```
 
-`pi-sidebar` subscribes to the `Agent` directly and passes messages/tools/streaming state down as properties to the message components.
+`pi-sidebar.view` subscribes to a `ConversationPresenter`, a read-only projection
+of committed Durable data. It renders `view.current` history, pending tools and
+live generation partials (including on late attachment or tab switches), and
+derives compaction progress from `current.live.compactions`. Runtime wiring
+passes the separate `sidebar.tools` UI tool definitions. The sidebar neither
+executes a conversation nor consumes synthetic Agent events.
 
 ### Message component modules (`src/ui/messages/`)
 
@@ -79,7 +84,7 @@ visibility utilities that shell components toggle.
 > - `theme/preflight.css` (1b)
 > - `theme/base.css` (2)
 > - `theme/components.css` (3–10, import-only entrypoint) → imports `theme/components/{tabs,input,empty-state,working-indicator,widgets,status-bar,toasts,menus,welcome,files,welcome-login}.css`
-> - `theme/overlays.css` (10b) → imports `theme/overlays/{primitives,extensions,integrations,skills,provider-resume-shortcuts,recovery,experimental}.css`
+> - `theme/overlays.css` (10b) → imports `theme/overlays/{primitives,settings-shell,provider-resume-shortcuts,recovery,settings,experimental,durable}.css`
 > - `theme/content-overrides.css` (11) → imports `theme/content/{messages,tool-cards,csv-table,dependency-tree,tool-card-markdown,message-components}.css`
 > - `theme/dialogs.css` (12, stable selectors)
 > - `theme/queue.css` (13)
@@ -124,7 +129,7 @@ Message components use Light DOM (`createRenderRoot() { return this; }`), so the
 
 | File | Replaces | Notes |
 |---|---|---|
-| `pi-sidebar.ts` | ChatPanel + AgentInterface | Owns layout, subscribes to Agent, renders message-list + streaming container + working indicator |
+| `pi-sidebar.ts` | ChatPanel + AgentInterface | Owns layout, subscribes to ConversationPresenter, renders message-list + streaming container + working indicator |
 | `pi-input.ts` | MessageEditor | Auto-growing textarea, send/abort buttons, `+` input actions menu, file import affordances; fires `pi-send` / `pi-abort` / `pi-files-drop` / `pi-input-action` events |
 | `messages/*` | pi-web-ui Messages, MessageList, StreamingMessageContainer, ThinkingBlock, AttachmentTile + mini-lit MarkdownBlock/CodeBlock | First-party message rendering (see table above) |
 | `icons.ts` | mini-lit `icon`/`iconDOM` | Lucide icon helpers sized via SVG attributes |
@@ -137,10 +142,47 @@ Message components use Light DOM (`createRenderRoot() { return this; }`), so the
 | `overlay-dialog.ts` | — | Shared overlay lifecycle helper (single-instance toggle, Escape/backdrop close, focus restore) + shared overlay chrome/DOM builders (`createOverlayCloseButton`, `createOverlayHeader`, `createOverlayButton`, `createOverlayInput`, `createOverlaySectionTitle`) |
 | `overlay-ids.ts` | — | Shared overlay id constants used across builtins/extensions/taskpane |
 
-## Wiring (taskpane.ts)
+## Wiring (taskpane runtime)
 
-`taskpane.ts` creates the `Agent`, mounts `PiSidebar`, and wires:
-- `sidebar.onSend` / `sidebar.onAbort` → agent.prompt() / agent.abort()
+Mount `mountDurableControls(host, runtime, history)` from `durable-controls.ts`
+outside the model transcript. Its styles live in `theme/overlays/durable.css`.
+It reads authoritative `runtime.reviews()` (including legacy evidence). The runtime type is
+`Pick<Awaited<ReturnType<typeof openDurableRuntime>>, 'reviews' | 'mutations' | 'harness'>`.
+Call the returned `refresh(): Promise<void>` after committed runtime changes;
+call `dispose(): void` before switching runtimes or removing the host.
+Inspection uses `mutations.reconcile(id)`; acknowledgement uses
+`mutations.resolve(id, observationToken)`. Failed acknowledgement discards the
+old acceptance and fetches a fresh observation; it never retries automatically.
+
+Inject `DurableHistoryCallbacks`: `listScopes()` returns
+`{ id, generation, name, current, identityDurable }[]`; `inspectSessions(scopeId)`
+returns metadata `{ id, name, completed }[]`; `copyCompletedHistory(scopeId,
+sessionId)` copies **only completed history into the current scope**, never pending
+tasks or execution state; `deleteGeneration(scopeId)` explicitly deletes only
+the selected obsolete generation. All callbacks return promises. The parent
+must validate scope/session eligibility again when copying/deleting (including
+rejecting deletion of the current scope), and handle storage concurrency.
+The controls perform no storage operations or workbook writes. Unidentified WPS
+users can explicitly select retained history; no identity match or age-based
+deletion is inferred. `taskpane/init.ts` mounts these controls and refreshes them
+on pending-index commits. `durable/retained-history.ts` supplies the callbacks:
+it opens foreign generations paused, copies completed sessions without execution
+state, and leaves pending sessions and their mutation evidence in the source.
+Unknown legacy attribution prevents transfer until reviewed. Save As creates a
+separate execution scope; the controls retain access to completed old history.
+
+The `/revert` and backup-overlay restore actions, and the development bridge's
+direct tool command, use `runtime.executeTool`. This is a native Durable task
+with a journaled dispatch boundary, not a synthetic model turn. It shares the
+model-tool mutation gate and never replays an interrupted write. Trusted
+extension code can still access host globals directly; those calls are outside
+the supported tool dispatch boundary.
+
+Taskpane initialization and runtime-sidebar binding mount `PiSidebar` and wire:
+- `sidebar.view` → active runtime's `ConversationPresenter`; `sidebar.tools` → runtime UI tool definitions
+- `sidebar.syncFromConversation()` → explicit re-render of the current committed projection when needed
+- `sidebar.onSend` / `sidebar.onAbort` → runtime submission/abort handling on the actual Durable `Conversation`
+- Status bar → active presenter provider (`getActiveConversation`), reading `current` and subscribing to committed snapshots
 - Keyboard shortcuts (Enter, Escape, Shift+Tab for thinking) via `document.addEventListener("keydown")`
 - Slash command menu via `wireCommandMenu(sidebar.getTextarea())`
-- Session persistence (auto-save on message_end, auto-restore latest on init)
+- Durable harness owns conversation persistence and live state; UI archive buckets remain presentation-only and do not count toward context estimates

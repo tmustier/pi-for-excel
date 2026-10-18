@@ -7,6 +7,7 @@
 
 import type { SpreadsheetHostKind } from "../host/index.js";
 import { createCoreTools, type AnyCoreTool } from "./registry.js";
+import type { WriteCellsHooks } from "./write-cells.js";
 import { selectOfficeCoupledToolForHost } from "./host-selection.js";
 import type { SkillReadCache } from "../skills/read-cache.js";
 import { createTmuxTool } from "./tmux.js";
@@ -23,6 +24,7 @@ import {
 
 export interface CreateAllToolsOptions {
   hostKind?: SpreadsheetHostKind;
+  writeCellsHooks?: WriteCellsHooks;
   getExtensionManager?: () => ExtensionsManagerToolRuntime | null;
   getSessionId?: () => string | null;
   skillReadCache?: SkillReadCache;
@@ -41,6 +43,7 @@ export function createAllTools(options: CreateAllToolsOptions = {}): AnyCoreTool
     ...createCoreTools({
       hostKind,
       skills,
+      ...(options.writeCellsHooks ? { writeCellsHooks: options.writeCellsHooks } : {}),
     }),
     createTmuxTool(),
     createPythonRunTool(),

@@ -1,0 +1,110 @@
+/* Taskpane strip: one compact line when idle, a prominent warning while reviews are pending. */
+.pi-durable-controls {
+  position: relative;
+  flex-shrink: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  padding: 6px 12px;
+  border-top: var(--pi-divider);
+  color: var(--muted-foreground);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+.pi-durable-controls--pending {
+  border-left: 3px solid var(--pi-amber);
+  background: var(--amber-alpha-8);
+  color: var(--foreground);
+}
+.pi-durable-status { flex: 1 1 140px; min-width: 0; }
+/* Idle: nothing to warn about, so the strip is one line of entry points; the status stays announced. */
+.pi-durable-controls:not(.pi-durable-controls--pending) .pi-durable-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.pi-durable-controls--pending .pi-durable-status { flex-basis: 100%; font-weight: 600; }
+.pi-durable-list,
+.pi-durable-controls > [role] { flex-basis: 100%; }
+.pi-durable-list { display: flex; flex-direction: column; gap: 4px; }
+.pi-durable-list:empty,
+.pi-durable-controls > [role]:empty { display: none; }
+.pi-durable-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.pi-durable-row > span { min-width: 0; }
+.pi-durable-row > button { flex-shrink: 0; }
+.pi-durable-actions { display: flex; flex-wrap: wrap; gap: 4px; }
+.pi-durable-controls [role="alert"]:not(:empty) { border-left: 3px solid var(--destructive); padding: 4px 8px; color: var(--foreground); }
+
+.pi-durable-dialog {
+  color: var(--foreground);
+  background: var(--background);
+  padding: 12px;
+  font-size: var(--text-base);
+  overflow-wrap: anywhere;
+  width: min(100%, 350px);
+  max-height: 90vh;
+  overflow-y: auto;
+  border-radius: var(--radius-xl);
+}
+.pi-durable-dialog p { margin-block: 8px; }
+.pi-durable-dialog section { border-top: 1px solid var(--border); margin-top: 12px; padding-top: 12px; }
+.pi-durable-dialog section button { margin: 4px; white-space: normal; }
+.pi-durable-dialog pre { white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--font-mono); font-size: 11px; margin-block: 8px; }
+.pi-durable-dialog button:focus-visible,
+.pi-durable-controls button:focus-visible,
+.pi-durable-dialog summary:focus-visible,
+.pi-durable-outcome-title:focus-visible { outline: 2px solid var(--foreground); outline-offset: 2px; }
+
+/* Review: decision content first, forensic evidence collapsed last. */
+.pi-durable-review,
+.pi-durable-inspection { display: flex; flex-direction: column; gap: 10px; }
+.pi-durable-review { margin-top: 12px; }
+.pi-durable-review p { margin: 0; }
+.pi-durable-review .pi-durable-evidence p { margin-block: 8px; }
+.pi-durable-facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 12px; margin: 0; }
+.pi-durable-facts:empty { display: none; }
+.pi-durable-facts dt { color: var(--muted-foreground); font-size: var(--text-sm); }
+.pi-durable-facts dd { margin: 0; white-space: pre-line; }
+.pi-durable-outcome {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px solid var(--alpha-8);
+  border-radius: var(--radius-md);
+  padding: 8px 10px;
+}
+.pi-durable-outcome-title { margin: 0; font-size: var(--text-base); font-weight: 600; }
+.pi-durable-muted { color: var(--muted-foreground); font-size: var(--text-sm); }
+.pi-durable-warning {
+  border-left: 3px solid var(--pi-amber);
+  background: var(--amber-alpha-8);
+  border-radius: var(--radius-xs);
+  padding: 8px 10px;
+  font-size: var(--text-sm);
+}
+.pi-durable-alerts:empty { display: none; }
+.pi-durable-alerts { display: flex; flex-direction: column; gap: 4px; }
+.pi-durable-alerts [role="alert"] { border-left: 3px solid var(--destructive); padding: 4px 8px; }
+/* Keep decisions reachable with a long outcome and while scrolling expanded evidence. */
+.pi-durable-review-actions {
+  position: sticky;
+  /* Match the card inset so scrolled content cannot peek beyond the action surface. */
+  top: -12px;
+  bottom: -12px;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-inline: -12px;
+  padding: 8px 12px 12px;
+  border-top: 1px solid var(--border);
+  background: var(--background);
+}
+.pi-durable-review-actions button { white-space: normal; }
+.pi-durable-evidence > summary { cursor: pointer; color: var(--muted-foreground); font-size: var(--text-sm); }
+.pi-durable-evidence h4 { margin-top: 8px; font-size: var(--text-sm); font-weight: 600; }
