@@ -1,11 +1,11 @@
-# Pi 1.3 upgrade and Pi Durable evaluation
+# Pi 1.3 upgrade and Pi Durable migration
 
-**Status:** Step 1 tested in Excel and merged (#765). Step 2 implemented, tested in Chromium and tested in Excel. We have decided to migrate to Pi Durable (Step 3). The first task is to fix recovery after a pane reload, which does not work in Excel as built.
+Status: Step 1 merged in #765. PR #769 replaces the taskpane Agent runtime with Durable and includes the seven Step 3 implementation areas below. The reload recovery fix has passed component tests in Excel. Final acceptance of the integrated runtime remains open and currently needs restored Mac host access. See the [verification record](../durable-migration-verification.md).
 **Written:** 2026-10-17
 
 ## Summary
 
-Pi for Excel ships `@earendil-works/pi-ai` and `@earendil-works/pi-agent-core` at 0.87.0, and the latest published versions are 1.3.0. We plan to upgrade the existing runtime to 1.3.0 first, and to evaluate Pi Durable separately in a prototype.
+The Pi 1.3 upgrade merged in #765. PR #769 contains the full Durable migration. The earlier upgrade research and prototype findings remain below as decision history.
 
 We considered moving straight to Pi Durable, because the version gap means we have to do migration work anyway. The evidence below shows that the upgrade is small, while a Durable migration would replace our session, queue, and compaction code and would not solve the hardest Excel problem.
 
@@ -248,7 +248,9 @@ In one run the model told the user the write had succeeded, although the tool re
 
 The test runs left five small Durable databases in the pane's IndexedDB, one per scratch workbook. They hold only test values, and nothing reads them while the flag is off.
 
-### Run the remaining Excel checks on the Mac
+### Historical prototype test procedure
+
+These commands record the prototype procedure. Its runtime flag is now retired. For the current integrated acceptance run, use ordinary taskpane chat and the [verification record](../durable-migration-verification.md), following the current background verification skill.
 
 Use the existing `.agents/skills/excel-background-verification/SKILL.md` setup from this branch. Keep the bridge loopback only and token protected. Use a dev build, a trusted manifest and a newly saved scratch workbook. Do not clear WebKit data during a recovery test because that deletes the evidence. Do not use a valuable workbook. Keep ordinary chat idle throughout a prototype run.
 

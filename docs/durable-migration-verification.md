@@ -64,6 +64,42 @@ A subsequent attempt exhausted the remaining background entry points. Creating a
 
 Implementation and isolated browser validation can continue. Fresh independent Excel persistence acceptance still requires restored host access; the earlier component results are not a waiver for the final runtime.
 
+## Integrated automated verification
+
+Runtime revision `b20d0c7` passes every required local suite. Documentation-only updates follow that revision.
+
+| Command | Result |
+| --- | --- |
+| `npm run check` | Pass |
+| `npm test` | 984 pass |
+| `npm run test:models` | 39 pass |
+| `npm run test:context` | 639 pass |
+| `npm run test:security` | 87 pass |
+| `npm run test:browser` | 122 pass |
+| `npm run build` | Pass |
+
+These checks exercise real Durable Harness instances with synthetic model and Office responses. They support the implementation but do not replace live model tests in Excel.
+
+| Step 3 requirement | Implementation and automated evidence |
+| --- | --- |
+| Interrupted model requests | `src/durable/model-recovery.ts`; model recovery and native recovery tests |
+| Mutation intent and explicit resolution | `mutations.ts`, `mutation-host.ts`, coordinator dispatch gate and mutation host/runtime/browser tests; review controls refuse stale observations |
+| Storage lifecycle | IndexedDB storage, codec and lifecycle modules; browser conformance, checkpoint, corruption, generation and ownership tests |
+| Existing sessions | Session import and retained-history modules; original JSON retention, compacted/archive import, duplicate import and cold-history tests |
+| Chat, tabs, history, export, queues and compaction | Native sessions, conversation projection, inbox and compaction policy; session, inbox, chat projection, compaction and taskpane browser tests |
+| Extension reads and events | Durable-backed extension API and read-only event projection; sandbox provider/tool tests and real-Harness partial tool update tests, including image content and final receipt/export isolation |
+| Sole runtime | Taskpane initialization and retired-flag browser tests; no Agent executor, replaced snapshot writer, action scheduler or execution compaction path remains |
+
+Structural observations now retain stable sheet/table IDs, full intended bands and sparse values/formulas around row/column boundaries or the used sheet extent. Geometry reads never load the whole used area's contents into JavaScript. The original samples survive sheet deletion and explicit resolution; sheet names never substitute for missing IDs. Sampling choices are labeled agent defaults. These hints cannot prove stable row identities or complete deletion/duplication outcomes and never authorize replay. All 20 mutation-host tests pass; the two follow-ups each include regressions that fail against their preceding implementation.
+
+## Rendered review controls
+
+The review dialog now leads with the operation, target, observation, cell values and acceptance warning. Full original and current evidence remains available in a collapsed disclosure. Acknowledgement still rechecks the observation and never writes the workbook or proves the original operation succeeded.
+
+The coordinator inspected narrow and desktop screenshots of the changed element and the actual taskpane bundle with the Chromium Office fixture. At 350 by 780 pixels, the fresh review card is 605 pixels tall and its acknowledgement button ends at 652 pixels. No card scrolling is needed. The idle controls strip uses 38 pixels, down from 103. The stale-observation state preserves the refusal, displays new values and requires a fresh acknowledgement. These are browser screenshots, not Excel screenshots. [Taskpane fixture screenshots](https://github.com/tmustier/pi-for-excel/pull/769#issuecomment-6244411874) and [coordinator screenshots and test results](https://github.com/tmustier/pi-for-excel/pull/769#issuecomment-6244693226).
+
+Visual review found consistent theme fonts, spacing, alignment and contrast, no horizontal overflow or broken images, and visible actions at narrow width. Evidence expansion, fresh inspection, unavailable inspection, stale-token refusal, successful acknowledgement and explicit obsolete-generation deletion pass browser interaction tests. Sheet-level reviews also display the name attached to the recorded original ID when no cell range exists. Five formatter regressions cover deletion, duplication, new-sheet identity, missing IDs and row bands; restoring the old guard makes the deletion and duplication assertions fail. The sheet review was rendered and inspected at narrow width.
+
 ## Remaining acceptance
 
-These checks establish recovery in the prototype path only. Repeat them after integrating the full runtime migration. Session migration, extension behavior, compaction, queues, mutation reconciliation and resolution, storage lifecycle, rendered UI, and all validation suites still need final integrated evidence before the migration is complete.
+The earlier live model checks establish recovery in the component path. Repeat them through ordinary chat on the final integrated runtime. Independently verify cells, formulas, structure and persisted data for session import/export, representative extensions, automatic/manual compaction and overflow, queues, every mutation recovery class and user conflict, provider/proxy/WebSocket transport, two-pane takeover and the storage lifecycle. Current Mac host access prevents those final checks. None is waived by the passing browser suites or screenshots.

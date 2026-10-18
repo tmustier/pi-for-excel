@@ -1,6 +1,6 @@
 # Upstream divergences from pi-mono
 
-**Last reviewed:** 2026-07-16
+Last reviewed: 2026-10-18
 
 This document records every place Pi for Excel intentionally diverges from
 [pi-mono](https://github.com/badlogic/pi-mono) / `@earendil-works/pi-coding-agent`
@@ -43,15 +43,15 @@ pi-mono parity (in-place), and kept fork as an advanced opt-in setting.
 
 | | pi-mono | Pi for Excel |
 |---|---|---|
-| When tools change | Direct `setTools()` on explicit user action | Event-driven capability refreshes; apply `setTools()` only when tool fingerprint or extension tool revision changes |
+| When tools change | Direct `setTools()` on explicit user action | Event-driven native registry updates when the tool fingerprint or extension tool revision changes |
 
 **Rationale:** This is not a disagreement with upstream — it's compensating for
 a different lifecycle. Pi-mono's tool set only changes when the user explicitly
 does something (e.g. `/tools`). In Excel, capability refresh passes run on many
 events (focus/visibility return, integrations/connections/skills/rules/execution-mode/experimental updates, extension activation).
 
-Each refresh rebuilds tool objects. Without a guard, every pass would assign
-`agent.state.tools = ...` even when schema metadata is identical.
+Each refresh rebuilds tool objects. Without a guard, every pass would replace
+the native registry capabilities even when schema metadata is identical.
 
 We therefore gate tool updates by:
 - stable metadata fingerprint (`name`, `label`, `description`, `parameters`)
@@ -289,7 +289,8 @@ main runtime prefix) but **deferred** it — see
 
 ### Session ID stability
 
-Both keep `agent.sessionId` stable for the lifetime of a session. No divergence.
+Both keep the provider session ID stable for the lifetime of a chat conversation.
+Pi for Excel persists that identity and forwards it through the Models adapter.
 
 ### Tool disclosure on continuations
 
