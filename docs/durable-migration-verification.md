@@ -58,7 +58,9 @@ Generation expectations, the storage UI, explicit cleanup, concurrent ownership 
 
 At 00:16 UTC on 18 October 2026, this session could no longer enumerate Excel's WebKit storage. Node and both Python interpreters returned filesystem permission errors. Apple Events to Excel also returned error -1743. Earlier direct SQLite reads above succeeded before the permission failure.
 
-The persistence inspector now reports denied access explicitly instead of letting `pathlib.glob` return an empty list and falsely implying no databases exist. Its permission regression fails against the previous implementation and passes with the fix; all four inspector tests pass locally. Accessibility remains usable, and the generated scratch workbook was closed through the native File menu without deleting app data.
+The persistence inspector now reports denied access explicitly instead of letting `pathlib.glob` return an empty list and falsely implying no databases exist. Its permission regression fails against the previous implementation and passes with the fix; all four inspector tests pass locally. Accessibility still worked at that point, and the generated scratch workbook was closed through the native File menu without deleting app data.
+
+A subsequent attempt exhausted the remaining background entry points. Creating a fresh scratch workbook in Excel's container failed with `PermissionError`. Creating a tagged workbook in the task's temporary directory succeeded, but opening it through background LaunchServices produced no bridge client. Computer Use then failed twice with `bootstrapTimedOut`, and the standalone accessibility reader reported no Excel windows. The first foreground observation was Excel, so the attempt could not establish background verification. No model prompt ran; the owned test servers were stopped and the shared lane released.
 
 Implementation and isolated browser validation can continue. Fresh independent Excel persistence acceptance still requires restored host access; the earlier component results are not a waiver for the final runtime.
 
