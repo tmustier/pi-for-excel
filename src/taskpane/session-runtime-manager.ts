@@ -236,7 +236,14 @@ export class SessionRuntimeManager {
     this.refreshRequested = true;
     if (this.refreshPromise) return this.refreshPromise;
 
-    this.refreshPromise = this.runCapabilityRefreshes();
+    this.refreshPromise = this.runCapabilityRefreshes().finally(() => {
+      // Even an empty pass must release the slot after its Promise is assigned.
+      // Release before notifying listeners so they can request a fresh pass.
+      this.refreshPromise = null;
+      // A request may arrive after the loop drains but before this continuation.
+      if (this.refreshRequested) return this.refreshCapabilities();
+      return this.emit();
+    });
     return this.refreshPromise;
   }
 
@@ -300,27 +307,18 @@ export class SessionRuntimeManager {
   }
 
   private async runCapabilityRefreshes(): Promise<void> {
-    try {
-      while (this.refreshRequested) {
-        this.refreshRequested = false;
-        const runtimes = this.listRuntimes();
+    while (this.refreshRequested) {
+      this.refreshRequested = false;
+      const runtimes = this.listRuntimes();
 
-        for (const runtime of runtimes) {
-          try {
-            await runtime.refreshCapabilities();
-          } catch (error) {
-            this.warnCapabilityRefresh(error);
-          }
+      for (const runtime of runtimes) {
+        try {
+          await runtime.refreshCapabilities();
+        } catch (error) {
+          this.warnCapabilityRefresh(error);
         }
       }
-    } finally {
-      // Release the in-flight slot before notifying listeners so a refresh
-      // requested from a snapshot listener starts a new pass instead of being
-      // coalesced into this finished one.
-      this.refreshPromise = null;
     }
-
-    this.emit();
   }
 
   private emit(): void {

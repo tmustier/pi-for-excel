@@ -33,6 +33,9 @@ void test("native runtime lifecycle owns tab identity, rename, subscriptions and
     return runtime;
   } });
   try {
+    // Startup refreshes can arrive before any tabs exist; they must not strand
+    // the in-flight slot and suppress later extension capability updates.
+    await manager.refreshCapabilities();
     const first = await manager.createRuntime({ activate: true, autoRestoreLatest: false });
     const second = await manager.createRuntime({ activate: false, autoRestoreLatest: false });
     assert.deepEqual(manager.snapshotTabs().map((tab) => tab.title), ["Chat 1", "Chat 2"]);
@@ -70,6 +73,37 @@ void test("native runtime lifecycle owns tab identity, rename, subscriptions and
     unsubscribe();
   } finally {
     for (const view of views) await view.dispose();
+    await harness.close(context);
+  }
+});
+
+void test("a refresh requested while an empty startup pass settles reaches newly registered tabs", async () => {
+  const models = createModels();
+  const faux = fauxProvider();
+  models.setProvider(faux.provider);
+  const model = faux.getModel();
+  const harness = await Harness.open(new MemoryStorage(), { models, registry: createRegistry() }, context);
+  const sessions = new DurableSessions(harness, models, model);
+  const conversation = await sessions.create(model, "off");
+  const view = await ConversationPresenter.open(harness, conversation, models, model);
+  let refreshes = 0;
+  const manager = new SessionRuntimeManager({ sessions, createRuntime: () => {
+    throw new Error("This contract registers an existing runtime");
+  } });
+  try {
+    const startup = manager.refreshCapabilities();
+    manager.registerRuntime({
+      runtimeId: "first-tab", view, tools: [], title: "", hasExplicitTitle: false,
+      lockState: "idle", refreshCapabilities: () => { refreshes += 1; return Promise.resolve(); },
+      dispose: () => {}, queueDisplay: createQueueDisplay({ view }),
+    });
+    const requested = manager.refreshCapabilities();
+    await Promise.all([startup, requested]);
+    assert.equal(refreshes, 1, "the coalesced caller awaits the newly requested pass");
+    await manager.refreshCapabilities();
+    assert.equal(refreshes, 2, "subsequent passes remain available");
+  } finally {
+    await view.dispose();
     await harness.close(context);
   }
 });
