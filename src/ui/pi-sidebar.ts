@@ -15,7 +15,6 @@ import type { StreamingMessageContainer } from "./messages/streaming-message-con
 import { Archive, ChevronRight, FileText, Keyboard, Puzzle, RotateCcw, Ruler, Settings, Wrench } from "lucide";
 import "./pi-input.js";
 import "./working-indicator.js";
-import { initToolGrouping } from "./tool-grouping.js";
 import {
   endOpenThinking,
   forgetOpenThinking,
@@ -195,13 +194,11 @@ export class PiSidebar extends LitElement {
   private _unsubscribe: (() => void) | undefined;
   /** Results of tools that finished before their batch did (see MessageList.liveToolResults). */
   private _liveToolResults = new Map<string, ToolResultMessage>();
-  private _cleanupGrouping: (() => void) | undefined;
   private _autoScroll = true;
   private _lastScrollTop = 0;
   private _resizeObserver: ResizeObserver | undefined;
   private _scrollContainerEl: HTMLElement | undefined;
   private _scrollListener: (() => void) | undefined;
-  private _groupingRoot: HTMLElement | undefined;
   /** rAF handle for the inner-container auto-scroll loop (thinking / tool blocks). */
   private _innerScrollRAF: number | undefined;
   /** Inner elements we have snapped to bottom at least once. */
@@ -317,9 +314,6 @@ export class PiSidebar extends LitElement {
     super.disconnectedCallback();
     this._unsubscribe?.();
     this._unsubscribe = undefined;
-    this._cleanupGrouping?.();
-    this._cleanupGrouping = undefined;
-    this._groupingRoot = undefined;
     this._resizeObserver?.disconnect();
     this._resizeObserver = undefined;
 
@@ -454,15 +448,6 @@ export class PiSidebar extends LitElement {
 
   private _ensureMessageEnhancements() {
     this._setupAutoScroll();
-
-    const inner = this.querySelector<HTMLElement>(".pi-messages__inner");
-    if (!inner) return;
-
-    if (this._groupingRoot === inner) return;
-
-    this._cleanupGrouping?.();
-    this._cleanupGrouping = initToolGrouping(inner);
-    this._groupingRoot = inner;
   }
 
   private _scrollToBottom(container: HTMLElement): void {

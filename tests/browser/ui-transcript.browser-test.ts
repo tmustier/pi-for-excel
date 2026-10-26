@@ -155,7 +155,9 @@ void test("Ctrl+O switches details mode for every card, survives re-renders and 
 
     // A hand toggle overrides one card until the next Ctrl+O.
     await page.locator(".pi-tool-card__toggle").first().click();
-    await page.waitForTimeout(100);
+    // The body animates closed; wait for the transition rather than a fixed delay.
+    await page.waitForFunction(() => document.querySelectorAll(".pi-tool-card__body--collapsed").length === 1);
+    await page.waitForTimeout(400);
     assert.equal((await readDetails(page)).openBodies, 2);
 
     await page.reload();
@@ -171,6 +173,58 @@ void test("Ctrl+O switches details mode for every card, survives re-renders and 
     await page.keyboard.press("Control+o");
     await page.waitForTimeout(200);
     assert.deepEqual(await readDetails(page), { openBodies: 0, groupExpanded: "false", thinkingExpanded: "false" });
+  } finally {
+    await opened.finish();
+  }
+});
+
+/* ── Tool groups across tab switches ── */
+
+async function seedTab(page: Page, tag: string, turns: string[][]): Promise<void> {
+  await page.evaluate(({ tag, turns }) => {
+    const sidebar = document.querySelector("pi-sidebar");
+    const usage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } };
+    for (const [turnIndex, names] of turns.entries()) {
+      const timestamp = 1000 + turnIndex * 10;
+      const calls = names.map((name, index) => ({ type: "toolCall", id: `${tag}-${turnIndex}-${index}`, name, arguments: { range: `Sheet1!A${index + 1}` } }));
+      sidebar.agent.state.messages.push(
+        { role: "assistant", content: [{ type: "text", text: `${tag} turn` }, ...calls], api: "openai-responses", provider: "openai", model: "fixture", usage, stopReason: "toolUse", timestamp },
+        ...calls.map((call) => ({ role: "toolResult", toolCallId: call.id, toolName: call.name, content: [{ type: "text", text: "ok" }], isError: false, timestamp: timestamp + 1 })),
+      );
+    }
+    sidebar.syncFromAgent();
+  }, { tag, turns });
+}
+
+async function readGroups(page: Page): Promise<{ cards: number; groups: string[] }> {
+  return page.evaluate(() => ({
+    cards: document.querySelectorAll("pi-sidebar tool-message").length,
+    groups: [...document.querySelectorAll(".pi-tool-group")].map((group) =>
+      `${group.querySelector(".pi-tool-group__label")?.textContent ?? ""}:${group.querySelectorAll("tool-message").length}`),
+  }));
+}
+
+void test("tool groups keep exactly their cards across tab switches", async () => {
+  const opened = await openTaskpane(env, { viewport, clientId: "ui-transcript-tabs" });
+  const { page } = opened;
+  try {
+    await seedTab(page, "A", [["read_range", "read_range", "read_range"], ["write_cells", "write_cells"]]);
+    await page.locator(".pi-session-tabs__new").click();
+    await page.waitForTimeout(300);
+    await seedTab(page, "B", [["read_range", "read_range", "read_range", "read_range"], ["read_range"]]);
+
+    const tabs = page.locator(".pi-session-tab__main");
+    const expected = {
+      A: { cards: 5, groups: ["3 reads:3", "2 edits:2"] },
+      B: { cards: 5, groups: ["4 reads:4"] },
+    };
+    for (let switchIndex = 0; switchIndex < 6; switchIndex++) {
+      const tab = switchIndex % 2 === 0 ? "A" : "B";
+      await tabs.nth(switchIndex % 2).click();
+      await page.locator(".pi-tool-group__header").first().click();
+      await page.waitForTimeout(150);
+      assert.deepEqual(await readGroups(page), expected[tab], `switch ${switchIndex + 1} to ${tab}`);
+    }
   } finally {
     await opened.finish();
   }
