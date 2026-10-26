@@ -438,6 +438,9 @@ export class FakeExcelHost {
   private active: FakeSheet;
   /** Every sync, for asserting how many round trips a tool made. */
   syncCount = 0;
+  /** Fail the sync that would apply the Nth queued write (1-based) with this error; the write is not applied. */
+  failWrite: { at: number; error: Error } | null = null;
+  private writesApplied = 0;
 
   constructor(sheetNames: string[] = ["Sheet1"]) {
     for (const name of sheetNames) this.sheets.set(name, new FakeSheet(this, name));
@@ -486,7 +489,11 @@ export class FakeExcelHost {
       const loaded = this.pendingLoadedCells;
       this.pendingLoadedCells = 0;
       try {
-        for (const write of writes) write();
+        for (const write of writes) {
+          if (this.failWrite && this.writesApplied + 1 === this.failWrite.at) throw this.failWrite.error;
+          write();
+          this.writesApplied += 1;
+        }
       } catch (error) {
         return Promise.reject(error instanceof Error ? error : new Error(String(error)));
       }

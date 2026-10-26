@@ -24,7 +24,7 @@ import {
   CHECKPOINT_SKIPPED_NOTE,
   CHECKPOINT_SKIPPED_REASON,
 } from "./recovery-metadata.js";
-import { describeExcelFailure, parseExcelError } from "./mutation/excel-failure.js";
+import { describeExcelFailure, parseExcelError, unchangedClause } from "./mutation/excel-failure.js";
 import { finalizeMutationOperation } from "./mutation/finalize.js";
 import { appendMutationResultNote } from "./mutation/result-note.js";
 import type { MutationFinalizeDependencies } from "./mutation/types.js";
@@ -227,7 +227,7 @@ export function createCommentsTool(
         return {
           content: [{
             type: "text",
-            text: `Error (${params.action} on "${params.range}")${isMutation ? " — comments were not changed" : ""}. ${message}`,
+            text: `Error (${params.action} on "${params.range}")${isMutation ? unchangedClause(failure, "comments were not changed") : ""}. ${message}`,
           }],
           details: {
             kind: "comments",

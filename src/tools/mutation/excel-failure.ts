@@ -18,13 +18,45 @@ const officeErrorSchema = Type.Object({
   debugInfo: Type.Optional(Type.Object({
     errorLocation: Type.Optional(Type.String()),
   })),
+  /** Set by `excelRun` when it gave up waiting for the user to leave cell-edit mode (#792). */
+  waitedMs: Type.Optional(Type.Number()),
+  earlierStepReachedExcel: Type.Optional(Type.Boolean()),
 });
+
+/** Raw Office.js code while the user is typing in a cell. */
+const CELL_EDIT_MODE_CODE = "InvalidOperationInCellEditMode";
+/** Code of the error `excelRun` throws after waiting out cell-edit mode (#792). */
+const CELL_EDIT_MODE_WAITED_CODE = "excel_cell_edit_mode";
+
+/**
+ * The one cell-edit-mode reason. Worded like `ExcelCellEditModeError` (#792)
+ * minus its "what was applied" clause: each tool states what it changed itself,
+ * because only the tool knows (write_cells knows which chunks landed).
+ */
+export function cellEditModeReason(waitedMs = 0): string {
+  const waited = waitedMs > 0 ? ` Waited ${Math.round(waitedMs / 1000)} s for the user to finish.` : "";
+  return "Excel is in cell-edit mode: the user is typing in a cell, and Excel rejects every workbook request " +
+    `until they press Enter, Tab or Esc.${waited} Ask the user to finish editing the cell, then retry.`;
+}
 
 export interface ExcelFailure {
   /** Office.js error code (`AccessDenied`, `ItemNotFound`, ...) when the host gave one. */
   code: string | null;
   /** One or two sentences naming the cause and what to do next. */
   reason: string;
+  /**
+   * True when an earlier step of the failed call had already reached Excel, so
+   * part of the change may be in the workbook. Tools that cannot tell exactly
+   * what landed must not claim "nothing was changed" then.
+   */
+  maybeApplied: boolean;
+}
+
+/** The clause a tool appends after its error heading: what it did not change, or that it may have. */
+export function unchangedClause(failure: ExcelFailure, unchanged: string): string {
+  return failure.maybeApplied
+    ? " — part of this change may already be in the workbook; check it before retrying"
+    : ` — ${unchanged}`;
 }
 
 export interface ExcelFailureTarget {
@@ -46,13 +78,23 @@ export interface ExcelErrorInfo {
   /** `debugInfo.errorLocation`, e.g. "WorksheetCollection.getItem". */
   location: string;
   message: string;
+  waitedMs: number;
+  earlierStepReachedExcel: boolean;
 }
 
 /** Parse a caught value (the `catch` seam) into the fields Office.js errors carry. */
 export function parseExcelError(error: unknown): ExcelErrorInfo {
   const message = getErrorMessage(error);
-  if (!Value.Check(officeErrorSchema, error)) return { code: null, location: "", message };
-  return { code: error.code, location: error.debugInfo?.errorLocation ?? "", message };
+  if (!Value.Check(officeErrorSchema, error)) {
+    return { code: null, location: "", message, waitedMs: 0, earlierStepReachedExcel: false };
+  }
+  return {
+    code: error.code,
+    location: error.debugInfo?.errorLocation ?? "",
+    message,
+    waitedMs: error.waitedMs ?? 0,
+    earlierStepReachedExcel: error.earlierStepReachedExcel ?? false,
+  };
 }
 
 function targetSheetName(target: ExcelFailureTarget): string | undefined {
@@ -114,14 +156,15 @@ export async function describeExcelFailure(
       code,
       reason: protection ??
         "Excel denied the change (AccessDenied). The workbook may be read-only, open in view mode, or protected.",
+      maybeApplied: false,
     };
   }
 
-  if (code === "InvalidOperationInCellEditMode") {
+  if (code === CELL_EDIT_MODE_CODE || code === CELL_EDIT_MODE_WAITED_CODE) {
     return {
       code,
-      reason: "Excel is in cell-edit mode (someone is typing in a cell) and refuses every change until that ends. " +
-        "Ask the user to press Enter or Esc in the sheet, then retry.",
+      reason: cellEditModeReason(error.waitedMs),
+      maybeApplied: error.earlierStepReachedExcel,
     };
   }
 
@@ -130,6 +173,7 @@ export async function describeExcelFailure(
       code,
       reason: "The request was larger than Excel accepts in one call (payload size limit). " +
         "Split it into smaller ranges; for a formula column use fill_formula instead of a large values array.",
+      maybeApplied: false,
     };
   }
 
@@ -140,6 +184,7 @@ export async function describeExcelFailure(
       code,
       reason: `${sheetLabel} does not exist.` +
         (names ? ` Sheets in this workbook: ${names.map((name) => `"${name}"`).join(", ")}.` : ""),
+      maybeApplied: false,
     };
   }
 
@@ -147,11 +192,13 @@ export async function describeExcelFailure(
     return {
       code,
       reason: `${target.range ? `"${target.range}"` : "The range"} is not a valid A1 address on this sheet.`,
+      maybeApplied: false,
     };
   }
 
   return {
     code,
     reason: code ? `Excel error ${code}: ${message}` : message,
+    maybeApplied: false,
   };
 }

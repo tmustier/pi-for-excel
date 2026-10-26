@@ -17,7 +17,7 @@ import {
   NON_CHECKPOINTED_MUTATION_REASON,
   recoveryCheckpointUnavailable,
 } from "./recovery-metadata.js";
-import { describeExcelFailure, parseExcelError } from "./mutation/excel-failure.js";
+import { describeExcelFailure, parseExcelError, unchangedClause } from "./mutation/excel-failure.js";
 import { finalizeMutationOperation } from "./mutation/finalize.js";
 import { appendMutationResultNote } from "./mutation/result-note.js";
 import type { MutationFinalizeDependencies } from "./mutation/types.js";
@@ -201,7 +201,7 @@ export function createViewSettingsTool(
         }
 
         const output: AgentToolResult<ViewSettingsDetails> = {
-          content: [{ type: "text", text: `Error (${params.action}) — the view was not changed. ${message}` }],
+          content: [{ type: "text", text: `Error (${params.action})${unchangedClause(failure, "the view was not changed")}. ${message}` }],
           details: buildMutationDetails({
             action: params.action,
             ...(outputAddress !== undefined ? { address: outputAddress } : {}),
