@@ -10,7 +10,7 @@ Pi has written a block of numbers into Sheet1!B2:D20 and the user does not like 
 
 For anything other than the latest change, the user opens the gear menu and chooses "Backups". The dialog lists the workbook's backups, newest first, each as "{action} · {address}" with how long ago it was taken and how many cells it covers, for example "Format cells · Sheet1!A1:F1", "3 changes · #5d2c0a1e9b4f". The user clicks "Restore" on the one they want; the toast says "Reverted Sheet1!A1:F1", and a new entry "Restore · Sheet1!A1:F1" with "Restored from #5d2c0a1e9b4f" appears at the top of the list.
 
-When the user saves the workbook in Excel, all of these disappear within a few seconds.
+On Excel desktop, when the user saves the workbook, all of these disappear within a few seconds. On Excel on the web saving never clears them, but reopening or reloading the taskpane does (confirmed in Excel on the web; see [the workbook](../foundations/the-workbook.md#backups)).
 
 ## The interaction, event by event
 
@@ -34,7 +34,7 @@ stateDiagram-v2
 
 ### Opening the dialog
 
-The Backups dialog is a page of the Settings overlay, titled "Backups" with the subtitle "Snapshots saved before Pi modifies data". It lists backups for the workbook in this window only, at most the 40 most recent. While it loads, the status reads "Loading…" and controls are disabled.
+The Backups dialog is a page of the Settings overlay, titled "Backups" with the subtitle "Snapshots saved before Pi modifies data". Because it is a page of Settings, Escape and the back arrow in its header return to the Settings page rather than closing, even when it was opened with `/history` or from the utilities menu; a second Escape, the close button ("Close settings") or a click on the dimmed backdrop closes the overlay (confirmed in Excel on the web). It lists backups for the workbook in this window only, at most the 40 most recent. While it loads, the status reads "Loading…" and controls are disabled.
 
 With no backups it shows only the warning and an empty state: "No backups yet" and "Pi will save snapshots here before making changes to your data." With backups it adds:
 
@@ -50,7 +50,7 @@ The list does not update by itself while open. Backups Pi makes while the dialog
 
 ### Ends at once
 
-Nothing is changed when the user only searches, filters, sorts, refreshes, or closes the dialog (the close button, Escape, or a click on the backdrop). `/revert` with no backup for this workbook shows "No backups for this workbook yet" and does nothing. `/revert` while the active tab is busy is refused with "Can't run /revert while Pi is busy" and the text stays in the composer.
+Nothing is changed when the user only searches, filters, sorts, refreshes, or closes the dialog (the close button, Escape, or a click on the backdrop). `/revert` with no backup for this workbook shows "No backups for this workbook yet" and does nothing. `/revert` while the active tab is busy is refused with "Can't run /revert while Pi is busy" and the composer is cleared, so the command has to be typed again (confirmed in Excel on the web).
 
 ### Restoring
 
@@ -112,7 +112,7 @@ On desktop Excel, a workbook that has never been saved gets backups like any oth
 | Execution mode | User restores never ask. Pi's restore asks in Confirm mode. | No effect on a restore in progress. |
 | Files in the workspace, or an overlay open | No effect from files. The dialog is itself an overlay (a page of Settings). | Restoring from the dialog while Pi is writing waits for the lock. |
 | Tab state (new, restored, another tab busy) | Backups belong to the workbook, not to a tab: every tab sees the same list. `/revert` is refused only when the active tab is busy; the dialog works while busy. | A restore started while another tab writes waits for that write to finish. |
-| Host (desktop or web) | Excel on the web saves continuously, which may clear backups within seconds of each change (see [Open questions](#open-questions-and-verification)). Never-saved workbooks exist only on desktop. | No effect. |
+| Host (desktop or web) | On Excel on the web, saving never clears backups but every taskpane load does, and a workbook without a location (never saved on desktop, or opened through an anonymous link on the web) loses its first backup (confirmed; see [the workbook](../foundations/the-workbook.md#backups)). | No effect. |
 
 Nothing changed during a restore affects it; it applies the backup it was asked for.
 
@@ -120,14 +120,14 @@ Nothing changed during a restore affects it; it applies the backup it was asked 
 
 | Event | Before sent | While busy |
 | --- | --- | --- |
-| Stop (button or Escape) | Escape closes the dialog. Stop does not apply to a closed dialog. | A restore cannot be stopped. Escape closes the dialog, but the restore continues and its toast still appears. Stopping Pi's turn does not stop a restore the user started. |
+| Stop (button or Escape) | Escape returns to the Settings page; a second Escape closes the overlay (confirmed). Escape on a delete or clear confirmation closes only the confirmation. Stop does not apply to a closed dialog. | A restore cannot be stopped. Escape closes the dialog, but the restore continues and its toast still appears. Stopping Pi's turn does not stop a restore the user started. |
 | The user sends something else | The dialog covers the composer. `/revert` and `/history` are commands, not messages. | Not possible until the dialog closes. |
 | Tab switched, created, closed or reopened | The list does not depend on the tab. | The restore continues; the active tab is shown as holding the lock while it runs. |
 | An overlay or menu opens | A delete or clear confirm opens over the dialog; closing it cancels. An approval dialog for a busy tab can open on top of the dialog. | Not applicable. |
 | Model or thinking level changes | No effect. | No effect. |
 | The provider fails | No effect. | No effect. |
 | The taskpane goes away | Nothing happens. | A restore already sent to Excel may complete without its rollback backup being stored. |
-| The workbook changes underneath | The list is a snapshot; "Refresh" updates it. Saving clears all backups within about 4 seconds even with the dialog open; entries then fail with "Snapshot not found." | A restore writes the captured state over the user's newer edits in the same range without warning. |
+| The workbook changes underneath | The list is a snapshot; "Refresh" updates it. On desktop, saving clears all backups within about 4 seconds even with the dialog open; entries then fail with "Snapshot not found." On the web, saving does not clear them. | A restore writes the captured state over the user's newer edits in the same range without warning (confirmed: a value the user typed after Pi's write was erased by `/revert`). |
 | Focus moves to the grid or another window | The dialog stays open. | The restore continues. |
 | The context window fills | No effect. | No effect. |
 
@@ -135,7 +135,7 @@ After any interrupt the user is back in the dialog or the composer; a restore ei
 
 ## Interactions with other systems
 
-**Persistence.** Backups live in the add-in's browser storage and survive a taskpane reload only while the workbook has unsaved changes; reloading on a saved workbook clears them. See [persistence and restore](../cross-cutting/persistence-and-restore.md).
+**Persistence.** Backups live in the add-in's browser storage and survive a taskpane reload only while the workbook has unsaved changes; reloading on a saved workbook clears them. Excel on the web always reports the workbook as saved, so there every reload clears them (confirmed: 16 backups gone after one reload). See [persistence and restore](../cross-cutting/persistence-and-restore.md).
 
 **Workbook changes and recovery.** A restore is itself a change to the workbook, made through the workbook lock, recorded in the audit log, and backed up. Excel's Undo does not undo it.
 
@@ -155,7 +155,7 @@ After any interrupt the user is back in the dialog or the composer; a restore ei
 
 **Language.** The dialog's labels, toasts and confirms are translated. The action names in the list and filter ("Write", "Format cells", …), "{N} change(s)", the status counts ("12 backups", "3 of 12 shown") and the restore failure messages are English in every UI language.
 
-**Accessibility and keyboard.** Every control is a native input or button reachable with Tab. There is no shortcut for `/revert` or for opening the dialog. Escape closes the dialog, or the confirm on top of it first.
+**Accessibility and keyboard.** Every control is a native input or button reachable with Tab. There is no shortcut for `/revert` or for opening the dialog. Escape closes the confirm on top of the dialog first, then returns from Backups to Settings, then closes Settings.
 
 ## Edge cases
 
@@ -168,13 +168,14 @@ After any interrupt the user is back in the dialog or the composer; a restore ei
 
 ## Open questions and verification
 
-- Read from code; none of these flows has been run by hand at this commit.
-- "Keep at most" is saved (`src/workbook/recovery/log-store.ts:64`) and never applied (`src/workbook/recovery-log.ts:420` caps at 120 across all workbooks). Looks like a bug.
-- "Clear all" builds its message from the loaded list (`src/commands/builtins/settings-pages/backups-page.ts:232`, loaded with a limit of 40 at `src/taskpane/init.ts:1548`) but clears every backup for the workbook. The count can be wrong. Minor bug.
-- On Excel on the web, whether continuous saving clears backups within seconds (`src/workbook/save-boundary-monitor.ts`, 4-second poll) is the most important thing to verify.
+- Checked by hand in Excel on the web (orb session, anonymous-link workbook, `ec453df`), 26 October 2026: opening and closing the dialog, the empty state, entries, search, filter, sort, Restore, Delete, Clear all, retention, `/revert` (latest, twice, nothing left, while busy), Pi's list, restore and clear, and the effect of a taskpane reload. See [the workbook checklist](../verification/workbook.md#workbookbackups-and-revertmd). Desktop Excel, "Clear all" with more than 40 backups, and restores across tabs were not run.
+- **Confirmed bug (web).** Saving never clears backups on Excel on the web, but every taskpane load does, because the host always reports the workbook as saved (`src/workbook/save-boundary-monitor.ts:74`). The dialog's warning is wrong there. REVERT-24; see [the workbook](../foundations/the-workbook.md#open-questions-and-verification).
+- **Confirmed bug.** "Keep at most" is saved (`src/workbook/recovery/log-store.ts:64`) and never applied (`src/workbook/recovery-log.ts:420` caps at 120 across all workbooks): with 5 saved, the list held 10. REVERT-21.
+- "Clear all" builds its message from the loaded list (`src/commands/builtins/settings-pages/backups-page.ts:232`, loaded with a limit of 40 at `src/taskpane/init.ts:1548`) but clears every backup for the workbook. The count can be wrong above 40. Minor bug; not run (11 backups gave the right count).
 - `/revert` is not busy-allowed but `/history` is, and restoring from the dialog while Pi is writing is allowed. The two paths to the same action disagree; a product call.
-- `workbook_history` delete and clear are reads to the policy (`src/tools/execution-policy.ts:73`), so in Confirm mode Pi can clear every backup without asking. Probably worth treating as a bug.
-- Restores of range values overwrite whatever is in the range now, including the user's later edits, without a conflict check (`src/workbook/recovery/log-restore.ts`, range path). Intended per design; worth stating in the UI.
-- The relative-time format of the list entries has not been checked.
+- **Confirmed.** `workbook_history` delete and clear are reads to the policy (`src/tools/execution-policy.ts:73`), so in Confirm mode Pi cleared every backup without asking. Probably worth treating as a bug. APPROVE-17.
+- **Confirmed.** Restores of range values overwrite whatever is in the range now, including the user's later edits, without a conflict check (`src/workbook/recovery/log-restore.ts`, range path). Intended per design; worth stating in the UI. REVERT-19.
+- On Excel on the web, Excel's own Undo also takes back restores; see [the workbook](../foundations/the-workbook.md#excels-undo).
+- Relative times seen: "just now", "1m ago", "9m ago"; longer spans not checked.
 
 Verified against pi-for-excel commit `ec453df`.
