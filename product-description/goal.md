@@ -130,6 +130,8 @@ When a fix PR merges, revise the affected documents to its behavior and update t
 
 - [#791](https://github.com/tmustier/pi-for-excel/pull/791) agent writes (`agent-writes`): writes into merged areas, spill children or locked cells on protected sheets are refused with nothing written; large writes are chunked and succeed (verification is partial above 20k cells and says so); results report cells not written, text Excel converted, renamed table headers, formula errors and validation breaks; manual calculation is calculated and reported; every mutation failure is an error with a specific reason; Pi sets allow_overwrite when the user asked for the change. Fixes agent-description B-01, B-02, B-03, B-07 (writes), B-10, B-14, B-18.
 
+- [#792](https://github.com/tmustier/pi-for-excel/pull/792) agent context (`agent-context`, stacked on #787): the blueprint, Files summary and user edits (not Pi's own writes) go into the transcript as notes only when they change, and stay for the turn and later turns; the selection is re-read for every request and sent as address and size, then at most 20 rows / 4,000 characters (whole columns now get context); while the user edits a cell, Pi waits up to 60 s with "Waiting for you to finish editing a cell" before failing with a precise error. Fixes agent-description B-04, B-06, B-08, B-12, B-16.
+
 ## Order of work
 
 1. `sessions/renaming-a-tab.md` (pilot), then `foundations/` in this order: `the-taskpane.md`, `turns.md`, `sessions-and-tabs.md`, `the-workbook.md`, `models-and-providers.md`. Everything else links to them.
