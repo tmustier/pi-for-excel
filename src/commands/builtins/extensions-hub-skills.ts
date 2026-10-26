@@ -20,6 +20,7 @@ import {
 } from "../../skills/external-store.js";
 import { dispatchSkillsChanged } from "../../skills/events.js";
 import type { AgentSkillDefinition } from "../../skills/types.js";
+import { requestConfirmationDialog } from "../../ui/confirm-dialog.js";
 import { showToast } from "../../ui/toast.js";
 import {
   createSectionHeader,
@@ -177,17 +178,29 @@ export async function renderSkillsTab(args: {
         },
         onRemove: () => {
           if (isBusy()) return;
-          void runMutation(async () => {
-            const removed = await removeExternalAgentSkillFromWorkspace({
-              workspace: getFilesWorkspace(),
-              name: skill.name,
+          void (async () => {
+            const confirmed = await requestConfirmationDialog({
+              title: t("ext-hub-skills.confirmRemoveTitle", { name: skill.name }),
+              message: t("ext-hub-skills.confirmRemoveMessage"),
+              confirmLabel: t("ext-hub-skills.remove"),
+              cancelLabel: t("confirm.cancel"),
+              confirmButtonTone: "danger",
+              restoreFocusOnClose: false,
             });
-            if (removed) {
-              dispatchSkillsChanged({ reason: "catalog" });
-            } else {
-              throw new Error(`External skill not found: ${skill.name}`);
-            }
-          }, "config", `Removed external skill: ${skill.name}`);
+            if (!confirmed || isBusy()) return;
+
+            await runMutation(async () => {
+              const removed = await removeExternalAgentSkillFromWorkspace({
+                workspace: getFilesWorkspace(),
+                name: skill.name,
+              });
+              if (removed) {
+                dispatchSkillsChanged({ reason: "catalog" });
+              } else {
+                throw new Error(`External skill not found: ${skill.name}`);
+              }
+            }, "config", `Removed external skill: ${skill.name}`);
+          })();
         },
       }));
     }

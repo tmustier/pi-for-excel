@@ -35,7 +35,7 @@ import { effectiveToolOutputLimits } from "../context/window-budgets.js";
 import { findTrailingContextOverflowError } from "../compaction/overflow-recovery.js";
 import { readAutoCompactionEnabled } from "../compaction/settings.js";
 import { runCompactCommand } from "../commands/builtins/export.js";
-import { getFilesWorkspace } from "../files/workspace.js";
+import { describeImportRenames, getFilesWorkspace } from "../files/workspace.js";
 import { ConnectionManager } from "../connections/manager.js";
 import { createAllTools } from "../tools/index.js";
 import { collectRequiredConnectionIds } from "../tools/connection-requirements.js";
@@ -719,6 +719,11 @@ export async function initTaskpane(opts: {
 
   document.addEventListener("pi:rules-updated", () => {
     void refreshWorkbookState();
+  });
+
+  // Convention overrides live in the system prompt; rebuild it when they change.
+  document.addEventListener("pi:conventions-updated", () => {
+    void refreshCapabilitiesForAllRuntimes();
   });
 
   document.addEventListener(PI_EXPERIMENTAL_FEATURE_CHANGED_EVENT, () => {
@@ -1782,14 +1787,15 @@ export async function initTaskpane(opts: {
     void workspace.importFiles(files, {
       audit: { actor: "user", source: "input-drop" },
     })
-      .then((count) => {
+      .then((result) => {
+        const count = result.imported;
         if (count <= 0) {
           showToast(t("init.noFilesImported"));
           return;
         }
 
         const importedLabel = `${count} file${count === 1 ? "" : "s"}`;
-        showToast(t("init.importedIntoFiles", { label: importedLabel }));
+        showToast(t("init.importedIntoFiles", { label: importedLabel }) + describeImportRenames(result));
       })
       .catch((error: unknown) => {
         showToast(t("init.importFailed", { error: error instanceof Error ? error.message : t("init.unknownError") }));
