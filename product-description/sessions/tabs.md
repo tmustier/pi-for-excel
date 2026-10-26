@@ -51,7 +51,7 @@ What is targeted depends on how the user starts:
 These end without changing anything except a toast:
 
 - **Closing the last tab.** The × button is not shown when only one tab is open, and "Close tab" is disabled. Ctrl/Cmd+W shows "Can't close the last tab". Confirmed in Excel on the web; with one tab, "Move left", "Move right" and "Close other tabs" are disabled too.
-- **Closing a tab that holds the workbook lock**, meaning one of its mutations is running. Its × is disabled with the tooltip "Wait for workbook changes to complete", and "Close tab" is disabled. Ctrl/Cmd+W shows "Wait for workbook changes to finish before closing this tab".
+- **Closing a tab that holds the workbook lock**, meaning one of its mutations is running. Its × is disabled with the tooltip "Wait for workbook changes to complete", and "Close tab" is disabled. Ctrl/Cmd+W shows "Wait for workbook changes to finish before closing this tab". Confirmed in Excel on the web (with a delay added to `Excel.run` so the lock was held long enough to act).
 - **"Keep open"** in the stop-and-close confirmation. Nothing changes and the turn carries on.
 - **Duplicating a busy tab.** The toast is "Wait for this tab to finish before duplicating".
 - **Moving past the end.** "Move left" is disabled on the first tab and "Move right" on the last.
@@ -76,7 +76,7 @@ These end without changing anything except a toast:
 
   Confirmed in Excel on the web: the dialog, its wording, "Keep open" and Escape (both leave the turn running), "Stop and close", the left neighbour or new first tab becoming active, and the undo toast.
 
-  A tab that is busy but not responding, for example while `/compact` runs, closes without asking. The compaction is abandoned.
+  A tab that is busy but not responding, for example while `/compact` runs, closes without asking. The compaction is abandoned: its model request still runs to the end, and the working indicator of whichever tab is active shows "Compacting context…" until it does, but the summary is not saved. Reopening the tab brings back the uncompacted conversation. Confirmed in Excel on the web.
 - **Close other tabs.** Every other tab goes through the same close steps, from left to right. Each responding tab asks for confirmation in turn. A tab that holds the lock is skipped, with its "Wait for workbook changes…" toast. No undo toast is shown. The right-clicked tab becomes active, and a final toast says "Closed {count} other tabs", or "No tabs were closed" if every close was refused or kept open. Confirmed in Excel on the web with four idle tabs ("Closed 4 other tabs").
 
 ### While tabs change
@@ -156,13 +156,14 @@ After any interrupt the user is on whichever tab is active, with the composer te
 
 ## Open questions and verification
 
-- The close sequence checks the workbook lock before showing "Stop and close this tab?" but not again after the user confirms (`src/taskpane/init.ts:1316-1333`). A tab that starts a mutation while the dialog is open can then be closed while it holds the lock. Read from code. Looks like a bug.
-- A tab that is busy without responding (for example running `/compact`) closes with no confirmation, and the compaction is discarded (`src/taskpane/init.ts:1321`). Read from code. Probably unintentional.
+- The close sequence checks the workbook lock before showing "Stop and close this tab?" but not again after the user confirms (`src/taskpane/init.ts:1316-1333`). A tab that starts a mutation while the dialog is open can then be closed while it holds the lock. Confirmed in Excel on the web (TABS-22): with the dialog open, the tab took the lock (its × went disabled behind the dialog); "Stop and close" closed it at once, and its write still landed in the workbook afterwards. Looks like a bug.
+- A tab that is busy without responding (for example running `/compact`) closes with no confirmation, and the compaction is discarded (`src/taskpane/init.ts:1321`). Confirmed in Excel on the web (TABS-23, TABS-28): the compaction request still ran to completion and spent a model call, but the reopened tab had no summary and the same context use (19%). Probably unintentional.
 - Ctrl+PageUp/PageDown and Cmd+Shift+[ / ] do nothing when focus is on a tab in the strip. The document-level handler skips the tab strip (`src/taskpane/keyboard-shortcuts.ts:364-371`), and the tab's own handler only knows plain arrows (`src/ui/pi-sidebar.ts:541-573`). Confirmed in Excel on the web with keys sent to the page (TABS-08): after Escape put focus on a tab, Ctrl+PageUp did nothing, while the same keys with focus on the page body switched tabs. Looks like a bug.
 - Ctrl/Cmd+T and Ctrl/Cmd+W act on the tabs behind an open overlay (`src/taskpane/keyboard-shortcuts.ts:313-332` has no overlay check). Confirmed in Excel on the web with keys sent to the page: with the resume picker open, Ctrl+T added a tab and Ctrl+W closed it, and the picker stayed open.
 - On Excel on the web the browser keeps Ctrl+T, Ctrl+W and Ctrl+PageDown for itself (confirmed with real key presses in Chrome on Linux). A user who presses Ctrl+W expecting to close a Pi tab closes Excel instead. Excel desktop on Windows and macOS has not been checked.
 - With the command menu open, clicking another tab switched to it but left focus on the tab instead of the composer (seen once in Excel on the web). Minor.
-- Closing a tab that holds the workbook lock, and closing a tab that is busy but not responding (`/compact`), were not run: the lock is held too briefly to catch, and `/compact` on a short conversation ends at once with "Nothing to compact" or "Too few messages to compact".
+- Pressing Escape to dismiss the tab context menu while the tab held the lock stopped the turn. The write finished (the cell was written), and the turn then ended with "Error: signal is aborted without reason" instead of "Request aborted". This belongs to [stopping](../turn/stopping.md); reported, not changed here.
+- In a 350 px taskpane, five tabs already hide their titles and show only ×.
 - While the undo toast is visible, plain toasts such as "Moved tab left" are dropped (`src/ui/toast.ts:190`). This is by design for the toast, but it hides feedback for 9 seconds after every close.
 - Whether the keyboard's context-menu key or Shift+F10 opens the tab context menu has not been checked.
 - Checked in Excel on the web on 2026-10-26; see [the checklist](../verification/sessions-and-commands.md#sessionstabsmd).
