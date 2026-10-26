@@ -41,7 +41,7 @@ export class ChangeTracker {
         for (const sheet of sheets.items) {
           if (sheet.visibility !== "Visible") continue;
 
-          // eslint-disable-next-line @typescript-eslint/require-await -- Office JS requires async handler signature
+          // oxlint-disable-next-line typescript/require-await -- Office JS requires async handler signature
           sheet.onChanged.add(async (event) => {
             const sheetName = this.sheetIdToName.get(event.worksheetId) || event.worksheetId || "unknown";
             this.changes.push({

@@ -1,0 +1,6 @@
+{
+  // Lets type-aware lint find the project settings for test files.
+  // `npm run typecheck` still checks only src (see ../tsconfig.json).
+  "extends": "../tsconfig.json",
+  "include": ["./**/*.ts"]
+}

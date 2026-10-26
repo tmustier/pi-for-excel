@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access -- Playwright evaluates Vite-loaded application modules whose browser runtime types are unavailable to the Node test checker. */
+/* oxlint-disable typescript/no-unsafe-assignment, typescript/no-unsafe-call, typescript/no-unsafe-member-access -- Playwright evaluates Vite-loaded application modules whose browser runtime types are unavailable to the Node test checker. */
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 

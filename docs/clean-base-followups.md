@@ -279,9 +279,9 @@ corrupt-recovery-log fallback (seam tests only).
   (`@xmldom/xmldom`, `js-yaml`), until the Dependabot merges of 2026-09-10;
   clean since, so pushes no longer need `--no-verify`.
 - Tests are not typechecked. `tsconfig.json` includes `src/**` only;
-  `tsconfig.eslint.json` adds `tests/**` for ESLint parsing, and
-  `tsc --noEmit -p tsconfig.eslint.json` reports 533 errors there
-  (2026-09-10). Type-level contracts therefore cannot live in `tests/`; the
+  `tests/tsconfig.json` gives type-aware lint the project settings for
+  `tests/**`, and `tsc --noEmit -p tests/tsconfig.json` reports 924 errors
+  there (TypeScript 7.0.2, 2026-10-26). Type-level contracts therefore cannot live in `tests/`; the
   `StringEnum` literal regression from #718 is guarded structurally
   (`src/tools/string-enum.ts`) rather than by a test for that reason.
 - `tests/browser/extensions-overlays.browser-test.ts` ("an installed extension

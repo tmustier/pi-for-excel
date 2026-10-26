@@ -6,7 +6,7 @@
 - Upstream commit: `95a56e5d24fb3d849673c2d51eb0908b8bd2d33b`
 - Vendored path: the complete upstream production `src/` snapshot copied to this directory
 - License: MIT; the upstream license is preserved unchanged in `LICENSE`
-- Dependencies: `oxlint` and `@oxlint/plugins`, both pinned to `1.82.0`
+- Dependencies: `oxlint` and `@oxlint/plugins`, both pinned to the same exact version in `package.json`
 
 The vendored implementation is owned and reviewed as repository tooling. Update it by comparing against an immutable upstream revision; do not install the upstream skill globally or replace local policy with an upstream preset. Keep the production snapshot intact rather than deleting rule modules or shared code merely because a rule is not enabled.
 

@@ -7,9 +7,9 @@ This document is the standards router. Keep `AGENTS.md` short; load the relevant
 
 ## Core principles
 
-- Prefer deterministic guardrails over prompt-only taste. If agents repeat a mistake, promote the rule into ESLint, TypeScript, a focused check script, or a test.
+- Prefer deterministic guardrails over prompt-only taste. If agents repeat a mistake, promote the rule into Oxlint, TypeScript, a focused check script, or a test.
 - Keep boundary uncertainty at the boundary. Parse/refine external values before passing them into core logic.
-- Preserve strictness. Do not weaken TypeScript, ESLint, tests, origin allowlists, prompt-cache invariants, or security checks to make a change pass.
+- Preserve strictness. Do not weaken TypeScript, Oxlint, tests, origin allowlists, prompt-cache invariants, or security checks to make a change pass.
 - Verify through the real seam the user depends on: tool API, taskpane UI, bridge endpoint, Office/WPS host, or persisted store.
 - Keep context progressively disclosed: `AGENTS.md` maps to this file and to domain docs instead of becoming a giant manual.
 
@@ -23,8 +23,8 @@ Deterministic checks enforce the sharpest rules:
 - Do not add generic object/record guards (`isRecord`, `isPlainObject`, `is…PayloadShape`); an object check alone does not establish a domain contract. Parse the domain shape, ideally with a TypeBox schema and `Static<>` so the type and the check cannot drift.
 - Burn-down: `npm run check:unknown-burndown` runs the anti-slop `no-unknown-*` rules and fails if the count of `unknown` parameters/returns/aliases in `src` rises above the baseline in `scripts/check-unknown-burndown.mjs` (461 when the aliases were deleted on 2026-09-10; `rg -c '\\bunknown\\b' src` gave 1,071 mentions and 233 hand-written guards). Lower the baseline as you go. The per-area plan is in `docs/clean-base-followups.md`.
 - `@ts-ignore` and `@ts-nocheck` are banned. `@ts-expect-error` requires a real explanation.
-- ESLint disable comments must name specific rules and explain the local safety/interop invariant. Do not add blanket safety comments.
-- Top-level exported APIs and public methods should expose clear contracts. Add return types when inference obscures the contract for future agents.
+- `oxlint-disable` comments must name specific rules and explain the local safety/interop invariant (`npm run check:lint-comments`). Do not add blanket safety comments.
+- Top-level exported APIs and public methods should expose clear contracts. Exported top-level functions in `src` must declare return types (`pi-for-excel/exported-function-return-types`).
 
 Prefer:
 
@@ -54,7 +54,7 @@ Boundary input includes JSON, `Response.json()`, Office.js/WPS host objects, bri
 Rules:
 
 - Decoded JSON/fetch payloads first land as `unknown` (or `JsonValue` when the protocol is JSON), then a concrete parser returns the app type.
-- Do not cast `JSON.parse(...)` or `response.json()` directly to app/domain/test types. The `check:boundary-casts` script enforces this.
+- Do not cast `JSON.parse(...)` or `response.json()` directly to app/domain/test types. The `pi-for-excel/no-typed-json-boundary-cast` lint rule enforces this.
 - A successful parse returns the refined value; do not validate and then keep passing the unrefined object.
 - Keep protocol DTOs, persistence records, and domain/service values distinct even when their shapes look similar.
 - Mutating command/request parsers should reject misspelled or obsolete fields unless the sub-object is explicitly extensible.
