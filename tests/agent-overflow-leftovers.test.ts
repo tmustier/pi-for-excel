@@ -25,8 +25,8 @@ function harness(response: ReturnType<typeof fauxAssistantMessage>, runCompact: 
     agent,
     autoCompactEnabled: true,
     runCompact,
-    sidebar: { setBusyIndicator: () => {} },
-    queueDisplay: { setActionQueue: () => {} },
+    tab: { setActivity: () => {}, setBusy: () => {}, returnToDraft: () => {} },
+    queueDisplay: { setActionQueue: () => {}, drainQueuedMessages: () => [] },
   });
   return { agent, queue, requests };
 }

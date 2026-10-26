@@ -153,7 +153,8 @@ const INNER_SCROLLABLE_SELECTOR =
 export class PiSidebar extends LitElement {
   @property({ attribute: false }) agent?: Agent;
   @property({ attribute: false }) emptyHints: EmptyHint[] = [];
-  @property({ attribute: false }) onSend?: (text: string) => void;
+  /** Handles a submitted draft; returns true when the composer should clear. */
+  @property({ attribute: false }) onSend?: (text: string, opts: { followUp: boolean }) => boolean;
   @property({ attribute: false }) onAbort?: () => void;
   @property({ attribute: false }) sessionTabs: SessionTabView[] = [];
   @property({ attribute: false }) onCreateTab?: () => void;
@@ -172,6 +173,8 @@ export class PiSidebar extends LitElement {
   @property({ attribute: false }) onOpenResumePicker?: () => void;
   @property({ attribute: false }) onOpenRecovery?: () => void;
   @property({ attribute: false }) onOpenShortcuts?: () => void;
+  /** The active tab is busy (responding, compacting or waiting to retry). */
+  @property({ attribute: false }) tabBusy = false;
 
   @state() private _hasMessages = false;
   @state() private _isStreaming = false;
@@ -278,8 +281,8 @@ export class PiSidebar extends LitElement {
   }
 
   /**
-   * Show a non-streaming busy indicator (e.g. while `/compact` runs).
-   * Pass `null` to clear.
+   * Show the active tab's activity (compacting, waiting to retry) in the
+   * working indicator, also while Pi is responding. Pass `null` to clear.
    */
   setBusyIndicator(label: string | null, hint?: string | null): void {
     this._busyLabel = label;
@@ -288,8 +291,7 @@ export class PiSidebar extends LitElement {
   }
 
   sendMessage(text: string): void {
-    if (this.onSend) {
-      this.onSend(text);
+    if (this.onSend?.(text, { followUp: false })) {
       this._input?.clear();
     }
   }
@@ -571,9 +573,18 @@ export class PiSidebar extends LitElement {
 
     this._scrollToBottomIfNeeded();
 
+    let lastClientHeight = container.clientHeight;
     this._scrollListener = () => {
       const top = container.scrollTop;
       const distFromBottom = container.scrollHeight - top - container.clientHeight;
+      // A pane that got shorter (the composer grew, a queue row appeared)
+      // moves the scroll position without the user scrolling; keep following.
+      const resized = container.clientHeight !== lastClientHeight;
+      lastClientHeight = container.clientHeight;
+      if (resized) {
+        this._scrollToBottomIfNeeded();
+        return;
+      }
       if (top < this._lastScrollTop && distFromBottom > AUTO_SCROLL_DISENGAGE_PX) this._autoScroll = false;
       else if (distFromBottom < AUTO_SCROLL_REENGAGE_PX) this._autoScroll = true;
       this._lastScrollTop = top;
@@ -581,10 +592,11 @@ export class PiSidebar extends LitElement {
     container.addEventListener("scroll", this._scrollListener);
   }
 
-  private _onSend = (e: CustomEvent<{ text: string }>) => {
-    this._autoScroll = true;
-    this.onSend?.(e.detail.text);
-    this._input?.clear();
+  private _onSend = (e: CustomEvent<{ text: string; followUp: boolean }>) => {
+    if (this.onSend?.(e.detail.text, { followUp: e.detail.followUp })) {
+      this._autoScroll = true;
+      this._input?.clear();
+    }
   };
 
   private _onAbort = () => { this.onAbort?.(); };
@@ -771,13 +783,14 @@ export class PiSidebar extends LitElement {
       </div>
       <pi-working-indicator
         .active=${this._isStreaming || this._busyLabel !== null}
-        .primaryText=${this._isStreaming ? undefined : (this._busyLabel ?? undefined)}
-        .hintText=${this._isStreaming ? undefined : (this._busyHint ?? undefined)}
+        .primaryText=${this._busyLabel ?? undefined}
+        .hintText=${this._busyHint ?? undefined}
       ></pi-working-indicator>
       <div id="pi-widget-slot" class="pi-widget-slot" style="display:none"></div>
       <div class="pi-input-area">
         <pi-input
           .isStreaming=${this._isStreaming}
+          .busy=${this._isStreaming || this.tabBusy}
           @pi-send=${this._onSend}
           @pi-abort=${this._onAbort}
           @pi-files-drop=${this._onFilesDrop}
@@ -1241,6 +1254,10 @@ export class PiSidebar extends LitElement {
     return `${collapsed.slice(0, 117)}…`;
   }
 
+  /**
+   * A starter hint is added to the end of the draft, never replacing it. It
+   * is inserted as an edit so Ctrl/Cmd+Z takes it back out.
+   */
   private _applyHintPrompt(prompt: string): void {
     const input = this._input;
     if (!input) {
@@ -1248,12 +1265,17 @@ export class PiSidebar extends LitElement {
       return;
     }
 
-    input.value = prompt;
-
     const textarea = input.getTextarea();
     textarea.focus();
-    const cursor = textarea.value.length;
-    textarea.setSelectionRange(cursor, cursor);
+    const end = textarea.value.length;
+    textarea.setSelectionRange(end, end);
+    const insert = textarea.value.trim().length > 0 ? `\n\n${prompt}` : prompt;
+    // execCommand("insertText") is the only edit that keeps the textarea's
+    // undo stack; WKWebView and WebView2 support it.
+    const inserted = document.execCommand("insertText", false, insert);
+    if (!inserted) {
+      input.value = `${textarea.value}${insert}`;
+    }
   }
 
   private _renderEmptyState() {

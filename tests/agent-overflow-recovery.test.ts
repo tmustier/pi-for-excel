@@ -34,8 +34,8 @@ function createQueue(agent: Agent, runCompact: () => Promise<void>) {
     agent,
     autoCompactEnabled: true,
     runCompact,
-    sidebar: { setBusyIndicator: () => {} },
-    queueDisplay: { setActionQueue: () => {} },
+    tab: { setActivity: () => {}, setBusy: () => {}, returnToDraft: () => {} },
+    queueDisplay: { setActionQueue: () => {}, drainQueuedMessages: () => [] },
   });
 }
 
@@ -64,9 +64,9 @@ void test("LiteLLM context overflow from the active model compacts and retries t
   queue.shutdown();
 });
 
-void test("non-overflow model errors do not compact or retry the agent request", async () => {
+void test("non-overflow, non-transient model errors do not compact or retry the agent request", async () => {
   const runtime = createHarness([
-    fauxAssistantMessage("", { stopReason: "error", errorMessage: "429 rate limit exceeded" }),
+    fauxAssistantMessage("", { stopReason: "error", errorMessage: "400 invalid tool schema" }),
   ]);
   let compacted = false;
   const queue = createQueue(runtime.agent, () => {
@@ -79,7 +79,7 @@ void test("non-overflow model errors do not compact or retry the agent request",
 
   assert.equal(runtime.requests.length, 1);
   assert.equal(compacted, false);
-  assert.match(JSON.stringify(runtime.agent.state.messages.at(-1)), /rate limit exceeded/u);
+  assert.match(JSON.stringify(runtime.agent.state.messages.at(-1)), /invalid tool schema/u);
   queue.shutdown();
 });
 

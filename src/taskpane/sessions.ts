@@ -16,6 +16,7 @@ import type { SpreadsheetHost } from "../host/types.js";
 
 import { getCurrentSpreadsheetHost } from "../host/index.js";
 import { extractTextFromContent } from "../utils/content.js";
+import { getErrorMessage } from "../utils/errors.js";
 
 export interface SessionPersistenceController {
   getSessionId: () => string;
@@ -119,6 +120,8 @@ export async function setupSessionPersistence(opts: {
   initialSessionId?: string;
   autoRestoreLatest?: boolean;
   spreadsheetHost?: Pick<SpreadsheetHost, "getWorkbookContext" | "sessionStorage">;
+  /** Reports a save that did not reach storage (quota, blocked IndexedDB). */
+  onSaveError?: (message: string) => void;
 }): Promise<SessionPersistenceController> {
   const { agent, sessions, settings } = opts;
   const spreadsheetHost = opts.spreadsheetHost ?? getCurrentSpreadsheetHost();
@@ -262,6 +265,7 @@ export async function setupSessionPersistence(opts: {
       emitChange();
     } catch (err) {
       console.warn("[pi] Session save failed:", err);
+      opts.onSaveError?.(getErrorMessage(err));
     }
   }
 

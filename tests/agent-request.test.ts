@@ -37,8 +37,8 @@ function createQueue(agent: Agent, runCompact: () => Promise<void>) {
     agent,
     autoCompactEnabled: true,
     runCompact,
-    sidebar: { setBusyIndicator: () => {} },
-    queueDisplay: { setActionQueue: () => {} },
+    tab: { setActivity: () => {}, setBusy: () => {}, returnToDraft: () => {} },
+    queueDisplay: { setActionQueue: () => {}, drainQueuedMessages: () => [] },
   });
 }
 
