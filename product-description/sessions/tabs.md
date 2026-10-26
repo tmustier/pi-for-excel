@@ -2,7 +2,7 @@
 
 ## Summary
 
-Tabs let the user keep several independent conversations with Pi side by side in one taskpane and move between them. This document covers what the user does with [session tabs](../foundations/sessions-and-tabs.md): creating one ("+", Ctrl/Cmd+T, `/new`), switching (a click, the arrow keys, Ctrl+PageUp/PageDown, Cmd+Shift+[ / ]), moving and duplicating (the [tab context menu](../glossary.md#the-taskpane)), and closing (the × button, Ctrl/Cmd+W, "Close tab", "Close other tabs"). It also covers the scroll arrows that appear when the tab strip overflows. Renaming is in [renaming a tab](renaming-a-tab.md), bringing a closed tab back is in [reopening closed tabs](reopening-closed-tabs.md), and what a tab owns is in [sessions and tabs](../foundations/sessions-and-tabs.md#what-a-tab-owns). Creating, switching and moving work while tabs are busy. Duplicating is refused while the source tab is busy. Closing asks first if the tab is responding, and is refused if the tab holds the workbook lock. None of it needs a provider. Ctrl/Cmd+T and Ctrl/Cmd+W may be taken by the browser on Excel on the web (see [Open questions](#open-questions-and-verification)).
+Tabs let the user keep several independent conversations with Pi side by side in one taskpane and move between them. This document covers what the user does with [session tabs](../foundations/sessions-and-tabs.md): creating one ("+", Ctrl/Cmd+T, `/new`), switching (a click, the arrow keys, Ctrl+PageUp/PageDown, Cmd+Shift+[ / ]), moving and duplicating (the [tab context menu](../glossary.md#the-taskpane)), and closing (the × button, Ctrl/Cmd+W, "Close tab", "Close other tabs"). It also covers the scroll arrows that appear when the tab strip overflows. Renaming is in [renaming a tab](renaming-a-tab.md), bringing a closed tab back is in [reopening closed tabs](reopening-closed-tabs.md), and what a tab owns is in [sessions and tabs](../foundations/sessions-and-tabs.md#what-a-tab-owns). Creating, switching and moving work while tabs are busy. Duplicating is refused while the source tab is busy. Closing asks first if the tab is responding, and is refused if the tab holds the workbook lock. None of it needs a provider. On Excel on the web the browser takes Ctrl/Cmd+T, Ctrl/Cmd+W and Ctrl+PageUp/PageDown for its own tabs, so those shortcuts never reach Pi there (see [Host differences](#interactions-with-other-systems)).
 
 ## The simple case
 
@@ -35,10 +35,12 @@ stateDiagram-v2
 
 What is targeted depends on how the user starts:
 
-- **Creating** always adds a tab at the right end of the strip and makes it active. The "+" button (accessible name "New tab"), Ctrl/Cmd+T (without Shift or Alt), and `/new` all do the same thing. `/new` is allowed while the active tab is busy. Ctrl/Cmd+T works with focus anywhere in the taskpane, including the composer and inside an overlay.
+- **Creating** always adds a tab at the right end of the strip and makes it active. The "+" button (accessible name "New tab"), Ctrl/Cmd+T (without Shift or Alt), and `/new` all do the same thing. `/new` is allowed while the active tab is busy. Ctrl/Cmd+T works with focus anywhere in the taskpane, including the composer and inside an overlay, on hosts where it reaches the taskpane (not Excel on the web).
 - **Switching** targets a tab by position. A click selects that tab and puts focus in the composer. From the keyboard:
   - ArrowLeft/ArrowRight go to the previous or next tab, wrapping around at the ends. They work only when focus is not in a [text field](../glossary.md#input), for example after Escape has moved focus out of the composer to the tab strip.
   - Ctrl+PageUp/Ctrl+PageDown (any platform) and Cmd+Shift+[ / Cmd+Shift+] (macOS) do the same. They also do nothing in a text field.
+
+  Confirmed in Excel on the web, with the keys sent to the page: arrows wrap from the last tab to the first, and Ctrl+PageUp/PageDown and Cmd+Shift+[ switch tabs from the page body but not from the composer. On Excel on the web the browser takes Ctrl+PageUp/PageDown before the page sees them (see [Host differences](#interactions-with-other-systems)).
 
   After a keyboard switch, focus lands on the newly active tab, not in the composer. Holding a key down does not cycle through tabs, except with plain arrows while a tab has focus.
 - **Context-menu actions** target the right-clicked tab, which need not be the active one. Right-clicking does not switch tabs. The tab gets a highlighted outline while its menu is open.
@@ -48,21 +50,21 @@ What is targeted depends on how the user starts:
 
 These end without changing anything except a toast:
 
-- **Closing the last tab.** The × button is not shown when only one tab is open, and "Close tab" is disabled. Ctrl/Cmd+W shows "Can't close the last tab".
+- **Closing the last tab.** The × button is not shown when only one tab is open, and "Close tab" is disabled. Ctrl/Cmd+W shows "Can't close the last tab". Confirmed in Excel on the web; with one tab, "Move left", "Move right" and "Close other tabs" are disabled too.
 - **Closing a tab that holds the workbook lock**, meaning one of its mutations is running. Its × is disabled with the tooltip "Wait for workbook changes to complete", and "Close tab" is disabled. Ctrl/Cmd+W shows "Wait for workbook changes to finish before closing this tab".
 - **"Keep open"** in the stop-and-close confirmation. Nothing changes and the turn carries on.
 - **Duplicating a busy tab.** The toast is "Wait for this tab to finish before duplicating".
 - **Moving past the end.** "Move left" is disabled on the first tab and "Move right" on the last.
 - **"Close other tabs" with one tab.** The item is disabled.
 - **Switching with one tab**, or to the tab that is already active. Nothing happens.
-- **Dismissing the context menu.** A click anywhere outside it, Escape, opening the [utilities menu](../ui/the-utilities-menu.md), or clicking another tab (which also switches) closes it without acting. Escape while the active tab is responding stops the turn instead and leaves the menu open, because the tab context menu does not claim Escape.
+- **Dismissing the context menu.** A click anywhere outside it, Escape, opening the [utilities menu](../ui/the-utilities-menu.md), or clicking another tab (which also switches) closes it without acting. Escape while the active tab is responding stops the turn instead and leaves the menu open, because the tab context menu does not claim Escape. Confirmed in Excel on the web.
 
 ### Committing
 
 - **New tab.** The tab exists, has a new session and the next "Chat N" number, and is saved to the tab layout. The session itself is saved only once Pi answers, or when the tab is closed. If the tab cannot be built, the toast is "Couldn't open a new tab: {message}".
 - **Switch.** The active tab changes and the tab layout records it. The transcript, the status bar, the queue strip, the working indicator and the Stop/send button now show the new tab. The composer text stays as it was, because it is [shared by all tabs](../foundations/sessions-and-tabs.md#what-a-tab-owns).
-- **Move.** The tab swaps places with its neighbour. The toast "Moved tab left" or "Moved tab right" shows briefly, and the new order is saved to the layout. The active tab and tab numbers do not change.
-- **Duplicate.** A copy is added at the right end of the strip and becomes active. It has a copy of the transcript, the same model and the same thinking level, and the chosen title "{label} copy", for example "Chat 1 copy". It does not copy queued items or the composer. The copy is a new session, saved at once and linked to the current workbook. The toast is "Duplicated {label}".
+- **Move.** The tab swaps places with its neighbour. The toast "Moved tab left" or "Moved tab right" shows briefly (confirmed in Excel on the web), and the new order is saved to the layout. The active tab and tab numbers do not change.
+- **Duplicate.** A copy is added at the right end of the strip and becomes active. It has a copy of the transcript, the same model and the same thinking level, and the chosen title "{label} copy", for example "Chat 1 copy". It does not copy queued items or the composer. The copy is a new session, saved at once and linked to the current workbook. The toast is "Duplicated {label}". Confirmed in Excel on the web, including the refusal on a busy tab.
 - **Close.** The steps run in this order:
   1. If the tab is responding, the confirmation dialog "Stop and close this tab?" appears, with the message "Pi is still responding in this tab. Stop and close it?" and the buttons "Stop and close" (red) and "Keep open".
   2. On "Stop and close", the turn is [aborted](../glossary.md#endings).
@@ -72,14 +74,16 @@ These end without changing anything except a toast:
   6. If it was the active tab, the tab to its left becomes active, or the new first tab if it was first.
   7. An action toast says "Closed {label}" with "Undo" for 9 seconds (see [reopening closed tabs](reopening-closed-tabs.md)).
 
+  Confirmed in Excel on the web: the dialog, its wording, "Keep open" and Escape (both leave the turn running), "Stop and close", the left neighbour or new first tab becoming active, and the undo toast.
+
   A tab that is busy but not responding, for example while `/compact` runs, closes without asking. The compaction is abandoned.
-- **Close other tabs.** Every other tab goes through the same close steps, from left to right. Each responding tab asks for confirmation in turn. A tab that holds the lock is skipped, with its "Wait for workbook changes…" toast. No undo toast is shown. The right-clicked tab becomes active, and a final toast says "Closed {count} other tabs", or "No tabs were closed" if every close was refused or kept open.
+- **Close other tabs.** Every other tab goes through the same close steps, from left to right. Each responding tab asks for confirmation in turn. A tab that holds the lock is skipped, with its "Wait for workbook changes…" toast. No undo toast is shown. The right-clicked tab becomes active, and a final toast says "Closed {count} other tabs", or "No tabs were closed" if every close was refused or kept open. Confirmed in Excel on the web with four idle tabs ("Closed 4 other tabs").
 
 ### While tabs change
 
 Only closing has a waiting phase: the confirmation dialog. While it is open the turn keeps running, and the dialog covers the taskpane. Every other action is instant.
 
-When the tabs no longer fit, scroll arrows appear on each side of the strip. ‹ ("Scroll tabs left") and › ("Scroll tabs right") each show only when there is more to see in that direction, and each click scrolls by about one tab. The "+" button scrolls with the tabs, so it can be out of view when the strip overflows.
+When many tabs are open, the tabs first shrink. In a taskpane about 350 px wide, eleven tabs shrank to about 17 px each, showing only their × buttons and no title, and the last tab's × overlapped the "+" button; the strip never overflowed, so no scroll arrows appeared (confirmed in Excel on the web). Only when tabs cannot shrink further does the strip overflow: then ‹ ("Scroll tabs left") and › ("Scroll tabs right") appear, each only when there is more to see in that direction, and each click scrolls by about one tab. The "+" button scrolls with the tabs, so it can be out of view when the strip overflows.
 
 ### Afterwards
 
@@ -94,7 +98,7 @@ The tab layout reflects the change straight away, so a reload brings back the sa
 | Execution mode | No effect. The mode is shared by all tabs. | No effect. |
 | Files in the workspace, or an overlay open | Files are shared. An open overlay covers the tab strip, so clicks and right-clicks cannot reach it. Ctrl/Cmd+T, Ctrl/Cmd+W and Ctrl+PageUp/PageDown still act on the tabs behind it (the last only outside text fields). | The stop-and-close confirmation is itself an overlay. |
 | Tab state (new, restored, another tab busy) | A new tab that is closed before Pi answers is still saved, as a blank or unanswered session. Restored tabs behave like any other. Another tab being busy blocks nothing here. | A responding tab asks before closing. A busy tab cannot be duplicated. A tab holding the lock cannot be closed. |
-| Host (desktop or web) | On Excel on the web the browser may take Ctrl/Cmd+T, Ctrl/Cmd+W and Ctrl+PageUp/PageDown for its own tabs. | No effect. |
+| Host (desktop or web) | On Excel on the web (Chrome) the browser takes Ctrl+T (opens a browser tab), Ctrl+W (closes the Excel browser tab, or the whole window if it is the only tab) and Ctrl+PageDown/PageUp; none reaches Pi. Use "+", `/new`, the × and the context menu there. | No effect. |
 
 A variant that changes while the close confirmation is open is not re-checked when the user confirms (see [Open questions](#open-questions-and-verification)).
 
@@ -133,11 +137,11 @@ After any interrupt the user is on whichever tab is active, with the composer te
 
 **Settings and preferences.** No tab settings. The keyboard shortcuts page lists ⌘ T / Ctrl+T, ⌘ W / Ctrl+W, ⌘ ⇧ T / Ctrl+Shift+T, "← →" ("Switch tabs (exit input first)") and ⌘ ⇧ [ / ⌘ ⇧ ] / Ctrl+PgUp / PgDn.
 
-**Host differences.** On Excel on the web, the browser normally reserves Ctrl/Cmd+T, Ctrl/Cmd+W and Ctrl+PageUp/PageDown for its own tabs. See [host differences](../cross-cutting/host-differences.md).
+**Host differences.** On Excel on the web, the browser reserves Ctrl/Cmd+T, Ctrl/Cmd+W and Ctrl+PageUp/PageDown for its own tabs. Confirmed with real key presses in Chrome on Linux: Ctrl+T opened a new browser tab, Ctrl+W closed the browser window that held Excel (it was the only tab), and Ctrl+PageDown left Pi's tabs unchanged. See [host differences](../cross-cutting/host-differences.md).
 
 **Language.** Menu items, tooltips, the confirmation and the toasts are translated, except the direction word in "Moved tab left/right" and the " copy" suffix, which stay English.
 
-**Accessibility and keyboard.** Each tab is a button named "Open tab {title}". The × is named "Close tab", and the context menu is a `menu` named "Actions for tab {title}". Creating, switching and closing have keyboard paths. Moving, duplicating and closing other tabs need the context menu, and there is no keyboard shortcut for that menu. The menu has no arrow-key navigation, so Tab moves between its items.
+**Accessibility and keyboard.** Each tab is a button named "Open tab {title}". The × is named "Close tab", and the context menu is a `menu` named "Actions for tab {title}". Creating, switching and closing have keyboard paths. Moving, duplicating and closing other tabs need the context menu, and there is no keyboard shortcut for that menu. The menu has no arrow-key navigation, so Tab moves between its items. Unlike most overlays, the "Stop and close this tab?" confirmation takes focus when it opens (its × button is focused), so Escape cancels it at once (confirmed in Excel on the web).
 
 ## Edge cases
 
@@ -146,18 +150,21 @@ After any interrupt the user is on whichever tab is active, with the composer te
 - Closing a blank tab adds a blank "Untitled" session to the resume picker.
 - Closing the active first tab activates the tab that was second.
 - "Close other tabs" on a tab while several others are responding shows one confirmation per responding tab, one after another.
-- A new tab created by clicking "+" in an overflowing strip may be scrolled out of view. The strip does not scroll to it.
+- A new tab created by clicking "+" in an overflowing strip may be scrolled out of view. The strip does not scroll to it. In a 350 px taskpane the strip did not overflow even with eleven tabs (see [While tabs change](#while-tabs-change)).
+- A duplicate uses up a default number: after "Chat 11" was duplicated, the next new tab was "Chat 13".
 - The tab context menu can be open for a background tab while a different tab is active.
 
 ## Open questions and verification
 
 - The close sequence checks the workbook lock before showing "Stop and close this tab?" but not again after the user confirms (`src/taskpane/init.ts:1316-1333`). A tab that starts a mutation while the dialog is open can then be closed while it holds the lock. Read from code. Looks like a bug.
 - A tab that is busy without responding (for example running `/compact`) closes with no confirmation, and the compaction is discarded (`src/taskpane/init.ts:1321`). Read from code. Probably unintentional.
-- Ctrl+PageUp/PageDown and Cmd+Shift+[ / ] do nothing when focus is on a tab in the strip. The document-level handler skips the tab strip (`src/taskpane/keyboard-shortcuts.ts:364-371`), and the tab's own handler only knows plain arrows (`src/ui/pi-sidebar.ts:541-573`). Read from code. Looks like a bug.
-- Ctrl/Cmd+T and Ctrl/Cmd+W act on the tabs behind an open overlay (`src/taskpane/keyboard-shortcuts.ts:313-332` has no overlay check). Read from code.
-- On Excel on the web, whether the browser delivers Ctrl/Cmd+T, Ctrl/Cmd+W and Ctrl+PageUp/PageDown to the taskpane, or acts on its own tabs (closing the Excel tab on Ctrl+W), has not been checked. The same goes for Excel desktop on Windows and macOS.
+- Ctrl+PageUp/PageDown and Cmd+Shift+[ / ] do nothing when focus is on a tab in the strip. The document-level handler skips the tab strip (`src/taskpane/keyboard-shortcuts.ts:364-371`), and the tab's own handler only knows plain arrows (`src/ui/pi-sidebar.ts:541-573`). Confirmed in Excel on the web with keys sent to the page (TABS-08): after Escape put focus on a tab, Ctrl+PageUp did nothing, while the same keys with focus on the page body switched tabs. Looks like a bug.
+- Ctrl/Cmd+T and Ctrl/Cmd+W act on the tabs behind an open overlay (`src/taskpane/keyboard-shortcuts.ts:313-332` has no overlay check). Confirmed in Excel on the web with keys sent to the page: with the resume picker open, Ctrl+T added a tab and Ctrl+W closed it, and the picker stayed open.
+- On Excel on the web the browser keeps Ctrl+T, Ctrl+W and Ctrl+PageDown for itself (confirmed with real key presses in Chrome on Linux). A user who presses Ctrl+W expecting to close a Pi tab closes Excel instead. Excel desktop on Windows and macOS has not been checked.
+- With the command menu open, clicking another tab switched to it but left focus on the tab instead of the composer (seen once in Excel on the web). Minor.
+- Closing a tab that holds the workbook lock, and closing a tab that is busy but not responding (`/compact`), were not run: the lock is held too briefly to catch, and `/compact` on a short conversation ends at once with "Nothing to compact" or "Too few messages to compact".
 - While the undo toast is visible, plain toasts such as "Moved tab left" are dropped (`src/ui/toast.ts:190`). This is by design for the toast, but it hides feedback for 9 seconds after every close.
 - Whether the keyboard's context-menu key or Shift+F10 opens the tab context menu has not been checked.
-- Whether a new tab created during an overflowing strip is visible after creation has not been checked by hand.
+- Checked in Excel on the web on 2026-10-26; see [the checklist](../verification/sessions-and-commands.md#sessionstabsmd).
 
 Verified against pi-for-excel commit `ec453df`.
