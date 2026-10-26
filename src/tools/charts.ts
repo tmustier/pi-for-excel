@@ -25,6 +25,7 @@ import { formatRecoveryChartAddress } from "../workbook/recovery/chart-state.js"
 import { getErrorMessage } from "../utils/errors.js";
 import type { ChartListItemDetails, ChartsDetails } from "./tool-details.js";
 import { recoveryCheckpointUnavailable } from "./recovery-metadata.js";
+import { describeExcelFailure, parseExcelError } from "./mutation/excel-failure.js";
 import { finalizeMutationOperation } from "./mutation/finalize.js";
 import { appendMutationResultNote } from "./mutation/result-note.js";
 import type { MutationFinalizeDependencies, MutationRecoveryStep } from "./mutation/types.js";
@@ -843,7 +844,11 @@ export function createChartsTool(
 
         return result.result;
       } catch (error) {
-        const message = getErrorMessage(error);
+        const failure = await describeExcelFailure(parseExcelError(error), {
+          ...(params.sheet !== undefined ? { sheet: params.sheet } : {}),
+          ...(params.source_range !== undefined ? { range: params.source_range } : {}),
+        });
+        const message = failure.reason;
 
         if (isMutation) {
           const outputAddress = params.name ?? params.source_range ?? params.sheet;
@@ -861,13 +866,14 @@ export function createChartsTool(
         }
 
         return {
-          content: [{ type: "text", text: `Error (${params.action}): ${message}` }],
+          content: [{ type: "text", text: `Error (${params.action})${isMutation ? " — no chart was changed" : ""}. ${message}` }],
           details: {
             kind: "charts",
             action: params.action,
             ...(params.name !== undefined ? { name: params.name } : {}),
             ...(params.source_range !== undefined ? { sourceRange: params.source_range } : {}),
           },
+          isError: true,
         };
       }
     },

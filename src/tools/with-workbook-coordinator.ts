@@ -2,8 +2,8 @@
  * Tool wrapper that routes mutating tool calls through the workbook coordinator.
  */
 
-import type { AgentTool } from "@earendil-works/pi-agent-core";
-import type { TSchema } from "typebox";
+import type { AgentTool, AgentToolResult, AgentToolUpdateCallback } from "@earendil-works/pi-agent-core";
+import type { Static, TSchema } from "typebox";
 
 import {
   formatExecutionModeLabel,
@@ -71,24 +71,17 @@ function isWorkbookCoordinatorParamsShape(value: unknown): value is Record<strin
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function getActionParam(params: unknown): string | null {
-  if (!isWorkbookCoordinatorParamsShape(params)) return null;
+function readApprovalParams(params: unknown): { action: string | null; range: string | null } {
+  if (!isWorkbookCoordinatorParamsShape(params)) return { action: null, range: null };
 
-  const action = params.action;
-  return typeof action === "string" && action.trim().length > 0 ? action.trim() : null;
-}
-
-function getRangeParam(params: unknown): string | null {
-  if (!isWorkbookCoordinatorParamsShape(params)) return null;
-
-  const range = params.range;
-  return typeof range === "string" && range.trim().length > 0 ? range.trim() : null;
+  const action = typeof params.action === "string" ? params.action.trim() : "";
+  const range = typeof params.range === "string" ? params.range.trim() : "";
+  return { action: action.length > 0 ? action : null, range: range.length > 0 ? range : null };
 }
 
 export function buildMutationApprovalMessage(request: MutationApprovalRequest): string {
   const modeLabel = formatExecutionModeLabel(request.executionMode);
-  const action = getActionParam(request.params);
-  const range = getRangeParam(request.params);
+  const { action, range } = readApprovalParams(request.params);
 
   const toolLabel = action ? `${request.toolName}:${action}` : request.toolName;
   const lines = [
@@ -139,69 +132,100 @@ async function requireMutationApprovalIfNeeded(args: {
   }
 }
 
+/**
+ * Mutations started earlier in this tool set that have not finished. A model can
+ * issue a write and a verifying read in one batch; the batch's calls start in
+ * order but run concurrently, so without this a read can see the value from
+ * before the write. Reads wait for mutations already started; mutations do not
+ * wait for reads. Registration happens before the first `await` in `execute`,
+ * so the order of the batch decides who waits.
+ */
+type PendingMutations = Set<Promise<void>>;
+
 function wrapTool<TParameters extends TSchema, TDetails>(
   tool: AgentTool<TParameters, TDetails>,
   coordinator: WorkbookCoordinator,
   contextProvider: WorkbookCoordinatorContextProvider,
   mutationObserver: WorkbookMutationObserver | undefined,
   executionPolicy: WorkbookExecutionPolicy,
+  pendingMutations: PendingMutations,
 ): AgentTool<TParameters, TDetails> {
   return {
     ...tool,
-    execute: async (toolCallId, params, signal, onUpdate) => {
+    execute: (toolCallId, params, signal, onUpdate) => {
       const mode = getToolExecutionMode(tool.name, params);
-      const contextWorkbookId = await contextProvider.getWorkbookId();
-      const coordinatorWorkbookId = contextWorkbookId ?? "workbook:unknown";
-      const sessionId = contextProvider.getSessionId();
-      const context = makeContext({
-        workbookId: coordinatorWorkbookId,
-        sessionId,
-        toolName: tool.name,
-      });
-
-      throwIfAborted(signal);
-
       if (mode === "read") {
-        return coordinator.runRead(context, () => {
-          throwIfAborted(signal);
-          return tool.execute(toolCallId, params, signal, onUpdate);
-        });
+        const earlierMutations = [...pendingMutations];
+        if (earlierMutations.length === 0) return run(mode, toolCallId, params, signal, onUpdate);
+        return Promise.all(earlierMutations).then(() => run(mode, toolCallId, params, signal, onUpdate));
       }
 
-      await requireMutationApprovalIfNeeded({
-        policy: executionPolicy,
-        toolName: tool.name,
-        params,
-      });
-
-      throwIfAborted(signal);
-
-      const out = await coordinator.runWrite(
-        context,
-        () => {
-          throwIfAborted(signal);
-          return tool.execute(toolCallId, params, signal, onUpdate);
-        },
-      );
-
-      if (mutationObserver?.onWriteCommitted) {
-        const impact = getToolContextImpact(tool.name, params);
-        try {
-          mutationObserver.onWriteCommitted({
-            workbookId: contextWorkbookId,
-            sessionId,
-            toolName: tool.name,
-            impact,
-            revision: out.revision,
-          });
-        } catch (error) {
-          console.warn("[pi] Workbook mutation observer failed:", getErrorMessage(error));
-        }
-      }
-
-      return out.result;
+      const running = run(mode, toolCallId, params, signal, onUpdate);
+      const settled = running.then(() => undefined, () => undefined);
+      pendingMutations.add(settled);
+      void settled.then(() => pendingMutations.delete(settled));
+      return running;
     },
   };
+
+  async function run(
+    mode: ReturnType<typeof getToolExecutionMode>,
+    toolCallId: string,
+    params: Static<TParameters>,
+    signal: AbortSignal | undefined,
+    onUpdate: AgentToolUpdateCallback<TDetails> | undefined,
+  ): Promise<AgentToolResult<TDetails>> {
+    const contextWorkbookId = await contextProvider.getWorkbookId();
+    const coordinatorWorkbookId = contextWorkbookId ?? "workbook:unknown";
+    const sessionId = contextProvider.getSessionId();
+    const context = makeContext({
+      workbookId: coordinatorWorkbookId,
+      sessionId,
+      toolName: tool.name,
+    });
+
+    throwIfAborted(signal);
+
+    if (mode === "read") {
+      return coordinator.runRead(context, () => {
+        throwIfAborted(signal);
+        return tool.execute(toolCallId, params, signal, onUpdate);
+      });
+    }
+
+    await requireMutationApprovalIfNeeded({
+      policy: executionPolicy,
+      toolName: tool.name,
+      params,
+    });
+
+    throwIfAborted(signal);
+
+    const out = await coordinator.runWrite(
+      context,
+      () => {
+        throwIfAborted(signal);
+        return tool.execute(toolCallId, params, signal, onUpdate);
+      },
+    );
+
+    if (mutationObserver?.onWriteCommitted) {
+      const impact = getToolContextImpact(tool.name, params);
+      try {
+        mutationObserver.onWriteCommitted({
+          workbookId: contextWorkbookId,
+          sessionId,
+          toolName: tool.name,
+          impact,
+          revision: out.revision,
+        });
+      } catch (error) {
+        console.warn("[pi] Workbook mutation observer failed:", getErrorMessage(error));
+      }
+    }
+
+    return out.result;
+  }
 }
 
 export function withWorkbookCoordinator(
@@ -211,7 +235,8 @@ export function withWorkbookCoordinator(
   mutationObserver?: WorkbookMutationObserver,
   executionPolicy: WorkbookExecutionPolicy = {},
 ): AgentTool[] {
+  const pendingMutations: PendingMutations = new Set();
   return tools.map((tool) => isUnsupportedHostTool(tool)
     ? tool
-    : wrapTool(tool, coordinator, contextProvider, mutationObserver, executionPolicy));
+    : wrapTool(tool, coordinator, contextProvider, mutationObserver, executionPolicy, pendingMutations));
 }

@@ -26,7 +26,6 @@ import {
 import { buildWorkbookCellChangeSummary } from "../audit/cell-diff.js";
 import { getWorkbookChangeAuditLog } from "../audit/workbook-change-audit.js";
 import { getWorkbookRecoveryLog, MAX_RECOVERY_CELLS } from "../workbook/recovery-log.js";
-import { getErrorMessage } from "../utils/errors.js";
 import { findErrors } from "../utils/format.js";
 import {
   callDefaultPythonBridge,
@@ -42,6 +41,7 @@ import {
   CHECKPOINT_SKIPPED_NOTE,
   CHECKPOINT_SKIPPED_REASON,
 } from "./recovery-metadata.js";
+import { describeExcelFailure, parseExcelError } from "./mutation/excel-failure.js";
 import { finalizeMutationOperation } from "./mutation/finalize.js";
 import type { MutationFinalizeDependencies } from "./mutation/types.js";
 import { appendMutationResultNote } from "./mutation/result-note.js";
@@ -630,7 +630,11 @@ export function createPythonTransformRangeTool(
 
         return successResult;
       } catch (error) {
-        const message = getErrorMessage(error);
+        const parsed = parseExcelError(error);
+        // Excel failures get a specific reason; bridge/Python failures keep their message.
+        const message = parsed.code
+          ? (await describeExcelFailure(parsed)).reason
+          : parsed.message;
         const skillHint = shouldAttachPythonBridgeSkillHint(message)
           ? "python-bridge"
           : undefined;
@@ -648,6 +652,7 @@ export function createPythonTransformRangeTool(
             error: message,
             ...(skillHint !== undefined ? { skillHint } : {}),
           },
+          isError: true,
         };
       }
     },

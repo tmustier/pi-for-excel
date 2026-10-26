@@ -170,7 +170,8 @@ void test("duplicating a sheet to an existing name leaves the workbook unchanged
     new_name: "Existing",
   }));
 
-  assert.match(firstText(result), /^Error:/u);
+  assert.equal(result.isError, true);
+  assert.match(firstText(result), /^Error \(duplicate_sheet\) — the workbook was not changed\./u);
   assert.equal(copiesCreated, 0);
 });
 

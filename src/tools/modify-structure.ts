@@ -24,6 +24,7 @@ import {
   CHECKPOINT_SKIPPED_NOTE,
   CHECKPOINT_SKIPPED_REASON,
 } from "./recovery-metadata.js";
+import { describeExcelFailure, parseExcelError } from "./mutation/excel-failure.js";
 import { finalizeMutationOperation } from "./mutation/finalize.js";
 import { appendMutationResultNote } from "./mutation/result-note.js";
 import type { MutationFinalizeDependencies } from "./mutation/types.js";
@@ -489,7 +490,11 @@ export function createModifyStructureTool(): AgentTool<typeof schema, ModifyStru
 
         return toolResult;
       } catch (e) {
-        const message = getErrorMessage(e);
+        const failure = await describeExcelFailure(
+          parseExcelError(e),
+          params.sheet !== undefined ? { sheet: params.sheet } : {},
+        );
+        const message = failure.reason;
 
         await finalizeMutationOperation(mutationFinalizeDependencies, {
           auditEntry: {
@@ -504,11 +509,12 @@ export function createModifyStructureTool(): AgentTool<typeof schema, ModifyStru
         });
 
         return {
-          content: [{ type: "text", text: `Error: ${message}` }],
+          content: [{ type: "text", text: `Error (${params.action}) — the workbook was not changed. ${message}` }],
           details: {
             kind: "modify_structure",
             action: params.action,
           },
+          isError: true,
         };
       }
     },
