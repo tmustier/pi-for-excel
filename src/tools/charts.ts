@@ -25,7 +25,7 @@ import { formatRecoveryChartAddress } from "../workbook/recovery/chart-state.js"
 import { getErrorMessage } from "../utils/errors.js";
 import type { ChartListItemDetails, ChartsDetails } from "./tool-details.js";
 import { recoveryCheckpointUnavailable } from "./recovery-metadata.js";
-import { describeExcelFailure, parseExcelError } from "./mutation/excel-failure.js";
+import { describeExcelFailure, parseExcelError, unchangedClause } from "./mutation/excel-failure.js";
 import { finalizeMutationOperation } from "./mutation/finalize.js";
 import { appendMutationResultNote } from "./mutation/result-note.js";
 import type { MutationFinalizeDependencies, MutationRecoveryStep } from "./mutation/types.js";
@@ -866,7 +866,7 @@ export function createChartsTool(
         }
 
         return {
-          content: [{ type: "text", text: `Error (${params.action})${isMutation ? " — no chart was changed" : ""}. ${message}` }],
+          content: [{ type: "text", text: `Error (${params.action})${isMutation ? unchangedClause(failure, "no chart was changed") : ""}. ${message}` }],
           details: {
             kind: "charts",
             action: params.action,

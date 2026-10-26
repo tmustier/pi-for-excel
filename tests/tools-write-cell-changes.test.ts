@@ -5,7 +5,7 @@ import type { AgentToolResult } from "@earendil-works/pi-agent-core";
 
 import { createFillFormulaTool } from "../src/tools/fill-formula.ts";
 import { createWriteCellsTool } from "../src/tools/write-cells.ts";
-import { colName, FakeExcelHost, withFakeExcel } from "./fixtures/excel-write-host.ts";
+import { colName, FakeExcelHost, OfficeError, withFakeExcel } from "./fixtures/excel-write-host.ts";
 
 function text<T>(result: AgentToolResult<T>): string {
   const first = result.content[0];
@@ -232,5 +232,29 @@ void test("fill_formula over a range too large to read back reports the fill ins
     assert.equal(host.sheet("Big").formula("F60001"), "=C60001*E60001");
     assert.match(text(result), /bottom-right `=C60001\*E60001`/u);
     assert.match(text(result), /No backup/u);
+  });
+});
+
+void test("a chunked write interrupted by cell-edit mode reports exactly which rows landed", async () => {
+  const host = new FakeExcelHost(["Big"]);
+  // ~4.5 MB of text: written in several chunks, each synced on its own.
+  const rows = Array.from({ length: 15_000 }, (_, index) => [`${String(index).padStart(6, "0")}${"x".repeat(294)}`]);
+  host.failWrite = { at: 2, error: new OfficeError("InvalidOperationInCellEditMode", "Excel is in cell-editing mode.") };
+  const audits: Array<{ blocked: boolean; outputAddress?: string }> = [];
+
+  await withFakeExcel(host, async () => {
+    const result = await createWriteCellsTool({
+      appendAuditEntry: (entry) => { audits.push(entry); return Promise.resolve(); },
+      appendRecoverySnapshot: () => Promise.resolve(null),
+    }).execute("edit-mode-mid-write", { start_cell: "Big!A1", values: rows });
+
+    const landed = host.sheet("Big");
+    const lastWritten = [...Array(15_000).keys()].filter((index) => landed.value(`A${index + 1}`) !== "").length;
+    assert.ok(lastWritten > 0 && lastWritten < 15_000, "the first chunk landed and the rest did not");
+    assert.equal(result.isError, true);
+    assert.match(text(result), new RegExp(`Partly written\\*\\* — rows 1–${lastWritten} of Big!A1:A15000`, "u"));
+    assert.match(text(result), /Excel is in cell-edit mode/u);
+    assert.match(text(result), /Nothing was rolled back/u);
+    assert.equal(audits.at(-1)?.blocked, false, "the rows that landed are audited as a change");
   });
 });

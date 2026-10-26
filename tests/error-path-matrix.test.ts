@@ -8,7 +8,7 @@ import { createWebSearchTool } from "../src/tools/web-search.ts";
 import { OfficeError } from "./fixtures/excel-write-host.ts";
 
 /** An Excel host whose structural edits fail with `failure`, as Excel on the web does on a protected sheet. */
-async function withFailingStructureHost<T>(failure: OfficeError, action: () => Promise<T>): Promise<T> {
+async function withFailingStructureHost<T>(failure: Error & { code: string }, action: () => Promise<T>): Promise<T> {
   let failNextSync = false;
   const sheet = {
     id: "sheet-1",
@@ -255,6 +255,25 @@ void test("error-path matrix: cell-edit mode tells the agent to ask the user to 
   const text = result.content[0]?.type === "text" ? result.content[0].text : "";
 
   assert.equal(result.isError, true);
-  assert.match(text, /cell-edit mode/u);
-  assert.match(text, /press Enter or Esc/u);
+  assert.match(text, /the workbook was not changed\. Excel is in cell-edit mode: the user is typing in a cell/u);
+  assert.match(text, /Ask the user to finish editing the cell, then retry\./u);
+});
+
+void test("error-path matrix: cell-edit mode after an earlier step reached Excel does not claim nothing changed", async () => {
+  // Shape of excelRun's ExcelCellEditModeError (#792): it gives up without retrying once a sync succeeded.
+  const gaveUp = Object.assign(new Error("Excel is in cell-edit mode…"), {
+    code: "excel_cell_edit_mode",
+    waitedMs: 0,
+    earlierStepReachedExcel: true,
+  });
+  const result = await withFailingStructureHost(
+    gaveUp,
+    () => createModifyStructureTool().execute("call-edit-mode-late", { action: "insert_rows", sheet: "Protected", position: 3 }),
+  );
+  const text = result.content[0]?.type === "text" ? result.content[0].text : "";
+
+  assert.equal(result.isError, true);
+  assert.doesNotMatch(text, /was not changed/u);
+  assert.match(text, /part of this change may already be in the workbook; check it before retrying/u);
+  assert.match(text, /Excel is in cell-edit mode/u);
 });
