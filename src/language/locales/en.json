@@ -140,7 +140,7 @@
   "experimental.advancedSecurity": "Advanced / Security controls",
   "experimental.bridge.python": "Python bridge",
   "experimental.bridge.tmux": "Tmux bridge",
-  "experimental.dark_mode.desc": "Enable Office/theme-driven dark mode for the task pane UI.",
+  "experimental.dark_mode.desc": "Allow dark mode in the task pane. It follows Office’s theme (on the web, the theme set in Excel), or your system setting when Office has none.",
   "experimental.dark_mode.title": "Dark mode",
   "experimental.feature.none": "(none)",
   "experimental.hint": "Features in development, may evolve rapidly.",

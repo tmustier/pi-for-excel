@@ -20,6 +20,7 @@ import {
   STATUS_CONTEXT_WARNING_SEVERITY_ATTR,
 } from "./status-context.js";
 import type { RuntimeLockState } from "./session-runtime-manager.js";
+import { closeStatusPopover } from "./status-popovers.js";
 import { getThinkingLevelLabel } from "./thinking-display.js";
 
 export type ActiveAgentProvider = () => Agent | null;
@@ -296,6 +297,9 @@ export function injectStatusBar(opts: {
 
   const bindActiveAgent = () => {
     unsubscribeActiveAgent?.();
+    // Popovers describe the active tab (thinking, context, mode); a tab switch
+    // would leave them editing the old one (STATUS-08).
+    closeStatusPopover();
 
     const activeAgent = getActiveAgent();
     if (activeAgent) {
