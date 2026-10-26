@@ -134,7 +134,7 @@ Items keep their kind once queued: a steer does not become a follow-up if the tu
 | --- | --- | --- |
 | Stop (button or Escape) | Not applicable: nothing is queued while idle. | The Stop button strands steers and follow-ups and lets queued prompts and commands run next; Escape restores steers, follow-ups and queued prompts into the composer and drops queued commands. See [stopping](stopping.md). |
 | The user sends something else | Not applicable. | Each send adds a row. Mixed steers and follow-ups are delivered by the rules above, not in send order. |
-| Tab switched, created, closed or reopened | Not applicable. | Items stay with their tab and are delivered there. Closing a responding tab stops it ("Stop and close this tab?"); its waiting items are discarded with it. |
+| Tab switched, created, closed or reopened | Not applicable. | Items stay with their tab and are delivered there. Closing a responding tab stops it ("Stop and close this tab?"); its waiting items are discarded with it (confirmed in Excel on the web: a steer waiting behind a held tool call was never sent, and the reopened session ended at that tool call). |
 | An overlay or menu opens | Not applicable. | Items keep waiting and are delivered behind the overlay. |
 | Model or thinking level changes | Not applicable. | Model refused; thinking level applies to later model responses. |
 | The provider fails | Not applicable. | The turn ends; undelivered steers and follow-ups are stranded and leak into the next turn. Queued prompts start next. |
