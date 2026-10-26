@@ -58,7 +58,7 @@ Two small marks on a tab show what it is doing, whether it is active or not:
 - **The busy dot.** A small white dot after the title, shown while the tab is [busy](../glossary.md#the-turn): a turn is running, or a queued action such as `/compact` is running. It disappears when the tab is idle. It is decorative and is not announced to screen readers.
 - **"Locking…"** A small monospace label after the title, shown while one of the tab's mutations is waiting for another tab's mutation to release the [workbook lock](the-workbook.md). It disappears when the mutation starts.
 
-While a tab's mutation holds the lock, its × button is disabled with the tooltip "Wait for workbook changes to complete", and closing it is refused. Nothing else on the tab marks this state.
+While a tab's mutation holds the lock, its × button is disabled with the tooltip "Wait for workbook changes to complete", and closing it is refused. Nothing else on the tab marks this state; the status bar's lock badge reads "lock…" while the active tab waits and "lock" while it holds. Confirmed in Excel on the web with two tabs writing at once: the second showed "Locking…" until the first finished, then held the lock itself (Technique: an 8-second delay added to `Excel.run` in the taskpane over DevTools, so each write held the lock long enough to watch).
 
 ## Workbook links and workbook identity
 
@@ -185,7 +185,7 @@ In this table, "Before sent" means a tab that is idle and "While busy" means a t
 
 - A blank tab is saved when it is closed or restored, so blank sessions build up in the resume picker as "Untitled", "1 messages".
 - The same session can be open in two tabs, through resume or reopen. Both tabs save to the same session, and the last save wins.
-- Every never-saved workbook on one machine shares one tab layout, so a new "Book2" opens with the tabs left in "Book1" if Book1 was never saved.
+- Every never-saved workbook on one machine shares one tab layout, so a new "Book2" opens with the tabs left in "Book1" if Book1 was never saved. The same happened on Excel on the web for workbooks without an identity: a newly uploaded workbook opened with the eleven tabs left in the previous one.
 - Copies of one file opened from different paths, such as a synced local folder and the web, have different identities.
 - There is no limit on the number of tabs or saved sessions.
 - A duplicated tab uses up a default number even though its label is "{title} copy": after duplicating "Chat 11", the next new tab was "Chat 13". Confirmed in Excel on the web.
@@ -193,13 +193,12 @@ In this table, "Before sent" means a tab that is idle and "While busy" means a t
 ## Open questions and verification
 
 - The composer is shared by all tabs. A draft follows the user to another tab and is sent there. Confirmed in Excel on the web (SESS-03). The cause is that `src/ui/pi-sidebar.ts` renders a single `pi-input` and `src/taskpane/runtime-sidebar-binding.ts:15-44` swaps only the agent and queue display. This may be worth treating as a bug.
-- The "Compacting context…" label is set on the shared sidebar (`src/taskpane/action-queue.ts:72-79`, `107-114`), so a background tab's compaction shows in, and clears from, whichever tab is active. Read from code. Looks like a bug.
+- The "Compacting context…" label is set on the shared sidebar (`src/taskpane/action-queue.ts:72-79`, `107-114`), so a background tab's compaction shows in, and clears from, whichever tab is active. Confirmed in Excel on the web (SESS-15): an idle "Chat 1" showed "Compacting context…" while another tab compacted, and kept showing it after that tab was closed, until the compaction request finished. Looks like a bug.
 - A session can be open in two tabs at once. Confirmed in Excel on the web: resuming the session already open as "Chat 1" opened it again as "Chat 4", and after a reload with "Chat 4" active, "Chat 1" was active instead. See [resuming a session](../sessions/resuming-a-session.md#open-questions-and-verification).
 - Message counts include Pi's hidden instruction messages, so a blank session is listed with "1 messages". Confirmed in Excel on the web. The cause is `src/taskpane/sessions.ts:240`.
-- With the model-switch preference set to fork, a tab with no visible messages still counts as having messages, because every new tab starts with a hidden instruction message (`src/taskpane/init.ts:908`, `src/taskpane/session-runtime-manager.ts:201`). Changing the model of an empty tab may therefore open a copy instead of switching in place. Read from code, not confirmed. The test `session-runtime-lifecycle.test.ts` uses a runtime without that message.
-- The busy dot is white (`src/ui/theme/components/tabs.css:171-185`). On the active tab, which is green, it was clearly visible in Excel on the web. On an inactive tab, and for "Locking…" (70% white), it has not been checked and may be nearly invisible in the light theme.
+- With the model-switch preference set to fork, a tab with no visible messages still counts as having messages, because every new tab starts with a hidden instruction message (`src/taskpane/init.ts:908`, `src/taskpane/session-runtime-manager.ts:201`). Changing the model of an empty tab therefore opens a copy instead of switching in place. Confirmed in Excel on the web (SESS-16): on a new empty "Chat 2", choosing gpt-6-luna opened "Chat 2 (gpt-6-luna)" with the toast "Opened Chat 2 (gpt-6-luna) in a new tab". The test `session-runtime-lifecycle.test.ts` uses a runtime without that message. Looks like a bug.
+- The busy dot is white (`src/ui/theme/components/tabs.css:171-185`). On the active tab, which is green, it was clearly visible in Excel on the web. On an inactive tab it is nearly invisible in the light theme (confirmed in Excel on the web; see SESS-18). "Locking…" was readable on the active tab.
 - Workbook identity was unknown in Excel on the web for a OneDrive workbook opened signed out through an edit link: `Office.context.document.url` was empty, and so was the URL from `getFilePropertiesAsync` (`src/host/office-document-url.ts`). As a result the resume picker had no workbook filter and every session was unlinked. Whether a signed-in session reports an address is not known; until then, "web workbooks always have an identity" should not be assumed.
-- The workbook lock indicators ("Locking…", the disabled ×) were not seen: the lock is held only while a mutation runs, after any approval, which is too short to catch by hand.
 - Workbook identity on Excel desktop for macOS and Windows, including after "Save As", has not been checked by hand.
 - Checked in Excel on the web on 2026-10-26; see [the checklist](../verification/sessions-and-commands.md#foundationssessions-and-tabsmd).
 
