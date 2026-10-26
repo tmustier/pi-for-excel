@@ -2,11 +2,11 @@
 
 ## Summary
 
-Renaming gives a session tab a title the user chose instead of the default "Chat N". The chosen title replaces the tab label, becomes the session's title in the [resume picker](resuming-a-session.md), and is used in the close and reopen toasts. There are three ways in: double-click the tab, right-click the tab and choose "Rename tab…", or type `/name My title` in the [composer](../turn/the-composer.md). The first two open a native browser prompt titled "Rename tab"; `/name` renames at once with no dialog. All three refuse to run while the tab is [busy](../glossary.md#busy). None of them needs a provider to be connected. On Excel on the web, and wherever Office.js stubs out browser dialogs, the double-click and "Rename tab…" paths do nothing at all (see [Open questions](#open-questions-and-verification)); `/name` is the only path that works there.
+Renaming gives a session tab a title the user chose instead of the default "Chat N". The chosen title replaces the tab label, becomes the session's title in the [resume picker](resuming-a-session.md), and is used in the close and reopen toasts. There are three ways in: double-click the tab, right-click the tab and choose "Rename tab…", or type `/name My title` in the [composer](../turn/the-composer.md). The first two open a native browser prompt titled "Rename tab"; `/name` renames at once with no dialog. All three refuse to run while the tab is [busy](../glossary.md#the-turn). None of them needs a provider to be connected. On Excel on the web, and wherever Office.js stubs out browser dialogs, the double-click and "Rename tab…" paths do nothing at all (see [Open questions](#open-questions-and-verification)); `/name` is the only path that works there.
 
 ## The simple case
 
-The user types `/name Q3 budget review` in the composer and presses Enter. The composer clears, the tab label changes to "Q3 budget review" (cut off with an ellipsis after about 110 px, with the full title in the tab's tooltip), and a toast says "Session named: Q3 budget review". The tab stays active and focus stays in the composer.
+The user types `/name Q3 budget review` in the composer and presses Enter. The composer clears, the tab label changes to "Q3 budget review" (cut off with an ellipsis after about 110 px, with the full title in the tab's tooltip), and a toast says "Session named: Q3 budget review". Confirmed in Excel on the web, including the tooltip and the accessible name "Open tab {title}". The tab stays active and focus stays in the composer.
 
 On a host where the native prompt works, the user can instead double-click the tab, or right-click it and choose "Rename tab…". A prompt titled "Rename tab" appears, prefilled with the tab's current label. The user edits the text and confirms. The label changes and a toast says "Renamed to Q3 budget review". Clearing the text and confirming removes the chosen title instead: the label goes back to "Chat N" and the toast says "Tab name reset".
 
@@ -43,7 +43,7 @@ For the two dialog paths, the prompt is prefilled with the text the user would e
 
 The rename ends without recording anything when:
 
-- **The tab is busy.** The dialog paths show the toast "Wait for this tab to finish before renaming". `/name` goes through the [command busy policy](../commands/the-command-menu.md) instead and shows "Can't run /name while Pi is busy". The text the user typed after `/name` is kept in the composer because the command never ran.
+- **The tab is busy.** The dialog paths show the toast "Wait for this tab to finish before renaming" (confirmed in Excel on the web for both double-click and "Rename tab…": the busy check runs before the prompt, so on a busy tab the user does see this toast even where the prompt itself would fail). `/name` goes through the [command busy policy](../commands/the-command-menu.md) instead and shows "Can't run /name while Pi is busy". The text the user typed after `/name` is kept in the composer because the command never ran.
 - **The prompt is cancelled.** Cancel or Escape in the native prompt closes it. No toast, no change.
 - **`/name` has no text.** `/name` on its own, or followed only by spaces, shows the toast "Usage: /name My Session Name" and changes nothing. The composer is cleared.
 - **The tab no longer exists.** If the tab closed between the click and the prompt, the toast is "Session not found".
@@ -135,10 +135,11 @@ After any interrupt the user is back on the tab they started from, with the comp
 ## Open questions and verification
 
 - Double-click and "Rename tab…" call the browser's native `window.prompt`, which Office.js replaces with a function that throws "Function window.prompt is not supported." Confirmed in Excel on the web: double-clicking a tab does nothing, with no toast and no error shown. This makes two of the three rename paths dead on that host and likely on others; it may be worth treating as a bug rather than documenting. The repo already has an in-taskpane text dialog (`requestTextInputDialog`) that would fit.
-- A chosen title does not survive a reload: the label falls back to "Chat N" because the restored session is loaded without the "chosen title" flag. Confirmed in Excel on the web with a tab that had one completed turn and was named with `/name`. Looks like a bug.
+- A chosen title does not survive a reload: the label falls back to "Chat N" because the restored session is loaded without the "chosen title" flag. Confirmed again in Excel on the web on 2026-10-26: "Q3 budget" came back as "Chat 1", while the resume picker still listed the session as "Q3 budget" and resuming it gave a tab "Chat 4" with the toast "Resumed in new tab: Q3 budget". Looks like a bug.
 - In a tab where Pi has not answered yet, the title is not saved until the first response. Read from code, not confirmed by hand.
 - The "Rename tab" prompt title is hard-coded English. Read from code.
 - Whether the prompt works in desktop Excel on macOS and Windows has not been checked.
+- Checked in Excel on the web on 2026-10-26; see [the checklist](../verification/sessions-and-commands.md#sessionsrenaming-a-tabmd).
 - The toast wording differs between paths ("Session named: …" vs "Renamed to …"), and the busy refusal wording differs too ("Wait for this tab to finish before renaming" vs "Can't run /name while Pi is busy"). Probably unintentional; a product call.
 
 Verified against pi-for-excel commit `ec453df`.
