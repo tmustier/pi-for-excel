@@ -117,7 +117,7 @@ After any interrupt the user is back on the tab they started from, with the comp
 
 **Settings and preferences.** No interaction.
 
-**Host differences.** The native prompt is the only rename dialog. Office.js replaces `window.prompt` with a function that throws on Excel on the web, so double-click and "Rename tab…" fail silently there. Whether desktop Excel on macOS (WKWebView) and Windows (WebView2) show the prompt has not been confirmed.
+**Host differences.** The native prompt is the only rename dialog. Office.js replaces `window.prompt` with a function that throws on Excel on the web, so double-click and "Rename tab…" fail silently there. Excel for Mac is worse: no prompt appears, whether Excel is in front or not, and the call never returns, so the taskpane freezes (no clicks, no keys) until the user closes it and opens Pi again (confirmed in Excel for Mac, RENAME-09). Windows (WebView2) has not been checked.
 
 **Language.** The toasts and the context-menu label are translated. The prompt's title, "Rename tab", is hard-coded in English and is not translated in the Chinese UI. The default label "Chat N" is translated.
 
@@ -138,7 +138,7 @@ After any interrupt the user is back on the tab they started from, with the comp
 - A chosen title does not survive a reload: the label falls back to "Chat N" because the restored session is loaded without the "chosen title" flag. Confirmed again in Excel on the web on 2026-10-26: "Q3 budget" came back as "Chat 1", while the resume picker still listed the session as "Q3 budget" and resuming it gave a tab "Chat 4" with the toast "Resumed in new tab: Q3 budget". Looks like a bug.
 - In a tab where Pi has not answered yet, the title is not saved until the first response. Read from code, not confirmed by hand.
 - The "Rename tab" prompt title is hard-coded English. Read from code.
-- Whether the prompt works in desktop Excel on macOS and Windows has not been checked.
+- Confirmed in Excel for Mac: "Rename tab…" shows no prompt and freezes the taskpane until it is reopened; this may be worth treating as a bug, since renaming by dialog now works on no confirmed host. Windows has not been checked.
 - Checked in Excel on the web on 2026-10-26; see [the checklist](../verification/sessions-and-commands.md#sessionsrenaming-a-tabmd).
 - The toast wording differs between paths ("Session named: …" vs "Renamed to …"), and the busy refusal wording differs too ("Wait for this tab to finish before renaming" vs "Can't run /name while Pi is busy"). Probably unintentional; a product call.
 

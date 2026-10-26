@@ -181,6 +181,6 @@ After any interrupt, storage holds the last completed message of every tab that 
 - The backups retention setting ("Retention set to {count} backups") is saved but never applied: new backups are trimmed to the fixed 120 (`src/workbook/recovery-log.ts:420`). Read from code. Looks like a bug.
 - Compaction is not saved until the next completed message (`src/commands/builtins/export.ts` replaces messages without a save). Read from code, not confirmed by hand.
 - Restoring the global latest session into an unsaved workbook (`src/taskpane/sessions.ts:111-113`) can show a conversation from an unrelated workbook. Read from code; probably intended as a legacy fallback, but surprising.
-- Save As behavior (layout moves, links stay) was read from code and the `office-document-url` tests, not tried in desktop Excel.
+- Save As behavior (layout moves, links stay) was read from code and the `office-document-url` tests. Confirmed in Excel for Mac that the new identity is picked up without a reload and that sessions linked to the old name are listed only under "Show sessions from all workbooks"; where the layout is written was not checked.
 
 Verified against pi-for-excel commit `ec453df`.

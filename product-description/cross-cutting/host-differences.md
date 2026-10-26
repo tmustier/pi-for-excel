@@ -32,7 +32,7 @@ If Office.js is slow, Pi starts after 3 seconds anyway and keeps treating the ho
 | Area | Excel desktop, macOS | Excel desktop, Windows | Excel on the web |
 | --- | --- | --- | --- |
 | Engine | WKWebView (Safari) | WebView2 (Edge) | The user's browser, in a cross-origin iframe |
-| `window.prompt`, `alert`, `confirm` | Not confirmed | Not confirmed | Replaced by Office.js with functions that throw "Function window.prompt is not supported." (and the same for `alert` and `confirm`). Confirmed in Excel on the web. |
+| `window.prompt`, `alert`, `confirm` | `window.prompt` shows nothing and never returns, freezing the taskpane until it is reopened (confirmed in Excel for Mac; `alert` and `confirm` not tried) | Not confirmed | Replaced by Office.js with functions that throw "Function window.prompt is not supported." (and the same for `alert` and `confirm`). Confirmed in Excel on the web. |
 | Network error text | "Load failed" | "Failed to fetch" | "Failed to fetch" (Chromium) |
 | Plain `http://` requests to other machines | Blocked (mixed content); Excel for Mac also blocks `http://localhost` | Blocked to other machines | Blocked (mixed content) |
 | Workbook identity | From the file path; updated after Save As | From the file path or URL | Not available for a workbook opened through an anonymous link (confirmed); signed-in not checked |
@@ -46,7 +46,7 @@ The manifest declares no minimum Office.js version and Pi does not check which A
 
 ### Native browser dialogs
 
-Pi uses the browser's own prompt in two places: renaming a tab by double-click or "Rename tab…" (see [renaming a tab](../sessions/renaming-a-tab.md)), and installing a plugin from a URL ("Extension name:"). On Excel on the web the first does nothing and the second fails with "Install failed: Function window.prompt is not supported.". Every other dialog in Pi is drawn inside the taskpane and works on every host.
+Pi uses the browser's own prompt in two places: renaming a tab by double-click or "Rename tab…" (see [renaming a tab](../sessions/renaming-a-tab.md)), and installing a plugin from a URL ("Extension name:"). On Excel on the web the first does nothing and the second fails with "Install failed: Function window.prompt is not supported.". On Excel for Mac both freeze the taskpane with no visible prompt until it is closed and Pi is opened again (confirmed in Excel for Mac). Every other dialog in Pi is drawn inside the taskpane and works on every host.
 
 ### Keyboard
 
@@ -63,7 +63,7 @@ See [keyboard shortcuts](../ui/keyboard-shortcuts.md) for the full list.
 ### Clipboard, downloads and popups
 
 - **Clipboard.** Copy actions use the browser clipboard. On Excel on the web the taskpane frame does not have the clipboard-write permission (confirmed: the frame's permissions policy reports it as not allowed). Where copying fails, `/copy` shows nothing at all (no "Copied to clipboard"), while the proxy banner's "Copy command" selects the command text instead so the user can copy it by hand.
-- **Downloads** (manual backups, `/export`, downloading from the Files workspace) first open the file in a new window, because WKWebView ignores the usual download link, and fall back to a download link when the window is blocked. What the user then sees (a new browser tab, a save dialog, or the file in the default browser) is decided by the host.
+- **Downloads** (manual backups, `/export`, downloading from the Files workspace) first open the file in a new window, because WKWebView ignores the usual download link, and fall back to a download link when the window is blocked. What the user then sees (a new browser tab, a save dialog, or the file in the default browser) is decided by the host. On Excel for Mac nothing happens at all: no window, no save dialog, no file, with Excel in front or not, while the success toast still shows (confirmed in Excel for Mac for `/export download`, `/backup`, `/backup restore` and the Files preview's "Download" and "Open ↗").
 - **OAuth popups.** Logging in with an account opens the provider's page in a new window, without a link back to Pi. The login is completed either by the local proxy catching the redirect or by the user pasting the final URL into Pi; see [welcome and login](../setup/welcome-and-login.md).
 
 ### The CORS proxy and local network access
@@ -143,7 +143,7 @@ Pi recognises a workbook by its location (see [workbook identity](persistence-an
 - Backups on Excel on the web: because `isDirty` is always false, the save monitor's "first observation is already saved" rule (`src/workbook/save-boundary-monitor.ts:74`) clears a workbook's backups every time the taskpane opens, and in a workbook without an identity it likely clears the first backup within 4 seconds of its creation (the document token, and so the identity, only appears when that backup is taken). Read from code plus the confirmed `isDirty` behavior; not reproduced with a Pi mutation. Looks like a bug.
 - AutoSave on desktop clearing backups every few seconds is read from code, not observed.
 - `/copy` on a host that refuses clipboard writes shows no toast at all, because the failure is not handled (`src/commands/builtins/clipboard.ts:43`). Read from code; on the web the attempt from the test harness failed with "Document is not focused", so the permissions-policy failure itself was not isolated. Looks like a bug.
-- Whether `window.prompt` works in WKWebView and WebView2 desktop taskpanes is not confirmed; if Office stubs it there too, tab renaming by double-click is dead on every host.
+- Confirmed in Excel for Mac: `window.prompt` shows nothing and never returns, so tab renaming by dialog and install from URL freeze the taskpane. WebView2 (Windows) is not confirmed; if it fails too, tab renaming by double-click is dead on every host.
 - Browser-reserved shortcuts (Ctrl/Cmd+T, Ctrl/Cmd+W, Ctrl/Cmd+Shift+T, Ctrl+PageUp/PageDown, Cmd+Shift+[ and ]) on Excel on the web: described from standard browser behavior; synthetic key events over CDP cannot reproduce it, so not confirmed.
 - Chrome Local Network Access prompts for the hosted add-in calling `https://localhost:3003` on Excel on the web: not observed (the test browser disables the checks).
 - Whether workbooks opened signed in to OneDrive or SharePoint on Excel on the web report a URL, and so get an identity, has not been checked.

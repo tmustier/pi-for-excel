@@ -43,7 +43,7 @@ Two workbooks *without* an identity (two new, unsaved workbooks, or any two work
 
 ### Two taskpanes on the same workbook
 
-This happens when one workbook is shown in two taskpanes at once, for example in two windows of the same workbook, if Excel lets each window open Pi (not verified; see [Open questions](#open-questions-and-verification)), or the same workbook open in two browser tabs on Excel on the web.
+This happens when one workbook is shown in two taskpanes at once, for example in two windows of the same workbook, which Excel for Mac allows (confirmed in Excel for Mac; see [Open questions](#open-questions-and-verification)), or the same workbook open in two browser tabs on Excel on the web.
 
 - **Tabs.** Both taskpanes read the same tab layout and restore the same sessions, so each conversation is open twice. After that, each taskpane rewrites the shared layout whenever its own tabs change: the last change wins, and reopening the workbook restores that taskpane's tabs.
 - **The workbook lock does not cross taskpanes.** Each taskpane serializes its own mutations, but a mutation from one taskpane can run in the middle of a turn in the other, including on the same cells. Neither shows "Locking…" because of the other.
@@ -135,7 +135,7 @@ The document token Pi writes into a workbook without an identity is stored in th
 
 ## Open questions and verification
 
-- Whether Excel desktop (macOS or Windows) lets two windows of the same workbook each open their own Pi taskpane has not been checked. Everything under "Two taskpanes on the same workbook" is read from code and applies to any arrangement that puts two taskpanes on one workbook identity, including two browser tabs on Excel on the web.
+- Confirmed in Excel for Mac: after Window > New Window, the second window has no taskpane until the user presses "Open Pi" there, and then it runs its own Pi with its own tabs on the same workbook identity. Windows has not been checked. Everything under "Two taskpanes on the same workbook" is read from code and applies to any arrangement that puts two taskpanes on one workbook identity, including two browser tabs on Excel on the web.
 - Whether all Excel desktop taskpanes on one computer share one storage area was assumed from the single cache location in the repo's AGENTS.md; not tested.
 - Lost backups across taskpanes: `WorkbookRecoveryLog` loads the stored list once (`src/workbook/recovery-log.ts:375`) and writes its whole in-memory list on every new backup (`src/workbook/recovery-log.ts:420`), so two taskpanes erase each other's backups, even for different workbooks. The change audit log (`src/audit/workbook-change-audit.ts`) and the Files workspace tags (`src/files/workspace.ts:615-655`) follow the same pattern. Read from code. Looks like a bug.
 - Same session in two taskpanes: whole-record overwrite (`src/storage/local/sessions-store.ts:36`) loses the other taskpane's turns from storage. Read from code; no lock or warning exists. May be worth treating as a bug.

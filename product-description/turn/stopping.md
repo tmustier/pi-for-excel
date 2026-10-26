@@ -163,6 +163,6 @@ After a stop the user is in the same tab, idle or running the next queued item, 
 - Compaction ignores Stop: `runCompactCommand` is called without the agent's abort signal (`src/taskpane/action-queue.ts:85-92`, `:71-81`). Confirmed in Excel on the web for `/compact` and for auto-compaction before a prompt: no Stop button, and Escape only moved focus to the tab strip. An Escape pressed just as that compaction ends reaches the turn that starts and stops it. Stop during a mid-turn auto-compaction keeps the Stop button up until the summary is done, then ends the turn with "Error: signal is aborted without reason" (confirmed in Excel on the web).
 - Whether a write already sent to Excel completes after Stop has not been confirmed by hand; the coordinator checks for a stop only before starting the write (`src/tools/with-workbook-coordinator.ts:173-183`).
 - Closing a tab that is busy only compacting does not ask for confirmation (`src/taskpane/init.ts:1321`, which checks only `isStreaming`); what happens to the compaction has not been checked.
-- Whether Excel desktop delivers Escape to the taskpane in every focus state has not been checked.
+- Confirmed in Excel for Mac: Escape stops a response when focus is in the composer, and does nothing to Pi when focus is in the grid (Excel keeps it), as the Modifiers table says (STOP-15). Windows has not been checked.
 
 Verified against pi-for-excel commit `ec453df`.

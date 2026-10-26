@@ -195,7 +195,7 @@ After any interrupt the regions are where they were. What is lost is only what w
 - The 60-second timeout shows "Initialization failed: taskpane timeout" but does not stop startup (`src/taskpane/bootstrap.ts:69-80`); a late success mounts the sidebar under a fatal message that is never cleared (`src/taskpane/bootstrap.ts:84-86`). Read from code. May be worth treating as a bug.
 - The ">12s" warning goes only to the console (`src/taskpane/bootstrap.ts:66`); the user sees nothing for a slow start. A product call.
 - The page's language is hard-coded as Chinese (`<html lang="zh-CN">`, `src/taskpane.html:2`) and never updated to the UI language, so screen readers may read the English UI with Chinese pronunciation rules. May be worth treating as a bug.
-- Whether the composer actually receives focus when Excel desktop opens the taskpane (rather than the grid keeping it) has not been checked on macOS or Windows.
+- Confirmed in Excel for Mac: after "Open Pi" the composer has focus and typing goes there (TASKPANE-14). Windows has not been checked.
 - Whether the composer can take focus behind the welcome overlay (it focuses itself when first drawn, `src/ui/pi-input.ts:213`, without checking for overlays) has not been checked.
 - The window in which shortcuts, the command menu and the status bar are not yet installed (while extensions load, `src/taskpane/init.ts:1860-1924`) was read from code; with no extensions it was too short to observe.
 

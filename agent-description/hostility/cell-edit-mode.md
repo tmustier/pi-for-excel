@@ -34,7 +34,7 @@ Every Excel-touching tool behaves the same way. `instructions`, `conventions`, `
 
 ## Host differences
 
-Desktop Excel is documented to queue add-in requests until edit mode ends rather than fail them. That was not observed here. If true, desktop calls hang (with no timeout, see [throttling and timeouts](throttling-and-timeouts.md)) where web calls fail.
+Desktop Excel is documented to queue add-in requests until edit mode ends rather than fail them. Excel for Mac does not: a read during edit mode failed after about half a second with the same "Excel is in cell-editing mode…" error as on the web (confirmed in Excel for Mac, EDIT-05). Windows has not been checked.
 
 ## Proposed fix
 

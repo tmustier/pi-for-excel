@@ -86,7 +86,7 @@ The user stays on the same tab. If writing to the clipboard fails, `/export` sho
 | Execution mode | No effect on what is exported. Each audit entry records the mode it ran in. | Refused while busy. |
 | Files in the workspace, or an overlay open | Files are not exported. An open overlay that holds focus prevents typing the command. | Refused while busy. |
 | Tab state (new, restored, another tab busy) | A new tab still exports its hidden instructions and has nothing to `/copy`. A restored tab exports its full restored history. Another tab being busy does not matter: only the active tab is checked. | Refused while the active tab is busy, even though copying would be safe. Switching to an idle tab and exporting works. |
-| Host (desktop or web) | On Excel on the web the clipboard is blocked, so `/copy` and the clipboard forms of `/export` fail; downloads work. Desktop webviews have not been checked. | No effect. |
+| Host (desktop or web) | On Excel on the web the clipboard is blocked, so `/copy` and the clipboard forms of `/export` fail; downloads work. On Excel for Mac the reverse: the clipboard works when the command comes from a key press or click, and downloads save nothing although the toast says they did (confirmed in Excel for Mac). Windows has not been checked. | No effect. |
 
 A variant cannot change during the command, because it completes at once.
 
@@ -143,7 +143,7 @@ After any of these the user is on the same tab with the composer as it was, or e
 ## Open questions and verification
 
 - `/copy` does not handle a failed clipboard write: `navigator.clipboard.writeText(...)` has a `.then` but no `.catch` (`src/commands/builtins/clipboard.ts:43-45`), so on failure nothing is shown and the rejection is unhandled. Confirmed in Excel on the web (EXPORT-05): `/copy` after an "OK" answer showed no toast and raised an unhandled `NotAllowedError`. Looks like a bug; `/export` catches the same failure.
-- The download toast is shown whether or not a file was saved (`src/commands/builtins/export.ts:91-110`, `498-499`): `window.open` on a blob URL may open an empty window or nothing in Office webviews. On Excel on the web it opened a browser tab and also downloaded the file (EXPORT-08). Desktop not checked.
+- The download toast is shown whether or not a file was saved (`src/commands/builtins/export.ts:91-110`, `498-499`): `window.open` on a blob URL may open an empty window or nothing in Office webviews. On Excel on the web it opened a browser tab and also downloaded the file (EXPORT-08). Confirmed in Excel for Mac: "Transcript downloaded (11 messages)" with no file, no window and no save dialog, with Excel in front or not (EXPORT-11). Windows not checked.
 - The audit export is not limited to the current workbook (`src/commands/builtins/export.ts:115` lists all entries). Read from code. Possibly intended, but it can include addresses and cell values from other workbooks.
 - `/copy` and `/export` are refused while the active tab is busy (`src/commands/busy-command-policy.ts:11-24` does not list them), although both only read. Confirmed in Excel on the web for `/copy`, `/export` and `/share-session`. Probably a product call.
 - `/copy` only checks the most recent assistant message (`src/commands/builtins/clipboard.ts:13-22`). Read from code.

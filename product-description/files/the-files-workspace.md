@@ -141,7 +141,7 @@ Before each request Pi is given a short summary of the workspace as part of [aut
 - **"Copy content" fails on Excel on the web** with the clipboard permissions-policy error (confirmed, FILES-22), like every clipboard write in the add-in frame.
 - No disconnect for a connected folder: `disconnectNativeDirectory` (`src/files/workspace.ts:1041`) is never called. Read from code; could not be tried because connecting fails on the web.
 - No write/delete gate for Pi's `files` tool: `src/tools/experimental-tool-gates/wrappers.ts:451` states "`files` has no gate". A product call.
-- "Download" showed no toast and no visible result in the orb's Chrome; whether a file was saved could not be observed. Needs desktop for the WebView case.
+- "Download" showed no toast and no visible result in the orb's Chrome; whether a file was saved could not be observed. Confirmed in Excel for Mac: "Download" and "Open ↗" in the preview do nothing at all (no file, no window, no browser tab) (FILES-24). Looks like a bug.
 - Drops were made with a synthetic drop event in the taskpane frame; a real drag from the desktop through Excel's frame was not possible in the orb (needs desktop or a visible session). The empty state was not seen because a skill file already existed.
 
 Verified against pi-for-excel commit `ec453df`.
