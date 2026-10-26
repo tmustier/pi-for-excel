@@ -44,11 +44,11 @@ These are deliberate safety rules and apply to every markdown surface (user mess
 - **Links** are clickable only for `http`, `https`, `mailto` and `tel`. Anything else (`javascript:`, `data:`, `file:`) is shown as its link text, not as a link. Allowed links open in a new window, without giving the opened page access to the taskpane.
 - **Math** is not typeset. `$5 and $6` stays as written, which is why: dollar signs are currency in spreadsheets.
 
-Confirmed in the UI gallery for all four.
+Confirmed in the UI gallery for all four, and in Excel on the web in a live user message and Pi's answer: `<b>raw</b>` showed its brackets, `$5 and $6` stayed as written, an image became a link "image: logo", a `javascript:` link showed only its text, and an `https` link opened in a new window with `noopener noreferrer`.
 
 ### Markdown
 
-Text follows GitHub-style markdown: headings, emphasis, strikethrough, ordered and unordered lists, block quotes, horizontal rules, inline code, fenced code and tables. A single line break inside a paragraph is not kept: two lines without a blank line between them run together into one paragraph. This applies to user messages as well, so a message written over several lines with Shift+Enter shows as one paragraph unless the lines are separated by blank lines or are list items.
+Text follows GitHub-style markdown: headings, emphasis, strikethrough, ordered and unordered lists, block quotes, horizontal rules, inline code, fenced code and tables. A single line break inside a paragraph is not kept: two lines without a blank line between them run together into one paragraph. This applies to user messages as well, so a message written over several lines with Shift+Enter shows as one paragraph unless the lines are separated by blank lines or are list items. Confirmed in Excel on the web: a user message with "line one" and "line two" on separate lines showed "line one line two".
 
 Tables are wrapped in a horizontally scrolling box so a wide table does not widen the taskpane. They are ordinary HTML tables, not the Excel-style grid below.
 
@@ -56,9 +56,9 @@ Tables are wrapped in a horizontally scrolling box so a wide table does not wide
 
 A fenced code block becomes a code card: a bar with the language label and a "Copy" button (tooltip "Copy"), and the code below it in a monospace box that scrolls sideways. A fence without a language is labelled "text". JavaScript, TypeScript, Python, HTML, XML, CSS, JSON, Bash and SQL are syntax-highlighted by name; for any other label, or none, the highlighter guesses among those languages.
 
-Clicking "Copy" writes the code exactly as written to the clipboard. The label becomes "Copied!" with a check mark for 1.5 seconds. If the browser refuses the clipboard, Pi tries an older copy method; if that fails too, the label simply does not change and no error is shown.
+Clicking "Copy" writes the code exactly as written to the clipboard. The label becomes "Copied!" with a check mark for 1.5 seconds. If the browser refuses the clipboard, Pi tries an older copy method; if that fails too, the label simply does not change and no error is shown. On Excel on the web, where the clipboard API is blocked in the taskpane, the label still became "Copied!" for about 1.5 s with no error (confirmed), so the older method reported success; whether the clipboard really received the code was not checked.
 
-A fence whose language label contains anything but letters, digits and underscores (`c++`, `objective-c`, `f#`) does not get a code card: it is shown as a plain preformatted block with no bar and no Copy button. Confirmed in the UI gallery.
+A fence whose language label contains anything but letters, digits and underscores (`c++`, `objective-c`, `f#`) does not get a code card: it is shown as a plain preformatted block with no bar and no Copy button. Confirmed in the UI gallery and in Excel on the web (a `c++` fence in a user message and in Pi's answer).
 
 ### Copyable commands
 
@@ -66,7 +66,7 @@ Setup cards that ask the user to run a command (the bridge setup cards, see [exp
 
 ### Data grids from reads
 
-When Pi reads a range as data, the tool card's body shows a "Data" section with an Excel-style grid: column letters along the top starting at the range's first column, row numbers down the side starting at its first row, numbers and Excel errors styled distinctly, and empty cells blank. A "Copy CSV" button above it copies the CSV text Pi received; its label becomes "Copied!" for 1.5 seconds. A read with no values shows "(empty)". The grid is only how the card looks; Pi itself received plain CSV.
+When Pi reads a range in CSV mode (the card title reads "Export {range} (CSV)"), the tool card's body shows a "Data" section with an Excel-style grid: column letters along the top starting at the range's first column, row numbers down the side starting at its first row, numbers and Excel errors styled distinctly, and empty cells blank. A "Copy CSV" button above it copies the CSV text Pi received; its label becomes "Copied!" for 1.5 seconds. A read with no values shows "(empty)". The grid is only how the card looks; Pi itself received plain CSV. Pi's default read (compact mode) has no grid: its result is shown as markdown, with a table headed by the column letters and row numbers, followed by "Formulas" and "⚠️ Errors" lines where present, and no "Copy CSV" button. Confirmed in Excel on the web: a default read of Data2!C5:E9 showed a markdown table with no "Copy CSV"; a CSV-mode read of Sheet1!B1:D3 showed the grid with columns B–D, rows 1–3 and "Copy CSV" (the grid appears only for `details.kind === "read_range_csv"`, `src/ui/tool-renderers.ts:1105`).
 
 ### Dependency trees
 
@@ -80,18 +80,18 @@ The rest of a tool card's result is rendered by what it looks like: JSON as a hi
 
 Cell and range addresses inside tool cards are blue links: in card titles, in the humanized input ("Range", "Cell", "Start", "Source", "Position"), in before/after change tables, and in dependency trees. A list of several ranges becomes one link per range, with a shared sheet name shown once and "+N more" (not a link) after the first eight in places that cap the list.
 
-Clicking a link makes Excel activate the sheet and select the range, which scrolls it into view with Excel's normal selection highlight. For a multi-area address only the first area is selected. Nothing in the workbook changes: no backup is made, Excel's Undo is unaffected, and the tab does not become busy. Clicks closer together than 0.3 seconds are ignored. If the sheet no longer exists or the address is invalid, nothing happens and nothing is shown.
+Clicking a link makes Excel activate the sheet and select the range, which scrolls it into view with Excel's normal selection highlight. Focus stays on the link in the taskpane; it does not move to the grid. Confirmed in Excel on the web (clicking "Sheet1!B3" moved the selection from A2 to B3, the tab stayed idle). For a multi-area address only the first area is selected. Nothing in the workbook changes: no backup is made, Excel's Undo is unaffected, and the tab does not become busy. Clicks closer together than 0.3 seconds are ignored. If the sheet no longer exists or the address is invalid, nothing happens and nothing is shown. Confirmed in Excel on the web: a link to the deleted sheet Data2 did nothing, showed no toast, and logged an unhandled "ItemNotFound" rejection.
 
 Addresses in Pi's own text ("see Sheet1!B12") are not links; only tool cards have them.
 
 ### Attachments
 
-Pi for Excel cannot attach files to a message; dropped files go to the [Files workspace](../files/the-files-workspace.md). Sessions created elsewhere or by older versions may contain user messages with attachments. These show under the message text as tiles: an image with a preview is shown as a small image, any other file as an icon (a spreadsheet icon for `.xlsx`, `.xls`) with its file name. Tiles cannot be opened.
+Pi for Excel cannot attach files to a message; dropped files go to the [Files workspace](../files/the-files-workspace.md). Sessions created elsewhere or by older versions may contain user messages with attachments. These show under the message text as tiles: an image with a preview is shown as a small image, any other file as an icon (a spreadsheet icon for `.xlsx`, `.xls`) with its file name. Tiles cannot be opened. Confirmed in Excel on the web with a stored session edited to carry three attachments: "Budget 2026.xlsx" and "notes.pdf" showed as icon tiles with truncated names, an image with a preview showed as the image, and clicking a tile did nothing.
 
 ### Errors and endings
 
 - A model response that **failed** ends with a line "Error:" followed by the provider's reason, inside the assistant message. The [error banner](../glossary.md#the-taskpane) is separate; see [sending and the response](../turn/sending-and-the-response.md).
-- A model response that was **aborted** ends with the label "Request aborted". Tool calls in it that never got a result render as failed cards with no output.
+- A model response that was **aborted** ends with the label "Request aborted". Tool calls in it that never got a result render as failed cards with no output. Confirmed in Excel on the web: Stop mid-stream kept the partial text and ended it with "Request aborted", with no banner; a request sent offline ended with "Error: Failed to fetch".
 - Everything rendered before the ending stays as it was.
 
 ## Modifiers
@@ -119,7 +119,7 @@ Rendering never changes mid-message because of a variant; Ctrl/Cmd+O only shows 
 | The provider fails | Not applicable. | The message ends with the "Error:" line. |
 | The taskpane goes away | Nothing to lose; rendering is rebuilt from the saved session. | The streaming message is lost; completed messages render again after reopening. |
 | The workbook changes underneath | Grids, trees and change tables show what the tool saw at the time and do not update. Cell links select whatever is at that address now. | Same. |
-| Focus moves to the grid or another window | No effect. Clicking a cell link moves focus to Excel's selection. | Same. |
+| Focus moves to the grid or another window | No effect. Clicking a cell link changes Excel's selection but leaves focus on the link in the taskpane (confirmed in Excel on the web). | Same. |
 | The context window fills | Compacted messages are replaced by the summary card. | Same. |
 
 ## Interactions with other systems
@@ -156,11 +156,13 @@ Rendering never changes mid-message because of a variant; Ctrl/Cmd+O only shows 
 
 ## Open questions and verification
 
-- Single line breaks collapse in user messages because the user's text is rendered as markdown without line-break preservation (`src/ui/messages/messages.ts` renders user text through `markdown-block`; observed for `markdown-block` in the UI gallery, not yet in a live user bubble). A user's carefully line-broken message looks different from what they typed. May be worth treating as a bug.
-- Code fences with a language label containing `+`, `-` or `#` lose their code card and Copy button (`src/ui/messages/markdown-block.ts:120` only matches word characters). Confirmed in the UI gallery. Looks like a bug.
-- A cell link that fails (deleted or renamed sheet) does nothing and gives no feedback; the failure is an unhandled promise (`src/ui/cell-link.ts:82`, `:102`). Probably worth a toast.
+- Single line breaks collapse in user messages because the user's text is rendered as markdown without line-break preservation (`src/ui/messages/messages.ts` renders user text through `markdown-block`). Confirmed in a live user message in Excel on the web. A user's carefully line-broken message looks different from what they typed. May be worth treating as a bug.
+- Code fences with a language label containing `+`, `-` or `#` lose their code card and Copy button (`src/ui/messages/markdown-block.ts:120` only matches word characters). Confirmed in the UI gallery and in Excel on the web. Looks like a bug.
+- A cell link that fails (deleted or renamed sheet) does nothing and gives no feedback; the failure is an unhandled promise (`src/ui/cell-link.ts:82`, `:102`). Confirmed in Excel on the web (unhandled "ItemNotFound"). Probably worth a toast.
 - "Copy CSV" and several tool-card labels are hard-coded English (`src/ui/render-csv-table.ts:70`, `src/ui/tool-renderers.ts:1183`), while the equivalent "(no output)" in the default card is translated.
-- Where links open on each host has not been checked.
-- Attachment tiles were read from code only; no session with attachments was available.
+- Where links open on each host has not been checked; on Excel on the web they carry `target="_blank"`, so they would open a browser tab.
+- The code-block "Copy" reports "Copied!" on Excel on the web although the clipboard API is blocked there (the fallback `execCommand("copy")` path in the code block reports success). Whether anything reached the clipboard was not checked.
+- Attachment tiles were confirmed in Excel on the web by editing a stored session to carry attachments; no real session with attachments was available.
+- The data grid with "Copy CSV" appears only for CSV-mode reads. Pi's default read shows a markdown table instead, so most reads have no "Copy CSV".
 
 Verified against pi-for-excel commit `ec453df`.
