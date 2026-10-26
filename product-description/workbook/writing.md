@@ -40,7 +40,7 @@ Each tool, with its card header and the details the user can see:
 - **Modify structure** (`modify_structure`). Insert or delete rows or columns, add, delete, rename, duplicate, hide or unhide a sheet. The header is the result sentence, for example "Inserted 3 row(s) at row 5 in "Sheet1"." or "Deleted sheet "Old"." There is no confirmation in Auto mode, including for deletes.
 - **Format cells** (`format_cells`). Font, fill, number format (including named styles such as "currency" or "header"), borders, alignment, wrap, column width in Excel's character units, row height, auto-fit, merge and unmerge, on one range or several ranges of the same sheet. Header "Format {address}". When nothing needs saying, the result is replaced by "✓ Done"; warnings (for example a column width that may differ because the font is not Arial 10) are shown instead.
 - **Conditional format** (`conditional_format`). Adds a rule (formula, cell value, text, top/bottom, data bar, color scale, icon set and others) or clears all rules in a range. Header "Cond. format {address}", result "✓ Done" when clean.
-- **View settings** (`view_settings`). Gridlines and headings on or off, freeze rows, columns or at a cell, unfreeze, tab color, hide, show or very-hide a sheet, standard column width, and switching the active sheet. Headers such as "Hide gridlines (Sheet1)", "Freeze Sheet1!B2", "Activate Sheet2". These changes have no backup, so the header always ends " — no backup".
+- **View settings** (`view_settings`). Gridlines and headings on or off, freeze rows, columns or at a cell, unfreeze, tab color, hide, show or very-hide a sheet, standard column width, and switching the active sheet. Headers such as "Hide gridlines (Sheet1)", "Freeze Sheet1!B2", "Set freeze rows (Sheet1)", "Activate Sheet2". These changes have no backup, so the header always ends " — no backup" (confirmed in Excel on the web: "Set freeze rows (Sheet1) — no backup", with "ℹ️ Backup not created." in the result).
 - **Comments** (`comments`). Add, edit, reply to, delete, resolve or reopen the comment on one cell. Headers "Add comment {cell}", "Reply {cell}", "Resolve {cell}", and so on.
 - **Charts** (`charts`). Create a column, bar, line, area, pie, doughnut, scatter or radar chart from a source range; update a chart's type, title, legend, position or source; delete a chart. Headers "Chart 'Sales' created — Sheet1!A1:B13", "Chart 'Sales' updated", "Chart 'Sales' deleted — no backup". Pi can also capture a chart as a picture to check its work ("Chart image 'Sales' (600×360px)"), which is a read; the picture appears in the card.
 
@@ -50,10 +50,10 @@ There is no tool for named ranges, Excel tables, pivot tables or data validation
 
 A mutation can end without changing anything:
 
-- **Overwrite protection.** `write_cells` and `fill_formula` refuse to write over cells that already hold a value or a formula, unless Pi explicitly set the overwrite flag. Formatting, conditional formats and validation rules alone do not count as data. The card header ends " — blocked" ("Write {address} — blocked"), and the result shows "⛔ Write blocked — {address} contains N non-empty cell(s).", the existing data as a table, and the instruction to Pi: "To overwrite, confirm with the user and retry with `allow_overwrite: true`." Pi usually stops and asks the user in its reply; the user answers in a new message. Nothing was written, but the call still counted as a mutation: in Confirm mode the user was asked to approve a write that then did not happen.
+- **Overwrite protection.** `write_cells` and `fill_formula` refuse to write over cells that already hold a value or a formula, unless Pi explicitly set the overwrite flag. Formatting, conditional formats and validation rules alone do not count as data. The card header ends " — blocked" ("Write {address} — blocked"), and the result shows "⛔ Write blocked — {address} contains N non-empty cell(s).", the existing data as a table, and the instruction to Pi: "To overwrite, confirm with the user and retry with `allow_overwrite: true`." Pi usually stops and asks the user in its reply; the user answers in a new message. (Header, message and instruction confirmed in Excel on the web; the header reads "Write Sheet1!A1:A1 — blocked" for a one-cell write.) Nothing was written, but the call still counted as a mutation: in Confirm mode the user was asked to approve a write that then did not happen.
 - **Invalid input.** An empty value array, a start cell that is a range, a fill formula that does not start with "=", a multi-area fill range, a sheet that does not exist: the card completes with "Error: …" text, and Pi usually corrects itself.
 - **Approval declined.** In Confirm mode, Cancel fails the call; see [confirm mode and approvals](confirm-mode-and-approvals.md).
-- **Stopped while waiting.** A mutation still waiting for approval or the lock when the user stops the turn does nothing.
+- **Stopped while waiting.** A mutation still waiting for approval or the lock when the user stops the turn does nothing; its card shows "Aborted" in the error style (confirmed in Excel on the web).
 
 ### Applied
 
@@ -98,7 +98,7 @@ Mid-interaction changes take effect at the next tool call, never during one.
 
 | Event | Before sent | While busy |
 | --- | --- | --- |
-| Stop (button or Escape) | Not applicable: the user does not start a mutation. | A mutation waiting for approval or the lock does nothing. One already in Excel completes, keeps its backup, and its card shows the real result. Mutations in the same model response that had not started report "Operation aborted". |
+| Stop (button or Escape) | Not applicable: the user does not start a mutation. | A mutation waiting for approval or the lock does nothing. One already in Excel completes, keeps its backup, and its card shows the real result. Mutations in the same model response that had not started end with "Aborted" in the error style, and the transcript shows "Error: signal is aborted without reason" (confirmed in Excel on the web: of six parallel writes, two completed and four were "Aborted"). |
 | The user sends something else | Not applicable. | A steer is delivered after the running mutations finish. Telling Pi "don't overwrite that" does not stop a write already applying. |
 | Tab switched, created, closed or reopened | Not applicable. | The mutation continues in its tab. The tab cannot be closed while its mutation holds the lock. |
 | An overlay or menu opens | Not applicable. | The mutation continues. Opening Backups and restoring waits for the lock, then applies. |
@@ -106,7 +106,7 @@ Mid-interaction changes take effect at the next tool call, never during one.
 | The provider fails | Not applicable. | A running mutation finishes and stays; the turn then fails. |
 | The taskpane goes away | Not applicable. | A change already sent to Excel may be applied without its backup being stored. |
 | The workbook changes underneath | Not applicable. | If the user types into the target range between Pi's read and its write, overwrite protection catches it only if Pi did not ask to overwrite. If the user switches sheets, addresses without a sheet name go to the new active sheet. |
-| Focus moves to the grid or another window | Not applicable. | The mutation continues; if the user is editing a cell, Excel may hold it until the edit ends. |
+| Focus moves to the grid or another window | Not applicable. | The mutation continues. If the user is editing a cell when a tool runs, Excel on the web rejects it at once with "Excel is in cell-editing mode…"; Pi usually asks the user to finish the edit (confirmed for a read in the same turn). |
 | The context window fills | Not applicable. | No effect on the change. |
 
 After any interrupt, changes already applied stay in the workbook; the transcript shows which cards completed. The user can revert them from Backups.
@@ -143,13 +143,13 @@ After any interrupt, changes already applied stay in the workbook; the transcrip
 - Hiding a sheet with `modify_structure` has a backup; hiding it with `view_settings` does not.
 - Updating a chart's source range cannot be reverted: "ℹ️ Chart property backup only. Excel does not expose the previous source range, so `workbook_history` cannot revert this update's data-source change."
 - Filling a formula copies the top-left cell's formatting across the range, as Excel's fill does; the backup only covers values and formulas.
-- Several mutations in one model response appear as several cards; consecutive cards of the same kind may be grouped ("3 edits"); see [tool calls](../turn/tool-calls.md).
+- Several mutations in one model response appear as several cards; consecutive cards of the same kind may be grouped ("2 edits", confirmed); see [tool calls](../turn/tool-calls.md).
+- On Excel on the web, Excel's own Undo (Ctrl/Cmd+Z in the grid) takes back Pi's writes; see [the workbook](../foundations/the-workbook.md#excels-undo).
 
 ## Open questions and verification
 
-- Read from code; the grid behavior, card wording and timing have not been checked in the running product.
-- A write that overwrite protection blocks still goes through Confirm mode's approval and the lock, so the user can approve a change that then does not happen. Probably a product call.
-- When the user stops a turn while a mutation is already in Excel, whether the change lands and how the card shows it has not been confirmed.
+- Checked by hand in Excel on the web (orb session, `ec453df`), 26 October 2026: write cells (receipt, "Changes" table with "∅", verification, "Explain these changes" with "Explanation uses a bounded metadata sample."), overwrite protection, format cells, view settings, modify structure, grouping, and Stop during parallel writes. See [the workbook checklist](../verification/workbook.md#workbookwritingmd). Fill formula, conditional formats, comments and charts were not run.
+- A write that overwrite protection blocks still goes through Confirm mode's approval and the lock, so the user can approve a change that then does not happen. Probably a product call. Not run by hand.
 - Whether `fill_formula` (Excel's AutoFill "FillDefault") also copies formats on every host, and whether reverting it leaves them, has not been checked.
 - Partial failures inside `format_cells` (some properties applied before an error) leave changes with no backup. Read from code.
 
