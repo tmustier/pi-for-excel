@@ -213,6 +213,7 @@
   "export.toast.transcript_copied": "Transcript copied ({count} messages, {size}KB)",
   "export.toast.transcript_downloaded": "Transcript download started ({count} messages)",
   "ext-hub-connections.addButton": "Add",
+  "export.toast.transcript_download_instead": "The clipboard isn't available here, so the transcript download started instead ({count} messages)",
   "ext-hub-connections.allowExternal": "Allow Pi to search the web and call external services",
   "ext-hub-connections.badgeDisabled": "Disabled",
   "ext-hub-connections.badgeEnabled": "Enabled",
