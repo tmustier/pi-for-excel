@@ -42,7 +42,7 @@ The vocabulary used across these documents. When a document uses one of these wo
 
 **Disclosure bar.** The one-time notice above the transcript, "Pi can search the web, use extensions, and connect to external services.", with "Got it" and "Customize". It disappears once dismissed.
 
-**Proxy banner.** The warning above the transcript, "Proxy not running · Some features won't work.", shown when the selected provider needs the CORS proxy and none is detected. See [the proxy](setup/the-proxy.md).
+**Proxy banner.** The warning above the transcript, "Proxy not running · Some features won't work.", shown whenever the health check of the stored proxy URL fails (checked every 30 s), whatever the provider and whether or not the proxy switch is on. It cannot be dismissed. See [the proxy](setup/the-proxy.md).
 
 **Loading screen.** What the taskpane shows between **Open Pi** and the sidebar: a spinner with "Initializing…". If startup fails, or takes more than 60 s, a *startup error* replaces it.
 
@@ -165,6 +165,22 @@ The vocabulary used across these documents. When a document uses one of these wo
 **Compaction.** Replacing older messages in a session with a summary written by the model, to free context. Manual with `/compact`; automatic before a prompt or between model responses when the context is nearly full (auto-compaction), and once after a context overflow. A compaction summary appears in the transcript in place of the messages it replaced.
 
 **CORS proxy.** A small local or organisation-hosted HTTPS server that relays requests the Office webview cannot make directly, needed for some OAuth logins and providers. Configured in Settings → Proxy. See [the proxy](setup/the-proxy.md).
+
+**Credential.** What makes a provider connected: an OAuth login (access and refresh token), a saved API key, or a saved custom gateway (even one with no key). Stored per machine in the add-in's browser storage, never in the workbook. Saving a key does not test it. OAuth logins are restored, and refreshed if expired, only when the taskpane opens. Disconnecting deletes the stored credential without revoking it at the provider.
+
+**Default model.** The model Pi chooses for the first tab of a fresh taskpane and as the replacement when a tab's provider stops being connected; recomputed when the set of connected providers changes. Preference: OpenAI (API), then OpenAI (ChatGPT), then Anthropic's newest Opus, then Google, then any provider's newest; with nothing connected, GPT-6.1 Sol from OpenAI (API). New tabs copy the active tab's model, not the default.
+
+**Connection dialog.** The overlay "Connect {label}" ("This model needs a login or API key to continue.") that a turn opens when its model's provider has no credential. Connecting continues the turn; dismissing fails it.
+
+**Welcome overlay.** The first-run overlay ("Pi for Excel", "Connect an AI provider to get started", "Select provider") shown when the taskpane opens with no provider connected. It closes on any connection; Escape or a backdrop click dismiss it.
+
+**Model picker.** The "Select model" overlay, opened by the status-bar model control, `/model` or `/default-models`.
+
+**Model-switch behavior.** What choosing a model does to a tab with messages: **in place** (default) changes the tab's model; **fork** (Settings: "Fork model switch into new tab") opens a copy titled "{source title} ({model id})".
+
+**Proxy gate.** The dialog "One more step before login" shown before an OAuth login that needs the CORS proxy when none answers, with "Copy", "Retry" and "Cancel".
+
+**Custom gateway.** A user-added OpenAI-compatible endpoint. It becomes a provider named "Gateway · {name}" with exactly one model.
 
 ## Input
 

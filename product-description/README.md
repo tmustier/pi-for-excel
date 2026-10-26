@@ -111,11 +111,12 @@ bug-triage.md                    suspected defects collected from every document
 
 verification/
   README.md                      how to run a hand-verification pass and record results
-  foundations-and-turn.md        checklists for foundations/ and turn/
-  sessions-and-commands.md       checklists for sessions/ and commands/
-  workbook.md                    checklists for workbook/
-  setup-guidance-files.md        checklists for setup/, guidance/ and files/
-  extensions-ui-cross-cutting.md checklists for extensions/, ui/ and cross-cutting/
+  foundations-and-turn.md        checklists for foundations/the-taskpane.md, foundations/turns.md and turn/
+  sessions-and-commands.md       checklists for foundations/sessions-and-tabs.md, sessions/ and commands/
+  workbook.md                    checklists for foundations/the-workbook.md and workbook/
+  setup.md                       checklists for foundations/models-and-providers.md and setup/
+  guidance-files-extensions.md   checklists for guidance/, files/ and extensions/
+  ui-and-cross-cutting.md        checklists for ui/ and cross-cutting/
 
 foundations/
   the-taskpane.md                the regions of the sidebar, what is shown on arrival, and how
@@ -208,12 +209,12 @@ Status is one of `not started`, `drafted`, or `verified`.
 | --- | --- |
 | glossary.md | drafted |
 | bug-triage.md | not started |
-| verification/ (5 checklists) | not started |
+| verification/ (6 checklists) | not started |
 | foundations/the-taskpane.md | drafted |
 | foundations/turns.md | drafted |
 | foundations/sessions-and-tabs.md | drafted |
 | foundations/the-workbook.md | drafted |
-| foundations/models-and-providers.md | not started |
+| foundations/models-and-providers.md | drafted |
 | turn/the-composer.md | drafted |
 | turn/sending-and-the-response.md | drafted |
 | turn/tool-calls.md | not started |
@@ -234,11 +235,11 @@ Status is one of `not started`, `drafted`, or `verified`.
 | workbook/confirm-mode-and-approvals.md | drafted |
 | workbook/backups-and-revert.md | drafted |
 | workbook/manual-backups.md | drafted |
-| setup/welcome-and-login.md | not started |
-| setup/the-model-picker.md | not started |
-| setup/settings.md | not started |
-| setup/custom-gateways.md | not started |
-| setup/the-proxy.md | not started |
+| setup/welcome-and-login.md | drafted |
+| setup/the-model-picker.md | drafted |
+| setup/settings.md | drafted |
+| setup/custom-gateways.md | drafted |
+| setup/the-proxy.md | drafted |
 | guidance/rules.md | not started |
 | guidance/conventions.md | not started |
 | guidance/skills.md | not started |
