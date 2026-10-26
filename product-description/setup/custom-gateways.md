@@ -158,6 +158,7 @@ After any interrupt the user is on the gateway page with the form as it was, unl
 - The save toast names the gateway as typed rather than its stored name, so two saves of "Warehouse" both say "Saved gateway Warehouse." although the second is "Warehouse (2)". Minor.
 - Validation and transport messages are hard-coded English (`src/auth/custom-gateways.ts:67-133`, `src/auth/stream-proxy.ts:97`).
 - A half-filled form is lost without a question (Settings guards only the Rules page). Confirmed.
-- How a proxy refusal of a loopback or private target is worded in the error banner was not confirmed; no turn was sent through the proxy to a gateway.
+- A proxied gateway on `https://localhost` fails with "LLM error: 403 blocked_target_loopback: Loopback target URLs are blocked by default. Set ALLOW_LOOPBACK_TARGETS=1 to override." (GATEWAY-18). English only.
+- Confirmed with a local stub gateway that streams slowly: deleting the gateway while a turn on it was responding left the tab on its model until the reply finished, then moved it to "GPT-6.1 Sol" (MODEL-12). Enter in a form field does not save (GATEWAY-19).
 
 Verified against pi-for-excel commit `ec453df`.
