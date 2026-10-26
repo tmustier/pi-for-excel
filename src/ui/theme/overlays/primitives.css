@@ -83,8 +83,13 @@
   box-shadow: 0 0 0 2px var(--pi-green-lighter);
 }
 
-.pi-overlay-inline-control:disabled {
+.pi-overlay-inline-control:disabled,
+.pi-overlay-textarea:disabled {
   opacity: 0.6;
+}
+
+.pi-overlay-textarea:disabled {
+  cursor: not-allowed;
 }
 
 .pi-overlay-footer {

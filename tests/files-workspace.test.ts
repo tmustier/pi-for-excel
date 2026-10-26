@@ -717,8 +717,8 @@ void test("importFiles defaults to workspace source when native folder is connec
     type: "text/plain",
   });
 
-  const importedCount = await workspace.importFiles([file]);
-  assert.equal(importedCount, 1);
+  const importResult = await workspace.importFiles([file]);
+  assert.equal(importResult.imported, 1);
 
   const files = await workspace.listFiles();
   const uploaded = files.find((entry) => entry.path === "uploaded.txt");
@@ -730,6 +730,29 @@ void test("importFiles defaults to workspace source when native folder is connec
     locationKind: "workspace",
   });
   assert.equal(uploadedRead.text, "uploaded content");
+});
+
+void test("importFiles keeps an existing file and saves a same-named import with a suffix", async () => {
+  const workspace = new FilesWorkspace({
+    initialBackend: new SourceBackend({ kind: "opfs", label: "Sandboxed workspace", files: [] }),
+  });
+
+  await workspace.importFiles([new File(["old"], "Budget.csv", { type: "text/csv" })]);
+  const result = await workspace.importFiles([
+    new File(["new"], "budget.csv", { type: "text/csv" }),
+    new File(["newer"], "budget.csv", { type: "text/csv" }),
+  ]);
+
+  assert.deepEqual(result, {
+    imported: 2,
+    renamed: [
+      { from: "budget.csv", to: "budget (2).csv" },
+      { from: "budget.csv", to: "budget (3).csv" },
+    ],
+  });
+  assert.equal((await workspace.readFile("Budget.csv", { mode: "text" })).text, "old");
+  assert.equal((await workspace.readFile("budget (2).csv", { mode: "text" })).text, "new");
+  assert.equal((await workspace.readFile("budget (3).csv", { mode: "text" })).text, "newer");
 });
 
 void test("workspace context summary includes only relevant folders and current workbook artifacts", () => {

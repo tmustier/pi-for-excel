@@ -11,7 +11,7 @@ import {
   type WorkspaceFileLocationKind,
   type WorkspaceFileWorkbookTag,
 } from "../files/types.js";
-import { type FilesWorkspaceAuditContext, getFilesWorkspace } from "../files/workspace.js";
+import { describeImportRenames, type FilesWorkspaceAuditContext, getFilesWorkspace } from "../files/workspace.js";
 import { getErrorMessage } from "../utils/errors.js";
 import { MarkdownBlock } from "./messages/markdown-block.js";
 import {
@@ -1037,8 +1037,9 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
     void workspace.importFiles(files, {
       audit: DIALOG_AUDIT_CONTEXT,
     })
-      .then((count) => {
-        showToast(t("files-dialog.toast.imported", { count, plural: count === 1 ? "" : "s" }));
+      .then((result) => {
+        const count = result.imported;
+        showToast(t("files-dialog.toast.imported", { count, plural: count === 1 ? "" : "s" }) + describeImportRenames(result));
       })
       .catch((error: unknown) => {
         showToast(t("files-dialog.toast.uploadFailed", { error: getErrorMessage(error) }));

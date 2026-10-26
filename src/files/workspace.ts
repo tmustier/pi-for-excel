@@ -74,6 +74,25 @@ export interface WorkspaceMutationOptions {
   locationKind?: WorkspaceFileLocationKind;
 }
 
+export interface ImportFilesResult {
+  imported: number;
+  /** Imports saved under a suffixed name because `from` was already taken. */
+  renamed: Array<{ from: string; to: string }>;
+}
+
+/** Toast suffix telling the user which imports were kept alongside an existing file. */
+export function describeImportRenames(result: ImportFilesResult): string {
+  const [first] = result.renamed;
+  if (!first) return "";
+  if (result.renamed.length === 1) {
+    return " " + t("files-workspace.import.renamedOne", {
+      name: getWorkspaceBaseName(first.from),
+      newName: getWorkspaceBaseName(first.to),
+    });
+  }
+  return " " + t("files-workspace.import.renamedMany", { count: result.renamed.length });
+}
+
 interface DirectoryPickerHost {
   showDirectoryPicker: () => Promise<FileSystemDirectoryHandle>;
 }
@@ -169,6 +188,22 @@ function requestedLocationArgs(
   }
 
   return { requestedLocationKind: locationKind };
+}
+
+/** `docs/budget.csv` → `docs/budget (2).csv`, … — first path not in `takenLowerCase`. */
+function nextFreeImportPath(path: string, takenLowerCase: ReadonlySet<string>): string {
+  if (!takenLowerCase.has(path.toLowerCase())) return path;
+
+  const slash = path.lastIndexOf("/");
+  const dot = path.lastIndexOf(".");
+  const extensionStart = dot > slash + 1 ? dot : path.length;
+  const stem = path.slice(0, extensionStart);
+  const extension = path.slice(extensionStart);
+
+  for (let n = 2; ; n += 1) {
+    const candidate = `${stem} (${n})${extension}`;
+    if (!takenLowerCase.has(candidate.toLowerCase())) return candidate;
+  }
 }
 
 function parsePersistedMetadata(value: unknown): Map<string, WorkspaceFileWorkbookTag> {
@@ -1368,11 +1403,21 @@ export class FilesWorkspace {
     dispatchWorkspaceChanged({ reason: "rename" });
   }
 
-  async importFiles(files: Iterable<File>, options: WorkspaceMutationOptions = {}): Promise<number> {
+  /**
+   * Import files without replacing existing ones: a name that is already
+   * taken gets a " (2)", " (3)", … suffix before its extension.
+   */
+  async importFiles(files: Iterable<File>, options: WorkspaceMutationOptions = {}): Promise<ImportFilesResult> {
     const target = await this.resolveMutationTarget({
       ...requestedLocationArgs(options.locationKind),
       defaultToWorkspace: true,
     });
+
+    // Case-insensitive so imports never clobber on case-insensitive local folders.
+    const takenPaths = new Set(
+      (await target.backend.listFiles()).map((entry) => entry.path.toLowerCase()),
+    );
+    const renamed: ImportFilesResult["renamed"] = [];
 
     let imported = 0;
     let importedBytes = 0;
@@ -1394,15 +1439,21 @@ export class FilesWorkspace {
         }
       }
 
+      const path = nextFreeImportPath(normalizedPath, takenPaths);
+      takenPaths.add(path.toLowerCase());
+      if (path !== normalizedPath) {
+        renamed.push({ from: normalizedPath, to: path });
+      }
+
       const bytes = new Uint8Array(await file.arrayBuffer());
       await target.backend.writeBytes(
-        normalizedPath,
+        path,
         bytes,
         inferMimeType(file.name, file.type),
       );
 
       if (target.locationKind === "workspace") {
-        await this.setWorkbookTagForPath(normalizedPath);
+        await this.setWorkbookTagForPath(path);
       }
 
       imported += 1;
@@ -1420,7 +1471,7 @@ export class FilesWorkspace {
       dispatchWorkspaceChanged({ reason: "import" });
     }
 
-    return imported;
+    return { imported, renamed };
   }
 
   async listAuditEntries(limit = 40): Promise<FilesWorkspaceAuditEntry[]> {

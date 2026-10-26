@@ -302,11 +302,13 @@ function createPresetPreview(presetName: string, preset: StoredFormatPreset): { 
 
   const symbol = params.currencySymbol ?? (presetName === "currency" ? DEFAULT_CURRENCY_SYMBOL : "");
   const suffix = presetName === "percent" ? "%" : presetName === "ratio" ? "x" : "";
+  // Excel's % multiplies by 100, so preview a fraction (0.125 shows as 12.5%).
+  const sample = formatter.format(presetName === "percent" ? 0.125 * 100 : 1234.5);
 
-  const positiveCore = `${symbol}${formatter.format(1234.5)}${suffix}`;
+  const positiveCore = `${symbol}${sample}${suffix}`;
   const negativeCore = params.negativeStyle === "minus"
-    ? `${symbol}-${formatter.format(1234.5)}${suffix}`
-    : `${symbol}(${formatter.format(1234.5)}${suffix})`;
+    ? `${symbol}-${sample}${suffix}`
+    : `${symbol}(${sample}${suffix})`;
 
   let zeroCore = `${symbol}0${suffix}`;
   if (params.zeroStyle === "dash") {
@@ -957,6 +959,7 @@ export function createRulesPage(): SettingsShellPage {
         counter.hidden = isConventionsTab;
 
         if (activeTab === "user") {
+          textarea.disabled = false;
           textarea.value = userDraft;
           textarea.placeholder = t("rules.placeholder.user");
 
@@ -971,7 +974,9 @@ export function createRulesPage(): SettingsShellPage {
 
         if (activeTab === "workbook") {
           textarea.value = workbookDraft;
-          textarea.placeholder = t("rules.placeholder.workbook");
+          // Without a workbook ID there is nowhere to save "This file" rules.
+          textarea.disabled = !workbookId;
+          textarea.placeholder = workbookId ? t("rules.placeholder.workbook") : "";
 
           const count = workbookDraft.length;
           counter.textContent = formatCounterLabel(count, WORKBOOK_RULES_SOFT_LIMIT);
@@ -1036,15 +1041,48 @@ export function createRulesPage(): SettingsShellPage {
         void (async () => {
           saveActiveDraft();
 
-          await setUserRules(storage.settings, userDraft);
-          if (workbookId) {
-            await setWorkbookRules(storage.settings, workbookId, workbookDraft);
+          // Write only what the user changed, so a rule or convention Pi saved
+          // while this page was open survives. If Pi changed the same thing,
+          // ask before replacing it.
+          const userChanged = userDraft !== initialUserDraft;
+          const workbookChanged = workbookId !== null && workbookDraft !== initialWorkbookDraft;
+          const conventionsChanged = serializeConventionsForDirtyCheck(conventionsDraft) !== initialConventionsJson;
+
+          const changedUnderneath = (userChanged
+            && ((await getUserRules(storage.settings)) ?? "") !== initialUserDraft)
+            || (workbookChanged
+              && ((await getWorkbookRules(storage.settings, workbookId)) ?? "") !== initialWorkbookDraft)
+            || (conventionsChanged
+              && serializeConventionsForDirtyCheck(await getStoredConventions(storage.settings)) !== initialConventionsJson);
+
+          if (changedUnderneath) {
+            const replace = await requestConfirmationDialog({
+              title: t("rules.conflict.title"),
+              message: t("rules.conflict.message"),
+              confirmLabel: t("rules.conflict.replace"),
+              cancelLabel: t("rules.discard.keep_editing"),
+              confirmButtonTone: "danger",
+              restoreFocusOnClose: false,
+            });
+            if (!replace) return;
           }
 
-          await setStoredConventions(storage.settings, conventionsDraft);
+          if (userChanged) {
+            await setUserRules(storage.settings, userDraft);
+          }
+          if (workbookId && workbookChanged) {
+            await setWorkbookRules(storage.settings, workbookId, workbookDraft);
+          }
+          if (conventionsChanged) {
+            await setStoredConventions(storage.settings, conventionsDraft);
+          }
 
-          document.dispatchEvent(new CustomEvent("pi:rules-updated"));
-          document.dispatchEvent(new CustomEvent("pi:conventions-updated"));
+          if (userChanged || workbookChanged) {
+            document.dispatchEvent(new CustomEvent("pi:rules-updated"));
+          }
+          if (conventionsChanged) {
+            document.dispatchEvent(new CustomEvent("pi:conventions-updated"));
+          }
           document.dispatchEvent(new CustomEvent("pi:status-update"));
 
           const onRulesSaved = getSettingsPagesDependencies().onRulesSaved;
