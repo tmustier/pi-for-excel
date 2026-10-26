@@ -39,9 +39,9 @@ Choosing the language already in use does nothing on the welcome screen. In Sett
 
 ### Saving and the reload
 
-Choosing the other language in Settings does three things in order: the taskpane's language is switched in memory at once, the setting is saved, and then the toast "Language changed. Reloading..." is shown, in the new language, and the taskpane reloads one second later. On the welcome screen the setting is saved and the taskpane reloads immediately, with no toast.
+Choosing the other language in Settings does three things in order: the taskpane's language is switched in memory at once, the setting is saved, and then the toast "Language changed. Reloading..." is shown, in the new language, and the taskpane reloads one second later. Confirmed in Excel on the web both ways: switching to Chinese showed "语言已更改，正在重新加载…" and the page unloaded 1.03 s after the pick; switching back showed "Language changed. Reloading...". On the welcome screen the setting is saved and the taskpane reloads immediately, with no toast.
 
-The reload is a full restart of the taskpane, the same as closing and reopening it. Nothing asks for confirmation, even when a tab is responding. Everything a reload loses is lost: a turn in progress ends without a record of its ending, composer drafts and queued messages are discarded, a new session that Pi has not answered yet is not kept, and chosen tab titles fall back to "Chat N". See [persistence and restore](../cross-cutting/persistence-and-restore.md) and [renaming a tab](../sessions/renaming-a-tab.md).
+The reload is a full restart of the taskpane, the same as closing and reopening it. Nothing asks for confirmation, even when a tab is responding. Everything a reload loses is lost (confirmed in Excel on the web for a composer draft, and for three tabs that came back numbered 1 to 3 as "对话 1"…"对话 3"): a turn in progress ends without a record of its ending, composer drafts and queued messages are discarded, a new session that Pi has not answered yet is not kept, and chosen tab titles fall back to "Chat N". See [persistence and restore](../cross-cutting/persistence-and-restore.md) and [renaming a tab](../sessions/renaming-a-tab.md).
 
 ### While the change applies
 
@@ -59,7 +59,7 @@ If saving fails, the toast "Failed to save language setting." appears in the new
 
 **Never translated, by design:** anything the model reads. The system prompt, tool names and descriptions, auto-context about the workbook, and compaction instructions stay English so the conversation's fixed prefix is identical in both languages and prompt caching keeps working. Command names (`/model`), key names, model names and provider names are also not translated. The model's answers are not translated; the model chooses its language from the conversation.
 
-**Not translated, but probably should be:** strings written directly in English in the code. Seen while drafting: the "Rename tab" prompt title, the Ctrl/Cmd+O toasts "Details hidden (⌃O)" and "Details shown (⌃O)", the `/yolo` toasts ("Usage: /yolo [on|off|toggle|status]", "Confirm mode — Pi asks before each workbook change."), the status bar's lock badge and its tooltips, several tool-card labels ("Copy CSV", "Input", "Result", "Data", "✓ Done"), the context-overflow and CORS banners and "API key required for {provider}.", the command menu's accessible name "Slash commands", and every string supplied by an extension (such as "/snake" and "Play Snake! 🐍"). The Chinese locale has the same set of entries as English; a missing translation would fall back to English.
+**Not translated, but probably should be:** strings written directly in English in the code. Confirmed in the Chinese UI on Excel on the web: the Ctrl/Cmd+O toasts, and `/yolo status`, which mixes the two ("自动 mode — Pi applies workbook changes immediately."). Seen while drafting: the "Rename tab" prompt title, the Ctrl/Cmd+O toasts "Details hidden (⌃O)" and "Details shown (⌃O)", the `/yolo` toasts ("Usage: /yolo [on|off|toggle|status]", "Confirm mode — Pi asks before each workbook change."), the status bar's lock badge and its tooltips, several tool-card labels ("Copy CSV", "Input", "Result", "Data", "✓ Done"), the context-overflow and CORS banners and "API key required for {provider}.", the command menu's accessible name "Slash commands", and every string supplied by an extension (such as "/snake" and "Play Snake! 🐍"). The Chinese locale has the same set of entries as English; a missing translation would fall back to English.
 
 ## The theme
 
@@ -134,11 +134,14 @@ Changing the theme feature while a turn runs only recolours the taskpane.
 
 ## Open questions and verification
 
-- A language change reloads the taskpane with no confirmation, ending running turns and discarding drafts (`src/commands/builtins/settings-pages/root-page.ts:205`). Probably worth a confirm when any tab is busy or has a draft.
-- When saving fails, the in-memory language has already been switched (`src/commands/builtins/settings-pages/root-page.ts:199`), leaving a mixed-language taskpane until the next reload. Looks like a bug; the switch should follow a successful save.
+- A language change reloads the taskpane with no confirmation, ending running turns and discarding drafts (`src/commands/builtins/settings-pages/root-page.ts:205`). Confirmed in Excel on the web: switching language while a tab was responding reloaded at once with no confirm; after the reload the user message was there and the streaming answer was gone. Probably worth a confirm when any tab is busy or has a draft.
+- When saving fails, the in-memory language has already been switched (`src/commands/builtins/settings-pages/root-page.ts:199`), leaving a mixed-language taskpane until the next reload. Confirmed in Excel on the web with the storage write made to fail: the error toast "保存语言设置失败。" was already in Chinese, there was no reload, the Settings page turned Chinese while the tabs and status bar stayed English. Looks like a bug; the switch should follow a successful save.
+- Welcome-screen language buttons reload at once with no toast: confirmed in Excel on the web with a production build and empty storage, where "中文" reloaded straight into Chinese.
 - Welcome-screen language buttons ignore save failures silently (`src/taskpane/welcome-login.ts:197`–`:217`) and use hard-coded colours.
 - Dark mode does not react to Office theme changes while the taskpane is open; only operating-system changes and Office readiness re-check it (`src/ui/theme-mode.ts:164`–`:185`). Not confirmed by hand.
+- Dark mode on Excel on the web: with the `/experimental` flag on ("Dark mode: enabled") and the operating system emulated as dark, the taskpane stayed light, because Office on the web reports a white body background in its theme and that wins over the system preference. Confirmed in Excel on the web.
+- `src/taskpane.html` hard-codes `lang="zh-CN"` on the root element, so the page declares Chinese even when the UI is English. Seen in Excel on the web; may affect screen-reader pronunciation and fonts. Minor.
 - The list of hard-coded English strings above was collected while drafting other documents and is not exhaustive.
-- The reload and the Chinese UI were read from code; not tried by hand in this pass.
+- Confirmed in Excel on the web (2026-10-26): the Settings row and its two entries, the toast in the new language, the reload about 1 s later, the draft lost, tabs renumbered, the Chinese chrome (tabs, hints, placeholder, status bar, utilities menu), and the English Ctrl/Cmd+O and `/yolo status` toasts. Not tried: the welcome-screen buttons, a save failure, a language change while responding, dark mode.
 
 Verified against pi-for-excel commit `ec453df`.
