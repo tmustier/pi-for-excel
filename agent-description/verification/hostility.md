@@ -10,7 +10,7 @@ How to run this file: the fixture workbook from [README.md](README.md#how-to-run
 | EDIT-02 | P1 | user, probe | Writes fail; nothing written. | Same. | `write_cells`. | Edit-mode error. | fail (B-06) |
 | EDIT-03 | P1 | user, turn | A real turn stops and asks the user to press Enter. | Three-step prompt; start typing after step 1. | Send. | Step 2 fails; turn ends. | fail (B-06) |
 | EDIT-04 | P2 | user, probe | Registering a change handler fails during edit mode. | Same. | `onChanged.add`. | Exception. | pass |
-| EDIT-05 | P1 | desktop | Desktop queues instead of failing. | Desktop Excel. | Same as EDIT-01. | Record. | blocked |
+| EDIT-05 | P1 | desktop | Desktop queues instead of failing. | Desktop Excel. | Same as EDIT-01. | Record. | fail. desktop (macOS): with a cell in edit mode (typing in the formula bar, no Enter), `range.load` failed after 0.55 s with "Excel is in cell-editing mode. Please exit the edit mode by pressing ENTER or TAB or selecting another cell, and then try again.", as on the web. Nothing is queued. |
 
 ## hostility/the-user-moves-or-edits.md
 
