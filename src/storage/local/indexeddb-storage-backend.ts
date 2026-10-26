@@ -24,6 +24,15 @@ function normalizeIdbKey(key: IDBValidKey): string[] {
   return [];
 }
 
+/** Fired on `window` when this pane's database open waits for another pane to close it. */
+export const STORAGE_UPGRADE_BLOCKED_EVENT = "pi:storage-upgrade-blocked";
+/** Fired on `window` after this pane closed its database for a newer version's upgrade. */
+export const STORAGE_VERSION_CHANGED_EVENT = "pi:storage-version-changed";
+
+function dispatchStorageEvent(type: string): void {
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(type));
+}
+
 export class IndexedDBStorageBackend implements StorageBackend {
   private dbPromise: Promise<IDBDatabase> | null = null;
   private readonly config: IndexedDBConfig;
@@ -37,7 +46,18 @@ export class IndexedDBStorageBackend implements StorageBackend {
       this.dbPromise = new Promise((resolve, reject) => {
         const request = indexedDB.open(this.config.dbName, this.config.version);
         request.onerror = () => reject(toIdbError(request.error));
-        request.onsuccess = () => resolve(request.result);
+        // An older pane still holds the database open; the open continues once it closes.
+        request.onblocked = () => dispatchStorageEvent(STORAGE_UPGRADE_BLOCKED_EVENT);
+        request.onsuccess = () => {
+          const db = request.result;
+          // A newer version wants to upgrade the database: step aside so its
+          // upgrade is not blocked. This pane's storage stops working until reload.
+          db.onversionchange = () => {
+            db.close();
+            dispatchStorageEvent(STORAGE_VERSION_CHANGED_EVENT);
+          };
+          resolve(db);
+        };
         request.onupgradeneeded = () => {
           const db = request.result;
           // Create object stores from config
