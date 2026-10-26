@@ -50,6 +50,7 @@ type Params = Static<typeof schema>;
 type RestoreResult = {
   restoredSnapshotId: string;
   inverseSnapshotId: string | null;
+  inverseSnapshotError?: string;
   address: string;
   changedCount: number;
 };
@@ -203,6 +204,8 @@ export function createWorkbookHistoryTool(
 
           if (restored.inverseSnapshotId) {
             lines.push(`Rollback backup created: \`${shortId(restored.inverseSnapshotId)}\`.`);
+          } else if (restored.inverseSnapshotError) {
+            lines.push(`⚠️ ${restored.inverseSnapshotError} This restore cannot itself be reverted from backups.`);
           }
 
           await finalizeMutationOperation(mutationFinalizeDependencies, {

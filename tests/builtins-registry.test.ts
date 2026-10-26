@@ -312,31 +312,30 @@ void test("command-layer contract: recovery commands expose completion, errors, 
     await executeRegisteredCommand("history");
     assert.equal(recoveryOpenCount, 1);
 
-    const blockedRevert = executeSlashCommand({
+    // Backup commands run while Pi is busy; restores and captures wait for
+    // the workbook lock instead of being refused.
+    const busyRevert = executeSlashCommand({
       name: "revert",
       args: "",
       busy: true,
       onError: () => {},
     });
-    assert.equal(blockedRevert, "busy-blocked");
-    assert.equal(revertCount, 0);
-
-    await executeRegisteredCommand("revert");
+    assert.equal(busyRevert, "executed");
+    await Promise.resolve();
+    await Promise.resolve();
     assert.equal(revertCount, 1);
 
     failRevert = true;
     await assert.rejects(executeRegisteredCommand("revert"), /restore failed/);
 
-    const blockedBackup = executeSlashCommand({
+    const busyBackup = executeSlashCommand({
       name: "backup",
       args: "",
       busy: true,
       onError: () => {},
     });
-    assert.equal(blockedBackup, "busy-blocked");
-    assert.equal(createBackupCount, 0);
-
-    await executeRegisteredCommand("backup", "create");
+    assert.equal(busyBackup, "executed");
+    await new Promise((resolve) => setTimeout(resolve, 0));
     assert.equal(createBackupCount, 1);
     assert.match(getToastText(fakeDom.document), /Backup created/i);
 

@@ -36,6 +36,7 @@ import {
   buildChangeExplanation,
   type ChangeExplanationInput,
 } from "../audit/change-explanation.js";
+import { computeRangeAddress, parseRangeRef } from "../excel/helpers.js";
 import { renderCsvTable } from "./render-csv-table.js";
 import { renderDepTree } from "./render-dep-tree.js";
 
@@ -806,9 +807,28 @@ function describeWriteCells(context: ToolDescriptionContext): ToolDesc {
   }
 
   const address = resultText ? extractWrittenAddress(resultText) : null;
-  return address
-    ? toolDescWithAddress("Edit", address + receipt, address)
-    : toolDescWithAddress("Write", (startCell ?? "cells") + receipt, startCell);
+  if (address) return toolDescWithAddress("Edit", address + receipt, address);
+
+  const values = context.params.values;
+  const rows = Array.isArray(values) ? values.length : 0;
+  const cols = Array.isArray(values)
+    ? Math.max(0, ...values.map((row) => (Array.isArray(row) ? row.length : 0)))
+    : 0;
+  const target = startCell ? pendingWriteTarget(startCell, rows, cols) : undefined;
+  return toolDescWithAddress("Write", (target ?? "cells") + receipt, target);
+}
+
+/** The whole range a `write_cells` call will fill ("Sheet1!B2:C4"), before it runs. */
+function pendingWriteTarget(startCell: string, rows: number, cols: number): string {
+  if (rows <= 0 || cols <= 0 || (rows === 1 && cols === 1)) return startCell;
+
+  const { sheet, address } = parseRangeRef(startCell);
+  try {
+    const range = computeRangeAddress(address, rows, cols);
+    return sheet ? `${startCell.slice(0, startCell.lastIndexOf("!") + 1)}${range}` : range;
+  } catch {
+    return startCell;
+  }
 }
 
 function describeFillFormula(context: ToolDescriptionContext): ToolDesc {
@@ -1280,6 +1300,22 @@ function createExcelMarkdownRenderer(toolName: SupportedToolName): ToolRenderer 
 }
 
 const CUSTOM_RENDERED_TOOL_NAMES: readonly SupportedToolName[] = TOOL_NAMES_WITH_RENDERER;
+const CUSTOM_RENDERED_TOOL_NAME_SET = new Set<string>(CUSTOM_RENDERED_TOOL_NAMES);
+
+function isSupportedToolName(name: string): name is SupportedToolName {
+  return CUSTOM_RENDERED_TOOL_NAME_SET.has(name);
+}
+
+/**
+ * One-line description of a tool call that has not run yet, as its tool
+ * card shows it (for example "Write Sheet1!B2:C4"). Approvals use it so the
+ * user sees the same words they will see on the card.
+ */
+export function describePendingToolCall(toolName: string, params: unknown): string | null {
+  if (!isSupportedToolName(toolName)) return null;
+  const desc = describeToolCall(toolName, params, undefined, undefined);
+  return desc.detail ? `${desc.action} ${desc.detail}` : desc.action;
+}
 
 for (const name of CUSTOM_RENDERED_TOOL_NAMES) {
   registerToolRenderer(name, createExcelMarkdownRenderer(name));

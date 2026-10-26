@@ -236,6 +236,18 @@ class RecoveringAuditSettingsStore {
     return Promise.resolve();
   }
 
+  update<T, U>(key: string, parse: (raw: unknown) => T, change: (current: T) => U | undefined): Promise<void> {
+    // A read-modify-write reads first, so it fails the same seeded way.
+    if (key === "workbook.change-audit.v1" && this.failAuditRead) {
+      this.failAuditRead = false;
+      return Promise.reject(new Error("seeded audit read failure"));
+    }
+    const next = change(parse(this.values.get(key) ?? null));
+    if (next === undefined) this.values.delete(key);
+    else this.values.set(key, next);
+    return Promise.resolve();
+  }
+
   seed(key: string, value: unknown): void {
     this.values.set(key, value);
   }
@@ -382,7 +394,7 @@ void test("committed write reports recovery unavailable instead of replacing unr
     });
     assert.match(firstText(first), /Written to/u);
     assert.equal(first.details.recovery?.status, "not_available");
-    assert.match(firstText(first), /No backup was saved, so `workbook_history` cannot restore this change\. Pi could not identify this workbook/u);
+    assert.match(firstText(first), /backup could not be saved.*cannot be reverted/iu);
     assert.match(firstText(await read.execute("read-first-write", {
       range: "Sheet1!A1",
       mode: "csv",
@@ -400,8 +412,9 @@ void test("committed write reports recovery unavailable instead of replacing unr
     getWorkbookContext: workbookContext,
   });
   const persistedIds = (await reloaded.list()).map((snapshot) => snapshot.id);
+  // The existing checkpoint survives, and only the write whose backup was saved has one.
   assert.equal(persistedIds.includes("existing-checkpoint"), true);
-  assert.equal(persistedIds.includes("new-checkpoint-1"), true);
+  assert.equal(persistedIds.length, 2);
 });
 
 void test("user can write, inspect, reject overwrite, and restore through workbook tools", async () => {

@@ -30,7 +30,7 @@ function makeManualBackupFile(args: {
   };
 }
 
-function createManualBackupStoreForTest(files: WorkspaceFileEntry[]): {
+function createManualBackupStoreForTest(files: WorkspaceFileEntry[], workbookId: string | null = "wb-1"): {
   store: ManualFullWorkbookBackupStore;
   downloads: string[];
   deletes: string[];
@@ -40,17 +40,20 @@ function createManualBackupStoreForTest(files: WorkspaceFileEntry[]): {
 
   const store = new ManualFullWorkbookBackupStore({
     getWorkbookContext: (): Promise<WorkbookContext> => Promise.resolve({
-      workbookId: "wb-1",
+      workbookId,
       workbookName: "Workbook.xlsx",
       source: "document.url",
     }),
     getWorkspace: () => ({
       listFiles: () => Promise.resolve(files),
       writeBase64File: () => Promise.resolve(),
-      downloadFile: (path: string) => {
-        downloads.push(path);
-        return Promise.resolve();
-      },
+      beginDownload: () => ({
+        download: (path: string) => {
+          downloads.push(path);
+          return Promise.resolve();
+        },
+        cancel: () => {},
+      }),
       deleteFile: (path: string) => {
         deletes.push(path);
         return Promise.resolve();
@@ -115,7 +118,7 @@ void test("manual backup creates a downloadable copy of the current Office workb
         }));
         return Promise.resolve();
       },
-      downloadFile: () => Promise.resolve(),
+      beginDownload: () => ({ download: () => Promise.resolve(), cancel: () => {} }),
       deleteFile: () => Promise.resolve(),
     }),
     captureWorkbookBytes: () => captureWorkbookCompressedBytes(),
@@ -124,7 +127,7 @@ void test("manual backup creates a downloadable copy of the current Office workb
   });
 
   try {
-    const created = await store.create();
+    const created = await store.createAndDownload();
     const listed = await store.listForCurrentWorkbook();
 
     assert.deepEqual(created, {
@@ -195,4 +198,26 @@ void test("manual backup clear removes all workbook backups beyond first 500 ent
   assert.equal(removed, 620);
   assert.equal(deletes.length, 620);
   assert.equal(deletes.some((path) => path.includes("/wb-2/")), false);
+});
+
+void test("clearing manual backups checks identity and counts before asking", async () => {
+  const files = [0, 1, 2].map((index) => makeManualBackupFile({ workbookId: "wb-1", backupId: `b-${index}`, modifiedAt: index }));
+  const asked: number[] = [];
+  const confirm = (count: number): Promise<boolean> => {
+    asked.push(count);
+    return Promise.resolve(false);
+  };
+
+  const unidentified = createManualBackupStoreForTest(files, null);
+  await assert.rejects(unidentified.store.clearForCurrentWorkbook(confirm), /identity is unavailable/);
+  assert.deepEqual(asked, []);
+
+  const empty = createManualBackupStoreForTest([]);
+  assert.equal(await empty.store.clearForCurrentWorkbook(confirm), 0);
+  assert.deepEqual(asked, []);
+
+  const declined = createManualBackupStoreForTest(files);
+  assert.equal(await declined.store.clearForCurrentWorkbook(confirm), 0);
+  assert.deepEqual(asked, [3]);
+  assert.deepEqual(declined.deletes, []);
 });

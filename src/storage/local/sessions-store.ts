@@ -44,6 +44,31 @@ export class SessionsStore extends Store {
     );
   }
 
+  /**
+   * Saves unless the stored session has changed since `baseRevision` (the
+   * revision this writer last loaded or saved; `undefined` for a session it
+   * has not seen stored). Check and write are one transaction, so another
+   * taskpane cannot save in between. Returns `false` on conflict, writing
+   * nothing.
+   */
+  async saveIfUnchanged(
+    data: SessionData,
+    metadata: SessionMetadata,
+    baseRevision: string | undefined,
+  ): Promise<boolean> {
+    return this.getBackend().transaction(
+      ["sessions", "sessions-metadata"],
+      "readwrite",
+      async (tx) => {
+        const stored = await tx.get<SessionMetadata>("sessions-metadata", metadata.id);
+        if (stored && stored.revision !== baseRevision) return false;
+        await tx.set("sessions", data.id, data);
+        await tx.set("sessions-metadata", metadata.id, metadata);
+        return true;
+      },
+    );
+  }
+
   async get(id: string): Promise<SessionData | null> {
     return this.getBackend().get<SessionData>("sessions", id);
   }
@@ -95,12 +120,17 @@ export class SessionsStore extends Store {
   }
 
   // Alias methods for backward compatibility
+  /**
+   * Saves agent state. With `revisions`, saves only over `revisions.base`
+   * (see `saveIfUnchanged`) and returns `false` on conflict.
+   */
   async saveSession(
     id: string,
     state: AgentState,
     metadata: SessionMetadata | undefined,
     title?: string,
-  ): Promise<void> {
+    revisions?: { base: string | undefined; next: string },
+  ): Promise<boolean> {
     // If metadata is provided, use it; otherwise create it from state
     const meta: SessionMetadata = metadata ?? {
       id,
@@ -130,9 +160,17 @@ export class SessionsStore extends Store {
       thinkingLevel: state.thinkingLevel,
       messages: state.messages,
       createdAt: meta.createdAt,
-      lastModified: new Date().toISOString(),
+      lastModified: meta.lastModified,
     };
-    await this.save(data, meta);
+    if (!revisions) {
+      await this.save(data, meta);
+      return true;
+    }
+    return this.saveIfUnchanged(
+      { ...data, revision: revisions.next },
+      { ...meta, revision: revisions.next },
+      revisions.base,
+    );
   }
 
   async loadSession(id: string): Promise<SessionData | null> {

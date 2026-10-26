@@ -12,8 +12,11 @@
  * - `navigate(id)` pushes a page; `back()` pops.
  * - Deep links rebuild the stack from each page's `parentId` chain so Back
  *   always walks up the hierarchy.
- * - Escape goes back one level (closes at the root). The × button and
- *   backdrop click always request a full close.
+ * - Escape goes back one level through pages navigated to inside the
+ *   shell, and closes on the page it was opened at (a deep link such as
+ *   /history opens Backups; Escape there closes, it does not reveal the
+ *   Settings root). The back button still walks up the hierarchy. The ×
+ *   button and backdrop click always request a full close.
  * - Pages may install a `beforeLeave` guard (used for unsaved-changes
  *   confirmation); it gates back, navigate, and close.
  */
@@ -83,6 +86,8 @@ interface MountedShell {
 export function createSettingsShell(options: SettingsShellOptions): SettingsShellController {
   let mounted: MountedShell | null = null;
   let stack: string[] = [];
+  /** Stack depth of the page the shell was opened at; Escape closes at or above it. */
+  let entryDepth = 1;
   let pageCleanups: Array<() => void> = [];
   let beforeLeave: (() => Promise<boolean>) | null = null;
   let transitionInFlight = false;
@@ -344,6 +349,10 @@ export function createSettingsShell(options: SettingsShellOptions): SettingsShel
     card.append(header, bodyEl, footerEl);
 
     const cleanupEscape = installOverlayEscapeClose(overlay, () => {
+      if (stack.length <= entryDepth) {
+        void requestClose();
+        return;
+      }
       void goBack();
     });
 
@@ -384,12 +393,14 @@ export function createSettingsShell(options: SettingsShellOptions): SettingsShel
         const canLeave = await confirmLeave();
         if (!canLeave) return;
         stack = buildStackFor(targetId);
+        entryDepth = stack.length;
         renderCurrentPage("forward");
         return;
       }
 
       mounted = mountShell();
       stack = buildStackFor(targetId);
+      entryDepth = stack.length;
       renderCurrentPage("none");
     },
     isOpen: () => mounted !== null,
