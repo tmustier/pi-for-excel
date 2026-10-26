@@ -32,7 +32,10 @@ const untilStopped: FauxResponseStep = (_context, options) => new Promise((resol
   options?.signal?.addEventListener("abort", finish, { once: true });
 });
 
-function createTab(responses: FauxResponseStep[], opts?: { runCompact?: (args: string, signal: AbortSignal) => Promise<void> }) {
+function createTab(responses: FauxResponseStep[], opts?: {
+  runCompact?: (args: string, signal: AbortSignal) => Promise<void>;
+  transformContext?: (messages: AgentMessage[]) => Promise<AgentMessage[]>;
+}) {
   const faux = fauxProvider({ models: [{ id: "turn-test", contextWindow: 200_000, maxTokens: 4_096 }] });
   faux.setResponses(responses);
   const models = createModels();
@@ -40,6 +43,7 @@ function createTab(responses: FauxResponseStep[], opts?: { runCompact?: (args: s
   const requests: Context[] = [];
   const agent = new Agent({
     initialState: { model: faux.getModel(), messages: [], tools: [] },
+    transformContext: opts?.transformContext,
     streamFn: (model, context, options) => {
       requests.push(structuredClone(context));
       return models.streamSimple(model, context, options);
@@ -127,10 +131,13 @@ void test("a failed turn puts its undelivered steers back in the draft instead o
 });
 
 void test("a transient provider failure is retried with a visible countdown and the turn completes", async () => {
+  // A per-request message (like the workbook selection) is sent last on every
+  // request, including the retry, and never stored in the transcript.
+  const selection: AgentMessage = { role: "user", content: [{ type: "text", text: "SELECTION A1" }], timestamp: 0 };
   const tab = createTab([
     fauxAssistantMessage("", { stopReason: "error", errorMessage: "503 Service Unavailable" }),
     fauxAssistantMessage("recovered"),
-  ]);
+  ], { transformContext: (messages) => Promise.resolve([...messages, selection]) });
 
   tab.queue.enqueuePrompt("hello");
   await waitFor(() => !tab.queue.isBusy());
@@ -140,6 +147,12 @@ void test("a transient provider failure is retried with a visible countdown and 
   assert.equal(tab.tab.activity, null);
   const assistants = tab.agent.state.messages.filter((message) => message.role === "assistant");
   assert.deepEqual(assistants.map((message) => message.stopReason), ["stop"]);
+  assert.deepEqual(tab.requests.map((request) => requestUserTexts(request)), [["hello", "SELECTION A1"], ["hello", "SELECTION A1"]]);
+  const storedUserTexts = tab.agent.state.messages.flatMap((message) =>
+    message.role === "user" && typeof message.content !== "string"
+      ? [message.content.map((part) => (part.type === "text" ? part.text : "")).join("")]
+      : []);
+  assert.deepEqual(storedUserTexts, ["hello"]);
   tab.queue.shutdown();
 });
 
