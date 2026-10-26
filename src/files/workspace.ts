@@ -110,6 +110,20 @@ function isDirectoryPickerHost(value: unknown): value is DirectoryPickerHost {
     && "showDirectoryPicker" in value && typeof value.showDirectoryPicker === "function";
 }
 
+/**
+ * Chrome refuses `showDirectoryPicker` in a cross-origin subframe ("Cross
+ * origin sub frames aren't allowed to show a file picker"). Excel on the web
+ * hosts the taskpane in exactly such a frame.
+ */
+function isCrossOriginSubframe(win: Window): boolean {
+  if (win.top === null || win.top === win.self) return false;
+  try {
+    return win.top.location.origin !== win.location.origin;
+  } catch {
+    return true;
+  }
+}
+
 function isDirectoryHandle(value: unknown): value is FileSystemDirectoryHandle {
   return typeof value === "object" && value !== null
     && "kind" in value && value.kind === "directory"
@@ -988,12 +1002,17 @@ export class FilesWorkspace {
   }
 
   isNativeDirectoryPickerSupported(): boolean {
-    if (typeof window === "undefined") return false;
-    return isDirectoryPickerHost(window);
+    return this.getNativeDirectoryUnavailableReason() === null;
+  }
+
+  /** Why "Connect folder" cannot work here, or null when it can. */
+  getNativeDirectoryUnavailableReason(): "unsupported" | "cross-origin-frame" | null {
+    if (typeof window === "undefined" || !isDirectoryPickerHost(window)) return "unsupported";
+    return isCrossOriginSubframe(window) ? "cross-origin-frame" : null;
   }
 
   async connectNativeDirectory(options: WorkspaceMutationOptions = {}): Promise<void> {
-    if (typeof window === "undefined" || !isDirectoryPickerHost(window)) {
+    if (typeof window === "undefined" || !isDirectoryPickerHost(window) || !this.isNativeDirectoryPickerSupported()) {
       throw new Error("Native directory picker is not supported in this environment.");
     }
 
@@ -1038,13 +1057,14 @@ export class FilesWorkspace {
 
   async getBackendStatus(): Promise<WorkspaceBackendStatus> {
     const backend = await this.getBackend();
-    const nativeSupported = this.isNativeDirectoryPickerSupported();
+    const unavailableReason = this.getNativeDirectoryUnavailableReason();
 
     const status: WorkspaceBackendStatus = {
       kind: backend.kind,
       label: backendLabel(backend.kind),
-      nativeSupported,
+      nativeSupported: unavailableReason === null,
       nativeConnected: backend.kind === "native-directory",
+      ...(unavailableReason === "cross-origin-frame" ? { nativeBlockedByFrame: true } : {}),
     };
 
     if (this.nativeHandle?.name !== undefined) {

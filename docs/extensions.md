@@ -360,11 +360,12 @@ export function activate(api) {
 
 The `/extensions` manager shows capability toggles per installed extension.
 
-- Install from URL/code asks for confirmation and shows the default granted permissions.
+- Install from URL asks for a name in an in-taskpane dialog that shows the permissions this source gets (remote URLs get the restricted untrusted defaults).
+- When Pi installs code with `extensions_manager`, an approval dialog shows the code and any extra capabilities it requested (`capabilities`); those are the only grants added to the pasted-code defaults. Pi enabling or uninstalling an extension also asks, in Auto and Confirm mode.
 - Enabling an extension with higher-risk grants prompts for confirmation.
 - Toggling a permission updates stored grants in `extensions.registry.v2`.
 - If the extension is enabled, Pi reloads it immediately so revokes/grants take effect right away.
-- If `/experimental on extension-permissions` is off, configured grants are still saved but not enforced until you enable the flag.
+- Grants are always enforced; a call to a capability that is off fails with a permission error naming the toggle.
 
 High-risk capabilities include:
 - `tools.register`
@@ -424,8 +425,8 @@ If a local specifier is not bundled, loading fails with a clear error.
 
 - **"Extension module \"...\" must export an activate(api) function"**
   - Missing/invalid export.
-- **"Remote extension URL imports are disabled by default"**
-  - Enable with `/experimental on remote-extension-urls`.
+- **"Remote extension URLs are turned off"**
+  - Enable with `/experimental on remote-extension-urls`. The check also runs when an installed remote extension loads, so turning the flag off stops it at the next reload.
 - **"Local extension module \"...\" was not bundled"**
   - Local module path is outside bundled extension files.
 - **Command/tool already registered**
@@ -439,5 +440,5 @@ If a local specifier is not bundled, loading fails with a clear error.
 - Remote URL loading is intentionally off by default.
 - Untrusted extension sources (inline/remote) run in sandbox runtime by default.
 - Built-in/local-module extensions remain on host runtime.
-- Capability gates can be enabled with `/experimental on extension-permissions`.
+- Capability grants are always enforced (the former `extension-permissions` flag is removed).
 - Rollback kill switch for untrusted host-runtime fallback: `/experimental on extension-sandbox-rollback`.

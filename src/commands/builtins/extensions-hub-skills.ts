@@ -119,7 +119,7 @@ export async function renderSkillsTab(args: {
       if (result.changed) {
         dispatchSkillsChanged({ reason: "activation" });
       }
-    }, "toggle", `${enabled ? "Enabled" : "Disabled"} skill: ${skillName}`);
+    }, "toggle", t(enabled ? "ext-hub-skills.toast.enabled" : "ext-hub-skills.toast.disabled", { name: skillName }));
   };
 
   container.replaceChildren();
@@ -199,7 +199,7 @@ export async function renderSkillsTab(args: {
               } else {
                 throw new Error(`External skill not found: ${skill.name}`);
               }
-            }, "config", `Removed external skill: ${skill.name}`);
+            }, "config", t("ext-hub-skills.toast.removed", { name: skill.name }));
           })();
         },
       }));

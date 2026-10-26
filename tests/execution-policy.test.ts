@@ -33,6 +33,9 @@ void test("execution policy classifies every tool and action", () => {
     { name: "mcp", params: { server: "local" }, mode: "read", impact: "none" },
     { name: "files", params: { action: "list" }, mode: "read", impact: "none" },
     { name: "extensions_manager", params: { action: "list" }, mode: "read", impact: "none" },
+    // Skills read/write local skill files, never the workbook.
+    { name: "skills", params: { action: "list" }, mode: "read", impact: "none" },
+    { name: "skills", params: { action: "install" }, mode: "read", impact: "none" },
     { name: "python_transform_range", params: { range: "Sheet1!A1:B10", code: "result = input_data['values']" }, mode: "mutate", impact: "content" },
     { name: "execute_office_js", params: { explanation: "Update workbook settings", code: "return { ok: true };" }, mode: "mutate", impact: "structure" },
     { name: "skills", params: { action: "read", name: "x" }, mode: "read", impact: "none" },
