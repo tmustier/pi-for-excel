@@ -72,6 +72,8 @@ export interface BrowserProviderRegistration {
   allowKeyless?: boolean;
 }
 
+export type ProviderRoute = "proxy" | "direct";
+
 export interface CreateBrowserModelRuntimeOptions {
   providerKeys: ProviderKeysStoreLike;
   modelCatalogs: ModelsStore;
@@ -115,6 +117,13 @@ function streamsForApi(api: BrowserProviderApi): ProviderStreams {
   return anthropicMessagesStreams;
 }
 
+/**
+ * Pi AI's OpenAI and Anthropic clients refuse to send a request without an API key.
+ * Keyless servers such as llama.cpp, Ollama and LM Studio ignore the header, so keyless
+ * providers send this placeholder instead of failing before the request.
+ */
+const KEYLESS_PROVIDER_API_KEY = "pi-for-excel-keyless";
+
 function createStoredApiKeyAuth(args: {
   name: string;
   resolveApiKey: () => Promise<string | undefined>;
@@ -127,7 +136,7 @@ function createStoredApiKeyAuth(args: {
       if (!key && !args.allowKeyless) return undefined;
 
       return {
-        auth: key ? { apiKey: key } : {},
+        auth: { apiKey: key || KEYLESS_PROVIDER_API_KEY },
         source: key ? "Browser credential store" : "Keyless provider",
       };
     },
@@ -530,6 +539,7 @@ export class BrowserModelRuntime {
   private readonly fetchFn: typeof globalThis.fetch;
   private readonly builtinProviderIds = new Set<string>();
   private readonly customProviderIds = new Set<string>();
+  private readonly directCustomProviderIds = new Set<string>();
   private readonly extensionProviderOwners = new Map<string, string>();
   private readonly dynamicProviderAbortControllers = new Map<string, AbortController>();
   private dynamicProviderRevision = 0;
@@ -587,6 +597,7 @@ export class BrowserModelRuntime {
 
   async syncCustomProviders(customProviders: readonly CustomProvider[]): Promise<void> {
     const nextIds = new Set<string>();
+    const nextDirectIds = new Set<string>();
 
     for (const customProvider of customProviders) {
       for (const registration of customProviderRegistrations(customProvider)) {
@@ -604,6 +615,7 @@ export class BrowserModelRuntime {
         });
         this.models.setProvider(provider);
         nextIds.add(registration.id);
+        if (customProvider.connectDirectly === true) nextDirectIds.add(registration.id);
       }
     }
 
@@ -620,6 +632,8 @@ export class BrowserModelRuntime {
 
     this.customProviderIds.clear();
     for (const providerId of nextIds) this.customProviderIds.add(providerId);
+    this.directCustomProviderIds.clear();
+    for (const providerId of nextDirectIds) this.directCustomProviderIds.add(providerId);
   }
 
   registerExtensionProvider(ownerId: string, registration: BrowserProviderRegistration): void {
@@ -646,8 +660,17 @@ export class BrowserModelRuntime {
     return this.extensionProviderOwners.has(providerId);
   }
 
-  shouldProxyProvider(providerId: string): boolean {
-    return this.customProviderIds.has(providerId) || this.extensionProviderOwners.has(providerId);
+  /**
+   * Route for providers this runtime registered: custom and extension providers use the
+   * proxy when it is enabled, unless a custom gateway connects directly. Undefined for
+   * built-in providers, whose routing stays with the stream layer.
+   */
+  providerRoute(providerId: string): ProviderRoute | undefined {
+    if (this.directCustomProviderIds.has(providerId)) return "direct";
+    if (this.customProviderIds.has(providerId) || this.extensionProviderOwners.has(providerId)) {
+      return "proxy";
+    }
+    return undefined;
   }
 
   async unregisterExtensionProvider(ownerId: string, providerId: string): Promise<void> {

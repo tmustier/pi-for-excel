@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test, type TestContext } from "node:test";
 
 import type {
   Credential,
@@ -162,6 +162,7 @@ function gatewayProvider(options?: {
   providerId?: string;
   baseUrl?: string;
   apiKey?: string;
+  connectDirectly?: boolean;
 }): CustomProvider {
   const baseUrl = options?.baseUrl ?? "https://gateway.example.com/v1";
   return {
@@ -170,6 +171,7 @@ function gatewayProvider(options?: {
     type: "openai-completions",
     baseUrl,
     apiKey: options?.apiKey ?? "gateway-secret",
+    ...(options?.connectDirectly === true ? { connectDirectly: true } : {}),
     models: [{
       id: "configured-model",
       name: "Configured model",
@@ -226,7 +228,7 @@ void test("discovery-enabled custom providers merge remote model ids and persist
 
   const runtime = createRuntime({ catalogs, fetchFn });
   await runtime.syncCustomProviders([gatewayProvider()]);
-  assert.equal(runtime.shouldProxyProvider("Gateway · Acme"), true);
+  assert.equal(runtime.providerRoute("Gateway · Acme"), "proxy");
   const result = await runtime.refresh({ allowNetwork: true });
 
   assert.equal(result.errors.size, 0);
@@ -480,8 +482,8 @@ void test("extension providers are owner-scoped and can resolve host-owned crede
 
   runtime.registerExtensionProvider("ext.example", registration);
   assert.equal(runtime.isExtensionProvider(registration.id), true);
-  assert.equal(runtime.shouldProxyProvider(registration.id), true);
-  assert.equal(runtime.shouldProxyProvider("openai"), false);
+  assert.equal(runtime.providerRoute(registration.id), "proxy");
+  assert.equal(runtime.providerRoute("openai"), undefined);
   assert.equal((await runtime.models.getAuth(registration.id))?.auth.apiKey, "host-owned-secret");
   const extensionModel = (await runtime.models.getAvailable(registration.id)).find(
     (model) => model.id === "example-model",
@@ -494,7 +496,7 @@ void test("extension providers are owner-scoped and can resolve host-owned crede
   );
   await runtime.unregisterExtensionProvider("ext.example", registration.id);
   assert.equal(runtime.models.getProvider(registration.id), undefined);
-  assert.equal(runtime.shouldProxyProvider(registration.id), false);
+  assert.equal(runtime.providerRoute(registration.id), undefined);
 });
 
 void test("unregister aborts in-flight discovery before it can resurrect a catalogue", async () => {
@@ -911,4 +913,88 @@ void test("model refresh owner publishes cached startup before network discovery
   releaseFetch();
   await waitForOwnerRevision(owner, 2);
   assert.ok(runtime.models.getModel("Gateway · Acme", "network-model"));
+});
+
+function installDocumentShim(t: TestContext): void {
+  const originalDocument = Object.getOwnPropertyDescriptor(globalThis, "document");
+  Object.defineProperty(globalThis, "document", { configurable: true, value: new EventTarget() });
+  t.after(() => {
+    if (originalDocument) Object.defineProperty(globalThis, "document", originalDocument);
+    else Reflect.deleteProperty(globalThis, "document");
+  });
+}
+
+async function streamGatewayRequest(args: {
+  runtime: BrowserModelRuntime;
+  proxyUrl: string | undefined;
+}): Promise<{ url: string; authorization: string }> {
+  const model = args.runtime.models.getModel("Gateway · Acme", "configured-model");
+  assert.ok(model);
+  const auth = await args.runtime.models.getAuth("Gateway · Acme");
+  const request = { url: "", authorization: "" };
+  const stream = createOfficeStreamFn(
+    () => Promise.resolve(args.proxyUrl),
+    args.runtime.models,
+    (providerId) => args.runtime.providerRoute(providerId),
+  );
+  const events = await stream(model, { messages: [{ role: "user", content: "test", timestamp: 0 }] }, {
+    ...(auth?.auth.apiKey !== undefined ? { apiKey: auth.auth.apiKey } : {}),
+    fetch: (url, init) => {
+      request.url = typeof url === "string" ? url : url instanceof URL ? url.href : url.url;
+      request.authorization = new Headers(init?.headers).get("authorization") ?? "";
+      return Promise.resolve(new Response("test endpoint", { status: 400 }));
+    },
+  });
+  await events.result();
+  return request;
+}
+
+void test("keyless gateways reach the endpoint instead of failing for a missing API key", async (t) => {
+  installDocumentShim(t);
+  const runtime = createRuntime();
+  await runtime.syncCustomProviders([gatewayProvider({ apiKey: "", baseUrl: "https://localhost:8090/v1" })]);
+
+  const request = await streamGatewayRequest({ runtime, proxyUrl: undefined });
+
+  assert.equal(request.url, "https://localhost:8090/v1/chat/completions");
+  assert.equal(request.authorization, "Bearer pi-for-excel-keyless");
+});
+
+void test("gateways set to connect directly skip an enabled proxy", async (t) => {
+  installDocumentShim(t);
+  const proxied = createRuntime();
+  await proxied.syncCustomProviders([gatewayProvider()]);
+  assert.equal(proxied.providerRoute("Gateway · Acme"), "proxy");
+  assert.match(
+    (await streamGatewayRequest({ runtime: proxied, proxyUrl: "https://localhost:3004" })).url,
+    /^https:\/\/localhost:3004\/\?url=/u,
+  );
+
+  const direct = createRuntime();
+  await direct.syncCustomProviders([gatewayProvider({ connectDirectly: true })]);
+  assert.equal(direct.providerRoute("Gateway · Acme"), "direct");
+  assert.equal(
+    (await streamGatewayRequest({ runtime: direct, proxyUrl: "https://localhost:3004" })).url,
+    "https://gateway.example.com/v1/chat/completions",
+  );
+
+  await direct.syncCustomProviders([gatewayProvider()]);
+  assert.equal(direct.providerRoute("Gateway · Acme"), "proxy");
+});
+
+void test("direct plain-http requests to another machine explain the mixed-content block", async (t) => {
+  installDocumentShim(t);
+  const remote = createRuntime();
+  await remote.syncCustomProviders([gatewayProvider({ baseUrl: "http://192.168.1.50:8080/v1" })]);
+  await assert.rejects(
+    streamGatewayRequest({ runtime: remote, proxyUrl: undefined }),
+    /plain http:\/\/ endpoint .*Excel blocks http:\/\/ requests/u,
+  );
+
+  const loopback = createRuntime();
+  await loopback.syncCustomProviders([gatewayProvider({ baseUrl: "http://localhost:8080/v1" })]);
+  assert.equal(
+    (await streamGatewayRequest({ runtime: loopback, proxyUrl: undefined })).url,
+    "http://localhost:8080/v1/chat/completions",
+  );
 });

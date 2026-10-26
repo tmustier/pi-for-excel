@@ -7,6 +7,7 @@ import { getAppStorage } from "../../storage/local/app-storage.js";
 
 import {
   DEFAULT_OPENAI_GATEWAY_CONTEXT_WINDOW,
+  DEFAULT_OPENAI_GATEWAY_MAX_TOKENS,
   deleteOpenAiGatewayConfig,
   listOpenAiGatewayConfigs,
   saveOpenAiGatewayConfig,
@@ -17,6 +18,7 @@ import {
   createButton,
   createConfigInput,
   createConfigRow,
+  createToggleRow,
 } from "../../ui/extensions-hub-components.js";
 import { createOverlaySectionTitle } from "../../ui/overlay-dialog.js";
 import { showToast } from "../../ui/toast.js";
@@ -100,11 +102,21 @@ function createGatewayCard(args: {
   contextWindow.className = "pi-settings-gateway-item__meta";
   contextWindow.textContent = t("custom-gateway.gatewayContextWindow", { tokens: formatTokenCount(args.gateway.contextWindow) });
 
+  const maxTokens = document.createElement("p");
+  maxTokens.className = "pi-settings-gateway-item__meta";
+  maxTokens.textContent = t("custom-gateway.gatewayMaxTokens", { tokens: formatTokenCount(args.gateway.maxTokens) });
+
   const keyState = document.createElement("p");
   keyState.className = "pi-settings-gateway-item__meta";
   keyState.textContent = args.gateway.apiKey.length > 0 ? t("custom-gateway.gatewayApiKeyConfigured") : t("custom-gateway.gatewayApiKeyNone");
 
-  card.append(topRow, endpoint, model, contextWindow, keyState);
+  const connection = document.createElement("p");
+  connection.className = "pi-settings-gateway-item__meta";
+  connection.textContent = args.gateway.connectDirectly
+    ? t("custom-gateway.gatewayConnectionDirect")
+    : t("custom-gateway.gatewayConnectionProxy");
+
+  card.append(topRow, endpoint, model, contextWindow, maxTokens, keyState, connection);
   return card;
 }
 
@@ -145,9 +157,22 @@ export async function buildCustomGatewaySection(
   contextWindowInput.step = "1";
   contextWindowInput.inputMode = "numeric";
 
+  const maxTokensInput = createConfigInput({
+    placeholder: String(DEFAULT_OPENAI_GATEWAY_MAX_TOKENS),
+    type: "number",
+  });
+  maxTokensInput.min = "1";
+  maxTokensInput.step = "1";
+  maxTokensInput.inputMode = "numeric";
+
   const apiKeyInput = createConfigInput({
     placeholder: t("custom-gateway.apiKeyPlaceholder"),
     type: "password",
+  });
+
+  const connectDirectlyToggle = createToggleRow({
+    label: t("custom-gateway.connectDirectlyLabel"),
+    sublabel: t("custom-gateway.connectDirectlyHint"),
   });
 
   const errorText = document.createElement("p");
@@ -177,7 +202,10 @@ export async function buildCustomGatewaySection(
     createHint(
       t("custom-gateway.contextWindowHint"),
     ),
+    createConfigRow(t("custom-gateway.configLabelMaxTokens"), maxTokensInput),
+    createHint(t("custom-gateway.maxTokensHint")),
     createConfigRow(t("custom-gateway.configLabelApiKey"), apiKeyInput),
+    connectDirectlyToggle.root,
     errorText,
     formActions,
   );
@@ -209,7 +237,9 @@ export async function buildCustomGatewaySection(
     endpointInput.value = "";
     modelInput.value = "";
     contextWindowInput.value = "";
+    maxTokensInput.value = "";
     apiKeyInput.value = "";
+    connectDirectlyToggle.input.checked = false;
     cancelButton.hidden = true;
     saveButton.textContent = t("custom-gateway.saveGateway");
     setError(null);
@@ -221,7 +251,9 @@ export async function buildCustomGatewaySection(
     endpointInput.value = gateway.endpointUrl;
     modelInput.value = gateway.modelId;
     contextWindowInput.value = String(gateway.contextWindow);
+    maxTokensInput.value = String(gateway.maxTokens);
     apiKeyInput.value = gateway.apiKey;
+    connectDirectlyToggle.input.checked = gateway.connectDirectly;
     cancelButton.hidden = false;
     saveButton.textContent = t("custom-gateway-settings.update-gateway");
     setError(null);
@@ -293,6 +325,10 @@ export async function buildCustomGatewaySection(
         const contextWindow = rawContextWindow.length > 0
           ? Number(rawContextWindow)
           : undefined;
+        const rawMaxTokens = maxTokensInput.value.trim();
+        const maxTokens = rawMaxTokens.length > 0
+          ? Number(rawMaxTokens)
+          : undefined;
 
         const saved = await saveOpenAiGatewayConfig(getAppStorage().customProviders, {
           ...(editingGatewayId ? { id: editingGatewayId } : {}),
@@ -301,6 +337,8 @@ export async function buildCustomGatewaySection(
           modelId: modelInput.value,
           apiKey: apiKeyInput.value,
           ...(contextWindow !== undefined ? { contextWindow } : {}),
+          ...(maxTokens !== undefined ? { maxTokens } : {}),
+          connectDirectly: connectDirectlyToggle.input.checked,
         }, options.models);
 
         await reloadGateways();

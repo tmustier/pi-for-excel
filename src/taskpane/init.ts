@@ -331,7 +331,7 @@ export async function initTaskpane(opts: {
   const streamFn = createOfficeStreamFn(
     getConfiguredProxyUrl,
     modelRuntime.models,
-    (providerId) => modelRuntime.shouldProxyProvider(providerId),
+    (providerId) => modelRuntime.providerRoute(providerId),
   );
 
   const workbookCoordinator = createWorkbookCoordinator();

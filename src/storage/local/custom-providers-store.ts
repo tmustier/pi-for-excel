@@ -25,6 +25,8 @@ export interface CustomProvider {
   baseUrl: string;
   apiKey?: string;
   models?: Model<Api>[];
+  /** Send requests straight to the endpoint even when the CORS proxy is enabled. */
+  connectDirectly?: boolean;
 }
 
 export class CustomProvidersStore extends Store {

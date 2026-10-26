@@ -27,7 +27,8 @@ import type {
 import { isDebugEnabled } from "../debug/debug.js";
 import { selectToolBundle, type ToolBundleId } from "../context/tool-disclosure.js";
 import { modelRecencyScore } from "../models/model-ordering.js";
-import { OPENAI_GATEWAY_PROVIDER_PREFIX } from "./custom-gateways.js";
+import type { ProviderRoute } from "../models/browser-model-runtime.js";
+import { isPlainHttpRemoteEndpoint, OPENAI_GATEWAY_PROVIDER_PREFIX } from "./custom-gateways.js";
 import {
   createPrefixFingerprint,
   type PrefixChangeReason,
@@ -46,13 +47,16 @@ type OfficeStreamFn = (
   options?: StreamOptions,
 ) => Promise<AssistantMessageEventStream>;
 
+export type RuntimeProviderRoute = (providerId: string) => ProviderRoute | undefined;
+
 function shouldProxyProvider(
   provider: string,
   apiKey?: string,
-  isRuntimeProvider?: (providerId: string) => boolean,
+  runtimeProviderRoute?: RuntimeProviderRoute,
 ): boolean {
-  if (isRuntimeProvider?.(provider)) {
-    return true;
+  const route = runtimeProviderRoute?.(provider);
+  if (route !== undefined) {
+    return route === "proxy";
   }
 
   const p = provider.toLowerCase();
@@ -83,6 +87,21 @@ function shouldProxyProvider(
     default:
       return false;
   }
+}
+
+/**
+ * Office serves the taskpane over HTTPS, so its webview blocks plain-http requests to other
+ * machines as mixed content and pi-ai only reports "Connection error.". Explain it instead.
+ */
+function assertDirectRequestAllowed(model: Model<Api>): void {
+  if (!isPlainHttpRemoteEndpoint(model.baseUrl)) return;
+
+  throw new Error(
+    `${model.provider} uses a plain http:// endpoint (${model.baseUrl}). ` +
+    "Excel blocks http:// requests from the add-in to other machines, so Pi cannot reach it directly. " +
+    "Serve the endpoint over https:// with CORS enabled, or route it through the Pi for Excel proxy " +
+    "(start the proxy with ALLOW_PRIVATE_TARGETS=1 for addresses on your network).",
+  );
 }
 
 type OfficeProxyTransport = "codex-websocket";
@@ -563,7 +582,7 @@ function normalizeOpenRouterModel(model: Model<Api>): Model<Api> {
 export function createOfficeStreamFn(
   getProxyUrl: GetProxyUrl,
   modelsRuntime: Models,
-  isRuntimeProvider?: (providerId: string) => boolean,
+  runtimeProviderRoute?: RuntimeProviderRoute,
 ): OfficeStreamFn {
   return async (model: Model<Api>, context: TranscriptContext, options?: StreamOptions) => {
     const continuation = isToolContinuation(context.messages);
@@ -603,10 +622,12 @@ export function createOfficeStreamFn(
           "Enable Proxy in Settings and run: npx -y pi-for-excel-proxy@latest",
         );
       }
+      assertDirectRequestAllowed(normalizedModel);
       return modelsRuntime.streamSimple(normalizedModel, context, effectiveOptions);
     }
 
-    if (!needsOpenRouterProxy && !shouldProxyProvider(normalizedModel.provider, options?.apiKey, isRuntimeProvider)) {
+    if (!needsOpenRouterProxy && !shouldProxyProvider(normalizedModel.provider, options?.apiKey, runtimeProviderRoute)) {
+      assertDirectRequestAllowed(normalizedModel);
       return modelsRuntime.streamSimple(normalizedModel, context, effectiveOptions);
     }
 

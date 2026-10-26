@@ -4,13 +4,14 @@
 
 import type { Api, Model, Models } from "@earendil-works/pi-ai";
 import type { CustomProvider } from "../storage/local/custom-providers-store.js";
+import { isLoopbackProxyUrl } from "./proxy-validation.js";
 
 const OPENAI_GATEWAY_ID_PREFIX = "pi-openai-gateway:";
 export const OPENAI_GATEWAY_PROVIDER_PREFIX = "Gateway · ";
 const OPENAI_GATEWAY_TYPE = "openai-completions";
 
 export const DEFAULT_OPENAI_GATEWAY_CONTEXT_WINDOW = 16_384;
-const DEFAULT_OPENAI_GATEWAY_MAX_TOKENS = 4_096;
+export const DEFAULT_OPENAI_GATEWAY_MAX_TOKENS = 4_096;
 
 type StoredModel = NonNullable<CustomProvider["models"]>[number];
 
@@ -29,6 +30,8 @@ export interface OpenAiGatewayConfig {
   apiKey: string;
   providerName: string;
   contextWindow: number;
+  maxTokens: number;
+  connectDirectly: boolean;
 }
 
 export interface SaveOpenAiGatewayInput {
@@ -38,6 +41,10 @@ export interface SaveOpenAiGatewayInput {
   modelId: string;
   apiKey?: string;
   contextWindow?: number;
+  /** Explicit output-token limit; omitted means registry metadata or the unknown-model default. */
+  maxTokens?: number;
+  /** Skip the CORS proxy for this gateway; the endpoint must allow CORS itself. */
+  connectDirectly?: boolean;
 }
 
 export interface CustomProviderRuntimeInfo {
@@ -82,6 +89,21 @@ export function normalizeGatewayEndpointUrl(endpointUrl: string): string {
   return normalized.endsWith("/") ? normalized.slice(0, -1) : normalized;
 }
 
+/**
+ * True for plain-http endpoints on another machine. Office serves the taskpane over HTTPS,
+ * so its webview blocks these requests as mixed content unless the proxy relays them.
+ */
+export function isPlainHttpRemoteEndpoint(url: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+
+  return parsed.protocol === "http:" && !isLoopbackProxyUrl(url);
+}
+
 export function normalizeGatewayModelId(modelId: string): string {
   return normalizeRequiredString(modelId, "Model ID");
 }
@@ -101,6 +123,18 @@ export function normalizeGatewayContextWindow(contextWindow: number | null | und
   }
 
   return normalized;
+}
+
+function normalizeGatewayMaxTokens(maxTokens: number): number {
+  if (!Number.isInteger(maxTokens)) {
+    throw new Error("Max output tokens must be a whole number.");
+  }
+
+  if (maxTokens < 1) {
+    throw new Error("Max output tokens must be at least 1.");
+  }
+
+  return maxTokens;
 }
 
 function deriveDisplayName(rawName: string | undefined, endpointUrl: string): string {
@@ -186,6 +220,8 @@ function providerToGatewayConfig(provider: CustomProvider): OpenAiGatewayConfig 
     apiKey: normalizeOptionalString(provider.apiKey),
     providerName,
     contextWindow: normalizeGatewayContextWindow(model.contextWindow),
+    maxTokens: model.maxTokens,
+    connectDirectly: provider.connectDirectly === true,
   };
 }
 
@@ -194,11 +230,13 @@ function createGatewayModel(args: {
   modelId: string;
   providerName: string;
   contextWindow: number;
+  maxTokens?: number;
   registryModel?: Model<Api>;
 }): Model<"openai-completions"> {
   const registryModel = args.registryModel;
+  // Output can never exceed the context window, so an explicit limit is clamped like the defaults.
   const maxTokens = Math.min(
-    registryModel?.maxTokens ?? DEFAULT_OPENAI_GATEWAY_MAX_TOKENS,
+    args.maxTokens ?? registryModel?.maxTokens ?? DEFAULT_OPENAI_GATEWAY_MAX_TOKENS,
     args.contextWindow,
   );
 
@@ -283,6 +321,16 @@ export async function saveOpenAiGatewayConfig(
   const contextWindow = normalizeGatewayContextWindow(
     input.contextWindow ?? registryModel?.contextWindow,
   );
+  const explicitMaxTokens = input.maxTokens === undefined
+    ? undefined
+    : normalizeGatewayMaxTokens(input.maxTokens);
+  const connectDirectly = input.connectDirectly === true;
+  if (connectDirectly && isPlainHttpRemoteEndpoint(endpointUrl)) {
+    throw new Error(
+      "Direct connections need an https:// endpoint. Excel blocks plain http:// requests to other machines. "
+      + "Serve the endpoint over HTTPS, or turn off Connect directly to use the proxy.",
+    );
+  }
   const existingGateways = await listOpenAiGatewayConfigs(customProvidersStore);
 
   if (input.id) {
@@ -309,23 +357,27 @@ export async function saveOpenAiGatewayConfig(
   const id = input.id ?? `${OPENAI_GATEWAY_ID_PREFIX}${crypto.randomUUID()}`;
   const apiKey = normalizeOptionalString(input.apiKey);
 
+  const gatewayModel = createGatewayModel({
+    endpointUrl,
+    modelId,
+    providerName,
+    contextWindow,
+    ...(explicitMaxTokens !== undefined ? { maxTokens: explicitMaxTokens } : {}),
+    ...(registryModel !== undefined ? { registryModel } : {}),
+  });
+
   const provider: CustomProvider = {
     id,
     name: displayName,
     type: OPENAI_GATEWAY_TYPE,
     baseUrl: endpointUrl,
-    models: [
-      createGatewayModel({
-        endpointUrl,
-        modelId,
-        providerName,
-        contextWindow,
-        ...(registryModel !== undefined ? { registryModel } : {}),
-      }),
-    ],
+    models: [gatewayModel],
   };
   if (apiKey.length > 0) {
     provider.apiKey = apiKey;
+  }
+  if (connectDirectly) {
+    provider.connectDirectly = true;
   }
 
   await customProvidersStore.set(provider);
@@ -338,6 +390,8 @@ export async function saveOpenAiGatewayConfig(
     apiKey,
     providerName,
     contextWindow,
+    maxTokens: gatewayModel.maxTokens,
+    connectDirectly,
   };
 }
 

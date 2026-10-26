@@ -77,12 +77,17 @@ export class PiInput extends LitElement {
     return nextValue;
   }
 
+  /**
+   * `change` and `keyup` also land here because legacy WPS WebViews can miss
+   * `input`. Only a real value change needs the resize, which forces a layout
+   * of the whole pane, so repeats for the same edit (and keys such as arrows)
+   * return early.
+   */
   private _onInput = (e: Event) => {
-    if (e.target instanceof HTMLTextAreaElement) {
-      this._value = e.target.value;
-    } else {
-      this._syncValueFromTextarea();
-    }
+    const nextValue = e.target instanceof HTMLTextAreaElement ? e.target.value : this._readTextareaValue();
+    if (nextValue === this._value) return;
+
+    this._value = nextValue;
     this._autoGrow();
     this.dispatchEvent(new Event("input", { bubbles: true }));
   };

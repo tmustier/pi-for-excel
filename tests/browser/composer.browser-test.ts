@@ -117,3 +117,38 @@ void test("composer auto-grow uses the smaller short-pane cap", async () => {
     assert.equal(await input.evaluate((element) => element.style.height), "140px");
   }, 500);
 });
+
+void test("each composer edit resizes once and caret keys do not resize it", async () => {
+  await withTaskpane(async (page) => {
+    const input = page.locator("pi-input textarea");
+    await input.click();
+    await page.locator("pi-input").evaluate((composer) => {
+      const textarea = composer.querySelector("textarea");
+      if (!textarea) throw new Error("composer textarea missing");
+      const counters = document.body.dataset;
+      counters.composerResizes = "0";
+      counters.composerEdits = "0";
+      new MutationObserver((records) => {
+        counters.composerResizes = String(Number(counters.composerResizes) + records.length);
+      }).observe(textarea, { attributes: true, attributeFilter: ["style"] });
+      composer.addEventListener("input", (event) => {
+        if (event.target === composer) counters.composerEdits = String(Number(counters.composerEdits) + 1);
+      });
+    });
+    const takeWork = () => page.evaluate(() => {
+      const counters = document.body.dataset;
+      const work = { resizes: Number(counters.composerResizes), edits: Number(counters.composerEdits) };
+      counters.composerResizes = "0";
+      counters.composerEdits = "0";
+      return work;
+    });
+
+    // Each resize writes the height twice: "auto" to measure, then the measured height.
+    await input.pressSequentially("abc");
+    assert.deepEqual(await takeWork(), { resizes: 6, edits: 3 });
+
+    for (const key of ["ArrowLeft", "ArrowLeft", "ArrowRight", "Shift", "Home"]) await input.press(key);
+    assert.deepEqual(await takeWork(), { resizes: 0, edits: 0 });
+    assert.equal(await input.inputValue(), "abc");
+  });
+});
