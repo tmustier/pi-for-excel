@@ -97,6 +97,7 @@
     "fast-xml-parser": "5.7.0",
     "@xmldom/xmldom": "0.8.15",
     "protobufjs": "7.6.5",
-    "follow-redirects": "1.16.0"
+    "follow-redirects": "1.16.2",
+    "@azure/msal-node": "7.1.1"
   }
 }

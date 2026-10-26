@@ -1,8 +1,16 @@
 # Security dependency baseline
 
-Last verified: 17 October 2026.
+Last verified: 26 October 2026.
 
-The October refresh updates vulnerable transitive dependencies within the existing direct dependency ranges and moves the Axios override to 1.20.0. Pi, TypeScript and the direct Office tooling dependencies stay on their existing major versions. It includes the shell-quote, ip-address, proxy-addr and Handlebars fixes proposed in PRs #758, #759, #762 and #763.
+## October 26 refresh
+
+Updates vite, hono, zod, body-parser, fast-uri and their related packages within existing ranges. Moves the follow-redirects override to 1.16.2.
+
+Also adds an `@azure/msal-node` override at 7.1.1 for [GHSA-xcx6-jx8p-x3h5](https://github.com/advisories/GHSA-xcx6-jx8p-x3h5), which is fixed only in 7.1.0 and later. msal-node reaches this repo only through `office-addin-debugging` → `office-addin-dev-settings` → `@microsoft/m365agentstoolkit-cli` 1.1.18 and its `@azure/identity`. Both declare `^6`, and no newer release accepts 7. The toolkit uses `PublicClientApplication`, `ManagedIdentityApplication` and `LogLevel`, and all three are present in 7.1.1. Remove the override when the toolkit or `@azure/identity` accepts a fixed msal-node.
+
+## October 17 refresh
+
+The October 17 refresh updates vulnerable transitive dependencies within the existing direct dependency ranges and moves the Axios override to 1.20.0. Pi, TypeScript and the direct Office tooling dependencies stay on their existing major versions. It includes the shell-quote, ip-address, proxy-addr and Handlebars fixes proposed in PRs #758, #759, #762 and #763.
 
 ## Temporary node-forge patch
 
