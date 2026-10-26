@@ -14,7 +14,7 @@ import {
   type SkillActivationMutableSettingsStore,
 } from "../../skills/activation-store.js";
 import {
-  loadExternalAgentSkillsFromWorkspace,
+  loadDiscoverableAgentSkillsFromWorkspace,
   removeExternalAgentSkillFromWorkspace,
   upsertExternalAgentSkillInWorkspace,
 } from "../../skills/external-store.js";
@@ -57,7 +57,9 @@ async function buildSnapshot(settings: SkillActivationMutableSettingsStore): Pro
   let activationLoadError: string | null = null;
 
   try {
-    external = await loadExternalAgentSkillsFromWorkspace(getFilesWorkspace());
+    // Same set Pi loads at runtime: managed skills/external/<name>/SKILL.md
+    // plus workspace-discovered skills/<name>/SKILL.md.
+    external = await loadDiscoverableAgentSkillsFromWorkspace(getFilesWorkspace());
   } catch (err) {
     externalLoadError = err instanceof Error ? err.message : "Unknown error";
   }
@@ -190,10 +192,12 @@ export async function renderSkillsTab(args: {
             if (!confirmed || isBusy()) return;
 
             await runMutation(async () => {
-              const removed = await removeExternalAgentSkillFromWorkspace({
-                workspace: getFilesWorkspace(),
-                name: skill.name,
-              });
+              const workspace = getFilesWorkspace();
+              // Workspace-discovered skills are plain files the user added;
+              // remove exactly the SKILL.md this card shows.
+              const removed = skill.location.startsWith("skills/external/")
+                ? await removeExternalAgentSkillFromWorkspace({ workspace, name: skill.name })
+                : await workspace.deleteFile(skill.location).then(() => true);
               if (removed) {
                 dispatchSkillsChanged({ reason: "catalog" });
               } else {
