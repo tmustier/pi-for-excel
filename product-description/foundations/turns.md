@@ -66,7 +66,7 @@ From the moment the message joins the transcript:
 - Pi gathers [auto-context](../turn/auto-context.md) (the workbook blueprint, the selection, recent edits) and sends the request.
 - The tab is busy until the turn ends.
 
-If the tab's provider has no usable credential, Pi asks for one with a connection dialog only now, after the message is already in the transcript and the tab is responding. If the user dismisses it, the turn fails ("API key required for {provider}."). See [models and providers](models-and-providers.md).
+If the tab's provider has no usable credential, Pi asks for one with a connection dialog only now, after the message is already in the transcript and the tab is responding. If the user dismisses it, the turn fails: the transcript shows "Error: Provider is not configured: {provider id}" and the banner "LLM error: Provider is not configured: {provider id}" (confirmed in Excel on the web; the code's intended "API key required for {provider}." is overwritten). See [models and providers](models-and-providers.md).
 
 ### While Pi is busy
 

@@ -196,7 +196,7 @@ The vocabulary used across these documents. When a document uses one of these wo
 
 **Connection dialog.** The overlay "Connect {label}" ("This model needs a login or API key to continue.") that a turn opens when its model's provider has no credential. Connecting continues the turn; dismissing fails it.
 
-**Welcome overlay.** The first-run overlay ("Pi for Excel", "Connect an AI provider to get started", "Select provider") shown when the taskpane opens with no provider connected. It closes on any connection; Escape or a backdrop click dismiss it.
+**Welcome overlay.** The first-run overlay ("Pi for Excel", "Connect an AI provider to get started", "Select provider") shown when the taskpane opens with no provider connected. It closes on any connection; Escape or a backdrop click dismiss it. It does not take focus, so with focus in the composer the first Escape only leaves the composer.
 
 **Model picker.** The "Select model" overlay, opened by the status-bar model control, `/model` or `/default-models`.
 
