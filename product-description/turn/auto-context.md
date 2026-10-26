@@ -12,6 +12,8 @@ The user then types new numbers into D3 and D4 in the grid, comes back to the ta
 
 Nothing in the transcript shows that any of this was sent.
 
+Confirmed in Excel on the web: with D7 selected and a new value typed into B4 in the grid, "Without using any tools: which cell is selected, and which cells did I change since my last message?" was answered "Selected: Sheet1!D7; changed: Sheet1!B4." with no tool card.
+
 ## The interaction, event by event
 
 ```mermaid
@@ -134,12 +136,12 @@ After any interrupt, the next request simply gathers a new note.
 
 ## Open questions and verification
 
-- Pi's own writes are reported to the model as "User changes since last message": the change tracker records every `onChanged` event without checking where it came from (`src/context/change-tracker.ts:45-57`; no check of the event's trigger source). Read from code; confirming needs Excel. Looks like a bug, or at least a mislabel.
+- Pi's own writes are reported to the model as "User changes since last message": the change tracker records every `onChanged` event without checking where it came from (`src/context/change-tracker.ts:45-57`; no check of the event's trigger source). Confirmed in Excel on the web: after Pi wrote Sheet1!G1 with `write_cells`, the next request in the same turn carried "User changes since last message: Sheet1: G1". Looks like a bug, or at least a mislabel.
 - One change tracker is shared by every tab (`src/taskpane/init.ts:222`, passed to each tab's injector at `src/taskpane/init.ts:920`), so edits are reported to whichever tab sends the next request. Read from code. Probably a bug.
 - The blueprint is invalidated only by Pi's own structural writes (`src/taskpane/init.ts:860-863`); manual structural edits leave it stale for the life of the taskpane (`src/context/blueprint.ts:50-66`). Read from code. Probably a bug.
-- The refresh decision assumes earlier notes are still in the history (`src/taskpane/context-refresh-decision.ts`, `historyHasWorkbookContextRefresh` in `src/taskpane/context-injection.ts:53-68`), but the note is never stored, so the blueprint is re-sent with every request labelled "context missing from history", and the Files summary is sent only once and then never again until files change (`src/taskpane/context-injection.ts:150-171`). The file comment says the blueprint is injected "only on first send and when invalidated". Read from code; the effect on the blueprint is harmless, the effect on the Files summary looks like a bug.
+- The refresh decision assumes earlier notes are still in the history (`src/taskpane/context-refresh-decision.ts`, `historyHasWorkbookContextRefresh` in `src/taskpane/context-injection.ts:53-68`), but the note is never stored, so the blueprint is re-sent with every request labelled "context missing from history", and the Files summary is sent only once and then never again until files change (`src/taskpane/context-injection.ts:150-171`). The file comment says the blueprint is injected "only on first send and when invalidated". Confirmed in Excel on the web for the blueprint: the first request of the taskpane carried "[Workbook context refresh: initial]" and every later request "[Workbook context refresh: context missing from history]" with the full blueprint; the effect on the blueprint is harmless, the effect on the Files summary looks like a bug.
 - The selection block is not capped in rows (`src/context/selection.ts:63-64`); a whole-column selection on a large sheet could add a very large note to every request. Read from code.
 - Focus, visibility and rules updates refresh Pi's instructions but not the blueprint; whether that was intended is unknown.
-- Everything in this document was read from code; no part of the note is visible in the product to verify against without the debug UI.
+- No part of the note is visible in the product without the debug UI. The checks above read the note by wrapping the tab's context transform from the console of the taskpane in Excel on the web (observation only; the requests were otherwise unchanged). They also confirmed that the note is rebuilt before every model response (three times in a turn with two tool batches), carries the selection with five rows on either side and the used columns, the selection's formulas and "Errors nearby", and reports a grid edit once and then not again. The Files workspace summary, the time limits and the 50-event cap were not exercised.
 
 Verified against pi-for-excel commit `ec453df`.
