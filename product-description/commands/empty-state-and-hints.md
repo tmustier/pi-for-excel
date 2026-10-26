@@ -51,7 +51,7 @@ The exact wording is in `src/language/locales/en.json` under `hint.explain.promp
 
 Clicking a hint is the whole of the hint's own interaction, and it records nothing:
 
-- The composer's text is **replaced** by the hint's full prompt. Anything the user had typed is gone. It is not appended to, and Ctrl/Cmd+Z in the composer does not bring it back (confirmed in the standalone taskpane).
+- The composer's text is **replaced** by the hint's full prompt. Anything the user had typed is gone. It is not appended to, and Ctrl/Cmd+Z in the composer does not bring it back (confirmed in Excel on the web).
 - Focus moves to the composer, with the caret at the end of the prompt. The composer grows to fit, up to its maximum height, and the send button becomes active.
 - Nothing is sent, nothing is saved, and the tab does not become busy. The [command menu](the-command-menu.md) does not open; no hint starts with `/`.
 - The empty state stays on screen. Clicking another hint replaces the text again.
@@ -128,7 +128,7 @@ After any interrupt before sending, the user still has the empty state on screen
 
 ## Edge cases
 
-- **Short pane (520 px tall or less).** The π mark and the grey previews are hidden and the cards shrink to their labels.
+- **Short pane (520 px tall or less).** The π mark and the grey previews are hidden and the cards shrink to their labels. Confirmed in Excel on the web with a taskpane about 340 px tall.
 - **Very long existing draft.** Clicking a hint discards it without warning.
 - **Same hint twice.** The second click replaces the text with the same prompt, discarding any edits made to it.
 - **A hint, then `/new`.** The prompt stays in the composer and the new tab shows the empty state; sending goes to the new tab.
@@ -136,10 +136,12 @@ After any interrupt before sending, the user still has the empty state on screen
 
 ## Open questions and verification
 
-- Clicking a hint replaces the composer text instead of inserting into it (`src/ui/pi-sidebar.ts:1205`, `input.value = prompt`), and the replaced text cannot be recovered with Ctrl/Cmd+Z. Confirmed in the standalone taskpane. [turns](../foundations/turns.md) says "Clicking a starter hint replaces nothing: it inserts its prompt into the composer", which does not match; one of the two needs correcting. Losing a draft without warning may be worth treating as a bug.
-- The order of the hints in the product is Explain, Quality check, Build my financial model, Format this sheet (`src/taskpane/init.ts:341-358`); the glossary lists "Format this sheet" before "Build my financial model". Confirmed in the standalone taskpane.
-- The composer is shared by all tabs, so hint text follows the user across tab switches. Confirmed in the standalone taskpane; it contradicts the glossary's statement that each tab has its own composer text.
+- Clicking a hint replaces the composer text instead of inserting into it (`src/ui/pi-sidebar.ts:1205`, `input.value = prompt`), and the replaced text cannot be recovered with Ctrl/Cmd+Z. Confirmed in Excel on the web: a draft "my draft" was replaced by the whole Explain prompt, the caret was at the end, and Ctrl+Z left the prompt in place. [turns](../foundations/turns.md) now agrees. Losing a draft without warning may be worth treating as a bug.
+- The order of the hints in the product is Explain, Quality check, Build my financial model, Format this sheet (`src/taskpane/init.ts:341-358`); the glossary lists "Format this sheet" before "Build my financial model". Confirmed in Excel on the web.
+- The composer is shared by all tabs, so hint text follows the user across tab switches. Confirmed for a draft in Excel on the web; see [sessions and tabs](../foundations/sessions-and-tabs.md#what-a-tab-owns).
 - "Inserts into input — editable before sending." is only a `title` tooltip (`src/ui/pi-sidebar.ts:1225`); on touch devices and for keyboard users it is never seen. A product call.
 - That the empty state stays visible, with clickable hints, between Enter and the first message joining the transcript was read from code, not seen.
+- Clicking a hint with the utilities menu open was not run.
+- Checked in Excel on the web on 2026-10-26; see [the checklist](../verification/sessions-and-commands.md#commandsempty-state-and-hintsmd).
 
 Verified against pi-for-excel commit `ec453df`.
