@@ -1,15 +1,14 @@
 /**
- * Disclosure bar — non-blocking banner shown after first provider connect.
+ * First-run disclosure, built on the shared banner primitive.
  *
- * Informs the user about Pi's external capabilities (web search, extensions,
- * MCP, skills) and lets them acknowledge or customize before using the agent.
+ * Tells the user once that Pi can reach external services, with a way to
+ * review the related settings. Dismissed for good (per add-in) either way.
  */
 
 import { t } from "../language/index.js";
-import { createToggleRow } from "./extensions-hub-components.js";
+import { createBanner, type BannerHandle } from "./banner.js";
 
 const ACKNOWLEDGED_KEY = "pi.onboarding.disclosure.acknowledged";
-let disclosurePickerSequence = 0;
 
 function isAcknowledged(): boolean {
   try {
@@ -28,109 +27,40 @@ function setAcknowledged(): void {
 }
 
 export interface DisclosureBarOptions {
-  /** Number of configured providers (bar only shows when ≥1). */
+  /** Number of configured providers (shows only when ≥1). */
   providerCount: number;
-  /** Callback to open Settings overlay. If provided, t("disclosure-bar.changeInSettings") becomes a link. */
-  onOpenSettings?: () => void;
+  /** Opens the settings that control external access. */
+  onOpenSettings: () => void;
 }
 
-/**
- * Create and return the disclosure bar element, or `null` if already dismissed.
- *
- * The caller is responsible for inserting the element into the DOM.
- * The returned element removes itself when the user dismisses it.
- */
-export function createDisclosureBar(options: DisclosureBarOptions): HTMLElement | null {
+/** Create the disclosure banner, or `null` if it was already acknowledged. */
+export function createDisclosureBar(options: DisclosureBarOptions): BannerHandle | null {
   if (isAcknowledged() || options.providerCount < 1) {
     return null;
   }
 
-  const bar = document.createElement("div");
-  bar.className = "pi-disclosure-bar";
-
-  const text = document.createElement("div");
-  text.className = "pi-disclosure-bar__text";
-  text.textContent = t("disclosure-bar.text");
-  bar.appendChild(text);
-
-  // --- Expandable picker (hidden by default) ---
-  const picker = document.createElement("div");
-  disclosurePickerSequence += 1;
-  picker.id = `pi-disclosure-picker-${disclosurePickerSequence}`;
-  picker.className = "pi-disclosure-picker";
-
-  const toggleRows: { label: string; sublabel: string }[] = [
-    { label: t("disclosure-bar.webSearchLabel"), sublabel: "Search engines and read web pages" },
-    { label: t("disclosure-bar.extensionsLabel"), sublabel: "Sidebar tools and custom commands" },
-    { label: t("disclosure-bar.externalServicesLabel"), sublabel: "Connect to tool servers you configure" },
-    { label: t("disclosure-bar.skillsLabel"), sublabel: "Instruction documents the AI follows" },
-  ];
-
-  for (const row of toggleRows) {
-    const toggleRow = createToggleRow({
-      label: row.label,
-      sublabel: row.sublabel,
-      checked: true,
-    });
-    picker.appendChild(toggleRow.root);
-  }
-
-  // --- Actions row ---
-  const actions = document.createElement("div");
-  actions.className = "pi-disclosure-bar__actions";
-  bar.appendChild(actions);
-
-  const dismiss = () => {
+  let handle: BannerHandle | null = null;
+  const dismiss = (): void => {
     setAcknowledged();
-    bar.remove();
+    handle?.root.remove();
   };
 
-  const gotItBtn = document.createElement("button");
-  gotItBtn.className = "pi-overlay-btn pi-overlay-btn--primary pi-overlay-btn--compact";
-  gotItBtn.textContent = t("disclosure-bar.gotIt");
-  gotItBtn.addEventListener("click", dismiss);
-  actions.appendChild(gotItBtn);
-
-  const customizeBtn = document.createElement("button");
-  customizeBtn.className = "pi-disclosure-bar__link";
-  customizeBtn.textContent = t("disclosure-bar.customize");
-  customizeBtn.setAttribute("aria-controls", picker.id);
-  customizeBtn.setAttribute("aria-expanded", "false");
-  actions.appendChild(customizeBtn);
-
-  let hint: HTMLElement;
-  if (options.onOpenSettings) {
-    const link = document.createElement("button");
-    link.type = "button";
-    link.className = "pi-disclosure-bar__settings-link";
-    link.textContent = t("disclosure-bar.changeInSettings");
-    link.addEventListener("click", () => {
-      dismiss();
-      options.onOpenSettings?.();
-    });
-    hint = link;
-  } else {
-    const span = document.createElement("span");
-    span.className = "pi-disclosure-bar__muted";
-    span.textContent = t("disclosure-bar.changeInSettingsMuted");
-    hint = span;
-  }
-  actions.appendChild(hint);
-  bar.appendChild(picker);
-
-  customizeBtn.addEventListener("click", () => {
-    const isVisible = picker.classList.toggle("is-visible");
-    customizeBtn.setAttribute("aria-expanded", String(isVisible));
-    if (isVisible) {
-      gotItBtn.textContent = t("disclosure-bar.done");
-      customizeBtn.style.display = "none";
-      hint.style.display = "none";
-    } else {
-      gotItBtn.textContent = t("disclosure-bar.gotIt");
-      customizeBtn.style.display = "";
-      hint.style.display = "";
-    }
+  handle = createBanner({
+    id: "disclosure",
+    tone: "info",
+    message: t("disclosure-bar.text"),
+    actions: [
+      { label: t("disclosure-bar.gotIt"), primary: true, onClick: dismiss },
+      {
+        label: t("disclosure-bar.review"),
+        onClick: () => {
+          dismiss();
+          options.onOpenSettings();
+        },
+      },
+    ],
+    onDismiss: setAcknowledged,
   });
 
-  return bar;
+  return handle;
 }

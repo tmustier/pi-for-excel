@@ -17,8 +17,7 @@
 @import "./components/files.css";
 @import "./components/welcome-login.css";
 @import "./components/toggle.css";
-@import "./components/disclosure-bar.css";
-@import "./components/proxy-banner.css";
+@import "./components/banner.css";
 @import "./components/command-copy.css";
 @import "./components/web-search-setup.css";
 @import "./components/bridge-setup.css";

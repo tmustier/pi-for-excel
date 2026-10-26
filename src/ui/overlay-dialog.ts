@@ -47,7 +47,16 @@ export interface OverlayDialogOptions {
   overlayId: string;
   cardClassName: string;
   closeOnBackdrop?: boolean;
+  /**
+   * Focus always returns to the element that opened the overlay when it is still
+   * on the page. When it is gone, `true` (default) falls back to the composer.
+   */
   restoreFocusOnClose?: boolean;
+  /**
+   * Called on Escape before the overlay closes. Return true when the dialog
+   * handled it (e.g. went back one level) so the overlay stays open.
+   */
+  onEscape?: () => boolean;
   zIndex?: number;
   /**
    * Called on Escape before the overlay closes. Return true when the dialog
@@ -191,10 +200,158 @@ export function createOverlayHeader(options: OverlayHeaderOptions): OverlayHeade
   };
 }
 
+const FOCUSABLE_SELECTOR = [
+  "a[href]",
+  "button:not([disabled])",
+  "input:not([disabled]):not([type='hidden'])",
+  "select:not([disabled])",
+  "textarea:not([disabled])",
+  "[tabindex]:not([tabindex='-1'])",
+  "[contenteditable='true']",
+].join(",");
+
+function isRendered(element: HTMLElement): boolean {
+  return element.getClientRects().length > 0 && !element.closest("[hidden], [inert]");
+}
+
+/** Tabbable elements inside `root`, in DOM order, skipping hidden ones. */
+export function getTabbableElements(root: ParentNode): HTMLElement[] {
+  return Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(isRendered);
+}
+
+/** True while any modal overlay (Settings, a dialog, the welcome screen…) is open. */
+export function isModalOverlayOpen(): boolean {
+  if (typeof document === "undefined") return false;
+  return getTopmostModalOverlay() !== null;
+}
+
+function getTopmostModalOverlay(): HTMLElement | null {
+  const modals = Array.from(document.body.children).filter(
+    (element): element is HTMLElement => element instanceof HTMLElement
+      && element.getAttribute("aria-modal") === "true"
+      && !element.inert,
+  );
+  return modals[modals.length - 1] ?? null;
+}
+
+function pickInitialFocus(card: HTMLElement): HTMLElement {
+  const explicit = card.querySelector<HTMLElement>("[data-autofocus], [autofocus]");
+  if (explicit && isRendered(explicit)) return explicit;
+
+  const field = getTabbableElements(card).find((element) =>
+    element instanceof HTMLTextAreaElement
+    || element instanceof HTMLSelectElement
+    || (element instanceof HTMLInputElement && element.type !== "checkbox" && element.type !== "radio"),
+  );
+  if (field) return field;
+
+  // Focus the card itself: screen readers announce the dialog, and the next Tab
+  // reaches the first control without anything being activated by accident.
+  if (!card.hasAttribute("tabindex")) card.tabIndex = -1;
+  return card;
+}
+
+export interface OverlayFocusHandle {
+  /** Move focus into the card. Call after the overlay is in the document. */
+  focusInitial: () => void;
+  /** Return focus to the element that had it when the overlay opened. */
+  restore: (fallbackToComposer: boolean) => void;
+  dispose: () => void;
+}
+
+/**
+ * Modal focus contract shared by every overlay: remember the opener, move focus
+ * in, keep Tab/Shift+Tab inside the card while this overlay is topmost, and
+ * hand focus back to the opener on close (or the composer when it is gone).
+ */
+export function installOverlayFocus(overlay: HTMLElement, card: HTMLElement): OverlayFocusHandle {
+  const activeElement = document.activeElement;
+  const opener = activeElement instanceof HTMLElement && activeElement !== document.body ? activeElement : null;
+
+  const isTopmost = () => overlay.isConnected && getTopmostModalOverlay() === overlay;
+
+  const onKeyDown = (event: KeyboardEvent) => {
+    if (event.key !== "Tab" || event.defaultPrevented || !isTopmost()) return;
+    const tabbables = getTabbableElements(card);
+    const first = tabbables[0];
+    const last = tabbables[tabbables.length - 1];
+    if (!first || !last) {
+      event.preventDefault();
+      card.focus();
+      return;
+    }
+
+    const active = document.activeElement;
+    const inside = active instanceof Node && card.contains(active);
+    if (event.shiftKey && (!inside || active === first || active === card)) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && (!inside || active === last)) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
+
+  // Focus that lands behind the backdrop (a composer refocusing itself, a click
+  // that slips through) is pulled back into the card. Toasts stay reachable.
+  const onFocusIn = (event: FocusEvent) => {
+    if (!isTopmost()) return;
+    const target = event.target;
+    if (!(target instanceof Node) || overlay.contains(target)) return;
+    if (target instanceof Element && target.closest(".pi-toast-region")) return;
+    pickInitialFocus(card).focus({ preventScroll: true });
+  };
+
+  document.addEventListener("keydown", onKeyDown, true);
+  document.addEventListener("focusin", onFocusIn, true);
+
+  return {
+    focusInitial: () => {
+      const title = card.querySelector<HTMLElement>(".pi-overlay-title");
+      if (title && !overlay.hasAttribute("aria-labelledby")) {
+        if (!title.id) title.id = `${overlay.id || "pi-overlay"}-title`;
+        overlay.setAttribute("aria-labelledby", title.id);
+      }
+      const active = document.activeElement;
+      if (active instanceof Node && card.contains(active)) return;
+      pickInitialFocus(card).focus({ preventScroll: true });
+    },
+    restore: (fallbackToComposer) => {
+      if (opener && opener.isConnected && isRendered(opener)) {
+        opener.focus({ preventScroll: true });
+        if (document.activeElement === opener) return;
+      }
+      if (fallbackToComposer) requestChatInputFocus();
+    },
+    dispose: () => {
+      document.removeEventListener("keydown", onKeyDown, true);
+      document.removeEventListener("focusin", onFocusIn, true);
+    },
+  };
+}
+
+/**
+ * Make the overlays already open inert while `overlay` is on top. WebKit exposes
+ * only one aria-modal dialog to assistive technology, and it may pick an older one.
+ * Returns the function that releases them.
+ */
+export function coverOpenOverlays(overlay: HTMLElement): () => void {
+  const covered = Array.from(document.body.children).filter(
+    (element): element is HTMLElement => element instanceof HTMLElement
+      && element !== overlay
+      && element.getAttribute("aria-modal") === "true"
+      && !element.inert,
+  );
+  for (const element of covered) element.inert = true;
+  return () => {
+    for (const element of covered) element.inert = false;
+  };
+}
+
 export function createOverlayDialog(options: OverlayDialogOptions): OverlayDialogController {
   const overlay = document.createElement("div");
   overlay.id = options.overlayId;
-  overlay.className = "pi-welcome-overlay";
+  overlay.className = "pi-overlay";
   overlay.setAttribute("role", "dialog");
   overlay.setAttribute("aria-modal", "true");
   if (options.zIndex !== undefined) {
@@ -207,6 +364,7 @@ export function createOverlayDialog(options: OverlayDialogOptions): OverlayDialo
 
   const cleanups: Array<() => void> = [];
   let closed = false;
+  let focus: OverlayFocusHandle | null = null;
 
   const close = () => {
     if (closed) {
@@ -230,10 +388,8 @@ export function createOverlayDialog(options: OverlayDialogOptions): OverlayDialo
     }
 
     overlay.remove();
-
-    if (options.restoreFocusOnClose !== false) {
-      requestChatInputFocus();
-    }
+    focus?.dispose();
+    focus?.restore(options.restoreFocusOnClose !== false);
   };
 
   const cleanupEscape = installOverlayEscapeClose(overlay, () => {
@@ -262,21 +418,11 @@ export function createOverlayDialog(options: OverlayDialogOptions): OverlayDialo
     card,
     close,
     mount: () => {
-      // WebKit exposes only one aria-modal dialog to assistive technology, and it
-      // may pick an older one, so make the overlays underneath inert until this
-      // one closes.
-      const covered = Array.from(document.body.children).filter(
-        (element): element is HTMLElement => element instanceof HTMLElement
-          && element !== overlay
-          && element.getAttribute("aria-modal") === "true"
-          && !element.inert,
-      );
-      for (const element of covered) element.inert = true;
-      cleanups.push(() => {
-        for (const element of covered) element.inert = false;
-      });
-
+      if (closed || overlay.isConnected) return;
+      focus = installOverlayFocus(overlay, card);
+      cleanups.push(coverOpenOverlays(overlay));
       document.body.appendChild(overlay);
+      focus.focusInitial();
     },
     addCleanup: (cleanup) => {
       if (closed) {

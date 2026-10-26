@@ -131,6 +131,14 @@ class FakeElement extends FakeNode {
     return this.attributes.get(name) ?? null;
   }
 
+  hasAttribute(name: string): boolean {
+    return this.attributes.has(name);
+  }
+
+  querySelector<T extends Element = Element>(selector: string): T | null {
+    return this.querySelectorAll<T>(selector)[0] ?? null;
+  }
+
   querySelectorAll<T extends Element = Element>(selector: string): T[] {
     if (selector !== "button") {
       return [];
@@ -183,6 +191,8 @@ class FakeHTMLElement extends FakeElement {
     super(tagName);
   }
 
+  tabIndex = -1;
+
   focus(_options?: FocusOptions): void {
     // no-op for tests
   }
@@ -231,6 +241,7 @@ class FakeCustomEvent extends Event {
 
 class FakeDocument extends EventTarget {
   readonly body: FakeHTMLElement;
+  readonly activeElement: Element | null = null;
 
   constructor() {
     super();

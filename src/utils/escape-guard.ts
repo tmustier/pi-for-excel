@@ -6,8 +6,9 @@
  */
 
 const OVERLAY_ESCAPE_OWNER_SELECTORS = [
-  ".pi-welcome-overlay[data-claims-escape='true']",
+  ".pi-overlay[data-claims-escape='true']",
   ".pi-utilities-menu",
+  ".pi-session-tab-context-menu",
   ".pi-status-popover",
   "#pi-command-menu",
   "agent-model-selector",

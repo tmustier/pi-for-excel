@@ -39,7 +39,7 @@
 }
 
 .pi-empty__hints {
-  margin-top: 24px;
+  margin-top: 20px;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -53,10 +53,10 @@
   gap: 3px;
   font-family: var(--font-sans);
   color: var(--foreground);
-  padding: 10px 14px;
+  padding: 9px 12px;
   background: var(--white-alpha-70);
   border: 1px solid oklch(0 0 0 / 0.07);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   line-height: 1.35;
   pointer-events: auto;
   cursor: pointer;
@@ -71,9 +71,26 @@
   font-weight: 600;
 }
 
+/* One line of preview keeps four hints within a typical pane height. */
 .pi-empty__hint-preview {
   font-size: var(--text-sm);
   color: var(--muted-foreground);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pi-empty__note {
+  margin: 10px 0 0;
+  max-width: 260px;
+  font-size: var(--text-xs);
+  color: var(--muted-foreground);
+  text-align: center;
+}
+
+.pi-empty__hint:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
 }
 
 .pi-empty__hint:hover {
@@ -119,7 +136,8 @@
     font-size: var(--text-sm);
   }
 
-  .pi-empty__hint-preview {
+  .pi-empty__hint-preview,
+  .pi-empty__note {
     display: none;
   }
 }
@@ -165,13 +183,19 @@
   color: var(--muted-foreground);
 }
 
+/* Fatal startup error (before the sidebar and its notice area exist).
+   Same look as an error banner (components/banner.css). */
 .pi-error {
-  padding: 12px 14px;
+  margin: 8px 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--red-alpha-20);
+  background: oklch(0.97 0.02 25);
+  color: var(--pi-red-text);
+  font-family: var(--font-sans);
   font-size: var(--text-sm);
-  font-family: var(--font-mono);
-  background: oklch(0.55 0.22 25 / 0.08);
-  color: var(--destructive);
-  border-bottom: 1px solid oklch(0.55 0.22 25 / 0.2);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 
 

@@ -214,7 +214,7 @@
 
 @media (max-height: 520px) {
   .pi-welcome-lang-bar {
-    padding: 0 0 4px !important;
+    padding: 0 0 4px;
   }
 
   .pi-welcome-logo {
@@ -552,3 +552,33 @@
 }
 
 
+
+/* Language switch at the top of the welcome card */
+.pi-welcome-lang-bar {
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.pi-welcome-lang-btn {
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  padding: 2px 8px;
+  border: 1px solid var(--alpha-12);
+  border-radius: var(--radius-xs);
+  background: var(--white-alpha-55);
+  color: var(--muted-foreground);
+  cursor: pointer;
+}
+
+.pi-welcome-lang-btn[aria-pressed="true"] {
+  border-color: var(--green-alpha-30);
+  background: var(--pi-green-light);
+  color: var(--foreground);
+  font-weight: 600;
+}
+
+.pi-welcome-lang-btn:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+}

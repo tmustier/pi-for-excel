@@ -1,83 +1,98 @@
 /* ═══════════════════════════════════════════════════════
    8. TOAST
+   One region above every layer (overlays included), just above the
+   composer dock. `--pi-dock-height` is kept current by pi-sidebar.
    ═══════════════════════════════════════════════════════ */
 
-.pi-toast {
+.pi-toast-region {
   position: fixed;
-  top: 56px;
-  left: 50%;
-  transform: translateX(-50%) translateY(-4px);
-  z-index: 200;
-  padding: 6px 14px;
-  border-radius: var(--radius-sm);
+  left: 10px;
+  right: 10px;
+  bottom: calc(var(--pi-dock-height, 96px) + 8px);
+  z-index: var(--z-toast);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.pi-toast {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(560px, 100%);
+  padding: 7px 12px;
+  border-radius: var(--radius-md);
   border: 1px solid transparent;
-  background: oklch(0.18 0 0 / 0.88);
+  background: oklch(0.2 0 0 / 0.92);
   color: white;
   font-family: var(--font-sans);
   font-size: var(--text-sm);
+  line-height: 1.4;
   backdrop-filter: var(--glass-blur-dropdown);
   -webkit-backdrop-filter: var(--glass-blur-dropdown);
-  box-shadow: 0 4px 12px var(--alpha-15);
-  opacity: 0;
-  transition: opacity var(--duration-normal), transform var(--duration-normal), background var(--duration-fast), border-color var(--duration-fast);
-  pointer-events: none;
-  max-width: calc(100vw - 24px);
+  box-shadow: 0 6px 20px var(--alpha-20);
+  pointer-events: auto;
+  animation: pi-toast-in var(--duration-normal) ease-out;
 }
 
-.pi-toast.visible {
-  opacity: 1;
-  transform: translateX(-50%) translateY(0);
+@keyframes pi-toast-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .pi-toast--error {
-  background: oklch(0.34 0.17 25 / 0.95);
+  background: oklch(0.36 0.15 25 / 0.96);
   border-color: oklch(0.68 0.14 25 / 0.38);
-  box-shadow: 0 6px 16px oklch(0.20 0.10 25 / 0.38);
-}
-
-.pi-toast--action {
-  pointer-events: auto;
-}
-
-.pi-toast__content {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  max-width: min(560px, calc(100vw - 48px));
-  text-align: left;
 }
 
 .pi-toast__message {
   white-space: normal;
   overflow-wrap: anywhere;
-  word-break: break-word;
 }
 
 .pi-toast__action {
-  border: 1px solid oklch(1 0 0 / 0.35);
-  /* Intentional pill shape for floating action toast. */
-  border-radius: var(--radius-full);
-  padding: 2px 9px;
-  background: oklch(1 0 0 / 0.12);
-  color: white;
+  border: 0;
+  border-radius: var(--radius-sm);
+  padding: 2px 8px;
+  margin-block: -2px;
+  background: oklch(1 0 0 / 0.14);
+  color: oklch(0.88 0.09 160);
   font-family: var(--font-sans);
   font-size: var(--text-sm);
   font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
-  /* Overlap the toast's vertical padding so action toasts keep the same
-     height as plain message toasts. */
-  margin-block: -3px;
 }
 
 .pi-toast__action:hover {
-  background: var(--white-alpha-20);
+  background: var(--white-alpha-25);
 }
 
-.pi-toast--error .pi-toast__action {
-  border-color: oklch(1 0 0 / 0.55);
-  background: oklch(1 0 0 / 0.16);
+.pi-toast__dismiss {
+  border: 0;
+  background: transparent;
+  color: var(--white-alpha-80);
+  font-size: 16px;
+  line-height: 1;
+  padding: 0 2px;
+  margin-inline-start: auto;
+  cursor: pointer;
 }
 
+.pi-toast__dismiss:hover {
+  color: white;
+}
 
+.pi-toast__action:focus-visible,
+.pi-toast__dismiss:focus-visible {
+  outline: 2px solid var(--white-alpha-90);
+  outline-offset: 1px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pi-toast {
+    animation: none;
+  }
+}

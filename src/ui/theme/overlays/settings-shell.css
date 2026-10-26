@@ -3,8 +3,11 @@
    footer. Row primitives: groups, nav rows, control rows, segmented
    control. See src/ui/settings-shell.ts and src/ui/settings-rows.ts. */
 
+/* Fixed height: moving between pages never resizes the frame, so back and ×
+   stay put. Pages scroll inside the body. */
 .pi-set-shell {
-  max-height: 82vh;
+  height: min(680px, 86vh);
+  max-height: 86vh;
   overflow: hidden;
   display: flex;
   flex-direction: column;

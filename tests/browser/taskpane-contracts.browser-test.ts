@@ -95,7 +95,7 @@ async function verifyFailedCommandToast(failureKind: "rejects" | "throws"): Prom
     }, { kind: failureKind, message: sentinel });
 
     await enterCommand(page, `/browser-${failureKind}`);
-    const toast = page.locator("#pi-toast.visible .pi-toast__message");
+    const toast = page.locator("#pi-toast .pi-toast__message").last();
     await toast.waitFor({ state: "visible", timeout: 5_000 });
     assert.equal(await toast.textContent(), "Could not run that command.");
     assert.equal((await page.locator("body").textContent())?.includes(sentinel), false);
@@ -221,7 +221,7 @@ void test("typing /backup in the composer and pressing Enter runs the manual bac
   await withTaskpane(async (page) => {
     await enterCommand(page, "/backup");
 
-    const toast = page.locator("#pi-toast.visible .pi-toast__message");
+    const toast = page.locator("#pi-toast .pi-toast__message").last();
     await toast.waitFor({ state: "visible", timeout: 5_000 });
     assert.match(await toast.innerText(), /Backup command failed: .*unavailable/i);
   });
@@ -249,7 +249,7 @@ void test("submitInput uses the composer path for commands and model messages", 
     await welcomeOverlay.waitFor({ state: "detached" });
     allowCommands = true;
 
-    const toast = page.locator("#pi-toast.visible .pi-toast__message");
+    const toast = page.locator("#pi-toast .pi-toast__message").last();
     await toast.waitFor({ state: "visible", timeout: 5_000 });
     assert.match(await toast.innerText(), /Backup command failed: .*unavailable/i);
     allowPlainInput = true;
@@ -311,7 +311,7 @@ void test("Settings Backups exposes manual backup and reports browser-host unava
     await manualBackup.waitFor({ state: "visible" });
     await manualBackup.click();
 
-    const toast = page.locator("#pi-toast.visible .pi-toast__message");
+    const toast = page.locator("#pi-toast .pi-toast__message").last();
     await toast.waitFor({ state: "visible", timeout: 5_000 });
     assert.match(await toast.innerText(), /Backup failed: .*unavailable/i);
   });
@@ -363,44 +363,32 @@ void test("local-service probes populate the first runtime capabilities", async 
   });
 });
 
-void test("disclosure customization renders operable shared toggles", async () => {
+void test("first-run disclosure is a dismissible banner that can open Settings", async () => {
   await withBrowserPage("src/ui-gallery.html", async (page) => {
     await page.evaluate(`
       (async () => {
+        localStorage.removeItem("pi.onboarding.disclosure.acknowledged");
         const { createDisclosureBar } = await import("/src/ui/disclosure-bar.ts");
-        const firstBar = createDisclosureBar({ providerCount: 1 });
-        const secondBar = createDisclosureBar({ providerCount: 1 });
-        if (firstBar) document.body.appendChild(firstBar);
-        if (secondBar) document.body.appendChild(secondBar);
+        window.__settingsOpened = 0;
+        const bar = createDisclosureBar({ providerCount: 1, onOpenSettings: () => { window.__settingsOpened += 1; } });
+        if (bar) document.body.appendChild(bar.root);
       })()
     `);
 
-    const bars = page.locator(".pi-disclosure-bar");
-    assert.equal(await bars.count(), 2);
-    const firstBar = bars.nth(0);
-    const secondBar = bars.nth(1);
-    const customize = firstBar.locator(".pi-disclosure-bar__link");
-    const secondCustomize = secondBar.locator(".pi-disclosure-bar__link");
-    const pickerId = await customize.getAttribute("aria-controls");
-    const secondPickerId = await secondCustomize.getAttribute("aria-controls");
-    assert.ok(pickerId);
-    assert.ok(secondPickerId);
-    assert.notEqual(pickerId, secondPickerId);
-    assert.equal(await firstBar.locator(".pi-disclosure-picker").getAttribute("id"), pickerId);
-    assert.equal(await secondBar.locator(".pi-disclosure-picker").getAttribute("id"), secondPickerId);
+    const banner = page.locator('body > .pi-banner[data-banner-id="disclosure"]');
+    await banner.waitFor({ state: "visible" });
+    assert.equal(await banner.getAttribute("role"), "status");
+    await banner.getByRole("button", { name: "Review in Settings" }).click();
+    await banner.waitFor({ state: "detached" });
+    assert.equal(await page.evaluate("window.__settingsOpened"), 1);
 
-    assert.equal(await customize.getAttribute("aria-expanded"), "false");
-    await firstBar.locator(`#${pickerId}`).waitFor({ state: "hidden" });
-    await customize.click();
-    assert.equal(await customize.getAttribute("aria-expanded"), "true");
-    await firstBar.locator(`#${pickerId}`).waitFor({ state: "visible" });
-
-    const webSearchRow = firstBar.locator(".pi-toggle-row").filter({ hasText: "Web search" });
-    const checkbox = webSearchRow.locator('input[type="checkbox"]');
-    await checkbox.waitFor({ state: "attached" });
-    assert.equal(await checkbox.isChecked(), true);
-    await webSearchRow.locator("label.pi-toggle").click();
-    assert.equal(await checkbox.isChecked(), false);
+    // Acknowledged for good: a second taskpane boot does not show it again.
+    assert.equal(await page.evaluate(`
+      (async () => {
+        const { createDisclosureBar } = await import("/src/ui/disclosure-bar.ts");
+        return createDisclosureBar({ providerCount: 1, onOpenSettings: () => {} }) === null;
+      })()
+    `), true);
   });
 });
 
@@ -495,24 +483,59 @@ void test("Settings guards unsaved navigation and exposes shared behavior contro
   });
 });
 
-void test("proxy state changes update the proxy banner", async () => {
+void test("Settings back/close rule: Escape closes on the entry page and steps back from a nested one", async () => {
   await withTaskpane(async (page) => {
-    const banner = page.locator(".pi-proxy-banner");
-    await banner.waitFor({ state: "attached" });
-    await page.evaluate(() => {
-      document.dispatchEvent(new CustomEvent("pi:proxy-state-changed", {
-        detail: { state: "not-detected" },
-      }));
-    });
-    await banner.waitFor({ state: "visible" });
-    assert.match(await banner.innerText(), /Proxy not running/);
+    const settings = page.locator("#pi-settings-overlay");
 
-    await page.evaluate(() => {
-      document.dispatchEvent(new CustomEvent("pi:proxy-state-changed", {
-        detail: { state: "detected" },
-      }));
-    });
-    await banner.waitFor({ state: "hidden" });
+    // Opened straight at Backups: Escape closes instead of landing on the Settings root.
+    await enterCommand(page, "/history");
+    await settings.getByRole("heading", { name: "Backups" }).waitFor({ state: "visible", timeout: 5_000 });
+    await page.keyboard.press("Escape");
+    await settings.waitFor({ state: "detached" });
+
+    // Reached from the Settings root: Escape goes back to the root, then closes.
+    await enterCommand(page, "/settings");
+    await settings.getByRole("button", { name: /^Backups/ }).click();
+    await settings.getByRole("heading", { name: "Backups" }).waitFor({ state: "visible" });
+    await page.keyboard.press("Escape");
+    await settings.getByRole("heading", { name: "Settings" }).waitFor({ state: "visible" });
+    await page.keyboard.press("Escape");
+    await settings.waitFor({ state: "detached" });
+  });
+});
+
+void test("proxy banner warns only when the enabled proxy is down, and can be dismissed", async () => {
+  await withTaskpane(async (page) => {
+    const banner = page.locator('#pi-notices .pi-banner[data-banner-id="proxy"]');
+    const setProxyState = (state: string) => page.evaluate((next) => {
+      document.dispatchEvent(new CustomEvent("pi:proxy-state-changed", { detail: { state: next } }));
+    }, state);
+    const setProxyEnabled = (enabled: boolean) => page.evaluate(async (next) => {
+      const { getAppStorage } = await import("/src/storage/local/app-storage.ts") as typeof import("../../src/storage/local/app-storage.ts");
+      await getAppStorage().settings.set("proxy.enabled", next);
+    }, enabled);
+
+    await setProxyEnabled(false);
+    await setProxyState("not-detected");
+    await page.waitForTimeout(200);
+    assert.equal(await banner.count(), 0);
+
+    await setProxyEnabled(true);
+    await setProxyState("not-detected");
+    await banner.waitFor({ state: "visible" });
+    assert.match(await banner.innerText(), /proxy is turned on but isn’t running/);
+
+    await banner.getByRole("button", { name: "Dismiss" }).click();
+    await banner.waitFor({ state: "detached" });
+    await setProxyState("not-detected");
+    await page.waitForTimeout(200);
+    assert.equal(await banner.count(), 0, "a dismissed warning stays hidden until the proxy recovers");
+
+    await setProxyState("detected");
+    await setProxyState("not-detected");
+    await banner.waitFor({ state: "visible" });
+    await setProxyState("detected");
+    await banner.waitFor({ state: "detached" });
   });
 });
 

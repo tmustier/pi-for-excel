@@ -122,10 +122,12 @@ import {
   moveCursorToEnd,
 } from "../ui/input-focus.js";
 import { requestConfirmationDialog } from "../ui/confirm-dialog.js";
-import { requestTextInputDialog } from "../ui/text-input-dialog.js";
-import { showActionToast, showToast, type ActionToastHandle } from "../ui/toast.js";
+import { TOOL_APPROVAL_OVERLAY_ID } from "../ui/overlay-ids.js";
+import { dismissToast, showActionToast, showToast } from "../ui/toast.js";
 import { PiSidebar } from "../ui/pi-sidebar.js";
-import { createProxyBanner } from "../ui/proxy-banner.js";
+import { createProxyBannerController } from "../ui/proxy-banner.js";
+import { requestTextInputDialog } from "../ui/text-input-dialog.js";
+import { hideBanner, mountBanner, showBanner } from "../ui/banner.js";
 import { setActiveProviders } from "../models/active-providers.js";
 import { BrowserModelRuntime } from "../models/browser-model-runtime.js";
 import {
@@ -198,6 +200,7 @@ import { getProxyState, isProxyBlockedByBrowser, startProxyPolling } from "./pro
 import {
   closeStatusPopover,
   toggleContextPopover,
+  toggleModePopover,
   toggleThinkingPopover,
 } from "./status-popovers.js";
 import { showWelcomeLogin } from "./welcome-login.js";
@@ -226,8 +229,20 @@ import { doesOverlayClaimEscape } from "../utils/escape-guard.js";
 
 const RUNTIME_SYSTEM_PROMPT_SECTION = "pi-for-excel-runtime";
 
-function renderErrorBanner(errorRoot: HTMLElement, message: string | null): void {
-  render(message ? renderError(message) : html``, errorRoot);
+const RUN_ERROR_BANNER_ID = "run-error";
+
+/** The last run's error, as a closable banner in the notice area under the tabs. */
+function showErrorBanner(errorRoot: HTMLElement, message: string): void {
+  const shown = showBanner({ id: RUN_ERROR_BANNER_ID, tone: "error", message, onDismiss: () => {} });
+  if (!shown) {
+    // Before the sidebar exists there is no notice area; use the page-level slot.
+    render(renderError(message), errorRoot);
+  }
+}
+
+function clearErrorBanner(errorRoot: HTMLElement): void {
+  hideBanner(RUN_ERROR_BANNER_ID);
+  render(html``, errorRoot);
 }
 
 export async function initTaskpane(opts: {
@@ -415,17 +430,12 @@ export async function initTaskpane(opts: {
 
   const executionModeController = await createExecutionModeController({
     settings,
-    showToast,
   });
 
   const getExecutionMode = (): ExecutionMode => executionModeController.getMode();
 
   const setExecutionMode = async (mode: ExecutionMode): Promise<void> => {
     await executionModeController.setMode(mode);
-  };
-
-  const toggleExecutionModeFromUi = async (): Promise<void> => {
-    await executionModeController.toggleFromUi();
   };
 
   const loadModelSwitchBehavior = async (): Promise<ModelSwitchBehavior> => {
@@ -1239,7 +1249,7 @@ export async function initTaskpane(opts: {
         return (await getAppStorage().providerKeys.get(provider)) ?? undefined;
       }
 
-      missingCredentialsFor = provider;
+      showErrorBanner(errorRoot, t("runtime.error.apiKeyRequired", { provider }));
       return undefined;
     };
 
@@ -1333,6 +1343,36 @@ export async function initTaskpane(opts: {
       // reconciliation after the action queue unwinds so an extension that
       // unloads mid-turn cannot leave its now-missing provider selected.
       window.setTimeout(() => modelRefreshOwner.reconcileRuntimes(), 0);
+
+      const wasUserAbort = abortedAgents.has(agent);
+      abortedAgents.delete(agent);
+
+      if (!isActiveRuntime) return;
+
+      const errorMessage = agent.state.errorMessage;
+      if (errorMessage) {
+        const isAbort = wasUserAbort || /abort/i.test(errorMessage) || /cancel/i.test(errorMessage);
+        if (!isAbort) {
+          const err = errorMessage;
+          if (findTrailingContextOverflowError(agent.state)) {
+            showErrorBanner(
+              errorRoot,
+              autoCompactEnabled
+                ? t("runtime.error.contextOverflowAuto")
+                : t("runtime.error.contextOverflow"),
+            );
+          } else if (isLikelyCorsErrorMessage(err)) {
+            showErrorBanner(
+              errorRoot,
+              t("runtime.error.cors", { url: DEFAULT_PROXY_URL, guide: PROXY_HELPER_DOCS_URL }),
+            );
+          } else {
+            showErrorBanner(errorRoot, t("init.llmError", { error: err }));
+          }
+        }
+      } else {
+        clearErrorBanner(errorRoot);
+      }
     });
 
     return {
@@ -1516,15 +1556,9 @@ export async function initTaskpane(opts: {
         return "missing";
       }
 
-      const opened = await openSavedSession(sessionData, {
-        kind: "new_tab",
-        ...(item.tabNumber !== undefined ? { tabNumber: item.tabNumber } : {}),
-      });
-      if (!opened) return "failed";
-
-      showToast(opened.outcome === "focused"
-        ? t("init.alreadyOpen", { title: opened.title })
-        : t("init.reopened", { title: opened.title }));
+      await openSessionInNewTab(sessionData);
+      dismissToast(`closed-tab:${item.id}`);
+      showToast(t("init.reopened", { title: formatSessionTitle(item.title) }));
       return "reopened";
     } catch {
       showToast(t("init.couldNotReopenSession"));
@@ -1677,7 +1711,8 @@ export async function initTaskpane(opts: {
 
     const showUndoToast = optsForClose?.showUndoToast !== false;
     if (showUndoToast) {
-      const toast = showActionToast({
+      showActionToast({
+        id: `closed-tab:${closedItem.id}`,
         message: t("init.closedTab", { title: closedItem.title }),
         actionLabel: t("init.undo"),
         duration: 9000,
@@ -1710,9 +1745,9 @@ export async function initTaskpane(opts: {
       ? runtime.persistence.getSessionTitle().trim()
       : currentTitle;
 
-    // Office on the web replaces window.prompt with a function that throws, so ask in the taskpane.
     const nextTitleRaw = await requestTextInputDialog({
       title: t("init.renameTab.title"),
+      message: t("init.renameTab.message"),
       initialValue: defaultTitle,
       confirmLabel: t("init.renameTab.confirm"),
     });
@@ -2208,41 +2243,32 @@ export async function initTaskpane(opts: {
     window.addEventListener("beforeunload", () => clearInterval(identityPoll), { once: true });
   }
 
-  // ── Disclosure bar (onboarding banner) ──
-  // Must run after runtime bootstrap so the sidebar has rendered .pi-messages.
+  // ── Notice area: first-run disclosure + proxy warning (src/ui/banner.ts) ──
+  // Must run after runtime bootstrap so the sidebar has rendered #pi-notices.
   {
     const { createDisclosureBar } = await import("../ui/disclosure-bar.js");
-    const disclosureEl = createDisclosureBar({
+    const disclosure = createDisclosureBar({
       providerCount: modelRefreshOwner.snapshot().availableProviders.length,
       onOpenSettings: () => void openSettings(),
     });
-    if (disclosureEl) {
-      const messagesContainer = sidebar.querySelector(".pi-messages");
-      if (messagesContainer) {
-        messagesContainer.parentElement?.insertBefore(disclosureEl, messagesContainer);
+    if (disclosure) {
+      mountBanner(disclosure.root);
+    }
+
+    const proxyBanner = createProxyBannerController({
+      isProxyEnabled: async () => (await readTaskpaneProxySettings(settings)).enabled,
+    });
+    void proxyBanner.update(getProxyState());
+
+    document.addEventListener("pi:proxy-state-changed", (event: Event) => {
+      if (!(event instanceof CustomEvent)) return;
+      const detail: unknown = event.detail;
+      if (!isTaskpaneInitPayloadShape(detail)) return;
+      const state = detail.state;
+      if (state === "detected" || state === "not-detected" || state === "unknown") {
+        void proxyBanner.update(state);
       }
-    }
-  }
-
-  // ── Proxy warning banner (state-driven) ──
-  {
-    const messagesContainer = sidebar.querySelector(".pi-messages");
-    const host = messagesContainer?.parentElement;
-    if (host && messagesContainer) {
-      const proxyBanner = createProxyBanner();
-      host.insertBefore(proxyBanner.root, messagesContainer);
-      proxyBanner.update(getProxyState(), isProxyBlockedByBrowser());
-
-      document.addEventListener("pi:proxy-state-changed", (event: Event) => {
-        if (!(event instanceof CustomEvent)) return;
-        const detail: unknown = event.detail;
-        if (!isTaskpaneInitPayloadShape(detail)) return;
-        const state = detail.state;
-        if (state === "detected" || state === "not-detected" || state === "unknown") {
-          proxyBanner.update(state, isProxyBlockedByBrowser());
-        }
-      });
-    }
+    });
   }
 
   // ── Register extensions ──
@@ -2436,10 +2462,18 @@ export async function initTaskpane(opts: {
       return;
     }
 
-    // Execution mode toggle
-    if (el.closest(".pi-status-mode")) {
-      closeStatusPopover();
-      void toggleExecutionModeFromUi();
+    // Execution mode: Auto / Confirm, chosen from a popover like its neighbours
+    const modeTrigger = el.closest(".pi-status-mode");
+    if (modeTrigger) {
+      toggleModePopover({
+        anchor: modeTrigger,
+        activeMode: getExecutionMode(),
+        onSelectMode: (mode) => {
+          void setExecutionMode(mode).catch(() => {
+            showToast(t("status.mode.saveFailed"));
+          });
+        },
+      });
       return;
     }
 
