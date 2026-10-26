@@ -141,10 +141,10 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 | [P-111](#p-111-backup-does-not-take-the-workbook-lock-so-a-copy-can-catch-another-tabs-half-finished-change) | `/backup` does not take the workbook lock, so a copy can catch another tab's half-finished change | low | backups | fix | Fix in PR [#794](https://github.com/tmustier/pi-for-excel/pull/794) (open) |
 | [P-112](#p-112-enter-on-an-unknown-command-while-idle-inserts-a-newline) | Enter on an unknown `/command` while idle inserts a newline | low | commands | fix | Fix in PR [#789](https://github.com/tmustier/pi-for-excel/pull/789) (open) |
 | [P-113](#p-113-copy-and-export-are-refused-while-the-tab-is-busy-although-they-only-read) | `/copy` and `/export` are refused while the tab is busy although they only read | low | commands | product call | none yet |
-| [P-114](#p-114-the-snake-extension-is-enabled-by-default-putting-snake-in-every-users-menu) | The Snake extension is enabled by default, putting `/snake` in every user's menu | low | commands | product call | none yet |
+| [P-114](#p-114-the-snake-extension-is-enabled-by-default-putting-snake-in-every-users-menu) | The Snake extension is enabled by default, putting `/snake` in every user's menu | low | commands | product call | none (decided: intended) |
 | [P-115](#p-115-the-context-meter-keeps-the-old-figure-after-a-compaction-until-the-tab-is-switched) | The context meter keeps the old figure after a compaction until the tab is switched | low | compaction | fix | Fix in PR [#789](https://github.com/tmustier/pi-for-excel/pull/789) (open) |
 | [P-116](#p-116-compaction-between-model-responses-shows-no-compacting-context-indicator) | Compaction between model responses shows no "Compacting context…" indicator | low | compaction | fix | Fix in PR [#789](https://github.com/tmustier/pi-for-excel/pull/789) (open) |
-| [P-117](#p-117-the-context-meters-colours-ignore-the-per-model-warning-budget-so-it-is-red-long-before-compaction-on-200k-models) | The context meter's colours ignore the per-model warning budget, so it is red long before compaction on 200k models | low | compaction | product call | none yet |
+| [P-117](#p-117-the-context-meters-colours-ignore-the-per-model-warning-budget-so-it-is-red-long-before-compaction-on-200k-models) | The context meter's colours ignore the per-model warning budget, so it is red long before compaction on 200k models | low | compaction | product call | fix-turn-composer (#789 or a follow-up) |
 | [P-118](#p-118-the-percent-conventions-preview-does-not-multiply-by-100) | The Percent convention's preview does not multiply by 100 | low | conventions | fix | Fix in PR [#788](https://github.com/tmustier/pi-for-excel/pull/788) (open) |
 | [P-119](#p-119-small-copy-and-rendering-slips-in-the-taskpane-and-turn) | Small copy and rendering slips in the taskpane and turn | low | copy | fix | per item above |
 | [P-120](#p-120-small-copy-and-translation-slips-in-setup) | Small copy and translation slips in setup | low | copy | fix | none yet |
@@ -1552,10 +1552,10 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Reproduce:** Fresh extension storage; type `/`.
 - **Why (from the code):** Seeded enabled when extension storage is empty (`src/extensions/store.ts:263`).
 - **Severity:** `low`, because it is clutter, not a fault.
-- **Decision needed:** `product call`: keep it as a demo of extensions, or seed it disabled in production.
+- **Decision needed:** `product call`. Decided 26 October 2026: keep Snake installed by default (intended).
 - **Raised by:** MENU-01; [the command menu](commands/the-command-menu.md#open-questions-and-verification)
 - **Status:** Confirmed in Excel on the web, 26 October 2026 (MENU-01)
-- **Owner:** none yet
+- **Owner:** none (decided: intended)
 
 ### P-115: The context meter keeps the old figure after a compaction until the tab is switched
 
@@ -1588,10 +1588,10 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Reproduce:** Use a 200k model and fill past 60%; compare with when auto-compaction triggers.
 - **Why (from the code):** fixed thresholds in `src/taskpane/status-context.ts:38-70`; `getCompactionThresholds` computes `softWarningTokens` (`src/compaction/defaults.ts:116-127`) that nothing in the UI uses.
 - **Severity:** `low`, a misleading but harmless warning.
-- **Decision needed:** `product call`: fixed percentages (simple, same everywhere) or the model's budget (accurate, varies per model).
+- **Decision needed:** `fix`. Decided 26 October 2026: derive the meter colours from the per-model compaction budget.
 - **Raised by:** [context and compaction](turn/context-and-compaction.md#open-questions-and-verification)
 - **Status:** Suspected from code; not reproduced
-- **Owner:** none yet
+- **Owner:** fix-turn-composer (#789 or a follow-up)
 
 ### P-118: The Percent convention's preview does not multiply by 100
 
