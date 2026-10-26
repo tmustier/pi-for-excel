@@ -52,7 +52,7 @@ Clicking a row expands it and collapses any other expanded row; clicking it agai
 
 Nothing is stored when:
 
-- **The user dismisses the welcome overlay** with Escape or a click on the backdrop. There is no close button. The taskpane underneath is fully usable without a provider (see [Edge cases](#edge-cases)).
+- **The user dismisses the welcome overlay** with Escape or a click on the backdrop. There is no close button. The welcome overlay does not take focus: when it appears, focus stays in the composer behind it, so the first Escape only moves focus out of the composer and the second closes the overlay; focus then returns to the composer. The taskpane underneath is fully usable without a provider (see [Edge cases](#edge-cases)).
 - **"Save" is pressed with an empty field.** Nothing happens, not even an error.
 - **The key is rejected before saving.** A leading "Bearer " is removed silently. Pasting something that looks like an OAuth result instead of a key shows an error under the row and keeps the row open: for Anthropic "That looks like an OAuth authorization code (code#state). Use “Login with Anthropic” and paste it when prompted (don’t Save it as an API key)."; for OpenAI (ChatGPT), the Google OAuth rows and Google Gemini (API), the matching "That looks like an OAuth redirect URL/code. …" message.
 - **The user cancels an OAuth step**: "Cancel" in the proxy gate, "Cancel" or Escape in the login prompt. The row returns to "Login with {label}" with no message. A browser window that was already opened stays open.
@@ -66,7 +66,7 @@ Nothing is stored when:
 1. **The proxy gate.** For Anthropic, OpenAI (ChatGPT), Google Code Assist, Google Antigravity and GitHub Copilot, Pi first checks that the proxy answers. If it does not, the dialog "One more step before login" explains "This login method needs a small helper running on your Mac. Open the Terminal app and paste this command:", shows `npx pi-for-excel-proxy` with "Copy" ("Copied!"), and the hint "Wait until you see “Proxy listening” in Terminal, then click Retry." with "Step-by-step guide →". "Retry" ("Checking…") turns the proxy setting on and continues if the proxy now answers; otherwise the hint becomes "Helper not detected yet — make sure it says “Proxy listening” in Terminal, then try again.". Organisation builds with a central proxy show the remote wording instead.
 2. **The browser window.** Pi opens the provider's sign-in page in a new browser window (on desktop Excel, the system browser). The taskpane does not move.
 3. **The login prompt.** For providers that redirect back, a dialog titled "Login with {label}" shows the provider's instruction, the helper "After login, Pi for Excel will try to capture the local callback automatically. If it does not continue, copy the final callback URL from your browser address bar and paste it here.", an "Open login page" link and "Copy login link" ("Copied!", or "Select URL below" if copying fails), a read-only "Login URL (select and copy if buttons don't work)", a status line, a paste field, and "Cancel" / "Continue". With the local proxy enabled the status line says "Waiting for the browser callback via the local proxy…"; Pi checks every three-quarters of a second for up to two minutes, and when the browser lands on the callback the line says "Callback captured — finishing login…" and the prompt submits itself. If capture is not possible the line says "Automatic callback capture did not complete. Paste the callback URL below to continue." and the user pastes the address from the browser and presses "Continue" or Enter.
-4. **GitHub Copilot** uses a device code instead: Pi opens the verification page and shows "Finish sign-in in your browser", "Enter this code on the verification page that just opened:", the code with "Copy", and "If no window opened, visit {uri} and enter the code there.". This dialog has no buttons; it closes by itself when the login completes or fails.
+4. **GitHub Copilot** uses a device code instead (in the standalone taskpane the login failed at once with the CORS error described under [Connected, or failed](#connected-or-failed), even with the local proxy enabled and running, so this dialog was not seen): Pi opens the verification page and shows "Finish sign-in in your browser", "Enter this code on the verification page that just opened:", the code with "Copy", and "If no window opened, visit {uri} and enter the code there.". This dialog has no buttons; it closes by itself when the login completes or fails.
 
 While the flow runs, the login button shows the provider's progress messages. When it succeeds the credential is stored, the row shows "✓ connected" and collapses.
 
@@ -86,7 +86,7 @@ A failed OAuth login leaves the row open with an error under it. A network failu
 
 ### The connection dialog
 
-When a turn needs a credential for its model's provider and has none, Pi opens "Connect {label}" with the subtitle "This model needs a login or API key to continue." and the provider's row already expanded. The user's message is already in the transcript and the tab is busy while the dialog waits. Connecting closes the dialog and the turn continues. Closing it (×, Escape or the backdrop) fails the turn; see [turns](../foundations/turns.md#sent). Providers added by an extension never open this dialog: the error banner says "No API key available for provider "{provider}"." instead.
+When a turn needs a credential for its model's provider and has none, Pi opens "Connect {label}" with the subtitle "This model needs a login or API key to continue." and the provider's row already expanded, with focus in the key field. The user's message is already in the transcript and the tab is busy (the Stop button shows) while the dialog waits. Connecting closes the dialog with no toast and the turn continues with the new credential. Closing it (×, Escape twice, or the backdrop) fails the turn: the transcript shows "Error: Provider is not configured: {provider id}" and the error banner "LLM error: Provider is not configured: {provider id}" (for example `openai`); see [turns](../foundations/turns.md#sent). Providers added by an extension never open this dialog: the error banner says "No API key available for provider "{provider}"." instead.
 
 ### The proxy panel on the welcome overlay
 
@@ -109,7 +109,7 @@ A login started in one place (the welcome overlay, Settings or the connection di
 
 | Event | Before sent | While busy |
 | --- | --- | --- |
-| Stop (button or Escape) | Escape leaves a text field first, then closes the topmost dialog: the login prompt (cancelling the login), the proxy gate (cancelling), the device-code dialog (the login keeps polling), or the welcome overlay. | In the connection dialog, Escape dismisses it and the turn fails. |
+| Stop (button or Escape) | Escape leaves a text field first, then closes the topmost dialog: the login prompt (cancelling the login), the proxy gate (cancelling), the device-code dialog (the login keeps polling), or the welcome overlay. On the welcome overlay the field that has focus is usually the composer behind it. | In the connection dialog, the first Escape leaves the key field and the second dismisses it; the turn fails. |
 | The user sends something else | The composer is covered while an overlay is open. | The composer is covered by the connection dialog. |
 | Tab switched, created, closed or reopened | Not possible while the overlay covers the tab strip. | Not possible while the connection dialog is open. |
 | An overlay or menu opens | "Use a custom OpenAI-compatible gateway" closes the welcome overlay and opens Settings. | Not applicable. |
@@ -149,7 +149,7 @@ After a cancelled login the user is back on the expanded row with the key field 
 ## Edge cases
 
 - Dismissing the welcome overlay leaves a working taskpane with no provider: the status bar names a fallback OpenAI model, "Select model" lists nothing ("No matching models"), and the first message opens "Connect OpenAI (API)", whatever provider the user meant to use.
-- No disclosure bar is shown while no provider is connected.
+- No disclosure bar is shown while no provider is connected, and connecting from the welcome overlay does not bring it in during that session.
 - The welcome overlay can close itself without any click if a stored login finishes restoring after it appeared.
 - A second "Login with {label}" started before the first one's prompt appears starts a second flow; whichever prompt opens last replaces the other.
 - Saving an API key for a provider that already has one replaces it.
@@ -157,13 +157,17 @@ After a cancelled login the user is back on the expanded row with the key field 
 
 ## Open questions and verification
 
-- Seen in the standalone taskpane with no stored credentials: the welcome overlay, its provider list, the proxy panel ("Enabled" already ticked because a local proxy was running), and "No matching models" after dismissing it. OAuth flows, the proxy gate and the device-code dialog were read from code, not run; where the login window opens on each host (system browser on desktop, a browser tab on the web) was not confirmed. The proxy gate is skipped in development builds, so it cannot be seen on the dev server.
-- "Testing…" does not test the key (`src/ui/provider-login.ts:1018`); a mistyped key is accepted and fails later. Probably worth fixing or relabelling.
+- Confirmed in Excel on the web (logged in with OpenAI (ChatGPT)): Settings → "Model providers" with its rows and "✓ connected", an expanded row focusing "Enter API key", the Google Gemini (API) redirect-URL error, a key pasted as "Bearer …" saved with the prefix removed, the "{label} connected" and "{label} disconnected" toasts, and "Disconnect {label}" only inside a connected row.
+- Confirmed in the standalone taskpane with a fresh browser profile and the dev server's pre-login blocked (the no-provider case cannot be shown in the Excel session without logging it out): the welcome overlay and its rows, focus staying in the composer behind it, two Escapes to dismiss, "No matching models", the Anthropic "code#state" error, empty "Save" doing nothing, the API-key path with the welcome toast and focus in the composer, the Anthropic login prompt and its two-Escape cancel (the browser tab stays open), the proxy panel with "Hide proxy settings", the gateway link opening Settings on the gateway page with Back to the root, and the connection dialog's connect and dismiss paths.
+- Not run: the proxy gate (skipped in development builds), a completed OAuth login (it would need a real account; the shared ChatGPT credential must not be replaced), the device-code dialog (see below), and where the login window opens on desktop. On the standalone taskpane in Chromium it opened in a new browser tab.
+- GitHub Copilot's login failed at once in the standalone taskpane with "Login couldn't connect — this provider needs a helper running on your Mac. …" while the local proxy was enabled and answering (LOGIN-21). Whether Copilot's device-code requests are sent through the proxy at all was not traced; it may be a bug.
+- "Testing…" does not test the key (`src/ui/provider-login.ts:1018`): confirmed, a made-up OpenAI key was saved and the next turn failed with a 401 (LOGIN-12). Probably worth fixing or relabelling.
 - "Hide proxy settings" is hard-coded English (`src/taskpane/welcome-login.ts:255`).
-- The welcome proxy panel saves the URL without validation (`src/taskpane/welcome-login.ts:274`), unlike Settings → Proxy. An `http://` URL saved here is silently ignored when requests are made. Looks like a bug.
-- A success in the connection dialog shows no toast (`src/ui/api-key-dialog.ts:62`), unlike the other two places. Probably unintentional.
+- The welcome proxy panel saves the URL without validation (`src/taskpane/welcome-login.ts:274`), unlike Settings → Proxy. Confirmed: `http://example.com:3003` was saved with "Proxy settings saved" (LOGIN-24). Such a URL is then silently ignored when requests are made. Looks like a bug.
+- A success in the connection dialog shows no toast (`src/ui/api-key-dialog.ts:62`), unlike the other two places. Confirmed (LOGIN-29). Probably unintentional.
+- The connection dialog takes focus (the key field), unlike other overlays except Settings.
 - The proxy gate and CORS error say "on your Mac" and "Terminal" on Windows too (`provider.proxy_gate.message`, `provider.cors_error` in `en.json`). A wording bug on Windows.
 - The device-code dialog has no Cancel; closing it with Escape leaves the login polling in the background, and a later success still shows the toast. Read from code.
-- After dismissing the connection dialog, turns.md says the banner reads "API key required for {provider}.". The run then ends with an error, and the end-of-run handler may replace that banner with "LLM error: …". Not confirmed.
+- Dismissing the connection dialog: confirmed that the banner is "LLM error: Provider is not configured: openai", not "API key required for {provider}." as [turns](../foundations/turns.md) says (LOGIN-31).
 
 Verified against pi-for-excel commit `ec453df`.
