@@ -44,7 +44,7 @@ The meter shows two numbers: the share of the context window in use, rounded to 
 | 61–100% | red | "Context {pct}% full — responses may become less reliable." |
 | over 100% | red | "Context is full — the next message will fail." |
 
-The tooltip adds an action line after the warning: "Consider using /compact to free space or /new to start fresh." for yellow, "Use /compact to free space or /new to start fresh." for red. The popover shows the warning without the action line, and offers the two actions as buttons instead.
+The tooltip adds an action line after the warning: "Consider using /compact to free space or /new to start fresh." for yellow, "Use /compact to free space or /new to start fresh." for red. The popover shows the warning without the action line, and offers the two actions as buttons instead. Confirmed in Excel on the web with the window shrunk in memory: 54% of 40k was yellow with "21,639 / 40,000 tokens" and "Context 54% full." plus the yellow action line; 84% of 30k was red with "— responses may become less reliable."; 128% of 20k read "Context is full — the next message will fail."
 
 The count is an estimate. Pi takes the size the provider reported for the last successful model response and adds about one token per four characters for every message since. With no reported size yet (a new tab), and right after a compaction, it estimates everything at four characters per token. Auto-context sent with each request (see [auto-context](auto-context.md)) is included only once the provider has reported a size.
 
@@ -78,7 +78,7 @@ The compaction ends without changing anything, with a toast, when:
 - the tab has no usable model: "No model configured for compaction";
 - there is no credential for the provider: Pi asks for one with the connection dialog; if the user dismisses it, "No API key available for {provider}. Use /login or /settings."
 
-Nothing is saved and the transcript is unchanged. For auto-compaction before a prompt, the message is then sent as usual.
+Nothing is saved and the transcript is unchanged. For auto-compaction before a prompt, the message is then sent as usual (confirmed in Excel on the web: the toast "Nothing to compact" and the turn went ahead).
 
 ### Summarizing
 
@@ -87,8 +87,8 @@ The tab is busy from the moment the compaction starts. Pi keeps the most recent 
 What the user sees depends on how it started:
 
 - **`/compact`, and auto-compaction before a prompt or during overflow recovery:** the working indicator shows "Compacting context…" and "Send messages and Pi will see them after compaction". The send button stays (it does not become Stop). Enter, and Alt/Option+Enter alike, queue the text ("Queued"). A toast says "Compacting to free up context" and stays for up to a minute or until the next toast. Confirmed in Excel on the web: indicator, send button, toast, and a prompt sent meanwhile waiting as "Queued" and starting when the compaction ended.
-- **Auto-compaction between model responses:** the tab is still responding, so the working indicator keeps its usual rotating phrases and the Stop button stays. Only the toasts show that a compaction is running.
-- **Auto-compaction before a prompt** holds the user's message back: it has left the composer and the queue strip but has not joined the transcript. It appears when the compaction ends and the turn starts.
+- **Auto-compaction between model responses:** the tab is still responding, so the working indicator keeps its usual rotating phrases and the Stop button stays. Only the toasts show that a compaction is running. Confirmed in Excel on the web (context window shrunk in memory to 8k).
+- **Auto-compaction before a prompt** holds the user's message back: it has left the composer and the queue strip but has not joined the transcript. It appears when the compaction ends and the turn starts. Confirmed in Excel on the web (context window shrunk in memory to 20k): composer empty, nothing in the transcript or the queue strip, then the message appeared after "Summarized 3 messages".
 
 If any of the older user messages contain a request to remember something ("remember this", "don't forget", "keep this in mind", "for future reference", "make a note", "please save"), a toast shows for 12 seconds: "Compaction reminder: found {count} memory {cue} in older messages. Save durable facts to notes/ (rules via instructions) if needed." ("cue" or "cues"). Those passages are also pointed out to the summarizing model.
 
@@ -187,11 +187,11 @@ After a compaction, the user stays in the same tab with the composer as it was.
 - A queued `/compact` compacts the tab that is active when it runs, not the tab it was queued in: the command looks up the active tab at execution time (`src/commands/builtins/export.ts:714`), while the queue runs it after the original tab's turn (`src/taskpane/action-queue.ts:112`). If the user has switched to a tab that is responding, its history is rewritten mid-turn. Confirmed in Excel on the web twice: `/compact` queued behind a turn in one tab, then the user switched to another tab; when the turn ended, the compaction ran on the tab now active ("Nothing to compact" on an older tab, "Too few messages to compact" on a new empty one), and the original tab was never compacted. Bug.
 - The "Compacting context…" indicator is set on the one shared sidebar (`src/taskpane/action-queue.ts:72-79,107-114`, `src/taskpane/init.ts:991-997`), so a background tab's compaction shows on the active tab, and clears that tab's own indicator when it ends. Read from code; in the runs above the label appeared over the active tab, but that is also the tab the command ran on. Bug.
 - Compaction rewrites the history without saving (`src/commands/builtins/export.ts:686-696`); the session is saved only on the next `message_end` (`src/taskpane/sessions.ts:344-352`). A reload right after `/compact` restores the uncompacted session. Confirmed in Excel on the web: after "Summarized 6 messages" a reload brought back the earlier history and the previous summary card ("Summarized 30 tokens").
-- During auto-compaction before a prompt, the user's message is visible nowhere: it has been taken off the queue (`src/taskpane/action-queue.ts:134-136`) and is not yet in the transcript. Read from code; probably worth a visible placeholder.
-- Auto-compaction between model responses shows no indicator because the working indicator ignores the busy label while responding (`src/ui/pi-sidebar.ts:726-730`). Read from code.
+- During auto-compaction before a prompt, the user's message is visible nowhere: it has been taken off the queue (`src/taskpane/action-queue.ts:134-136`) and is not yet in the transcript. Confirmed in Excel on the web; probably worth a visible placeholder.
+- Auto-compaction between model responses shows no indicator because the working indicator ignores the busy label while responding (`src/ui/pi-sidebar.ts:726-730`). Confirmed in Excel on the web.
 - The meter's colour thresholds (41% and 61%, `src/taskpane/status-context.ts:38-70`) ignore the per-model soft-warning budget that `getCompactionThresholds` computes (`softWarningTokens`, `src/compaction/defaults.ts:116-127`), which nothing in the UI uses. On 200k models the meter is red long before anything happens. A product call.
 - The pre-prompt minimum of four messages counts Pi's own system messages (`src/compaction/auto-compaction.ts:51`), while `/compact` excludes them (`src/commands/builtins/export.ts:515-521`). Minor.
-- Stop during a mid-turn compaction does not cancel the summary request (`runCompactCommand` takes no abort signal). Read from code, not confirmed.
+- Stop during a mid-turn compaction does not cancel the summary request (`runCompactCommand` takes no abort signal). Confirmed in Excel on the web: Stop while the toast "Compacting to free up context" showed left the Stop button up, the compaction finished ("Summarized 8 messages"), and the turn then ended with "Error: signal is aborted without reason".
 - What the model sees as overflow depends on each provider's error text; tested in `agent-overflow-recovery.test.ts` for a LiteLLM message only.
 - The context meter is not redrawn after a compaction: it kept "17% / 500k" after `/compact` succeeded and changed to "6% / 500k" only on a tab switch. Confirmed in Excel on the web; the cause was not traced (compaction replaces the messages without an event the status bar listens to, presumably). Looks like a bug.
 - The success toast does not agree in number: "Summarized 1 messages" (overflow recovery in Excel on the web); `export.toast.compact.summarized` has no singular form (`src/language/locales/en.json:181`, used at `src/commands/builtins/export.ts:696`). A copy slip.
