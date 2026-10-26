@@ -177,7 +177,7 @@ const groupSection = section("tool-groups", "Grouped Tool Cards");
 const group = document.createElement("div");
 group.className = "pi-tool-group";
 
-// Real groups always carry a header (see tool-grouping.ts).
+// Real groups always carry a header (rendered by <assistant-message>).
 const groupHeader = document.createElement("button");
 groupHeader.type = "button";
 groupHeader.className = "pi-tool-group__header";

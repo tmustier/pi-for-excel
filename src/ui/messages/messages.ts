@@ -25,10 +25,12 @@ import { customElement, property } from "lit/decorators.js";
 
 import { t } from "../../language/index.js";
 import type { UserMessageWithAttachments } from "../../messages/attachments.js";
-import { renderTool } from "./tool-renderer-registry.js";
+import { describeToolGroup } from "../tool-grouping.js";
+import { getToolRenderer, renderTool } from "./tool-renderer-registry.js";
 import {
   getThinkingDurationMs,
   isDisclosureExpanded,
+  isToolGroupExpanded,
   setDisclosureExpanded,
   subscribeDisclosure,
   thinkingKey,
@@ -85,6 +87,61 @@ export class UserMessage extends LitElement {
   }
 }
 
+interface RenderItem {
+  template: TemplateResult;
+  toolCall?: ToolCall;
+  groupable?: boolean;
+}
+
+/**
+ * Wrap runs of two or more consecutive finished calls of the same tool in a
+ * collapsible group. Rendered by Lit like everything else, so re-renders and
+ * tab switches never meet DOM nodes moved behind Lit's back.
+ */
+function groupToolRuns(message: AssistantMessageType, items: readonly RenderItem[]): TemplateResult[] {
+  const parts: TemplateResult[] = [];
+  let index = 0;
+  while (index < items.length) {
+    const item = items[index];
+    if (!item) break;
+    const leader = item.toolCall;
+    let end = index + 1;
+    if (leader && item.groupable) {
+      while (end < items.length) {
+        const next = items[end];
+        if (!next?.groupable || next.toolCall?.name !== leader.name) break;
+        end++;
+      }
+    }
+
+    const run = items.slice(index, end);
+    if (!leader || run.length < 2) {
+      parts.push(item.template);
+      index++;
+      continue;
+    }
+
+    const key = toolGroupKey(message, leader.id);
+    const expanded = isToolGroupExpanded(key, run.length);
+    parts.push(html`
+      <div class=${expanded ? "pi-tool-group" : "pi-tool-group pi-tool-group--collapsed"}>
+        <button
+          type="button"
+          class="pi-tool-group__header"
+          aria-expanded=${expanded ? "true" : "false"}
+          @click=${() => setDisclosureExpanded(key, !expanded)}
+        >
+          <span class="pi-tool-group__chevron">▸</span>
+          <span class="pi-tool-group__label">${describeToolGroup(leader.name, run.length)}</span>
+        </button>
+        ${run.map((member) => member.template)}
+      </div>
+    `);
+    index = end;
+  }
+  return parts;
+}
+
 @customElement("assistant-message")
 export class AssistantMessage extends LitElement {
   @property({ type: Object }) message?: AssistantMessageType;
@@ -99,6 +156,8 @@ export class AssistantMessage extends LitElement {
    */
   @property({ type: Boolean }) awaitingToolResults = false;
 
+  private _unsubscribe: (() => void) | undefined;
+
   protected override createRenderRoot(): HTMLElement | DocumentFragment {
     return this;
   }
@@ -106,6 +165,14 @@ export class AssistantMessage extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     this.style.display = "block";
+    // Group open/closed state lives in transcript state.
+    this._unsubscribe = subscribeDisclosure(() => this.requestUpdate());
+  }
+
+  override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    this._unsubscribe?.();
+    this._unsubscribe = undefined;
   }
 
   override render() {
@@ -116,20 +183,20 @@ export class AssistantMessage extends LitElement {
     // streaming response can still be growing, so a thinking block reads
     // "Thinking…" only until the model moves on to text or a tool call.
     const lastIndex = message.content.length - 1;
-    const orderedParts: TemplateResult[] = [];
+    const items: RenderItem[] = [];
     for (const [index, chunk] of message.content.entries()) {
       if (chunk.type === "text" && chunk.text.trim() !== "") {
-        orderedParts.push(html`<markdown-block .content=${chunk.text}></markdown-block>`);
+        items.push({ template: html`<markdown-block .content=${chunk.text}></markdown-block>` });
       } else if (chunk.type === "thinking" && chunk.thinking.trim() !== "") {
         const key = thinkingKey(message, index);
-        orderedParts.push(html`
+        items.push({ template: html`
           <thinking-block
             .content=${chunk.thinking}
             .isStreaming=${this.isStreaming && index === lastIndex}
             .disclosureKey=${key}
             .durationMs=${getThinkingDurationMs(key)}
           ></thinking-block>
-        `);
+        ` });
       } else if (chunk.type === "toolCall") {
         if (this.hideToolCalls) continue;
 
@@ -142,21 +209,29 @@ export class AssistantMessage extends LitElement {
 
         // Aborted turn with no result for this call → render as aborted.
         const aborted = message.stopReason === "aborted" && !result;
+        const finished = result ? !result.isError : !aborted && !pending && !this.isStreaming;
 
-        orderedParts.push(html`
-          <tool-message
-            data-group-key=${toolGroupKey(message, chunk.id)}
-            .tool=${tool}
-            .toolCall=${chunk}
-            .result=${result}
-            .pending=${pending}
-            .aborted=${aborted}
-            .isStreaming=${this.isStreaming}
-            .disclosureKey=${toolCardKey(message, chunk.id)}
-          ></tool-message>
-        `);
+        items.push({
+          toolCall: chunk,
+          // Only finished calls with a tool card join a group; a running or
+          // failed call (or a fallback JSON render) breaks the run.
+          groupable: finished && getToolRenderer(chunk.name) !== undefined,
+          template: html`
+            <tool-message
+              .tool=${tool}
+              .toolCall=${chunk}
+              .result=${result}
+              .pending=${pending}
+              .aborted=${aborted}
+              .isStreaming=${this.isStreaming}
+              .disclosureKey=${toolCardKey(message, chunk.id)}
+            ></tool-message>
+          `,
+        });
       }
     }
+
+    const orderedParts = groupToolRuns(message, items);
 
     return html`
       <div>
