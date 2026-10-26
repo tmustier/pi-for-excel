@@ -8,13 +8,15 @@ Export and copy take content out of Pi so the user can keep it, share it or past
 - `/copy` ("Copy last agent message to clipboard") copies the text of Pi's last assistant message in the active tab;
 - `/share-session` ("Share session as a link") does nothing yet except show "Session sharing coming soon".
 
-All three act on the [active tab](../glossary.md#sessions-and-tabs) and finish at once, with a toast as the only sign. None of them is busy-allowed: while the active tab is [busy](../glossary.md#the-turn) each is refused with "Can't run /{command} while Pi is busy". None needs a provider. Clipboard and download behavior on Excel desktop and Excel on the web has not been checked by hand (see [Open questions](#open-questions-and-verification)).
+All three act on the [active tab](../glossary.md#sessions-and-tabs) and finish at once, with a toast as the only sign. None of them is busy-allowed: while the active tab is [busy](../glossary.md#the-turn) each is refused with "Can't run /{command} while Pi is busy". None needs a provider. On Excel on the web the clipboard is blocked: `/copy` silently does nothing and `/export` to the clipboard fails with "Copy failed: …"; only `/export download` works there (confirmed; see [Open questions](#open-questions-and-verification)). Desktop has not been checked.
 
 ## The simple case
 
 Pi has just answered a question. The user types `/copy` and presses Enter. The composer clears and a toast says "Copied to clipboard". The text of Pi's answer, as markdown source, is on the clipboard, ready to paste into a cell, an email or a document.
 
 The user then types `/export` and presses Enter. The whole conversation is copied to the clipboard as JSON, and the toast says "Transcript copied ({count} messages, {size}KB)". `/export download` instead saves a file named `pi-session-{YYYY-MM-DD}.json` and says "Transcript downloaded ({count} messages)". In every case the user stays on the same tab with an empty composer, and nothing in the conversation or the workbook changes.
+
+That is the behavior where the host allows clipboard access. On Excel on the web it does not, so the two clipboard paths fail and only the download works (see [Copied or downloaded](#copied-or-downloaded)).
 
 ## The interaction, event by event
 
@@ -50,7 +52,7 @@ The transcript export is the session as Pi holds it in memory, not the last save
 ### Ends at once
 
 - **The active tab is busy.** The command is refused with "Can't run /export while Pi is busy" (or `/copy`, `/share-session`). The command never ran, so its text stays in the composer.
-- **`/copy` with nothing to copy.** If the tab has no assistant message, or its most recent assistant message has no text (for example one that only called tools, or was stopped before writing anything), the toast is "No assistant message to copy". It does not look further back.
+- **`/copy` with nothing to copy.** If the tab has no assistant message, or its most recent assistant message has no text (for example one that only called tools, or was stopped before writing anything), the toast is "No assistant message to copy". It does not look further back. Confirmed in Excel on the web: after a stopped turn, with an earlier "OK" answer still on screen.
 - **`/share-session`.** The toast is "Session sharing coming soon". Nothing else happens.
 - **No active tab.** "No active session". This only happens during startup or teardown.
 
@@ -61,7 +63,9 @@ Nothing is recorded in any of these cases.
 The command commits as soon as it runs. The composer clears.
 
 - **To the clipboard.** The text replaces whatever was on the system clipboard. The toast is "Copied to clipboard" for `/copy`, "Transcript copied ({count} messages, {size}KB)" or "Audit log copied ({count} records, {size}KB)" for `/export`. The message count includes every message Pi holds, including hidden instructions and tool results, so it is larger than the number of bubbles in the transcript.
-- **As a download.** The JSON is handed to the host as a file: Pi first tries to open it in a new window, and if the host blocks that, starts a download of the named file. The toast "Transcript downloaded ({count} messages)" or "Audit log downloaded ({count} records)" is shown as soon as the file is handed over, whether or not the host actually saved it.
+
+  On Excel on the web the add-in frame's permissions policy blocks the clipboard, so this path fails. Confirmed: `/export` showed "Copy failed: Failed to execute 'writeText' on 'Clipboard': The Clipboard API has been blocked because of a permissions policy applied to the current document. See https://crbug.com/414348233 for more details.", `/export audit clipboard` showed "Audit export failed: " with the same text, and `/copy` showed nothing at all. Because the clipboard is `/export`'s default, plain `/export` always fails there.
+- **As a download.** The JSON is handed to the host as a file: Pi first tries to open it in a new window, and if the host blocks that, starts a download of the named file. The toast "Transcript downloaded ({count} messages)" or "Audit log downloaded ({count} records)" is shown as soon as the file is handed over, whether or not the host actually saved it. On Excel on the web (Chrome) both happened: a browser tab opened on the file's `blob:` address, the new-window call still reported failure, and so the fallback download also saved `pi-session-{date}.json` to the Downloads folder. The extra browser tab is left open.
 
 Nothing is added to the transcript, nothing is sent to the model, and nothing is saved to the session.
 
@@ -82,7 +86,7 @@ The user stays on the same tab. If writing to the clipboard fails, `/export` sho
 | Execution mode | No effect on what is exported. Each audit entry records the mode it ran in. | Refused while busy. |
 | Files in the workspace, or an overlay open | Files are not exported. An open overlay that holds focus prevents typing the command. | Refused while busy. |
 | Tab state (new, restored, another tab busy) | A new tab still exports its hidden instructions and has nothing to `/copy`. A restored tab exports its full restored history. Another tab being busy does not matter: only the active tab is checked. | Refused while the active tab is busy, even though copying would be safe. Switching to an idle tab and exporting works. |
-| Host (desktop or web) | Clipboard access and downloads depend on the host's webview; not checked by hand. | No effect. |
+| Host (desktop or web) | On Excel on the web the clipboard is blocked, so `/copy` and the clipboard forms of `/export` fail; downloads work. Desktop webviews have not been checked. | No effect. |
 
 A variant cannot change during the command, because it completes at once.
 
@@ -121,7 +125,7 @@ After any of these the user is on the same tab with the composer as it was, or e
 
 **Settings and preferences.** None.
 
-**Host differences.** Clipboard writes and the new-window-then-download fallback depend on the webview (WKWebView on macOS, WebView2 on Windows, the browser frame on Excel on the web). See [host differences](../cross-cutting/host-differences.md).
+**Host differences.** Clipboard writes and the new-window-then-download fallback depend on the webview (WKWebView on macOS, WebView2 on Windows, the browser frame on Excel on the web). On Excel on the web the clipboard is blocked by the frame's permissions policy and downloads work, leaving an extra browser tab. See [host differences](../cross-cutting/host-differences.md).
 
 **Language.** The toasts and command descriptions are translated. The file names, the JSON keys and the role names are English.
 
@@ -138,12 +142,13 @@ After any of these the user is on the same tab with the composer as it was, or e
 
 ## Open questions and verification
 
-- `/copy` does not handle a failed clipboard write: `navigator.clipboard.writeText(...)` has a `.then` but no `.catch` (`src/commands/builtins/clipboard.ts:43-45`), so on failure nothing is shown and the rejection is unhandled. Read from code. Looks like a bug; `/export` catches the same failure.
-- The download toast is shown whether or not a file was saved (`src/commands/builtins/export.ts:91-110`, `498-499`): `window.open` on a blob URL may open an empty window or nothing in Office webviews. Not checked on any host.
+- `/copy` does not handle a failed clipboard write: `navigator.clipboard.writeText(...)` has a `.then` but no `.catch` (`src/commands/builtins/clipboard.ts:43-45`), so on failure nothing is shown and the rejection is unhandled. Confirmed in Excel on the web (EXPORT-05): `/copy` after an "OK" answer showed no toast and raised an unhandled `NotAllowedError`. Looks like a bug; `/export` catches the same failure.
+- The download toast is shown whether or not a file was saved (`src/commands/builtins/export.ts:91-110`, `498-499`): `window.open` on a blob URL may open an empty window or nothing in Office webviews. On Excel on the web it opened a browser tab and also downloaded the file (EXPORT-08). Desktop not checked.
 - The audit export is not limited to the current workbook (`src/commands/builtins/export.ts:115` lists all entries). Read from code. Possibly intended, but it can include addresses and cell values from other workbooks.
-- `/copy` and `/export` are refused while the active tab is busy (`src/commands/busy-command-policy.ts:11-24` does not list them), although both only read. Probably a product call.
+- `/copy` and `/export` are refused while the active tab is busy (`src/commands/busy-command-policy.ts:11-24` does not list them), although both only read. Confirmed in Excel on the web for `/copy`, `/export` and `/share-session`. Probably a product call.
 - `/copy` only checks the most recent assistant message (`src/commands/builtins/clipboard.ts:13-22`). Read from code.
 - The exported message count includes hidden instructions and tool results. Read from code; consistent with the resume picker's "1 messages" for a blank session.
-- Whether `navigator.clipboard.writeText` is permitted in Excel on the web's add-in frame and in desktop webviews has not been checked.
+- `navigator.clipboard.writeText` is not permitted in Excel on the web's add-in frame (the frame has no `clipboard-write` permission), so `/copy` and the clipboard forms of `/export` cannot work there, and plain `/export` fails by default (EXPORT-04, EXPORT-06, EXPORT-07). Looks like a bug: a fallback (`document.execCommand('copy')`, a download, or defaulting `/export` to download on that host) would be needed. Desktop webviews have not been checked.
+- Checked in Excel on the web on 2026-10-26; see [the checklist](../verification/sessions-and-commands.md#sessionsexport-and-copymd).
 
 Verified against pi-for-excel commit `ec453df`.
