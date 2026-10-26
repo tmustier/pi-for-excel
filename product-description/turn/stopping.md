@@ -116,7 +116,7 @@ The stopped model response stays in the transcript, as far as it got, with "Requ
 | The taskpane goes away | The turn ends without being marked aborted; the streaming answer is lost. | Same. |
 | The workbook changes underneath | No effect on Stop. | No effect. |
 | Focus moves to the grid or another window | Escape goes to Excel; use the Stop button. | No effect. |
-| The context window fills | Stop during compaction between model responses waits for compaction to finish. | Same. |
+| The context window fills | Stop during compaction between model responses waits for compaction to finish; the turn then ends with "Error: signal is aborted without reason", not "Request aborted" (confirmed in Excel on the web). | Same. |
 
 After a stop the user is in the same tab, idle or running the next queued item, with the composer holding whatever Escape restored plus the draft.
 
@@ -160,7 +160,7 @@ After a stop the user is in the same tab, idle or running the next queued item, 
 - With the Stop button during a running tool, the loop polls one steer after the tool batch and adds it to the transcript before the aborted response (`agent-loop.js`, `runLoop`: `getSteeringMessages` after `turn_end`, then `streamAssistantResponse` with the aborted signal). Confirmed in Excel on the web: "Then say BANANA." joined the transcript after the Office.js card, followed by the error line.
 - A stop during a running tool ends with "Error: signal is aborted without reason" (`stopReason: "error"`, red) instead of "Request aborted": the loop's next request is made with the already-aborted signal and the provider rejects it with the browser's abort error (`agent-loop.js`, `runLoop`, then `streamAssistantResponse`). The banner is suppressed only because the text contains "abort". Confirmed in Excel on the web with both triggers. Looks like a bug: a deliberate stop reads as an error.
 - A stop during an approval waits for the dialog; the dialog itself has no cancel tied to the stop (`requireMutationApprovalIfNeeded` in `src/tools/with-workbook-coordinator.ts:118-137` takes no signal, and `throwIfAborted` runs after approval). Read from code.
-- Compaction ignores Stop: `runCompactCommand` is called without the agent's abort signal (`src/taskpane/action-queue.ts:85-92`, `:71-81`). Confirmed in Excel on the web for `/compact`: no Stop button, and Escape only moved focus to the tab strip. Stop during a mid-turn auto-compaction was not tried.
+- Compaction ignores Stop: `runCompactCommand` is called without the agent's abort signal (`src/taskpane/action-queue.ts:85-92`, `:71-81`). Confirmed in Excel on the web for `/compact` and for auto-compaction before a prompt: no Stop button, and Escape only moved focus to the tab strip. An Escape pressed just as that compaction ends reaches the turn that starts and stops it. Stop during a mid-turn auto-compaction keeps the Stop button up until the summary is done, then ends the turn with "Error: signal is aborted without reason" (confirmed in Excel on the web).
 - Whether a write already sent to Excel completes after Stop has not been confirmed by hand; the coordinator checks for a stop only before starting the write (`src/tools/with-workbook-coordinator.ts:173-183`).
 - Closing a tab that is busy only compacting does not ask for confirmation (`src/taskpane/init.ts:1321`, which checks only `isStreaming`); what happens to the compaction has not been checked.
 - Whether Excel desktop delivers Escape to the taskpane in every focus state has not been checked.
