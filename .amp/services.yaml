@@ -1,0 +1,13 @@
+services:
+  dev:
+    # vite.config.ts pins :3141 (strictPort; the Office manifest hardcodes it).
+    command: __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS=.onamp.dev npm run dev
+    port: 3141
+    health: /src/taskpane.html
+    portal:
+      url: /src/taskpane.html
+      title: Taskpane
+      description: Boots without Excel after a ~3s Office.js timeout.
+    portals:
+      - url: /src/ui-gallery.html
+        title: UI gallery
