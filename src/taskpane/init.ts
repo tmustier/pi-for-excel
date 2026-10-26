@@ -742,6 +742,25 @@ export async function initTaskpane(opts: {
     void refreshCapabilitiesForAllRuntimes();
   });
 
+  // Other taskpanes (browser tabs, Excel windows) share settings storage but
+  // not DOM events. Tell them to rebuild their prompt when guidance changes here.
+  if (typeof BroadcastChannel !== "undefined") {
+    const settingsChannel = new BroadcastChannel("pi-for-excel:settings-changed");
+    for (const eventName of [
+      "pi:rules-updated",
+      "pi:conventions-updated",
+      PI_SKILLS_CHANGED_EVENT,
+      PI_INTEGRATIONS_CHANGED_EVENT,
+    ]) {
+      document.addEventListener(eventName, () => {
+        settingsChannel.postMessage(eventName);
+      });
+    }
+    settingsChannel.addEventListener("message", () => {
+      void refreshWorkbookState();
+    });
+  }
+
   document.addEventListener(PI_EXECUTION_MODE_CHANGED_EVENT, () => {
     void refreshCapabilitiesForAllRuntimes();
   });
