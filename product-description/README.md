@@ -209,7 +209,7 @@ Status is one of `not started`, `drafted`, or `verified`.
 | --- | --- |
 | glossary.md | drafted |
 | bug-triage.md | not started |
-| verification/ (6 checklists) | not started |
+| verification/ (6 checklists) | drafted |
 | foundations/the-taskpane.md | drafted |
 | foundations/turns.md | drafted |
 | foundations/sessions-and-tabs.md | drafted |
