@@ -67,7 +67,7 @@ Each save rewrites the whole session record. It also links the session to the cu
 3. **If no layout exists** (the first time Pi opens in this workbook), Pi opens one tab. If the workbook has an identity, that tab is filled with the latest session linked to this workbook, if it has any messages; otherwise it is blank. If the workbook has no identity, the tab is filled with the most recently changed session in storage, from any workbook.
 4. If the layout could not be read at all (a storage error), Pi starts with one blank tab and leaves the stored layout untouched, so that a later open can still use it. A layout that was read but is malformed is replaced.
 
-Every restored tab gets a fresh default title: "Chat 1", "Chat 2", … in tab order, whatever it was called before.
+Every restored tab gets a fresh default title: "Chat 1", "Chat 2", … in tab order, whatever it was called before. Confirmed in Excel on the web after a language-change reload: three tabs (one of them "Chat 4" before the reload) came back as tabs 1 to 3, with the same active tab and each tab's model and thinking level.
 
 ### What a reload brings back and what it loses
 
@@ -88,7 +88,7 @@ Pi recognises "the same workbook" by its file location. It takes the workbook's 
 
 - **A saved workbook on disk or in OneDrive/SharePoint** has an identity as soon as the taskpane opens. Pi asks Excel for the current location every time it needs it, so a **Save As** or a **rename** is picked up without a reload, the next time Pi looks (at the latest when the taskpane next regains focus).
 - **A new workbook that has never been saved** ("Book1") has no identity. Its tab layout goes to one shared slot used by every workbook without an identity, its sessions are not linked to any workbook, workbook-level [rules](../guidance/rules.md) cannot be saved ("Can't identify this workbook right now — try saving the file first."), [manual backups](../workbook/manual-backups.md) are refused, and its automatic backups are kept under the document token instead.
-- **Excel on the web** reported no location at all in the workbook used for verification, which was opened through an anonymous sharing link; every workbook there therefore behaves like an unsaved one. Confirmed in Excel on the web (guest access); signed-in workbooks have not been checked. See [host differences](host-differences.md#workbook-identity-and-saving).
+- **Excel on the web** reported no location at all in the workbook used for verification, which was opened through an anonymous sharing link; every workbook there therefore behaves like an unsaved one. The only tab layout in storage was the shared slot, `workbook.tabLayout.v1.__global__` (confirmed). Confirmed in Excel on the web (guest access); signed-in workbooks have not been checked. See [host differences](host-differences.md#workbook-identity-and-saving).
 
 What happens when the identity changes while Pi is open:
 
@@ -132,11 +132,11 @@ After any interrupt, storage holds the last completed message of every tab that 
 
 **Persistence.** This document.
 
-**Workbook changes and recovery.** Automatic backups persist in the same database and survive reloads, but are cleared whenever Pi sees the workbook in a saved state: when a save is detected, and also when the taskpane opens on a workbook with no unsaved changes. See [backups and revert](../workbook/backups-and-revert.md).
+**Workbook changes and recovery.** Automatic backups persist in the same database and survive reloads, but are cleared whenever Pi sees the workbook in a saved state: when a save is detected, and also when the taskpane opens on a workbook with no unsaved changes. On Excel on the web, which always reports "saved", that means every opening of any taskpane on the workbook (confirmed: a backup in storage was gone after a second taskpane on the same workbook was reloaded). See [backups and revert](../workbook/backups-and-revert.md).
 
 **Other tabs and sessions.** Each tab saves its own session. The tab layout is one record per workbook, rewritten in full on every change. For two taskpanes writing to the same storage, see [several taskpanes](several-taskpanes.md).
 
-**Execution mode and approvals.** The execution mode is saved globally as "yolo" (Auto) or "safe" (Confirm) and read once when the taskpane opens. Approvals are never saved.
+**Execution mode and approvals.** The execution mode is saved globally as "yolo" (Auto) or "safe" (Confirm) under `execution.mode.v1` and read once when the taskpane opens (confirmed in Excel on the web: toggling to Confirm in one taskpane stored "safe" while a second taskpane kept running in Auto). Approvals are never saved.
 
 **Models and providers.** Credentials are stored per provider for all workbooks. OAuth access tokens that have expired are refreshed only when the taskpane opens; see [provider errors and offline](provider-errors-and-offline.md).
 
@@ -174,12 +174,15 @@ After any interrupt, storage holds the last completed message of every tab that 
 
 ## Open questions and verification
 
+- Pass of 2026-10-26 in Excel on the web: restore after a reload (tabs, order, active tab, model and thinking level), the draft lost, the shared layout slot, the stored execution mode, `navigator.storage.persisted()` false, and backups cleared when a taskpane opens were confirmed. Later in the pass, a failed save (write made to fail), compaction before a reload, and a reload with an unanswered message were also confirmed (below). Real quota exhaustion and Save As were not exercised; Save As needs desktop.
+- Two tabs both labelled "GPT-6.1 Sol" showed different context windows after a reload ("/ 500k" and "/ 272k"). They were on different providers (`openai-codex` and `openai`); restore keeps the saved provider (`src/taskpane/sessions.ts:54`). See [the status bar](../ui/the-status-bar.md#open-questions-and-verification).
 - Composer drafts, recently closed and chosen titles are lost on reload: confirmed in Excel on the web (draft "pd draft probe" gone, Ctrl+Shift+T toasting "No recently closed tab" after a reload in which a tab had been closed before, tab labelled "Chat 1" for a session saved as "Budget review").
 - Workbook identity on Excel on the web was null (`document.url` empty and `getFilePropertiesAsync` returning no URL) for a workbook opened through an anonymous edit link; the only tab layout in storage was the shared slot. Confirmed in Excel on the web. Signed-in OneDrive and SharePoint workbooks were not checked.
-- A failed save is never reported to the user (`src/taskpane/sessions.ts:264`, `src/taskpane/tab-layout-persistence.ts:62`, `src/workbook/recovery/log-store.ts:43`). Read from code. Data loss then only shows after a reload; may be worth treating as a bug.
+- A failed save is never reported to the user (`src/taskpane/sessions.ts:264`, `src/taskpane/tab-layout-persistence.ts:62`, `src/workbook/recovery/log-store.ts:43`). Confirmed in Excel on the web with the session write made to fail: only a console warning "[pi] Session save failed: QuotaExceededError", no toast, and after a reload the answered turn was gone. Data loss then only shows after a reload; may be worth treating as a bug.
 - Storage persistence is never requested (`requestPersistence` and `getQuotaInfo` in `src/storage/local/app-storage.ts:39-45` have no callers). Read from code; eviction behavior in WKWebView and WebView2 not tested.
 - The backups retention setting ("Retention set to {count} backups") is saved but never applied: new backups are trimmed to the fixed 120 (`src/workbook/recovery-log.ts:420`). Read from code. Looks like a bug.
-- Compaction is not saved until the next completed message (`src/commands/builtins/export.ts` replaces messages without a save). Read from code, not confirmed by hand.
+- Compaction is not saved until the next completed message (`src/commands/builtins/export.ts` replaces messages without a save). Confirmed in Excel on the web: after "/compact" at 75% ("Summarized 97,729 tokens") and a reload, the tab came back with the earlier summary ("Summarized 68,496 tokens") and at 75% again.
+- A tab whose message got no answer comes back blank: confirmed in Excel on the web with the model request held over the DevTools protocol and the taskpane reloaded; the tab returned as an empty state.
 - Restoring the global latest session into an unsaved workbook (`src/taskpane/sessions.ts:111-113`) can show a conversation from an unrelated workbook. Read from code; probably intended as a legacy fallback, but surprising.
 - Save As behavior (layout moves, links stay) was read from code and the `office-document-url` tests. Confirmed in Excel for Mac that the new identity is picked up without a reload and that sessions linked to the old name are listed only under "Show sessions from all workbooks"; where the layout is written was not checked.
 
