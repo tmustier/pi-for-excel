@@ -38,14 +38,14 @@ A tab's model is decided at four moments:
 
 ### Connecting a provider
 
-A provider becomes *connected* when Pi holds a credential it can use for it: an OAuth login, a saved API key, or a configured custom gateway (a gateway without an API key counts as connected). Connecting happens in three places that share one row design (a "set up →" row that expands to "Login with {label}", "or enter API key", a key field and "Save"): the [welcome overlay](../setup/welcome-and-login.md), Settings → "Model providers" ([settings](../setup/settings.md)), and the *connection dialog* "Connect {label}" that appears when a turn needs a credential that is missing. Nothing is checked against the provider when a key is saved: the button says "Testing…" for a moment, but the key is stored as typed, and a wrong key only shows up as an error on the next turn.
+A provider becomes *connected* when Pi holds a credential it can use for it: an OAuth login, a saved API key, or a configured custom gateway (a gateway without an API key counts as connected). Connecting happens in three places that share one row design (a "set up →" row that expands to "Login with {label}", "or enter API key", a key field and "Save"): the [welcome overlay](../setup/welcome-and-login.md), Settings → "Model providers" ([settings](../setup/settings.md)), and the *connection dialog* "Connect {label}" that appears when a turn needs a credential that is missing. Nothing is checked against the provider when a key is saved: the button says "Testing…" for a moment, but the key is stored as typed, and a wrong key only shows up as an error on the next turn (confirmed: a made-up OpenAI key was accepted and the next turn failed with "LLM error: OpenAI API error (401): …").
 
 The providers offered, in the order shown:
 
 | Label in the UI | How it connects | Notes |
 | --- | --- | --- |
 | Anthropic ("Claude Pro/Max") | OAuth or API key | OAuth needs the [CORS proxy](../setup/the-proxy.md). |
-| OpenAI (ChatGPT) ("Plus/Pro subscription") | OAuth, or a pasted access token | Called OpenAI Codex in the code (`openai-codex`). Always needs the proxy. |
+| OpenAI (ChatGPT) ("Plus/Pro subscription") | OAuth, or a pasted access token | Called OpenAI Codex in the code (`openai-codex`). Login needs the proxy. Model requests go through it when it is on; in Excel on the web they also worked with it off. |
 | Google Code Assist ("Gemini via Google account") | OAuth, or pasted credential JSON | Always needs the proxy. |
 | Google Antigravity ("Gemini/Claude/GPT-OSS") | OAuth, or pasted credential JSON | Always needs the proxy. |
 | GitHub Copilot | Device-code login, or a token | Login needs the proxy; model requests go direct. |
@@ -89,14 +89,14 @@ Choosing a model in "Select model" (from the status-bar model control, `/model` 
 
 Choosing the model the tab already has does nothing. Choosing a different model while the tab is busy is refused with "Wait for this tab to finish before changing models".
 
-The thinking level is not adjusted when the model changes in place. If the new model does not support the tab's level, the status bar keeps showing the old level until the user changes it; Shift+Tab then starts from the new model's first level.
+The thinking level is not adjusted when the model changes in place. If the new model does not support the tab's level, the status bar keeps showing the old level until the user changes it; Shift+Tab then starts from the new model's first level. Confirmed in Excel on the web: switching a "High" tab to a custom gateway model that does not reason left "High" in the status bar.
 
 ### When a provider is disconnected
 
 Whenever the set of connected providers changes (a login, a disconnect, a gateway saved, edited or deleted, an extension loaded or unloaded, credentials restored at startup), Pi re-checks every tab:
 
 - A tab whose provider is still connected keeps its model. If the provider's catalogue now describes that model differently (a new context window, new thinking levels), the tab picks up the new description silently.
-- An idle tab whose provider is no longer connected is moved to the new default model, with its thinking level reset ("High" for a reasoning model, "Off" otherwise). Nothing announces this; the status bar simply shows the new model.
+- An idle tab whose provider is no longer connected is moved to the new default model, with its thinking level reset ("High" for a reasoning model, "Off" otherwise). Nothing announces this; the status bar simply shows the new model. Confirmed in Excel on the web: disconnecting Google Gemini (API) moved an idle tab from "Gemini 2.5 Flash-Lite" to "GPT-6.1 Sol", and deleting a gateway moved the tab using it the same way, both without a toast.
 - A busy tab is never changed; it is re-checked when its turn or queued action ends.
 - If no provider is connected at all, nothing is swapped: tabs keep their models, and the next send opens the connection dialog for that model's provider.
 
@@ -117,7 +117,7 @@ Every model declares a context window and a maximum output length, both shown in
 | Modifier | Set before | Changed while busy |
 | --- | --- | --- |
 | Model and provider | This document defines it. | Changing the model is refused; disconnecting the provider does not affect a busy tab until it is idle. |
-| Thinking level | Kept across an in-place model change, copied by a fork, reset by an automatic swap. | Can change; applies from the next model request. |
+| Thinking level | Kept across an in-place model change (even when the new model does not reason), copied by a fork, reset by an automatic swap. | Can change; applies from the next model request. |
 | Execution mode | No effect. | No effect. |
 | Files in the workspace, or an overlay open | No effect from files. The connection dialog, welcome overlay and model picker are overlays; while one is open nothing else can be clicked. | A connection dialog opened by a turn holds that turn until it is answered. |
 | Tab state (new, restored, another tab busy) | A new tab copies the active tab's model; a restored tab uses its saved model; another tab being busy does not block changing this tab's model. | Only the busy tab is protected; idle tabs are still swapped when a provider disconnects. |
@@ -152,7 +152,7 @@ Changes to providers take effect at the next boundary: a busy tab finishes its t
 
 **Models and providers.** This document.
 
-**Offline and provider errors.** A missing credential opens the connection dialog; any other provider failure ends the turn as described in [provider errors and offline](../cross-cutting/provider-errors-and-offline.md). Providers that need the proxy fail with a CORS banner when it is not running.
+**Offline and provider errors.** A missing credential opens the connection dialog; any other provider failure ends the turn as described in [provider errors and offline](../cross-cutting/provider-errors-and-offline.md). A request the browser blocks shows the CORS-worded banner described in [the proxy](../setup/the-proxy.md#when-the-proxy-is-missing-at-the-moment-it-is-needed); an unreachable OpenAI-compatible endpoint shows "LLM error: Connection error." instead.
 
 **Notifications.** Login toasts ("{label} connected — try "Explain this workbook"" on the welcome overlay, "{label} connected" in Settings, "{label} disconnected"), the fork toast, and the busy refusal. Automatic swaps and the connection dialog's own success are silent.
 
@@ -188,13 +188,14 @@ Changes to providers take effect at the next boundary: a busy tab finishes its t
 
 ## Open questions and verification
 
-- Fork opens a new tab even when the active tab is empty: the check counts the hidden system message as a message (`src/taskpane/session-runtime-manager.ts:201`, `messages.length > 0`). Confirmed in the standalone taskpane: with the setting on, picking another model in an empty "Chat 1" opened "Chat 1 (gpt-5.3-codex-spark)". Looks like a bug; the setting's own text says "For non-empty chats".
+- Fork opens a new tab even when the active tab is empty: the check counts the hidden system message as a message (`src/taskpane/session-runtime-manager.ts:201`, `messages.length > 0`). Confirmed in Excel on the web: with the setting on, picking "gpt-6-luna" in an empty "Chat 1" opened "Chat 1 (gpt-6-luna)" with "Opened Chat 1 (gpt-6-luna) in a new tab" (MODEL-08). Looks like a bug; the setting's own text says "For non-empty chats".
 - OAuth logins are refreshed only when the taskpane opens (`src/auth/restore.ts:160`). An access token that expires during a long session is not refreshed, so turns fail until the taskpane is reloaded. Read from code; not confirmed by hand.
-- An in-place model switch keeps a thinking level the new model may not support (`src/taskpane/session-runtime-manager.ts:203`). What is sent to the provider in that case was not confirmed.
+- An in-place model switch keeps a thinking level the new model may not support (`src/taskpane/session-runtime-manager.ts:203`). Confirmed in Excel on the web that the status bar keeps "High" on a non-reasoning gateway model (MODEL-10); what is sent to the provider in that case was not confirmed.
 - With both OpenAI (API) and OpenAI (ChatGPT) connected, the default model is the API-key one (`src/taskpane/default-model.ts:53` checks `openai` first). A product call: subscription users may not expect API billing.
 - An automatic swap is not saved until the session next saves; a restored session whose provider is gone may keep its old model until the next provider refresh. Whether a send can happen in that window, prompting for the old provider, was not confirmed.
-- Renaming a custom gateway orphans tabs that use it: restored sessions are matched by provider name (`src/taskpane/sessions.ts:54`), and the helper that would match a renamed gateway by endpoint and model (`resolveCustomProviderModel`, `src/auth/custom-gateways.ts:405`) is never called. Read from code. Looks like a bug.
-- Saving an API key says "Testing…" but does not test it (`src/ui/provider-login.ts:1018`). Read from code.
+- Renaming a custom gateway orphans tabs that use it: restored sessions are matched by provider name (`src/taskpane/sessions.ts:54`), and the helper that would match a renamed gateway by endpoint and model (`resolveCustomProviderModel`, `src/auth/custom-gateways.ts:405`) is never called. Confirmed in Excel on the web for open tabs: renaming "Warehouse" to "Depot" moved the idle tab on "gpt-oss-120b" to "GPT-6.1 Sol" without a word (GATEWAY-14). Looks like a bug.
+- Saving an API key says "Testing…" but does not test it (`src/ui/provider-login.ts:1018`). Confirmed with a made-up OpenAI key in the standalone taskpane (LOGIN-12).
+- In Excel on the web, OpenAI (ChatGPT) turns succeeded with the proxy switch off: requests went straight to ChatGPT (`src/auth/stream-proxy.ts:70` only routes them through the proxy when one is configured). Whether Excel desktop's webviews block the same requests was not checked, so the proxy may still be required there.
 - The order in which "other connected providers" are tried for the default model follows the provider registry, not a product rule. Read from code.
 
 Verified against pi-for-excel commit `ec453df`.
