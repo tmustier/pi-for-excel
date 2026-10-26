@@ -146,7 +146,7 @@ The vocabulary used across these documents. When a document uses one of these wo
 
 **Backup** (automatic). A snapshot of the cells, formats or structure a mutation is about to change, saved by Pi before the mutation runs. The UI calls these "backups" ("Snapshots saved before Pi modifies data"); the code calls them checkpoints. They are listed in the Backups dialog, can be restored one at a time, and are cleared when the workbook is saved in Excel. See [backups and revert](workbook/backups-and-revert.md).
 
-**Revert.** Restoring the cells covered by one backup to their state before the mutation, from the Backups dialog or with `/revert` (the latest backup). On Excel on the web, Excel's own Undo also takes back Pi's changes step by step, and Ctrl+Y redoes them (confirmed; desktop unchecked). A revert restores a specific backup regardless of Undo history.
+**Revert.** Restoring the cells covered by one backup to their state before the mutation, from the Backups dialog or with `/revert` (the latest backup). On Excel on the web, Excel's own Undo also takes back Pi's changes step by step, and Ctrl+Y redoes them (confirmed on the web and on Excel for Mac). A revert restores a specific backup regardless of Undo history.
 
 **Manual backup.** A full copy of the workbook file taken on request with `/backup`, stored in the add-in's storage and downloadable later. Distinct from automatic backups. See [manual backups](workbook/manual-backups.md).
 
