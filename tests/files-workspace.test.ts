@@ -780,6 +780,20 @@ void test("workspace context summary includes only relevant folders and current 
   assert.doesNotMatch(summary.summary, /forecast-q3/);
 });
 
+void test("without a workbook identity, untagged files (e.g. dropped on the composer) are relevant", () => {
+  const snapshot = createWorkspaceSnapshot([
+    { path: "dropped.csv" },
+    { path: "workbooks/other/data.csv", workbookId: "wb-b" },
+    { path: "scratch/temp.txt" },
+  ]);
+
+  const summary = buildWorkspaceContextSummary({ snapshot, currentWorkbookId: null });
+
+  assert.equal(summary.hasRelevantFiles, true);
+  assert.match(summary.summary, /Files \(not tied to a saved workbook\): 1 file \(dropped\.csv\)\./);
+  assert.doesNotMatch(summary.summary, /other\/data\.csv|temp\.txt/);
+});
+
 void test("workspace context relevance signature ignores scratch-only changes", () => {
   const baseSnapshot = createWorkspaceSnapshot([
     { path: "notes/index.md", workbookId: "wb-a" },

@@ -385,19 +385,20 @@ export function buildWorkspaceContextSummary(args: WorkspaceContextSummaryArgs):
 
   const importFiles = sortFilesByPath(workspaceFiles.filter((file) => file.path.startsWith(IMPORTS_PREFIX)));
 
-  const currentWorkbookFiles = args.currentWorkbookId
-    ? sortFilesByPath(workspaceFiles.filter((file) => {
-      if (file.workbookTag?.workbookId !== args.currentWorkbookId) {
-        return false;
-      }
+  // Without a workbook identity (e.g. an unsaved workbook, Excel on the web
+  // as a guest) files cannot be tagged; untagged files, such as files the user
+  // dropped on the composer, are then this workbook's files.
+  const currentWorkbookFiles = sortFilesByPath(workspaceFiles.filter((file) => {
+    if (file.workbookTag?.workbookId !== (args.currentWorkbookId ?? undefined)) {
+      return false;
+    }
 
-      if (file.path.startsWith(NOTES_PREFIX)) return false;
-      if (file.path.startsWith(IMPORTS_PREFIX)) return false;
-      if (file.path.startsWith(SCRATCH_PREFIX)) return false;
-      if (file.path.startsWith(ASSISTANT_DOCS_PREFIX)) return false;
-      return true;
-    }))
-    : [];
+    if (file.path.startsWith(NOTES_PREFIX)) return false;
+    if (file.path.startsWith(IMPORTS_PREFIX)) return false;
+    if (file.path.startsWith(SCRATCH_PREFIX)) return false;
+    if (file.path.startsWith(ASSISTANT_DOCS_PREFIX)) return false;
+    return true;
+  }));
 
   const hasRelevantFiles =
     notesFiles.length > 0 ||
@@ -425,9 +426,8 @@ export function buildWorkspaceContextSummary(args: WorkspaceContextSummaryArgs):
 
   if (currentWorkbookFiles.length > 0) {
     const noun = currentWorkbookFiles.length === 1 ? "file" : "files";
-    lines.push(
-      `- Current workbook artifacts: ${currentWorkbookFiles.length} ${noun}${formatPathPreview(currentWorkbookFiles, previewLimit)}.`,
-    );
+    const label = args.currentWorkbookId ? "Current workbook artifacts" : "Files (not tied to a saved workbook)";
+    lines.push(`- ${label}: ${currentWorkbookFiles.length} ${noun}${formatPathPreview(currentWorkbookFiles, previewLimit)}.`);
   }
 
   if (importFiles.length > 0) {

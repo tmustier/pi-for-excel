@@ -253,6 +253,40 @@ void test("the workbook note is re-sent after compaction removed it, and labelle
   assert.equal(messages[2]?.role, "user", "the user's prompt stays after the note");
 });
 
+void test("the Files summary is sent again whenever it changes, and to every new tab", async () => {
+  let files = { summary: "### Workspace\n- a.csv", relevantSignature: "sig-1", hasRelevantFiles: true };
+  const transcript: AgentMessage[] = [];
+  const newTab = () => createAutoContext({
+    changeTracker: { cursor: () => 0, describeSince: () => ({ text: null, cursor: 0 }) },
+    getAgent: () => undefined,
+    getWorkbookId: () => Promise.resolve(null),
+    getBlueprint: () => Promise.resolve(""),
+    getFilesSummary: () => Promise.resolve(files),
+  });
+  const model = fauxProvider().getModel();
+  const send = async (autoContext: ReturnType<typeof createAutoContext>, messages: AgentMessage[]) => {
+    const update = await autoContext.prepareRequest({ model, thinkingLevel: "off", context: { messages } });
+    return (update?.context?.messages ?? messages).filter((m) => m.role === "autoContext");
+  };
+
+  const tab = newTab();
+  const first = await send(tab, transcript);
+  assert.match(first[0]?.role === "autoContext" ? first[0].text : "", /Files workspace \(initial\)/u);
+  transcript.push(...first);
+  assert.equal((await send(tab, transcript)).length, 1, "unchanged: not re-sent");
+
+  for (const signature of ["sig-2", "sig-3"]) {
+    files = { hasRelevantFiles: true, relevantSignature: signature, summary: `### Workspace\n- ${signature}` };
+    const notes = await send(tab, transcript);
+    const latest = notes.at(-1);
+    assert.match(latest?.role === "autoContext" ? latest.text : "", new RegExp(`files changed[\\s\\S]*${signature}`, "u"));
+    transcript.splice(0, transcript.length, ...notes);
+  }
+
+  const other = await send(newTab(), []);
+  assert.match(other[0]?.role === "autoContext" ? other[0].text : "", /Files workspace \(initial\)[\s\S]*sig-3/u);
+});
+
 // ---------------------------------------------------------------------------
 // Selection context
 // ---------------------------------------------------------------------------
