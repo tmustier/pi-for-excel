@@ -11,7 +11,7 @@ The feature documents were written from the code. This directory is the protocol
 | [workbook.md](workbook.md) | `foundations/the-workbook.md` and `workbook/*` |
 | [setup.md](setup.md) | `foundations/models-and-providers.md` and `setup/*` |
 | [guidance-files-extensions.md](guidance-files-extensions.md) | `guidance/*`, `files/*` and `extensions/*` |
-| `ui-and-cross-cutting.md` (being written) | `ui/*` and `cross-cutting/*` |
+| [ui-and-cross-cutting.md](ui-and-cross-cutting.md) | `ui/*` and `cross-cutting/*` |
 
 The agent's own experience (what the model is given and what its tools return) is checked separately in [agent-description/verification/](../../agent-description/verification/).
 
@@ -51,10 +51,11 @@ First pass: 26 October 2026, Excel on the web in Amp orbs (Chrome over the DevTo
 
 | File | Items | Pass | Fail | Blocked | Not run |
 | --- | --- | --- | --- | --- | --- |
-| foundations-and-turn.md | 147 | 133 | 10 | 4 | 0 |
-| sessions-and-commands.md | 129 | 116 | 11 | 2 | 0 |
-| workbook.md | 115 | 86 | 21 | 8 | 0 |
+| foundations-and-turn.md | 147 | 135 | 11 | 1 | 0 |
+| sessions-and-commands.md | 129 | 116 | 13 | 0 | 0 |
+| workbook.md | 115 | 91 | 24 | 0 | 0 |
 | setup.md | 134 | 125 | 9 | 0 | 0 |
-| guidance-files-extensions.md | 149 | 118 | 9 | 22 | 0 |
+| guidance-files-extensions.md | 149 | 119 | 12 | 18 | 0 |
+| ui-and-cross-cutting.md | 118 | 105 | 3 | 9 | 1 |
 
 A fail on a "(suspected bug)" row means the bug reproduced; those are filed in [bug-triage.md](../bug-triage.md). Fails that were document errors have been corrected in the documents and are noted in the row. No document is marked `verified`: that needs a human pass.

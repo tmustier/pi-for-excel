@@ -22,13 +22,13 @@ The vocabulary used across these documents. When a document uses one of these wo
 
 **Queue strip.** The list that appears just above the composer when the active tab has *steer*, *follow-up* or *queued* items waiting. Each row has a label ("Steer", "Follow up", "Queued", or a command such as "/compact") and the text, cut to 47 characters plus "…" when longer than 50; the last row says "↳ Press Alt+↑ to edit queued message" (⌥↑ on macOS).
 
-**Status bar.** The row under the composer with the model control, the thinking-level control, the execution-mode control ("Auto" or "Confirm"), and the *context meter*. See [the status bar](ui/the-status-bar.md).
+**Status bar.** The row under the composer with, in order, the model control, the thinking-level control, the *context meter*, the lock badge (while a mutation holds the workbook lock) and the execution-mode control ("Auto" or "Confirm"). See [the status bar](ui/the-status-bar.md).
 
 **Status popover.** The small dialog that opens above a status-bar control when clicked: the thinking popover ("Thinking level") or the context popover ("Context usage", with "/compact" and "/new" buttons). Only one is open at a time. It closes on Escape, an outside click, clicking its control again, or when the model picker opens. Escape goes to an open popover first, so it never stops a turn.
 
 **Lock badge.** The status-bar badge shown while the active tab waits for ("lock…") or holds ("lock") the workbook lock; the status-bar counterpart of the tab's "Locking…" label. English only.
 
-**Utilities menu.** The menu opened by the gear in the header ("Settings and tools"): Resume session, Rules, Extensions, Files, Backups, Settings, Keyboard shortcuts. See [the utilities menu](ui/the-utilities-menu.md).
+**Utilities menu.** The menu opened by the gear in the header ("Settings and tools"), in order: Settings, Extensions, Files, Rules, Resume session, Backups, Keyboard shortcuts. See [the utilities menu](ui/the-utilities-menu.md).
 
 **Tab context menu.** The menu that opens when the user right-clicks a session tab: "Rename tab…", "Duplicate tab", "Move left", "Move right", "Close other tabs", "Close tab".
 
