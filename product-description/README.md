@@ -208,7 +208,7 @@ Status is one of `not started`, `drafted`, or `verified`.
 | Document | Status |
 | --- | --- |
 | glossary.md | drafted |
-| bug-triage.md | not started |
+| bug-triage.md | drafted |
 | verification/ (6 checklists) | drafted |
 | foundations/the-taskpane.md | drafted |
 | foundations/turns.md | drafted |
