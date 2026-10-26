@@ -1199,6 +1199,8 @@
   "whimsical.wrangling": "驯服中…",
   "whimsical.wrestling_with_array_formulas": "与数组公式搏斗…",
   "workbook.currentWorkbook": "当前工作簿",
+  "working.cellEdit": "正在等待你完成单元格编辑",
+  "working.cellEditHint": "在 Excel 中按 Enter、Tab 或 Esc 后，Pi 会继续",
   "working.default": "工作中…",
   "working.hint.collapse": "{shortcut} 展开或折叠详情",
   "working.hint.commands": "输入 / 查看命令",

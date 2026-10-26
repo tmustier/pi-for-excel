@@ -38,6 +38,10 @@ export function estimateMessageTokens(message: AgentMessage): number {
     return estimateTextTokens(message.summary);
   }
 
+  if (message.role === "autoContext") {
+    return estimateTextTokens(message.text);
+  }
+
   if (message.role === "user" || message.role === "user-with-attachments") {
     const content = message.content;
     if (typeof content === "string") {

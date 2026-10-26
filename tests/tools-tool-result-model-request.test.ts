@@ -80,6 +80,9 @@ void test("model request compacts an older large tool result but preserves recen
   ]);
 
   assert.match(textOf(requestToolResult(request, "1")), /^\[Compacted tool result\] read_range/u);
+  // The model is told the output left its context, not that it can still see it (B-16).
+  assert.doesNotMatch(textOf(requestToolResult(request, "1")), /visible in chat history/u);
+  assert.match(textOf(requestToolResult(request, "1")), /no longer in your context/u);
   assert.equal(textOf(requestToolResult(request, "3")), large);
   const historyOlder = history.find(
     (message) => message.role === "toolResult" && message.toolCallId === "1",

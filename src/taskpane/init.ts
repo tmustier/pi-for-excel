@@ -23,6 +23,7 @@ import {
 } from "../auth/proxy-validation.js";
 import { restoreCredentials } from "../auth/restore.js";
 import { invalidateBlueprint } from "../context/blueprint.js";
+import { onCellEditWait } from "../excel/helpers.js";
 import { ChangeTracker } from "../context/change-tracker.js";
 import {
   PI_EXPERIMENTAL_FEATURE_CHANGED_EVENT,
@@ -156,7 +157,7 @@ import {
   startWorkbookSaveBoundaryPolling,
 } from "../workbook/save-boundary-monitor.js";
 
-import { createContextInjector } from "./context-injection.js";
+import { createAutoContext } from "./context-injection.js";
 import { getThinkingLevels, installKeyboardShortcuts } from "./keyboard-shortcuts.js";
 import { createQueueDisplay } from "./queue-display.js";
 import { createActionQueue } from "./action-queue.js";
@@ -218,7 +219,9 @@ export async function initTaskpane(opts: {
 }): Promise<void> {
   const { appEl, errorRoot, autoResizeImages } = opts;
 
-  const changeTracker = new ChangeTracker();
+  // One workbook-level edit log; each runtime reads it from its own cursor.
+  // User structure changes (sheets, rows, columns) invalidate the blueprint.
+  const changeTracker = new ChangeTracker({ onStructureChange: () => invalidateBlueprint(null) });
   const spreadsheetHost = getCurrentSpreadsheetHost();
 
   // 1. Storage
@@ -337,6 +340,14 @@ export async function initTaskpane(opts: {
 
   // 5. Create and mount PiSidebar
   const sidebar = new PiSidebar();
+  // Excel rejects every batch while the user is typing in a cell; excelRun
+  // retries and this tells the user why Pi is waiting.
+  onCellEditWait((waiting) => {
+    sidebar.setHostWaitIndicator(
+      waiting ? t("working.cellEdit") : null,
+      waiting ? t("working.cellEditHint") : null,
+    );
+  });
   sidebar.emptyHints = [
     {
       label: t("hint.explain.label"),
@@ -943,7 +954,7 @@ export async function initTaskpane(opts: {
       convertToLlm: createConvertToLlm({
         getContextWindow: () => runtimeAgent?.state.model.contextWindow,
       }),
-      transformContext: createContextInjector(changeTracker),
+      ...createAutoContext({ changeTracker, getAgent: () => runtimeAgent }),
       streamFn,
     });
 

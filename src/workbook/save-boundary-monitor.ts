@@ -24,9 +24,9 @@ async function defaultReadWorkbookDirtyState(): Promise<boolean | null> {
       workbook.load("isDirty");
       await context.sync();
       return workbook.isDirty;
-    });
+    }, { waitForCellEdit: false }); // a background poll: skip it while the user edits a cell
   } catch {
-    // API set may be unavailable on some hosts/builds.
+    // API set may be unavailable on some hosts/builds, or the user is editing a cell.
     return null;
   }
 }
