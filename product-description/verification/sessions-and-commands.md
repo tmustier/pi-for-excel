@@ -88,7 +88,7 @@ Not checkable by hand:
 | RENAME-06 | P2 | web | `/name` with no text shows "Usage: /name My Session Name" and clears the composer ([Ends at once](../sessions/renaming-a-tab.md#ends-at-once)). | Idle. | 1. `/name` (via the menu). | Usage toast; composer empty. | pass (menu path) |
 | RENAME-07 | P1 | web | A chosen title is lost on reload, while the picker keeps the saved title (suspected bug) ([Open questions](../sessions/renaming-a-tab.md#open-questions-and-verification)). | "Q3 budget" with an answer. | 1. Reload. 2. `/resume`. | Label "Chat 1"; picker lists "Q3 budget". | pass (bug confirmed) |
 | RENAME-08 | P2 | web | Resuming a named session gives "Chat N", with the saved title in the toast ([Open questions](../sessions/renaming-a-tab.md#open-questions-and-verification)). | As RENAME-07. | 1. Resume "Q3 budget". | Tab "Chat 4"; "Resumed in new tab: Q3 budget". | pass |
-| RENAME-09 | P1 | desktop | The native prompt works on desktop (prefill, confirm, empty resets) ([Host differences](../sessions/renaming-a-tab.md#interactions-with-other-systems)). | Excel desktop. | 1. Double-click a tab, edit, OK. 2. Repeat with empty text. | "Renamed to …", then "Tab name reset". | blocked (no desktop) |
+| RENAME-09 | P1 | desktop | The native prompt works on desktop (prefill, confirm, empty resets) ([Host differences](../sessions/renaming-a-tab.md#interactions-with-other-systems)). | Excel desktop. | 1. Double-click a tab, edit, OK. 2. Repeat with empty text. | "Renamed to …", then "Tab name reset". | blocked (needs Excel desktop; assigned to the Mac desktop thread) |
 
 ## sessions/reopening-closed-tabs.md
 
@@ -123,12 +123,13 @@ Not checkable by hand:
 | RESUME-09 | P1 | web | `/resume-here` is refused while busy ([Ends at once](../sessions/resuming-a-session.md#ends-at-once)). | Tab responding. | 1. `/resume-here x`, Enter. | "Can't run /resume-here while Pi is busy". | pass |
 | RESUME-10 | P2 | web | `/resume` opens the picker while busy ([Summary](../sessions/resuming-a-session.md#summary)). | Tab responding. | 1. `/resume`. | Picker opens. | pass |
 | RESUME-11 | P2 | web | Replace current tab while idle swaps the transcript and model ([Resumed](../sessions/resuming-a-session.md#resumed)). | Idle. | 1. Replace current tab, choose a session. | "Resumed in current tab: {title}". | pass ("Resumed in current tab: Q3 budget", label stayed "Chat 1") |
-| RESUME-12 | P2 | web | A session from another workbook asks "Resume session from another workbook?" ([Ends at once](../sessions/resuming-a-session.md#ends-at-once)). | Known identities. | 1. Show all workbooks; choose a foreign session. | Confirmation. | blocked (identity unknown) |
+| RESUME-12 | P2 | web | A session from another workbook asks "Resume session from another workbook?" ([Ends at once](../sessions/resuming-a-session.md#ends-at-once)). | Known identities. | 1. Show all workbooks; choose a foreign session. | Confirmation. | pass (workbook address stubbed over DevTools by replacing the global `Office` with a wrapper whose `getFilePropertiesAsync` returns Workbook-A, then Workbook-B; a session linked to A, resumed from B, showed the confirmation; Escape returned to the picker; "Resume anyway" opened it) |
 | RESUME-13 | P2 | web | With focus outside the composer, Escape while responding closes the picker and does not stop ([Cancel and interrupt](../sessions/resuming-a-session.md#cancel-and-interrupt)). | Responding; picker open; focus on the tab. | 1. Escape. | Picker closes; turn continues. | pass (opened from the utilities menu, focus on body) |
 | RESUME-14 | P2 | web | With nothing saved or closed, "No previous sessions" and no picker ([Ends at once](../sessions/resuming-a-session.md#ends-at-once)). | Fresh storage. | 1. `/resume`. | Toast only. | pass (after clearing the sessions stores in IndexedDB) |
 | RESUME-15 | P3 | web | Dates read "just now", "{n}m ago" ([Opening the picker](../sessions/resuming-a-session.md#opening-the-picker)). | — | 1. `/resume`. | As stated. | pass |
-| RESUME-16 | P2 | web | A click on a saved entry resumes it. | — | 1. Click an entry. | Resumed. | fail (two pointer clicks failed in the first pass; worked in the second pass; recheck with a physical mouse) |
+| RESUME-16 | P2 | web | A click on a saved entry resumes it. | — | 1. Click an entry. | Resumed. | pass (the first-pass failures were the driver clicking the middle of an entry outside the 28 px visible strip, see RESUME-18; clicks on the visible strip resume) |
 | RESUME-17 | P1 | web | With the picker opened by `/resume` while responding, the first Escape stops the turn (suspected bug) ([Ends at once](../sessions/resuming-a-session.md#ends-at-once)). | Tab responding. | 1. `/resume`. 2. Escape. | Record. | pass (bug confirmed: turn stopped, picker still open; second Escape closed it) |
+| RESUME-18 | P2 | web | In a short pane the picker's entries can be reached (suspected bug) ([Open questions](../sessions/resuming-a-session.md#open-questions-and-verification)). | Pane ~340 px tall; several saved sessions. | 1. `/resume`. 2. Look at the list. | Record the list height. | fail (card cut off, list 28 px tall; only the top strip of one entry clickable) |
 
 ## sessions/export-and-copy.md
 
@@ -144,7 +145,7 @@ Not checkable by hand:
 | EXPORT-08 | P1 | web | `/export download` saves `pi-session-{date}.json` and says "Transcript downloaded ({count} messages)" ([Copied or downloaded](../sessions/export-and-copy.md#copied-or-downloaded)). | Idle. | 1. Run it. | File and toast. | pass (also leaves a browser tab on the blob address) |
 | EXPORT-09 | P2 | web | `/export audit` downloads `pi-audit-log-{date}.json` ([Choosing what to export](../sessions/export-and-copy.md#choosing-what-to-export)). | Idle. | 1. Run it. | File; "Audit log downloaded ({n} records)". | pass (0 records) |
 | EXPORT-10 | P2 | web | The message count includes hidden messages ([Copied or downloaded](../sessions/export-and-copy.md#copied-or-downloaded)). | A tab with a few turns. | 1. `/export download`. | Count larger than visible bubbles. | pass (11) |
-| EXPORT-11 | P2 | desktop | Clipboard and download on desktop. | Excel desktop. | 1. `/copy`, `/export`, `/export download`. | Record. | blocked (no desktop) |
+| EXPORT-11 | P2 | desktop | Clipboard and download on desktop. | Excel desktop. | 1. `/copy`, `/export`, `/export download`. | Record. | blocked (needs Excel desktop; assigned to the Mac desktop thread) |
 
 ## commands/the-command-menu.md
 
@@ -186,13 +187,13 @@ Not checkable by hand:
 
 ## Results of the 2026-10-26 passes
 
-128 items: 114 pass, 11 fail, 3 blocked.
+129 items: 116 pass, 11 fail, 2 blocked (RENAME-09 and EXPORT-11, which need Excel desktop and are assigned to the Mac desktop thread). The workbook-identity item RESUME-12 was run by stubbing the workbook address in the taskpane.
 
 - **Techniques in the second pass:** the workbook lock was made observable by adding an 8-second delay to `Excel.run` in the taskpane over DevTools (SESS-17, TABS-21, TABS-22). Compaction used a ~52k-token session built on gpt-6-luna by having Pi read 4,500 cells of text, with the compaction request held by DevTools request interception (SESS-15, TABS-23, TABS-28). "No previous sessions" was reached by clearing the `sessions` and `sessions-metadata` stores in IndexedDB.
 - **Fails where the document was wrong** (documents corrected): SESS-14 (workbook identity unknown on Excel on the web), TABS-26 (tabs shrink instead of showing scroll arrows), EXPORT-04, EXPORT-06, EXPORT-07 (clipboard blocked on Excel on the web), MENU-12 (one Escape closes the menu and stops the turn), REOPEN-06 (the stale Undo shows nothing), HINTS-08 (the utilities menu covers the hints in a short pane).
-- **Fails that are product defects** for `bug-triage.md`: MENU-12, MENU-15 (clicking a menu row runs nothing), REOPEN-06, EXPORT-04/06/07 (no clipboard fallback on Excel on the web), SESS-18 (busy dot invisible on inactive tabs).
-- **Unexplained:** RESUME-16 (two pointer clicks failed in the first pass, a click worked in the second); recheck with a physical mouse.
+- **Fails that are product defects** for `bug-triage.md`: MENU-12, MENU-15 (clicking a menu row runs nothing), REOPEN-06, EXPORT-04/06/07 (no clipboard fallback on Excel on the web), SESS-18 (busy dot invisible on inactive tabs), RESUME-18 (picker list 28 px tall in a short pane).
+- **Explained:** RESUME-16's first-pass failures were the driver clicking outside the visible strip of a 28 px list (RESUME-18, a product defect).
 - **Suspected bugs confirmed:** SESS-03, SESS-09, SESS-15, SESS-16, TABS-08, TABS-22, TABS-23, TABS-28, RENAME-03, RENAME-04, RENAME-07, REOPEN-05, RESUME-07, RESUME-08, RESUME-17, EXPORT-05, MENU-06, MENU-09, MENU-13, MENU-14, HINTS-05.
-- **Blocked:** RENAME-09 and EXPORT-11 (Excel desktop) and RESUME-12 (needs a workbook identity); they go to a desktop pass.
+- **Blocked:** RENAME-09 and EXPORT-11 (Excel desktop), assigned to the Mac desktop thread.
 
 No document is marked verified: this was an automated pass, and the P1/P2 fails still need filing in `bug-triage.md`.
