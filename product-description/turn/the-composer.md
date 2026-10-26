@@ -38,9 +38,9 @@ stateDiagram-v2
 The text area accepts plain text of any length. There is no character limit and no counter. Typing, pasting and deleting all count as edits; each edit resizes the text area once.
 
 - **Auto-grow.** The text area starts one line high (at least 40 px; 34 px in a pane 520 px tall or less) and grows with its content up to 40% of the taskpane's height, or 28% in a pane 520 px tall or less. Past that it stops growing and scrolls inside itself. It shrinks again as text is deleted.
-- **Placeholders.** While the composer is empty and the tab is not responding, the placeholder cycles through four prompts, in this order, one every 8 seconds: "Ask about this workbook…", "Type / for commands…", "Have Pi edit this workbook…", "Summarize this workbook…". It does not advance while the composer has any text, even only spaces, or while the tab is responding; it resumes from where it was at the next 8-second tick. While the active tab is responding the placeholder is fixed at "Redirect reply (↵) · New question (⌥↵)". A tab that is busy but not responding (for example during `/compact`) shows the rotating placeholders.
+- **Placeholders.** While the composer is empty and the tab is not responding, the placeholder cycles through four prompts, in this order, one every 8 seconds: "Ask about this workbook…", "Type / for commands…", "Have Pi edit this workbook…", "Summarize this workbook…". It does not advance while the composer has any text, even only spaces, or while the tab is responding; it resumes from where it was at the next 8-second tick. While the active tab is responding the placeholder is fixed at "Redirect reply (↵) · New question (⌥↵)". The order and the 8-second interval were confirmed in Excel on the web. A tab that is busy but not responding (for example during `/compact`) shows the rotating placeholders.
 - **The send button.** Shown dimmed (and announced as disabled) when the draft is empty or only whitespace; full colour as soon as it contains a visible character. It is never truly disabled: clicking it while dimmed does nothing because there is nothing to send.
-- **Shift+Enter** inserts a newline. Enter with any other modifier (Ctrl/Cmd, Alt/Option) is treated as Enter while the tab is idle.
+- **Shift+Enter** inserts a newline. Enter with any other modifier (Ctrl/Cmd, Alt/Option) is treated as Enter while the tab is idle. Confirmed in Excel on the web: Shift+Enter between two lines, then Alt+Enter, sent both lines as one message.
 - **Paste.** Pasting text inserts it as typed text, newlines included. Pasting an image or a file does nothing: the composer has no attachments, and nothing pasted becomes an attachment or a file in the Files workspace. Images reach Pi only through tools and the [Files workspace](../files/the-files-workspace.md).
 - **The slash prefix.** When the draft starts with `/` and has no newline, the [command menu](../commands/the-command-menu.md) opens above the composer, filtered by what follows the slash. From then until it closes, the command menu owns the arrow keys, Enter, Tab and Escape. It closes when the draft gains a newline, stops starting with `/`, or matches no command.
 
@@ -51,13 +51,13 @@ The text area accepts plain text of any length. There is no character limit and 
 Enter (or the send button) ends without sending anything when:
 
 - **The draft is empty or whitespace.** Nothing happens. The whitespace stays in the composer.
-- **The draft starts with `/` and names a known command.** The command runs locally (or is queued, for `/compact`) and the composer clears. If the command is refused because the tab is busy ("Can't run /{command} while Pi is busy"), the draft is kept. See [the command menu](../commands/the-command-menu.md).
+- **The draft starts with `/` and names a known command.** The command runs locally (or is queued, for `/compact`) and the composer clears. If the command is refused because the tab is busy ("Can't run /{command} while Pi is busy"), the draft is usually lost: a one-word command such as `/model` has the command menu open, and Enter then runs it through the menu, which empties the composer before the refusal. Confirmed in Excel on the web with `/model`. Only when the menu is closed (arguments that match no menu entry, a newline) is the draft kept; read from code. See [the command menu](../commands/the-command-menu.md).
 - **The draft starts with `/` and names no known command, and the tab is idle.** Nothing happens and the draft stays, with no toast. (While the tab is responding the same text is steered to Pi as ordinary text; see [steering and the queue](steering-and-the-queue.md).)
 - **There is no active tab.** The toast says "No active session" and the composer clears. This only happens during startup or teardown.
 
 The leading slash check is on the raw text: a draft that starts with a space before the slash (" /model") is not a command and is sent to Pi as a message.
 
-Escape while the tab is idle and focus is in the composer is not a cancel: it moves focus out of the composer to the active tab in the tab strip and leaves the draft as it was. If the command menu is open, the first Escape closes the menu and keeps focus; the second moves focus out.
+Escape while the tab is idle and focus is in the composer is not a cancel: it moves focus out of the composer to the active tab in the tab strip and leaves the draft as it was (confirmed in Excel on the web; F2 brought focus back). If the command menu is open, the first Escape closes the menu and keeps focus; the second moves focus out.
 
 ### Sending
 
@@ -101,7 +101,7 @@ Changing a variant while drafting never touches the draft.
 | --- | --- | --- |
 | Stop (button or Escape) | There is no Stop button while idle. Escape with focus in the composer moves focus to the tab strip and keeps the draft; with the command menu open it closes the menu first. | Escape and the Stop button stop the turn; Escape also puts waiting steers, follow-ups and queued prompts back above the draft. See [stopping](stopping.md). |
 | The user sends something else | A known slash command runs and clears the composer. Clicking a starter hint replaces the whole draft with the hint's prompt, without sending. | Enter steers, Alt/Option+Enter follows up, Enter in a busy-but-not-responding tab queues. See [steering and the queue](steering-and-the-queue.md). |
-| Tab switched, created, closed or reopened | The draft stays in the composer and now belongs to whichever tab is active: pressing Enter sends it in the new tab. Confirmed in Excel on the web. | Same. The placeholder and send/Stop button follow the newly active tab's state. |
+| Tab switched, created, closed or reopened | The draft stays in the composer and now belongs to whichever tab is active: pressing Enter sends it in the new tab. Confirmed in Excel on the web. | Same. The placeholder and send/Stop button follow the newly active tab's state (confirmed in Excel on the web: switching from a responding tab to an idle one showed the send button and the rotating placeholder at once). |
 | An overlay or menu opens | The draft stays. Closing most overlays returns focus to the composer with the caret at the end. | Same. |
 | Model or thinking level changes | No effect on the draft. | No effect on the draft. |
 | The provider fails | Not applicable. | No effect on the draft. The error banner appears above the transcript. |
@@ -146,6 +146,7 @@ After any interrupt the draft is where it was, unless the taskpane was reloaded 
 - Dropping a folder imports the files the webview exposes for it, with their relative paths; a drop that yields no files shows "No files were imported."
 - Dropping files while a tab is responding imports them for every tab: the Files workspace is shared.
 - Clicking a starter hint discards the existing draft without asking.
+- A draft that makes the composer grow (several lines, or messages restored with Alt/Option+Up) takes height from the transcript, and that stops the transcript following new content until the user scrolls back to the bottom or sends. Confirmed in Excel on the web; see [sending and the response](sending-and-the-response.md#streaming).
 
 ## Open questions and verification
 
@@ -155,5 +156,7 @@ After any interrupt the draft is where it was, unless the taskpane was reloaded 
 - Whether desktop Excel's webviews deliver file drops from the Finder or Explorer to the taskpane has not been checked. What a drop outside the composer card does is up to the webview.
 - Pasting an image does nothing; read from code (no paste handler; attachments are never created, `src/messages/attachments.ts:8-12`). Not tried by hand.
 - The draft is lost on reload; read from code.
+- A busy-refused command typed with the command menu open loses the draft: the menu's run path clears the text area (`src/commands/command-menu.ts:31`) before `executeSlashCommand` returns `busy-blocked` (`src/taskpane/init.ts:1713-1716`), while the editor's own path keeps it (`src/taskpane/keyboard-shortcuts/editor-actions.ts:181-186`). Confirmed in Excel on the web: `/model` + Enter while responding showed "Can't run /model while Pi is busy" and left the composer empty. Looks like a bug.
+- Growing the composer turns off the transcript's auto-follow; see [sending and the response](sending-and-the-response.md#open-questions-and-verification).
 
 Verified against pi-for-excel commit `ec453df`.
