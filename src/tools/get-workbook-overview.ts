@@ -68,7 +68,7 @@ export function createGetWorkbookOverviewTool(): AgentTool<typeof schema> {
       try {
         const text = params.sheet
           ? await buildSheetDetail(params.sheet)
-          : await buildOverview();
+          : `${await buildOverview()}${await buildWorkbookStateNotes()}`;
         return {
           content: [{ type: "text", text }],
           details: undefined,
@@ -83,6 +83,36 @@ export function createGetWorkbookOverviewTool(): AgentTool<typeof schema> {
   };
 }
 
+/**
+ * Calculation mode and sheet protection for the workbook overview tool. Kept
+ * out of buildOverview() because that text is the cached blueprint, which only
+ * refreshes on structure changes; these change without one.
+ */
+async function buildWorkbookStateNotes(): Promise<string> {
+  return excelRun(async (context) => {
+    const application = context.workbook.application;
+    application.load("calculationMode");
+    const sheets = context.workbook.worksheets;
+    sheets.load("items/name");
+    await context.sync();
+    const protections = sheets.items.map((sheet) => {
+      sheet.protection.load("protected");
+      return { name: sheet.name, protection: sheet.protection };
+    });
+    await context.sync();
+
+    const lines: string[] = [];
+    if (application.calculationMode !== "Automatic") {
+      lines.push(`Calculation mode: ${application.calculationMode} (formula results may be stale until recalculated)`);
+    }
+    const protectedSheets = protections.filter((item) => item.protection.protected).map((item) => item.name);
+    if (protectedSheets.length > 0) {
+      lines.push(`Protected sheets: ${protectedSheets.join(", ")}`);
+    }
+    return lines.length > 0 ? `\n\n### Current state\n${lines.map((line) => `- ${line}`).join("\n")}` : "";
+  });
+}
+
 /** Build the full workbook overview. Also used by context injection. */
 export async function buildOverview(): Promise<string> {
   return excelRun(async (context) => {
@@ -95,16 +125,10 @@ export async function buildOverview(): Promise<string> {
     const names = wb.names;
     names.load("items/name,items/type,items/value,items/visible");
 
-    const application = wb.application;
-    application.load("calculationMode");
-
     await context.sync();
 
     const lines: string[] = [];
     lines.push(`## Workbook: ${wb.name}`);
-    if (application.calculationMode !== "Automatic") {
-      lines.push(`Calculation mode: ${application.calculationMode} (formula results may be stale)`);
-    }
     lines.push("");
     lines.push(`### Sheets (${sheets.items.length})`);
 
@@ -127,9 +151,6 @@ export async function buildOverview(): Promise<string> {
       const pivotTables = sheet.pivotTables;
       const pivotCount = pivotTables.getCount();
 
-      const protection = sheet.protection;
-      protection.load("protected");
-
       let shapes: Excel.ShapeCollection | null = null;
       try {
         shapes = sheet.shapes;
@@ -145,14 +166,13 @@ export async function buildOverview(): Promise<string> {
         : `${used.rowCount} rows × ${used.columnCount} cols`;
 
       const visibility = sheet.visibility === "Visible" ? "" : ` (${sheet.visibility})`;
-      const protectedNote = protection.protected ? " (protected)" : "";
 
       const headers = headerRange.isNullObject
         ? []
         : (headerRange.values[0] ?? []).filter((v) => v !== null && v !== undefined && v !== "");
 
       lines.push(
-        `${sheet.position + 1}. **${sheet.name}**${visibility}${protectedNote} — ${dims}`,
+        `${sheet.position + 1}. **${sheet.name}**${visibility} — ${dims}`,
       );
 
       if (headers.length > 0) {
