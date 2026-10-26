@@ -876,11 +876,11 @@ export function createRulesPage(): SettingsShellPage {
     render: async (ctx) => {
       const storage = getAppStorage();
       const workbookContext = await getWorkbookContext();
-      const workbookId = workbookContext.workbookId;
+      let workbookId = workbookContext.workbookId;
       const workbookLabel = formatWorkbookLabel(workbookContext);
 
       const initialUserDraft = (await getUserRules(storage.settings)) ?? "";
-      const initialWorkbookDraft = (await getWorkbookRules(storage.settings, workbookId)) ?? "";
+      let initialWorkbookDraft = (await getWorkbookRules(storage.settings, workbookId)) ?? "";
       const storedConventions = await getStoredConventions(storage.settings);
       const initialConventionsJson = serializeConventionsForDirtyCheck(storedConventions);
 
@@ -904,6 +904,7 @@ export function createRulesPage(): SettingsShellPage {
             activeTab = id;
             refreshTabUi();
           }
+          if (id === "workbook") void refreshWorkbookIdentity();
         },
       });
 
@@ -921,6 +922,32 @@ export function createRulesPage(): SettingsShellPage {
       conventionsContainer.className = "pi-conventions-container pi-conventions-container--page";
 
       ctx.body.append(segmented.root, workbookTag, hint, textarea, conventionsContainer);
+
+      // A never-saved workbook gets its identity when it is first saved, which
+      // can happen while this page is open. Re-read it and enable "This file".
+      const refreshWorkbookIdentity = async (): Promise<void> => {
+        if (workbookId) return;
+        const nextContext = await getWorkbookContext().catch(() => null);
+        if (!nextContext?.workbookId || workbookId) return;
+
+        workbookId = nextContext.workbookId;
+        initialWorkbookDraft = (await getWorkbookRules(storage.settings, workbookId)) ?? "";
+        workbookDraft = initialWorkbookDraft;
+        workbookTag.textContent = t("rules.workbook_tag", { label: formatWorkbookLabel(nextContext) });
+        refreshTabUi();
+      };
+      const onFocus = (): void => {
+        void refreshWorkbookIdentity();
+      };
+      const onVisibilityChange = (): void => {
+        if (document.visibilityState === "visible") void refreshWorkbookIdentity();
+      };
+      window.addEventListener("focus", onFocus);
+      document.addEventListener("visibilitychange", onVisibilityChange);
+      ctx.addCleanup(() => {
+        window.removeEventListener("focus", onFocus);
+        document.removeEventListener("visibilitychange", onVisibilityChange);
+      });
 
       // ── Footer: counter + Cancel/Save ──
       const footer = document.createElement("div");
@@ -1040,6 +1067,7 @@ export function createRulesPage(): SettingsShellPage {
       saveBtn.addEventListener("click", () => {
         void (async () => {
           saveActiveDraft();
+          await refreshWorkbookIdentity();
 
           // Write only what the user changed, so a rule or convention Pi saved
           // while this page was open survives. If Pi changed the same thing,
