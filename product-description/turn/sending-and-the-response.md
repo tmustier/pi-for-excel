@@ -75,7 +75,7 @@ The answer streams into the streaming area below the last message. Text is rende
 
 While streaming, the user can scroll, switch tabs, open overlays, change the thinking level, steer, follow up and stop. Changing the model is refused ("Wait for this tab to finish before changing models").
 
-**Scrolling.** The transcript follows new content: every time the content grows, it scrolls to the bottom. Scrolling up by more than about 32 px from the bottom stops this, so the user can read earlier messages while Pi keeps writing below. Scrolling back to within about 20 px of the bottom resumes it. Sending a new message always resumes it; steering does not. Inside the streaming answer, an expanded thinking block or tool card body that has its own scroll area follows its own bottom in the same way, independently of the transcript: scrolling up inside one stops it following until the user scrolls back to its bottom.
+**Scrolling.** The transcript follows new content: every time the content grows, it scrolls to the bottom. Scrolling up by more than 32 px from the bottom stops this, so the user can read earlier messages while Pi keeps writing below. Scrolling back to within 20 px of the bottom resumes it. Sending a new message always resumes it; steering does not. Confirmed in Excel on the web: 30 px up kept following, 34 px stopped it, 25 px and 21 px stayed stopped, 19 px resumed it. Anything that makes the composer taller (a multi-line draft, messages restored with Alt/Option+Up) also stops it, because the transcript loses height; after an Alt/Option+Up restore and a steer, the rest of the turn streamed below the visible area. Inside the streaming answer, an expanded thinking block or tool card body that has its own scroll area follows its own bottom in the same way, independently of the transcript: scrolling up inside one stops it following until the user scrolls back to its bottom.
 
 ### The working indicator
 
@@ -85,7 +85,7 @@ The line between the transcript and the composer, shown while the active tab is 
 - **Right text.** A hint picked at random when the indicator starts, then a different random one every 4.5 seconds: "Press Esc to stop", "⇧Tab to adjust reasoning depth", "Type / for commands", "⌃O to collapse tool details", "Press Enter to redirect Pi".
 - **Fixed mode.** When the active tab is busy but not responding and a labeled action runs (compaction), the line instead shows a pill with a spinner and fixed text, "Compacting context…", with the hint "Send messages and Pi will see them after compaction". Nothing rotates. When compaction happens *between model responses* the tab is responding, so the normal rotating line is shown instead of the label.
 
-The indicator starts fresh ("Working…") each time the active tab goes from idle to responding. It belongs to the active tab: switching to a responding tab shows it, switching to an idle tab hides it.
+The indicator starts fresh ("Working…") each time the active tab goes from idle to responding. Confirmed in Excel on the web: the first phrase replaced "Working…" about 1.25 seconds after the send, and the first hint varied between turns ("Press Esc to stop", "Type / for commands", "⇧Tab to adjust reasoning depth", "⌃O to collapse tool details"). It belongs to the active tab: switching to a responding tab shows it, switching to an idle tab hides it.
 
 ### Finishes
 
@@ -98,7 +98,7 @@ A turn ends in one of three ways; [turns](../foundations/turns.md#finishes) defi
     - a network failure that looks like a blocked cross-origin request ("Failed to fetch", "Load failed", "NetworkError", "CORS"): "Network error (likely CORS). If you're using OAuth, enable /settings → Proxy with {proxy URL} and retry. Guide: {docs link}";
     - anything else: "LLM error: {reason}".
 
-  An error whose text contains "abort" or "cancel" is treated as an abort and shows no banner. The banner has no close button. It is cleared when a user message starts in the active tab, when the user sends, and when a later run in the active tab ends without error. It is not cleared by switching tabs, and a tab that fails in the background never shows one.
+  An error whose text contains "abort" or "cancel" is treated as an abort and shows no banner. The banner has no close button. It is cleared when a user message starts in the active tab, when the user sends, and when a later run in the active tab ends without error. It is not cleared by switching tabs, and a tab that fails in the background never shows one. Confirmed in Excel on the web with simulated provider errors.
 
 If a queued prompt or command is waiting in the tab's action queue when the turn ends, it starts next and the tab stays busy.
 
@@ -162,6 +162,7 @@ After the turn, the user is in the same tab with the composer focused, unless th
 - A very fast answer can finish before the first phrase rotation, so the user only ever sees "Working…".
 - The working hint at the start is random; "Press Esc to stop" is not guaranteed to appear first.
 - If the user has scrolled up, new content does not pull them down, and nothing tells them more has arrived until they scroll back.
+- Typing a multi-line draft or restoring queued messages with Alt/Option+Up while Pi is writing makes the transcript stop following, though the user never scrolled.
 - Switching tabs does not reset the scroll-follow state: a tab switched to while the user had scrolled up in another tab may not jump to its bottom.
 - Sending while an error banner is showing clears it immediately, before the new turn has a result.
 - An error banner from one tab stays visible after switching to a tab that is fine.
@@ -176,6 +177,9 @@ After the turn, the user is in the same tab with the composer focused, unless th
 - Mid-turn compaction (between model responses) shows the normal rotating line instead of "Compacting context…", because the fixed label is only used when the tab is not responding (`src/ui/pi-sidebar.ts:726-730`). Read from code; probably unintentional.
 - The error banner is one per taskpane and sits above the tab strip (`#error-root` in `src/taskpane.html:35`), so it is not visually tied to a tab. Read from code.
 - The working-indicator source comment says hints start with "escape to interrupt", but the first hint is random (`src/ui/working-indicator.ts:86`). Read from code.
-- The rotation timings (1 s, 6 s, 4.5 s, 250 ms fade) are read from code. The stop-before-any-text case ("Request aborted" alone) was confirmed in Excel on the web.
+- The rotation timings (1 s, 6 s, 4.5 s, 250 ms fade) are read from code; in Excel on the web the first phrase appeared about 1.25 s after the send (1 s plus the fade). The stop-before-any-text case ("Request aborted" alone) was confirmed in Excel on the web.
+- Growing the composer turns off auto-follow. With the transcript at its bottom, five Shift+Enter lines in the composer left the transcript 97 px above its bottom with following off; Alt/Option+Up restoring two messages did the same mid-turn. The scroll listener (`src/ui/pi-sidebar.ts:524-528`) evidently sees the shrink as the user scrolling up; the exact sequence was not traced. Looks like a bug: the user did nothing to ask for it, and the steer that follows does not turn following back on.
+- Confirmed in Excel on the web: the user message appears, the Stop button, busy dot and "Redirect reply (↵) · New question (⌥↵)" placeholder appear at once, and all go when the turn ends; a provider error (simulated by making the request throw) shows "Error: {reason}" in red in the transcript and "LLM error: {reason}" above the tab strip; sending clears the banner.
+- Taking the network away (CDP offline emulation for 8 s) during a streaming answer did not fail it: the answer finished normally. The ChatGPT provider in use may stream over a connection the emulation does not cut. What a real network loss does was not checked.
 
 Verified against pi-for-excel commit `ec453df`.
