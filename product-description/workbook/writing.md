@@ -149,8 +149,8 @@ After any interrupt, changes already applied stay in the workbook; the transcrip
 ## Open questions and verification
 
 - Checked by hand in Excel on the web (orb session, `ec453df`), 26 October 2026: write cells (receipt, "Changes" table with "∅", verification, "Explain these changes" with "Explanation uses a bounded metadata sample."), overwrite protection, format cells, view settings, modify structure, grouping, and Stop during parallel writes. See [the workbook checklist](../verification/workbook.md#workbookwritingmd). Fill formula, conditional formats, comments and charts were not run.
-- A write that overwrite protection blocks still goes through Confirm mode's approval and the lock, so the user can approve a change that then does not happen. Probably a product call. Not run by hand.
-- Whether `fill_formula` (Excel's AutoFill "FillDefault") also copies formats on every host, and whether reverting it leaves them, has not been checked.
+- **Confirmed.** A write that overwrite protection blocks still goes through Confirm mode's approval and the lock: the user clicked "Allow once" and the card then said "— blocked". Probably a product call. WRITE-10.
+- **Confirmed on the web.** `fill_formula` copies the top-left cell's fill and bold across the range, and `/revert` clears the formulas but leaves the copied formats. Desktop not checked. WRITE-12.
 - Partial failures inside `format_cells` (some properties applied before an error) leave changes with no backup. Read from code.
 
 Verified against pi-for-excel commit `ec453df`.
