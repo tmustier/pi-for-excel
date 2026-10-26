@@ -20,7 +20,7 @@ stateDiagram-v2
     responding --> stopping : Stop button (queue left as is)
     responding --> stopping : Escape (waiting messages back in composer, commands dropped)
     stopping --> waiting_tool : a tool or approval is still running (Stop button stays)
-    waiting_tool --> aborted : tool returns ("Request aborted")
+    waiting_tool --> aborted : tool returns ("Error: signal is aborted without reason")
     stopping --> aborted : streaming ends ("Request aborted", partial kept)
     aborted --> idle : nothing queued
     aborted --> next_item : Stop button with a queued prompt or command (it starts)
@@ -36,10 +36,10 @@ stateDiagram-v2
 
 - the [command menu](../commands/the-command-menu.md) (Escape closes it);
 - the [utilities menu](../ui/the-utilities-menu.md) and the [status-bar popovers](../ui/the-status-bar.md) (thinking level, execution mode, context);
-- any overlay: settings, the model picker, the resume picker, the Files workspace, the Backups dialog, confirm and approval dialogs, text-input dialogs, the "Connect {provider}" dialog, the welcome screen. Escape first leaves a text field inside the overlay, then closes the overlay. Confirmed in Excel on the web with the Files workspace: Escape closed it and Pi kept responding;
+- any overlay: settings, the model picker, the resume picker, the Files workspace, the Backups dialog, confirm and approval dialogs, text-input dialogs, the "Connect {provider}" dialog, the welcome screen. Escape first leaves a text field inside the overlay, then closes the overlay. Confirmed in Excel on the web with the Files workspace (opened with `/files` while Pi was responding, focus still in the composer): Escape closed it and Pi kept responding;
 - an extension widget shown above the composer.
 
-The [tab context menu](../glossary.md#the-taskpane) does not claim Escape: Escape with it open stops the turn and leaves the menu open. Escape with focus in the Excel grid goes to Excel, not to Pi.
+The [tab context menu](../glossary.md#the-taskpane) does not claim Escape: Escape with it open stops the turn and leaves the menu open; a second Escape closes it. Confirmed in Excel on the web, as was the thinking-level popover claiming Escape (it closed and Pi kept responding). Escape with focus in the Excel grid goes to Excel, not to Pi.
 
 A second Escape after a claiming surface has closed stops the turn.
 
@@ -66,11 +66,11 @@ Stop cannot be undone. The stopped model response is not resumed; to continue, t
 | Stage when Stop is triggered | What the user sees |
 | --- | --- |
 | Before the first token (auto-context, request in flight) | The answer area under the user message shows only "Request aborted". Confirmed in Excel on the web. |
-| While text streams | The text stops where it was, followed by "Request aborted", within a fraction of a second (about 350 ms in Excel on the web). |
+| While text streams | The text stops where it was, followed by "Request aborted", within a fraction of a second (about 350 ms in Excel on the web). Confirmed again with Escape. |
 | While thinking | The thinking block keeps what had streamed, followed by "Request aborted"; see [thinking](thinking.md). |
 | While the model is writing a tool call | The tool never runs. Its card is shown as failed with no output. |
-| While a tool runs | Pi waits for the tool. Reads and writes already handed to Excel complete; the Stop button and working indicator stay until the tool returns. Other tool calls of the same batch that had not started are marked failed ("Operation aborted"). Then a new, empty answer marked "Request aborted" appears. A write that completed stays in the workbook and has an [automatic backup](../workbook/backups-and-revert.md). |
-| While an approval dialog is open (Confirm mode) | The Stop button is under the dialog's backdrop and Escape closes the dialog, both of which decline the change: the tool call fails with "Mutation cancelled by user (Confirm mode).", Pi sees the failure, and the turn **continues**. Press Escape (or Stop) again to stop. See [confirm mode and approvals](../workbook/confirm-mode-and-approvals.md). |
+| While a tool runs | Pi waits for the tool. Reads and writes already handed to Excel complete; the Stop button and working indicator stay until the tool returns. Other tool calls of the same batch that had not started are marked failed ("Operation aborted"). Then a new, empty answer appears with the red line "Error: signal is aborted without reason", not "Request aborted"; there is no banner. Confirmed in Excel on the web with a 12-second Office.js call, with the Stop button and with Escape: the card kept its result, and the error line appeared about 11 s after the stop. A write that completed stays in the workbook and has an [automatic backup](../workbook/backups-and-revert.md). |
+| While an approval dialog is open (Confirm mode) | The Stop button is under the dialog's backdrop and Escape closes the dialog, both of which decline the change: the tool call fails with "Mutation cancelled by user (Confirm mode).", Pi sees the failure, and the turn **continues** (confirmed in Excel on the web with Escape). Press Escape (or Stop) again to stop. See [confirm mode and approvals](../workbook/confirm-mode-and-approvals.md). |
 | While the "Connect {provider}" dialog is open | Same: Escape or the backdrop closes the dialog, the banner says "API key required for {provider}.", and the turn fails instead of being stopped. |
 | While Pi compacts between model responses | The Stop button is shown, but compaction is not interrupted: the turn ends "Request aborted" only after compaction finishes. |
 | While a queued `/compact` or pre-prompt compaction runs | Cannot be stopped (see [Ends at once](#ends-at-once)). |
@@ -79,18 +79,18 @@ Stop cannot be undone. The stopped model response is not resumed; to continue, t
 
 | Waiting item | Stop button | Escape |
 | --- | --- | --- |
-| Steers and follow-ups | Their rows leave the queue strip when the turn ends, but Pi keeps them and delivers them, unasked, in the next turn the user starts in this tab. Confirmed in Excel on the web. If Stop came while a tool was running, the oldest steer is added to the transcript just before "Request aborted", unanswered. | Put back into the composer, oldest first, above the draft, separated by blank lines, and removed from Pi's queue. Confirmed in Excel on the web. No toast. |
+| Steers and follow-ups | Their rows leave the queue strip when the turn ends, but Pi keeps them and delivers them, unasked, in the next turn the user starts in this tab. Confirmed in Excel on the web. If Stop came while a tool was running, the oldest steer is added to the transcript just before the ending, unanswered (confirmed in Excel on the web). | Put back into the composer, oldest first, above the draft, separated by blank lines, and removed from Pi's queue. Confirmed in Excel on the web. No toast. |
 | Queued prompts | Stay queued; the first starts as soon as the stopped turn has ended, as a new turn (and picks up any stranded steers). | Put back into the composer after the steers and follow-ups. |
-| Queued commands (`/compact`) | Stay queued and run next. | Dropped, with no toast. |
+| Queued commands (`/compact`) | Stay queued and run next (confirmed in Excel on the web: "Nothing to compact" right after the stop). | Dropped, with no toast (confirmed in Excel on the web). |
 | Text in the composer | Unchanged. | Kept, below the restored text; focus moves to the composer if anything was restored. |
 
 See [steering and the queue](steering-and-the-queue.md#delivered-restored-or-stranded) for what "stranded" means and how restored text is sent.
 
 ### After stopping
 
-The stopped model response stays in the transcript, as far as it got, with "Request aborted" under it. Tool cards that finished keep their results; tool cards with no result are shown as failed. No error banner is shown, and a banner left from an earlier run is not cleared by the stop. The tab is idle unless a queued prompt or command was left to run (Stop button). The stopped response is saved like any completed message once the session has had a first answer; see [persistence and restore](../cross-cutting/persistence-and-restore.md).
+The stopped model response stays in the transcript, as far as it got, with "Request aborted" under it (or, after a stop during a tool, an empty response with "Error: signal is aborted without reason"). Tool cards that finished keep their results; tool cards with no result are shown as failed. No error banner is shown, and a banner left from an earlier run is not cleared by the stop. The tab is idle unless a queued prompt or command was left to run (Stop button). The stopped response is saved like any completed message once the session has had a first answer; see [persistence and restore](../cross-cutting/persistence-and-restore.md).
 
-**Stopping a background tab.** Stop and Escape act on the active tab only. To stop a tab that is responding in the background, switch to it and stop it there, or close it: its close button (or Ctrl/Cmd+W when it is active) asks "Stop and close this tab?" ("Pi is still responding in this tab. Stop and close it?") with "Stop and close" and "Keep open". "Stop and close" stops the turn like the Stop button, saves the session and closes the tab, with the usual "Closed {title} · Undo" toast. A tab whose write currently holds the [workbook lock](../foundations/the-workbook.md) cannot be closed ("Wait for workbook changes to finish before closing this tab"), so a tab in the middle of a write can only be stopped by switching to it. A tab that is busy only compacting closes without asking.
+**Stopping a background tab.** Stop and Escape act on the active tab only. To stop a tab that is responding in the background, switch to it and stop it there, or close it: its close button (or Ctrl/Cmd+W when it is active) asks "Stop and close this tab?" ("Pi is still responding in this tab. Stop and close it?") with "Stop and close" and "Keep open". "Stop and close" stops the turn like the Stop button, saves the session and closes the tab, with the usual "Closed {title} · Undo" toast. A tab whose write currently holds the [workbook lock](../foundations/the-workbook.md) cannot be closed: its close button is disabled, with the tooltip "Wait for workbook changes to complete" (Ctrl/Cmd+W shows "Wait for workbook changes to finish before closing this tab", read from code), so a tab in the middle of a write can only be stopped by switching to it. Confirmed in Excel on the web: clicking × during a held write did nothing, and "Stop and close" on a responding background tab closed it with "Closed Chat 5 · Undo"; Undo brought it back (as "Chat 6") with the user message and "Request aborted", although Pi had never answered in it. A tab that is busy only compacting closes without asking.
 
 ## Modifiers
 
@@ -157,9 +157,10 @@ After a stop the user is in the same tab, idle or running the next queued item, 
 
 - The Stop button strands steers and follow-ups (`sidebar.onAbort`, `src/taskpane/init.ts:1734-1739`, only calls `agent.abort()`; Escape calls `restoreQueuedMessagesToEditor` first, `src/taskpane/keyboard-shortcuts.ts:258-265`). Confirmed in Excel on the web: after Stop with a steer and a follow-up waiting, the next turn delivered both. This is a bug; [steering and the queue](steering-and-the-queue.md#open-questions-and-verification) has the details.
 - Generic overlay dialogs do claim Escape: `createOverlayDialog` gives every overlay the class `pi-welcome-overlay` and `data-claims-escape="true"` (`src/ui/overlay-dialog.ts:192`, `src/ui/overlay-escape.ts:31`), which matches the first selector in `src/utils/escape-guard.ts:9`. Settings uses the same class (`src/ui/settings-shell.ts:280`). Confirmed in Excel on the web with the Files workspace. This contradicts the established note in `goal.md` and the Stop table in [turns](../foundations/turns.md#stop), which say generic overlays do not claim Escape. Only the tab context menu does not.
-- With the Stop button during a running tool, the loop polls one steer after the tool batch and adds it to the transcript before the aborted response (`agent-loop.js`, `runLoop`: `getSteeringMessages` after `turn_end`, then `streamAssistantResponse` with the aborted signal). Read from code, not confirmed.
+- With the Stop button during a running tool, the loop polls one steer after the tool batch and adds it to the transcript before the aborted response (`agent-loop.js`, `runLoop`: `getSteeringMessages` after `turn_end`, then `streamAssistantResponse` with the aborted signal). Confirmed in Excel on the web: "Then say BANANA." joined the transcript after the Office.js card, followed by the error line.
+- A stop during a running tool ends with "Error: signal is aborted without reason" (`stopReason: "error"`, red) instead of "Request aborted": the loop's next request is made with the already-aborted signal and the provider rejects it with the browser's abort error (`agent-loop.js`, `runLoop`, then `streamAssistantResponse`). The banner is suppressed only because the text contains "abort". Confirmed in Excel on the web with both triggers. Looks like a bug: a deliberate stop reads as an error.
 - A stop during an approval waits for the dialog; the dialog itself has no cancel tied to the stop (`requireMutationApprovalIfNeeded` in `src/tools/with-workbook-coordinator.ts:118-137` takes no signal, and `throwIfAborted` runs after approval). Read from code.
-- Compaction ignores Stop: `runCompactCommand` is called without the agent's abort signal (`src/taskpane/action-queue.ts:85-92`, `:71-81`). Read from code.
+- Compaction ignores Stop: `runCompactCommand` is called without the agent's abort signal (`src/taskpane/action-queue.ts:85-92`, `:71-81`). Confirmed in Excel on the web for `/compact`: no Stop button, and Escape only moved focus to the tab strip. Stop during a mid-turn auto-compaction was not tried.
 - Whether a write already sent to Excel completes after Stop has not been confirmed by hand; the coordinator checks for a stop only before starting the write (`src/tools/with-workbook-coordinator.ts:173-183`).
 - Closing a tab that is busy only compacting does not ask for confirmation (`src/taskpane/init.ts:1321`, which checks only `isStreaming`); what happens to the compaction has not been checked.
 - Whether Excel desktop delivers Escape to the taskpane in every focus state has not been checked.
