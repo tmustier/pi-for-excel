@@ -119,6 +119,8 @@ When a fix PR merges, revise the affected documents to its behavior and update t
 
 - [#786](https://github.com/tmustier/pi-for-excel/pull/786) transcript (`fix-transcript`): a response is drawn once; parallel tool cards finish individually and groups update live; Ctrl/Cmd+O details mode starts collapsed, covers cards, thinking blocks and groups (new, re-rendered, other tabs), is saved in localStorage, hand toggles override one item until the next press, toast "Details expanded/collapsed (⌘O | Ctrl+O)", listed on the Shortcuts page; collapsed groups hide cards (3+ start collapsed, 2 expanded), only user-chosen states remembered; "Thinking…" only while the block streams, finished block "Thought for {duration}" when seen live, "Thought" when restored, header is a button with aria-expanded; fences like c++/f#/objective-c keep the code bar; a single newline is a line break; failed cell link toast "Couldn't go to {address}: {reason}". Affects turn/tool-calls.md, turn/thinking.md, ui/message-rendering.md, ui/keyboard-shortcuts.md.
 
+- [#787](https://github.com/tmustier/pi-for-excel/pull/787) agent reads (`agent-reads`): large reads page through a "Next page" range (at most 500 rows or 2,500 cells), search and sheet overview work on big sheets, values are shown as displayed (stored value in brackets when hidden), and read results note manual calculation, protection, filters, tables, merges, spills and validation. Fixes agent-description B-05, B-07 (reads), B-11, B-13, B-15, B-17.
+
 ## Order of work
 
 1. `sessions/renaming-a-tab.md` (pilot), then `foundations/` in this order: `the-taskpane.md`, `turns.md`, `sessions-and-tabs.md`, `the-workbook.md`, `models-and-providers.md`. Everything else links to them.
