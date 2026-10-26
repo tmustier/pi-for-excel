@@ -10,7 +10,12 @@ import {
   PROXY_HELPER_DOCS_URL,
   validateOfficeProxyUrl,
 } from "../../../auth/proxy-validation.js";
-import { checkProxyOnce, getProxyState, type ProxyState } from "../../../taskpane/proxy-status.js";
+import {
+  checkProxyOnce,
+  getProxyState,
+  isProxyBlockedByBrowser,
+  type ProxyState,
+} from "../../../taskpane/proxy-status.js";
 import { needsRemoteProxyWarning, saveTaskpaneProxyUrl } from "../../../taskpane/settings.js";
 import { t } from "../../../language/index.js";
 import {
@@ -50,6 +55,14 @@ function resolveProxyCallout(args: {
       tone: "success",
       icon: "✓",
       message: t("settings.proxy.connected", { url: args.proxyUrl }),
+    };
+  }
+
+  if (args.state === "not-detected" && isProxyBlockedByBrowser()) {
+    return {
+      tone: "warn",
+      icon: "⚠",
+      message: t("settings.section.proxy.blocked_by_browser", { url: args.proxyUrl }),
     };
   }
 

@@ -169,7 +169,7 @@ export function validateOfficeProxyUrl(url: string): string {
   return normalized;
 }
 
-function isLoopbackHostname(hostname: string): boolean {
+export function isLoopbackHostname(hostname: string): boolean {
   const h = hostname.toLowerCase();
   if (h === "localhost") return true;
   if (h === "::1" || h === "0:0:0:0:0:0:0:1") return true;

@@ -194,7 +194,7 @@ import {
   STATUS_CONTEXT_WARNING_ATTR,
   STATUS_CONTEXT_WARNING_SEVERITY_ATTR,
 } from "./status-context.js";
-import { getProxyState, startProxyPolling } from "./proxy-status.js";
+import { getProxyState, isProxyBlockedByBrowser, startProxyPolling } from "./proxy-status.js";
 import {
   closeStatusPopover,
   toggleContextPopover,
@@ -2211,7 +2211,7 @@ export async function initTaskpane(opts: {
     if (host && messagesContainer) {
       const proxyBanner = createProxyBanner();
       host.insertBefore(proxyBanner.root, messagesContainer);
-      proxyBanner.update(getProxyState());
+      proxyBanner.update(getProxyState(), isProxyBlockedByBrowser());
 
       document.addEventListener("pi:proxy-state-changed", (event: Event) => {
         if (!(event instanceof CustomEvent)) return;
@@ -2219,7 +2219,7 @@ export async function initTaskpane(opts: {
         if (!isTaskpaneInitPayloadShape(detail)) return;
         const state = detail.state;
         if (state === "detected" || state === "not-detected" || state === "unknown") {
-          proxyBanner.update(state);
+          proxyBanner.update(state, isProxyBlockedByBrowser());
         }
       });
     }
