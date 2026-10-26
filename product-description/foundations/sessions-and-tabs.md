@@ -2,7 +2,7 @@
 
 ## Summary
 
-A session is one saved conversation with Pi. A session tab is a session that is open in the taskpane's tab strip. This document owns what each of them is and how they relate: what a session stores, what each tab owns and what all tabs share, how tabs are labeled, how the busy dot and "Locking…" appear on a tab, how a session is linked to a workbook, how the product works out which workbook it is in, and what the taskpane restores when it opens. The tab operations themselves are described in [tabs](../sessions/tabs.md), [renaming a tab](../sessions/renaming-a-tab.md), [reopening closed tabs](../sessions/reopening-closed-tabs.md) and [resuming a session](../sessions/resuming-a-session.md). What is saved and when is owned by [persistence and restore](../cross-cutting/persistence-and-restore.md). Tabs and sessions need no provider and work the same on every host. The only exception is that workbook identity can be unknown for a workbook that has never been saved (see [Workbook links and workbook identity](#workbook-links-and-workbook-identity)).
+A session is one saved conversation with Pi. A session tab is a session that is open in the taskpane's tab strip. This document owns what each of them is and how they relate: what a session stores, what each tab owns and what all tabs share, how tabs are labeled, how the busy dot and "Locking…" appear on a tab, how a session is linked to a workbook, how the product works out which workbook it is in, and what the taskpane restores when it opens. The tab operations themselves are described in [tabs](../sessions/tabs.md), [renaming a tab](../sessions/renaming-a-tab.md), [reopening closed tabs](../sessions/reopening-closed-tabs.md) and [resuming a session](../sessions/resuming-a-session.md). What is saved and when is owned by [persistence and restore](../cross-cutting/persistence-and-restore.md). Tabs and sessions need no provider and work the same on every host. The only exception is that workbook identity can be unknown: for a workbook that has never been saved on desktop, and, as seen in this project's Excel on the web session, for a workbook Excel on the web reports no address for (see [Workbook links and workbook identity](#workbook-links-and-workbook-identity)).
 
 ## The simple case
 
@@ -34,7 +34,7 @@ Each tab is an independent conversation. Switching tabs swaps everything in the 
 | Lock state ("Locking…") | The "Compacting context…" label in the working indicator |
 | Default number and chosen title | Files workspace, rules, settings, connections |
 
-**The composer is not per tab.** The taskpane has one composer, and switching tabs does not change what is in it. A draft typed in "Chat 1" is still in the composer after switching to "Chat 2", and Enter sends it to "Chat 2". The draft is not saved anywhere and is lost when the taskpane reloads. This was confirmed in the standalone taskpane. The glossary and [turns](turns.md) say otherwise; see [Open questions](#open-questions-and-verification).
+**The composer is not per tab.** The taskpane has one composer, and switching tabs does not change what is in it. A draft typed in "Chat 1" is still in the composer after switching to "Chat 2", and Enter sends it to "Chat 2". The draft is not saved anywhere and is lost when the taskpane reloads. Confirmed in Excel on the web: a draft stayed in the composer across tab switches and new tabs, and a reload left the composer empty.
 
 A new tab starts with an empty transcript and a new session. It takes its model from the tab that was active when it was created, or the default model if there was none. Its thinking level is not inherited: it starts at High if the model can reason, and Off otherwise.
 
@@ -64,7 +64,7 @@ While a tab's mutation holds the lock, its × button is disabled with the toolti
 
 **Workbook identity.** Pi identifies a workbook by the address Excel reports for the open file: its URL on OneDrive or SharePoint, or its file path on disk. Pi removes any query string or fragment from the address and stores only a SHA-256 hash of it. The raw address is never stored. The identity is read again whenever the taskpane gains focus or becomes visible, so a workbook that is saved for the first time during a session gets an identity from then on.
 
-The identity is unknown when Excel reports no address. That happens for a new workbook that has never been saved, in the standalone taskpane outside Excel, and when the host does not answer within 3 seconds and has no earlier answer. A renamed, moved or "Save As" copy of a file has a different address, so it gets a new identity. Pi treats it as a different workbook.
+The identity is unknown when Excel reports no address. That happens for a new workbook that has never been saved, in the standalone taskpane outside Excel, and when the host does not answer within 3 seconds and has no earlier answer. It also happened in Excel on the web for a OneDrive workbook opened through an "anyone with the link can edit" folder link while signed out: Excel reported an empty address both when the add-in started and when asked again, so that workbook had no identity, every session stayed unlinked, and the shared layout was used. Whether a signed-in user's workbook on Excel on the web reports an address has not been checked. A renamed, moved or "Save As" copy of a file has a different address, so it gets a new identity. Pi treats it as a different workbook.
 
 Where the product shows which workbook it means (the resume picker), it uses the file name, then "Workbook ({first 18 characters of the identity}…)", then "Current workbook".
 
@@ -114,7 +114,7 @@ There is no visible progress. The tabs appear together once they are all loaded.
 
 ### Restored
 
-The user lands on the active tab with focus in the composer. Every tab is idle with an empty queue. The composer is empty, and no error banner is shown. Labels are "Chat 1", "Chat 2"… in strip order. A turn that was running when the taskpane went away is not resumed: messages that had completed are there, and the model response that was streaming is gone. The layout is written straight away.
+The user lands on the active tab with focus in the composer. Every tab is idle with an empty queue. The composer is empty, and no error banner is shown. Labels are "Chat 1", "Chat 2"… in strip order. Confirmed in Excel on the web: tabs labeled "Q3 budget" and "Chat 14" came back as "Chat 1" and "Chat 2", the second still active, and the draft was gone. A turn that was running when the taskpane went away is not resumed: messages that had completed are there, and the model response that was streaming is gone. The layout is written straight away.
 
 ## Modifiers
 
@@ -125,7 +125,7 @@ The user lands on the active tab with focus in the composer. Every tab is idle w
 | Execution mode | Shared by all tabs. It does not affect restore. | A change applies to every tab's next mutation. |
 | Files in the workspace, or an overlay open | Files are shared by all tabs. No overlay can be open during restore. | No effect on tabs. |
 | Tab state (new, restored, another tab busy) | Described above. Another tab being busy never blocks creating, switching or restoring. | Each tab's busy state is its own. |
-| Host (desktop or web) | On Excel on the web every workbook has an address, so its identity is known. On desktop, a never-saved workbook has no identity and uses the shared layout. | No effect. |
+| Host (desktop or web) | On desktop, a never-saved workbook has no identity and uses the shared layout. On Excel on the web the identity depends on whether Excel reports an address: in this project's signed-out guest session it did not, so the workbook had no identity and used the shared layout. | No effect. |
 
 Changing a variant affects only the tab it belongs to, except execution mode, which is shared.
 
@@ -135,12 +135,12 @@ In this table, "Before sent" means a tab that is idle and "While busy" means a t
 
 | Event | Before sent | While busy |
 | --- | --- | --- |
-| Stop (button or Escape) | Escape with focus in the composer moves focus to the active tab in the strip. | Stops only the active tab's turn; other busy tabs carry on. See [turns](turns.md#stop). |
+| Stop (button or Escape) | Escape with focus in the composer moves focus to the active tab in the strip (confirmed in Excel on the web). | Stops only the active tab's turn; other busy tabs carry on. See [turns](turns.md#stop). |
 | The user sends something else | The text goes to whichever tab is active at that moment, including a draft typed in another tab. | Enter steers the active tab only. |
 | Tab switched, created, closed or reopened | Switching swaps everything a tab owns, but not the composer. | A busy tab keeps running in the background with its busy dot. Closing it while responding asks "Stop and close this tab?". |
 | An overlay or menu opens | No effect on tabs. | Turns keep running behind it. |
 | Model or thinking level changes | Affects the active tab only. | Model change refused for that tab. |
-| The provider fails | No effect on tabs. | Fails that tab's turn only. The banner is shared; see [turns](turns.md). |
+| The provider fails | No effect on tabs. | Fails that tab's turn only. The banner is shared: confirmed in Excel on the web, a failed turn's banner stayed up after switching to an idle tab. See [turns](turns.md). |
 | The taskpane goes away | The tab layout is already saved. The composer draft and chosen titles are lost. | Completed messages are kept, and the streaming model response is lost. A session Pi had never answered is not saved, but its tab comes back blank. |
 | The workbook changes underneath | Saving the workbook under a new name changes its identity. From the next focus, the layout and new links go to the new identity. | Same. Mutations keep queuing for the shared lock. |
 | Focus moves to the grid or another window | No effect. On return, the identity is read again. | Turns keep running. |
@@ -188,15 +188,19 @@ In this table, "Before sent" means a tab that is idle and "While busy" means a t
 - Every never-saved workbook on one machine shares one tab layout, so a new "Book2" opens with the tabs left in "Book1" if Book1 was never saved.
 - Copies of one file opened from different paths, such as a synced local folder and the web, have different identities.
 - There is no limit on the number of tabs or saved sessions.
+- A duplicated tab uses up a default number even though its label is "{title} copy": after duplicating "Chat 11", the next new tab was "Chat 13". Confirmed in Excel on the web.
 
 ## Open questions and verification
 
-- The composer is shared by all tabs. A draft follows the user to another tab and is sent there. Confirmed in the standalone taskpane: text typed in "Chat 1" was still in the composer after "+" opened "Chat 2". This contradicts the glossary ("Each tab has its own … composer text") and [turns](turns.md) ("The composer text is the tab's own; switching tabs swaps it"). The cause is that `src/ui/pi-sidebar.ts` renders a single `pi-input` and `src/taskpane/runtime-sidebar-binding.ts:15-44` swaps only the agent and queue display. This may be worth treating as a bug.
+- The composer is shared by all tabs. A draft follows the user to another tab and is sent there. Confirmed in Excel on the web (SESS-03). The cause is that `src/ui/pi-sidebar.ts` renders a single `pi-input` and `src/taskpane/runtime-sidebar-binding.ts:15-44` swaps only the agent and queue display. This may be worth treating as a bug.
 - The "Compacting context…" label is set on the shared sidebar (`src/taskpane/action-queue.ts:72-79`, `107-114`), so a background tab's compaction shows in, and clears from, whichever tab is active. Read from code. Looks like a bug.
-- A session can be open in two tabs at once. Confirmed in the standalone taskpane: the tab layout held the same session ID twice, and after a reload the active tab was the first of the two, not the one that had been active. See [resuming a session](../sessions/resuming-a-session.md#open-questions-and-verification).
-- Message counts include Pi's hidden instruction messages, so a blank session is listed with "1 messages". Confirmed in the standalone taskpane. The cause is `src/taskpane/sessions.ts:240`.
+- A session can be open in two tabs at once. Confirmed in Excel on the web: resuming the session already open as "Chat 1" opened it again as "Chat 4", and after a reload with "Chat 4" active, "Chat 1" was active instead. See [resuming a session](../sessions/resuming-a-session.md#open-questions-and-verification).
+- Message counts include Pi's hidden instruction messages, so a blank session is listed with "1 messages". Confirmed in Excel on the web. The cause is `src/taskpane/sessions.ts:240`.
 - With the model-switch preference set to fork, a tab with no visible messages still counts as having messages, because every new tab starts with a hidden instruction message (`src/taskpane/init.ts:908`, `src/taskpane/session-runtime-manager.ts:201`). Changing the model of an empty tab may therefore open a copy instead of switching in place. Read from code, not confirmed. The test `session-runtime-lifecycle.test.ts` uses a runtime without that message.
-- The busy dot is white on a white-tinted tab and "Locking…" is 70% white (`src/ui/theme/components/tabs.css:171-185`). Both may be nearly invisible in the light theme. Not checked by hand.
+- The busy dot is white (`src/ui/theme/components/tabs.css:171-185`). On the active tab, which is green, it was clearly visible in Excel on the web. On an inactive tab, and for "Locking…" (70% white), it has not been checked and may be nearly invisible in the light theme.
+- Workbook identity was unknown in Excel on the web for a OneDrive workbook opened signed out through an edit link: `Office.context.document.url` was empty, and so was the URL from `getFilePropertiesAsync` (`src/host/office-document-url.ts`). As a result the resume picker had no workbook filter and every session was unlinked. Whether a signed-in session reports an address is not known; until then, "web workbooks always have an identity" should not be assumed.
+- The workbook lock indicators ("Locking…", the disabled ×) were not seen: the lock is held only while a mutation runs, after any approval, which is too short to catch by hand.
 - Workbook identity on Excel desktop for macOS and Windows, including after "Save As", has not been checked by hand.
+- Checked in Excel on the web on 2026-10-26; see [the checklist](../verification/sessions-and-commands.md#foundationssessions-and-tabsmd).
 
 Verified against pi-for-excel commit `ec453df`.
