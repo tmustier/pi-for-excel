@@ -22,7 +22,7 @@ The documents are for people who need to understand or change the product: desig
 - Describe the experience, not the code. "The message waits in the queue and is sent when Pi finishes" rather than "the action queue awaits `agent.waitForIdle()`".
 - Technical detail goes in block quotes, prefixed with `Technical note:`. Use it only when the mechanism changes what the user would expect.
 - Use sentence case for headings.
-- Name the vocabulary consistently. The [glossary](glossary.md) is the source of truth for terms like *turn*, *session*, *tab*, *busy*, *steer*, *follow-up*, *queued*, *execution mode* and *checkpoint*.
+- Name the vocabulary consistently. The [glossary](glossary.md) is the source of truth for terms like *turn*, *session*, *tab*, *busy*, *steer*, *follow-up*, *queued*, *execution mode* and *backup*.
 - Use the product's own UI wording for controls and messages, quoted exactly ("Wait for this tab to finish before renaming").
 - Keys are written as Windows/macOS pairs where they differ: Ctrl/Cmd, Alt/Option. Enter is written Enter.
 - Every document ends with the commit of pi-for-excel it was verified against and a list of open questions.
@@ -124,7 +124,7 @@ foundations/
                                  and queue; what Stop does at each stage
   sessions-and-tabs.md           what a session and a tab are, how they relate to the workbook,
                                  and what is restored when the taskpane reopens
-  the-workbook.md                what Pi can read and change, the workbook lock, checkpoints,
+  the-workbook.md                what Pi can read and change, the workbook lock, automatic backups,
                                  and the execution mode
   models-and-providers.md        providers, logins and API keys, the model of a tab, and
                                  thinking levels
@@ -161,7 +161,7 @@ workbook/
   writing.md                     writing cells, filling formulas, structure, formatting,
                                  conditional formats, view settings, comments, charts and names
   confirm-mode-and-approvals.md  Auto and Confirm, /yolo, and approval dialogs
-  checkpoints-and-revert.md      automatic checkpoints, the recovery dialog, /history and /revert
+  backups-and-revert.md          automatic backups, the Backups dialog, /history and /revert
   manual-backups.md              /backup: create, list, restore and clear full-workbook copies
 
 setup/
@@ -232,7 +232,7 @@ Status is one of `not started`, `drafted`, or `verified`.
 | workbook/reading.md | not started |
 | workbook/writing.md | not started |
 | workbook/confirm-mode-and-approvals.md | not started |
-| workbook/checkpoints-and-revert.md | not started |
+| workbook/backups-and-revert.md | not started |
 | workbook/manual-backups.md | not started |
 | setup/welcome-and-login.md | not started |
 | setup/the-model-picker.md | not started |
@@ -265,7 +265,7 @@ The source of truth is the pi-for-excel repository itself (this repo), at the co
 - `node_modules/@earendil-works/pi-agent-core`: the agent loop (streaming, tool execution, steer and follow-up queues, abort)
 - `src/ui/`: the UI (`pi-sidebar.ts`, `pi-input.ts`, `working-indicator.ts`, `messages/`, `tool-renderers.ts`, `toast.ts`, `overlay-*.ts`, dialogs)
 - `src/commands/`: slash commands (`builtins/`, `command-menu.ts`, `busy-command-policy.ts`)
-- `src/tools/`, `src/workbook/`, `src/audit/`: the workbook tools, the workbook coordinator and lock, checkpoints and recovery
+- `src/tools/`, `src/workbook/`, `src/audit/`: the workbook tools, the workbook coordinator and lock, automatic backups and recovery
 - `src/language/locales/en.json`: every user-visible string, and the source for quoting UI wording
 - `tests/`: behavioral tests
 - `src/compaction/`, `src/context/`, `src/models/`, `src/auth/`, `src/storage/`, `src/files/`, `src/extensions/`: subsystems that shape the experience (compaction thresholds, auto-context, model ordering, login, persistence, the Files workspace, extensions)

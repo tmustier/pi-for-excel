@@ -73,7 +73,7 @@ The title is saved with the session only if the session has already been saved, 
 
 | Modifier | Set before | Changed while busy |
 | --- | --- | --- |
-| Model and provider | No effect. Renaming works with no provider connected. | Renaming is refused while busy, so a model change has nothing to interact with. Duplicating a tab or switching model by forking gives the new tab the title "{source title} copy" or "{source title} ({model id})", which counts as a chosen title. |
+| Model and provider | No effect. Renaming works with no provider connected. | Renaming is refused while busy, and so is changing the model ("Wait for this tab to finish before changing models"). |
 | Thinking level | No effect. | No effect. |
 | Execution mode | No effect. Renaming never touches the workbook. | No effect. |
 | Files in the workspace, or an overlay open | No effect from files. An overlay that covers the tab strip (settings, resume, the model picker) prevents double-clicking or right-clicking a tab; `/name` cannot be typed while an overlay holds focus. | No effect. |
@@ -109,7 +109,7 @@ After any interrupt the user is back on the tab they started from, with the comp
 
 **Execution mode and approvals.** No interaction.
 
-**Models and providers.** No interaction, except that switching the model of a busy tab by forking it into a new tab names the new tab "{source title} ({model id})".
+**Models and providers.** No interaction, except that when the model-switch preference is set to fork, changing the model of a tab that has messages opens a copy in a new tab with the chosen title "{source title} ({model id})".
 
 **Offline and provider errors.** No interaction.
 

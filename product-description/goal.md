@@ -9,7 +9,7 @@ The pi-for-excel source is the rest of this repository (everything outside `prod
 For each document, read in this order before writing:
 
 1. Where the interaction state lives for the feature: `src/taskpane/init.ts` (search for the feature's handler: `sidebar.on…`, `pi:` events, the command's action), `src/taskpane/keyboard-shortcuts.ts` and `keyboard-shortcuts/`, `src/taskpane/action-queue.ts`, `src/taskpane/session-runtime-manager.ts`, and the command in `src/commands/builtins/`.
-2. The shared pipeline where relevant: the agent loop in `node_modules/@earendil-works/pi-agent-core/dist/` (prompt, steer, followUp, abort, waitForIdle), `src/commands/slash-command-execution.ts` and `busy-command-policy.ts`, `src/workbook/coordinator.ts` (the workbook lock), `src/tools/with-workbook-coordinator.ts`, `src/workbook/recovery-log.ts` (checkpoints), `src/compaction/`.
+2. The shared pipeline where relevant: the agent loop in `node_modules/@earendil-works/pi-agent-core/dist/` (prompt, steer, followUp, abort, waitForIdle), `src/commands/slash-command-execution.ts` and `busy-command-policy.ts`, `src/workbook/coordinator.ts` (the workbook lock), `src/tools/with-workbook-coordinator.ts`, `src/workbook/recovery-log.ts` (automatic backups), `src/compaction/`.
 3. The tests in `tests/`. They are close to executable specifications of edge cases. Key files: `action-queue.test.ts`, `session-runtime-manager.test.ts`, `session-runtime-lifecycle.test.ts`, `tab-layout.test.ts`, `tab-layout-persistence.test.ts`, `session-title.test.ts`, `auto-compaction.test.ts`, `overflow-recovery.test.ts`, `compaction-thresholds.test.ts`, `status-popovers.test.ts`, `context-injection.test.ts`, `workbook-write-inspect-undo-contract.test.ts`, `recovery-*.test.ts`, `error-path-matrix.test.ts`, and the browser tests in `tests/browser/`.
 4. UI behavior: `src/ui/` (`pi-sidebar.ts` for tabs, the empty state and the utilities menu; `pi-input.ts` for the composer; `working-indicator.ts`; `messages/` and `tool-renderers.ts` for the transcript; `toast.ts`, `overlay-dialog.ts`, `overlay-escape.ts`, `confirm-dialog.ts`, `text-input-dialog.ts` for overlays).
 5. Wording: `src/language/locales/en.json`. Quote UI strings exactly from here.
@@ -61,7 +61,7 @@ The H1 is "The {feature}" for screens, controls and UI ("The composer", "The sta
 - Use the glossary's words. If you need a term the glossary lacks, add it to `glossary.md` in the right section with a one-paragraph definition, then use it. Never coin a synonym for an existing term.
 - Sentence case for all headings. Direct, concrete language. No hedging, no marketing.
 - State surprising behavior plainly and say why if the reason is in the code or a comment. If it looks like a bug, say so in "Open questions" rather than smoothing it over.
-- Cross-reference other documents with relative links rather than repeating their content. [foundations/turns.md](foundations/turns.md) owns what busy, steer, follow-up, queued and Stop mean; [foundations/the-workbook.md](foundations/the-workbook.md) owns the workbook lock, checkpoints and execution mode; [foundations/sessions-and-tabs.md](foundations/sessions-and-tabs.md) owns what a session and tab are; [cross-cutting/persistence-and-restore.md](cross-cutting/persistence-and-restore.md) owns what is saved when. Do not restate them; link.
+- Cross-reference other documents with relative links rather than repeating their content. [foundations/turns.md](foundations/turns.md) owns what busy, steer, follow-up, queued and Stop mean; [foundations/the-workbook.md](foundations/the-workbook.md) owns the workbook lock, automatic backups and execution mode; [foundations/sessions-and-tabs.md](foundations/sessions-and-tabs.md) owns what a session and tab are; [cross-cutting/persistence-and-restore.md](cross-cutting/persistence-and-restore.md) owns what is saved when. Do not restate them; link.
 - Quote UI wording exactly from `en.json`, in double quotes.
 - Every document ends with "## Open questions and verification" followed by ``Verified against pi-for-excel commit `{sha}`.`` using the source commit below.
 - Mermaid `stateDiagram-v2` for each interaction's states. Keep it to the states the user passes through.
@@ -69,6 +69,21 @@ The H1 is "The {feature}" for screens, controls and UI ("The composer", "The sta
 ## Things already established (do not re-derive, do not contradict)
 
 - The source commit for this pass is `ec453df`. Commits that only touch `product-description/` do not change behavior; keep citing `ec453df` unless the source moves.
+- "Turn" means the whole exchange from send to idle; one streamed model answer inside it is a "model response". Never use "turn" for a single model response (the code does).
+- Busy = a turn or a queued action is running. Responding = a turn is running (the code's `isStreaming`). Only while responding: Stop button replaces send, Enter steers, Alt/Option+Enter follows up, Escape stops. Busy but not responding (e.g. `/compact`): send button stays, Enter queues, nothing stops it.
+- Steer is delivered after the current model response and all its tool calls finish, one per model response; it never interrupts a running tool. Follow-up is delivered only when Pi would otherwise finish. Both appear in the queue strip until delivered.
+- Busy-allowed commands: `compact`, `new`, `rules`, `resume`, `history`, `reopen`, `yolo`, `extensions`, `plugins`, `skills`, `files`, `tools`, plus extension commands unless they opt out. Others: toast "Can't run /{command} while Pi is busy". `/compact` is always queued, even when idle.
+- Stop button vs Escape differ (see `foundations/turns.md#stop`): Escape restores steers, follow-ups and queued prompts into the composer and drops queued commands; the Stop button leaves queued prompts and commands to run next. Escape is claimed first by the utilities menu, status popovers, the command menu, the model picker, settings, API-key dialogs and extension widgets; the tab context menu and generic overlay dialogs do not claim it.
+- A session is first saved when Pi's first answer completes; after that every completed message saves it. Nothing is saved on unload. Blank tabs restored from the tab layout are force-saved.
+- Tab labels: chosen title if any, else "Chat N" (N fixed at creation). Chosen titles are lost on reload (confirmed). Double-click/"Rename tab…" use `window.prompt`, which throws on Excel on the web (confirmed).
+- The error banner is one per taskpane: shown only if the failing tab is active at the end of its run; not cleared on tab switch.
+- Execution mode default is Auto ("yolo" in storage); Confirm is "safe". Model-switch behavior default is in place; "fork" opens a copy titled "{title} ({model id})" when the tab has messages. Changing model while busy: "Wait for this tab to finish before changing models".
+- Closing: the last tab cannot be closed ("Can't close the last tab"); a tab holding the workbook lock cannot be closed ("Wait for workbook changes to finish before closing this tab"); a responding tab asks "Stop and close this tab?". Close shows an action toast "Closed {title} · Undo" for 9 s.
+- The workbook lock is per taskpane (in-memory), serializing mutations across tabs; "Locking…" on a tab means it waits for the lock.
+- Automatic backups are the UI's "Backups" (code: checkpoints, recovery log); they are cleared when the workbook is saved in Excel.
+- Office.js stubs `window.prompt` (and likely `alert`/`confirm`) to throw on Excel on the web.
+- Auto-compaction is on by default with no Settings control (stored key `compaction.enabled`, read once at startup).
+- The running product can be driven in an orb: `node scripts/orb/excel-web-session.mjs --check` opens Pi in Excel on the web (logged in via `PI_EXCEL_WEB_AUTH_JSON`); the taskpane is the CDP target `https://localhost:3141/src/taskpane.html?et=` on port 9223.
 
 ## Order of work
 
