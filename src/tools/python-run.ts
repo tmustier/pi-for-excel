@@ -33,6 +33,15 @@ const MIN_TIMEOUT_MS = 100;
 const MAX_TIMEOUT_MS = 120_000;
 
 export const PYTHON_BRIDGE_TOKEN_SETTING_KEY = "python.bridge.token";
+export const PYODIDE_BACKEND_LABEL = "Pyodide (in-browser)";
+
+/** fetch() rejected before the bridge answered, so no code ran there. */
+export class PythonBridgeUnreachableError extends Error {
+  constructor(url: string, cause: unknown) {
+    super(`Python bridge unreachable at ${url}: ${getErrorMessage(cause)}`);
+    this.name = "PythonBridgeUnreachableError";
+  }
+}
 
 const schema = Type.Object({
   code: Type.String({
@@ -286,17 +295,29 @@ export async function callDefaultPythonBridge(
   }
 
   try {
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(request),
-      signal: controller.signal,
-    });
+    let response: Response;
+    try {
+      response = await fetch(endpoint, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(request),
+        signal: controller.signal,
+      });
+    } catch (error) {
+      if (isAbortError(error)) throw error;
+      throw new PythonBridgeUnreachableError(config.url, error);
+    }
 
     const rawBody = await response.text();
     const parsedBody = tryParseBridgeJson(rawBody);
 
     if (!response.ok) {
+      // The bridge ran the code and it failed: report it like any Python failure.
+      const failed = parsedBody === null ? null : parseBridgeResponse(parsedBody);
+      if (failed && (failed.stderr !== undefined || failed.stdout !== undefined)) {
+        throw new Error(formatPythonFailure(failed, `local Python (bridge at ${config.url})`));
+      }
+
       const payloadError = extractBridgeErrorMessage(parsedBody);
       const textError = rawBody.trim().length > 0 ? rawBody.trim() : null;
       const reason = payloadError ?? textError ?? `HTTP ${response.status}`;
@@ -412,27 +433,40 @@ function shouldAttachPythonBridgeSkillHint(message: string): boolean {
     || normalized.includes("econnrefused");
 }
 
+/**
+ * Only an unreachable default bridge falls back to Pyodide. Any answer from the
+ * bridge (including a Python error) means the code ran there, and a timeout means
+ * it may still be running, so re-running it in Pyodide could run it twice.
+ */
 export function shouldFallbackToPyodideAfterBridgeError(
   error: unknown,
   bridgeConfig: PythonBridgeConfig,
 ): boolean {
-  if (bridgeConfig.source !== "default") {
-    return false;
+  return bridgeConfig.source === "default" && error instanceof PythonBridgeUnreachableError;
+}
+
+/** Failure text for a run that did not succeed: which backend, the exception, stderr and stdout. */
+export function formatPythonFailure(response: PythonBridgeResponse, backend: string): string {
+  const stderr = response.stderr?.trim() ?? "";
+  const error = response.error?.trim() ?? "";
+  const exception = error.length > 0 && error !== stderr ? error : findExceptionLine(stderr);
+  const exitCode = response.exit_code !== undefined ? ` (exit code ${response.exit_code})` : "";
+  const sections = [`Python failed in ${backend}${exitCode}${exception.length > 0 ? `: ${exception}` : "."}`];
+
+  if (stderr.length > 0) sections.push(`Stderr:\n\n${renderCodeBlock(stderr)}`);
+  if (response.stdout && response.stdout.trim().length > 0) {
+    sections.push(`Stdout:\n\n${renderCodeBlock(response.stdout)}`);
   }
+  if (exception.length === 0 && stderr.length === 0) sections.push("No error message or stderr was produced.");
 
-  const message = getErrorMessage(error).toLowerCase();
+  return sections.join("\n\n");
+}
 
-  return (
-    message.includes("timed out")
-    || message.includes("failed to fetch")
-    || message.includes("fetch failed")
-    || message.includes("networkerror")
-    || message.includes("network request failed")
-    || message.includes("ecconnrefused")
-    || message.includes("econnrefused")
-    || message.includes("econnreset")
-    || message.includes("enotfound")
-  );
+/** The exception line of a traceback (e.g. "ModuleNotFoundError: No module named 'pandas'"). */
+function findExceptionLine(stderr: string): string {
+  const lines = stderr.split("\n").map((line) => line.trim()).filter((line) => line.length > 0);
+  const exception = [...lines].reverse().find((line) => /^[A-Za-z_][\w.]*(Error|Exception|Interrupt|Exit)\b/u.test(line));
+  return exception ?? lines.at(-1) ?? "";
 }
 
 async function getDefaultPyodideAvailable(): Promise<boolean> {
@@ -541,7 +575,7 @@ export function createPythonRunTool(
         const response = await callPyodideFn(request, signal);
 
         if (!response.ok) {
-          throw new Error(response.error ?? "Pyodide execution failed.");
+          throw new Error(formatPythonFailure(response, PYODIDE_BACKEND_LABEL));
         }
 
         const stdoutPreview = buildOutputPreview(response.stdout);

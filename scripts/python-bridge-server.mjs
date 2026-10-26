@@ -119,7 +119,7 @@ const PYTHON_WRAPPER_CODE = [
   "    exec(user_code, scope, scope)",
   "except Exception:",
   "    traceback.print_exc()",
-  "    raise",
+  "    sys.exit(1)",
   "",
   "if 'result' in scope:",
   "    try:",
@@ -133,11 +133,13 @@ class HttpError extends Error {
   /**
    * @param {number} status
    * @param {string} message
+   * @param {Record<string, unknown>} [details] extra response fields
    */
-  constructor(status, message) {
+  constructor(status, message, details = {}) {
     super(message);
     this.name = "HttpError";
     this.status = status;
+    this.details = details;
   }
 }
 
@@ -608,7 +610,13 @@ async function runPython(request, pythonInfo) {
       .map((value) => value.trim())
       .find((value) => value.length > 0) || `python exited with code ${result.code}`;
 
-    throw new HttpError(400, message);
+    // The code ran: return its exit code and output with the error.
+    throw new HttpError(400, message, {
+      action: "run_python",
+      exit_code: result.code,
+      stdout: normalizeOutput(result.stdout),
+      stderr: normalizeOutput(result.stderr),
+    });
   }
 
   const parsed = splitPythonResult(result.stdout);
@@ -976,6 +984,7 @@ const handler = async (req, res) => {
       : "Internal server error.";
 
     respondJson(res, status, {
+      ...(isHttpError ? error.details : {}),
       ok: false,
       error: message,
     });

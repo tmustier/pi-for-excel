@@ -30,7 +30,9 @@ import { findErrors } from "../utils/format.js";
 import { formatReplacedFormulas, replacedFormulas, toCellGrid, writeBlockFromAddress } from "./mutation/range-write.js";
 import {
   callDefaultPythonBridge,
+  formatPythonFailure,
   getDefaultPythonBridgeConfig,
+  PYODIDE_BACKEND_LABEL,
   shouldFallbackToPyodideAfterBridgeError,
   type PythonBridgeConfig,
   type PythonBridgeRequest,
@@ -511,7 +513,10 @@ export function createPythonTransformRangeTool(
         }
 
         if (!bridgeResponse.ok) {
-          throw new Error(bridgeResponse.error ?? "Python execution failed.");
+          throw new Error(formatPythonFailure(
+            bridgeResponse,
+            bridgeUrlUsed !== undefined ? `local Python (bridge at ${bridgeUrlUsed})` : PYODIDE_BACKEND_LABEL,
+          ));
         }
 
         const transformedValues = parseBridgeResultJson(bridgeResponse.result_json);
