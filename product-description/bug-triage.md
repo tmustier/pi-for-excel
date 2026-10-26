@@ -30,7 +30,7 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 
 ## medium | fix | Fix in PR [#795](https://github.com/tmustier/pi-for-excel/pull/795) (open) |
 | [P-12](#p-12-shifttab-changes-the-thinking-level-wherever-focus-is-and-on-the-web-also-moves-focus-backwards) | Shift+Tab changes the thinking level wherever focus is, and on the web also moves focus backwards | high | keyboard | fix | Fix in PR [#793](https://github.com/tmustier/pi-for-excel/pull/793) (open) |
-| [P-13](#p-13-an-expired-oauth-login-is-not-refreshed-until-the-taskpane-reopens) | An expired OAuth login is not refreshed until the taskpane reopens | high | login | fix | none yet |
+| [P-13](#p-13-an-expired-oauth-login-is-not-refreshed-until-the-taskpane-reopens) | An expired OAuth login is not refreshed until the taskpane reopens | high | login | fix | Assigned to #795 (follow-up; not yet in the PR) |
 | [P-14](#p-14-a-pointer-resting-over-the-model-picker-decides-what-enter-chooses) | A pointer resting over the model picker decides what Enter chooses | high | models | fix | Fix in PR [#795](https://github.com/tmustier/pi-for-excel/pull/795) (open) |
 | [P-15](#p-15-the-same-session-open-in-two-taskpanes-loses-one-taskpanes-turns) | The same session open in two taskpanes loses one taskpane's turns | high | multi-pane | product call | Fix in PR [#794](https://github.com/tmustier/pi-for-excel/pull/794) (open) |
 | [P-16](#p-16-failed-saves-are-silent-so-lost-sessions-only-show-after-a-reload) | Failed saves are silent, so lost sessions only show after a reload | high | persistence | fix | Fix in PR [#789](https://github.com/tmustier/pi-for-excel/pull/789) (open) |
@@ -46,7 +46,7 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 
 ## low | fix | none yet |
 | [P-24](#p-24-renaming-a-tab-by-double-click-or-rename-tab-does-nothing-on-the-web-and-freezes-the-taskpane-on-mac) | Renaming a tab by double-click or "Rename tab…" does nothing on the web and freezes the taskpane on Mac | high | tabs | fix | Fix in PR [#793](https://github.com/tmustier/pi-for-excel/pull/793) and PR #795 (open): in-pane rename dialog |
-| [P-25](#p-25-stop-and-close-closes-a-tab-that-took-the-workbook-lock-while-the-dialog-was-open-and-its-write-still-lands) | "Stop and close" closes a tab that took the workbook lock while the dialog was open, and its write still lands | high | tabs | fix | none yet |
+| [P-25](#p-25-stop-and-close-closes-a-tab-that-took-the-workbook-lock-while-the-dialog-was-open-and-its-write-still-lands) | "Stop and close" closes a tab that took the workbook lock while the dialog was open, and its write still lands | high | tabs | fix | Assigned to #794 (follow-up; not yet in the PR) |
 | [P-26](#p-26-the-four-disclosure-bar-switches-change-nothing-and-are-not-saved) | The four disclosure-bar switches change nothing and are not saved | high | taskpane | fix | Fix in PR [#793](https://github.com/tmustier/pi-for-excel/pull/793) (open) |
 | [P-27](#p-27-the-stop-button-and-a-failed-turn-strand-waiting-steers-and-follow-ups-which-are-delivered-unasked-in-the-next-turn) | The Stop button and a failed turn strand waiting steers and follow-ups, which are delivered unasked in the next turn | high | turn | fix | Fix in PR [#789](https://github.com/tmustier/pi-for-excel/pull/789) (open) |
 | [P-28](#p-28-reloading-during-the-first-turn-of-a-new-session-loses-the-users-message) | Reloading during the first turn of a new session loses the user's message | high | turn | fix | Fix in PR [#795](https://github.com/tmustier/pi-for-excel/pull/795) (open) |
@@ -62,7 +62,7 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 | [P-36](#p-36-keep-at-most-retention-is-saved-but-never-applied) | "Keep at most" retention is saved but never applied | medium | backups | fix | Fix in PR [#794](https://github.com/tmustier/pi-for-excel/pull/794) (open) |
 | [P-37](#p-37-clear-all-shows-at-most-40-backups-in-its-count-but-deletes-them-all) | "Clear all" shows at most 40 backups in its count but deletes them all | medium | backups | fix | Fix in PR [#794](https://github.com/tmustier/pi-for-excel/pull/794) (open) |
 | [P-38](#p-38-revert-keeps-reverting-the-same-chart-create-backup-and-changes-nothing) | `/revert` keeps "reverting" the same chart-create backup and changes nothing | medium | backups | fix | Fix in PR [#794](https://github.com/tmustier/pi-for-excel/pull/794) (open) |
-| [P-39](#p-39-revert-of-a-formula-fill-leaves-the-copied-formats-behind) | `/revert` of a formula fill leaves the copied formats behind | medium | backups | fix | none yet |
+| [P-39](#p-39-revert-of-a-formula-fill-leaves-the-copied-formats-behind) | `/revert` of a formula fill leaves the copied formats behind | medium | backups | fix | Assigned to #794 (follow-up; not yet in the PR) |
 | [P-40](#p-40-manual-backup-ids-in-toasts-are-cut-too-short-to-restore-with) | Manual backup ids in toasts are cut too short to restore with | medium | backups | fix | Fix in PR [#794](https://github.com/tmustier/pi-for-excel/pull/794) (open) |
 | [P-41](#p-41-clicking-a-row-in-the-command-menu-runs-nothing-on-excel-on-the-web) | Clicking a row in the command menu runs nothing on Excel on the web | medium | commands | fix | Fix in PR [#789](https://github.com/tmustier/pi-for-excel/pull/789) (open) |
 | [P-42](#p-42-the-command-menu-captures-enter-and-other-keys-anywhere-in-the-taskpane-so-a-stale-menu-runs-its-command) | The command menu captures Enter and other keys anywhere in the taskpane, so a stale menu runs its command | medium | commands | fix | Fix in PR [#789](https://github.com/tmustier/pi-for-excel/pull/789) (open); the overlay part also in PR #793 (open) |
@@ -86,22 +86,22 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 
 ## low | fix | fix-host-web (in progress) |
 | [P-60](#p-60-the-hosted-add-in-cannot-reach-the-local-proxy-in-current-chrome-or-edge) | The hosted add-in cannot reach the local proxy in current Chrome or Edge | medium | host | fix | fix-host-web (in progress) |
-| [P-61](#p-61-the-utilities-menu-claims-to-be-a-menu-but-gives-none-of-the-menu-keyboard-behaviour) | The utilities menu claims to be a menu but gives none of the menu keyboard behaviour | medium | keys | fix | none yet |
+| [P-61](#p-61-the-utilities-menu-claims-to-be-a-menu-but-gives-none-of-the-menu-keyboard-behaviour) | The utilities menu claims to be a menu but gives none of the menu keyboard behaviour | medium | keys | fix | Assigned to #793 (follow-up; not yet in the PR) |
 | [P-62](#p-62-a-failed-language-save-leaves-a-mixed-language-taskpane) | A failed language save leaves a mixed-language taskpane | medium | language | fix | fix-host-web (in progress) |
-| [P-63](#p-63-a-tab-running-several-writes-shows-locking-on-itself-and-lets-itself-be-closed) | A tab running several writes shows "Locking…" on itself and lets itself be closed | medium | lock | fix | none yet |
+| [P-63](#p-63-a-tab-running-several-writes-shows-locking-on-itself-and-lets-itself-be-closed) | A tab running several writes shows "Locking…" on itself and lets itself be closed | medium | lock | fix | Assigned to #794 (follow-up; not yet in the PR) |
 | [P-64](#p-64-saving-an-api-key-says-testing-but-does-not-test-it) | Saving an API key says "Testing…" but does not test it | medium | login | product call | fix-sessions-models (check #795) |
 | [P-65](#p-65-github-copilot-login-fails-with-the-needs-a-helper-message-although-the-proxy-runs) | GitHub Copilot login fails with the "needs a helper" message although the proxy runs | medium | login | product call | Fix in PR [#795](https://github.com/tmustier/pi-for-excel/pull/795) (open) |
-| [P-66](#p-66-a-credential-present-at-startup-leaves-the-first-tab-on-the-fallback-openai-api-model) | A credential present at startup leaves the first tab on the fallback OpenAI (API) model | medium | models | fix | none yet |
-| [P-67](#p-67-a-reload-brings-back-a-model-whose-provider-is-gone-and-does-not-swap-it) | A reload brings back a model whose provider is gone and does not swap it | medium | models | fix | none yet |
-| [P-68](#p-68-with-both-openai-providers-connected-the-default-model-bills-the-api-key) | With both OpenAI providers connected the default model bills the API key | medium | models | product call | none yet |
-| [P-69](#p-69-two-taskpanes-on-one-workbook-can-run-in-different-execution-modes) | Two taskpanes on one workbook can run in different execution modes | medium | multi-pane | product call | none yet |
-| [P-70](#p-70-storage-persistence-is-never-requested-so-the-browser-may-evict-all-sessions) | Storage persistence is never requested, so the browser may evict all sessions | medium | persistence | product call | none yet |
+| [P-66](#p-66-a-credential-present-at-startup-leaves-the-first-tab-on-the-fallback-openai-api-model) | A credential present at startup leaves the first tab on the fallback OpenAI (API) model | medium | models | fix | Assigned to #795 (follow-up; not yet in the PR) |
+| [P-67](#p-67-a-reload-brings-back-a-model-whose-provider-is-gone-and-does-not-swap-it) | A reload brings back a model whose provider is gone and does not swap it | medium | models | fix | Assigned to #795 (follow-up; not yet in the PR) |
+| [P-68](#p-68-with-both-openai-providers-connected-the-default-model-bills-the-api-key) | With both OpenAI providers connected the default model bills the API key | medium | models | product call | Assigned to #795 (follow-up; not yet in the PR) |
+| [P-69](#p-69-two-taskpanes-on-one-workbook-can-run-in-different-execution-modes) | Two taskpanes on one workbook can run in different execution modes | medium | multi-pane | product call | Assigned to #794 (follow-up; not yet in the PR) |
+| [P-70](#p-70-storage-persistence-is-never-requested-so-the-browser-may-evict-all-sessions) | Storage persistence is never requested, so the browser may evict all sessions | medium | persistence | product call | Assigned to fix-host-web (in progress) |
 | [P-71](#p-71-on-excel-on-the-web-every-workbook-shares-one-tab-layout-and-two-taskpanes-overwrite-it) | On Excel on the web every workbook shares one tab layout, and two taskpanes overwrite it | medium | persistence | product call | Fix in PR [#795](https://github.com/tmustier/pi-for-excel/pull/795) (open) |
 | [P-72](#p-72-being-offline-or-having-the-proxy-down-shows-a-banner-blaming-cors) | Being offline or having the proxy down shows a banner blaming CORS | medium | providers | fix | Fix in PR [#789](https://github.com/tmustier/pi-for-excel/pull/789) (open) |
 | [P-73](#p-73-provider-errors-mentioning-abort-or-cancel-are-treated-as-user-stops-and-show-no-banner) | Provider errors mentioning "abort" or "cancel" are treated as user stops and show no banner | medium | providers | fix | Fix in PR [#789](https://github.com/tmustier/pi-for-excel/pull/789) (open) |
 | [P-74](#p-74-the-proxy-page-reports-the-previous-urls-check-after-the-url-changes) | The Proxy page reports the previous URL's check after the URL changes | medium | proxy | fix | fix-sessions-models (check #795) |
 | [P-75](#p-75-the-welcome-proxy-panel-saves-an-unvalidated-proxy-url) | The welcome proxy panel saves an unvalidated proxy URL | medium | proxy | fix | fix-sessions-models (check #795) |
-| [P-76](#p-76-the-remote-proxy-security-warning-appears-only-after-a-reload) | The remote-proxy security warning appears only after a reload | medium | proxy | fix | none yet |
+| [P-76](#p-76-the-remote-proxy-security-warning-appears-only-after-a-reload) | The remote-proxy security warning appears only after a reload | medium | proxy | fix | Assigned to #795 (follow-up; not yet in the PR) |
 | [P-77](#p-77-a-rate-limited-or-failing-chatgpt-request-is-never-retried-and-every-429-reads-as-usage-limit) | A rate-limited or failing ChatGPT request is never retried, and every 429 reads as "usage limit" | medium | sending | fix | Fix in PR [#789](https://github.com/tmustier/pi-for-excel/pull/789) (open) |
 | [P-78](#p-78-with-model-switching-set-to-fork-changing-the-model-of-an-empty-tab-opens-a-copy) | With model switching set to fork, changing the model of an empty tab opens a copy | medium | sessions | fix | Fix in PR [#795](https://github.com/tmustier/pi-for-excel/pull/795) (open) |
 | [P-79](#p-79-a-failed-copy-shows-nothing-and-leaves-an-unhandled-rejection) | A failed `/copy` shows nothing and leaves an unhandled rejection | medium | sessions | fix | Fix in PR [#795](https://github.com/tmustier/pi-for-excel/pull/795) (open) |
@@ -109,18 +109,18 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 | [P-81](#p-81-replace-current-tab-on-a-busy-tab-reports-resumed-in-current-tab-although-nothing-was-replaced) | "Replace current tab" on a busy tab reports "Resumed in current tab" although nothing was replaced | medium | sessions | fix | Fix in PR [#795](https://github.com/tmustier/pi-for-excel/pull/795) (open) |
 | [P-82](#p-82-in-a-short-taskpane-the-resume-picker-is-cut-off-and-its-list-is-28-px-tall) | In a short taskpane the resume picker is cut off and its list is 28 px tall | medium | sessions | fix | Fix in PR [#793](https://github.com/tmustier/pi-for-excel/pull/793) (open) |
 | [P-83](#p-83-copy-and-the-clipboard-forms-of-export-cannot-work-on-excel-on-the-web-and-plain-export-fails-by-default) | `/copy` and the clipboard forms of `/export` cannot work on Excel on the web, and plain `/export` fails by default | medium | sessions | fix | fix-host-web (in progress) |
-| [P-84](#p-84-leaving-a-half-filled-gateway-form-drops-it-without-asking) | Leaving a half-filled gateway form drops it without asking | medium | settings | fix | none yet |
+| [P-84](#p-84-leaving-a-half-filled-gateway-form-drops-it-without-asking) | Leaving a half-filled gateway form drops it without asking | medium | settings | fix | Assigned to #795 (follow-up; not yet in the PR) |
 | [P-85](#p-85-in-confirm-mode-listing-or-reading-skills-asks-for-a-workbook-mutation-approval) | In Confirm mode, listing or reading skills asks for a workbook-mutation approval | medium | skills | fix | Fix in PR [#794](https://github.com/tmustier/pi-for-excel/pull/794) (open) |
 | [P-86](#p-86-skills-written-outside-skillsexternal-reach-pi-but-do-not-appear-on-the-skills-page) | Skills written outside `skills/external/` reach Pi but do not appear on the Skills page | medium | skills | fix | Fix in PR [#790](https://github.com/tmustier/pi-for-excel/pull/790) (open) |
 | [P-87](#p-87-removing-an-external-skill-happens-immediately-with-no-confirmation) | Removing an external skill happens immediately, with no confirmation | medium | skills | product call | Fix in PR [#788](https://github.com/tmustier/pi-for-excel/pull/788) (open) |
 | [P-88](#p-88-shifttab-redraws-the-mode-badge-as-auto-in-confirm-mode-and-drops-the-lock-badge) | Shift+Tab redraws the mode badge as "Auto" in Confirm mode and drops the lock badge | medium | status bar | fix | Fix in PR [#793](https://github.com/tmustier/pi-for-excel/pull/793) (open) |
-| [P-89](#p-89-the-model-control-hides-the-provider-so-a-tab-silently-on-another-provider-looks-identical) | The model control hides the provider, so a tab silently on another provider looks identical | medium | status-bar | product call | none yet |
+| [P-89](#p-89-the-model-control-hides-the-provider-so-a-tab-silently-on-another-provider-looks-identical) | The model control hides the provider, so a tab silently on another provider looks identical | medium | status-bar | product call | Assigned to #795 (follow-up; not yet in the PR) |
 | [P-90](#p-90-after-a-keyboard-tab-switch-the-open-thinking-popover-changes-the-hidden-tab) | After a keyboard tab switch, the open thinking popover changes the hidden tab | medium | status-bar | fix | Fix in PR [#793](https://github.com/tmustier/pi-for-excel/pull/793) (open) |
 | [P-91](#p-91-closing-a-tab-that-is-compacting-asks-nothing-and-throws-away-a-compaction-that-still-runs-and-is-paid-for) | Closing a tab that is compacting asks nothing and throws away a compaction that still runs and is paid for | medium | tabs | product call | Fix in PR [#789](https://github.com/tmustier/pi-for-excel/pull/789) (open) |
 | [P-92](#p-92-a-tabs-label-does-not-follow-its-session-chosen-titles-are-lost-on-reload-resume-and-reopen) | A tab's label does not follow its session: chosen titles are lost on reload, resume and reopen | medium | tabs | fix | Fix in PR [#795](https://github.com/tmustier/pi-for-excel/pull/795) (open) |
 | [P-93](#p-93-reopening-while-the-undo-toast-shows-leaves-a-stale-undo-that-then-does-nothing) | Reopening while the undo toast shows leaves a stale "Undo" that then does nothing | medium | tabs | fix | Fix in PR [#793](https://github.com/tmustier/pi-for-excel/pull/793) (open) |
 | [P-94](#p-94-the-proxy-banner-shows-whenever-the-proxy-check-fails-whatever-the-provider-and-cannot-be-dismissed) | The proxy banner shows whenever the proxy check fails, whatever the provider, and cannot be dismissed | medium | taskpane | fix | Fix in PR [#793](https://github.com/tmustier/pi-for-excel/pull/793) (open) |
-| [P-95](#p-95-a-startup-slower-than-60-seconds-shows-a-fatal-error-but-keeps-starting-then-mounts-the-taskpane-under-it) | A startup slower than 60 seconds shows a fatal error but keeps starting, then mounts the taskpane under it | medium | taskpane | product call | none yet |
+| [P-95](#p-95-a-startup-slower-than-60-seconds-shows-a-fatal-error-but-keeps-starting-then-mounts-the-taskpane-under-it) | A startup slower than 60 seconds shows a fatal error but keeps starting, then mounts the taskpane under it | medium | taskpane | product call | Assigned to fix-host-web (in progress) |
 | [P-96](#p-96-the-page-language-is-hard-coded-as-chinese-langzh-cn-whatever-the-ui-language) | The page language is hard-coded as Chinese (lang="zh-CN") whatever the UI language | medium | taskpane
 
 ## low | fix | fix-host-web (in progress) |
@@ -137,40 +137,40 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 | [P-107](#p-107-the-selection-sent-with-every-request-is-not-capped-in-rows) | The selection sent with every request is not capped in rows | low | auto-context | fix | Fix in PR [#792](https://github.com/tmustier/pi-for-excel/pull/792) (open) |
 | [P-108](#p-108-backup-clear-asks-for-confirmation-and-only-then-says-the-workbook-has-no-identity) | `/backup clear` asks for confirmation and only then says the workbook has no identity | low | backups | fix | Fix in PR [#794](https://github.com/tmustier/pi-for-excel/pull/794) (open) |
 | [P-109](#p-109-revert-is-refused-while-pi-is-busy-but-restoring-from-the-backups-dialog-is-not) | `/revert` is refused while Pi is busy, but restoring from the Backups dialog is not | low | backups | product call | Fix in PR [#794](https://github.com/tmustier/pi-for-excel/pull/794) (open) |
-| [P-110](#p-110-a-formatcells-call-that-fails-partway-leaves-changes-with-no-backup) | A `format_cells` call that fails partway leaves changes with no backup | low | backups | fix | none yet |
+| [P-110](#p-110-a-formatcells-call-that-fails-partway-leaves-changes-with-no-backup) | A `format_cells` call that fails partway leaves changes with no backup | low | backups | fix | Assigned to #794 (follow-up; not yet in the PR) |
 | [P-111](#p-111-backup-does-not-take-the-workbook-lock-so-a-copy-can-catch-another-tabs-half-finished-change) | `/backup` does not take the workbook lock, so a copy can catch another tab's half-finished change | low | backups | fix | Fix in PR [#794](https://github.com/tmustier/pi-for-excel/pull/794) (open) |
 | [P-112](#p-112-enter-on-an-unknown-command-while-idle-inserts-a-newline) | Enter on an unknown `/command` while idle inserts a newline | low | commands | fix | Fix in PR [#789](https://github.com/tmustier/pi-for-excel/pull/789) (open) |
-| [P-113](#p-113-copy-and-export-are-refused-while-the-tab-is-busy-although-they-only-read) | `/copy` and `/export` are refused while the tab is busy although they only read | low | commands | product call | none yet |
+| [P-113](#p-113-copy-and-export-are-refused-while-the-tab-is-busy-although-they-only-read) | `/copy` and `/export` are refused while the tab is busy although they only read | low | commands | product call | Assigned to #794 (follow-up; not yet in the PR) |
 | [P-114](#p-114-the-snake-extension-is-enabled-by-default-putting-snake-in-every-users-menu) | The Snake extension is enabled by default, putting `/snake` in every user's menu | low | commands | product call | none (decided: intended) |
 | [P-115](#p-115-the-context-meter-keeps-the-old-figure-after-a-compaction-until-the-tab-is-switched) | The context meter keeps the old figure after a compaction until the tab is switched | low | compaction | fix | Fix in PR [#789](https://github.com/tmustier/pi-for-excel/pull/789) (open) |
 | [P-116](#p-116-compaction-between-model-responses-shows-no-compacting-context-indicator) | Compaction between model responses shows no "Compacting context…" indicator | low | compaction | fix | Fix in PR [#789](https://github.com/tmustier/pi-for-excel/pull/789) (open) |
 | [P-117](#p-117-the-context-meters-colours-ignore-the-per-model-warning-budget-so-it-is-red-long-before-compaction-on-200k-models) | The context meter's colours ignore the per-model warning budget, so it is red long before compaction on 200k models | low | compaction | fix | fix-turn-composer (#789 or a follow-up) |
 | [P-118](#p-118-the-percent-conventions-preview-does-not-multiply-by-100) | The Percent convention's preview does not multiply by 100 | low | conventions | fix | Fix in PR [#788](https://github.com/tmustier/pi-for-excel/pull/788) (open) |
 | [P-119](#p-119-small-copy-and-rendering-slips-in-the-taskpane-and-turn) | Small copy and rendering slips in the taskpane and turn | low | copy | fix | per item above |
-| [P-120](#p-120-small-copy-and-translation-slips-in-setup) | Small copy and translation slips in setup | low | copy | fix | none yet |
+| [P-120](#p-120-small-copy-and-translation-slips-in-setup) | Small copy and translation slips in setup | low | copy | fix | Assigned to #795 (follow-up; not yet in the PR) |
 | [P-121](#p-121-small-copy-and-rendering-slips-in-guidance-and-extensions) | Small copy and rendering slips in guidance and extensions | low | copy | fix | per sub-item above |
 | [P-122](#p-122-the-plugins-pages-busy-guard-is-never-set-so-double-clicks-can-start-two-installs-or-toggles) | The Plugins page's busy guard is never set, so double clicks can start two installs or toggles | low | extensions | fix | Fix in PR [#790](https://github.com/tmustier/pi-for-excel/pull/790) (open) |
 | [P-123](#p-123-escape-in-the-files-preview-closes-the-whole-overlay-instead-of-going-back-to-the-list) | Escape in the Files preview closes the whole overlay instead of going back to the list | low | files | fix | Fix in PR [#790](https://github.com/tmustier/pi-for-excel/pull/790) (open) |
 | [P-124](#p-124-the-shortcuts-page-lists-f6shiftf6-and-default-models-advertises-ctrlp-none-of-which-pi-handles) | The shortcuts page lists F6/Shift+F6 and `/default-models` advertises Ctrl+P, none of which Pi handles | low | keys | product call | Fix in PR [#795](https://github.com/tmustier/pi-for-excel/pull/795) (open) removes `/default-models`; F6 entry: none yet |
 | [P-125](#p-125-small-copy-and-rendering-slips-in-the-chrome) | Small copy and rendering slips in the chrome | low | language | fix | fix-host-web (in progress) for the `lang` attribute; none yet for the rest |
-| [P-126](#p-126-the-proxy-gates-helper-not-detected-yet-hint-shows-html-entities-as-text) | The proxy gate's "Helper not detected yet" hint shows HTML entities as text | low | login | fix | none yet |
+| [P-126](#p-126-the-proxy-gates-helper-not-detected-yet-hint-shows-html-entities-as-text) | The proxy gate's "Helper not detected yet" hint shows HTML entities as text | low | login | fix | Assigned to #795 (follow-up; not yet in the PR) |
 | [P-127](#p-127-connecting-from-the-connection-dialog-shows-no-toast) | Connecting from the connection dialog shows no toast | low | login | fix | fix-sessions-models (check #795) |
-| [P-128](#p-128-closing-the-device-code-dialog-leaves-the-login-polling-in-the-background) | Closing the device-code dialog leaves the login polling in the background | low | login | fix | none yet |
-| [P-129](#p-129-the-picker-shows-no-check-mark-when-its-opening-refresh-swaps-the-model) | The picker shows no check mark when its opening refresh swaps the model | low | models | fix | none yet |
-| [P-130](#p-130-an-unsaved-workbook-can-open-with-the-latest-conversation-from-an-unrelated-workbook) | An unsaved workbook can open with the latest conversation from an unrelated workbook | low | persistence | product call | none yet |
-| [P-131](#p-131-an-older-open-taskpane-can-block-a-newer-versions-database-upgrade) | An older open taskpane can block a newer version's database upgrade | low | persistence | fix | none yet |
+| [P-128](#p-128-closing-the-device-code-dialog-leaves-the-login-polling-in-the-background) | Closing the device-code dialog leaves the login polling in the background | low | login | fix | Assigned to #795 (follow-up; not yet in the PR) |
+| [P-129](#p-129-the-picker-shows-no-check-mark-when-its-opening-refresh-swaps-the-model) | The picker shows no check mark when its opening refresh swaps the model | low | models | fix | Assigned to #795 (follow-up; not yet in the PR) |
+| [P-130](#p-130-an-unsaved-workbook-can-open-with-the-latest-conversation-from-an-unrelated-workbook) | An unsaved workbook can open with the latest conversation from an unrelated workbook | low | persistence | product call | Assigned to fix-host-web (in progress) |
+| [P-131](#p-131-an-older-open-taskpane-can-block-a-newer-versions-database-upgrade) | An older open taskpane can block a newer version's database upgrade | low | persistence | fix | Assigned to fix-host-web (in progress) |
 | [P-132](#p-132-a-failed-read-looks-like-a-successful-one) | A failed read looks like a successful one | low | reads | fix | Fix in PR [#793](https://github.com/tmustier/pi-for-excel/pull/793) (open) |
 | [P-133](#p-133-single-line-breaks-collapse-in-user-messages) | Single line breaks collapse in user messages | low | rendering | fix | Fix in PR [#786](https://github.com/tmustier/pi-for-excel/pull/786) (open) |
 | [P-134](#p-134-code-fences-labelled-c-f-or-with---lose-their-code-card-and-copy-button) | Code fences labelled `c++`, `f#` or with `-` lose their code card and Copy button | low | rendering | fix | Fix in PR [#786](https://github.com/tmustier/pi-for-excel/pull/786) (open) |
 | [P-135](#p-135-dark-mode-never-turns-on-in-excel-on-the-web-and-ignores-office-theme-changes) | Dark mode never turns on in Excel on the web and ignores Office theme changes | low | rendering | product call | Fix in PR [#793](https://github.com/tmustier/pi-for-excel/pull/793) (open) |
 | [P-136](#p-136-save-and-cancel-on-the-rules-page-go-back-to-settings-instead-of-closing) | Save and Cancel on the Rules page go back to "Settings" instead of closing | low | rules | fix | Fix in PR [#790](https://github.com/tmustier/pi-for-excel/pull/790) (open) |
-| [P-137](#p-137-this-file-stays-unidentified-after-the-workbook-is-first-saved-while-the-rules-page-is-open) | "This file" stays unidentified after the workbook is first saved while the Rules page is open | low | rules | fix | none yet |
+| [P-137](#p-137-this-file-stays-unidentified-after-the-workbook-is-first-saved-while-the-rules-page-is-open) | "This file" stays unidentified after the workbook is first saved while the Rules page is open | low | rules | fix | Assigned to #788 (follow-up; not yet in the PR) |
 | [P-138](#p-138-nothing-in-the-ui-shows-that-rules-are-active) | Nothing in the UI shows that rules are active | low | rules | product call | Fix in PR [#790](https://github.com/tmustier/pi-for-excel/pull/790) (open) |
-| [P-139](#p-139-a-double-click-on-a-resume-entry-can-start-two-resumes) | A double click on a resume entry can start two resumes | low | sessions | fix | none yet |
-| [P-140](#p-140-the-audit-export-includes-entries-from-every-workbook-not-only-the-current-one) | The audit export includes entries from every workbook, not only the current one | low | sessions | product call | none yet |
-| [P-141](#p-141-small-copy-and-rendering-slips-in-sessions-and-commands) | Small copy and rendering slips in sessions and commands | low | sessions | fix | none yet |
+| [P-139](#p-139-a-double-click-on-a-resume-entry-can-start-two-resumes) | A double click on a resume entry can start two resumes | low | sessions | fix | Assigned to #795 (follow-up; not yet in the PR) |
+| [P-140](#p-140-the-audit-export-includes-entries-from-every-workbook-not-only-the-current-one) | The audit export includes entries from every workbook, not only the current one | low | sessions | product call | Assigned to #795 (follow-up; not yet in the PR) |
+| [P-141](#p-141-small-copy-and-rendering-slips-in-sessions-and-commands) | Small copy and rendering slips in sessions and commands | low | sessions | fix | Assigned to #795 (follow-up; not yet in the PR) |
 | [P-142](#p-142-busy-rules-differ-between-the-menu-or-status-bar-and-the-matching-slash-commands) | Busy rules differ between the menu or status bar and the matching slash commands | low | settings | product call | Fix in PR [#795](https://github.com/tmustier/pi-for-excel/pull/795) (open) (picker part; the Settings part is not listed) |
-| [P-143](#p-143-f2-lets-focus-leave-the-settings-dialog-for-the-composer-behind-it) | F2 lets focus leave the Settings dialog for the composer behind it | low | settings | fix | none yet (overlay focus work in PR #793 (open) may cover it) |
+| [P-143](#p-143-f2-lets-focus-leave-the-settings-dialog-for-the-composer-behind-it) | F2 lets focus leave the Settings dialog for the composer behind it | low | settings | fix | Assigned to #793 (follow-up; not yet in the PR) |
 | [P-144](#p-144-the-busy-dot-is-nearly-invisible-on-an-inactive-tab-in-the-light-theme) | The busy dot is nearly invisible on an inactive tab in the light theme | low | tabs | fix | Fix in PR [#793](https://github.com/tmustier/pi-for-excel/pull/793) (open) |
 | [P-145](#p-145-ctrlpageuppagedown-and-cmdshift---do-nothing-when-focus-is-on-a-tab) | Ctrl+PageUp/PageDown and Cmd+Shift+[ / ] do nothing when focus is on a tab | low | tabs | fix | Fix in PR [#793](https://github.com/tmustier/pi-for-excel/pull/793) (open) |
 | [P-146](#p-146-a-toast-shown-while-an-overlay-is-open-is-drawn-under-the-overlay-once-any-toast-has-been-shown) | A toast shown while an overlay is open is drawn under the overlay once any toast has been shown | low | taskpane | fix | Fix in PR [#793](https://github.com/tmustier/pi-for-excel/pull/793) (open) |
@@ -337,7 +337,7 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Decision needed:** `fix`: refresh (or refresh on 401 and retry once) before each model request when the token is near expiry.
 - **Raised by:** MODEL-15; [models and providers](foundations/models-and-providers.md#open-questions-and-verification); MULTI-10; [several taskpanes](cross-cutting/several-taskpanes.md#open-questions-and-verification), [provider errors and offline](cross-cutting/provider-errors-and-offline.md#open-questions-and-verification)
 - **Status:** Confirmed in the standalone taskpane with a stubbed login, 26 October 2026 (MODEL-15) Also: Suspected from code; not reproduced (MULTI-10 refuted only the "logs each other out" version)
-- **Owner:** none yet
+- **Owner:** Assigned to #795 (follow-up; not yet in the PR)
 
 ### P-14: A pointer resting over the model picker decides what Enter chooses
 
@@ -481,7 +481,7 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Decision needed:** `fix`: recheck the lock after the user confirms and refuse or wait.
 - **Raised by:** TABS-22; [tabs](sessions/tabs.md#open-questions-and-verification), [checklist](verification/sessions-and-commands.md#sessionstabsmd)
 - **Status:** Confirmed in Excel on the web, 26 October 2026 (TABS-22)
-- **Owner:** none yet
+- **Owner:** Assigned to #794 (follow-up; not yet in the PR)
 
 ### P-26: The four disclosure-bar switches change nothing and are not saved
 
@@ -652,7 +652,7 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Decision needed:** `fix`. Fill formulas only (`FillValues`-style or set `formulas`), or capture formats in the backup.
 - **Raised by:** WRITE-12; [writing](workbook/writing.md#open-questions-and-verification)
 - **Status:** Confirmed in Excel on the web, 26 October 2026 (WRITE-12)
-- **Owner:** none yet
+- **Owner:** Assigned to #794 (follow-up; not yet in the PR)
 
 ### P-40: Manual backup ids in toasts are cut too short to restore with
 
@@ -916,7 +916,7 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Decision needed:** `fix`, move focus into the menu and add arrow/Escape handling (the Escape order then resolves itself).
 - **Raised by:** UTIL-02, UTIL-08; [the utilities menu](ui/the-utilities-menu.md#open-questions-and-verification), [the utilities menu](ui/the-utilities-menu.md#edge-cases)
 - **Status:** Confirmed in Excel on the web, 26 October 2026 (UTIL-02: no arrows, focus not moved); the macOS Escape case (UTIL-08) suspected from code, not reproduced
-- **Owner:** none yet
+- **Owner:** Assigned to #793 (follow-up; not yet in the PR)
 
 ### P-62: A failed language save leaves a mixed-language taskpane
 
@@ -940,7 +940,7 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Decision needed:** `fix`. Track held and waiting counts per tab.
 - **Raised by:** WB-07, WB-08; [the workbook](foundations/the-workbook.md#edge-cases), [the workbook](foundations/the-workbook.md#open-questions-and-verification)
 - **Status:** Confirmed in Excel on the web, 26 October 2026 (WB-07, WB-08)
-- **Owner:** none yet
+- **Owner:** Assigned to #794 (follow-up; not yet in the PR)
 
 ### P-64: Saving an API key says "Testing…" but does not test it
 
@@ -976,7 +976,7 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Decision needed:** `fix`: re-run the default-model choice once the startup credentials are known.
 - **Raised by:** MODEL-21; [models and providers](foundations/models-and-providers.md#open-questions-and-verification)
 - **Status:** Confirmed in the standalone taskpane, 26 October 2026 (MODEL-21)
-- **Owner:** none yet
+- **Owner:** Assigned to #795 (follow-up; not yet in the PR)
 
 ### P-67: A reload brings back a model whose provider is gone and does not swap it
 
@@ -988,7 +988,7 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Decision needed:** `fix`: reconcile restored tabs against connected providers after restore, and save automatic swaps.
 - **Raised by:** MODEL-19, MODEL-22; [models and providers](foundations/models-and-providers.md#open-questions-and-verification)
 - **Status:** Confirmed in the standalone taskpane, 26 October 2026 (MODEL-22, MODEL-19)
-- **Owner:** none yet
+- **Owner:** Assigned to #795 (follow-up; not yet in the PR)
 
 ### P-68: With both OpenAI providers connected the default model bills the API key
 
@@ -1000,7 +1000,7 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Decision needed:** `product call`: prefer the subscription (no per-token cost, but rate limits) or keep the API key (predictable limits, costs money); either way, label the provider in the status bar.
 - **Raised by:** MODEL-16, MODEL-18; [models and providers](foundations/models-and-providers.md#open-questions-and-verification)
 - **Status:** Confirmed in Excel on the web, 26 October 2026 (MODEL-16, MODEL-18)
-- **Owner:** none yet
+- **Owner:** Assigned to #795 (follow-up; not yet in the PR)
 
 ### P-69: Two taskpanes on one workbook can run in different execution modes
 
@@ -1012,7 +1012,7 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Decision needed:** `product call`, sync via the storage event (one global mode) or document per-pane modes.
 - **Raised by:** MULTI-02; [several taskpanes](cross-cutting/several-taskpanes.md#modifiers), [several taskpanes](cross-cutting/several-taskpanes.md#open-questions-and-verification)
 - **Status:** Confirmed in Excel on the web, 26 October 2026 (MULTI-02)
-- **Owner:** none yet
+- **Owner:** Assigned to #794 (follow-up; not yet in the PR)
 
 ### P-70: Storage persistence is never requested, so the browser may evict all sessions
 
@@ -1024,7 +1024,7 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Decision needed:** `product call`, request persistence at startup (may prompt in some browsers) or document the risk; eviction in WKWebView/WebView2 is untested.
 - **Raised by:** PERSIST-06; [persistence and restore](cross-cutting/persistence-and-restore.md#open-questions-and-verification)
 - **Status:** Confirmed in Excel on the web, 26 October 2026 (PERSIST-06: not persisted); eviction not reproduced
-- **Owner:** none yet
+- **Owner:** Assigned to fix-host-web (in progress)
 
 ### P-71: On Excel on the web every workbook shares one tab layout, and two taskpanes overwrite it
 
@@ -1096,7 +1096,7 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Decision needed:** `fix`: show the same warning when a remote URL is saved.
 - **Raised by:** PROXY-14; [the proxy](setup/the-proxy.md#open-questions-and-verification)
 - **Status:** Confirmed in Excel on the web, 26 October 2026 (PROXY-14)
-- **Owner:** none yet
+- **Owner:** Assigned to #795 (follow-up; not yet in the PR)
 
 ### P-77: A rate-limited or failing ChatGPT request is never retried, and every 429 reads as "usage limit"
 
@@ -1192,7 +1192,7 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Decision needed:** `fix`: register a before-leave guard on the gateway page (and other editable pages).
 - **Raised by:** SETTINGS-09; [settings](setup/settings.md#open-questions-and-verification), [custom gateways](setup/custom-gateways.md#open-questions-and-verification)
 - **Status:** Confirmed in Excel on the web, 26 October 2026 (SETTINGS-09)
-- **Owner:** none yet
+- **Owner:** Assigned to #795 (follow-up; not yet in the PR)
 
 ### P-85: In Confirm mode, listing or reading skills asks for a workbook-mutation approval
 
@@ -1252,7 +1252,7 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Decision needed:** `product call`, show the provider in the control when ambiguous; and `fix` reconciliation if it changes providers unasked.
 - **Raised by:** STATUS-19; [the status bar](ui/the-status-bar.md#open-questions-and-verification), [persistence and restore](cross-cutting/persistence-and-restore.md#open-questions-and-verification)
 - **Status:** Confirmed in Excel on the web, 26 October 2026 (STATUS-19)
-- **Owner:** none yet
+- **Owner:** Assigned to #795 (follow-up; not yet in the PR)
 
 ### P-90: After a keyboard tab switch, the open thinking popover changes the hidden tab
 
@@ -1324,7 +1324,7 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Decision needed:** `product call`: abort at 60 s (cost: slow-but-healthy starts fail) or keep going and clear the message on success (cost: a long wait with no outcome); and whether to show the 12 s warning.
 - **Raised by:** [the taskpane](foundations/the-taskpane.md#open-questions-and-verification)
 - **Status:** Suspected from code; not reproduced
-- **Owner:** none yet
+- **Owner:** Assigned to fix-host-web (in progress)
 
 ### P-96: The page language is hard-coded as Chinese (lang="zh-CN") whatever the UI language
 
@@ -1507,7 +1507,7 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Decision needed:** `fix`. Store the captured backup in the error path when anything was applied.
 - **Raised by:** [writing](workbook/writing.md#open-questions-and-verification)
 - **Status:** Suspected from code; not reproduced
-- **Owner:** none yet
+- **Owner:** Assigned to #794 (follow-up; not yet in the PR)
 
 ### P-111: `/backup` does not take the workbook lock, so a copy can catch another tab's half-finished change
 
@@ -1543,7 +1543,7 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Decision needed:** `product call`: allow them (copy may catch a partial answer) or keep refusing (simpler, consistent).
 - **Raised by:** EXPORT-01; [export and copy](sessions/export-and-copy.md#open-questions-and-verification)
 - **Status:** Confirmed in Excel on the web, 26 October 2026 (EXPORT-01)
-- **Owner:** none yet
+- **Owner:** Assigned to #794 (follow-up; not yet in the PR)
 
 ### P-114: The Snake extension is enabled by default, putting `/snake` in every user's menu
 
@@ -1623,7 +1623,7 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Decision needed:** `fix`: route strings through `t()`, make OS wording neutral, use the stored name, align the command.
 - **Raised by:** LOGIN-34, GATEWAY-07, GATEWAY-18; [welcome and login](setup/welcome-and-login.md#open-questions-and-verification), [custom gateways](setup/custom-gateways.md#open-questions-and-verification), [settings](setup/settings.md#open-questions-and-verification), [the proxy](setup/the-proxy.md#open-questions-and-verification)
 - **Status:** Confirmed in Excel on the web and the standalone taskpane, 26 October 2026 (LOGIN-34, GATEWAY-07, GATEWAY-18); items 3, 5, 6 from code
-- **Owner:** none yet
+- **Owner:** Assigned to #795 (follow-up; not yet in the PR)
 
 ### P-121: Small copy and rendering slips in guidance and extensions
 
@@ -1705,7 +1705,7 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Decision needed:** `fix`: store plain text in the key (or build the bold part with DOM nodes).
 - **Raised by:** LOGIN-35; [welcome and login](setup/welcome-and-login.md#open-questions-and-verification)
 - **Status:** Confirmed in a production build of the standalone taskpane, 26 October 2026 (LOGIN-35)
-- **Owner:** none yet
+- **Owner:** Assigned to #795 (follow-up; not yet in the PR)
 
 ### P-127: Connecting from the connection dialog shows no toast
 
@@ -1729,7 +1729,7 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Decision needed:** `fix`: add Cancel and abort the polling when the dialog is closed.
 - **Raised by:** [welcome and login](setup/welcome-and-login.md#open-questions-and-verification)
 - **Status:** Suspected from code; not reproduced
-- **Owner:** none yet
+- **Owner:** Assigned to #795 (follow-up; not yet in the PR)
 
 ### P-129: The picker shows no check mark when its opening refresh swaps the model
 
@@ -1741,7 +1741,7 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Decision needed:** `fix`: read the current model after the refresh.
 - **Raised by:** PICKER-19; [the model picker](setup/the-model-picker.md#open-questions-and-verification)
 - **Status:** Confirmed in Excel on the web, 26 October 2026 (PICKER-19)
-- **Owner:** none yet
+- **Owner:** Assigned to #795 (follow-up; not yet in the PR)
 
 ### P-130: An unsaved workbook can open with the latest conversation from an unrelated workbook
 
@@ -1753,7 +1753,7 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Decision needed:** `product call`, keep the fallback for legacy users or start blank.
 - **Raised by:** [persistence and restore](cross-cutting/persistence-and-restore.md#open-questions-and-verification)
 - **Status:** Suspected from code; not reproduced
-- **Owner:** none yet
+- **Owner:** Assigned to fix-host-web (in progress)
 
 ### P-131: An older open taskpane can block a newer version's database upgrade
 
@@ -1765,7 +1765,7 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Decision needed:** `fix`, handle `onversionchange` (close + reload prompt) and `onblocked`.
 - **Raised by:** [several taskpanes](cross-cutting/several-taskpanes.md#open-questions-and-verification)
 - **Status:** Suspected from code; not reproduced
-- **Owner:** none yet
+- **Owner:** Assigned to fix-host-web (in progress)
 
 ### P-132: A failed read looks like a successful one
 
@@ -1837,7 +1837,7 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Decision needed:** `fix`. Re-read the workbook context on focus or before Save.
 - **Raised by:** RULES-25; [rules](guidance/rules.md#open-questions-and-verification)
 - **Status:** Confirmed in Excel for Mac, 26 October 2026 (RULES-25)
-- **Owner:** none yet
+- **Owner:** Assigned to #788 (follow-up; not yet in the PR)
 
 ### P-138: Nothing in the UI shows that rules are active
 
@@ -1861,7 +1861,7 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Decision needed:** `fix`: ignore selections while a resume is in flight.
 - **Raised by:** [resuming a session](sessions/resuming-a-session.md#open-questions-and-verification)
 - **Status:** Suspected from code; not reproduced
-- **Owner:** none yet
+- **Owner:** Assigned to #795 (follow-up; not yet in the PR)
 
 ### P-140: The audit export includes entries from every workbook, not only the current one
 
@@ -1873,7 +1873,7 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Decision needed:** `product call`: filter by workbook (loses a cross-workbook audit) or keep all and say so in the toast/file.
 - **Raised by:** [export and copy](sessions/export-and-copy.md#open-questions-and-verification)
 - **Status:** Suspected from code; not reproduced
-- **Owner:** none yet
+- **Owner:** Assigned to #795 (follow-up; not yet in the PR)
 
 ### P-141: Small copy and rendering slips in sessions and commands
 
@@ -1891,7 +1891,7 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Decision needed:** `fix` for the count, Ctrl+P text and prompt title; `product call` for the wording and tooltip.
 - **Raised by:** [sessions and tabs](foundations/sessions-and-tabs.md#open-questions-and-verification), [the command menu](commands/the-command-menu.md#open-questions-and-verification), [renaming a tab](sessions/renaming-a-tab.md#open-questions-and-verification), [empty state and hints](commands/empty-state-and-hints.md#open-questions-and-verification), [tabs](sessions/tabs.md#open-questions-and-verification)
 - **Status:** Confirmed in Excel on the web, 26 October 2026 (SESS-10, EXPORT-10, MENU-19, RENAME-01, RENAME-05, HINTS-02, TABS-05); the prompt title is suspected from code
-- **Owner:** none yet
+- **Owner:** Assigned to #795 (follow-up; not yet in the PR)
 
 ### P-142: Busy rules differ between the menu or status bar and the matching slash commands
 
@@ -1915,7 +1915,7 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Decision needed:** `fix`: ignore the composer-focus shortcut while a modal is open.
 - **Raised by:** SETTINGS-14; [settings](setup/settings.md#open-questions-and-verification)
 - **Status:** Confirmed in Excel on the web, 26 October 2026 (SETTINGS-14)
-- **Owner:** none yet (overlay focus work in PR #793 (open) may cover it)
+- **Owner:** Assigned to #793 (follow-up; not yet in the PR)
 
 ### P-144: The busy dot is nearly invisible on an inactive tab in the light theme
 
