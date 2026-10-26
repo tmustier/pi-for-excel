@@ -2,7 +2,7 @@
 
 ## Summary
 
-The Files workspace is a small file store that belongs to Pi rather than to the workbook: documents, data and reference material the user gives Pi, notes and artifacts Pi writes for itself, external [skills](../guidance/skills.md), and Pi's own built-in documentation. Files in it are available to Pi in every session and every workbook on this computer, but they are never attached to a message: Pi reads them with its `files` tool when it decides to. The user sees it in the Files overlay, titled "Files" ("Documents available to Pi"), opened with `/files`, the "Browse files" button at the left of the [composer](../turn/the-composer.md), or "Files" in the [utilities menu](../ui/the-utilities-menu.md). Files get in by dropping them on the composer, with "Upload" in the overlay, by connecting a local folder, or by Pi writing them. The overlay opens while a tab is [busy](../glossary.md#busy) (`/files` is busy-allowed), with no provider connected, and on Excel on the web. Running `/files` while the overlay is open closes it.
+The Files workspace is a small file store that belongs to Pi rather than to the workbook: documents, data and reference material the user gives Pi, notes and artifacts Pi writes for itself, external [skills](../guidance/skills.md), and Pi's own built-in documentation. Files in it are available to Pi in every session and every workbook on this computer, but they are never attached to a message: Pi reads them with its `files` tool when it decides to. The user sees it in the Files overlay, titled "Files" ("Documents available to Pi"), opened with `/files`, the "Browse files" button at the left of the [composer](../turn/the-composer.md), or "Files" in the [utilities menu](../ui/the-utilities-menu.md). Files get in by dropping them on the composer, with "Upload" in the overlay, by connecting a local folder, or by Pi writing them. The overlay opens while a tab is [busy](../glossary.md#the-turn) (`/files` is busy-allowed), with no provider connected, and on Excel on the web. Running `/files` while the overlay is open closes it.
 
 ## The simple case
 
@@ -10,7 +10,7 @@ The user drags `budget.csv` from their desktop onto the composer. While it hover
 
 The user then types "compare budget.csv with Sheet1" and sends. Pi calls its `files` tool; a [tool card](../turn/tool-calls.md) "Read file budget.csv" appears, and Pi answers using the file.
 
-Clicking "Browse files" opens the overlay. Under "YOUR FILES" is `budget.csv` with "3.20 KB · Uploaded · Just now" and a "Workbook" badge; below it, "BUILT-IN DOCS" lists Pi's documentation, each marked "Read only". Clicking the file opens its preview with "Open ↗", "Download", "Rename" and "Delete". Escape closes the overlay and returns focus to the composer.
+Clicking "Browse files" opens the overlay. Under "YOUR FILES" is `budget.csv` with "3.20 KB · Uploaded · just now" and, when Pi can identify the workbook, a "Workbook" badge; below it, "BUILT-IN DOCS" lists Pi's documentation, each marked "Read only". Clicking the file opens its preview with "Open ↗", "Download", "Rename" and "Delete". Escape closes the overlay and returns focus to the composer. The overlay does not take focus: if focus is still in the composer, the first Escape only moves it out of the composer (to the tab strip) and the second closes the overlay.
 
 ## The interaction, event by event
 
@@ -47,17 +47,17 @@ Opening and browsing records nothing (reads are logged in an internal audit list
 
 ### Importing
 
-A drop on the composer or files chosen with "Upload" / "Upload files" are written one by one, by file name, into the top of the workspace, and each is tagged to the current workbook. A file with the same name as an existing one replaces it without asking. When all are written the toast says "Imported {N} file(s) into Files." (drop) or "Imported {N} file(s)." (Upload). A failure stops at that file, keeps the files already written, and shows "Import failed: {error}" or "Upload failed: {error}". There is no size limit other than the browser's storage quota. Dropping on any part of the taskpane other than the composer card does nothing.
+A drop on the composer or files chosen with "Upload" / "Upload files" are written one by one, by file name, into the top of the workspace, and each is tagged to the current workbook if Pi can identify it. When it cannot (a never-saved workbook, or a workbook opened signed out through a link on Excel on the web), files are imported untagged and show no badge (confirmed). A file with the same name as an existing one replaces it without asking. When all are written the toast says "Imported {N} file(s) into Files." (drop) or "Imported {N} file(s)." (Upload). A failure stops at that file, keeps the files already written, and shows "Import failed: {error}" or "Upload failed: {error}". There is no size limit other than the browser's storage quota. Dropping on any part of the taskpane other than the composer card does nothing.
 
-"Connect folder" opens the operating system's folder picker and asks for read and write permission. Once granted, the button becomes "Connected ✓" (disabled) and the folder's files appear under "FROM {FOLDER NAME}". The link is remembered across reloads while the browser keeps the permission. A refusal shows "Connect folder failed: {error}". There is no way to disconnect from the overlay.
+"Connect folder" opens the operating system's folder picker and asks for read and write permission. On Excel on the web the button is shown but always fails, because the taskpane is a cross-origin frame: "Connect folder failed: Failed to execute 'showDirectoryPicker' on 'Window': Cross origin sub frames aren't allowed to show a file picker." (confirmed). Once granted, the button becomes "Connected ✓" (disabled) and the folder's files appear under "FROM {FOLDER NAME}". The link is remembered across reloads while the browser keeps the permission. A refusal shows "Connect folder failed: {error}". There is no way to disconnect from the overlay.
 
 ### The preview
 
-Clicking a row replaces the list with the file: the name as title, a line such as "Text · 3.20 KB · Uploaded · 2h ago" ("(preview truncated)" is added when the file is long), then:
+Clicking a row replaces the list with the file: the name as title, a line such as "CSV · 3.20 KB · Uploaded · 2h ago" or "Text · 7.00 KB · Pi documentation" (built-in docs have no date; "(preview truncated)" is added only when the file was too large to read in full, not when it merely has more than 50 lines), then:
 
 - a callout "Tagged to {workbook} — included when that workbook is open." for workbook-tagged files, or "Built-in documentation — read only. Pi references this automatically." for built-in docs;
 - the preview: the first 50 lines of a text file (markdown rendered, other text wrapped), the image itself, or a placeholder "PDF document", "Binary file", "Image preview unavailable" or "Preview unavailable: {error}";
-- actions. Built-in docs have "Copy content" ("Copied {name} to clipboard.") and "Download". Other files have "Open ↗" (a new browser window), "Download", "Rename" and a red "Delete".
+- actions. Built-in docs have "Copy content" ("Copied {name} to clipboard."; on Excel on the web it always fails with "Copy failed: … The Clipboard API has been blocked because of a permissions policy …", confirmed) and "Download". Other files have "Open ↗" (a new browser window), "Download", "Rename" and a red "Delete".
 
 "Rename" opens an in-taskpane dialog "Rename file" with "{path} — leave off the extension to keep it.", the path prefilled, and "Cancel" / "Rename". The new path may include folders. Success says "Renamed to {path}." and shows the file under its new path. "Delete" asks "Delete file?" with the path and "Cancel" / "Delete"; success says "Deleted {name}." and returns to the list. Failures say "Rename failed: {error}" / "Delete failed: {error}". If the file disappears while previewed (Pi deleted it), the toast is "That file is no longer available." and the list returns.
 
@@ -82,13 +82,13 @@ Before each request Pi is given a short summary of the workspace as part of [aut
 | Execution mode | No effect. Pi's file writes and deletes never ask, in Auto or Confirm. | No effect. |
 | Files in the workspace, or an overlay open | This is the workspace. The overlay is itself an overlay; it cannot be opened from the composer button while another overlay covers the composer. | A drop or upload during a turn is available to tool calls that start afterwards. |
 | Tab state (new, restored, another tab busy) | The workspace is the same for every tab. | A responding tab keeps running behind the overlay. |
-| Host (desktop or web) | "Connect folder" appears only where the browser offers a folder picker: Chromium-based Excel on the web, some Windows desktop builds; not on macOS desktop, Firefox or Safari. "Open ↗" and "Download" depend on the host allowing new windows and downloads. | No effect. |
+| Host (desktop or web) | "Connect folder" appears only where the browser offers a folder picker: Chromium-based Excel on the web, some Windows desktop builds; not on macOS desktop, Firefox or Safari. On Excel on the web it appears but always fails (cross-origin frame). "Copy content" fails on the web. "Open ↗" opens the file in a new browser window on the web; "Download" depends on the host allowing downloads. | No effect. |
 
 ## Cancel and interrupt
 
 | Event | Before sent | While busy |
 | --- | --- | --- |
-| Stop (button or Escape) | Escape closes the whole overlay, from the list or the preview (the first Escape in the filter box only leaves the box). It never stops a responding tab while the overlay is open. | A running import cannot be stopped; files written so far stay. Stopping a turn during a `files` call ends the call like any [tool call](../turn/stopping.md). |
+| Stop (button or Escape) | Escape closes the whole overlay, from the list or the preview (the first Escape in the filter box or the composer only leaves it). It never stops a responding tab while the overlay is open. | A running import cannot be stopped; files written so far stay. Stopping a turn during a `files` call ends the call like any [tool call](../turn/stopping.md). |
 | The user sends something else | Behind the overlay. A drop on the composer works only with the overlay closed. | The composer accepts drops while Pi is responding; the import does not interrupt the turn. |
 | Tab switched, created, closed or reopened | Behind the overlay. The workspace does not depend on the tab. | No effect on an import. |
 | An overlay or menu opens | Rename and Delete open dialogs over the overlay; an approval from a background tab can too. | No effect. |
@@ -134,11 +134,14 @@ Before each request Pi is given a short summary of the workspace as part of [aut
 
 ## Open questions and verification
 
-- The task brief mentions an experimental write/delete gate for the `files` tool. At this commit there is none: `src/tools/experimental-tool-gates/wrappers.ts:451` states "`files` has no gate", and `/experimental` has no files flag. Pi can delete any user file with no confirmation, in either execution mode. A product call.
-- "Connect folder" has no matching disconnect in the UI; `disconnectNativeDirectory` (`src/files/workspace.ts:1041`) is never called. Once connected, a folder can only be dropped by revoking browser permission. Looks like a gap.
-- Escape from the preview closes the whole overlay rather than going back to the list (confirmed in the standalone taskpane). Probably unintended, since the settings pages go back one level.
-- Import silently overwrites a same-named file (`src/files/workspace.ts:1371-1423`). A product call.
-- Whether "Open ↗" and "Download" work in Excel desktop WebViews and Excel on the web was not checked.
-- The list, the built-in docs, the preview of a built-in doc and Escape were confirmed in the standalone taskpane (Chromium, so "Connect folder" was visible). Drops, uploads, rename and delete were read from code.
+- Confirmed in Excel on the web (FILES checklist): the drop hint "Drop files to import to file workspace", "Imported 1 file into Files." and "Imported 2 files into Files." with the draft left untouched; a drop during a running turn importing without interrupting it; "Upload" opening a multi-file picker and "Imported 2 files."; the sections "YOUR FILES", "SKILLS" (with a folder row) and "BUILT-IN DOCS" (47, "Read only"); the footer "{N} files · 356 KB · Sandboxed workspace" counting the built-in docs; the filter appearing, matching "BUD" case-insensitively, "No matching files" / "Try a different filter term.", and the first Escape in it only leaving the box; the preview line, rendered markdown, the CSV shown as text, the built-in-doc callout; "Open ↗" opening a new window; Rename ("Rename file", "notes.md — leave off the extension to keep it.", focus in the prefilled field, "Renamed to docs/renamed.md."); Delete ("Delete file?" with the path, "Deleted renamed.md.", back to the list); `/files` closing the overlay when run again; focus back in the composer after closing.
+- **Import silently overwrites a same-named file.** Confirmed in Excel on the web (FILES-14): dropping a second `budget.csv` replaced the first with no question, and an Upload replaced it again (`src/files/workspace.ts:1371-1423`). A product call.
+- **Escape from the preview closes the whole overlay** rather than going back to the list (confirmed in Excel on the web, FILES-20). Probably unintended, since the settings pages go back one level.
+- **"Connect folder" is offered on Excel on the web but cannot work** (confirmed, FILES-25): the folder picker is refused in the cross-origin add-in frame. The button should probably be hidden there (`src/files/workspace.ts:88` offers it whenever `showDirectoryPicker` exists; the call at line 1017 then throws).
+- **"Copy content" fails on Excel on the web** with the clipboard permissions-policy error (confirmed, FILES-22), like every clipboard write in the add-in frame.
+- No disconnect for a connected folder: `disconnectNativeDirectory` (`src/files/workspace.ts:1041`) is never called. Read from code; could not be tried because connecting fails on the web.
+- No write/delete gate for Pi's `files` tool: `src/tools/experimental-tool-gates/wrappers.ts:451` states "`files` has no gate". A product call.
+- "Download" showed no toast and no visible result in the orb's Chrome; whether a file was saved could not be observed. Needs desktop for the WebView case.
+- Drops were made with a synthetic drop event in the taskpane frame; a real drag from the desktop through Excel's frame was not possible in the orb (needs desktop or a visible session). The empty state was not seen because a skill file already existed.
 
 Verified against pi-for-excel commit `ec453df`.
