@@ -52,12 +52,12 @@ Before anything else, the workbook must have an identity, which a workbook gets 
 
 Nothing is stored, downloaded or deleted when:
 
-- the active tab is busy ("Can't run /backup while Pi is busy"; the text stays in the composer);
+- the active tab is busy ("Can't run /backup while Pi is busy"; the composer is cleared, confirmed in Excel on the web);
 - the subcommand is `help` or unknown (the usage toast);
 - `list` finds no copies ("No manual full-workbook backups for this workbook.");
 - `restore` finds no copy, or none with that id ("Could not find backups for this workbook.");
 - `clear` is cancelled in its confirmation;
-- the workbook has never been saved: "Backup command failed: Current workbook identity is unavailable; cannot create or restore manual full-workbook backups safely." (`list` on such a workbook simply finds nothing).
+- the workbook has no identity (never saved on desktop, or opened through an anonymous sharing link on Excel on the web): `create` and `restore` fail with "Backup command failed: Current workbook identity is unavailable; cannot create or restore manual full-workbook backups safely."; `list` reports "No manual full-workbook backups for this workbook."; `clear` still opens its confirmation and only fails with the same message after "Delete all" (all confirmed in Excel on the web).
 
 ### Capturing
 
@@ -97,7 +97,7 @@ There is no size or count limit beyond what the storage allows; copies are never
 | Execution mode | No effect. Taking or downloading a copy never asks for approval. | No effect. |
 | Files in the workspace, or an overlay open | Copies are stored in the Files workspace; a connected folder means they are written there. An open overlay prevents typing the command; "Download backup" in the Backups dialog is the overlay path. | A capture in progress continues if an overlay opens. |
 | Tab state (new, restored, another tab busy) | Works from any idle tab. Another tab being busy does not block it, and that tab's writes are not paused. | Refused while this tab is busy. |
-| Host (desktop or web) | Requires the host's whole-file API. Never-saved workbooks (desktop only) cannot be backed up. How the download appears differs by host (see [Open questions](#open-questions-and-verification)). | No effect. |
+| Host (desktop or web) | Requires the host's whole-file API. Workbooks without an identity (never saved on desktop; opened through an anonymous link on the web) cannot be backed up. How the download appears differs by host (see [Open questions](#open-questions-and-verification)). | No effect. |
 
 A capture uses the state of the workbook at the moment Excel produces the file.
 
@@ -152,11 +152,13 @@ After any interrupt the current workbook is unchanged: `/backup` never writes to
 
 ## Open questions and verification
 
-- Read from code; nothing here has been tried by hand at this commit.
-- The ids shown in toasts are cut to 24 characters (`src/commands/builtins/session.ts:80-81`), which is the timestamp part only, so `/backup restore {id}` cannot be used with an id copied from a toast. Looks like a bug.
+- Checked by hand in Excel on the web (orb session, `ec453df`), 26 October 2026, but only on an anonymous-link workbook, which has no identity: the refusals, the usage toast, the clear confirmation and the busy refusal were confirmed; creating, listing, restoring and clearing real copies could not be run. See [the workbook checklist](../verification/workbook.md#workbookmanual-backupsmd). Those items need desktop Excel or a signed-in workbook on the web.
+- `/backup clear` asks for confirmation before checking the workbook identity, so on a workbook without one the user confirms a deletion that then fails (`src/commands/builtins/session.ts:180-193`). Minor bug. BACKUP-06.
+- Typing `/backup list` and pressing Enter while the command menu is still open runs the highlighted command with no arguments, that is `/backup create`; the menu must be closed first (see [the command menu](../commands/the-command-menu.md)).
+- The ids shown in toasts are cut to 24 characters (`src/commands/builtins/session.ts:80-81`), which is the timestamp part only, so `/backup restore {id}` cannot be used with an id copied from a toast. Looks like a bug. Not run.
 - The download opens a blank window first to keep the user's click "active" (`src/files/workspace.ts:1450`), but after a slash command the capture runs first; whether the window or the fallback download works in WKWebView (macOS), WebView2 (Windows) and the browser (Excel on the web) has not been checked. DECISIONS notes that WKWebView ignores programmatic link clicks.
 - Whether Excel's whole-file API returns unsaved changes on each host has not been checked.
-- Whether "Download backup" in the Backups dialog should be reachable when there are no automatic backups (the toolbar is hidden then, `src/commands/builtins/settings-pages/backups-page.ts`, `syncVisibility`) is a product call.
+- Whether "Download backup" in the Backups dialog should be reachable when there are no automatic backups (the toolbar is hidden then, `src/commands/builtins/settings-pages/backups-page.ts`, `syncVisibility`) is a product call. Confirmed hidden in the empty state.
 - `/backup` does not take the workbook lock, so a copy taken while Pi writes in another tab may capture a half-finished change. Read from code.
 - Very large workbooks are held in memory several times (bytes, base64) during capture; the size at which this fails has not been measured.
 
