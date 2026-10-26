@@ -74,7 +74,7 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 
 ## Sheet overview (`get_workbook_overview {sheet}`)
 - **No used-range values:** the preview reads only its first 5 rows × 20 columns (as displayed), so a 200k-row sheet previews like a small one.
-- **Sheet state:** the same notes as `read_range` for the used range, plus frozen panes. The workbook-level overview (also the auto-context blueprint) adds `(protected)` to protected sheets and a calculation-mode line when not Automatic.
+- **Sheet state:** the same notes as `read_range` for the used range, plus frozen panes. The workbook-level tool result appends a `### Current state` section (calculation mode when not Automatic, protected sheets), read fresh per call. These stay out of `buildOverview()`: that text is the cached auto-context blueprint, which only refreshes on structure changes, and protection or calculation-mode changes are not structure changes.
 
 ## Dependency ranges (`trace_dependencies`)
 - **Ranges are not collapsed:** a precedent/dependent range of up to 16 cells is traced cell by cell (`SUM(E2:E3)` → E2 and E3); a larger range becomes one range node whose values are not loaded (`Mid50k!C2:C3000 (range, values not traced)`). Previously only the first cell was kept.
