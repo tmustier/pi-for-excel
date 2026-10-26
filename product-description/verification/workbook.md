@@ -1,0 +1,163 @@
+# Verification: workbook
+
+How to run this file: bring up Pi in Excel on the web with `node scripts/orb/excel-web-session.mjs --check` (see [docs/orb-excel-web.md](../../docs/orb-excel-web.md)), or open Pi in desktop Excel on a workbook saved to disk. Start from a blank Sheet1, one tab, execution mode Auto, thinking level at its lowest to keep turns fast, and a closed Backups dialog. Ask Pi for small, explicit tool calls ("Write 1,2,3 into A1:A3 of Sheet1, nothing else. Do not read first."). Before Enter on a typed slash command with arguments, press Escape to close the command menu, or the highlighted command runs with no arguments. Read cell values back yourself (the grid, or Office.js in the taskpane) rather than trusting Pi's reply. Device values: `web` is Excel on the web, `desktop` is Excel on macOS or Windows, `any` is either, `web-anon` is a workbook opened through an anonymous sharing link (no workbook identity), `2 tabs` needs a second tab in the same taskpane, `2 panes` needs two taskpanes sharing one browser profile.
+
+Results recorded below are from one pass on 26 October 2026 in Excel on the web (orb, `web-anon`, Chrome over CDP with real mouse and key input, model GPT-6.1 Sol at Min), against `ec453df`. `—` means not run. A `fail` on a suspected-bug row means the bug reproduced; a `fail` with "document corrected" means the document was wrong and has been fixed.
+
+## foundations/the-workbook.md
+
+| ID | P | Device | Claim | Setup | Steps | Expected | Result |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| WB-01 | P1 | any | Reads never ask, take no lock and take no backup ([what Pi can read and change](../foundations/the-workbook.md#what-pi-can-read-and-change)). | Confirm mode. | 1. Ask Pi to read A1:A3. | A "Read …" card completes; no dialog; Backups list unchanged. | pass |
+| WB-02 | P1 | any | In Auto, the default, mutations run without asking ([the simple case](../foundations/the-workbook.md#the-simple-case)). | Fresh profile or `/yolo on`. | 1. Ask Pi to write 1,2,3 into A1:A3. | Card "Edit Sheet1!A1:A3 — 3 changed"; no dialog; A1:A3 = 1,2,3. | pass |
+| WB-03 | P1 | any | A write stores a backup ([backups](../foundations/the-workbook.md#backups)). | A workbook with an identity, or a second write on `web-anon` (see WB-14). | 1. Ask Pi to write a cell. 2. `/history`. | A "Write · {address}" entry. | pass |
+| WB-04 | P1 | any | In Confirm, a mutation waits for "Allow workbook mutation in Safe mode?" ([the simple case](../foundations/the-workbook.md#the-simple-case)). | Confirm mode. | 1. Ask Pi to write D1. | Dialog appears before the write; D1 unchanged until answered. | pass |
+| WB-05 | P1 | any | Declining fails the call with "Mutation cancelled by user (Confirm mode)." and the turn continues ([ends at once](../foundations/the-workbook.md#ends-at-once)). | As WB-04. | 1. Press Escape on the dialog. | Card result "Mutation cancelled by user (Confirm mode)."; Pi replies; D1 unchanged. | pass |
+| WB-06 | P2 | 2 tabs | A tab whose mutation waits for another tab's shows "Locking…" ([the workbook lock](../foundations/the-workbook.md#the-workbook-lock)). | Auto. Two tabs. | 1. In Chat 2 ask for 6 parallel one-cell writes in J. 2. Switch to Chat 1, ask for 6 in K. 3. Watch the tab strip. | "Locking…" appears on a tab while the other writes; all 12 cells written. | pass |
+| WB-07 | P2 | any | A tab holding the lock cannot be closed; tooltip "Wait for workbook changes to complete" ([while a mutation runs](../foundations/the-workbook.md#while-a-mutation-runs)). | Two tabs; slow the write (over CDP, delay `Excel.run` by 4 s). | 1. Ask for a write. 2. Inspect the close button during it. | Close button disabled with that tooltip while the write holds the lock. | pass (with a 4 s delay the button was disabled at first, then enabled again while the status bar still showed "lock") |
+| WB-08 | P1 | 2 tabs | Suspected bug: a tab with several mutations in flight shows "Locking…" on itself and its close button is enabled mid-write ([edge cases](../foundations/the-workbook.md#edge-cases)). | As WB-06. | 1. Sample the tab label and close buttons every 100 ms. | Record what happens. | fail (bug reproduced: "Locking…" while the status bar showed "lock"; close enabled at moments during the writes) |
+| WB-09 | P3 | any | Status bar shows "lock" while the active tab holds the lock ([while a mutation runs](../foundations/the-workbook.md#while-a-mutation-runs)). | As WB-06. | 1. Watch the status bar. | "lock" badge appears during writes. | pass |
+| WB-10 | P1 | any | Stop: mutations waiting for the lock end with "Aborted"; those in Excel complete ([cancel and interrupt](../foundations/the-workbook.md#cancel-and-interrupt)). | Auto. | 1. Ask for 6 parallel one-cell writes in P. 2. Press Escape as soon as the cards appear. | Some cards completed and written; the rest "Aborted" in the error style; matching cells empty. | pass (2 written, 4 Aborted) |
+| WB-11 | P1 | web | Excel on the web always reports the workbook as saved ([backups](../foundations/the-workbook.md#backups)). | — | 1. Over CDP, read `workbook.isDirty` before and every second for 12 s after a write and after typing in a cell. | Record the value. | pass (always `false`) |
+| WB-12 | P1 | web | Saving never clears backups on the web ([backups](../foundations/the-workbook.md#backups)). | At least one backup listed. | 1. Click the grid. 2. Ctrl/Cmd+S. 3. Wait 9 s. 4. `/history`. | Backups still listed. | pass (10 before and after) |
+| WB-13 | P1 | web | Every taskpane load clears all backups for the workbook (suspected bug) ([backups](../foundations/the-workbook.md#backups)). | 16 backups listed. | 1. Reload the taskpane. 2. Wait 10 s. 3. `/history`. | Record what happens. | fail (bug reproduced: "No backups yet") |
+| WB-14 | P1 | web-anon | The first backup of a workbook without a location is cleared within seconds ([backups](../foundations/the-workbook.md#backups)). | Fresh taskpane, no backups. | 1. Ask Pi to write A1:A3. 2. Wait 10 s. 3. `/history`. | Record what happens. | fail (bug reproduced: "No backups yet") |
+| WB-15 | P1 | web | A backup taken after the first one survives at least 10 s ([backups](../foundations/the-workbook.md#backups)). | After WB-14 or a reload. | 1. Ask Pi to write a cell. 2. Wait 10 s. 3. `/history`. | The entry is listed. | pass |
+| WB-16 | P1 | desktop | Saving clears all backups within about 4 s ([backups](../foundations/the-workbook.md#backups)). | Saved workbook with unsaved Pi changes. | 1. Ctrl/Cmd+S. 2. Wait 5 s. 3. `/history`. | "No backups yet". | blocked (needs desktop) |
+| WB-17 | P1 | web | Excel's Undo takes back Pi's writes and restores; Redo puts them back ([Excel's Undo](../foundations/the-workbook.md#excels-undo)). | Pi just wrote R1 = 5. | 1. Click the grid. 2. Ctrl/Cmd+Z. 3. Ctrl/Cmd+Y. | R1 empty after Undo, 5 after Redo. | pass (the glossary claim "Excel's own Undo does not undo Pi's changes" is refuted on the web) |
+| WB-18 | P1 | desktop | Same as WB-17 on desktop. | As WB-17. | As WB-17. | Record what happens. | blocked (needs desktop) |
+| WB-19 | P2 | web | While the user edits a cell, Pi's calls fail at once with "Excel is in cell-editing mode…" ([cancel and interrupt](../foundations/the-workbook.md#cancel-and-interrupt)). | — | 1. Ask Pi to write Q1. 2. Immediately type "abc" in another cell without pressing Enter. | Card result "Error reading … Excel is in cell-editing mode…"; Pi asks the user to finish editing. | pass |
+| WB-20 | P2 | web-anon | An anonymous-link workbook has no identity ([unsaved and new workbooks](../foundations/the-workbook.md#unsaved-and-new-workbooks)). | — | 1. `/backup`. | "Current workbook identity is unavailable…". | pass |
+| WB-21 | P1 | 2 panes | Suspected bug: two taskpanes overwrite each other's backup list ([open questions](../foundations/the-workbook.md#open-questions-and-verification)). | Two workbooks open in one browser profile, Pi in each. | 1. Write in A. 2. Write in B. 3. `/history` in A. | Record what happens. | blocked (needs two workbooks open in one profile) |
+| WB-22 | P2 | desktop | Save As gives a new identity; old backups are no longer shown ([workbook identity](../foundations/the-workbook.md#workbook-identity)). | Saved workbook with backups. | 1. Save As. 2. `/history`. | Empty list. | blocked (needs desktop) |
+| WB-23 | P2 | any | No backup above 20,000 cells ([backups](../foundations/the-workbook.md#backups)). | — | 1. Ask Pi to write 21,000 cells. | Header ends "no backup". | — |
+| WB-24 | P2 | any | `view_settings` has no backup ([backups](../foundations/the-workbook.md#backups)). | — | 1. Ask Pi to freeze row 1. | "Set freeze rows (Sheet1) — no backup", "ℹ️ Backup not created." | pass |
+| WB-25 | P1 | any | `workbook_history` clear counts as a read (no approval) ([open questions](../foundations/the-workbook.md#open-questions-and-verification)). | See APPROVE-17. | — | — | fail (bug reproduced; see APPROVE-17) |
+
+Not checkable by hand:
+
+- Whether `workbook_history` delete and clear should count as reads is a product call ([open questions](../foundations/the-workbook.md#open-questions-and-verification)).
+
+## workbook/reading.md
+
+| ID | P | Device | Claim | Setup | Steps | Expected | Result |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| READ-01 | P2 | any | The overview card header is "Overview" ([what Pi reads](../workbook/reading.md#what-pi-reads)). | — | 1. Ask Pi to call `get_workbook_overview`. | Header "Overview"; result lists sheets with size and headers. | pass |
+| READ-02 | P2 | any | Read card "Read {address}"; an empty range shows "All cells are empty." ([what Pi reads](../workbook/reading.md#what-pi-reads)). | Empty A1:A3. | 1. Ask Pi to read A1:A3. | As stated. | pass |
+| READ-03 | P2 | any | No-match search header "No matches for "{query}" in any sheet (searched values)." ([what Pi reads](../workbook/reading.md#what-pi-reads)). | — | 1. Ask Pi to search for "zzz". | As stated. | pass |
+| READ-04 | P2 | any | Trace card "Trace precedents {cell}" with a tree ([what Pi reads](../workbook/reading.md#what-pi-reads)). | F1 = `=A1+D1`. | 1. Ask for precedents of F1. | Tree with A1 and D1. | pass |
+| READ-05 | P2 | any | Explain card "Explain formula {cell}" with "Direct references (N)" and "→ value" ([what Pi reads](../workbook/reading.md#what-pi-reads)). | As READ-04. | 1. Ask Pi to explain F1. | "Direct references (2)", "Sheet1!A1 → 1". | pass |
+| READ-06 | P2 | any | Detailed read lists formulas ([what Pi reads](../workbook/reading.md#what-pi-reads)). | As READ-04. | 1. Ask for a detailed read of A1:F3. | "Formulas F1: =A1+D1". | pass |
+| READ-07 | P1 | any | Clicking a card's address selects that range in Excel ([cell links](../workbook/reading.md#cell-links)). | A card for Sheet1!B1:B2. | 1. Click the address. 2. Read the selection. | Selection is Sheet1!B1:B2; card not toggled. | pass |
+| READ-08 | P1 | any | Reads do not ask in Confirm mode ([modifiers](../workbook/reading.md#modifiers)). | Confirm. | 1. Ask Pi to write D1 (it reads first). | Read card completes without a dialog; dialog only for the write. | pass |
+| READ-09 | P2 | web | A read during cell editing fails at once with "Excel is in cell-editing mode…" ([ends at once](../workbook/reading.md#ends-at-once)). | See WB-19. | — | — | pass |
+| READ-10 | P1 | any | Suspected issue: a failed read is not drawn in the error style ([open questions](../workbook/reading.md#open-questions-and-verification)). | READ-09's card. | 1. Compare the card header color with a failed write. | Record what happens. | fail (reproduced: grey header for the failed read, red for "Aborted" writes) |
+| READ-11 | P2 | any | Results over 50 KB / 2,000 lines are cut with a notice and saved to `.tool-output/` ([finishes](../workbook/reading.md#finishes)). | A sheet with 5,000 filled rows. | 1. Ask Pi to read it all. | "[Output truncated: …]" and a Files path. | — |
+| READ-12 | P2 | any | Search skips hidden sheets unless named ([hidden sheets](../workbook/reading.md#hidden-sheets)). | A hidden sheet holding "zzz". | 1. Ask Pi to search "zzz". | No match. | — |
+| READ-13 | P2 | any | Stop during a read: the turn ends aborted ([cancel and interrupt](../workbook/reading.md#cancel-and-interrupt)). | Large range. | 1. Ask for a big read. 2. Escape. | Turn aborted; no workbook change. | — |
+| READ-14 | P2 | 2 tabs | A read is not delayed by another tab's lock ([modifiers](../workbook/reading.md#modifiers)). | Slow write in tab 1. | 1. Read in tab 2 during it. | Read completes before the write. | — |
+| READ-15 | P3 | any | A link click within 0.3 s of the last one is ignored ([cell links](../workbook/reading.md#cell-links)). | Two cards. | 1. Double-click two links quickly. | Only the first selects. | — |
+
+Not checkable by hand:
+
+- Whether failed reads should use the error style is a product call.
+
+## workbook/writing.md
+
+| ID | P | Device | Claim | Setup | Steps | Expected | Result |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| WRITE-01 | P2 | any | Write card shows "Changes (N)" with "Before"/"After" and "∅" for empty ([finishes](../workbook/writing.md#finishes)). | Empty A1:A3. | 1. Ask Pi to write 1,2,3. 2. Expand the card. | "Changes (3)", "Sheet1!A1 ∅ 1". | pass |
+| WRITE-02 | P2 | any | "Explain these changes" opens to a summary and "Citations:" ([finishes](../workbook/writing.md#finishes)). | As WRITE-01. | 1. Open the drawer. | Summary, citations, "Explanation uses a bounded metadata sample." | pass |
+| WRITE-03 | P1 | any | Overwrite protection: "— blocked" header and "⛔ Write blocked — … contains N non-empty cell(s)." ([ends at once](../workbook/writing.md#ends-at-once)). | A1 holds 1. | 1. Ask Pi to write 99 to A1 without `allow_overwrite`. | "Write Sheet1!A1:A1 — blocked"; A1 still 1. | pass |
+| WRITE-04 | P2 | any | Format card "Format {address}", result "✓ Done", backup taken ([what Pi can change](../workbook/writing.md#what-pi-can-change)). | — | 1. Ask Pi to bold A1. 2. `/history`. | As stated; "Format cells · Sheet1!A1". | pass |
+| WRITE-05 | P2 | any | View settings header ends " — no backup" ([what Pi can change](../workbook/writing.md#what-pi-can-change)). | — | See WB-24. | — | pass |
+| WRITE-06 | P2 | any | Structure card header is the result sentence; backup taken ([what Pi can change](../workbook/writing.md#what-pi-can-change)). | — | 1. Ask Pi to insert one row at row 10. | "Inserted 1 row(s) at row 10 in "Sheet1"."; "Modify structure · Sheet1!10:10". | pass |
+| WRITE-07 | P3 | any | Consecutive edit cards are grouped ([edge cases](../workbook/writing.md#edge-cases)). | — | 1. Ask for several parallel writes. | "N edits" group. | pass ("2 edits") |
+| WRITE-08 | P1 | any | Stop: unstarted mutations end "Aborted" in the error style ([cancel and interrupt](../workbook/writing.md#cancel-and-interrupt)). | See WB-10. | — | Also "Error: signal is aborted without reason" in the transcript. | pass |
+| WRITE-09 | P1 | any | A declined write's card shows the error in the error style ([ends at once](../workbook/writing.md#ends-at-once)). | Confirm. | 1. Decline a write. | Red header, "Mutation cancelled by user (Confirm mode)." | pass |
+| WRITE-10 | P1 | any | Suspected issue: a write that will be blocked still asks for approval ([open questions](../workbook/writing.md#open-questions-and-verification)). | Confirm; A1 holds data. | 1. Ask Pi to write A1 without overwrite. | Record whether a dialog appears. | — |
+| WRITE-11 | P2 | any | Excel's selection does not move after a write ([applied](../workbook/writing.md#applied)). | Select E10. | 1. Ask Pi to write C1. | Selection still E10. | pass (seen in screenshots) |
+| WRITE-12 | P2 | any | Fill formula copies formats; revert leaves them ([open questions](../workbook/writing.md#open-questions-and-verification)). | Formatted top-left cell. | 1. Ask Pi to fill down. 2. `/revert`. | Record what happens. | — |
+| WRITE-13 | P2 | any | Chart delete has no backup ([what Pi can change](../workbook/writing.md#what-pi-can-change)). | A chart. | 1. Ask Pi to delete it. | "— no backup". | — |
+| WRITE-14 | P2 | any | A steer does not interrupt a running write ([cancel and interrupt](../workbook/writing.md#cancel-and-interrupt)). | Slow write. | 1. Send a steer mid-write. | Write completes; steer delivered after. | — |
+
+## workbook/confirm-mode-and-approvals.md
+
+| ID | P | Device | Claim | Setup | Steps | Expected | Result |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| APPROVE-01 | P1 | any | Clicking the status-bar control switches the mode with toast "Confirm mode." / "Auto mode." ([switching the mode](../workbook/confirm-mode-and-approvals.md#switching-the-mode)). | Auto. | 1. Click "Auto". 2. Click again. | Toasts in turn; stored mode changes each time. | pass |
+| APPROVE-02 | P3 | any | Tooltip "Auto: Pi applies workbook changes immediately. Click to switch to Confirm." ([switching the mode](../workbook/confirm-mode-and-approvals.md#switching-the-mode)). | Auto. | 1. Hover the control. | As stated. | pass |
+| APPROVE-03 | P1 | any | Suspected bug: the label keeps the old mode until the pointer and focus leave the status bar ([switching the mode](../workbook/confirm-mode-and-approvals.md#switching-the-mode)). | Auto. | 1. Click the control and leave the pointer on it. 2. Read the label. 3. Click elsewhere in the taskpane. | Record what happens. | fail (bug reproduced: "Auto" after the "Confirm mode." toast, for at least 8 s; "Confirm" after clicking elsewhere) |
+| APPROVE-04 | P2 | any | The Settings "Auto mode" switch changes the same setting and updates the status bar ([switching the mode](../workbook/confirm-mode-and-approvals.md#switching-the-mode)). | Settings open. | 1. Click the switch twice. | "Confirm mode." then "Auto mode."; status bar follows. | pass |
+| APPROVE-05 | P2 | any | `/yolo` arguments and toasts as tabled ([`/yolo`](../workbook/confirm-mode-and-approvals.md#yolo)). | — | 1. Run `/yolo`, `status`, `off` twice, `toggle`, `fast`, `bogus`. | Toasts exactly as tabled; repeated `off` changes nothing. | pass |
+| APPROVE-06 | P1 | any | Suspected bug: title says "Safe mode", body says "Confirm mode" ([open questions](../workbook/confirm-mode-and-approvals.md#open-questions-and-verification)). | Confirm. | 1. Trigger an approval. | Record the wording. | fail (bug reproduced: "Allow workbook mutation in Safe mode?" over "Allow workbook mutation in Confirm mode?") |
+| APPROVE-07 | P2 | any | `write_cells` approval shows "Tool: write_cells" and no "Range:" line ([edge cases](../workbook/confirm-mode-and-approvals.md#edge-cases)). | As APPROVE-06. | — | As stated. | pass |
+| APPROVE-08 | P1 | any | "Allow once" lets the call run ([answered](../workbook/confirm-mode-and-approvals.md#answered)). | As APPROVE-06. | 1. Click "Allow once". | Card "Edit … — 1 changed"; cell written. | pass |
+| APPROVE-09 | P1 | any | Escape declines and the turn continues ([answered](../workbook/confirm-mode-and-approvals.md#answered)). | As APPROVE-06. | 1. Press Escape. | "Mutation cancelled by user (Confirm mode)."; Pi replies. | pass |
+| APPROVE-10 | P2 | any | A click on the backdrop declines ([answered](../workbook/confirm-mode-and-approvals.md#answered)). | As APPROVE-06. | 1. Click the dimmed area above the dialog. | Same as APPROVE-09. | pass |
+| APPROVE-11 | P1 | any | The dialog does not take focus; the composer keeps it ([while the dialog is open](../workbook/confirm-mode-and-approvals.md#while-the-dialog-is-open)). | As APPROVE-06. | 1. Check focus. | Focus in the composer. | pass (document corrected; it said the dialog takes focus) |
+| APPROVE-12 | P2 | any | `/yolo on` typed behind an open dialog switches the mode and leaves the dialog open; its answer still counts ([while the dialog is open](../workbook/confirm-mode-and-approvals.md#while-the-dialog-is-open)). | As APPROVE-06. | 1. Type `/yolo on`, Enter. 2. Click "Allow once". | Toast "Auto mode — …"; dialog stays; write applied. | pass |
+| APPROVE-13 | P1 | any | Suspected bug: a second approval in the same model response declines the first ([open questions](../workbook/confirm-mode-and-approvals.md#open-questions-and-verification)). | Confirm. | 1. Ask for two parallel writes, D1 and E1. 2. Allow the one dialog shown. | Record what happens. | fail (bug reproduced: D1 "Mutation cancelled…" without a click; E1 written) |
+| APPROVE-14 | P1 | 2 tabs | Suspected bug: an approval from another tab declines the open one ([open questions](../workbook/confirm-mode-and-approvals.md#open-questions-and-verification)). | Confirm; two tabs. | 1. Chat 2: write H1. 2. Chat 1: write H3. 3. Allow the dialog shown. | Record what happens. | fail (bug reproduced: Chat 2's H1 cancelled; only H3 written; the dialog does not say which tab asked) |
+| APPROVE-15 | P2 | any | In Confirm, Pi also asks in chat before calling the tool ([switching the mode](../workbook/confirm-mode-and-approvals.md#switching-the-mode)). | Confirm. | 1. Ask for a write without pre-confirming. | Pi asks "Please confirm …" first. | pass |
+| APPROVE-16 | P2 | any | Pi's restore asks in Confirm with "Tool: workbook_history:restore" ([approval asked](../workbook/confirm-mode-and-approvals.md#approval-asked)). | Confirm; a backup exists. | 1. Ask Pi to restore the latest backup. | Dialog with that tool line. | pass |
+| APPROVE-17 | P1 | any | Suspected bug: Pi's `workbook_history` clear does not ask in Confirm ([edge cases](../workbook/confirm-mode-and-approvals.md#edge-cases)). | Confirm; 4 backups. | 1. Ask Pi to clear backups. | Record what happens. | fail (bug reproduced: "Clear backups" card, no dialog, 0 backups left) |
+| APPROVE-18 | P1 | any | Stop while a dialog is open: the turn ends only after it is answered ([cancel and interrupt](../workbook/confirm-mode-and-approvals.md#cancel-and-interrupt)). | Confirm; dialog open. | 1. Stop the turn without Escape (e.g. the Stop button under the overlay is not reachable; use a second route). | Record what happens. | — |
+| APPROVE-19 | P2 | any | Direct Office.js beyond the Excel API asks in Auto ([risky actions](../workbook/confirm-mode-and-approvals.md#risky-actions-ask-in-any-mode)). | Auto. | 1. Ask Pi to run Office.js that uses `fetch`. | "Allow direct Office.js execution?" with the warning. | — |
+| APPROVE-20 | P2 | any | The mode survives a reload ([persistence](../workbook/confirm-mode-and-approvals.md#interactions-with-other-systems)). | Confirm. | 1. Reload the taskpane. | Status bar shows "Confirm". | — |
+
+Not checkable by hand:
+
+- Whether `/yolo on` should mean "Auto" and whether Pi should also ask in chat are product calls.
+
+## workbook/backups-and-revert.md
+
+| ID | P | Device | Claim | Setup | Steps | Expected | Result |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| REVERT-01 | P2 | any | `/history` and utilities menu "Backups" open the dialog with the warning ([opening the dialog](../workbook/backups-and-revert.md#opening-the-dialog)). | — | 1. `/history`. 2. Utilities menu → Backups. | "Backups", subtitle, warning. | pass |
+| REVERT-02 | P2 | any | Empty state "No backups yet" / "Pi will save snapshots here…" with no toolbar ([opening the dialog](../workbook/backups-and-revert.md#opening-the-dialog)). | No backups. | 1. `/history`. | As stated. | pass |
+| REVERT-03 | P2 | any | Entry "{action} · {address}", relative time, "N change(s) · #{12 chars}" ([opening the dialog](../workbook/backups-and-revert.md#opening-the-dialog)). | Backups exist. | 1. `/history`. | e.g. "Write · Sheet1!C1", "just now", "1 change · #ef666cad-daa". | pass |
+| REVERT-04 | P2 | any | Filter lists "All actions (N)" and each kind with a count ([opening the dialog](../workbook/backups-and-revert.md#opening-the-dialog)). | Several kinds. | 1. Open the select; choose "Format cells". | "1 of 8 shown". | pass |
+| REVERT-05 | P2 | any | Search narrows the list and shows "N of M shown" ([opening the dialog](../workbook/backups-and-revert.md#opening-the-dialog)). | 8 backups. | 1. Type "E1". | "3 of 8 shown". | pass |
+| REVERT-06 | P3 | any | No match shows "No backups match the current filter." ([opening the dialog](../workbook/backups-and-revert.md#opening-the-dialog)). | As REVERT-05. | 1. Type a nonsense query. | As stated. | pass |
+| REVERT-07 | P3 | any | Sort toggles to "↑ Oldest" ([opening the dialog](../workbook/backups-and-revert.md#opening-the-dialog)). | — | 1. Click "↓ Newest". | Oldest first. | pass |
+| REVERT-08 | P1 | any | "Restore" acts without confirmation, toasts "Reverted {address}" and adds a "Restore" entry with "Restored from #…" ([restoring](../workbook/backups-and-revert.md#restoring)). | A format backup. | 1. Click Restore. | Bold removed from A1; toast; new entry. | pass |
+| REVERT-09 | P2 | any | Delete asks "Delete this backup?" with "Backup: {address} (#{id})"; Escape cancels only the confirmation ([deleting and clearing](../workbook/backups-and-revert.md#deleting-and-clearing)). | — | 1. Click Delete. 2. Escape. | Confirm closes; dialog stays; nothing deleted. | pass |
+| REVERT-10 | P2 | any | Confirmed Delete removes one backup ([deleting and clearing](../workbook/backups-and-revert.md#deleting-and-clearing)). | 9 backups. | 1. Delete → Delete. | "8 backups". | pass |
+| REVERT-11 | P2 | any | Clear all asks "This will delete N backups." and toasts "Cleared N backups" ([deleting and clearing](../workbook/backups-and-revert.md#deleting-and-clearing)). | 11 backups. | 1. Clear all → Delete all. | As stated; empty state. | pass |
+| REVERT-12 | P1 | any | `/revert` restores the latest backup with "Reverted {address}" ([`/revert`](../workbook/backups-and-revert.md#revert)). | Pi wrote C1. | 1. `/revert`. | C1 empty; toast. | pass |
+| REVERT-13 | P1 | any | `/revert` twice toggles the last change ([`/revert`](../workbook/backups-and-revert.md#revert)). | As REVERT-12. | 1. `/revert` again. | C1 back to 7. | pass |
+| REVERT-14 | P2 | any | `/revert` with no backups: "No backups for this workbook yet" ([ends at once](../workbook/backups-and-revert.md#ends-at-once)). | After Clear all. | 1. `/revert`. | As stated. | pass |
+| REVERT-15 | P1 | any | `/revert` while busy: "Can't run /revert while Pi is busy" ([ends at once](../workbook/backups-and-revert.md#ends-at-once)). | Pi streaming a long reply. | 1. Type `/revert`, Enter. | Toast; composer cleared. | fail (document said the text stays in the composer; it is cleared; document corrected) |
+| REVERT-16 | P2 | any | Escape on Backups returns to Settings; the backdrop closes ([opening the dialog](../workbook/backups-and-revert.md#opening-the-dialog)). | Dialog opened with `/history`. | 1. Escape. 2. Escape. 3. Reopen; click the backdrop. | Settings, then closed; backdrop closes at once. | fail (document said Escape closes; document corrected) |
+| REVERT-17 | P2 | any | Focus returns to the composer after closing ([opening the dialog](../workbook/backups-and-revert.md#opening-the-dialog)). | — | 1. Close the overlay. | Composer focused. | pass |
+| REVERT-18 | P2 | any | Pi's restore reports "✅ Restored backup … Changed item(s): N. Rollback backup created: …" ([Pi's tool](../workbook/backups-and-revert.md#restoring)). | — | See APPROVE-16. | As stated. | pass |
+| REVERT-19 | P1 | any | A restore overwrites the user's newer edit without warning ([cancel and interrupt](../workbook/backups-and-revert.md#cancel-and-interrupt)). | Pi wrote L1 = 42; user typed 77 in L1. | 1. `/revert`. | L1 empty; no warning. | pass |
+| REVERT-20 | P2 | any | Retention outside 5–120: "Retention limit must be between 5 and 120"; 5 saves "Retention set to 5 backups" ([retention](../workbook/backups-and-revert.md#retention)). | — | 1. Enter 4, Save. 2. Enter 5, Save. | As stated. | pass |
+| REVERT-21 | P1 | any | Suspected bug: "Keep at most" is not applied ([retention](../workbook/backups-and-revert.md#retention)). | Retention 5. | 1. Make 6 more backups. 2. `/history`. | Record the count. | fail (bug reproduced: 10 backups with retention 5) |
+| REVERT-22 | P1 | any | Suspected bug: Clear all count is capped at the 40 loaded ([open questions](../workbook/backups-and-revert.md#open-questions-and-verification)). | More than 40 backups. | 1. Clear all. | Record the count shown vs deleted. | — |
+| REVERT-23 | P2 | any | The list does not refresh by itself while open ([opening the dialog](../workbook/backups-and-revert.md#opening-the-dialog)). | Dialog open in tab A; Pi writes in tab B. | 1. Watch the list. 2. Refresh. | New entry only after Refresh. | — |
+| REVERT-24 | P1 | web | Backups survive saving but not a taskpane reload on the web ([modifiers](../workbook/backups-and-revert.md#modifiers)). | See WB-12 and WB-13. | — | — | fail (bug reproduced) |
+| REVERT-25 | P2 | 2 tabs | A dialog restore during another tab's write waits for the lock ([restoring](../workbook/backups-and-revert.md#restoring)). | Slow write. | 1. Restore during it. | Restore after the write. | — |
+
+## workbook/manual-backups.md
+
+| ID | P | Device | Claim | Setup | Steps | Expected | Result |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| BACKUP-01 | P1 | web-anon | `/backup` without identity fails with "Backup command failed: Current workbook identity is unavailable…" ([ends at once](../workbook/manual-backups.md#ends-at-once)). | — | 1. `/backup`. | As stated. | pass |
+| BACKUP-02 | P2 | web-anon | `/backup restore` without identity fails the same way ([ends at once](../workbook/manual-backups.md#ends-at-once)). | — | 1. `/backup restore`. | As stated. | pass |
+| BACKUP-03 | P2 | web-anon | `/backup list` without copies: "No manual full-workbook backups for this workbook." ([ends at once](../workbook/manual-backups.md#ends-at-once)). | — | 1. Close the command menu. 2. `/backup list`. | As stated. | pass |
+| BACKUP-04 | P2 | any | `help` and unknown words show the usage toast ([typing the command](../workbook/manual-backups.md#typing-the-command)). | — | 1. `/backup help`. 2. `/backup bogus`. | "Usage: /backup [create\|list [limit]\|restore [id]\|clear]". | pass |
+| BACKUP-05 | P2 | any | `/backup clear` asks "Delete all manual full-workbook backups?" ([the confirmation for clear](../workbook/manual-backups.md#the-confirmation-for-clear)). | — | 1. `/backup clear`. | Title, message, "Cancel", "Delete all". | pass |
+| BACKUP-06 | P1 | web-anon | Suspected bug: `clear` confirms before checking identity ([ends at once](../workbook/manual-backups.md#ends-at-once)). | — | 1. `/backup clear`. 2. Delete all. | Record what happens. | fail (bug reproduced: confirmation, then "Backup command failed: … identity is unavailable…") |
+| BACKUP-07 | P1 | any | Refused while busy: "Can't run /backup while Pi is busy" ([ends at once](../workbook/manual-backups.md#ends-at-once)). | Pi streaming. | 1. `/backup`. | Toast; composer cleared. | fail (document said the text stays; document corrected) |
+| BACKUP-08 | P1 | desktop | `/backup` stores a copy in Files and downloads `{id}.xlsx`, toast "Manual backup created: #… (size)." ([finishes](../workbook/manual-backups.md#finishes)). | Saved workbook. | 1. `/backup`. 2. Open Files. | File downloaded; `manual-backups/full-workbook/v1/…`. | blocked (needs desktop or a signed-in workbook) |
+| BACKUP-09 | P1 | desktop | Suspected bug: toast ids are cut at 24 characters, too short for `/backup restore {id}` ([open questions](../workbook/manual-backups.md#open-questions-and-verification)). | After BACKUP-08. | 1. `/backup restore {id from toast}`. | Record what happens. | blocked (needs desktop) |
+| BACKUP-10 | P1 | desktop | The download works in WKWebView, WebView2 and the browser ([open questions](../workbook/manual-backups.md#open-questions-and-verification)). | — | 1. `/backup` on each host. | Record what happens. | blocked (needs desktop) |
+| BACKUP-11 | P2 | desktop | `/backup restore` downloads the copy and leaves the workbook untouched ([finishes](../workbook/manual-backups.md#finishes)). | A copy exists. | 1. `/backup restore`. | "Downloaded backup #…. Open the file in Excel to restore." | blocked (needs desktop) |
+| BACKUP-12 | P2 | desktop | Copies are not cleared on save ([where copies live](../workbook/manual-backups.md#where-copies-live)). | A copy exists. | 1. Save. 2. `/backup list`. | Copy still listed. | blocked (needs desktop) |
+| BACKUP-13 | P2 | any | "Download backup" is hidden when there are no automatic backups ([edge cases](../workbook/manual-backups.md#edge-cases)). | No backups. | 1. `/history`. | No toolbar. | pass |
+
+Not checkable by hand:
+
+- Whether "Download backup" should be reachable with no automatic backups is a product call.
