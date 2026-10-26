@@ -70,6 +70,7 @@ export class SessionRuntimeManager {
   private nextDefaultTabNumber = 1;
   private refreshPromise: Promise<void> | null = null;
   private refreshRequested = false;
+  private refreshPassRunning = false;
 
   constructor(opts: {
     createRuntime: SessionRuntimeFactory;
@@ -227,8 +228,11 @@ export class SessionRuntimeManager {
     this.refreshRequested = true;
     if (this.refreshPromise) return this.refreshPromise;
 
-    this.refreshPromise = this.runCapabilityRefreshes();
-    return this.refreshPromise;
+    const pass = this.runCapabilityRefreshes();
+    // A pass with no runtime to await has already finished and released the
+    // slot; holding its settled promise would swallow every later request.
+    if (this.refreshPassRunning) this.refreshPromise = pass;
+    return pass;
   }
 
   findRuntimeBySessionId(sessionId: string): SessionRuntime | null {
@@ -291,6 +295,7 @@ export class SessionRuntimeManager {
   }
 
   private async runCapabilityRefreshes(): Promise<void> {
+    this.refreshPassRunning = true;
     try {
       while (this.refreshRequested) {
         this.refreshRequested = false;
@@ -309,6 +314,7 @@ export class SessionRuntimeManager {
       // requested from a snapshot listener starts a new pass instead of being
       // coalesced into this finished one.
       this.refreshPromise = null;
+      this.refreshPassRunning = false;
     }
 
     this.emit();
