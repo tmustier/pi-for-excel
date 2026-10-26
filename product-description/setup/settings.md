@@ -32,7 +32,7 @@ stateDiagram-v2
 
 How Settings opens decides where the user lands and what Back does:
 
-- **The utilities menu "Settings"** and **`/settings`** open the root page. If Settings is already open, either one closes it instead.
+- **The utilities menu "Settings"** and **`/settings`** open the root page. If Settings is already open, either one closes it instead, although with Settings covering the header and holding focus the user cannot normally reach either.
 - **A command or menu item for one page** opens that page with the root page underneath, so Back always leads to the root page rather than closing. `/login` opens "Model providers"; `/rules` and "Rules" open "Rules"; `/history` and "Backups" open "Backups"; `/extensions` and `/tools` open "Connections", `/plugins` "Plugins", `/skills` "Skills"; `/shortcuts` and "Keyboard shortcuts" open "Keyboard shortcuts"; `/experimental` with no arguments opens "Experimental features". If Settings is already open on another page, it switches to the requested page; if it is already on that page, nothing happens.
 - **The welcome overlay's** "Use a custom OpenAI-compatible gateway" opens the gateway page, and the [disclosure bar's](../glossary.md#the-taskpane) "Change anytime in Settings" dismisses the bar and opens the root page.
 
@@ -155,17 +155,19 @@ After closing Settings the user is in the composer of the tab that was active wh
 ## Edge cases
 
 - Opening Settings with `/rules` and saving lands on the root page, not back in the chat.
-- `/settings` while Settings is open on any page closes it, after the Rules page's unsaved-edits check.
+- `/settings` while Settings is open on any page would close it, after the Rules page's unsaved-edits check; in practice the composer cannot be reached while Settings is open.
 - The "Model providers" count includes OAuth and API-key providers but not gateways; a user with only a gateway sees "Not set up".
 - The value previews on the root page are read when the root page opens and are not refreshed until it is shown again.
 - Changing the language reloads the taskpane, which ends any running turn the same way closing the taskpane does.
 
 ## Open questions and verification
 
-- Confirmed in the standalone taskpane: the root page groups and values, navigation into "Model providers", "Custom gateway" and "Proxy", Escape stepping back from a page to the root and then closing, the first Escape only leaving a text field, and a half-filled gateway form being dropped without a question on Back.
-- Only the Rules page guards unsaved edits (`ctx.setBeforeLeave` is used only in `src/commands/builtins/settings-pages/rules-page.ts:1014`). A half-typed gateway is lost silently. Probably worth a guard.
-- The utilities menu opens Settings while busy, but `/settings` and `/login` are refused (`src/commands/busy-command-policy.ts`). Probably unintentional inconsistency.
-- Changing the language while a turn runs reloads the taskpane and loses the streaming response. Read from code.
+- Confirmed in Excel on the web: the root page groups, rows and values ("1 connected", later "2 connected" while three gateways showed "3" on their own row, "None", "On"/"Off", Plugins "1 installed" for the bundled extension), focus moving to the page body, the fork switch's two toasts, `/login` opening "Model providers" with Back shown and Back leading to the root page, Escape stepping back from a page to the root and then closing with focus returned to the composer, the first Escape only leaving a text field, "Close settings" closing from a page, a half-filled gateway form being dropped without a question on Back, and the Rules page asking "Discard changes?" on both Escape and "Close settings" ("Keep editing" stays, "Discard" closes).
+- The utilities menu opens Settings while the tab is busy, but `/settings` and `/login` are refused ("Can't run /settings while Pi is busy", "Can't run /login while Pi is busy"): both confirmed in Excel on the web (SETTINGS-04, SETTINGS-05). Probably unintentional inconsistency (`src/commands/busy-command-policy.ts`).
+- Only the Rules page guards unsaved edits (`ctx.setBeforeLeave` is used only in `src/commands/builtins/settings-pages/rules-page.ts:1014`). A half-typed gateway is lost silently (confirmed). Probably worth a guard.
+- The "Proxy" page has no subtitle under its title, unlike "Model providers" and the gateway page.
+- `/settings` or the utilities menu while Settings is open could not be tried: Settings covers the composer and the header, so neither is reachable with the pointer, and Settings keeps focus.
+- Changing the language while a turn runs reloads the taskpane and loses the streaming response. Read from code; not run, because a reload of the Excel session repeats credential restore.
 - Pages that depend on the workbook were not checked against a real workbook in this pass.
 
 Verified against pi-for-excel commit `ec453df`.
