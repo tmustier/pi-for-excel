@@ -92,7 +92,7 @@ Progress is tracked in the coverage table below.
 
 - **WPS Spreadsheets.** Excluded. WPS is a second host with its own JSAPI and its own tool set; see [docs/wps-support.md](../docs/wps-support.md). It can get its own description later.
 - **Extension authoring and the extension runtime.** Excluded beyond what a user meets in the Extensions hub (installing, enabling, removing). What an installed extension can do is defined by the extension.
-- **Experimental features and local bridges.** `/experimental`, the tmux bridge, the Python and LibreOffice bridge, direct Office.js execution and the debug UI (`/debug`) are off by default. They get one document, [extensions/experimental.md](extensions/experimental.md), which says what turning each on changes, and are otherwise out of scope.
+- **Experimental features and local bridges.** `/experimental`, the tmux bridge and the debug UI (`/debug`) are off by default. The Python and LibreOffice tools and direct Office.js execution are registered by default but ask before running; [the workbook](foundations/the-workbook.md) and [confirm mode and approvals](workbook/confirm-mode-and-approvals.md) cover what the user sees of them, and the bridges themselves are out of scope. They get one document, [extensions/experimental.md](extensions/experimental.md), which says what turning each on changes, and are otherwise out of scope.
 - **Installing the add-in.** Sideloading and manifests are covered by [docs/install.md](../docs/install.md). The description starts when the taskpane opens.
 - **Keyboard shortcuts are described inside each document** that owns the behavior, and listed once in [ui/keyboard-shortcuts.md](ui/keyboard-shortcuts.md) as an index that links back. A separate behavioral document would drift.
 - **Persistence is described once** in [cross-cutting/persistence-and-restore.md](cross-cutting/persistence-and-restore.md) and linked from the Persistence paragraph of every document, because it is one mechanism (browser storage scoped to the add-in origin) with one set of failure modes.
@@ -206,34 +206,34 @@ Status is one of `not started`, `drafted`, or `verified`.
 
 | Document | Status |
 | --- | --- |
-| glossary.md | not started |
+| glossary.md | drafted |
 | bug-triage.md | not started |
 | verification/ (5 checklists) | not started |
-| foundations/the-taskpane.md | not started |
-| foundations/turns.md | not started |
-| foundations/sessions-and-tabs.md | not started |
-| foundations/the-workbook.md | not started |
+| foundations/the-taskpane.md | drafted |
+| foundations/turns.md | drafted |
+| foundations/sessions-and-tabs.md | drafted |
+| foundations/the-workbook.md | drafted |
 | foundations/models-and-providers.md | not started |
-| turn/the-composer.md | not started |
-| turn/sending-and-the-response.md | not started |
+| turn/the-composer.md | drafted |
+| turn/sending-and-the-response.md | drafted |
 | turn/tool-calls.md | not started |
-| turn/steering-and-the-queue.md | not started |
-| turn/stopping.md | not started |
+| turn/steering-and-the-queue.md | drafted |
+| turn/stopping.md | drafted |
 | turn/thinking.md | not started |
 | turn/context-and-compaction.md | not started |
 | turn/auto-context.md | not started |
-| sessions/renaming-a-tab.md | not started |
-| sessions/tabs.md | not started |
-| sessions/reopening-closed-tabs.md | not started |
-| sessions/resuming-a-session.md | not started |
-| sessions/export-and-copy.md | not started |
-| commands/the-command-menu.md | not started |
-| commands/empty-state-and-hints.md | not started |
-| workbook/reading.md | not started |
-| workbook/writing.md | not started |
-| workbook/confirm-mode-and-approvals.md | not started |
-| workbook/backups-and-revert.md | not started |
-| workbook/manual-backups.md | not started |
+| sessions/renaming-a-tab.md | drafted |
+| sessions/tabs.md | drafted |
+| sessions/reopening-closed-tabs.md | drafted |
+| sessions/resuming-a-session.md | drafted |
+| sessions/export-and-copy.md | drafted |
+| commands/the-command-menu.md | drafted |
+| commands/empty-state-and-hints.md | drafted |
+| workbook/reading.md | drafted |
+| workbook/writing.md | drafted |
+| workbook/confirm-mode-and-approvals.md | drafted |
+| workbook/backups-and-revert.md | drafted |
+| workbook/manual-backups.md | drafted |
 | setup/welcome-and-login.md | not started |
 | setup/the-model-picker.md | not started |
 | setup/settings.md | not started |
@@ -246,11 +246,11 @@ Status is one of `not started`, `drafted`, or `verified`.
 | extensions/the-extensions-hub.md | not started |
 | extensions/web-search-and-mcp.md | not started |
 | extensions/experimental.md | not started |
-| ui/the-status-bar.md | not started |
-| ui/message-rendering.md | not started |
-| ui/keyboard-shortcuts.md | not started |
-| ui/the-utilities-menu.md | not started |
-| ui/language-and-theme.md | not started |
+| ui/the-status-bar.md | drafted |
+| ui/message-rendering.md | drafted |
+| ui/keyboard-shortcuts.md | drafted |
+| ui/the-utilities-menu.md | drafted |
+| ui/language-and-theme.md | drafted |
 | cross-cutting/persistence-and-restore.md | not started |
 | cross-cutting/several-taskpanes.md | not started |
 | cross-cutting/provider-errors-and-offline.md | not started |

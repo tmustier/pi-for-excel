@@ -20,9 +20,13 @@ The vocabulary used across these documents. When a document uses one of these wo
 
 **Working indicator.** The line above the composer that appears while the active tab is busy: a rotating playful phrase on the left ("Working…" first) and a rotating hint on the right ("Press Esc to stop", "Press Enter to redirect Pi", …). During a queued action such as compaction it shows a fixed label instead ("Compacting context…").
 
-**Queue strip.** The list that appears just above the composer when the active tab has *steer*, *follow-up* or *queued* items waiting. Each row has a label ("Steer", "Follow up", "Queued", or a command such as "/compact") and the first 47 characters of the text; the last row says "↳ Press Alt+↑ to edit queued message" (⌥↑ on macOS).
+**Queue strip.** The list that appears just above the composer when the active tab has *steer*, *follow-up* or *queued* items waiting. Each row has a label ("Steer", "Follow up", "Queued", or a command such as "/compact") and the text, cut to 47 characters plus "…" when longer than 50; the last row says "↳ Press Alt+↑ to edit queued message" (⌥↑ on macOS).
 
 **Status bar.** The row under the composer with the model control, the thinking-level control, the execution-mode control ("Auto" or "Confirm"), and the *context meter*. See [the status bar](ui/the-status-bar.md).
+
+**Status popover.** The small dialog that opens above a status-bar control when clicked: the thinking popover ("Thinking level") or the context popover ("Context usage", with "/compact" and "/new" buttons). Only one is open at a time. It closes on Escape, an outside click, clicking its control again, or when the model picker opens. Escape goes to an open popover first, so it never stops a turn.
+
+**Lock badge.** The status-bar badge shown while the active tab waits for ("lock…") or holds ("lock") the workbook lock; the status-bar counterpart of the tab's "Locking…" label. English only.
 
 **Utilities menu.** The menu opened by the gear in the header ("Settings and tools"): Resume session, Rules, Extensions, Files, Backups, Settings, Keyboard shortcuts. See [the utilities menu](ui/the-utilities-menu.md).
 
@@ -30,21 +34,27 @@ The vocabulary used across these documents. When a document uses one of these wo
 
 **Command menu.** The pop-up list of slash commands that opens above the composer when the text starts with `/`. See [the command menu](commands/the-command-menu.md).
 
-**Overlay.** A modal card drawn over the whole taskpane with a dimmed backdrop: settings, the model picker, the resume picker, the Backups dialog, the Files workspace, confirm dialogs, text-input dialogs. At most one overlay with a given purpose is open at a time. Escape closes most overlays. Native browser dialogs (`window.prompt`) are not overlays.
+**Overlay.** A modal card drawn over the whole taskpane with a dimmed backdrop: settings, the model picker, the resume picker, the Backups dialog, the Files workspace, confirm dialogs, text-input dialogs. At most one overlay with a given purpose is open at a time. Escape closes every overlay built on the shared overlay dialog (resume picker, Backups, confirm and text-input dialogs, settings, the model picker), and while one is open Escape does not stop a turn. Native browser dialogs (`window.prompt`) are not overlays.
 
-**Toast.** A short message that appears briefly at the bottom of the taskpane and disappears by itself. An **action toast** is a toast with a button, such as "Closed Chat 2 · Undo", and stays longer (9 seconds for the close toast).
+**Toast.** A short message centred near the top of the taskpane, under the header, that disappears by itself: after 2 s, or 6 s for one that reads as an error ("failed", "error", "can't", "unable"). An **action toast** has a button, such as "Closed Chat 2 · Undo", and stays longer (7 s by default, 9 s for the close toast). While an action toast shows, ordinary toasts are suppressed; error toasts replace it.
 
-**Error banner.** A red box shown above the transcript when the last run of the active tab ended in an error, such as "LLM error: …" or a context-overflow message. It is cleared when the user sends the next message, and when a later run ends without error. There is one banner for the whole taskpane, not one per tab.
+**Error banner.** A red box shown at the very top of the taskpane, above the header, when the last run of the active tab ended in an error, such as "LLM error: …" or a context-overflow message. It is cleared when the user sends the next message, and when a later run ends without error. There is one banner for the whole taskpane, not one per tab.
 
 **Disclosure bar.** The one-time notice above the transcript, "Pi can search the web, use extensions, and connect to external services.", with "Got it" and "Customize". It disappears once dismissed.
 
 **Proxy banner.** The warning above the transcript, "Proxy not running · Some features won't work.", shown when the selected provider needs the CORS proxy and none is detected. See [the proxy](setup/the-proxy.md).
 
+**Loading screen.** What the taskpane shows between **Open Pi** and the sidebar: a spinner with "Initializing…". If startup fails, or takes more than 60 s, a *startup error* replaces it.
+
+**Startup error.** The red message at the top of the taskpane when startup fails: "Initialization failed: {msg}", or "Initialization failed: taskpane timeout" after 60 s. It has no retry; the user closes and reopens the taskpane. It is not the error banner.
+
+**Extension widget slot.** The space between the working indicator and the queue strip where an installed extension can show a widget. Hidden in the default configuration. While it holds a widget it claims Escape before Stop.
+
 ## Sessions and tabs
 
 **Session.** One conversation with Pi: its messages, its model and thinking level, its title, and the workbook it is linked to. Sessions are saved in the browser storage of the add-in and can be reopened later. See [sessions and tabs](foundations/sessions-and-tabs.md).
 
-**Session tab** (or **tab**). A session that is open in the tab strip. Each tab has its own transcript, model, thinking level, composer text, queue and busy state; switching tabs swaps all of them. Several tabs can be busy at once. A tab is not an Excel window and not a browser tab.
+**Session tab** (or **tab**). A session that is open in the tab strip. Each tab has its own transcript, model, thinking level, queue and busy state; switching tabs swaps all of them. The composer is not per tab: its text stays when the user switches tabs and is sent to whichever tab is active. Several tabs can be busy at once. A tab is not an Excel window and not a browser tab.
 
 **Active tab.** The tab whose transcript is shown and which the composer, the status bar, Escape and slash commands act on. Exactly one tab is active.
 
@@ -59,6 +69,14 @@ The vocabulary used across these documents. When a document uses one of these wo
 **Recently closed.** The list of tabs closed in this workbook that can be brought back with the undo toast, Ctrl/Cmd+Z, Ctrl/Cmd+Shift+T, `/reopen`, or the "Recently closed" section of the resume picker. See [reopening closed tabs](sessions/reopening-closed-tabs.md).
 
 **Workbook link.** The association between a saved session and the workbook it was used in. Restore on open and the resume picker prefer sessions linked to the current workbook. The link uses a workbook identity derived by the product, never the raw file URL.
+
+**Workbook identity.** How Pi recognises a workbook across reopenings: a SHA-256 hash of the address Excel reports for the file (its OneDrive or SharePoint URL, or its path on disk) with any query string or fragment dropped. The raw address is never stored. The identity is unknown when there is no address (a never-saved workbook on desktop, the standalone taskpane, a host that does not answer within 3 s). Renaming, moving or Save As gives a new identity. Pi re-reads it whenever the taskpane gains focus or becomes visible. Tab layouts, workbook links and the resume picker's filter all key on it.
+
+**Latest session.** The session most recently saved or loaded for a workbook. When no tab layout exists, opening the taskpane restores it; if the workbook identity is unknown, Pi restores the most recently modified session from any workbook instead (the global fallback).
+
+**Resume picker.** The "Resume session" overlay opened by `/resume`, `/resume-here` or "Resume session" in the utilities menu: two target buttons ("Open in new tab", "Replace current tab"), a "Show sessions from all workbooks" filter, a "Recently closed" section (up to 6 entries) and "Saved sessions" (up to 30). See [resuming a session](sessions/resuming-a-session.md).
+
+**Busy dot.** The small dot after a tab's title while that tab is busy. It is hidden from screen readers.
 
 ## The turn
 
@@ -90,7 +108,9 @@ The vocabulary used across these documents. When a document uses one of these wo
 
 **Queued.** A prompt or slash command waiting in the tab's action queue to run after the current activity finishes. Prompts are queued when sent while the tab is busy but not responding (for example during `/compact`); `/compact` itself is always queued. The queue strip labels a queued prompt "Queued" and a queued command with its name.
 
-**Restore queued.** Alt/Option+Up in the composer (or anywhere outside another text field) takes every waiting steer, follow-up and queued prompt out of the queue and puts their text back in the composer, above anything already there, separated by blank lines. Queued commands stay queued. The toast says "Restored {count} queued message(s) to editor", or "No queued messages" if there were none.
+**Restore queued.** Alt/Option+Up in the composer (or anywhere outside another text field) takes every waiting steer, follow-up and queued prompt out of the queue and puts their text back in the composer, above anything already there, separated by blank lines. Queued commands stay queued. The toast says "Restored {count} queued message(s) to editor", or "No queued messages to restore" if there were none.
+
+**Busy-allowed command.** One of the twelve built-in commands that run while the tab is busy: `compact`, `new`, `rules`, `resume`, `history`, `reopen`, `yolo`, `extensions`, `plugins`, `skills`, `files`, `tools`, plus extension commands unless they opt out. Every other command is refused with "Can't run /{command} while Pi is busy".
 
 ## Endings
 
@@ -101,6 +121,8 @@ The vocabulary used across these documents. When a document uses one of these wo
 **Failed.** How a turn ends when the provider or the agent loop raises an error that is not an abort. The transcript keeps everything up to the failure, and the error banner shows the reason.
 
 **Context overflow.** A failure in which the provider rejects the request because the conversation no longer fits the model's context window. With auto-compaction on (the default), Pi compacts once and retries; see [context and compaction](turn/context-and-compaction.md).
+
+**Stranded.** A steer or follow-up left undelivered because the turn ended early (the Stop button, or a provider error). Its row leaves the queue strip, but Pi keeps it and delivers it unasked in the next turn the user starts in that tab. Escape and restore queued never strand anything. This is a defect; see [bug triage](bug-triage.md).
 
 **Interrupt.** Anything in a document's "Cancel and interrupt" table: an event that happens in the middle of an interaction and is not part of its normal path. "Interrupt" is not a product action; the product's interrupts are Stop, steer and follow-up.
 
@@ -123,6 +145,10 @@ The vocabulary used across these documents. When a document uses one of these wo
 **Manual backup.** A full copy of the workbook file taken on request with `/backup`, stored in the add-in's storage and downloadable later. Distinct from automatic backups. See [manual backups](workbook/manual-backups.md).
 
 **Auto-context.** What Pi is told about the workbook before each model request without the user asking: a structural blueprint of the workbook, the current selection, and cells the user changed since the last turn. See [auto-context](turn/auto-context.md).
+
+**Audit log.** Pi's local record of every workbook mutation it made or tried, and of the user's restores: tool, workbook, range, changed cells with before and after values, whether it was blocked, execution mode. It keeps the newest 500 entries across all workbooks, is not shown in the UI (except through the "Explain these changes" drawer on mutation tool cards), is not cleared on save, and is exported with `/export audit`. It is not a backup and cannot revert anything.
+
+**Cell link.** A blue cell or range address inside a tool card (title, humanized input, change tables, dependency trees). Clicking it makes Excel activate the sheet and select the range (the first area of a multi-area address) without changing the workbook. Addresses in Pi's own prose are not cell links.
 
 ## Models and providers
 
@@ -147,5 +173,9 @@ The vocabulary used across these documents. When a document uses one of these wo
 **Alt/Option.** The Alt key on Windows and the Option key on macOS.
 
 **Text field.** Any element the user can type into: the composer, an input in an overlay, a search box. Several shortcuts (arrow keys for tab switching, Ctrl/Cmd+Z for reopening a tab) do nothing, or behave differently, while focus is in a text field.
+
+**Draft.** The text in the composer that has not been sent. There is one draft for the whole taskpane, not one per tab: switching or creating tabs leaves it in place, so Enter sends it to whichever tab is active. It is never saved; a reload loses it. Starter hints overwrite it; restore queued and Escape-stop write into it.
+
+**Auto-scroll.** The transcript following new content to the bottom while Pi responds. Scrolling up more than about 32 px from the bottom turns it off; scrolling back within about 20 px, or sending a message, turns it on again.
 
 **Focus in the composer.** The composer's text area has keyboard focus. Escape while idle with focus in the composer moves focus out of it (to the tab strip) instead of doing anything else. F2 puts focus back in the composer from anywhere in the taskpane.

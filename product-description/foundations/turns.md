@@ -8,7 +8,7 @@ A turn is the unit of interaction in Pi for Excel: the user sends a message, and
 
 The user types "What sheets do I have?" in the [composer](../turn/the-composer.md) and presses Enter. The message appears at the bottom of the transcript at once, the composer clears, the send button becomes a Stop button, a dot appears on the tab, and the [working indicator](../glossary.md#the-taskpane) starts above the composer ("Working…", then rotating phrases, with hints such as "Press Esc to stop").
 
-Pi's answer streams into the transcript. Partway through, Pi may decide to read the workbook: a tool card appears ("Workbook Overview") with a spinner, the tool runs, its card shows the result, and Pi continues writing with what it learned. When Pi stops writing, the working indicator disappears, the Stop button turns back into the send button, the tab's dot goes away, and the conversation is saved.
+Pi's answer streams into the transcript. Partway through, Pi may decide to read the workbook: a tool card appears ("Overview") with a spinner, the tool runs, its card shows the result, and Pi continues writing with what it learned. When Pi stops writing, the working indicator disappears, the Stop button turns back into the send button, the tab's dot goes away, and the conversation is saved.
 
 The user is back where they started: an idle tab, focus in the composer, ready for the next message.
 
@@ -37,7 +37,7 @@ The diagram's `responding` and `running_tools` together are what the glossary ca
 A turn begins in the composer. What the composer accepts, how it grows, and what Enter, Shift+Enter and the Files button do is owned by [the composer](../turn/the-composer.md). Three decisions are made the instant the user presses Enter:
 
 1. **Is there anything to send?** Text is trimmed. Empty or whitespace-only text sends nothing.
-2. **Is it a slash command?** Text that starts with `/` is never sent to the model by Enter. If it names a known command, the command runs locally (see [the command menu](../commands/the-command-menu.md)). If it does not, nothing happens and the text stays in the composer while the tab is idle; while the tab is responding, the unknown `/text` is steered to Pi as ordinary text.
+2. **Is it a slash command?** Text that starts with `/` is never sent to the model by Enter. If it names a known command, the command runs locally (see [the command menu](../commands/the-command-menu.md)). If it does not, Enter inserts a newline into the composer while the tab is idle (nothing is sent); while the tab is responding, the unknown `/text` is steered to Pi as ordinary text.
 3. **What is the tab doing?** If the tab is idle, the text is *sent*. If the tab is *responding*, Enter *steers* and Alt/Option+Enter sends a *follow-up* (see [While Pi is busy](#while-pi-is-busy)). If the tab is busy but not responding (for example during `/compact`), the text is *queued* behind the current action.
 
 The model, thinking level and execution mode used for the turn are the tab's settings at the moment its first model request is made. See [Modifiers](#modifiers).
@@ -47,17 +47,17 @@ The model, thinking level and execution mode used for the turn are the tab's set
 Nothing reaches the model, nothing is added to the transcript, and nothing is saved when:
 
 - the text is empty or only spaces (the send button is shown disabled when the composer is empty, but clicking it is simply ignored);
-- the text starts with `/` and the tab is idle (a local command or nothing);
+- the text starts with `/` and the tab is idle (a local command runs, or an unknown one gets a newline);
 - there is no active tab ("No active session"), which only happens during startup or teardown.
 
 A starter hint is not a send either: clicking one fills the composer and stops there.
 
 ### Sent
 
-The turn is committed when the user's message joins the transcript. That happens almost immediately after Enter, with two possible waits in between:
+The turn is committed when the user's message joins the transcript. That happens almost immediately after Enter, with one possible wait in between:
 
 - **Auto-compaction.** If the tab's context is nearly full, Pi compacts older messages first. The working indicator shows "Compacting context…" with the hint "Send messages and Pi will see them after compaction". See [context and compaction](../turn/context-and-compaction.md).
-- **A missing login.** If the tab's provider has no usable credential, Pi asks for one with a connection dialog before the request goes out. If the user dismisses it, the turn fails with the banner "API key required for {provider}." See [models and providers](models-and-providers.md).
+
 
 From the moment the message joins the transcript:
 
@@ -65,6 +65,8 @@ From the moment the message joins the transcript:
 - The error banner, if one was showing, is cleared.
 - Pi gathers [auto-context](../turn/auto-context.md) (the workbook blueprint, the selection, recent edits) and sends the request.
 - The tab is busy until the turn ends.
+
+If the tab's provider has no usable credential, Pi asks for one with a connection dialog only now, after the message is already in the transcript and the tab is responding. If the user dismisses it, the turn fails ("API key required for {provider}."). See [models and providers](models-and-providers.md).
 
 ### While Pi is busy
 
@@ -102,7 +104,7 @@ Stop is the user's explicit abort of the active tab's turn. It has two triggers,
 | Available | While the active tab is responding; the button replaces send. | While the active tab is responding, and no menu, popover, the command menu, the model picker, settings, or an extension widget is open. Those claim Escape for themselves and close instead. |
 | The streaming model response | Ends at once, kept as far as it got, marked "Request aborted". | Same. |
 | A running tool | Asked to cancel. A workbook change that Excel has already started may still complete. | Same. |
-| Waiting steers and follow-ups | Removed from the queue strip when the turn ends, but not removed from Pi's queue (see [Open questions](#open-questions-and-verification)). | Put back into the composer, above any text already there. |
+| Waiting steers and follow-ups | Removed from the queue strip but kept by Pi (*stranded*) and delivered in the next turn; see [Open questions](#open-questions-and-verification). | Put back into the composer, above any text already there. |
 | Queued prompts | Stay queued and start as soon as the stopped turn has ended. | Put back into the composer with the steers and follow-ups. |
 | Queued commands | Stay queued and run. | Dropped. |
 | Text in the composer | Unchanged. | Unchanged; if it would otherwise be lost it is put back. |
@@ -127,8 +129,8 @@ Variants that change mid-turn take effect at the next boundary (the next model r
 | Event | Before sent | While busy |
 | --- | --- | --- |
 | Stop (button or Escape) | Escape with focus in the composer moves focus out; nothing is sent and the text stays. There is no Stop button while idle. | The turn ends as aborted. See [Stop](#stop) for how the two triggers differ. |
-| The user sends something else | A slash command runs instead, if it is known. Clicking a starter hint replaces nothing: it inserts its prompt into the composer. | Enter steers, Alt/Option+Enter follows up, a busy-allowed command runs or is queued, any other command is refused with a toast. |
-| Tab switched, created, closed or reopened | The composer text is the tab's own; switching tabs swaps it. | The turn keeps running in its tab, which shows a busy dot. Closing a responding tab asks "Stop and close this tab?" ("Stop and close" / "Keep open"); closing a tab whose mutation holds the workbook lock is refused. |
+| The user sends something else | A slash command runs instead, if it is known. Clicking a starter hint overwrites the whole draft with its prompt; nothing is sent. | Enter steers, Alt/Option+Enter follows up, a busy-allowed command runs or is queued, any other command is refused with a toast. |
+| Tab switched, created, closed or reopened | The composer is shared by all tabs: the draft stays put and is sent to whichever tab is active when Enter is pressed. | The turn keeps running in its tab, which shows a busy dot. Closing a responding tab asks "Stop and close this tab?" ("Stop and close" / "Keep open"); closing a tab whose mutation holds the workbook lock is refused. |
 | An overlay or menu opens | No effect on the draft. | The turn keeps running behind it. While a menu, popover or overlay that claims Escape is open, Escape closes it instead of stopping. |
 | Model or thinking level changes | Applies to the turn about to be sent. | Model change refused; thinking-level change applies from the next model response. |
 | The provider fails | Not applicable; nothing has been sent. | The turn ends as failed. The error banner appears only if the tab is active when the turn ends. |
@@ -189,9 +191,10 @@ After any interrupt, the user stays in the same tab (unless they switched), with
 ## Open questions and verification
 
 - The Stop button and Escape treat waiting items differently: Escape restores steers, follow-ups and queued prompts into the composer and drops queued commands; the Stop button leaves queued prompts and commands to run immediately after the stopped turn. Read from code. Probably unintentional; a product call at least.
-- After the Stop button, steers and follow-ups that had not been delivered disappear from the queue strip but stay in Pi's internal queue, so they appear to be delivered at the start of the next turn the user sends. Read from code; not confirmed by hand. Looks like a bug.
+- After the Stop button, steers and follow-ups that had not been delivered disappear from the queue strip but stay in Pi's internal queue (they are *stranded*), and are delivered unasked in the next turn. Confirmed in Excel on the web: after Stop, the next prompt "Reply with just OK." was answered "BANANA" then "MANGO", the stranded steers. The same is read from code after a provider error. A bug.
 - The error banner is shared by all tabs: it is not cleared on tab switch, and errors from background tabs never show one. Read from code. Probably a bug.
 - Whether a workbook write already sent to Excel completes after Stop has not been confirmed.
+- The composer draft is shared across tabs, so text typed in one tab is sent to another after a switch. Confirmed in the standalone taskpane. Probably a bug; see [sessions and tabs](sessions-and-tabs.md).
 - Compaction cannot be stopped: the Stop button is not shown and Escape does nothing while only compaction is running. Read from code.
 - Reloading the taskpane during the first turn of a new session loses the user's message because nothing is saved until Pi's first answer completes. Read from code.
 
