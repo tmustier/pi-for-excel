@@ -56,7 +56,7 @@ void test("recently closed stack reopens newest first and enforces max size", ()
   assert.equal(stack.popMostRecent(), null);
 });
 
-void test("recently closed stack removes duplicate-session entries by unique id", () => {
+void test("recently closed stack keeps one entry per session, the most recent close", () => {
   const stack = new RecentlyClosedStack(5);
 
   stack.push({
@@ -74,9 +74,8 @@ void test("recently closed stack removes duplicate-session entries by unique id"
     workbookId: "wb-a",
   });
 
-  const removed = stack.removeById("closed-a");
-  assert.equal(removed?.id, "closed-a");
   assert.deepEqual(stack.snapshot().map((item) => item.id), ["closed-b"]);
+  assert.equal(stack.removeById("closed-a"), null);
 });
 
 void test("resume target labels and workbook confirmation copy follow selected target", () => {

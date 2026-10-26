@@ -110,7 +110,7 @@ async function createRuntime(backend: StorageBackend, workbookId: string | null)
     agent,
     sessions,
     settings,
-    models,
+    resolveModel: (persisted) => models.getModel(persisted.provider, persisted.id),
     spreadsheetHost: {
       getWorkbookContext: () => Promise.resolve({
         workbookId,

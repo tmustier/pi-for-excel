@@ -105,6 +105,12 @@ void test("current OpenAI providers select GPT-6.1 Sol as the default", () => {
   }
 });
 
+void test("with both OpenAI logins connected the default bills the ChatGPT subscription", () => {
+  for (const providers of [["openai", "openai-codex"], ["openai-codex", "openai"]]) {
+    assert.equal(pickDefaultModel(providers).provider, "openai-codex");
+  }
+});
+
 void test("OpenAI defaults compare versions before tiers and keep Codex as a fallback", () => {
   const provider = modelsRuntime.getProvider("openai");
   assert.ok(provider);

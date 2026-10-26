@@ -156,6 +156,7 @@ export class SessionsStore extends Store {
     const data: SessionData = {
       id,
       title: title ?? meta.title,
+      ...(meta.titleChosen !== undefined ? { titleChosen: meta.titleChosen } : {}),
       model,
       thinkingLevel: state.thinkingLevel,
       messages: state.messages,

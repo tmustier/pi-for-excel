@@ -70,8 +70,10 @@ export function openModelSelectorDialog(options: ModelSelectorDialogOptions): vo
   // Selection follows the mouse only after real pointer movement, so
   // keyboard-triggered scrolling doesn't hand selection to whatever lands
   // under the cursor.
-  let navigationMode: "keyboard" | "mouse" = "mouse";
-  let lastMouse = { x: 0, y: 0 };
+  // It starts in keyboard mode: a pointer resting where the list appears must
+  // not take the selection from the current model, or Enter would pick its row.
+  let navigationMode: "keyboard" | "mouse" = "keyboard";
+  let lastMouse: { x: number; y: number } | null = null;
 
   const { header } = createOverlayHeader({
     title: t("modelSelector.title"),
@@ -215,8 +217,10 @@ export function openModelSelectorDialog(options: ModelSelectorDialogOptions): vo
   });
 
   dialog.overlay.addEventListener("mousemove", (event) => {
-    if (event.clientX === lastMouse.x && event.clientY === lastMouse.y) return;
+    const previous = lastMouse;
     lastMouse = { x: event.clientX, y: event.clientY };
+    // The first event only records where the pointer rests (browsers send one when content appears under it).
+    if (!previous || (event.clientX === previous.x && event.clientY === previous.y)) return;
     navigationMode = "mouse";
   });
 

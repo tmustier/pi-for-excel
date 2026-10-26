@@ -50,7 +50,12 @@ export function pickDefaultModel(
   // Prefer the newest general GPT model when it is at least as new as Codex,
   // while keeping Codex as fallback. Within one version Sol is the preferred
   // tier; upstream intentionally exposes no bare gpt-5.6 or gpt-6 alias.
-  for (const provider of ["openai", "openai-codex"] as const) {
+  //
+  // With both connected, the ChatGPT subscription (openai-codex) wins over the
+  // API key (openai): the subscription is already paid for, while the API key
+  // bills every token. A user who wants API billing picks it in the model picker
+  // and the tab keeps that choice.
+  for (const provider of ["openai-codex", "openai"] as const) {
     if (!availableProviders.includes(provider)) continue;
     const models = [...modelsRuntime.getModels(provider)]
       .sort((a, b) => compareOpenAiModelIds(a.id, b.id));
