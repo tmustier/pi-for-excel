@@ -40,6 +40,12 @@ import { getErrorMessage } from "../../utils/errors.js";
 import { formatAsMarkdownTable, extractFormulas, findErrors } from "../../utils/format.js";
 import type { ReadRangeCsvDetails, WriteCellsDetails } from "../tool-details.js";
 import { countOccupiedCells, validateFormula } from "../write-cells.js";
+import {
+  classifySentValue,
+  diffWrittenGrid,
+  formatVerificationProblems,
+  toCellGrid,
+} from "../mutation/range-write.js";
 
 const WPS_NO_BACKUP_NOTICE =
   "ℹ️ WPS workbook backups are not implemented yet; no automatic recovery snapshot was created.";
@@ -813,7 +819,7 @@ export function executeWpsWriteCells(
     }
 
     const result = writeWpsCells(params, padded, rows, cols, startCellRef);
-    return Promise.resolve(result.blocked ? formatWpsBlockedWrite(result) : formatWpsSuccessWrite(result, rows, cols));
+    return Promise.resolve(result.blocked ? formatWpsBlockedWrite(result) : formatWpsSuccessWrite(result, padded, rows, cols));
   } catch (error) {
     return Promise.resolve({
       content: [{ type: "text", text: `Error writing WPS cells: ${getErrorMessage(error)}` }],
@@ -874,7 +880,10 @@ function formatWpsBlockedWrite(result: BlockedWriteCellsResult): AgentToolResult
   lines.push("**Existing data:**");
   lines.push(result.existingCount > 0 ? formatAsMarkdownTable(result.existingValues) : "(empty)");
   lines.push("");
-  lines.push("To overwrite, confirm with the user and retry with `allow_overwrite: true`.");
+  lines.push(
+    "If the user asked to change these cells, retry with `allow_overwrite: true`. " +
+    "Otherwise show the user the existing data and ask before overwriting.",
+  );
   lines.push("");
   lines.push(WPS_NO_BACKUP_NOTICE);
 
@@ -925,18 +934,38 @@ function buildVerifiedValuesPreview(values: unknown[][]): {
 
 function formatWpsSuccessWrite(
   result: SuccessWriteCellsResult,
+  padded: unknown[][],
   rows: number,
   cols: number,
 ): AgentToolResult<WriteCellsDetails> {
   const fullAddress = qualifiedAddress(result.sheetName, result.address);
   const cellPart = result.address.includes("!") ? result.address.split("!").at(-1) ?? result.address : result.address;
   const startCell = cellPart.split(":")[0] ?? cellPart;
+  const start = parseCell(startCell);
+  const sentGrid = toCellGrid(padded);
+  const verification = diffWrittenGrid(
+    { startRow: start.row, startCol: start.col, rowCount: rows, columnCount: cols },
+    (row, col) => classifySentValue(sentGrid[row]?.[col]),
+    toCellGrid(result.readBackValues),
+    toCellGrid(result.readBackFormulas),
+  );
+  const notWritten = verification.notWrittenCount;
   const lines: string[] = [];
-  lines.push(`Written to **${fullAddress}** (${rows}×${cols})`);
+  lines.push(notWritten > 0
+    ? `⚠️ **Partly written** to **${fullAddress}** (${rows}×${cols}): ${notWritten} of ${rows * cols} cell(s) do not hold the value sent.`
+    : `Written to **${fullAddress}** (${rows}×${cols})`);
+  // Formula errors are listed below with their formulas, as before.
+  const problems = formatVerificationProblems(
+    { ...verification, formulaErrors: [], formulaErrorCount: 0 },
+    (address) => qualifiedAddress(result.sheetName, address),
+  );
+  if (problems.length > 0) {
+    lines.push("");
+    lines.push(...problems);
+  }
 
   const errors = findErrors(result.readBackValues, startCell);
   if (errors.length > 0) {
-    const start = parseCell(startCell);
     for (const error of errors) {
       const errorCell = parseCell(error.address);
       const row = errorCell.row - start.row;
@@ -1005,6 +1034,10 @@ function formatWpsSuccessWrite(
       formulaErrorCount: errors.length,
       changes,
       recovery: { status: "not_available", reason: WPS_NO_BACKUP_REASON },
+      verification: "full",
+      ...(notWritten > 0 ? { notWrittenCount: notWritten } : {}),
+      ...(verification.converted.length > 0 ? { convertedCount: verification.converted.length } : {}),
     },
+    ...(notWritten > 0 ? { isError: true } : {}),
   };
 }

@@ -173,6 +173,7 @@ void test("format_cells rejects an invalid border value before changing the host
   // Runtime tool input originates from model JSON, so this deliberately bypasses compile-time schema checking.
   const result = await withFormatHost(range, () => createFormatCellsTool().execute("format-2", params));
 
-  assert.match(firstText(result), /Error formatting: Invalid borders/u);
+  assert.match(firstText(result), /Error formatting A1 — no formatting was applied\. Invalid borders/u);
+  assert.equal(result.isError, true);
   assert.deepEqual([...range.borders], []);
 });

@@ -3,7 +3,39 @@ import { test } from "node:test";
 
 import { createFetchPageTool } from "../src/tools/fetch-page.ts";
 import { createMcpTool } from "../src/tools/mcp.ts";
+import { createModifyStructureTool } from "../src/tools/modify-structure.ts";
 import { createWebSearchTool } from "../src/tools/web-search.ts";
+import { OfficeError } from "./fixtures/excel-write-host.ts";
+
+/** An Excel host whose structural edits fail with `failure`, as Excel on the web does on a protected sheet. */
+async function withFailingStructureHost<T>(failure: OfficeError, action: () => Promise<T>): Promise<T> {
+  let failNextSync = false;
+  const sheet = {
+    id: "sheet-1",
+    name: "Protected",
+    load: (): void => {},
+    protection: { protected: failure.code === "AccessDenied", load: (): void => {} },
+    getRange: () => ({ insert: (): void => { failNextSync = true; } }),
+  };
+  const context = {
+    workbook: {
+      worksheets: { getItem: () => sheet, getActiveWorksheet: () => sheet },
+      protection: { protected: false, load: (): void => {} },
+    },
+    sync: (): Promise<void> => {
+      if (!failNextSync) return Promise.resolve();
+      failNextSync = false;
+      return Promise.reject(failure);
+    },
+  };
+  const previous = Reflect.get(globalThis, "Excel");
+  Reflect.set(globalThis, "Excel", { run: <R>(callback: (ctx: unknown) => Promise<R>): Promise<R> => callback(context) });
+  try {
+    return await action();
+  } finally {
+    Reflect.set(globalThis, "Excel", previous);
+  }
+}
 
 void test("error-path matrix: wrong web_search API key falls back to Jina with warning", async () => {
   const tool = createWebSearchTool({
@@ -200,4 +232,29 @@ void test("error-path matrix: mcp tool call handles mid-call network disconnect"
   assert.equal(details.operation, "tool");
   assert.equal(details.tool, "echo");
   assert.match(details.error ?? "", /networkerror/i);
+});
+
+void test("error-path matrix: a protected sheet is named as the reason, as a tool error", async () => {
+  const result = await withFailingStructureHost(
+    new OfficeError("AccessDenied", "You cannot perform the requested operation.", "Range.insert"),
+    () => createModifyStructureTool().execute("call-protected", { action: "insert_rows", sheet: "Protected", position: 3 }),
+  );
+  const text = result.content[0]?.type === "text" ? result.content[0].text : "";
+
+  assert.equal(result.isError, true);
+  assert.match(text, /the workbook was not changed/u);
+  assert.match(text, /Sheet "Protected" is protected/u);
+  assert.doesNotMatch(text, /You cannot perform the requested operation/u);
+});
+
+void test("error-path matrix: cell-edit mode tells the agent to ask the user to leave the cell", async () => {
+  const result = await withFailingStructureHost(
+    new OfficeError("InvalidOperationInCellEditMode", "Excel is in cell-editing mode.", ""),
+    () => createModifyStructureTool().execute("call-edit-mode", { action: "insert_rows", sheet: "Protected", position: 3 }),
+  );
+  const text = result.content[0]?.type === "text" ? result.content[0].text : "";
+
+  assert.equal(result.isError, true);
+  assert.match(text, /cell-edit mode/u);
+  assert.match(text, /press Enter or Esc/u);
 });

@@ -39,6 +39,25 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 - **Blocks only on existing data:** values or formulas.
 - **Does NOT block** on formatting, conditional formats, or data validation rules.
 - **Rationale:** formatting-only cells are not meaningful "content" and shouldn't block writes.
+- **Explicit requests count as confirmation:** the system prompt and the `allow_overwrite` description tell the agent to set it when the user asked to change those cells, and to ask only otherwise. Asking "Confirm replacing A2?" after "change A2 to Output" cost a turn and added nothing.
+
+## Write results tell the truth (`write_cells`, `fill_formula`)
+- **Shared path:** `src/tools/mutation/range-write.ts` (`inspectWriteTarget`, `verifyWrittenRange`); failure reasons in `src/tools/mutation/excel-failure.ts`.
+- **Before writing (blocked, `isError: true`, nothing written):** locked cells on a protected sheet; target cells inside a merged area other than its top-left (Excel silently drops them); target cells inside a spilled range other than its anchor (Excel turns the anchor into `#SPILL!`). Merges are queried from A1 to the target's bottom-right because Excel on the web reports a merge only when its top-left cell is inside the queried range.
+- **Writes are chunked** under Excel's request payload limit and synced on their own; `fill_formula` syncs the autofill before any read-back. A read-back failure after the write therefore reports "written, but could not be verified", never a failure for a change that landed.
+- **Verification is bounded:** up to `MAX_RECOVERY_CELLS` (20,000) cells every cell is read back and compared with what was sent. Above that, the first and last ~1,000 cells are read back and the whole range is scanned with `getSpecialCellsOrNullObject` for formula errors and blank cells; the result says "Verification is partial" and what was checked (`details.verification: "sampled"`).
+- **Compared, not trusted:** cells that do not hold the value sent are listed as not written (`isError: true`, `details.notWrittenCount`); text Excel converted to a number/date/boolean is listed with its displayed text and the apostrophe workaround (`'00123` stores text; `details.convertedCount`); values stored differently (duplicate table headers renamed `Qty2`) are listed; formula errors, including `#SPILL!`, are listed with formulas.
+- **Data validation:** written values that violate the cells' rule are listed with the rule (`details.invalidCount`). Not blocked: Office.js does not enforce validation and the agent may be fixing data in bulk.
+- **Manual calculation:** when `calculationMode` is not Automatic and formulas were written, the target is calculated (`range.calculate()`) before the read-back, and the result says dependents still show old results until the user recalculates (`details.calculationMode`).
+- **Backups for large writes:** a write above the backup limit into an empty target proceeds and says "No backup… was empty before, so clearing it undoes the change". A large write that would overwrite existing data is refused up front ("Write in blocks of at most 20,000 cells"), because it could not be undone.
+- **Partial chunked failure:** if a later chunk fails, the result names the rows that were written, backs up and audits them, and is an error.
+
+## Tool failures are errors with a reason
+- Every workbook mutation tool (`write_cells`, `fill_formula`, `format_cells`, `modify_structure`, `conditional_format`, `comments`, `charts`, `view_settings`, `python_transform_range`) returns failures with `isError: true`, states that nothing was changed, and maps the Office.js code to a reason: `AccessDenied` → probe sheet/workbook protection and name the sheet; `InvalidOperationInCellEditMode` → ask the user to press Enter/Esc; payload limits → split the request; `ItemNotFound` on a sheet → list the sheets that exist; `InvalidArgument` on `getRange` → invalid address.
+- A failed mutation records an audit entry but no "backup not created" note: nothing changed.
+
+## Reads in a batch see earlier writes
+- `withWorkbookCoordinator` tracks mutations that have started and not finished. A read waits for mutations started before it (the agent loop starts a batch's calls in order); mutations never wait for reads. A read issued before a write in the same batch is not delayed.
 
 ## Fill formulas (`fill_formula`)
 - **Purpose:** avoid large 2D formula arrays by using Excel AutoFill.

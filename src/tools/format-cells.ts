@@ -18,6 +18,7 @@ import {
   CHECKPOINT_SKIPPED_NOTE,
   CHECKPOINT_SKIPPED_REASON,
 } from "./recovery-metadata.js";
+import { describeExcelFailure, parseExcelError } from "./mutation/excel-failure.js";
 import { finalizeMutationOperation, finalizeMutationRecoveryStep } from "./mutation/finalize.js";
 import { appendMutationResultNote } from "./mutation/result-note.js";
 import type { MutationFinalizeDependencies } from "./mutation/types.js";
@@ -602,7 +603,8 @@ export function createFormatCellsTool(): AgentTool<typeof schema, FormatCellsDet
 
         return toolResult;
       } catch (e) {
-        const message = getErrorMessage(e);
+        const failure = await describeExcelFailure(parseExcelError(e), { range: params.range });
+        const message = failure.reason;
 
         await finalizeMutationOperation(mutationFinalizeDependencies, {
           auditEntry: {
@@ -617,8 +619,9 @@ export function createFormatCellsTool(): AgentTool<typeof schema, FormatCellsDet
         });
 
         return {
-          content: [{ type: "text", text: `Error formatting: ${message}` }],
+          content: [{ type: "text", text: `Error formatting ${params.range} — no formatting was applied. ${message}` }],
           details: { kind: "format_cells", address: params.range },
+          isError: true,
         };
       }
     },

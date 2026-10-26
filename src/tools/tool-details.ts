@@ -66,10 +66,18 @@ const mutationDetailsProperties = {
   formulaErrorCount: Type.Optional(Type.Number()),
   changes: Type.Optional(workbookCellChangeSummarySchema),
   recovery: Type.Optional(recoveryCheckpointDetailsSchema),
-  /** The user pressed Stop during the call; the text says what was written before it. */
-  stopped: Type.Optional(Type.Boolean()),
-  /** With `stopped`: cells confirmed written before Stop took effect; 0 means nothing changed. */
-  writtenCount: Type.Optional(Type.Number()),
+  /** How the write was checked: every cell (`full`), both ends plus a whole-range scan (`sampled`), or not at all (`failed`). */
+  verification: Type.Optional(StringEnum(["full", "sampled", "failed"])),
+  /** Cells that do not hold the value sent (merged cells, spills, …). */
+  notWrittenCount: Type.Optional(Type.Number()),
+  /** Text values Excel converted to numbers, dates or booleans. */
+  convertedCount: Type.Optional(Type.Number()),
+  /** Written values that violate the cells' data validation. */
+  invalidCount: Type.Optional(Type.Number()),
+  /** Workbook calculation mode, present only when it is not Automatic. */
+  calculationMode: Type.Optional(Type.String()),
+  /** Office.js error code when the call failed. */
+  errorCode: Type.Optional(Type.String()),
 };
 
 export const writeCellsDetailsSchema = Type.Object({
