@@ -15,7 +15,7 @@ import {
 } from "./overlay-dialog.js";
 import { COPY_TEXT_OVERLAY_ID } from "./overlay-ids.js";
 
-export type CopyTextOutcome = "copied" | "manual";
+export type CopyTextOutcome = "copied" | "manual" | "unavailable";
 
 /** Legacy fallback for WebViews where the async clipboard API is rejected. */
 export function copyViaHiddenTextarea(text: string): boolean {
@@ -35,7 +35,14 @@ export function copyViaHiddenTextarea(text: string): boolean {
   }
 }
 
-export async function copyText(text: string): Promise<CopyTextOutcome> {
+/**
+ * `manualFallback: false` returns "unavailable" instead of showing the dialog,
+ * for callers with a better fallback for large text (such as a download).
+ */
+export async function copyText(
+  text: string,
+  options: { manualFallback?: boolean } = {},
+): Promise<CopyTextOutcome> {
   try {
     await navigator.clipboard.writeText(text);
     return "copied";
@@ -44,6 +51,7 @@ export async function copyText(text: string): Promise<CopyTextOutcome> {
   }
 
   if (copyViaHiddenTextarea(text)) return "copied";
+  if (options.manualFallback === false) return "unavailable";
 
   const dialog = createOverlayDialog({
     overlayId: COPY_TEXT_OVERLAY_ID,

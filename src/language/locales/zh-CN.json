@@ -213,6 +213,7 @@
   "export.toast.transcript_copied": "记录已复制（{count} 条消息，{size}KB）",
   "export.toast.transcript_downloaded": "已开始下载对话记录（{count} 条消息）",
   "ext-hub-connections.addButton": "添加",
+  "export.toast.transcript_download_instead": "此处无法使用剪贴板，已改为开始下载对话记录（{count} 条消息）",
   "ext-hub-connections.allowExternal": "允许 Pi 搜索网络和调用外部服务",
   "ext-hub-connections.badgeDisabled": "已禁用",
   "ext-hub-connections.badgeEnabled": "已启用",

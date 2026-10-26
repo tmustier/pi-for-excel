@@ -86,11 +86,12 @@ function countChatMessages(messages: AgentMessage[]): number {
 
 type ExportDestination = "clipboard" | "download";
 
-function parseExportDestination(raw: string, fallback: ExportDestination): ExportDestination {
+/** The destination the user named, or null for the command's default. */
+function parseExportDestination(raw: string): ExportDestination | null {
   const normalized = raw.trim().toLowerCase();
   if (normalized === "clipboard") return "clipboard";
   if (normalized === "file" || normalized === "download") return "download";
-  return fallback;
+  return null;
 }
 
 function triggerJsonDownload(fileName: string, content: string): void {
@@ -118,7 +119,7 @@ function triggerJsonDownload(fileName: string, content: string): void {
 }
 
 async function exportWorkbookAuditLog(rawArgs: string): Promise<void> {
-  const destination = parseExportDestination(rawArgs, "download");
+  const destination = parseExportDestination(rawArgs) ?? "download";
 
   // Only this workbook's changes: the log holds addresses and values from every workbook.
   // With no workbook identity, only entries that were recorded without one are included.
@@ -473,7 +474,7 @@ export function createExportCommands(getActiveAgent: ActiveAgentProvider): Slash
           try {
             await exportWorkbookAuditLog(parts.slice(1).join(" "));
           } catch (error) {
-            showToast(t("export.toast.audit_export_failed", { error: getErrorMessage(error) }));
+            showToast(t("export.toast.audit_export_failed", { error: getErrorMessage(error) }), { variant: "error" });
           }
           return;
         }
@@ -520,18 +521,28 @@ export function createExportCommands(getActiveAgent: ActiveAgentProvider): Slash
         };
 
         const json = JSON.stringify(exportData, null, 2);
-        const destination = parseExportDestination(args, "clipboard");
+        const destination = parseExportDestination(args);
 
-        if (destination === "clipboard") {
+        if (destination !== "download") {
           try {
-            if (await copyText(json) === "manual") return;
-            showToast(t("export.toast.transcript_copied", {
-              count: String(countChatMessages(msgs)),
-              size: (json.length / 1024).toFixed(0),
-            }));
+            // A bare /export downloads where the clipboard refuses the copy
+            // (Excel on the web without user activation) instead of filling the
+            // manual-copy dialog with the whole JSON transcript.
+            const outcome = await copyText(json, { manualFallback: destination === "clipboard" });
+            if (outcome === "manual") return;
+            if (outcome === "copied") {
+              showToast(t("export.toast.transcript_copied", {
+                count: String(countChatMessages(msgs)),
+                size: (json.length / 1024).toFixed(0),
+              }));
+              return;
+            }
           } catch (error) {
-            showToast(t("export.toast.copy_failed", { error: getErrorMessage(error) }));
+            showToast(t("export.toast.copy_failed", { error: getErrorMessage(error) }), { variant: "error" });
+            return;
           }
+          triggerJsonDownload(`pi-session-${new Date().toISOString().slice(0, 10)}.json`, json);
+          showToast(t("export.toast.transcript_download_instead", { count: String(countChatMessages(msgs)) }));
           return;
         }
 
