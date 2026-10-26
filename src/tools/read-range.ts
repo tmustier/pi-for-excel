@@ -2,44 +2,74 @@
  * read_range — Read cell values, formulas, and optionally formatting.
  *
  * Three modes:
- * - "compact" (default): Markdown table of values. Token-efficient.
+ * - "compact" (default): Markdown table of displayed values. Token-efficient.
  * - "csv": Raw CSV values only. Analysis-friendly.
- * - "detailed": Full JSON with formulas, number formats. For debugging.
+ * - "detailed": Formulas, number formats and comments as well.
+ *
+ * Reads are bounded: whole-column/row addresses and ranges larger than one
+ * page are clipped to the sheet's used range and returned one page at a time,
+ * with the exact range to read next. Summaries (sheet state, formulas,
+ * errors) come before the table so output truncation only cuts the bulk.
  */
 
 import { Type, type Static } from "typebox";
+import { Value } from "typebox/value";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import {
+  blockAddress,
   colToLetter,
   excelRun,
-  getRange,
+  intersectBlocks,
   isCellInRange,
-  parseCell,
+  isResponsePayloadLimitMessage,
   qualifiedAddress,
+  resolveSheetRef,
+  type CellBlock,
+  type SheetSource,
 } from "../excel/helpers.js";
-import { formatAsMarkdownTable, extractFormulas, findErrors } from "../utils/format.js";
+import {
+  findErrors,
+  formatAsMarkdownTable,
+  formatDisplayedCell,
+  cellValueGridSchema,
+  textGridSchema,
+  type CellValue,
+} from "../utils/format.js";
 import { getErrorMessage } from "../utils/errors.js";
 import { buildResolvedFormatLabels, getResolvedConventions, humanizeFormat } from "../conventions/index.js";
 import { getAppStorage } from "../storage/local/app-storage.js";
 import type { ReadRangeCsvDetails } from "./tool-details.js";
+import { canSpill, collectRangeState, renderRangeState, type RangeState } from "./sheet-state.js";
+
+/**
+ * Cells and rows returned per call. Compact mode costs roughly 8 bytes per
+ * cell plus 10 per row, so a full page is about 25 KB, half the output limit.
+ */
+const READ_RANGE_PAGE_CELLS = 2_500;
+const MAX_PAGE_ROWS = 500;
+const MAX_PAGE_COLUMNS = 100;
+const MAX_LISTED_FORMULAS = 40;
+const MAX_LISTED_ERRORS = 40;
+const MAX_LISTED_FORMAT_AREAS = 20;
 
 const schema = Type.Object({
   range: Type.String({
     description:
-      'Cell range in A1 notation, e.g. "A1:D10", "Sheet2!A1:B5". ' +
-      "If no sheet is specified, uses the active sheet.",
+      'Cell range in A1 notation, e.g. "A1:D10", "Sheet2!A1:B5", "Data!A:C". ' +
+      "Include the sheet name; without one the active sheet is used and the result says so.",
   }),
   mode: Type.Optional(
     Type.Union([Type.Literal("compact"), Type.Literal("csv"), Type.Literal("detailed")], {
       description:
-        '"compact" (default): markdown table of values. ' +
-        '"csv": values only as CSV. ' +
+        '"compact" (default): markdown table of values as displayed. ' +
+        '"csv": raw values only as CSV. ' +
         '"detailed": includes formulas and number formats.',
     }),
   ),
 });
 
 type Params = Static<typeof schema>;
+type Mode = "compact" | "csv" | "detailed";
 
 interface CommentSummary {
   cell: string;
@@ -49,15 +79,163 @@ interface CommentSummary {
   replyCount: number;
 }
 
-interface ReadRangeResult {
+interface ReadRangePage {
   sheetName: string;
-  address: string;
-  rows: number;
-  cols: number;
-  values: unknown[][];
-  formulas: unknown[][];
-  numberFormats: unknown[][];
+  sheetSource: SheetSource;
+  /** The address as given, without the sheet. */
+  requested: string;
+  /** Requested block after clipping to the used range; null when that leaves nothing. */
+  target: CellBlock | null;
+  clippedToUsedRange: boolean;
+  page: CellBlock | null;
+  values: CellValue[][];
+  formulas: CellValue[][];
+  /** R1C1 formulas, to group filled formulas; empty in csv mode. */
+  formulasR1C1: CellValue[][];
+  numberFormats: string[][];
+  text: string[][];
   comments: CommentSummary[];
+  state: RangeState | null;
+}
+
+const WHOLE_LINE_PATTERN = /^\$?(?:[A-Z]+:\$?[A-Z]+|\d+:\$?\d+)$/iu;
+
+function cellCount(block: CellBlock): number {
+  return block.rowCount * block.columnCount;
+}
+
+function firstPage(target: CellBlock): CellBlock {
+  const columnCount = Math.min(target.columnCount, MAX_PAGE_COLUMNS);
+  const rowCount = Math.min(target.rowCount, MAX_PAGE_ROWS, Math.max(1, Math.floor(READ_RANGE_PAGE_CELLS / columnCount)));
+  return { ...target, rowCount, columnCount };
+}
+
+async function loadPage(context: Excel.RequestContext, ref: string, mode: Mode): Promise<ReadRangePage> {
+  const resolved = await resolveSheetRef(context, ref);
+  const { sheet } = resolved;
+  const requestedRange = sheet.getRange(resolved.address);
+  requestedRange.load("rowIndex,columnIndex,rowCount,columnCount");
+  const used = sheet.getUsedRangeOrNullObject(true);
+  used.load("rowIndex,columnIndex,rowCount,columnCount");
+  await context.sync();
+
+  const requested: CellBlock = {
+    rowIndex: requestedRange.rowIndex,
+    columnIndex: requestedRange.columnIndex,
+    rowCount: requestedRange.rowCount,
+    columnCount: requestedRange.columnCount,
+  };
+  const base = {
+    sheetName: resolved.sheetName,
+    sheetSource: resolved.sheetSource,
+    requested: resolved.address,
+  };
+
+  // Whole columns/rows and anything bigger than a page only make sense where data is.
+  const clip = WHOLE_LINE_PATTERN.test(resolved.address) || cellCount(requested) > READ_RANGE_PAGE_CELLS;
+  let target: CellBlock | null = requested;
+  if (clip) {
+    target = used.isNullObject
+      ? null
+      : intersectBlocks(requested, {
+        rowIndex: used.rowIndex,
+        columnIndex: used.columnIndex,
+        rowCount: used.rowCount,
+        columnCount: used.columnCount,
+      });
+  }
+  const empty = { values: [], formulas: [], formulasR1C1: [], numberFormats: [], text: [], comments: [], state: null };
+  if (target === null) {
+    return { ...base, target: null, clippedToUsedRange: clip, page: null, ...empty };
+  }
+
+  const pageShape = firstPage(target);
+  let rowCount = pageShape.rowCount;
+  for (;;) {
+    const page = { ...pageShape, rowCount };
+    const range = sheet.getRangeByIndexes(page.rowIndex, page.columnIndex, page.rowCount, page.columnCount);
+    range.load(mode === "csv" ? "values,formulas,numberFormat" : "values,formulas,formulasR1C1,numberFormat,text");
+    try {
+      await context.sync();
+    } catch (error) {
+      // Long text can exceed the host's response limit even within the cell budget.
+      if (page.rowCount > 1 && isResponsePayloadLimitMessage(getErrorMessage(error))) {
+        rowCount = Math.ceil(rowCount / 2);
+        continue;
+      }
+      throw error;
+    }
+
+    const values = Value.Parse(cellValueGridSchema, range.values);
+    const formulas = Value.Parse(cellValueGridSchema, range.formulas);
+    const numberFormats = Value.Parse(textGridSchema, range.numberFormat);
+    const text = mode === "csv" ? [] : Value.Parse(textGridSchema, range.text);
+    const formulasR1C1 = mode === "csv" ? [] : Value.Parse(cellValueGridSchema, range.formulasR1C1);
+    const state = await collectRangeState(context, sheet, page, spillCandidates(formulas, page));
+    const comments = mode === "detailed" ? await loadComments(context, sheet, blockAddress(page)) : [];
+
+    return {
+      ...base,
+      target,
+      clippedToUsedRange: clip,
+      page,
+      values,
+      formulas,
+      formulasR1C1,
+      numberFormats,
+      text,
+      comments,
+      state,
+    };
+  }
+}
+
+function spillCandidates(formulas: CellValue[][], page: CellBlock): string[] {
+  const cells: string[] = [];
+  for (const [r, row] of formulas.entries()) {
+    for (const [c, formula] of row.entries()) {
+      if (typeof formula === "string" && formula.startsWith("=") && canSpill(formula)) {
+        cells.push(`${colToLetter(page.columnIndex + c)}${page.rowIndex + r + 1}`);
+      }
+    }
+  }
+  return cells;
+}
+
+async function loadComments(
+  context: Excel.RequestContext,
+  sheet: Excel.Worksheet,
+  pageAddress: string,
+): Promise<CommentSummary[]> {
+  const commentsCol = sheet.comments;
+  commentsCol.load("items");
+  await context.sync();
+  if (commentsCol.items.length === 0) return [];
+
+  const entries = commentsCol.items.map((comment) => {
+    comment.load("content,authorName,resolved");
+    const location = comment.getLocation();
+    location.load("address");
+    const replyCount = comment.replies.getCount();
+    return { comment, location, replyCount };
+  });
+  await context.sync();
+
+  const comments: CommentSummary[] = [];
+  for (const { comment, location, replyCount } of entries) {
+    const locBangIndex = location.address.indexOf("!");
+    const locCell = locBangIndex >= 0 ? location.address.slice(locBangIndex + 1) : location.address;
+    if (isCellInRange(locCell, pageAddress)) {
+      comments.push({
+        cell: locCell,
+        content: comment.content,
+        author: comment.authorName,
+        resolved: comment.resolved,
+        replyCount: replyCount.value,
+      });
+    }
+  }
+  return comments;
 }
 
 export function createReadRangeTool(): AgentTool<typeof schema> {
@@ -65,7 +243,10 @@ export function createReadRangeTool(): AgentTool<typeof schema> {
     name: "read_range",
     label: "Read Range",
     description:
-      "Read cell values from an Excel range. Returns a markdown table by default (compact mode). " +
+      "Read cell values from an Excel range. Returns a markdown table of values as the user sees them " +
+      "(compact mode), with notes on protection, merges, hidden/filtered rows, tables, spills, validation " +
+      "and manual calculation. Large ranges and whole columns (A:A) are clipped to the data and paged; " +
+      "the result names the range to read next. " +
       'Use mode "csv" for raw CSV values (analysis-friendly). ' +
       'Use mode "detailed" to also see formulas and number formats. ' +
       "Always read before modifying — never guess what's in the spreadsheet.",
@@ -75,86 +256,27 @@ export function createReadRangeTool(): AgentTool<typeof schema> {
       params: Params,
     ): Promise<AgentToolResult<ReadRangeCsvDetails | undefined>> => {
       try {
-        const mode = params.mode || "compact";
+        const mode: Mode = params.mode ?? "compact";
+        const result = await excelRun((context) => loadPage(context, params.range, mode));
 
-        const result = await excelRun<ReadRangeResult>(async (context) => {
-          const { sheet, range } = getRange(context, params.range);
-          range.load("values,formulas,numberFormat,address,rowCount,columnCount");
-          sheet.load("name");
+        const lines = renderPreamble(result);
+        if (result.page === null) {
+          lines.push("", "_All cells are empty._");
+          return { content: [{ type: "text", text: lines.join("\n") }], details: undefined };
+        }
 
-          // Pre-load comments collection for detailed mode
-          const loadComments = mode === "detailed";
-          const commentsCol = loadComments ? sheet.comments : undefined;
-          if (commentsCol) {
-            commentsCol.load("items");
-          }
+        if (mode === "csv") return formatCsvOutput(lines, result, result.page);
 
-          await context.sync();
-
-          // Collect comments within the range (detailed mode only)
-          const comments: CommentSummary[] = [];
-          if (commentsCol && commentsCol.items.length > 0) {
-            const entries = commentsCol.items.map((comment) => {
-              comment.load("content,authorName,resolved");
-              const location = comment.getLocation();
-              location.load("address");
-              const replyCount = comment.replies.getCount();
-              return { comment, location, replyCount };
-            });
-            await context.sync();
-
-            const rangeAddr = range.address;
-            for (const { comment, location, replyCount } of entries) {
-              const locBangIndex = location.address.indexOf("!");
-              const locCell = locBangIndex >= 0
-                ? location.address.slice(locBangIndex + 1)
-                : location.address;
-              if (isCellInRange(locCell, rangeAddr)) {
-                comments.push({
-                  cell: locCell,
-                  content: comment.content,
-                  author: comment.authorName,
-                  resolved: comment.resolved,
-                  replyCount: replyCount.value,
-                });
-              }
-            }
-          }
-
-          return {
-            sheetName: sheet.name,
-            address: range.address,
-            rows: range.rowCount,
-            cols: range.columnCount,
-            values: range.values,
-            formulas: range.formulas,
-            numberFormats: range.numberFormat,
-            comments,
-          };
-        });
-
-        const fullAddress = qualifiedAddress(result.sheetName, result.address);
-        // Extract just the cell part (without sheet!) for offset calculations
-        const bangIndex = result.address.indexOf("!");
-        const cellPart = bangIndex >= 0 ? result.address.slice(bangIndex + 1) : result.address;
-        const colonIndex = cellPart.indexOf(":");
-        const startCell = colonIndex >= 0 ? cellPart.slice(0, colonIndex) : cellPart;
-
-        if (mode === "compact") {
-          return formatCompact(fullAddress, result, startCell);
-        } else if (mode === "csv") {
-          return formatCsvOutput(fullAddress, result, startCell);
-        } else {
-          let resolvedLabels: Map<string, string> | undefined;
+        let resolvedLabels: Map<string, string> | undefined;
+        if (mode === "detailed") {
           try {
             const conventions = await getResolvedConventions(getAppStorage().settings);
             resolvedLabels = buildResolvedFormatLabels(conventions);
           } catch {
             // Ignore conventions lookup failures in read-only output.
           }
-
-          return formatDetailed(fullAddress, result, startCell, resolvedLabels);
         }
+        return formatTable(lines, result, result.page, mode, resolvedLabels);
       } catch (e) {
         return {
           content: [{ type: "text", text: `Error reading "${params.range}": ${getErrorMessage(e)}` }],
@@ -165,205 +287,266 @@ export function createReadRangeTool(): AgentTool<typeof schema> {
   };
 }
 
-function hasAnyNonEmptyCell(values: unknown[][]): boolean {
-  for (const row of values) {
-    for (const v of row) {
-      if (v !== null && v !== undefined && v !== "") return true;
-    }
+/** Header, sheet note, paging note and sheet-state notes: the lines truncation must not cut. */
+function renderPreamble(result: ReadRangePage): string[] {
+  const lines: string[] = [];
+  const { page, target } = result;
+  const shownAddress = page ? blockAddress(page) : result.requested;
+  const size = page ? ` (${page.rowCount}×${page.columnCount})` : "";
+  lines.push(`**${qualifiedAddress(result.sheetName, shownAddress)}**${size}`);
+
+  if (result.sheetSource === "active") {
+    lines.push(`Sheet: "${result.sheetName}" (the active sheet; the address named no sheet).`);
   }
-  return false;
+
+  if (target === null) {
+    lines.push(`Requested ${result.requested}: the sheet has no data there (used range checked).`);
+    return lines;
+  }
+  if (result.clippedToUsedRange && blockAddress(target) !== result.requested.replace(/\$/gu, "").toUpperCase()) {
+    lines.push(`Requested ${result.requested}; clipped to the data: ${blockAddress(target)} (${target.rowCount}×${target.columnCount}).`);
+  }
+  if (page && (page.rowCount < target.rowCount || page.columnCount < target.columnCount)) {
+    lines.push(...renderPagingNote(result.sheetName, target, page));
+  }
+  if (result.state) {
+    lines.push(...renderRangeState(result.state, colToLetter));
+  }
+  return lines;
 }
 
-function formatAsExcelMarkdownTable(values: unknown[][], startCell: string): string {
-  if (!values || values.length === 0) return "(empty)";
-
-  const start = parseCell(startCell);
-  const numCols = Math.max(...values.map((r) => r.length));
-
-  const header: unknown[] = [""];
-  for (let c = 0; c < numCols; c++) {
-    header.push(colToLetter(start.col + c));
+function renderPagingNote(sheetName: string, target: CellBlock, page: CellBlock): string[] {
+  const lines: string[] = [];
+  const firstRow = page.rowIndex + 1;
+  const lastRow = page.rowIndex + page.rowCount;
+  const targetLastRow = target.rowIndex + target.rowCount;
+  if (page.rowCount < target.rowCount) {
+    const nextRows = Math.min(page.rowCount, targetLastRow - lastRow);
+    const next = blockAddress({ ...page, rowIndex: lastRow, rowCount: nextRows });
+    lines.push(
+      `Page: rows ${firstRow}-${lastRow} of ${target.rowIndex + 1}-${targetLastRow} ` +
+      `(pages hold at most ${MAX_PAGE_ROWS} rows or ${READ_RANGE_PAGE_CELLS.toLocaleString("en-US")} cells). ` +
+      `Next page: read_range "${qualifiedAddress(sheetName, next)}". ` +
+      "For whole-sheet analysis prefer search_workbook or python over paging.",
+    );
   }
+  if (page.columnCount < target.columnCount) {
+    const nextColumn = page.columnIndex + page.columnCount;
+    const nextColumns = Math.min(page.columnCount, target.columnIndex + target.columnCount - nextColumn);
+    const next = blockAddress({ ...page, columnIndex: nextColumn, columnCount: nextColumns });
+    lines.push(
+      `Columns ${colToLetter(page.columnIndex)}-${colToLetter(nextColumn - 1)} of ` +
+      `${colToLetter(target.columnIndex)}-${colToLetter(target.columnIndex + target.columnCount - 1)}. ` +
+      `Next columns: read_range "${qualifiedAddress(sheetName, next)}".`,
+    );
+  }
+  return lines;
+}
 
-  const rows: unknown[][] = [header];
+function hasAnyNonEmptyCell(values: CellValue[][]): boolean {
+  return values.some((row) => row.some((v) => v !== null && v !== undefined && v !== ""));
+}
 
+function listCapped(items: string[], max: number, noun: string): string {
+  if (items.length <= max) return items.join(", ");
+  return `${items.slice(0, max).join(", ")}, … (+${items.length - max} more ${noun})`;
+}
+
+/** Values as displayed, with the stored value in brackets when the display hides it. */
+function displayGrid(result: ReadRangePage): { grid: string[][]; usedRaw: boolean } {
+  let usedRaw = false;
+  const grid = result.values.map((row, r) => row.map((value, c) => {
+    const cell = formatDisplayedCell(value, result.text[r]?.[c], result.numberFormats[r]?.[c]);
+    usedRaw ||= cell.usedRaw;
+    return cell.text;
+  }));
+  return { grid, usedRaw };
+}
+
+function formatAsExcelMarkdownTable(values: string[][], page: CellBlock): string {
+  const header: string[] = [""];
+  for (let c = 0; c < page.columnCount; c++) header.push(colToLetter(page.columnIndex + c));
+  const rows: Array<Array<string | number>> = [header];
   for (let r = 0; r < values.length; r++) {
-    const valueRow = values[r] ?? [];
-    const row: unknown[] = [start.row + r, ...valueRow];
-    while (row.length < numCols + 1) row.push("");
+    const row: Array<string | number> = [page.rowIndex + r + 1, ...(values[r] ?? [])];
+    while (row.length < page.columnCount + 1) row.push("");
     rows.push(row);
   }
-
   return formatAsMarkdownTable(rows);
 }
 
-function formatCompact(
-  address: string,
-  result: ReadRangeResult,
-  startCell: string,
+/** Group a format's cells into per-column runs: "A2:A6, E2:E3, K2". */
+function formatCellRuns(cells: Array<{ row: number; col: number }>): string[] {
+  const byColumn = new Map<number, number[]>();
+  for (const { row, col } of cells) {
+    const rows = byColumn.get(col) ?? [];
+    rows.push(row);
+    byColumn.set(col, rows);
+  }
+  const runs: string[] = [];
+  for (const [col, rows] of [...byColumn.entries()].sort((a, b) => a[0] - b[0])) {
+    rows.sort((a, b) => a - b);
+    let start = rows[0];
+    let prev = start;
+    for (const row of [...rows.slice(1), undefined]) {
+      if (row !== undefined && prev !== undefined && row === prev + 1) {
+        prev = row;
+        continue;
+      }
+      if (start !== undefined && prev !== undefined) {
+        const letter = colToLetter(col);
+        runs.push(start === prev ? `${letter}${start}` : `${letter}${start}:${letter}${prev}`);
+      }
+      start = row;
+      prev = row;
+    }
+  }
+  return runs;
+}
+
+/**
+ * Formula summary with filled blocks collapsed: cells in one column with the
+ * same R1C1 formula in consecutive rows read "F2:F833: =C2*2 (filled, 832 cells)".
+ */
+function summarizeFormulas(result: ReadRangePage, page: CellBlock): string[] {
+  interface Run { col: number; startRow: number; endRow: number; formula: string; r1c1: string }
+  const runs: Run[] = [];
+  const open = new Map<number, Run>();
+  for (const [r, row] of result.formulas.entries()) {
+    for (const [c, formula] of row.entries()) {
+      const current = open.get(c);
+      if (typeof formula !== "string" || !formula.startsWith("=")) {
+        open.delete(c);
+        continue;
+      }
+      const r1c1Value = result.formulasR1C1[r]?.[c];
+      const r1c1 = typeof r1c1Value === "string" ? r1c1Value : formula;
+      if (current && current.r1c1 === r1c1 && current.endRow === r - 1) {
+        current.endRow = r;
+        continue;
+      }
+      const run = { col: c, startRow: r, endRow: r, formula, r1c1 };
+      runs.push(run);
+      open.set(c, run);
+    }
+  }
+  return runs.map((run) => {
+    const column = colToLetter(page.columnIndex + run.col);
+    const first = `${column}${page.rowIndex + run.startRow + 1}`;
+    if (run.endRow === run.startRow) return `${first}: ${run.formula}`;
+    const count = run.endRow - run.startRow + 1;
+    return `${first}:${column}${page.rowIndex + run.endRow + 1}: ${run.formula} (filled, ${count} cells)`;
+  });
+}
+
+function formatTable(
+  lines: string[],
+  result: ReadRangePage,
+  page: CellBlock,
+  mode: "compact" | "detailed",
+  resolvedLabels?: Map<string, string>,
 ): AgentToolResult<undefined> {
-  const lines: string[] = [];
-
-  // Collect these once; we also use them to detect a truly empty range.
-  const formulas = extractFormulas(result.formulas, startCell);
+  const startCell = `${colToLetter(page.columnIndex)}${page.rowIndex + 1}`;
+  const formulas = summarizeFormulas(result, page);
   const errors = findErrors(result.values, startCell);
-  const hasValues = hasAnyNonEmptyCell(result.values);
 
-  lines.push(`**${address}** (${result.rows}×${result.cols})`);
-
-  if (!hasValues && formulas.length === 0 && errors.length === 0) {
-    lines.push("");
-    lines.push("_All cells are empty._");
+  if (!hasAnyNonEmptyCell(result.values) && formulas.length === 0 && errors.length === 0) {
+    lines.push("", "_All cells are empty._");
     return { content: [{ type: "text", text: lines.join("\n") }], details: undefined };
   }
 
+  if (mode === "compact") {
+    if (formulas.length > 0) lines.push("", `**Formulas:** ${listCapped(formulas, MAX_LISTED_FORMULAS, "formulas")}`);
+    if (errors.length > 0) {
+      const listed = errors.map((e) => `${e.address}=${e.error}`);
+      lines.push("", `⚠️ **Errors:** ${listCapped(listed, MAX_LISTED_ERRORS, "errors")}`);
+    }
+  } else {
+    if (formulas.length > 0) {
+      lines.push("", "### Formulas");
+      for (const f of formulas.slice(0, MAX_LISTED_FORMULAS)) lines.push(`- ${f}`);
+      if (formulas.length > MAX_LISTED_FORMULAS) lines.push(`- … +${formulas.length - MAX_LISTED_FORMULAS} more formulas`);
+    }
+    lines.push(...renderNumberFormats(result, page, resolvedLabels));
+    if (errors.length > 0) {
+      lines.push("", "### ⚠️ Errors");
+      for (const e of errors.slice(0, MAX_LISTED_ERRORS)) lines.push(`- ${e.address}: ${e.error}`);
+      if (errors.length > MAX_LISTED_ERRORS) lines.push(`- … +${errors.length - MAX_LISTED_ERRORS} more errors`);
+    }
+    if (result.comments.length > 0) {
+      lines.push("", "### Comments");
+      for (const c of result.comments) {
+        const resolved = c.resolved ? " ✓" : "";
+        const replies = c.replyCount > 0 ? ` (${c.replyCount} ${c.replyCount === 1 ? "reply" : "replies"})` : "";
+        lines.push(`- **${c.cell}**: "${c.content}" — *${c.author}*${resolved}${replies}`);
+      }
+    }
+  }
+
+  const { grid, usedRaw } = displayGrid(result);
   lines.push("");
-  lines.push(formatAsExcelMarkdownTable(result.values, startCell));
-
-  // Append formulas if any exist
-  if (formulas.length > 0) {
-    lines.push("");
-    lines.push(`**Formulas:** ${formulas.join(", ")}`);
-  }
-
-  // Append errors if any
-  if (errors.length > 0) {
-    lines.push("");
-    lines.push(`⚠️ **Errors:** ${errors.map((e) => `${e.address}=${e.error}`).join(", ")}`);
-  }
+  if (mode === "detailed") lines.push("### Values");
+  if (usedRaw) lines.push("_Cells show the displayed text; [brackets] hold the stored value where the display differs._");
+  lines.push(formatAsExcelMarkdownTable(grid, page));
 
   return { content: [{ type: "text", text: lines.join("\n") }], details: undefined };
 }
 
-function formatDetailed(
-  address: string,
-  result: ReadRangeResult,
-  startCell: string,
+function renderNumberFormats(
+  result: ReadRangePage,
+  page: CellBlock,
   resolvedLabels?: Map<string, string>,
-): AgentToolResult<undefined> {
-  const lines: string[] = [];
-
-  // Collect these once; we also use them to detect a truly empty range.
-  const formulas = extractFormulas(result.formulas, startCell);
-  const errors = findErrors(result.values, startCell);
-  const hasValues = hasAnyNonEmptyCell(result.values);
-
-  lines.push(`**${address}** (${result.rows}×${result.cols})`);
-
-  if (!hasValues && formulas.length === 0 && errors.length === 0) {
-    lines.push("");
-    lines.push("_All cells are empty._");
-    return { content: [{ type: "text", text: lines.join("\n") }], details: undefined };
-  }
-
-  lines.push("");
-
-  // Values table
-  lines.push("### Values");
-  lines.push(formatAsExcelMarkdownTable(result.values, startCell));
-
-  // All formulas
-  if (formulas.length > 0) {
-    lines.push("");
-    lines.push("### Formulas");
-    for (const f of formulas) {
-      lines.push(`- ${f}`);
+): string[] {
+  const formatCells = new Map<string, Array<{ row: number; col: number }>>();
+  for (const [r, row] of result.numberFormats.entries()) {
+    for (const [c, fmt] of row.entries()) {
+      if (fmt === "" || fmt === "General") continue;
+      const cells = formatCells.get(fmt) ?? [];
+      cells.push({ row: page.rowIndex + r + 1, col: page.columnIndex + c });
+      formatCells.set(fmt, cells);
     }
   }
-
-  // Number formats (deduplicated)
-  const formatMap = new Map<string, string[]>();
-  const start = parseCell(startCell);
-  for (let r = 0; r < result.numberFormats.length; r++) {
-    const numberFormatRow = result.numberFormats[r] ?? [];
-    for (let c = 0; c < numberFormatRow.length; c++) {
-      const fmt = numberFormatRow[c];
-      if (typeof fmt === "string" && fmt !== "" && fmt !== "General") {
-        const addr = `${colToLetter(start.col + c)}${start.row + r}`;
-        const existing = formatMap.get(fmt) || [];
-        existing.push(addr);
-        formatMap.set(fmt, existing);
-      }
-    }
+  if (formatCells.size === 0) return [];
+  const lines = ["", "### Number Formats"];
+  for (const [fmt, cells] of formatCells) {
+    const label = humanizeFormat(fmt, resolvedLabels);
+    const display = label !== fmt ? `**${label}** (\`${fmt}\`)` : `\`${fmt}\``;
+    lines.push(`- ${display} → ${listCapped(formatCellRuns(cells), MAX_LISTED_FORMAT_AREAS, "areas")}`);
   }
-  if (formatMap.size > 0) {
-    lines.push("");
-    lines.push("### Number Formats");
-    for (const [fmt, cells] of formatMap) {
-      const label = humanizeFormat(fmt, resolvedLabels);
-      const display = label !== fmt ? `**${label}** (\`${fmt}\`)` : `\`${fmt}\``;
-      lines.push(`- ${display} → ${cells.join(", ")}`);
-    }
-  }
-
-  // Errors
-  if (errors.length > 0) {
-    lines.push("");
-    lines.push("### ⚠️ Errors");
-    for (const e of errors) {
-      lines.push(`- ${e.address}: ${e.error}`);
-    }
-  }
-
-  // Comments (only when present)
-  if (result.comments.length > 0) {
-    lines.push("");
-    lines.push("### Comments");
-    for (const c of result.comments) {
-      const resolved = c.resolved ? " ✓" : "";
-      const replies = c.replyCount > 0 ? ` (${c.replyCount} ${c.replyCount === 1 ? "reply" : "replies"})` : "";
-      lines.push(`- **${c.cell}**: "${c.content}" — *${c.author}*${resolved}${replies}`);
-    }
-  }
-
-  return { content: [{ type: "text", text: lines.join("\n") }], details: undefined };
+  return lines;
 }
 
 /* ── CSV helpers (migrated from get-range-as-csv) ──────────────────── */
 
-function toCsvField(value: unknown): string {
+function toCsvField(value: CellValue): string {
   if (value === null || value === undefined) return "";
-  if (typeof value === "string") return value.includes(",") || value.includes('"') || value.includes("\n") || value.includes("\r") ? `"${value.replace(/"/g, '""')}"` : value;
-  const str = typeof value === "number" || typeof value === "boolean" ? String(value) : JSON.stringify(value);
-  if (/[",\n\r]/.test(str)) {
-    return `"${str.replace(/"/g, '""')}"`;
-  }
-  return str;
+  const str = String(value);
+  return /[",\n\r]/u.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
 }
 
-function valuesToCsv(values: unknown[][]): string {
-  if (!values || values.length === 0) return "";
-  return values
-    .map((row) => row.map((v) => toCsvField(v)).join(","))
-    .join("\n");
+function valuesToCsv(values: CellValue[][]): string {
+  return values.map((row) => row.map((v) => toCsvField(v)).join(",")).join("\n");
 }
 
 function formatCsvOutput(
-  address: string,
-  result: ReadRangeResult,
-  startCell: string,
+  lines: string[],
+  result: ReadRangePage,
+  page: CellBlock,
 ): AgentToolResult<ReadRangeCsvDetails | undefined> {
-  const lines: string[] = [];
-  lines.push(`**${address}** (${result.rows}×${result.cols})`);
-  lines.push("");
-
-  const csv = valuesToCsv(result.values);
-  if (!csv) {
-    lines.push("(empty)");
+  if (!hasAnyNonEmptyCell(result.values)) {
+    lines.push("", "(empty)");
     return { content: [{ type: "text", text: lines.join("\n") }], details: undefined };
   }
 
-  lines.push("```csv");
-  lines.push(csv);
-  lines.push("```");
+  const csv = valuesToCsv(result.values);
+  lines.push("", "```csv", csv, "```");
 
-  const start = parseCell(startCell);
   return {
     content: [{ type: "text", text: lines.join("\n") }],
     details: {
       kind: "read_range_csv",
-      startCol: start.col,
-      startRow: start.row,
+      startCol: page.columnIndex,
+      startRow: page.rowIndex + 1,
       values: result.values,
       csv,
     },

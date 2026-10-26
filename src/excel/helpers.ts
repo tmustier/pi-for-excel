@@ -54,6 +54,74 @@ export function getRange(context: Excel.RequestContext, ref: string): { sheet: E
   return { sheet, range: sheet.getRange(parsed.address) };
 }
 
+/** Whether a sheet came from the address itself or from the active sheet. */
+export type SheetSource = "explicit" | "active";
+
+export interface ResolvedSheetRef {
+  sheet: Excel.Worksheet;
+  sheetName: string;
+  /** Address without the sheet prefix, e.g. "A1:B5" or "A:A". */
+  address: string;
+  sheetSource: SheetSource;
+}
+
+/**
+ * Resolve a range reference to one named sheet before any range work, so a
+ * tool reads the sheet it reports even if the user switches tabs mid-call.
+ * An unknown sheet name fails with the list of existing sheets.
+ */
+export async function resolveSheetRef(context: Excel.RequestContext, ref: string): Promise<ResolvedSheetRef> {
+  const parsed = parseRangeRef(ref.trim());
+  if (parsed.sheet === undefined) {
+    const sheet = context.workbook.worksheets.getActiveWorksheet();
+    sheet.load("name");
+    await context.sync();
+    return { sheet, sheetName: sheet.name, address: parsed.address, sheetSource: "active" };
+  }
+
+  const sheet = context.workbook.worksheets.getItemOrNullObject(parsed.sheet);
+  sheet.load("name");
+  await context.sync();
+  if (sheet.isNullObject) {
+    const sheets = context.workbook.worksheets;
+    sheets.load("items/name");
+    await context.sync();
+    const names = sheets.items.map((item) => `"${item.name}"`).join(", ");
+    throw new Error(`Sheet "${parsed.sheet}" not found. Sheets in this workbook: ${names}.`);
+  }
+  return { sheet, sheetName: sheet.name, address: parsed.address, sheetSource: "explicit" };
+}
+
+/** A rectangular block of cells by zero-based indexes, as Office.js reports them. */
+export interface CellBlock {
+  rowIndex: number;
+  columnIndex: number;
+  rowCount: number;
+  columnCount: number;
+}
+
+/** A1 address of a block, e.g. "A1:E500" (or "B3" for one cell). */
+export function blockAddress(block: CellBlock): string {
+  const start = cellAddress(block.columnIndex, block.rowIndex + 1);
+  if (block.rowCount === 1 && block.columnCount === 1) return start;
+  const end = cellAddress(block.columnIndex + block.columnCount - 1, block.rowIndex + block.rowCount);
+  return `${start}:${end}`;
+}
+
+export function intersectBlocks(a: CellBlock, b: CellBlock): CellBlock | null {
+  const rowStart = Math.max(a.rowIndex, b.rowIndex);
+  const colStart = Math.max(a.columnIndex, b.columnIndex);
+  const rowEnd = Math.min(a.rowIndex + a.rowCount, b.rowIndex + b.rowCount);
+  const colEnd = Math.min(a.columnIndex + a.columnCount, b.columnIndex + b.columnCount);
+  if (rowEnd <= rowStart || colEnd <= colStart) return null;
+  return { rowIndex: rowStart, columnIndex: colStart, rowCount: rowEnd - rowStart, columnCount: colEnd - colStart };
+}
+
+/** Excel's "response payload size has exceeded the limit" (about 5 MB per sync on the web). */
+export function isResponsePayloadLimitMessage(message: string): boolean {
+  return /payload size has exceeded|ResponsePayloadSizeLimitExceeded/iu.test(message);
+}
+
 /** Build a fully-qualified address like "Sheet1!A1:B5" */
 export function qualifiedAddress(sheetName: string, address: string): string {
   // Strip sheet prefix if already in the address

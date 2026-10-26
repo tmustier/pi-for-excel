@@ -133,17 +133,20 @@ void test("trace_dependencies defaults to precedents and parses formula referenc
       value: 42,
       numberFormat: "General",
       formula: "=SUM(A1:B2,'Input Data'!$C$5,D1)+IF(A2=\"E9\",0,0)",
+      // Every cell of A1:B2 is a precedent, not just A1; A2 is not repeated for IF(A2=...).
       precedents: [
         { address: "Calc!A1", value: 10, numberFormat: "General", precedents: [] },
+        { address: "Calc!B1", value: null, numberFormat: "General", precedents: [] },
+        { address: "Calc!A2", value: null, numberFormat: "General", precedents: [] },
+        { address: "Calc!B2", value: null, numberFormat: "General", precedents: [] },
         { address: "'Input Data'!C5", value: 20, numberFormat: "General", precedents: [] },
         { address: "Calc!D1", value: 12, numberFormat: "General", precedents: [] },
-        { address: "Calc!A2", value: null, numberFormat: "General", precedents: [] },
       ],
     },
     mode: "precedents",
     maxDepth: 1,
-    nodeCount: 5,
-    edgeCount: 4,
+    nodeCount: 7,
+    edgeCount: 6,
     source: "formula_scan",
     truncated: false,
   });
@@ -173,4 +176,38 @@ void test("trace_dependencies finds dependents that reference the target inside 
   assert.equal(trace.nodeCount, 2);
   assert.equal(trace.edgeCount, 1);
   assert.deepEqual(trace.root.precedents.map((node) => node.address), ["Calc!C3"]);
+});
+
+void test("trace_dependencies keeps every cell of a small precedent range from the host API and one node for a large one", async () => {
+  const calc = new TraceSheet("Calc");
+  calc.cells.set("K2", { value: 3, formula: "=SUM(E2:E3)+SUM(A1:Z100)" });
+  calc.cells.set("E2", { value: 1, formula: "" });
+  calc.cells.set("E3", { value: 2, formula: "" });
+  const loadedAddresses: string[] = [];
+  const baseGetRange = calc.getRange.bind(calc);
+  calc.getRange = (address: string): TraceRange => {
+    loadedAddresses.push(address);
+    const range = baseGetRange(address);
+    if (address === "K2") {
+      Object.assign(range, {
+        // Excel reports a precedent range as one address, e.g. "Calc!E2:E3".
+        getDirectPrecedents: () => ({ addresses: ["Calc!E2:E3,Calc!A1:Z100"], load: () => undefined }),
+      });
+    }
+    return range;
+  };
+
+  const result = await withExcel(createContext([calc]), () =>
+    createTraceDependenciesTool().execute("trace-api-range", { cell: "Calc!K2", depth: 2 })) as
+    AgentToolResult<TraceDependenciesDetails | undefined>;
+
+  const trace = details(result);
+  assert.equal(trace.source, "api");
+  assert.deepEqual(trace.root.precedents.map((node) => [node.address, node.value]), [
+    ["Calc!E2", 1],
+    ["Calc!E3", 2],
+    ["Calc!A1:Z100", null],
+  ]);
+  // The 2,600-cell range is never loaded.
+  assert.ok(!loadedAddresses.includes("A1:Z100"));
 });
