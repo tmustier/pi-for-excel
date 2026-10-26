@@ -94,7 +94,7 @@ Nothing changed mid-read affects that read; it affects the next tool call.
 
 | Event | Before sent | While busy |
 | --- | --- | --- |
-| Stop (button or Escape) | Not applicable: the user cannot start a read. | The turn ends as aborted; a read already sent to Excel finishes but its result is not used. A read not yet started reports "Operation aborted". |
+| Stop (button or Escape) | Not applicable: the user cannot start a read. | The Stop button stays until a read already sent to Excel returns; the card then shows the read's result, and the turn ends with "Error: signal is aborted without reason" (confirmed in Excel on the web). A read not yet started reports "Operation aborted". |
 | The user sends something else | Not applicable. | A steer waits until the running reads finish. |
 | Tab switched, created, closed or reopened | Not applicable. | The read continues in its tab. Closing the tab asks "Stop and close this tab?" while it is responding. |
 | An overlay or menu opens | Not applicable. | The read continues. |
@@ -135,6 +135,7 @@ After an interrupt the cards that completed stay in the transcript with their re
 
 - Reading a whole column ("A:A") reads the full sheet height and is likely to be truncated.
 - Search values are shown cut at 60 characters, context cells at 20.
+- On Excel on the web, a search without a sheet name fails with "Error searching: An internal error has occurred." when a sheet's used range is very large (confirmed with a used range of about 567,000 cells); naming another sheet works.
 - A dependents trace scans at most 50,000 formula cells and lists at most 80 children per cell, then adds "_Trace output was truncated to keep the result responsive._".
 - Named ranges marked invisible in Excel are left out of the overview.
 - A cell link whose sheet has since been renamed or deleted does nothing visible.
@@ -145,7 +146,8 @@ After an interrupt the cards that completed stay in the transcript with their re
 - Checked by hand in Excel on the web (orb session, `ec453df`), 26 October 2026: all five read tools, their card headers and result sections, the empty-range text, the no-match search header, cell links, reads in Confirm mode, and a read during cell editing. See [the workbook checklist](../verification/workbook.md#workbookreadingmd). Truncation, hidden sheets and Stop during a read were not run.
 - `foundations/turns.md` describes the overview card as "Workbook Overview"; the header shown is "Overview" (`tools.action.overview`, confirmed in Excel on the web), with "Workbook Overview" only as the tool's label. One of the two documents should change in the consistency pass.
 - A failed read does not render in the error style (confirmed with the cell-editing error): tool errors are returned as normal text, so the card looks successful. Probably intentional (the model handles it), but the user cannot tell at a glance. Mutations that fail ("Aborted", "Mutation cancelled …") do render in the error style, so the two differ.
-- Whether the truncated-output copy is written to the Files workspace when the Files workspace has never been opened has not been checked.
+- **Confirmed.** Truncation and the Files copy work as described: a 5,000-row read was cut at 2,000 lines and saved under `.tool-output/` with the Files dialog never opened; a 21,000-row read (about 700 KB) was cut but not saved, because it is over 512 KB. READ-11.
+- **New, confirmed.** `search_workbook` loads every visible sheet's used range values and formulas in one request (`src/tools/search-workbook.ts:262-263`); on Excel on the web a large used range makes the whole search fail with "An internal error has occurred." rather than skipping or chunking that sheet. READ-16. Looks like a bug.
 - Clicking a cell link while Excel is in cell-edit mode: behavior not checked.
 
 Verified against pi-for-excel commit `ec453df`.
