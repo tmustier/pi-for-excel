@@ -148,7 +148,7 @@ Rendering never changes mid-message because of a variant; Ctrl/Cmd+O only shows 
 
 ## Edge cases
 
-- A relative link such as `[notes](notes.md)` is clickable and resolves against the taskpane's own address, so it opens a page on the add-in's server, not a workbook file.
+- A relative link (link text pointing at a bare file name such as `notes.md`) is clickable and resolves against the taskpane's own address, so it opens a page on the add-in's server, not a workbook file.
 - Code containing `<`, `>` or `&` is copied exactly as the model wrote it, not as escaped HTML.
 - A grid's column letters follow the range, so a read of `C5:E9` is headed C, D, E and numbered 5–9.
 - Two quick clicks on different cell links within 0.3 seconds: only the first is followed.

@@ -162,7 +162,7 @@ The vocabulary used across these documents. When a document uses one of these wo
 
 **Skill.** A task playbook (`SKILL.md`) Pi loads on demand with its `skills` tool. Bundled skills ship with the add-in; external skills are installed by the user into the Files workspace under `skills/`.
 
-**Files workspace.** Pi's own file store in add-in storage, or a connected folder on disk. Shared by every tab and workbook on this computer, not part of the workbook, and read by Pi with its `files` tool, never as an attachment. Includes read-only built-in docs under `assistant-docs/`. Files imported are tagged to the workbook that was open (the "Workbook" badge).
+**Files workspace.** Pi's own file store in add-in storage, or a connected folder on disk. Shared by every tab and workbook on this computer, not part of the workbook, and read by Pi with its `files` tool, never as an attachment. Includes read-only built-in docs under `assistant-docs/`. Files imported are tagged to the workbook that was open (the "Workbook" badge), but only when Pi can identify the workbook; on an unidentified workbook they are untagged.
 
 **Extension.** Add-on code (also called a plugin) that registers tools, slash commands, widgets or connections. Code and URL installs run in an isolated sandbox frame; built-in and local ones run in the taskpane. Managed on the "Plugins" page; the bundled Snake extension is installed and enabled by default.
 
