@@ -121,6 +121,8 @@ When a fix PR merges, revise the affected documents to its behavior and update t
 
 - [#787](https://github.com/tmustier/pi-for-excel/pull/787) agent reads (`agent-reads`): large reads page through a "Next page" range (at most 500 rows or 2,500 cells), search and sheet overview work on big sheets, values are shown as displayed (stored value in brackets when hidden), and read results note manual calculation, protection, filters, tables, merges, spills and validation. Fixes agent-description B-05, B-07 (reads), B-11, B-13, B-15, B-17.
 
+- [#788](https://github.com/tmustier/pi-for-excel/pull/788) guidance and files (`fix-guidance-files`): Rules Save writes only the scopes the user changed and asks "Rules changed" (Keep editing / Replace) on a conflict; "This file" is disabled with a reason on an unidentified workbook; the percent preview multiplies by 100; a same-name import is saved as "{name} (2).{ext}" with a toast; conventions changes refresh the system prompt; removing a skill asks first; rule and convention changes now reach the system prompt mid-session (they did not after a boot-time refresh with no runtimes).
+
 ## Order of work
 
 1. `sessions/renaming-a-tab.md` (pilot), then `foundations/` in this order: `the-taskpane.md`, `turns.md`, `sessions-and-tabs.md`, `the-workbook.md`, `models-and-providers.md`. Everything else links to them.
