@@ -146,7 +146,7 @@ The vocabulary used across these documents. When a document uses one of these wo
 
 **Backup** (automatic). A snapshot of the cells, formats or structure a mutation is about to change, saved by Pi before the mutation runs. The UI calls these "backups" ("Snapshots saved before Pi modifies data"); the code calls them checkpoints. They are listed in the Backups dialog, can be restored one at a time, and are cleared when the workbook is saved in Excel. See [backups and revert](workbook/backups-and-revert.md).
 
-**Revert.** Restoring the cells covered by one backup to their state before the mutation, from the Backups dialog or with `/revert` (the latest backup). Excel's own Undo does not undo Pi's changes.
+**Revert.** Restoring the cells covered by one backup to their state before the mutation, from the Backups dialog or with `/revert` (the latest backup). On Excel on the web, Excel's own Undo also takes back Pi's changes step by step, and Ctrl+Y redoes them (confirmed; desktop unchecked). A revert restores a specific backup regardless of Undo history.
 
 **Manual backup.** A full copy of the workbook file taken on request with `/backup`, stored in the add-in's storage and downloadable later. Distinct from automatic backups. See [manual backups](workbook/manual-backups.md).
 
@@ -208,7 +208,7 @@ The vocabulary used across these documents. When a document uses one of these wo
 
 **Add-in storage.** The browser storage of the add-in's web origin on this computer: the `pi-for-excel` IndexedDB database (sessions, settings, keys, backups), a few `localStorage` flags, and the private file area of the Files workspace. Every taskpane on the same host and browser profile shares it; Excel desktop and Excel on the web never share it. Clearing site data erases all of it. See [persistence and restore](cross-cutting/persistence-and-restore.md).
 
-**Save boundary.** The moment Pi decides the workbook was saved: Excel's unsaved-changes flag, polled every 4 s, goes from unsaved to saved, or reads saved the first time it is checked after the taskpane opens. Automatic backups for that workbook are cleared at a save boundary. On Excel on the web the flag always reads saved (confirmed).
+**Save boundary.** The moment Pi decides the workbook was saved: Excel's unsaved-changes flag, polled every 4 s, goes from unsaved to saved, or reads saved the first time it is checked after the taskpane opens. Automatic backups for that workbook are cleared at a save boundary. On Excel on the web the flag always reads saved (confirmed), so saving never clears backups there but every taskpane load does.
 
 **Document token.** A random identifier Pi writes into a never-saved workbook (add-in setting `pi.workbookInstanceId`) before its first automatic backup, used to file backups until the workbook has a workbook identity.
 
