@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { Agent } from "@earendil-works/pi-agent-core";
 
 import {
   getCrossWorkbookResumeConfirmMessage,
@@ -19,9 +18,7 @@ import {
   shouldBlurEditorFromEscape,
   shouldHandleUndoCloseTabShortcut,
 } from "../src/taskpane/keyboard-shortcuts.ts";
-import { restoreQueuedMessagesToEditor } from "../src/taskpane/keyboard-shortcuts/editor-actions.ts";
 import { RecentlyClosedStack } from "../src/taskpane/recently-closed.ts";
-import { failOnUnexpectedStream } from "./fail-on-unexpected-stream.ts";
 
 void test("recently closed stack reopens newest first and enforces max size", () => {
   const stack = new RecentlyClosedStack(2);
@@ -565,126 +562,6 @@ void test("Alt+Up detection matches host fallbacks and rejects modified chords",
     }),
     false,
   );
-});
-
-void test("queued restore prepends follow-up and compact queue items before draft text", () => {
-  const agent = new Agent({
-    streamFn: failOnUnexpectedStream,
-    initialState: {
-      messages: [],
-      tools: [],
-    },
-  });
-
-  let clearQueueCalls = 0;
-  agent.clearAllQueues = () => {
-    clearQueueCalls += 1;
-  };
-
-  const input = { value: "Draft note" };
-  const requeuedCommands: Array<{ name: string; args: string }> = [];
-
-  const restoredCount = restoreQueuedMessagesToEditor({
-    sidebar: {
-      getInput: () => input,
-      getTextarea: () => undefined,
-    },
-    textarea: undefined,
-    agent,
-    queueDisplay: {
-      add: () => {
-        // unused in this test
-      },
-      drainQueuedMessages: () => [
-        { type: "follow-up", text: "Follow-up while streaming" },
-        { type: "steer", text: "Steer while streaming" },
-      ],
-    },
-    actionQueue: {
-      enqueueCommand: (name, args) => {
-        requeuedCommands.push({ name, args });
-      },
-      drainQueuedActions: () => [
-        { type: "prompt", text: "Queued during /compact" },
-        { type: "command", name: "compact", args: "" },
-      ],
-      isBusy: () => true,
-    },
-  });
-
-  assert.equal(restoredCount, 3);
-  assert.equal(clearQueueCalls, 1);
-  assert.deepEqual(requeuedCommands, [{ name: "compact", args: "" }]);
-  assert.equal(
-    input.value,
-    [
-      "Follow-up while streaming",
-      "Steer while streaming",
-      "Queued during /compact",
-      "Draft note",
-    ].join("\n\n"),
-  );
-});
-
-void test("queued restore can drop queued commands when requested", () => {
-  const input = { value: "Draft" };
-  const requeuedCommands: Array<{ name: string; args: string }> = [];
-
-  const restoredCount = restoreQueuedMessagesToEditor({
-    sidebar: {
-      getInput: () => input,
-      getTextarea: () => undefined,
-    },
-    textarea: undefined,
-    agent: null,
-    queueDisplay: {
-      add: () => {
-        // unused in this test
-      },
-      drainQueuedMessages: () => [],
-    },
-    actionQueue: {
-      enqueueCommand: (name, args) => {
-        requeuedCommands.push({ name, args });
-      },
-      drainQueuedActions: () => [{ type: "command", name: "compact", args: "" }],
-      isBusy: () => true,
-    },
-    requeueCommands: false,
-  });
-
-  assert.equal(restoredCount, 0);
-  assert.deepEqual(requeuedCommands, []);
-  assert.equal(input.value, "Draft");
-});
-
-void test("queued restore is a no-op when nothing is pending", () => {
-  const input = { value: "Keep draft" };
-
-  const restoredCount = restoreQueuedMessagesToEditor({
-    sidebar: {
-      getInput: () => input,
-      getTextarea: () => undefined,
-    },
-    textarea: undefined,
-    agent: null,
-    queueDisplay: {
-      add: () => {
-        // unused in this test
-      },
-      drainQueuedMessages: () => [],
-    },
-    actionQueue: {
-      enqueueCommand: () => {
-        // unused in this test
-      },
-      drainQueuedActions: () => [],
-      isBusy: () => false,
-    },
-  });
-
-  assert.equal(restoredCount, 0);
-  assert.equal(input.value, "Keep draft");
 });
 
 void test("Escape exits editor focus only when not streaming", () => {

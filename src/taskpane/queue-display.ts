@@ -6,7 +6,7 @@
  * Security note: avoid `innerHTML` so queued text can't inject markup.
  */
 
-import type { Agent } from "@earendil-works/pi-agent-core";
+import type { Agent, AgentMessage } from "@earendil-works/pi-agent-core";
 
 import type { PiSidebar } from "../ui/pi-sidebar.js";
 import { extractTextFromContent } from "../utils/content.js";
@@ -15,7 +15,12 @@ import { t } from "../language/index.js";
 export type QueuedMessageType = "steer" | "follow-up";
 export type QueuedActionType = "prompt" | "command";
 
-export type QueuedMessageItem = { type: QueuedMessageType; text: string };
+export type QueuedMessageItem = {
+  type: QueuedMessageType;
+  text: string;
+  /** The message handed to the agent; its delivery removes exactly this row. */
+  message?: AgentMessage;
+};
 type QueuedActionItem = { type: QueuedActionType; label: string; text: string };
 
 function getQueuedRestoreShortcutHint(): string {
@@ -53,7 +58,7 @@ function renderQueuedItem({ type, text }: QueuedMessageItem): HTMLElement {
 }
 
 export type QueueDisplay = {
-  add: (type: QueuedMessageType, text: string) => void;
+  add: (type: QueuedMessageType, text: string, message?: AgentMessage) => void;
   clear: () => void;
   drainQueuedMessages: () => QueuedMessageItem[];
   setActionQueue: (items: Array<{ type: QueuedActionType; label: string; text: string }>) => void;
@@ -126,16 +131,19 @@ export function createQueueDisplay(opts: {
       fragment.appendChild(itemEl);
     }
 
-    const hintEl = document.createElement("div");
-    hintEl.className = "pi-queue__hint";
-    hintEl.textContent = t("queue-display.shortcutHint", { shortcut: getQueuedRestoreShortcutHint() });
-    fragment.appendChild(hintEl);
+    // Alt+Up takes back messages and prompts; queued commands stay queued.
+    if (queued.length > 0 || queuedActions.some((action) => action.type === "prompt")) {
+      const hintEl = document.createElement("div");
+      hintEl.className = "pi-queue__hint";
+      hintEl.textContent = t("queue-display.shortcutHint", { shortcut: getQueuedRestoreShortcutHint() });
+      fragment.appendChild(hintEl);
+    }
 
     container.replaceChildren(fragment);
   }
 
-  function add(type: QueuedMessageType, text: string): void {
-    queued.push({ type, text });
+  function add(type: QueuedMessageType, text: string, message?: AgentMessage): void {
+    queued.push(message ? { type, text, message } : { type, text });
     updateQueueDisplay();
   }
 
@@ -176,21 +184,22 @@ export function createQueueDisplay(opts: {
     attachedSidebar = null;
   }
 
+  // A row leaves the strip when its own message is delivered. Rows still
+  // waiting when a turn ends are settled by the action queue (delivered,
+  // or returned to the composer), never silently dropped here.
   agent.subscribe((ev) => {
     if (queued.length === 0) return;
+    if (ev.type !== "message_start" || ev.message.role !== "user") return;
 
-    if (ev.type === "message_start" && ev.message.role === "user") {
-      const msgText = extractTextFromContent(ev.message.content);
-      const idx = queued.findIndex((q) => q.text === msgText);
-      if (idx !== -1) {
-        queued.splice(idx, 1);
-        updateQueueDisplay();
-      }
+    const delivered = ev.message;
+    let idx = queued.findIndex((q) => q.message === delivered);
+    if (idx === -1) {
+      const msgText = extractTextFromContent(delivered.content);
+      idx = queued.findIndex((q) => !q.message && q.text === msgText);
     }
-
-    // Only clear steer/follow-up on agent end. Action queue is owned elsewhere.
-    if (ev.type === "agent_end" && queued.length > 0) {
-      clear();
+    if (idx !== -1) {
+      queued.splice(idx, 1);
+      updateQueueDisplay();
     }
   });
 

@@ -1,8 +1,8 @@
-export interface InputEnterState {
+export interface SubmitKeyEvent {
   key: string;
   shiftKey: boolean;
-  isStreaming: boolean;
-  value: string;
+  isComposing: boolean;
+  keyCode: number;
 }
 
 export function getSendText(value: string): string | null {
@@ -10,11 +10,14 @@ export function getSendText(value: string): string | null {
   return text.length > 0 ? text : null;
 }
 
-export function shouldSendOnEnter(state: InputEnterState): boolean {
-  if (state.key !== "Enter" || state.shiftKey) return false;
-  if (state.isStreaming) return false;
-  if (!getSendText(state.value)) return false;
-  return !state.value.startsWith("/");
+/**
+ * Enter submits the draft; Shift+Enter is a newline. An Enter that commits an
+ * IME composition (WebKit reports `isComposing`, Chromium keyCode 229) only
+ * commits the candidate.
+ */
+export function isSubmitKey(event: SubmitKeyEvent): boolean {
+  if (event.key !== "Enter" || event.shiftKey) return false;
+  return !event.isComposing && event.keyCode !== 229;
 }
 
 export function resolveInputAutoGrowHeight(options: {

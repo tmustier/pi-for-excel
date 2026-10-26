@@ -10,6 +10,7 @@ import { initAppStorage } from "../src/storage/init-app-storage.ts";
 import type { StorageBackend, StorageTransaction } from "../src/storage/local/types.ts";
 import type { ActionQueue } from "../src/taskpane/action-queue.ts";
 import type { QueueDisplay } from "../src/taskpane/queue-display.ts";
+import { createTabState } from "../src/taskpane/tab-state.ts";
 import {
   SessionRuntimeManager,
   type SessionRuntime,
@@ -84,7 +85,8 @@ class MemoryStorageBackend implements StorageBackend {
 const actionQueue: ActionQueue = {
   enqueuePrompt: () => {},
   enqueueCommand: () => {},
-  drainQueuedActions: () => [],
+  takeBackQueued: () => ({ texts: [], cancelledCommands: [] }),
+  stop: () => ({ texts: [], cancelledCommands: [] }),
   isBusy: () => false,
   shutdown: () => {},
 };
@@ -145,6 +147,7 @@ function createEnvironment(backend: StorageBackend): RuntimeEnvironment {
       agent,
       actionQueue,
       queueDisplay: createQueueDisplay(),
+      tab: createTabState(),
       persistence,
       lockState: "idle",
       refreshCapabilities: () => Promise.resolve(),

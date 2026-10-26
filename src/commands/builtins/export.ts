@@ -502,6 +502,31 @@ export function createExportCommands(getActiveAgent: ActiveAgentProvider): Slash
   ];
 }
 
+class CompactionStoppedError extends Error {
+  constructor() {
+    super("Compaction stopped");
+  }
+}
+
+function untilStopped<T>(work: Promise<T>, signal: AbortSignal | undefined): Promise<T> {
+  if (!signal) return work;
+  if (signal.aborted) return Promise.reject(new CompactionStoppedError());
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(new CompactionStoppedError());
+    signal.addEventListener("abort", onAbort, { once: true });
+    work.then(
+      (value) => {
+        signal.removeEventListener("abort", onAbort);
+        resolve(value);
+      },
+      (error: Error) => {
+        signal.removeEventListener("abort", onAbort);
+        reject(error);
+      },
+    );
+  });
+}
+
 /**
  * Run compaction for a specific agent.
  *
@@ -509,7 +534,7 @@ export function createExportCommands(getActiveAgent: ActiveAgentProvider): Slash
  * auto-compaction / overflow recovery (with the agent that owns the run, which
  * may not be the active tab).
  */
-export async function runCompactCommand(agent: Agent, args: string): Promise<void> {
+export async function runCompactCommand(agent: Agent, args: string, signal?: AbortSignal): Promise<void> {
   const allMessages = agent.state.messages;
   const currentSystemMessage = getCurrentSystemMessage(allMessages);
   const conversationMessages = allMessages.filter((message) => message.role !== "system");
@@ -596,29 +621,39 @@ export async function runCompactCommand(agent: Agent, args: string): Promise<voi
       ...(customInstructions !== undefined ? { customInstructions } : {}),
     });
 
-    const stream = await agent.streamFunction(
-      model,
-      normalizeContext({
-        systemPrompt: SUMMARIZATION_SYSTEM_PROMPT,
-        messages: [
-          {
-            role: "user",
-            content: [{ type: "text", text: promptText }],
-            timestamp: Date.now(),
-          },
-        ],
-      }),
-      {
-        apiKey,
-        ...(agent.sessionId !== undefined ? { sessionId: agent.sessionId } : {}),
-        maxTokens,
-        // Match pi-coding-agent: don't force temperature when using reasoning,
-        // since Anthropic requires temperature=1 when thinking is enabled.
-        reasoning: "high",
-      },
-    );
+    const request = async () => {
+      const stream = await agent.streamFunction(
+        model,
+        normalizeContext({
+          systemPrompt: SUMMARIZATION_SYSTEM_PROMPT,
+          messages: [
+            {
+              role: "user",
+              content: [{ type: "text", text: promptText }],
+              timestamp: Date.now(),
+            },
+          ],
+        }),
+        {
+          apiKey,
+          ...(agent.sessionId !== undefined ? { sessionId: agent.sessionId } : {}),
+          maxTokens,
+          ...(signal ? { signal } : {}),
+          // Match pi-coding-agent: don't force temperature when using reasoning,
+          // since Anthropic requires temperature=1 when thinking is enabled.
+          reasoning: "high",
+        },
+      );
 
-    const result = await stream.result();
+      return stream.result();
+    };
+    // Stop ends compaction at once, even if the provider stream does not
+    // honor the signal.
+    const result = await untilStopped(request(), signal);
+
+    if (result.stopReason === "aborted" || signal?.aborted) {
+      throw new CompactionStoppedError();
+    }
 
     if (result.stopReason === "error") {
       throw new Error(result.errorMessage || t("export.toast.compact.failed_error"));
@@ -662,7 +697,7 @@ export async function runCompactCommand(agent: Agent, args: string): Promise<voi
     try {
       out = await runOnce(defaultLimits);
     } catch (e) {
-      if (!isPromptTooLongError(e)) throw e;
+      if (e instanceof CompactionStoppedError || !isPromptTooLongError(e)) throw e;
 
       // Retry once with more aggressive truncation + keeping a larger recent tail.
       showToast(t("export.toast.compact.retrying"), 60000);
@@ -683,6 +718,8 @@ export async function runCompactCommand(agent: Agent, args: string): Promise<voi
       timestamp: now,
     });
 
+    if (signal?.aborted) throw new CompactionStoppedError();
+
     agent.state.messages = [
       ...(currentSystemMessage ? [currentSystemMessage] : []),
       archived,
@@ -693,8 +730,15 @@ export async function runCompactCommand(agent: Agent, args: string): Promise<voi
     const iface = document.querySelector<PiSidebar>("pi-sidebar");
     iface?.requestUpdate();
 
-    showToast(t("export.toast.compact.summarized", { count: out.summarizedCount }));
+    showToast(t("export.toast.compact.summarized", {
+      count: out.summarizedCount,
+      plural: out.summarizedCount === 1 ? "" : "s",
+    }));
   } catch (e) {
+    if (e instanceof CompactionStoppedError) {
+      showToast(t("export.toast.compact.stopped"));
+      return;
+    }
     const msg = getErrorMessage(e);
     if (msg === "Nothing to compact") {
       showToast(t("export.toast.compact.nothing"));
