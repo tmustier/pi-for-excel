@@ -1,0 +1,194 @@
+# Verification: sessions and commands
+
+How to run this file: bring up Pi in Excel on the web with `node scripts/orb/excel-web-session.mjs --check` (see [docs/orb-excel-web.md](../../docs/orb-excel-web.md)), or use Excel desktop where the Device column says so. Start each section from a freshly opened taskpane with one tab, execution mode Auto, no extensions beyond the bundled Snake, and a connected provider. Model turns are only needed where the setup says "responding" or "has an answer"; use "Reply with just OK". To hold a tab in the responding state long enough to act, pause the model request (for example with DevTools request interception) and release it afterwards. Clear the tab layout between sections by reloading after closing extra tabs. Device values:
+
+- `web` — Excel on the web, with mouse clicks and key presses delivered to the page (Pi sees every key, including Ctrl/Cmd chords the browser would normally keep).
+- `web-keys` — Excel on the web with real keyboard input through the operating system, so the browser gets first refusal on its own shortcuts.
+- `desktop` — Excel desktop on Windows or macOS.
+
+Results below are from a first pass in Excel on the web on 2026-10-26, run by an agent driving Chrome in an Amp orb (pointer and key events through the DevTools protocol for `web`, OS key events through `wtype` for `web-keys`), against pi-for-excel commit `ec453df`. The pass watched the DOM, toasts, focus and screenshots of the taskpane; it did not judge timing by eye or use a screen reader. The workbook was opened signed out through an "anyone with the link can edit" folder link, which left the workbook identity unknown (SESS-14); items that need a known identity are blocked.
+
+## foundations/sessions-and-tabs.md
+
+| ID | P | Device | Claim | Setup | Steps | Expected | Result |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| SESS-01 | P1 | web | A fresh taskpane opens one tab, "Chat 1", showing the empty state ([The simple case](../foundations/sessions-and-tabs.md#the-simple-case)). | No saved sessions or layout for this workbook. | 1. Open Pi. | One tab "Chat 1", the empty state, focus in the composer. | pass |
+| SESS-02 | P1 | web | A new tab inherits the active tab's model; its thinking level starts at High for a reasoning model ([What a tab owns](../foundations/sessions-and-tabs.md#what-a-tab-owns)). | Active tab on a reasoning model. | 1. Click "+". 2. Read the status bar. | Same model; thinking "High". | pass (only one model used; inheriting a different model not checked) |
+| SESS-03 | P1 | web | The composer is shared: a draft stays when switching or creating tabs and is sent to whichever tab is active (suspected bug) ([What a tab owns](../foundations/sessions-and-tabs.md#what-a-tab-owns)). | Two tabs. | 1. Type `/new` in "Chat 1". 2. Click "Chat 2". 3. Read the composer. | The composer still holds `/new`. | pass (bug confirmed) |
+| SESS-04 | P1 | web | The draft is not saved; a reload leaves the composer empty ([What a tab owns](../foundations/sessions-and-tabs.md#what-a-tab-owns)). | Any tab. | 1. Click a starter hint. 2. Reload the taskpane. | Composer empty after reload. | pass |
+| SESS-05 | P1 | web | Default numbers are never reused within a taskpane's life ([Tab labels](../foundations/sessions-and-tabs.md#tab-labels)). | Tabs up to "Chat 6". | 1. Close "Chat 6". 2. Create a tab. | The new tab is "Chat 7". | pass |
+| SESS-06 | P1 | web | After a reload tabs are renumbered 1…n in strip order and chosen titles are lost ([Tab labels](../foundations/sessions-and-tabs.md#tab-labels)). | Tabs "Q3 budget" (named with `/name`, has an answer) and "Chat 14" (blank, active). | 1. Reload. | "Chat 1", "Chat 2". | pass |
+| SESS-07 | P1 | web | Restore brings back the same tabs in the same order with the same active tab ([Restored](../foundations/sessions-and-tabs.md#restored)). | As SESS-06. | 1. Reload. | Two tabs, second active, transcripts as before. | pass |
+| SESS-08 | P1 | web | A blank tab in the layout comes back blank after a reload ([Tabs are created](../foundations/sessions-and-tabs.md#tabs-are-created)). | A blank tab open. | 1. Reload. | The blank tab is there, showing the empty state. | pass |
+| SESS-09 | P1 | web | A session can be open in two tabs; after a reload the first of the two is active, not the one that was (suspected bug) ([Open questions](../foundations/sessions-and-tabs.md#open-questions-and-verification)). | "Chat 1" holds a session with an answer. | 1. `/resume`, choose that session (Open in new tab). 2. Keep the new tab active. 3. Reload. | Two tabs on one session before reload; after reload the first is active. | pass (bug confirmed) |
+| SESS-10 | P2 | web | A blank closed or restored tab is listed as "Untitled", "1 messages" ([Edge cases](../foundations/sessions-and-tabs.md#edge-cases)). | Close a blank tab. | 1. `/resume`. | "Untitled · 1 messages · …". | pass |
+| SESS-11 | P1 | web | The busy dot shows on a busy tab, active or not, and goes when idle ([Busy and locking indicators](../foundations/sessions-and-tabs.md#busy-and-locking-indicators)). | One tab responding. | 1. Watch the tab. 2. Switch away. 3. Let the turn end. | Dot while busy, on both active and background tab; gone at idle. | pass |
+| SESS-12 | P2 | web | A busy tab keeps running when the user switches or creates tabs ([Cancel and interrupt](../foundations/sessions-and-tabs.md#cancel-and-interrupt)). | "Chat 1" responding. | 1. `/new`. 2. Look at "Chat 1". | "Chat 1" keeps its dot; the turn continues. | pass |
+| SESS-13 | P1 | web | The error banner is shared and is not cleared by switching tabs ([Cancel and interrupt](../foundations/sessions-and-tabs.md#cancel-and-interrupt)). | Two tabs. | 1. Make a turn fail in "Chat 2" (network failure). 2. Click "Chat 1". | The banner is still shown on "Chat 1". | pass |
+| SESS-14 | P1 | web | On Excel on the web the workbook has an address, so its identity is known (as first drafted) ([Workbook links and workbook identity](../foundations/sessions-and-tabs.md#workbook-links-and-workbook-identity)). | Workbook opened signed out via an edit link. | 1. `/resume`. 2. Look for "Show sessions from all workbooks". | Filter row present. | fail (document was wrong: `Office.context.document.url` and `getFilePropertiesAsync` both returned an empty address, no filter row; document corrected) |
+| SESS-15 | P1 | web | "Compacting context…" from a background tab shows in the active tab (suspected bug) ([Open questions](../foundations/sessions-and-tabs.md#open-questions-and-verification)). | A long conversation in a background tab. | 1. `/compact` there. 2. Switch tabs at once. | Record which tab shows the label. | blocked (short sessions compact at once with "Nothing to compact") |
+| SESS-16 | P1 | web | With model switching set to fork, changing the model of an empty tab opens a copy (suspected bug) ([Open questions](../foundations/sessions-and-tabs.md#open-questions-and-verification)). | Settings: fork. A new empty tab. | 1. Change the model. | Record whether a copy opens. | blocked (not run) |
+| SESS-17 | P2 | web | "Locking…" shows while a mutation waits for the lock, and the × is disabled while it holds it ([Busy and locking indicators](../foundations/sessions-and-tabs.md#busy-and-locking-indicators)). | Two tabs writing to the workbook at once. | 1. Watch both tabs. | "Locking…" on the waiting tab; disabled × on the holder. | blocked (lock held too briefly to catch) |
+| SESS-18 | P3 | web | The busy dot is visible in the light theme ([Open questions](../foundations/sessions-and-tabs.md#open-questions-and-verification)). | One tab responding. | 1. Screenshot the active tab, then an inactive busy tab. | Dot visible on both. | pass (active tab only; inactive not checked) |
+| SESS-19 | P2 | web | Escape with focus in the composer while idle moves focus to the active tab ([Cancel and interrupt](../foundations/sessions-and-tabs.md#cancel-and-interrupt)). | Idle, focus in composer. | 1. Escape. | Focus on the active tab button. | pass |
+| SESS-20 | P2 | web | Tabs are buttons named "Open tab {title}" with the title as tooltip ([Accessibility](../foundations/sessions-and-tabs.md#interactions-with-other-systems)). | Any tab. | 1. Inspect the tab. | Name "Open tab Chat 8", tooltip "Chat 8". | pass |
+| SESS-21 | P1 | web | Stop affects only the active tab's turn ([Cancel and interrupt](../foundations/sessions-and-tabs.md#cancel-and-interrupt)). | Two tabs responding. | 1. Stop in one. | The other keeps running. | blocked (not run) |
+
+Not checkable by hand:
+
+- Whether the composer should be per tab is a product call ([Open questions](../foundations/sessions-and-tabs.md#open-questions-and-verification)).
+
+## sessions/tabs.md
+
+| ID | P | Device | Claim | Setup | Steps | Expected | Result |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| TABS-01 | P1 | web | "+" adds a tab at the right end, makes it active, shows the empty state, focus in the composer ([The simple case](../sessions/tabs.md#the-simple-case)). | One tab. | 1. Click "+". | "Chat 2" active at the right, empty state, focus in composer. | pass |
+| TABS-02 | P1 | web | `/new` works while the active tab is busy ([Choosing an action](../sessions/tabs.md#choosing-an-action)). | Active tab responding. | 1. Type `/new`, Enter. | New tab, no refusal toast. | pass |
+| TABS-03 | P1 | web-keys | On Excel on the web the browser takes Ctrl+T ([Modifiers](../sessions/tabs.md#modifiers)). | Focus in the composer. | 1. Press Ctrl+T on the keyboard. | A new browser tab opens; Pi's tabs are unchanged. | pass |
+| TABS-04 | P1 | web | Ctrl/Cmd+T creates a tab from anywhere, including behind an overlay ([Open questions](../sessions/tabs.md#open-questions-and-verification)). | Resume picker open. | 1. Ctrl+T delivered to the page. | A tab is added behind the picker; picker stays. | pass |
+| TABS-05 | P2 | web | Clicking a tab switches to it and puts focus in the composer ([Choosing an action](../sessions/tabs.md#choosing-an-action)). | Two tabs, focus on the page body. | 1. Click the other tab. | It becomes active; focus in composer. | pass (once, with the command menu open, focus stayed on the tab) |
+| TABS-06 | P2 | web | ArrowLeft/Right outside a text field switch tabs, wrapping, with focus on the new tab ([Choosing an action](../sessions/tabs.md#choosing-an-action)). | Four tabs, last active; Escape to leave the composer. | 1. ArrowRight. 2. ArrowLeft. | First tab, then last tab active; focus on the tab. | pass |
+| TABS-07 | P2 | web | Ctrl+PageUp/PageDown and Cmd+Shift+[ / ] switch tabs outside text fields and do nothing in the composer ([Choosing an action](../sessions/tabs.md#choosing-an-action)). | Several tabs. | 1. With focus in the composer, Ctrl+PageUp. 2. Click the empty state, Ctrl+PageDown. 3. Cmd+Shift+[ from the composer and from the body. | 1 and the composer case of 3 do nothing; the body cases switch. | pass |
+| TABS-08 | P1 | web | Ctrl+PageUp/PageDown do nothing when focus is on a tab (suspected bug) ([Open questions](../sessions/tabs.md#open-questions-and-verification)). | Focus on a tab after Escape. | 1. Ctrl+PageUp. | Record what happens. | pass (bug confirmed: no switch) |
+| TABS-09 | P1 | web-keys | On Excel on the web the browser takes Ctrl+PageDown ([Host differences](../sessions/tabs.md#interactions-with-other-systems)). | Two tabs, focus on the body. | 1. Press Ctrl+PageDown. | Pi's active tab unchanged. | pass |
+| TABS-10 | P1 | web | The context menu lists the six items, right-click does not switch tabs, and impossible moves are disabled ([Choosing an action](../sessions/tabs.md#choosing-an-action)). | Several tabs; another tab active. | 1. Right-click the first tab. | Six items, "Move left" disabled; active tab unchanged. | pass |
+| TABS-11 | P1 | web | With the context menu open, Escape while responding stops the turn and leaves the menu open ([Ends at once](../sessions/tabs.md#ends-at-once)). | Active tab responding. | 1. Right-click a tab. 2. Escape. | "Request aborted"; menu still open. | pass |
+| TABS-12 | P2 | web | Escape while idle closes the context menu ([Ends at once](../sessions/tabs.md#ends-at-once)). | Idle; menu open. | 1. Escape. | Menu closed. | pass |
+| TABS-13 | P2 | web | Duplicate adds "{label} copy" at the right end, active, toast "Duplicated {label}" ([Committing](../sessions/tabs.md#committing)). | Idle tab "Chat 11". | 1. Duplicate tab. | "Chat 11 copy" active at right; toast. | pass |
+| TABS-14 | P1 | web | Duplicating a busy tab is refused ([Ends at once](../sessions/tabs.md#ends-at-once)). | Tab responding. | 1. Duplicate tab. | "Wait for this tab to finish before duplicating"; no new tab. | pass |
+| TABS-15 | P2 | web | Move left swaps with the neighbour and shows "Moved tab left" ([Committing](../sessions/tabs.md#committing)). | Several tabs. | 1. Move left. | Order changed; toast. | pass |
+| TABS-16 | P1 | web | With one tab: no ×, "Close tab", moves and "Close other tabs" disabled, Ctrl/Cmd+W shows "Can't close the last tab" ([Ends at once](../sessions/tabs.md#ends-at-once)). | One tab. | 1. Look. 2. Right-click. 3. Ctrl+W to the page. | As stated. | pass |
+| TABS-17 | P1 | web | Closing a responding tab asks "Stop and close this tab?" with the documented message and buttons ([Committing](../sessions/tabs.md#committing)). | Tab responding. | 1. Click its ×. | Dialog as documented; also from Ctrl+W to the page. | pass |
+| TABS-18 | P1 | web | "Keep open" and Escape cancel the close; the turn keeps running ([Ends at once](../sessions/tabs.md#ends-at-once)). | Dialog open. | 1. Escape. 2. Reopen; "Keep open". | Dialog closes, tab stays busy. | pass (the dialog takes focus, so one Escape suffices) |
+| TABS-19 | P1 | web | "Stop and close" aborts, closes, activates the left neighbour or new first tab, and shows "Closed {label}" · Undo ([Committing](../sessions/tabs.md#committing)). | First tab responding and active. | 1. ×. 2. Stop and close. | "Chat 2" active; toast "Closed Chat 1 · Undo". | pass |
+| TABS-20 | P2 | web | Close other tabs closes left to right, no undo toast, "Closed {count} other tabs" ([Committing](../sessions/tabs.md#committing)). | Five idle tabs. | 1. Right-click the last, Close other tabs. | One tab left; "Closed 4 other tabs". | pass |
+| TABS-21 | P1 | web | A tab holding the workbook lock cannot be closed ([Ends at once](../sessions/tabs.md#ends-at-once)). | A tab mid-mutation. | 1. ×, Ctrl/Cmd+W. | Disabled ×; toast. | blocked (lock held too briefly) |
+| TABS-22 | P1 | web | The lock is not rechecked after "Stop and close" (suspected bug) ([Open questions](../sessions/tabs.md#open-questions-and-verification)). | As TABS-21 with the dialog open. | 1. Confirm while a mutation starts. | Record what happens. | blocked |
+| TABS-23 | P1 | web | A tab running `/compact` closes without confirmation (suspected bug) ([Open questions](../sessions/tabs.md#open-questions-and-verification)). | Long conversation compacting. | 1. ×. | Record what happens. | blocked (short sessions do not compact) |
+| TABS-24 | P1 | web | Ctrl/Cmd+W closes the active tab behind an overlay ([Open questions](../sessions/tabs.md#open-questions-and-verification)). | Resume picker open, two tabs. | 1. Ctrl+W to the page. | Tab closed; picker stays. | pass |
+| TABS-25 | P1 | web-keys | On Excel on the web the browser takes Ctrl+W ([Host differences](../sessions/tabs.md#interactions-with-other-systems)). | Excel is the only browser tab. | 1. Press Ctrl+W on the keyboard. | The browser window closes. | pass |
+| TABS-26 | P2 | web | When tabs no longer fit, scroll arrows appear ([While tabs change](../sessions/tabs.md#while-tabs-change)). | ~350 px taskpane. | 1. Create 11 tabs. | Arrows appear. | fail (document was wrong: tabs shrank to about 17 px showing only ×, no arrows; document corrected) |
+| TABS-27 | P3 | web | A duplicate uses up a default number ([Edge cases](../sessions/tabs.md#edge-cases)). | After duplicating "Chat 11". | 1. Create a tab. | "Chat 13". | pass |
+
+Not checkable by hand:
+
+- Whether a busy-but-not-responding tab should ask before closing is a product call.
+
+## sessions/renaming-a-tab.md
+
+| ID | P | Device | Claim | Setup | Steps | Expected | Result |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| RENAME-01 | P1 | web | `/name {title}` renames the active tab, with toast, tooltip and accessible name ([The simple case](../sessions/renaming-a-tab.md#the-simple-case)). | Idle tab. | 1. `/name Q3 budget`, Enter. | Label "Q3 budget"; "Session named: Q3 budget"; name "Open tab Q3 budget". | pass |
+| RENAME-02 | P1 | web | `/name` typed while busy is refused and keeps the text ([Ends at once](../sessions/renaming-a-tab.md#ends-at-once)). | Tab responding. | 1. `/name Foo`, Enter. | "Can't run /name while Pi is busy"; composer still `/name Foo`. | pass |
+| RENAME-03 | P1 | web | Double-click on Excel on the web does nothing (suspected bug) ([Open questions](../sessions/renaming-a-tab.md#open-questions-and-verification)). | Idle tab. | 1. Double-click it. | No prompt, no toast, label unchanged. | pass (bug confirmed) |
+| RENAME-04 | P1 | web | "Rename tab…" on Excel on the web does nothing (suspected bug). | Idle tab. | 1. Right-click, Rename tab…. | No prompt, no toast. | blocked (only run on a busy tab) |
+| RENAME-05 | P1 | web | Double-click and "Rename tab…" on a busy tab show "Wait for this tab to finish before renaming" ([Ends at once](../sessions/renaming-a-tab.md#ends-at-once)). | Tab responding. | 1. Rename tab…. 2. Double-click. | Toast each time. | pass |
+| RENAME-06 | P2 | web | `/name` with no text shows "Usage: /name My Session Name" and clears the composer ([Ends at once](../sessions/renaming-a-tab.md#ends-at-once)). | Idle. | 1. `/name` (via the menu). | Usage toast; composer empty. | pass (menu path) |
+| RENAME-07 | P1 | web | A chosen title is lost on reload, while the picker keeps the saved title (suspected bug) ([Open questions](../sessions/renaming-a-tab.md#open-questions-and-verification)). | "Q3 budget" with an answer. | 1. Reload. 2. `/resume`. | Label "Chat 1"; picker lists "Q3 budget". | pass (bug confirmed) |
+| RENAME-08 | P2 | web | Resuming a named session gives "Chat N", with the saved title in the toast ([Open questions](../sessions/renaming-a-tab.md#open-questions-and-verification)). | As RENAME-07. | 1. Resume "Q3 budget". | Tab "Chat 4"; "Resumed in new tab: Q3 budget". | pass |
+| RENAME-09 | P1 | desktop | The native prompt works on desktop (prefill, confirm, empty resets) ([Host differences](../sessions/renaming-a-tab.md#interactions-with-other-systems)). | Excel desktop. | 1. Double-click a tab, edit, OK. 2. Repeat with empty text. | "Renamed to …", then "Tab name reset". | blocked (no desktop) |
+
+## sessions/reopening-closed-tabs.md
+
+| ID | P | Device | Claim | Setup | Steps | Expected | Result |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| REOPEN-01 | P1 | web | "Undo" reopens in a new tab with the next number and "Reopened: {old label}"; the draft is untouched ([Reopened](../sessions/reopening-closed-tabs.md#reopened)). | Close "Chat 7". | 1. Click Undo. | Tab "Chat 8"; "Reopened: Chat 7". | pass |
+| REOPEN-02 | P1 | web | Ctrl/Cmd+Z with the undo toast showing reopens even with text in the composer ([Choosing what to reopen](../sessions/reopening-closed-tabs.md#choosing-what-to-reopen)). | Close a tab; type "draft text". | 1. Ctrl+Z. | Tab reopened; draft unchanged. | pass |
+| REOPEN-03 | P1 | web | Ctrl/Cmd+Shift+T reopens the most recent entry from the composer ([Choosing what to reopen](../sessions/reopening-closed-tabs.md#choosing-what-to-reopen)). | A closed tab. | 1. Ctrl+Shift+T to the page. | Tab reopened. | pass |
+| REOPEN-04 | P1 | web-keys | On Excel on the web the browser takes Ctrl+Shift+T ([Modifiers](../sessions/reopening-closed-tabs.md#modifiers)). | A closed Pi tab; a closed browser tab exists. | 1. Press Ctrl+Shift+T on the keyboard. | A browser tab reopens; no Pi tab. | pass |
+| REOPEN-05 | P1 | web | Reopening by shortcut while the undo toast shows leaves the stale toast and no "Reopened" (suspected bug) ([Open questions](../sessions/reopening-closed-tabs.md#open-questions-and-verification)). | Close "Chat 6". | 1. At once, Ctrl+Shift+T to the page. | Record the toast. | pass (bug confirmed: "Closed Chat 6 · Undo" stays) |
+| REOPEN-06 | P1 | web | Clicking that stale "Undo" shows "Session is no longer in recently closed" ([Ends at once](../sessions/reopening-closed-tabs.md#ends-at-once)). | After REOPEN-05. | 1. Click Undo. | Toast. | fail (nothing at all is shown; document corrected; bug) |
+| REOPEN-07 | P2 | web | With nothing closed, `/reopen` and Ctrl/Cmd+Shift+T say "No recently closed tab" ([Ends at once](../sessions/reopening-closed-tabs.md#ends-at-once)). | Empty list. | 1. `/reopen`. 2. Ctrl+Shift+T to the page. | Toast each time. | pass |
+| REOPEN-08 | P2 | web | With the list empty, Ctrl/Cmd+Z in the composer is a text undo ([Ends at once](../sessions/reopening-closed-tabs.md#ends-at-once)). | Empty list; type "abc". | 1. Ctrl+Z. | Text undone; no tab. | pass |
+| REOPEN-09 | P1 | web | With the list non-empty but no toast, Ctrl/Cmd+Z with text in the composer is a text undo ([Choosing what to reopen](../sessions/reopening-closed-tabs.md#choosing-what-to-reopen)). | Entry in list; toast gone; type "abc" then "def". | 1. Ctrl+Z. | Composer "abc"; no tab. | pass |
+| REOPEN-10 | P2 | web | With the list non-empty and an empty composer, Ctrl/Cmd+Z reopens ([Choosing what to reopen](../sessions/reopening-closed-tabs.md#choosing-what-to-reopen)). | Entry in list; toast gone. | 1. Ctrl+Z. | Tab reopened. | pass |
+| REOPEN-11 | P2 | web | The picker's "Recently closed" lists entries newest first with "Closed {date} · Reopens in new tab", and opens a new tab even with "Replace current tab" selected ([Choosing what to reopen](../sessions/reopening-closed-tabs.md#choosing-what-to-reopen)). | Close other tabs on four tabs. | 1. `/resume`. 2. Select Replace current tab. 3. Click an entry. | New tab; "Reopened: Chat 4". | pass |
+| REOPEN-12 | P2 | web | After "Close other tabs", the rightmost closed tab is reopened first ([Edge cases](../sessions/reopening-closed-tabs.md#edge-cases)). | As REOPEN-11. | 1. Ctrl+Shift+T to the page. | "Chat 5" (rightmost) returns. | pass |
+| REOPEN-13 | P1 | web | The list is lost on reload ([Cancel and interrupt](../sessions/reopening-closed-tabs.md#cancel-and-interrupt)). | A closed tab. | 1. Reload. 2. `/reopen`. | "No recently closed tab". | blocked (not run) |
+
+## sessions/resuming-a-session.md
+
+| ID | P | Device | Claim | Setup | Steps | Expected | Result |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| RESUME-01 | P1 | web | `/resume` opens the picker with title, subtitle, target buttons ("Open in new tab" selected), hint and "Saved sessions" ([Opening the picker](../sessions/resuming-a-session.md#opening-the-picker)). | A saved session. | 1. `/resume`. | As stated. | pass |
+| RESUME-02 | P1 | web | "Resume session" in the utilities menu opens the same picker. | — | 1. Gear → Resume session. | Picker. | pass |
+| RESUME-03 | P1 | web | No workbook filter when the identity is unknown ([Opening the picker](../sessions/resuming-a-session.md#opening-the-picker)). | Identity unknown (SESS-14). | 1. `/resume`. | No checkbox. | pass |
+| RESUME-04 | P1 | web | The picker leaves focus in the composer; typing goes there; first Escape leaves the composer, second closes ([Ends at once](../sessions/resuming-a-session.md#ends-at-once)). | — | 1. `/resume`. 2. Type "hi". 3. Escape twice. | As stated. | pass |
+| RESUME-05 | P1 | web | Enter behind the picker sends to the active tab ([Cancel and interrupt](../sessions/resuming-a-session.md#cancel-and-interrupt)). | Picker open from `/resume`. | 1. Type a message, Enter. | Turn starts; picker stays. | pass |
+| RESUME-06 | P1 | web | Open in new tab adds "Chat N" with the session, toast "Resumed in new tab: {title}" ([Resumed](../sessions/resuming-a-session.md#resumed)). | — | 1. Choose a session. | As stated. | pass |
+| RESUME-07 | P1 | web | Resuming an open session opens a second tab on it (suspected bug) ([Open questions](../sessions/resuming-a-session.md#open-questions-and-verification)). | Session open in "Chat 1". | 1. Resume it. | Second tab on it. | pass (bug confirmed) |
+| RESUME-08 | P1 | web | Replace current tab on a busy tab shows the busy toast then the false success toast (suspected bug) ([Resumed](../sessions/resuming-a-session.md#resumed)). | Active tab responding. | 1. `/resume`. 2. Replace current tab. 3. Choose a session. | Both toasts; nothing replaced; picker closes. | pass (bug confirmed) |
+| RESUME-09 | P1 | web | `/resume-here` is refused while busy ([Ends at once](../sessions/resuming-a-session.md#ends-at-once)). | Tab responding. | 1. `/resume-here x`, Enter. | "Can't run /resume-here while Pi is busy". | pass |
+| RESUME-10 | P2 | web | `/resume` opens the picker while busy ([Summary](../sessions/resuming-a-session.md#summary)). | Tab responding. | 1. `/resume`. | Picker opens. | pass |
+| RESUME-11 | P2 | web | Replace current tab while idle swaps the transcript and model ([Resumed](../sessions/resuming-a-session.md#resumed)). | Idle. | 1. Replace current tab, choose a session. | "Resumed in current tab: {title}". | blocked (not run) |
+| RESUME-12 | P2 | web | A session from another workbook asks "Resume session from another workbook?" ([Ends at once](../sessions/resuming-a-session.md#ends-at-once)). | Known identities. | 1. Show all workbooks; choose a foreign session. | Confirmation. | blocked (identity unknown) |
+| RESUME-13 | P2 | web | With focus outside the composer, Escape while responding closes the picker and does not stop ([Cancel and interrupt](../sessions/resuming-a-session.md#cancel-and-interrupt)). | Responding; picker open; focus on the tab. | 1. Escape. | Picker closes; turn continues. | blocked (not run) |
+| RESUME-14 | P2 | web | With nothing saved or closed, "No previous sessions" and no picker ([Ends at once](../sessions/resuming-a-session.md#ends-at-once)). | Fresh storage. | 1. `/resume`. | Toast only. | blocked (not run) |
+| RESUME-15 | P3 | web | Dates read "just now", "{n}m ago" ([Opening the picker](../sessions/resuming-a-session.md#opening-the-picker)). | — | 1. `/resume`. | As stated. | pass |
+| RESUME-16 | P2 | web | A click on a saved entry resumes it. | — | 1. Click an entry. | Resumed. | fail (two pointer clicks closed the picker with nothing resumed; a third and a scripted click worked; cause not found, recheck with a real mouse) |
+
+## sessions/export-and-copy.md
+
+| ID | P | Device | Claim | Setup | Steps | Expected | Result |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| EXPORT-01 | P1 | web | `/copy`, `/export`, `/share-session` are refused while busy and keep the text ([Ends at once](../sessions/export-and-copy.md#ends-at-once)). | Tab responding. | 1. Each with an argument, Enter. | "Can't run /{command} while Pi is busy"; text kept. | pass |
+| EXPORT-02 | P1 | web | `/share-session` shows "Session sharing coming soon" ([Ends at once](../sessions/export-and-copy.md#ends-at-once)). | Idle. | 1. `/share-session`. | Toast. | pass |
+| EXPORT-03 | P1 | web | `/copy` after a stopped empty response says "No assistant message to copy" ([Ends at once](../sessions/export-and-copy.md#ends-at-once)). | Last response aborted with no text. | 1. `/copy`. | Toast. | pass |
+| EXPORT-04 | P1 | web | `/copy` copies the last answer and says "Copied to clipboard" ([The simple case](../sessions/export-and-copy.md#the-simple-case)). | Last answer "OK". | 1. `/copy`. | Toast; clipboard holds "OK". | fail (clipboard blocked on Excel on the web; document corrected) |
+| EXPORT-05 | P1 | web | A failed `/copy` shows nothing (suspected bug) ([Open questions](../sessions/export-and-copy.md#open-questions-and-verification)). | As EXPORT-04. | 1. `/copy`. | Record toast and console. | pass (bug confirmed: no toast, unhandled `NotAllowedError`) |
+| EXPORT-06 | P1 | web | `/export` copies the transcript to the clipboard ([Copied or downloaded](../sessions/export-and-copy.md#copied-or-downloaded)). | Idle. | 1. `/export`. | "Transcript copied (…)". | fail ("Copy failed: … permissions policy …"; document corrected) |
+| EXPORT-07 | P1 | web | `/export audit clipboard` copies the audit log. | Idle. | 1. Run it. | "Audit log copied (…)". | fail ("Audit export failed: … permissions policy …") |
+| EXPORT-08 | P1 | web | `/export download` saves `pi-session-{date}.json` and says "Transcript downloaded ({count} messages)" ([Copied or downloaded](../sessions/export-and-copy.md#copied-or-downloaded)). | Idle. | 1. Run it. | File and toast. | pass (also leaves a browser tab on the blob address) |
+| EXPORT-09 | P2 | web | `/export audit` downloads `pi-audit-log-{date}.json` ([Choosing what to export](../sessions/export-and-copy.md#choosing-what-to-export)). | Idle. | 1. Run it. | File; "Audit log downloaded ({n} records)". | pass (0 records) |
+| EXPORT-10 | P2 | web | The message count includes hidden messages ([Copied or downloaded](../sessions/export-and-copy.md#copied-or-downloaded)). | A tab with a few turns. | 1. `/export download`. | Count larger than visible bubbles. | pass (11) |
+| EXPORT-11 | P2 | desktop | Clipboard and download on desktop. | Excel desktop. | 1. `/copy`, `/export`, `/export download`. | Record. | blocked (no desktop) |
+
+## commands/the-command-menu.md
+
+| ID | P | Device | Claim | Setup | Steps | Expected | Result |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| MENU-01 | P1 | web | `/` lists every command in registration order, then `/snake` with "ext" ([Opening and filtering](../commands/the-command-menu.md#opening-and-filtering)). | Idle. | 1. Type `/`. | Order as documented. | pass |
+| MENU-02 | P1 | web | Filtering matches name or description (`/tab` → `/new`, `/resume-here`, `/reopen`) ([Opening and filtering](../commands/the-command-menu.md#opening-and-filtering)). | — | 1. Type `/tab`. | Three rows. | pass |
+| MENU-03 | P2 | web | An exact name moves to the top (`/skills` → `/skills`, `/extensions`) ([Opening and filtering](../commands/the-command-menu.md#opening-and-filtering)). | — | 1. `/skills`, `/plugins`, `/new`. | Exact match first. | pass |
+| MENU-04 | P2 | web | Escape closes the menu and keeps the text; typing reopens it ([Ends at once](../commands/the-command-menu.md#ends-at-once)). | `/res` typed. | 1. Escape. 2. Type `u`. | Menu reopens. | pass |
+| MENU-05 | P2 | web | Tab fills `/name ` without running ([Ends at once](../commands/the-command-menu.md#ends-at-once)). | `/res`. | 1. Tab. | `/resume `, menu still open. | pass |
+| MENU-06 | P1 | web | Enter on an unknown `/foo` while idle adds a newline (suspected bug) ([Ends at once](../commands/the-command-menu.md#ends-at-once)). | Idle. | 1. `/foo`, Enter. | `/foo` plus newline. | pass |
+| MENU-07 | P1 | web | Enter with the menu open runs the highlighted command with no arguments ([Edge cases](../commands/the-command-menu.md#edge-cases)). | — | 1. `/name the current`, Enter. | "Usage: /name My Session Name". | pass |
+| MENU-08 | P1 | web | A typed refused command keeps its text ([Running the command](../commands/the-command-menu.md#running-the-command)). | Responding. | 1. `/name Foo`, Enter. | Refusal; text kept. | pass |
+| MENU-09 | P1 | web | A refused command chosen from the menu clears the composer (suspected bug) ([Open questions](../commands/the-command-menu.md#open-questions-and-verification)). | Responding. | 1. `/name`, Enter with menu open. | Refusal; composer empty. | pass |
+| MENU-10 | P1 | web | `/compact` runs through the queue; on a short conversation it ends at once ([Running the command](../commands/the-command-menu.md#running-the-command)). | Idle, short conversation. | 1. `/compact`. | "Compacting to free up context", then "Nothing to compact" or "Too few messages to compact". | pass |
+| MENU-11 | P1 | web | With the menu open while responding, Enter runs the command, not a steer. | Responding. | 1. `/new`, Enter. | New tab, nothing steered. | pass |
+| MENU-12 | P1 | web | With the menu open while responding, the first Escape only closes the menu ([Cancel and interrupt](../commands/the-command-menu.md#cancel-and-interrupt)). | Responding; focus in composer. | 1. Type `/`. 2. Escape. | Menu closed; turn continues. | fail (one Escape closes the menu and stops the turn; bug; document corrected) |
+| MENU-13 | P1 | web | After switching tabs with the menu open, Enter runs the highlighted command (suspected bug). | `/new` in the menu. | 1. Click another tab. 2. Enter. | Record. | pass (bug confirmed: `/new` ran) |
+| MENU-14 | P1 | web | With an overlay opened over the menu, Enter runs the highlighted command (suspected bug). | `/new` in the menu. | 1. Gear → Resume session. 2. Enter. | Record. | pass (bug confirmed: a tab opened behind the picker) |
+| MENU-15 | P1 | web | Clicking a row runs that command ([Running the command](../commands/the-command-menu.md#running-the-command)). | `/share` → `/share-session`. | 1. Click the row. | "Session sharing coming soon". | fail (nothing ran; continuous re-render on hover; bug) |
+| MENU-16 | P2 | web | Shift+Tab with the menu open fills like Tab and does not change thinking ([Cancel and interrupt](../commands/the-command-menu.md#cancel-and-interrupt)). | `/mod`. | 1. Shift+Tab. | `/model `; level unchanged. | pass |
+| MENU-17 | P2 | web | The menu stays open on outside clicks and behind the utilities menu ([Cancel and interrupt](../commands/the-command-menu.md#cancel-and-interrupt)). | Menu open. | 1. Click the empty state. 2. Open the gear menu. | Menu still open. | pass |
+| MENU-18 | P3 | web | Hover moves the highlight ([Edge cases](../commands/the-command-menu.md#edge-cases)). | Menu open. | 1. Hover a row. | Highlight moves. | pass (menu redraws continuously while hovered) |
+| MENU-19 | P2 | web | `/default-models` advertises Ctrl+P ([The built-in commands](../commands/the-command-menu.md#the-built-in-commands)). | — | 1. Type `/`. | "Switch models with Ctrl+P". | pass |
+
+## commands/empty-state-and-hints.md
+
+| ID | P | Device | Claim | Setup | Steps | Expected | Result |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| HINTS-01 | P1 | web | The empty state shows the tagline and four hints in order Explain, Quality check, Build my financial model, Format this sheet ([Summary](../commands/empty-state-and-hints.md#summary)). | New tab. | 1. Look. | As stated. | pass |
+| HINTS-02 | P2 | web | Each hint's tooltip is "Inserts into input — editable before sending." | — | 1. Inspect. | As stated. | pass |
+| HINTS-03 | P3 | web | Previews are 117 characters plus "…" ([Showing the empty state](../commands/empty-state-and-hints.md#showing-the-empty-state)). | — | 1. Inspect. | 118 characters each. | pass |
+| HINTS-04 | P1 | web | A hint replaces the draft, focuses the composer with the caret at the end, sends nothing ([Clicking a hint ends at once](../commands/empty-state-and-hints.md#clicking-a-hint-ends-at-once)). | Draft "my draft". | 1. Click "Explain this workbook". | Prompt replaces draft; caret at end; not sent. | pass |
+| HINTS-05 | P1 | web | Ctrl/Cmd+Z does not bring the draft back (suspected bug). | After HINTS-04. | 1. Ctrl+Z. | Prompt stays. | pass |
+| HINTS-06 | P1 | web | Inserted text is lost on reload; the blank tab shows the empty state again ([Cancel and interrupt](../commands/empty-state-and-hints.md#cancel-and-interrupt)). | After HINTS-04. | 1. Reload. | Composer empty; empty state. | pass |
+| HINTS-07 | P2 | web | In a short pane the π mark and previews are hidden ([Edge cases](../commands/empty-state-and-hints.md#edge-cases)). | Pane ≤520 px tall. | 1. Look. | Labels only. | pass (≈340 px) |
+| HINTS-08 | P2 | web | Clicking a hint with the utilities menu open closes the menu and inserts ([Modifiers](../commands/empty-state-and-hints.md#modifiers)). | Gear menu open. | 1. Click a hint. | Inserted; menu closed. | blocked (not run) |
+| HINTS-09 | P3 | web | The empty state stays clickable between Enter and the first message appearing. | No provider. | 1. Send. 2. Click a hint. | Record. | blocked (not run) |
+
+## Results of the 2026-10-26 pass
+
+125 items: 99 pass, 9 fail, 17 blocked.
+
+- **Fails where the document was wrong** (documents corrected): SESS-14 (workbook identity unknown on Excel on the web), TABS-26 (tabs shrink instead of showing scroll arrows), EXPORT-04, EXPORT-06, EXPORT-07 (clipboard blocked on Excel on the web), MENU-12 (one Escape closes the menu and stops the turn), REOPEN-06 (the stale Undo shows nothing).
+- **Fails that are product defects** for `bug-triage.md`: MENU-12, MENU-15 (clicking a menu row runs nothing), REOPEN-06, EXPORT-04/06/07 (no clipboard fallback on Excel on the web).
+- **Unexplained:** RESUME-16 (two pointer clicks on a saved session closed the picker without resuming); recheck with a physical mouse.
+- **Suspected bugs confirmed:** SESS-03, SESS-09, TABS-08, RENAME-03, RENAME-07, REOPEN-05, RESUME-07, RESUME-08, EXPORT-05, MENU-06, MENU-09, MENU-13, MENU-14, HINTS-05.
+- **Blocked:** desktop items (no desktop host), items needing a known workbook identity, the workbook lock (held too briefly to catch), and `/compact` on a long conversation (short sessions end at once with "Nothing to compact").
+
+No document is marked verified: this was an automated pass, and the P1/P2 fails still need filing in `bug-triage.md`.
