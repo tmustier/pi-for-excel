@@ -1837,6 +1837,7 @@ export async function initTaskpane(opts: {
     getModelSwitchBehavior,
     setModelSwitchBehavior,
     models: modelRuntime.models,
+    isAnyTabBusy: () => runtimeManager.snapshotTabs().some((tab) => tab.isBusy),
     onRulesSaved: async () => {
       await refreshWorkbookState();
     },
