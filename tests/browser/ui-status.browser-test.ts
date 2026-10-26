@@ -104,6 +104,20 @@ void test("choosing a mode updates the label at once while the status bar is hov
   });
 });
 
+void test("a tab switch closes the thinking popover instead of leaving it bound to the old tab", async () => {
+  await withTaskpane({ width: 380, height: 720 }, async (page) => {
+    await page.getByRole("button", { name: "New tab" }).click();
+    await page.locator(".pi-session-tab").nth(1).waitFor({ state: "visible" });
+    await page.locator(".pi-status-thinking").click();
+    const popover = page.locator(".pi-status-popover--thinking");
+    await popover.waitFor({ state: "visible" });
+    // Keyboard switch: no outside click to close the popover as a side effect.
+    await page.keyboard.press("Control+PageUp");
+    await page.locator(".pi-session-tab").first().and(page.locator(".is-active")).waitFor({ state: "visible" });
+    await popover.waitFor({ state: "detached", timeout: 2_000 });
+  });
+});
+
 const bridgeRows = [
   { name: "tmux outage", tool: "python_transform_range", details: { kind: "tmux_bridge", ok: false, action: "capture_pane", error: "bridge unreachable", gateReason: "bridge_unreachable", skillHint: "tmux-bridge" }, title: /terminal access.*unavailable/i, enabled: true },
   { name: "tmux custom URL", tool: "python_transform_range", details: { kind: "tmux_bridge", ok: false, action: "list_sessions", bridgeUrl: "https://localhost:4441", error: "bridge unreachable", gateReason: "bridge_unreachable", skillHint: "tmux-bridge" }, title: /terminal access.*unavailable/i, enabled: true, probeUrl: "https://localhost:4441" },

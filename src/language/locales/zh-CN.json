@@ -140,7 +140,7 @@
   "experimental.advancedSecurity": "高级与安全控制选项",
   "experimental.bridge.python": "Python 桥接",
   "experimental.bridge.tmux": "Tmux 桥接",
-  "experimental.dark_mode.desc": "为任务窗格 UI 启用由 Office/主题驱动的深色模式",
+  "experimental.dark_mode.desc": "允许任务窗格使用深色模式。它跟随 Office 主题（网页版跟随 Excel 中设置的主题）；Office 未提供主题时跟随系统设置。",
   "experimental.dark_mode.title": "深色模式",
   "experimental.feature.none": "（无）",
   "experimental.hint": "进行中的功能，可能快速迭代更新。",
