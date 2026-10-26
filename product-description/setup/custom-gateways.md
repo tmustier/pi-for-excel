@@ -61,7 +61,7 @@ Nothing is stored when:
 - the endpoint is normalized (trailing slash and any `#fragment` removed);
 - the output limit is clamped to the context window;
 - the provider name is "Gateway · {name}"; if another gateway already has that name (ignoring case), " (2)", " (3)" … is appended;
-- the toast says "Saved gateway {name}." (or "Updated gateway {name}." when editing), the list re-sorts alphabetically by name, and the form clears.
+- the toast says "Saved gateway {name}." (or "Updated gateway {name}." when editing), using the name as typed, without any " (2)"; the list re-sorts alphabetically by name, and the form clears.
 
 The gateway is now a connected provider, even without an API key: a keyless gateway sends a placeholder key, which local servers ignore. Pi refreshes the provider list; any idle tab whose provider is not connected may move to the [default model](../foundations/models-and-providers.md#the-default-model), and if the gateway is the only provider, that default is the gateway's model.
 
@@ -79,6 +79,8 @@ Requests go to the endpoint by one of two routes:
 
 - **Proxy (default).** If the [proxy](the-proxy.md) is enabled, requests go through it ("Connection: proxy when enabled"). If it is disabled, they go straight to the endpoint. A local proxy refuses loopback and private-network targets unless it was started with `ALLOW_LOOPBACK_TARGETS=1` or `ALLOW_PRIVATE_TARGETS=1`, and refuses hosts not on its allowlist; those refusals reach the user as an error banner.
 - **Direct** ("Connect directly" on, "Connection: direct"). Requests skip the proxy even when it is enabled; the endpoint must serve HTTPS with CORS for the add-in.
+
+If the endpoint cannot be reached at all (nothing listening, wrong host), the turn fails with "Error: Connection error." in the transcript and "LLM error: Connection error." in the error banner (confirmed with the proxy off and an endpoint at `https://localhost:3999/v1`), not the CORS-worded banner.
 
 Without the proxy, a plain `http://` endpoint on another machine fails before sending with an explanation ("{provider} uses a plain http:// endpoint ({url}). Excel blocks http:// requests from the add-in to other machines, …") in the error banner.
 
@@ -142,18 +144,20 @@ After any interrupt the user is on the gateway page with the form as it was, unl
 
 ## Edge cases
 
-- Two gateways named "Warehouse" become "Gateway · Warehouse" and "Gateway · Warehouse (2)"; the card titles both read "Warehouse".
+- Two gateways named "Warehouse" and "warehouse" become "Gateway · Warehouse" and "Gateway · warehouse (2)"; the card titles read the names as typed and the toast says "Saved gateway warehouse.".
 - A gateway saved with no key is listed "API key: none" and still counts as connected.
 - Clearing the API key while editing removes the stored key.
-- Context below 1,024 is refused; an output limit above the context window is silently clamped.
+- Context below 1,024 is refused; an output limit above the context window is silently clamped (an output of 99999 with the default context was stored as 16,384).
+- The picker rounds the limits: a 32,768-token gateway shows "33k ctx · 4k out".
 - The only way to change a gateway's model is to edit it; the model picker never lists other models the endpoint serves.
 
 ## Open questions and verification
 
-- Confirmed in the standalone taskpane: the form's fields, "Endpoint URL is required." on an empty save, "Endpoint URL must use http:// or https://." for `ftp://x`, "No custom gateways configured yet.", and the form being dropped silently on Back. Saving, editing and deleting were read from code and `tests/custom-gateways.test.ts`.
-- Renaming a gateway changes its provider name, so tabs and saved sessions using it lose it and are moved to the default model at the next refresh. Restored sessions are matched by provider name only (`src/taskpane/sessions.ts:54`); `resolveCustomProviderModel` (`src/auth/custom-gateways.ts:405`), which matches by endpoint and model id, is tested but never called. Looks like a bug.
+- Confirmed in Excel on the web: the form's fields and placeholders, every validation message ("Endpoint URL is required.", "Endpoint URL must use http:// or https://." for `ftp://x`, "Endpoint URL must be a valid http:// or https:// URL.", "Model ID is required.", "Max context tokens must be at least 1024.", "Max context tokens must be a whole number.", "Max output tokens must be at least 1.", and the "Direct connections need an https:// endpoint. …" message for `http://example.com/v1`), the endpoint's trailing slash and `#fragment` removed, the output limit clamped, a blank name becoming "localhost:9090", the " (2)" suffix, a direct `http://localhost` endpoint being accepted, the card lines, "Edit" prefilling every field including the hidden key with focus in "Name" and "Cancel"/"Update gateway", the delete confirmation and Escape cancelling it, every save, update and delete toast, the gateway model in the picker, the root row count and the "Model providers" count leaving gateways out, and the form dropped silently on Back.
+- Renaming a gateway changes its provider name, so tabs and saved sessions using it lose it and are moved to the default model at the next refresh. Confirmed in Excel on the web for an open idle tab (GATEWAY-14): "gpt-oss-120b" became "GPT-6.1 Sol" with no toast when "Warehouse" was renamed "Depot". Restored sessions are matched by provider name only (`src/taskpane/sessions.ts:54`); `resolveCustomProviderModel` (`src/auth/custom-gateways.ts:405`), which matches by endpoint and model id, is tested but never called. Looks like a bug.
+- The save toast names the gateway as typed rather than its stored name, so two saves of "Warehouse" both say "Saved gateway Warehouse." although the second is "Warehouse (2)". Minor.
 - Validation and transport messages are hard-coded English (`src/auth/custom-gateways.ts:67-133`, `src/auth/stream-proxy.ts:97`).
-- A half-filled form is lost without a question (Settings guards only the Rules page).
-- How a proxy refusal of a loopback or private target is worded in the error banner was not confirmed.
+- A half-filled form is lost without a question (Settings guards only the Rules page). Confirmed.
+- How a proxy refusal of a loopback or private target is worded in the error banner was not confirmed; no turn was sent through the proxy to a gateway.
 
 Verified against pi-for-excel commit `ec453df`.
