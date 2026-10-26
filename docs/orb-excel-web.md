@@ -18,20 +18,66 @@ checklist still requires desktop Excel (see
 | Dev server `:3141` | `.amp/services.yaml` (`dev`) | Taskpane + UI gallery portals |
 | CORS proxy `:3003` | `.amp/services.yaml` (`proxy`) | Model traffic for providers that need it, and the OAuth callback listeners (OpenAI `:1455`, Google `:8085`, ...) |
 | Excel Chrome | `scripts/orb/excel-web.sh` | Chrome with a persistent profile and CDP on `127.0.0.1:9223`, Local Network Access checks off; headed in the Desktop, headless without one |
-| Manifest upload helper | `scripts/orb/set-file-input.mjs` | Fills the cross-origin "Upload Add-in" file input over CDP |
+| Session script | `scripts/orb/excel-web-session.mjs` | One command from a fresh orb to Pi open in its own workbook |
+| Blank workbook | `scripts/orb/blank.xlsx` | Default workbook each orb uploads |
+| Model login | Amp project secret `PI_EXCEL_WEB_AUTH_JSON` | pi `auth.json` contents; written to `~/.pi/agent/auth.json`, which the dev server serves to the taskpane at `/__pi-auth`, so Pi starts logged in |
+| Shared folder link | Amp project secret `PI_EXCEL_WEB_FOLDER_LINK` | "Anyone with the link can edit" link to a OneDrive folder (see [Sign-in](#sign-in)) |
 
-Start the services with `amp orb services ensure`.
+## One command
 
-## Steps
+```bash
+node scripts/orb/excel-web-session.mjs --check
+```
 
-1. **Open Excel** on a workbook (see [Sign-in](#sign-in) for which URL):
+It runs `amp orb services ensure`, starts the Excel Chrome if CDP is not
+answering, opens the shared folder signed out, uploads this orb's own
+workbook (`orb-<thread>-<timestamp>.xlsx`, or `--workbook <file.xlsx>`) as
+the guest, opens it in Excel, uploads `manifest.xml`, and opens Pi. `--check`
+then writes, reads back and clears Z1 through Office.js in the taskpane. It
+prints the workbook name and URL as JSON. A cold orb takes about 50 s
+(including starting the services); later new sessions about 40 s.
+
+Add `--prompt "<message>"` to send Pi a real agent turn after the setup; the
+command waits for the turn to finish and prints the model, the tools Pi
+called and the end of its reply under `turn`. If Pi shows a login overlay
+instead (missing or rejected credentials), it fails at once. Check the workbook yourself
+afterwards (Office.js in the taskpane target) rather than trusting the reply.
+
+`PI_EXCEL_WEB_AUTH_JSON` currently holds an `openai-codex` (ChatGPT) OAuth credential.
+Pi only refreshes it once the access token expires; refreshing rotates the
+refresh token and logs out every other copy, so when it nears expiry,
+replace the secret with a freshly exported one instead of letting orbs
+refresh it. Every orb shares that subscription's rate limits.
+
+The secret has its own name because a personal secret named `PI_AUTH_JSON`
+(used by pi elsewhere) takes precedence over a project secret of that name.
+
+A rerun while Pi is open reuses that workbook (`"reused": true`) and only
+repeats the check. Otherwise each run uploads a new workbook, so parallel
+orbs never share one. Guests cannot delete files, so the folder's owner
+clears out old `orb-*.xlsx` files now and then.
+
+In a cold orb the Excel Chrome runs headless, so the user cannot see it.
+For a visible window run `amp orb desktop ensure` before the first run; if
+Chrome already started headless, run `amp orb service stop excel-web` and
+rerun the command.
+
+`.agents/setup` runs when an orb is created. In an orb created before these
+files reached the default branch, run `.agents/setup` by hand first.
+
+## Manual steps
+
+What the script automates, for when Office's UI changes and it breaks:
+
+1. **Open Excel** on a workbook:
    `amp orb service start excel-web --command 'scripts/orb/excel-web.sh "<workbook url>"'`.
    For a visible window, run `amp orb desktop ensure` first (a cold orb has
    no Desktop); without one the launcher runs headless. Users can also run
    the script from an `amp-desktop-run` link.
 2. **Upload the add-in.** Home → Add-ins → More Add-ins → My Add-ins →
-   Manage My Add-ins → Upload My Add-in. In the Upload Add-in dialog run
-   `node scripts/orb/set-file-input.mjs manifest.xml`, then press Upload.
+   Manage My Add-ins → Upload My Add-in. The file input is in a
+   cross-origin iframe; set it with CDP `DOM.setFileInputFiles` on the
+   `res.public.onecdn.static.microsoft` iframe target, then press Upload.
    Banners such as "Your administrator has not installed Web Add-ins",
    "The Add-ins store has been disabled" and "Cannot connect to catalog."
    are normal and do not block the upload. A Developer Mode prompt may or
@@ -74,11 +120,13 @@ is a separate CDP target (`https://localhost:3141/src/taskpane.html?et=`), so
 Signing in to Microsoft in each new orb can mean MFA. Two ways avoid it,
 both verified in fresh orbs on 2026-10-26:
 
-- **Anonymous edit link (preferred).** Share a scratch workbook from OneDrive
-  as "Anyone with the link can edit" and open that link signed out. The
-  workbook opens in Editing mode, Upload My Add-in works, and Office.js reads
-  and writes cells. The link grants edit access to that one workbook only, so
-  keep it in an Amp secret rather than in the repository.
+- **Anonymous folder link (preferred, what the script uses).** Share a
+  OneDrive folder as "Anyone with the link can edit" and store the link as
+  the project secret `PI_EXCEL_WEB_FOLDER_LINK`. Signed out, the browser gets
+  a SharePoint REST session as "Guest Contributor" that can upload files;
+  their workbooks open in Editing mode, Upload My Add-in works, and Office.js
+  reads and writes cells. The link grants edit access to that folder only.
+  A link to a single workbook works the same way but is shared by every orb.
 - **Restored session.** Export the Microsoft-domain cookies of a signed-in
   profile with CDP `Storage.getCookies`, and in the new orb inject them with
   `Storage.setCookies` on the browser target before navigating (set host-only
