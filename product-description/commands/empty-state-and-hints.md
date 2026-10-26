@@ -77,7 +77,7 @@ The empty state does not come back for that tab. No command empties a tab's conv
 | Model and provider | No effect on the hints. With no provider connected the hints still fill the composer; sending then asks for a connection, as for any message (see [models and providers](../foundations/models-and-providers.md)). | Not applicable: the empty state is gone once the tab is responding. |
 | Thinking level | No effect. The prompt is sent at the tab's current level. | Not applicable. |
 | Execution mode | No effect on the hints. "Build my financial model" and "Format this sheet" lead Pi to change the workbook, so in Confirm mode the resulting turn stops for [approvals](../workbook/confirm-mode-and-approvals.md). | Not applicable. |
-| Files in the workspace, or an overlay open | Files have no effect; the prompts do not mention them. An overlay's backdrop covers the hints, so they cannot be clicked until it closes. A menu does not: clicking a hint with the utilities menu open closes the menu and inserts the hint. | Not applicable. |
+| Files in the workspace, or an overlay open | Files have no effect; the prompts do not mention them. An overlay's backdrop covers the hints, so they cannot be clicked until it closes. A menu does not have a backdrop, but in a short taskpane the utilities menu sits over the hints: in a pane about 340 px tall it covered all four, and a click where a hint showed chose the menu item under it ("Resume session") instead. Where a hint is not under the menu, the click closes the menu and inserts the hint (read from code). | Not applicable. |
 | Tab state (new, restored, another tab busy) | Shown in new and blank tabs only; a restored tab with history shows its transcript. Another tab being busy does not matter. | Not applicable for this tab. Another tab being busy does not affect the hints. |
 | Host (desktop or web) | No difference. Outside Excel the hints still insert, but the prompts ask about a workbook Pi cannot reach. | No effect. |
 
@@ -140,8 +140,7 @@ After any interrupt before sending, the user still has the empty state on screen
 - The order of the hints in the product is Explain, Quality check, Build my financial model, Format this sheet (`src/taskpane/init.ts:341-358`); the glossary lists "Format this sheet" before "Build my financial model". Confirmed in Excel on the web.
 - The composer is shared by all tabs, so hint text follows the user across tab switches. Confirmed for a draft in Excel on the web; see [sessions and tabs](../foundations/sessions-and-tabs.md#what-a-tab-owns).
 - "Inserts into input — editable before sending." is only a `title` tooltip (`src/ui/pi-sidebar.ts:1225`); on touch devices and for keyboard users it is never seen. A product call.
-- That the empty state stays visible, with clickable hints, between Enter and the first message joining the transcript was read from code, not seen.
-- Clicking a hint with the utilities menu open was not run.
+- With a provider connected, the empty state was already gone 150 ms after Enter, even with the model request held (confirmed in Excel on the web). The window in which hints stay clickable after Enter only matters while a login is being asked for; that case was not run.
 - Checked in Excel on the web on 2026-10-26; see [the checklist](../verification/sessions-and-commands.md#commandsempty-state-and-hintsmd).
 
 Verified against pi-for-excel commit `ec453df`.
