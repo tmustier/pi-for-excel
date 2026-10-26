@@ -64,7 +64,7 @@ Picking a level or pressing Shift+Tab changes the tab's level immediately: the s
 
 The new level is used from the next turn: the next message the user sends, or the next queued prompt. A turn that is already running keeps the level it started with for all of its model responses, including those after steers and follow-ups, as the toast's "(next turn)" says.
 
-> Technical note: pi-agent-core reads the model and thinking level once when a run starts (`createLoopConfig` in `agent.js`) and Pi's between-response hook does not change them. Observed in a harness: changing the level during the first model response left the second at the old level.
+> Technical note: pi-agent-core reads the model and thinking level once when a run starts (`createLoopConfig` in `agent.js`) and Pi's between-response hook does not change them. Confirmed in Excel on the web: Shift+Tab to "Extra high" during the first model response of a turn with two tool calls left all three requests at "high".
 
 The level is passed to the provider as a request for that much reasoning. Providers map it onto their own settings and, where a model does not support the requested level, use the nearest one it does; the status bar keeps showing the stored level.
 
@@ -134,7 +134,7 @@ After any interrupt the tab keeps whatever level it had.
 
 **Language.** Level labels, hints, the popover title, the toast, "Thinking…", "Thought for {duration}" and "Thought" are translated.
 
-**Accessibility and keyboard.** The status-bar control is a button with the accessible name "Thinking level {level}"; the popover's levels are buttons. Shift+Tab is listed on the shortcuts page as "Cycle thinking depth". Shift+Tab is taken by Pi everywhere in the taskpane, including inside dialogs. On Excel on the web, Office's own keyboard handling still moves focus backwards on the same press, so focus moves and the level changes together (confirmed in Excel on the web from the composer). The thinking block's header is not a button: it cannot be reached with Tab or toggled from the keyboard except through Ctrl/Cmd+O.
+**Accessibility and keyboard.** The status-bar control is a button with the accessible name "Thinking level {level}"; the popover's levels are buttons. Shift+Tab is listed on the shortcuts page as "Cycle thinking depth". Shift+Tab is taken by Pi everywhere in the taskpane, including inside dialogs. On Excel on the web, Office's own keyboard handling still moves focus backwards on the same press, so focus moves and the level changes together (confirmed in Excel on the web from the composer). The thinking block's header is not a button: it cannot be reached with Tab or toggled from the keyboard except through Ctrl/Cmd+O (confirmed in Excel on the web: 40 Tab presses through a transcript with thinking blocks never focused a header).
 
 ## Edge cases
 
