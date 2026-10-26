@@ -105,6 +105,12 @@ The H1 is "The {feature}" for screens, controls and UI ("The composer", "The sta
 - The agent-experience description lives in `agent-description/` (same method, from the model's standpoint); its bug-triage.md ranks 21 agent problems. Link to it rather than restating tool contracts.
 - The running product can be driven in an orb: `node scripts/orb/excel-web-session.mjs --check` opens Pi in Excel on the web (logged in via `PI_EXCEL_WEB_AUTH_JSON`); the taskpane is the CDP target `https://localhost:3141/src/taskpane.html?et=` on port 9223.
 
+## Fixes in flight (documents describe `main` until these merge)
+
+When a fix PR merges, revise the affected documents to its behavior and update the checklist rows and bug-triage Status lines.
+
+- [#786](https://github.com/tmustier/pi-for-excel/pull/786) transcript (`fix-transcript`): a response is drawn once; parallel tool cards finish individually and groups update live; Ctrl/Cmd+O details mode starts collapsed, covers cards, thinking blocks and groups (new, re-rendered, other tabs), is saved in localStorage, hand toggles override one item until the next press, toast "Details expanded/collapsed (⌘O | Ctrl+O)", listed on the Shortcuts page; collapsed groups hide cards (3+ start collapsed, 2 expanded), only user-chosen states remembered; "Thinking…" only while the block streams, finished block "Thought for {duration}" when seen live, "Thought" when restored, header is a button with aria-expanded; fences like c++/f#/objective-c keep the code bar; a single newline is a line break; failed cell link toast "Couldn't go to {address}: {reason}". Affects turn/tool-calls.md, turn/thinking.md, ui/message-rendering.md, ui/keyboard-shortcuts.md.
+
 ## Order of work
 
 1. `sessions/renaming-a-tab.md` (pilot), then `foundations/` in this order: `the-taskpane.md`, `turns.md`, `sessions-and-tabs.md`, `the-workbook.md`, `models-and-providers.md`. Everything else links to them.
