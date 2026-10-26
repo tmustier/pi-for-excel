@@ -75,7 +75,11 @@ void test("Ctrl+PageDown switches tabs while a tab has focus, and tab shortcuts 
     const active = page.locator(".pi-session-tab.is-active .pi-session-tab__title");
     await active.filter({ hasText: "Chat 2" }).waitFor({ state: "visible" });
 
+    // A new tab moves focus to the composer on the next frame; let that land
+    // before focusing the tab, or it takes focus back after the key press.
+    await page.waitForFunction(() => document.activeElement?.closest("pi-input") !== null);
     await page.locator(".pi-session-tab.is-active .pi-session-tab__main").focus();
+    await page.waitForFunction(() => document.activeElement?.closest(".pi-session-tab") !== null);
     await page.keyboard.press("Control+PageDown");
     await active.filter({ hasText: "Chat 1" }).waitFor({ state: "visible" });
     await page.keyboard.press("Control+PageUp");
