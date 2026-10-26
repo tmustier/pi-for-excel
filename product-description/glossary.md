@@ -8,7 +8,7 @@ The vocabulary used across these documents. When a document uses one of these wo
 
 **Header.** The top row of the taskpane: the *tab strip* on the left and the *utilities button* (a gear) on the right. Excel draws its own title bar ("Pi for Excel", a `⋯` menu and a close button) above it; that bar is not part of the product.
 
-**Tab strip.** The row of *session tabs* in the header, with a "+" button ("New tab") after the last tab and scroll arrows when the tabs overflow.
+**Tab strip.** The row of *session tabs* in the header, with a "+" button ("New tab") after the last tab. Tabs shrink as more are added; scroll arrows appear only once tabs reach their minimum width, and in a narrow pane (about 350 px) they never appear: eleven tabs become ~17 px slivers showing only ×.
 
 **Transcript.** The scrolling area under the header that shows the active tab's messages, tool cards and thinking blocks, oldest at the top. When the tab has no messages it shows the *empty state* instead.
 
@@ -60,7 +60,7 @@ The vocabulary used across these documents. When a document uses one of these wo
 
 **Active tab.** The tab whose transcript is shown and which the composer, the status bar, Escape and slash commands act on. Exactly one tab is active.
 
-**Default title.** The label "Chat N" that a tab shows when it has no chosen title. N is assigned when the tab is created, counting up within the taskpane's lifetime; it is not renumbered when other tabs close.
+**Default title.** The label "Chat N" that a tab shows when it has no chosen title. N is assigned when the tab is created, counting up within the taskpane's lifetime; it is not renumbered when other tabs close. Duplicating a tab consumes a number.
 
 **Chosen title.** A title the user gave a tab with `/name` or the rename dialog, or that Pi gave a duplicated or forked tab ("Chat 1 copy"). A tab with a chosen title shows it instead of the default title. See [renaming a tab](sessions/renaming-a-tab.md).
 
@@ -72,7 +72,7 @@ The vocabulary used across these documents. When a document uses one of these wo
 
 **Workbook link.** The association between a saved session and the workbook it was used in. Restore on open and the resume picker prefer sessions linked to the current workbook. The link uses a workbook identity derived by the product, never the raw file URL.
 
-**Workbook identity.** How Pi recognises a workbook across reopenings: a SHA-256 hash of the address Excel reports for the file (its OneDrive or SharePoint URL, or its path on disk) with any query string or fragment dropped. The raw address is never stored. The identity is unknown when there is no address (a never-saved workbook on desktop, the standalone taskpane, a host that does not answer within 3 s). Renaming, moving or Save As gives a new identity. Pi re-reads it whenever the taskpane gains focus or becomes visible. Tab layouts, workbook links and the resume picker's filter all key on it.
+**Workbook identity.** How Pi recognises a workbook across reopenings: a SHA-256 hash of the address Excel reports for the file (its OneDrive or SharePoint URL, or its path on disk) with any query string or fragment dropped. The raw address is never stored. The identity is unknown when there is no address: a never-saved workbook on desktop, the standalone taskpane, a host that does not answer within 3 s, and Excel on the web when the workbook is opened signed out through a shared link (confirmed). With no identity the resume picker has no workbook filter, sessions stay unlinked, and all such workbooks share one tab layout. Renaming, moving or Save As gives a new identity. Pi re-reads it whenever the taskpane gains focus or becomes visible. Tab layouts, workbook links and the resume picker's filter all key on it.
 
 **Latest session.** The session most recently saved or loaded for a workbook. When no tab layout exists, opening the taskpane restores it; if the workbook identity is unknown, Pi restores the most recently modified session from any workbook instead (the global fallback).
 
