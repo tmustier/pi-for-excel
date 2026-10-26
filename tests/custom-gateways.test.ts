@@ -232,6 +232,65 @@ void test("saveOpenAiGatewayConfig clamps maxTokens to the configured context wi
   assert.equal(model?.maxTokens, 2_048);
 });
 
+void test("saveOpenAiGatewayConfig applies an explicit output-token limit to unknown gateway models", async () => {
+  const store = new MemoryCustomProvidersStore();
+
+  const saved = await saveOpenAiGatewayConfig(store, {
+    displayName: "Long output",
+    endpointUrl: "https://gateway.example.com/v1",
+    modelId: "unlisted-model",
+    contextWindow: 200_000,
+    maxTokens: 32_000,
+  });
+
+  assert.equal(saved.maxTokens, 32_000);
+  assert.equal((await listOpenAiGatewayConfigs(store))[0]?.maxTokens, 32_000);
+
+  const restarted = await restartGatewayRuntime(store);
+  assert.equal(restarted.models.getModel(saved.providerName, "unlisted-model")?.maxTokens, 32_000);
+});
+
+void test("saveOpenAiGatewayConfig lets an explicit output-token limit override registry metadata", async () => {
+  const store = new MemoryCustomProvidersStore();
+
+  const saved = await saveOpenAiGatewayConfig(store, {
+    endpointUrl: knownRegistryModel.baseUrl,
+    modelId: knownRegistryModel.id,
+    maxTokens: 8_000,
+  }, {
+    getModels: () => [knownRegistryModel],
+  });
+
+  assert.equal(saved.contextWindow, 1_050_000);
+  assert.equal((await store.get(saved.id))?.models?.[0]?.maxTokens, 8_000);
+});
+
+void test("saveOpenAiGatewayConfig clamps an explicit output-token limit to the context window", async () => {
+  const store = new MemoryCustomProvidersStore();
+
+  const saved = await saveOpenAiGatewayConfig(store, {
+    endpointUrl: "https://gateway.example.com/v1",
+    modelId: "small-model",
+    contextWindow: 8_192,
+    maxTokens: 100_000,
+  });
+
+  assert.equal(saved.maxTokens, 8_192);
+});
+
+void test("saveOpenAiGatewayConfig rejects invalid output-token limits", async () => {
+  for (const maxTokens of [0, -1, 1.5, Number.NaN]) {
+    await assert.rejects(
+      saveOpenAiGatewayConfig(new MemoryCustomProvidersStore(), {
+        endpointUrl: "https://gateway.example.com/v1",
+        modelId: "bad-output-limit",
+        maxTokens,
+      }),
+      /Max output tokens must be/,
+    );
+  }
+});
+
 void test("saveOpenAiGatewayConfig rejects invalid context window values", async () => {
   const store = new MemoryCustomProvidersStore();
 

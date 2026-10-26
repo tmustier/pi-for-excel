@@ -10,7 +10,7 @@ export const OPENAI_GATEWAY_PROVIDER_PREFIX = "Gateway · ";
 const OPENAI_GATEWAY_TYPE = "openai-completions";
 
 export const DEFAULT_OPENAI_GATEWAY_CONTEXT_WINDOW = 16_384;
-const DEFAULT_OPENAI_GATEWAY_MAX_TOKENS = 4_096;
+export const DEFAULT_OPENAI_GATEWAY_MAX_TOKENS = 4_096;
 
 type StoredModel = NonNullable<CustomProvider["models"]>[number];
 
@@ -29,6 +29,7 @@ export interface OpenAiGatewayConfig {
   apiKey: string;
   providerName: string;
   contextWindow: number;
+  maxTokens: number;
 }
 
 export interface SaveOpenAiGatewayInput {
@@ -38,6 +39,8 @@ export interface SaveOpenAiGatewayInput {
   modelId: string;
   apiKey?: string;
   contextWindow?: number;
+  /** Explicit output-token limit; omitted means registry metadata or the unknown-model default. */
+  maxTokens?: number;
 }
 
 export interface CustomProviderRuntimeInfo {
@@ -101,6 +104,18 @@ export function normalizeGatewayContextWindow(contextWindow: number | null | und
   }
 
   return normalized;
+}
+
+function normalizeGatewayMaxTokens(maxTokens: number): number {
+  if (!Number.isInteger(maxTokens)) {
+    throw new Error("Max output tokens must be a whole number.");
+  }
+
+  if (maxTokens < 1) {
+    throw new Error("Max output tokens must be at least 1.");
+  }
+
+  return maxTokens;
 }
 
 function deriveDisplayName(rawName: string | undefined, endpointUrl: string): string {
@@ -186,6 +201,7 @@ function providerToGatewayConfig(provider: CustomProvider): OpenAiGatewayConfig 
     apiKey: normalizeOptionalString(provider.apiKey),
     providerName,
     contextWindow: normalizeGatewayContextWindow(model.contextWindow),
+    maxTokens: model.maxTokens,
   };
 }
 
@@ -194,11 +210,13 @@ function createGatewayModel(args: {
   modelId: string;
   providerName: string;
   contextWindow: number;
+  maxTokens?: number;
   registryModel?: Model<Api>;
 }): Model<"openai-completions"> {
   const registryModel = args.registryModel;
+  // Output can never exceed the context window, so an explicit limit is clamped like the defaults.
   const maxTokens = Math.min(
-    registryModel?.maxTokens ?? DEFAULT_OPENAI_GATEWAY_MAX_TOKENS,
+    args.maxTokens ?? registryModel?.maxTokens ?? DEFAULT_OPENAI_GATEWAY_MAX_TOKENS,
     args.contextWindow,
   );
 
@@ -283,6 +301,9 @@ export async function saveOpenAiGatewayConfig(
   const contextWindow = normalizeGatewayContextWindow(
     input.contextWindow ?? registryModel?.contextWindow,
   );
+  const explicitMaxTokens = input.maxTokens === undefined
+    ? undefined
+    : normalizeGatewayMaxTokens(input.maxTokens);
   const existingGateways = await listOpenAiGatewayConfigs(customProvidersStore);
 
   if (input.id) {
@@ -309,20 +330,21 @@ export async function saveOpenAiGatewayConfig(
   const id = input.id ?? `${OPENAI_GATEWAY_ID_PREFIX}${crypto.randomUUID()}`;
   const apiKey = normalizeOptionalString(input.apiKey);
 
+  const gatewayModel = createGatewayModel({
+    endpointUrl,
+    modelId,
+    providerName,
+    contextWindow,
+    ...(explicitMaxTokens !== undefined ? { maxTokens: explicitMaxTokens } : {}),
+    ...(registryModel !== undefined ? { registryModel } : {}),
+  });
+
   const provider: CustomProvider = {
     id,
     name: displayName,
     type: OPENAI_GATEWAY_TYPE,
     baseUrl: endpointUrl,
-    models: [
-      createGatewayModel({
-        endpointUrl,
-        modelId,
-        providerName,
-        contextWindow,
-        ...(registryModel !== undefined ? { registryModel } : {}),
-      }),
-    ],
+    models: [gatewayModel],
   };
   if (apiKey.length > 0) {
     provider.apiKey = apiKey;
@@ -338,6 +360,7 @@ export async function saveOpenAiGatewayConfig(
     apiKey,
     providerName,
     contextWindow,
+    maxTokens: gatewayModel.maxTokens,
   };
 }
 
