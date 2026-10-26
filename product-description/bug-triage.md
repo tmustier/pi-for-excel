@@ -37,7 +37,7 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 | [P-17](#p-17-searching-without-a-sheet-name-fails-on-a-workbook-with-one-large-sheet) | Searching without a sheet name fails on a workbook with one large sheet | high | reads
 
 ## medium | fix | Fix in PR [#787](https://github.com/tmustier/pi-for-excel/pull/787) (open) |
-| [P-18](#p-18-saved-rules-conventions-skills-and-integration-changes-do-not-reach-pi-until-the-taskpane-reloads) | Saved rules, conventions, skills and integration changes do not reach Pi until the taskpane reloads | high | rules | fix | Fix in PR [#788](https://github.com/tmustier/pi-for-excel/pull/788) (open; cross-pane case being checked) |
+| [P-18](#p-18-saved-rules-conventions-skills-and-integration-changes-do-not-reach-pi-until-the-taskpane-reloads) | Saved rules, conventions, skills and integration changes do not reach Pi until the taskpane reloads | high | rules | fix | Fix in PR [#788](https://github.com/tmustier/pi-for-excel/pull/788) (open): cause is the settled refresh promise left by a boot-time refresh with no runtimes; panes now also broadcast changes on BroadcastChannel "pi-for-excel:settings-changed" (verified same pane and across panes) |
 | [P-19](#p-19-saving-the-rules-page-overwrites-rules-and-conventions-that-pi-changed-while-the-page-was-open) | Saving the Rules page overwrites rules and conventions that Pi changed while the page was open | high | rules | fix | Fix in PR [#788](https://github.com/tmustier/pi-for-excel/pull/788) (open) |
 | [P-20](#p-20-workbook-rules-typed-on-an-unidentified-workbook-are-dropped-while-the-page-says-rules-saved) | Workbook rules typed on an unidentified workbook are dropped while the page says "Rules saved" | high | rules | fix | Fix in PR [#788](https://github.com/tmustier/pi-for-excel/pull/788) (open) |
 | [P-21](#p-21-export-download-says-transcript-downloaded-whether-or-not-a-file-was-saved) | `/export download` says "Transcript downloaded" whether or not a file was saved | high | sessions | fix | fix-host-web (in progress) for the Mac no-op; [#795](https://github.com/tmustier/pi-for-excel/pull/795) (open) removes the stray tab on the web |
@@ -397,7 +397,7 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Decision needed:** `fix`. Make saves (and focus in other taskpanes) trigger a capability refresh that rebuilds the system prompt and the tools.
 - **Raised by:** RULES-26, RULES-27; [rules](guidance/rules.md#open-questions-and-verification), [the Extensions hub](extensions/the-extensions-hub.md#open-questions-and-verification), [checklist](verification/guidance-files-extensions.md#results-so-far); [conventions](guidance/conventions.md#open-questions-and-verification)
 - **Status:** Confirmed in Excel on the web, 26 October 2026 (RULES-26, RULES-27); Excel for Mac behaves the same way (RULES-26 desktop pass). Also: Suspected from code; not reproduced
-- **Owner:** Fix in PR [#788](https://github.com/tmustier/pi-for-excel/pull/788) (open; cross-pane case being checked)
+- **Owner:** Fix in PR [#788](https://github.com/tmustier/pi-for-excel/pull/788) (open): cause is the settled refresh promise left by a boot-time refresh with no runtimes; panes now also broadcast changes on BroadcastChannel "pi-for-excel:settings-changed" (verified same pane and across panes)
 
 ### P-19: Saving the Rules page overwrites rules and conventions that Pi changed while the page was open
 
