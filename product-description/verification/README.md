@@ -51,10 +51,10 @@ First pass: 26 October 2026, Excel on the web in Amp orbs (Chrome over the DevTo
 
 | File | Items | Pass | Fail | Blocked | Not run |
 | --- | --- | --- | --- | --- | --- |
-| foundations-and-turn.md | 147 | 106 | 9 | 10 | 22 |
+| foundations-and-turn.md | 147 | 133 | 10 | 4 | 0 |
 | sessions-and-commands.md | 129 | 116 | 11 | 2 | 0 |
 | workbook.md | 115 | 86 | 21 | 8 | 0 |
-| setup.md | 131 | 99 | 6 | 26 | 0 |
+| setup.md | 134 | 125 | 9 | 0 | 0 |
 | guidance-files-extensions.md | 149 | 118 | 9 | 22 | 0 |
 
 A fail on a "(suspected bug)" row means the bug reproduced; those are filed in [bug-triage.md](../bug-triage.md). Fails that were document errors have been corrected in the documents and are noted in the row. No document is marked `verified`: that needs a human pass.
