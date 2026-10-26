@@ -8,7 +8,7 @@ Reading is how Pi learns what is in the workbook before it answers or changes an
 
 The user asks "What's in this workbook?" A card headed "Overview" appears with a spinner, and a moment later completes. Expanded, its "Result" section lists every sheet with its size ("120 rows × 8 cols"), its first header row, its tables and object counts, and the workbook's named ranges. Pi then reads part of a sheet: a card "Read Summary!A1:F30" appears and completes; expanded, it shows the cells as a grid with column letters and row numbers.
 
-Pi writes its answer using what it read. The user clicks "Summary!A1:F30" in the card header, and Excel switches to the Summary sheet and selects A1:F30. Nothing in the workbook changed.
+Pi writes its answer using what it read. The user clicks "Summary!A1:F30" in the card header, and Excel switches to the Summary sheet and selects A1:F30. Nothing in the workbook changed. (The cards, their headers and the cell link were confirmed in Excel on the web.)
 
 ## The interaction, event by event
 
@@ -43,10 +43,11 @@ Each read tool targets something different, and its card header says what:
 Some reads finish immediately without reading anything useful. The card completes normally (not in the error style) and the result text says why:
 
 - the address is malformed or the sheet does not exist ("Error reading "{range}": …", "Error searching: …");
+- the user is editing a cell in the grid: on Excel on the web the read fails at once with "Error reading "{range}": Excel is in cell-editing mode. Please exit the edit mode by pressing ENTER or TAB or selecting another cell, and then try again.", and Pi usually asks the user to finish the edit (confirmed in Excel on the web);
 - trace or explain was given a range instead of a single cell ("Error: trace_dependencies expects a single cell, not a range.");
 - a regular expression does not compile ("Invalid regex "{query}": …").
 
-The model sees the text and usually retries with a corrected input. Nothing is recorded anywhere.
+The model sees the text and usually retries with a corrected input. Nothing is recorded anywhere. The card header keeps its normal grey style; only the result text shows the error (confirmed in Excel on the web).
 
 ### The read runs
 
@@ -85,7 +86,7 @@ Hidden and very hidden sheets are listed in the overview with their state. Pi ca
 | Execution mode | No effect. Reads never ask, in Auto or Confirm. | No effect. |
 | Files in the workspace, or an overlay open | No effect on reads. Truncated results are saved to the Files workspace when small enough. | An overlay does not pause a read in progress. |
 | Tab state (new, restored, another tab busy) | No effect. Another tab holding the workbook lock does not delay a read. | No effect. |
-| Host (desktop or web) | No known difference. | No effect. |
+| Host (desktop or web) | Same tools and cards. On Excel on the web, a read made while the user is editing a cell fails at once with "Excel is in cell-editing mode…" (confirmed). | No effect. |
 
 Nothing changed mid-read affects that read; it affects the next tool call.
 
@@ -101,7 +102,7 @@ Nothing changed mid-read affects that read; it affects the next tool call.
 | The provider fails | Not applicable. | The read itself does not use the provider and finishes; the turn may then fail. |
 | The taskpane goes away | Not applicable. | The read and its result are lost unless the session had already saved that message. |
 | The workbook changes underneath | Not applicable. | The read sees the grid as it is when it runs. An address without a sheet name reads from whichever sheet is active at that moment. |
-| Focus moves to the grid or another window | Not applicable. | The read continues. Clicking a cell link moves Excel's selection but not the taskpane's focus. |
+| Focus moves to the grid or another window | Not applicable. | The read continues. If the user is in cell-edit mode when the read runs, Excel on the web rejects it with "Excel is in cell-editing mode…" (confirmed). Clicking a cell link moves Excel's selection but not the taskpane's focus. |
 | The context window fills | Not applicable. | The result is cut to the size limit before it joins the conversation; older results may later be summarized by [compaction](../turn/context-and-compaction.md). |
 
 After an interrupt the cards that completed stay in the transcript with their results; nothing in the workbook needs undoing.
@@ -141,9 +142,9 @@ After an interrupt the cards that completed stay in the transcript with their re
 
 ## Open questions and verification
 
-- Read from code; none of the card wording has been checked in the running product.
-- `foundations/turns.md` describes the overview card as "Workbook Overview"; the header shown is "Overview" (`tools.action.overview`), with "Workbook Overview" only as the tool's label. One of the two documents should change in the consistency pass.
-- Whether a failed read should render in the error style: tool errors are returned as normal text ("Error reading …"), so the card looks successful. Probably intentional (the model handles it), but the user cannot tell at a glance.
+- Checked by hand in Excel on the web (orb session, `ec453df`), 26 October 2026: all five read tools, their card headers and result sections, the empty-range text, the no-match search header, cell links, reads in Confirm mode, and a read during cell editing. See [the workbook checklist](../verification/workbook.md#workbookreadingmd). Truncation, hidden sheets and Stop during a read were not run.
+- `foundations/turns.md` describes the overview card as "Workbook Overview"; the header shown is "Overview" (`tools.action.overview`, confirmed in Excel on the web), with "Workbook Overview" only as the tool's label. One of the two documents should change in the consistency pass.
+- A failed read does not render in the error style (confirmed with the cell-editing error): tool errors are returned as normal text, so the card looks successful. Probably intentional (the model handles it), but the user cannot tell at a glance. Mutations that fail ("Aborted", "Mutation cancelled …") do render in the error style, so the two differ.
 - Whether the truncated-output copy is written to the Files workspace when the Files workspace has never been opened has not been checked.
 - Clicking a cell link while Excel is in cell-edit mode: behavior not checked.
 
