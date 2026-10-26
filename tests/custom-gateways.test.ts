@@ -291,6 +291,51 @@ void test("saveOpenAiGatewayConfig rejects invalid output-token limits", async (
   }
 });
 
+void test("saveOpenAiGatewayConfig stores the connect-directly choice and round-trips it for editing", async () => {
+  const store = new MemoryCustomProvidersStore();
+
+  const direct = await saveOpenAiGatewayConfig(store, {
+    endpointUrl: "https://llama.example.lan:8443/v1",
+    modelId: "local-model",
+    connectDirectly: true,
+  });
+  assert.equal(direct.connectDirectly, true);
+  assert.equal((await store.get(direct.id))?.connectDirectly, true);
+  assert.equal((await listOpenAiGatewayConfigs(store))[0]?.connectDirectly, true);
+
+  const proxied = await saveOpenAiGatewayConfig(store, {
+    id: direct.id,
+    endpointUrl: "https://llama.example.lan:8443/v1",
+    modelId: "local-model",
+  });
+  assert.equal(proxied.connectDirectly, false);
+  assert.equal((await store.get(direct.id))?.connectDirectly, undefined);
+});
+
+void test("saveOpenAiGatewayConfig rejects direct plain-http endpoints on other machines", async () => {
+  await assert.rejects(
+    saveOpenAiGatewayConfig(new MemoryCustomProvidersStore(), {
+      endpointUrl: "http://192.168.1.50:8080/v1",
+      modelId: "local-model",
+      connectDirectly: true,
+    }),
+    /Direct connections need an https:\/\/ endpoint/,
+  );
+
+  const proxied = await saveOpenAiGatewayConfig(new MemoryCustomProvidersStore(), {
+    endpointUrl: "http://192.168.1.50:8080/v1",
+    modelId: "local-model",
+  });
+  assert.equal(proxied.connectDirectly, false);
+
+  const loopback = await saveOpenAiGatewayConfig(new MemoryCustomProvidersStore(), {
+    endpointUrl: "http://localhost:8080/v1",
+    modelId: "local-model",
+    connectDirectly: true,
+  });
+  assert.equal(loopback.connectDirectly, true);
+});
+
 void test("saveOpenAiGatewayConfig rejects invalid context window values", async () => {
   const store = new MemoryCustomProvidersStore();
 

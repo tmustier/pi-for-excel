@@ -4,6 +4,7 @@
 
 import type { Api, Model, Models } from "@earendil-works/pi-ai";
 import type { CustomProvider } from "../storage/local/custom-providers-store.js";
+import { isLoopbackProxyUrl } from "./proxy-validation.js";
 
 const OPENAI_GATEWAY_ID_PREFIX = "pi-openai-gateway:";
 export const OPENAI_GATEWAY_PROVIDER_PREFIX = "Gateway · ";
@@ -30,6 +31,7 @@ export interface OpenAiGatewayConfig {
   providerName: string;
   contextWindow: number;
   maxTokens: number;
+  connectDirectly: boolean;
 }
 
 export interface SaveOpenAiGatewayInput {
@@ -41,6 +43,8 @@ export interface SaveOpenAiGatewayInput {
   contextWindow?: number;
   /** Explicit output-token limit; omitted means registry metadata or the unknown-model default. */
   maxTokens?: number;
+  /** Skip the CORS proxy for this gateway; the endpoint must allow CORS itself. */
+  connectDirectly?: boolean;
 }
 
 export interface CustomProviderRuntimeInfo {
@@ -83,6 +87,21 @@ export function normalizeGatewayEndpointUrl(endpointUrl: string): string {
   parsed.hash = "";
   const normalized = parsed.toString();
   return normalized.endsWith("/") ? normalized.slice(0, -1) : normalized;
+}
+
+/**
+ * True for plain-http endpoints on another machine. Office serves the taskpane over HTTPS,
+ * so its webview blocks these requests as mixed content unless the proxy relays them.
+ */
+export function isPlainHttpRemoteEndpoint(url: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+
+  return parsed.protocol === "http:" && !isLoopbackProxyUrl(url);
 }
 
 export function normalizeGatewayModelId(modelId: string): string {
@@ -202,6 +221,7 @@ function providerToGatewayConfig(provider: CustomProvider): OpenAiGatewayConfig 
     providerName,
     contextWindow: normalizeGatewayContextWindow(model.contextWindow),
     maxTokens: model.maxTokens,
+    connectDirectly: provider.connectDirectly === true,
   };
 }
 
@@ -304,6 +324,13 @@ export async function saveOpenAiGatewayConfig(
   const explicitMaxTokens = input.maxTokens === undefined
     ? undefined
     : normalizeGatewayMaxTokens(input.maxTokens);
+  const connectDirectly = input.connectDirectly === true;
+  if (connectDirectly && isPlainHttpRemoteEndpoint(endpointUrl)) {
+    throw new Error(
+      "Direct connections need an https:// endpoint. Excel blocks plain http:// requests to other machines. "
+      + "Serve the endpoint over HTTPS, or turn off Connect directly to use the proxy.",
+    );
+  }
   const existingGateways = await listOpenAiGatewayConfigs(customProvidersStore);
 
   if (input.id) {
@@ -349,6 +376,9 @@ export async function saveOpenAiGatewayConfig(
   if (apiKey.length > 0) {
     provider.apiKey = apiKey;
   }
+  if (connectDirectly) {
+    provider.connectDirectly = true;
+  }
 
   await customProvidersStore.set(provider);
 
@@ -361,6 +391,7 @@ export async function saveOpenAiGatewayConfig(
     providerName,
     contextWindow,
     maxTokens: gatewayModel.maxTokens,
+    connectDirectly,
   };
 }
 
