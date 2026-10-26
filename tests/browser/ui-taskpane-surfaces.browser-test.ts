@@ -42,13 +42,18 @@ void test("open tab titles survive a taskpane reload", async () => {
   });
 });
 
-void test("renaming a tab confirms the entered visible title", async () => {
+void test("renaming a tab confirms the entered visible title, even where window.prompt is unavailable", async () => {
   await withTaskpane(async (page) => {
-    page.once("dialog", async (dialog) => {
-      assert.equal(dialog.type(), "prompt");
-      await dialog.accept("Revenue Model");
+    // Office on the web replaces window.prompt with a function that throws.
+    await page.evaluate(() => {
+      window.prompt = () => {
+        throw new Error("Function window.prompt is not supported.");
+      };
     });
     await page.locator(".pi-session-tab__main").dblclick();
+    const renameDialog = page.locator("#pi-text-input-dialog-overlay");
+    await renameDialog.locator("input").fill("Revenue Model");
+    await renameDialog.getByRole("button", { name: "Rename" }).click();
 
     await page.locator(".pi-session-tab__title").filter({ hasText: "Revenue Model" }).waitFor({ state: "visible" });
     assert.equal(await page.locator(".pi-session-tab__title").innerText(), "Revenue Model");

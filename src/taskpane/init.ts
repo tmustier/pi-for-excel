@@ -123,6 +123,8 @@ import {
   moveCursorToEnd,
 } from "../ui/input-focus.js";
 import { requestConfirmationDialog } from "../ui/confirm-dialog.js";
+import { requestTextInputDialog } from "../ui/text-input-dialog.js";
+import { TOOL_APPROVAL_OVERLAY_ID } from "../ui/overlay-ids.js";
 import { showActionToast, showToast } from "../ui/toast.js";
 import { PiSidebar } from "../ui/pi-sidebar.js";
 import { createProxyBanner } from "../ui/proxy-banner.js";
@@ -137,6 +139,7 @@ import { openModelSelectorDialog } from "../ui/model-selector-dialog.js";
 import { getCurrentSpreadsheetHost } from "../host/index.js";
 import { createWorkbookCoordinator, getSessionLockState } from "../workbook/coordinator.js";
 import { formatWorkbookLabel, type WorkbookContext } from "../workbook/context.js";
+import { createRecoveryScopeResolver } from "../workbook/recovery-scope.js";
 import {
   getManualFullWorkbookBackupStore,
   ManualFullWorkbookBackupStore,
@@ -537,6 +540,24 @@ export async function initTaskpane(opts: {
     },
   });
   const draftStore = createDraftStore(settings);
+
+  // Per-workbook tab state (layout, recently closed) is stored under the
+  // workbook's identity. A workbook without one (never saved, or edited through
+  // an anonymous web link) uses the token Pi keeps inside the document, as
+  // recovery checkpoints do, so a reload keeps its tabs and another
+  // unidentified workbook does not see them. Without a token the state stays in
+  // memory. The standalone browser taskpane never has an identity and keeps
+  // using the shared slot.
+  const usesSharedUnidentifiedState = spreadsheetHost.kind === "browser";
+  const workbookScope = createRecoveryScopeResolver({ getWorkbookContext: resolveWorkbookContext });
+  const resolvePersistentWorkbookKey = async (
+    mode: "read" | "write",
+  ): Promise<{ workbookId: string | null } | null> => {
+    if (usesSharedUnidentifiedState) return { workbookId: await resolveWorkbookId() };
+    const scope = mode === "write" ? await workbookScope.resolveForAppend() : await workbookScope.resolveForRead();
+    return scope ? { workbookId: scope.workbookId } : null;
+  };
+
   // Recently closed tabs are kept per workbook. If the stored list cannot be
   // read, it is not overwritten: closes stay in memory for this taskpane only.
   let recentlyClosedWritable = false;
@@ -545,14 +566,16 @@ export async function initTaskpane(opts: {
     if (!recentlyClosedWritable) return;
     recentlyClosedWrites = recentlyClosedWrites.then(async () => {
       try {
-        await saveRecentlyClosed(settings, await resolveWorkbookId(), items);
+        const key = await resolvePersistentWorkbookKey("write");
+        if (key) await saveRecentlyClosed(settings, key.workbookId, items);
       } catch (error) {
         console.warn("[pi] Failed to persist recently closed tabs:", error);
       }
     });
   });
   try {
-    recentlyClosed.load(await loadRecentlyClosed(settings, await resolveWorkbookId()));
+    const key = await resolvePersistentWorkbookKey("read");
+    if (key) recentlyClosed.load(await loadRecentlyClosed(settings, key.workbookId));
     recentlyClosedWritable = true;
   } catch (error) {
     console.warn("[pi] Failed to read recently closed tabs:", error);
@@ -703,8 +726,9 @@ export async function initTaskpane(opts: {
 
   const tabLayoutPersistence = createTabLayoutPersistence({
     resolveWorkbookId,
-    saveLayout: async (workbookId, layout) => {
-      await saveWorkbookTabLayout(settings, workbookId, layout);
+    saveLayout: async (_workbookId, layout) => {
+      const key = await resolvePersistentWorkbookKey("write");
+      if (key) await saveWorkbookTabLayout(settings, key.workbookId, layout);
     },
     warn: (message, error) => {
       console.warn(message, error);
@@ -1305,7 +1329,12 @@ export async function initTaskpane(opts: {
   let tabLayoutReadSucceeded = false;
 
   const restorePersistedTabLayout = async (): Promise<SessionRuntime | null> => {
-    const workbookId = await resolveWorkbookId();
+    const key = await resolvePersistentWorkbookKey("read");
+    if (!key) {
+      tabLayoutReadSucceeded = true;
+      return null;
+    }
+    const workbookId = key.workbookId;
     let savedLayout: WorkbookTabLayout | null;
     try {
       savedLayout = await loadWorkbookTabLayout(settings, workbookId);
@@ -1643,10 +1672,17 @@ export async function initTaskpane(opts: {
       ? runtime.persistence.getSessionTitle().trim()
       : currentTitle;
 
-    const nextTitleRaw = window.prompt("Rename tab", defaultTitle);
+    // Office on the web replaces window.prompt with a function that throws, so ask in the taskpane.
+    const nextTitleRaw = await requestTextInputDialog({
+      title: t("init.renameTab.title"),
+      initialValue: defaultTitle,
+      confirmLabel: t("init.renameTab.confirm"),
+    });
     if (nextTitleRaw === null) {
       return;
     }
+    // The tab may have started a turn while the dialog was open.
+    if (runtimeManager.getRuntime(runtimeId) !== runtime) return;
 
     const nextTitle = nextTitleRaw.trim();
     await runtime.persistence.renameSession(nextTitle);
@@ -2094,7 +2130,9 @@ export async function initTaskpane(opts: {
   // Bootstrap from persisted tab layout; fallback to legacy single-runtime restore.
   const restoredRuntime = await restorePersistedTabLayout();
   if (!restoredRuntime) {
-    await runtimeManager.createRuntime({ activate: true, autoRestoreLatest: true });
+    // Without an identity in a real workbook there is no "latest session" of this workbook to restore.
+    const autoRestoreLatest = usesSharedUnidentifiedState || (await resolveWorkbookId()) !== null;
+    await runtimeManager.createRuntime({ activate: true, autoRestoreLatest });
   }
   for (const tab of runtimeManager.snapshotTabs()) {
     recentlyClosed.removeBySessionId(tab.sessionId);

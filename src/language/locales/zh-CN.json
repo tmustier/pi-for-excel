@@ -576,6 +576,8 @@
   "init.noRecentlyClosedTab": "没有最近关闭的标签页",
   "init.noTabsWereClosed": "没有标签页被关闭",
   "init.openedInNewTab": "已在新标签页中打开 {title}",
+  "init.renameTab.confirm": "重命名",
+  "init.renameTab.title": "重命名标签页",
   "init.renamedTo": "已重命名为 {title}",
   "init.reopened": "已重新打开：{title}",
   "init.revertFailed": "还原失败：{message}",
