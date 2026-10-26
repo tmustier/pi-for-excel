@@ -105,7 +105,7 @@ A variant cannot change mid-reopen in a way that matters, because loading is nea
 | An overlay or menu opens | The toast stays up for its 9 seconds, but its button may be covered. | Not applicable. |
 | Model or thinking level changes | No effect. | Not applicable. |
 | The provider fails | No effect. No network request is made. | Not applicable. |
-| The taskpane goes away | The recently closed list is lost. The closed sessions are still saved and can be found in the resume picker's "Saved sessions". | Not applicable. |
+| The taskpane goes away | The recently closed list is lost (confirmed in Excel on the web: after a reload `/reopen` said "No recently closed tab"). The closed sessions are still saved and can be found in the resume picker's "Saved sessions". | Not applicable. |
 | The workbook changes underneath | No effect. Saving under a new name changes the workbook identity, so the picker's filter may then hide earlier entries. The shortcut paths still reach them. | Not applicable. |
 | Focus moves to the grid or another window | Ctrl/Cmd+Z in the grid is Excel's undo, not a reopen. The toast still disappears after 9 seconds. | Not applicable. |
 | The context window fills | No effect. A reopened session keeps any compaction summaries it had. | Not applicable. |
