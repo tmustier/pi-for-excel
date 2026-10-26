@@ -1199,6 +1199,8 @@
   "whimsical.wrangling": "Wrangling…",
   "whimsical.wrestling_with_array_formulas": "Wrestling with array formulas…",
   "workbook.currentWorkbook": "Current workbook",
+  "working.cellEdit": "Waiting for you to finish editing a cell",
+  "working.cellEditHint": "Press Enter, Tab or Esc in Excel and Pi will continue",
   "working.default": "Working…",
   "working.hint.collapse": "{shortcut} to expand or collapse details",
   "working.hint.commands": "Type / for commands",

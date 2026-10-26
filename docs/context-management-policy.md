@@ -74,12 +74,27 @@ Implications:
 |---|---|---|
 | Base system prompt | Keep minimal and stable per session | Every call (provider APIs are request-based) |
 | Tool schemas | Include a deterministic tool set on every call so continuations can keep using tools (current runtime policy: full set) | Every call |
-| Workbook structural context | Inject as separate context block (not baked repeatedly into base prompt) | Session start + workbook hash/version change |
-| Per-turn auto-context (selection + recent changes) | Keep bounded and high-signal | Per user turn when non-empty |
+| Workbook structural context | Stored `autoContext` note in the transcript (not the base prompt) | First request, workbook switch, blueprint text changed, or the note was compacted away |
+| Files workspace summary | Stored `autoContext` note | First request with relevant files, signature changed, or compacted away |
+| Edits by the user or a collaborator | Stored `autoContext` note (event); Pi's own writes excluded | Before any request (including mid-turn) when the per-tab cursor has new entries |
+| Current selection | Not stored; appended as the last message, bounded (address + size, ≤ 20 sampled rows, ≤ 4,000-char table) | Every request |
 | Tool results in model-facing history | Keep fresh full detail short-term, summarize/prune older bulky outputs | On pressure/threshold |
 | Compaction | Trigger before hard limits to protect quality | Soft and hard thresholds |
 
 ---
+
+## Auto-context contract (2026-10-26)
+
+`src/taskpane/context-injection.ts` owns what Pi tells the agent without being asked. Two layers:
+
+1. **Stored notes** (`prepareRequest`, role `autoContext`, `src/messages/auto-context.ts`). Snapshots (workbook blueprint, Files summary) and events (edits by someone other than Pi) are inserted into the runtime transcript before the user's prompt, or after the latest tool results mid-turn. A snapshot is added only when it differs from the last note of its kind in the transcript, so it is sent once, stays visible for the rest of the turn and later turns, persists with the session, and becomes part of the cached prefix. Later notes are appended, never rewritten, so earlier prefixes stay valid.
+2. **Selection** (`transformContext`). Re-read for every request and appended last; never stored. Everything before it is byte-identical to the previous request's messages.
+
+Rules:
+- A source that fails or times out is logged (`[auto-context]`) and, for the selection, reported to the agent as unavailable. Never silently dropped.
+- Auto-context Excel reads use `excelRun(..., { waitForCellEdit: false })`: they must not hold up a model request while the user edits a cell.
+- Edit tracking: one workbook-level `worksheets.onChanged` listener per taskpane; each runtime reads the shared log from its own cursor. `triggerSource: "ThisLocalAddin"` is excluded. User structure events (sheet added/deleted/renamed/moved/shown, row/column insert/delete) invalidate the blueprint cache.
+- Agent-facing text; never routed through `t()`.
 
 ## Implementation plan (next slices)
 

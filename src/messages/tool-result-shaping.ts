@@ -156,7 +156,7 @@ function summarizeToolResult(
     lines.push("Preview: (no text payload)");
   }
 
-  lines.push("Full output remains visible in chat history; this compact version is model-facing only.");
+  lines.push("The full output was shown to the user in the tool card but is no longer in your context; run the tool again if you need it.");
 
   return {
     type: "text",

@@ -388,3 +388,9 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 - **Current `conditional_format` backup scope:** captures/restores all current rule families (`custom`, `cell_value`, `contains_text`, `top_bottom`, `preset_criteria`, `data_bar`, `color_scale`, `icon_set`) including per-rule applies-to ranges.
 - **Quick affordance:** users can restore via `/history` (Backups overlay) or `/revert` (latest backup). The Backups overlay also exposes a **Full backup** button for explicit manual full-workbook capture.
 - **Rationale:** addresses #27 by shifting from cumbersome up-front approvals to versioned recovery with explicit user-controlled rollback.
+
+## Cell-edit mode (`excelRun`)
+- **Problem:** while the user types in a cell, Excel rejects every batch with `InvalidOperationInCellEditMode` (Excel on the web fails in milliseconds).
+- **Behavior:** `excelRun` retries with backoff (250 ms → 2 s) for up to 60 s and shows "Waiting for you to finish editing a cell" in the working indicator. A run is retried only if none of its `context.sync()` calls had succeeded, so a half-applied mutation is never re-run.
+- **Timeout:** throws `ExcelCellEditModeError`, whose message tells the agent what happened, whether anything reached Excel, and to ask the user to press Enter, Tab or Esc.
+- **Opt-out:** background and auto-context reads pass `waitForCellEdit: false` (they must not block a model request or show the status while Pi is idle).

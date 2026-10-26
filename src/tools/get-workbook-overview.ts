@@ -12,7 +12,7 @@ import { t } from "../language/index.js";
 import { Type, type Static } from "typebox";
 import { Value } from "typebox/value";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
-import { blockAddress, excelRun, colToLetter, parseRangeRef } from "../excel/helpers.js";
+import { blockAddress, excelRun, colToLetter, parseRangeRef, type ExcelRunOptions } from "../excel/helpers.js";
 import { getErrorMessage } from "../utils/errors.js";
 import { cellValueGridSchema, formatAsMarkdownTable, formatDisplayedCell, textGridSchema } from "../utils/format.js";
 import { collectRangeState, parseBlock, renderRangeState } from "./sheet-state.js";
@@ -136,7 +136,7 @@ async function buildWorkbookStateNotes(): Promise<string> {
 }
 
 /** Build the full workbook overview. Also used by context injection. */
-export async function buildOverview(): Promise<string> {
+export async function buildOverview(runOptions?: ExcelRunOptions): Promise<string> {
   return excelRun(async (context) => {
     const wb = context.workbook;
     wb.load("name");
@@ -228,7 +228,7 @@ export async function buildOverview(): Promise<string> {
     }
 
     return lines.join("\n");
-  });
+  }, runOptions);
 }
 
 // ============================================================================

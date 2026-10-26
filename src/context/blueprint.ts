@@ -1,81 +1,43 @@
 /**
- * Workbook blueprint — structural overview injected into model context.
+ * Workbook blueprint — structural overview sent to the model as an
+ * auto-context note (see `src/taskpane/context-injection.ts`).
  *
- * Re-uses buildOverview() from the get_workbook_overview tool but
- * wraps it with workbook-aware caching and invalidation signals.
+ * Re-uses buildOverview() from the get_workbook_overview tool, cached per
+ * workbook. The cache is invalidated by structural changes: Pi's own
+ * structure writes (workbook coordinator) and the user's (change tracker
+ * sheet/row/column events). The injector compares the blueprint with the last
+ * one stored in the transcript and sends a new note only when it differs.
  */
 
-import { getWorkbookContext } from "../workbook/context.js";
 import { buildOverview } from "../tools/get-workbook-overview.js";
 
 const UNKNOWN_WORKBOOK_KEY = "__workbook_unknown__";
 
 const blueprintCacheByWorkbook = new Map<string, string>();
-const blueprintRevisionByWorkbook = new Map<string, number>();
 
 function normalizeWorkbookKey(workbookId: string | null): string {
   return workbookId ?? UNKNOWN_WORKBOOK_KEY;
 }
 
-function getRevisionForKey(workbookKey: string): number {
-  return blueprintRevisionByWorkbook.get(workbookKey) ?? 0;
-}
-
-function bumpRevisionForKey(workbookKey: string): number {
-  const next = getRevisionForKey(workbookKey) + 1;
-  blueprintRevisionByWorkbook.set(workbookKey, next);
-  return next;
-}
-
-async function resolveWorkbookId(): Promise<string | null> {
-  try {
-    const ctx = await getWorkbookContext();
-    return ctx.workbookId;
-  } catch {
-    return null;
-  }
-}
-
 /**
- * Monotonic revision token for one workbook's blueprint cache.
- *
- * Intended for context injection logic: if this value changes for the active
- * workbook, workbook structure context should be considered stale.
+ * Get the workbook blueprint (cached per workbook identity). Never waits for
+ * the user to leave cell-edit mode: it runs before a model request.
  */
-export function getBlueprintRevision(workbookId: string | null): number {
-  return getRevisionForKey(normalizeWorkbookKey(workbookId));
-}
-
-/** Get the workbook blueprint (cached per workbook identity when available). */
-export async function getBlueprint(workbookId?: string | null): Promise<string> {
-  const resolvedWorkbookId = workbookId === undefined
-    ? await resolveWorkbookId()
-    : workbookId;
-  const workbookKey = normalizeWorkbookKey(resolvedWorkbookId);
-
+export async function getBlueprint(workbookId: string | null): Promise<string> {
+  const workbookKey = normalizeWorkbookKey(workbookId);
   const cached = blueprintCacheByWorkbook.get(workbookKey);
-  if (cached !== undefined) {
-    return cached;
-  }
+  if (cached !== undefined) return cached;
 
-  const blueprint = await buildOverview();
+  const blueprint = await buildOverview({ waitForCellEdit: false });
   blueprintCacheByWorkbook.set(workbookKey, blueprint);
-  bumpRevisionForKey(workbookKey);
   return blueprint;
 }
 
-/** Force a fresh blueprint rebuild (e.g. after structural changes). */
-export async function refreshBlueprint(workbookId?: string | null): Promise<string> {
-  const resolvedWorkbookId = workbookId === undefined
-    ? await resolveWorkbookId()
-    : workbookId;
-  invalidateBlueprint(resolvedWorkbookId);
-  return getBlueprint(resolvedWorkbookId);
-}
-
-/** Invalidate one workbook's cached blueprint. */
+/** Invalidate one workbook's cached blueprint (null: every workbook). */
 export function invalidateBlueprint(workbookId: string | null): void {
-  const workbookKey = normalizeWorkbookKey(workbookId);
-  blueprintCacheByWorkbook.delete(workbookKey);
-  bumpRevisionForKey(workbookKey);
+  if (workbookId === null) {
+    blueprintCacheByWorkbook.clear();
+    return;
+  }
+  blueprintCacheByWorkbook.delete(normalizeWorkbookKey(workbookId));
 }
