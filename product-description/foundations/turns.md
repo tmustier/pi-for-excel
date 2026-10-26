@@ -116,13 +116,13 @@ Stop never affects other tabs. Escape while the tab is idle does not stop anythi
 | Modifier | Set before | Changed while busy |
 | --- | --- | --- |
 | Model and provider | The tab's model is used for every model response in the turn. With no connected provider for it, sending opens a connection dialog first. | Refused: "Wait for this tab to finish before changing models". The status-bar model control and `/model` are blocked until the tab is idle. |
-| Thinking level | Applies to every model response in the turn. | Takes effect from the next model response; the toast says "Thinking: {level} (next turn)". The model response already streaming keeps the old level. |
+| Thinking level | Applies to every model response in the turn. | Takes effect from the next turn; the toast says "Thinking: {level} (next turn)". Every remaining model response in the running turn keeps the old level. |
 | Execution mode | In Auto, mutations run as Pi calls them. In Confirm, each mutation waits for an [approval](../workbook/confirm-mode-and-approvals.md) and the turn pauses on it. | Takes effect from the next mutation. A change does not affect an approval dialog already open. |
 | Files in the workspace, or an overlay open | Files in the [Files workspace](../files/the-files-workspace.md) are available to Pi's tools; they are not attached to the message. An open overlay holds focus, so Enter in the composer cannot happen until it closes. | Importing files during a turn makes them available to tool calls that start afterwards. Overlays opened during a turn do not pause it, except approval dialogs, which the turn waits on. |
 | Tab state (new, restored, another tab busy) | A new tab sends its first message like any other; the session is first saved when Pi's first answer completes. A restored tab sends with its full restored history. Another tab being busy does not delay this one, except that mutations wait for the [workbook lock](the-workbook.md). | Switching away does not pause the turn; it keeps running in the background tab. |
 | Host (desktop or web) | No difference in the turn itself. Some providers need the [CORS proxy](../setup/the-proxy.md) on some hosts. | No effect. |
 
-Variants that change mid-turn take effect at the next boundary (the next model response, the next mutation), never in the middle of one.
+Variants that change mid-turn take effect at the next boundary (the next turn for the thinking level, the next mutation for the execution mode), never in the middle of one.
 
 ## Cancel and interrupt
 
@@ -132,7 +132,7 @@ Variants that change mid-turn take effect at the next boundary (the next model r
 | The user sends something else | A slash command runs instead, if it is known. Clicking a starter hint overwrites the whole draft with its prompt; nothing is sent. | Enter steers, Alt/Option+Enter follows up, a busy-allowed command runs or is queued, any other command is refused with a toast. |
 | Tab switched, created, closed or reopened | The composer is shared by all tabs: the draft stays put and is sent to whichever tab is active when Enter is pressed. | The turn keeps running in its tab, which shows a busy dot. Closing a responding tab asks "Stop and close this tab?" ("Stop and close" / "Keep open"); closing a tab whose mutation holds the workbook lock is refused. |
 | An overlay or menu opens | No effect on the draft. | The turn keeps running behind it. While a menu, popover or overlay that claims Escape is open, Escape closes it instead of stopping. |
-| Model or thinking level changes | Applies to the turn about to be sent. | Model change refused; thinking-level change applies from the next model response. |
+| Model or thinking level changes | Applies to the turn about to be sent. | Model change refused; thinking-level change applies from the next turn. |
 | The provider fails | Not applicable; nothing has been sent. | The turn ends as failed. The error banner appears only if the tab is active when the turn ends. |
 | The taskpane goes away | The draft in the composer is lost. | The turn ends without a record of its ending. Messages that had completed are saved; the model response that was streaming is lost. In a session Pi had never answered, nothing is saved at all. Workbook changes already made stay made. |
 | The workbook changes underneath | Edits and selection changes are picked up by auto-context at send time. | Pi does not see edits made during the turn until its next request gathers auto-context. A tool that reads or writes cells the user is editing sees whatever Excel reports at that moment. |
@@ -153,7 +153,7 @@ After any interrupt, the user stays in the same tab (unless they switched), with
 
 **Models and providers.** The tab's model and thinking level are read at each model request. A missing credential opens the connection dialog at the first request of the turn.
 
-**Offline and provider errors.** A failed request ends the turn as failed. Retries that the provider asks for (rate limits) happen inside the model request, before the failure is reported. See [provider errors and offline](../cross-cutting/provider-errors-and-offline.md).
+**Offline and provider errors.** A failed request ends the turn as failed. Pi never retries a failed request, including rate limits (429); the first failure ends the turn. See [provider errors and offline](../cross-cutting/provider-errors-and-offline.md).
 
 **Notifications.** The working indicator, the tab's busy dot, the queue strip and the error banner are the turn's notifications. There is no sound and no system notification when a turn finishes in a background tab.
 

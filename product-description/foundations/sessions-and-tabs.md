@@ -121,7 +121,7 @@ The user lands on the active tab with focus in the composer. Every tab is idle w
 | Modifier | Set before | Changed while busy |
 | --- | --- | --- |
 | Model and provider | A restored tab uses its session's saved model. A new tab inherits the active tab's model. With no provider connected, tabs still restore and open. | A tab's model cannot be changed while it is busy ("Wait for this tab to finish before changing models"). Other tabs are unaffected. |
-| Thinking level | A restored tab uses its saved level. A new tab starts at High or Off depending on the model. | Applies to that tab only, from its next model response. |
+| Thinking level | A restored tab uses its saved level. A new tab starts at High or Off depending on the model. | Applies to that tab only, from its next turn. |
 | Execution mode | Shared by all tabs. It does not affect restore. | A change applies to every tab's next mutation. |
 | Files in the workspace, or an overlay open | Files are shared by all tabs. No overlay can be open during restore. | No effect on tabs. |
 | Tab state (new, restored, another tab busy) | Described above. Another tab being busy never blocks creating, switching or restoring. | Each tab's busy state is its own. |

@@ -120,7 +120,7 @@ Restoring also empties Pi's own steer and follow-up queues, so nothing restored 
 | Modifier | Set before | Changed while busy |
 | --- | --- | --- |
 | Model and provider | Steers and follow-ups are answered by the tab's model. | Refused while busy. |
-| Thinking level | No effect on queuing. | A change applies from the next model response, so a steer delivered after the change is answered at the new level. |
+| Thinking level | No effect on queuing. | A change applies from the next turn, so a steer delivered in the running turn is still answered at the old level. |
 | Execution mode | No effect on queuing. In Confirm, a steer waits for the pending approval like any tool. | Applies from the next mutation. |
 | Files in the workspace, or an overlay open | No effect. An overlay holds focus, so Enter cannot steer until it closes. | No effect. |
 | Tab state (new, restored, another tab busy) | Queues are per tab. A restored tab starts with empty queues. Another tab being busy does not affect this tab's queue. | Switching tabs leaves this tab's items waiting; they are delivered in the background. The strip shows only the active tab's items. |

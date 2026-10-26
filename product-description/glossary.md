@@ -18,7 +18,7 @@ The vocabulary used across these documents. When a document uses one of these wo
 
 **Composer.** The chat input card at the bottom of the taskpane: a Files button, an auto-growing text area, and a send button that turns into a Stop button while the tab is busy. The code and the accessible name call it the chat input ("Chat message"). See [the composer](turn/the-composer.md).
 
-**Working indicator.** The line above the composer that appears while the active tab is busy: a rotating playful phrase on the left ("Working…" first) and a rotating hint on the right ("Press Esc to stop", "Press Enter to redirect Pi", …). During a queued action such as compaction it shows a fixed label instead ("Compacting context…").
+**Working indicator.** The line above the composer that appears while the active tab is busy: a rotating playful phrase on the left ("Working…" first) and a rotating hint on the right ("Press Esc to stop", "Press Enter to redirect Pi", …). During a queued action such as `/compact` or auto-compaction before a prompt it shows a fixed label instead ("Compacting context…"); auto-compaction between model responses keeps the rotating phrases.
 
 **Queue strip.** The list that appears just above the composer when the active tab has *steer*, *follow-up* or *queued* items waiting. Each row has a label ("Steer", "Follow up", "Queued", or a command such as "/compact") and the text, cut to 47 characters plus "…" when longer than 50; the last row says "↳ Press Alt+↑ to edit queued message" (⌥↑ on macOS).
 
@@ -92,7 +92,11 @@ The vocabulary used across these documents. When a document uses one of these wo
 
 **Tool card.** The block in the transcript that shows one tool call: a header with a humanized description of what the tool is doing (for example "Read Sheet1!A1:D20"), a spinner while it runs, and a body with the input and output that can be collapsed. Consecutive related cards may be grouped. See [tool calls](turn/tool-calls.md).
 
-**Thinking block.** The collapsible block that shows the model's reasoning, labeled "Thinking…" while it streams and "Thought for {duration}" afterwards. Only shown when the model and thinking level produce reasoning. See [thinking](turn/thinking.md).
+**Tool group.** A container wrapping two or more consecutive finished cards of the same tool within one model response, headed with a count ("3 reads", "4 edits"). A running or failed card breaks the group.
+
+**Details mode.** The taskpane-wide state Ctrl/Cmd+O toggles ("Details hidden (⌃O)" / "Details shown (⌃O)"): hidden collapses every tool card and thinking block on screen, shown expands them. It affects only what is on screen at that moment and is not saved.
+
+**Thinking block.** The collapsible block that shows the model's reasoning, labeled "Thinking…" while it streams and "Thought" afterwards (the code means to show "Thought for {duration}", but a live response never gets it). Only shown when the model and thinking level produce reasoning. See [thinking](turn/thinking.md).
 
 **Idle.** A tab is idle when it is not busy: no model response is streaming, no tool is running, and no queued action is running or waiting.
 
@@ -156,13 +160,19 @@ The vocabulary used across these documents. When a document uses one of these wo
 
 **Model.** The specific model a tab uses (for example "GPT-6.1 Sol"). Each tab has its own model, shown in the status bar. Changing it affects only the active tab.
 
-**Thinking level.** How much the model reasons before answering: Off, Min, Low, Medium, High, Extra high, Max, limited to the levels the model supports. Each tab has its own. Shift+Tab cycles it; a change applies from the next model request ("Thinking: {level} (next turn)").
+**Thinking level.** How much the model reasons before answering: Off, Min, Low, Medium, High, Extra high, Max, limited to the levels the model supports. Each tab has its own. Shift+Tab cycles it; a change applies from the next turn, never within the running one ("Thinking: {level} (next turn)").
 
 **Context window.** The amount of conversation the model can take in at once, in tokens.
 
 **Context meter.** The status-bar readout of how much of the context window the active tab's conversation uses, for example "1% / 500k". It warns as it fills ("Context {pct}% full.").
 
 **Compaction.** Replacing older messages in a session with a summary written by the model, to free context. Manual with `/compact`; automatic before a prompt or between model responses when the context is nearly full (auto-compaction), and once after a context overflow. A compaction summary appears in the transcript in place of the messages it replaced.
+
+**Compaction summary card.** The collapsed "Summarized {n} tokens" card that stands in for compacted messages; it expands to "Summary".
+
+**Archived history.** The collapsed "Show earlier messages" card at the top of a compacted session holding every message compacted away. Saved with the session, never sent to the model.
+
+**Auto-compaction thresholds.** For windows of 200k tokens or more, 85% of the window; 128k–199k, the smaller of 88% and the window minus 16,384; under 128k, the window minus the smaller of 16,384 and half the window. The tab needs at least 4 messages. Compaction keeps the most recent ~20,000 tokens unchanged.
 
 **CORS proxy.** A small local or organisation-hosted HTTPS server that relays requests the Office webview cannot make directly, needed for some OAuth logins and providers. Configured in Settings → Proxy. See [the proxy](setup/the-proxy.md).
 
@@ -181,6 +191,12 @@ The vocabulary used across these documents. When a document uses one of these wo
 **Proxy gate.** The dialog "One more step before login" shown before an OAuth login that needs the CORS proxy when none answers, with "Copy", "Retry" and "Cancel".
 
 **Custom gateway.** A user-added OpenAI-compatible endpoint. It becomes a provider named "Gateway · {name}" with exactly one model.
+
+**Add-in storage.** The browser storage of the add-in's web origin on this computer: the `pi-for-excel` IndexedDB database (sessions, settings, keys, backups), a few `localStorage` flags, and the private file area of the Files workspace. Every taskpane on the same host and browser profile shares it; Excel desktop and Excel on the web never share it. Clearing site data erases all of it. See [persistence and restore](cross-cutting/persistence-and-restore.md).
+
+**Save boundary.** The moment Pi decides the workbook was saved: Excel's unsaved-changes flag, polled every 4 s, goes from unsaved to saved, or reads saved the first time it is checked after the taskpane opens. Automatic backups for that workbook are cleared at a save boundary. On Excel on the web the flag always reads saved (confirmed).
+
+**Document token.** A random identifier Pi writes into a never-saved workbook (add-in setting `pi.workbookInstanceId`) before its first automatic backup, used to file backups until the workbook has a workbook identity.
 
 ## Input
 

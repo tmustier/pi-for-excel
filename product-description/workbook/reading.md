@@ -97,7 +97,7 @@ Nothing changed mid-read affects that read; it affects the next tool call.
 | The user sends something else | Not applicable. | A steer waits until the running reads finish. |
 | Tab switched, created, closed or reopened | Not applicable. | The read continues in its tab. Closing the tab asks "Stop and close this tab?" while it is responding. |
 | An overlay or menu opens | Not applicable. | The read continues. |
-| Model or thinking level changes | Not applicable. | Model change refused; thinking level applies to the next model response. |
+| Model or thinking level changes | Not applicable. | Model change refused; thinking level applies from the next turn. |
 | The provider fails | Not applicable. | The read itself does not use the provider and finishes; the turn may then fail. |
 | The taskpane goes away | Not applicable. | The read and its result are lost unless the session had already saved that message. |
 | The workbook changes underneath | Not applicable. | The read sees the grid as it is when it runs. An address without a sheet name reads from whichever sheet is active at that moment. |

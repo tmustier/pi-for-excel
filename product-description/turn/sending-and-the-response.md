@@ -107,7 +107,7 @@ If a queued prompt or command is waiting in the tab's action queue when the turn
 | Modifier | Set before | Changed while busy |
 | --- | --- | --- |
 | Model and provider | Used for every model response in the turn. With no credential, the connection dialog opens after the message is in the transcript. A small context window makes pre-prompt compaction likelier. | Refused: "Wait for this tab to finish before changing models". |
-| Thinking level | Applies to the turn's model responses; a reasoning model shows a thinking block before text. | Applies from the next model response ("Thinking: {level} (next turn)"). |
+| Thinking level | Applies to the turn's model responses; a reasoning model shows a thinking block before text. | Applies from the next turn ("Thinking: {level} (next turn)"). |
 | Execution mode | In Confirm, a mutation pauses the turn on an [approval](../workbook/confirm-mode-and-approvals.md); streaming stops until it is answered. | Applies from the next mutation. |
 | Files in the workspace, or an overlay open | Files are not sent with the message; Pi reads them with tools if it decides to. An open overlay holds focus, so the send comes after it closes. | Overlays opened during the turn do not pause it, except the connection dialog and approvals, which the turn waits on. |
 | Tab state (new, restored, another tab busy) | A new tab's first answer creates its saved session. A restored tab sends its whole history. Another tab being busy does not delay this one, except at the [workbook lock](../foundations/the-workbook.md). | Switching away does not pause the turn. On return, the transcript shows everything so far; the indicator restarts from "Working…" if the tab switched from was idle, and keeps its current phrase if it was responding too. |
@@ -123,7 +123,7 @@ Changes made while busy take effect at the next model response or mutation, neve
 | The user sends something else | A second Enter during pre-prompt compaction queues the new text behind the first. | Enter steers, Alt/Option+Enter follows up; see [steering and the queue](steering-and-the-queue.md). |
 | Tab switched, created, closed or reopened | Not applicable: the send starts at once. | The turn continues in the background; its dot stays. Closing it asks "Stop and close this tab?". The error banner of a background failure is never shown. |
 | An overlay or menu opens | Not applicable. | The turn continues behind it. The connection dialog and approval dialogs are overlays the turn waits for. |
-| Model or thinking level changes | Applies to this send. | Model refused; thinking level from the next model response. |
+| Model or thinking level changes | Applies to this send. | Model refused; thinking level from the next turn. |
 | The provider fails | Not applicable. | The turn fails: "Error:" in the answer, banner if active. A context overflow is compacted and retried once. |
 | The taskpane goes away | Not applicable. | Completed messages are saved; the answer that was streaming is lost. In a session Pi had never answered, nothing is saved. See [persistence and restore](../cross-cutting/persistence-and-restore.md). |
 | The workbook changes underneath | Edits made before Enter are picked up by auto-context. | Edits made during the turn are seen by the next request's auto-context, which runs before each model response. |

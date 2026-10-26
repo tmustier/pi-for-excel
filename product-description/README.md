@@ -217,12 +217,12 @@ Status is one of `not started`, `drafted`, or `verified`.
 | foundations/models-and-providers.md | drafted |
 | turn/the-composer.md | drafted |
 | turn/sending-and-the-response.md | drafted |
-| turn/tool-calls.md | not started |
+| turn/tool-calls.md | drafted |
 | turn/steering-and-the-queue.md | drafted |
 | turn/stopping.md | drafted |
-| turn/thinking.md | not started |
-| turn/context-and-compaction.md | not started |
-| turn/auto-context.md | not started |
+| turn/thinking.md | drafted |
+| turn/context-and-compaction.md | drafted |
+| turn/auto-context.md | drafted |
 | sessions/renaming-a-tab.md | drafted |
 | sessions/tabs.md | drafted |
 | sessions/reopening-closed-tabs.md | drafted |
@@ -252,10 +252,10 @@ Status is one of `not started`, `drafted`, or `verified`.
 | ui/keyboard-shortcuts.md | drafted |
 | ui/the-utilities-menu.md | drafted |
 | ui/language-and-theme.md | drafted |
-| cross-cutting/persistence-and-restore.md | not started |
-| cross-cutting/several-taskpanes.md | not started |
-| cross-cutting/provider-errors-and-offline.md | not started |
-| cross-cutting/host-differences.md | not started |
+| cross-cutting/persistence-and-restore.md | drafted |
+| cross-cutting/several-taskpanes.md | drafted |
+| cross-cutting/provider-errors-and-offline.md | drafted |
+| cross-cutting/host-differences.md | drafted |
 
 ## Reference
 
