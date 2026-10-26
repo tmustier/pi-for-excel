@@ -26,7 +26,14 @@ export class MessageList extends LitElement {
   @property({ type: Array }) messages: AgentMessage[] = [];
   @property({ type: Array }) tools: AgentTool[] = [];
   @property({ type: Object }) pendingToolCalls?: ReadonlySet<string>;
+  /** The turn is running: tool calls without a result are still to come. */
   @property({ type: Boolean }) isStreaming = false;
+  /**
+   * Results pi-agent-core reported at tool_execution_end. In a parallel batch
+   * each tool finishes on its own, but its toolResult message is only added
+   * once the whole batch is done; these let each card finish as it happens.
+   */
+  @property({ type: Object }) liveToolResults?: ReadonlyMap<string, ToolResultMessage>;
 
   protected override createRenderRoot(): HTMLElement | DocumentFragment {
     return this;
@@ -39,7 +46,7 @@ export class MessageList extends LitElement {
 
   private _buildRenderItems(): RenderItem[] {
     // Map tool results by call id for quick lookup.
-    const resultByCallId = new Map<string, ToolResultMessage>();
+    const resultByCallId = new Map<string, ToolResultMessage>(this.liveToolResults ?? []);
     for (const message of this.messages) {
       if (message.role === "toolResult") {
         resultByCallId.set(message.toolCallId, message);
@@ -79,7 +86,7 @@ export class MessageList extends LitElement {
               .pendingToolCalls=${this.pendingToolCalls}
               .toolResultsById=${resultByCallId}
               .hideToolCalls=${false}
-              .hidePendingToolCalls=${this.isStreaming}
+              .awaitingToolResults=${this.isStreaming}
             ></assistant-message>
           `,
         });

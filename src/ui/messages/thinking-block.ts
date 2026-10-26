@@ -8,19 +8,24 @@
  *   (CSS reorders them visually via flex `order`)
  * - expanded body rendered as a nested <markdown-block .isThinking>
  *
- * Owns the label lifecycle previously provided by the
- * src/compat/thinking-duration.ts MutationObserver patch:
- * - streaming → shimmering "Thinking…"
- * - finished after streaming here → "Thought for Xs" / "Xm Xs"
- * - restored history (never streamed in this element) → "Thought"
+ * Label lifecycle:
+ * - this block is the part of the response still streaming → "Thinking…"
+ * - finished, with its start and end observed by the sidebar in this
+ *   taskpane → "Thought for Xs" / "Xm Xs"
+ * - otherwise (restored history, reload mid-response) → "Thought"
+ *
+ * The duration and expanded state live in transcript-state.ts, keyed by
+ * message and content position, so they survive the element being replaced
+ * when the response moves from the streaming container into the list.
  */
 
-import { html, LitElement, type PropertyValues } from "lit";
-import { customElement, property, state } from "lit/decorators.js";
+import { html, LitElement } from "lit";
+import { customElement, property } from "lit/decorators.js";
 import { ChevronRight } from "lucide";
 
 import { icon } from "../icons.js";
 import { t } from "../../language/index.js";
+import { isDisclosureExpanded, setDisclosureExpanded, subscribeDisclosure } from "./transcript-state.js";
 import "./markdown-block.js";
 
 function formatThinkingDuration(elapsedMs: number): string {
@@ -39,63 +44,54 @@ function formatThinkingDuration(elapsedMs: number): string {
 export class ThinkingBlock extends LitElement {
   @property() content = "";
   @property({ type: Boolean }) isStreaming = false;
+  @property() disclosureKey = "";
+  @property({ type: Number }) durationMs: number | undefined;
 
-  @state() private _expanded = false;
-  @state() private _completedLabel: string | null = null;
-
-  private _startedAtMs: number | null = null;
+  private _unsubscribe: (() => void) | undefined;
 
   protected override createRenderRoot(): HTMLElement | DocumentFragment {
     return this;
   }
 
-  protected override willUpdate(changed: PropertyValues<this>): void {
-    super.willUpdate(changed);
-
-    if (this.isStreaming) {
-      if (this._startedAtMs === null) {
-        this._startedAtMs = Date.now();
-      }
-      this._completedLabel = null;
-      return;
-    }
-
-    if (this._completedLabel === null) {
-      this._completedLabel =
-        this._startedAtMs !== null
-          ? t("messages.thoughtFor", { duration: formatThinkingDuration(Date.now() - this._startedAtMs) })
-          : t("compat.thought");
-    }
-  }
-
   override connectedCallback(): void {
     super.connectedCallback();
     this.style.display = "block";
+    this._unsubscribe = subscribeDisclosure(() => this.requestUpdate());
   }
 
-  private _toggle(): void {
-    this._expanded = !this._expanded;
+  override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    this._unsubscribe?.();
+    this._unsubscribe = undefined;
   }
 
   override render() {
+    const expanded = isDisclosureExpanded(this.disclosureKey);
     const labelClass = this.isStreaming
       ? "pi-thinking-label pi-thinking-label--streaming"
       : "pi-thinking-label";
-    const chevronClass = this._expanded
+    const chevronClass = expanded
       ? "pi-thinking-chevron pi-thinking-chevron--open"
       : "pi-thinking-chevron";
 
     const label = this.isStreaming
       ? t("messages.thinking")
-      : this._completedLabel ?? t("compat.thought");
+      : this.durationMs !== undefined
+        ? t("messages.thoughtFor", { duration: formatThinkingDuration(this.durationMs) })
+        : t("compat.thought");
 
     return html`
       <div class="thinking-block">
-        <div class="thinking-header" @click=${this._toggle}>
+        <button
+          type="button"
+          class="thinking-header"
+          aria-expanded=${expanded ? "true" : "false"}
+          @click=${() => setDisclosureExpanded(this.disclosureKey, !expanded)}
+        >
           <span class=${chevronClass}>${icon(ChevronRight, "sm")}</span>
           <span class=${labelClass}>${label}</span>
-        </div>
-        ${this._expanded
+        </button>
+        ${expanded
           ? html`<markdown-block .content=${this.content} .isThinking=${true}></markdown-block>`
           : ""}
       </div>

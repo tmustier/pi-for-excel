@@ -55,6 +55,54 @@ export function renderToolCardHeader(state: ToolHeaderState, text: TemplateResul
   `;
 }
 
+export interface ToolCardDisclosure {
+  expanded: boolean;
+  toggle: () => void;
+}
+
+function renderChevron(expanded: boolean): TemplateResult {
+  return html`
+    <span class="pi-tool-card__chevron-up ${expanded ? "" : "hidden"}">
+      ${icon(ChevronUp, "sm")}
+    </span>
+    <span class="pi-tool-card__chevron-collapsed ${expanded ? "hidden" : ""}">
+      ${icon(ChevronsUpDown, "sm")}
+    </span>
+  `;
+}
+
+/**
+ * Header for a card whose expanded state lives in transcript state
+ * (tool calls): the caller re-renders with the new state after `toggle`.
+ */
+export function renderDisclosureToolCardHeader(
+  state: ToolHeaderState,
+  text: TemplateResult,
+  disclosure: ToolCardDisclosure,
+): TemplateResult {
+  return html`
+    <button
+      type="button"
+      class="pi-tool-card__toggle"
+      aria-expanded=${disclosure.expanded ? "true" : "false"}
+      @click=${(event: Event) => {
+        event.preventDefault();
+        disclosure.toggle();
+      }}
+    >
+      <span class="pi-tool-card__toggle-main">
+        ${renderStreamingSpinner(state)}
+        ${text}
+      </span>
+      <span class="pi-tool-card__toggle-chevron" aria-hidden="true">${renderChevron(disclosure.expanded)}</span>
+    </button>
+  `;
+}
+
+/**
+ * Header for a self-contained card (archive and summary cards) that toggles
+ * its body in place and does not follow details mode.
+ */
 export function renderCollapsibleToolCardHeader(
   state: ToolHeaderState,
   text: TemplateResult,
@@ -72,14 +120,7 @@ export function renderCollapsibleToolCardHeader(
         ${renderStreamingSpinner(state)}
         ${text}
       </span>
-      <span class="pi-tool-card__toggle-chevron" ${ref(chevronRef)} aria-hidden="true">
-        <span class="pi-tool-card__chevron-up ${defaultExpanded ? "" : "hidden"}">
-          ${icon(ChevronUp, "sm")}
-        </span>
-        <span class="pi-tool-card__chevron-collapsed ${defaultExpanded ? "hidden" : ""}">
-          ${icon(ChevronsUpDown, "sm")}
-        </span>
-      </span>
+      <span class="pi-tool-card__toggle-chevron" ${ref(chevronRef)} aria-hidden="true">${renderChevron(defaultExpanded)}</span>
     </button>
   `;
 }

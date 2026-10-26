@@ -1,34 +1,43 @@
 /**
  * Tool card grouping — wraps consecutive same-tool calls in a single
- * collapsible container. Groups of 3+ start collapsed; groups of 2 start
- * expanded (grouping with stripped card chrome only).
+ * collapsible container. Whether a group is open comes from
+ * transcript-state.ts: groups of 3+ start collapsed unless details are
+ * expanded (Ctrl/Cmd+O), and only a group the user toggles keeps its own
+ * state, keyed by its first call.
  */
+
+import { t } from "../language/index.js";
+import {
+  isToolGroupExpanded,
+  setDisclosureExpanded,
+  subscribeDisclosure,
+} from "./messages/transcript-state.js";
 
 /* ── Group header summary ──────────────────────────────── */
 
-/** Map tool-name → human-readable plural label for the group header. */
-const TOOL_GROUP_LABELS: Record<string, string> = {
-  fill_formula: "fill operations",
-  write_cells: "edits",
-  read_range: "reads",
-  format_cells: "format operations",
-  conditional_format: "conditional formats",
-  view_settings: "view changes",
-  charts: "chart operations",
-  execute_office_js: "script executions",
-  execute_wps_js: "script executions",
+/** Tool name → locale key for the group header ("3 reads"). */
+const TOOL_GROUP_LABEL_KEYS: Record<string, string> = {
+  fill_formula: "tool-group.fill_formula",
+  write_cells: "tool-group.write_cells",
+  read_range: "tool-group.read_range",
+  format_cells: "tool-group.format_cells",
+  conditional_format: "tool-group.conditional_format",
+  view_settings: "tool-group.view_settings",
+  charts: "tool-group.charts",
+  execute_office_js: "tool-group.script",
+  execute_wps_js: "tool-group.script",
 };
 
 function describeGroup(toolName: string, count: number): string {
-  const label = TOOL_GROUP_LABELS[toolName] ?? `${toolName} calls`;
-  return `${count} ${label}`;
+  const key = TOOL_GROUP_LABEL_KEYS[toolName];
+  return key ? t(key, { count }) : t("tool-group.other", { count, tool: toolName });
 }
 
-function buildGroupHeader(toolName: string, count: number, collapsed: boolean): HTMLButtonElement {
+function buildGroupHeader(toolName: string, count: number, groupKey: string, expanded: boolean): HTMLButtonElement {
   const btn = document.createElement("button");
   btn.type = "button";
   btn.className = "pi-tool-group__header";
-  btn.setAttribute("aria-expanded", collapsed ? "false" : "true");
+  btn.setAttribute("aria-expanded", expanded ? "true" : "false");
 
   const chevron = document.createElement("span");
   chevron.className = "pi-tool-group__chevron";
@@ -40,20 +49,11 @@ function buildGroupHeader(toolName: string, count: number, collapsed: boolean): 
 
   btn.append(chevron, label);
 
-  btn.addEventListener("click", () => {
-    const wrapper = btn.parentElement;
-    if (!wrapper) return;
-    const isCollapsed = wrapper.classList.toggle("pi-tool-group--collapsed");
-    btn.setAttribute("aria-expanded", isCollapsed ? "false" : "true");
-  });
+  // Regrouping rebuilds the header from transcript state.
+  btn.addEventListener("click", () => setDisclosureExpanded(groupKey, !expanded));
 
   return btn;
 }
-
-/* ── Collapse threshold ──────────────────────────────────── */
-
-/** Groups with this many or more items start collapsed. */
-const COLLAPSE_THRESHOLD = 3;
 
 /* ── Main entry point ──────────────────────────────────── */
 
@@ -65,29 +65,12 @@ const COLLAPSE_THRESHOLD = 3;
 export function initToolGrouping(root: HTMLElement): () => void {
   let rafId = 0;
 
-  /**
-   * Preserve user toggle state across regrouping passes. Keyed on the
-   * first tool-message element of each group — if the user explicitly
-   * expanded or collapsed a group, we restore that state when the group
-   * is rebuilt rather than using the default.
-   */
-  const userToggleState = new WeakMap<Element, boolean>();
-
   /* ── Unwrap existing groups ────────────────────────────── */
 
   function unwrapAll() {
     for (const wrapper of root.querySelectorAll(".pi-tool-group")) {
       const parent = wrapper.parentNode;
       if (!parent) continue;
-
-      // Snapshot user toggle state before unwrapping.
-      const firstMessage = wrapper.querySelector("tool-message");
-      if (firstMessage) {
-        userToggleState.set(
-          firstMessage,
-          wrapper.classList.contains("pi-tool-group--collapsed"),
-        );
-      }
 
       // Remove injected header before unwrapping.
       wrapper.querySelector(".pi-tool-group__header")?.remove();
@@ -171,15 +154,14 @@ export function initToolGrouping(root: HTMLElement): () => void {
       const members = run.elements.slice(1);
       const count = run.elements.length;
 
-      // Restore user toggle state if available, otherwise use default.
-      const savedState = userToggleState.get(leader);
-      const collapsed = savedState ?? count >= COLLAPSE_THRESHOLD;
+      const groupKey = leader.getAttribute("data-group-key") ?? "";
+      const expanded = isToolGroupExpanded(groupKey, count);
 
       const wrapper = document.createElement("div");
-      wrapper.className = "pi-tool-group" + (collapsed ? " pi-tool-group--collapsed" : "");
+      wrapper.className = "pi-tool-group" + (expanded ? "" : " pi-tool-group--collapsed");
 
       // Inject group header with summary + expand/collapse toggle.
-      const header = buildGroupHeader(run.toolName, count, collapsed);
+      const header = buildGroupHeader(run.toolName, count, groupKey, expanded);
       wrapper.appendChild(header);
 
       if (leader.parentNode) leader.parentNode.insertBefore(wrapper, leader);
@@ -222,6 +204,7 @@ export function initToolGrouping(root: HTMLElement): () => void {
 
   const observer = new MutationObserver(scheduleGrouping);
   observer.observe(root, { childList: true, subtree: true });
+  const unsubscribeDisclosure = subscribeDisclosure(scheduleGrouping);
 
   // Initial pass.
   applyGrouping();
@@ -230,6 +213,7 @@ export function initToolGrouping(root: HTMLElement): () => void {
 
   return () => {
     observer.disconnect();
+    unsubscribeDisclosure();
     if (rafId) cancelAnimationFrame(rafId);
 
     unwrapAll();

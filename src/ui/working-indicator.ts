@@ -12,6 +12,7 @@ import { html, LitElement } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { pickWhimsicalMessage } from "./whimsical-messages.js";
 import { t } from "../language/index.js";
+import { formatDetailsShortcut } from "./messages/transcript-state.js";
 
 // Locale keys — resolved lazily via t() so the active language (set at boot,
 // after module import) is respected. Do NOT call t() at module scope.
@@ -126,7 +127,7 @@ export class WorkingIndicator extends LitElement {
     if (!this.active) return html``;
 
     const left = this.primaryText || this._whimsical;
-    const right = this.hintText || t(getHintKey(this._hintIndex));
+    const right = this.hintText || t(getHintKey(this._hintIndex), { shortcut: formatDetailsShortcut() });
 
     const fixed = Boolean(this.primaryText || this.hintText);
 

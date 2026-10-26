@@ -10,8 +10,8 @@ import { registerToolRenderer } from "./messages/tool-renderer-registry.js";
 import type { ToolRenderer, ToolRenderResult } from "./messages/tool-renderer-registry.js";
 import { t } from "../language/index.js";
 import { html, type TemplateResult } from "lit";
-import { createRef, ref } from "lit/directives/ref.js";
-import { renderCollapsibleToolCardHeader, renderToolCardHeader } from "./tool-card-header.js";
+import { ref } from "lit/directives/ref.js";
+import { renderDisclosureToolCardHeader, renderToolCardHeader, type ToolCardDisclosure } from "./tool-card-header.js";
 import { cellRef, cellRefDisplay, cellRefs } from "./cell-link.js";
 import { humanizeToolInput } from "./humanize-params.js";
 import { humanizeColorsInText } from "./color-names.js";
@@ -210,7 +210,7 @@ function renderImages(images: ImageContent[]): TemplateResult {
         const src = `data:${img.mimeType};base64,${img.data}`;
         return html`
           <div class="pi-tool-image-frame">
-            <img src=${src} alt="Tool result image" class="pi-tool-image" />
+            <img src=${src} alt=${t("tool-card.imageAlt")} class="pi-tool-image" />
           </div>
         `;
       })}
@@ -241,14 +241,14 @@ function renderWorkbookCellDiff(details: ToolDetails): TemplateResult {
 
   return html`
     <div class="pi-tool-card__section">
-      <div class="pi-tool-card__section-label">Changes (${changes.changedCount})</div>
+      <div class="pi-tool-card__section-label">${t("tool-card.changes", { count: changes.changedCount })}</div>
       <div class="pi-tool-card__diff">
         <table class="pi-tool-card__diff-table">
           <thead>
             <tr>
-              <th>Cell</th>
-              <th>Before</th>
-              <th>After</th>
+              <th>${t("tool-card.diff.cell")}</th>
+              <th>${t("tool-card.diff.before")}</th>
+              <th>${t("tool-card.diff.after")}</th>
             </tr>
           </thead>
           <tbody>
@@ -272,7 +272,7 @@ function renderWorkbookCellDiff(details: ToolDetails): TemplateResult {
           </tbody>
         </table>
         ${changes.truncated
-          ? html`<div class="pi-tool-card__diff-note">Showing first ${changes.sample.length} changed cell(s).</div>`
+          ? html`<div class="pi-tool-card__diff-note">${t("tool-card.diff.sample", { count: changes.sample.length })}</div>`
           : html``}
       </div>
     </div>
@@ -303,11 +303,11 @@ function renderExplainFormulaDetails(details: ToolDetails): TemplateResult | nul
     <div class="pi-formula-explain">
       <div class="pi-tool-card__plain-text">${details.explanation}</div>
       <div class="pi-formula-explain__formula">
-        <span class="pi-formula-explain__label">Formula:</span>
+        <span class="pi-formula-explain__label">${t("tool-card.formula.label")}</span>
         <code>${details.formula}</code>
       </div>
       <div class="pi-formula-explain__refs">
-        <div class="pi-formula-explain__label">Direct references (${details.references.length})</div>
+        <div class="pi-formula-explain__label">${t("tool-card.formula.references", { count: details.references.length })}</div>
         <ul class="pi-formula-explain__list">
           ${details.references.length > 0
             ? details.references.map((reference) => html`
@@ -316,11 +316,11 @@ function renderExplainFormulaDetails(details: ToolDetails): TemplateResult | nul
                 ${reference.valuePreview ? html`<span class="pi-formula-explain__preview"> → ${reference.valuePreview}</span>` : html``}
               </li>
             `)
-            : html`<li>(No direct references detected)</li>`}
+            : html`<li>${t("tool-card.formula.noReferences")}</li>`}
         </ul>
       </div>
       ${details.truncated
-        ? html`<div class="pi-tool-card__diff-note">Showing the first ${details.references.length} reference(s).</div>`
+        ? html`<div class="pi-tool-card__diff-note">${t("tool-card.formula.sample", { count: details.references.length })}</div>`
         : html``}
     </div>
   `;
@@ -514,7 +514,7 @@ function buildChangeExplanationInputForTool(
 
 function renderCitations(citations: readonly string[]): TemplateResult {
   if (citations.length === 0) {
-    return html`<span class="pi-tool-card__explain-citations-empty">No range citations available.</span>`;
+    return html`<span class="pi-tool-card__explain-citations-empty">${t("tool-card.explain.noCitations")}</span>`;
   }
 
   return html`${citations.map((address, index) => html`${index > 0 ? html`, ` : html``}${cellRefs(address)}`)}`;
@@ -534,18 +534,18 @@ function renderChangeExplanationSection(
   return html`
     <div class="pi-tool-card__section">
       <details class="pi-tool-card__explain">
-        <summary class="pi-tool-card__explain-toggle">Explain these changes</summary>
+        <summary class="pi-tool-card__explain-toggle">${t("tool-card.explain.toggle")}</summary>
         <div class="pi-tool-card__explain-body">
           <div class="pi-tool-card__plain-text">${explanation.text}</div>
           <div class="pi-tool-card__explain-citations">
-            <span class="pi-tool-card__explain-citations-label">Citations:</span>
+            <span class="pi-tool-card__explain-citations-label">${t("tool-card.explain.citations")}</span>
             ${renderCitations(explanation.citations)}
           </div>
           ${explanation.usedFallback
-            ? html`<div class="pi-tool-card__diff-note">Limited metadata available; explanation is high-level.</div>`
+            ? html`<div class="pi-tool-card__diff-note">${t("tool-card.explain.fallback")}</div>`
             : html``}
           ${explanation.truncated
-            ? html`<div class="pi-tool-card__diff-note">Explanation uses a bounded metadata sample.</div>`
+            ? html`<div class="pi-tool-card__diff-note">${t("tool-card.explain.truncated")}</div>`
             : html``}
         </div>
       </details>
@@ -1068,7 +1068,8 @@ function createExcelMarkdownRenderer(toolName: SupportedToolName): ToolRenderer 
     render(
       params: unknown,
       result: ToolResultMessage | undefined,
-      isStreaming?: boolean,
+      isStreaming: boolean,
+      disclosure: ToolCardDisclosure,
     ): ToolRenderResult {
       const state: ToolState = result
         ? (result.isError ? "error" : "complete")
@@ -1077,11 +1078,9 @@ function createExcelMarkdownRenderer(toolName: SupportedToolName): ToolRenderer 
           : "complete";
 
       const paramsJson = formatParamsJson(params);
-      const contentRef = createRef<HTMLDivElement>();
-      const chevronRef = createRef<HTMLElement>();
-
-      // Always start collapsed — the description tells the user what happened
-      const defaultExpanded = false;
+      const bodyClass = disclosure.expanded
+        ? "pi-tool-card__body"
+        : "pi-tool-card__body pi-tool-card__body--collapsed";
 
       const resultText = result ? splitToolResultContent(result).text : undefined;
       // `details` is unknown at this seam: older persisted sessions may carry any shape.
@@ -1113,9 +1112,9 @@ function createExcelMarkdownRenderer(toolName: SupportedToolName): ToolRenderer 
           : null;
         const depSectionLabel = traceDetails
           ? traceDetails.mode === "dependents"
-            ? "Dependents"
-            : "Precedents"
-          : "Dependencies";
+            ? t("tool-card.section.dependents")
+            : t("tool-card.section.precedents")
+          : t("tool-card.section.dependencies");
         const formulaExplanation = renderExplainFormulaDetails(details);
 
         // Search setup card: show inline guided setup when web_search fails
@@ -1138,23 +1137,21 @@ function createExcelMarkdownRenderer(toolName: SupportedToolName): ToolRenderer 
           content: html`
             <div class="pi-tool-card" data-state=${state} data-tool-name=${toolName}>
               <div class="pi-tool-card__header">
-                ${renderCollapsibleToolCardHeader(state, title, contentRef, chevronRef, defaultExpanded)}
+                ${renderDisclosureToolCardHeader(state, title, disclosure)}
               </div>
-              <div ${ref(contentRef)}
-                class="pi-tool-card__body pi-tool-card__body--collapsed"
-              >
+              <div class=${bodyClass}>
                 <div class="pi-tool-card__inner">
                   <div class="pi-tool-card__detail">
                     <span class="pi-tool-card__tool-id">${toolName}</span>
                   </div>
                   ${paramsJson ? html`
                     <div class="pi-tool-card__section">
-                      <div class="pi-tool-card__section-label">Input</div>
+                      <div class="pi-tool-card__section-label">${t("messages.toolInput")}</div>
                       ${humanizeToolInput(toolName, params) ?? html`<code-block .code=${paramsJson} language="json"></code-block>`}
                     </div>
                   ` : ""}
                   <div class="pi-tool-card__section">
-                    <div class="pi-tool-card__section-label">${formulaExplanation !== null ? "Formula explanation" : depTree !== null ? depSectionLabel : csvTable !== null ? "Data" : "Result"}</div>
+                    <div class="pi-tool-card__section-label">${formulaExplanation !== null ? t("tool-card.section.formulaExplanation") : depTree !== null ? depSectionLabel : csvTable !== null ? t("tool-card.section.data") : t("tool-card.section.result")}</div>
                     ${formulaExplanation !== null
                       ? formulaExplanation
                       : csvTable !== null
@@ -1162,11 +1159,11 @@ function createExcelMarkdownRenderer(toolName: SupportedToolName): ToolRenderer 
                       : depTree !== null
                       ? depTree
                       : isEchoResult(toolName, text)
-                      ? html`<div class="pi-tool-card__plain-text pi-tool-card__echo-result">✓ Done</div>`
+                      ? html`<div class="pi-tool-card__plain-text pi-tool-card__echo-result">${t("tool-card.done")}</div>`
                       : standaloneImagePath
                       ? html`
                         <div class="pi-tool-image-link">
-                          <div>Image:
+                          <div>${t("tool-card.image")}
                             <a href=${toFileUrl(standaloneImagePath)} target="_blank"
                               rel="noopener noreferrer" class="pi-tool-image-link__anchor">
                               ${pathBasename(standaloneImagePath)}
@@ -1180,8 +1177,8 @@ function createExcelMarkdownRenderer(toolName: SupportedToolName): ToolRenderer 
                       : json.isJson
                         ? html`<code-block .code=${json.formatted} language="json"></code-block>`
                         : useMarkdown
-                          ? html`<div class="pi-tool-card__markdown"><markdown-block .content=${humanizedText || "(no output)"}></markdown-block></div>`
-                          : html`<div class="pi-tool-card__plain-text">${humanizedText || "(no output)"}</div>`}
+                          ? html`<div class="pi-tool-card__markdown"><markdown-block .content=${humanizedText || t("messages.noOutput")}></markdown-block></div>`
+                          : html`<div class="pi-tool-card__plain-text">${humanizedText || t("messages.noOutput")}</div>`}
                     ${renderImages(images)}
                     ${renderChartImageDetails(details, images.length > 0)}
                   </div>
@@ -1203,17 +1200,15 @@ function createExcelMarkdownRenderer(toolName: SupportedToolName): ToolRenderer 
           content: html`
             <div class="pi-tool-card" data-state=${state} data-tool-name=${toolName}>
               <div class="pi-tool-card__header">
-                ${renderCollapsibleToolCardHeader(state, title, contentRef, chevronRef, defaultExpanded)}
+                ${renderDisclosureToolCardHeader(state, title, disclosure)}
               </div>
-              <div ${ref(contentRef)}
-                class="pi-tool-card__body pi-tool-card__body--collapsed"
-              >
+              <div class=${bodyClass}>
                 <div class="pi-tool-card__inner">
                   <div class="pi-tool-card__detail">
                     <span class="pi-tool-card__tool-id">${toolName}</span>
                   </div>
                   <div class="pi-tool-card__section">
-                    <div class="pi-tool-card__section-label">Input</div>
+                    <div class="pi-tool-card__section-label">${t("messages.toolInput")}</div>
                     ${humanizeToolInput(toolName, params) ?? html`<code-block .code=${paramsJson} language="json"></code-block>`}
                   </div>
                 </div>
