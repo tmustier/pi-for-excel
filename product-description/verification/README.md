@@ -52,7 +52,7 @@ First pass: 26 October 2026, Excel on the web in Amp orbs (Chrome over the DevTo
 | File | Items | Pass | Fail | Blocked | Not run |
 | --- | --- | --- | --- | --- | --- |
 | foundations-and-turn.md | 147 | 106 | 9 | 10 | 22 |
-| sessions-and-commands.md | 128 | 114 | 11 | 3 | 0 |
+| sessions-and-commands.md | 129 | 116 | 11 | 2 | 0 |
 | workbook.md | 112 | 71 | 16 | 9 | 16 |
 | setup.md | 131 | 99 | 6 | 26 | 0 |
 | guidance-files-extensions.md | 149 | 118 | 9 | 22 | 0 |
