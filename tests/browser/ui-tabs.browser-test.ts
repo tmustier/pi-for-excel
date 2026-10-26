@@ -27,6 +27,13 @@ async function withTaskpane(run: (page: Page) => Promise<void>): Promise<void> {
   }
 }
 
+async function renameInDialog(page: Page, title: string): Promise<void> {
+  const dialog = page.locator("#pi-text-input-dialog-overlay");
+  await dialog.locator("input").fill(title);
+  await dialog.getByRole("button", { name: "Rename" }).click();
+  await dialog.waitFor({ state: "detached" });
+}
+
 void test("renamed and closed tabs restore with the active tab after reload", async () => {
   await withTaskpane(async (page) => {
     const newTab = page.getByRole("button", { name: "New tab" });
@@ -36,8 +43,8 @@ void test("renamed and closed tabs restore with the active tab after reload", as
     await newTab.click();
     await tabs.filter({ hasText: "Chat 3" }).waitFor({ state: "visible" });
 
-    page.once("dialog", (dialog) => dialog.accept("Revenue Model"));
     await tabs.filter({ hasText: "Chat 2" }).locator(".pi-session-tab__main").dblclick();
+    await renameInDialog(page, "Revenue Model");
     await tabs.filter({ hasText: "Revenue Model" }).waitFor({ state: "visible" });
 
     await tabs.filter({ hasText: "Revenue Model" }).getByRole("button", { name: "Close tab" }).click();
@@ -97,8 +104,8 @@ void test("visible tab titles follow default numbering and explicit renames", as
       if (row.action === "new") {
         await page.getByRole("button", { name: "New tab" }).click();
       } else if (row.action === "rename") {
-        page.once("dialog", (dialog) => dialog.accept("  Forecast  "));
         await page.locator(".pi-session-tab.is-active .pi-session-tab__main").dblclick();
+        await renameInDialog(page, "  Forecast  ");
       }
 
       await page.locator(".pi-session-tab.is-active .pi-session-tab__title").filter({ hasText: row.expected }).waitFor({ state: "visible" });

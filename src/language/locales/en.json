@@ -576,6 +576,8 @@
   "init.noRecentlyClosedTab": "No recently closed tab",
   "init.noTabsWereClosed": "No tabs were closed",
   "init.openedInNewTab": "Opened {title} in a new tab",
+  "init.renameTab.confirm": "Rename",
+  "init.renameTab.title": "Rename tab",
   "init.renamedTo": "Renamed to {title}",
   "init.reopened": "Reopened: {title}",
   "init.revertFailed": "Revert failed: {message}",
