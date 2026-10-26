@@ -37,6 +37,11 @@ export interface ModelSelectorDialogOptions {
   models: Models;
   currentModel: Model<Api> | null;
   onSelect: (model: Model<Api>) => void;
+  /**
+   * When set, the list can be browsed but not picked from, and this text says why
+   * (the tab is busy). Picking only to be refused afterwards would lose the choice.
+   */
+  disabledReason?: string;
 }
 
 function formatTokenCount(count: number): string {
@@ -138,6 +143,7 @@ export function openModelSelectorDialog(options: ModelSelectorDialogOptions): vo
   };
 
   const select = (item: ModelSelectorItem): void => {
+    if (options.disabledReason) return;
     dialog.close();
     options.onSelect(item.model);
   };
@@ -167,6 +173,7 @@ export function openModelSelectorDialog(options: ModelSelectorDialogOptions): vo
       row.classList.toggle("pi-model-selector-item--selected", index === selectedIndex);
       row.setAttribute("role", "option");
       row.setAttribute("aria-selected", index === selectedIndex ? "true" : "false");
+      if (options.disabledReason) row.setAttribute("aria-disabled", "true");
 
       const topRow = document.createElement("span");
       topRow.className = "pi-model-selector-item-top";
@@ -248,7 +255,15 @@ export function openModelSelectorDialog(options: ModelSelectorDialogOptions): vo
     }
   });
 
-  dialog.card.append(header, searchInput, list);
+  dialog.card.append(header, searchInput);
+  if (options.disabledReason) {
+    const notice = document.createElement("p");
+    notice.className = "pi-overlay-hint pi-model-selector-notice";
+    notice.setAttribute("role", "status");
+    notice.textContent = options.disabledReason;
+    dialog.card.append(notice);
+  }
+  dialog.card.append(list);
   const handleModelsChanged = (): void => {
     if (!dialog.overlay.isConnected) return;
     allItems = collectModelItems(options.models);

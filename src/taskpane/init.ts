@@ -18,7 +18,6 @@ import type { SessionData } from "../storage/local/types.js";
 import { createOfficeStreamFn } from "../auth/stream-proxy.js";
 import {
   DEFAULT_PROXY_URL,
-  isLoopbackProxyUrl,
   validateOfficeProxyUrl,
 } from "../auth/proxy-validation.js";
 import { restoreCredentials } from "../auth/restore.js";
@@ -1898,12 +1897,6 @@ export async function initTaskpane(opts: {
       return;
     }
 
-    // Same rule from every entry point (/model, status bar): a busy tab keeps its model.
-    if (isRuntimeBusy(activeRuntime)) {
-      showToast(t("init.waitBeforeChangingModels"));
-      return;
-    }
-
     const targetRuntimeId = activeRuntime.runtimeId;
 
     void (async () => {
@@ -1921,6 +1914,9 @@ export async function initTaskpane(opts: {
       openModelSelectorDialog({
         models: modelRuntime.models,
         currentModel,
+        // Same rule from every entry point (/model, status bar): a busy tab keeps
+        // its model, so the list says so up front instead of refusing a pick.
+        ...(isRuntimeBusy(activeRuntime) ? { disabledReason: t("modelSelector.busy") } : {}),
         onSelect: (model) => {
           void applyModelSelection(targetRuntimeId, model);
         },

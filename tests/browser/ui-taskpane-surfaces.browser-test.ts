@@ -60,6 +60,55 @@ void test("renaming a tab confirms the entered visible title, even where window.
   });
 });
 
+void test("a busy tab's model picker lists models but cannot pick one, and keeps the model", async () => {
+  await withTaskpane(async (page) => {
+    // A connected provider, so the picker has models to list.
+    await page.evaluate(async () => {
+      // Resolves from the page (/src/taskpane.html) to the module the app itself loaded.
+      const storage = await import("../../src/storage/local/app-storage.ts");
+      await storage.getAppStorage().providerKeys.set("openai", "sk-test");
+    });
+    await page.reload();
+    await page.locator("pi-input textarea").waitFor({ state: "visible", timeout: 20_000 });
+    const modelBefore = await page.evaluate(() => {
+      const sidebar = document.querySelector("pi-sidebar");
+      if (!sidebar || !("agent" in sidebar)) throw new Error("sidebar missing");
+      // The sidebar's agent is the active tab's Agent: a stream that never answers keeps the turn running.
+      const agent = sidebar.agent as {
+        state: { model: { id: string } };
+        getApiKey: () => Promise<string>;
+        streamFunction: () => Promise<never>;
+      };
+      agent.getApiKey = () => Promise.resolve("test-key");
+      agent.streamFunction = () => new Promise<never>(() => {});
+      return agent.state.model.id;
+    });
+    const welcome = page.locator("#pi-welcome-login-overlay");
+    if (await welcome.count()) {
+      await welcome.dispatchEvent("click");
+      await welcome.waitFor({ state: "detached" });
+    }
+    await enterCommand(page, "Keep working");
+    await page.locator(".pi-input-btn--abort").waitFor({ state: "visible" });
+
+    await enterCommand(page, "/model");
+    const picker = page.locator("#pi-model-selector-overlay");
+    await picker.getByRole("status").filter({ hasText: "Pi is working in this tab" }).waitFor({ state: "visible" });
+    const rows = picker.locator(".pi-model-selector-item");
+    await rows.nth(1).waitFor({ state: "visible" });
+    assert.equal(await picker.locator(".pi-model-selector-item:not([aria-disabled=true])").count(), 0);
+
+    // force: Playwright will not click an aria-disabled row; the test proves clicking it does nothing.
+    await rows.nth(1).click({ force: true });
+    await page.keyboard.press("Enter");
+    assert.equal(await picker.isVisible(), true);
+    assert.equal(await page.evaluate(() => {
+      const sidebar = document.querySelector("pi-sidebar");
+      return sidebar && "agent" in sidebar ? (sidebar.agent as { state: { model: { id: string } } }).state.model.id : null;
+    }), modelBefore);
+  });
+});
+
 void test("the Files detail view exposes writable actions", async () => {
   await withTaskpane(async (page) => {
     await page.evaluate(`
