@@ -32,7 +32,7 @@ stateDiagram-v2
 
 How Settings opens decides where the user lands and what Back does:
 
-- **The utilities menu "Settings"** and **`/settings`** open the root page. If Settings is already open, either one closes it instead, although with Settings covering the header and holding focus the user cannot normally reach either.
+- **The utilities menu "Settings"** and **`/settings`** open the root page. If Settings is already open, either one closes it instead. The header is covered, but F2 still puts focus in the composer behind Settings, and `/settings` typed there closes Settings; `/login` typed there switches it to "Model providers".
 - **A command or menu item for one page** opens that page with the root page underneath, so Back always leads to the root page rather than closing. `/login` opens "Model providers"; `/rules` and "Rules" open "Rules"; `/history` and "Backups" open "Backups"; `/extensions` and `/tools` open "Connections", `/plugins` "Plugins", `/skills` "Skills"; `/shortcuts` and "Keyboard shortcuts" open "Keyboard shortcuts"; `/experimental` with no arguments opens "Experimental features". If Settings is already open on another page, it switches to the requested page; if it is already on that page, nothing happens.
 - **The welcome overlay's** "Use a custom OpenAI-compatible gateway" opens the gateway page, and the [disclosure bar's](../glossary.md#the-taskpane) "Change anytime in Settings" dismisses the bar and opens the root page.
 
@@ -116,7 +116,7 @@ A change made in Settings applies to every tab at its next boundary; nothing in 
 | Event | Before sent | While busy |
 | --- | --- | --- |
 | Stop (button or Escape) | Escape goes back one page, or closes on the root page. | Escape belongs to Settings while it is open; a running turn can only be stopped after Settings closes. |
-| The user sends something else | The composer is covered. A slash command cannot be typed while Settings is open. | Same. |
+| The user sends something else | The composer is covered, but F2 reaches it: a message or slash command typed there is sent while Settings stays open (`/settings` closes it). | Same. |
 | Tab switched, created, closed or reopened | The tab strip is covered. Settings content does not change with the active tab, except workbook-scoped pages. | Same. |
 | An overlay or menu opens | Confirmations and login prompts open on top; closing them returns to the page. Opening the model picker from a command is not possible while Settings covers the composer. | Same; an approval dialog from a running turn opens on top. |
 | Model or thinking level changes | Not possible from Settings. | Not applicable. |
@@ -155,7 +155,7 @@ After closing Settings the user is in the composer of the tab that was active wh
 ## Edge cases
 
 - Opening Settings with `/rules` and saving lands on the root page, not back in the chat.
-- `/settings` while Settings is open on any page would close it, after the Rules page's unsaved-edits check; in practice the composer cannot be reached while Settings is open.
+- `/settings` while Settings is open on any page closes it, after the Rules page's unsaved-edits check. The composer is reachable for this only through F2, which moves focus out of the modal Settings dialog.
 - The "Model providers" count includes OAuth and API-key providers but not gateways; a user with only a gateway sees "Not set up".
 - The value previews on the root page are read when the root page opens and are not refreshed until it is shown again.
 - Changing the language reloads the taskpane, which ends any running turn the same way closing the taskpane does.
@@ -166,8 +166,9 @@ After closing Settings the user is in the composer of the tab that was active wh
 - The utilities menu opens Settings while the tab is busy, but `/settings` and `/login` are refused ("Can't run /settings while Pi is busy", "Can't run /login while Pi is busy"): both confirmed in Excel on the web (SETTINGS-04, SETTINGS-05). Probably unintentional inconsistency (`src/commands/busy-command-policy.ts`).
 - Only the Rules page guards unsaved edits (`ctx.setBeforeLeave` is used only in `src/commands/builtins/settings-pages/rules-page.ts:1014`). A half-typed gateway is lost silently (confirmed). Probably worth a guard.
 - The "Proxy" page has no subtitle under its title, unlike "Model providers" and the gateway page.
-- `/settings` or the utilities menu while Settings is open could not be tried: Settings covers the composer and the header, so neither is reachable with the pointer, and Settings keeps focus.
-- Changing the language while a turn runs reloads the taskpane and loses the streaming response. Read from code; not run, because a reload of the Excel session repeats credential restore.
+- F2 moves focus from Settings to the composer behind it, where typing works: `/settings` closed Settings and `/login` switched it to "Model providers" (SETTINGS-14). A modal dialog that lets focus out may be worth treating as a bug.
+- Confirmed in Excel on the web: "Auto mode" toggling with "Confirm mode." / "Auto mode." and the status bar following (SETTINGS-11), and saving Rules showing "Rules saved" and landing on the root page (SETTINGS-15).
+- Choosing "中文（简体）· AI 翻译" showed the toast in the new language ("语言已更改，正在重新加载…") and reloaded the taskpane 1.0 s later (SETTINGS-12). Changing the language while a turn runs loses the streaming response; read from code, not run.
 - Pages that depend on the workbook were not checked against a real workbook in this pass.
 
 Verified against pi-for-excel commit `ec453df`.
