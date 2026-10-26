@@ -56,13 +56,13 @@ The picker closes, or never opens, without changing anything when:
 
 - **The command is refused.** `/model` and `/default-models` are not allowed while the tab is busy: "Can't run /model while Pi is busy" (see [the command menu](../commands/the-command-menu.md)). With no active tab, "No active session".
 - **The user closes it.** Escape inside the search field first leaves the field; a second Escape closes the picker. The × button ("Close dialog") and a click on the dimmed backdrop close it at once.
-- **The user chooses the current model.** The picker closes and nothing happens, not even a toast. If the provider has since described that model differently (a new context window, for example), the new description is applied and saved.
+- **The user chooses the current model.** The picker closes and nothing happens, not even a toast (confirmed in Excel on the web). If the provider has since described that model differently (a new context window, for example), the new description is applied and saved.
 
 In every case focus returns to the composer.
 
 ### Choosing a model
 
-Click a row, or move the highlight with Up and Down (it stops at both ends) and press Enter. The highlight follows the mouse only after the mouse actually moves, so arrowing through a long list is not disturbed by a pointer resting over it. Choosing closes the picker immediately; then one of three things happens to the target tab:
+Click a row, or move the highlight with Up and Down (it stops at both ends) and press Enter. Once the user has pressed Up or Down, the highlight follows the mouse again only after the mouse actually moves, so arrowing through a long list is not disturbed by a pointer resting over it. Before any arrow key, though, the highlight is in mouse mode: a pointer resting over the list when the picker opens highlights the row under it, and Enter chooses that row rather than the current model (see [Open questions](#open-questions-and-verification)). Choosing closes the picker immediately; then one of three things happens to the target tab:
 
 - **The tab is busy.** The toast says "Wait for this tab to finish before changing models" and the model does not change. The user has to wait for the turn to end and open the picker again.
 - **In place** (the default). The tab switches to the chosen model, the status bar shows its name, and the session is saved, even if the tab has no messages yet. The conversation and thinking level are kept.
@@ -143,15 +143,17 @@ After closing the picker the user is in the composer of the tab they started fro
 - Seen in the standalone taskpane: when the tab's model was swapped by a provider refresh at the same moment the picker opened, no row had the check mark, and the status bar's context size changed from "272k" to "500k" behind the overlay.
 - Custom gateways appear with their single model and the tag "Gateway · {name}".
 - Opening the picker again while it is open replaces it with a fresh one.
-- `/model` followed by text ignores the text; the picker does not prefill the search.
+- Fork titles stack: forking an already forked tab gives "Chat 1 (gpt-6-luna) (gpt-6-sol)".
+- `/model` followed by text ignores the text; the picker does not prefill the search (confirmed: `/model luna` opened the full list with an empty search).
 
 ## Open questions and verification
 
-- Confirmed in the standalone taskpane (Chromium, no Excel): the picker's layout and row format, two-step Escape, the fuzzy filter and "No matching models", and the empty list with no provider. The busy refusal and the fork toast were read from code; the fork itself was confirmed (see below).
-- `/default-models` is a placeholder that opens the ordinary picker (`src/commands/builtins/model.ts:36-44`), and its description "Switch models with Ctrl+P" (`en.json` key `command.model.cycle`) promises a shortcut that does not exist. Looks like a bug in either the command or its description.
-- The current model is captured before the provider refresh that opening triggers (`src/taskpane/init.ts:1607`), so a model swapped by that refresh is not checked. Seen once, as described in Edge cases. Minor bug.
-- Forking happens even in an empty tab: confirmed, a new tab "Chat 1 (gpt-5.3-codex-spark)" opened from an empty "Chat 1". Cause: `src/taskpane/session-runtime-manager.ts:201` counts the hidden system message. Looks like a bug.
-- The status-bar control opens the picker while busy and refuses at choice time, while `/model` refuses before opening. Probably unintentional inconsistency; a product call.
+- Confirmed in Excel on the web (logged in with OpenAI (ChatGPT), then also Google Gemini (API) and custom gateways): the status-bar control and `/model` opening the picker with focus in the search, the row format ("gpt-6.1-sol ✓ openai-codex 500k ctx · 128k out", "Gateway · {name}" tags), the default order (current, then the featured "gpt-6.1-sol", "gpt-5.3-codex-spark" and "gemini-3.1-pro-preview", then the rest by provider), the fuzzy filter ("luna", "gemflash"), Down stopping on the last row, two-step Escape with focus back in the composer, choosing the current model doing nothing, an in-place switch with no toast, the fork toast and new tab, "Wait for this tab to finish before changing models" when choosing from the status-bar control while busy, and "Can't run /model while Pi is busy".
+- A resting pointer decides what Enter chooses. Opening the picker with `/default-models` and Enter, with the pointer resting where an earlier click had left it, highlighted "gpt-5.6-terra" under the pointer instead of the current model, and a second Enter switched the tab to it (PICKER-08). The highlight starts in mouse mode (`src/ui/model-selector-dialog.ts:73`) and `lastMouse` starts at 0,0 (`:74`), so the first mouse event after the overlay appears counts as movement. Seen through CDP input, which may synthesise that event differently from a physical mouse. If a real pointer does the same, a user who opens the picker from the keyboard and presses Enter switches models by accident. Looks like a bug.
+- `/default-models` is a placeholder that opens the ordinary picker (`src/commands/builtins/model.ts:36-44`), and its description "Switch models with Ctrl+P" (`en.json` key `command.model.cycle`) promises a shortcut that does not exist. Confirmed in Excel on the web: the command menu shows "Switch models with Ctrl+P" and the command opens "Select model". Ctrl/Cmd+P itself was not pressed (it would open the browser's print dialog in the Excel window). Looks like a bug in either the command or its description.
+- The current model is captured before the provider refresh that opening triggers (`src/taskpane/init.ts:1607`), so a model swapped by that refresh is not checked. Seen once in the standalone taskpane; not reproduced in Excel on the web. Minor bug.
+- Forking happens even in an empty tab: confirmed in Excel on the web, "Chat 1 (gpt-6-luna)" opened from an empty "Chat 1" (PICKER-13). Cause: `src/taskpane/session-runtime-manager.ts:201` counts the hidden system message. Looks like a bug.
+- The status-bar control opens the picker while busy and refuses at choice time, while `/model` refuses before opening: both confirmed in Excel on the web (PICKER-15, PICKER-16). Probably unintentional inconsistency; a product call.
 - Whether tab-switching shortcuts reach the tab strip while the picker has focus was not checked.
 
 Verified against pi-for-excel commit `ec453df`.
