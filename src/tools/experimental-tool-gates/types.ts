@@ -58,6 +58,8 @@ export interface PythonBridgeApprovalRequest {
   toolName: string;
   bridgeUrl: string;
   params: unknown;
+  /** Aborts when the turn is stopped; the request should then be withdrawn. */
+  signal?: AbortSignal;
 }
 
 export interface OfficeJsExecuteApprovalRequest {
@@ -70,6 +72,8 @@ export interface OfficeJsExecuteApprovalRequest {
    * mode and the approval message includes an explicit warning.
    */
   riskIdentifiers?: string[];
+  /** Aborts when the turn is stopped; the request should then be withdrawn. */
+  signal?: AbortSignal;
 }
 
 export interface ExperimentalToolGateDependencies extends

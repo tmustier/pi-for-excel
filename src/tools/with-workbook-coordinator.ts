@@ -2,17 +2,19 @@
  * Tool wrapper that routes mutating tool calls through the workbook coordinator.
  */
 
-import type { AgentTool, AgentToolResult, AgentToolUpdateCallback } from "@earendil-works/pi-agent-core";
+import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import type { Static, TSchema } from "typebox";
 
-import {
-  formatExecutionModeLabel,
-  type ExecutionMode,
-} from "../execution/mode.js";
+import type { ExecutionMode } from "../execution/mode.js";
 import type { WorkbookCoordinator, WorkbookOperationContext } from "../workbook/coordinator.js";
 import { cancelCellEditWaits } from "../excel/helpers.js";
 import { getErrorMessage } from "../utils/errors.js";
-import { getToolContextImpact, getToolExecutionMode, type ToolContextImpact } from "./execution-policy.js";
+import {
+  getToolApprovalRequirement,
+  getToolContextImpact,
+  getToolExecutionMode,
+  type ToolContextImpact,
+} from "./execution-policy.js";
 import { isUnsupportedHostTool } from "./unsupported-host-tool.js";
 
 export interface WorkbookCoordinatorContextProvider {
@@ -47,20 +49,38 @@ export interface WorkbookMutationObserver {
   onWriteStarted?: (window: WorkbookWriteWindow) => void;
 }
 
-export interface MutationApprovalRequest {
+export interface ToolApprovalRequest {
   executionMode: ExecutionMode;
+  /** Why this call asks: Confirm mode, or an action that always asks (see execution-policy). */
+  reason: "confirm_mode" | "always";
   toolName: string;
   params: unknown;
+  /** Aborts when the turn is stopped; the request should then be withdrawn. */
+  signal?: AbortSignal;
+}
+
+/**
+ * A tool may check, before approval is asked, whether the call would be
+ * refused anyway (write_cells: invalid input or overwrite protection). A
+ * result ends the call: the user is not asked about a change that will not
+ * happen. It runs as a workbook read; the tool checks again when it runs.
+ */
+export interface ApprovalPrecheck<TParameters extends TSchema, TDetails> {
+  checkBeforeApproval?: (
+    toolCallId: string,
+    params: Static<TParameters>,
+  ) => Promise<AgentToolResult<TDetails> | null>;
 }
 
 export interface WorkbookExecutionPolicy {
   /** Default: yolo */
   getExecutionMode?: () => Promise<ExecutionMode>;
   /**
-   * Called for mutating tools when execution mode is "safe".
-   * Return `true` to proceed, `false` to block.
+   * Asked before the call waits for the workbook lock, for calls that
+   * `getToolApprovalRequirement` says need approval in the current mode.
+   * Return `true` to proceed, `false` to decline.
    */
-  requestMutationApproval?: (request: MutationApprovalRequest) => Promise<boolean>;
+  requestToolApproval?: (request: ToolApprovalRequest) => Promise<boolean>;
 }
 
 function makeContext(args: {
@@ -141,68 +161,55 @@ function settleOnStop<T>(
   });
 }
 
-function isWorkbookCoordinatorParamsShape(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function readApprovalParams(params: unknown): { action: string | null; range: string | null } {
-  if (!isWorkbookCoordinatorParamsShape(params)) return { action: null, range: null };
-
-  const action = typeof params.action === "string" ? params.action.trim() : "";
-  const range = typeof params.range === "string" ? params.range.trim() : "";
-  return { action: action.length > 0 ? action : null, range: range.length > 0 ? range : null };
-}
-
-export function buildMutationApprovalMessage(request: MutationApprovalRequest): string {
-  const modeLabel = formatExecutionModeLabel(request.executionMode);
-  const { action, range } = readApprovalParams(request.params);
-
-  const toolLabel = action ? `${request.toolName}:${action}` : request.toolName;
-  const lines = [
-    `Allow workbook mutation in ${modeLabel} mode?`,
-    "",
-    `Tool: ${toolLabel}`,
-  ];
-
-  if (range) {
-    lines.push(`Range: ${range}`);
-  }
-
-  lines.push("", "Tip: run /yolo on to switch to Auto mode (no confirmations).");
-  return lines.join("\n");
-}
-
 function defaultGetExecutionMode(): Promise<ExecutionMode> {
   return Promise.resolve("yolo");
 }
 
-function defaultRequestMutationApproval(_request: MutationApprovalRequest): Promise<boolean> {
+function defaultRequestToolApproval(_request: ToolApprovalRequest): Promise<boolean> {
   return Promise.reject(new Error(
-    "Confirm mode requires explicit user approval, but confirmation UI is unavailable.",
+    "This action requires explicit user approval, but confirmation UI is unavailable.",
   ));
 }
 
-async function requireMutationApprovalIfNeeded(args: {
+/** The approval this call needs in the current mode, or null. */
+async function getNeededApproval(args: {
   policy: WorkbookExecutionPolicy;
   toolName: string;
   params: unknown;
-}): Promise<void> {
-  const getExecutionMode = args.policy.getExecutionMode ?? defaultGetExecutionMode;
+}): Promise<{ requirement: "confirm_mode" | "always"; executionMode: ExecutionMode } | null> {
+  const { policy, toolName, params } = args;
+  const requirement = getToolApprovalRequirement(toolName, params);
+  if (requirement === "none") return null;
+
+  const getExecutionMode = policy.getExecutionMode ?? defaultGetExecutionMode;
   const executionMode = await getExecutionMode();
+  if (requirement === "confirm_mode" && executionMode !== "safe") return null;
+  return { requirement, executionMode };
+}
 
-  if (executionMode !== "safe") {
-    return;
-  }
-
-  const requestMutationApproval = args.policy.requestMutationApproval ?? defaultRequestMutationApproval;
-  const approved = await requestMutationApproval({
+async function requireApproval(args: {
+  policy: WorkbookExecutionPolicy;
+  requirement: "confirm_mode" | "always";
+  executionMode: ExecutionMode;
+  toolName: string;
+  params: unknown;
+  signal: AbortSignal | undefined;
+}): Promise<void> {
+  const { requirement, executionMode } = args;
+  const requestToolApproval = args.policy.requestToolApproval ?? defaultRequestToolApproval;
+  const approved = await requestToolApproval({
     executionMode,
+    reason: requirement,
     toolName: args.toolName,
     params: args.params,
+    ...(args.signal ? { signal: args.signal } : {}),
   });
 
+  throwIfAborted(args.signal);
   if (!approved) {
-    throw new Error("Mutation cancelled by user (Confirm mode).");
+    throw new Error(requirement === "always"
+      ? "The user declined this action in the approval dialog."
+      : "The user declined this workbook change in the approval dialog (Confirm mode).");
   }
 }
 
@@ -217,7 +224,7 @@ async function requireMutationApprovalIfNeeded(args: {
 type PendingMutations = Set<Promise<void>>;
 
 function wrapTool<TParameters extends TSchema, TDetails>(
-  tool: AgentTool<TParameters, TDetails> & StopReporting,
+  tool: AgentTool<TParameters, TDetails> & ApprovalPrecheck<TParameters, TDetails>,
   coordinator: WorkbookCoordinator,
   contextProvider: WorkbookCoordinatorContextProvider,
   mutationObserver: WorkbookMutationObserver | undefined,
@@ -228,17 +235,69 @@ function wrapTool<TParameters extends TSchema, TDetails>(
     ...tool,
     execute: (toolCallId, params, signal, onUpdate) => {
       const mode = getToolExecutionMode(tool.name, params);
+      const contextWorkbookId = await contextProvider.getWorkbookId();
+      const coordinatorWorkbookId = contextWorkbookId ?? "workbook:unknown";
+      const sessionId = contextProvider.getSessionId();
+      const context = makeContext({
+        workbookId: coordinatorWorkbookId,
+        sessionId,
+        toolName: tool.name,
+      });
+
+      throwIfAborted(signal);
+
+      // Ask before waiting for the lock, so a pending approval never holds
+      // up other tabs' writes.
+      const needed = await getNeededApproval({ policy: executionPolicy, toolName: tool.name, params });
+      if (needed) {
+        const { checkBeforeApproval } = tool;
+        if (checkBeforeApproval) {
+          const refused = await coordinator.runRead(
+            makeContext({ workbookId: coordinatorWorkbookId, sessionId, toolName: tool.name }),
+            () => checkBeforeApproval(toolCallId, params),
+          );
+          if (refused) return refused;
+        }
+
+        await requireApproval({
+          policy: executionPolicy,
+          ...needed,
+          toolName: tool.name,
+          params,
+          signal,
+        });
+      }
+
       if (mode === "read") {
         const earlierMutations = [...pendingMutations];
         if (earlierMutations.length === 0) return run(mode, toolCallId, params, signal, onUpdate);
         return Promise.all(earlierMutations).then(() => run(mode, toolCallId, params, signal, onUpdate));
       }
 
-      const running = run(mode, toolCallId, params, signal, onUpdate);
-      const settled = running.then(() => undefined, () => undefined);
-      pendingMutations.add(settled);
-      void settled.then(() => pendingMutations.delete(settled));
-      return running;
+      const out = await coordinator.runWrite(
+        context,
+        () => {
+          throwIfAborted(signal);
+          return tool.execute(toolCallId, params, signal, onUpdate);
+        },
+      );
+
+      if (mutationObserver?.onWriteCommitted) {
+        const impact = getToolContextImpact(tool.name, params);
+        try {
+          mutationObserver.onWriteCommitted({
+            workbookId: contextWorkbookId,
+            sessionId,
+            toolName: tool.name,
+            impact,
+            revision: out.revision,
+          });
+        } catch (error) {
+          console.warn("[pi] Workbook mutation observer failed:", getErrorMessage(error));
+        }
+      }
+
+      return out.result;
     },
   };
 

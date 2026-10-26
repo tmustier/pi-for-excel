@@ -156,6 +156,16 @@ export class IndexedDBStorageBackend implements StorageBackend {
   ): Promise<T> {
     const db = await this.getDB();
     const idbTx = db.transaction(storeNames, mode);
+    // Settle only once the transaction commits, so a write that fails at
+    // commit time (for example QuotaExceededError) rejects instead of
+    // reporting success.
+    const committed = new Promise<void>((resolve, reject) => {
+      idbTx.oncomplete = () => resolve();
+      idbTx.onabort = () => reject(toIdbError(idbTx.error));
+      idbTx.onerror = () => reject(toIdbError(idbTx.error));
+    });
+    // Callers that fail the operation get that error, not the abort it causes.
+    void committed.catch(() => {});
     const storageTx: StorageTransaction = {
       get: async <V = unknown>(storeName: string, key: string): Promise<V | null> => {
         const store = idbTx.objectStore(storeName);
@@ -173,7 +183,19 @@ export class IndexedDBStorageBackend implements StorageBackend {
         await this.promisifyRequest(store.delete(key));
       },
     };
-    return operation(storageTx);
+    let result: T;
+    try {
+      result = await operation(storageTx);
+    } catch (error) {
+      try {
+        idbTx.abort();
+      } catch {
+        // Already finished or aborted.
+      }
+      throw error;
+    }
+    await committed;
+    return result;
   }
 
   async getQuotaInfo(): Promise<{ usage: number; quota: number; percent: number }> {

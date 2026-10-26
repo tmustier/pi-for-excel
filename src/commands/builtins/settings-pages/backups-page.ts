@@ -187,7 +187,7 @@ async function renderBackupsContent(
         statusText.textContent = t("recovery.capturing");
         try {
           const backup = await createManualFullBackup();
-          showToast(t("recovery.toast.backupDownloaded", { id: shortId(backup.id), size: formatBytes(backup.sizeBytes) }));
+          showToast(t("recovery.toast.backupDownloaded", { id: backup.id, size: formatBytes(backup.sizeBytes) }));
           renderList();
         } catch (error) {
           const message = error instanceof Error ? error.message : "Unknown error";

@@ -13,7 +13,7 @@ import {
   type ExecutionMode,
 } from "../execution/mode.js";
 import type { WorkbookCellChange } from "./cell-diff.js";
-import type { SettingsAccess } from "../storage/local/settings-store.js";
+import type { SettingsUpdater } from "../storage/local/settings-store.js";
 
 const AUDIT_SETTING_KEY = "workbook.change-audit.v1";
 const MAX_AUDIT_ENTRIES = 500;
@@ -60,8 +60,8 @@ export interface AppendWorkbookChangeAuditEntryArgs {
 }
 
 interface WorkbookChangeAuditLogDependencies {
-  settings: SettingsAccess | null;
-  getSettingsStore: () => Promise<SettingsAccess | null>;
+  settings: SettingsUpdater | null;
+  getSettingsStore: () => Promise<SettingsUpdater | null>;
   getWorkbookContext: () => Promise<WorkbookContext>;
   now: () => number;
   createId: () => string;
@@ -89,7 +89,7 @@ function defaultCreateId(): string {
   return `change_${Date.now().toString(36)}_${randomChunk}`;
 }
 
-async function defaultGetSettingsStore(): Promise<SettingsAccess | null> {
+async function defaultGetSettingsStore(): Promise<SettingsUpdater | null> {
   try {
     const storageModule = await import("../storage/local/app-storage.js");
     return storageModule.getAppStorage().settings;
@@ -182,6 +182,16 @@ function parsePersistedEntries(payload: unknown): WorkbookChangeAuditEntry[] {
     .slice(0, MAX_AUDIT_ENTRIES);
 }
 
+function mergeEntries(
+  pending: readonly WorkbookChangeAuditEntry[],
+  stored: readonly WorkbookChangeAuditEntry[],
+): WorkbookChangeAuditEntry[] {
+  const storedIds = new Set(stored.map((entry) => entry.id));
+  return [...pending.filter((entry) => !storedIds.has(entry.id)), ...stored]
+    .sort((a, b) => b.at - a.at)
+    .slice(0, MAX_AUDIT_ENTRIES);
+}
+
 function clampLimit(limit: number): number {
   if (!Number.isFinite(limit)) return 50;
   const rounded = Math.floor(limit);
@@ -192,9 +202,8 @@ function clampLimit(limit: number): number {
 
 export class WorkbookChangeAuditLog {
   private readonly dependencies: WorkbookChangeAuditLogDependencies;
-  private loaded = false;
-  private entries: WorkbookChangeAuditEntry[] = [];
-  private bufferedEntries: WorkbookChangeAuditEntry[] = [];
+  /** Entries whose write failed; retried with the next append. */
+  private pendingEntries: WorkbookChangeAuditEntry[] = [];
 
   constructor(dependencies: Partial<WorkbookChangeAuditLogDependencies> = {}) {
     const getSettingsStore = dependencies.settings !== undefined
@@ -210,38 +219,24 @@ export class WorkbookChangeAuditLog {
     };
   }
 
-  private async ensureLoaded(): Promise<void> {
-    if (this.loaded) return;
-
+  /**
+   * Every taskpane on this computer appends to the same stored log, so each
+   * write is an atomic update of what is stored now rather than a write-back
+   * of a copy loaded earlier.
+   */
+  private async persistPending(): Promise<void> {
     const settings = await this.dependencies.getSettingsStore();
-    if (!settings) {
-      this.entries = this.bufferedEntries;
-      this.bufferedEntries = [];
-      this.loaded = true;
-      return;
-    }
+    if (!settings || this.pendingEntries.length === 0) return;
 
-    const payload = await settings.get(AUDIT_SETTING_KEY);
-    this.entries = [...this.bufferedEntries, ...parsePersistedEntries(payload)]
-      .sort((a, b) => b.at - a.at)
-      .slice(0, MAX_AUDIT_ENTRIES);
-    this.bufferedEntries = [];
-    this.loaded = true;
-  }
-
-  private async persist(): Promise<void> {
-    const settings = await this.dependencies.getSettingsStore();
-    if (!settings) return;
-
-    const payload: PersistedWorkbookChangeAuditPayload = {
-      version: 1,
-      entries: this.entries,
-    };
-
+    const pending = this.pendingEntries;
     try {
-      await settings.set(AUDIT_SETTING_KEY, payload);
-    } catch {
-      // ignore persistence failures
+      await settings.update(AUDIT_SETTING_KEY, parsePersistedEntries, (stored): PersistedWorkbookChangeAuditPayload => ({
+        version: 1,
+        entries: mergeEntries(pending, stored),
+      }));
+      this.pendingEntries = this.pendingEntries.filter((entry) => !pending.includes(entry));
+    } catch (error) {
+      console.warn("[pi] Workbook change audit entry could not be saved; retrying with the next change.", error);
     }
   }
 
@@ -289,36 +284,23 @@ export class WorkbookChangeAuditLog {
     if (workbookId !== undefined) entry.workbookId = workbookId;
     if (workbookLabel !== undefined) entry.workbookLabel = workbookLabel;
 
-    if (!this.loaded) {
-      try {
-        await this.ensureLoaded();
-      } catch {
-        this.bufferedEntries = [entry, ...this.bufferedEntries].slice(0, MAX_AUDIT_ENTRIES);
-        return;
-      }
-    }
-
-    this.entries = [entry, ...this.entries].slice(0, MAX_AUDIT_ENTRIES);
-    await this.persist();
+    this.pendingEntries = [entry, ...this.pendingEntries].slice(0, MAX_AUDIT_ENTRIES);
+    await this.persistPending();
   }
 
   async list(limit = 50): Promise<WorkbookChangeAuditEntry[]> {
-    await this.ensureLoaded();
-    return this.entries.slice(0, clampLimit(limit));
+    const settings = await this.dependencies.getSettingsStore();
+    const stored = settings ? parsePersistedEntries(await settings.get(AUDIT_SETTING_KEY)) : [];
+    return mergeEntries(this.pendingEntries, stored).slice(0, clampLimit(limit));
   }
 
   async clear(): Promise<void> {
-    await this.ensureLoaded();
-    this.entries = [];
+    this.pendingEntries = [];
 
     const settings = await this.dependencies.getSettingsStore();
     if (!settings) return;
 
-    try {
-      await settings.delete(AUDIT_SETTING_KEY);
-    } catch {
-      // ignore persistence failures
-    }
+    await settings.update(AUDIT_SETTING_KEY, parsePersistedEntries, () => undefined);
   }
 }
 

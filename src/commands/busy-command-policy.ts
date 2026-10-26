@@ -13,7 +13,11 @@ const BUSY_ALLOWED_COMMANDS = new Set<string>([
   "new",
   "rules",
   "resume",
+  // Backups stay available while Pi works: restores and full backups wait
+  // for the workbook lock instead of interleaving with Pi's writes.
   "history",
+  "revert",
+  "backup",
   "reopen",
   "yolo",
   "extensions",

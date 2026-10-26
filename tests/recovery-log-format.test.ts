@@ -291,6 +291,11 @@ void test("restore round-trips conditional-format rules in target and inverse sn
         showDataBarOnly: false,
         lowerBoundRule: { type: "LowestValue" },
         upperBoundRule: { type: "HighestValue" },
+        positiveFillColor: "#638EC6",
+        positiveGradientFill: true,
+        negativeFillColor: "#FF0000",
+        negativeMatchPositiveFillColor: false,
+        negativeMatchPositiveBorderColor: false,
       },
     },
     {
