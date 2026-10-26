@@ -174,15 +174,17 @@ void test("Stop during a retry wait keeps the failure and sends no further reque
   tab.queue.shutdown();
 });
 
-void test("a non-retryable failure is not retried", async () => {
-  const tab = createTab([
-    fauxAssistantMessage("", { stopReason: "error", errorMessage: "insufficient_quota: billing" }),
-  ]);
-  tab.queue.enqueuePrompt("hello");
-  await waitFor(() => !tab.queue.isBusy());
-  assert.equal(tab.requests.length, 1);
-  assert.deepEqual(tab.settled, [false]);
-  tab.queue.shutdown();
+void test("a quota or usage-limit failure is not retried", async () => {
+  // The ChatGPT login reports every 429 as a usage limit that resets after minutes or hours.
+  for (const errorMessage of ["insufficient_quota: billing", "You have hit your ChatGPT usage limit (plus plan). Try again in ~42 min."]) {
+    const tab = createTab([fauxAssistantMessage("", { stopReason: "error", errorMessage })]);
+    tab.queue.enqueuePrompt("hello");
+    await waitFor(() => !tab.queue.isBusy());
+    assert.equal(tab.requests.length, 1, errorMessage);
+    assert.deepEqual(tab.activities.filter((activity) => activity !== null), [], errorMessage);
+    assert.deepEqual(tab.settled, [false]);
+    tab.queue.shutdown();
+  }
 });
 
 void test("Stop cancels a running /compact for this tab and returns the prompt held behind it", async () => {
