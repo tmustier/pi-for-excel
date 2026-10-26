@@ -681,6 +681,7 @@
   "provider.oauth.capture_captured": "已捕获回调 — 正在完成登录…",
   "provider.oauth.capture_fallback": "自动捕获回调未完成。请在下方粘贴回调 URL 以继续。",
   "provider.oauth.capture_waiting": "正在通过本地代理等待浏览器回调…",
+  "provider.oauth.flow_unavailable": "{label} 登录暂时无法在任务窗格中运行。请使用其他服务商或 API 密钥。",
   "provider.oauth.helper.anthropic": "登录后，Pi for Excel 会尝试自动捕获本地回调。如果没有继续，请从浏览器地址栏复制最终回调 URL 并粘贴到这里。",
   "provider.oauth.helper.google": "登录后，Pi for Excel 会尝试自动捕获本地回调。如果没有继续，请从浏览器地址栏复制最终回调 URL 并粘贴到这里。",
   "provider.oauth.helper.openai": "登录后，Pi for Excel 会尝试自动捕获本地回调。如果没有继续，请从浏览器地址栏复制最终回调 URL 并粘贴到这里。",
