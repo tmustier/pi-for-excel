@@ -9,10 +9,11 @@ import {
 import type {
   PythonTransformRangeDetails,
 } from "../src/tools/tool-details.ts";
-import type {
-  PythonBridgeConfig,
-  PythonBridgeRequest,
-  PythonBridgeResponse,
+import {
+  PythonBridgeUnreachableError,
+  type PythonBridgeConfig,
+  type PythonBridgeRequest,
+  type PythonBridgeResponse,
 } from "../src/tools/python-run.ts";
 
 function firstText(result: AgentToolResult<PythonTransformRangeDetails>): string {
@@ -63,7 +64,7 @@ void test("python_transform_range falls back to Pyodide when default bridge URL 
     }),
     callBridge: () => {
       bridgeCalls += 1;
-      return Promise.reject(new Error("fetch failed"));
+      return Promise.reject(new PythonBridgeUnreachableError("https://localhost:3340", new TypeError("Failed to fetch")));
     },
     isPyodideAvailable: () => true,
     callPyodide: () => {
