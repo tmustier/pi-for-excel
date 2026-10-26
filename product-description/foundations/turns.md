@@ -153,7 +153,7 @@ After any interrupt, the user stays in the same tab (unless they switched), with
 
 **Models and providers.** The tab's model and thinking level are read at each model request. A missing credential opens the connection dialog at the first request of the turn.
 
-**Offline and provider errors.** A failed request ends the turn as failed. Pi never retries a failed request, including rate limits (429); the first failure ends the turn. See [provider errors and offline](../cross-cutting/provider-errors-and-offline.md).
+**Offline and provider errors.** A failed request ends the turn as failed. Pi does not retry failed requests, including rate limits (429) and 5xx: no retry count is configured, so the first failure ends the turn. The only exception is internal to the OpenAI (ChatGPT) transport, which reconnects once when its WebSocket hits a connection limit or loses its continuation; the user does not see it. See [provider errors and offline](../cross-cutting/provider-errors-and-offline.md).
 
 **Notifications.** The working indicator, the tab's busy dot, the queue strip and the error banner are the turn's notifications. There is no sound and no system notification when a turn finishes in a background tab.
 
