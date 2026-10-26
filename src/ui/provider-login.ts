@@ -18,7 +18,7 @@ function terminalAppName(): string {
   if (isWindowsPlatform()) return t("platform.terminal.windows");
   return t("platform.terminal.other");
 }
-import { isCorsError } from "../auth/cors-error.js";
+import { isCorsError, isModuleLoadError } from "../auth/cors-error.js";
 import { pollOAuthCallbackCapture } from "../auth/oauth-callback-capture.js";
 import { getOAuthProvider } from "../auth/oauth-provider-registry.js";
 import { clearOAuthCredentials, saveOAuthCredentials } from "../auth/oauth-storage.js";
@@ -953,9 +953,11 @@ export function buildProviderRow(
           }
 
           const msg = getErrorMessage(err);
-          const isLikelyCors =
+          // The login flow's code itself could not load (GitHub Copilot's flow is not bundled for the browser).
+          const flowUnavailable = err instanceof Error && isModuleLoadError(err);
+          const isLikelyCors = !flowUnavailable && (
             isCorsError(err) ||
-            (typeof msg === "string" && /load failed|failed to fetch|cors|cross-origin|networkerror/i.test(msg));
+            (typeof msg === "string" && /load failed|failed to fetch|cors|cross-origin|networkerror/i.test(msg)));
 
           if (isLikelyCors) {
             if (DEFAULT_PROXY_IS_REMOTE) {
@@ -970,6 +972,8 @@ export function buildProviderRow(
                 "provider CORS helper error markup with escaped localized text",
               );
             }
+          } else if (flowUnavailable) {
+            errorEl.textContent = t("provider.oauth.flow_unavailable", { label });
           } else {
             errorEl.textContent = msg || t("provider.login_failed");
           }

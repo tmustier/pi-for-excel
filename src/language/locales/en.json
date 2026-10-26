@@ -681,6 +681,7 @@
   "provider.oauth.capture_captured": "Callback captured — finishing login…",
   "provider.oauth.capture_fallback": "Automatic callback capture did not complete. Paste the callback URL below to continue.",
   "provider.oauth.capture_waiting": "Waiting for the browser callback via the local proxy…",
+  "provider.oauth.flow_unavailable": "{label} login can't run inside the taskpane yet. Use another provider or an API key.",
   "provider.oauth.helper.anthropic": "After login, Pi for Excel will try to capture the local callback automatically. If it does not continue, copy the final callback URL from your browser address bar and paste it here.",
   "provider.oauth.helper.google": "After sign-in, Pi for Excel will try to capture the local callback automatically. If it does not continue, copy the final callback URL from your browser address bar and paste it here.",
   "provider.oauth.helper.openai": "After login, Pi for Excel will try to capture the local callback automatically. If it does not continue, copy the final callback URL from your browser address bar and paste it here.",
