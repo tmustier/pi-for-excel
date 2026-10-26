@@ -62,7 +62,7 @@ There is no busy phase.
 
 ### After saving
 
-The user lands on the "Settings" page, as for [rules](rules.md#after-saving). Existing cells do not change: conventions only affect formatting Pi does from now on. Conventions are stored in the add-in's browser storage on this computer, not in the workbook.
+The user lands on the "Settings" page, as for [rules](rules.md#after-saving). Existing cells do not change: conventions only affect formatting Pi does from now on (confirmed in Excel on the web: cells Pi had formatted kept their `€* #,##0_)…` string after the decimal places changed). Conventions are stored in the add-in's browser storage on this computer, not in the workbook.
 
 ## The defaults
 
@@ -90,7 +90,7 @@ Other defaults: hard-coded values in blue (`#0000FF`), links to other sheets in 
 
 Pi's `conventions` tool can view the conventions, change part of them, or reset them all to the defaults. Its [tool card](../turn/tool-calls.md) reads "View conventions", "Update conventions" or "Reset conventions". Expanded, an update lists what it touched ("Built-in presets", "Custom presets", "Remove presets", "Color conventions", …) and the result shows the full conventions with the values that differ from the defaults. An invalid colour makes the call fail with "Invalid conventions update:" and the reason; nothing is saved.
 
-The tool is not a [mutation](../glossary.md#the-workbook): it needs no [approval](../workbook/confirm-mode-and-approvals.md) in Confirm mode and creates no backup. There is no toast. The new values are used by the next formatting call. Resetting is only possible through Pi; the editor has no "reset all" button.
+The tool is not a [mutation](../glossary.md#the-workbook): it needs no [approval](../workbook/confirm-mode-and-approvals.md) in Confirm mode and creates no backup (confirmed in Excel on the web: no dialog, card "Update conventions", the result listing the overrides). There is no toast. The new values are used by the next formatting call. Resetting is only possible through Pi; the editor has no "reset all" button.
 
 ## Modifiers
 
@@ -148,11 +148,11 @@ The Formats tab shares its overlay, its exits and its interrupts with the Rules 
 
 - There is no control for the thousands separator in the editor. Pi can turn it off through its tool; the editor then shows the resulting format string.
 - The Percent preview shows "1,234.5%" for 1,234.5, but Excel's percent format multiplies by 100; the cell would show 123,450.0%.
-- Renaming a custom format to a name that already exists is ignored without a message; the card keeps its old name.
+- Renaming a custom format to a name that already exists is ignored without a message; the card keeps its old name (confirmed in Excel on the web).
 - A custom format named like a built-in one ("currency") does not replace the built-in.
 - Hand-editing a built-in format and saving it means Pi's "decimal places" and "currency symbol" adjustments no longer apply to that format.
 - Changing the header style affects only headers Pi formats afterwards with its "header" style.
-- When Pi changes the conventions mid-conversation, the next formatting call uses the new values at once, but the list of non-default values in Pi's instructions is only refreshed at the next refresh (the taskpane regaining focus, or rules being saved).
+- When Pi changes the conventions mid-conversation, the next formatting call uses the new values at once, but the list of non-default values in Pi's instructions is only refreshed at the next refresh (the taskpane regaining focus, or rules being saved). In Excel on the web that refresh did not run at all, so the list stayed stale until a reload; see [rules](rules.md#open-questions-and-verification).
 
 ## Open questions and verification
 
@@ -162,6 +162,7 @@ The Formats tab shares its overlay, its exits and its interrupts with the Rules 
 - The Percent preview does not multiply by 100 (`src/commands/builtins/settings-pages/rules-page.ts:286-320`). Confirmed in Excel on the web (CONV-06): the preview reads "1,234.5%" while Excel shows 1234.5 in that format as "123,450.0%". Small, but misleading.
 - Saving the Rules page writes the conventions read when the page opened, overwriting any change Pi made meanwhile; see [rules](rules.md#open-questions-and-verification).
 - Whether models follow the font-colour and default-font guidance consistently was not checked.
-- Custom formats used by name, the header style and the `conventions` tool's cards were read from code.
+- Custom formats used by name, the header style, and the "View conventions" and "Reset conventions" cards were read from code. The "Update conventions" card was confirmed (CONV-14).
+- Two GPT-6 Luna turns kept streaming without finishing after a `conventions` call; GPT-6.1 Sol finished the same request. Probably the model, not the product.
 
 Verified against pi-for-excel commit `ec453df`.
