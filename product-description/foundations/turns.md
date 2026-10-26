@@ -88,7 +88,7 @@ When a steered or followed-up message is delivered, it appears in the transcript
 A turn ends in one of three ways.
 
 - **Done.** The last model response asked for no tools and nothing was waiting. The working indicator disappears, the tab's dot goes away, the Stop button becomes the send button, and the queue strip clears.
-- **Aborted.** The user pressed Stop. The model response that was streaming stays in the transcript as far as it got, marked "Request aborted". No error banner. See [stopping](../turn/stopping.md).
+- **Aborted.** The user pressed Stop. The model response that was streaming stays in the transcript as far as it got, marked "Request aborted". No error banner. A stop that lands while a tool is running ends differently: after the tool returns, an empty model response shows the red line "Error: signal is aborted without reason" (still no banner). See [stopping](../turn/stopping.md#at-each-stage).
 - **Failed.** The provider or the loop raised an error. Everything up to the failure stays in the transcript, the failing model response is marked with "Error:" and the reason, and, if the tab is the active tab, the error banner shows "LLM error: {reason}", or a more specific message for a context overflow or a likely CORS failure. With auto-compaction on, a context overflow triggers one compact-and-retry before the failure is final. See [provider errors and offline](../cross-cutting/provider-errors-and-offline.md).
 
 In every case, each message is saved as it completes, once the session has had at least one answer from Pi; see [persistence and restore](../cross-cutting/persistence-and-restore.md). Changes Pi made to the workbook during the turn stay made, whatever the ending; each one has an [automatic backup](the-workbook.md) the user can revert.
@@ -101,10 +101,10 @@ Stop is the user's explicit abort of the active tab's turn. It has two triggers,
 
 | | Stop button | Escape |
 | --- | --- | --- |
-| Available | While the active tab is responding; the button replaces send. | While the active tab is responding, and no menu, popover, the command menu, the model picker, settings, or an extension widget is open. Those claim Escape for themselves and close instead. |
+| Available | While the active tab is responding; the button replaces send. | While the active tab is responding, and no menu, popover, overlay (settings, the model picker, the Files workspace, any dialog), the command menu or an extension widget is open. Those claim Escape for themselves and close instead; only the tab context menu does not. Confirmed in Excel on the web with the Files workspace, the thinking popover and the tab context menu. |
 | The streaming model response | Ends at once, kept as far as it got, marked "Request aborted". | Same. |
-| A running tool | Asked to cancel. A workbook change that Excel has already started may still complete. | Same. |
-| Waiting steers and follow-ups | Removed from the queue strip but kept by Pi (*stranded*) and delivered in the next turn; see [Open questions](#open-questions-and-verification). | Put back into the composer, above any text already there. |
+| A running tool | Pi waits for it to return; the Stop button and working indicator stay until then. The turn then ends with a red "Error: signal is aborted without reason" instead of "Request aborted", with no banner. Confirmed in Excel on the web with a 12-second Office.js call. | Same. Confirmed in Excel on the web. |
+| Waiting steers and follow-ups | Removed from the queue strip but kept by Pi (*stranded*) and delivered in the next turn; see [Open questions](#open-questions-and-verification). Confirmed in Excel on the web. | Put back into the composer, above any text already there. Confirmed in Excel on the web. |
 | Queued prompts | Stay queued and start as soon as the stopped turn has ended. | Put back into the composer with the steers and follow-ups. |
 | Queued commands | Stay queued and run. | Dropped. |
 | Text in the composer | Unchanged. | Unchanged; if it would otherwise be lost it is put back. |
@@ -182,7 +182,7 @@ After any interrupt, the user stays in the same tab (unless they switched), with
 
 - A steer sent while the very last model response is streaming is still delivered: the turn continues with one more model response instead of ending.
 - Sending an identical steer twice shows two rows in the queue strip; when the first is delivered, only one row disappears.
-- Several tabs can be responding at once. Their mutations still run one at a time; a tab waiting for the lock shows "Locking…".
+- Several tabs can be responding at once (confirmed in Excel on the web with writes from two tabs, the workbook calls slowed to 8 s each). Their mutations still run one at a time; a tab waiting for the lock shows "Locking…".
 - A turn started in one tab keeps streaming if the user switches to another tab; on switching back, the transcript shows everything so far and the working indicator resumes.
 - An error in a background tab is not shown as a banner, neither when it happens nor when the user switches to that tab; the only trace is the "Error:" line in its transcript.
 - An error banner shown for one tab stays visible after switching to another tab, until the next send or the next successful run in the active tab.
@@ -191,11 +191,12 @@ After any interrupt, the user stays in the same tab (unless they switched), with
 ## Open questions and verification
 
 - The Stop button and Escape treat waiting items differently: Escape restores steers, follow-ups and queued prompts into the composer and drops queued commands; the Stop button leaves queued prompts and commands to run immediately after the stopped turn. Read from code. Probably unintentional; a product call at least.
-- After the Stop button, steers and follow-ups that had not been delivered disappear from the queue strip but stay in Pi's internal queue (they are *stranded*), and are delivered unasked in the next turn. Confirmed in Excel on the web: after Stop, the next prompt "Reply with just OK." was answered "BANANA" then "MANGO", the stranded steers. The same is read from code after a provider error. A bug.
-- The error banner is shared by all tabs: it is not cleared on tab switch, and errors from background tabs never show one. Read from code. Probably a bug.
+- After the Stop button, steers and follow-ups that had not been delivered disappear from the queue strip but stay in Pi's internal queue (they are *stranded*), and are delivered unasked in the next turn. Confirmed in Excel on the web (twice): after Stop, the next prompt "Reply with just OK." was followed straight away by the stranded steer "Then say BANANA." as a user message, Pi answered "BANANA" (and never answered "OK"), then the follow-up "Then say MANGO." was delivered and answered. After a provider error (simulated by making the request throw), the strip emptied and both items were still held, as after Stop; their delivery after an error was not observed because the taskpane was reloaded first. A bug.
+- The error banner is shared by all tabs: it is not cleared on tab switch, and errors from background tabs never show one. Confirmed in Excel on the web with simulated provider errors: Chat 1's banner stayed after "+" opened Chat 2; Chat 2 then failed while Chat 1 was active and no banner appeared, neither then nor after switching to Chat 2. Sending from Chat 2 cleared Chat 1's banner. Probably a bug.
 - Whether a workbook write already sent to Excel completes after Stop has not been confirmed.
-- The composer draft is shared across tabs, so text typed in one tab is sent to another after a switch. Confirmed in the standalone taskpane. Probably a bug; see [sessions and tabs](sessions-and-tabs.md).
-- Compaction cannot be stopped: the Stop button is not shown and Escape does nothing while only compaction is running. Read from code.
-- Reloading the taskpane during the first turn of a new session loses the user's message because nothing is saved until Pi's first answer completes. Read from code.
+- The composer draft is shared across tabs, so text typed in one tab is sent to another after a switch. Confirmed in the standalone taskpane and in Excel on the web. Probably a bug; see [sessions and tabs](sessions-and-tabs.md).
+- Compaction cannot be stopped: the Stop button is not shown and Escape only moves focus out of the composer while only compaction is running. Confirmed in Excel on the web during `/compact`.
+- Reloading the taskpane during the first turn of a new session loses the user's message because nothing is saved until Pi's first answer completes. Confirmed in Excel on the web: a tab opened with "+" and reloaded mid-answer came back empty. In a tab Pi had already answered, a reload mid-answer kept the user message and lost the answer, and the turn left no ending marker.
+- A stop during a running tool ends with "Error: signal is aborted without reason" (`stopReason: "error"`) rather than "Request aborted": after the tool batch the loop starts another model request with the already-aborted signal (`agent-loop.js`, `runLoop`), and the provider rejects it with the browser's abort error. The banner is suppressed because the text contains "abort". Confirmed in Excel on the web with both the Stop button and Escape. Looks like a bug.
 
 Verified against pi-for-excel commit `ec453df`.
