@@ -45,11 +45,11 @@ Each action takes a moment; switches are disabled until the page re-renders. The
 
 ### After an action
 
-The page re-renders with the new state, and every open tab's instructions to Pi are refreshed, taking effect from its next model request. Nothing is added to any transcript.
+The page re-renders with the new state, and every open tab's instructions to Pi are meant to be refreshed, taking effect from its next model request. In Excel on the web that refresh did not run, so the list of skills in Pi's instructions stayed as it was until the taskpane reloaded; see [rules](rules.md#open-questions-and-verification). The `skills` tool itself reads the current catalog, so a list or read call sees the change at once. Nothing is added to any transcript.
 
 ## External skills and the Files workspace
 
-External skills are ordinary files. Besides `skills/external/{name}/SKILL.md`, any file at `skills/{name}/SKILL.md` in the Files workspace is picked up as well, so uploading a skill folder or writing such a file adds a skill without visiting the page. Both kinds show under "External skills" with an "External" badge. Deleting the file in the Files workspace removes the skill. External skills appear in the Files workspace under "SKILLS". An external skill with the same name as a bundled one gets a "Shadowed" badge and a disabled switch: the bundled skill wins.
+External skills are ordinary files. Besides `skills/external/{name}/SKILL.md`, any file at `skills/{name}/SKILL.md` in the Files workspace is picked up by Pi as well, so uploading a skill folder or writing such a file adds a skill without visiting the page. Only the first kind shows under "External skills" on the page (confirmed in Excel on the web: Pi's "List skills" included `pd2` at `skills/pd2/SKILL.md`, while the page counted "4 bundled, 2 external" without it). Deleting the file in the Files workspace removes the skill. External skills appear in the Files workspace under "SKILLS". An external skill with the same name as a bundled one gets a "Shadowed" badge and a disabled switch: the bundled skill wins.
 
 Pi is told to treat external skills as untrusted unless the user confirms the source.
 
@@ -64,7 +64,7 @@ The `skills` tool has four actions, each shown as a tool card:
 | "Install skill {name}" | Pi saved an external skill, exactly as the page's install does. |
 | "Uninstall skill {name}" | Pi removed an external skill; "(not found)" if there was none. |
 
-Install and uninstall from Pi ask nothing in Auto mode. Bridge and integration errors sometimes end with "Skill: {name}"; Pi is told to read that skill before giving setup advice. A disabled or unknown skill fails the read with "Skill not found: …" and the list of available names.
+Install and uninstall from Pi ask nothing in Auto mode (confirmed in Excel on the web: "Install skill pd-pi", no dialog). Bridge and integration errors sometimes end with "Skill: {name}"; Pi is told to read that skill before giving setup advice. A disabled or unknown skill fails the read with "Skill not found: …" and the list of available names (confirmed in Excel on the web: "Skill not found: `tmux-bridge`. Available: …").
 
 > Technical note: the `skills` tool is not on the list of tools that only read, so the product treats every call to it, including list and read, as a workbook [mutation](../glossary.md#the-workbook). It waits for the [workbook lock](../foundations/the-workbook.md), and in Confirm mode each call asks "Allow workbook mutation in Safe mode?". See [Open questions](#open-questions-and-verification).
 
@@ -132,6 +132,8 @@ Install and uninstall from Pi ask nothing in Auto mode. Bridge and integration e
 - **Every `skills` call is treated as a workbook mutation.** Confirmed in Excel on the web (SKILLS-20, SKILLS-21): in Confirm mode both `skills:list` and `skills:read` opened "Allow workbook mutation in Safe mode?" (body "Allow workbook mutation in Confirm mode?", "Tool: skills:list"); Escape on the read returned "Mutation cancelled by user (Confirm mode)." to Pi and the card read "Read skill web-search" with no source suffix. The `skills` tool is missing from the read-only list in `src/tools/execution-policy.ts:11-31`, so `getToolExecutionMode` falls through to `mutate` (`execution-policy.ts:111`). Looks like a bug. The dialog's title still says "Safe mode" while its body says "Confirm mode".
 - The bundled "web-search" skill's description, shown on this page, says "Works out of the box with Jina (default, no API key needed)", but every provider needs a key; see [web search and MCP](../extensions/web-search-and-mcp.md#open-questions-and-verification).
 - External skill removal has no confirmation (`src/commands/builtins/extensions-hub-skills.ts:177-190`), unlike plugin uninstall (confirmed). A product call.
-- Whether the workbook lock is taken by a `skills` call was read from code. The "(cached)" and "Refresh skill" cards and Pi's install/uninstall cards were read from code.
+- **Skills written outside `skills/external/` are invisible on the page.** Confirmed in Excel on the web (SKILLS-22): Pi saw `skills/pd2/SKILL.md`, the page did not list it, so it cannot be switched off or removed there. The page loads only `skills/external/*` (`loadExternalAgentSkillsFromWorkspace`, `src/commands/builtins/extensions-hub-skills.ts:59`, `src/skills/external-store.ts:209`), while Pi's catalog also takes workspace-discovered skills. Looks like a bug.
+- Confirmed in Excel on the web: "Read skill web-search (bundled)", then "Refresh skill web-search (bundled)" when Pi forced a reload, then "Read skill web-search (bundled) (cached)" (SKILLS-17).
+- Whether the workbook lock is taken by a `skills` call was read from code, as was Pi's uninstall card.
 
 Verified against pi-for-excel commit `ec453df`.
