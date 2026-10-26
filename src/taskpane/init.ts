@@ -257,6 +257,13 @@ export async function initTaskpane(opts: {
   // 1. Storage
   const { providerKeys, sessions, settings, customProviders, modelCatalogs } = initAppStorage();
 
+  // Ask the browser not to evict sessions, backups and settings under storage
+  // pressure. Best effort: hosts may refuse silently or not support it.
+  void getAppStorage().requestPersistence().then(
+    (persisted) => console.log(`[pi] Persistent storage: ${persisted ? "granted" : "not granted"}`),
+    (error: Error) => console.warn("[pi] Persistent storage request failed:", error),
+  );
+
   // Initialize language from storage
   initLanguage(await readTaskpaneLanguage(settings));
 
