@@ -2,7 +2,7 @@
 
 ## Summary
 
-Conventions are the house style Pi uses when it formats cells: what a "number", "currency", "percent" or "ratio" looks like (decimal places, how negatives and zeros show, the currency symbol), any custom formats the user has named, the header style, the font colors that mark hard-coded values and links to other sheets, and the default font. They exist so that "format this as currency" produces the same result in every workbook without the user spelling it out. The user edits them on the "Formats" tab of the "Rules" page in the Settings overlay (reached with `/rules`, the "Rules" item of the [utilities menu](../ui/the-utilities-menu.md), or "Rules & conventions" in [Settings](../setup/settings.md)); Pi can read and change them with its `conventions` tool. There is one set of conventions for this computer, used in every workbook. Out of the box they follow a financial-modelling style: thousands separators, negatives in parentheses, zeros as a dash. The editor opens while a tab is [busy](../glossary.md#busy), with no provider connected, and on Excel on the web.
+Conventions are the house style Pi uses when it formats cells: what a "number", "currency", "percent" or "ratio" looks like (decimal places, how negatives and zeros show, the currency symbol), any custom formats the user has named, the header style, the font colors that mark hard-coded values and links to other sheets, and the default font. They exist so that "format this as currency" produces the same result in every workbook without the user spelling it out. The user edits them on the "Formats" tab of the "Rules" page in the Settings overlay (reached with `/rules`, the "Rules" item of the [utilities menu](../ui/the-utilities-menu.md), or "Rules & conventions" in [Settings](../setup/settings.md)); Pi can read and change them with its `conventions` tool. There is one set of conventions for this computer, used in every workbook. Out of the box they follow a financial-modelling style: thousands separators, negatives in parentheses, zeros as a dash. The editor opens while a tab is [busy](../glossary.md#the-turn), with no provider connected, and on Excel on the web.
 
 ## The simple case
 
@@ -38,11 +38,11 @@ The tab opens with the hint "Set preset formats, font colors, header style, and 
 
 ### Editing a format
 
-An expanded built-in card shows a "Format" field with the full format string, three preview chips ("Positive", "Negative", "Zero") formatting 1,234.5 and zero, and quick options: "dp" (0 to 4), "neg" ("(1,234)" or "-1,234"), "zero" ("--", "-", "0" or "blank"), and, for Currency only, "symbol". Changing a quick option rebuilds the format string and previews immediately. "Text" has no quick options; its format is `@`.
+An expanded built-in card shows a "Format" field with the full format string, three preview chips ("Positive", "Negative", "Zero") formatting 1,234.5 and zero (for the default Currency: "$1,234.50", "$(1,234.50)", "$--"; the chips do not show the gap Excel puts after the symbol), and quick options: "dp" (0 to 4), "neg" ("(1,234)" or "-1,234"), "zero" ("--", "-", "0" or "blank"), and, for Currency only, "symbol". Changing a quick option rebuilds the format string and previews immediately. "Text" has no quick options; its format is `@`.
 
 Typing in the "Format" field (the change applies when the field loses focus) replaces the format with exactly what was typed and removes the quick options, because Pi can no longer tell how the string was built. The previews then say "Custom". A link "Custom format — use quick options to reset" brings the quick options back with the built-in defaults for that format, not the user's previous choices.
 
-"Add custom format" adds a card named "custom-1" (then "custom-2", …) with the default number format, a "Name" field, a "Description" field ("Optional"), a "Format" field and a red "Remove preset" link. Pi can use a custom format by name, and is told the name and description.
+"Add custom format" adds a card named "custom-1" (then "custom-2", …) with the default number format, a "Name" field, a "Description" field ("Optional"), a "Format" field, previews that all read "Custom", and a red "Remove preset" link. It has no quick options. Pi can use a custom format by name, and is told the name and description.
 
 Colour fields accept the change when they lose focus. A value that is not a valid colour is ignored without a message and the field shows the previous colour again.
 
@@ -156,11 +156,12 @@ The Formats tab shares its overlay, its exits and its interrupts with the Rules 
 
 ## Open questions and verification
 
-- After the `conventions` tool saves, it announces the change with an event nothing listens for (`src/tools/conventions.ts:90-94`; no listener for `pi:conventions-updated` in `src/`). Pi's instructions keep the old list of overrides and custom names until something else refreshes them. Read from code; probably a bug.
-- The Ratio format puts a bare `x` in the format string (`#,##0.0x_)`, built in `src/conventions/format-builder.ts:70`). Excel normally needs literal letters escaped (`\x` or `"x"`). Not confirmed whether Excel accepts it as written.
-- The Percent preview does not multiply by 100 (`src/commands/builtins/settings-pages/rules-page.ts:286-320`), so it disagrees with what Excel shows. Small, but misleading.
+- Confirmed in Excel on the web (CONV checklist): the tab's hint and the six built-in cards with the default format strings above; the expanded Currency card (Format field, the three previews, "dp", "neg", "zero" and "symbol"); changing "dp" to 0 and the symbol to `€` rebuilding the string as `€* #,##0_);€* (#,##0);€* --_)`; Save writing it with "Rules saved"; Pi then formatting A1:A3 "with your currency style" and Excel getting exactly that string, showing "€1,235", "€(1,235)" and "€--"; a hand-typed Format removing the quick options and the previews reading "Custom"; the reset link restoring the built-in defaults; "Add custom format" adding "custom-1"; an invalid colour reverting without a message; a change on this tab raising "Discard changes?", and "Discard" leaving nothing saved.
+- After the `conventions` tool saves, it announces the change with an event nothing listens for (`src/tools/conventions.ts:90-94`; no listener for `pi:conventions-updated` in `src/`). Pi's instructions keep the old list of overrides and custom names until something else refreshes them. Read from code; probably a bug. Not checkable by hand without reading Pi's instructions.
+- The Ratio format's bare `x` (`#,##0.0x_)`, built in `src/conventions/format-builder.ts:70`) is accepted by Excel on the web: a cell with that format shows "1,234.5x", "(1,234.5x)" and "--" (CONV-07). Excel desktop was not tried.
+- The Percent preview does not multiply by 100 (`src/commands/builtins/settings-pages/rules-page.ts:286-320`). Confirmed in Excel on the web (CONV-06): the preview reads "1,234.5%" while Excel shows 1234.5 in that format as "123,450.0%". Small, but misleading.
 - Saving the Rules page writes the conventions read when the page opened, overwriting any change Pi made meanwhile; see [rules](rules.md#open-questions-and-verification).
 - Whether models follow the font-colour and default-font guidance consistently was not checked.
-- The tab layout, the default format strings and the Currency quick options were confirmed in the standalone taskpane. Formatting in Excel with changed conventions was not tried.
+- Custom formats used by name, the header style and the `conventions` tool's cards were read from code.
 
 Verified against pi-for-excel commit `ec453df`.
