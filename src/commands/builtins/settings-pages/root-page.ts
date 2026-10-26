@@ -8,7 +8,7 @@ import { getAppStorage } from "../../../storage/local/app-storage.js";
 import { listOpenAiGatewayConfigs } from "../../../auth/custom-gateways.js";
 import { PI_EXECUTION_MODE_CHANGED_EVENT, type ExecutionMode } from "../../../execution/mode.js";
 import type { ModelSwitchBehavior } from "../../../models/switch-behavior.js";
-import { getLanguage, initLanguage, t } from "../../../language/index.js";
+import { getLanguage, t } from "../../../language/index.js";
 import {
   Archive,
   FlaskConical,
@@ -29,6 +29,7 @@ import {
   createSettingToggleRow,
 } from "../../../ui/settings-rows.js";
 import type { SettingsPageContext, SettingsShellPage } from "../../../ui/settings-shell.js";
+import { requestConfirmationDialog } from "../../../ui/confirm-dialog.js";
 import { showToast } from "../../../ui/toast.js";
 import { getSettingsPagesDependencies } from "./dependencies.js";
 
@@ -196,16 +197,34 @@ function buildBehaviorGroup(ctx: SettingsPageContext): HTMLElement {
     ],
     value: getLanguage(),
     onChange: (newLang) => {
-      initLanguage(newLang);
+      // The language applies only through the reload, so a refused switch or a
+      // failed save leaves the whole taskpane in the current language.
       void (async () => {
+        if (deps.isAnyTabBusy?.()) {
+          const proceed = await requestConfirmationDialog({
+            title: t("settings.lang.busy_title"),
+            message: t("settings.lang.busy_message"),
+            confirmLabel: t("settings.lang.busy_confirm"),
+            cancelLabel: t("confirm.cancel"),
+            confirmButtonTone: "danger",
+            restoreFocusOnClose: true,
+          });
+          if (!proceed) {
+            languageRow.select.value = getLanguage();
+            return;
+          }
+        }
+
         try {
           const storage = getAppStorage();
           await storage.settings.set("language", newLang);
-          showToast(t("settings.lang.reloading"));
-          setTimeout(() => location.reload(), 1000);
         } catch {
-          showToast(t("settings.lang.saveFailed"));
+          languageRow.select.value = getLanguage();
+          showToast(t("settings.lang.saveFailed"), { variant: "error" });
+          return;
         }
+        showToast(t("settings.lang.reloading"));
+        setTimeout(() => location.reload(), 1000);
       })();
     },
   });
