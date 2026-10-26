@@ -1,12 +1,12 @@
 # Bug triage
 
-The agent-experience problems the documents raised, deduplicated by root cause and ranked by how much they hurt task success: how often an agent doing ordinary spreadsheet work meets them, and how badly they mislead it when it does. Each entry names where the agent meets it, what it receives, how to reproduce it, the cause in the code, and a proposed fix. Seventeen of the twenty-one were confirmed in Excel on the web on 2026-10-26 by calling the real tools in the taskpane (wrapped as the runtime wraps them) and, for nine of them, by real model turns with GPT-6.1 Sol whose requests were captured from the network; those carry a **Status** line. The rest are read from code. None has been filed as an issue.
+The agent-experience problems the documents raised, deduplicated by root cause and ranked by how much they hurt task success: how often an agent doing ordinary spreadsheet work meets them, and how badly they mislead it when it does. Each entry names where the agent meets it, what it receives, how to reproduce it, the cause in the code, and a proposed fix. Twenty-three of the twenty-five were confirmed in Excel on the web on 2026-10-26 by calling the real tools in the taskpane (wrapped as the runtime wraps them) and, for twelve of them, by real model turns (GPT-6.1 Sol in the first pass, GPT-6 Luna in the second) whose requests were captured from the network; those carry a **Status** line. The second pass added a co-author in a second browser profile, a real Confirm-mode turn, Stop during a delayed write, `/compact`, an Excel burst that hung the host, and the Python tools against the repo's native bridge (`PYTHON_BRIDGE_MODE=real`) and Pyodide. The rest are read from code. None has been filed as an issue. None has been filed as an issue.
 
 Ranking principle: a result that lies (says success when the workbook disagrees, or failure when the change was made) ranks above one that fails loudly, because the agent has no reason to look again. Among loud failures, the ones that every large or busy workbook hits rank above the rare ones.
 
 ## Summary
 
-Twenty-one entries after merging about forty raw observations. Nine are high. They fall into four clusters. **Results that lie** (B-01, B-02, B-03): writes into merged areas, oversized writes and fills, and writes that break a spill, land under manual calculation or violate data validation all produce a result that contradicts the workbook. **Size** (B-04, B-05): nothing bounds what the agent reads or is sent; one large selection costs ~150k tokens per model call, and one large sheet disables `search_workbook` for the whole workbook. **Excel state the agent cannot see or survive** (B-06, B-07, B-11): cell-edit mode ends the task, values arrive raw (dates as serials, zero as `0.0000e+0`), and protection, merges, filters, spills and calculation mode are invisible, so the agent leans on `execute_office_js` (six of eleven real turns). **Context the agent is given wrongly** (B-08, B-09, B-12): the change list reports Pi's own writes as the user's and disappears after one model call; parallel approvals decline each other; the blueprint goes stale. The common thread of the high entries is that each tool trusts Excel's success and reports only on the cells it was asked about.
+Twenty-five entries after merging about fifty raw observations. Ten are high. They fall into four clusters. **Results that lie** (B-01, B-02, B-03): writes into merged areas, oversized writes and fills, and writes that break a spill, land under manual calculation or violate data validation all produce a result that contradicts the workbook. **Size** (B-04, B-05): nothing bounds what the agent reads or is sent; one large selection costs ~150k tokens per model call, and one large sheet disables `search_workbook` for the whole workbook. **Excel state the agent cannot see or survive** (B-06, B-07, B-11): cell-edit mode ends the task, values arrive raw (dates as serials, zero as `0.0000e+0`), and protection, merges, filters, spills and calculation mode are invisible, so the agent leans on `execute_office_js` (six of eleven real turns). **Context the agent is given wrongly** (B-08, B-09, B-12): the change list reports Pi's own writes as the user's and disappears after one model call; parallel approvals decline each other; the blueprint goes stale. **A host that stops answering** (B-20): when Excel on the web hangs, the tool call, the lock and the turn hang with it, and Stop does not end the turn. The common thread of the high entries is that each tool trusts Excel's success and reports only on the cells it was asked about.
 
 | ID | Title | Severity | Area | Decision needed |
 | --- | --- | --- | --- | --- |
@@ -19,6 +19,7 @@ Twenty-one entries after merging about forty raw observations. Nine are high. Th
 | B-07 | Values reach the agent raw and mis-rendered, and writes coerce text | high | reading, writing | fix |
 | B-08 | The change list reports Pi's own writes, misses new sheets and lasts one model call | high | auto-context | fix |
 | B-09 | Parallel Confirm-mode approvals decline each other | high | approvals | fix |
+| B-20 | Excel calls have no timeout, and a hung host hangs the turn past Stop | high | hostility | fix |
 | B-10 | Excel failures arrive as generic text in results marked successful | medium | tool contract | fix |
 | B-11 | The agent cannot see workbook state that changes what its calls do | medium | reading, prompt | fix |
 | B-12 | The blueprint goes stale and is re-sent on every model call | medium | auto-context | fix |
@@ -29,8 +30,11 @@ Twenty-one entries after merging about forty raw observations. Nine are high. Th
 | B-17 | Unqualified addresses follow the user's active sheet | medium | addresses | product call |
 | B-18 | Overwrite protection forces a confirmation round trip on explicit requests | medium | prompt | product call |
 | B-19 | Backup notes give the wrong reason when a backup is skipped | low | backups | fix |
-| B-20 | Excel calls have no timeout and cannot be stopped | low | hostility | fix |
+| B-22 | A missing Python module on the native bridge falls back to Pyodide and returns `Error: ` with no message | medium | python | fix |
+| B-23 | A co-author's edits overwrite or move Pi's verified writes with no notice | medium | co-authoring | fix |
+| B-24 | Compaction summarizes finished work as still to do, and frees little | medium | context | fix |
 | B-21 | Small result-format slips | low | results | fix |
+| B-25 | The Python transform hides stdout, pads ragged output and hits bridge size limits | low | python | fix |
 
 ## High
 
@@ -120,7 +124,7 @@ Twenty-one entries after merging about forty raw observations. Nine are high. Th
 - **Severity:** `high`. The agent either attributes its own work to the user or cannot see the user's edits, and loses them mid-turn.
 - **Decision needed:** `fix`. Skip events whose `triggerSource` is `ThisLocalAddin`; register `worksheets.onChanged` at workbook level (ExcelApi 1.9) or `onAdded` for new sheets; flush per tab and append the flushed line to that tab's stored user message (or keep it until the turn ends) so later model calls see it.
 - **Raised by:** [foundations/auto-context.md](foundations/auto-context.md), [hostility/the-user-moves-or-edits.md](hostility/the-user-moves-or-edits.md).
-- **Status:** confirmed 2026-10-26 for (1), (2), (3) (AUTO-10 to AUTO-12, real turns); (4) read from code.
+- **Status:** confirmed 2026-10-26 for (1), (2), (3) (AUTO-10 to AUTO-12, real turns); (4) read from code. Second pass (COAUTH-01, COAUTH-02): a co-author's edit to `Calc!Z3` arrived with `source: "Remote"`, `triggerSource: "Unknown"`, and the tracker records it as the user's. Once the co-author had joined, Pi's own writes also arrived with `triggerSource: "Unknown"` (they were `ThisLocalAddin` before), and stayed that way after the co-author left. So filtering on `triggerSource` alone is not enough: also skip ranges Pi has just written (the coordinator knows them), and label `source: "Remote"` entries as a co-author's.
 
 ### B-09: Parallel Confirm-mode approvals decline each other
 
@@ -131,7 +135,18 @@ Twenty-one entries after merging about forty raw observations. Nine are high. Th
 - **Severity:** `high` in Confirm mode. The agent is told the user refused, and by the system prompt's rules it should not retry or should ask again.
 - **Decision needed:** `fix`. Serialize approvals (take the workbook lock before asking, or queue approval requests), or give each request its own overlay id and stack them.
 - **Raised by:** [hostility/the-lock-and-parallel-calls.md](hostility/the-lock-and-parallel-calls.md), [foundations/the-tool-contract.md](foundations/the-tool-contract.md).
-- **Status:** confirmed 2026-10-26 at the dialog level (LOCK-05): the first of two `requestConfirmationDialog` calls resolved `false` without a click. A full Confirm-mode turn was not run.
+- **Status:** confirmed 2026-10-26 at the dialog level (LOCK-05) and in a real Confirm-mode turn (LOCK-06, GPT-6 Luna). Asked for "make A1:B1 bold, give C1 a yellow fill, and write the word checked in H2", the model issued all three calls in one response. One dialog appeared (for `write_cells`, the last), and it was approved. Both `format_cells` calls returned `Mutation cancelled by user (Confirm mode).` without the user seeing them. The agent ended: "The formatting changes to Co!A1:B1 and Co!C1 were cancelled, so they weren't applied." The dialog's title also says "Allow workbook mutation in Safe mode?" while its body says "Confirm mode".
+
+### B-20: Excel calls have no timeout, and a hung host hangs the turn past Stop
+
+- **Where the agent meets it:** whenever Excel on the web stops answering: after a heavy burst (its own or another add-in's), a lost connection, or a host stuck "Saving...". Rare, but when it happens the whole session is stuck until the user reloads the page.
+- **What happens / what was expected:** 150 parallel batches each writing 10,000 volatile formulas (`=RAND()*SUM($A$1:$E$2000)`) were sent from the taskpane. Excel never answered any of them. Only 10,800 of 1.5 million formulas landed. From then on every `Excel.run` waited: a 2 × 2 `read_range` was still waiting after 50 s. A real turn ("Read Co!A1:B3 and tell me what is in it.") showed the `read_range` card spinning for 90 s; pressing Stop did not end the turn, and pressing it again 10 s later still did not. Excel's own UI showed only "Saving..." with no error. Reloading the page recovered Excel in 22 s; Pi restored both chats. In the next turn the agent said the read had returned "No result provided". Expected: the call gives up after a bounded time, releases the lock, and tells the agent "Excel did not answer in 60 s; the change may or may not have been applied, read back before retrying"; Stop ends the turn at once.
+- **Reproduce:** fire ~150 large formula writes in parallel through `Excel.run` from the taskpane console, then send a turn that reads a small range; press Stop.
+- **Why (from the code):** `src/excel/helpers.ts:27-29` (`excelRun`) passes `Excel.run` through with no timeout and no abort. The coordinator checks the signal only before running (`with-workbook-coordinator.ts:63-68`); the tool's promise is awaited by the agent loop, so the turn cannot end until it settles.
+- **Severity:** `high`. Rare, but total: the agent, the lock and the user's Stop are all held hostage, and nothing tells anyone why.
+- **Decision needed:** `fix`. Race every `Excel.run` against a timeout (say 60 s for reads, longer for mutations) and the abort signal; on either, release the lock and return an error-shaped result that says the outcome is unknown. Make Stop settle pending tool calls with "cancelled by Stop; the Excel batch may still complete".
+- **Raised by:** [hostility/throttling-and-timeouts.md](hostility/throttling-and-timeouts.md), [hostility/stop.md](hostility/stop.md).
+- **Status:** confirmed 2026-10-26 on Excel on the web (TIME-01, TIME-02, STOP-03). Lighter bursts did not throttle: 60 parallel `read_range` calls finished in 8.7 s, 40 parallel `write_cells` serialized through the lock in 34 s, 300 raw 5,000-cell reads in 45 s and 100 raw 10,000-cell writes in 96 s, all with no error. A `read_range` issued straight after the 100-write burst waited 15 s. No throttling error was ever returned; overload shows up as delay, then as a hang.
 
 ## Medium
 
@@ -225,6 +240,39 @@ Twenty-one entries after merging about forty raw observations. Nine are high. Th
 - **Raised by:** [tools/writing-cells.md](tools/writing-cells.md), [foundations/what-the-agent-is-told.md](foundations/what-the-agent-is-told.md).
 - **Status:** observed 2026-10-26 in a real turn (one model, one prompt).
 
+### B-22: A missing Python module on the native bridge falls back to Pyodide and returns `Error: ` with no message
+
+- **Where the agent meets it:** `python_run` with the native bridge running, whenever the code imports a package the local Python lacks (pandas and numpy are the usual ones), or the bridge times out.
+- **What happens / what was expected:** with the bridge in real mode and no pandas installed, `python_run {code: "import pandas as pd\nresult = 1"}` returned exactly `Error: ` and details `{ok: false, error: ""}`. The bridge had answered 400 with `ModuleNotFoundError: No module named 'pandas'`, but the tool then retried in Pyodide, where pandas was also not loaded; Pyodide's traceback went to `stderr`, which the error path drops. Any unknown module (`import notamodule_xyz`) gives the same empty error. A bridge timeout also re-runs the code in Pyodide: `while True: pass` with `timeout_ms: 2000` ran on the bridge, then in the browser, and returned `Pyodide execution timed out after 2000ms` after 4 s. Other bridge errors are clear: `1/0` returned the full traceback. Expected: the bridge's own error, and no silent second run.
+- **Reproduce:** `PORT=3340 PYTHON_BRIDGE_MODE=real node scripts/python-bridge-server.mjs --https` on a machine without pandas; call `python_run` with `import pandas`.
+- **Why (from the code):** `shouldFallbackToPyodideAfterBridgeError` (`src/tools/python-run.ts:415-436`) matches `message.includes("enotfound")`, which `modulenotfounderror` contains, and `"timed out"`. The Pyodide branch throws `response.error ?? "Pyodide execution failed."` (`:543-545`); Pyodide sets `error: ""`, so the message is empty and `stderr` is lost. The tool description promises "numpy, pandas, etc. work automatically" in Pyodide, but a direct Pyodide call returned "The module 'pandas' is included in the Pyodide distribution, but it is not installed."
+- **Severity:** `medium`. The agent cannot tell what failed and usually abandons Python.
+- **Decision needed:** `fix`. Match network errors by error code or a word-boundary pattern, not substrings; never fall back on a bridge timeout; on a Pyodide failure, return `stderr` (and say which backend ran).
+- **Raised by:** [tools/python.md](tools/python.md).
+- **Status:** confirmed 2026-10-26 (PY-03, PY-04, PY-05).
+
+### B-23: A co-author's edits overwrite or move Pi's verified writes with no notice
+
+- **Where the agent meets it:** any shared workbook on the web (or desktop with AutoSave on OneDrive) where someone else is editing while Pi works.
+- **What happens / what was expected:** three observations with a second guest editing the same workbook in another browser profile. (1) The co-author started typing in `Co!B4` (without Enter). Pi wrote `555` there and got `Written to **Co!B4** … Verified values: 555`. The co-author then pressed Enter, and `B4` became `9`: last writer wins, and the verified result is now false. (2) The co-author inserted a row above row 2 while Pi wrote `[["Total", "=SUM(B2:B5)"]]` at `Co!A6`. The result said `Written to **Co!A6:B6**`, but the cells ended in row 7 as `=SUM(B3:B6)`, and every address the agent read earlier now points one row off. (3) A co-author editing a cell does not put Pi into cell-edit mode: Pi's reads and writes succeeded while the co-author was mid-edit. Remote values reached Pi within about 4 s; a sheet Pi added took over 20 s to appear for the co-author. Expected: the agent learns, at least on its next model call, that a co-author changed cells or structure it is working with.
+- **Reproduce:** open the same folder-link workbook in a second profile (`PI_EXCEL_WEB_PROFILE=/tmp/coauthor-profile PI_EXCEL_WEB_CDP_PORT=9224 scripts/orb/excel-web.sh "<workbook url>"`); edit while Pi writes.
+- **Why (from the code):** Remote changes arrive through `onChanged` with `source: "Remote"`, but the change tracker labels them as the user's (B-08) and keeps them for one model call; nothing reports a remote structural change (the blueprint is invalidated only by Pi's own writes, B-12). Verification reads back once, immediately.
+- **Severity:** `medium`. Co-authoring is common on the web, and the agent's model of the sheet silently drifts.
+- **Decision needed:** `fix`. Track `source: "Remote"` changes and row/column insertions (`onChanged` change types, `worksheets.onRowInserted` where available) per tab, report them as "A co-author changed …", and invalidate the blueprint on remote structural change. Optionally mention in write results when the target overlaps a remote change seen during the call.
+- **Raised by:** [hostility/co-authoring-and-autosave.md](hostility/co-authoring-and-autosave.md).
+- **Status:** confirmed 2026-10-26 (COAUTH-01 to COAUTH-05).
+
+### B-24: Compaction summarizes finished work as still to do, and frees little
+
+- **Where the agent meets it:** after `/compact` or auto-compaction (near 85% of a 272k window, 425k of a 500k one).
+- **What happens / what was expected:** on a 63k-token session, `/compact` summarized 21 messages. The summary's Goal and "In Progress" were the request before last ("Read `Calc!A1:D2500` … then `Calc!A2501:D5000` …"), which had already been done and answered, and its Next Steps told the agent to call `read_range` on both ranges again. The agent did not redo them on "continue", but only because the next kept message showed a later answer. The context meter went from 62,934 to 58,752 tokens: the kept tail must hold at least 20,000 tokens and cannot start with a tool result, so a single 22k-token read result stayed verbatim. Below 20,000 tokens, `/compact` reports "Nothing to compact" (a 14k-token session). Expected: completed requests summarized as done with their answer, and compaction that frees most of the window.
+- **Reproduce:** a session with a few large reads; `/compact`; inspect `agent.state.messages` for the `compactionSummary`.
+- **Why (from the code):** `src/commands/builtins/export.ts` cuts at `findCutIndex` (`:302-323`) with `keepRecentTokens` = 20,000 (`src/compaction/defaults.ts`), walking back past tool results; the summarization prompt is given the summarized slice only, so the last request in that slice looks unfinished even when its answer is in the kept tail.
+- **Severity:** `medium`. A summary that says "next, do X" invites repeating mutations.
+- **Decision needed:** `fix`. Tell the summarizer which requests were answered (pass the first kept user message, or mark each summarized request's final assistant reply); shrink oversized tool results in the kept tail to their shaped preview before measuring the tail.
+- **Raised by:** [hostility/context-pressure.md](hostility/context-pressure.md).
+- **Status:** confirmed 2026-10-26 (CTX-03, CTX-04).
+
 ## Low
 
 ### B-19: Backup notes give the wrong reason when a backup is skipped
@@ -234,14 +282,6 @@ Twenty-one entries after merging about forty raw observations. Nine are high. Th
 - **Decision needed:** `fix`. Distinguish "too large to back up (N cells > 20,000)" from "workbook identity unknown".
 - **Raised by:** [tools/backups.md](tools/backups.md), [tools/filling-a-formula.md](tools/filling-a-formula.md).
 - **Status:** confirmed 2026-10-26 (FILL-06).
-
-### B-20: Excel calls have no timeout and cannot be stopped
-
-- **What happens:** `excelRun` wraps `Excel.run` with no timeout and no abort. A batch that Excel never answers keeps the tool call — and, for a mutation, the workbook lock — forever; Stop ends the turn only after the call returns. Not observed (Excel on the web answered every probe).
-- **Why:** `src/excel/helpers.ts:27-29`; tools ignore the `signal` argument after `throwIfAborted` in `with-workbook-coordinator.ts:63-68`.
-- **Decision needed:** `fix`. A per-call timeout (for example 60 s) that releases the lock and returns "Excel did not answer in 60 s; the change may or may not have been applied — read back before retrying".
-- **Raised by:** [hostility/throttling-and-timeouts.md](hostility/throttling-and-timeouts.md), [hostility/stop.md](hostility/stop.md).
-- **Status:** read from code.
 
 ### B-21: Small result-format slips
 
@@ -253,8 +293,22 @@ Twenty-one entries after merging about forty raw observations. Nine are high. Th
     - Overview sheet previews label rows 1–5 and columns from A even when the used range starts elsewhere (read from code, `get-workbook-overview.ts:278-298`).
     - Office.js errors lose their `code` and `debugInfo` (see B-10).
     - Passing a wrong optional parameter name (`cell` for `comments`) gives an internal JavaScript error, `Cannot read properties of undefined (reading 'includes')`, instead of "range is required" (confirmed).
+    - Stop after a write had landed shows `Error: signal is aborted without reason` under the successful result (confirmed, STOP-02).
+    - The Confirm-mode approval dialog is titled "Allow workbook mutation in Safe mode?" while its body and the mode button say "Confirm" (confirmed, LOCK-06).
 - **Decision needed:** `fix` each.
 - **Raised by:** [foundations/auto-context.md](foundations/auto-context.md), [tools/office-js.md](tools/office-js.md), [tools/filling-a-formula.md](tools/filling-a-formula.md), [tools/the-workbook-overview.md](tools/the-workbook-overview.md).
+
+### B-25: The Python transform hides stdout, pads ragged output and hits bridge size limits
+
+- **What happens:** grouped, all confirmed 2026-10-26 on the native bridge (PY-06 to PY-10).
+    - `print()` output and stderr from the transform code are not in the result; a transform that printed diagnostics returned only `✅ Transformed …`.
+    - A ragged result (`[[1,2,3],[4]]`) is written as 2 × 3 with blanks and reported as success.
+    - `input_data` is `{range, values}`, and values are raw: an echo of formatted dates, percentages and text codes wrote `45292`, `0.05` and `123` in General format (the text `00123` became a number; B-07).
+    - Writing into a merged destination drops values with a success result (`Changed cell(s): 3` for 4 values; B-01).
+    - Reading `Big!A1:E20000` failed with `Python bridge request failed (413): Request body too large (max 524288 bytes).`; returning 50,000 rows failed with `Process output exceeded 262144 bytes.`. Neither says how many rows would fit.
+- **Why:** `src/tools/python-transform-range.ts` formats only the write; the bridge's `MAX_JSON_BODY_BYTES` and `MAX_OUTPUT_BYTES` (`scripts/python-bridge-server.mjs`).
+- **Decision needed:** `fix`. Include stdout/stderr previews as `python_run` does; reject ragged output; state the byte limits and a row estimate in the error.
+- **Raised by:** [tools/python.md](tools/python.md).
 
 ## Items raised elsewhere, checked here
 

@@ -7,7 +7,7 @@ The documents were drafted from the code and checked against Excel on the web by
 | File | Covers |
 | --- | --- |
 | [foundations-and-reading.md](foundations-and-reading.md) | `foundations/*`, `tools/reading-a-range.md`, `tools/the-workbook-overview.md`, `tools/searching.md`, `tools/tracing-and-explaining.md` |
-| [writing.md](writing.md) | `tools/writing-cells.md`, `tools/filling-a-formula.md`, `tools/formatting.md`, `tools/structure-and-view.md`, `tools/charts-and-comments.md`, `tools/office-js.md`, `tools/backups.md` |
+| [writing.md](writing.md) | `tools/writing-cells.md`, `tools/filling-a-formula.md`, `tools/formatting.md`, `tools/structure-and-view.md`, `tools/charts-and-comments.md`, `tools/office-js.md`, `tools/backups.md`, `tools/python.md` |
 | [hostility.md](hostility.md) | `hostility/*` |
 
 Each row has an ID, a priority (P1 established fact or suspected bug, P2 ordinary claim, P3 a number or timing), what it needs, the claim, setup, steps, expected result and a Result column. "Needs": `probe` (a tool call from the taskpane console), `turn` (a real model turn), `user` (real keyboard or mouse input in the grid), `2nd user`, `desktop`.
@@ -39,4 +39,6 @@ Each row has an ID, a priority (P1 established fact or suspected bug, P2 ordinar
 
 One pass, 2026-10-26, against `ec453df` (dev server on the branch checkout), on Excel on the web (ExcelApi 1.19, anonymous guest workbook, workbook identity unknown), model GPT-6.1 Sol (`openai-codex`, 500k window, thinking High), Auto mode. It made about 120 probe tool calls, ran 11 real turns with captured requests, and used grid input for cell-edit mode and user edits. Every row marked `pass` or `fail` below was observed in that pass. A `fail` is a claim the documents make about a defect, observed to be true. Its triage entry carries the Status.
 
-Not covered: desktop Excel; a second user (co-authoring); external links; Confirm mode in a real turn (only the dialog race was exercised); Python tools; compaction; Stop during a running write; throttling. No document is marked `verified`, because the P2 rows for those areas are blocked.
+A second pass, the same day, covered what the first left out, with GPT-6 Luna (272k window) for the real turns: a second guest editor in a fresh browser profile on CDP port 9224 typing into the grid (COAUTH); a real Confirm-mode turn (LOCK-06); Stop with `Excel.run` patched from the console to delay before or after the batch (STOP); `/compact` on a 14k and a 63k session (CTX-03, CTX-04); parallel bursts up to one that hung Excel (TIME); and the Python tools against the repo bridge in real mode and Pyodide (PY). It ran 10 real turns and about 1,000 probe calls (most in bursts).
+
+Not covered here: desktop Excel and external links (handed to the Mac pass). No document is marked `verified` until those rows are run.

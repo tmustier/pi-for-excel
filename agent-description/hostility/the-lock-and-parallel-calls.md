@@ -17,7 +17,7 @@ Another tab's mutation holds the lock. This tab's mutations wait, with no time l
 
 ## Racing approvals
 
-In Confirm mode each mutating call asks for approval *before* taking the lock, so all mutating calls in a batch ask at once. All approval dialogs share one overlay id. Opening the second closes the first, which resolves as declined. Calling the dialog twice: the first resolved `false` without a click (confirmed). The agent receives `Mutation cancelled by user (Confirm mode).` for every call but the last. By its prompt, it should treat that as the user's refusal. See [B-09](../bug-triage.md#b-09-parallel-confirm-mode-approvals-decline-each-other).
+In Confirm mode each mutating call asks for approval *before* taking the lock, so all mutating calls in a batch ask at once. All approval dialogs share one overlay id. Opening the second closes the first, which resolves as declined. Calling the dialog twice: the first resolved `false` without a click (confirmed). The agent receives `Mutation cancelled by user (Confirm mode).` for every call but the last. By its prompt, it should treat that as the user's refusal. In a real Confirm-mode turn (GPT-6 Luna) asked for two formatting changes and one write, the model sent all three at once; one dialog appeared, for the write; both format calls were declined without the user seeing them, and the agent reported them as cancelled (confirmed). See [B-09](../bug-triage.md#b-09-parallel-confirm-mode-approvals-decline-each-other).
 
 ## Classification quirks
 
@@ -26,7 +26,7 @@ In Confirm mode each mutating call asks for approval *before* taking the lock, s
 
 ## Open questions and verification
 
-- Confirmed: LOCK-02, LOCK-05.
+- Confirmed: LOCK-02, LOCK-05, LOCK-06.
 - Read from code: cross-tab waiting; no lock timeout.
 
 Verified against pi-for-excel commit `ec453df`.

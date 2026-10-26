@@ -34,7 +34,9 @@ The preview does not name the call's arguments. The last line refers to a chat h
 
 ## Compaction
 
-Near the context limit (or on `/compact`), older messages are serialized and summarized by the same model into Goal, Constraints, Progress, Key Decisions, Next Steps and Critical Context sections, "Preserve exact identifiers (sheet names, cell addresses, …)". The agent then sees a user message beginning "The conversation history before this point was compacted into the following summary:". Tool results are labelled "(error)" in the serialization only when `isError` is set. Workbook tools' failures are not set that way, so a failed write is summarized like a success (read from code; [B-10](../bug-triage.md#b-10-excel-failures-arrive-as-generic-text-in-results-marked-successful)).
+Near the context limit (or on `/compact`), older messages are serialized and summarized by the same model into Goal, Constraints, Progress, Key Decisions, Next Steps and Critical Context sections, "Preserve exact identifiers (sheet names, cell addresses, …)". The agent then sees a user message beginning "The conversation history before this point was compacted into the following summary:". Tool results are labelled "(error)" in the serialization only when `isError` is set.
+
+Observed (second pass, GPT-6 Luna, 272k window). `/compact` on a 14k-token session showed "Nothing to compact": the most recent 20,000 tokens are always kept, so a session must be larger than that before anything is summarized. On a 63k-token session it showed "Summarized 21 messages" and the meter went from 62,934 to only 58,752 tokens, because the kept tail cannot start with a tool result and so kept one 22k-token read whole. The summary's Goal was the request before last, which had already been answered, listed under "In Progress", with Next Steps to call `read_range` on both ranges again. The "Critical Context" kept the two cancelled Confirm-mode format calls and the Stop-orphaned J write, but dropped the protected-sheet exchange and the co-authoring writes. On "continue" the agent repeated its last answer rather than redoing the reads ([B-24](../bug-triage.md#b-24-compaction-summarizes-finished-work-as-still-to-do-and-frees-little)). Workbook tools' failures are not set that way, so a failed write is summarized like a success (read from code; [B-10](../bug-triage.md#b-10-excel-failures-arrive-as-generic-text-in-results-marked-successful)).
 
 ## The auto-context is outside all three
 
@@ -43,6 +45,8 @@ The auto-context note is never truncated, shaped or compacted, because it is reb
 ## Open questions and verification
 
 - Confirmed: truncation (CTX-01), the selection cost (AUTO-06).
-- Read from code: shaping text and compaction (no long session was run).
+- Confirmed: compaction (CTX-03, CTX-04).
+- In the real runtime, truncated results also say `full output saved to Files workspace: .tool-output/<timestamp>-read_range-<call id>.txt` (confirmed; the probe harness has no saver).
+- Read from code: shaping text.
 
 Verified against pi-for-excel commit `ec453df`.

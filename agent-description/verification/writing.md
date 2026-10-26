@@ -77,3 +77,23 @@ How to run this file: the fixture workbook from [README.md](README.md#how-to-run
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | HIST-01 | P2 | probe | List shows backups with IDs. | After writes. | `list`. | Table. | pass |
 | HIST-02 | P1 | probe, Confirm | `delete` skips approval in Confirm mode. | Confirm. | `delete`. | No dialog. | — |
+
+## tools/python.md
+
+Needs the bridge: `PORT=3340 PYTHON_BRIDGE_MODE=real node scripts/python-bridge-server.mjs --https` (an orb service), and for `libreoffice_convert`, LibreOffice (`apt-get install libreoffice-calc-nogui`). Wrap the Python tools with `applyExperimentalToolGates` from `/src/tools/experimental-tool-gates.ts`.
+
+| ID | P | Needs | Claim | Setup | Steps | Expected | Result |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| PY-01 | P2 | probe, bridge | `python_run` returns result and stdout. | Bridge up. | `print(sys.version); result = {"a": 1}`. | `Ran Python snippet (exit code 0)`, JSON, stdout. | pass |
+| PY-02 | P2 | probe | Without a bridge, `python_run` uses Pyodide silently. | Bridge stopped. | Same. | stdout `emscripten`; no backend note. | pass |
+| PY-03 | P1 | probe, bridge | A missing module returns an empty error. | No pandas. | `import pandas`. | `Error: `, `error: ""`. | fail (B-22) |
+| PY-04 | P1 | probe, bridge | A bridge timeout re-runs in Pyodide. | — | `while True: pass`, `timeout_ms: 2000`. | `Pyodide execution timed out`, 4 s. | fail (B-22) |
+| PY-05 | P2 | probe, bridge | An exception returns the traceback. | — | `1/0`. | `ZeroDivisionError` traceback. | pass |
+| PY-06 | P2 | probe, bridge | Transform hides stdout. | — | Transform that prints. | No stdout in result. | fail (B-25) |
+| PY-07 | P2 | probe, bridge | Ragged output padded silently. | — | `result = [[1,2,3],[4]]`. | 2 × 3 written, success. | fail (B-25) |
+| PY-08 | P1 | probe, bridge | Merged destination drops values. | `F1:G1` merged. | 2 × 2 at F1. | `Changed cell(s): 3.` | fail (B-01) |
+| PY-09 | P2 | probe, bridge | Formatted input arrives raw; text codes become numbers. | Dates, %, `@` codes. | Echo `input_data['values']`. | `45292`, `0.05`, `123`. | fail (B-07) |
+| PY-10 | P2 | probe, bridge | Bridge size limits. | `Big`. | Read 20,000 × 5; return 50,000 rows. | `413` body / output limits. | fail (B-25) |
+| PY-11 | P2 | probe, bridge | Overwrite protection on transform. | Occupied A1. | Output at A1. | `⛔ **Transform blocked**`. | pass |
+| PY-12 | P2 | probe, bridge | `libreoffice_convert` csv → xlsx. | LibreOffice. | Convert `/tmp/lo/t.csv`. | `Converted … to **XLSX**`. | pass |
+
