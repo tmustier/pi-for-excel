@@ -1,0 +1,141 @@
+# The Extensions hub
+
+## Summary
+
+Extensions add capabilities to Pi from outside its core: tools Pi can call, slash commands the user can type, and small widgets above the composer. The user manages them on three pages of the [Settings overlay](../setup/settings.md), collectively called the Extensions hub: "Connections" ("Web search, MCP servers, and bridges"), "Plugins" ("Extensions that add tools and commands") and "Skills" ("Task playbooks Pi can load on demand"). `/extensions` and `/tools` open "Connections", `/plugins` opens "Plugins", `/skills` opens "Skills". The utilities-menu item "Extensions" also opens "Connections". The Settings root lists the three pages under "Extensions": "Connections" ("Web search, MCP servers & bridges"), "Plugins" ("Installed extensions", with "{count} installed") and "Skills" ("Task playbooks Pi can load"). All four commands are busy-allowed and work with no provider connected.
+
+This document covers the hub as a whole and the Plugins page. The Connections page is described in [web search and MCP](web-search-and-mcp.md), the Skills page in [skills](../guidance/skills.md). How an extension is written is out of scope.
+
+## The simple case
+
+A fresh install has one plugin: the built-in **Snake**. The user types `/plugins`. The Settings overlay opens on "Plugins": under "Installed" is a card "Snake" with "../extensions/snake.js · host runtime" and an on toggle; under "Install" is a box "Paste a plugin URL…" and an "Install" button.
+
+The user turns the Snake toggle off. A toast says "Snake: disabled", the Snake widget above the composer disappears and `/snake` leaves the [command menu](../commands/the-command-menu.md). Turning it on again says "Snake: enabled" and both come back. Escape returns to the "Settings" root; a second Escape closes the overlay and focus returns to the composer.
+
+## The interaction, event by event
+
+```mermaid
+stateDiagram-v2
+    [*] --> page : /extensions, /tools, /plugins, /skills or menu "Extensions"
+    page --> page : toggle enable (runtime reloaded, toast)
+    page --> page : toggle a permission (saved, extension reloaded, toast)
+    page --> enable_confirm : enable a non-built-in plugin holding higher-risk grants
+    enable_confirm --> page : Enable (activated, toast) or Cancel (nothing)
+    page --> name_prompt : Install with a URL
+    name_prompt --> install_confirm : name given
+    name_prompt --> page : empty name or prompt fails (toast)
+    install_confirm --> page : Install (saved, activated, toast) or Cancel (nothing)
+    page --> uninstall_confirm : Uninstall
+    uninstall_confirm --> page : Uninstall (removed, toast) or Cancel
+    page --> root : Escape or back arrow
+    root --> [*] : Escape
+    page --> [*] : × or backdrop
+```
+
+There is no busy phase: every change applies at once and the page re-renders. Each page follows live changes, so an extension Pi installs while the page is open appears without reopening it.
+
+### Opening
+
+The page opens on whatever the command names. Running the same command while the overlay is open on any page closes it (opening Settings with no page toggles). Each plugin card shows the name, the source and the runtime ("host runtime" or a sandboxed one), and an enable toggle. Clicking the card expands it to show:
+
+- "Commands": each slash command it registered, as `/name`;
+- "Permissions": one toggle per capability, labelled in plain words such as "register tools" or "fetch external HTTP resources";
+- "Error: …" in a callout if the extension failed to load or crashed;
+- an "Uninstall" button.
+
+With nothing installed the section reads "No plugins installed." over "Pi can build plugins, or install one from a URL." An "Extension connections" section lists connections extensions registered, or "Installed extensions haven't registered any connections."
+
+### Ends at once
+
+Opening, expanding cards, going back and closing record nothing. Cancelling any of the three confirmations, an empty install box ("Enter a URL first.") and an empty name leave everything as it was.
+
+### Changes
+
+- **Enable / disable.** Disabling unloads the extension: its tools leave Pi's toolset from the next request, its commands leave the menu, its widgets are removed. Enabling loads it again. For a plugin that is not built in and holds higher-risk permissions, enabling first asks "Enable plugin "{name}"?" listing "Granted higher-risk permissions:" and "Source: {source}". The toast is "{name}: enabled" or "{name}: disabled".
+- **Permissions.** Toggling a capability saves it, shows "{name}: {capability} granted" or "{name}: {capability} revoked", and reloads the extension if it is on. At this commit the toggles are only enforced when the experimental flag "Extension permission gates" is on (see [experimental](experimental.md)); with the default, every extension can use every capability whatever the grid says.
+- **Install from URL.** After "Install", Pi asks for a name with the browser's "Extension name:" prompt, then confirms "Install plugin "{name}"?" with "Source: {url}", "Default permissions:" and "Higher-risk:" (each list may read "(none)"). On "Install" the extension is saved enabled and loaded; the toast is "Installed: {name}". A load failure shows "Install failed: {error}", but the entry stays installed with its error on the card. A remote http(s) URL is refused unless "Remote extension URLs" is on.
+- **Uninstall.** "Uninstall "{name}"?" / "This removes the plugin and its settings." / "Cancel" / "Uninstall"; the toast is "Uninstalled: {name}".
+
+Failures from the page itself show "Plugins: {error}".
+
+### Finishes
+
+The list of installed extensions, their enabled state and their permissions are stored in the add-in's settings on this computer and apply to every tab, session and workbook. Each change takes effect for all tabs at once; a turn already running keeps the toolset it started with.
+
+## How extensions show up
+
+- **Sandbox.** Built-in and local extensions run inside the taskpane ("host runtime"). Extensions installed from pasted code or a URL run in an isolated frame by default and reach Pi only through messages; the flag "Extension sandbox rollback" moves them back to the taskpane.
+- **Default permissions.** Built-in and local extensions get all capabilities. Code and URL installs get a restricted set: they cannot register tools, call the model, fetch from the network, read the conversation or register connections. These defaults are what the grid shows; see the enforcement caveat above.
+- **Widgets.** An extension's widget appears in a slot between the working indicator and the composer. Snake's board lives there. Widgets disappear when the extension is disabled or uninstalled.
+- **Commands.** Extension commands appear in the command menu next to built-ins and run even while the tab is busy unless the extension opts out.
+- **Tools.** Tools an extension registers are added to Pi's toolset after the built-in tools, in a stable order, and appear as ordinary [tool cards](../turn/tool-calls.md).
+- **Pi as installer.** Pi has an `extensions_manager` tool that lists, installs from code it writes, enables, disables, reloads and uninstalls extensions. Its card is labelled "Extensions Manager". It is not a workbook mutation, so it never asks for approval, not even in Confirm mode; an extension Pi writes is installed without the confirmation the user's own install shows. Code Pi writes runs in the sandbox with restricted permissions.
+
+## Modifiers
+
+| Modifier | Set before | Changed while busy |
+| --- | --- | --- |
+| Model and provider | No effect on the pages. An extension that calls the model uses the tab's current model. | No effect. |
+| Thinking level | No effect. | No effect. |
+| Execution mode | No effect on the pages. Extension tools follow the same rules as built-in tools: read-only tools never ask, workbook mutations ask in Confirm mode. `extensions_manager` never asks. | No effect. |
+| Files in the workspace, or an overlay open | The hub is a page of the Settings overlay; the commands replace any other Settings page that is open. | — |
+| Tab state (new, restored, another tab busy) | Extensions are the same for every tab. | A responding tab keeps its toolset; disabling an extension mid-turn removes its widgets and commands at once, and its tools from the next request. |
+| Host (desktop or web) | Install from URL fails on Excel on the web, where the name prompt is unavailable. Sandboxed extensions need iframes, which every host provides. | No effect. |
+
+## Cancel and interrupt
+
+| Event | Before sent | While busy |
+| --- | --- | --- |
+| Stop (button or Escape) | Escape goes back to the Settings root, then closes; on a confirmation it cancels the confirmation. It never stops a responding tab while the overlay is open. | An install or reload in progress cannot be stopped. Stopping a turn during an extension tool call ends it like any [tool call](../turn/stopping.md). |
+| The user sends something else | Behind the overlay. | Behind the overlay. |
+| Tab switched, created, closed or reopened | Behind the overlay; no effect on extensions. | No effect. |
+| An overlay or menu opens | Confirmations open over the page. An approval from a background tab can open over it. | No effect. |
+| Model or thinking level changes | No effect. | No effect. |
+| The provider fails | No effect; extensions that call the model see the error themselves. | No effect. |
+| The taskpane goes away | Saved changes stay; an unanswered confirmation is the same as Cancel. Extensions load again on the next start. | Same. |
+| The workbook changes underneath | No effect. | No effect. |
+| Focus moves to the grid or another window | No effect. | No effect. |
+| The context window fills | No effect. | No effect. |
+
+## Interactions with other systems
+
+**Persistence.** Installed extensions and their settings survive reloads; extension code from pasted text is stored with them. See [persistence and restore](../cross-cutting/persistence-and-restore.md).
+
+**Workbook changes and recovery.** Extension tools that write cells are workbook mutations and get [backups](../workbook/backups-and-revert.md) like any other. Installing or removing an extension is not covered by revert.
+
+**Other tabs and sessions.** One extension list for everything; all tabs see a change at once. A second taskpane picks it up on its next start (see [several taskpanes](../cross-cutting/several-taskpanes.md)).
+
+**Execution mode and approvals.** See the Execution mode row. [Confirm mode and approvals](../workbook/confirm-mode-and-approvals.md) owns the approval dialog.
+
+**Models and providers.** No interaction beyond extensions that call the model.
+
+**Offline and provider errors.** Installed extensions load offline unless they fetch something; URL installs need the network.
+
+**Notifications.** Toasts for every change and failure. Pi's own installs show only as tool cards, though the Plugins page updates live if open.
+
+**Settings and preferences.** Four [experimental flags](experimental.md) change extension behaviour: remote URLs, permission gates, sandbox rollback and Widget API v2.
+
+**Host differences.** See the Host row and [host differences](../cross-cutting/host-differences.md).
+
+**Language.** Page titles, section headings, buttons, confirmations and toasts are translated. "Extension name:", extension names, capability labels and error text are English.
+
+**Accessibility and keyboard.** Cards, toggles and buttons are reachable with Tab; toggles are switches with labels.
+
+## Edge cases
+
+- Uninstalling Snake removes it for good. It is seeded again only if the stored extension list is missing or unreadable, for example after the add-in's storage is cleared.
+- An install whose code fails to load is still listed, enabled, with "Error: …"; the user must uninstall it.
+- Revoking a permission from an extension that relies on it has no effect unless permission gates are on; with gates on, the extension's next use of that capability fails with an error naming it.
+- Two extensions may register commands of the same name; which one wins was not checked.
+
+## Open questions and verification
+
+- **Install from URL is broken on Excel on the web.** `src/commands/builtins/extensions-hub-plugins.ts:296` calls `window.prompt("Extension name:")`; Office.js replaces `window.prompt` with a throwing stub on the web, so every URL install ends in "Install failed: …". The URL box has already been cleared by then.
+- **Possible bypass of the remote-URL gate.** A URL install gets trust `remote-url` and runs in the sandbox by default. The opt-in check lives only in the host loader (`src/commands/extension-api.ts:828-833`); the sandbox imports the URL directly (`src/extensions/sandbox/srcdoc.ts:1078`). The taskpane's content security policy probably blocks most remote hosts anyway. Not tested.
+- **Permission toggles do nothing by default.** `src/extensions/runtime-manager.ts:927-933` returns "allowed" for every capability unless "Extension permission gates" is on, yet the grid and its toasts suggest otherwise.
+- **Pi installs extensions without approval.** `extensions_manager` is classed as non-mutating (`src/tools/execution-policy.ts:30`) and `src/tools/extensions-manager.ts` has no confirmation, so Pi can install and enable code in Confirm mode silently. A product call.
+- The Plugins page's busy guard is never set (`src/commands/builtins/settings-pages/extensions-pages.ts:175,182`), so double clicks can start two installs or toggles. Minor.
+- Install confirmation always lists the remote-URL defaults (`extensions-hub-plugins.ts:298`), even for a local path that will be trusted. Minor.
+- Snake, the plugin card, the expanded card and the widget were seen in the standalone taskpane; confirmations, install and uninstall were read from code.
+
+Verified against pi-for-excel commit `ec453df`.

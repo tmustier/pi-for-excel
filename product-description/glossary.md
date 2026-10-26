@@ -50,6 +50,8 @@ The vocabulary used across these documents. When a document uses one of these wo
 
 **Extension widget slot.** The space between the working indicator and the queue strip where an installed extension can show a widget. Hidden in the default configuration. While it holds a widget it claims Escape before Stop.
 
+**Settings overlay.** The one overlay opened by Settings and by `/settings`, `/login`, `/rules`, `/extensions`, `/tools`, `/plugins`, `/skills` and `/experimental`, each opening a named page in a page stack under the "Settings" root. Escape goes back one page, then closes; × or the backdrop closes at once. It takes focus; other overlays do not.
+
 ## Sessions and tabs
 
 **Session.** One conversation with Pi: its messages, its model and thinking level, its title, and the workbook it is linked to. Sessions are saved in the browser storage of the add-in and can be reopened later. See [sessions and tabs](foundations/sessions-and-tabs.md).
@@ -153,6 +155,18 @@ The vocabulary used across these documents. When a document uses one of these wo
 **Audit log.** Pi's local record of every workbook mutation it made or tried, and of the user's restores: tool, workbook, range, changed cells with before and after values, whether it was blocked, execution mode. It keeps the newest 500 entries across all workbooks, is not shown in the UI (except through the "Explain these changes" drawer on mutation tool cards), is not cleared on save, and is exported with `/export audit`. It is not a backup and cannot revert anything.
 
 **Cell link.** A blue cell or range address inside a tool card (title, humanized input, change tables, dependency trees). Clicking it makes Excel activate the sheet and select the range (the first area of a multi-area address) without changing the workbook. Addresses in Pi's own prose are not cell links.
+
+**Rules.** Instructions for Pi, written by the user on the Rules page or by Pi through its `instructions` tool. User rules apply everywhere; workbook rules apply to one identified workbook. They take effect from the next request.
+
+**Conventions.** Pi's default number-format preferences (currency, negatives, zeros, decimal places), set with the `conventions` tool or on the Rules page.
+
+**Skill.** A task playbook (`SKILL.md`) Pi loads on demand with its `skills` tool. Bundled skills ship with the add-in; external skills are installed by the user into the Files workspace under `skills/`.
+
+**Files workspace.** Pi's own file store in add-in storage, or a connected folder on disk. Shared by every tab and workbook on this computer, not part of the workbook, and read by Pi with its `files` tool, never as an attachment. Includes read-only built-in docs under `assistant-docs/`. Files imported are tagged to the workbook that was open (the "Workbook" badge).
+
+**Extension.** Add-on code (also called a plugin) that registers tools, slash commands, widgets or connections. Code and URL installs run in an isolated sandbox frame; built-in and local ones run in the taskpane. Managed on the "Plugins" page; the bundled Snake extension is installed and enabled by default.
+
+**External tools.** Pi's network tools: `web_search` with `fetch_page`, and `mcp`. One "External tools" switch on the Connections page turns them on or off. They never ask for approval.
 
 ## Models and providers
 

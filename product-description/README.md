@@ -240,13 +240,13 @@ Status is one of `not started`, `drafted`, or `verified`.
 | setup/settings.md | drafted |
 | setup/custom-gateways.md | drafted |
 | setup/the-proxy.md | drafted |
-| guidance/rules.md | not started |
-| guidance/conventions.md | not started |
-| guidance/skills.md | not started |
-| files/the-files-workspace.md | not started |
-| extensions/the-extensions-hub.md | not started |
-| extensions/web-search-and-mcp.md | not started |
-| extensions/experimental.md | not started |
+| guidance/rules.md | drafted |
+| guidance/conventions.md | drafted |
+| guidance/skills.md | drafted |
+| files/the-files-workspace.md | drafted |
+| extensions/the-extensions-hub.md | drafted |
+| extensions/web-search-and-mcp.md | drafted |
+| extensions/experimental.md | drafted |
 | ui/the-status-bar.md | drafted |
 | ui/message-rendering.md | drafted |
 | ui/keyboard-shortcuts.md | drafted |

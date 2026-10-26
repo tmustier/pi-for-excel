@@ -1,0 +1,136 @@
+# Web search and MCP
+
+## Summary
+
+Pi can reach outside the workbook in three ways: `web_search` (search the public web through a search provider), `fetch_page` (read one web page as text) and `mcp` (call tools on MCP servers the user configures). The user sets them up on the "Connections" page of the [Extensions hub](the-extensions-hub.md), titled "Connections" / "Web search, MCP servers, and bridges", opened with `/tools`, `/extensions` or "Extensions" in the [utilities menu](../ui/the-utilities-menu.md). The page also holds the Python and tmux bridge cards, which are out of scope here. All three tools only read: they never touch the workbook, never ask for approval and never wait for the workbook lock, in Auto or Confirm mode. Web search and page fetch are on by default, but web search needs an API key before it works. The MCP tool is off by default, and nothing on the page turns it on.
+
+## The simple case
+
+The user asks "what is the current UK base rate?". Pi calls `web_search`; a [tool card](../turn/tool-calls.md) "Web search "UK base rate"" appears. With no key saved, the call fails and an inline card appears under it, first "Checking search setup…", then "Web search needs an API key" with a link "Get a free key at {url} ↗", a password box, "Save" and "Dismiss". Pi's reply says search is not set up.
+
+The user pastes a Jina key and clicks "Save". The button reads "Validating…", then a toast says "✓ Web search is ready — ask the assistant to try again." The user asks again. This time the card expands to "Web search via Jina Search (default)", the query sent, and numbered results with titles, links and snippets. Pi may follow up with `fetch_page` ("Fetch page https://…"), then answers citing sources as [1], [2].
+
+## The interaction, event by event
+
+```mermaid
+stateDiagram-v2
+    [*] --> page : /tools, /extensions or menu "Extensions"
+    page --> page : master toggle, provider, key Save/Clear, scope toggles (saved, toast)
+    page --> page : Validate (key tested, toast)
+    page --> add_form : + Add server
+    add_form --> page : Add (saved, toast) or collapse
+    page --> page : server Enabled toggle, Test (probe, toast), Remove (toast)
+    page --> root : Escape or back arrow
+    root --> [*] : Escape
+    page --> [*] : × or backdrop
+```
+
+The page has no busy phase; each control saves at once and the page re-renders. Changes apply to Pi from the next request.
+
+### The page
+
+From the top:
+
+- **"External tools"** / "Allow Pi to search the web and call external services". On by default. Off removes `web_search`, `fetch_page` and `mcp` from every tab whatever the settings below; the toast is "External tools disabled".
+- **"Web search"** section, with one card "Jina Search (default)" (or the chosen provider) and a badge: "Off" when web search is disabled in every scope, "Connected" when a key is saved, otherwise "No API key". Expanding the card shows:
+  - "Provider": "Jina Search (default)", "Firecrawl", "Serper.dev", "Tavily", "Brave Search". Changing it toasts "Web search provider set to {provider}". Each provider keeps its own key.
+  - "API key": a password box prefilled with the masked saved key, then "Validate", "Save" and "Clear". Validate shows "✓ {message}" or "✗ {message}"; with an empty box and no saved key, "No API key to validate.". Save with an empty box says "Enter an API key first."; otherwise "Saved {key label}", or a warning such as "Jina keys usually start with "jina_" — double-check the value." with "Key saved anyway — use Validate to test it.". Clear toasts "Cleared {key label}".
+  - "Availability": "Session", "Workbook ({label})", "Session + workbook ({label})", "Session only" or "Off in all scopes".
+  - "Scope controls": "Enable for this session" and "Enable for workbook ({label})" (or "Workbook scope unavailable" for an unsaved workbook). Web search is on if either is on. A workbook never configured counts as on; the session toggle starts off.
+- **"MCP servers"** section with "+ Add server" in its header. Empty: "No MCP servers configured." over "Add one to connect external tools."
+- **"Bridges"**: the Python and tmux bridge cards.
+- **"Extension connections"**: connections registered by [extensions](the-extensions-hub.md).
+
+Any failure while saving shows "Extensions: {error}".
+
+### Adding an MCP server
+
+"+ Add server" opens a form with "Server name", "https://server-url/rpc" and "Bearer token (optional)", and "Add". Errors come back as "Extensions: {error}", for example "Extensions: MCP server name cannot be empty." or "Extensions: MCP server URL cannot be empty."; the form keeps what was typed. Success toasts "Added MCP server" and clears the form. Only HTTP(S) servers are supported.
+
+Each server card shows "URL", "Token" (masked, or "(none)"), an "Enabled" toggle, "Test" and "Remove". "Test" connects, lists the server's tools and reports "{name}: reachable ({count} tools, direct)" (or "proxy"), or "{name}: {error}". "Remove" deletes at once without asking: "Removed MCP server: {name}".
+
+### Ends at once
+
+Opening, expanding, Validate and Test change nothing saved. Validate and Test send the key or token to the provider or server.
+
+### Finishes
+
+Provider, keys, MCP servers and the master toggle are stored in the add-in's settings on this computer and apply to every tab and workbook. The workbook scope is stored per workbook, the session scope per session. Keys are stored as entered and shown masked.
+
+## What the user sees when Pi uses them
+
+- **`web_search`.** Card "Web search "{query}"". Expanded: "Web search via {provider}", "Sent:" with the query, the result count (5 by default), and whether it went direct or through the [proxy](../setup/the-proxy.md), then numbered results. If a non-Jina provider fails and a Jina key exists, the search is retried with Jina and the card starts "⚠️ {provider} search failed (…) — used Jina Search (default) for this request. Check your … in /tools." A failure adds the setup card below the tool card: "Web search needs an API key", "Web search needs setup" (adds "Step {n} · Start the helper (keep running):" with `npx pi-for-excel-proxy` and "Retry"), "Web search can't connect", "No {label} found" ("Switch to {alternative} in /tools, or set up a {current} key below:"), or "Web search failed" ("Check your API key and proxy configuration in /tools."). Saving a key there validates it and toasts "✓ Web search is ready — ask the assistant to try again."; Pi does not retry by itself. "Dismiss" removes the card.
+- **`fetch_page`.** Card "Fetch page {url}". Only http(s) addresses. Returns up to 12,000 characters of readable text by default (Pi may ask for up to 50,000), times out after 15 seconds, and allows one request per second per site; a faster second request fails with "Rate limited for {host}…".
+- **`mcp`.** Cards "MCP status", "MCP list {server}", "MCP search "{text}"", "MCP describe {tool}", "MCP connect {server}", "MCP call {tool}". Errors include "No MCP servers configured. Open /tools to add one." and "MCP server "{name}" is disabled.". Whether a remote tool changes anything is up to the server; Pi asks nothing first.
+
+## The disclosure bar
+
+The first time the taskpane starts with a provider connected, a bar under the header (placement and dismissal are owned by [the taskpane](../foundations/the-taskpane.md#the-disclosure-bar)) says "Pi can search the web, use extensions, and connect to external services." with "Got it", "Customize" and "Change anytime in Settings". "Customize" reveals four switches, all on: "Web search & page fetch" ("Search engines and read web pages"), "Extensions & plugins" ("Sidebar tools and custom commands"), "External services (MCP)" ("Connect to tool servers you configure") and "Skills" ("Instruction documents the AI follows"); the button becomes "Done". "Got it" or "Done" hides the bar for good on this computer. "Change anytime in Settings" hides it and opens Settings. At this commit the four switches change nothing (see Open questions).
+
+## Modifiers
+
+| Modifier | Set before | Changed while busy |
+| --- | --- | --- |
+| Model and provider | No effect on the page. Whether and how Pi searches is the model's choice. | No effect. |
+| Thinking level | No effect. | No effect. |
+| Execution mode | No effect. The three tools never ask, in Auto or Confirm. | No effect. |
+| Files in the workspace, or an overlay open | The page is part of the Settings overlay. | — |
+| Tab state (new, restored, another tab busy) | The session scope follows the tab's session; a new tab starts with session scope off and relies on the workbook scope. | A running turn keeps its tools; the change applies from the next request. |
+| Host (desktop or web) | Some providers block requests from the taskpane; those need the [proxy](../setup/the-proxy.md). Which ones work direct on which host was not checked. | No effect. |
+
+## Cancel and interrupt
+
+| Event | Before sent | While busy |
+| --- | --- | --- |
+| Stop (button or Escape) | Escape goes back to the Settings root, then closes. A Validate or Test in flight still finishes and toasts. It never stops a responding tab while the overlay is open. | Stopping a turn during a search, fetch or MCP call ends it like any [tool call](../turn/stopping.md); an MCP action already sent may still happen on the server. |
+| The user sends something else | Behind the overlay. | The setup card's Save does not send anything. |
+| Tab switched, created, closed or reopened | Behind the overlay. | No effect on the call. |
+| An overlay or menu opens | An approval from a background tab can open over the page. | No effect. |
+| Model or thinking level changes | No effect. | No effect. |
+| The provider fails | No effect on these settings. A search provider failure is a tool error, not a provider error. | Same. |
+| The taskpane goes away | Saved changes stay; an unsubmitted form is lost. | A call in flight is lost with the turn. |
+| The workbook changes underneath | No effect; the workbook scope follows the workbook identity. | No effect. |
+| Focus moves to the grid or another window | No effect. | No effect. |
+| The context window fills | No effect. Results are in the conversation and are summarized away by [compaction](../turn/context-and-compaction.md). | Same. |
+
+## Interactions with other systems
+
+**Persistence.** Settings survive reloads. See [persistence and restore](../cross-cutting/persistence-and-restore.md).
+
+**Workbook changes and recovery.** None of the three tools writes to the workbook.
+
+**Other tabs and sessions.** Global settings apply to all tabs at once; the session scope belongs to one session.
+
+**Execution mode and approvals.** No approvals. [Confirm mode and approvals](../workbook/confirm-mode-and-approvals.md) does not apply.
+
+**Models and providers.** Independent of the model provider; keys are separate.
+
+**Offline and provider errors.** All three fail offline with a tool error and, for search, a setup card. See [provider errors and offline](../cross-cutting/provider-errors-and-offline.md).
+
+**Notifications.** Toasts for every change and test. Pi's use shows only as tool cards and setup cards.
+
+**Settings and preferences.** The [proxy](../setup/the-proxy.md) setting decides whether requests go direct or through the local helper.
+
+**Host differences.** See the Host row and [host differences](../cross-cutting/host-differences.md).
+
+**Language.** Section titles, labels, buttons and setup-card text are translated. Most toasts on this page ("External tools enabled", "Saved {key label}", "Added MCP server", "Removed MCP server: {name}", the provider and scope toasts), the disclosure-bar sublabels, tool cards and tool errors are English.
+
+**Accessibility and keyboard.** Every control is reachable with Tab. "Customize" reports whether the switches are shown.
+
+## Edge cases
+
+- The "Ready" badge never appears: every provider, including Jina, requires a key.
+- Clearing the active provider's key while a Jina key exists makes searches fall back to Jina silently, apart from the warning line on the card.
+- An MCP server can be added, enabled and tested successfully while Pi still cannot use it, because the `mcp` tool is not in Pi's toolset.
+- Disabling a workbook's web search on one computer does not affect another computer.
+
+## Open questions and verification
+
+- **Jina is described as keyless but needs a key.** No provider sets `apiKeyOptional` (`src/tools/web-search-config.ts:34, 388-389`) and tests assert Jina needs a key, so a fresh install's first search always fails with "Web search API key is missing. Open /tools and set the Jina API key." (`src/tools/web-search.ts:876`). The skill (`skills/web-search/SKILL.md:3`) and catalog (`src/integrations/catalog.ts:45`) say "works out of the box". Either the copy or the code is wrong.
+- **Masked key overwrites the real key.** The API key box is prefilled with the masked key (`src/commands/builtins/extensions-hub-connections.ts:294`). "Save" without retyping saves the mask as the key (line 335-339), and "Validate" tests the mask (line 315).
+- **The MCP tool cannot be enabled from the UI.** `mcp_tools` has no `enabledByDefault` (`src/integrations/catalog.ts:56-66`) and the only scope toggles set `web_search` (`extensions-hub-connections.ts:397, 422`). MCP servers can be configured but Pi never gets the `mcp` tool, except through the dev verification bridge.
+- **Disclosure-bar switches do nothing.** `src/ui/disclosure-bar.ts:62-75` builds them with no change handler; "Done" only hides the bar.
+- The workbook scope toggle starts on for any workbook never configured; the session toggle starts off. The availability text therefore usually reads "Workbook ({label})".
+- The page, the "No API key" badge and the disclosure bar were seen in the standalone taskpane. Search results, the setup card and MCP were read from code; no search or MCP server was contacted.
+
+Verified against pi-for-excel commit `ec453df`.
