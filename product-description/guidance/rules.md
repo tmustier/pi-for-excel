@@ -2,7 +2,7 @@
 
 ## Summary
 
-Rules are standing instructions that Pi follows in every conversation without being told again: preferences such as "always use EUR", or notes about one workbook's structure. There are two kinds. **User rules** ("All my files") apply in every workbook on this computer. **Workbook rules** ("This file") apply only while the current workbook is open. The user edits both on the "Rules" page of the Settings overlay, reached with `/rules`, the "Rules" item of the [utilities menu](../ui/the-utilities-menu.md), or the "Rules & conventions" row in [Settings](../setup/settings.md). The same page has a third tab, "Formats", for [conventions](conventions.md). Pi can also change the rules itself during a turn with its `instructions` tool, which shows up as a tool card. A change, from either side, reaches every open tab from its next model request. The page opens while a tab is [busy](../glossary.md#busy) (`/rules` is busy-allowed), with no provider connected, and on Excel on the web. Nothing marks that rules are active: no badge or status-bar item shows whether any rules are set.
+Rules are standing instructions that Pi follows in every conversation without being told again: preferences such as "always use EUR", or notes about one workbook's structure. There are two kinds. **User rules** ("All my files") apply in every workbook on this computer. **Workbook rules** ("This file") apply only while the current workbook is open. The user edits both on the "Rules" page of the Settings overlay, reached with `/rules`, the "Rules" item of the [utilities menu](../ui/the-utilities-menu.md), or the "Rules & conventions" row in [Settings](../setup/settings.md). The same page has a third tab, "Formats", for [conventions](conventions.md). Pi can also change the rules itself during a turn with its `instructions` tool, which shows up as a tool card. A change, from either side, reaches every open tab from its next model request. The page opens while a tab is [busy](../glossary.md#the-turn) (`/rules` is busy-allowed), with no provider connected, and on Excel on the web. Nothing marks that rules are active: no badge or status-bar item shows whether any rules are set.
 
 ## The simple case
 
@@ -79,7 +79,7 @@ The tool is not a [mutation](../glossary.md#the-workbook): it does not ask for [
 | Execution mode | No effect. Pi's `instructions` tool runs without approval in both Auto and Confirm. | No effect. |
 | Files in the workspace, or an overlay open | No effect from files; rules are not files and do not appear in the [Files workspace](../files/the-files-workspace.md). Opening `/rules` while the Settings overlay is already open on another page moves it to "Rules", passing that page's own unsaved-changes check first. | Opening another overlay is not possible while the Settings overlay covers the taskpane. |
 | Tab state (new, restored, another tab busy) | No effect; the page is not tied to a tab. Rules apply to every tab, including restored ones. | A responding tab keeps running behind the overlay. A save applies to it from its next model response. |
-| Host (desktop or web) | Works the same on both. On a new, never-saved workbook, workbook rules are unavailable on every host. | No effect. |
+| Host (desktop or web) | Works the same on both. Workbook rules are unavailable whenever the workbook has no [workbook identity](../glossary.md#sessions-and-tabs): a new, never-saved workbook on any host, and a workbook opened signed out through a shared link on Excel on the web (confirmed). | No effect. |
 
 Saving while a tab is mid-turn changes Pi's instructions between two model responses of that turn; Pi is not told that they changed.
 
@@ -120,7 +120,7 @@ After any interrupt the user is on the "Rules" page with the drafts as they were
 
 **Settings and preferences.** The page is part of the Settings overlay. Its "Formats" tab holds [conventions](conventions.md), which are saved by the same Save button.
 
-**Host differences.** None in the page. Workbook identity depends on the host reporting the file's location; a workbook Excel has not saved has none.
+**Host differences.** None in the page. Workbook identity depends on the host reporting the file's location; a workbook Excel has not saved has none, and neither does a workbook opened signed out through a link on Excel on the web, where "This file" shows the unidentified hint (confirmed).
 
 **Language.** Tab names, hints, placeholders, counter, buttons, the discard dialog and the toast are translated. The text of the tool card ("Remember user rules", "Updated user rules …") is English in every UI language. Rules are passed to Pi in whatever language the user wrote them.
 
@@ -138,13 +138,14 @@ After any interrupt the user is on the "Rules" page with the drafts as they were
 
 ## Open questions and verification
 
-- Saving the page writes all three drafts, including tabs the user never touched, from the values read when the page opened (`src/commands/builtins/settings-pages/rules-page.ts:1035-1057`). A rule or convention that Pi saved while the page was open is overwritten. Read from code; looks like a bug.
-- On an unidentified workbook the "This file" box accepts text, but Save skips it (`rules-page.ts:1040`) and still says "Rules saved". Looks like a bug; the box should probably be disabled.
-- Save and Cancel go back to the "Settings" page instead of closing the overlay (`rules-page.ts:1032`, `1057`; confirmed in the standalone taskpane). Users who came from `/rules` or the utilities menu land on a page they did not ask for. Probably unintended.
+- Confirmed in Excel on the web (RULES checklist): every way in opening the page on "All my files" with focus in the text box; the hint, placeholder and "0 / 2,000 chars" counter; "This file" on an unidentified workbook ("Workbook: Current workbook", "Can't identify this workbook right now — try saving the file first.", a box that still accepts typing and counts to 4,000); "Rules saved" with the overlay going back to the "Settings" page; Cancel with no changes going back silently; the first Escape only leaving the text box; "Discard changes?" on Escape and on ×, "Keep editing" and Escape keeping the drafts, "Discard" after × closing the overlay; an unsaved convention triggering the question from "All my files"; the counter's warning style past 2,000 with Save still allowed; a blank box clearing the stored rules; Pi's `instructions` tool card "Remember user rules" with "Updated user rules (10/2000 chars):".
+- **Saving the page overwrites changes made while it was open.** Confirmed in Excel on the web (RULES-24): with the page open, Pi's `instructions` tool reported "Updated user rules (10/2000 chars):"; the page still showed an empty box, and Save wrote the empty value back, so the stored rule was gone. A value written straight into storage while the page was open was overwritten the same way. Save writes all three drafts read when the page opened (`src/commands/builtins/settings-pages/rules-page.ts:1035-1057`). Looks like a bug.
+- **Workbook rules typed on an unidentified workbook are dropped.** Confirmed in Excel on the web (RULES-09): text typed under "This file" was accepted, Save said "Rules saved", and reopening showed an empty box. Save skips it (`rules-page.ts:1040`). Looks like a bug; the box should probably be disabled.
+- Save and Cancel go back to the "Settings" page instead of closing the overlay (`rules-page.ts:1032`, `1057`; confirmed in Excel on the web). Users who came from `/rules` or the utilities menu land on a page they did not ask for. Probably unintended.
 - Nothing in the UI shows that rules are active. The taskpane tracks it internally (`src/taskpane/init.ts:363-369`) but nothing displays it.
-- The "Discard changes?" message mentions only rules, although it also guards unsaved conventions.
+- The "Discard changes?" message mentions only rules, although it also guards unsaved conventions (confirmed).
+- The tool card's error for workbook rules on an unidentified workbook was read from code, not triggered.
 - How quickly a second taskpane picks up a rules change was read from code, not tried.
 - Whether a save during a running turn reaches the very next model response of that turn was read from code, not confirmed by hand.
-- The page layout, the tab labels, the discard dialog and the return to "Settings" were confirmed in the standalone taskpane (no workbook, so "This file" showed the unidentified-workbook hint). Not tried in Excel.
 
 Verified against pi-for-excel commit `ec453df`.
