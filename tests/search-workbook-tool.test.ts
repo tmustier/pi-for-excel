@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import { parseCell, parseRangeRef } from "../src/excel/helpers.ts";
 import { createSearchWorkbookTool } from "../src/tools/search-workbook.ts";
 
 interface SearchSheetFixture {
@@ -9,6 +10,8 @@ interface SearchSheetFixture {
   address: string;
   values: unknown[][];
   formulas?: unknown[][];
+  /** Loads larger than this fail like Excel's response payload limit. */
+  maxCellsPerLoad?: number;
 }
 
 function firstText(result: { content: Array<{ type: string; text?: string }> }): string {
@@ -23,18 +26,43 @@ async function withSearchWorkbook<T>(
   fixtures: SearchSheetFixture[],
   action: () => Promise<T>,
 ): Promise<T> {
-  const sheets = fixtures.map((fixture) => ({
-    name: fixture.name,
-    visibility: fixture.visibility ?? "Visible",
-    getUsedRangeOrNullObject: () => ({
-      isNullObject: false,
-      address: fixture.address,
-      values: fixture.values,
-      formulas: fixture.formulas ?? fixture.values.map((row) => row.map(() => "")),
-      load: (_properties: string) => undefined,
-    }),
-  }));
+  const sheets = fixtures.map((fixture) => {
+    const [startCell = "A1"] = parseRangeRef(fixture.address).address.split(":");
+    const start = parseCell(startCell);
+    const formulas = fixture.formulas ?? fixture.values.map((row) => row.map(() => ""));
+    const columnCount = Math.max(...fixture.values.map((row) => row.length));
+    return {
+      name: fixture.name,
+      visibility: fixture.visibility ?? "Visible",
+      getUsedRangeOrNullObject: () => ({
+        isNullObject: false,
+        rowIndex: start.row - 1,
+        columnIndex: start.col,
+        rowCount: fixture.values.length,
+        columnCount,
+        load: (_properties: string) => undefined,
+      }),
+      getRangeByIndexes: (rowIndex: number, _columnIndex: number, rowCount: number, chunkColumns: number) => {
+        const from = rowIndex - (start.row - 1);
+        if (fixture.maxCellsPerLoad !== undefined && rowCount * chunkColumns > fixture.maxCellsPerLoad) {
+          // What Excel on the web throws when one load is too large.
+          const error = new Error("The response payload size has exceeded the limit.");
+          return {
+            load: (_properties: string) => { pendingError = error; },
+            get values(): never { throw error; },
+            get formulas(): never { throw error; },
+          };
+        }
+        return {
+          values: fixture.values.slice(from, from + rowCount),
+          formulas: formulas.slice(from, from + rowCount),
+          load: (_properties: string) => undefined,
+        };
+      },
+    };
+  });
 
+  let pendingError: Error | undefined;
   const context = {
     workbook: {
       worksheets: {
@@ -42,7 +70,11 @@ async function withSearchWorkbook<T>(
         load: (_properties: string) => undefined,
       },
     },
-    sync: () => Promise.resolve(),
+    sync: () => {
+      const error = pendingError;
+      pendingError = undefined;
+      return error ? Promise.reject(error) : Promise.resolve();
+    },
   };
 
   const hadExcel = Reflect.has(globalThis, "Excel");
@@ -193,4 +225,28 @@ void test("search returns an early match without traversing every loaded cell du
     assert.match(firstText(result), /1 match\(es\).*limit reached/u);
     assert.ok(cellReads < 10, `Search read ${cellReads} cells before returning the first result.`);
   });
+});
+
+void test("search finds a match at the end of a sheet too large to load at once", async () => {
+  const values: unknown[][] = Array.from({ length: 30_000 }, (_, index) => [index + 1, `row ${index + 1}`]);
+  values.push([30_001, "needle at the end"]);
+
+  const result = await withSearchWorkbook([
+    { name: "Small", address: "Small!A1:A2", values: [["alpha"], ["beta"]] },
+    // A single load of this sheet fails, as one used-range load of a 200k-row sheet does in Excel.
+    { name: "Big", address: "Big!A1:B30001", values, maxCellsPerLoad: 50_000 },
+  ], () => createSearchWorkbookTool().execute("search-big-sheet", { query: "needle", context_rows: 1 }));
+
+  const text = firstText(result);
+  assert.match(text, /\*\*Big!B30001\*\*: needle at the end/u);
+  // Context spans a chunk boundary: the row above comes from the previous chunk's range.
+  assert.match(text, /\| 30000 \| 30000 \| row 30000 \|/u);
+});
+
+void test("search names the existing sheets when the requested sheet does not exist", async () => {
+  const result = await withSearchWorkbook([
+    { name: "Data", address: "Data!A1", values: [["x"]] },
+  ], () => createSearchWorkbookTool().execute("search-missing-sheet", { query: "x", sheet: "Dta" }));
+
+  assert.match(firstText(result), /Sheet "Dta" not found\. Sheets in this workbook: "Data"/u);
 });
