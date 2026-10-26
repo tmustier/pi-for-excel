@@ -280,8 +280,8 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 - **Packaging:** exposed as opt-in **integrations** instead of always-on core tools.
 - **Scopes:** integrations can be enabled per-**session** and/or per-**workbook**; effective integrations are the union (ordered by catalog).
 - **Global gate:** `external.tools.enabled` defaults to **off** and blocks all external integration tools until explicitly enabled.
-- **Web search providers:** Jina (default, zero-config), Serper.dev, Tavily, and Brave Search (`web_search`) with optional proxy routing and explicit "Sent" attribution in results.
-- **Fallback behavior:** when a configured keyed provider fails with auth/rate-limit/server/network errors, `web_search` automatically retries with Jina for that call and includes a warning in tool output/details.
+- **Web search providers:** Jina (default), Firecrawl, Serper.dev, Tavily, and Brave Search, all needing an API key (Jina's is free; s.jina.ai returns 401 without one) (`web_search`) with optional proxy routing and explicit "Sent" attribution in results.
+- **Fallback behavior:** when a Jina key is saved and the selected provider fails with auth/rate-limit/server/network errors, `web_search` automatically retries with Jina for that call and includes a warning in tool output/details.
 - **Page retrieval companion:** `fetch_page` fetches URL content and returns extracted markdown for source grounding workflows (`web_search` → `fetch_page`).
 - **MCP integration:** configurable server registry (`mcp.servers.v1`) + bearer token secrets in connection store (`connections.store.v1` / `builtin.mcp.servers`), UI add/remove/test, and a single `mcp` gateway tool for list/search/describe/call flows.
 - **Rationale:** satisfy issue #24 with explicit consent, clear attribution, and minimal overlap with the extension system.
@@ -300,7 +300,8 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 - **Availability:** always registered via `createAllTools()`.
 - **Purpose:** lets the agent manage extension lifecycle from chat (`list`, `install_code`, `set_enabled`, `reload`, `uninstall`).
 - **Default install policy:** `install_code` replaces existing extensions with the same name unless `replace_existing=false` is provided.
-- **Execution policy:** treated as `read/none` for workbook coordination (mutates local extension registry/runtime only, not workbook cells/structure).
+- **Capabilities:** `install_code` grants the pasted-code defaults plus only the `capabilities` it lists (e.g. `tools.register`); the approval dialog shows them.
+- **Execution policy:** treated as `read/none` for workbook coordination (mutates local extension registry/runtime only, not workbook cells/structure). Consent is a separate gate, below.
 - **Rationale:** supports non-engineer extension authoring by allowing users to ask Pi to generate + install an extension directly.
 
 ## Extension sandbox UI bridge (default-on for untrusted)
@@ -331,7 +332,7 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 - **Rationale:** establish predictable multi-widget lifecycle semantics before richer layout controls.
 
 ## Feature-flagged files tool (`files`)
-- **Availability:** non-core tool, always registered. `list`/`read` stay available even when `files-workspace` is off; `write`/`delete` remain gated by `files-workspace`.
+- **Availability:** non-core tool, always registered. `write`/`delete` ask for consent (see "Consent outside the workbook"); there is no `files-workspace` flag.
 - **Built-in assistant docs:** a read-only `assistant-docs/` namespace ships with the app (README + key docs) and is always visible to both UI and tool.
 - **Backend strategy:** native folder handle (when permitted) → OPFS → in-memory fallback.
 - **Workbook tagging:** files are **not segregated** by workbook; each file stores an optional workbook tag (`workbookId` + label) based on the active workbook when last written/imported.
@@ -342,8 +343,9 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 - **Rename safety:** if a rename input omits an extension, preserve the current extension (`report.xlsx` + `report-final` → `report-final.xlsx`) unless the user explicitly types a dotted name.
 - **Preview UX:** Files dialog supports inline text editing plus image/PDF preview; other binaries fall back to metadata + download. Built-in docs are marked read-only in the UI.
 - **Filter UX:** Files dialog includes workbook-tag filtering (`all`, `current workbook`, `untagged`, and per-tag options) without changing underlying shared storage.
-- **Input drop UX:** dropping files onto the chat input imports them directly into workspace (and auto-enables `files-workspace` if needed).
-- **Naming:** user-facing UI uses "Files" (not "Files workspace"). Internal flag id remains `files_workspace`; slug `files-workspace` and alias `files` are both accepted.
+- **Import conflicts:** user uploads and chat-input drops never overwrite: a same-named import is saved as `name (2).ext` and the toast names the rename.
+- **Naming:** user-facing UI uses "Files" (not "Files workspace").
+- **Folder:** a connected local folder can be disconnected from the same button; Escape in a preview returns to the list.
 - **Rationale:** keep one shared artifact space while preserving workbook context/transparency, while making core assistant docs available without extra setup.
 
 ## Workbook mutation change previews + audit log (slice)
@@ -410,16 +412,11 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 - **Quick affordance:** users can restore via `/history` (Backups overlay) or `/revert` (latest backup). The Backups overlay also exposes a **Full backup** button for explicit manual full-workbook capture. `/revert`, `/history` and `/backup` all work while Pi is busy; restores and captures take the workbook lock, so they wait for an in-flight write instead of interleaving with it. `/backup clear` checks workbook identity and counts the backups before it asks.
 - **Rationale:** addresses #27 by shifting from cumbersome up-front approvals to versioned recovery with explicit user-controlled rollback.
 
-## Cell-edit mode (`excelRun`)
-- **Problem:** while the user types in a cell, Excel rejects every batch with `InvalidOperationInCellEditMode` (Excel on the web fails in milliseconds).
-- **Behavior:** `excelRun` retries with backoff (250 ms → 2 s) for up to 60 s and shows "Waiting for you to finish editing a cell" in the working indicator. A run is retried only if none of its `context.sync()` calls had succeeded, so a half-applied mutation is never re-run.
-- **Timeout:** throws `ExcelCellEditModeError`, whose message tells the agent what happened, whether anything reached Excel, and to ask the user to press Enter, Tab or Esc.
-- **Opt-out:** background and auto-context reads pass `waitForCellEdit: false` (they must not block a model request or show the status while Pi is idle).
-- **Stop:** pressing Stop ends any cell-edit wait (`cancelCellEditWaits()`, `ExcelWaitStoppedError`: nothing reached Excel), so a stopped batch never runs once the user leaves the cell. Known limit: the cancel is taskpane-wide, so a wait in another tab ends too.
-
-## Excel timeouts and Stop (`excelRun`, workbook coordinator)
-- **Problem:** a hung or overloaded Excel on the web (e.g. 150 parallel heavy formula writes) never answers `Excel.run`; the tool call, the workbook lock and every later call hung, and Stop could not end the turn.
-- **Timeout:** each `Excel.run` races a 60 s timeout (`EXCEL_RUN_TIMEOUT_MS`). On timeout `excelRun` throws `ExcelTimeoutError` (code `excel_timeout`): "outcome unknown; read the affected range back before retrying". After consecutive timeouts with no answer in between, the message tells the agent to stop calling workbook tools and ask the user to reload.
-- **Stop:** the coordinator wrapper gives a stopped tool call time to finish by itself (`STOP_GRACE_MS`: 500 ms for reads, 10 s for writes, so a slow write still returns its own precise result and backup id), then rejects it ("Stopped by the user … outcome unknown" for writes). Tools marked `reportsStop` (#791: write_cells, fill_formula) are not cut short: they check Stop between batches, each batch is bounded by the `excelRun` timeout, and only they know which rows landed and the backup id. Either way the call settles, so the workbook lock is released and the turn ends.
-- **Contract:** both errors carry `outcomeUnknown: true`; mutation results (#791) then report rows as "may or may not have been written".
-- **Limit:** Office.js cannot cancel a batch already sent; an abandoned batch may still apply later. Both errors say so.
+## Consent outside the workbook (`files`, `extensions_manager`)
+- **Rule:** tools that change only local state stay `read` for the workbook lock; consent is a gate in `experimental-tool-gates/local-change-gates.ts`, shown through the same approval dialog as workbook mutations.
+- **Confirm mode:** every `files` write/delete and every changing `extensions_manager` action asks.
+- **Auto mode:** still asks before running new code (extension `install_code`, `set_enabled: true`) and before irreversible loss (`uninstall`; `files` delete or overwrite of a file Pi did not create in this chat). Pi's own new files can be rewritten/deleted freely.
+- **Fail closed:** without an approval handler these actions are refused.
+- **Not gated:** `instructions`, `conventions`, `skills` (prompt guidance, visible on the Rules/Skills pages); `skills` is classified `read` (it was falling through to `mutate`).
+- **Extension capability grants** are always enforced; the `extension-permissions` experimental flag is removed. The remote-URL opt-in is checked at install and at every load in host and sandbox runtimes.
+- **Overlap:** `fix-backups-approvals` owns the approval queue and `getToolApprovalRequirement`; these gates use `requestRuntimeToolApproval` and can move there.

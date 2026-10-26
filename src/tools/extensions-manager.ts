@@ -5,6 +5,9 @@
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { Type, type Static } from "typebox";
 
+import { ALL_EXTENSION_CAPABILITIES, type ExtensionCapability } from "../extensions/permissions.js";
+import { StringEnum } from "./string-enum.js";
+
 export interface ExtensionsManagerToolStatus {
   id: string;
   name: string;
@@ -18,7 +21,7 @@ export interface ExtensionsManagerToolStatus {
 
 export interface ExtensionsManagerToolRuntime {
   list(): ExtensionsManagerToolStatus[];
-  installFromCode(name: string, code: string): Promise<string>;
+  installFromCode(name: string, code: string, grantCapabilities?: readonly ExtensionCapability[]): Promise<string>;
   setExtensionEnabled(entryId: string, enabled: boolean): Promise<void>;
   reloadExtension(entryId: string): Promise<void>;
   uninstallExtension(entryId: string): Promise<void>;
@@ -53,6 +56,12 @@ const schema = Type.Object({
   })),
   replace_existing: Type.Optional(Type.Boolean({
     description: "When install_code, uninstall existing extensions with the same name first (default: true).",
+  })),
+  capabilities: Type.Optional(Type.Array(StringEnum(ALL_EXTENSION_CAPABILITIES), {
+    description:
+      "For install_code: extra capabilities the code needs beyond the defaults for pasted code "
+      + "(commands.register, ui.*, storage.readwrite, clipboard.write, skills.read, download.file). "
+      + "Request only what the code uses, e.g. tools.register for api.registerTool. The user approves them.",
   })),
 });
 
@@ -163,7 +172,7 @@ export function createExtensionsManagerTool(
           await manager.uninstallExtension(existing.id);
         }
 
-        const newId = await manager.installFromCode(extensionName, extensionCode);
+        const newId = await manager.installFromCode(extensionName, extensionCode, params.capabilities ?? []);
 
         if (params.enabled === false) {
           await manager.setExtensionEnabled(newId, false);

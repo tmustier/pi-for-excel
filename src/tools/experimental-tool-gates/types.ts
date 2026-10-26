@@ -1,4 +1,6 @@
 export const TMUX_TOOL_NAME = "tmux";
+export const FILES_TOOL_NAME = "files";
+export const EXTENSIONS_MANAGER_TOOL_NAME = "extensions_manager";
 export const EXECUTE_OFFICE_JS_TOOL_NAME = "execute_office_js";
 export const EXECUTE_WPS_JS_TOOL_NAME = "execute_wps_js";
 
@@ -76,6 +78,25 @@ export interface OfficeJsExecuteApprovalRequest {
   signal?: AbortSignal;
 }
 
+/** A Files workspace entry as seen by the files approval gate. */
+export interface FilesGateFileInfo {
+  size: number;
+  readOnly: boolean;
+  /** Set when the file lives in a connected local folder (changes hit the disk). */
+  nativeFolderName?: string;
+}
+
+/** A consent request for an action that changes local state outside the workbook. */
+export interface LocalChangeApprovalRequest {
+  toolName: string;
+  title: string;
+  message: string;
+  confirmLabel: string;
+  destructive: boolean;
+  /** The tool call's signal: when the turn stops, the pending request is withdrawn. */
+  signal?: AbortSignal;
+}
+
 export interface ExperimentalToolGateDependencies extends
   TmuxBridgeGateDependencies,
   PythonBridgeGateDependencies {
@@ -85,4 +106,18 @@ export interface ExperimentalToolGateDependencies extends
   requestOfficeJsExecuteApproval?: (request: OfficeJsExecuteApprovalRequest) => Promise<boolean>;
   /** When provided, Auto mode skips the Office.js approval prompt. */
   getExecutionMode?: () => Promise<"yolo" | "safe">;
+  /**
+   * Consent for `files` writes/deletes and `extensions_manager` changes.
+   * Without it those actions fail closed whenever approval is required.
+   */
+  requestLocalChangeApproval?: (request: LocalChangeApprovalRequest) => Promise<boolean>;
+  /** Look up a Files workspace path; `null` when it does not exist. */
+  inspectWorkspaceFile?: (path: string) => Promise<FilesGateFileInfo | null>;
+  /**
+   * Paths the assistant created in this session. Auto mode lets Pi overwrite
+   * or delete its own new files without asking; anything else asks.
+   */
+  assistantCreatedFiles?: Set<string>;
+  /** Installed extensions, for naming the target of an approval. */
+  listExtensions?: () => ReadonlyArray<{ id: string; name: string; grantedCapabilities: readonly string[] }>;
 }

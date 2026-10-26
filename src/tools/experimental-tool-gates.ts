@@ -13,6 +13,8 @@ export {
   PYTHON_BRIDGE_URL_SETTING_KEY,
   TMUX_BRIDGE_URL_SETTING_KEY,
   type ExperimentalToolGateDependencies,
+  type FilesGateFileInfo,
+  type LocalChangeApprovalRequest,
   type OfficeJsExecuteApprovalRequest,
   type PythonBridgeApprovalRequest,
   type PythonBridgeGateDependencies,

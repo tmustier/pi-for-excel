@@ -8,8 +8,11 @@ import type {
   ExtensionRuntimeManager,
   ExtensionRuntimeStatus,
 } from "../../extensions/runtime-manager.js";
+import { classifyExtensionSource } from "../extension-source-policy.js";
+import { isExperimentalFeatureEnabled } from "../../experiments/flags.js";
 import {
   describeExtensionCapability,
+  deriveStoredExtensionTrust,
   getDefaultPermissionsForTrust,
   isExtensionCapabilityAllowed,
   listAllExtensionCapabilities,
@@ -17,6 +20,7 @@ import {
   type ExtensionCapability,
 } from "../../extensions/permissions.js";
 import { requestConfirmationDialog } from "../../ui/confirm-dialog.js";
+import { requestTextInputDialog } from "../../ui/text-input-dialog.js";
 import { showToast } from "../../ui/toast.js";
 import { t } from "../../language/index.js";
 import {
@@ -80,12 +84,19 @@ async function confirmEnable(status: ExtensionRuntimeStatus): Promise<boolean> {
   });
 }
 
-async function confirmInstall(name: string, sourceLabel: string, capabilities: readonly ExtensionCapability[]): Promise<boolean> {
+/**
+ * One in-taskpane dialog for URL installs: asks for the name and shows the
+ * permissions this source will actually get (derived from its trust level).
+ * Resolves to the trimmed name, or null when cancelled.
+ */
+async function requestInstallName(url: string): Promise<string | null> {
+  const trust = deriveStoredExtensionTrust("ext.pending", { kind: "module", specifier: url });
+  const capabilities = listGrantedExtensionCapabilities(getDefaultPermissionsForTrust(trust));
   const risky = capabilities.filter((c) => HIGH_RISK_CAPABILITIES.has(c));
-  return requestConfirmationDialog({
-    title: t("ext-hub-plugins.confirmInstallTitle", { name }),
+  const name = await requestTextInputDialog({
+    title: t("ext-hub-plugins.installDialogTitle"),
     message: [
-      t("ext-hub-plugins.confirm.source", { source: sourceLabel }),
+      t("ext-hub-plugins.confirm.source", { source: url }),
       "",
       t("ext-hub-plugins.confirm.defaultPermissions"),
       ...(capabilities.length > 0
@@ -94,12 +105,16 @@ async function confirmInstall(name: string, sourceLabel: string, capabilities: r
       ...(risky.length > 0
         ? ["", t("ext-hub-plugins.confirm.higherRisk"), ...risky.map((c) => `- ${describeExtensionCapability(c)}`)]
         : []),
+      "",
+      t("ext-hub-plugins.installDialogName"),
     ].join("\n"),
+    placeholder: t("ext-hub-plugins.installNamePlaceholder"),
     confirmLabel: t("ext-hub-plugins.installButton"),
     cancelLabel: t("confirm.cancel"),
-    confirmButtonTone: risky.length > 0 ? "danger" : "primary",
     restoreFocusOnClose: false,
   });
+  const trimmed = name?.trim() ?? "";
+  return trimmed.length > 0 ? trimmed : null;
 }
 
 // ── Main render ─────────────────────────────────────
@@ -107,10 +122,11 @@ async function confirmInstall(name: string, sourceLabel: string, capabilities: r
 export function renderPluginsTab(args: {
   container: HTMLElement;
   manager: ExtensionRuntimeManager;
-  isBusy: () => boolean;
+  /** Runs one user action at a time; returns false when another is in flight. */
+  runExclusive: (action: () => Promise<void>) => Promise<boolean>;
   onChanged: () => Promise<void>;
 }): void {
-  const { container, manager, isBusy, onChanged } = args;
+  const { container, manager, runExclusive, onChanged } = args;
   container.replaceChildren();
 
   const statuses = manager.list();
@@ -128,7 +144,7 @@ export function renderPluginsTab(args: {
     list.className = "pi-hub-stack";
 
     for (const status of statuses) {
-      list.appendChild(renderPluginCard(status, manager, isBusy, onChanged, () => {
+      list.appendChild(renderPluginCard(status, manager, runExclusive, onChanged, () => {
         renderPluginsTab(args);
       }));
     }
@@ -147,11 +163,9 @@ export function renderPluginsTab(args: {
       primary: true,
       compact: true,
       onClick: () => {
-        if (isBusy()) return;
         const url = urlInput.value.trim();
         if (!url) { showToast(t("extensions-hub-plugins.toast.enterUrl")); return; }
-        void installFromUrl(url, manager, onChanged, () => renderPluginsTab(args));
-        urlInput.value = "";
+        void runExclusive(() => installFromUrl(url, manager, onChanged, () => renderPluginsTab(args)));
       },
     }),
   );
@@ -164,7 +178,7 @@ export function renderPluginsTab(args: {
 function renderPluginCard(
   status: ExtensionRuntimeStatus,
   manager: ExtensionRuntimeManager,
-  isBusy: () => boolean,
+  runExclusive: (action: () => Promise<void>) => Promise<boolean>,
   onChanged: () => Promise<void>,
   refresh: () => void,
 ): HTMLElement {
@@ -172,8 +186,7 @@ function renderPluginCard(
     checked: status.enabled,
     stopPropagation: true,
     onChange: (checked) => {
-      if (isBusy()) return;
-      void (async () => {
+      void runExclusive(async () => {
         if (checked && !status.enabled && !(await confirmEnable(status))) {
           enableToggle.input.checked = false;
           return;
@@ -187,7 +200,9 @@ function renderPluginCard(
           showToast(t("ext-hub-plugins.toast.error", { error: err instanceof Error ? err.message : String(err) }));
           refresh();
         }
-      })();
+      }).then((ran) => {
+        if (!ran) enableToggle.input.checked = !checked;
+      });
     },
   });
 
@@ -220,7 +235,7 @@ function renderPluginCard(
         label: describeExtensionCapability(cap),
         checked: allowed,
         onChange: (checked) => {
-          void (async () => {
+          void runExclusive(async () => {
             try {
               await manager.setExtensionCapability(status.id, cap, checked);
               showToast(t("ext-hub-plugins.toast.permissionUpdated", { name: status.name, capability: describeExtensionCapability(cap), state: t(checked ? "ext-hub-plugins.granted" : "ext-hub-plugins.revoked") }));
@@ -229,7 +244,9 @@ function renderPluginCard(
               showToast(t("ext-hub-plugins.toast.error", { error: err instanceof Error ? err.message : String(err) }));
               refresh();
             }
-          })();
+          }).then((ran) => {
+            if (!ran) row.input.checked = !checked;
+          });
         },
       });
       // Use sublabel styling for compact grid.
@@ -252,8 +269,7 @@ function renderPluginCard(
       danger: true,
       compact: true,
       onClick: () => {
-        if (isBusy()) return;
-        void (async () => {
+        void runExclusive(async () => {
           const ok = await requestConfirmationDialog({
             title: t("ext-hub-plugins.confirmUninstallTitle", { name: status.name }),
             message: t("ext-hub-plugins.confirm.uninstallMessage"),
@@ -271,14 +287,14 @@ function renderPluginCard(
           } catch (err) {
             showToast(t("ext-hub-plugins.toast.error", { error: err instanceof Error ? err.message : String(err) }));
           }
-        })();
+        });
       },
     }),
   ));
 
   // Error callout
   if (status.lastError) {
-    card.body.appendChild(createCallout("warn", lucide(AlertTriangle), `Error: ${status.lastError}`, { compact: true }));
+    card.body.appendChild(createCallout("warn", lucide(AlertTriangle), t("ext-hub-plugins.lastError", { error: status.lastError }), { compact: true }));
   }
 
   return card.root;
@@ -292,12 +308,18 @@ async function installFromUrl(
   onChanged: () => Promise<void>,
   refresh: () => void,
 ): Promise<void> {
+  if (classifyExtensionSource(url) !== "remote-url") {
+    showToast(t("ext-hub-plugins.toast.urlOnly"));
+    return;
+  }
+  if (!isExperimentalFeatureEnabled("remote_extension_urls")) {
+    showToast(t("ext-hub-plugins.toast.remoteOff"));
+    return;
+  }
+
   try {
-    const name = window.prompt("Extension name:", "") ?? "";
-    if (!name.trim()) return;
-    const perms = getDefaultPermissionsForTrust("remote-url");
-    const caps = listGrantedExtensionCapabilities(perms);
-    if (!(await confirmInstall(name, url, caps))) return;
+    const name = await requestInstallName(url);
+    if (name === null) return;
     await manager.installFromUrl(name, url);
     await onChanged();
     showToast(t("ext-hub-plugins.toast.installed", { name }));

@@ -18,6 +18,7 @@ import {
   createFilesDialogDetailActions,
   type FilesDialogDetailActionFileRef,
 } from "./files-dialog-actions.js";
+import { requestConfirmationDialog } from "./confirm-dialog.js";
 import {
   buildFilesDialogSections,
   type FilesDialogFolderGroup,
@@ -398,6 +399,12 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
   const dialog = createOverlayDialog({
     overlayId: OVERLAY_ID,
     cardClassName: "pi-welcome-card pi-overlay-card pi-overlay-card--m pi-files-dialog",
+    // Escape in a file preview goes back to the list, like the back arrow.
+    onEscape: () => {
+      if (currentView !== "detail") return false;
+      showListView();
+      return true;
+    },
   });
 
   const closeOverlay = dialog.close;
@@ -458,6 +465,11 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
 
   actionsRow.append(uploadButton, connectFolderButton);
 
+  // Visible reason when "Connect folder" cannot work in this host.
+  const connectFolderHint = document.createElement("p");
+  connectFolderHint.className = "pi-overlay-hint pi-files-connect-hint";
+  connectFolderHint.hidden = true;
+
   const hiddenInput = document.createElement("input");
   hiddenInput.type = "file";
   hiddenInput.multiple = true;
@@ -501,6 +513,7 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
     listHeaderElements.header,
     detailHeader,
     actionsRow,
+    connectFolderHint,
     hiddenInput,
     listBody,
     footer,
@@ -545,6 +558,7 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
 
     listHeaderElements.header.hidden = !showList;
     actionsRow.hidden = !showList;
+    connectFolderHint.hidden = !showList || (connectFolderHint.textContent ?? "").length === 0;
     listBody.hidden = !showList;
     footer.hidden = !showList;
 
@@ -861,6 +875,9 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
     connectFolderButton.disabled = connectState.disabled;
     connectFolderButton.title = connectState.title;
     connectFolderButton.setAttribute("aria-label", connectState.label);
+    const blockedReason = !connectState.hidden && connectState.disabled ? connectState.title : "";
+    connectFolderHint.textContent = blockedReason;
+    connectFolderHint.hidden = blockedReason.length === 0 || currentView !== "list";
 
     if (connectFolderButton.lastChild) {
       connectFolderButton.lastChild.textContent = ` ${connectState.label}`;
@@ -1019,6 +1036,27 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
 
   connectFolderButton.addEventListener("click", () => {
     if (connectFolderButton.disabled) {
+      return;
+    }
+
+    if (backendStatus?.nativeConnected) {
+      const folder = backendStatus.nativeDirectoryName ?? "";
+      void (async () => {
+        try {
+          const ok = await requestConfirmationDialog({
+            title: t("files-dialog.disconnect.title"),
+            message: t("files-dialog.disconnect.message", { folder }),
+            confirmLabel: t("files-dialog.disconnect.confirm"),
+            cancelLabel: t("confirm.cancel"),
+            restoreFocusOnClose: false,
+          });
+          if (!ok) return;
+          await workspace.disconnectNativeDirectory({ audit: DIALOG_AUDIT_CONTEXT });
+          showToast(t("files-dialog.toast.disconnected", { folder }));
+        } catch (error) {
+          showToast(t("files-dialog.toast.connectFolderFailed", { error: getErrorMessage(error) }));
+        }
+      })();
       return;
     }
 

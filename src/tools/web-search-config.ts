@@ -30,19 +30,17 @@ export interface WebSearchProviderInfo {
   searchEndpoint: string;
   apiKeyLabel: string;
   apiKeyHelp: string;
-  /** When true the provider works without an API key (key is optional for higher limits). */
-  apiKeyOptional?: boolean;
 }
 
 export const WEB_SEARCH_PROVIDER_INFO: Record<WebSearchProvider, WebSearchProviderInfo> = {
   jina: {
     id: "jina",
     title: "Jina Search (default)",
-    shortDescription: "Fast web search API with free tier.",
+    shortDescription: "Fast web search API. Needs a free API key from jina.ai.",
     signupUrl: "https://jina.ai",
     searchEndpoint: "https://s.jina.ai/",
     apiKeyLabel: "Jina API key",
-    apiKeyHelp: "Free tier available at jina.ai.",
+    apiKeyHelp: "Required. Get a free key at jina.ai.",
   },
   firecrawl: {
     id: "firecrawl",
@@ -382,11 +380,6 @@ export function getApiKeyForProvider(
   provider: WebSearchProvider = config.provider,
 ): string | undefined {
   return normalizeOptionalString(config.apiKeys[provider]);
-}
-
-/** Returns true when the provider cannot work without an API key. */
-export function isApiKeyRequired(provider: WebSearchProvider): boolean {
-  return WEB_SEARCH_PROVIDER_INFO[provider].apiKeyOptional !== true;
 }
 
 function hasRepeatedLongSegment(value: string): boolean {

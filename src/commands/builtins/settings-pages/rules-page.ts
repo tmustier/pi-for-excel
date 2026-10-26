@@ -1060,8 +1060,10 @@ export function createRulesPage(): SettingsShellPage {
         refreshTabUi();
       });
 
+      // Save and Cancel finish the task and close the overlay; the back arrow
+      // and Escape still go back one level.
       cancelBtn.addEventListener("click", () => {
-        ctx.back();
+        ctx.close();
       });
 
       saveBtn.addEventListener("click", () => {
@@ -1119,8 +1121,8 @@ export function createRulesPage(): SettingsShellPage {
           }
 
           saved = true;
-          showToast(t("rules.toast.saved"));
-          ctx.back();
+          showToast(t(userChanged || workbookChanged || conventionsChanged ? "rules.toast.saved" : "rules.toast.noChanges"));
+          ctx.close();
         })();
       });
 

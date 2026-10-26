@@ -25,7 +25,6 @@ import {
 import {
   getApiKeyForProvider,
   getWebSearchEndpoint,
-  isApiKeyRequired,
   loadWebSearchProviderConfig,
   type WebSearchProvider,
   type WebSearchProviderInfo,
@@ -869,7 +868,7 @@ export function createWebSearchTool(
 
         let result: WebSearchExecutionResult;
         try {
-          if (!configuredApiKey && isApiKeyRequired(configuredProvider)) {
+          if (!configuredApiKey) {
             throw new WebSearchExecutionError({
               provider: configuredProvider,
               kind: "missing_api_key",

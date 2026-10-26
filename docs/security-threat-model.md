@@ -66,17 +66,17 @@ Hosted taskpane is protected with CSP in `vercel.json` (scripts/styles/fonts/con
 - Bounded payload sizes + execution timeouts in helper servers
 
 ### 4) Extension code execution risks
-- Remote `http(s)` extension URLs are blocked by default (`/experimental on remote-extension-urls` required)
+- Remote `http(s)` extension URLs are blocked by default (`/experimental on remote-extension-urls` required). The opt-in is checked at install and at every load, in both host and sandbox runtimes (the sandbox imports module URLs itself, so the host checks before creating it)
 - Untrusted extension sources (inline code + remote URL) run in sandbox iframe runtime by default
 - Rollback kill switch exists for maintainers (`/experimental on extension-sandbox-rollback`) and should be temporary only
-- Capability permissions are persisted per extension (`extensions.registry.v2`)
-- Capability enforcement is feature-flagged via `/experimental on extension-permissions`
+- Capability permissions are persisted per extension (`extensions.registry.v2`) and always enforced; the Plugins page toggles take effect on the next load (enabled extensions reload at once)
+- Pi installing, enabling or uninstalling an extension asks for approval in every execution mode; install shows the code and any extra capabilities requested, which are the only grants beyond the pasted-code defaults
+- Pi's Files writes/deletes ask for approval in Confirm mode, and in Auto mode whenever they would delete or overwrite a file Pi did not create in that chat
 
 ## Known limitations
 
 - IndexedDB is not an XSS boundary; same-origin script execution can read stored credentials.
 - Built-in/local-module extensions are trusted and run in host runtime.
-- Capability policy enforcement is opt-in (`extension-permissions` flag) in current rollout.
 - Sandbox runtime intentionally limits API surface (for example, no raw `api.agent` in sandbox).
 - Host-specific CSP behavior still needs smoke testing across Excel macOS/Windows/Web.
 - Tool-argument schema validation is intentionally disabled in Office builds (Ajv uses runtime code generation blocked by Office CSP, so the browser build aliases Ajv to stubs).

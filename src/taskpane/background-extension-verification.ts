@@ -128,7 +128,6 @@ function extensionStatusSummary(options: ExtensionVerificationOptions): JsonReco
     sourceKind: status.source.kind,
     trust: status.trust,
     runtimeMode: status.runtimeMode,
-    permissionsEnforced: status.permissionsEnforced,
     grantedCapabilities: status.grantedCapabilities,
     effectiveCapabilities: status.effectiveCapabilities,
     connectionIds: options.connectionManager.listRegisteredConnectionIds()
@@ -149,7 +148,6 @@ function parseExperimentalFeatureId(value: string): ExperimentalFeatureId {
   switch (value) {
     case "ui_dark_mode":
     case "remote_extension_urls":
-    case "extension_permission_gates":
     case "extension_sandbox_runtime":
     case "extension_widget_v2":
       return value;
