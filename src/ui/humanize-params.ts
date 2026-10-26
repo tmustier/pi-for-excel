@@ -851,6 +851,22 @@ function humanizeSkills(p: Record<string, unknown>): ParamItem[] {
   return items;
 }
 
+function humanizeExtensionsManager(p: Record<string, unknown>): ParamItem[] {
+  const items: ParamItem[] = [{ label: l("Action"), value: str(p.action || "list") }];
+
+  if (p.name) items.push({ label: l("Name"), value: str(p.name) });
+  if (p.extension_id) items.push({ label: l("Extension"), value: str(p.extension_id) });
+  if (typeof p.enabled === "boolean") items.push({ label: l("Enabled"), value: p.enabled ? v("yes") : v("no") });
+  if (Array.isArray(p.capabilities) && p.capabilities.length > 0) {
+    items.push({ label: l("Permissions"), value: p.capabilities.map((c) => str(c)).join(", ") });
+  }
+  if (typeof p.code === "string") {
+    items.push({ label: l("Code"), value: t("humanize.unit.chars", { n: p.code.length }) });
+  }
+
+  return items;
+}
+
 function humanizeWebSearch(p: Record<string, unknown>): ParamItem[] {
   const items: ParamItem[] = [];
 
@@ -1081,6 +1097,7 @@ const EXTRA_HUMANIZERS = {
   fetch_page: humanizeFetchPage,
   mcp: humanizeMcp,
   files: humanizeFiles,
+  extensions_manager: humanizeExtensionsManager,
   python_transform_range: humanizePythonTransformRange,
   execute_office_js: humanizeExecuteOfficeJs,
   execute_wps_js: humanizeExecuteWpsJs,

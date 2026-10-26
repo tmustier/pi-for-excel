@@ -27,6 +27,6 @@ This repository exposes MCP access as a built-in **integration** in the Excel ad
 ## Excel-specific setup
 
 1. Open `/tools` (or `/extensions` → Connections tab).
-2. Enable external tools.
+2. Turn on **External tools**.
 3. Add one or more MCP servers.
-4. Enable **MCP Gateway** for session and/or workbook scope.
+4. On the **Let Pi use MCP servers** card, turn on **Enable for this session** and/or **Enable for workbook**. The `mcp` tool is available from the next message; no reload needed.
