@@ -1258,6 +1258,7 @@
   "action-queue.retrying": "Retrying in {seconds}s (attempt {attempt} of {max})…",
   "action-queue.retryingHint": "Provider hiccup · Esc to stop",
   "export.toast.compact.stopped": "Compaction stopped",
+  "modelSelector.busy": "Pi is working in this tab. Change the model when it finishes, or press Stop.",
   "turn.toast.stopCancelled": "Stopped · cancelled queued {commands}",
   "turn.toast.stopKept": "Stopped · {count} queued message{plural} not sent, kept above the composer",
   "turn.toast.stopKeptCancelled": "Stopped · {count} queued message{plural} not sent, kept above the composer; cancelled queued {commands}",

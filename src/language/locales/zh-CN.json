@@ -1258,6 +1258,7 @@
   "action-queue.retrying": "{seconds} 秒后重试（第 {attempt}/{max} 次）…",
   "action-queue.retryingHint": "服务商暂时故障 · 按 Esc 停止",
   "export.toast.compact.stopped": "已停止压缩",
+  "modelSelector.busy": "Pi 正在此标签页中工作。请在完成后或按“停止”后再切换模型。",
   "turn.toast.stopCancelled": "已停止 · 已取消排队的 {commands}",
   "turn.toast.stopKept": "已停止 · {count} 条排队消息未发送，保留在输入框上方",
   "turn.toast.stopKeptCancelled": "已停止 · {count} 条排队消息未发送，保留在输入框上方；已取消排队的 {commands}",
