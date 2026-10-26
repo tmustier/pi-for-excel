@@ -93,6 +93,13 @@ The Excel lane runs entirely in the background, including opening the pane after
 - `npm run test:security` when touching proxy/bridge/auth/HTML safety paths
 - Manual Excel smoke test when touching session persistence, tools, auth, or UI wiring
 
+### Amp orbs (Excel on the web)
+
+Orbs cannot run desktop Excel. `.agents/setup` and `.amp/services.yaml` prepare
+the dev server, CORS proxy and trusted localhost certs; follow
+`docs/orb-excel-web.md` to load the add-in into Excel on the web in the orb's
+Desktop Chrome (needs a Microsoft sign-in).
+
 ### Visual UI verification (agent-browser)
 
 Use the **UI Gallery** (`src/ui-gallery.html`) to verify CSS and component changes
