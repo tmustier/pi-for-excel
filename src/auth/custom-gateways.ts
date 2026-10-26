@@ -5,6 +5,7 @@
 import type { Api, Model, Models } from "@earendil-works/pi-ai";
 import type { CustomProvider } from "../storage/local/custom-providers-store.js";
 import { isLoopbackProxyUrl } from "./proxy-validation.js";
+import { t } from "../language/index.js";
 
 const OPENAI_GATEWAY_ID_PREFIX = "pi-openai-gateway:";
 export const OPENAI_GATEWAY_PROVIDER_PREFIX = "Gateway · ";
@@ -61,27 +62,27 @@ function normalizeOptionalString(value: string | null | undefined): string {
   return value.trim();
 }
 
-function normalizeRequiredString(value: string, label: string): string {
+function normalizeRequiredString(value: string, requiredMessage: () => string): string {
   const trimmed = value.trim();
   if (trimmed.length === 0) {
-    throw new Error(`${label} is required.`);
+    throw new Error(requiredMessage());
   }
 
   return trimmed;
 }
 
 export function normalizeGatewayEndpointUrl(endpointUrl: string): string {
-  const raw = normalizeRequiredString(endpointUrl, "Endpoint URL");
+  const raw = normalizeRequiredString(endpointUrl, () => t("custom-gateway.error.endpointRequired"));
 
   let parsed: URL;
   try {
     parsed = new URL(raw);
   } catch {
-    throw new Error("Endpoint URL must be a valid http:// or https:// URL.");
+    throw new Error(t("custom-gateway.error.endpointInvalid"));
   }
 
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-    throw new Error("Endpoint URL must use http:// or https://.");
+    throw new Error(t("custom-gateway.error.endpointScheme"));
   }
 
   parsed.hash = "";
@@ -105,7 +106,7 @@ export function isPlainHttpRemoteEndpoint(url: string): boolean {
 }
 
 export function normalizeGatewayModelId(modelId: string): string {
-  return normalizeRequiredString(modelId, "Model ID");
+  return normalizeRequiredString(modelId, () => t("custom-gateway.error.modelRequired"));
 }
 
 export function normalizeGatewayContextWindow(contextWindow: number | null | undefined): number {
@@ -114,12 +115,12 @@ export function normalizeGatewayContextWindow(contextWindow: number | null | und
   }
 
   if (!Number.isInteger(contextWindow)) {
-    throw new Error("Max context tokens must be a whole number.");
+    throw new Error(t("custom-gateway.error.contextWhole"));
   }
 
   const normalized = contextWindow;
   if (normalized < 1_024) {
-    throw new Error("Max context tokens must be at least 1024.");
+    throw new Error(t("custom-gateway.error.contextMin"));
   }
 
   return normalized;
@@ -127,11 +128,11 @@ export function normalizeGatewayContextWindow(contextWindow: number | null | und
 
 function normalizeGatewayMaxTokens(maxTokens: number): number {
   if (!Number.isInteger(maxTokens)) {
-    throw new Error("Max output tokens must be a whole number.");
+    throw new Error(t("custom-gateway.error.maxTokensWhole"));
   }
 
   if (maxTokens < 1) {
-    throw new Error("Max output tokens must be at least 1.");
+    throw new Error(t("custom-gateway.error.maxTokensMin"));
   }
 
   return maxTokens;
@@ -326,17 +327,14 @@ export async function saveOpenAiGatewayConfig(
     : normalizeGatewayMaxTokens(input.maxTokens);
   const connectDirectly = input.connectDirectly === true;
   if (connectDirectly && isPlainHttpRemoteEndpoint(endpointUrl)) {
-    throw new Error(
-      "Direct connections need an https:// endpoint. Excel blocks plain http:// requests to other machines. "
-      + "Serve the endpoint over HTTPS, or turn off Connect directly to use the proxy.",
-    );
+    throw new Error(t("custom-gateway.error.directNeedsHttps"));
   }
   const existingGateways = await listOpenAiGatewayConfigs(customProvidersStore);
 
   if (input.id) {
     const match = existingGateways.find((gateway) => gateway.id === input.id);
     if (!match) {
-      throw new Error("Gateway not found.");
+      throw new Error(t("custom-gateway.error.notFound"));
     }
   }
 

@@ -39,6 +39,8 @@ const DEFAULT_ERROR_DURATION_MS = 6000;
 const ACTION_TOAST_DEFAULT_MS = 7000;
 
 let toastElements: ToastElements | null = null;
+/** Increments on every render so a stale dismiss handle cannot hide a newer toast. */
+let toastGeneration = 0;
 let hideTimer: ReturnType<typeof setTimeout> | null = null;
 /** Backup timer for action toasts — fires even if the primary is cancelled. */
 let actionHideTimer: ReturnType<typeof setTimeout> | null = null;
@@ -131,7 +133,14 @@ function applyToastVariant(root: HTMLDivElement, variant: ToastVariant): void {
   root.setAttribute("aria-live", "polite");
 }
 
-function renderToast(opts: ResolvedToastOptions): void {
+function hideToastElements(elements: ToastElements): void {
+  elements.root.classList.remove("visible", "pi-toast--action", "pi-toast--error");
+  elements.action.hidden = true;
+  elements.action.onclick = null;
+}
+
+function renderToast(opts: ResolvedToastOptions): number {
+  toastGeneration += 1;
   const elements = ensureToastElements();
   applyToastVariant(elements.root, opts.variant);
   elements.message.textContent = opts.message;
@@ -176,6 +185,8 @@ function renderToast(opts: ResolvedToastOptions): void {
       }
     }, opts.duration + 1000);
   }
+
+  return toastGeneration;
 }
 
 export function showToast(message: string, duration?: number): void;
@@ -196,8 +207,12 @@ export function showToast(message: string, durationOrOptions?: number | ToastOpt
   });
 }
 
-export function showActionToast(opts: ActionToastOptions): void {
-  renderToast({
+/**
+ * Shows a toast with an action button. Returns a function that hides this
+ * toast if it is still the one showing, e.g. once its action no longer applies.
+ */
+export function showActionToast(opts: ActionToastOptions): () => void {
+  const generation = renderToast({
     message: opts.message,
     duration: opts.duration ?? ACTION_TOAST_DEFAULT_MS,
     variant: "info",
@@ -206,6 +221,12 @@ export function showActionToast(opts: ActionToastOptions): void {
       onAction: opts.onAction,
     },
   });
+
+  return () => {
+    if (generation !== toastGeneration || !toastElements) return;
+    clearHideTimer();
+    hideToastElements(toastElements);
+  };
 }
 
 export function isActionToastVisible(): boolean {

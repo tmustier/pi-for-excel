@@ -120,9 +120,15 @@ function createGatewayCard(args: {
   return card;
 }
 
+export interface CustomGatewaySection {
+  section: HTMLElement;
+  /** True while the form differs from the gateway being edited (or from empty). */
+  hasUnsavedChanges: () => boolean;
+}
+
 export async function buildCustomGatewaySection(
   options: BuildCustomGatewaySectionOptions,
-): Promise<HTMLElement> {
+): Promise<CustomGatewaySection> {
   const section = document.createElement("section");
   section.className = "pi-overlay-section pi-settings-section";
   section.dataset.settingsAnchor = "custom-gateways";
@@ -231,6 +237,17 @@ export async function buildCustomGatewaySection(
     errorText.textContent = message;
   };
 
+  const readFormValues = (): string => JSON.stringify([
+    nameInput.value,
+    endpointInput.value,
+    modelInput.value,
+    contextWindowInput.value,
+    maxTokensInput.value,
+    apiKeyInput.value,
+    connectDirectlyToggle.input.checked,
+  ]);
+  let savedFormValues = "";
+
   const resetForm = (): void => {
     editingGatewayId = null;
     nameInput.value = "";
@@ -243,6 +260,7 @@ export async function buildCustomGatewaySection(
     cancelButton.hidden = true;
     saveButton.textContent = t("custom-gateway.saveGateway");
     setError(null);
+    savedFormValues = readFormValues();
   };
 
   const startEditing = (gateway: OpenAiGatewayConfig): void => {
@@ -257,6 +275,7 @@ export async function buildCustomGatewaySection(
     cancelButton.hidden = false;
     saveButton.textContent = t("custom-gateway-settings.update-gateway");
     setError(null);
+    savedFormValues = readFormValues();
     nameInput.focus();
   };
 
@@ -363,11 +382,12 @@ export async function buildCustomGatewaySection(
 
   await reloadGateways();
   renderList();
+  savedFormValues = readFormValues();
 
   content.append(formCard, listTitle, listHost);
   if (options.includeHeading !== false) {
     section.append(title, hint);
   }
   section.append(content);
-  return section;
+  return { section, hasUnsavedChanges: () => readFormValues() !== savedFormValues };
 }

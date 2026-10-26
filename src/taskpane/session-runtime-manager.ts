@@ -3,6 +3,7 @@
  */
 
 import type { Agent } from "@earendil-works/pi-agent-core";
+import { clampThinkingLevel } from "@earendil-works/pi-ai";
 
 import {
   shouldForkModelSwitch,
@@ -11,7 +12,8 @@ import {
 import { areRuntimeModelsEquivalent } from "../models/model-refresh-owner.js";
 import type { ActionQueue } from "./action-queue.js";
 import type { QueueDisplay } from "./queue-display.js";
-import type { SessionPersistenceController } from "./sessions.js";
+import type { SessionData } from "../storage/local/types.js";
+import { countVisibleSessionMessages, type SessionPersistenceController } from "./sessions.js";
 import { resolveTabTitle } from "./session-title.js";
 import type { TabState } from "./tab-state.js";
 
@@ -35,10 +37,17 @@ export interface CreateRuntimeOptions {
   autoRestoreLatest: boolean;
   /** Reuse this session id (a tab restored from the saved layout). */
   sessionId?: string;
+  /**
+   * Default "Chat N" number to give the tab, e.g. the number it had before a
+   * reload or before it was closed. Ignored when another open tab has it.
+   */
+  tabNumber?: number;
 }
 
 export interface RuntimeTabSnapshot {
   runtimeId: string;
+  sessionId: string;
+  tabNumber: number;
   title: string;
   isActive: boolean;
   isStreaming: boolean;
@@ -56,6 +65,27 @@ export type SessionRuntimeFactory = (opts: CreateRuntimeOptions) => Promise<Sess
 export type ModelSelectionResult =
   | { outcome: "missing" | "unchanged" | "busy" | "updated" }
   | { outcome: "forked"; runtime: SessionRuntime; title: string };
+
+/**
+ * Where a saved session should open. A session is open in at most one tab, so
+ * either target switches to the tab that already shows it.
+ */
+export type OpenSessionTarget =
+  | { kind: "new_tab"; tabNumber?: number }
+  | { kind: "replace"; runtimeId: string };
+
+export type OpenSessionResult =
+  | { outcome: "opened" | "replaced" | "focused"; runtime: SessionRuntime }
+  | { outcome: "busy" }
+  | { outcome: "missing" };
+
+export function isRuntimeBusy(runtime: Pick<SessionRuntime, "agent" | "actionQueue">): boolean {
+  return runtime.agent.state.isStreaming || runtime.actionQueue.isBusy();
+}
+
+function isValidTabNumber(value: number | undefined): value is number {
+  return value !== undefined && Number.isInteger(value) && value >= 1;
+}
 
 interface RuntimeListeners {
   unsubscribeAgent: () => void;
@@ -88,14 +118,16 @@ export class SessionRuntimeManager {
 
   async createRuntime(opts: CreateRuntimeOptions): Promise<SessionRuntime> {
     const runtime = await this.createSessionRuntime(opts);
-    return this.registerRuntime(runtime, { activate: opts.activate });
+    return this.registerRuntime(runtime, {
+      activate: opts.activate,
+      ...(opts.tabNumber !== undefined ? { tabNumber: opts.tabNumber } : {}),
+    });
   }
 
-  registerRuntime(runtime: SessionRuntime, opts?: { activate?: boolean }): SessionRuntime {
+  registerRuntime(runtime: SessionRuntime, opts?: { activate?: boolean; tabNumber?: number }): SessionRuntime {
     this.runtimes.set(runtime.runtimeId, runtime);
     this.runtimeOrder.push(runtime.runtimeId);
-    this.runtimeDefaultTabNumbers.set(runtime.runtimeId, this.nextDefaultTabNumber);
-    this.nextDefaultTabNumber += 1;
+    this.runtimeDefaultTabNumbers.set(runtime.runtimeId, this.assignTabNumber(opts?.tabNumber));
 
     const unsubscribeAgent = runtime.agent.subscribe(() => {
       this.emit();
@@ -123,6 +155,55 @@ export class SessionRuntimeManager {
     }
 
     return runtime;
+  }
+
+  /**
+   * The next number a new tab gets. Numbers are never reused while they are
+   * remembered, so a reload can seed this from the saved layout.
+   */
+  getNextTabNumber(): number {
+    return this.nextDefaultTabNumber;
+  }
+
+  seedNextTabNumber(next: number): void {
+    if (isValidTabNumber(next) && next > this.nextDefaultTabNumber) {
+      this.nextDefaultTabNumber = next;
+    }
+  }
+
+  getTabNumber(runtimeId: string): number | null {
+    return this.runtimeDefaultTabNumbers.get(runtimeId) ?? null;
+  }
+
+  /**
+   * Opens a saved session. If any tab already shows it, that tab becomes
+   * active instead, so one session never backs two tabs.
+   */
+  async openSession(sessionData: SessionData, target: OpenSessionTarget): Promise<OpenSessionResult> {
+    const existing = this.findRuntimeBySessionId(sessionData.id);
+    if (existing) {
+      this.switchRuntime(existing.runtimeId);
+      return { outcome: "focused", runtime: existing };
+    }
+
+    if (target.kind === "replace") {
+      const runtime = this.runtimes.get(target.runtimeId);
+      if (!runtime) return { outcome: "missing" };
+      if (isRuntimeBusy(runtime)) return { outcome: "busy" };
+
+      await runtime.persistence.applyLoadedSession(sessionData);
+      this.switchRuntime(runtime.runtimeId);
+      return { outcome: "replaced", runtime };
+    }
+
+    const runtime = await this.createRuntime({
+      activate: true,
+      autoRestoreLatest: false,
+      ...(target.tabNumber !== undefined ? { tabNumber: target.tabNumber } : {}),
+    });
+    await runtime.persistence.applyLoadedSession(sessionData);
+    this.emit();
+    return { outcome: "opened", runtime };
   }
 
   switchRuntime(runtimeId: string): SessionRuntime | null {
@@ -210,15 +291,20 @@ export class SessionRuntimeManager {
       return { outcome: "unchanged" };
     }
 
-    if (runtime.agent.state.isStreaming || runtime.actionQueue.isBusy()) {
+    if (isRuntimeBusy(runtime)) {
       return { outcome: "busy" };
     }
 
+    // The thinking level carries over only as far as the new model supports it.
+    const thinkingLevel = clampThinkingLevel(args.nextModel, runtime.agent.state.thinkingLevel);
+
     if (sameIdentity || !shouldForkModelSwitch({
       behavior: args.behavior,
-      hasMessages: runtime.agent.state.messages.length > 0,
+      // Every tab starts with a hidden instruction message; only what the user sees counts.
+      hasMessages: countVisibleSessionMessages(runtime.agent.state.messages) > 0,
     })) {
       runtime.agent.state.model = args.nextModel;
+      runtime.agent.state.thinkingLevel = thinkingLevel;
       await runtime.persistence.saveSession({ force: true });
       return { outcome: "updated" };
     }
@@ -232,7 +318,7 @@ export class SessionRuntimeManager {
     });
     forkedRuntime.agent.state.messages = structuredClone(runtime.agent.state.messages);
     forkedRuntime.agent.state.model = args.nextModel;
-    forkedRuntime.agent.state.thinkingLevel = runtime.agent.state.thinkingLevel;
+    forkedRuntime.agent.state.thinkingLevel = thinkingLevel;
     await forkedRuntime.persistence.renameSession(title);
     forkedRuntime.queueDisplay.clear();
     forkedRuntime.queueDisplay.setActionQueue([]);
@@ -289,18 +375,23 @@ export class SessionRuntimeManager {
   }
 
   snapshotTabs(): RuntimeTabSnapshot[] {
-    return this.listRuntimes().map((runtime, index) => ({
-      runtimeId: runtime.runtimeId,
-      title: resolveTabTitle({
-        hasExplicitTitle: runtime.persistence.hasExplicitTitle(),
-        sessionTitle: runtime.persistence.getSessionTitle(),
-        defaultTabNumber: this.runtimeDefaultTabNumbers.get(runtime.runtimeId) ?? (index + 1),
-      }),
-      isActive: runtime.runtimeId === this.activeRuntimeId,
-      isStreaming: runtime.agent.state.isStreaming,
-      isBusy: runtime.agent.state.isStreaming || runtime.actionQueue.isBusy(),
-      lockState: runtime.lockState,
-    }));
+    return this.listRuntimes().map((runtime, index) => {
+      const tabNumber = this.runtimeDefaultTabNumbers.get(runtime.runtimeId) ?? (index + 1);
+      return {
+        runtimeId: runtime.runtimeId,
+        sessionId: runtime.persistence.getSessionId(),
+        tabNumber,
+        title: resolveTabTitle({
+          hasExplicitTitle: runtime.persistence.hasExplicitTitle(),
+          sessionTitle: runtime.persistence.getSessionTitle(),
+          defaultTabNumber: tabNumber,
+        }),
+        isActive: runtime.runtimeId === this.activeRuntimeId,
+        isStreaming: runtime.agent.state.isStreaming,
+        isBusy: isRuntimeBusy(runtime),
+        lockState: runtime.lockState,
+      };
+    });
   }
 
   subscribe(listener: RuntimeSnapshotListener): () => void {
@@ -335,6 +426,21 @@ export class SessionRuntimeManager {
     }
 
     this.emit();
+  }
+
+  private assignTabNumber(requested: number | undefined): number {
+    const inUse = new Set(this.runtimeDefaultTabNumbers.values());
+    const tabNumber = isValidTabNumber(requested) && !inUse.has(requested)
+      ? requested
+      : this.nextFreeTabNumber(inUse);
+    this.nextDefaultTabNumber = Math.max(this.nextDefaultTabNumber, tabNumber + 1);
+    return tabNumber;
+  }
+
+  private nextFreeTabNumber(inUse: ReadonlySet<number>): number {
+    let candidate = this.nextDefaultTabNumber;
+    while (inUse.has(candidate)) candidate += 1;
+    return candidate;
   }
 
   private emit(): void {

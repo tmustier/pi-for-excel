@@ -10,6 +10,7 @@
  */
 
 import { t } from "../language/index.js";
+import { showToast } from "./toast.js";
 import { API_KEY_OVERLAY_ID } from "./overlay-ids.js";
 import {
   closeOverlayById,
@@ -59,9 +60,10 @@ export function promptForProviderConnection(provider: string): Promise<boolean> 
     const row = buildProviderRow(def, {
       isActive: false,
       expandedRef,
-      onConnected: () => {
+      onConnected: (_row, _id, label) => {
         settle(true);
         dialog.close();
+        showToast(t("welcome.toast.connected", { label }), 3200);
       },
     });
 

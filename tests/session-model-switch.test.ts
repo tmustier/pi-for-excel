@@ -132,7 +132,7 @@ function createEnvironment(backend: StorageBackend): RuntimeEnvironment {
       agent,
       sessions,
       settings,
-      models,
+      resolveModel: (persisted) => models.getModel(persisted.provider, persisted.id),
       autoRestoreLatest,
       spreadsheetHost: {
         getWorkbookContext: () => Promise.resolve({

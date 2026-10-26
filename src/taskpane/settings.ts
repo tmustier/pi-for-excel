@@ -1,6 +1,8 @@
 import {
   DEFAULT_PROXY_URL,
+  isLoopbackProxyUrl,
   resolveRuntimeDefaultProxyUrl,
+  validateOfficeProxyUrl,
 } from "../auth/proxy-validation.js";
 import type { SpreadsheetHostKind } from "../host/index.js";
 import type { SupportedLanguage } from "../language/index.js";
@@ -75,4 +77,22 @@ export async function ensureDefaultProxyUrl(
   } catch {
     // A failed read is unknown state, not permission to replace the stored URL.
   }
+}
+
+/**
+ * Validates and stores a proxy URL; an empty value means the default. Throws
+ * the validation message without writing anything, so an unusable URL (such as
+ * plain http:// from the HTTPS taskpane) is never saved where requests would
+ * silently skip it. Returns the normalized URL that was stored.
+ */
+export async function saveTaskpaneProxyUrl(settings: SettingsWriter, rawUrl: string): Promise<string> {
+  const trimmed = rawUrl.trim();
+  const normalized = validateOfficeProxyUrl(trimmed.length > 0 ? trimmed : DEFAULT_PROXY_URL);
+  await settings.set(TASKPANE_PROXY_URL_SETTING_KEY, normalized);
+  return normalized;
+}
+
+/** A proxy on another machine sees prompts and credentials; the user is warned whenever one is in use. */
+export function needsRemoteProxyWarning(proxy: TaskpaneProxySettings): boolean {
+  return proxy.enabled && proxy.url !== null && proxy.url.length > 0 && !isLoopbackProxyUrl(proxy.url);
 }

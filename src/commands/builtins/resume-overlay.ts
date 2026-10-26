@@ -51,7 +51,10 @@ function buildResumeListItem(session: SessionMetadata): HTMLButtonElement {
 
   const meta = document.createElement("span");
   meta.className = "pi-resume-item__meta";
-  meta.textContent = t("resume.sessionMeta", { count: session.messageCount || 0, date: formatRelativeDate(session.lastModified) });
+  const date = formatRelativeDate(session.lastModified);
+  meta.textContent = session.messageCount === 1
+    ? t("resume.sessionMetaOne", { date })
+    : t("resume.sessionMeta", { count: session.messageCount || 0, date });
 
   button.append(title, meta);
   return button;
@@ -103,15 +106,19 @@ function buildWorkbookFilterRow(opts: {
   return row;
 }
 
+/** What opening a session did, or null when it was refused (the callee shows why). */
+export type ResumeOpenResult = { outcome: "opened" | "replaced" | "focused"; title: string } | null;
+
 export async function showResumeDialog(opts: {
   defaultTarget?: ResumeDialogTarget;
-  onOpenInNewTab: (sessionData: SessionData) => Promise<void>;
-  onReplaceCurrent: (sessionData: SessionData) => Promise<void>;
+  onOpenSession: (sessionData: SessionData, target: ResumeDialogTarget) => Promise<ResumeOpenResult>;
   getRecentlyClosedItems?: () => readonly ResumeRecentlyClosedItem[];
   onReopenRecentlyClosed?: (item: ResumeRecentlyClosedItem) => Promise<boolean>;
 }): Promise<void> {
   const storage = getAppStorage();
-  const allSessions = await storage.sessions.getAllMetadata();
+  // Blank sessions (saved when an empty tab closed) have nothing to resume.
+  const allSessions = (await storage.sessions.getAllMetadata())
+    .filter((session) => session.messageCount !== 0);
 
   const getRecentlyClosedItems = (): ResumeRecentlyClosedItem[] => {
     if (!opts.getRecentlyClosedItems) {
@@ -288,8 +295,9 @@ export async function showResumeDialog(opts: {
       return false;
     }
 
-    await opts.onOpenInNewTab(sessionData);
-    showToast(t("resume.toast.reopened", { title: sessionData.title || t("session.untitled") }));
+    const opened = await opts.onOpenSession(sessionData, "new_tab");
+    if (!opened) return false;
+    showToast(t("resume.toast.reopened", { title: opened.title }));
     return true;
   };
 
@@ -322,12 +330,15 @@ export async function showResumeDialog(opts: {
 
   renderLists();
 
+  // One open at a time: a double click must not resume the session twice.
+  let opening = false;
+
   dialog.overlay.addEventListener("click", (event) => {
     const target = event.target;
     if (!(target instanceof HTMLElement)) return;
 
     const item = target.closest<HTMLElement>(".pi-resume-item");
-    if (!item) return;
+    if (!item || opening) return;
 
     const id = item.dataset.id;
     if (!id) return;
@@ -337,7 +348,20 @@ export async function showResumeDialog(opts: {
       ? RESUME_ITEM_KIND_RECENTLY_CLOSED
       : RESUME_ITEM_KIND_SESSION;
 
+    opening = true;
+    dialog.card.setAttribute("aria-busy", "true");
     void (async () => {
+      try {
+        await openItem(item, id, kind);
+      } finally {
+        opening = false;
+        dialog.card.removeAttribute("aria-busy");
+      }
+    })();
+  });
+
+  const openItem = async (item: HTMLElement, id: string, kind: ResumeItemKind): Promise<void> => {
+    {
       if (kind === RESUME_ITEM_KIND_RECENTLY_CLOSED) {
         const recentId = item.dataset.recentId;
         if (!recentId) {
@@ -386,17 +410,20 @@ export async function showResumeDialog(opts: {
         return;
       }
 
-      if (targetMode === "replace_current") {
-        await opts.onReplaceCurrent(sessionData);
-      } else {
-        await opts.onOpenInNewTab(sessionData);
-      }
+      const opened = await opts.onOpenSession(sessionData, targetMode);
+      // A refusal (e.g. the current tab is busy) keeps the picker open with its toast.
+      if (!opened) return;
 
       closeOverlay();
-      const resumedMode = targetMode === "replace_current" ? "current tab" : "new tab";
-      showToast(t("resume.toast.resumedIn", { mode: resumedMode, title: sessionData.title || t("session.untitled") }));
-    })();
-  });
+      if (opened.outcome === "focused") {
+        showToast(t("init.alreadyOpen", { title: opened.title }));
+        return;
+      }
+      showToast(opened.outcome === "replaced"
+        ? t("resume.toast.resumedCurrent", { title: opened.title })
+        : t("resume.toast.resumedNew", { title: opened.title }));
+    }
+  };
 
   dialog.mount();
 }

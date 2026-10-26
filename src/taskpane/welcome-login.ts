@@ -16,8 +16,11 @@ import {
   PROXY_HELPER_DOCS_URL,
   probeProxyReachability,
   resolveConfiguredProxyUrl,
+  validateOfficeProxyUrl,
 } from "../auth/proxy-validation.js";
-import { readTaskpaneProxySettings } from "./settings.js";
+import { getErrorMessage } from "../utils/errors.js";
+import { checkProxyOnce } from "./proxy-status.js";
+import { needsRemoteProxyWarning, readTaskpaneProxySettings, saveTaskpaneProxyUrl } from "./settings.js";
 
 function createElement<K extends keyof HTMLElementTagNameMap>(
   tagName: K,
@@ -252,7 +255,7 @@ export async function showWelcomeLogin(modelRefreshOwner: ModelRefreshOwner): Pr
       proxyPanel.hidden = !willOpen;
       proxyToggle.setAttribute("aria-expanded", willOpen ? "true" : "false");
       proxyToggle.textContent = willOpen
-        ? "Hide proxy settings"
+        ? t("welcome.proxy.toggle_hide")
         : proxyToggleClosedLabel;
 
       if (willOpen) {
@@ -268,14 +271,29 @@ export async function showWelcomeLogin(modelRefreshOwner: ModelRefreshOwner): Pr
     };
 
     const saveProxyUi = async () => {
+      const storage = getAppStorage();
+      let proxyUrl: string;
       try {
-        const storage = getAppStorage();
+        // Same validation as Settings → Proxy: an unusable URL is never stored.
+        proxyUrl = validateOfficeProxyUrl(proxyUrlEl.value.trim() || DEFAULT_PROXY_URL);
+      } catch (error) {
+        showToast(t("welcome.toast.proxy_url_not_saved", { error: getErrorMessage(error) }), { variant: "error" });
+        return;
+      }
+
+      try {
         await storage.settings.set("proxy.enabled", proxyEnabledEl.checked);
-        await storage.settings.set("proxy.url", proxyUrlEl.value.trim());
-        showToast(t("welcome.toast.proxy_saved"));
+        proxyUrlEl.value = await saveTaskpaneProxyUrl(storage.settings, proxyUrl);
       } catch {
         showToast(t("welcome.toast.proxy_failed"));
+        return;
       }
+
+      showToast(t("welcome.toast.proxy_saved"));
+      if (needsRemoteProxyWarning({ enabled: proxyEnabledEl.checked, url: proxyUrl })) {
+        showToast(t("init.securityWarning"), { variant: "error" });
+      }
+      void checkProxyOnce(storage.settings);
     };
 
     proxyEnabledEl.addEventListener("change", () => {
