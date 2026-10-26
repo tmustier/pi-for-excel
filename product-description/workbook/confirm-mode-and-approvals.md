@@ -6,7 +6,7 @@ The [execution mode](../foundations/the-workbook.md#the-execution-mode) decides 
 
 ## The simple case
 
-The user clicks "Auto" in the status bar. It changes to "Confirm" and a toast says "Confirm mode.". Nothing else changes until Pi next tries to change the workbook.
+The user clicks "Auto" in the status bar. A toast says "Confirm mode." and the mode changes at once, but the control keeps saying "Auto" until the pointer and focus leave the status bar; then it reads "Confirm" (confirmed in Excel on the web; see [Open questions](#open-questions-and-verification)). Nothing else changes until Pi next tries to change the workbook.
 
 The user asks Pi to fill in a column. Pi reads the sheet as usual, without asking. When it is about to write, a dialog appears over the taskpane, titled "Allow workbook mutation in Safe mode?", with the tool and range it wants to change and the tip "Tip: run /yolo on to switch to Auto mode (no confirmations)." The turn waits. The user clicks "Allow once"; the dialog closes, the write runs, and Pi continues. If Pi makes three writes, the user is asked three times.
 
@@ -33,7 +33,7 @@ stateDiagram-v2
 
 There are three ways, all with the same effect:
 
-- **The status-bar control.** A button showing "Auto" or "Confirm" with a small chevron. Its tooltip is "Auto: Pi applies workbook changes immediately. Click to switch to Confirm." or "Confirm: Pi asks before each workbook change. Click to switch to Auto." One click switches at once (the chevron does not open a menu) and shows "Auto mode." or "Confirm mode.". Clicking it closes any open status-bar popover.
+- **The status-bar control.** A button showing "Auto" or "Confirm" with a small chevron. Its tooltip is "Auto: Pi applies workbook changes immediately. Click to switch to Confirm." or "Confirm: Pi asks before each workbook change. Click to switch to Auto." One click switches at once (the chevron does not open a menu) and shows "Auto mode." or "Confirm mode.". The label and tooltip are not redrawn while the pointer is over the status bar or the button has focus, so right after the click it still shows the old mode; it catches up when the user clicks or moves elsewhere. Clicking it closes any open status-bar popover.
 - **Settings.** In the Behavior group, the switch "Auto mode" ("Pi applies changes immediately without asking"). On is Auto, off is Confirm. The toast is "Auto mode." or "Confirm mode."; if saving fails, the switch flips back and the toast is "Couldn't update execution mode.".
 - **`/yolo`.** Described below.
 
@@ -69,7 +69,7 @@ Every mutation asks, including ones the user might not think of as changes: swit
 
 ### While the dialog is open
 
-The turn waits as long as the dialog stays open; there is no timeout. The overlay covers the transcript, the tab strip and the composer, so the user cannot switch tabs or type until they answer. Other tabs keep running; their reads continue and their mutations can take the lock, because the waiting call has not asked for it yet.
+The turn waits as long as the dialog stays open; there is no timeout. The overlay dims the transcript, the tab strip and the composer, but it does not take focus: the composer keeps it, so typing and Enter still reach the composer behind the dialog. Typing `/yolo on` and Enter while the dialog is open switches the mode (toast and all) and leaves the dialog open; its answer still counts (confirmed in Excel on the web). Other tabs keep running; their reads continue and their mutations can take the lock, because the waiting call has not asked for it yet.
 
 ### Answered
 
@@ -109,8 +109,8 @@ Changing the mode mid-turn never cancels or approves a pending dialog; it only c
 
 | Event | Before sent | While busy |
 | --- | --- | --- |
-| Stop (button or Escape) | Escape while the dialog is open closes it as Cancel, not as Stop. The Stop button is under the overlay. | If the turn is stopped some other way while a dialog is open, the dialog stays; the turn finishes ending only after it is answered, and the mutation does not run whichever button is pressed. |
-| The user sends something else | The overlay holds focus; the composer cannot be used until the dialog closes. `/yolo` can be typed only after. | After answering, steers and follow-ups work as usual. |
+| Stop (button or Escape) | Escape while the dialog is open closes it as Cancel, not as Stop (confirmed). The Stop button is under the overlay. | If the turn is stopped some other way while a dialog is open, the dialog stays; the turn finishes ending only after it is answered, and the mutation does not run whichever button is pressed. |
+| The user sends something else | The composer keeps focus behind the dialog: a typed message or command is sent (confirmed with `/yolo on`, which changed the mode and left the dialog open). | After answering, steers and follow-ups work as usual. |
 | Tab switched, created, closed or reopened | Not possible while the dialog is open; the overlay covers the tab strip. | A tab whose turn is waiting on a dialog can only be closed after the dialog is answered. |
 | An overlay or menu opens | A second approval (from another tab, or a second mutation in the same model response) closes the first dialog, which counts as Cancel for the first call. | Not applicable. |
 | Model or thinking level changes | No effect on the dialog. | No effect. |
@@ -144,25 +144,29 @@ After any interrupt the mode itself is unchanged; it is only ever changed by the
 
 **Language.** "Auto", "Confirm", their tooltips, the dialog title and buttons, and the Settings switch are translated. The dialog body, the `/yolo` toasts after the mode name, the usage toast, and the Office.js and Python dialog bodies are English in every UI language.
 
-**Accessibility and keyboard.** The dialog takes focus when it opens; Tab moves between "Cancel" and "Allow once", Enter activates, Escape cancels. Focus returns to the composer afterwards. The status-bar control is a button reachable with Tab.
+**Accessibility and keyboard.** The dialog does not take focus when it opens: focus stays in the composer (confirmed in Excel on the web), so Enter sends the draft rather than choosing a button. Escape cancels the dialog wherever focus is. A keyboard user reaches "Cancel" and "Allow once" with Tab. The status-bar control is a button reachable with Tab.
 
 ## Edge cases
 
-- The dialog title says "Safe mode" while the body, the status bar and the toasts say "Confirm". Both refer to the same mode.
-- `write_cells` names its target by start cell, not range, so its approval dialog shows "Tool: write_cells" with no "Range:" line.
-- Two mutations in one model response in Confirm mode open two dialogs in quick succession; the second replaces the first, which is declined without the user clicking anything.
+- The dialog title says "Safe mode" while the body, the status bar and the toasts say "Confirm". Both refer to the same mode (confirmed in Excel on the web).
+- `write_cells` names its target by start cell, not range, so its approval dialog shows "Tool: write_cells" with no "Range:" line (confirmed).
+- Two mutations in one model response in Confirm mode open two dialogs in quick succession; the second replaces the first, which is declined without the user clicking anything (confirmed in Excel on the web). The same happens across tabs: a second tab's approval declines the first tab's open one.
+- In Confirm mode Pi often asks in chat before calling the tool ("Please confirm: write 1 to Sheet1!H1?") and the dialog then asks again (confirmed).
 - Declining repeatedly does not switch the mode or stop Pi from asking again.
 - `/yolo on` while already in Auto shows the Auto sentence and does nothing else.
-- Pi's `workbook_history` delete and clear do not ask, even in Confirm mode; only restore does.
+- Pi's `workbook_history` delete and clear do not ask, even in Confirm mode; only restore does ("Tool: workbook_history:restore"). Both confirmed in Excel on the web.
 
 ## Open questions and verification
 
-- Read from code; nothing here has been tried by hand.
-- The approval title (`init.confirm.safeModeMutationTitle`, "Allow workbook mutation in Safe mode?") uses the old name, and the body's first line (`src/tools/with-workbook-coordinator.ts:95`) says "Confirm mode". The taskpane strips a body line only when it equals the title (`src/taskpane/init.ts:759`), so both are shown. Looks like a bug.
-- `requestConfirmationDialog` closes any open dialog with the same overlay id before opening a new one (`src/ui/confirm-dialog.ts:45`), and closing settles the old promise as `false`. Every approval uses the same id, so concurrent approvals (parallel tool calls, or two tabs) auto-decline all but the last. Looks like a bug.
-- The range line reads only an input named `range` (`src/tools/with-workbook-coordinator.ts`, `getRangeParam`), so `write_cells` (start cell) and `modify_structure` (sheet and position) approvals do not say where the change will land.
-- In Confirm mode, direct Office.js asks twice, and the second dialog is shown while the call holds the workbook lock, because the coordinator wraps the gated tool (`src/taskpane/init.ts`, the order of `applyExperimentalToolGates` and `withWorkbookCoordinator`). Probably unintended.
-- The Confirm-mode system prompt tells Pi to ask in chat as well as relying on the dialog (`src/prompt/system-prompt.ts:80-87`), which can produce two confirmations for one change. A product call.
+- Checked by hand in Excel on the web (orb session, `ec453df`), 26 October 2026: the status-bar control, the Settings switch, every `/yolo` argument, the approval dialog's wording, Allow once, Escape, backdrop, typing behind the dialog, and concurrent approvals in one tab and across two tabs. See [the workbook checklist](../verification/workbook.md#workbookconfirm-mode-and-approvalsmd). Direct Office.js, the Python bridge and Stop while a dialog is open were not run.
+- **Confirmed bug.** The approval title (`init.confirm.safeModeMutationTitle`, "Allow workbook mutation in Safe mode?") uses the old name, and the body's first line (`src/tools/with-workbook-coordinator.ts:95`) says "Confirm mode". The taskpane strips a body line only when it equals the title (`src/taskpane/init.ts:759`), so both are shown. APPROVE-06.
+- **Confirmed bug.** `requestConfirmationDialog` closes any open dialog with the same overlay id before opening a new one (`src/ui/confirm-dialog.ts:45`), and closing settles the old promise as `false`. Every approval uses the same id, so concurrent approvals auto-decline all but the last: two writes in one model response (D1 declined, E1 applied) and two tabs (Chat 2's H1 declined when Chat 1's H3 dialog opened). APPROVE-13, APPROVE-14.
+- **New, confirmed.** After a click on the status-bar mode control, the label keeps showing the old mode while the pointer is over the status bar or the button keeps focus: `src/taskpane/status-bar.ts` defers every re-render while the bar is hovered or focused (`shouldDeferRenderForInteraction`), and the click leaves focus on the button. The toast and the mode itself are correct. A user who clicks and looks sees "Auto" right after the "Confirm mode." toast. APPROVE-03. Looks like a bug; it belongs to [the status bar](../ui/the-status-bar.md) too.
+- **Refuted.** The dialog does not take focus; the composer keeps it and stays usable behind the overlay. This matches the general rule that overlays other than Settings do not take focus. APPROVE-11.
+- The range line reads only an input named `range` (`src/tools/with-workbook-coordinator.ts`, `getRangeParam`), so `write_cells` (start cell) and `modify_structure` (sheet and position) approvals do not say where the change will land. Confirmed for `write_cells`.
+- In Confirm mode, direct Office.js asks twice, and the second dialog is shown while the call holds the workbook lock, because the coordinator wraps the gated tool (`src/taskpane/init.ts`, the order of `applyExperimentalToolGates` and `withWorkbookCoordinator`). Probably unintended. Not run.
+- The Confirm-mode system prompt tells Pi to ask in chat as well as relying on the dialog (`src/prompt/system-prompt.ts:80-87`), which produces two confirmations for one change (confirmed). A product call.
+- **Confirmed.** `workbook_history` clear is classified as a read (`src/tools/execution-policy.ts:73`): in Confirm mode Pi cleared every backup with no dialog. APPROVE-17.
 - That Stop leaves an open approval dialog in place and the turn ends only after it is answered is read from the agent loop; not confirmed.
 - `/yolo` wording ("on" = fewer confirmations) is the opposite of what "Confirm mode on" suggests; a product call.
 
