@@ -120,7 +120,17 @@ export function createFillFormulaTool(): AgentTool<typeof schema, FillFormulaDet
 
           const topLeft = range.getCell(0, 0);
           topLeft.formulas = [[params.formula]];
-          topLeft.autoFill(range, "FillDefault");
+          if (range.rowCount > 1 && range.columnCount > 1) {
+            // Excel on the web fills a 2D target from a single cell only below and
+            // right of it, leaving the rest of the first row and column blank.
+            // Fill across the first row, then down from it.
+            const firstRow = range.getRow(0);
+            topLeft.autoFill(firstRow, "FillDefault");
+            firstRow.autoFill(range, "FillDefault");
+          } else if (range.rowCount > 1 || range.columnCount > 1) {
+            // A single cell cannot autofill onto itself (InvalidArgument on the web).
+            topLeft.autoFill(range, "FillDefault");
+          }
 
           range.load("values,formulas,address,rowCount,columnCount");
           await context.sync();

@@ -42,7 +42,7 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 
 ## Fill formulas (`fill_formula`)
 - **Purpose:** avoid large 2D formula arrays by using Excel AutoFill.
-- **Behavior:** sets formula in top-left cell, then `autoFill` across the range.
+- **Behavior:** sets formula in top-left cell, then `autoFill` across the range. A 2D range fills across the first row, then down: Excel on the web leaves the first row and column blank when one cell autofills a 2D range.
 - **Validation:** uses `validateFormula()` (same as `write_cells`).
 - **Overwrite protection:** blocks only if values/formulas exist (same policy as `write_cells`).
 - **Rationale:** major productivity win for large formula blocks.
