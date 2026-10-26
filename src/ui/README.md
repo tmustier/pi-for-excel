@@ -22,6 +22,15 @@ The sidebar UI is first-party end to end:
 
 `pi-sidebar` subscribes to the `Agent` directly and passes messages/tools/streaming state down as properties to the message components.
 
+One model of a streaming turn: the response being streamed renders only in
+`<streaming-message-container>`. At `message_end` pi-agent-core pushes the
+finished response into `state.messages`; the sidebar clears the streaming copy
+in the same update, so `<message-list>` alone draws it from then on. Its tool
+cards spin until their own `tool_execution_end` (results arriving before the
+batch's toolResult messages are passed down as `liveToolResults`). Whether a
+card, thinking block or group is open comes from `transcript-state.ts`, never
+from the element, so it survives the element being replaced.
+
 ### Message component modules (`src/ui/messages/`)
 
 | Module | Elements / exports |
@@ -31,7 +40,8 @@ The sidebar UI is first-party end to end:
 | `messages.ts` | `<user-message>`, `<assistant-message>`, `<tool-message>` |
 | `markdown-block.ts` | `<markdown-block>` — marked + input hardening; fenced code → `<code-block encoding="base64">` |
 | `code-block.ts` | `<code-block>` — highlight.js core + copy button |
-| `thinking-block.ts` | `<thinking-block>` — collapsible; owns "Thinking…" → "Thought for Xs" label lifecycle |
+| `thinking-block.ts` | `<thinking-block>` — collapsible (header is a button); "Thinking…" while it is the streaming block, then "Thought for Xs" from transcript state, "Thought" when the timing was not observed |
+| `transcript-state.ts` | View state that outlives elements: details mode (Ctrl/Cmd+O, saved), hand toggles of cards/blocks/groups, observed thinking durations |
 | `attachment-tile.ts` | `<attachment-tile>` — defensive rendering for restored attachment messages |
 | `message-renderer-registry.ts` | `registerMessageRenderer()` / `renderMessage()` by role |
 | `tool-renderer-registry.ts` | `registerToolRenderer()` / `renderTool()` + JSON fallback renderer |

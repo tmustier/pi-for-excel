@@ -11,6 +11,7 @@ import type { PiSidebar } from "../ui/pi-sidebar.js";
 import { moveCursorToEnd } from "../ui/input-focus.js";
 import { isActionToastVisible, showToast } from "../ui/toast.js";
 import { t } from "../language/index.js";
+import { formatDetailsShortcut, toggleDetailsExpanded } from "../ui/messages/transcript-state.js";
 
 import { doesUiClaimStreamingEscape } from "../utils/escape-guard.js";
 import { blurTextEntryTarget, isTextEntryTarget } from "../utils/text-entry.js";
@@ -72,52 +73,6 @@ function isInsideSessionTabs(target: EventTarget | null | undefined): boolean {
   }
 
   return target.closest(".pi-session-tabs") !== null;
-}
-
-function setExcelToolCardsExpanded(expanded: boolean): void {
-  const toolMessages = document.querySelectorAll("tool-message");
-
-  for (const toolMessage of toolMessages) {
-    const body = toolMessage.querySelector<HTMLElement>(".pi-tool-card__body");
-    if (!body) continue;
-
-    body.classList.toggle("pi-tool-card__body--collapsed", !expanded);
-
-    const up = toolMessage.querySelector<HTMLElement>(".pi-tool-card__chevron-up");
-    const down = toolMessage.querySelector<HTMLElement>(".pi-tool-card__chevron-collapsed");
-    if (!up || !down) continue;
-
-    if (expanded) {
-      up.classList.remove("hidden");
-      down.classList.add("hidden");
-    } else {
-      up.classList.add("hidden");
-      down.classList.remove("hidden");
-    }
-  }
-}
-
-function collapseThinkingBlocks(): void {
-  const blocks = document.querySelectorAll("thinking-block");
-  for (const block of blocks) {
-    // When expanded, ThinkingBlock renders a markdown-block for its body.
-    const isExpanded = Boolean(block.querySelector("markdown-block"));
-    if (!isExpanded) continue;
-
-    const header = block.querySelector<HTMLElement>(".thinking-header");
-    header?.click();
-  }
-}
-
-function expandThinkingBlocks(): void {
-  const blocks = document.querySelectorAll("thinking-block");
-  for (const block of blocks) {
-    const isExpanded = Boolean(block.querySelector("markdown-block"));
-    if (isExpanded) continue;
-
-    const header = block.querySelector<HTMLElement>(".thinking-header");
-    header?.click();
-  }
 }
 
 function buildKeydownContext(args: {
@@ -387,17 +342,14 @@ export function installKeyboardShortcuts(opts: {
       if (!(event.ctrlKey || event.metaKey) || event.key !== "o") return false;
 
       event.preventDefault();
-      const collapsed = document.body.classList.toggle("pi-hide-internals");
-
-      // Collapse/expand tool cards to match the new mode.
-      requestAnimationFrame(() => setExcelToolCardsExpanded(!collapsed));
-
-      // Collapse/expand thinking blocks to match the new mode.
-      requestAnimationFrame(() =>
-        collapsed ? collapseThinkingBlocks() : expandThinkingBlocks(),
+      const expanded = toggleDetailsExpanded();
+      const shortcut = formatDetailsShortcut();
+      showToast(
+        expanded
+          ? t("transcript.details.expanded", { shortcut })
+          : t("transcript.details.collapsed", { shortcut }),
+        1500,
       );
-
-      showToast(collapsed ? "Details hidden (⌃O)" : "Details shown (⌃O)", 1500);
       return true;
     },
   ];

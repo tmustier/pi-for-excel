@@ -54,7 +54,7 @@ async function copyToClipboard(csv: string, btn: HTMLButtonElement): Promise<voi
  */
 export function renderCsvTable(details: ReadRangeCsvDetails): TemplateResult {
   const { startCol, startRow, values, csv } = details;
-  if (values.length === 0) return html`<div class="pi-tool-card__plain-text">(empty)</div>`;
+  if (values.length === 0) return html`<div class="pi-tool-card__plain-text">${t("render-csv-table.empty")}</div>`;
 
   const numCols = Math.max(...values.map((r) => (Array.isArray(r) ? r.length : 0)));
 
@@ -67,7 +67,7 @@ export function renderCsvTable(details: ReadRangeCsvDetails): TemplateResult {
             const btn = e.currentTarget;
             if (btn instanceof HTMLButtonElement) void copyToClipboard(csv, btn);
           }}
-        >Copy CSV</button>
+        >${t("render-csv-table.copy")}</button>
       </div>
       <div class="pi-csv-table__scroll">
         <table class="pi-csv-table__grid">
