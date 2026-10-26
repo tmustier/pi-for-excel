@@ -15,13 +15,8 @@ import type { StreamingMessageContainer } from "./messages/streaming-message-con
 import { Archive, ChevronRight, FileText, Keyboard, Puzzle, RotateCcw, Ruler, Settings, Wrench } from "lucide";
 import "./pi-input.js";
 import "./working-indicator.js";
-import {
-  endOpenThinking,
-  forgetOpenThinking,
-  recordThinkingEnd,
-  recordThinkingStart,
-  thinkingKey,
-} from "./messages/transcript-state.js";
+import { initToolGrouping } from "./tool-grouping.js";
+import { focusInitialMenuItem, handleMenuKeydown } from "./menu-keyboard.js";
 import type { PiInput } from "./pi-input.js";
 import { isDebugEnabled, formatK } from "../debug/debug.js";
 import {
@@ -227,14 +222,15 @@ export class PiSidebar extends LitElement {
     }
 
     if (this._tabContextMenuRuntimeId) {
-      this._closeTabContextMenu();
+      this._closeTabContextMenu({ restoreFocus: true });
       return;
     }
 
     if (this._utilitiesMenuOpen) {
-      this._closeUtilitiesMenu();
+      this._closeUtilitiesMenu({ restoreFocus: true });
     }
   };
+  private _dockObserver: ResizeObserver | undefined;
   private _onWindowResize = () => {
     this._updateSessionTabOverflow();
   };
@@ -330,6 +326,8 @@ export class PiSidebar extends LitElement {
     this._unsubscribe = undefined;
     this._resizeObserver?.disconnect();
     this._resizeObserver = undefined;
+    this._dockObserver?.disconnect();
+    this._dockObserver = undefined;
 
     if (this._scrollContainerEl && this._scrollListener) {
       this._scrollContainerEl.removeEventListener("scroll", this._scrollListener);
@@ -350,9 +348,32 @@ export class PiSidebar extends LitElement {
     if (changed.has("agent")) this._setupSubscription();
   }
 
-  override updated(_changed: PropertyValues<this>) {
-    this._setupAutoScroll();
+  override firstUpdated() {
+    this._ensureMessageEnhancements();
+    this._observeDock();
+  }
+
+  /** Publish the dock's height so toasts sit just above it (see toasts.css). */
+  private _observeDock(): void {
+    const dock = this.querySelector<HTMLElement>(".pi-dock");
+    if (!dock || typeof ResizeObserver === "undefined") return;
+    const publish = () => {
+      const offset = Math.max(0, window.innerHeight - dock.getBoundingClientRect().top);
+      document.documentElement.style.setProperty("--pi-dock-height", `${Math.round(offset)}px`);
+    };
+    this._dockObserver = new ResizeObserver(publish);
+    this._dockObserver.observe(dock);
+    window.addEventListener("resize", publish);
+    publish();
+  }
+
+  override updated(changed: PropertyValues<this>) {
+    this._ensureMessageEnhancements();
     this._updateSessionTabOverflow();
+    if (changed.has("sessionTabs")) {
+      // Keep the active tab visible when the strip overflows.
+      this.querySelector(".pi-session-tab.is-active")?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    }
 
     if (this._isStreaming !== this._wasStreaming) {
       this._wasStreaming = this._isStreaming;
@@ -617,6 +638,11 @@ export class PiSidebar extends LitElement {
   private _onAbort = () => { this.onAbort?.(); };
 
   private _onSessionTabKeyDown = (runtimeId: string, event: KeyboardEvent) => {
+    if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
+      this._openTabContextMenu(runtimeId, event);
+      return;
+    }
+
     const direction = getHorizontalArrowDirection(event);
     if (!direction) {
       return;
@@ -693,25 +719,25 @@ export class PiSidebar extends LitElement {
     });
   }
 
-  private _resolveTabContextMenuPosition(event: MouseEvent): { x: number; y: number } {
+  private _resolveTabContextMenuPosition(point: { x: number; y: number }): { x: number; y: number } {
     const offset = 6;
     const estimatedMenuWidth = 190;
     const estimatedMenuHeight = 220;
     const margin = 8;
 
     const x = Math.min(
-      event.clientX + offset,
+      point.x + offset,
       Math.max(margin, window.innerWidth - estimatedMenuWidth - margin),
     );
     const y = Math.min(
-      event.clientY + offset,
+      point.y + offset,
       Math.max(margin, window.innerHeight - estimatedMenuHeight - margin),
     );
 
     return { x, y };
   }
 
-  private _openTabContextMenu(runtimeId: string, event: MouseEvent): void {
+  private _openTabContextMenu(runtimeId: string, event: MouseEvent | KeyboardEvent): void {
     event.preventDefault();
     event.stopPropagation();
 
@@ -719,9 +745,22 @@ export class PiSidebar extends LitElement {
       this._closeUtilitiesMenu();
     }
 
+    let point = { x: 0, y: 0 };
+    if (event instanceof MouseEvent && (event.clientX !== 0 || event.clientY !== 0)) {
+      point = { x: event.clientX, y: event.clientY };
+    } else if (event.currentTarget instanceof Element) {
+      // Keyboard (Shift+F10 / context-menu key): open under the tab.
+      const rect = event.currentTarget.getBoundingClientRect();
+      point = { x: rect.left, y: rect.bottom };
+    }
+
     this._tabContextMenuRuntimeId = runtimeId;
-    this._tabContextMenuPosition = this._resolveTabContextMenuPosition(event);
+    this._tabContextMenuPosition = this._resolveTabContextMenuPosition(point);
     this._attachTabContextMenuDocumentListener();
+    void this.updateComplete.then(() => {
+      const menu = this.querySelector<HTMLElement>(".pi-session-tab-context-menu");
+      if (menu) focusInitialMenuItem(menu);
+    });
   }
 
   private _attachTabContextMenuDocumentListener(): void {
@@ -752,10 +791,36 @@ export class PiSidebar extends LitElement {
     this._tabContextMenuClickHandler = undefined;
   }
 
-  private _closeTabContextMenu(): void {
+  private _closeTabContextMenu(opts: { restoreFocus?: boolean } = {}): void {
+    const runtimeId = this._tabContextMenuRuntimeId;
     this._tabContextMenuRuntimeId = null;
     this._tabContextMenuPosition = null;
     this._detachTabContextMenuDocumentListener();
+    if (opts.restoreFocus && runtimeId) {
+      const index = this.sessionTabs.findIndex((tab) => tab.runtimeId === runtimeId);
+      const buttons = this.querySelectorAll<HTMLButtonElement>(".pi-session-tab__main");
+      (buttons[index] ?? null)?.focus();
+    }
+  }
+
+  private _runTabMenuItem(action: (() => void) | undefined) {
+    this._closeTabContextMenu({ restoreFocus: true });
+    action?.();
+  }
+
+  private _onTabContextMenuKeyDown = (event: KeyboardEvent) => {
+    const menu = event.currentTarget;
+    if (!(menu instanceof HTMLElement)) return;
+    handleMenuKeydown(event, menu, () => this._closeTabContextMenu({ restoreFocus: true }));
+  };
+
+  private _buildToolResultsMap(): Map<string, ToolResultMessage> {
+    const map = new Map<string, ToolResultMessage>();
+    if (!this.agent) return map;
+    for (const msg of this.agent.state.messages) {
+      if (msg.role === "toolResult") map.set(msg.toolCallId, msg);
+    }
+    return map;
   }
 
   override render() {
@@ -774,6 +839,7 @@ export class PiSidebar extends LitElement {
     return html`
       ${this._renderSessionTabs()}
       ${this._renderTabContextMenuOverlay()}
+      <div id="pi-notices" class="pi-notices"></div>
       <div class="pi-messages">
         <div class="pi-messages__inner">
           ${hasMessages ? html`
@@ -796,22 +862,23 @@ export class PiSidebar extends LitElement {
         </div>
         ${!hasMessages ? this._renderEmptyState() : ""}
       </div>
-      <pi-working-indicator
-        .active=${this._isStreaming || this._busyLabel !== null || this._hostWaitLabel !== null}
-        .primaryText=${this._hostWaitLabel ?? this._busyLabel ?? undefined}
-        .hintText=${this._hostWaitLabel !== null ? (this._hostWaitHint ?? undefined) : (this._busyHint ?? undefined)}
-      ></pi-working-indicator>
-      <div id="pi-widget-slot" class="pi-widget-slot" style="display:none"></div>
-      <div class="pi-input-area">
-        <pi-input
-          .isStreaming=${this._isStreaming}
-          .busy=${this._isStreaming || this.tabBusy}
-          @pi-send=${this._onSend}
-          @pi-abort=${this._onAbort}
-          @pi-files-drop=${this._onFilesDrop}
-          @pi-open-files=${this._onOpenFilesWorkspace}
-        ></pi-input>
-        <div id="pi-status-bar" class="pi-status-bar"></div>
+      <div class="pi-dock ${this._isStreaming || this._busyLabel !== null ? "pi-dock--busy" : ""}">
+        <pi-working-indicator
+          .active=${this._isStreaming || this._busyLabel !== null}
+          .primaryText=${this._isStreaming ? undefined : (this._busyLabel ?? undefined)}
+          .hintText=${this._isStreaming ? undefined : (this._busyHint ?? undefined)}
+        ></pi-working-indicator>
+        <div id="pi-widget-slot" class="pi-widget-slot" style="display:none"></div>
+        <div class="pi-input-area">
+          <pi-input
+            .isStreaming=${this._isStreaming}
+            @pi-send=${this._onSend}
+            @pi-abort=${this._onAbort}
+            @pi-files-drop=${this._onFilesDrop}
+            @pi-open-files=${this._onOpenFilesWorkspace}
+          ></pi-input>
+          <div id="pi-status-bar" class="pi-status-bar"></div>
+        </div>
       </div>
     `;
   }
@@ -856,13 +923,15 @@ export class PiSidebar extends LitElement {
                     @keydown=${(event: KeyboardEvent) => this._onSessionTabKeyDown(tab.runtimeId, event)}
                     title=${tab.title}
                     aria-label=${t("sidebar.tabs.open", { title: tab.title })}
+                    aria-haspopup="menu"
+                    aria-current=${tab.isActive ? "page" : "false"}
                   >
                     <span class="pi-session-tab__title">${tab.title}</span>
                     ${tab.lockState === "waiting_for_lock"
-                      ? html`<span class="pi-session-tab__lock">${t("sidebar.tabs.lock")}</span>`
+                      ? html`<span class="pi-session-tab__lock" title=${t("sidebar.tabs.lock.tooltip")}>${t("sidebar.tabs.lock")}</span>`
                       : nothing}
                     ${tab.isBusy
-                      ? html`<span class="pi-session-tab__busy" aria-hidden="true"></span>`
+                      ? html`<span class="pi-session-tab__busy" role="img" aria-label=${t("sidebar.tabs.busy")} title=${t("sidebar.tabs.busy")}></span>`
                       : nothing}
                   </button>
                   ${canCloseTabs
@@ -917,6 +986,21 @@ export class PiSidebar extends LitElement {
     `;
   }
 
+  private _renderTabMenuItem(label: string, disabled: boolean, action: (() => void) | undefined, danger = false) {
+    return html`
+      <button
+        role="menuitem"
+        type="button"
+        tabindex="-1"
+        class="pi-session-tab-context-menu__item ${danger ? "pi-session-tab-context-menu__item--danger" : ""}"
+        ?disabled=${disabled}
+        @click=${() => this._runTabMenuItem(action)}
+      >
+        ${label}
+      </button>
+    `;
+  }
+
   private _renderTabContextMenu(tab: SessionTabView) {
     const canCloseTabs = this.sessionTabs.length > 1;
     const closeDisabled = !canCloseTabs || tab.lockState === "holding_lock";
@@ -924,6 +1008,7 @@ export class PiSidebar extends LitElement {
     const tabIndex = this.sessionTabs.findIndex((entry) => entry.runtimeId === tab.runtimeId);
     const moveLeftDisabled = tabIndex <= 0 || !this.onMoveTabLeft;
     const moveRightDisabled = tabIndex < 0 || tabIndex >= this.sessionTabs.length - 1 || !this.onMoveTabRight;
+    const id = tab.runtimeId;
 
     return html`
       <div
@@ -931,83 +1016,18 @@ export class PiSidebar extends LitElement {
         id=${this._tabContextMenuId}
         role="menu"
         aria-label=${t("sidebar.contextmenu.aria", { title: tab.title })}
+        @keydown=${this._onTabContextMenuKeyDown}
         style=${this._tabContextMenuPosition
           ? `left:${this._tabContextMenuPosition.x}px;top:${this._tabContextMenuPosition.y}px;`
           : ""}
       >
-        <button
-          role="menuitem"
-          type="button"
-          class="pi-session-tab-context-menu__item"
-          ?disabled=${!this.onRenameTab}
-          @click=${() => {
-            this._closeTabContextMenu();
-            this.onRenameTab?.(tab.runtimeId);
-          }}
-        >
-          ${t("sidebar.contextmenu.rename")}
-        </button>
-        <button
-          role="menuitem"
-          type="button"
-          class="pi-session-tab-context-menu__item"
-          ?disabled=${!this.onDuplicateTab}
-          @click=${() => {
-            this._closeTabContextMenu();
-            this.onDuplicateTab?.(tab.runtimeId);
-          }}
-        >
-          ${t("sidebar.contextmenu.duplicate")}
-        </button>
-        <button
-          role="menuitem"
-          type="button"
-          class="pi-session-tab-context-menu__item"
-          ?disabled=${moveLeftDisabled}
-          @click=${() => {
-            this._closeTabContextMenu();
-            this.onMoveTabLeft?.(tab.runtimeId);
-          }}
-        >
-          ${t("sidebar.contextmenu.move_left")}
-        </button>
-        <button
-          role="menuitem"
-          type="button"
-          class="pi-session-tab-context-menu__item"
-          ?disabled=${moveRightDisabled}
-          @click=${() => {
-            this._closeTabContextMenu();
-            this.onMoveTabRight?.(tab.runtimeId);
-          }}
-        >
-          ${t("sidebar.contextmenu.move_right")}
-        </button>
-        <button
-          role="menuitem"
-          type="button"
-          class="pi-session-tab-context-menu__item"
-          ?disabled=${closeOthersDisabled}
-          @click=${() => {
-            this._closeTabContextMenu();
-            this.onCloseOtherTabs?.(tab.runtimeId);
-          }}
-        >
-          ${t("sidebar.contextmenu.close_others")}
-        </button>
+        ${this._renderTabMenuItem(t("sidebar.contextmenu.rename"), !this.onRenameTab, () => this.onRenameTab?.(id))}
+        ${this._renderTabMenuItem(t("sidebar.contextmenu.duplicate"), !this.onDuplicateTab, () => this.onDuplicateTab?.(id))}
+        ${this._renderTabMenuItem(t("sidebar.contextmenu.move_left"), moveLeftDisabled, () => this.onMoveTabLeft?.(id))}
+        ${this._renderTabMenuItem(t("sidebar.contextmenu.move_right"), moveRightDisabled, () => this.onMoveTabRight?.(id))}
+        ${this._renderTabMenuItem(t("sidebar.contextmenu.close_others"), closeOthersDisabled, () => this.onCloseOtherTabs?.(id))}
         <div class="pi-session-tab-context-menu__divider" role="separator"></div>
-        <button
-          role="menuitem"
-          type="button"
-          class="pi-session-tab-context-menu__item pi-session-tab-context-menu__item--danger"
-          ?disabled=${closeDisabled}
-          @click=${() => {
-            this._closeTabContextMenu();
-            this.onCloseTab?.(tab.runtimeId);
-          }}
-        >
-          ${t("sidebar.contextmenu.close")}
-        </button>
+        ${this._renderTabMenuItem(t("sidebar.contextmenu.close"), closeDisabled, () => this.onCloseTab?.(id), true)}
       </div>
     `;
   }
@@ -1025,14 +1045,22 @@ export class PiSidebar extends LitElement {
     return this._renderTabContextMenu(tab);
   }
 
+  private _getUtilitiesButton(): HTMLButtonElement | null {
+    return this.querySelector<HTMLButtonElement>(".pi-utilities-btn");
+  }
+
   private _toggleUtilitiesMenu() {
     if (this._utilitiesMenuOpen) {
-      this._closeUtilitiesMenu();
+      this._closeUtilitiesMenu({ restoreFocus: true });
       return;
     }
 
     this._closeTabContextMenu();
     this._utilitiesMenuOpen = true;
+    void this.updateComplete.then(() => {
+      const menu = this.querySelector<HTMLElement>(".pi-utilities-menu");
+      if (menu) focusInitialMenuItem(menu);
+    });
     requestAnimationFrame(() => {
       if (!this.isConnected || !this._utilitiesMenuOpen) return;
       this._attachUtilitiesMenuDocumentListener();
@@ -1044,7 +1072,8 @@ export class PiSidebar extends LitElement {
 
     this._utilitiesMenuClickHandler = (event: MouseEvent) => {
       const anchor = this.querySelector(".pi-utilities-anchor");
-      if (anchor && !anchor.contains(event.target as Node)) {
+      const target = event.target;
+      if (anchor && target instanceof Node && !anchor.contains(target)) {
         this._closeUtilitiesMenu();
       }
     };
@@ -1058,44 +1087,57 @@ export class PiSidebar extends LitElement {
     this._utilitiesMenuClickHandler = undefined;
   }
 
-  private _closeUtilitiesMenu() {
+  private _closeUtilitiesMenu(opts: { restoreFocus?: boolean } = {}) {
+    if (!this._utilitiesMenuOpen) return;
     this._utilitiesMenuOpen = false;
     this._detachUtilitiesMenuDocumentListener();
+    if (opts.restoreFocus) this._getUtilitiesButton()?.focus();
+  }
+
+  /**
+   * Close the menu without refocusing the gear: the item opens a view, and when
+   * that view closes its opener (this menu item) is gone, so focus returns to
+   * the composer, where the user carries on.
+   */
+  private _runUtilitiesItem(action: (() => void) | undefined) {
+    this._closeUtilitiesMenu();
+    action?.();
+  }
+
+  private _onUtilitiesMenuKeyDown = (event: KeyboardEvent) => {
+    const menu = event.currentTarget;
+    if (!(menu instanceof HTMLElement)) return;
+    handleMenuKeydown(event, menu, () => this._closeUtilitiesMenu({ restoreFocus: true }));
+  };
+
+  private _renderUtilitiesItem(iconNode: Parameters<typeof icon>[0], label: string, action: (() => void) | undefined) {
+    return html`
+      <button role="menuitem" type="button" tabindex="-1" class="pi-utilities-menu__item" @click=${() => this._runUtilitiesItem(action)}>
+        <span class="pi-utilities-menu__item-icon" aria-hidden="true">${icon(iconNode, "sm")}</span>
+        <span>${label}</span>
+      </button>
+    `;
   }
 
   private _renderUtilitiesMenu() {
     return html`
-      <div class="pi-utilities-menu" id=${this._utilitiesMenuId} role="menu" aria-label=${t("sidebar.utilities.aria")}>
-        <button role="menuitem" class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenSettings?.(); }}>
-          <span class="pi-utilities-menu__item-icon" aria-hidden="true">${icon(Wrench, "sm")}</span> ${t("sidebar.menu.setup")}
-        </button>
-        <button role="menuitem" class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenExtensions?.(); }}>
-          <span class="pi-utilities-menu__item-icon" aria-hidden="true">${icon(Puzzle, "sm")}</span> ${t("sidebar.menu.extensions")}
-        </button>
-
+      <div
+        class="pi-utilities-menu"
+        id=${this._utilitiesMenuId}
+        role="menu"
+        aria-label=${t("sidebar.utilities.aria")}
+        @keydown=${this._onUtilitiesMenuKeyDown}
+      >
+        ${this._renderUtilitiesItem(Wrench, t("sidebar.menu.setup"), this.onOpenSettings)}
+        ${this._renderUtilitiesItem(Puzzle, t("sidebar.menu.extensions"), this.onOpenExtensions)}
         <div class="pi-utilities-menu__divider" role="separator"></div>
-
-        <button role="menuitem" class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this._onOpenFilesWorkspace(); }}>
-          <span class="pi-utilities-menu__item-icon" aria-hidden="true">${icon(FileText, "sm")}</span> ${t("sidebar.menu.files")}
-        </button>
-        <button role="menuitem" class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenRules?.(); }}>
-          <span class="pi-utilities-menu__item-icon" aria-hidden="true">${icon(Ruler, "sm")}</span> ${t("sidebar.menu.rules")}
-        </button>
-
+        ${this._renderUtilitiesItem(FileText, t("sidebar.menu.files"), this.onOpenFilesWorkspace)}
+        ${this._renderUtilitiesItem(Ruler, t("sidebar.menu.rules"), this.onOpenRules)}
         <div class="pi-utilities-menu__divider" role="separator"></div>
-
-        <button role="menuitem" class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenResumePicker?.(); }}>
-          <span class="pi-utilities-menu__item-icon" aria-hidden="true">${icon(RotateCcw, "sm")}</span> ${t("sidebar.menu.resume")}
-        </button>
-        <button role="menuitem" class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenRecovery?.(); }}>
-          <span class="pi-utilities-menu__item-icon" aria-hidden="true">${icon(Archive, "sm")}</span> ${t("sidebar.menu.backups")}
-        </button>
-
+        ${this._renderUtilitiesItem(RotateCcw, t("sidebar.menu.resume"), this.onOpenResumePicker)}
+        ${this._renderUtilitiesItem(Archive, t("sidebar.menu.backups"), this.onOpenRecovery)}
         <div class="pi-utilities-menu__divider" role="separator"></div>
-
-        <button role="menuitem" class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenShortcuts?.(); }}>
-          <span class="pi-utilities-menu__item-icon" aria-hidden="true">${icon(Keyboard, "sm")}</span> ${t("sidebar.menu.keyboard_shortcuts")}
-        </button>
+        ${this._renderUtilitiesItem(Keyboard, t("sidebar.menu.keyboard_shortcuts"), this.onOpenShortcuts)}
       </div>
     `;
   }
@@ -1305,7 +1347,7 @@ export class PiSidebar extends LitElement {
             ${this.emptyHints.map((hint) => html`
               <button
                 class="pi-empty__hint"
-                title=${t("sidebar.empty.hint.title")}
+                aria-describedby="pi-empty-note"
                 @click=${() => this._applyHintPrompt(hint.prompt)}
               >
                 <span class="pi-empty__hint-label">${hint.label}</span>
@@ -1313,6 +1355,7 @@ export class PiSidebar extends LitElement {
               </button>
             `)}
           </div>
+          <p class="pi-empty__note" id="pi-empty-note">${t("sidebar.empty.hint.title")}</p>
         </div>
       </div>
     `;

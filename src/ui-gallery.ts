@@ -17,6 +17,7 @@ import "./boot.js";
 // Register web components we render
 import "./ui/register-components.js";
 
+import { createBanner } from "./ui/banner.js";
 import { createCopyableCommand } from "./ui/command-copy.js";
 import { mountTranscriptHarness } from "./ui-gallery-transcript.js";
 import { escapeHtml, setSafeInnerHTML } from "./utils/html.js";
@@ -347,35 +348,55 @@ buttonsSection.appendChild(btnRow);
 
 const toastSection = section("toasts", "Toast Notifications");
 
-for (const [msg, classes] of [
-  ["Closed Chat 3", "pi-toast visible pi-toast--action"],
-  ["Tab name reset", "pi-toast visible"],
-  ["Could not save", "pi-toast visible pi-toast--error"],
+// Same markup as src/ui/toast.ts renders, stacked in a static copy of the region.
+const toastStack = document.createElement("div");
+toastStack.className = "pi-toast-region";
+toastStack.style.cssText = "position: static; transform: none; width: auto;";
+for (const [msg, variant] of [
+  ["Closed “Chat 3”", "action"],
+  ["Renamed tab to “Forecast”", "info"],
+  ["Couldn’t save the session. Try again.", "error"],
 ] as const) {
   const toast = document.createElement("div");
-  toast.className = classes;
-  toast.style.cssText = "position: relative; top: 0; left: 0; transform: none; opacity: 1; pointer-events: auto; margin-bottom: 8px;";
-
-  const content = document.createElement("div");
-  content.className = "pi-toast__content";
+  toast.className = `pi-toast visible${variant === "error" ? " pi-toast--error" : ""}${variant === "action" ? " pi-toast--action" : ""}`;
 
   const message = document.createElement("span");
   message.className = "pi-toast__message";
   message.textContent = msg;
+  toast.appendChild(message);
 
-  content.appendChild(message);
-
-  if (classes.includes("pi-toast--action")) {
+  if (variant === "action") {
     const action = document.createElement("button");
     action.type = "button";
     action.className = "pi-toast__action";
     action.textContent = "Undo";
-    content.appendChild(action);
+    toast.appendChild(action);
   }
 
-  toast.appendChild(content);
-  toastSection.appendChild(toast);
+  if (variant === "error") {
+    const dismiss = document.createElement("button");
+    dismiss.type = "button";
+    dismiss.className = "pi-toast__dismiss";
+    dismiss.setAttribute("aria-label", "Dismiss");
+    dismiss.textContent = "×";
+    toast.appendChild(dismiss);
+  }
+
+  toastStack.appendChild(toast);
 }
+toastSection.appendChild(toastStack);
+
+/* ── 8b. Banners (src/ui/banner.ts) ──────────────────── */
+
+const bannerSection = section("banners", "Banners (notice area)");
+const bannerStack = document.createElement("div");
+bannerStack.className = "pi-notices";
+bannerStack.append(
+  createBanner({ id: "error", tone: "error", message: "The last request failed: the provider returned 429 (rate limited).", actions: [{ label: "Retry", primary: true, onClick: () => {} }], onDismiss: () => {} }).root,
+  createBanner({ id: "proxy", tone: "warning", message: "The proxy is turned on but isn’t running, so some providers and web tools won’t work.", actions: [{ label: "Show how to start it", onClick: () => {} }], onDismiss: () => {} }).root,
+  createBanner({ id: "disclosure", tone: "info", message: "Pi can search the web, use extensions and connect to services you add.", actions: [{ label: "Got it", primary: true, onClick: () => {} }, { label: "Review in Settings", onClick: () => {} }], onDismiss: () => {} }).root,
+);
+bannerSection.appendChild(bannerStack);
 
 /* ── 9. Markdown rendering (font test) ───────────────── */
 

@@ -175,44 +175,34 @@ export async function showWelcomeLogin(modelRefreshOwner: ModelRefreshOwner): Pr
 
     // Language bar at the top
     const langBar = createElement("div", "pi-welcome-lang-bar");
-    langBar.style.cssText = "display:flex;justify-content:flex-end;gap:4px;padding:4px 8px;";
+    langBar.setAttribute("role", "group");
+    langBar.setAttribute("aria-label", t("welcome.language.aria"));
 
-    const engBtn = createElement("button");
-    engBtn.type = "button";
-    engBtn.textContent = t("language.english");
-    engBtn.style.cssText = "font-size:11px;padding:2px 8px;border:1px solid #ccc;border-radius:4px;background:var(--pi-bg, #fff);cursor:pointer;";
+    const createLanguageButton = (lang: "en" | "zh-CN", label: string): HTMLButtonElement => {
+      const button = createElement("button", "pi-welcome-lang-btn");
+      button.type = "button";
+      button.textContent = label;
+      button.setAttribute("aria-pressed", getLanguage() === lang ? "true" : "false");
+      button.addEventListener("click", () => {
+        if (getLanguage() === lang) return;
+        void (async () => {
+          // Save first: switching in memory before a failed save would leave a
+          // mixed-language pane until the next reload.
+          try {
+            await getAppStorage().settings.set("language", lang);
+          } catch {
+            showToast(t("welcome.language.saveFailed"));
+            return;
+          }
+          initLanguage(lang);
+          location.reload();
+        })();
+      });
+      return button;
+    };
 
-    const zhBtn = createElement("button");
-    zhBtn.type = "button";
-    zhBtn.textContent = "中文";
-    zhBtn.style.cssText = "font-size:11px;padding:2px 8px;border:1px solid #ccc;border-radius:4px;background:var(--pi-bg, #fff);cursor:pointer;";
-
-    const currentLang2 = getLanguage();
-    if (currentLang2 === "zh-CN") {
-      zhBtn.style.borderColor = "var(--color-accent, #3b82f6)";
-      zhBtn.style.color = "var(--color-accent, #3b82f6)";
-    } else {
-      engBtn.style.borderColor = "var(--color-accent, #3b82f6)";
-      engBtn.style.color = "var(--color-accent, #3b82f6)";
-    }
-
-    engBtn.addEventListener("click", () => {
-      if (getLanguage() === "en") return;
-      // The language applies through the reload; a failed save keeps the current one.
-      void getAppStorage().settings.set("language", "en").then(
-        () => location.reload(),
-        () => showToast(t("settings.lang.saveFailed"), { variant: "error" }),
-      );
-    });
-
-    zhBtn.addEventListener("click", () => {
-      if (getLanguage() === "zh-CN") return;
-      // The language applies through the reload; a failed save keeps the current one.
-      void getAppStorage().settings.set("language", "zh-CN").then(
-        () => location.reload(),
-        () => showToast(t("settings.lang.saveFailed"), { variant: "error" }),
-      );
-    });
+    const engBtn = createLanguageButton("en", t("language.english"));
+    const zhBtn = createLanguageButton("zh-CN", "中文");
 
     langBar.append(engBtn, zhBtn);
 
@@ -249,7 +239,7 @@ export async function showWelcomeLogin(modelRefreshOwner: ModelRefreshOwner): Pr
       proxyPanel.hidden = !willOpen;
       proxyToggle.setAttribute("aria-expanded", willOpen ? "true" : "false");
       proxyToggle.textContent = willOpen
-        ? t("welcome.proxy.toggle_hide")
+        ? t("welcome.proxy.hide")
         : proxyToggleClosedLabel;
 
       if (willOpen) {

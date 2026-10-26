@@ -1,12 +1,9 @@
 /** Runtime controller for persisted execution mode state. */
 
-import { t } from "../language/index.js";
 import {
   dispatchExecutionModeChanged,
-  formatExecutionModeLabel,
   getStoredExecutionMode,
   setStoredExecutionMode,
-  toggleExecutionMode,
   type ExecutionMode,
   type ExecutionModeStore,
 } from "./mode.js";
@@ -21,20 +18,10 @@ export interface ExecutionModeController {
    */
   readMode: () => Promise<ExecutionMode>;
   setMode: (mode: ExecutionMode) => Promise<void>;
-  toggleFromUi: () => Promise<void>;
 }
 
 export interface CreateExecutionModeControllerOptions {
   settings: ExecutionModeStore;
-  showToast?: (message: string) => void;
-  /** Tells other taskpanes the mode changed. Default: a BroadcastChannel when available. */
-  channel?: Pick<BroadcastChannel, "postMessage" | "addEventListener"> | null;
-}
-
-const EXECUTION_MODE_CHANNEL = "pi-execution-mode";
-
-function defaultChannel(): Pick<BroadcastChannel, "postMessage" | "addEventListener"> | null {
-  return typeof BroadcastChannel === "undefined" ? null : new BroadcastChannel(EXECUTION_MODE_CHANNEL);
 }
 
 export async function createExecutionModeController(
@@ -72,11 +59,6 @@ export async function createExecutionModeController(
     readMode,
     setMode: async (nextMode: ExecutionMode) => {
       await applyMode(nextMode);
-    },
-    toggleFromUi: async () => {
-      const nextMode = toggleExecutionMode(mode);
-      await applyMode(nextMode);
-      options.showToast?.(t("status.mode.toast", { mode: formatExecutionModeLabel(nextMode) }));
     },
   };
 }

@@ -9,6 +9,7 @@ import type { Agent, ThinkingLevel } from "@earendil-works/pi-agent-core";
 import { getThinkingLevelsForModel } from "../models/thinking-levels.js";
 import type { PiSidebar } from "../ui/pi-sidebar.js";
 import { moveCursorToEnd } from "../ui/input-focus.js";
+import { isModalOverlayOpen } from "../ui/overlay-dialog.js";
 import { isActionToastVisible, showToast } from "../ui/toast.js";
 import { t } from "../language/index.js";
 import { formatDetailsShortcut, toggleDetailsExpanded } from "../ui/messages/transcript-state.js";
@@ -22,7 +23,7 @@ import {
   isCommandMenuVisible,
 } from "../commands/command-menu.js";
 
-import { flashThinkingLevel, updateStatusBarForAgent } from "./status-bar.js";
+import { flashThinkingLevel } from "./status-bar.js";
 import { THINKING_LEVEL_COLORS } from "./thinking-display.js";
 import { shouldHandleUndoCloseTabShortcut, textEntryHasContent } from "./keyboard-shortcuts/guards.js";
 import {
@@ -110,7 +111,9 @@ export function cycleThinkingLevel(agent: Agent): ThinkingLevel {
   const next = levels[(idx >= 0 ? idx + 1 : 0) % levels.length] ?? "off";
 
   agent.state.thinkingLevel = next;
-  updateStatusBarForAgent(agent);
+  // Full re-render with the real mode and lock state (rendering from the agent
+  // alone would reset the mode badge to its default).
+  document.dispatchEvent(new CustomEvent("pi:status-update"));
   flashThinkingLevel(next, THINKING_LEVEL_COLORS[next]);
 
   return next;
@@ -294,10 +297,14 @@ export function installKeyboardShortcuts(opts: {
       return true;
     },
     (context) => {
-      const { event, agent } = context;
-      if (!(event.shiftKey && event.key === "Tab") || !agent) return false;
+      const { event, agent, isInEditor } = context;
+      // Only from the composer: everywhere else Shift+Tab moves focus backwards.
+      if (!(event.shiftKey && event.key === "Tab") || !agent || !isInEditor) return false;
 
+      // Office on the web also moves focus on Shift+Tab from a window listener;
+      // the key must do exactly one thing.
       event.preventDefault();
+      event.stopPropagation();
       cycleThinkingLevel(agent);
       return true;
     },
@@ -319,12 +326,9 @@ export function installKeyboardShortcuts(opts: {
   ];
 
   const onKeyDown = (event: KeyboardEvent) => {
-    // Keys that belong to an IME composition (including the Enter that
-    // commits a candidate) are the input method's, not shortcuts.
-    if (event.isComposing || event.keyCode === 229) return;
-
-    // Command menu takes priority
-    if (isCommandMenuVisible() && handleCommandMenuKey(event)) {
+    // A modal overlay owns the keyboard. Its own handlers take Escape and Tab;
+    // taskpane shortcuts must not act on the tabs or composer behind it.
+    if (isModalOverlayOpen()) {
       return;
     }
 
@@ -334,6 +338,11 @@ export function installKeyboardShortcuts(opts: {
       isBusy: isActiveTabBusy(),
       sidebar,
     });
+
+    // The command menu is a combobox on the composer: it only takes keys typed there.
+    if (isCommandMenuVisible() && context.isInEditor && handleCommandMenuKey(event)) {
+      return;
+    }
 
     for (const handler of shortcutHandlers) {
       if (handler(context)) {

@@ -1,29 +1,27 @@
 /* ═══════════════════════════════════════════════════════
    12. DIALOGS — first-party model selector + provider connect
    Components: src/ui/model-selector-dialog.ts, src/ui/api-key-dialog.ts.
-   Both mount inside .pi-welcome-overlay via createOverlayDialog().
+   Both mount inside .pi-overlay via createOverlayDialog().
    ═══════════════════════════════════════════════════════ */
 
 /* ── Model selector ── */
 
+/* Surface, radius and width come from the shared overlay card
+   (.pi-welcome-card.pi-overlay-card--m); only the list layout is specific. */
 .pi-model-selector-card {
-  display: flex;
-  flex-direction: column;
-  width: min(340px, 92vw);
-  height: min(500px, 78vh);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--glass-shadow-lg);
-  border: var(--glass-border);
-  background: var(--glass-bg-solid);
-  overflow: hidden;
+  padding: 0;
+  gap: 0;
+  height: min(520px, 80vh);
 }
 
 .pi-model-selector-card .pi-overlay-header {
-  padding: 16px 16px 0;
+  padding: 20px 20px 0;
 }
 
 .pi-model-selector-search {
-  margin: 12px 16px;
+  width: auto;
+  align-self: stretch;
+  margin: 12px 20px;
   flex-shrink: 0;
 }
 
@@ -38,7 +36,7 @@
 .pi-model-selector-item {
   display: block;
   width: 100%;
-  padding: 10px 16px;
+  padding: 10px 20px;
   border: 0;
   border-bottom: 1px solid var(--alpha-4);
   background: transparent;

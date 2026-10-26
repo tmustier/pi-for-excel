@@ -6,20 +6,26 @@ pi-working-indicator {
   flex-shrink: 0;
 }
 
+/* First tray row of the composer dock (see tabs.css, "Composer dock"). */
 .pi-working {
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: space-between;
   gap: 8px;
-  padding: 6px 14px;
+  margin: 2px 22px 0;
+  padding: 5px 10px;
+  border: var(--pill-border);
+  border-bottom: 0;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  background: var(--pi-tray-bg);
   overflow: hidden;
   min-width: 0;
 }
 
 .pi-working__text {
   font-family: var(--font-sans);
-  font-size: var(--text-base);
-  font-weight: 500;
+  font-size: var(--text-sm);
+  font-weight: 600;
   color: var(--primary);
   transition: opacity var(--duration-normal) ease;
   white-space: nowrap;
@@ -27,11 +33,9 @@ pi-working-indicator {
 }
 
 .pi-working__hint {
-  font-family: var(--font-mono);
-  font-size: var(--text-sm);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
   color: var(--muted-foreground);
-  opacity: 0.7;
-  letter-spacing: 0.02em;
   transition: opacity var(--duration-normal) ease;
   white-space: nowrap;
   overflow: hidden;
@@ -44,22 +48,14 @@ pi-working-indicator {
   opacity: 0;
 }
 
-/* Fixed (non-streaming) busy indicator — rendered as a pill + spinner */
-.pi-working--fixed {
-  padding-top: 8px;
-  padding-bottom: 8px;
-}
-
+/* Fixed (non-streaming) busy indicator, e.g. compaction — spinner + label */
 .pi-working__pill {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  border-radius: var(--radius-xs);
-  padding: 2px 8px;
-  background: var(--pi-green-lighter);
   color: var(--primary);
   font-family: var(--font-sans);
-  font-size: var(--text-base);
+  font-size: var(--text-sm);
   font-weight: 600;
   white-space: nowrap;
   flex-shrink: 0;

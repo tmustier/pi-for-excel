@@ -1,0 +1,172 @@
+/* ═══════════════════════════════════════════════════════
+   NOTICE AREA + BANNERS
+   One banner primitive (src/ui/banner.ts) for every persistent
+   condition: run errors, proxy warnings, the first-run disclosure.
+   ═══════════════════════════════════════════════════════ */
+
+.pi-notices {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 10px;
+}
+
+.pi-notices:not(:empty) {
+  padding-top: 2px;
+  padding-bottom: 6px;
+}
+
+.pi-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 8px 8px 10px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--alpha-10);
+  background: var(--pill-bg);
+  box-shadow: var(--pill-shadow);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  line-height: 1.4;
+}
+
+.pi-banner--warning {
+  background: oklch(0.97 0.03 84);
+  border-color: var(--amber-alpha-30);
+}
+
+.pi-banner--error {
+  background: oklch(0.97 0.02 25);
+  border-color: var(--red-alpha-20);
+}
+
+.pi-banner__icon {
+  flex-shrink: 0;
+  width: 15px;
+  height: 15px;
+  margin-top: 1px;
+  color: var(--muted-foreground);
+}
+
+.pi-banner--warning .pi-banner__icon { color: var(--pi-amber-text); }
+.pi-banner--error .pi-banner__icon { color: var(--pi-red-text); }
+
+.pi-banner__body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pi-banner__message {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.pi-banner--error .pi-banner__message {
+  color: var(--pi-red-text);
+}
+
+.pi-banner__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+}
+
+.pi-banner__actions[hidden] {
+  display: none;
+}
+
+.pi-banner__action {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--primary);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.pi-banner__action:hover {
+  text-decoration: underline;
+}
+
+.pi-banner__action--primary {
+  padding: 3px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--pi-green);
+  color: var(--primary-foreground);
+}
+
+.pi-banner__action--primary:hover {
+  background: var(--pi-green-strong);
+  text-decoration: none;
+}
+
+.pi-banner__dismiss {
+  flex-shrink: 0;
+  border: 0;
+  background: none;
+  width: 20px;
+  height: 20px;
+  margin: -2px -2px 0 0;
+  border-radius: var(--radius-xs);
+  color: var(--muted-foreground);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.pi-banner__dismiss:hover {
+  background: var(--alpha-6);
+  color: var(--foreground);
+}
+
+.pi-banner__action:focus-visible,
+.pi-banner__dismiss:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+}
+
+.pi-banner__details {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--alpha-8);
+}
+
+.pi-banner__details[hidden] {
+  display: none;
+}
+
+.pi-banner__details p {
+  margin: 0;
+}
+
+.pi-banner__hint {
+  color: var(--muted-foreground);
+  font-size: var(--text-xs);
+}
+
+.pi-banner__link {
+  color: var(--primary);
+  text-decoration: none;
+}
+
+.pi-banner__link:hover {
+  text-decoration: underline;
+}
+
+.dark .pi-banner--warning { background: oklch(0.3 0.04 84 / 0.6); }
+.dark .pi-banner--error { background: oklch(0.3 0.05 25 / 0.6); }
+
+@media (max-height: 520px) {
+  .pi-banner {
+    padding: 6px 6px 6px 8px;
+  }
+}

@@ -83,8 +83,11 @@ async function executeRegisteredCommand(name: string, args = ""): Promise<void> 
   await command.execute(args);
 }
 
+/** Text of the newest toast (toasts stack, newest last). */
 function getToastText(document: Document): string {
-  return document.getElementById("pi-toast")?.children[0]?.children[0]?.textContent ?? "";
+  const region = document.getElementById("pi-toast");
+  const newest = region?.children[region.children.length - 1];
+  return newest?.children[0]?.textContent ?? "";
 }
 
 void test("command-layer contract: workspace commands complete, preserve failures, and run while busy", async () => {

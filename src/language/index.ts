@@ -37,7 +37,7 @@ export function isSupportedLanguage(lang: string): lang is SupportedLanguage {
 export function initLanguage(lang: string): void {
   if (isSupportedLanguage(lang)) {
     currentLang = lang;
-    // Screen readers, hyphenation and CJK font selection follow <html lang>.
+    // Screen readers pick pronunciation rules from the page language.
     if (typeof document !== "undefined") document.documentElement.lang = lang;
   }
 }

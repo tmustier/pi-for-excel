@@ -5,6 +5,7 @@
  * Filters as user types, arrow keys navigate, Enter selects, Esc dismisses.
  */
 
+import { t } from "../language/index.js";
 import { commandRegistry, type SlashCommand } from "./types.js";
 import type { PiInput } from "../ui/pi-input.js";
 
@@ -55,9 +56,10 @@ export function showCommandMenu(filter: string, anchor: HTMLElement): void {
     menuEl.id = "pi-command-menu";
     menuEl.className = "pi-cmd-menu";
     menuEl.setAttribute("role", "listbox");
-    menuEl.setAttribute("aria-label", "Slash commands");
+    menuEl.setAttribute("aria-label", t("command-menu.aria"));
     document.body.appendChild(menuEl);
   }
+
 
   // Position above the anchor (the input card)
   const anchorRect = anchor.getBoundingClientRect();
@@ -74,6 +76,7 @@ export function hideCommandMenu(): void {
     menuEl.style.display = "none";
   }
   selectedIndex = 0;
+  getCommandTextarea()?.removeAttribute("aria-activedescendant");
 }
 
 export function isCommandMenuVisible(): boolean {
@@ -136,6 +139,8 @@ function renderMenu(): void {
     item.type = "button";
     item.className = `pi-cmd-item${isSelected ? " selected" : ""}`;
     item.dataset.index = String(index);
+    item.id = `pi-cmd-option-${index}`;
+    item.tabIndex = -1;
     item.setAttribute("role", "option");
     item.setAttribute("aria-selected", isSelected ? "true" : "false");
 
@@ -175,6 +180,7 @@ function renderMenu(): void {
 
     if (isSelected) {
       item.scrollIntoView({ block: "nearest" });
+      getCommandTextarea()?.setAttribute("aria-activedescendant", item.id);
     }
   }
 }
@@ -190,17 +196,17 @@ function selectIndex(index: number): void {
   }
 }
 
-/**
- * Listens on the composer element, not its textarea: the composer renders a
- * fresh textarea for each tab (see `PiInput.loadDraft`).
- */
-export function wireCommandMenu(composer: HTMLElement): void {
-  composer.addEventListener("input", (event) => {
-    const textarea = event.target;
-    if (!(textarea instanceof HTMLTextAreaElement)) return;
-    const anchor = textarea.closest<HTMLElement>(".pi-input-card")
-      ?? textarea.closest<HTMLElement>(".bg-card")
-      ?? textarea;
+  textarea.setAttribute("aria-controls", "pi-command-menu");
+
+  // Like any popover, a press outside the menu and the composer closes it.
+  document.addEventListener("pointerdown", (event) => {
+    if (!isCommandMenuVisible()) return;
+    const target = event.target;
+    if (target instanceof Node && (menuEl?.contains(target) || textarea.contains(target))) return;
+    hideCommandMenu();
+  }, true);
+
+  textarea.addEventListener("input", () => {
     const value = textarea.value;
     if (value.startsWith("/") && !value.includes("\n")) {
       const filter = value.slice(1); // strip the `/`

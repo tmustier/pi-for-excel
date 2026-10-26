@@ -67,7 +67,7 @@ export function openModelSelectorDialog(options: ModelSelectorDialogOptions): vo
 
   const dialog = createOverlayDialog({
     overlayId: MODEL_SELECTOR_OVERLAY_ID,
-    cardClassName: "pi-model-selector-card",
+    cardClassName: "pi-welcome-card pi-overlay-card pi-overlay-card--m pi-model-selector-card",
     restoreFocusOnClose: true,
   });
 

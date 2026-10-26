@@ -305,6 +305,37 @@
   padding-right: 4px;
 }
 
+/* Short panes (Excel on the web can be ~340px tall): the whole card is the one
+   scroll region and the header stays pinned, instead of a body squeezed to a
+   sliver under the header. Specific enough to beat per-dialog rules (e.g.
+   resume's saved list). */
+@media (max-height: 520px) {
+  .pi-overlay .pi-overlay-card {
+    overflow-y: auto;
+  }
+
+  .pi-overlay .pi-overlay-card .pi-overlay-body {
+    flex: none;
+    overflow: visible;
+  }
+
+  .pi-overlay .pi-overlay-card .pi-overlay-body > * {
+    flex-shrink: 0;
+    min-height: auto;
+  }
+
+  /* Full-bleed over the card's 12px/14px short-pane padding (welcome.css). */
+  .pi-overlay .pi-overlay-card > .pi-overlay-header {
+    position: sticky;
+    top: -12px;
+    z-index: 1;
+    margin: -12px -14px 0;
+    padding: 12px 14px 8px;
+    background: var(--background);
+    border-bottom: 1px solid var(--alpha-6);
+  }
+}
+
 .pi-overlay-section,
 .pi-overlay-list {
   display: flex;

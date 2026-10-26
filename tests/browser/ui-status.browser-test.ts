@@ -86,6 +86,24 @@ void test("thinking popover remains above its anchor when it fits", async () => 
   });
 });
 
+void test("choosing a mode updates the label at once while the status bar is hovered and focused", async () => {
+  await withTaskpane({ width: 380, height: 720 }, async (page) => {
+    const mode = page.locator(".pi-status-mode");
+    const initial = (await mode.innerText()).trim();
+    const target = initial === "Auto" ? "Confirm" : "Auto";
+
+    await mode.hover();
+    await mode.focus();
+    await page.keyboard.press("Enter");
+    await page.getByRole("menuitemradio", { name: new RegExp(`^${target}`) }).waitFor({ state: "visible" });
+    await page.getByRole("menuitemradio", { name: new RegExp(`^${target}`) }).focus();
+    await page.keyboard.press("Enter");
+
+    await page.locator(".pi-status-mode").filter({ hasText: target }).waitFor({ state: "visible", timeout: 1_000 });
+    assert.equal(await page.evaluate(() => document.activeElement?.classList.contains("pi-status-mode") ?? false), true);
+  });
+});
+
 const bridgeRows = [
   { name: "tmux outage", tool: "python_transform_range", details: { kind: "tmux_bridge", ok: false, action: "capture_pane", error: "bridge unreachable", gateReason: "bridge_unreachable", skillHint: "tmux-bridge" }, title: /terminal access.*unavailable/i, enabled: true },
   { name: "tmux custom URL", tool: "python_transform_range", details: { kind: "tmux_bridge", ok: false, action: "list_sessions", bridgeUrl: "https://localhost:4441", error: "bridge unreachable", gateReason: "bridge_unreachable", skillHint: "tmux-bridge" }, title: /terminal access.*unavailable/i, enabled: true, probeUrl: "https://localhost:4441" },
