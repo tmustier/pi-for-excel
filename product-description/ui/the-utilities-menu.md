@@ -30,7 +30,7 @@ The menu opens when the gear is clicked, or when the gear has keyboard focus and
 
 Nothing is targeted when the menu opens. Every item acts on the taskpane, not on a tab, except that "Resume session" opens its picker set to open the chosen session in a new tab. The menu has no disabled items and checks nothing: not whether a tab is busy, not whether a provider is connected, not whether there is anything to resume or restore.
 
-The menu does not take focus. The user can Tab from the gear into the items, which come next in the tab order, and activate one with Enter or Space; the arrow keys do not move between items.
+The menu does not take focus. The user can Tab from the gear into the items, which come next in the tab order, and activate one with Enter or Space; the arrow keys do not move between items. Confirmed in Excel on the web: after a click on the gear, focus stayed on the gear, the gear reported itself expanded, ↓ did nothing and Tab moved to "Settings".
 
 ### Ends at once
 
@@ -41,7 +41,7 @@ The menu closes without opening anything when:
 - **Escape.** The menu closes and nothing else happens. Escape does not stop a responding tab while the menu is open, because the menu claims Escape (see [turns](../foundations/turns.md#stop)). The exception is when focus is still in the composer and the tab is idle: then the first Escape moves focus out of the composer to the tab strip, as it always does, and the menu stays open until a second Escape. See [Edge cases](#edge-cases).
 - **A tab is right-clicked.** The menu closes and the tab context menu opens in its place.
 
-Nothing is recorded in any of these cases.
+Nothing is recorded in any of these cases. Confirmed in Excel on the web for a tab click (the menu closed and the tab became active), a right-click on a tab (the tab context menu replaced it) and Escape. With focus on one of the menu's items, Escape closed the menu and focus landed on the active tab in the tab strip.
 
 ### Choosing an item
 
@@ -56,6 +56,8 @@ Choosing an item is the commit. The menu closes first and the item's overlay ope
 | "Resume session" | The resume picker, "Resume session", set to open the chosen session in a new tab. If there are no saved sessions and no recently closed tabs at all, no picker opens and a toast says "No previous sessions". | [resuming a session](../sessions/resuming-a-session.md) |
 | "Backups" | The Settings overlay on the "Backups" page ("Snapshots saved before Pi modifies data"). | [backups and revert](../workbook/backups-and-revert.md) |
 | "Keyboard shortcuts" | The Settings overlay on the "Keyboard shortcuts" page ("Quick reference for chat, tab, navigation, and system shortcuts."). | [keyboard shortcuts](keyboard-shortcuts.md) |
+
+Every row was confirmed in Excel on the web. Of the overlays, only Settings' "Rules" page moves focus into itself (into its text area); "Files" and "Resume session" leave focus on the page body.
 
 Five of the seven items open the same Settings overlay, each on a different page. When it opens on a page other than "Settings", the page still sits under "Settings": its back button, and Escape, go to the "Settings" page first, and a second Escape closes the overlay. The × button and a click on the backdrop close it at once.
 
@@ -86,7 +88,7 @@ The menu has no busy phase of its own, so the columns here mean: "Before sent" i
 
 | Event | Before sent | While busy |
 | --- | --- | --- |
-| Stop (button or Escape) | Escape closes the menu. With focus in the composer, the first Escape leaves the composer and the second closes the menu. | Escape closes the menu and does not stop the turn. The Stop button is not covered by the menu; clicking it closes the menu and stops the turn. |
+| Stop (button or Escape) | Escape closes the menu. With focus in the composer, the first Escape leaves the composer and the second closes the menu. | Escape closes the menu and does not stop the turn (confirmed in Excel on the web). The Stop button is not covered by the menu; clicking it closes the menu and stops the turn. |
 | The user sends something else | Typing and Enter in the composer work and do not close the menu. Clicking a starter hint closes the menu and inserts the hint. A slash command that opens an overlay draws it over the open menu. | Enter steers and Alt/Option+Enter follows up as usual; the menu stays open. |
 | Tab switched, created, closed or reopened | Clicking a tab or "+" closes the menu and does its job. Keyboard shortcuts for tabs work and leave the menu open. | The same; the busy tab keeps running. |
 | An overlay or menu opens | Opening the tab context menu closes this menu. Typing `/` opens the command menu alongside it. An overlay opened by a shortcut or command covers it. | The same. |
@@ -130,12 +132,12 @@ After any interrupt the user is where the interrupting action put them; the menu
 - **Short pane.** The menu is at most 320 px tall, or 60% of the pane if that is less, and scrolls inside itself; in a very short pane "Keyboard shortcuts" may need scrolling.
 - **Narrow pane.** The menu is at least 220 px wide and anchored to the gear's right edge.
 - **Same overlay twice.** The Settings overlay cannot be already open when an item is chosen, because its backdrop covers the gear. The menu cannot be used to close an overlay.
-- **Nothing to resume.** When no session has ever been saved in the add-in (in any workbook) and no tab has been closed in this taskpane, "Resume session" shows only the toast "No previous sessions".
+- **Nothing to resume.** When no session has ever been saved in the add-in (in any workbook) and no tab has been closed in this taskpane, "Resume session" shows only the toast "No previous sessions". Confirmed in Excel on the web with a production build and empty storage. A blank tab that had already been saved counts as a session, so in that case the picker opens instead.
 
 ## Open questions and verification
 
 - The glossary's *utilities menu* entry and the README list the items as Resume session, Rules, Extensions, Files, Backups, Settings, Keyboard shortcuts. The product shows Settings, Extensions, Files, Rules, Resume session, Backups, Keyboard shortcuts (`src/ui/pi-sidebar.ts:992-1026`). This document follows the product; the glossary order needs correcting.
-- The item order and the Escape behaviour with focus on the gear (one Escape closes the menu; focus stays on the gear) were confirmed in the standalone taskpane in Chromium.
+- The item order, the gear's expanded state, the absence of arrow-key navigation, Tab into the items, every item's overlay, the outside-click and right-click behaviour, and Escape not stopping a responding tab were confirmed in Excel on the web on 2026-10-26. On Excel on the web (Chromium) a click on the gear moves focus to the gear, so the two-Escape case below does not arise there.
 - With focus in the composer, the composer's Escape handler (`src/taskpane/keyboard-shortcuts.ts:222`) runs before the menu's (`src/ui/pi-sidebar.ts:194`), so the first Escape blurs the composer and leaves the menu open. Confirmed in the standalone taskpane by opening the menu without moving focus. Whether Excel on macOS really leaves focus in the composer when the gear is clicked has not been checked. If it does, the menu needs two Escapes there; may be worth treating as a bug.
 - The menu is marked as a menu but has no arrow-key navigation and does not move focus into itself (`src/ui/pi-sidebar.ts:954-1026`). Screen-reader users are told it is a menu and then get none of the menu keyboard behaviour. May be worth treating as a bug.
 - "Resume session" from this menu always defaults to a new tab; `/resume` does the same and `/resume-here` targets the current tab. Read from code.
