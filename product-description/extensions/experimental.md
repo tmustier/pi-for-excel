@@ -10,7 +10,7 @@ At this commit there is no flag for the tmux bridge, the Python / LibreOffice br
 
 The user types `/experimental`. The overlay opens on "Experimental features". Each row has a switch with a title and a description, the command that toggles it (for example `/experimental toggle dark-mode`), any warning, and "Ready". The footer reads "Tip: use /experimental on <feature>, /experimental off <feature>, /experimental toggle <feature>, /experimental tmux-bridge-url <url>, /experimental tmux-bridge-token <token>, or /experimental tmux-status."
 
-The user turns on "Dark mode". A toast says "Dark mode: Enabled" and, if Office uses a dark theme, the taskpane turns dark at once. Escape goes back to the Settings root; a second Escape closes the overlay.
+The user turns on "Dark mode". A toast says "Dark mode: Enabled" and, if Office uses a dark theme, the taskpane turns dark at once. With Office on a light theme (as in Excel on the web here) nothing visibly changes. Escape goes back to the Settings root; a second Escape closes the overlay.
 
 ## The interaction, event by event
 
@@ -128,10 +128,10 @@ How the bridges themselves behave is out of scope.
 
 ## Open questions and verification
 
-- The task brief's flag list (tmux bridge, Python/LibreOffice bridge, Office.js execution, files write/delete gate, debug) does not match this commit. Those are not experimental flags; see [Not flags](#not-flags). `src/experiments/flags.ts:36-86` defines exactly five.
-- When remote URLs are off, a URL install that runs in the sandbox may still import the URL (`src/extensions/sandbox/srcdoc.ts:1078`), because the opt-in check is only in the host loader (`src/commands/extension-api.ts:828-833`). See [the Extensions hub](the-extensions-hub.md#open-questions-and-verification).
-- The page's "flag-only" readiness text ("Currently flag-only — this capability is planned but not wired yet.") cannot appear: every flag is marked wired.
-- Whether a flag change reloads already-running extensions was not checked; the last edge case is read from code.
-- The page and its footer were seen in the standalone taskpane; no flag was changed there.
+- Confirmed in Excel on the web (EXP checklist): the page's two sections, five rows, warnings, "Ready" and the footer tip, word for word; "Dark mode: Enabled" / "Dark mode: Disabled" from the switch with the taskpane staying light under Office's light theme; the typed forms "Dark mode: enabled" / "disabled", the "Unknown feature: foo. Available: …" toast, the `/tools` redirect for `mcp`, the full usage text for `help`, "Python bridge URL: https://localhost:3340", "Tmux bridge token is not set. Example: /experimental tmux-bridge-token <token>"; "Can't run /experimental while Pi is busy"; Escape going back to the Settings root and then closing.
+- The task brief's flag list (tmux bridge, Python/LibreOffice bridge, Office.js execution, files write/delete gate, debug) does not match this commit. Those are not experimental flags; see [Not flags](#not-flags). `src/experiments/flags.ts:36-86` defines exactly five (confirmed on the page).
+- When remote URLs are off, a URL install that runs in the sandbox may still import the URL (`src/extensions/sandbox/srcdoc.ts:1078`), because the opt-in check is only in the host loader (`src/commands/extension-api.ts:828-833`). Not testable on the web, where URL install fails at the name prompt; needs desktop.
+- The page's "flag-only" readiness text ("Currently flag-only — this capability is planned but not wired yet.") cannot appear: every flag is marked wired (every row showed "Ready").
+- Dark mode under a dark Office theme, the widget v2, permission and sandbox flags' effect on an installed extension, and the tmux status toast were not tried.
 
 Verified against pi-for-excel commit `ec453df`.
