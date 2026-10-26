@@ -134,7 +134,7 @@ After any interrupt the user is back on the tab they started from, with the comp
 
 ## Open questions and verification
 
-- Double-click and "Rename tab…" call the browser's native `window.prompt`, which Office.js replaces with a function that throws "Function window.prompt is not supported." Confirmed in Excel on the web: double-clicking a tab does nothing, with no toast and no error shown. This makes two of the three rename paths dead on that host and likely on others; it may be worth treating as a bug rather than documenting. The repo already has an in-taskpane text dialog (`requestTextInputDialog`) that would fit.
+- Double-click and "Rename tab…" call the browser's native `window.prompt`, which Office.js replaces with a function that throws "Function window.prompt is not supported." Confirmed in Excel on the web: double-clicking a tab, and "Rename tab…" on an idle tab, do nothing, with no toast and no error shown. This makes two of the three rename paths dead on that host and likely on others; it may be worth treating as a bug rather than documenting. The repo already has an in-taskpane text dialog (`requestTextInputDialog`) that would fit.
 - A chosen title does not survive a reload: the label falls back to "Chat N" because the restored session is loaded without the "chosen title" flag. Confirmed again in Excel on the web on 2026-10-26: "Q3 budget" came back as "Chat 1", while the resume picker still listed the session as "Q3 budget" and resuming it gave a tab "Chat 4" with the toast "Resumed in new tab: Q3 budget". Looks like a bug.
 - In a tab where Pi has not answered yet, the title is not saved until the first response. Read from code, not confirmed by hand.
 - The "Rename tab" prompt title is hard-coded English. Read from code.
