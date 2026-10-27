@@ -320,6 +320,8 @@ export async function initTaskpane(opts: {
       console.warn("[models] Some provider catalogues could not be refreshed:", snapshot.providerErrors);
     }
     document.dispatchEvent(new Event("pi:models-changed"));
+    // The model control tags the provider when two connected providers share models.
+    document.dispatchEvent(new CustomEvent("pi:status-update"));
   });
 
   document.addEventListener("pi:providers-changed", () => {
