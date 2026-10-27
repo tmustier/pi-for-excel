@@ -97,18 +97,19 @@ pi-sidebar {
   display: none;
 }
 
-/* Tabs shrink (titles ellipsize) until they reach min-width; only then does
-   the strip scroll, so a few tabs always fit a narrow pane. */
+/* Tabs keep their natural width (readable titles); the strip scrolls when
+   they don't fit. Inactive tabs show × only on hover or keyboard focus, so a
+   few tabs fit a narrow pane without squeezing titles. */
 .pi-session-tab {
   display: flex;
   align-items: center;
-  flex-shrink: 1;
+  flex-shrink: 0;
   position: relative;
   border: 1px solid var(--alpha-10);
   border-radius: var(--radius-sm);
   background: var(--white-alpha-25);
   color: var(--muted-foreground);
-  min-width: 60px;
+  min-width: 0;
   transition:
     background var(--duration-fast),
     border-color var(--duration-fast),
@@ -249,6 +250,18 @@ pi-sidebar {
     color var(--duration-fast),
     border-color var(--duration-fast),
     opacity var(--duration-fast);
+}
+
+.pi-session-tab:not(.is-active) .pi-session-tab__close {
+  position: absolute;
+  right: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.pi-session-tab:not(.is-active):is(:hover, :focus-within) .pi-session-tab__close {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .pi-session-tab.is-active .pi-session-tab__close {

@@ -446,6 +446,8 @@ void test("recently closed tabs and experimental settings are reachable by comma
     const closeButtons = page.getByRole("button", { name: "Close tab" });
     await closeButtons.first().waitFor({ state: "visible" });
     assert.equal(await closeButtons.count(), 2);
+    // An inactive tab's × appears on hover.
+    await page.locator(".pi-session-tab").first().hover();
     await closeButtons.first().click();
     await page.waitForFunction(() => document.querySelectorAll('.pi-session-tab__close').length === 0);
 
