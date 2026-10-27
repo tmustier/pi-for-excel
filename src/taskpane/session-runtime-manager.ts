@@ -118,16 +118,19 @@ export class SessionRuntimeManager {
 
   async createRuntime(opts: CreateRuntimeOptions): Promise<SessionRuntime> {
     const runtime = await this.createSessionRuntime(opts);
-    return this.registerRuntime(runtime, {
-      activate: opts.activate,
-      ...(opts.tabNumber !== undefined ? { tabNumber: opts.tabNumber } : {}),
-    });
+    return this.registerRuntime(runtime, opts);
   }
 
   registerRuntime(runtime: SessionRuntime, opts?: { activate?: boolean; tabNumber?: number }): SessionRuntime {
     this.runtimes.set(runtime.runtimeId, runtime);
     this.runtimeOrder.push(runtime.runtimeId);
-    this.runtimeDefaultTabNumbers.set(runtime.runtimeId, this.assignTabNumber(opts?.tabNumber));
+    const requested = opts?.tabNumber;
+    const inUse = new Set(this.runtimeDefaultTabNumbers.values());
+    const tabNumber = isValidTabNumber(requested) && !inUse.has(requested)
+      ? requested
+      : this.nextDefaultTabNumber;
+    this.nextDefaultTabNumber = Math.max(this.nextDefaultTabNumber, tabNumber + 1);
+    this.runtimeDefaultTabNumbers.set(runtime.runtimeId, tabNumber);
 
     const unsubscribeAgent = runtime.agent.subscribe(() => {
       this.emit();
@@ -426,21 +429,6 @@ export class SessionRuntimeManager {
     }
 
     this.emit();
-  }
-
-  private assignTabNumber(requested: number | undefined): number {
-    const inUse = new Set(this.runtimeDefaultTabNumbers.values());
-    const tabNumber = isValidTabNumber(requested) && !inUse.has(requested)
-      ? requested
-      : this.nextFreeTabNumber(inUse);
-    this.nextDefaultTabNumber = Math.max(this.nextDefaultTabNumber, tabNumber + 1);
-    return tabNumber;
-  }
-
-  private nextFreeTabNumber(inUse: ReadonlySet<number>): number {
-    let candidate = this.nextDefaultTabNumber;
-    while (inUse.has(candidate)) candidate += 1;
-    return candidate;
   }
 
   private emit(): void {

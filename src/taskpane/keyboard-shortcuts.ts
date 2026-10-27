@@ -62,11 +62,6 @@ interface KeydownContext {
 
 type ShortcutHandler = (context: KeydownContext) => boolean;
 
-/** Adjacent-tab shortcuts without modifiers are the plain arrow keys. */
-function isPlainHorizontalArrow(event: KeyboardEvent): boolean {
-  return !(event.metaKey || event.ctrlKey || event.altKey || event.shiftKey);
-}
-
 function isInsideSessionTabs(target: EventTarget | null | undefined): boolean {
   if (!(target instanceof Element)) {
     return false;
@@ -289,7 +284,7 @@ export function installKeyboardShortcuts(opts: {
         || isTextEntryTarget(keyTarget)
         || isDialogOverlayOpen()
         // A focused tab handles plain arrows itself; chords still switch here.
-        || (isInsideSessionTabs(keyTarget) && isPlainHorizontalArrow(event))
+        || (isInsideSessionTabs(keyTarget) && !(event.metaKey || event.ctrlKey || event.altKey || event.shiftKey))
       ) {
         return false;
       }

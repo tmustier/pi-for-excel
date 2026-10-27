@@ -12,64 +12,42 @@ export type ApiKeyCheckResult =
   | { status: "rejected"; httpStatus: number }
   | { status: "unverified" };
 
-interface KeyCheckRequest {
-  url: string;
-  headers: Record<string, string>;
-}
-
 const CHECK_TIMEOUT_MS = 8_000;
-
-function bearer(url: string, key: string): KeyCheckRequest {
-  return { url, headers: { Authorization: `Bearer ${key}` } };
-}
-
-/** Model-list endpoints for providers whose API keys are entered in the taskpane. */
-export function buildApiKeyCheckRequest(providerId: string, key: string): KeyCheckRequest | null {
-  switch (providerId) {
-    case "openai":
-      return bearer("https://api.openai.com/v1/models", key);
-    case "anthropic":
-      return {
-        url: "https://api.anthropic.com/v1/models",
-        headers: {
-          "x-api-key": key,
-          "anthropic-version": "2023-06-01",
-          "anthropic-dangerous-direct-browser-access": "true",
-        },
-      };
-    case "google":
-      return {
-        url: "https://generativelanguage.googleapis.com/v1beta/models",
-        headers: { "x-goog-api-key": key },
-      };
-    case "deepseek":
-      return bearer("https://api.deepseek.com/models", key);
-    case "mistral":
-      return bearer("https://api.mistral.ai/v1/models", key);
-    case "groq":
-      return bearer("https://api.groq.com/openai/v1/models", key);
-    case "xai":
-      return bearer("https://api.x.ai/v1/models", key);
-    case "openrouter":
-      return bearer("https://openrouter.ai/api/v1/key", key);
-    default:
-      return null;
-  }
-}
+const API_KEY_CHECK_URLS = new Map([
+  ["openai", "https://api.openai.com/v1/models"],
+  ["anthropic", "https://api.anthropic.com/v1/models"],
+  ["google", "https://generativelanguage.googleapis.com/v1beta/models"],
+  ["deepseek", "https://api.deepseek.com/models"],
+  ["mistral", "https://api.mistral.ai/v1/models"],
+  ["groq", "https://api.groq.com/openai/v1/models"],
+  ["xai", "https://api.x.ai/v1/models"],
+  ["openrouter", "https://openrouter.ai/api/v1/key"],
+]);
 
 export async function checkProviderApiKey(
   providerId: string,
   key: string,
   fetchFn: typeof globalThis.fetch = globalThis.fetch,
 ): Promise<ApiKeyCheckResult> {
-  const request = buildApiKeyCheckRequest(providerId, key);
-  if (!request) return { status: "unverified" };
+  const url = API_KEY_CHECK_URLS.get(providerId);
+  if (!url) return { status: "unverified" };
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), CHECK_TIMEOUT_MS);
   try {
-    const response = await fetchFn(request.url, {
-      headers: { Accept: "application/json", ...request.headers },
+    const headers = new Headers({ Accept: "application/json" });
+    if (providerId === "anthropic") {
+      headers.set("x-api-key", key);
+      headers.set("anthropic-version", "2023-06-01");
+      headers.set("anthropic-dangerous-direct-browser-access", "true");
+    } else if (providerId === "google") {
+      headers.set("x-goog-api-key", key);
+    } else {
+      headers.set("Authorization", `Bearer ${key}`);
+    }
+
+    const response = await fetchFn(url, {
+      headers,
       signal: controller.signal,
       cache: "no-store",
     });

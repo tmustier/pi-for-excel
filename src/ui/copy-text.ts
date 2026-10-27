@@ -35,7 +35,16 @@ export function copyViaHiddenTextarea(text: string): boolean {
   }
 }
 
-function showManualCopyDialog(text: string): void {
+export async function copyText(text: string): Promise<CopyTextOutcome> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return "copied";
+  } catch {
+    // Refused by the frame's permissions policy or the WebView; try the legacy path.
+  }
+
+  if (copyViaHiddenTextarea(text)) return "copied";
+
   const dialog = createOverlayDialog({
     overlayId: COPY_TEXT_OVERLAY_ID,
     cardClassName: "pi-welcome-card pi-overlay-card pi-overlay-card--m",
@@ -69,18 +78,5 @@ function showManualCopyDialog(text: string): void {
   dialog.mount();
   textarea.focus();
   textarea.select();
-}
-
-export async function copyText(text: string): Promise<CopyTextOutcome> {
-  try {
-    await navigator.clipboard.writeText(text);
-    return "copied";
-  } catch {
-    // Refused by the frame's permissions policy or the WebView; try the legacy path.
-  }
-
-  if (copyViaHiddenTextarea(text)) return "copied";
-
-  showManualCopyDialog(text);
   return "manual";
 }
