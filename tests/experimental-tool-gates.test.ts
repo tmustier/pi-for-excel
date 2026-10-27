@@ -409,7 +409,7 @@ void test("python bridge tools require explicit user approval", async () => {
 });
 
 
-void test("files writes and deletes ask for consent unless Auto mode is changing Pi's own new file", async () => {
+void test("files writes and deletes use the same ownership consent in Auto and Confirm", async () => {
   const existing = new Map<string, { size: number; readOnly: boolean }>([
     ["notes/user.txt", { size: 40, readOnly: false }],
     ["assistant-docs/README.md", { size: 10, readOnly: true }],
@@ -456,14 +456,21 @@ void test("files writes and deletes ask for consent unless Auto mode is changing
   assert.deepEqual(asked, ["Replace a file?", "Delete a file?"]);
   assert.ok(existing.has("notes/user.txt"));
 
-  // Confirm: even creating a new file asks.
+  // Confirm: new files and Pi's own files are also silent; user files still ask.
   mode = "safe";
   answer = true;
   await run({ action: "write", path: "out/new.csv" });
-  assert.equal(asked.at(-1), "Create a file?");
+  await run({ action: "write", path: "out/new.csv" });
+  await run({ action: "delete", path: "out/new.csv" });
+  assert.equal(asked.length, 2);
+  answer = false;
+  await assert.rejects(run({ action: "write", path: "notes/user.txt" }), /cancelled by user/);
+  await assert.rejects(run({ action: "delete", path: "notes/user.txt" }), /cancelled by user/);
+  assert.deepEqual(asked, ["Replace a file?", "Delete a file?", "Replace a file?", "Delete a file?"]);
   assert.deepEqual(calls, [
     "write:out/report.csv", "write:out/report.csv", "delete:out/report.csv",
     "read:notes/user.txt", "write:assistant-docs/README.md", "write:out/new.csv",
+    "write:out/new.csv", "delete:out/new.csv",
   ]);
 });
 

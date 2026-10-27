@@ -478,10 +478,9 @@ function wrapPythonBridgeOnlyToolWithApprovalGate(
  *   call in Confirm mode. In Auto mode, pure host JSAPI code runs without a
  *   prompt, but code referencing ambient browser authority (network, storage,
  *   globals, dynamic evaluation) still requires per-call approval.
- * - `files` write/delete and `extensions_manager` changes ask for consent
- *   (`local-change-gates.ts`): every change in Confirm mode; in Auto mode,
- *   new code (install/enable) and irreversible loss (deleting or overwriting
- *   a file Pi did not create this session, uninstall).
+ * - `files` asks in both modes before deleting/overwriting a file Pi did not
+ *   create in this chat. Extensions ask for every Confirm change; Auto asks
+ *   before install/enable/uninstall (`local-change-gates.ts`).
  */
 export function applyExperimentalToolGates(
   tools: AgentTool[],

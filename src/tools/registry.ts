@@ -34,6 +34,7 @@ import {
 import { composeCoreToolsForHost } from "./host-selection.js";
 import type { CoreToolName } from "./names.js";
 import type { RecoveryAttribution } from "./recovery-metadata.js";
+import type { GuidanceChangeDependencies } from "./guidance-change.js";
 
 export { CORE_TOOL_NAMES } from "./names.js";
 export type { CoreToolName } from "./names.js";
@@ -46,6 +47,7 @@ export interface CreateCoreToolsOptions {
   hostKind?: SpreadsheetHostKind;
   skills?: SkillsToolDependencies;
   recovery?: RecoveryAttribution;
+  guidance?: GuidanceChangeDependencies;
 }
 
 type CoreToolFactory = (options: CreateCoreToolsOptions) => AnyCoreTool;
@@ -64,10 +66,10 @@ const CORE_TOOL_FACTORIES = {
   explain_formula: () => createExplainFormulaTool(),
   view_settings: () => createViewSettingsTool(),
   comments: (options) => createCommentsTool({}, options.recovery),
-  instructions: () => createInstructionsTool(),
-  conventions: () => createConventionsTool(),
+  instructions: (options) => createInstructionsTool(options.guidance),
+  conventions: (options) => createConventionsTool(options.guidance),
   workbook_history: (options) => createWorkbookHistoryTool({}, options.recovery),
-  skills: (options) => createSkillsTool(options.skills),
+  skills: (options) => createSkillsTool({ ...options.skills, ...options.guidance }),
 } satisfies Record<CoreToolName, CoreToolFactory>;
 
 export { isCoreToolUnsupportedOnWps } from "./host-selection.js";

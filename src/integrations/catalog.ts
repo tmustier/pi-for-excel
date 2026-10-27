@@ -8,7 +8,7 @@
 
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 
-import { createMcpTool } from "../tools/mcp.js";
+import { createMcpTool, type McpToolDependencies } from "../tools/mcp.js";
 import { createFetchPageTool } from "../tools/fetch-page.js";
 import { createWebSearchTool } from "../tools/web-search.js";
 
@@ -35,7 +35,7 @@ export interface IntegrationDefinition {
   enabledByDefault?: boolean;
   toolNames: readonly string[];
   instructions: string;
-  createTools: () => AgentTool[];
+  createTools: (mcp?: McpToolDependencies) => AgentTool[];
 }
 
 const INTEGRATION_DEFINITIONS: Record<IntegrationId, IntegrationDefinition> = {
@@ -63,7 +63,7 @@ const INTEGRATION_DEFINITIONS: Record<IntegrationId, IntegrationDefinition> = {
     instructions:
       "Use the mcp tool only when a configured external capability is needed. "
       + "Prefer listing/describing tools before invoking them, and clearly state which server/tool was used.",
-    createTools: () => [createMcpTool()],
+    createTools: (mcp) => [createMcpTool(mcp)],
   },
 };
 
@@ -79,13 +79,13 @@ export function getIntegrationDefinition(integrationId: string): IntegrationDefi
   return null;
 }
 
-export function createToolsForIntegrations(integrationIds: readonly string[]): AgentTool[] {
+export function createToolsForIntegrations(integrationIds: readonly string[], mcp?: McpToolDependencies): AgentTool[] {
   const tools: AgentTool[] = [];
 
   for (const integrationId of integrationIds) {
     const definition = getIntegrationDefinition(integrationId);
     if (!definition) continue;
-    tools.push(...definition.createTools());
+    tools.push(...definition.createTools(mcp));
   }
 
   return tools;

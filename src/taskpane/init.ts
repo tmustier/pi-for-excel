@@ -1121,6 +1121,17 @@ export async function initTaskpane(opts: {
         getSessionId: () => runtimeAgent?.sessionId ?? runtimeSessionId,
         getTurnId: (toolCallId) => toolTurns.get(toolCallId),
         skillReadCache: runtimeSkillReadCache,
+        guidance: {
+          getExecutionMode: () => executionModeController.readMode(),
+          requestLocalChangeApproval: (request) => requestRuntimeToolApproval({
+            title: request.title,
+            message: request.message,
+            confirmLabel: request.confirmLabel,
+            ...(request.signal ? { signal: request.signal } : {}),
+            onStop: stopRuntimeTurn,
+            ...approvalSource(),
+          }),
+        },
       }).filter(isRuntimeAgentTool);
 
       // Snapshot extension tools + revision together so schema-stable handler
@@ -1130,7 +1141,14 @@ export async function initTaskpane(opts: {
 
       const runtimeTools = normalizeRuntimeTools([
         ...coreTools,
-        ...createToolsForIntegrations(activeIntegrationIds),
+        ...createToolsForIntegrations(activeIntegrationIds, {
+          getExecutionMode: () => executionModeController.readMode(),
+          requestToolApproval: (request) => requestApproval({
+            ...request,
+            onStop: stopRuntimeTurn,
+            ...approvalSource(),
+          }),
+        }),
         ...extensionTools,
       ]);
 

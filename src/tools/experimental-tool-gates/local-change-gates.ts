@@ -3,10 +3,9 @@
  * workbook: Files workspace writes/deletes and extension lifecycle changes.
  *
  * Rule (see src/tools/DECISIONS.md, "Consent outside the workbook"):
- * - Confirm mode asks before every such change.
- * - Auto mode still asks before running new code (extension install/enable)
- *   and before irreversible loss: deleting or overwriting a file Pi did not
- *   create in this session, or uninstalling an extension.
+ * - Both modes ask before deleting/overwriting files Pi did not create in
+ *   this chat, and before extension install/enable/uninstall.
+ * - Confirm also asks before disabling extensions.
  */
 
 import type { AgentTool } from "@earendil-works/pi-agent-core";
@@ -121,13 +120,12 @@ export function wrapFilesToolWithChangeGate(
         return tool.execute(toolCallId, params, signal, onUpdate);
       }
 
-      const mode = await getMode(dependencies);
       const losesUserData = existing !== null && !assistantCreated.has(path);
-      if (mode === "safe" || losesUserData) {
+      if (losesUserData) {
         const location = existing?.nativeFolderName !== undefined
           ? t("gate.files.locationFolder", { folder: existing.nativeFolderName })
           : t("gate.files.locationWorkspace");
-        const size = existing ? formatBytes(existing.size) : "";
+        const size = formatBytes(existing.size);
         const request: LocalChangeApprovalRequest = action === "delete"
           ? {
             toolName: tool.name,
@@ -136,20 +134,12 @@ export function wrapFilesToolWithChangeGate(
             confirmLabel: t("gate.files.deleteConfirm"),
             destructive: true,
           }
-          : existing !== null
-            ? {
+          : {
               toolName: tool.name,
               title: t("gate.files.replaceTitle"),
               message: t("gate.files.replaceMessage", { path, size, location }),
               confirmLabel: t("gate.files.replaceConfirm"),
               destructive: true,
-            }
-            : {
-              toolName: tool.name,
-              title: t("gate.files.createTitle"),
-              message: t("gate.files.createMessage", { path, location }),
-              confirmLabel: t("gate.files.createConfirm"),
-              destructive: false,
             };
 
         await requireApproval(dependencies, request, `Files ${action} of '${path}' cancelled by user.`, signal);

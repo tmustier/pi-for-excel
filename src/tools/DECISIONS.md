@@ -432,9 +432,11 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 
 ## Consent outside the workbook (`files`, `extensions_manager`)
 - **Rule:** tools that change only local state stay `read` for the workbook lock; consent is a gate in `experimental-tool-gates/local-change-gates.ts`, shown through the same approval dialog as workbook mutations.
-- **Confirm mode:** every `files` write/delete and every changing `extensions_manager` action asks.
+- **Files (both modes, SE-08):** asks before deleting or overwriting a file Pi did not create in this chat. New files and Pi's own files do not ask, including in Confirm mode.
+- **Confirm mode:** every changing `extensions_manager` action asks.
 - **Auto mode:** still asks before running new code (extension `install_code`, `set_enabled: true`) and before irreversible loss (`uninstall`; `files` delete or overwrite of a file Pi did not create in this chat). Pi's own new files can be rewritten/deleted freely.
 - **Fail closed:** without an approval handler these actions are refused.
-- **Not gated:** `instructions`, `conventions`, `skills` (prompt guidance, visible on the Rules/Skills pages); `skills` is classified `read` (it was falling through to `mutate`).
+- **Standing guidance (SE-03, reversing #790):** rules, conventions and skill changes ask in Confirm and show the proposed new text. Workbook rules always ask, including in Auto. Successful changes show an Undo toast in both modes; Undo refuses to replace newer guidance. They remain `read` for the workbook lock, not exempt from consent.
+- **MCP (SE-04):** discovery is ungated. Tool calls show server, tool and inputs; Auto offers Allow once or a remembered Always allow this tool grant scoped to the server id, endpoint and tool. Explicit `readOnlyHint: true` tools skip Auto consent. Confirm always asks per call, even for read-only tools or remembered grants. Connections lists remembered tools with revoke actions. Guidance and MCP never inherit workbook turn-wide approval.
 - **Extension capability grants** are always enforced; the `extension-permissions` experimental flag is removed. The remote-URL opt-in is checked at install and at every load in host and sandbox runtimes.
 - **Overlap:** `fix-backups-approvals` owns the approval queue and `getToolApprovalRequirement`; these gates use `requestRuntimeToolApproval` and can move there.

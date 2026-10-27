@@ -295,6 +295,7 @@ void test("skills install writes external skill and emits structured install det
   let changedReason = "";
 
   const tool = createSkillsTool({
+    getExecutionMode: () => Promise.resolve("yolo"),
     catalog: { list: () => [WEB_SEARCH_SKILL] },
     isExternalDiscoveryEnabled: () => true,
     loadExternalSkills: () => Promise.resolve([]),
@@ -352,6 +353,7 @@ void test("skills uninstall reports removed state and emits refresh only when re
   let changedCount = 0;
 
   const tool = createSkillsTool({
+    getExecutionMode: () => Promise.resolve("yolo"),
     catalog: { list: () => [WEB_SEARCH_SKILL] },
     isExternalDiscoveryEnabled: () => true,
     loadExternalSkills: () => Promise.resolve([]),
@@ -382,4 +384,36 @@ void test("skills uninstall reports removed state and emits refresh only when re
 
   assert.equal(missingDetails.removed, false);
   assert.equal(changedCount, 1);
+});
+
+void test("Confirm skill changes show the proposed text and refuse denial, Stop, or missing approval", async () => {
+  let installed = "original";
+  const controller = new AbortController();
+  let stop = false;
+  const dependencies = {
+    catalog: { list: () => [] },
+    loadExternalSkills: () => Promise.resolve([]),
+    getExecutionMode: () => Promise.resolve("safe" as const),
+    installExternalSkill: ({ markdown }: { name: string; markdown: string }) => {
+      installed = markdown;
+      return Promise.resolve({ name: "test", location: "skills/external/test/SKILL.md" });
+    },
+    requestLocalChangeApproval: (request: { message: string }) => {
+      assert.match(request.message, /proposed instructions/);
+      if (stop) controller.abort();
+      return Promise.resolve(stop);
+    },
+  };
+  const params = { action: "install" as const, name: "test", markdown: "proposed instructions" };
+  let result = await createSkillsTool(dependencies).execute("denied", params);
+  assert.equal(decodeToolDetailsOfKind(result.details, "skills_error")?.action, "install");
+  assert.equal(installed, "original");
+  stop = true;
+  result = await createSkillsTool(dependencies).execute("stopped", params, controller.signal);
+  assert.equal(decodeToolDetailsOfKind(result.details, "skills_error")?.action, "install");
+  assert.equal(installed, "original");
+  const { requestLocalChangeApproval: _approval, ...withoutApproval } = dependencies;
+  result = await createSkillsTool(withoutApproval).execute("unavailable", params);
+  assert.equal(decodeToolDetailsOfKind(result.details, "skills_error")?.action, "install");
+  assert.equal(installed, "original");
 });

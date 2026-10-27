@@ -9,6 +9,7 @@ import type { SpreadsheetHostKind } from "../host/index.js";
 import { createCoreTools, type AnyCoreTool } from "./registry.js";
 import { selectOfficeCoupledToolForHost } from "./host-selection.js";
 import type { SkillReadCache } from "../skills/read-cache.js";
+import type { GuidanceChangeDependencies } from "./guidance-change.js";
 import { createTmuxTool } from "./tmux.js";
 import { createPythonRunTool } from "./python-run.js";
 import { createLibreOfficeConvertTool } from "./libreoffice-convert.js";
@@ -27,6 +28,7 @@ export interface CreateAllToolsOptions extends RecoveryAttribution {
   getExtensionManager?: () => ExtensionsManagerToolRuntime | null;
   getSessionId?: () => string | null;
   skillReadCache?: SkillReadCache;
+  guidance?: GuidanceChangeDependencies;
 }
 
 export function createAllTools(options: CreateAllToolsOptions = {}): AnyCoreTool[] {
@@ -43,6 +45,7 @@ export function createAllTools(options: CreateAllToolsOptions = {}): AnyCoreTool
       hostKind,
       skills,
       recovery: options,
+      ...(options.guidance ? { guidance: options.guidance } : {}),
     }),
     createTmuxTool(),
     createPythonRunTool(),

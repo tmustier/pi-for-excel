@@ -6,8 +6,9 @@
  */
 
 import { INTEGRATION_IDS, type IntegrationId } from "../../integrations/catalog.js";
-import type { SettingsAccess } from "../../storage/local/settings-store.js";
+import type { SettingsAccess, SettingsUpdater } from "../../storage/local/settings-store.js";
 import type { McpServerConfig } from "../../tools/mcp-config.js";
+import { getMcpToolGrants, setMcpToolGrant } from "../../tools/mcp-approvals.js";
 import {
   getExternalToolsEnabled,
   getSessionIntegrationIds,
@@ -259,7 +260,7 @@ function createBridgeSetupCommand(command: string): HTMLDivElement {
 
 export async function renderConnectionsTab(args: {
   container: HTMLElement;
-  settings: SettingsAccess;
+  settings: SettingsAccess & SettingsUpdater;
   deps: ExtensionsHubDependencies;
   isBusy: () => boolean;
   runMutation: ConnectionsMutation;
@@ -514,7 +515,7 @@ export async function renderConnectionsTab(args: {
     mcpList.appendChild(createEmptyInline(lucide(Zap), t("ext-hub-connections.noMcpServers")));
   } else {
     for (const server of mcpServers) {
-      mcpList.appendChild(renderMcpServerCard(server, settings, isBusy, runMutation));
+      mcpList.appendChild(await renderMcpServerCard(server, settings, isBusy, runMutation));
     }
   }
   container.appendChild(mcpList);
@@ -601,12 +602,12 @@ export async function renderConnectionsTab(args: {
 
 // ── MCP server card ─────────────────────────────────
 
-function renderMcpServerCard(
+async function renderMcpServerCard(
   server: McpServerConfig,
-  settings: SettingsAccess,
+  settings: SettingsAccess & SettingsUpdater,
   isBusy: () => boolean,
   runMutation: ConnectionsMutation,
-): HTMLElement {
+): Promise<HTMLElement> {
   const toolLabel = server.enabled ? t("ext-hub-connections.badgeEnabled") : t("ext-hub-connections.badgeDisabled");
   const card = createItemCard({
     icon: lucide(Zap),
@@ -623,6 +624,22 @@ function renderMcpServerCard(
   // Token
   const tokenValue = server.token ? maskSecret(server.token) : t("ext-hub-connections.badgeNoToken");
   card.body.appendChild(createConfigRow(t("extensions-hub-connections.token"), createConfigValue(tokenValue)));
+
+  const grants = await getMcpToolGrants(settings, server);
+  card.body.appendChild(createConfigRow(t("mcp.grants.title"), createConfigValue(
+    grants.length > 0 ? t("mcp.grants.autoOnly") : t("mcp.grants.none"),
+  )));
+  for (const tool of grants) {
+    const revoke = createButton(t("mcp.grants.revoke", { tool }), {
+      compact: true,
+      onClick: () => {
+        void runMutation(async () => {
+          await setMcpToolGrant(settings, server, tool, false);
+        }, "config", t("mcp.grants.revoked", { tool }));
+      },
+    });
+    card.body.appendChild(createConfigRow(tool, revoke));
+  }
 
   // Enabled toggle
   const enabledRow = document.createElement("div");

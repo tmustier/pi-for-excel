@@ -55,11 +55,163 @@ void test("export counts chat messages without discarding hidden debugging recor
   });
 });
 
-void test("Stop Pi in a local-file approval aborts the turn without creating the file", async () => {
+async function startMcpCall(page: Page, mode: "safe" | "yolo"): Promise<void> {
+  await page.evaluate(async (mode) => {
+    const { createMcpTool } = await import("/src/tools/mcp.ts") as typeof import("../../src/tools/mcp.ts");
+    const { requestApproval } = await import("/src/ui/approval-dialog.ts") as typeof import("../../src/ui/approval-dialog.ts");
+    document.body.dataset.mcpResult = "pending";
+    const tool = createMcpTool({
+      getExecutionMode: () => Promise.resolve(mode),
+      requestToolApproval: (request) => requestApproval(request),
+      getRuntimeConfig: () => Promise.resolve({ servers: [{ id: "consent", name: "Consent server", url: "https://localhost:4010/mcp", enabled: true }] }),
+      callJsonRpc: ({ method }) => Promise.resolve({ proxied: false, result: method === "tools/list"
+        ? { result: { tools: [{ name: "send_note" }] } }
+        : { result: { content: [{ type: "text", text: "sent" }] } } }),
+    });
+    void tool.execute("call", { tool: "send_note", args: '{"note":"Consent test 17"}' }).then((result) => {
+      document.body.dataset.mcpResult = result.details.ok ? "sent" : "declined";
+    });
+  }, mode);
+}
+
+void test("MCP Always allow persists, Confirm still asks, and Connections can revoke it", async () => {
+  await withTaskpane(async (page) => {
+    await page.evaluate(async () => {
+      const { getAppStorage } = await import("/src/storage/local/app-storage.ts") as typeof import("../../src/storage/local/app-storage.ts");
+      const { saveMcpServers } = await import("/src/tools/mcp-config.ts") as typeof import("../../src/tools/mcp-config.ts");
+      await saveMcpServers(getAppStorage().settings, [{ id: "consent", name: "Consent server", url: "https://localhost:4010/mcp", enabled: true }]);
+    });
+    await startMcpCall(page, "yolo");
+    const dialog = page.locator("#pi-tool-approval-overlay");
+    await dialog.getByText(/Consent test 17/).waitFor();
+    await dialog.getByRole("button", { name: "Always allow this tool", exact: true }).click();
+    await page.waitForFunction(() => document.body.dataset.mcpResult === "sent");
+    await page.reload();
+    await page.locator("pi-input textarea").waitFor({ state: "visible" });
+    const welcome = page.locator("#pi-welcome-login-overlay");
+    await welcome.waitFor({ state: "visible" });
+    await welcome.dispatchEvent("click");
+    await welcome.waitFor({ state: "detached" });
+    await startMcpCall(page, "yolo");
+    await page.waitForFunction(() => document.body.dataset.mcpResult === "sent");
+    assert.equal(await dialog.count(), 0);
+    await startMcpCall(page, "safe");
+    await dialog.waitFor({ state: "visible" });
+    assert.equal(await dialog.getByRole("button", { name: "Always allow this tool", exact: true }).count(), 0);
+    assert.equal(await dialog.getByRole("button", { name: "Allow for the rest of this turn", exact: true }).count(), 0);
+    await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+    await page.waitForFunction(() => document.body.dataset.mcpResult === "declined");
+    await enterCommand(page, "/tools");
+    await page.getByText("Consent server", { exact: true }).click();
+    await page.getByRole("button", { name: "Revoke “send_note”", exact: true }).click();
+    await page.getByText("Revoked approval for “send_note”", { exact: true }).waitFor();
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("Escape");
+    await startMcpCall(page, "yolo");
+    await dialog.waitFor({ state: "visible" });
+    await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+    await page.waitForFunction(() => document.body.dataset.mcpResult === "declined");
+  });
+});
+
+void test("guidance tools preview Confirm changes and Undo restores rules, conventions and installed skills", async () => {
+  await withTaskpane(async (page) => {
+    const welcome = page.locator("#pi-welcome-login-overlay");
+    if (await welcome.count()) await welcome.dispatchEvent("click");
+    for (const kind of ["rules", "conventions", "skills"] as const) {
+      await page.evaluate(async (kind) => {
+        const { getAppStorage } = await import("/src/storage/local/app-storage.ts") as typeof import("../../src/storage/local/app-storage.ts");
+        const { requestApproval } = await import("/src/ui/approval-dialog.ts") as typeof import("../../src/ui/approval-dialog.ts");
+        const { createInstructionsTool } = await import("/src/tools/instructions.ts");
+        const { createConventionsTool } = await import("/src/tools/conventions.ts");
+        const { createSkillsTool } = await import("/src/tools/skills.ts");
+        const { setUserRules } = await import("/src/rules/store.ts");
+        const { setStoredConventions } = await import("/src/conventions/store.ts");
+        const settings = getAppStorage().settings;
+        const dependencies: import("../../src/tools/guidance-change.ts").GuidanceChangeDependencies = {
+          getExecutionMode: () => Promise.resolve("safe" as const),
+          requestLocalChangeApproval: (request) => requestApproval(request),
+        };
+        document.body.dataset.guidanceResult = "pending";
+        if (kind === "rules") {
+          await setUserRules(settings, "Keep the original rule");
+          void createInstructionsTool(dependencies).execute("rule", { action: "append", level: "user", content: "Use 17 decimal places" }).then(() => { document.body.dataset.guidanceResult = "saved"; });
+        } else if (kind === "conventions") {
+          await setStoredConventions(settings, { visualDefaults: { fontName: "Arial", fontSize: 13 } });
+          void createConventionsTool(dependencies).execute("convention", { action: "reset" }).then(() => { document.body.dataset.guidanceResult = "saved"; });
+        } else {
+          void createSkillsTool(dependencies).execute("skill", { action: "install", name: "consent-test", markdown: "---\nname: consent-test\ndescription: Consent test\n---\nUse 17 decimal places" }).then(() => { document.body.dataset.guidanceResult = "saved"; });
+        }
+      }, kind);
+      const dialog = page.locator("#pi-tool-approval-overlay");
+      await dialog.waitFor({ state: "visible" });
+      assert.match(await dialog.innerText(), kind === "conventions" ? /New formatting conventions/ : /17 decimal places/);
+      assert.equal(await dialog.getByRole("button", { name: "Allow for the rest of this turn", exact: true }).count(), 0);
+      await dialog.getByRole("button", { name: "Save change", exact: true }).click();
+      await page.waitForFunction(() => document.body.dataset.guidanceResult === "saved");
+      await page.getByRole("button", { name: "Undo", exact: true }).click();
+      await page.getByText("Undid Pi’s guidance change", { exact: true }).waitFor();
+      const state = await page.evaluate(async (kind) => {
+        const { getAppStorage } = await import("/src/storage/local/app-storage.ts") as typeof import("../../src/storage/local/app-storage.ts");
+        const settings = getAppStorage().settings;
+        if (kind === "rules") return settings.get("user.instructions");
+        if (kind === "conventions") {
+          const { getStoredConventions } = await import("/src/conventions/store.ts") as typeof import("../../src/conventions/store.ts");
+          return getStoredConventions(settings);
+        }
+        const { getFilesWorkspace } = await import("/src/files/workspace.ts") as typeof import("../../src/files/workspace.ts");
+        return (await getFilesWorkspace().listFiles()).some((file) => file.path === "skills/external/consent-test/SKILL.md");
+      }, kind);
+      assert.deepEqual(state, kind === "rules" ? "Keep the original rule" : kind === "conventions" ? { visualDefaults: { fontName: "Arial", fontSize: 13 } } : false);
+      await page.mouse.move(5, 5);
+      await page.getByText("Undid Pi’s guidance change", { exact: true }).waitFor({ state: "detached" });
+    }
+  });
+});
+
+void test("workbook rules ask even in Auto, and declining leaves the standing rule unchanged", async () => {
+  await withTaskpane(async (page) => {
+    await page.evaluate(async () => {
+      const { getAppStorage } = await import("/src/storage/local/app-storage.ts") as typeof import("../../src/storage/local/app-storage.ts");
+      const { createInstructionsTool } = await import("/src/tools/instructions.ts") as typeof import("../../src/tools/instructions.ts");
+      const { requestApproval } = await import("/src/ui/approval-dialog.ts") as typeof import("../../src/ui/approval-dialog.ts");
+      const { BrowserHost } = await import("/src/host/browser-host.ts") as typeof import("../../src/host/browser-host.ts");
+      const { getCurrentSpreadsheetHost, setCurrentSpreadsheetHost } = await import("/src/host/current.ts") as typeof import("../../src/host/current.ts");
+      const { setWorkbookRules } = await import("/src/rules/store.ts") as typeof import("../../src/rules/store.ts");
+      const previousHost = getCurrentSpreadsheetHost();
+      class IdentifiedHost extends BrowserHost {
+        override getWorkbookContext(): Promise<import("../../src/workbook/context.ts").WorkbookContext> {
+          return Promise.resolve({ workbookId: "consent-workbook", workbookName: "Consent.xlsx", source: "document.url" });
+        }
+      }
+      setCurrentSpreadsheetHost(new IdentifiedHost());
+      await setWorkbookRules(getAppStorage().settings, "consent-workbook", "Original workbook rule");
+      document.body.dataset.workbookRuleResult = "pending";
+      void createInstructionsTool({
+        getExecutionMode: () => Promise.resolve("yolo"),
+        requestLocalChangeApproval: (request) => requestApproval(request),
+      }).execute("rule", { action: "replace", level: "workbook", content: "Replace all standing workbook guidance" }).then(() => {
+        document.body.dataset.workbookRuleResult = "settled";
+      }).finally(() => setCurrentSpreadsheetHost(previousHost));
+    });
+    const dialog = page.locator("#pi-tool-approval-overlay");
+    await dialog.getByText(/New rules for this workbook/).waitFor();
+    await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+    await page.waitForFunction(() => document.body.dataset.workbookRuleResult === "settled");
+    assert.equal(await page.evaluate(async () => {
+      const { getAppStorage } = await import("/src/storage/local/app-storage.ts") as typeof import("../../src/storage/local/app-storage.ts");
+      return getAppStorage().settings.get("workbook.instructions.v1.consent-workbook");
+    }), "Original workbook rule");
+  });
+});
+
+void test("Stop Pi in a local-file approval aborts the turn without replacing the user's file", async () => {
   await withTaskpane(async (page) => {
     await page.evaluate(async () => {
       const { getAppStorage } = await import("/src/storage/local/app-storage.ts");
       await getAppStorage().settings.set("execution.mode.v1", "safe");
+      const { getFilesWorkspace } = await import("/src/files/workspace.ts");
+      await getFilesWorkspace().writeTextFile("stop-approval.txt", "keep this", "text/plain");
     });
     await page.reload();
     await page.locator("pi-input textarea").waitFor({ state: "visible", timeout: 20_000 });
@@ -93,11 +245,11 @@ void test("Stop Pi in a local-file approval aborts the turn without creating the
     await page.waitForFunction(() => !document.querySelector("pi-sidebar").agent.state.isStreaming);
     await page.waitForTimeout(100);
     assert.equal(await page.locator(".pi-announcer").innerText(), "");
-    const files = await page.evaluate(async () => {
+    const contents = await page.evaluate(async () => {
       const { getFilesWorkspace } = await import("/src/files/workspace.ts") as typeof import("../../src/files/workspace.ts");
-      return (await getFilesWorkspace().listFiles()).map((file) => file.path);
+      return (await getFilesWorkspace().readFile("stop-approval.txt", { mode: "text" })).text;
     });
-    assert.equal(files.includes("stop-approval.txt"), false);
+    assert.equal(contents, "keep this");
     assert.equal(await page.locator("[inert]").count(), 0);
   });
 });
