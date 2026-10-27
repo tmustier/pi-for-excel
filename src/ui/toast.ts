@@ -17,10 +17,15 @@ export type ToastVariant = "info" | "error";
 export interface ToastOptions {
   duration?: number;
   variant?: ToastVariant;
+  /** A later toast with the same id replaces this one. */
+  id?: string;
 }
 
 interface ActionToastOptions {
-  /** Lets the caller dismiss this toast later with `dismissToast(id)`. */
+  /**
+   * Lets the caller dismiss this toast later with `dismissToast(id)`. A later
+   * toast with the same id replaces this one.
+   */
   id?: string;
   message: string;
   actionLabel: string;
@@ -111,6 +116,10 @@ function renderToast(opts: {
 }): void {
   const host = ensureRegion();
 
+  // A toast with the same id replaces the earlier one (e.g. "Compacting…"
+  // followed by its result), so progress toasts never outlive their task.
+  if (opts.id !== undefined) dismissToast(opts.id);
+
   const duplicate = entries.find((entry) => entry.message === opts.message && entry.hasAction === Boolean(opts.action));
   if (duplicate && !opts.action) {
     duplicate.remainingMs = opts.duration;
@@ -184,7 +193,8 @@ export function showToast(message: string, options?: ToastOptions): void;
 export function showToast(message: string, durationOrOptions?: number | ToastOptions): void {
   if (typeof document === "undefined") return;
   const normalized = normalizeToastOptions(message, durationOrOptions);
-  renderToast({ message, duration: normalized.duration, variant: normalized.variant });
+  const id = typeof durationOrOptions === "object" ? durationOrOptions.id : undefined;
+  renderToast({ ...(id !== undefined ? { id } : {}), message, duration: normalized.duration, variant: normalized.variant });
 }
 
 export function showActionToast(opts: ActionToastOptions): void {

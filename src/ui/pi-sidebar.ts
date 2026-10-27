@@ -233,6 +233,7 @@ export class PiSidebar extends LitElement {
     }
   };
   private _dockObserver: ResizeObserver | undefined;
+  private _observedDock: HTMLElement | undefined;
   private _onWindowResize = () => {
     this._updateSessionTabOverflow();
   };
@@ -330,6 +331,8 @@ export class PiSidebar extends LitElement {
     this._resizeObserver = undefined;
     this._dockObserver?.disconnect();
     this._dockObserver = undefined;
+    this._observedDock = undefined;
+    window.removeEventListener("resize", this._publishDockHeight);
 
     if (this._scrollContainerEl && this._scrollListener) {
       this._scrollContainerEl.removeEventListener("scroll", this._scrollListener);
@@ -352,25 +355,36 @@ export class PiSidebar extends LitElement {
 
   override firstUpdated() {
     this._ensureMessageEnhancements();
-    this._observeDock();
   }
 
-  /** Publish the dock's height so toasts sit just above it (see toasts.css). */
+  private readonly _publishDockHeight = (): void => {
+    const dock = this._observedDock;
+    if (!dock) return;
+    const offset = Math.max(0, window.innerHeight - dock.getBoundingClientRect().top);
+    document.documentElement.style.setProperty("--pi-dock-height", `${Math.round(offset)}px`);
+  };
+
+  /**
+   * Publish the dock's height so toasts sit just above it (see toasts.css).
+   * Runs after every render: the dock does not exist until an agent is bound,
+   * and it is re-created when the sidebar re-renders without one.
+   */
   private _observeDock(): void {
-    const dock = this.querySelector<HTMLElement>(".pi-dock");
-    if (!dock || typeof ResizeObserver === "undefined") return;
-    const publish = () => {
-      const offset = Math.max(0, window.innerHeight - dock.getBoundingClientRect().top);
-      document.documentElement.style.setProperty("--pi-dock-height", `${Math.round(offset)}px`);
-    };
-    this._dockObserver = new ResizeObserver(publish);
+    const dock = this.querySelector<HTMLElement>(".pi-dock") ?? undefined;
+    if (dock === this._observedDock || typeof ResizeObserver === "undefined") return;
+    this._dockObserver?.disconnect();
+    this._observedDock = dock;
+    if (!dock) return;
+    this._dockObserver ??= new ResizeObserver(this._publishDockHeight);
     this._dockObserver.observe(dock);
-    window.addEventListener("resize", publish);
-    publish();
+    window.removeEventListener("resize", this._publishDockHeight);
+    window.addEventListener("resize", this._publishDockHeight);
+    this._publishDockHeight();
   }
 
   override updated(changed: PropertyValues<this>) {
     this._ensureMessageEnhancements();
+    this._observeDock();
     this._updateSessionTabOverflow();
     // Keep the active tab visible when the strip overflows. Showing or hiding
     // a scroll arrow resizes the scroller, so re-check after that too; else

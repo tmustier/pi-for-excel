@@ -67,6 +67,73 @@ void test("context warning attributes normalize unknown severity to yellow in th
   });
 });
 
+void test("Shift+Tab cycles thinking only from the composer text field", async () => {
+  await withTaskpane({ width: 420, height: 720 }, async (page) => {
+    const level = (): Promise<string | null> => page.locator(".pi-status-thinking").getAttribute("aria-label");
+    const input = page.locator("pi-input textarea");
+    await input.fill("draft");
+
+    const before = await level();
+    await input.press("Shift+Tab");
+    const cycled = await level();
+    assert.notEqual(cycled, before);
+    assert.equal(await input.evaluate((el) => el === document.activeElement), true);
+
+    // From Send, Shift+Tab moves focus back to the text field and leaves the level alone.
+    await page.getByRole("button", { name: "Send" }).focus();
+    await page.keyboard.press("Shift+Tab");
+    assert.equal(await level(), cycled);
+    assert.equal(await input.evaluate((el) => el === document.activeElement), true);
+  });
+});
+
+void test("arrow keys inside a status popover do not switch tabs", async () => {
+  await withTaskpane({ width: 420, height: 720 }, async (page) => {
+    await page.getByRole("button", { name: "New tab" }).click();
+    const active = page.locator(".pi-session-tab.is-active");
+    await active.filter({ hasText: "Chat 2" }).waitFor();
+
+    await page.locator(".pi-status-thinking").click();
+    await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("ArrowLeft");
+
+    assert.match(await active.textContent() ?? "", /Chat 2/);
+    assert.equal(await page.locator(".pi-status-popover--thinking").isVisible(), true);
+  });
+});
+
+void test("toasts sit above the composer dock as it grows", async () => {
+  await withTaskpane({ width: 380, height: 622 }, async (page) => {
+    const gap = await page.evaluate(async () => {
+      // A queue strip is inserted into the dock above the input, as queue-display.ts does.
+      const inputArea = document.querySelector(".pi-input-area");
+      const strip = document.createElement("div");
+      strip.style.height = "60px";
+      inputArea.parentElement.insertBefore(strip, inputArea);
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      const { showToast } = await import("/src/ui/toast.ts");
+      showToast("Toast placement fixture");
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      const toast = document.querySelector(".pi-toast-region").getBoundingClientRect();
+      return strip.getBoundingClientRect().top - toast.bottom;
+    });
+    assert.ok(gap >= 0, `toast overlaps the dock by ${-gap}px`);
+  });
+});
+
+void test("a toast with the same id replaces a long progress toast", async () => {
+  await withTaskpane({ width: 380, height: 622 }, async (page) => {
+    const messages = await page.evaluate(async () => {
+      const { showToast } = await import("/src/ui/toast.ts");
+      showToast("Unrelated toast");
+      showToast("Compacting fixture…", { id: "compact", duration: 60_000 });
+      showToast("Summarized fixture", { id: "compact" });
+      return [...document.querySelectorAll("#pi-toast .pi-toast__message")].map((node) => node.textContent);
+    });
+    assert.deepEqual(messages, ["Unrelated toast", "Summarized fixture"]);
+  });
+});
+
 void test("thinking popover stays visible inside a 290 by 400 taskpane", async () => {
   await withTaskpane({ width: 290, height: 400 }, async (page) => {
     await page.locator(".pi-status-thinking").click();
