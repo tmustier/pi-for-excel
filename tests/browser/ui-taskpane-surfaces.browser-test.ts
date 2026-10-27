@@ -415,6 +415,7 @@ void test("GitHub Copilot login reaches its device code, and closing the code di
 
     await enterCommand(page, "/login");
     await page.getByText("GitHub Copilot", { exact: true }).first().click();
+    const firstPoll = page.waitForResponse("**/oauth-proxy/github/login/oauth/access_token");
     await page.getByRole("button", { name: "Login with GitHub Copilot" }).click();
     // GitHub Enterprise domain: blank means github.com.
     const prompt = page.locator("#pi-prompt-overlay");
@@ -422,7 +423,7 @@ void test("GitHub Copilot login reaches its device code, and closing the code di
     await prompt.getByRole("button", { name: /continue/i }).click();
 
     await prompt.locator("code").filter({ hasText: "ABCD-1234" }).waitFor({ state: "visible" });
-    await expectPolls(() => tokenPolls > 0);
+    await firstPoll;
 
     await page.keyboard.press("Escape");
     await prompt.waitFor({ state: "detached" });
@@ -432,10 +433,3 @@ void test("GitHub Copilot login reaches its device code, and closing the code di
     await page.getByRole("button", { name: "Login with GitHub Copilot" }).waitFor({ state: "visible" });
   });
 });
-
-async function expectPolls(condition: () => boolean): Promise<void> {
-  for (let attempt = 0; attempt < 50 && !condition(); attempt += 1) {
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
-  assert.ok(condition(), "the login never polled for its token");
-}
