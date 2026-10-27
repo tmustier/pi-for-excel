@@ -35,7 +35,7 @@ import { effectiveToolOutputLimits } from "../context/window-budgets.js";
 import { findTrailingContextOverflowError } from "../compaction/overflow-recovery.js";
 import { readAutoCompactionEnabled } from "../compaction/settings.js";
 import { runCompactCommand } from "../commands/builtins/export.js";
-import { getFilesWorkspace } from "../files/workspace.js";
+import { describeImportRenames, getFilesWorkspace } from "../files/workspace.js";
 import { ConnectionManager } from "../connections/manager.js";
 import { createAllTools } from "../tools/index.js";
 import { collectRequiredConnectionIds } from "../tools/connection-requirements.js";
@@ -721,6 +721,11 @@ export async function initTaskpane(opts: {
     void refreshWorkbookState();
   });
 
+  // Convention overrides live in the system prompt; rebuild it when they change.
+  document.addEventListener("pi:conventions-updated", () => {
+    void refreshCapabilitiesForAllRuntimes();
+  });
+
   document.addEventListener(PI_EXPERIMENTAL_FEATURE_CHANGED_EVENT, () => {
     void refreshCapabilitiesForAllRuntimes();
   });
@@ -736,6 +741,25 @@ export async function initTaskpane(opts: {
   document.addEventListener(PI_SKILLS_CHANGED_EVENT, () => {
     void refreshCapabilitiesForAllRuntimes();
   });
+
+  // Other taskpanes (browser tabs, Excel windows) share settings storage but
+  // not DOM events. Tell them to rebuild their prompt when guidance changes here.
+  if (typeof BroadcastChannel !== "undefined") {
+    const settingsChannel = new BroadcastChannel("pi-for-excel:settings-changed");
+    for (const eventName of [
+      "pi:rules-updated",
+      "pi:conventions-updated",
+      PI_SKILLS_CHANGED_EVENT,
+      PI_INTEGRATIONS_CHANGED_EVENT,
+    ]) {
+      document.addEventListener(eventName, () => {
+        settingsChannel.postMessage(eventName);
+      });
+    }
+    settingsChannel.addEventListener("message", () => {
+      void refreshWorkbookState();
+    });
+  }
 
   document.addEventListener(PI_EXECUTION_MODE_CHANGED_EVENT, () => {
     void refreshCapabilitiesForAllRuntimes();
@@ -1782,14 +1806,15 @@ export async function initTaskpane(opts: {
     void workspace.importFiles(files, {
       audit: { actor: "user", source: "input-drop" },
     })
-      .then((count) => {
+      .then((result) => {
+        const count = result.imported;
         if (count <= 0) {
           showToast(t("init.noFilesImported"));
           return;
         }
 
         const importedLabel = `${count} file${count === 1 ? "" : "s"}`;
-        showToast(t("init.importedIntoFiles", { label: importedLabel }));
+        showToast(t("init.importedIntoFiles", { label: importedLabel }) + describeImportRenames(result));
       })
       .catch((error: unknown) => {
         showToast(t("init.importFailed", { error: error instanceof Error ? error.message : t("init.unknownError") }));
