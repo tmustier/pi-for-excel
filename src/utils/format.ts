@@ -45,10 +45,6 @@ export function escapeMarkdownCell(text: string): string {
     .replace(/\r\n|\r|\n/g, "\\n");
 }
 
-function isGeneralNumberFormat(numberFormat: string | undefined): boolean {
-  return numberFormat === undefined || numberFormat === "" || numberFormat === "General";
-}
-
 /** True when displayed text such as "£1,234.50", "12.5%" or "(3.00)" denotes exactly `value`. */
 function displayDenotesValue(text: string, value: number): boolean {
   let s = text.trim();
@@ -81,19 +77,13 @@ export function formatDisplayedCell(
   numberFormat: string | undefined,
 ): { text: string; usedRaw: boolean } {
   const raw = formatCellValue(value);
-  if (typeof value !== "number" || text === undefined || isGeneralNumberFormat(numberFormat)) {
+  if (typeof value !== "number" || text === undefined || numberFormat === undefined || numberFormat === "" || numberFormat === "General") {
     return { text: raw, usedRaw: false };
   }
   const shown = text.trim();
   if (shown === "" || shown === raw || /^#+$/u.test(shown)) return { text: raw, usedRaw: false };
   if (displayDenotesValue(shown, value)) return { text: shown, usedRaw: false };
   return { text: `${shown} [${raw}]`, usedRaw: true };
-}
-
-function markdownCellText(v: unknown): string {
-  if (v === null || v === undefined) return "";
-  if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") return formatCellValue(v);
-  return JSON.stringify(v);
 }
 
 /**
@@ -104,7 +94,12 @@ function markdownCellText(v: unknown): string {
 export function formatAsMarkdownTable(values: unknown[][]): string {
   if (!values || values.length === 0) return "(empty)";
 
-  const rows = values.map((row) => row.map((v) => escapeMarkdownCell(markdownCellText(v))));
+  const rows = values.map((row) => row.map((v) => {
+    const text = v === null || v === undefined ? ""
+      : typeof v === "string" || typeof v === "number" || typeof v === "boolean" ? formatCellValue(v)
+        : JSON.stringify(v);
+    return escapeMarkdownCell(text);
+  }));
   const numCols = Math.max(...rows.map((r) => r.length));
 
   // Pad rows to uniform width

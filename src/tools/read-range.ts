@@ -100,16 +100,6 @@ interface ReadRangePage {
 
 const WHOLE_LINE_PATTERN = /^\$?(?:[A-Z]+:\$?[A-Z]+|\d+:\$?\d+)$/iu;
 
-function cellCount(block: CellBlock): number {
-  return block.rowCount * block.columnCount;
-}
-
-function firstPage(target: CellBlock): CellBlock {
-  const columnCount = Math.min(target.columnCount, MAX_PAGE_COLUMNS);
-  const rowCount = Math.min(target.rowCount, MAX_PAGE_ROWS, Math.max(1, Math.floor(READ_RANGE_PAGE_CELLS / columnCount)));
-  return { ...target, rowCount, columnCount };
-}
-
 async function loadPage(context: Excel.RequestContext, ref: string, mode: Mode): Promise<ReadRangePage> {
   const resolved = await resolveSheetRef(context, ref);
   const { sheet } = resolved;
@@ -132,7 +122,7 @@ async function loadPage(context: Excel.RequestContext, ref: string, mode: Mode):
   };
 
   // Whole columns/rows and anything bigger than a page only make sense where data is.
-  const clip = WHOLE_LINE_PATTERN.test(resolved.address) || cellCount(requested) > READ_RANGE_PAGE_CELLS;
+  const clip = WHOLE_LINE_PATTERN.test(resolved.address) || requested.rowCount * requested.columnCount > READ_RANGE_PAGE_CELLS;
   let target: CellBlock | null = requested;
   if (clip) {
     target = used.isNullObject
@@ -149,10 +139,10 @@ async function loadPage(context: Excel.RequestContext, ref: string, mode: Mode):
     return { ...base, target: null, clippedToUsedRange: clip, page: null, ...empty };
   }
 
-  const pageShape = firstPage(target);
-  let rowCount = pageShape.rowCount;
+  const columnCount = Math.min(target.columnCount, MAX_PAGE_COLUMNS);
+  let rowCount = Math.min(target.rowCount, MAX_PAGE_ROWS, Math.max(1, Math.floor(READ_RANGE_PAGE_CELLS / columnCount)));
   for (;;) {
-    const page = { ...pageShape, rowCount };
+    const page = { ...target, rowCount, columnCount };
     const range = sheet.getRangeByIndexes(page.rowIndex, page.columnIndex, page.rowCount, page.columnCount);
     range.load(mode === "csv" ? "values,formulas,numberFormat" : "values,formulas,formulasR1C1,numberFormat,text");
     try {
@@ -171,7 +161,15 @@ async function loadPage(context: Excel.RequestContext, ref: string, mode: Mode):
     const numberFormats = Value.Parse(textGridSchema, range.numberFormat);
     const text = mode === "csv" ? [] : Value.Parse(textGridSchema, range.text);
     const formulasR1C1 = mode === "csv" ? [] : Value.Parse(cellValueGridSchema, range.formulasR1C1);
-    const state = await collectRangeState(context, sheet, page, spillCandidates(formulas, page));
+    const spillCells: string[] = [];
+    for (const [r, row] of formulas.entries()) {
+      for (const [c, formula] of row.entries()) {
+        if (typeof formula === "string" && formula.startsWith("=") && canSpill(formula)) {
+          spillCells.push(`${colToLetter(page.columnIndex + c)}${page.rowIndex + r + 1}`);
+        }
+      }
+    }
+    const state = await collectRangeState(context, sheet, page, spillCells);
     const comments = mode === "detailed" ? await loadComments(context, sheet, blockAddress(page)) : [];
 
     return {
@@ -188,18 +186,6 @@ async function loadPage(context: Excel.RequestContext, ref: string, mode: Mode):
       state,
     };
   }
-}
-
-function spillCandidates(formulas: CellValue[][], page: CellBlock): string[] {
-  const cells: string[] = [];
-  for (const [r, row] of formulas.entries()) {
-    for (const [c, formula] of row.entries()) {
-      if (typeof formula === "string" && formula.startsWith("=") && canSpill(formula)) {
-        cells.push(`${colToLetter(page.columnIndex + c)}${page.rowIndex + r + 1}`);
-      }
-    }
-  }
-  return cells;
 }
 
 async function loadComments(
@@ -323,12 +309,6 @@ const MAX_LISTED_TEXT_NUMBERS = 10;
 const AGGREGATE_HINT_MIN_NUMBERS = 50;
 const MAX_SUMMED_COLUMNS = 10;
 
-function isNumberStoredAsText(value: CellValue): value is string {
-  if (typeof value !== "string") return false;
-  const text = value.trim();
-  return /\d/u.test(text) && NUMERIC_TEXT_PATTERN.test(text);
-}
-
 /**
  * Notes about the values themselves: numbers stored as text (SUM and AVERAGE
  * skip them, and the grid shows them like numbers), and, for long numeric
@@ -337,15 +317,16 @@ function isNumberStoredAsText(value: CellValue): value is string {
 function renderValueNotes(values: CellValue[][], page: CellBlock): string[] {
   const lines: string[] = [];
   const textNumbers: string[] = [];
-  const numericRows = new Map<number, number[]>();
+  const numericColumns = new Map<number, { count: number; sum: number }>();
   for (const [r, row] of values.entries()) {
     for (const [c, value] of row.entries()) {
-      if (isNumberStoredAsText(value)) {
+      if (typeof value === "string" && /\d/u.test(value.trim()) && NUMERIC_TEXT_PATTERN.test(value.trim())) {
         textNumbers.push(`${colToLetter(page.columnIndex + c)}${page.rowIndex + r + 1} "${value}"`);
       } else if (typeof value === "number") {
-        const rows = numericRows.get(c) ?? [];
-        rows.push(page.rowIndex + r + 1);
-        numericRows.set(c, rows);
+        const column = numericColumns.get(c) ?? { count: 0, sum: 0 };
+        column.count += 1;
+        column.sum += value;
+        numericColumns.set(c, column);
       }
     }
   }
@@ -355,19 +336,14 @@ function renderValueNotes(values: CellValue[][], page: CellBlock): string[] {
       listCapped(textNumbers, MAX_LISTED_TEXT_NUMBERS, "cells"),
     );
   }
-  const longColumns = [...numericRows.entries()]
-    .filter(([, rows]) => rows.length >= AGGREGATE_HINT_MIN_NUMBERS)
+  const longColumns = [...numericColumns.entries()]
+    .filter(([, column]) => column.count >= AGGREGATE_HINT_MIN_NUMBERS)
     .slice(0, MAX_SUMMED_COLUMNS);
   if (longColumns.length > 0) {
-    const sums = longColumns.map(([c, rows]) => {
-      let sum = 0;
-      for (const row of values) {
-        const value = row[c];
-        if (typeof value === "number") sum += value;
-      }
+    const sums = longColumns.map(([c, { count, sum }]) => {
       // Round away float noise (0.1 + 0.2) without hiding real digits.
       const shown = Number(sum.toPrecision(12)).toLocaleString("en-US", { maximumFractionDigits: 10 });
-      return `${colToLetter(page.columnIndex + c)} ${shown} (${rows.length} numbers)`;
+      return `${colToLetter(page.columnIndex + c)} ${shown} (${count} numbers)`;
     });
     lines.push(
       `Column sums on this page (numbers only): ${sums.join(", ")}. ` +
@@ -413,17 +389,6 @@ function hasAnyNonEmptyCell(values: CellValue[][]): boolean {
 function listCapped(items: string[], max: number, noun: string): string {
   if (items.length <= max) return items.join(", ");
   return `${items.slice(0, max).join(", ")}, … (+${items.length - max} more ${noun})`;
-}
-
-/** Values as displayed, with the stored value in brackets when the display hides it. */
-function displayGrid(result: ReadRangePage): { grid: string[][]; usedRaw: boolean } {
-  let usedRaw = false;
-  const grid = result.values.map((row, r) => row.map((value, c) => {
-    const cell = formatDisplayedCell(value, result.text[r]?.[c], result.numberFormats[r]?.[c]);
-    usedRaw ||= cell.usedRaw;
-    return cell.text;
-  }));
-  return { grid, usedRaw };
 }
 
 function formatAsExcelMarkdownTable(values: string[][], page: CellBlock): string {
@@ -546,7 +511,12 @@ function formatTable(
     }
   }
 
-  const { grid, usedRaw } = displayGrid(result);
+  let usedRaw = false;
+  const grid = result.values.map((row, r) => row.map((value, c) => {
+    const cell = formatDisplayedCell(value, result.text[r]?.[c], result.numberFormats[r]?.[c]);
+    usedRaw ||= cell.usedRaw;
+    return cell.text;
+  }));
   lines.push("");
   if (mode === "detailed") lines.push("### Values");
   if (usedRaw) lines.push("_Cells show the displayed text; [brackets] hold the stored value where the display differs._");
@@ -587,10 +557,6 @@ function toCsvField(value: CellValue): string {
   return /[",\n\r]/u.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
 }
 
-function valuesToCsv(values: CellValue[][]): string {
-  return values.map((row) => row.map((v) => toCsvField(v)).join(",")).join("\n");
-}
-
 function formatCsvOutput(
   lines: string[],
   result: ReadRangePage,
@@ -601,7 +567,7 @@ function formatCsvOutput(
     return { content: [{ type: "text", text: lines.join("\n") }], details: undefined };
   }
 
-  const csv = valuesToCsv(result.values);
+  const csv = result.values.map((row) => row.map(toCsvField).join(",")).join("\n");
   lines.push("", "```csv", csv, "```");
 
   return {
