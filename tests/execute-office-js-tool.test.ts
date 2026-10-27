@@ -68,3 +68,19 @@ void test("execute_office_js reports non-serializable result payloads", async ()
   const text = firstText(result);
   assert.match(text, /Result is not JSON-serializable/u);
 });
+
+void test("execute_office_js on a protected sheet is an error that names the protection", async () => {
+  const { FakeExcelHost, OfficeError, withFakeExcel } = await import("./fixtures/excel-write-host.ts");
+  const host = new FakeExcelHost(["Sheet1", "Locked"]);
+  host.sheet("Locked").protect();
+  await withFakeExcel(host, async () => {
+    const tool = createExecuteOfficeJsTool({
+      runCode: () => Promise.reject(new OfficeError("AccessDenied", "You cannot perform the requested operation.", "Range.values")),
+    });
+    const result = await tool.execute("ojs-protected", { explanation: "Write to Locked", code: "return 1;" });
+
+    assert.equal(result.isError, true);
+    assert.match(firstText(result), /Protected sheet\(s\): "Locked"\. Excel refused the change.*Review → Unprotect Sheet/u);
+    assert.doesNotMatch(firstText(result), /You cannot perform the requested operation/u);
+  });
+});

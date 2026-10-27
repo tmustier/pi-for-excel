@@ -121,7 +121,18 @@ async function describeProtection(sheetName: string | undefined): Promise<string
       sheet.load("name");
       sheet.protection.load("protected");
       context.workbook.protection.load("protected");
+      // Without a named target (e.g. execute_office_js), the change may have hit any sheet.
+      const sheets = sheetName ? null : context.workbook.worksheets;
+      sheets?.load("items/name,items/protection/protected");
       await context.sync();
+      const protectedOthers = sheets && !sheet.protection.protected
+        ? sheets.items.filter((item) => item.protection.protected).map((item) => `"${item.name}"`)
+        : [];
+      if (protectedOthers.length > 0) {
+        return `Protected sheet(s): ${protectedOthers.join(", ")}. Excel refused the change, most likely because it touches one of them. ` +
+          "Pi cannot unprotect a sheet: ask the user to unprotect it (Review → Unprotect Sheet) " +
+          "or unlock the target cells, then retry.";
+      }
       if (sheet.protection.protected) {
         return `Sheet "${sheet.name}" is protected, so Excel refused the change. ` +
           "Pi cannot unprotect it: ask the user to unprotect the sheet (Review → Unprotect Sheet) " +

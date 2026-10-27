@@ -16,6 +16,7 @@ import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 
 import { excelRun } from "../excel/helpers.js";
 import { getErrorMessage } from "../utils/errors.js";
+import { describeExcelFailure, parseExcelError } from "./mutation/excel-failure.js";
 
 const MAX_CODE_CHARS = 20_000;
 const MAX_EXPLANATION_CHARS = 50;
@@ -199,14 +200,21 @@ export function createExecuteOfficeJsTool(
           details: undefined,
         };
       } catch (error) {
-        const message = getErrorMessage(error);
+        const parsed = parseExcelError(error);
+        // Office.js codes (AccessDenied, cell-edit mode, payload limits) get the same reasons as the
+        // structured tools; errors thrown by the code itself keep their message.
+        const message = parsed.code ? (await describeExcelFailure(parsed)).reason : getErrorMessage(error);
+        const ranEarlier = parsed.code
+          ? "\n\nSteps in the code before the failing call may already have changed the workbook; read back before retrying."
+          : "";
 
         return {
           content: [{
             type: "text",
-            text: `Error executing Office.js: ${message}`,
+            text: `Error executing Office.js: ${message}${ranEarlier}`,
           }],
           details: undefined,
+          isError: true,
         };
       }
     },
