@@ -58,4 +58,14 @@ First pass: 26 October 2026, Excel on the web in Amp orbs (Chrome over the DevTo
 | guidance-files-extensions.md | 156 | 142 | 14 | 0 | 0 |
 | ui-and-cross-cutting.md | 118 | 111 | 3 | 3 | 1 |
 
+### Combined fixes (`integration-fixes`)
+
+Second pass: 27 October 2026, on the `integration-fixes` branch (all open fix PRs merged together; a2b3f2d), one independent verifier per cluster, results in [integration-fixes/](integration-fixes/).
+
+| Cluster | Items | Pass | Fail | Blocked |
+| --- | --- | --- | --- | --- |
+| [setup](integration-fixes/setup.md) | 134 | 132 | 2 | 0 |
+
+The other clusters are in progress.
+
 A fail on a "(suspected bug)" row means the bug reproduced; those are filed in [bug-triage.md](../bug-triage.md). Fails that were document errors have been corrected in the documents and are noted in the row. No document is marked `verified`: that needs a human pass.

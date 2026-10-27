@@ -163,6 +163,8 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 | [P-151](#p-151-the-first-ctrlcmdo-appears-to-do-nothing-and-expanded-cards-collapse-again-on-re-render) | The first Ctrl/Cmd+O appears to do nothing, and expanded cards collapse again on re-render | low | transcript | fix | Fix in PR [#786](https://github.com/tmustier/pi-for-excel/pull/786) (open) |
 | [P-152](#p-152-the-stop-button-and-escape-treat-queued-prompts-and-commands-differently) | The Stop button and Escape treat queued prompts and commands differently | low | turn | product call | Fix in PR [#789](https://github.com/tmustier/pi-for-excel/pull/789) (open) |
 | [P-153](#p-153-opening-a-built-in-doc-in-files-starts-a-render-loop-so-its-download-and-copy-buttons-never-respond) | Opening a built-in doc in Files starts a render loop, so its Download and Copy buttons never respond | medium | files | fix | Fix in PR [#790](https://github.com/tmustier/pi-for-excel/pull/790) (open): e65c3b7 |
+| [P-154](#p-154-turning-the-proxy-off-leaves-the-proxy-isnt-running-banner-up-until-reload) | Turning the proxy off leaves the "proxy isn't running" banner up until reload | low | proxy | fix | Assigned to #793 (follow-up; not yet in the PR) |
+| [P-155](#p-155-the-proxy-banners-copy-command-does-nothing-in-excel-on-the-web) | The proxy banner's Copy command does nothing in Excel on the web | low | proxy | fix | Assigned to #793 (follow-up; not yet in the PR) |
 
 ## High
 
@@ -2018,3 +2020,27 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Raised by:** STOP-08, STOP-11; [turns](foundations/turns.md#open-questions-and-verification)
 - **Status:** Confirmed in Excel on the web, 26 October 2026 (STOP-11)
 - **Owner:** Fix in PR [#789](https://github.com/tmustier/pi-for-excel/pull/789) (open)
+
+### P-154: Turning the proxy off leaves the "proxy isn't running" banner up until reload
+
+- **Where the user meets it:** The banner saying the proxy is turned on but isn't running, then Settings → Proxy → switch off.
+- **What happens / what was expected:** The banner stays until the taskpane reloads. Expected: it disappears when the proxy is turned off.
+- **Reproduce:** 1. Turn the proxy on with no proxy running; the banner appears. 2. Turn the proxy off.
+- **Why (from the code):** The banner's update() runs only when reachability flips (src/taskpane/proxy-status.ts:103-107; src/taskpane/init.ts:2266-2279), not when the setting changes.
+- **Severity:** `low`. A stale warning, cleared by a reload.
+- **Decision needed:** `fix`.
+- **Raised by:** PROXY-07 (integration-fixes verification, setup cluster, 27 October 2026)
+- **Status:** Confirmed in Excel on the web on integration-fixes a2b3f2d.
+- **Owner:** Assigned to #793 (follow-up; not yet in the PR)
+
+### P-155: The proxy banner's Copy command does nothing in Excel on the web
+
+- **Where the user meets it:** The proxy banner's command → Copy.
+- **What happens / what was expected:** Nothing is copied. Expected: the command is copied, or the user is shown it to copy by hand.
+- **Reproduce:** Open the proxy banner in Excel on the web and click Copy, then paste.
+- **Why (from the code):** The Excel frame denies clipboard-write, and src/ui/command-copy.ts:18-25 has no execCommand fallback (#795's copyText has one).
+- **Severity:** `low`. The command can be selected and copied by hand.
+- **Decision needed:** `fix`. Use #795's copyText.
+- **Raised by:** PROXY-10 (integration-fixes verification, setup cluster, 27 October 2026)
+- **Status:** Confirmed in Excel on the web on integration-fixes a2b3f2d; code unchanged from `main`.
+- **Owner:** Assigned to #793 (follow-up; not yet in the PR)
