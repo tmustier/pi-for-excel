@@ -235,21 +235,6 @@ function buildBehaviorGroup(ctx: SettingsPageContext): HTMLElement {
   return group.root;
 }
 
-async function describeActiveRules(): Promise<string> {
-  const settings = getAppStorage().settings;
-  const { workbookId } = await getWorkbookContext();
-  const [userRules, workbookRules] = await Promise.all([
-    getUserRules(settings),
-    getWorkbookRules(settings, workbookId),
-  ]);
-  const active: string[] = [];
-  if (userRules) active.push(t("rules-overlay.all-my-files"));
-  if (workbookRules) active.push(t("rules-overlay.this-file"));
-  return active.length > 0
-    ? t("settings.row.rules.active", { list: active.join(", ") })
-    : t("settings.row.rules.none");
-}
-
 function buildRulesDataGroup(ctx: SettingsPageContext): HTMLElement {
   const group = createSettingsGroup(t("settings.group.rules_data"));
 
@@ -267,8 +252,20 @@ function buildRulesDataGroup(ctx: SettingsPageContext): HTMLElement {
     onActivate: () => ctx.navigate("backups"),
   });
 
-  // Show which rules Pi is following right now, so active rules are visible.
-  void describeActiveRules().then((value) => rulesRow.setValue(value)).catch(() => {});
+  void (async () => {
+    const settings = getAppStorage().settings;
+    const { workbookId } = await getWorkbookContext();
+    const [userRules, workbookRules] = await Promise.all([
+      getUserRules(settings),
+      getWorkbookRules(settings, workbookId),
+    ]);
+    const active: string[] = [];
+    if (userRules) active.push(t("rules-overlay.all-my-files"));
+    if (workbookRules) active.push(t("rules-overlay.this-file"));
+    rulesRow.setValue(active.length > 0
+      ? t("settings.row.rules.active", { list: active.join(", ") })
+      : t("settings.row.rules.none"));
+  })().catch(() => {});
 
   group.list.append(rulesRow.root, backupsRow.root);
   return group.root;

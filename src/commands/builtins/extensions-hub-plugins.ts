@@ -84,39 +84,6 @@ async function confirmEnable(status: ExtensionRuntimeStatus): Promise<boolean> {
   });
 }
 
-/**
- * One in-taskpane dialog for URL installs: asks for the name and shows the
- * permissions this source will actually get (derived from its trust level).
- * Resolves to the trimmed name, or null when cancelled.
- */
-async function requestInstallName(url: string): Promise<string | null> {
-  const trust = deriveStoredExtensionTrust("ext.pending", { kind: "module", specifier: url });
-  const capabilities = listGrantedExtensionCapabilities(getDefaultPermissionsForTrust(trust));
-  const risky = capabilities.filter((c) => HIGH_RISK_CAPABILITIES.has(c));
-  const name = await requestTextInputDialog({
-    title: t("ext-hub-plugins.installDialogTitle"),
-    message: [
-      t("ext-hub-plugins.confirm.source", { source: url }),
-      "",
-      t("ext-hub-plugins.confirm.defaultPermissions"),
-      ...(capabilities.length > 0
-        ? capabilities.map((c) => `- ${describeExtensionCapability(c)}`)
-        : [`- ${t("ext-hub-plugins.confirm.none")}`]),
-      ...(risky.length > 0
-        ? ["", t("ext-hub-plugins.confirm.higherRisk"), ...risky.map((c) => `- ${describeExtensionCapability(c)}`)]
-        : []),
-      "",
-      t("ext-hub-plugins.installDialogName"),
-    ].join("\n"),
-    placeholder: t("ext-hub-plugins.installNamePlaceholder"),
-    confirmLabel: t("ext-hub-plugins.installButton"),
-    cancelLabel: t("confirm.cancel"),
-    restoreFocusOnClose: false,
-  });
-  const trimmed = name?.trim() ?? "";
-  return trimmed.length > 0 ? trimmed : null;
-}
-
 // ── Main render ─────────────────────────────────────
 
 export function renderPluginsTab(args: {
@@ -318,8 +285,30 @@ async function installFromUrl(
   }
 
   try {
-    const name = await requestInstallName(url);
-    if (name === null) return;
+    const trust = deriveStoredExtensionTrust("ext.pending", { kind: "module", specifier: url });
+    const capabilities = listGrantedExtensionCapabilities(getDefaultPermissionsForTrust(trust));
+    const risky = capabilities.filter((c) => HIGH_RISK_CAPABILITIES.has(c));
+    const name = (await requestTextInputDialog({
+      title: t("ext-hub-plugins.installDialogTitle"),
+      message: [
+        t("ext-hub-plugins.confirm.source", { source: url }),
+        "",
+        t("ext-hub-plugins.confirm.defaultPermissions"),
+        ...(capabilities.length > 0
+          ? capabilities.map((c) => `- ${describeExtensionCapability(c)}`)
+          : [`- ${t("ext-hub-plugins.confirm.none")}`]),
+        ...(risky.length > 0
+          ? ["", t("ext-hub-plugins.confirm.higherRisk"), ...risky.map((c) => `- ${describeExtensionCapability(c)}`)]
+          : []),
+        "",
+        t("ext-hub-plugins.installDialogName"),
+      ].join("\n"),
+      placeholder: t("ext-hub-plugins.installNamePlaceholder"),
+      confirmLabel: t("ext-hub-plugins.installButton"),
+      cancelLabel: t("confirm.cancel"),
+      restoreFocusOnClose: false,
+    }))?.trim();
+    if (!name) return;
     await manager.installFromUrl(name, url);
     await onChanged();
     showToast(t("ext-hub-plugins.toast.installed", { name }));
@@ -328,5 +317,4 @@ async function installFromUrl(
     showToast(t("ext-hub-plugins.toast.installFailed", { error: err instanceof Error ? err.message : String(err) }));
   }
 }
-
 
