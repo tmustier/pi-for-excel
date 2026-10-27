@@ -11,12 +11,12 @@ Plain fixes were sent to the owning pull requests:
 
 | Pull request | Fixes |
 | --- | --- |
-| #789 | CL-04 |
+| #789 | CL-04 (done in 40c5a36) |
 | #792 | WT-06 |
-| #791 | WT-08 |
-| #793 | CC-06, CC-09 |
+| #791 | WT-08 (done in 0b48b0d) |
+| #793 | CC-06, CC-09 (done in 599f8fc) |
 | #794 | WT-02, WT-04, WT-07, WT-09 (done in 6c54a39) |
-| #795 | CL-02 |
+| #795 | CL-02 (done in 6b89ad2) |
 
 The calls below wait for the product owner.
 
