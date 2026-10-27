@@ -69,9 +69,7 @@ The list of installed extensions, their enabled state and their permissions are 
 - **Widgets.** An extension's widget appears in a slot between the working indicator and the composer. Snake's board lives there while a game is open. Escape with focus outside the composer closes Snake's board.
 - **Commands.** Extension commands appear in the command menu next to built-ins and run even while the tab is busy unless the extension opts out.
 - **Tools.** Tools an extension registers are added to Pi's toolset after the built-in tools, in a stable order, and appear as ordinary [tool cards](../turn/tool-calls.md).
-- **Pi as installer.** `extensions_manager` is local state, not a workbook mutation. Both modes ask before installing/enabling code and uninstalling; Confirm also asks before disabling. Reload does not ask. Installation shows the code and requested capabilities; pasted code starts with restricted untrusted defaults plus approved grants. An action requiring consent cannot proceed without approval UI.
-
-Reload's missing Confirm approval is a known bug: reactivation of a sandboxed URL extension can import newer remote code. [PR #826](https://github.com/tmustier/pi-for-excel/pull/826) proposes approval before reload in Confirm, with declined reloads not executed and Auto unchanged. It is not merged; the current behavior above remains the contract until it lands.
+- **Pi as installer.** `extensions_manager` is local state, not a workbook mutation. Both modes ask before installing/enabling code and uninstalling; Confirm also asks before disabling and before reloading ("Reload an extension?"), because a reload runs the code again, including any newer version from its URL. A declined reload does not run. ([PR #826](https://github.com/tmustier/pi-for-excel/pull/826)) Installation shows the code and requested capabilities; pasted code starts with restricted untrusted defaults plus approved grants. An action requiring consent cannot proceed without approval UI.
 
 ## Modifiers
 
