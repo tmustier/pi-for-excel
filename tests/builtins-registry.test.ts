@@ -126,7 +126,18 @@ void test("command-layer contract: workspace commands complete, preserve failure
   };
 
   try {
+    commandRegistry.register({ name: "unrelated", description: "Restore saved conversations", source: "builtin", execute: () => {} });
     registerBuiltins(context);
+
+    const menuNames = commandRegistry.list("").map((command) => command.name);
+    assert.equal(menuNames[0], "new");
+    for (const hidden of ["debug", "experimental", "tools", "plugins", "skills", "share-session", "resume-here"]) {
+      assert.equal(menuNames.includes(hidden), false, `${hidden} must not crowd discovery`);
+    }
+    assert.equal(commandRegistry.list("res")[0]?.name, "resume");
+    assert.equal(commandRegistry.list("debug")[0]?.name, "debug");
+    assert.equal(commandRegistry.list("exper").some((command) => command.name === "experimental"), false);
+    for (const removed of ["share-session", "resume-here"]) assert.equal(commandRegistry.get(removed), undefined);
 
     for (const name of ["extensions", "plugins", "tools", "skills", "files"]) {
       await executeRegisteredCommand(name);
@@ -173,6 +184,7 @@ void test("slash-command dispatcher owns synchronous and asynchronous command fa
       name: "test-sync-failure",
       description: "Test synchronous failure",
       source: "builtin",
+      busyAllowed: false,
       execute: () => {
         executionCount += 1;
         throw new Error("sensitive sync failure");
@@ -372,7 +384,7 @@ void test("command-layer contract: recovery commands expose completion, errors, 
   }
 });
 
-void test("command-layer contract: busy policy allows workspace commands and blocks ordinary commands", () => {
+void test("command-layer contract: busy policy refuses only conversation conflicts", () => {
   const previousCommands = commandRegistry.list();
   const executed: string[] = [];
   const register = (command: Pick<SlashCommand, "name" | "source"> & Partial<Pick<SlashCommand, "busyAllowed">>): void => {
@@ -391,10 +403,9 @@ void test("command-layer contract: busy policy allows workspace commands and blo
 
   try {
     for (const command of commandRegistry.list()) commandRegistry.unregister(command.name);
-    const allowedWhileBusy = ["new", "rules", "resume", "history", "reopen", "yolo", "extensions", "plugins", "skills", "files", TOOLS_COMMAND_NAME];
+    const allowedWhileBusy = ["new", "rules", "resume", "history", "reopen", "yolo", "extensions", "plugins", "skills", "files", "name", "shortcuts", "debug", "experimental", TOOLS_COMMAND_NAME];
     for (const name of allowedWhileBusy) register({ name, source: "builtin" });
-    register({ name: "addons", source: "builtin" });
-    register({ name: "integrations", source: "builtin" });
+    register({ name: "prompt-template", source: "prompt" });
     register({ name: "opted-in", source: "builtin", busyAllowed: true });
     register({ name: "ext-default", source: "extension" });
     register({ name: "ext-opted-out", source: "extension", busyAllowed: false });
@@ -402,8 +413,7 @@ void test("command-layer contract: busy policy allows workspace commands and blo
     for (const name of allowedWhileBusy) assert.equal(run(name), "executed", `/${name} must run while busy`);
     assert.equal(run("opted-in"), "executed");
     assert.equal(run("ext-default"), "executed", "extension commands run while busy unless they opt out");
-    assert.equal(run("addons"), "busy-blocked");
-    assert.equal(run("integrations"), "busy-blocked");
+    assert.equal(run("prompt-template"), "busy-blocked");
     assert.equal(run("ext-opted-out"), "busy-blocked");
     assert.equal(run("compact"), "not-found");
     assert.deepEqual(

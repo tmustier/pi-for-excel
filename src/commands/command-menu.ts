@@ -136,7 +136,18 @@ function renderMenu(): void {
 
   menuEl.replaceChildren();
 
+  let previousGroup: SlashCommand["menuGroup"];
   for (const [index, command] of filteredCommands.entries()) {
+    const group = command.menuGroup ?? "setup";
+    if (group !== previousGroup) {
+      const heading = document.createElement("div");
+      heading.className = "pi-cmd-group";
+      heading.setAttribute("role", "presentation");
+      heading.textContent = group === "chat" ? t("command-menu.group.chat")
+        : group === "workbook" ? t("command-menu.group.workbook") : t("command-menu.group.setup");
+      menuEl.appendChild(heading);
+      previousGroup = group;
+    }
     const badge = SOURCE_BADGES[command.source];
     const isSelected = index === selectedIndex;
 
@@ -163,7 +174,9 @@ function renderMenu(): void {
 
     const description = document.createElement("span");
     description.className = "pi-cmd-desc";
-    description.textContent = command.description;
+    description.textContent = command.name === "extensions"
+      ? t("command-menu.extensionsAliases") : command.description;
+    description.title = description.textContent;
     item.appendChild(description);
 
     // Keep focus (and the menu) in the composer while clicking a row.

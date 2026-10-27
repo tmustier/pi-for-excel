@@ -87,6 +87,13 @@
   cursor: pointer;
 }
 
+.pi-cmd-group {
+  padding: 6px 10px 2px;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--muted-foreground);
+}
+
 .pi-cmd-item.selected {
   background: var(--pi-green-light);
 }

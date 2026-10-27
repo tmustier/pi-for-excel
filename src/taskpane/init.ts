@@ -68,7 +68,6 @@ import {
 } from "../tools/with-workbook-coordinator.js";
 import { registerBuiltins } from "../commands/builtins.js";
 import { ExtensionRuntimeManager } from "../extensions/runtime-manager.js";
-import type { ResumeDialogTarget } from "../commands/builtins/resume-target.js";
 import {
   configureSettingsPages,
   openSettings,
@@ -88,11 +87,6 @@ import {
   PI_EXECUTION_MODE_CHANGED_EVENT,
   type ExecutionMode,
 } from "../execution/mode.js";
-import {
-  getStoredModelSwitchBehavior,
-  setStoredModelSwitchBehavior,
-  type ModelSwitchBehavior,
-} from "../models/switch-behavior.js";
 import { getResolvedConventions } from "../conventions/store.js";
 import {
   buildIntegrationPromptEntries,
@@ -422,22 +416,6 @@ export async function initTaskpane(opts: {
 
   const setExecutionMode = async (mode: ExecutionMode): Promise<void> => {
     await executionModeController.setMode(mode);
-  };
-
-  const loadModelSwitchBehavior = async (): Promise<ModelSwitchBehavior> => {
-    try {
-      return await getStoredModelSwitchBehavior(settings);
-    } catch {
-      return "inPlace";
-    }
-  };
-
-  let modelSwitchBehavior: ModelSwitchBehavior = await loadModelSwitchBehavior();
-
-  const getModelSwitchBehavior = (): ModelSwitchBehavior => modelSwitchBehavior;
-
-  const setModelSwitchBehavior = async (nextBehavior: ModelSwitchBehavior): Promise<void> => {
-    modelSwitchBehavior = await setStoredModelSwitchBehavior(settings, nextBehavior);
   };
 
   const resolveWorkbookContext = async (): Promise<WorkbookContext> => {
@@ -1273,7 +1251,7 @@ export async function initTaskpane(opts: {
     const agent = new Agent({
       initialState: {
         model: initialModel,
-        thinkingLevel: initialModel.reasoning ? "high" : "off",
+        thinkingLevel: clampThinkingLevel(initialModel, getActiveRuntime()?.agent.state.thinkingLevel ?? "high"),
         messages: [{
           role: "system",
           content: "",
@@ -1620,22 +1598,13 @@ export async function initTaskpane(opts: {
 
   /**
    * Opens a saved session in a tab. A session is open in at most one tab, so
-   * a session that is already open switches to its tab. Shows the refusal
-   * toast itself and returns null when nothing was opened.
+   * a session that is already open switches to its tab.
    */
   const openSavedSession = async (
     sessionData: SessionData,
     target: OpenSessionTarget,
-  ): Promise<{ outcome: "opened" | "replaced" | "focused"; title: string } | null> => {
+  ): Promise<{ outcome: "opened" | "replaced" | "focused"; title: string }> => {
     const result = await runtimeManager.openSession(sessionData, target);
-    if (result.outcome === "missing") {
-      showToast(t("init.noActiveSession"));
-      return null;
-    }
-    if (result.outcome === "busy") {
-      showToast(t("init.currentTabBusy"));
-      return null;
-    }
 
     // An open session is not "recently closed" any more.
     recentlyClosed.removeBySessionId(result.runtime.persistence.getSessionId());
@@ -1645,21 +1614,9 @@ export async function initTaskpane(opts: {
     return { outcome: result.outcome, title: getRuntimeTabTitle(result.runtime.runtimeId) };
   };
 
-  const openResumePicker = async (defaultTarget: ResumeDialogTarget = "new_tab"): Promise<void> => {
+  const openResumePicker = async (): Promise<void> => {
     await showResumeDialog({
-      defaultTarget,
-      onOpenSession: async (sessionData: SessionData, resumeTarget: ResumeDialogTarget) => {
-        if (resumeTarget === "new_tab") {
-          return openSavedSession(sessionData, { kind: "new_tab" });
-        }
-
-        const activeRuntime = getActiveRuntime();
-        if (!activeRuntime) {
-          showToast(t("init.noActiveSession"));
-          return null;
-        }
-        return openSavedSession(sessionData, { kind: "replace", runtimeId: activeRuntime.runtimeId });
-      },
+      onOpenSession: (sessionData: SessionData) => openSavedSession(sessionData, { kind: "resume" }),
       getRecentlyClosedItems: () => recentlyClosed.snapshot(),
       onReopenRecentlyClosed: async (item) => {
         return reopenRecentlyClosedById(item.id);
@@ -2030,8 +1987,6 @@ export async function initTaskpane(opts: {
   configureSettingsPages({
     getExecutionMode,
     setExecutionMode,
-    getModelSwitchBehavior,
-    setModelSwitchBehavior,
     models: modelRuntime.models,
     isAnyTabBusy: () => runtimeManager.snapshotTabs().some((tab) => tab.isBusy),
     onRulesSaved: async () => {
@@ -2074,22 +2029,16 @@ export async function initTaskpane(opts: {
     const result = await runtimeManager.selectModel({
       runtimeId,
       nextModel,
-      behavior: getModelSwitchBehavior(),
     });
 
     if (result.outcome === "missing") {
       showToast(t("init.sessionNotFound"));
       return;
     }
-    if (result.outcome === "busy") {
-      showToast(t("init.waitBeforeChangingModels"));
-      return;
-    }
     if (result.outcome === "unchanged") return;
 
-    if (result.outcome === "forked") {
-      sidebar.syncFromAgent();
-      showToast(t("init.openedInNewTab", { title: result.title }));
+    if (result.outcome === "next_turn") {
+      showToast(t("init.modelNextTurn", { model: nextModel.name }));
     }
     document.dispatchEvent(new CustomEvent("pi:model-changed"));
     document.dispatchEvent(new CustomEvent("pi:status-update"));
@@ -2120,12 +2069,6 @@ export async function initTaskpane(opts: {
       openModelSelectorDialog({
         models: modelRuntime.models,
         currentModel,
-        // Same rule from every entry point (/model, status bar): a busy tab keeps
-        // its model, so the list says so up front instead of refusing a pick.
-        getDisabledReason: () => {
-          const runtime = runtimeManager.getRuntime(targetRuntimeId);
-          return runtime && isRuntimeBusy(runtime) ? t("modelSelector.busy") : undefined;
-        },
         onSelect: (model) => {
           void applyModelSelection(targetRuntimeId, model);
         },
@@ -2152,8 +2095,8 @@ export async function initTaskpane(opts: {
     createRuntime: async () => {
       await createRuntimeFromUi();
     },
-    openResumeDialog: async (defaultTarget: ResumeDialogTarget = "new_tab") => {
-      await openResumePicker(defaultTarget);
+    openResumeDialog: async () => {
+      await openResumePicker();
     },
     openRecoveryDialog,
     reopenLastClosed,
@@ -2322,7 +2265,7 @@ export async function initTaskpane(opts: {
       });
   };
   sidebar.onOpenResumePicker = () => {
-    void openResumePicker("new_tab");
+    void openResumePicker();
   };
   sidebar.onOpenRecovery = () => {
     void openRecoveryDialog();

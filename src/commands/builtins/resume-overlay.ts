@@ -5,11 +5,6 @@
 import type { SessionData, SessionMetadata } from "../../storage/local/types.js";
 import { getAppStorage } from "../../storage/local/app-storage.js";
 
-import {
-  getCrossWorkbookResumeConfirmMessage,
-  getResumeTargetLabel,
-  type ResumeDialogTarget,
-} from "./resume-target.js";
 import { formatRelativeDate } from "./overlay-relative-date.js";
 import {
   closeOverlayById,
@@ -110,8 +105,7 @@ function buildWorkbookFilterRow(opts: {
 export type ResumeOpenResult = { outcome: "opened" | "replaced" | "focused"; title: string } | null;
 
 export async function showResumeDialog(opts: {
-  defaultTarget?: ResumeDialogTarget;
-  onOpenSession: (sessionData: SessionData, target: ResumeDialogTarget) => Promise<ResumeOpenResult>;
+  onOpenSession: (sessionData: SessionData) => Promise<ResumeOpenResult>;
   getRecentlyClosedItems: () => readonly ResumeRecentlyClosedItem[];
   onReopenRecentlyClosed: (item: ResumeRecentlyClosedItem) => Promise<boolean>;
 }): Promise<void> {
@@ -145,7 +139,6 @@ export async function showResumeDialog(opts: {
   }
 
   let showAllWorkbooks = workbookId === null;
-  let selectedTarget: ResumeDialogTarget = opts.defaultTarget ?? "new_tab";
 
   const dialog = createOverlayDialog({
     overlayId: RESUME_OVERLAY_ID,
@@ -160,22 +153,6 @@ export async function showResumeDialog(opts: {
     title: t("resume.title"),
     subtitle: t("resume.subtitle"),
   });
-
-  const targetControls = document.createElement("div");
-  targetControls.className = "pi-resume-target-controls";
-
-  const openInNewTabButton = document.createElement("button");
-  openInNewTabButton.type = "button";
-  openInNewTabButton.className = "pi-overlay-btn pi-overlay-btn--ghost pi-resume-target-btn";
-  openInNewTabButton.textContent = t("resume.openInNewTab");
-
-  const replaceCurrentButton = document.createElement("button");
-  replaceCurrentButton.type = "button";
-  replaceCurrentButton.className = "pi-overlay-btn pi-overlay-btn--ghost pi-resume-target-btn";
-  replaceCurrentButton.textContent = t("resume.replaceCurrent");
-
-  const targetHint = document.createElement("div");
-  targetHint.className = "pi-resume-target-hint";
 
   const body = document.createElement("div");
   body.className = "pi-overlay-body pi-resume-body";
@@ -211,31 +188,7 @@ export async function showResumeDialog(opts: {
   savedSection.append(savedTitle, list);
   body.append(recentSection, savedSection);
 
-  const syncTargetButtons = () => {
-    const isNewTab = selectedTarget === "new_tab";
-
-    openInNewTabButton.classList.toggle("is-active", isNewTab);
-    replaceCurrentButton.classList.toggle("is-active", !isNewTab);
-
-    openInNewTabButton.setAttribute("aria-pressed", String(isNewTab));
-    replaceCurrentButton.setAttribute("aria-pressed", String(!isNewTab));
-    targetHint.textContent = t("resume.defaultActionHint", { action: getResumeTargetLabel(selectedTarget) });
-  };
-
-  openInNewTabButton.addEventListener("click", () => {
-    selectedTarget = "new_tab";
-    syncTargetButtons();
-  });
-
-  replaceCurrentButton.addEventListener("click", () => {
-    selectedTarget = "replace_current";
-    syncTargetButtons();
-  });
-
-  targetControls.append(openInNewTabButton, replaceCurrentButton);
-
-  dialog.card.append(header, targetControls, targetHint);
-  syncTargetButtons();
+  dialog.card.append(header);
 
   if (workbookId) {
     dialog.card.appendChild(
@@ -342,14 +295,12 @@ export async function showResumeDialog(opts: {
           return;
         }
 
-        const targetMode = selectedTarget;
-
         if (workbookId) {
           const linkedWorkbookId = await getSessionWorkbookId(storage.settings, id);
           if (linkedWorkbookId && linkedWorkbookId !== workbookId) {
             const proceed = await requestConfirmationDialog({
               title: t("resume.confirm.anotherWorkbookTitle"),
-              message: getCrossWorkbookResumeConfirmMessage(targetMode),
+              message: t("resume.crossWorkbookNewTab"),
               confirmLabel: t("resume.confirm.resumeAnyway"),
               cancelLabel: t("confirm.cancel"),
               restoreFocusOnClose: false,
@@ -365,7 +316,7 @@ export async function showResumeDialog(opts: {
           return;
         }
 
-        const opened = await opts.onOpenSession(sessionData, targetMode);
+        const opened = await opts.onOpenSession(sessionData);
         // A refusal (e.g. the current tab is busy) keeps the picker open with its toast.
         if (!opened) return;
 

@@ -79,6 +79,8 @@ export interface SessionMetadata {
   title: string;
   /** True when the user chose the title; absent on sessions saved before this was recorded. */
   titleChosen?: boolean;
+  /** A title request was started; do not charge again after a reload or failure. */
+  titleGenerationAttempted?: boolean;
   /** ISO 8601 UTC timestamp of creation */
   createdAt: string;
   /** ISO 8601 UTC timestamp of last modification */
@@ -134,6 +136,8 @@ export interface SessionData {
   title: string;
   /** True when the user chose the title; absent on sessions saved before this was recorded. */
   titleChosen?: boolean;
+  /** A title request was started; do not charge again after a reload or failure. */
+  titleGenerationAttempted?: boolean;
   /** Last selected model */
   model: Model<Api>;
   /** Last selected thinking level */

@@ -5,10 +5,6 @@
 import type { Agent } from "@earendil-works/pi-agent-core";
 import { clampThinkingLevel } from "@earendil-works/pi-ai";
 
-import {
-  shouldForkModelSwitch,
-  type ModelSwitchBehavior,
-} from "../models/switch-behavior.js";
 import { areRuntimeModelsEquivalent } from "../models/model-refresh-owner.js";
 import type { ActionQueue } from "./action-queue.js";
 import type { QueueDisplay } from "./queue-display.js";
@@ -80,9 +76,7 @@ export interface RuntimeLifecycleSnapshot {
 
 export type RuntimeSnapshotListener = (snapshot: RuntimeLifecycleSnapshot) => void;
 export type SessionRuntimeFactory = (opts: CreateRuntimeOptions) => Promise<SessionRuntime>;
-export type ModelSelectionResult =
-  | { outcome: "missing" | "unchanged" | "busy" | "updated" }
-  | { outcome: "forked"; runtime: SessionRuntime; title: string };
+export type ModelSelectionResult = { outcome: "missing" | "unchanged" | "updated" | "next_turn" };
 
 /**
  * Where a saved session should open. A session is open in at most one tab, so
@@ -90,12 +84,9 @@ export type ModelSelectionResult =
  */
 export type OpenSessionTarget =
   | { kind: "new_tab"; tabNumber?: number }
-  | { kind: "replace"; runtimeId: string };
+  | { kind: "resume" };
 
-export type OpenSessionResult =
-  | { outcome: "opened" | "replaced" | "focused"; runtime: SessionRuntime }
-  | { outcome: "busy" }
-  | { outcome: "missing" };
+export type OpenSessionResult = { outcome: "opened" | "replaced" | "focused"; runtime: SessionRuntime };
 
 export function isRuntimeBusy(runtime: Pick<SessionRuntime, "agent" | "actionQueue">): boolean {
   return runtime.agent.state.isStreaming || runtime.actionQueue.isBusy();
@@ -223,20 +214,19 @@ export class SessionRuntimeManager {
       return { outcome: "focused", runtime: existing };
     }
 
-    if (target.kind === "replace") {
-      const runtime = this.runtimes.get(target.runtimeId);
-      if (!runtime) return { outcome: "missing" };
-      if (isRuntimeBusy(runtime)) return { outcome: "busy" };
-
-      await runtime.persistence.applyLoadedSession(sessionData);
-      this.switchRuntime(runtime.runtimeId);
-      return { outcome: "replaced", runtime };
+    if (target.kind === "resume") {
+      const runtime = this.getActiveRuntime();
+      if (runtime && !isRuntimeBusy(runtime) && countVisibleSessionMessages(runtime.agent.state.messages) === 0) {
+        await runtime.persistence.applyLoadedSession(sessionData);
+        this.switchRuntime(runtime.runtimeId);
+        return { outcome: "replaced", runtime };
+      }
     }
 
     const runtime = await this.createRuntime({
       activate: true,
       autoRestoreLatest: false,
-      ...(target.tabNumber !== undefined ? { tabNumber: target.tabNumber } : {}),
+      ...(target.kind === "new_tab" && target.tabNumber !== undefined ? { tabNumber: target.tabNumber } : {}),
     });
     await runtime.persistence.applyLoadedSession(sessionData);
     this.emit();
@@ -319,7 +309,6 @@ export class SessionRuntimeManager {
   async selectModel(args: {
     runtimeId: string;
     nextModel: Agent["state"]["model"];
-    behavior: ModelSwitchBehavior;
   }): Promise<ModelSelectionResult> {
     const runtime = this.runtimes.get(args.runtimeId);
     if (!runtime) return { outcome: "missing" };
@@ -331,40 +320,15 @@ export class SessionRuntimeManager {
       return { outcome: "unchanged" };
     }
 
-    if (isRuntimeBusy(runtime)) {
-      return { outcome: "busy" };
-    }
-
-    // The thinking level carries over only as far as the new model supports it.
+    const busy = isRuntimeBusy(runtime);
+    // Agent captures model and thinking once per run. Updating state changes the
+    // next run, not the model already streaming or continuing a tool batch.
     const thinkingLevel = clampThinkingLevel(args.nextModel, runtime.agent.state.thinkingLevel);
-
-    if (sameIdentity || !shouldForkModelSwitch({
-      behavior: args.behavior,
-      // Every tab starts with a hidden instruction message; only what the user sees counts.
-      hasMessages: countVisibleSessionMessages(runtime.agent.state.messages) > 0,
-    })) {
-      runtime.agent.state.model = args.nextModel;
-      runtime.agent.state.thinkingLevel = thinkingLevel;
-      await runtime.persistence.saveSession({ force: true });
-      return { outcome: "updated" };
-    }
-
-    const sourceTitle = this.snapshotTabs()
-      .find((tab) => tab.runtimeId === args.runtimeId)?.title ?? "Untitled";
-    const title = `${sourceTitle} (${args.nextModel.id})`;
-    const forkedRuntime = await this.createRuntime({
-      activate: true,
-      autoRestoreLatest: false,
-    });
-    forkedRuntime.agent.state.messages = structuredClone(runtime.agent.state.messages);
-    forkedRuntime.agent.state.model = args.nextModel;
-    forkedRuntime.agent.state.thinkingLevel = thinkingLevel;
-    await forkedRuntime.persistence.renameSession(title);
-    forkedRuntime.queueDisplay.clear();
-    forkedRuntime.queueDisplay.setActionQueue([]);
-    await forkedRuntime.persistence.saveSession({ force: true });
-
-    return { outcome: "forked", runtime: forkedRuntime, title };
+    runtime.agent.state.model = args.nextModel;
+    runtime.agent.state.thinkingLevel = thinkingLevel;
+    await runtime.persistence.saveSession({ force: true });
+    this.emit();
+    return { outcome: busy ? "next_turn" : "updated" };
   }
 
   refreshCapabilities(): Promise<void> {
@@ -422,7 +386,6 @@ export class SessionRuntimeManager {
         sessionId: runtime.persistence.getSessionId(),
         tabNumber,
         title: resolveTabTitle({
-          hasExplicitTitle: runtime.persistence.hasExplicitTitle(),
           sessionTitle: runtime.persistence.getSessionTitle(),
           defaultTabNumber: tabNumber,
         }),

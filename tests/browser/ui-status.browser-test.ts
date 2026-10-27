@@ -163,7 +163,7 @@ void test("toasts never cover the open slash-command menu", async () => {
     assert.equal(result.covered, 0);
 
     // A pointer click on a row runs it (hovering must not re-render the row away).
-    await page.locator("pi-input textarea").fill("/share");
+    await page.locator("pi-input textarea").fill("/shortcuts");
     await page.locator("#pi-command-menu .pi-cmd-item").first().click();
     await page.waitForFunction(() => document.querySelector("pi-input textarea")?.value === "", undefined, { timeout: 3_000 });
   });

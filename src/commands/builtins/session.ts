@@ -3,7 +3,6 @@
  */
 
 import type { SlashCommand } from "../types.js";
-import type { ResumeDialogTarget } from "./resume-target.js";
 import { requestConfirmationDialog } from "../../ui/confirm-dialog.js";
 import { showToast } from "../../ui/toast.js";
 import { t } from "../../language/index.js";
@@ -17,7 +16,7 @@ export interface ManualFullBackupSummary {
 export interface SessionCommandActions {
   renameActiveSession: (title: string) => Promise<void>;
   createRuntime: () => Promise<void>;
-  openResumeDialog: (defaultTarget?: ResumeDialogTarget) => Promise<void>;
+  openResumeDialog: () => Promise<void>;
   openRecoveryDialog: () => Promise<void>;
   reopenLastClosed: () => Promise<void>;
   revertLatestCheckpoint: () => Promise<void>;
@@ -43,14 +42,6 @@ export function createSessionIdentityCommands(actions: SessionCommandActions): S
 
         await actions.renameActiveSession(title);
         showToast(t("session.toast.named", { title }));
-      },
-    },
-    {
-      name: "share-session",
-      description: t("command.session.share"),
-      source: "builtin",
-      execute: () => {
-        showToast(t("session.toast.sharing_soon"));
       },
     },
   ];
@@ -97,15 +88,7 @@ export function createSessionLifecycleCommands(actions: SessionCommandActions): 
       description: t("command.session.resume"),
       source: "builtin",
       execute: async () => {
-        await actions.openResumeDialog("new_tab");
-      },
-    },
-    {
-      name: "resume-here",
-      description: t("command.resume_here.desc"),
-      source: "builtin",
-      execute: async () => {
-        await actions.openResumeDialog("replace_current");
+        await actions.openResumeDialog();
       },
     },
     {

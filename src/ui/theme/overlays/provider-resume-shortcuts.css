@@ -28,26 +28,6 @@
   margin: 0;
 }
 
-.pi-resume-target-controls {
-  display: flex;
-  gap: 6px;
-  margin: 0 0 4px;
-  flex-shrink: 0;
-}
-
-.pi-resume-target-btn.is-active {
-  background: oklch(0.57 0.15 165 / 0.16);
-  border-color: oklch(0.57 0.15 165 / 0.45);
-}
-
-.pi-resume-target-hint {
-  margin: 0 0 4px;
-  font-family: var(--font-sans);
-  font-size: var(--text-sm);
-  color: var(--muted-foreground);
-  flex-shrink: 0;
-}
-
 .pi-resume-workbook-filter {
   display: flex;
   align-items: center;

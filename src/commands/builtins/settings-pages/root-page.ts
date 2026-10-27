@@ -1,6 +1,6 @@
 /**
  * Settings root page — grouped navigation plus the handful of inline
- * behavior settings (execution mode, model-switch fork, language).
+ * behavior settings (execution mode, language).
  */
 
 import { getAppStorage } from "../../../storage/local/app-storage.js";
@@ -9,7 +9,6 @@ import { getWorkbookContext } from "../../../workbook/context.js";
 
 import { listOpenAiGatewayConfigs } from "../../../auth/custom-gateways.js";
 import { PI_EXECUTION_MODE_CHANGED_EVENT, type ExecutionMode } from "../../../execution/mode.js";
-import type { ModelSwitchBehavior } from "../../../models/switch-behavior.js";
 import { getLanguage, t } from "../../../language/index.js";
 import {
   Archive,
@@ -154,41 +153,6 @@ function buildBehaviorGroup(ctx: SettingsPageContext): HTMLElement {
     });
   }
 
-  // ── Fork model switch ──
-  const forkToggle = createSettingToggleRow({
-    label: t("settings.section.advanced.fork_label"),
-    sublabel: t("settings.section.advanced.fork_sublabel"),
-  });
-
-  const getModelSwitchBehavior = deps.getModelSwitchBehavior;
-  const setModelSwitchBehavior = deps.setModelSwitchBehavior;
-
-  if (!getModelSwitchBehavior || !setModelSwitchBehavior) {
-    forkToggle.input.disabled = true;
-  } else {
-    let currentBehavior = getModelSwitchBehavior();
-    forkToggle.input.checked = currentBehavior === "fork";
-
-    forkToggle.input.addEventListener("change", () => {
-      const nextBehavior: ModelSwitchBehavior = forkToggle.input.checked ? "fork" : "inPlace";
-      if (nextBehavior === currentBehavior) return;
-
-      forkToggle.input.disabled = true;
-      void setModelSwitchBehavior(nextBehavior).then(
-        () => {
-          currentBehavior = nextBehavior;
-          showToast(nextBehavior === "fork" ? t("settings.toast.fork_on") : t("settings.toast.fork_off"));
-        },
-        () => {
-          forkToggle.input.checked = currentBehavior === "fork";
-          showToast(t("settings.toast.fork_failed"));
-        },
-      ).finally(() => {
-        forkToggle.input.disabled = false;
-      });
-    });
-  }
-
   // ── Language ──
   const languageRow = createSettingSelectRow({
     label: t("settings.section.language.label"),
@@ -231,7 +195,7 @@ function buildBehaviorGroup(ctx: SettingsPageContext): HTMLElement {
     },
   });
 
-  group.list.append(autoApply.root, forkToggle.root, languageRow.root);
+  group.list.append(autoApply.root, languageRow.root);
   return group.root;
 }
 

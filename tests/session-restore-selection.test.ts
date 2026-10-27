@@ -3,10 +3,6 @@ import { test } from "node:test";
 
 
 import {
-  getCrossWorkbookResumeConfirmMessage,
-  getResumeTargetLabel,
-} from "../src/commands/builtins/resume-target.ts";
-import {
   getAdjacentTabDirectionFromShortcut,
   isCloseActiveTabShortcut,
   isCreateTabShortcut,
@@ -76,20 +72,6 @@ void test("recently closed stack keeps one entry per session, the most recent cl
 
   assert.deepEqual(stack.snapshot().map((item) => item.id), ["closed-b"]);
   assert.equal(stack.removeById("closed-a"), null);
-});
-
-void test("resume target labels and workbook confirmation copy follow selected target", () => {
-  assert.equal(getResumeTargetLabel("new_tab"), "Open in new tab");
-  assert.equal(getResumeTargetLabel("replace_current"), "Replace current tab");
-
-  assert.match(
-    getCrossWorkbookResumeConfirmMessage("new_tab"),
-    /new tab/i,
-  );
-  assert.match(
-    getCrossWorkbookResumeConfirmMessage("replace_current"),
-    /replace the current chat/i,
-  );
 });
 
 void test("Cmd/Ctrl+T detection ignores Shift/Alt-modified chords", () => {

@@ -60,7 +60,7 @@ void test("renaming a tab uses the in-pane dialog, focused on the title field", 
   });
 });
 
-void test("a busy tab's model picker lists models but cannot pick one, and unlocks when the turn ends", async () => {
+void test("a busy model choice applies to the next run without changing the running request", async () => {
   await withTaskpane(async (page) => {
     // A connected provider, so the picker has models to list.
     await page.evaluate(async () => {
@@ -77,11 +77,12 @@ void test("a busy tab's model picker lists models but cannot pick one, and unloc
       const agent = sidebar.agent as {
         state: { model: { id: string } };
         getApiKey: () => Promise<string>;
-        streamFunction: (model: unknown, context: unknown, options?: { signal?: AbortSignal }) => Promise<never>;
+        streamFunction: (model: { id: string }, context: unknown, options?: { signal?: AbortSignal }) => Promise<never>;
       };
       agent.getApiKey = () => Promise.resolve("test-key");
       // Never answers; Stop (abort) ends the turn.
       agent.streamFunction = (_model, _context, options) => new Promise<never>((_resolve, reject) => {
+        document.body.dataset.requestModel = _model.id;
         options?.signal?.addEventListener("abort", () => reject(new Error("aborted")));
       });
       return agent.state.model.id;
@@ -94,39 +95,55 @@ void test("a busy tab's model picker lists models but cannot pick one, and unloc
     await enterCommand(page, "Keep working");
     await page.locator(".pi-input-btn--abort").waitFor({ state: "visible" });
 
+    const input = page.locator("pi-input textarea");
+    await input.fill("/");
+    const names = await page.locator("#pi-command-menu .pi-cmd-name").allTextContents();
+    assert.equal(names[0], "/new");
+    for (const pruned of ["/share-session", "/resume-here", "/debug", "/experimental", "/tools", "/plugins", "/skills"]) {
+      assert.equal(names.includes(pruned), false);
+    }
+    assert.deepEqual(await page.locator("#pi-command-menu .pi-cmd-group").allTextContents(), ["Chat", "Workbook", "Setup"]);
+    await input.fill("/res");
+    assert.equal(await page.locator("#pi-command-menu .pi-cmd-name").first().innerText(), "/resume");
+    await enterCommand(page, "/name Working forecast");
+    await page.locator(".pi-session-tab__title").filter({ hasText: "Working forecast" }).waitFor({ state: "visible" });
+    await enterCommand(page, "/shortcuts");
+    await page.locator("#pi-settings-overlay").waitFor({ state: "visible" });
+    await page.keyboard.press("Escape");
+    assert.equal(await page.locator(".pi-input-btn--abort").isVisible(), true);
+
     await enterCommand(page, "/model");
     const picker = page.locator("#pi-model-selector-overlay");
-    await picker.getByRole("status").filter({ hasText: "Pi is working in this tab" }).waitFor({ state: "visible" });
     const rows = picker.locator(".pi-model-selector-item");
     await rows.nth(1).waitFor({ state: "visible" });
-    assert.equal(await picker.locator(".pi-model-selector-item:not([aria-disabled=true])").count(), 0);
-
-    // force: Playwright will not click an aria-disabled row; the test proves clicking it does nothing.
-    await rows.nth(1).click({ force: true });
-    await page.keyboard.press("Enter");
-    assert.equal(await picker.isVisible(), true);
-    assert.equal(await page.evaluate(() => {
-      const sidebar = document.querySelector("pi-sidebar");
-      return sidebar && "agent" in sidebar ? (sidebar.agent as { state: { model: { id: string } } }).state.model.id : null;
-    }), modelBefore);
-
-    // The turn ends while the picker stays open: the rows unlock without reopening it.
-    await page.evaluate(() => {
-      const sidebar = document.querySelector("pi-sidebar");
-      if (sidebar && "agent" in sidebar) (sidebar.agent as { abort: () => void }).abort();
-    });
-    await picker.getByRole("status").waitFor({ state: "hidden" });
-    await page.waitForFunction(() => document.querySelectorAll(
-      "#pi-model-selector-overlay .pi-model-selector-item[aria-disabled=true]",
-    ).length === 0);
     const pickedId = await rows.nth(1).locator(".pi-model-selector-item-id").innerText();
+    assert.notEqual(pickedId, modelBefore);
     await rows.nth(1).click();
     await picker.waitFor({ state: "detached" });
+    await page.getByText(/Model: .*\(next turn\)/).waitFor({ state: "visible" });
+    assert.equal(await page.locator("body").getAttribute("data-request-model"), modelBefore);
+    assert.equal(await page.locator(".pi-session-tab").count(), 1);
     await page.waitForFunction((id) => {
       const sidebar = document.querySelector("pi-sidebar");
       return sidebar !== null && "agent" in sidebar
         && (sidebar.agent as { state: { model: { id: string } } }).state.model.id === id;
     }, pickedId);
+    await page.locator(".pi-input-btn--abort").click();
+    await page.locator(".pi-input-btn--abort").waitFor({ state: "hidden" });
+    await enterCommand(page, "Next question");
+    await page.waitForFunction((id) => document.body.dataset.requestModel === id, pickedId);
+    await page.locator(".pi-input-btn--abort").click();
+  });
+});
+
+void test("a new tab inherits the active tab's chosen thinking level", async () => {
+  await withTaskpane(async (page) => {
+    await page.locator(".pi-status-thinking").click();
+    const popover = page.locator(".pi-status-popover--thinking");
+    await popover.getByRole("menuitemradio", { name: /^Low/ }).click();
+    await page.getByRole("button", { name: "New tab" }).click();
+    await page.locator(".pi-session-tab__title").filter({ hasText: "Chat 2" }).waitFor({ state: "visible" });
+    assert.match(await page.locator(".pi-status-thinking").getAttribute("aria-label") ?? "", /Low/);
   });
 });
 

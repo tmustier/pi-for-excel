@@ -157,6 +157,7 @@ export class SessionsStore extends Store {
       id,
       title: title ?? meta.title,
       ...(meta.titleChosen !== undefined ? { titleChosen: meta.titleChosen } : {}),
+      ...(meta.titleGenerationAttempted !== undefined ? { titleGenerationAttempted: meta.titleGenerationAttempted } : {}),
       model,
       thinkingLevel: state.thinkingLevel,
       messages: state.messages,

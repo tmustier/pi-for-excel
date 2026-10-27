@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { Agent } from "@earendil-works/pi-agent-core";
-import { createModels, fauxProvider } from "@earendil-works/pi-ai";
+import { createModels, fauxAssistantMessage, fauxProvider } from "@earendil-works/pi-ai";
 import { getBuiltinModel } from "@earendil-works/pi-ai/providers/all";
 
 import { settingsBackedSessionStorage } from "../src/host/session-storage.ts";
@@ -202,7 +202,7 @@ void test("runtime tab snapshots follow create, switch, and close lifecycle", as
   assert.deepEqual(environment.manager.snapshotTabs().map((tab) => tab.title), ["Chat 1", "Chat 3"]);
 });
 
-void test("fork preference updates an empty session in place and survives restart", async () => {
+void test("model selection updates an empty session in place and survives restart", async () => {
   const environment = createEnvironment();
   const runtime = await environment.manager.createRuntime({ activate: true, autoRestoreLatest: false });
   const sessionId = runtime.persistence.getSessionId();
@@ -212,7 +212,6 @@ void test("fork preference updates an empty session in place and survives restar
   const result = await environment.manager.selectModel({
     runtimeId: runtime.runtimeId,
     nextModel: getBuiltinModel("openai-codex", "gpt-5.6-sol"),
-    behavior: "fork",
   });
   assert.equal(result.outcome, "updated");
   assert.equal(environment.manager.snapshot().tabs.length, 1);
@@ -250,7 +249,7 @@ void test("a session that is already open switches to its tab instead of opening
   const sessionData = await saveConversation(first, "budget review");
   const second = await environment.manager.createRuntime({ activate: true, autoRestoreLatest: false });
 
-  for (const target of [{ kind: "new_tab" as const }, { kind: "replace" as const, runtimeId: second.runtimeId }]) {
+  for (const target of [{ kind: "new_tab" as const }, { kind: "resume" as const }]) {
     environment.manager.switchRuntime(second.runtimeId);
     const result = await environment.manager.openSession(sessionData, target);
     assert.equal(result.outcome, "focused");
@@ -261,7 +260,7 @@ void test("a session that is already open switches to its tab instead of opening
   }
 });
 
-void test("replacing a busy tab is refused and leaves its session in place", async () => {
+void test("resuming beside a busy tab opens another tab and leaves its session in place", async () => {
   const environment = createEnvironment();
   const source = await environment.manager.createRuntime({ activate: true, autoRestoreLatest: false });
   const sessionData = await saveConversation(source, "saved elsewhere");
@@ -270,9 +269,121 @@ void test("replacing a busy tab is refused and leaves its session in place", asy
   const busySessionId = busy.persistence.getSessionId();
   busy.actionQueue = { ...busy.actionQueue, isBusy: () => true };
 
-  const result = await environment.manager.openSession(sessionData, { kind: "replace", runtimeId: busy.runtimeId });
-  assert.equal(result.outcome, "busy");
+  const result = await environment.manager.openSession(sessionData, { kind: "resume" });
+  assert.equal(result.outcome, "opened");
+  assert.equal(environment.manager.snapshotTabs().length, 2);
   assert.equal(busy.persistence.getSessionId(), busySessionId);
+});
+
+void test("resume reuses only an idle empty tab, never a conversation", async () => {
+  const environment = createEnvironment();
+  const source = await environment.manager.createRuntime({ activate: true, autoRestoreLatest: false });
+  const saved = await saveConversation(source, "saved conversation");
+  const empty = await environment.manager.createRuntime({ activate: true, autoRestoreLatest: false });
+  environment.manager.closeRuntime(source.runtimeId);
+  empty.agent.state.messages.push({ role: "system", content: "hidden", timestamp: 0 });
+  assert.equal((await environment.manager.openSession(saved, { kind: "resume" })).outcome, "replaced");
+  assert.equal(empty.persistence.getSessionId(), saved.id);
+  assert.equal(environment.manager.snapshotTabs().length, 1);
+
+  const another = { ...saved, id: crypto.randomUUID(), title: "another conversation" };
+  assert.equal((await environment.manager.openSession(another, { kind: "resume" })).outcome, "opened");
+  assert.equal(empty.persistence.getSessionId(), saved.id);
+  assert.equal(environment.manager.snapshotTabs().length, 2);
+});
+
+void test("first exchange generates one isolated title, persists it, and never overwrites a user rename", { timeout: 10_000 }, async () => {
+  for (const renameDuringRequest of [false, true]) {
+    const environment = createEnvironment();
+    const runtime = await environment.manager.createRuntime({ activate: true, autoRestoreLatest: false });
+    const faux = fauxProvider();
+    const models = createModels();
+    models.setProvider(faux.provider);
+    let notifyTitleRequested = (): void => {};
+    const titleRequested = new Promise<void>((resolve) => { notifyTitleRequested = resolve; });
+    let answerTitle = (_title: string): void => {};
+    const titleResponse = new Promise<string>((resolve) => { answerTitle = resolve; });
+    let notifyTitleSettled = (): void => {};
+    const titleSettled = new Promise<void>((resolve) => { notifyTitleSettled = resolve; });
+    const sessionId = runtime.persistence.getSessionId();
+    const chatPrefix = "Original chat instructions";
+    const requests: string[] = [];
+    runtime.agent.state.messages.push({ role: "system", content: chatPrefix, timestamp: 0 });
+    runtime.agent.streamFunction = (model, context, options) => {
+      requests.push(options?.sessionId ?? "");
+      if (options?.sessionId === `${sessionId}::title`) {
+        assert.doesNotMatch(JSON.stringify(context), /"tools":\[\{/);
+        assert.doesNotMatch(JSON.stringify(context), /Original chat instructions/);
+        assert.equal(options.maxTokens, 64);
+      }
+      return models.streamSimple(faux.getModel(), context, options);
+    };
+    faux.setResponses([
+      fauxAssistantMessage("We can forecast Q3 revenue from historical sales."),
+      async () => {
+        notifyTitleRequested();
+        return fauxAssistantMessage(await titleResponse);
+      },
+      fauxAssistantMessage("Next answer"),
+    ]);
+    const unsubscribe = runtime.persistence.subscribe(() => {
+      if (runtime.persistence.getSessionTitle()) notifyTitleSettled();
+    });
+    await runtime.agent.prompt("Forecast Q3 revenue");
+    await titleRequested;
+    if (renameDuringRequest) await runtime.persistence.renameSession("My forecast");
+    answerTitle("Quarterly Revenue Forecast");
+    await titleSettled;
+    await runtime.agent.prompt("Show the assumptions");
+    await runtime.persistence.saveSession();
+    const expected = renameDuringRequest ? "My forecast" : "Quarterly Revenue Forecast";
+    assert.equal(environment.manager.snapshotTabs()[0]?.title, expected);
+    assert.equal(requests.filter((id) => id.endsWith("::title")).length, 1);
+    assert.equal(runtime.agent.sessionId, sessionId);
+    assert.match(JSON.stringify(runtime.agent.state.messages), /Original chat instructions/);
+    assert.doesNotMatch(JSON.stringify(runtime.agent.state.messages), /Write a short 3–5 word/);
+    const saved = await environment.sessions.loadSession(sessionId);
+    assert.equal(saved?.title, expected);
+    assert.equal(saved?.titleChosen, renameDuringRequest);
+    assert.equal(saved?.titleGenerationAttempted, true);
+    unsubscribe();
+    runtime.dispose();
+  }
+});
+
+void test("failed title requests keep Chat N and are not charged again after resume", async () => {
+  const environment = createEnvironment();
+  const runtime = await environment.manager.createRuntime({ activate: true, autoRestoreLatest: false });
+  const faux = fauxProvider();
+  const models = createModels();
+  models.setProvider(faux.provider);
+  const requests: string[] = [];
+  const stream: Agent["streamFunction"] = (_model, context, options) => {
+    requests.push(options?.sessionId ?? "");
+    return models.streamSimple(faux.getModel(), context, options);
+  };
+  runtime.agent.streamFunction = stream;
+  faux.setResponses([
+    fauxAssistantMessage("First answer"),
+    fauxAssistantMessage("", { stopReason: "error", errorMessage: "Title unavailable" }),
+    fauxAssistantMessage("Second answer"),
+  ]);
+  await runtime.agent.prompt("A question");
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  await runtime.persistence.saveSession();
+  assert.equal(environment.manager.snapshotTabs()[0]?.title, "Chat 1");
+  const saved = await environment.sessions.loadSession(runtime.persistence.getSessionId());
+  assert.ok(saved);
+  assert.equal(saved.titleGenerationAttempted, true);
+  assert.equal(saved.title, "");
+  const resumed = await environment.createRuntime(false);
+  await resumed.persistence.applyLoadedSession(saved);
+  resumed.agent.streamFunction = stream;
+  await resumed.agent.prompt("Continue");
+  await resumed.persistence.saveSession();
+  assert.equal(requests.filter((id) => id.endsWith("::title")).length, 1);
+  runtime.dispose();
+  resumed.dispose();
 });
 
 void test("a chosen tab title and the tab number survive reopening the session", async () => {
@@ -339,7 +450,6 @@ void test("an in-place model switch drops a thinking level the new model cannot 
   const result = await environment.manager.selectModel({
     runtimeId: runtime.runtimeId,
     nextModel: getBuiltinModel("openai", "gpt-4.1"),
-    behavior: "inPlace",
   });
   assert.equal(result.outcome, "updated");
   assert.equal(runtime.agent.state.thinkingLevel, "off");

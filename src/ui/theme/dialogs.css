@@ -49,15 +49,6 @@
   background: var(--pi-green-lighter);
 }
 
-.pi-model-selector-item[aria-disabled="true"] {
-  cursor: default;
-  opacity: 0.6;
-}
-
-.pi-model-selector-notice {
-  padding: 0 16px 10px;
-}
-
 .pi-model-selector-item-top {
   display: flex;
   align-items: center;

@@ -7,7 +7,6 @@ import type { Models } from "@earendil-works/pi-ai";
 import type { ConnectionManager } from "../../../connections/manager.js";
 import type { ExecutionMode } from "../../../execution/mode.js";
 import type { ExtensionRuntimeManager } from "../../../extensions/runtime-manager.js";
-import type { ModelSwitchBehavior } from "../../../models/switch-behavior.js";
 import type { BackupsPageCallbacks } from "./backups-page.js";
 
 export interface WorkbookContextSnapshot {
@@ -29,8 +28,6 @@ export interface ExtensionsHubDependencies {
 export interface SettingsPagesDependencies {
   getExecutionMode?: () => ExecutionMode;
   setExecutionMode?: (mode: ExecutionMode) => Promise<void>;
-  getModelSwitchBehavior?: () => ModelSwitchBehavior;
-  setModelSwitchBehavior?: (behavior: ModelSwitchBehavior) => Promise<void>;
   models?: Pick<Models, "getModels">;
   extensionsHub?: ExtensionsHubDependencies;
   onRulesSaved?: () => Promise<void> | void;

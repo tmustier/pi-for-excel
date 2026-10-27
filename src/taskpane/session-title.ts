@@ -5,7 +5,6 @@
 import { t } from "../language/index.js";
 
 export interface ResolveTabTitleArgs {
-  hasExplicitTitle: boolean;
   sessionTitle: string;
   /** Stable, one-based number assigned when the tab/runtime is created. */
   defaultTabNumber: number;
@@ -20,11 +19,9 @@ function normalizeTabNumber(defaultTabNumber: number): number {
 }
 
 export function resolveTabTitle(args: ResolveTabTitleArgs): string {
-  if (args.hasExplicitTitle) {
-    const trimmed = args.sessionTitle.trim();
-    if (trimmed.length > 0) {
-      return trimmed;
-    }
+  const trimmed = args.sessionTitle.trim();
+  if (trimmed.length > 0) {
+    return trimmed;
   }
 
   return t("session.tab.default", { number: String(normalizeTabNumber(args.defaultTabNumber)) });

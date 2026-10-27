@@ -14,28 +14,24 @@ don't accumulate silently.
 
 ---
 
-## 1. Mid-session model switching (fork vs in-place)
+## 1. Mid-session model switching (in-place)
 
 | | pi-mono | Pi for Excel (current) |
 |---|---|---|
 | Empty session | Switch in place | Switch in place |
 | Non-empty session (default) | Switch in place | Switch in place |
-| Non-empty session (opt-in) | N/A | Fork to a new tab with the new model |
 
-**Rationale:** When you switch models mid-conversation, the API provider's
-cached prefix becomes invalid (different model = different cache key). Forking
-can preserve the original tab's cache if the user switches back, but forcing
-fork by default is surprising UX for many users.
+**Rationale:** Switching is always in place, matching pi-mono. Duplicate tab
+is the explicit way to make a copy. Choices made while busy apply to the next
+run, just like thinking; Agent captures both settings once per run.
 
-**Status:** #428 introduced fork-on-non-empty. #442 changed default back to
-pi-mono parity (in-place), and kept fork as an advanced opt-in setting.
+**Status:** CL-11 removes the former opt-in fork setting. The old
+`model.switch.behavior.v1` key is ignored, including persisted `fork` values.
 
 - **Default:** in-place switch (parity)
-- **Option:** fork to new tab for non-empty sessions
 
-**Files:** `src/models/switch-behavior.ts`, `src/taskpane/init.ts`
-(`applyModelSelection`, `cloneRuntimeToNewTab`),
-`src/commands/builtins/settings-overlay.ts`
+**Files:** `src/taskpane/session-runtime-manager.ts`, `src/taskpane/init.ts`
+(`applyModelSelection`, `cloneRuntimeToNewTab`).
 
 ---
 
