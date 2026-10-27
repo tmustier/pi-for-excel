@@ -136,7 +136,7 @@ After any interrupt the mode itself is unchanged; it is only ever changed by the
 
 **Offline and provider errors.** None.
 
-**Notifications.** Toasts on every mode change; the dialogs themselves. No sound or system notification when a background tab is waiting for approval.
+**Notifications.** When an approval is shown, Pi announces "Pi is waiting for your approval: {title}" to screen readers. Approvals waiting in the queue are not announced until shown. Closing the approval, including through Stop Pi, withdraws that announcement and cancels any delayed delivery; it does not erase a newer announcement from another event.
 
 **Settings and preferences.** The "Auto mode" switch in Settings is the same setting as the status-bar control and `/yolo`; each updates the others immediately.
 
@@ -171,4 +171,6 @@ After any interrupt the mode itself is unchanged; it is only ever changed by the
 - The mode survived a taskpane reload (APPROVE-20).
 - `/yolo` wording ("on" = fewer confirmations) is the opposite of what "Confirm mode on" suggests; a product call.
 
-Verified against pi-for-excel commit `ec453df`.
+P-168 announcement lifecycle was verified in [#806](https://github.com/tmustier/pi-for-excel/pull/806): a real model Files request in Excel on the web announced its approval; Stop Pi closed it, cleared the announcement and created no file. Browser regressions cover queued approvals, immediate withdrawal before announcement delivery and preserving a newer unrelated announcement.
+
+Verified against pi-for-excel commit `c8f7016` for announcement lifecycle; remaining sections retain their historical `ec453df` baseline pending separate revision.
