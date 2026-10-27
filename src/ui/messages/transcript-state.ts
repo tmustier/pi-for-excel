@@ -20,9 +20,6 @@ import type { AssistantMessage } from "@earendil-works/pi-ai";
 
 const DETAILS_STORAGE_KEY = "pi.transcript.details-expanded";
 
-/** Groups this large start collapsed while details are collapsed. */
-const GROUP_COLLAPSE_THRESHOLD = 3;
-
 type DisclosureListener = () => void;
 
 let detailsExpanded: boolean | null = null;
@@ -32,27 +29,11 @@ const listeners = new Set<DisclosureListener>();
 const thinkingStartedAt = new Map<string, number>();
 const thinkingDurations = new Map<string, number>();
 
-function readStoredDetailsExpanded(): boolean {
-  try {
-    return localStorage.getItem(DETAILS_STORAGE_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
-
 function notify(): void {
   for (const listener of listeners) listener();
 }
 
 /* ── Keys ──────────────────────────────────────────────── */
-
-export function toolCardKey(message: AssistantMessage, toolCallId: string): string {
-  return `tool:${message.timestamp}:${toolCallId}`;
-}
-
-export function toolGroupKey(message: AssistantMessage, leaderToolCallId: string): string {
-  return `group:${message.timestamp}:${leaderToolCallId}`;
-}
 
 export function thinkingKey(message: AssistantMessage, contentIndex: number): string {
   return `thinking:${message.timestamp}:${contentIndex}`;
@@ -61,7 +42,13 @@ export function thinkingKey(message: AssistantMessage, contentIndex: number): st
 /* ── Details mode + disclosure ─────────────────────────── */
 
 export function areDetailsExpanded(): boolean {
-  detailsExpanded ??= readStoredDetailsExpanded();
+  if (detailsExpanded === null) {
+    try {
+      detailsExpanded = localStorage.getItem(DETAILS_STORAGE_KEY) === "1";
+    } catch {
+      detailsExpanded = false;
+    }
+  }
   return detailsExpanded;
 }
 
@@ -78,14 +65,9 @@ export function toggleDetailsExpanded(): boolean {
   return detailsExpanded;
 }
 
-/** Tool cards and thinking blocks follow details mode unless toggled by hand. */
-export function isDisclosureExpanded(key: string): boolean {
-  return overrides.get(key) ?? areDetailsExpanded();
-}
-
-/** Groups of three or more start collapsed while details are collapsed. */
-export function isToolGroupExpanded(key: string, memberCount: number): boolean {
-  return overrides.get(key) ?? (areDetailsExpanded() || memberCount < GROUP_COLLAPSE_THRESHOLD);
+/** Hand toggles override details mode and the element's initial state. */
+export function isDisclosureExpanded(key: string, initiallyExpanded = false): boolean {
+  return overrides.get(key) ?? (areDetailsExpanded() || initiallyExpanded);
 }
 
 export function setDisclosureExpanded(key: string, expanded: boolean): void {
@@ -121,7 +103,6 @@ export function recordThinkingEnd(key: string, at: number): void {
 /** End every block still open for this message (response ended or aborted mid-thought). */
 export function endOpenThinking(message: AssistantMessage, at: number): void {
   const prefix = `thinking:${message.timestamp}:`;
-  // Deleting the current entry while iterating a Map is safe.
   for (const key of thinkingStartedAt.keys()) {
     if (key.startsWith(prefix)) recordThinkingEnd(key, at);
   }
