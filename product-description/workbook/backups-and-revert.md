@@ -2,7 +2,7 @@
 
 ## Summary
 
-Backups let the user take back changes Pi made to the workbook. Before most [mutations](../glossary.md#the-workbook), Pi captures what it is about to change and saves the snapshot once the change succeeds. What is captured is owned by [the workbook](../foundations/the-workbook.md#backups). The user sees and uses backups in three places: the **Backups** dialog, which pages through the current workbook's history with search, filter, sort, restore and delete; **`/revert`**, which restores the latest backup; and Pi's `workbook_history` tool. A restore puts captured cells, formats or structure back and, when possible, saves a new backup of what it overwrote. The dialog opens from the [utilities menu](../ui/the-utilities-menu.md), [Settings](../setup/settings.md), or `/history`; `/history` works while Pi is busy, `/revert` does not. These user commands need no provider. Backups survive saves and reloads, but remain local, best-effort storage, not a durable copy of the workbook.
+Backups let the user restore the cells, formats or structure captured before Pi's changes. They survive saves/reloads in local, best-effort storage, not as a durable copy of the workbook. The Backups dialog (`/history`, Settings or utilities menu) pages/searches/filters the current workbook's history; `/revert` targets the latest. Both remain available while busy and serialize recovery with workbook writes. User restores preview/confirm the replacement; Pi's recovery tool follows [approval policy](confirm-mode-and-approvals.md). Inverse capture is attempted, and failures are reported, not hidden. See [the workbook](../foundations/the-workbook.md#backups) for capture limits.
 
 ## The simple case
 
@@ -52,7 +52,7 @@ The list does not update by itself while open. Backups Pi makes while the dialog
 
 ### Ends at once
 
-Nothing is changed when the user only searches, filters, sorts, refreshes, or closes the dialog (the close button, Escape, or a click on the backdrop). `/revert` with no backup for this workbook shows "No backups for this workbook yet" and does nothing. `/revert` while the active tab is busy is refused with "Can't run /revert while Pi is busy" and the composer is cleared, so the command has to be typed again (confirmed in Excel on the web).
+Nothing is changed when the user only searches, filters, sorts, refreshes, or closes the dialog. `/revert` with no backup for this workbook shows "No backups for this workbook yet" and does nothing. `/revert` is available while busy; an accepted restore waits for the workbook lock.
 
 ### Restoring
 
@@ -117,7 +117,7 @@ On desktop Excel and anonymous-link Excel on the web, a workbook without a path 
 | Thinking level | No effect. | No effect. |
 | Execution mode | User restores do not ask a general approval, but later-edits/destructive warnings still apply. Pi's restore asks in Confirm mode. | No effect on a restore in progress. |
 | Files in the workspace, or an overlay open | No effect from files. The dialog is itself an overlay (a page of Settings). | Restoring from the dialog while Pi is writing waits for the lock. |
-| Tab state (new, restored, another tab busy) | Backups belong to the workbook, not to a tab: every tab sees the same list. `/revert` is refused only when the active tab is busy; the dialog works while busy. | A restore started while another tab writes waits for that write to finish. |
+| Tab state (new, restored, another tab busy) | Backups belong to the workbook, not to a tab: every tab sees the same list. Command and dialog work while busy. | A restore started while another tab writes waits for that write to finish. |
 | Host (desktop or web) | Saves, AutoSave and reloads retain history on both. Anonymous-link web workbooks may use a document token rather than a path identity. Storage quota and eviction vary by host. | No save-triggered clearing. |
 
 Changing the model, provider or thinking level does not replace the selected backup. Live workbook safety checks still apply.
@@ -179,6 +179,7 @@ After an interrupt the user returns to the dialog or composer. Refusal or cancel
 - Real Excel for Mac, isolated origin: four pre-upgrade backups migrated intact; new writes, inverse restore, restore of a migrated snapshot and relaunch passed. Save As into a new and existing destination moved metadata without changing Blob files. Delete and Clear all freed files and reduced accounting exactly. The normal development origin was untouched.
 - Failed migration rollback, legacy read fallback, eviction order, no protected floor and oversized refusal were tested through public storage interfaces, not by filling a real Mac disk. Real full-disk behavior, peak large-payload heap, Windows WebView2 quota and long-term eviction remain unmeasured. Rename/move outside Save As were not exercised on Mac.
 - Historical [workbook checklist](../verification/workbook.md#workbookbackups-and-revertmd) observations at `ec453df` predate the merged save/restore fixes and #809; they are not the current storage contract. General lock, chart and approval guards here come from main's merged fixes, not new behavior in #809.
-- The open panel still needs Refresh/reopen after changes outside it. `/revert` remains refused while the active tab is busy; `/history` and user-initiated dialog restores remain available.
+- The open panel still needs Refresh/reopen after changes outside it. `/revert` and manual capture work while busy under the same workbook lock. User restores preview and confirm current replacement, but are not isolated from co-author edits.
+- Merged-main historical acceptance also covered a dialog restore waiting behind another tab's write (REVERT-25), and the list requiring Refresh for a backup made meanwhile (REVERT-23). Excel's own Undo also takes back restores on the web; see [the workbook](../foundations/the-workbook.md#excels-undo).
 
 Verified against pi-for-excel main [1f51cf8](https://github.com/tmustier/pi-for-excel/commit/1f51cf8f) plus [#809](https://github.com/tmustier/pi-for-excel/pull/809): implementation [5c61b21](https://github.com/tmustier/pi-for-excel/commit/5c61b21d), final metadata-fallback/test/doc follow-up [9f4f60d](https://github.com/tmustier/pi-for-excel/commit/9f4f60d7). Mac acceptance used the initial implementation; final fallback validation used deterministic tests.
