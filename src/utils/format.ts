@@ -163,7 +163,7 @@ export function findErrors(
     if (row === undefined) continue;
     for (let c = 0; c < row.length; c++) {
       const v = row[c];
-      if (typeof v === "string" && v.startsWith("#")) {
+      if (isExcelError(v)) {
         errors.push({
           address: `${colToLetter(start.col + c)}${start.row + r}`,
           error: v,
@@ -187,9 +187,15 @@ export function countNonEmpty(values: unknown[][]): number {
   return count;
 }
 
-/** True for Excel error values like #REF!, #VALUE!, #N/A, etc. */
+const EXCEL_ERROR_VALUES = new Set([
+  "#NULL!", "#DIV/0!", "#VALUE!", "#REF!", "#NAME?", "#NUM!", "#N/A",
+  "#GETTING_DATA", "#SPILL!", "#CALC!", "#FIELD!", "#BLOCKED!", "#CONNECT!",
+  "#BUSY!", "#UNKNOWN!", "#EXTERNAL!", "#PYTHON!", "#TIMEOUT",
+]);
+
+/** True for Excel error values (#REF!, #N/A, #DIV/0!, …); text such as "#1 priority" is not an error. */
 export function isExcelError(value: unknown): value is string {
-  return typeof value === "string" && /^#\w+!?$/.test(value);
+  return typeof value === "string" && EXCEL_ERROR_VALUES.has(value);
 }
 
 /**

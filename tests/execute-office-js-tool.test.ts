@@ -29,7 +29,7 @@ void test("execute_office_js runs code and serializes result", async () => {
   const text = firstText(result);
   assert.match(text, /Executed Office\.js: Recalculate dashboard totals/u);
   assert.match(text, /```json/u);
-  assert.match(text, /"ok": true/u);
+  assert.match(text, /\{"ok":true,"sheet":"Sheet1","changedCells":4\}/u);
 });
 
 void test("execute_office_js blocks nested Excel.run usage", async () => {

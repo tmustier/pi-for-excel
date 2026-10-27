@@ -60,11 +60,30 @@ function makeContext(args: {
   };
 }
 
-function throwIfAborted(signal: AbortSignal | undefined): void {
+function throwIfAborted(signal: AbortSignal | undefined, mutation = false): void {
   if (!signal?.aborted) return;
 
-  // Keep message text compatible with existing abort handling paths.
-  throw new Error("Aborted");
+  // A mutation stopped here never reached Excel; say so, so the agent knows.
+  throw new Error(mutation ? "Stopped before running; nothing changed in the workbook." : "Aborted");
+}
+
+/**
+ * A mutation tool that checks Stop itself and says in its result what was
+ * written before it stopped (write_cells, fill_formula). Other mutation tools
+ * run as one Excel batch; when Stop comes while one runs, the wrapper adds
+ * that its change stands.
+ */
+export interface StopReporting {
+  reportsStop?: true;
+}
+
+export const STOPPED_AFTER_CHANGE_NOTE =
+  "⏹ Stop was pressed while this ran; the change above was already applied and stands.";
+
+function appendStopNote<TDetails>(result: AgentToolResult<TDetails>): AgentToolResult<TDetails> {
+  const [first, ...rest] = result.content;
+  if (!first || first.type !== "text") return result;
+  return { ...result, content: [{ ...first, text: `${first.text}\n\n${STOPPED_AFTER_CHANGE_NOTE}` }, ...rest] };
 }
 
 function isWorkbookCoordinatorParamsShape(value: unknown): value is Record<string, unknown> {
@@ -143,7 +162,7 @@ async function requireMutationApprovalIfNeeded(args: {
 type PendingMutations = Set<Promise<void>>;
 
 function wrapTool<TParameters extends TSchema, TDetails>(
-  tool: AgentTool<TParameters, TDetails>,
+  tool: AgentTool<TParameters, TDetails> & StopReporting,
   coordinator: WorkbookCoordinator,
   contextProvider: WorkbookCoordinatorContextProvider,
   mutationObserver: WorkbookMutationObserver | undefined,
@@ -184,7 +203,7 @@ function wrapTool<TParameters extends TSchema, TDetails>(
       toolName: tool.name,
     });
 
-    throwIfAborted(signal);
+    throwIfAborted(signal, mode !== "read");
 
     if (mode === "read") {
       return coordinator.runRead(context, () => {
@@ -199,12 +218,12 @@ function wrapTool<TParameters extends TSchema, TDetails>(
       params,
     });
 
-    throwIfAborted(signal);
+    throwIfAborted(signal, true);
 
     const out = await coordinator.runWrite(
       context,
       () => {
-        throwIfAborted(signal);
+        throwIfAborted(signal, true);
         return tool.execute(toolCallId, params, signal, onUpdate);
       },
     );
@@ -224,6 +243,9 @@ function wrapTool<TParameters extends TSchema, TDetails>(
       }
     }
 
+    if (signal?.aborted && !tool.reportsStop && out.result.isError !== true) {
+      return appendStopNote(out.result);
+    }
     return out.result;
   }
 }

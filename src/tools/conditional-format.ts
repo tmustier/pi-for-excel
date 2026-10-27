@@ -14,7 +14,6 @@ import { captureConditionalFormatState } from "../workbook/recovery-states.js";
 import { getWorkbookRecoveryLog } from "../workbook/recovery-log.js";
 import type { ConditionalFormatDetails } from "./tool-details.js";
 import {
-  CHECKPOINT_SKIPPED_NOTE,
   CHECKPOINT_SKIPPED_REASON,
 } from "./recovery-metadata.js";
 import { describeExcelFailure, parseExcelError, unchangedClause } from "./mutation/excel-failure.js";
@@ -235,7 +234,6 @@ async function clearFormats(
       },
       appendResultNote: appendMutationResultNote,
       unavailableReason: recoveryUnavailableReason,
-      unavailableNote: CHECKPOINT_SKIPPED_NOTE,
     },
   });
 
@@ -356,7 +354,6 @@ async function addFormat(
       },
       appendResultNote: appendMutationResultNote,
       unavailableReason: recoveryUnavailableReason,
-      unavailableNote: CHECKPOINT_SKIPPED_NOTE,
     },
   });
 

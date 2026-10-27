@@ -14,6 +14,7 @@
  * what was sent, with reads bounded so large writes can still be verified.
  */
 
+import { isExcelError } from "../../utils/format.js";
 import {
   cellAddress,
   colToLetter,
@@ -21,7 +22,7 @@ import {
 } from "../../excel/helpers.js";
 import { buildWorkbookCellChangeSummary, type WorkbookCellChangeSummary } from "../../audit/cell-diff.js";
 import { MAX_RECOVERY_CELLS } from "../../workbook/recovery/constants.js";
-import { CHECKPOINT_SKIPPED_NOTE, CHECKPOINT_SKIPPED_REASON } from "../recovery-metadata.js";
+import { CHECKPOINT_SKIPPED_REASON, tooLargeToBackUpReason } from "../recovery-metadata.js";
 
 /** Writes up to this many cells read their before-state (for backups) and verify every cell. */
 export const FULL_VERIFY_CELL_LIMIT = MAX_RECOVERY_CELLS;
@@ -35,12 +36,6 @@ const PER_CELL_PROBE_LIMIT = 500;
 /** Cells listed by address in a result line; the rest are counted. */
 const LISTED_CELL_LIMIT = 8;
 
-const EXCEL_ERROR_VALUES = new Set([
-  "#NULL!", "#DIV/0!", "#VALUE!", "#REF!", "#NAME?", "#NUM!", "#N/A",
-  "#GETTING_DATA", "#SPILL!", "#CALC!", "#FIELD!", "#BLOCKED!", "#CONNECT!",
-  "#BUSY!", "#UNKNOWN!", "#EXTERNAL!", "#PYTHON!", "#TIMEOUT",
-]);
-
 /** A cell value as Office.js reads or writes it. */
 export type CellScalar = string | number | boolean | null | undefined;
 
@@ -53,9 +48,6 @@ export function toCellGrid(grid: readonly (readonly unknown[])[]): CellScalar[][
   }));
 }
 
-export function isExcelErrorValue(value: CellScalar): value is string {
-  return typeof value === "string" && EXCEL_ERROR_VALUES.has(value);
-}
 
 /** The block of cells a tool writes: 1-based row, 0-based column, as in `parseCell`. */
 export interface WriteBlock {
@@ -153,6 +145,8 @@ export interface WriteTargetInspection {
   occupiedCount: number;
   mergeConflicts: MergeConflict[];
   spillConflicts: SpillConflict[];
+  /** Tables overlapping the target before the write; null when the host cannot list them. */
+  tableNames: string[] | null;
   /** Set when a check could not run on this host or was capped. */
   checkNotes: string[];
 }
@@ -215,6 +209,11 @@ export async function inspectWriteTarget(
     : null;
   merges?.load("areas/items/address,areas/items/rowCount,areas/items/columnCount");
   if (!canReadMerges) checkNotes.push("merged cells were not checked (needs ExcelApi 1.13)");
+
+  // Excel extends a table when a write lands next to it; listing the tables
+  // before and after lets the result say so.
+  const tables = excelApiSupported("1.9") ? target.getTables(false) : null;
+  tables?.load("items/name");
 
   const canReadSpills = excelApiSupported("1.12");
   if (canReadSpills) target.load("hasSpill");
@@ -293,6 +292,7 @@ export async function inspectWriteTarget(
     occupiedCount,
     mergeConflicts,
     spillConflicts,
+    tableNames: tables ? tables.items.map((table) => table.name) : null,
     checkNotes,
   };
 }
@@ -378,6 +378,8 @@ export interface WriteVerification {
   invalidSummary: string | null;
   /** The rule the invalid cells break, e.g. "list: Yes,No". */
   invalidRule: string | null;
+  /** Tables Excel extended to take in the written cells, with the headers it made up. */
+  tableExtensions: Array<{ name: string; address: string; newHeaders: string[] }>;
   /** Calculation mode when it is not Automatic; written cells were calculated. */
   manualCalculation: string | null;
   /** What was checked when not every cell was read back, or why verification failed. */
@@ -467,7 +469,7 @@ function diffRows(
       const formula = formulas[r]?.[c];
       const sentCell = sent(row, c);
       const address = cellAt(block, row, c);
-      if (isExcelErrorValue(value)) {
+      if (isExcelError(value)) {
         into.formulaErrors.push({
           address,
           error: value,
@@ -508,6 +510,7 @@ export function diffWrittenGrid(
     formulaErrorCount: acc.formulaErrors.length,
     invalidCells: [],
     invalidSummary: null,
+    tableExtensions: [],
     invalidRule: null,
     manualCalculation: null,
     scopeNote: null,
@@ -521,6 +524,8 @@ export interface VerifyOptions {
   sentFormulas: boolean;
   /** Number of cells sent "" (they are expected to be blank). */
   sentEmptyCount: number;
+  /** Tables overlapping the target before the write (`WriteTargetInspection.tableNames`). */
+  tablesBefore: string[] | null;
 }
 
 /**
@@ -559,6 +564,7 @@ export async function verifyWrittenRange(
     invalidCells: [],
     invalidSummary: null,
     invalidRule: null,
+    tableExtensions: [],
     manualCalculation: manual,
     scopeNote: null,
     sampleRows: [],
@@ -566,6 +572,8 @@ export async function verifyWrittenRange(
 
   const canReadValidation = excelApiSupported("1.8");
   if (canReadValidation) target.dataValidation.load("valid");
+  const tablesAfter = options.tablesBefore ? target.getTables(false) : null;
+  tablesAfter?.load("items/name");
 
   if (cellCount(block) <= FULL_VERIFY_CELL_LIMIT) {
     target.load("values,formulas");
@@ -618,6 +626,25 @@ export async function verifyWrittenRange(
     if (missingBlanks > acc.notWritten.length && !blankCells.isNullObject) {
       verification.scopeNote += ` Blank cells in: ${truncateAddressList(blankCells.address)}.`;
     }
+  }
+
+  const extended = tablesAfter && options.tablesBefore
+    ? tablesAfter.items.filter((table) => !options.tablesBefore?.includes(table.name))
+    : [];
+  if (extended.length > 0) {
+    const ranges = extended.map((table) => {
+      const range = table.getRange();
+      range.load("address");
+      const header = table.getHeaderRowRange();
+      header.load("values");
+      return { name: table.name, range, header };
+    });
+    await context.sync();
+    verification.tableExtensions = ranges.map(({ name, range, header }) => ({
+      name,
+      address: stripSheet(range.address),
+      newHeaders: (header.values[0] ?? []).map(String).filter((text) => /^Column\d+$/u.test(text)),
+    }));
   }
 
   if (canReadValidation && target.dataValidation.valid !== true) {
@@ -789,6 +816,12 @@ export function formatVerificationNotes(verification: WriteVerification): string
       "but other formulas that depend on them still show old results until the user recalculates (F9) or switches calculation to Automatic.",
     );
   }
+  for (const table of verification.tableExtensions) {
+    const headers = table.newHeaders.length > 0
+      ? ` It named the new column(s) ${table.newHeaders.map((header) => `"${header}"`).join(", ")}; rename the header cell with write_cells if that is not wanted.`
+      : "";
+    lines.push(`ℹ️ Excel added the written cells to table **${table.name}**, which now covers ${table.address}.${headers}`);
+  }
   if (verification.mode === "sampled" && verification.scopeNote) {
     lines.push(`ℹ️ Verification is partial: the range is too large to read back in one call, so I ${verification.scopeNote}`);
   }
@@ -802,6 +835,34 @@ export function hasVerificationProblems(verification: WriteVerification): boolea
     verification.formulaErrorCount > 0 ||
     verification.invalidCells.length > 0 ||
     verification.invalidSummary !== null;
+}
+
+/** Cells that held a formula before the write and hold a constant now. */
+export function replacedFormulas(
+  block: WriteBlock,
+  beforeFormulas: CellScalar[][],
+  afterFormulas: CellScalar[][],
+): Array<{ address: string; formula: string }> {
+  const replaced: Array<{ address: string; formula: string }> = [];
+  beforeFormulas.forEach((row, r) => row.forEach((before, c) => {
+    const after = afterFormulas[r]?.[c];
+    if (typeof before !== "string" || !before.startsWith("=")) return;
+    if (typeof after === "string" && after.startsWith("=")) return;
+    replaced.push({ address: cellAt(block, r, c), formula: before });
+  }));
+  return replaced;
+}
+
+/** Warning when a write hard-coded cells that held formulas, with a few of the lost formulas. */
+export function formatReplacedFormulas(
+  sheetName: string,
+  replaced: ReadonlyArray<{ address: string; formula: string }>,
+): string | null {
+  if (replaced.length === 0) return null;
+  const samples = replaced.slice(0, 3).map(({ address, formula }) => `${address} was \`${formula}\``);
+  return `⚠️ ${replaced.length} formula(s) on sheet "${sheetName}" replaced by values: ` +
+    `${listCells(replaced.map(({ address }) => address))}. ${samples.join(", ")}. ` +
+    "These cells no longer update when their inputs change; if the user did not ask to hard-code them, write formulas instead.";
 }
 
 /** Split a grid into row chunks whose serialized size stays under Excel's request payload limit. */
@@ -830,13 +891,11 @@ export function backupUnavailable(
   beforeCaptured: boolean,
   block: WriteBlock,
   fullAddr: string,
-): { unavailableReason: string; unavailableNote: string } {
-  if (beforeCaptured) {
-    return { unavailableReason: CHECKPOINT_SKIPPED_REASON, unavailableNote: CHECKPOINT_SKIPPED_NOTE };
-  }
+): { unavailableReason: string; unavailableNote?: string } {
+  if (beforeCaptured) return { unavailableReason: CHECKPOINT_SKIPPED_REASON };
   const cells = block.rowCount * block.columnCount;
   return {
-    unavailableReason: `Too large to back up: ${cells} cells exceed the ${MAX_RECOVERY_CELLS}-cell backup limit.`,
+    unavailableReason: tooLargeToBackUpReason(cells),
     unavailableNote:
       `ℹ️ No backup: this change covers ${cells.toLocaleString("en-US")} cells, more than the ` +
       `${MAX_RECOVERY_CELLS.toLocaleString("en-US")} a backup can hold. ${fullAddr} was empty before, so clearing it undoes the change.`,

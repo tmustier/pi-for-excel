@@ -459,3 +459,26 @@ void test("a read issued after a write in the same batch sees the written value"
   releaseLater();
   await pendingWrite;
 });
+
+void test("Stop tells the agent whether a mutation ran", async () => {
+  const stopped = new AbortController();
+  stopped.abort();
+  const [beforeRun] = withWorkbookCoordinator([makeTool("format_cells")], new FakeCoordinator(), createContextProvider("wb-1"));
+  if (!beforeRun) throw new Error("Wrapped tool missing");
+  await assert.rejects(beforeRun.execute("s1", {}, stopped.signal), /Stopped before running; nothing changed in the workbook\./u);
+
+  // Stop pressed while a one-batch mutation runs: its change stands, and the result says so.
+  const during = new AbortController();
+  const [whileRunning] = withWorkbookCoordinator(
+    [makeTool("format_cells", () => {
+      during.abort();
+      return Promise.resolve({ content: [{ type: "text", text: "Formatted A1." }], details: { echo: "ok" } });
+    })],
+    new FakeCoordinator(),
+    createContextProvider("wb-1"),
+  );
+  if (!whileRunning) throw new Error("Wrapped tool missing");
+  const result = await whileRunning.execute("s2", {}, during.signal);
+  const first = result.content[0];
+  assert.equal(first?.type === "text" ? first.text : "", "Formatted A1.\n\n⏹ Stop was pressed while this ran; the change above was already applied and stands.");
+});

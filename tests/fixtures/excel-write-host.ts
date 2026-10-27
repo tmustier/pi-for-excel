@@ -9,6 +9,8 @@
  * - a new formula reads back 0 under manual calculation until calculated;
  * - data validation is not enforced on writes, only reported by `valid`;
  * - writes to locked cells on a protected sheet fail with AccessDenied;
+ * - a write in the column right of a table extends the table, and Excel
+ *   names the new column "Column1" when its header cell is empty;
  * - loading values/formulas for more than PAYLOAD_CELL_LIMIT cells fails the
  *   sync with ResponsePayloadSizeLimitExceeded, after writes in it applied.
  *
@@ -82,6 +84,7 @@ export class OfficeError extends Error {
 interface Merge { block: Block }
 interface Spill { anchor: Coord; formula: string; values: (string | number)[] }
 interface ListValidation { block: Block; allowed: string[] }
+interface Table { name: string; block: Block }
 
 export class FakeSheet {
   readonly name: string;
@@ -89,6 +92,7 @@ export class FakeSheet {
   readonly merges: Merge[] = [];
   readonly spills: Spill[] = [];
   readonly validations: ListValidation[] = [];
+  readonly tables: Table[] = [];
   readonly unlocked = new Set<string>();
   readonly protection = { protected: false, load: (_properties?: string): void => {} };
   readonly comments = { items: [] as never[], load: (_properties?: string): void => {} };
@@ -127,6 +131,10 @@ export class FakeSheet {
     values.slice(1).forEach((value, index) => {
       this.cells.set(key(anchor.row + index + 1, anchor.col), { value, formula: "" });
     });
+  }
+
+  table(name: string, address: string): void {
+    this.tables.push({ name, block: parseBlock(address) });
   }
 
   listValidation(address: string, allowed: string[]): void {
@@ -180,6 +188,12 @@ export class FakeSheet {
 
   writeCell(row: number, col: number, sent: unknown): void {
     if (sent === null || sent === undefined) return;
+    for (const table of this.tables) {
+      const { block } = table;
+      if (col !== block.right + 1 || row < block.top || row > block.bottom || sent === "") continue;
+      block.right = col;
+      if (!this.cells.get(key(block.top, col))) this.cells.set(key(block.top, col), { value: "Column1", formula: "" });
+    }
     const merge = this.mergeAt(row, col);
     if (merge && (row !== merge.block.top || col !== merge.block.left)) return; // dropped by Excel
     const spill = this.spillAt(row, col);
@@ -392,7 +406,24 @@ export class FakeRange {
     return new FakeAreas(this.sheet.name, blocks);
   }
 
-  getSpillParentOrNullObject(): FakeRange | { isNullObject: true; load: () => void } {
+  getTables(_fullyContained?: boolean): {
+    items: Array<{ name: string; getRange: () => FakeRange; getHeaderRowRange: () => FakeRange }>;
+    load: (properties?: string) => void;
+  } {
+    const overlapping = this.sheet.tables.filter(({ block }) =>
+      block.top <= this.block.bottom && block.bottom >= this.block.top &&
+      block.left <= this.block.right && block.right >= this.block.left);
+    return {
+      items: overlapping.map((table) => ({
+        name: table.name,
+        getRange: () => new FakeRange(this.sheet, { ...table.block }),
+        getHeaderRowRange: () => new FakeRange(this.sheet, { ...table.block, bottom: table.block.top }),
+      })),
+      load: (): void => {},
+    };
+  }
+
+    getSpillParentOrNullObject(): FakeRange | { isNullObject: true; load: () => void } {
     const spill = this.rowCount === 1 && this.columnCount === 1
       ? this.sheet.spillAt(this.block.top, this.block.left)
       : undefined;
@@ -440,6 +471,9 @@ export class FakeExcelHost {
   syncCount = 0;
   /** Fail the sync that would apply the Nth queued write (1-based) with this error; the write is not applied. */
   failWrite: { at: number; error: Error } | null = null;
+  /** Called after each sync that applied at least one write (1-based count of such syncs). */
+  afterWriteSync: ((writeSyncs: number) => void) | null = null;
+  private writeSyncs = 0;
   private writesApplied = 0;
 
   constructor(sheetNames: string[] = ["Sheet1"]) {
@@ -496,6 +530,10 @@ export class FakeExcelHost {
         }
       } catch (error) {
         return Promise.reject(error instanceof Error ? error : new Error(String(error)));
+      }
+      if (writes.length > 0) {
+        this.writeSyncs += 1;
+        this.afterWriteSync?.(this.writeSyncs);
       }
       if (loaded > PAYLOAD_CELL_LIMIT) {
         return Promise.reject(new OfficeError(

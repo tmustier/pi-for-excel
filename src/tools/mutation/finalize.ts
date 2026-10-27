@@ -1,4 +1,5 @@
 import {
+  backupSkippedNote,
   recoveryCheckpointCreated,
   recoveryCheckpointUnavailable,
 } from "../recovery-metadata.js";
@@ -35,7 +36,7 @@ export async function finalizeMutationRecoveryStep<TDetails extends MutationResu
 
   if (!checkpoint) {
     recovery.result.details.recovery = recoveryCheckpointUnavailable(recovery.unavailableReason);
-    recovery.appendResultNote(recovery.result, recovery.unavailableNote);
+    recovery.appendResultNote(recovery.result, recovery.unavailableNote ?? backupSkippedNote(recovery.unavailableReason));
 
     return {
       checkpointCreated: false,

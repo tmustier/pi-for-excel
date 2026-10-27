@@ -15,6 +15,7 @@ import { buildWorkbookCellChangeSummary } from "../audit/cell-diff.js";
 import { getWorkbookChangeAuditLog } from "../audit/workbook-change-audit.js";
 import { getWorkbookRecoveryLog, MAX_RECOVERY_CELLS } from "../workbook/recovery-log.js";
 import { validateFormula } from "./write-cells.js";
+import { STOPPED_AFTER_CHANGE_NOTE, type StopReporting } from "./with-workbook-coordinator.js";
 import { finalizeMutationOperation } from "./mutation/finalize.js";
 import type { MutationFinalizeDependencies } from "./mutation/types.js";
 import { appendMutationResultNote } from "./mutation/result-note.js";
@@ -63,7 +64,10 @@ type FillOutcome =
     block: WriteBlock;
     verification: WriteVerification | null;
     verifyError: string | null;
-  };
+    /** Stop was pressed after the fill landed, so verification was skipped. */
+    stopped: boolean;
+  }
+  | { kind: "stopped"; inspection: WriteTargetInspection; block: WriteBlock };
 
 const mutationFinalizeDependencies: MutationFinalizeDependencies = {
   appendAuditEntry: (entry) => getWorkbookChangeAuditLog().append(entry),
@@ -73,7 +77,7 @@ function errorResult(text: string, details: FillFormulaDetails = { kind: "fill_f
   return { content: [{ type: "text", text }], details, isError: true };
 }
 
-export function createFillFormulaTool(): AgentTool<typeof schema, FillFormulaDetails> {
+export function createFillFormulaTool(): AgentTool<typeof schema, FillFormulaDetails> & StopReporting {
   return {
     name: "fill_formula",
     label: "Fill Formula",
@@ -81,7 +85,8 @@ export function createFillFormulaTool(): AgentTool<typeof schema, FillFormulaDet
       "Fill a single formula across a range using Excel's AutoFill. " +
       "Relative references adjust automatically. Use this instead of building large formula arrays.",
     parameters: schema,
-    execute: async (toolCallId: string, params: Params): Promise<AgentToolResult<FillFormulaDetails>> => {
+    reportsStop: true,
+    execute: async (toolCallId: string, params: Params, signal?: AbortSignal): Promise<AgentToolResult<FillFormulaDetails>> => {
       if (!params.formula.startsWith("=")) {
         return errorResult("Error: formula must start with '='.");
       }
@@ -96,7 +101,8 @@ export function createFillFormulaTool(): AgentTool<typeof schema, FillFormulaDet
       }
 
       const sent: SentGrid = () => ({ kind: "formula", formula: params.formula });
-      const progress: { inspection: WriteTargetInspection | null; filled: boolean } = { inspection: null, filled: false };
+      const progress: { inspection: WriteTargetInspection | null; filled: boolean; fillInFlight: boolean } =
+        { inspection: null, filled: false, fillInFlight: false };
 
       let outcome: FillOutcome;
       try {
@@ -113,6 +119,7 @@ export function createFillFormulaTool(): AgentTool<typeof schema, FillFormulaDet
           if (obstacle) return { kind: "obstacle", inspection, block, reason: obstacle };
           if (inspection.occupiedCount > 0 && !params.allow_overwrite) return { kind: "occupied", inspection, block };
           if (inspection.occupiedCount > 0 && !inspection.before) return { kind: "too_large_to_back_up", inspection, block };
+          if (signal?.aborted) return { kind: "stopped", inspection, block };
 
           const topLeft = range.getCell(0, 0);
           topLeft.formulas = [[params.formula]];
@@ -129,30 +136,37 @@ export function createFillFormulaTool(): AgentTool<typeof schema, FillFormulaDet
           }
           // Sync the fill on its own: a read-back in the same batch can exceed the
           // response payload limit after Excel has already applied the fill.
+          progress.fillInFlight = true;
           await context.sync();
+          progress.fillInFlight = false;
           progress.filled = true;
+          if (signal?.aborted) return { kind: "filled", inspection, block, verification: null, verifyError: null, stopped: true };
 
           try {
             const verification = await verifyWrittenRange(context, sheet, block, sent, {
               calculationMode: inspection.calculationMode,
               sentFormulas: true,
               sentEmptyCount: 0,
+              tablesBefore: inspection.tableNames,
             });
-            return { kind: "filled", inspection, block, verification, verifyError: null };
+            return { kind: "filled", inspection, block, verification, verifyError: null, stopped: false };
           } catch (verifyError) {
             const failure = await describeExcelFailure(parseExcelError(verifyError), { range: params.range });
-            return { kind: "filled", inspection, block, verification: null, verifyError: failure.reason };
+            return { kind: "filled", inspection, block, verification: null, verifyError: failure.reason, stopped: false };
           }
         });
       } catch (error) {
-        const failure = await describeExcelFailure(parseExcelError(error), { range: params.range });
+        const parsed = parseExcelError(error);
+        const failure = await describeExcelFailure(parsed, { range: params.range });
+        // Excel never answered the fill batch (timeout, Stop, not an Excel error): it may have landed.
+        const fillUnknown = progress.fillInFlight && (parsed.outcomeUnknown || parsed.code === null);
         const inspection = progress.inspection;
         const address = inspection ? qualifiedAddress(inspection.sheetName, params.range) : params.range;
         await finalizeMutationOperation(mutationFinalizeDependencies, {
           auditEntry: {
             toolName: "fill_formula",
             toolCallId,
-            blocked: !progress.filled,
+            blocked: !progress.filled && !fillUnknown,
             outputAddress: address,
             changedCount: 0,
             changes: [],
@@ -162,12 +176,32 @@ export function createFillFormulaTool(): AgentTool<typeof schema, FillFormulaDet
         return errorResult(
           progress.filled
             ? `The fill of ${address} was applied, but Pi could not finish afterwards: ${failure.reason}\n\nRead the range before relying on it.`
-            : `Error filling formula — nothing was written to ${address}. ${failure.reason}`,
+            : fillUnknown
+              ? `⚠️ **Outcome unknown** — the fill of ${address} may or may not have been applied: Excel did not confirm it. ` +
+                `${failure.reason}\n\nRead ${address} before retrying.`
+              : `Error filling formula — nothing was written to ${address}. ${failure.reason}`,
           { kind: "fill_formula", blocked: false, address, ...(failure.code ? { errorCode: failure.code } : {}) },
         );
       }
 
       const fullAddr = qualifiedAddress(outcome.inspection.sheetName, blockAddress(outcome.block));
+
+      if (outcome.kind === "stopped") {
+        await finalizeMutationOperation(mutationFinalizeDependencies, {
+          auditEntry: {
+            toolName: "fill_formula",
+            toolCallId,
+            blocked: true,
+            outputAddress: fullAddr,
+            changedCount: 0,
+            changes: [],
+            summary: "stopped before filling",
+          },
+        });
+        return errorResult(`⏹ **Stopped before filling** — nothing changed in ${fullAddr}.`, {
+          kind: "fill_formula", blocked: false, address: fullAddr, stopped: true,
+        });
+      }
 
       if (outcome.kind !== "filled") {
         const text = outcome.kind === "obstacle"
@@ -202,7 +236,16 @@ export function createFillFormulaTool(): AgentTool<typeof schema, FillFormulaDet
       }
 
       const { inspection, block, verification } = outcome;
-      const toolResult = verification
+      const toolResult: AgentToolResult<FillFormulaDetails> = outcome.stopped
+        ? {
+          content: [{
+            type: "text",
+            text: `⏹ **Stopped after filling ${fullAddr}** — the change stands. ` +
+              "It was not verified because Stop was pressed; read the range before relying on it.",
+          }],
+          details: { kind: "fill_formula", blocked: false, address: fullAddr, verification: "failed", stopped: true },
+        }
+        : verification
         ? formatFilled(inspection, block, verification, params.formula, fullAddr)
         : {
           content: [{
@@ -212,6 +255,8 @@ export function createFillFormulaTool(): AgentTool<typeof schema, FillFormulaDet
           }],
           details: { kind: "fill_formula" as const, blocked: false, address: fullAddr, verification: "failed" as const },
         };
+
+      if (signal?.aborted && !outcome.stopped) appendMutationResultNote(toolResult, STOPPED_AFTER_CHANGE_NOTE);
 
       const before = inspection.before;
       await finalizeMutationOperation(mutationFinalizeDependencies, {

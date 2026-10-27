@@ -204,7 +204,7 @@ void test("a completed sheet duplicate stays successful when backup inspection f
   }));
 
   assert.match(firstText(result), /^Duplicated "Source" as "Source \(2\)"\./u);
-  assert.match(firstText(result), /Backup not created/u);
+  assert.match(firstText(result), /No backup was saved.*Used-range inspection unavailable/u);
   assert.equal(copiesCreated, 1);
 });
 

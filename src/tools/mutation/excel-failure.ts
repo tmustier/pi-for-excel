@@ -21,6 +21,8 @@ const officeErrorSchema = Type.Object({
   /** Set by `excelRun` when it gave up waiting for the user to leave cell-edit mode (#792). */
   waitedMs: Type.Optional(Type.Number()),
   earlierStepReachedExcel: Type.Optional(Type.Boolean()),
+  /** Set by an `excelRun` that gave up waiting for Excel to answer (timeout or Stop, #792). */
+  outcomeUnknown: Type.Optional(Type.Boolean()),
 });
 
 /** Raw Office.js code while the user is typing in a cell. */
@@ -80,13 +82,19 @@ export interface ExcelErrorInfo {
   message: string;
   waitedMs: number;
   earlierStepReachedExcel: boolean;
+  /**
+   * The call gave up waiting for Excel (timeout or Stop) without Excel
+   * confirming or refusing the batch in flight, so its change may or may not
+   * be in the workbook. Set from the error's own `outcomeUnknown` flag.
+   */
+  outcomeUnknown: boolean;
 }
 
 /** Parse a caught value (the `catch` seam) into the fields Office.js errors carry. */
 export function parseExcelError(error: unknown): ExcelErrorInfo {
   const message = getErrorMessage(error);
   if (!Value.Check(officeErrorSchema, error)) {
-    return { code: null, location: "", message, waitedMs: 0, earlierStepReachedExcel: false };
+    return { code: null, location: "", message, waitedMs: 0, earlierStepReachedExcel: false, outcomeUnknown: false };
   }
   return {
     code: error.code,
@@ -94,6 +102,7 @@ export function parseExcelError(error: unknown): ExcelErrorInfo {
     message,
     waitedMs: error.waitedMs ?? 0,
     earlierStepReachedExcel: error.earlierStepReachedExcel ?? false,
+    outcomeUnknown: error.outcomeUnknown ?? false,
   };
 }
 
@@ -157,6 +166,15 @@ export async function describeExcelFailure(
       reason: protection ??
         "Excel denied the change (AccessDenied). The workbook may be read-only, open in view mode, or protected.",
       maybeApplied: false,
+    };
+  }
+
+  if (error.outcomeUnknown) {
+    return {
+      code,
+      reason: `Excel did not answer (${message}), so whether the change was applied is unknown. ` +
+        "Read the affected range before retrying.",
+      maybeApplied: true,
     };
   }
 

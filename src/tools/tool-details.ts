@@ -72,12 +72,16 @@ const mutationDetailsProperties = {
   notWrittenCount: Type.Optional(Type.Number()),
   /** Text values Excel converted to numbers, dates or booleans. */
   convertedCount: Type.Optional(Type.Number()),
+  /** Cells that held a formula and now hold a constant. */
+  formulasReplacedCount: Type.Optional(Type.Number()),
   /** Written values that violate the cells' data validation. */
   invalidCount: Type.Optional(Type.Number()),
   /** Workbook calculation mode, present only when it is not Automatic. */
   calculationMode: Type.Optional(Type.String()),
   /** Office.js error code when the call failed. */
   errorCode: Type.Optional(Type.String()),
+  /** The user pressed Stop during the call; the text says what was written before it. */
+  stopped: Type.Optional(Type.Boolean()),
 };
 
 export const writeCellsDetailsSchema = Type.Object({
@@ -320,6 +324,8 @@ export const pythonTransformRangeDetailsSchema = Type.Object({
   rowsWritten: Type.Optional(Type.Number()),
   colsWritten: Type.Optional(Type.Number()),
   formulaErrorCount: Type.Optional(Type.Number()),
+  /** Cells that held a formula and now hold a constant. */
+  formulasReplacedCount: Type.Optional(Type.Number()),
   changes: Type.Optional(workbookCellChangeSummarySchema),
   recovery: Type.Optional(recoveryCheckpointDetailsSchema),
   /** Stop was pressed; the result says what was written before it took effect. */

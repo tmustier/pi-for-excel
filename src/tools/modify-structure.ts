@@ -21,7 +21,6 @@ import type { RecoveryModifyStructureState, RecoverySheetVisibility } from "../w
 import { getErrorMessage } from "../utils/errors.js";
 import type { ModifyStructureDetails } from "./tool-details.js";
 import {
-  CHECKPOINT_SKIPPED_NOTE,
   CHECKPOINT_SKIPPED_REASON,
 } from "./recovery-metadata.js";
 import { describeExcelFailure, parseExcelError, unchangedClause } from "./mutation/excel-failure.js";
@@ -484,7 +483,6 @@ export function createModifyStructureTool(): AgentTool<typeof schema, ModifyStru
             },
             appendResultNote: appendMutationResultNote,
             unavailableReason: recoveryUnavailableReason,
-            unavailableNote: CHECKPOINT_SKIPPED_NOTE,
           },
         });
 

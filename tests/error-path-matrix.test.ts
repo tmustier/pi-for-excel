@@ -277,3 +277,22 @@ void test("error-path matrix: cell-edit mode after an earlier step reached Excel
   assert.match(text, /part of this change may already be in the workbook; check it before retrying/u);
   assert.match(text, /Excel is in cell-edit mode/u);
 });
+
+void test("error-path matrix: comments without range says range is required instead of a JavaScript error", async () => {
+  const { createCommentsTool } = await import("../src/tools/comments.ts");
+  const dispatched: string[] = [];
+  const tool = createCommentsTool({
+    dispatchAction: (params) => { dispatched.push(params.range); return Promise.resolve({ text: "ok" }); },
+    captureCommentThread: () => Promise.reject(new Error("must not touch the workbook")),
+  });
+  const result = await tool.execute(
+    "comments-no-range",
+    // @ts-expect-error -- a misnamed parameter, as a model sent it: `cell` instead of `range`
+    { action: "add", cell: "A1", content: "hi" },
+  );
+
+  assert.equal(result.isError, true);
+  const first = result.content[0];
+  assert.match(first?.type === "text" ? first.text : "", /`range` is required.*Received parameters: action, cell, content\. Nothing was changed\./u);
+  assert.deepEqual(dispatched, []);
+});

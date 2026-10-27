@@ -134,7 +134,7 @@ function serializeResult(result: unknown): { text: string; truncated: boolean } 
   let serialized: string;
 
   try {
-    const maybeSerialized = JSON.stringify(result, jsonSafeReplacer, 2);
+    const maybeSerialized = JSON.stringify(result, jsonSafeReplacer);
     serialized = maybeSerialized ?? "null";
   } catch (error) {
     throw new Error(`Result is not JSON-serializable: ${getErrorMessage(error)}`);
