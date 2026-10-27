@@ -16,7 +16,12 @@ import type {
   OAuthLoginCallbacks,
   OAuthSelectOption,
 } from "@earendil-works/pi-ai";
-import { githubCopilotProvider } from "@earendil-works/pi-ai/providers/github-copilot";
+// pi-ai loads its OAuth flows through an opaque import() so bundlers skip
+// Node-only flows; Vite cannot follow it, and the taskpane failed with
+// "Failed to fetch dynamically imported module" (LOGIN-21, P-65). The GitHub
+// Copilot flow itself only uses fetch, so it is imported directly. It is not in
+// pi-ai's export map, hence the file path; check it on pi-ai upgrades.
+import { githubCopilotOAuth } from "../../node_modules/@earendil-works/pi-ai/dist/auth/oauth/github-copilot.js";
 
 import { anthropicBrowserOAuthProvider } from "./anthropic-browser-oauth.js";
 import type { BrowserOAuthProvider } from "./browser-oauth-types.js";
@@ -105,10 +110,7 @@ function createAuthInteraction(callbacks: OAuthLoginCallbacks): ProviderAuthInte
 }
 
 function createGitHubCopilotBrowserProvider(): BrowserOAuthProvider {
-  const oauth = githubCopilotProvider().auth.oauth;
-  if (!oauth) {
-    throw new Error("GitHub Copilot OAuth is unavailable.");
-  }
+  const oauth = githubCopilotOAuth;
 
   return {
     id: "github-copilot",
