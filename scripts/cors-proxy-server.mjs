@@ -917,13 +917,13 @@ function armOAuthCallbackListener(entry) {
     const code = typeof err?.code === "string" ? err.code : "listen_error";
     if (entry.lastListenError === code) return;
     entry.lastListenError = code;
-    console.warn(`[pi-for-excel] OAuth callback capture listener on port ${entry.port} unavailable (${code}).`);
+    console.warn(`[pi-for-excel] OAuth callback capture listener unavailable (${code}).`);
     console.warn("[pi-for-excel] Affected OAuth logins will still work with manual callback URL paste.");
   });
 
   server.once("listening", () => {
     entry.lastListenError = null;
-    console.log(`[pi-for-excel] OAuth callback capture listener bound on port ${entry.port} for a login.`);
+    console.log(`[pi-for-excel] OAuth callback capture listener bound for a login.`);
   });
 
   server.listen(entry.port, OAUTH_CALLBACK_HOST);
@@ -937,7 +937,7 @@ function releaseOAuthCallbackListener(entry) {
   entry.server = null;
   server.close();
   server.closeAllConnections();
-  console.log(`[pi-for-excel] OAuth callback capture listener on port ${entry.port} released.`);
+  console.log(`[pi-for-excel] OAuth callback capture listener released.`);
 }
 
 function closeServer(server) {
