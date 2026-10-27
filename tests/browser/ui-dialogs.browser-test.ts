@@ -29,6 +29,50 @@ async function openFileDetail(page: Page, name: string): Promise<void> {
   await page.locator(".pi-files-detail-actions").waitFor({ state: "visible" });
 }
 
+void test("Stop Pi in a local-file approval aborts the turn without creating the file", async () => {
+  await withTaskpane(async (page) => {
+    await page.evaluate(async () => {
+      const { getAppStorage } = await import("/src/storage/local/app-storage.ts");
+      await getAppStorage().settings.set("execution.mode.v1", "safe");
+    });
+    await page.reload();
+    await page.locator("pi-input textarea").waitFor({ state: "visible", timeout: 20_000 });
+    await page.evaluate(async () => {
+      const { createAssistantMessageEventStream } = await import("/node_modules/@earendil-works/pi-ai/dist/utils/event-stream.js") as typeof import("@earendil-works/pi-ai/utils/event-stream");
+      const { fauxAssistantMessage } = await import("/node_modules/@earendil-works/pi-ai/dist/providers/faux.js") as typeof import("@earendil-works/pi-ai/providers/faux");
+      const { PiSidebar } = await import("/src/ui/pi-sidebar.ts") as typeof import("../../src/ui/pi-sidebar.ts");
+      const sidebar = document.querySelector("pi-sidebar");
+      if (!(sidebar instanceof PiSidebar) || !sidebar.agent) throw new Error("sidebar missing");
+      sidebar.agent.getApiKey = () => Promise.resolve("synthetic-key");
+      sidebar.agent.streamFunction = (_model, _context, options) => {
+        const stream = createAssistantMessageEventStream();
+        if (options?.signal?.aborted) {
+          stream.push({ type: "error", reason: "aborted", error: fauxAssistantMessage("", { stopReason: "aborted" }) });
+        } else {
+          stream.push({ type: "done", reason: "toolUse", message: fauxAssistantMessage([
+            { type: "toolCall", id: "create-file", name: "files", arguments: { action: "write", path: "stop-approval.txt", content: "must not be written" } },
+          ], { stopReason: "toolUse" }) });
+        }
+        return stream;
+      };
+    });
+    const welcome = page.locator("#pi-welcome-login-overlay");
+    if (await welcome.count()) await welcome.dispatchEvent("click");
+    await enterCommand(page, "Create the file");
+    const dialog = page.locator("#pi-tool-approval-overlay");
+    await dialog.waitFor({ state: "visible" });
+    await dialog.getByRole("button", { name: "Stop Pi", exact: true }).click({ timeout: 3_000 });
+    await dialog.waitFor({ state: "detached" });
+    await page.waitForFunction(() => !document.querySelector("pi-sidebar").agent.state.isStreaming);
+    const files = await page.evaluate(async () => {
+      const { getFilesWorkspace } = await import("/src/files/workspace.ts") as typeof import("../../src/files/workspace.ts");
+      return (await getFilesWorkspace().listFiles()).map((file) => file.path);
+    });
+    assert.equal(files.includes("stop-approval.txt"), false);
+    assert.equal(await page.locator("[inert]").count(), 0);
+  });
+});
+
 void test("approvals ignore a stray Enter, and Escape declines only the shown request", async () => {
   await withTaskpane(async (page) => {
     await page.evaluate(async () => {
@@ -65,6 +109,34 @@ void test("the Files rename dialog confirms a new path", async () => {
     await dialog.getByRole("button", { name: "Rename" }).click();
     await page.getByRole("heading", { name: "final-plan.md" }).waitFor({ state: "visible" });
     assert.equal(await page.getByRole("heading", { name: "final-plan.md" }).innerText(), "final-plan.md");
+    await page.waitForTimeout(200);
+    const notices = await page.locator("#pi-toast .pi-toast__message").allTextContents();
+    assert.deepEqual(notices.filter((text) => text.startsWith("Renamed to") || text === "That file is no longer available."),
+      ["Renamed to archive/final-plan.md."]);
+  });
+});
+
+void test("a Files preview delete reports success, while an external delete still warns", async () => {
+  await withTaskpane(async (page) => {
+    await importFile(page, "delete-me.md");
+    await openFileDetail(page, "delete-me.md");
+    await page.locator(".pi-files-detail-actions").getByRole("button", { name: "Delete", exact: true }).click();
+    await page.getByRole("dialog").last().getByRole("button", { name: "Delete", exact: true }).click();
+    await page.getByRole("heading", { name: "Files", exact: true }).waitFor();
+    await page.waitForTimeout(200);
+    const notices = await page.locator("#pi-toast .pi-toast__message").allTextContents();
+    assert.deepEqual(notices.filter((text) => text.startsWith("Deleted") || text === "That file is no longer available."),
+      ["Deleted delete-me.md."]);
+
+    await importFile(page, "external-delete.md");
+    await page.getByText("external-delete.md", { exact: true }).click();
+    await page.getByRole("heading", { name: "external-delete.md", exact: true }).waitFor();
+    await page.evaluate(async () => {
+      const { getFilesWorkspace } = await import("/src/files/workspace.ts");
+      await getFilesWorkspace().deleteFile("external-delete.md", { audit: { actor: "assistant", source: "tool:files" } });
+    });
+    await page.getByText("That file is no longer available.", { exact: true }).waitFor();
+    await page.getByRole("heading", { name: "Files", exact: true }).waitFor();
   });
 });
 

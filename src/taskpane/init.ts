@@ -1106,6 +1106,7 @@ export async function initTaskpane(opts: {
           message: request.message,
           confirmLabel: request.confirmLabel,
           ...(request.signal ? { signal: request.signal } : {}),
+          onStop: stopRuntimeTurn,
           ...approvalSource(),
         }),
         assistantCreatedFiles: runtimeAssistantCreatedFiles,
