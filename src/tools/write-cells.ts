@@ -16,7 +16,7 @@ import { runMutation } from "./mutation/run-mutation.js";
 import { Type, type Static } from "typebox";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import type { WriteCellsDetails } from "./tool-details.js";
-import { getRange, qualifiedAddress, parseCell, colToLetter, parseRangeRef } from "../excel/helpers.js";
+import { excelRun, getRange, qualifiedAddress, parseCell, colToLetter, parseRangeRef } from "../excel/helpers.js";
 import { buildWorkbookCellChangeSummary } from "../audit/cell-diff.js";
 import { getWorkbookChangeAuditLog } from "../audit/workbook-change-audit.js";
 import {
@@ -31,6 +31,32 @@ import { finalizeMutationOperation } from "./mutation/finalize.js";
 import type { MutationFinalizeDependencies } from "./mutation/types.js";
 import { appendMutationResultNote } from "./mutation/result-note.js";
 import type { ApprovalPrecheck, OverwrittenCells } from "./with-workbook-coordinator.js";
+import { describeExcelFailure, parseExcelError } from "./mutation/excel-failure.js";
+import {
+  blockAddress,
+  chunkRowsForWrite,
+  classifySentValue,
+  describeWriteObstacle,
+  formatInterruptedWrite,
+  formatStoppedAfterWrite,
+  formatReplacedFormulas,
+  formatVerificationNotes,
+  formatVerificationProblems,
+  hasVerificationProblems,
+  inspectWriteTarget,
+  verifyWrittenRange,
+  backupUnavailable,
+  replacedFormulas,
+  sampledChanges,
+  toCellGrid,
+  type CellScalar,
+  type SentGrid,
+  type WriteBlock,
+  type WriteTargetInspection,
+  type WriteReadBack,
+} from "./mutation/range-write.js";
+
+export { countOccupiedCells } from "./mutation/range-write.js";
 
 const schema = Type.Object({
   start_cell: Type.String({
@@ -87,68 +113,71 @@ const defaultDependencies: WriteCellsToolDependencies = {
   appendRecoverySnapshot: (args) => getWorkbookRecoveryLog().append(args),
 };
 
+function errorResult(text: string, details: WriteCellsDetails = { kind: "write_cells", blocked: false }): AgentToolResult<WriteCellsDetails> {
+  return { content: [{ type: "text", text }], details, isError: true };
+}
+
 type CheckedWrite =
   | { result: AgentToolResult<WriteCellsDetails> }
-  | { padded: unknown[][]; rows: number; cols: number; startCellRef: string };
+  | { padded: CellScalar[][]; block: WriteBlock; sent: SentGrid };
 
 /** Input checks that refuse a write before it touches the workbook. */
 function checkWriteInput(params: Params): CheckedWrite {
   if (!params.values || params.values.length === 0) {
-    return {
-      result: {
-        content: [{ type: "text", text: "Error: values array is empty." }],
-        details: { kind: "write_cells", blocked: false },
-      },
-    };
+    return { result: errorResult("Error: values array is empty.") };
   }
 
-  const { padded, rows, cols } = padValues(params.values);
-
+  const sentGrid = toCellGrid(params.values);
+  const cols = Math.max(...sentGrid.map((row) => row.length));
+  const rows = sentGrid.length;
+  // Short rows are padded with "" (which clears those cells), as before.
+  const padded: CellScalar[][] = sentGrid.map((row) =>
+    Array.from({ length: cols }, (_, index) => index < row.length ? row[index] : ""));
   const startCellRef = parseRangeRef(params.start_cell).address;
 
   if (startCellRef.includes(":")) {
-    return {
-      result: {
-        content: [{ type: "text", text: "Error: start_cell must be a single cell (e.g. \"A1\")." }],
-        details: { kind: "write_cells", blocked: false },
-      },
-    };
+    return { result: errorResult("Error: start_cell must be a single cell (e.g. \"A1\").") };
   }
 
-  let invalidFormulas: InvalidFormula[] = [];
+  let start: { col: number; row: number };
   try {
-    invalidFormulas = findInvalidFormulas(padded, startCellRef);
+    start = parseCell(startCellRef);
   } catch {
-    return {
-      result: {
-        content: [{ type: "text", text: `Error: invalid start_cell "${params.start_cell}".` }],
-        details: { kind: "write_cells", blocked: false },
-      },
-    };
+    return { result: errorResult(`Error: invalid start_cell "${params.start_cell}".`) };
   }
 
+  const invalidFormulas = findInvalidFormulas(padded, start);
   if (invalidFormulas.length > 0) {
     const lines: string[] = [];
-    lines.push("⛔ **Write blocked** — invalid formula syntax detected:");
+    lines.push("⛔ **Write blocked** — invalid formula syntax detected (nothing was written):");
     for (const invalid of invalidFormulas) {
       lines.push(`- ${invalid.address}: ${invalid.formula} (${invalid.reason})`);
     }
     lines.push("");
     lines.push("Fix the formulas and retry.");
-    return {
-      result: {
-        content: [{ type: "text", text: lines.join("\n") }],
-        details: { kind: "write_cells", blocked: true },
-      },
-    };
+    return { result: errorResult(lines.join("\n"), { kind: "write_cells", blocked: true }) };
   }
 
-  return { padded, rows, cols, startCellRef };
+  const block: WriteBlock = { startRow: start.row, startCol: start.col, rowCount: rows, columnCount: cols };
+  const sent: SentGrid = (r, c) => classifySentValue(padded[r]?.[c]);
+  return { padded, block, sent };
+}
+
+/** Why a write is refused after inspecting its target, or null when it can go ahead. */
+function refusedOutcome(
+  inspected: WriteTargetInspection,
+  allowOverwrite: boolean | undefined,
+): Exclude<WriteOutcome, { kind: "written" }> | null {
+  const obstacle = describeWriteObstacle(inspected, (address) => qualifiedAddress(inspected.sheetName, address));
+  if (obstacle) return { kind: "obstacle", inspection: inspected, reason: obstacle };
+  if (inspected.occupiedCount > 0 && !allowOverwrite) return { kind: "occupied", inspection: inspected };
+  if (inspected.occupiedCount > 0 && !inspected.before) return { kind: "too_large_to_back_up", inspection: inspected };
+  return null;
 }
 
 export function createWriteCellsTool(
   dependencies: Partial<WriteCellsToolDependencies> = {},
-): AgentTool<typeof schema, WriteCellsDetails> & ApprovalPrecheck<typeof schema, WriteCellsDetails> {
+): AgentTool<typeof schema, WriteCellsDetails> & ApprovalPrecheck<typeof schema, WriteCellsDetails> & StopReporting {
   const resolvedDependencies: WriteCellsToolDependencies = {
     appendAuditEntry: dependencies.appendAuditEntry ?? defaultDependencies.appendAuditEntry,
     appendRecoverySnapshot:
@@ -158,23 +187,31 @@ export function createWriteCellsTool(
     appendAuditEntry: resolvedDependencies.appendAuditEntry,
   };
 
-  const reportBlocked = async (
+  const reportRefused = async (
     toolCallId: string,
-    blocked: BlockedWriteCellsResult,
+    outcome: Exclude<WriteOutcome, { kind: "written" }>,
+    block: WriteBlock,
   ): Promise<AgentToolResult<WriteCellsDetails>> => {
-    const blockedResult = formatBlocked(blocked);
+    const fullAddr = qualifiedAddress(outcome.inspection.sheetName, blockAddress(block));
+    const blockedResult = outcome.kind === "obstacle"
+      ? errorResult(`⛔ **Write blocked** — nothing was written to ${fullAddr}.\n\n${outcome.reason}`, {
+        kind: "write_cells", blocked: true, address: fullAddr,
+      })
+      : outcome.kind === "occupied"
+        ? formatOccupied(outcome.inspection, fullAddr)
+        : formatTooLargeToBackUp(outcome.inspection, fullAddr, block);
 
     await finalizeMutationOperation(mutationFinalizeDependencies, {
       auditEntry: {
         toolName: "write_cells",
         toolCallId,
         blocked: true,
-        ...(blockedResult.details.address !== undefined ? { outputAddress: blockedResult.details.address } : {}),
+        outputAddress: fullAddr,
         changedCount: 0,
         changes: [],
+        summary: outcome.kind === "obstacle" ? "blocked: target cannot hold the values" : `blocked: ${outcome.kind.replaceAll("_", " ")}`,
       },
     });
-
     return blockedResult;
   };
 
@@ -189,81 +226,63 @@ export function createWriteCellsTool(
       "After writing, verifies what Excel stored and reports cells that did not take their value " +
       "(merged cells, spilled ranges), converted text, formula errors and data-validation violations.",
     parameters: schema,
-    // In Confirm mode, a write that would be refused (bad input, or overwrite
-    // protection) is refused before the user is asked to approve it.
+    // In Confirm mode, a write that would be refused (bad input, sheet
+    // protection, merged/spilled targets, overwrite protection) is refused
+    // before the user is asked to approve it. Same inspection as execute.
     checkBeforeApproval: async (toolCallId, params) => {
+      const checked = checkWriteInput(params);
+      if ("result" in checked) return { refused: checked.result };
       try {
-        const checked = checkWriteInput(params);
-        if ("result" in checked) return { refused: checked.result };
-
-        const target = await excelRun(async (context) => {
+        const inspected = await excelRun(async (context) => {
           const { sheet } = getRange(context, params.start_cell);
-          sheet.load("name");
-          const rangeAddr = computeRangeAddress(checked.startCellRef, checked.rows, checked.cols);
-          const targetRange = sheet.getRange(rangeAddr);
-          targetRange.load("values,formulas");
-          await context.sync();
-          return { sheetName: sheet.name, rangeAddr, values: targetRange.values, formulas: targetRange.formulas };
+          return inspectWriteTarget(context, sheet, checked.block, checked.sent);
         });
-
-        const occupied = describeOccupiedCells({
-          sheetName: target.sheetName,
-          topLeft: checked.startCellRef,
-          values: target.values,
-          formulas: target.formulas,
-        });
-        if (!occupied) return null;
-        if (params.allow_overwrite) return { overwrites: occupied };
-        return {
-          refused: await reportBlocked(toolCallId, {
-            blocked: true,
-            sheetName: target.sheetName,
-            address: target.rangeAddr,
-            existingCount: occupied.count,
-            existingValues: target.values,
-          }),
-        };
+        const refused = refusedOutcome(inspected, params.allow_overwrite);
+        if (refused) return { refused: await reportRefused(toolCallId, refused, checked.block) };
+        if (inspected.occupiedCount === 0) return null;
+        // Allowed overwrite: the approval names the cells it replaces (#794).
+        const occupied = inspected.before
+          ? describeOccupiedCells({
+            sheetName: inspected.sheetName,
+            topLeft: `${colToLetter(checked.block.startCol)}${checked.block.startRow}`,
+            values: inspected.before.values,
+            formulas: inspected.before.formulas,
+          })
+          : { count: inspected.occupiedCount, sample: [] };
+        return occupied ? { overwrites: occupied } : null;
       } catch {
         // Let the call proceed to approval; it reports its own error when it runs.
         return null;
       }
     },
+    reportsStop: true,
     execute: async (
       toolCallId: string,
       params: Params,
       signal?: AbortSignal,
     ): Promise<AgentToolResult<WriteCellsDetails>> => {
-      if (!params.values || params.values.length === 0) {
-        return errorResult("Error: values array is empty.");
-      }
+      const checked = checkWriteInput(params);
+      if ("result" in checked) return checked.result;
+      const { padded, block, sent } = checked;
+      const sentFormulas = padded.some((row) => row.some((value) => typeof value === "string" && value.startsWith("=")));
+      const sentEmptyCount = padded.reduce((total, row) => total + row.filter((value) => value === "").length, 0);
 
-      const sentGrid = toCellGrid(params.values);
-      const cols = Math.max(...sentGrid.map((row) => row.length));
-      const rows = sentGrid.length;
-      // Short rows are padded with "" (which clears those cells), as before.
-      const padded: CellScalar[][] = sentGrid.map((row) =>
-        Array.from({ length: cols }, (_, index) => index < row.length ? row[index] : ""));
-      const startCellRef = parseRangeRef(params.start_cell).address;
+      // Filled in as the Excel batch progresses, so a failure can say what already happened.
+      const progress: { inspection: WriteTargetInspection | null; writtenRows: number; inFlightRows: number } = {
+        inspection: null,
+        writtenRows: 0,
+        inFlightRows: 0,
+      };
 
-      if (startCellRef.includes(":")) {
-        return errorResult("Error: start_cell must be a single cell (e.g. \"A1\").");
-      }
-
-      let start: { col: number; row: number };
+      let outcome: WriteOutcome;
       try {
-        const checked = checkWriteInput(params);
-        if ("result" in checked) return checked.result;
-        const { padded, rows, cols, startCellRef } = checked;
-
-        const result = await excelRun<WriteCellsResult>(async (context) => {
+        outcome = await runMutation<WriteOutcome>(async (context) => {
           const { sheet } = getRange(context, params.start_cell);
           const inspected = await inspectWriteTarget(context, sheet, block, sent);
           progress.inspection = inspected;
 
-          const obstacle = describeWriteObstacle(inspected, (address) => qualifiedAddress(inspected.sheetName, address));
-          if (obstacle) return { kind: "obstacle", inspection: inspected, reason: obstacle };
-          if (inspected.occupiedCount > 0 && !params.allow_overwrite) return { kind: "occupied", inspection: inspected };
-          if (inspected.occupiedCount > 0 && !inspected.before) return { kind: "too_large_to_back_up", inspection: inspected };
+          const refused = refusedOutcome(inspected, params.allow_overwrite);
+          if (refused) return refused;
 
           // Stop is honored between chunks, never inside one, so the result can
           // say exactly which rows landed.
@@ -322,39 +341,23 @@ export function createWriteCellsTool(
         });
       }
 
-        if (result.blocked) {
-          return reportBlocked(toolCallId, result);
-        }
-
-        const successResult = formatSuccess(result, rows, cols);
-
-        await finalizeMutationOperation(mutationFinalizeDependencies, {
-          auditEntry: {
-            toolName: "write_cells",
-            toolCallId,
-            blocked: false,
-            ...(successResult.details.address !== undefined ? { outputAddress: successResult.details.address } : {}),
-            changedCount: successResult.details.changes?.changedCount ?? 0,
-            changes: successResult.details.changes?.sample ?? [],
-          },
-          recovery: {
-            result: successResult,
-            appendRecoverySnapshot: () => resolvedDependencies.appendRecoverySnapshot({
-              toolName: "write_cells",
-              toolCallId,
-              address: successResult.details.address ?? qualifiedAddress(result.sheetName, result.address),
-              changedCount: successResult.details.changes?.changedCount ?? 0,
-              beforeValues: result.beforeValues,
-              beforeFormulas: result.beforeFormulas,
-              afterFormulas: result.readBackFormulas,
-            }),
-            appendResultNote: appendMutationResultNote,
-            unavailableReason: CHECKPOINT_SKIPPED_REASON,
-            unavailableNote: CHECKPOINT_SKIPPED_NOTE,
-          },
+      if (outcome.kind === "stopped") {
+        return interruptedWrite({
+          cause: { kind: "stopped" },
+          params,
+          toolCallId,
+          block,
+          inspection: outcome.inspection,
+          writtenRows: progress.writtenRows,
+          uncertainRows: 0,
+          dependencies: resolvedDependencies,
+          finalizeDependencies: mutationFinalizeDependencies,
         });
-        return blockedResult;
       }
+
+      const fullAddr = qualifiedAddress(outcome.inspection.sheetName, blockAddress(block));
+
+      if (outcome.kind !== "written") return reportRefused(toolCallId, outcome, block);
 
       const successResult = formatWritten(outcome, block, padded, fullAddr);
       // Stop pressed after verification finished: the result is complete, but say the change stands.
@@ -380,6 +383,8 @@ export function createWriteCellsTool(
               changedCount: successResult.details.changes?.changedCount ?? 0,
               beforeValues: backupBefore.values,
               beforeFormulas: backupBefore.formulas,
+              // What the write left, so a later restore can warn about edits made since (#794).
+              ...(outcome.verification?.formulas ? { afterFormulas: outcome.verification.formulas } : {}),
             })
             : Promise.resolve(null),
           appendResultNote: appendMutationResultNote,
@@ -390,6 +395,38 @@ export function createWriteCellsTool(
       return successResult;
     },
   };
+}
+
+const OVERWRITE_SAMPLE_SIZE = 3;
+
+/**
+ * The non-empty cells of a grid starting at `topLeft` (e.g. "B2"), for an
+ * approval that must say what a change replaces. Formulas are shown as
+ * formulas, other cells by value.
+ */
+export function describeOccupiedCells(args: {
+  sheetName: string;
+  topLeft: string;
+  values: CellScalar[][];
+  formulas: CellScalar[][];
+}): OverwrittenCells | null {
+  const start = parseCell(args.topLeft);
+  const sample: OverwrittenCells["sample"] = [];
+  let count = 0;
+  args.values.forEach((row, r) => {
+    row.forEach((value, c) => {
+      const formula = args.formulas[r]?.[c];
+      const isFormula = typeof formula === "string" && formula.startsWith("=");
+      if (!isFormula && (value === null || value === undefined || value === "")) return;
+      count += 1;
+      if (sample.length >= OVERWRITE_SAMPLE_SIZE) return;
+      sample.push({
+        address: qualifiedAddress(args.sheetName, `${colToLetter(start.col + c)}${start.row + r}`),
+        content: isFormula ? formula : String(value),
+      });
+    });
+  });
+  return count > 0 ? { count, sample } : null;
 }
 
 type InterruptCause =
@@ -545,53 +582,6 @@ export function validateFormula(formula: string): string | null {
   if (/[+\-*/^&,]$/.test(trimmed)) return "Formula ends with an operator";
 
   return null;
-}
-
-export function countOccupiedCells(values: unknown[][], formulas: unknown[][]): number {
-  let count = 0;
-  for (let r = 0; r < values.length; r++) {
-    const valueRow = values[r] ?? [];
-    for (let c = 0; c < valueRow.length; c++) {
-      const value = valueRow[c];
-      const formula = formulas[r]?.[c];
-      const hasValue = value !== null && value !== undefined && value !== "";
-      const hasFormula = typeof formula === "string" && formula.startsWith("=");
-      if (hasValue || hasFormula) count += 1;
-    }
-  }
-  return count;
-}
-
-const OVERWRITE_SAMPLE_SIZE = 3;
-
-/**
- * The non-empty cells of a grid starting at `topLeft` (e.g. "B2"), for an
- * approval that must say what a change replaces. Formulas are shown as
- * formulas, other cells by value.
- */
-export function describeOccupiedCells(args: {
-  sheetName: string;
-  topLeft: string;
-  values: unknown[][];
-  formulas: unknown[][];
-}): OverwrittenCells | null {
-  const start = parseCell(args.topLeft);
-  const sample: OverwrittenCells["sample"] = [];
-  let count = 0;
-  args.values.forEach((row, r) => {
-    row.forEach((value, c) => {
-      const formula = args.formulas[r]?.[c];
-      const isFormula = typeof formula === "string" && formula.startsWith("=");
-      if (!isFormula && (value === null || value === undefined || value === "")) return;
-      count += 1;
-      if (sample.length >= OVERWRITE_SAMPLE_SIZE) return;
-      sample.push({
-        address: qualifiedAddress(args.sheetName, `${colToLetter(start.col + c)}${start.row + r}`),
-        content: isFormula ? formula : String(value),
-      });
-    });
-  });
-  return count > 0 ? { count, sample } : null;
 }
 
 const VERIFIED_VALUES_PREVIEW_ROWS = 8;

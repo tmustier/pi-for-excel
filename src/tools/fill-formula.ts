@@ -11,18 +11,12 @@ import { runMutation } from "./mutation/run-mutation.js";
 import { Type, type Static } from "typebox";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import type { FillFormulaDetails } from "./tool-details.js";
-import { getRange, qualifiedAddress, colToLetter } from "../excel/helpers.js";
+import { excelRun, getRange, qualifiedAddress, colToLetter } from "../excel/helpers.js";
 import { buildWorkbookCellChangeSummary } from "../audit/cell-diff.js";
 import { getWorkbookChangeAuditLog } from "../audit/workbook-change-audit.js";
-import { getWorkbookRecoveryLog } from "../workbook/recovery-log.js";
-import { countOccupiedCells, describeOccupiedCells, validateFormula } from "./write-cells.js";
-import type { ApprovalPrecheck } from "./with-workbook-coordinator.js";
-import { findErrors } from "../utils/format.js";
-import { getErrorMessage } from "../utils/errors.js";
-import {
-  CHECKPOINT_SKIPPED_NOTE,
-  CHECKPOINT_SKIPPED_REASON,
-} from "./recovery-metadata.js";
+import { getWorkbookRecoveryLog, MAX_RECOVERY_CELLS } from "../workbook/recovery-log.js";
+import { describeOccupiedCells, validateFormula } from "./write-cells.js";
+import { STOPPED_AFTER_CHANGE_NOTE, type ApprovalPrecheck, type StopReporting } from "./with-workbook-coordinator.js";
 import { finalizeMutationOperation } from "./mutation/finalize.js";
 import type { MutationFinalizeDependencies } from "./mutation/types.js";
 import { appendMutationResultNote } from "./mutation/result-note.js";
@@ -77,13 +71,49 @@ const mutationFinalizeDependencies: MutationFinalizeDependencies = {
   appendAuditEntry: (entry) => getWorkbookChangeAuditLog().append(entry),
 };
 
-type BlockedFill = Extract<FillFormulaResult, { blocked: true }>;
+function errorResult(text: string, details: FillFormulaDetails = { kind: "fill_formula", blocked: false }): AgentToolResult<FillFormulaDetails> {
+  return { content: [{ type: "text", text }], details, isError: true };
+}
 
-async function reportBlocked(
-  toolCallId: string,
-  blocked: BlockedFill,
-): Promise<AgentToolResult<FillFormulaDetails>> {
-  const fullAddr = qualifiedAddress(blocked.sheetName, blocked.address);
+type RefusedFill = Extract<FillOutcome, { kind: "obstacle" | "occupied" | "too_large_to_back_up" }>;
+
+/** Input checks that refuse a fill before it touches the workbook. */
+function checkFillInput(params: Params): AgentToolResult<FillFormulaDetails> | null {
+  if (!params.formula.startsWith("=")) {
+    return errorResult("Error: formula must start with '='.");
+  }
+  const invalid = validateFormula(params.formula);
+  if (invalid) {
+    return errorResult(`Error: invalid formula (${invalid}).`);
+  }
+  if (/[;,]/.test(params.range)) {
+    return errorResult("Error: fill_formula only supports a single contiguous range.");
+  }
+  return null;
+}
+
+/** Why a fill is refused after inspecting its target, or null when it can go ahead. */
+function refusedFill(inspection: WriteTargetInspection, block: WriteBlock, allowOverwrite: boolean | undefined): RefusedFill | null {
+  const obstacle = describeWriteObstacle(inspection, (address) => qualifiedAddress(inspection.sheetName, address));
+  if (obstacle) return { kind: "obstacle", inspection, block, reason: obstacle };
+  if (inspection.occupiedCount > 0 && !allowOverwrite) return { kind: "occupied", inspection, block };
+  if (inspection.occupiedCount > 0 && !inspection.before) return { kind: "too_large_to_back_up", inspection, block };
+  return null;
+}
+
+async function reportRefusedFill(toolCallId: string, outcome: RefusedFill): Promise<AgentToolResult<FillFormulaDetails>> {
+  const fullAddr = qualifiedAddress(outcome.inspection.sheetName, blockAddress(outcome.block));
+  const text = outcome.kind === "obstacle"
+    ? `⛔ **Fill blocked** — nothing was written to ${fullAddr}.\n\n${outcome.reason}`
+    : outcome.kind === "occupied"
+      ? `⛔ **Fill blocked** — ${fullAddr} contains ${outcome.inspection.occupiedCount} non-empty cell(s); nothing was written.\n\n` +
+        "If the user asked to replace them, retry with `allow_overwrite: true`; otherwise ask the user first."
+      : `⛔ **Fill refused** — nothing was written. ${fullAddr} already holds data, and the fill covers ` +
+        `${(outcome.block.rowCount * outcome.block.columnCount).toLocaleString("en-US")} cells, more than the ` +
+        `${MAX_RECOVERY_CELLS.toLocaleString("en-US")} a backup can hold, so the overwrite could not be undone.\n\n` +
+        `Fill it in blocks of at most ${MAX_RECOVERY_CELLS.toLocaleString("en-US")} cells (each gets its own backup), ` +
+        "or ask the user to clear the old data first.";
+
   await finalizeMutationOperation(mutationFinalizeDependencies, {
     auditEntry: {
       toolName: "fill_formula",
@@ -92,28 +122,19 @@ async function reportBlocked(
       outputAddress: fullAddr,
       changedCount: 0,
       changes: [],
+      summary: `blocked: ${outcome.kind.replaceAll("_", " ")}`,
     },
   });
 
-  return {
-    content: [
-      {
-        type: "text",
-        text:
-          `⛔ **Fill blocked** — ${fullAddr} contains ${blocked.existingCount} non-empty cell(s).\n\n` +
-          "To overwrite, confirm with the user and retry with `allow_overwrite: true`.",
-      },
-    ],
-    details: {
-      kind: "fill_formula",
-      blocked: true,
-      address: fullAddr,
-      existingCount: blocked.existingCount,
-    },
-  };
+  return errorResult(text, {
+    kind: "fill_formula",
+    blocked: true,
+    address: fullAddr,
+    ...(outcome.kind === "obstacle" ? {} : { existingCount: outcome.inspection.occupiedCount }),
+  });
 }
 
-export function createFillFormulaTool(): AgentTool<typeof schema, FillFormulaDetails> & ApprovalPrecheck<typeof schema, FillFormulaDetails> {
+export function createFillFormulaTool(): AgentTool<typeof schema, FillFormulaDetails> & ApprovalPrecheck<typeof schema, FillFormulaDetails> & StopReporting {
   return {
     name: "fill_formula",
     label: "Fill Formula",
@@ -121,36 +142,49 @@ export function createFillFormulaTool(): AgentTool<typeof schema, FillFormulaDet
       "Fill a single formula across a range using Excel's AutoFill. " +
       "Relative references adjust automatically. Use this instead of building large formula arrays.",
     parameters: schema,
-    // Before approval: refuse a fill overwrite protection would block, and
-    // otherwise name the non-empty cells the fill replaces.
+    reportsStop: true,
+    // Before approval (#794): refuse a fill that would be refused anyway, and
+    // otherwise name the non-empty cells an allowed overwrite replaces.
+    // Same inspection as execute.
     checkBeforeApproval: async (toolCallId, params) => {
+      const inputError = checkFillInput(params);
+      if (inputError) return { refused: inputError };
+      const sent: SentGrid = () => ({ kind: "formula", formula: params.formula });
       try {
         const target = await excelRun(async (context) => {
           const { sheet, range } = getRange(context, params.range);
-          sheet.load("name");
-          range.load("address,values,formulas");
+          range.load("address");
           await context.sync();
-          return { sheetName: sheet.name, address: range.address, values: range.values, formulas: range.formulas };
+          const block = writeBlockFromAddress(range.address);
+          return { block, inspection: await inspectWriteTarget(context, sheet, block, sent) };
         });
-        const topLeft = target.address.slice(target.address.lastIndexOf("!") + 1).split(":")[0] ?? "A1";
-        const occupied = describeOccupiedCells({ sheetName: target.sheetName, topLeft, values: target.values, formulas: target.formulas });
-        if (!occupied) return null;
-        if (params.allow_overwrite) return { overwrites: occupied };
-        return {
-          refused: await reportBlocked(toolCallId, {
-            blocked: true,
-            sheetName: target.sheetName,
-            address: target.address,
-            existingCount: occupied.count,
-            existingValues: target.values,
-          }),
-        };
+        const refused = refusedFill(target.inspection, target.block, params.allow_overwrite);
+        if (refused) return { refused: await reportRefusedFill(toolCallId, refused) };
+        const { inspection, block } = target;
+        if (inspection.occupiedCount === 0) return null;
+        const occupied = inspection.before
+          ? describeOccupiedCells({
+            sheetName: inspection.sheetName,
+            topLeft: `${colToLetter(block.startCol)}${block.startRow}`,
+            values: inspection.before.values,
+            formulas: inspection.before.formulas,
+          })
+          : { count: inspection.occupiedCount, sample: [] };
+        return occupied ? { overwrites: occupied } : null;
       } catch {
         // Let the call proceed to approval; it reports its own error when it runs.
         return null;
       }
     },
-    execute: async (toolCallId: string, params: Params): Promise<AgentToolResult<FillFormulaDetails>> => {
+    execute: async (toolCallId: string, params: Params, signal?: AbortSignal): Promise<AgentToolResult<FillFormulaDetails>> => {
+      const inputError = checkFillInput(params);
+      if (inputError) return inputError;
+
+      const sent: SentGrid = () => ({ kind: "formula", formula: params.formula });
+      const progress: { inspection: WriteTargetInspection | null; filled: boolean; fillInFlight: boolean } =
+        { inspection: null, filled: false, fillInFlight: false };
+
+      let outcome: FillOutcome;
       try {
         outcome = await runMutation<FillOutcome>(async (context) => {
           const { sheet, range } = getRange(context, params.range);
@@ -161,10 +195,8 @@ export function createFillFormulaTool(): AgentTool<typeof schema, FillFormulaDet
           const inspection = await inspectWriteTarget(context, sheet, block, sent);
           progress.inspection = inspection;
 
-          const obstacle = describeWriteObstacle(inspection, (address) => qualifiedAddress(inspection.sheetName, address));
-          if (obstacle) return { kind: "obstacle", inspection, block, reason: obstacle };
-          if (inspection.occupiedCount > 0 && !params.allow_overwrite) return { kind: "occupied", inspection, block };
-          if (inspection.occupiedCount > 0 && !inspection.before) return { kind: "too_large_to_back_up", inspection, block };
+          const refused = refusedFill(inspection, block, params.allow_overwrite);
+          if (refused) return refused;
           if (signal?.aborted) return { kind: "stopped", inspection, block };
 
           // Paste the top-left formula across the range, formulas only: the
@@ -175,56 +207,29 @@ export function createFillFormulaTool(): AgentTool<typeof schema, FillFormulaDet
           // after ~4,500 cells.
           const topLeft = range.getCell(0, 0);
           topLeft.formulas = [[params.formula]];
-          if (range.rowCount > 1 || range.columnCount > 1) {
+          if (block.rowCount > 1 || block.columnCount > 1) {
             range.copyFrom(topLeft, "Formulas");
           }
-
-          range.load("values,formulas,address,rowCount,columnCount");
+          // Sync the fill on its own: a read-back in the same batch can exceed the
+          // response payload limit after Excel has already applied the fill.
+          progress.fillInFlight = true;
           await context.sync();
           progress.fillInFlight = false;
           progress.filled = true;
           if (signal?.aborted) return { kind: "filled", inspection, block, verification: null, verifyError: null, stopped: true };
 
-          return {
-            blocked: false,
-            sheetName: sheet.name,
-            address: range.address,
-            rowCount: range.rowCount,
-            columnCount: range.columnCount,
-            beforeValues,
-            beforeFormulas,
-            readBackValues: range.values,
-            readBackFormulas: range.formulas,
-          };
-        });
-
-        if (result.blocked) {
-          return reportBlocked(toolCallId, result);
-        }
-
-        const fullAddr = qualifiedAddress(result.sheetName, result.address);
-        const lines: string[] = [];
-        lines.push(`Filled formula across **${fullAddr}** (${result.rowCount}×${result.columnCount})`);
-        lines.push(`**Formula pattern:** \`${params.formula}\``);
-
-        const topLeftRaw: unknown = result.readBackFormulas?.[0]?.[0] ?? "";
-        const bottomRightRaw: unknown = result.readBackFormulas?.[result.rowCount - 1]?.[result.columnCount - 1] ?? "";
-        const topLeft = typeof topLeftRaw === "string" ? topLeftRaw : JSON.stringify(topLeftRaw);
-        const bottomRight = typeof bottomRightRaw === "string" ? bottomRightRaw : JSON.stringify(bottomRightRaw);
-        if (topLeft && bottomRight && (result.rowCount > 1 || result.columnCount > 1)) {
-          lines.push(`**Example formulas:** top-left \`${topLeft}\`, bottom-right \`${bottomRight}\``);
-        }
-
-        const bangIndex = result.address.indexOf("!");
-        const cellPart = bangIndex >= 0 ? result.address.slice(bangIndex + 1) : result.address;
-        const colonIndex = cellPart.indexOf(":");
-        const startCell = colonIndex >= 0 ? cellPart.slice(0, colonIndex) : cellPart;
-        const errors = findErrors(result.readBackValues, startCell);
-        if (errors.length > 0) {
-          lines.push("");
-          lines.push(`⚠️ **${errors.length} formula error(s):**`);
-          for (const e of errors) {
-            lines.push(`- ${e.address}: ${e.error}`);
+          try {
+            const verification = await verifyWrittenRange(context, sheet, block, sent, {
+              calculationMode: inspection.calculationMode,
+              sentFormulas: true,
+              sentEmptyCount: 0,
+              tablesBefore: inspection.tableNames,
+              sentChars: params.formula.length * block.rowCount * block.columnCount,
+            });
+            return { kind: "filled", inspection, block, verification, verifyError: null, stopped: false };
+          } catch (verifyError) {
+            const failure = await describeExcelFailure(parseExcelError(verifyError), { range: params.range });
+            return { kind: "filled", inspection, block, verification: null, verifyError: failure.reason, stopped: false };
           }
         });
       } catch (error) {
@@ -282,51 +287,7 @@ export function createFillFormulaTool(): AgentTool<typeof schema, FillFormulaDet
         });
       }
 
-      if (outcome.kind !== "filled") {
-        const text = outcome.kind === "obstacle"
-          ? `⛔ **Fill blocked** — nothing was written to ${fullAddr}.\n\n${outcome.reason}`
-          : outcome.kind === "occupied"
-            ? `⛔ **Fill blocked** — ${fullAddr} contains ${outcome.inspection.occupiedCount} non-empty cell(s); nothing was written.\n\n` +
-              "If the user asked to replace them, retry with `allow_overwrite: true`; otherwise ask the user first."
-            : `⛔ **Fill refused** — nothing was written. ${fullAddr} already holds data, and the fill covers ` +
-              `${(outcome.block.rowCount * outcome.block.columnCount).toLocaleString("en-US")} cells, more than the ` +
-              `${MAX_RECOVERY_CELLS.toLocaleString("en-US")} a backup can hold, so the overwrite could not be undone.\n\n` +
-              `Fill it in blocks of at most ${MAX_RECOVERY_CELLS.toLocaleString("en-US")} cells (each gets its own backup), ` +
-              "or ask the user to clear the old data first.";
-
-        await finalizeMutationOperation(mutationFinalizeDependencies, {
-          auditEntry: {
-            toolName: "fill_formula",
-            toolCallId,
-            blocked: true,
-            outputAddress: fullAddr,
-            changedCount: changes.changedCount,
-            changes: changes.sample,
-          },
-          recovery: {
-            result: toolResult,
-            appendRecoverySnapshot: () => getWorkbookRecoveryLog().append({
-              toolName: "fill_formula",
-              toolCallId,
-              address: fullAddr,
-              changedCount: changes.changedCount,
-              beforeValues: result.beforeValues,
-              beforeFormulas: result.beforeFormulas,
-              afterFormulas: result.readBackFormulas,
-            }),
-            appendResultNote: appendMutationResultNote,
-            unavailableReason: CHECKPOINT_SKIPPED_REASON,
-            unavailableNote: CHECKPOINT_SKIPPED_NOTE,
-          },
-        });
-
-        return errorResult(text, {
-          kind: "fill_formula",
-          blocked: true,
-          address: fullAddr,
-          ...(outcome.kind === "obstacle" ? {} : { existingCount: outcome.inspection.occupiedCount }),
-        });
-      }
+      if (outcome.kind !== "filled") return reportRefusedFill(toolCallId, outcome);
 
       const { inspection, block, verification } = outcome;
       const toolResult: AgentToolResult<FillFormulaDetails> = outcome.stopped
@@ -374,6 +335,8 @@ export function createFillFormulaTool(): AgentTool<typeof schema, FillFormulaDet
               changedCount: toolResult.details.changes?.changedCount ?? 0,
               beforeValues: before.values,
               beforeFormulas: before.formulas,
+              // What the fill left, so a later restore can warn about edits made since (#794).
+              ...(verification?.formulas ? { afterFormulas: verification.formulas } : {}),
             })
             : Promise.resolve(null),
           appendResultNote: appendMutationResultNote,

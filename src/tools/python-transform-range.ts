@@ -145,6 +145,8 @@ type WriteOutputResult =
     changes?: WorkbookCellChangeSummary;
     beforeValues?: CellScalar[][];
     beforeFormulas?: CellScalar[][];
+    /** What the write left (full read-back only), for the backup's later-edit check. */
+    afterFormulas?: CellScalar[][];
     backupUnavailable?: { unavailableReason: string; unavailableNote?: string };
     /** Cells that held a formula and hold a constant now. */
     formulasReplacedCount?: number;
@@ -406,6 +408,7 @@ async function defaultWriteOutputValues(request: WriteOutputRequest): Promise<Wr
         ...(verification.converted.length > 0 ? { convertedCount: verification.converted.length } : {}),
         changes,
         ...(before ? { beforeValues: before.values, beforeFormulas: before.formulas } : {}),
+        ...(verification.formulas ? { afterFormulas: verification.formulas } : {}),
         backupUnavailable: backup,
       };
     });
@@ -946,9 +949,9 @@ export function createPythonTransformRangeTool(
                 toolCallId,
                 address: writeResult.outputAddress,
                 changedCount,
-                beforeValues: writeResult.beforeValues,
-                beforeFormulas: writeResult.beforeFormulas,
-                ...(writeResult.readBackFormulas ? { afterFormulas: writeResult.readBackFormulas } : {}),
+                beforeValues,
+                beforeFormulas,
+                ...(writeResult.afterFormulas ? { afterFormulas: writeResult.afterFormulas } : {}),
               });
             },
             appendResultNote: appendMutationResultNote,

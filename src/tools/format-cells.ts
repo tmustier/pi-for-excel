@@ -561,7 +561,7 @@ export function createFormatCellsTool(): AgentTool<typeof schema, FormatCellsDet
 
         if (checkpointCapture.supported && checkpointCapture.state) capturedState = checkpointCapture.state;
 
-        const result = await excelRun((context) =>
+        const result = await runMutation((context) =>
           applyResolvedFormatting(context, params, normalizedBorders, styleResult));
 
         const fullAddr = result.isMultiRange
@@ -658,7 +658,9 @@ export function createFormatCellsTool(): AgentTool<typeof schema, FormatCellsDet
         });
 
         return {
-          content: [{ type: "text", text: `Error formatting: ${message}${backupNote}` }],
+          // #791 says whether anything may have reached Excel; #794's backup note
+          // only applies when it may have.
+          content: [{ type: "text", text: `Error formatting ${params.range}${unchangedClause(failure, "no formatting was applied")}. ${message}${failure.maybeApplied ? backupNote : ""}` }],
           details: { kind: "format_cells", address: params.range },
           isError: true,
         };

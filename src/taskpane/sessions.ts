@@ -120,6 +120,8 @@ export async function setupSessionPersistence(opts: {
   initialSessionId?: string;
   autoRestoreLatest?: boolean;
   spreadsheetHost?: Pick<SpreadsheetHost, "getWorkbookContext" | "sessionStorage">;
+  /** Reports a save that did not reach storage (quota, blocked IndexedDB). */
+  onSaveError?: (message: string) => void;
   /**
    * Called when another taskpane saved this session since this one loaded
    * it: this taskpane's copy was saved as a new session instead of
