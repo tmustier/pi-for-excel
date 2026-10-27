@@ -60,9 +60,15 @@ pi-sidebar {
   gap: 4px;
   overflow-x: auto;
   overflow-y: visible;
-  scrollbar-width: thin;
+  /* The ‹ › arrows and horizontal scrolling move the strip; a classic scrollbar
+     (Windows, Linux) would only add a second control under the tabs. */
+  scrollbar-width: none;
   min-width: 0;
   flex: 1;
+}
+
+.pi-session-tabs__scroller::-webkit-scrollbar {
+  display: none;
 }
 
 .pi-session-tabs__scroll {

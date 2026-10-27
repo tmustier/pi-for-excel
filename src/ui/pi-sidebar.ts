@@ -234,6 +234,8 @@ export class PiSidebar extends LitElement {
   };
   private _dockObserver: ResizeObserver | undefined;
   private _observedDock: HTMLElement | undefined;
+  private _tabRevealKey = "";
+  private _tabRevealPending = false;
   private _onWindowResize = () => {
     this._updateSessionTabOverflow();
   };
@@ -386,11 +388,18 @@ export class PiSidebar extends LitElement {
     this._ensureMessageEnhancements();
     this._observeDock();
     this._updateSessionTabOverflow();
-    // Keep the active tab visible when the strip overflows. Showing or hiding
-    // a scroll arrow resizes the scroller, so re-check after that too; else
-    // the newest tab can end up half under the right arrow.
+    // Reveal the active tab only when the active tab or the tab count changes,
+    // never on other re-renders: the ‹ › arrows scroll the strip, and pulling
+    // it back would make earlier tabs unreachable. Showing an arrow resizes
+    // the scroller, so the reveal also re-runs on the render that follows.
+    const activeTab = this.sessionTabs.find((tab) => tab.isActive);
+    const revealKey = `${activeTab?.runtimeId ?? ""}:${this.sessionTabs.length}`;
     const changedKeys: ReadonlyMap<PropertyKey, unknown> = changed;
-    if (changed.has("sessionTabs") || changedKeys.has("_tabCanScrollLeft") || changedKeys.has("_tabCanScrollRight")) {
+    const arrowsChanged = changedKeys.has("_tabCanScrollLeft") || changedKeys.has("_tabCanScrollRight");
+    if (revealKey !== this._tabRevealKey || (arrowsChanged && this._tabRevealPending)) {
+      this._tabRevealKey = revealKey;
+      this._tabRevealPending = true;
+      requestAnimationFrame(() => { this._tabRevealPending = false; });
       this.querySelector(".pi-session-tab.is-active")?.scrollIntoView({ block: "nearest", inline: "nearest" });
     }
 
