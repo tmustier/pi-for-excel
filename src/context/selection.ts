@@ -127,11 +127,11 @@ async function readSelection(context: Excel.RequestContext): Promise<SelectionCo
     : [[startRow, HEAD_ROWS], [endRow - TAIL_ROWS + 1, TAIL_ROWS]];
   const sampleRows = spans.reduce((sum, [, count]) => sum + count, 0);
   const maxCols = Math.max(1, Math.min(MAX_COLS, Math.floor(MAX_SAMPLE_CELLS / sampleRows)));
-  // Keep the left-hand labels when the selection is near them; otherwise start
-  // just left of the selection.
-  const startCol = sel.columnIndex < used.columnIndex + maxCols
+  // Keep left-hand labels only when the selection fits beside them; otherwise
+  // use spare columns for context without dropping selected columns that fit.
+  const startCol = selEndCol < used.columnIndex + maxCols
     ? used.columnIndex
-    : Math.max(used.columnIndex, sel.columnIndex - 2);
+    : Math.max(used.columnIndex, sel.columnIndex - Math.min(2, Math.max(0, maxCols - sel.columnCount)));
   const endCol = Math.min(usedEndCol, startCol + maxCols - 1);
 
   const overlapsUsed = sel.rowIndex <= usedEndRow && selEndRow >= used.rowIndex

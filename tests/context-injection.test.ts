@@ -367,6 +367,32 @@ void test("selection Markdown keeps backslashes, pipes and neighboring cells wit
   }
 });
 
+void test("selection samples keep selected columns before neighboring labels within the column limit", async () => {
+  const used = { address: "Data!A1:BA2", rowIndex: 0, columnIndex: 0, rowCount: 2, columnCount: 53 };
+  const values = Array.from({ length: 2 }, () => Array.from({ length: 53 }, (_, col) => `col-${col}`));
+  for (const [address, columnCount] of [
+    ["Data!R1:T2", 3],
+    ["Data!R1:U2", 4],
+    ["Data!R1:AJ2", 19],
+    ["Data!R1:AK2", 20],
+    ["Data!R1:AL2", 21],
+  ] as const) {
+    const uninstall = installSelection({ address, rowIndex: 0, columnIndex: 17, rowCount: 2, columnCount, used, values });
+    try {
+      const { text } = await readSelectionContext();
+      const table = marked.lexer(text).find((token): token is Tokens.Table => token.type === "table");
+      assert.ok(table);
+      for (let col = 17; col < 17 + Math.min(columnCount, 20); col++) {
+        assert.ok(table.rows[0]?.some((cell) => cell.text === `col-${col}`), `Missing selected column ${col} in ${address}`);
+      }
+      assert.equal(table.header.length, 21, "sample remains capped at 20 data columns");
+      if (columnCount === 3) assert.equal(table.header[1]?.text, "A", "nearby left-hand labels are retained when they fit");
+    } finally {
+      uninstall();
+    }
+  }
+});
+
 void test("a 5,000-row selection sends its size and a bounded sample, not every row", async () => {
   const uninstall = installSelection({ address: "Data!A1:A5000", rowIndex: 0, columnIndex: 0, rowCount: 5000, columnCount: 1, used: USED });
   try {
