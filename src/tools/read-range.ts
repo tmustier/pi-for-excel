@@ -312,6 +312,69 @@ function renderPreamble(result: ReadRangePage): string[] {
   if (result.state) {
     lines.push(...renderRangeState(result.state, colToLetter));
   }
+  if (page) lines.push(...renderValueNotes(result.values, page));
+  return lines;
+}
+
+/** Text that Excel would read as a number if typed: "12", "-3.5", "1,200", "40%". Codes with leading zeros ("00123") are left alone. */
+const NUMERIC_TEXT_PATTERN = /^[-+]?(?:\d{1,3}(?:,\d{3})+|0|[1-9]\d*)?(?:\.\d+)?%?$/u;
+const MAX_LISTED_TEXT_NUMBERS = 10;
+/** A page with at least this many numbers in one column gets the aggregate hint. */
+const AGGREGATE_HINT_MIN_NUMBERS = 50;
+const MAX_SUMMED_COLUMNS = 10;
+
+function isNumberStoredAsText(value: CellValue): value is string {
+  if (typeof value !== "string") return false;
+  const text = value.trim();
+  return /\d/u.test(text) && NUMERIC_TEXT_PATTERN.test(text);
+}
+
+/**
+ * Notes about the values themselves: numbers stored as text (SUM and AVERAGE
+ * skip them, and the grid shows them like numbers), and, for long numeric
+ * columns, that totals must be computed rather than added up by hand.
+ */
+function renderValueNotes(values: CellValue[][], page: CellBlock): string[] {
+  const lines: string[] = [];
+  const textNumbers: string[] = [];
+  const numericRows = new Map<number, number[]>();
+  for (const [r, row] of values.entries()) {
+    for (const [c, value] of row.entries()) {
+      if (isNumberStoredAsText(value)) {
+        textNumbers.push(`${colToLetter(page.columnIndex + c)}${page.rowIndex + r + 1} "${value}"`);
+      } else if (typeof value === "number") {
+        const rows = numericRows.get(c) ?? [];
+        rows.push(page.rowIndex + r + 1);
+        numericRows.set(c, rows);
+      }
+    }
+  }
+  if (textNumbers.length > 0) {
+    lines.push(
+      `⚠️ Numbers stored as text (SUM, AVERAGE and other aggregates skip them; they look like numbers in the table): ` +
+      listCapped(textNumbers, MAX_LISTED_TEXT_NUMBERS, "cells"),
+    );
+  }
+  const longColumns = [...numericRows.entries()]
+    .filter(([, rows]) => rows.length >= AGGREGATE_HINT_MIN_NUMBERS)
+    .slice(0, MAX_SUMMED_COLUMNS);
+  if (longColumns.length > 0) {
+    const sums = longColumns.map(([c, rows]) => {
+      let sum = 0;
+      for (const row of values) {
+        const value = row[c];
+        if (typeof value === "number") sum += value;
+      }
+      // Round away float noise (0.1 + 0.2) without hiding real digits.
+      const shown = Number(sum.toPrecision(12)).toLocaleString("en-US", { maximumFractionDigits: 10 });
+      return `${colToLetter(page.columnIndex + c)} ${shown} (${rows.length} numbers)`;
+    });
+    lines.push(
+      `Column sums on this page (numbers only): ${sums.join(", ")}. ` +
+      "For other totals, counts or averages over many cells, compute them (execute_office_js with " +
+      "`context.workbook.functions`, or python_run); do not add up values yourself.",
+    );
+  }
   return lines;
 }
 

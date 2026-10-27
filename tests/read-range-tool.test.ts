@@ -262,3 +262,32 @@ void test("sheet state, formulas and errors come before the table and survive ou
   assert.match(text, /\*\*Errors:\*\* C400=#DIV\/0!/u);
   assert.ok(text.indexOf("**Errors:**") < text.indexOf("| --- |"), "summaries precede the table");
 });
+
+void test("reads flag numbers stored as text and give exact column sums for long numeric pages", async () => {
+  const text = await readRange([{
+    name: "Prices",
+    cells: {
+      A1: { value: "Price" },
+      A2: { value: 2.5 },
+      A3: { value: "12" },
+      A4: { value: "00123" },
+      A5: { value: "#1 priority" },
+    },
+  }], { range: "Prices!A1:A5" });
+  // "12" is a number SUM/AVERAGE would skip; a zero-padded code and a label are ordinary text.
+  assert.match(text, /Numbers stored as text .*: A3 "12"$/mu);
+  assert.doesNotMatch(text, /A4 "00123"|A5 "#1/u);
+  assert.doesNotMatch(text, /Column sums/u);
+
+  // Qty cycles 1..17 over IDs 1..999 (the verifier's Big sheet); 0.1 steps check float noise is rounded.
+  const page = await readRange([{
+    name: "Big",
+    dense: {
+      rows: 1_000,
+      columns: 3,
+      value: (row, column) => (row === 0 ? `H${column}` : column === 0 ? (row % 17) + 1 : column === 1 ? `Item ${row}` : row * 0.1),
+    },
+  }], { range: "Big!A1:C500", mode: "csv" });
+  // Sum of (i % 17) + 1 for i = 1..499 and of i / 10, computed by hand: 4,464 and 12,475.
+  assert.match(page, /Column sums on this page \(numbers only\): A 4,464 \(499 numbers\), C 12,475 \(499 numbers\)\./u);
+});
