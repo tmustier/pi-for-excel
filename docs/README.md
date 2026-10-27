@@ -24,6 +24,7 @@ This folder contains **current** docs that should match shipped behavior.
 ## Proposals
 - [Agent tool interface redesign](./proposals/agent-tool-interface-redesign.md)
 - [Agent eval suite](./proposals/agent-evals.md)
+- [Migrating the taskpane to Pi Durable: plan](./proposals/durable-migration-plan.md)
 - [Research: Claude for Excel teardown](./research/claude-for-excel-teardown.md)
 
 ## Architecture & policy
