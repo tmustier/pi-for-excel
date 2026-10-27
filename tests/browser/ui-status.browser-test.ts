@@ -102,6 +102,22 @@ void test("arrow keys inside a status popover do not switch tabs", async () => {
   });
 });
 
+void test("the tab strip's left arrow reaches the first tab", async () => {
+  await withTaskpane({ width: 349, height: 622 }, async (page) => {
+    for (let count = 2; count <= 6; count += 1) {
+      await page.getByRole("button", { name: "New tab" }).click();
+      await page.locator(".pi-session-tab").nth(count - 1).waitFor();
+    }
+    const scroller = page.locator(".pi-session-tabs__scroller");
+    const left = page.locator(".pi-session-tabs__scroll--left");
+    for (let clicks = 0; clicks < 10 && await left.isVisible(); clicks += 1) {
+      await left.click();
+      await page.waitForTimeout(500);
+    }
+    assert.equal(await scroller.evaluate((element) => element.scrollLeft), 0);
+  });
+});
+
 void test("toasts sit above the composer dock as it grows", async () => {
   await withTaskpane({ width: 380, height: 622 }, async (page) => {
     const gap = await page.evaluate(async () => {
