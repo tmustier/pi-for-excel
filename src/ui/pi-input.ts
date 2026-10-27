@@ -201,6 +201,12 @@ export class PiInput extends LitElement {
   private _autoGrow() {
     const ta = this._textarea;
     if (!ta) return;
+    // Measuring needs `height: auto`, which collapses the textarea for a
+    // moment. Holding the card at its current height keeps that collapse out
+    // of the pane's layout; otherwise the transcript above grows, the browser
+    // clamps its scroll position, and that jump reads as the user scrolling up.
+    const card = ta.closest<HTMLElement>(".pi-input-card");
+    if (card) card.style.minHeight = `${card.offsetHeight}px`;
     ta.style.height = "auto";
     const height = resolveInputAutoGrowHeight({
       scrollHeight: ta.scrollHeight,
@@ -208,6 +214,7 @@ export class PiInput extends LitElement {
       cssMaxHeight: this._getTextareaCssMaxHeight(ta),
     });
     ta.style.height = `${height}px`;
+    if (card) card.style.minHeight = "";
   }
 
   private _getTextareaCssMaxHeight(ta: HTMLTextAreaElement): number {

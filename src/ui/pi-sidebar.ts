@@ -593,8 +593,11 @@ export class PiSidebar extends LitElement {
   }
 
   private _onSend = (e: CustomEvent<{ text: string; followUp: boolean }>) => {
+    // A new prompt brings the transcript back to its newest message; a steer or
+    // follow-up sent while Pi is busy leaves the user's scroll position alone.
+    const startsTurn = !this.tabBusy && !this._isStreaming;
     if (this.onSend?.(e.detail.text, { followUp: e.detail.followUp })) {
-      this._autoScroll = true;
+      if (startsTurn) this._autoScroll = true;
       this._input?.clear();
     }
   };

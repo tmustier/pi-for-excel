@@ -325,9 +325,22 @@ void test("a growing composer keeps the transcript following its newest message"
 
     const input = page.locator("pi-input textarea");
     await input.click();
-    for (let line = 0; line < 5; line += 1) await input.press("Shift+Enter");
+    for (let line = 0; line < 5; line += 1) {
+      await page.keyboard.type(`g${line}`);
+      await page.keyboard.press("Shift+Enter");
+    }
     await page.waitForTimeout(200);
-
     assert.ok((await distanceFromBottom()) < 20, `transcript ${await distanceFromBottom()}px from the bottom`);
+
+    // Still following: a new message scrolls into view.
+    await page.evaluate(() => {
+      const sidebar = document.querySelector("pi-sidebar");
+      if (!sidebar || !("agent" in sidebar) || !("requestUpdate" in sidebar)) throw new Error("sidebar missing");
+      const agent = sidebar.agent as { state: { messages: Array<{ role: string; content: string; timestamp: number }> } };
+      agent.state.messages.push({ role: "user", content: "newest\n\nmessage\n\nwith\n\nseveral\n\nlines", timestamp: 100 });
+      (sidebar.requestUpdate as () => void)();
+    });
+    await page.waitForTimeout(300);
+    assert.ok((await distanceFromBottom()) < 20, `after a new message, transcript ${await distanceFromBottom()}px from the bottom`);
   });
 });
