@@ -70,7 +70,7 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 | [P-58](#p-58-a-connected-folder-can-never-be-disconnected) | A connected folder can never be disconnected | medium | files | fix | Fixed in [#790](https://github.com/tmustier/pi-for-excel/pull/790) (merged 27 October 2026) |
 | [P-59](#p-59-copy-content-in-the-files-preview-fails-on-excel-on-the-web) | "Copy content" in the Files preview fails on Excel on the web | medium | files | fix | fix-host-web (in progress) |
 | [P-60](#p-60-the-hosted-add-in-cannot-reach-the-local-proxy-in-current-chrome-or-edge) | The hosted add-in cannot reach the local proxy in current Chrome or Edge | medium | host | fix | Fixed in [#796](https://github.com/tmustier/pi-for-excel/pull/796) (merged 27 October 2026) |
-| [P-61](#p-61-the-utilities-menu-claims-to-be-a-menu-but-gives-none-of-the-menu-keyboard-behaviour) | The utilities menu claims to be a menu but gives none of the menu keyboard behaviour | medium | keys | fix | Assigned to #793 (follow-up; not yet in the PR) |
+| [P-61](#p-61-the-utilities-menu-claims-to-be-a-menu-but-gives-none-of-the-menu-keyboard-behaviour) | The utilities menu claims to be a menu but gives none of the menu keyboard behaviour | medium | keys | fix | Fixed on main 1f51cf8 (checked 27 October 2026) |
 | [P-62](#p-62-a-failed-language-save-leaves-a-mixed-language-taskpane) | A failed language save leaves a mixed-language taskpane | medium | language | fix | Fixed in [#796](https://github.com/tmustier/pi-for-excel/pull/796) (merged 27 October 2026) |
 | [P-63](#p-63-a-tab-running-several-writes-shows-locking-on-itself-and-lets-itself-be-closed) | A tab running several writes shows "Locking…" on itself and lets itself be closed | medium | lock | fix | Fixed in [#794](https://github.com/tmustier/pi-for-excel/pull/794) (merged 27 October 2026) |
 | [P-64](#p-64-saving-an-api-key-says-testing-but-does-not-test-it) | Saving an API key says "Testing…" but does not test it | medium | login | product call | fix-sessions-models (check #795) |
@@ -98,7 +98,7 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 | [P-86](#p-86-skills-written-outside-skillsexternal-reach-pi-but-do-not-appear-on-the-skills-page) | Skills written outside `skills/external/` reach Pi but do not appear on the Skills page | medium | skills | fix | Fixed in [#790](https://github.com/tmustier/pi-for-excel/pull/790) (merged 27 October 2026) |
 | [P-87](#p-87-removing-an-external-skill-happens-immediately-with-no-confirmation) | Removing an external skill happens immediately, with no confirmation | medium | skills | product call | Fixed in [#788](https://github.com/tmustier/pi-for-excel/pull/788) (merged 27 October 2026) |
 | [P-88](#p-88-shifttab-redraws-the-mode-badge-as-auto-in-confirm-mode-and-drops-the-lock-badge) | Shift+Tab redraws the mode badge as "Auto" in Confirm mode and drops the lock badge | medium | status bar | fix | Fixed in [#793](https://github.com/tmustier/pi-for-excel/pull/793) (merged 27 October 2026) |
-| [P-89](#p-89-the-model-control-hides-the-provider-so-a-tab-silently-on-another-provider-looks-identical) | The model control hides the provider, so a tab silently on another provider looks identical | medium | status-bar | product call | Assigned to #795 (follow-up; not yet in the PR) |
+| [P-89](#p-89-the-model-control-hides-the-provider-so-a-tab-silently-on-another-provider-looks-identical) | The model control hides the provider, so a tab silently on another provider looks identical | medium | status-bar | product call | Fixed on main 1f51cf8 (checked 27 October 2026) |
 | [P-90](#p-90-after-a-keyboard-tab-switch-the-open-thinking-popover-changes-the-hidden-tab) | After a keyboard tab switch, the open thinking popover changes the hidden tab | medium | status-bar | fix | Fixed in [#793](https://github.com/tmustier/pi-for-excel/pull/793) (merged 27 October 2026) |
 | [P-91](#p-91-closing-a-tab-that-is-compacting-asks-nothing-and-throws-away-a-compaction-that-still-runs-and-is-paid-for) | Closing a tab that is compacting asks nothing and throws away a compaction that still runs and is paid for | medium | tabs | product call | Fixed in [#789](https://github.com/tmustier/pi-for-excel/pull/789) (merged 27 October 2026) |
 | [P-92](#p-92-a-tabs-label-does-not-follow-its-session-chosen-titles-are-lost-on-reload-resume-and-reopen) | A tab's label does not follow its session: chosen titles are lost on reload, resume and reopen | medium | tabs | fix | Fixed in [#795](https://github.com/tmustier/pi-for-excel/pull/795) (merged 27 October 2026) |
@@ -129,15 +129,15 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 | [P-117](#p-117-the-context-meters-colours-ignore-the-per-model-warning-budget-so-it-is-red-long-before-compaction-on-200k-models) | The context meter's colours ignore the per-model warning budget, so it is red long before compaction on 200k models | low | compaction | fix | Fixed in [#789](https://github.com/tmustier/pi-for-excel/pull/789) (merged 27 October 2026): colours now follow the compaction budget (red just before auto-compaction) |
 | [P-118](#p-118-the-percent-conventions-preview-does-not-multiply-by-100) | The Percent convention's preview does not multiply by 100 | low | conventions | fix | Fixed in [#788](https://github.com/tmustier/pi-for-excel/pull/788) (merged 27 October 2026) |
 | [P-119](#p-119-small-copy-and-rendering-slips-in-the-taskpane-and-turn) | Small copy and rendering slips in the taskpane and turn | low | copy | fix | per item above |
-| [P-120](#p-120-small-copy-and-translation-slips-in-setup) | Small copy and translation slips in setup | low | copy | fix | Assigned to #795 (follow-up; not yet in the PR) |
+| [P-120](#p-120-small-copy-and-translation-slips-in-setup) | Small copy and translation slips in setup | low | copy | fix | Fix in the remaining-bugs PR (not yet open): 2446d26 |
 | [P-121](#p-121-small-copy-and-rendering-slips-in-guidance-and-extensions) | Small copy and rendering slips in guidance and extensions | low | copy | fix | per sub-item above |
 | [P-122](#p-122-the-plugins-pages-busy-guard-is-never-set-so-double-clicks-can-start-two-installs-or-toggles) | The Plugins page's busy guard is never set, so double clicks can start two installs or toggles | low | extensions | fix | Fixed in [#790](https://github.com/tmustier/pi-for-excel/pull/790) (merged 27 October 2026) |
 | [P-123](#p-123-escape-in-the-files-preview-closes-the-whole-overlay-instead-of-going-back-to-the-list) | Escape in the Files preview closes the whole overlay instead of going back to the list | low | files | fix | Fixed in [#790](https://github.com/tmustier/pi-for-excel/pull/790) (merged 27 October 2026) |
 | [P-124](#p-124-the-shortcuts-page-lists-f6shiftf6-and-default-models-advertises-ctrlp-none-of-which-pi-handles) | The shortcuts page lists F6/Shift+F6 and `/default-models` advertises Ctrl+P, none of which Pi handles | low | keys | product call | Fixed in [#795](https://github.com/tmustier/pi-for-excel/pull/795) (merged 27 October 2026) removes `/default-models`; F6 entry: none yet |
 | [P-125](#p-125-small-copy-and-rendering-slips-in-the-chrome) | Small copy and rendering slips in the chrome | low | language | fix | Fixed in [#796](https://github.com/tmustier/pi-for-excel/pull/796) (merged 27 October 2026) for the `lang` attribute; none yet for the rest |
-| [P-126](#p-126-the-proxy-gates-helper-not-detected-yet-hint-shows-html-entities-as-text) | The proxy gate's "Helper not detected yet" hint shows HTML entities as text | low | login | fix | Assigned to #795 (follow-up; not yet in the PR) |
+| [P-126](#p-126-the-proxy-gates-helper-not-detected-yet-hint-shows-html-entities-as-text) | The proxy gate's "Helper not detected yet" hint shows HTML entities as text | low | login | fix | Fixed on main 1f51cf8 (checked 27 October 2026) |
 | [P-127](#p-127-connecting-from-the-connection-dialog-shows-no-toast) | Connecting from the connection dialog shows no toast | low | login | fix | fix-sessions-models (check #795) |
-| [P-128](#p-128-closing-the-device-code-dialog-leaves-the-login-polling-in-the-background) | Closing the device-code dialog leaves the login polling in the background | low | login | fix | Assigned to #795 (follow-up; not yet in the PR) |
+| [P-128](#p-128-closing-the-device-code-dialog-leaves-the-login-polling-in-the-background) | Closing the device-code dialog leaves the login polling in the background | low | login | fix | Fixed on main 1f51cf8 (checked 27 October 2026) |
 | [P-129](#p-129-the-picker-shows-no-check-mark-when-its-opening-refresh-swaps-the-model) | The picker shows no check mark when its opening refresh swaps the model | low | models | fix | Fixed in [#795](https://github.com/tmustier/pi-for-excel/pull/795) (merged 27 October 2026) |
 | [P-130](#p-130-an-unsaved-workbook-can-open-with-the-latest-conversation-from-an-unrelated-workbook) | An unsaved workbook can open with the latest conversation from an unrelated workbook | low | persistence | product call | Fixed in [#796](https://github.com/tmustier/pi-for-excel/pull/796) (merged 27 October 2026) |
 | [P-131](#p-131-an-older-open-taskpane-can-block-a-newer-versions-database-upgrade) | An older open taskpane can block a newer version's database upgrade | low | persistence | fix | Fixed in [#796](https://github.com/tmustier/pi-for-excel/pull/796) (merged 27 October 2026) |
@@ -150,9 +150,9 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 | [P-138](#p-138-nothing-in-the-ui-shows-that-rules-are-active) | Nothing in the UI shows that rules are active | low | rules | product call | Fixed in [#790](https://github.com/tmustier/pi-for-excel/pull/790) (merged 27 October 2026) |
 | [P-139](#p-139-a-double-click-on-a-resume-entry-can-start-two-resumes) | A double click on a resume entry can start two resumes | low | sessions | fix | Fixed in [#795](https://github.com/tmustier/pi-for-excel/pull/795) (merged 27 October 2026) |
 | [P-140](#p-140-the-audit-export-includes-entries-from-every-workbook-not-only-the-current-one) | The audit export includes entries from every workbook, not only the current one | low | sessions | product call | Fixed in [#795](https://github.com/tmustier/pi-for-excel/pull/795) (merged 27 October 2026) |
-| [P-141](#p-141-small-copy-and-rendering-slips-in-sessions-and-commands) | Small copy and rendering slips in sessions and commands | low | sessions | fix | Assigned to #795 (follow-up; not yet in the PR) |
+| [P-141](#p-141-small-copy-and-rendering-slips-in-sessions-and-commands) | Small copy and rendering slips in sessions and commands | low | sessions | fix | Fix in the remaining-bugs PR (not yet open): 27702ec |
 | [P-142](#p-142-busy-rules-differ-between-the-menu-or-status-bar-and-the-matching-slash-commands) | Busy rules differ between the menu or status bar and the matching slash commands | low | settings | product call | Fixed in [#795](https://github.com/tmustier/pi-for-excel/pull/795) (merged 27 October 2026) (picker part; the Settings part is not listed) |
-| [P-143](#p-143-f2-lets-focus-leave-the-settings-dialog-for-the-composer-behind-it) | F2 lets focus leave the Settings dialog for the composer behind it | low | settings | fix | Assigned to #793 (follow-up; not yet in the PR) |
+| [P-143](#p-143-f2-lets-focus-leave-the-settings-dialog-for-the-composer-behind-it) | F2 lets focus leave the Settings dialog for the composer behind it | low | settings | fix | Fixed on main 1f51cf8 (checked 27 October 2026) |
 | [P-144](#p-144-the-busy-dot-is-nearly-invisible-on-an-inactive-tab-in-the-light-theme) | The busy dot is nearly invisible on an inactive tab in the light theme | low | tabs | fix | Fixed in [#793](https://github.com/tmustier/pi-for-excel/pull/793) (merged 27 October 2026) |
 | [P-145](#p-145-ctrlpageuppagedown-and-cmdshift---do-nothing-when-focus-is-on-a-tab) | Ctrl+PageUp/PageDown and Cmd+Shift+[ / ] do nothing when focus is on a tab | low | tabs | fix | Fixed in [#793](https://github.com/tmustier/pi-for-excel/pull/793) (merged 27 October 2026) |
 | [P-146](#p-146-a-toast-shown-while-an-overlay-is-open-is-drawn-under-the-overlay-once-any-toast-has-been-shown) | A toast shown while an overlay is open is drawn under the overlay once any toast has been shown | low | taskpane | fix | Fixed in [#793](https://github.com/tmustier/pi-for-excel/pull/793) (merged 27 October 2026) |
@@ -163,21 +163,21 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 | [P-151](#p-151-the-first-ctrlcmdo-appears-to-do-nothing-and-expanded-cards-collapse-again-on-re-render) | The first Ctrl/Cmd+O appears to do nothing, and expanded cards collapse again on re-render | low | transcript | fix | Fixed in [#786](https://github.com/tmustier/pi-for-excel/pull/786) (merged 27 October 2026) |
 | [P-152](#p-152-the-stop-button-and-escape-treat-queued-prompts-and-commands-differently) | The Stop button and Escape treat queued prompts and commands differently | low | turn | product call | Fixed in [#789](https://github.com/tmustier/pi-for-excel/pull/789) (merged 27 October 2026) |
 | [P-153](#p-153-opening-a-built-in-doc-in-files-starts-a-render-loop-so-its-download-and-copy-buttons-never-respond) | Opening a built-in doc in Files starts a render loop, so its Download and Copy buttons never respond | medium | files | fix | Fixed in [#790](https://github.com/tmustier/pi-for-excel/pull/790) (merged 27 October 2026): e65c3b7 |
-| [P-154](#p-154-turning-the-proxy-off-leaves-the-proxy-isnt-running-banner-up-until-reload) | Turning the proxy off leaves the "proxy isn't running" banner up until reload | low | proxy | fix | Assigned to #793 (follow-up; not yet in the PR) |
+| [P-154](#p-154-turning-the-proxy-off-leaves-the-proxy-isnt-running-banner-up-until-reload) | Turning the proxy off leaves the "proxy isn't running" banner up until reload | low | proxy | fix | Fixed on main 1f51cf8 (checked 27 October 2026) |
 | [P-155](#p-155-the-proxy-banners-copy-command-does-nothing-in-excel-on-the-web) | The proxy banner's Copy command does nothing in Excel on the web | low | proxy | fix | Fixed in [#793](https://github.com/tmustier/pi-for-excel/pull/793) (merged 27 October 2026): 74c167b |
 | [P-156](#p-156-tab-from-an-open-dialog-in-excel-on-the-web-moves-focus-out-of-the-add-in) | Tab from an open dialog in Excel on the web moves focus out of the add-in | medium | dialogs | fix | Fixed in [#793](https://github.com/tmustier/pi-for-excel/pull/793) (merged 27 October 2026): aff33d6 |
 | [P-157](#p-157-ctrlz-in-one-tabs-composer-brings-back-text-typed-in-another-tab) | Ctrl+Z in one tab's composer brings back text typed in another tab | low | composer | fix | Fixed in [#789](https://github.com/tmustier/pi-for-excel/pull/789) (merged 27 October 2026) |
 | [P-158](#p-158-after-a-stopped-compaction-the-compacting-toast-stays-up-to-60-s) | After a stopped compaction the "Compacting…" toast stays up to 60 s | low | commands | fix | Fixed in [#793](https://github.com/tmustier/pi-for-excel/pull/793) (merged 27 October 2026) |
-| [P-159](#p-159-backups-clear-all-confirms-with-a-stale-count) | Backups "Clear all" confirms with a stale count | low | backups | fix | Assigned to #794 (follow-up; not yet in the PR) |
+| [P-159](#p-159-backups-clear-all-confirms-with-a-stale-count) | Backups "Clear all" confirms with a stale count | low | backups | fix | Fixed on main 1f51cf8 (checked 27 October 2026) |
 | [P-160](#p-160-the-tab-bars-scroll-arrows-snap-back) | The tab bar's scroll arrows snap back | low | tabs | fix | Fixed in [#793](https://github.com/tmustier/pi-for-excel/pull/793) (merged 27 October 2026): b268152 |
 | [P-161](#p-161-in-files-the-first-escape-drops-focus-to-the-page-body) | In Files, the first Escape drops focus to the page body | low | files | fix | Fixed in [#793](https://github.com/tmustier/pi-for-excel/pull/793) (merged 27 October 2026): 655e9d2 |
 | [P-162](#p-162-the-hover--draws-over-the-tab-title) | The hover × draws over the tab title | medium | tabs | fix | Fixed in [#793](https://github.com/tmustier/pi-for-excel/pull/793) (merged 27 October 2026): 995487b |
-| [P-163](#p-163-workbook-approvals-are-not-announced-to-screen-readers) | Workbook approvals are not announced to screen readers | low | accessibility | fix | Assigned to #793 (follow-up; not yet in the PR) |
+| [P-163](#p-163-workbook-approvals-are-not-announced-to-screen-readers) | Workbook approvals are not announced to screen readers | low | accessibility | fix | Fixed on main 1f51cf8 (checked 27 October 2026) |
 | [P-164](#p-164-a-model-picker-opened-while-busy-stays-read-only-after-the-turn-ends) | A model picker opened while busy stays read-only after the turn ends | low | models | fix | Fixed in [#795](https://github.com/tmustier/pi-for-excel/pull/795) (merged 27 October 2026): be2e666 |
 | [P-165](#p-165-toasts-cover-the-command-menus-lower-rows) | Toasts cover the command menu's lower rows | low | menus | fix | Fixed in [#793](https://github.com/tmustier/pi-for-excel/pull/793) (merged 27 October 2026): c88b997 |
 | [P-166](#p-166-copy-content-on-a-built-in-doc-fails-in-excel-for-mac) | Copy content on a built-in doc fails in Excel for Mac | low | files | fix | Fixed in [#790](https://github.com/tmustier/pi-for-excel/pull/790) (merged 27 October 2026): 3666748 |
 | [P-167](#p-167-after-save-as-the-tabs-stay-with-the-old-file-and-the-new-file-opens-a-fresh-chat) | After Save As, the tabs stay with the old file and the new file opens a fresh chat | medium | sessions | fix | Fixed in [#795](https://github.com/tmustier/pi-for-excel/pull/795) (merged 27 October 2026): d32fd2b |
-| [P-168](#p-168-the-screen-reader-announcement-for-an-approval-stays-after-stop-withdraws-it) | The screen-reader announcement for an approval stays after Stop withdraws it | low | accessibility | fix | Assigned to #793 (follow-up after the stack merges) |
+| [P-168](#p-168-the-screen-reader-announcement-for-an-approval-stays-after-stop-withdraws-it) | The screen-reader announcement for an approval stays after Stop withdraws it | low | accessibility | fix | Fix in the remaining-bugs PR (not yet open): 6f637da |
 | [P-169](#p-169-the-plugin-install-button-ignores-pointer-clicks-in-excel-for-mac) | The plugin Install button ignores pointer clicks in Excel for Mac | low | plugins | fix | Assigned to the remaining-bugs PR (in progress) |
 | [P-170](#p-170-dark-mode-leaves-the-gear-and-composer-file-buttons-light-with-a-pale-band-under-the-tabs) | Dark mode leaves the gear and composer file buttons light, with a pale band under the tabs | low | theme | fix | Assigned to the CC-10 theme PR (in progress) |
 
@@ -915,8 +915,8 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Severity:** `medium`, accessibility gap; recoverable.
 - **Decision needed:** `fix`, move focus into the menu and add arrow/Escape handling (the Escape order then resolves itself).
 - **Raised by:** UTIL-02, UTIL-08; [the utilities menu](ui/the-utilities-menu.md#open-questions-and-verification), [the utilities menu](ui/the-utilities-menu.md#edge-cases)
-- **Status:** Confirmed in Excel on the web, 26 October 2026 (UTIL-02: no arrows, focus not moved); the macOS Escape case (UTIL-08) suspected from code, not reproduced
-- **Owner:** Assigned to #793 (follow-up; not yet in the PR)
+- **Status:** Confirmed in Excel on the web, 26 October 2026 (UTIL-02: no arrows, focus not moved); the macOS Escape case (UTIL-08) suspected from code, not reproduced Checked on main 1f51cf8 in the code and in Excel on the web: no longer reproduces.
+- **Owner:** Fixed on main 1f51cf8 (checked 27 October 2026)
 
 ### P-62: A failed language save leaves a mixed-language taskpane
 
@@ -1251,8 +1251,8 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Severity:** `medium`, turns fail confusingly; picking the model again recovers.
 - **Decision needed:** `product call`, show the provider in the control when ambiguous; and `fix` reconciliation if it changes providers unasked.
 - **Raised by:** STATUS-19; [the status bar](ui/the-status-bar.md#open-questions-and-verification), [persistence and restore](cross-cutting/persistence-and-restore.md#open-questions-and-verification)
-- **Status:** Confirmed in Excel on the web, 26 October 2026 (STATUS-19)
-- **Owner:** Assigned to #795 (follow-up; not yet in the PR)
+- **Status:** Confirmed in Excel on the web, 26 October 2026 (STATUS-19) Checked on main 1f51cf8 in the code and in Excel on the web: no longer reproduces.
+- **Owner:** Fixed on main 1f51cf8 (checked 27 October 2026)
 
 ### P-90: After a keyboard tab switch, the open thinking popover changes the hidden tab
 
@@ -1658,7 +1658,7 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Decision needed:** `fix`: route strings through `t()`, make OS wording neutral, use the stored name, align the command.
 - **Raised by:** LOGIN-34, GATEWAY-07, GATEWAY-18; [welcome and login](setup/welcome-and-login.md#open-questions-and-verification), [custom gateways](setup/custom-gateways.md#open-questions-and-verification), [settings](setup/settings.md#open-questions-and-verification), [the proxy](setup/the-proxy.md#open-questions-and-verification)
 - **Status:** Confirmed in Excel on the web and the standalone taskpane, 26 October 2026 (LOGIN-34, GATEWAY-07, GATEWAY-18); items 3, 5, 6 from code
-- **Owner:** Assigned to #795 (follow-up; not yet in the PR)
+- **Owner:** Fix in the remaining-bugs PR (not yet open): 2446d26
 
 ### P-121: Small copy and rendering slips in guidance and extensions
 
@@ -1739,8 +1739,8 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Severity:** `low`, because it is cosmetic.
 - **Decision needed:** `fix`: store plain text in the key (or build the bold part with DOM nodes).
 - **Raised by:** LOGIN-35; [welcome and login](setup/welcome-and-login.md#open-questions-and-verification)
-- **Status:** Confirmed in a production build of the standalone taskpane, 26 October 2026 (LOGIN-35)
-- **Owner:** Assigned to #795 (follow-up; not yet in the PR)
+- **Status:** Confirmed in a production build of the standalone taskpane, 26 October 2026 (LOGIN-35) Checked on main 1f51cf8 in the code and in Excel on the web: no longer reproduces.
+- **Owner:** Fixed on main 1f51cf8 (checked 27 October 2026)
 
 ### P-127: Connecting from the connection dialog shows no toast
 
@@ -1763,8 +1763,8 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Severity:** `low`, because the only effect is an unexpected later login.
 - **Decision needed:** `fix`: add Cancel and abort the polling when the dialog is closed.
 - **Raised by:** [welcome and login](setup/welcome-and-login.md#open-questions-and-verification)
-- **Status:** Suspected from code; not reproduced
-- **Owner:** Assigned to #795 (follow-up; not yet in the PR)
+- **Status:** Suspected from code; not reproduced Checked on main 1f51cf8 in the code and in Excel on the web: no longer reproduces.
+- **Owner:** Fixed on main 1f51cf8 (checked 27 October 2026)
 
 ### P-129: The picker shows no check mark when its opening refresh swaps the model
 
@@ -1926,7 +1926,7 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Decision needed:** `fix` for the count, Ctrl+P text and prompt title; `product call` for the wording and tooltip.
 - **Raised by:** [sessions and tabs](foundations/sessions-and-tabs.md#open-questions-and-verification), [the command menu](commands/the-command-menu.md#open-questions-and-verification), [renaming a tab](sessions/renaming-a-tab.md#open-questions-and-verification), [empty state and hints](commands/empty-state-and-hints.md#open-questions-and-verification), [tabs](sessions/tabs.md#open-questions-and-verification)
 - **Status:** Confirmed in Excel on the web, 26 October 2026 (SESS-10, EXPORT-10, MENU-19, RENAME-01, RENAME-05, HINTS-02, TABS-05); the prompt title is suspected from code
-- **Owner:** Assigned to #795 (follow-up; not yet in the PR)
+- **Owner:** Fix in the remaining-bugs PR (not yet open): 27702ec
 
 ### P-142: Busy rules differ between the menu or status bar and the matching slash commands
 
@@ -1949,8 +1949,8 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Severity:** `low`, because it needs a shortcut and is recoverable.
 - **Decision needed:** `fix`: ignore the composer-focus shortcut while a modal is open.
 - **Raised by:** SETTINGS-14; [settings](setup/settings.md#open-questions-and-verification)
-- **Status:** Confirmed in Excel on the web, 26 October 2026 (SETTINGS-14)
-- **Owner:** Assigned to #793 (follow-up; not yet in the PR)
+- **Status:** Confirmed in Excel on the web, 26 October 2026 (SETTINGS-14) Checked on main 1f51cf8 in the code and in Excel on the web: no longer reproduces.
+- **Owner:** Fixed on main 1f51cf8 (checked 27 October 2026)
 
 ### P-144: The busy dot is nearly invisible on an inactive tab in the light theme
 
@@ -2069,8 +2069,8 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Severity:** `low`. A stale warning, cleared by a reload.
 - **Decision needed:** `fix`.
 - **Raised by:** PROXY-07 (integration-fixes verification, setup cluster, 27 October 2026)
-- **Status:** Confirmed in Excel on the web on integration-fixes a2b3f2d.
-- **Owner:** Assigned to #793 (follow-up; not yet in the PR)
+- **Status:** Confirmed in Excel on the web on integration-fixes a2b3f2d. Checked on main 1f51cf8 in the code and in Excel on the web: no longer reproduces.
+- **Owner:** Fixed on main 1f51cf8 (checked 27 October 2026)
 
 ### P-155: The proxy banner's Copy command does nothing in Excel on the web
 
@@ -2117,8 +2117,8 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Severity:** `low`. All backups are still cleared; only the number shown is wrong.
 - **Decision needed:** `fix`. Count when confirming.
 - **Raised by:** workbook integration verification, 27 October 2026
-- **Status:** Confirmed in Excel on the web on integration-fixes e48d83c.
-- **Owner:** Assigned to #794 (follow-up; not yet in the PR)
+- **Status:** Confirmed in Excel on the web on integration-fixes e48d83c. Checked on main 1f51cf8 in the code and in Excel on the web: no longer reproduces.
+- **Owner:** Fixed on main 1f51cf8 (checked 27 October 2026)
 
 ### P-160: The tab bar's scroll arrows snap back
 
@@ -2165,8 +2165,8 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Severity:** `low`.
 - **Decision needed:** `fix`. Announce workbook approvals through the shared announcer.
 - **Raised by:** ui and cross-cutting integration verification, 27 October 2026
-- **Status:** Confirmed in Excel on the web on integration-fixes 8099cd6. Only in the integration build: on #793 every approval goes through requestRuntimeToolApproval, which announces; #793 keeps that when merging #794.
-- **Owner:** Assigned to #793 (follow-up; not yet in the PR)
+- **Status:** Confirmed in Excel on the web on integration-fixes 8099cd6. Only in the integration build: on #793 every approval goes through requestRuntimeToolApproval, which announces; #793 keeps that when merging #794. Checked on main 1f51cf8 in the code and in Excel on the web: no longer reproduces.
+- **Owner:** Fixed on main 1f51cf8 (checked 27 October 2026)
 
 ### P-164: A model picker opened while busy stays read-only after the turn ends
 
@@ -2214,7 +2214,7 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Decision needed:** `fix`.
 - **Raised by:** guidance re-check on stack top 97e15a3, 27 October 2026
 - **Status:** Confirmed in Excel on the web on 2d91e58 and 97e15a3.
-- **Owner:** Assigned to #793 (follow-up after the stack merges)
+- **Owner:** Fix in the remaining-bugs PR (not yet open): 6f637da
 
 ### P-169: The plugin Install button ignores pointer clicks in Excel for Mac
 
@@ -2225,7 +2225,7 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Severity:** `low`.
 - **Decision needed:** `fix`.
 - **Raised by:** Desktop pass (HUB-16) on stack top 97e15a3, 27 October 2026
-- **Status:** Seen once in Excel for Mac; not yet reproduced on the web.
+- **Status:** Seen once in Excel for Mac. Does not reproduce in Excel on the web (trusted pointer click, keyboard and DOM activation all work, flag on and off); the Mac cause is unknown.
 - **Owner:** Assigned to the remaining-bugs PR (in progress)
 
 ### P-170: Dark mode leaves the gear and composer file buttons light, with a pale band under the tabs
