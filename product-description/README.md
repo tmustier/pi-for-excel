@@ -2,6 +2,8 @@
 
 A written description of the user experience of Pi for Excel: what the user sees, what they can do, and exactly what happens when they do it.
 
+The current-behaviour pages follow merged main, including [the original merged fixes](goal.md#merged-fixes) and subsequent merged product decisions. Older verification results retain their recorded build/date; they are not new acceptance results. Unmerged proposals are not described as current behavior.
+
 ## Purpose
 
 Pi for Excel is, from the user's point of view, a large state chart. The user moves through it with typed messages, Enter and its modifiers, Escape, clicks on tabs, buttons, status-bar controls and menus, slash commands, dropped files, and the edits and selection changes they make in the workbook itself. Most of that behavior is defined implicitly, spread across the taskpane bootstrap (`src/taskpane/`), the agent runtime from pi-agent-core, the sidebar components (`src/ui/`), the slash commands (`src/commands/`), the workbook tools (`src/tools/`), and the tests. There is no single place that says, in plain language, "when the user does X, this is what happens, and this is what happens if they do Y halfway through."

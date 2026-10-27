@@ -4,7 +4,7 @@ Read [README.md](README.md), [glossary.md](glossary.md), [turns](foundations/tur
 
 ## Source of truth
 
-The source baseline is **main `1f51cf8`**, including the merged fixes below. Documentation-only commits do not change that baseline. Read the owning code, tests and UI wording in `src/language/locales/en.json`; check ambiguous behavior in the running product. Old verification runs are historical evidence, not the current contract. Never label a behavior confirmed solely because a PR description claims it.
+The source of truth is **current merged main**. The original fixes below landed at `1f51cf8`; subsequent merged product decisions supersede their earlier contracts where noted in the feature pages. Documentation-only commits do not establish a new product baseline. Read the owning code, tests and UI wording in `src/language/locales/en.json`; check ambiguous behavior in the running product. Old verification runs are historical evidence, not the current contract. Never label a behavior confirmed solely because a PR description claims it.
 
 The default configuration is one connected provider, Auto execution mode, no installed extensions, experimental flags, rules or conventions. WPS and extension authoring are out of scope. The agent-facing counterpart is [agent-description](../agent-description/README.md).
 
@@ -44,7 +44,7 @@ Foundations and cross-cutting documents may omit phases that do not apply. Keep 
 - Context meter warnings use the selected model's compaction budget, not fixed percentages of its full window. Compaction belongs to its originating tab and saves immediately. Summaries distinguish answered requests and shrink large answered results in the kept tail.
 - Workbook structure, Files summary and other people's edits are stored conversation notes when changed. Selection is fresh per request with a bounded sample. Tools wait for cell-edit mode for up to 60 seconds before a precise failure; auto-context does not hold up a request for that wait.
 - Large reads page; compact/detailed reads use displayed values and annotate hidden stored values and workbook state. Checked writes refuse merge/spill/protection obstacles, chunk large inputs, and report the scope and limitations of read-back verification.
-- Every modal takes focus, traps Tab and returns focus; Escape acts on the topmost surface. Shortcuts do not operate behind a modal. Shift+Tab cycles thinking only in the composer.
+- Every modal takes focus, traps Tab and returns focus; Escape acts on the topmost surface. Shortcuts do not operate behind a modal. Ctrl+Alt/Option+T cycles thinking from the composer; Shift+Tab moves focus backwards. Model/thinking changes during a turn apply to the next turn.
 - The notice area is below the tabs. Banners are dismissible; a disabled proxy produces no warning. Excel-web loopback restrictions are explained rather than offering an impossible permission prompt.
 - Clipboard copy uses fallbacks; bare `/export` downloads when copy is unavailable. Downloads use a single blob download link without opening a spare browser tab. Desktop Save-sheet behavior needs desktop acceptance.
 - Rules, conventions, skills and integration changes refresh runtime capabilities without a reload. Conflicting Rules saves ask before replacement; same-name imports receive a new name rather than overwriting.
