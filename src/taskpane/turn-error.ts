@@ -16,6 +16,8 @@ export interface TurnFailureContext {
   overflowAfterRecovery: boolean;
   /** The user dismissed the connection dialog for this provider during the turn. */
   missingCredentialsFor: string | null;
+  /** This provider's login expired and could not be refreshed; the stale token was not sent. */
+  expiredLoginFor?: string | null;
   online: boolean;
   /** The configured proxy URL when the proxy is enabled. */
   proxyUrl: string | null;
@@ -32,6 +34,9 @@ export function describeTurnFailure(context: TurnFailureContext): string | null 
   if (!last || last.role !== "assistant" || last.stopReason !== "error") return null;
   const error = last.errorMessage ?? "";
 
+  if (context.expiredLoginFor) {
+    return t("turn.error.loginExpired", { provider: context.expiredLoginFor });
+  }
   if (context.missingCredentialsFor) {
     return t("turn.error.apiKeyRequired", { provider: context.missingCredentialsFor });
   }

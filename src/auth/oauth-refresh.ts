@@ -33,8 +33,10 @@ export type OAuthRefreshOutcome =
   | "refreshed"
   /** The grant was revoked or is stale; the login was removed and must be redone. */
   | "logged_out"
-  /** Refresh failed for another reason (e.g. offline); the old token is kept. */
-  | "failed";
+  /** Refresh failed (e.g. offline), but the old token has not expired yet and is kept. */
+  | "failed"
+  /** Refresh failed and the token has expired: it must not be sent; the user signs in again. */
+  | "expired";
 
 export interface OAuthRefresher {
   /** Makes sure the API key stored for `apiProvider` is usable for the next request. */
@@ -90,7 +92,8 @@ export function createOAuthRefresher(options: {
           return "logged_out";
         }
         warn(`[auth] ${provider.name}: refresh failed (${getErrorMessage(error)})`);
-        return "failed";
+        // The grant is kept, so a later request (or a reload) can retry the refresh.
+        return now() < credentials.expires ? "failed" : "expired";
       }
 
       await saveOAuthCredentials(options.settings, oauthProviderId, refreshed);

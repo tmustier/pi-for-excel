@@ -146,3 +146,16 @@ void test("a failed refresh keeps the stored grant so the next request can retry
   assert.equal(await refresher.ensureFresh("anthropic"), "failed");
   assert.equal(fake.refreshCalls(), 2);
 });
+
+void test("a failed refresh of an expired token reports the login expired instead of keeping the token", async () => {
+  const settings = new MemorySettings();
+  seed(settings, NOW - 1);
+  const fake = fakeProvider({ fail: new Error("invalid_grant") });
+  const refresher = createOAuthRefresher({
+    settings, providerKeys: new MemoryKeys(), getOAuthProvider: () => fake.provider, now: () => NOW, warn: () => {},
+  });
+
+  assert.equal(await refresher.ensureFresh("anthropic"), "expired");
+  // The grant is kept so a later request can retry once the provider answers again.
+  assert.equal((settings.values.get("oauth.anthropic") as OAuthCredentials).refresh, "refresh-0");
+});
