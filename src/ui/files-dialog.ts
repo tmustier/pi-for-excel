@@ -980,7 +980,11 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
     });
   };
 
-  const onWorkspaceChanged: EventListener = () => {
+  const onWorkspaceChanged: EventListener = (event) => {
+    // The dialog shows no audit trail, and reading a file for the detail view
+    // records one: re-rendering on it replaced the detail buttons in a loop.
+    const detail: unknown = event instanceof CustomEvent ? event.detail : null;
+    if (typeof detail === "object" && detail !== null && "reason" in detail && detail.reason === "audit") return;
     void (async () => {
       try {
         await refreshWorkspaceState();
