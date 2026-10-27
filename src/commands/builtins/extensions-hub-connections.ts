@@ -153,6 +153,7 @@ function appendIntegrationScopeControls(args: {
         integrationId,
         enabled,
         knownIntegrationIds: INTEGRATION_IDS,
+        applyDefaultsWhenUnconfigured: scope === "session" && workbookId === null,
       });
     }, "scope", t(scope === "session" ? "ext-hub-connections.toast.scopeSession" : "ext-hub-connections.toast.scopeWorkbook", {
       name,

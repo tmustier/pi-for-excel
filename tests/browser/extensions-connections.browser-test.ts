@@ -99,11 +99,18 @@ async function openConnectionsWithExtension(code?: string, grantConnections = fa
   return { plugins, finish: opened.finish };
 }
 
-void test("Connections hides extension connections when no extensions are installed", async () => {
+void test("Connections hides absent extensions and enabling MCP preserves inherited web search", async () => {
   const { plugins, finish } = await openConnectionsWithExtension();
   try {
     await plugins.locator(".pi-section-header__label", { hasText: "MCP servers" }).waitFor({ state: "visible" });
     assert.equal(await plugins.locator(".pi-section-header__label", { hasText: "Extension connections" }).count(), 0);
+    const mcp = plugins.locator(".pi-item-card").filter({ hasText: "Let Pi use MCP servers" });
+    await mcp.locator(".pi-item-card__header").click();
+    await mcp.locator(".pi-toggle").first().click();
+    await mcp.getByText("Enabled", { exact: true }).waitFor();
+    const web = plugins.locator(".pi-item-card").filter({ hasText: "Jina Search (default)" });
+    await web.getByText("No API key", { exact: true }).waitFor();
+    assert.equal(await web.getByText("Off", { exact: true }).count(), 0);
   } finally {
     await finish();
   }
