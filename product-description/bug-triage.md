@@ -179,7 +179,7 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 | [P-167](#p-167-after-save-as-the-tabs-stay-with-the-old-file-and-the-new-file-opens-a-fresh-chat) | After Save As, the tabs stay with the old file and the new file opens a fresh chat | medium | sessions | fix | Fixed in [#795](https://github.com/tmustier/pi-for-excel/pull/795) (merged 27 October 2026): d32fd2b |
 | [P-168](#p-168-the-screen-reader-announcement-for-an-approval-stays-after-stop-withdraws-it) | The screen-reader announcement for an approval stays after Stop withdraws it | low | accessibility | fix | Fixed in [#806](https://github.com/tmustier/pi-for-excel/pull/806) (merged 27 October 2026) |
 | [P-169](#p-169-the-plugin-install-button-ignores-pointer-clicks-in-excel-for-mac) | The plugin Install button ignores pointer clicks in Excel for Mac | low | plugins | fix | Open: not reproduced on the web; Mac cause unknown |
-| [P-170](#p-170-dark-mode-leaves-the-gear-and-composer-file-buttons-light-with-a-pale-band-under-the-tabs) | Dark mode leaves the gear and composer file buttons light, with a pale band under the tabs | low | theme | fix | Fixed in [#802](https://github.com/tmustier/pi-for-excel/pull/802) (open) |
+| [P-170](#p-170-dark-mode-leaves-the-gear-and-composer-file-buttons-light-with-a-pale-band-under-the-tabs) | Dark mode leaves the gear and composer file buttons light, with a pale band under the tabs | low | theme | fix | Fixed in [#802](https://github.com/tmustier/pi-for-excel/pull/802) (merged 27 October 2026) |
 | [P-171](#p-171-undo-this-turn-does-not-cover-direct-officejs-changes) | "Undo this turn" does not cover direct Office.js changes | low | workbook | fix | Follow-up (not started); [#808](https://github.com/tmustier/pi-for-excel/pull/808) (merged) shows the warning |
 
 ## High
@@ -2239,7 +2239,7 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Decision needed:** `fix`.
 - **Raised by:** Desktop pass (EXP-03) on stack top 97e15a3, 27 October 2026
 - **Status:** Confirmed in Excel for Mac. Fixed in #802 (e1582a1), including dark Settings selects; checked in screenshots.
-- **Owner:** Fixed in [#802](https://github.com/tmustier/pi-for-excel/pull/802) (open)
+- **Owner:** Fixed in [#802](https://github.com/tmustier/pi-for-excel/pull/802) (merged 27 October 2026)
 
 ### P-171: "Undo this turn" does not cover direct Office.js changes
 
