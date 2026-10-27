@@ -4,6 +4,8 @@
 
 Each Pi taskpane is a separate copy of Pi. When the user has two workbooks open, each workbook window has its own taskpane, with its own tabs, its own turns, its own [workbook lock](../glossary.md#the-workbook), its own error banner, its own recently closed list and its own copy of most settings. What the taskpanes share is the add-in's storage on this computer: saved sessions, tab layouts, settings, logins, automatic backups and the Files workspace (see [persistence and restore](persistence-and-restore.md)). They do not talk to each other. Nothing locks a session, a tab layout or a workbook across taskpanes, nothing tells one taskpane that another changed something, and when two taskpanes write the same record, the later write wins whole. This document describes what the user sees in each arrangement: two workbooks at once, two taskpanes on the same workbook, the same session open twice, and co-authoring on Excel on the web. There is no control for any of it; it is how the product behaves whenever more than one taskpane is open.
 
+Automatic history is an exception to whole-record replacement: [#809](https://github.com/tmustier/pi-for-excel/pull/809) coordinates backup mutations through shared storage transactions. This does not synchronize loaded pages or lock the workbook across taskpanes.
+
 ## The simple case
 
 The user has `Budget.xlsx` and `Forecast.xlsx` open in Excel desktop and opens Pi in both. Each taskpane restores the tabs last open in its own workbook. The user asks Pi to fill a column in Budget and, at the same time, to build a chart in Forecast. Both turns run at full speed: each taskpane has its own workbook lock, and they are changing different workbooks.
@@ -26,7 +28,7 @@ stateDiagram-v2
 
 ### Opening a second taskpane
 
-When a taskpane opens it reads, once, the tab layout for its workbook, the execution mode, the language, the automatic backups and the Files workspace tags into memory, and restores its tabs (see [restoring when the taskpane opens](persistence-and-restore.md#restoring-when-the-taskpane-opens)). From then on it works from that copy. What another taskpane writes later is not picked up, with these exceptions:
+When a taskpane opens it restores its tabs and loads several settings into memory (see [restoring when the taskpane opens](persistence-and-restore.md#restoring-when-the-taskpane-opens)). This is not how automatic history is stored: backup pages query shared indexed metadata, and each mutation uses a transaction rather than writing back a cached list. An already-open Backups page can remain stale until refreshed or reopened. Other examples of fresh reads include:
 
 - **Logins.** The credential for a provider is read from storage before every model request, so a provider logged in or out in one taskpane takes effect at the other's next request.
 - **Rules and conventions.** They are re-read whenever the taskpane regains focus.
@@ -37,7 +39,7 @@ When a taskpane opens it reads, once, the tab layout for its workbook, the execu
 
 Two workbooks with different [workbook identities](persistence-and-restore.md#workbook-identity) use different tab-layout records, so each taskpane restores and saves its own tabs. Their turns, queues and Stop are independent. Their workbook locks are independent, which is correct because each lock protects a different workbook.
 
-One record still collides: all workbooks' automatic backups are stored as a single list, and each taskpane writes back the list it loaded when it opened plus its own new backups. Backups Pi takes in Budget can therefore erase the backups taken in Forecast since Budget's taskpane opened, and the other way round (see [Concurrent saves](#concurrent-saves)). Each taskpane's Backups dialog keeps listing what that taskpane holds in memory, so the loss shows only after the taskpane is reloaded.
+Automatic backups do not collide as whole lists. Each backup has its own payload, and shared transactions serialize metadata, accounting and eviction. Budget and Forecast share the 512 MiB ceiling, so adding a backup in either can evict the oldest history from the other, but cannot accidentally overwrite the other's newer additions.
 
 Two workbooks *without* an identity (two new, unsaved workbooks, or any two workbooks on Excel on the web where no identity is available) share one tab-layout record. Each taskpane rewrites it whenever its own tabs change, so the next unsaved workbook to open Pi restores whichever taskpane changed its tabs last.
 
@@ -49,8 +51,8 @@ This happens when one workbook is shown in two taskpanes at once, for example in
 - **The workbook lock does not cross taskpanes.** Each taskpane serializes its own mutations, but a mutation from one taskpane can run in the middle of a turn in the other, including on the same cells. Neither shows "Locking…" because of the other. Confirmed in Excel on the web: while taskpane B held the lock for 8 s, taskpane A's write turn ran and wrote its cell; A's tabs never showed "Locking…".
 - **Each browser tab sees the other's cell changes late.** On Excel on the web two browser tabs on one workbook are two co-authoring sessions. Right after both writes, B read both new values while A still read the cell B had written as empty. Pi's tools in A would read the stale value.
 - **Auto-context.** Each Pi is told about the other Pi's writes as "user changes" before its next request, because Excel reports them the same way as the user's edits.
-- **Backups.** Each taskpane keeps its own in-memory list of automatic backups, loaded when it opened, and writes that whole list back after every new backup. The other taskpane's newer backups are overwritten and disappear from storage; each taskpane's Backups dialog shows only what it loaded plus its own. Reverting a backup restores its cells as they were, overwriting anything the other Pi wrote there since.
-- **Opening a taskpane clears the workbook's backups for both.** A taskpane that opens on a workbook with no unsaved changes clears that workbook's backups from storage, and on Excel on the web the workbook always reports no unsaved changes. Confirmed in Excel on the web: Pi in taskpane A wrote one cell and its Backups page listed "1 backup"; reloading taskpane B removed the backup from storage, and A went on listing "1 backup" from memory until reloaded.
+- **Backups.** Concurrent additions preserve both taskpanes' backups, subject to the shared size ceiling. Pages query metadata without loading cell payloads. A loaded page is not a live subscription; refresh or reopen it to see another pane's additions or removals. Restore reads the selected backup again and checks current cells against its recorded post-write state. Later edits trigger "Overwrite later edits?" rather than being silently overwritten.
+- **Opening or saving does not clear backups.** History survives reload and AutoSave. Explicit deletion and ceiling-driven eviction affect shared storage, so another pane's previously loaded page can offer an entry that has since been removed; restore then refuses safely.
 
 ### The same session open in two taskpanes
 
@@ -64,7 +66,7 @@ Each taskpane holds the whole conversation in memory and rewrites the whole save
 
 ### Concurrent saves
 
-Each save is a single storage transaction that writes the session together with its summary, so two taskpanes saving at the same moment cannot corrupt a session or leave half of one; one write simply lands after the other. The same holds for every settings record: tab layouts, the backups list, the change audit log and the Files workspace tags are each one record, rewritten whole, and the later write wins. Sessions and tab layouts are written from the taskpane's own current state, so a write replaces the other taskpane's version of that session or layout entirely. The backups list, the audit log and the Files tags are lists loaded once when the taskpane opened, so a write also drops every entry the other taskpane added since then, including entries for other workbooks.
+Each save is a single storage transaction that writes the session together with its summary, so two taskpanes saving at the same moment cannot leave half a session. Sessions and tab layouts still have whole-record replacement behavior. Automatic history is different: payloads are independent records and additions, removals, identity moves and eviction serialize through shared transactions. Two panes migrating old history cannot duplicate it; a failed migration leaves the old source intact. This storage update does not change the audit log or Files tags.
 
 ## Modifiers
 
@@ -98,9 +100,9 @@ After any of these, each taskpane carries on from its own memory; nothing is rec
 
 ## Interactions with other systems
 
-**Persistence.** Shared storage, no coordination, last write wins; see [persistence and restore](persistence-and-restore.md).
+**Persistence.** Shared storage; automatic history coordinates mutations transactionally, while other records have their own save rules. See [persistence and restore](persistence-and-restore.md).
 
-**Workbook changes and recovery.** The workbook lock is per taskpane. Automatic backups written by two taskpanes overwrite each other's list; see [Two taskpanes on the same workbook](#two-taskpanes-on-the-same-workbook). Each taskpane checks every 4 seconds whether its workbook was saved and clears that workbook's backups when it was; a taskpane on another workbook clears only its own.
+**Workbook changes and recovery.** The workbook lock remains per taskpane, even though history storage is coordinated. Backups survive saves and reloads, and restores guard later edits; see [Two taskpanes on the same workbook](#two-taskpanes-on-the-same-workbook).
 
 **Other tabs and sessions.** Tabs in different taskpanes are unrelated, even when they show the same session.
 
@@ -122,7 +124,7 @@ After any of these, each taskpane carries on from its own memory; nothing is rec
 
 ## Excel on the web and co-authoring
 
-When two people edit the same workbook on Excel on the web, each has their own Pi in their own browser, with their own storage. Nothing is shared between them: not sessions, not tabs, not backups. Pi's workbook lock does not know about the other person or their Pi. A co-author's edits, and their Pi's edits, reach Pi as user changes in [auto-context](../turn/auto-context.md), and can land in the middle of a turn. Reverting one of Pi's backups writes the saved cells back regardless of what the co-author has written there since.
+When two people edit the same workbook on Excel on the web, each has their own Pi in their own browser, with their own storage. Nothing is shared between them: not sessions, not tabs, not backups. Pi's workbook lock does not know about the other person or their Pi. A co-author's edits, and their Pi's edits, reach Pi as user changes in [auto-context](../turn/auto-context.md), and can land in the middle of a turn. Restore checks the current cells and asks before overwriting later edits; this is not a cross-person workbook lock.
 
 The document token Pi writes into a workbook without an identity is stored in the file, so co-authors' taskpanes see the same token; since each keeps its backups in its own browser, this has no visible effect.
 
@@ -136,6 +138,8 @@ The document token Pi writes into a workbook without an identity is stored in th
 - Disabling the proxy in one taskpane stops the other from using it at its next request, but the other's proxy banner reflects only reachability, not the setting.
 
 ## Open questions and verification
+
+Backup-specific observations below are historical, from before main #794 and [#809](https://github.com/tmustier/pi-for-excel/pull/809). Indexed storage now preserves concurrent additions, migration is single-winner, and opening a pane does not clear history. Native Chromium tests cover two simultaneous panes, paging and deletion; live Mac/web acceptance covers migration/reload/restore. Current evidence and remaining limitations are in [backups and revert](../workbook/backups-and-revert.md#open-questions-and-verification). The new backend closes on a database version change; older pre-upgrade builds still cannot open the upgraded origin.
 
 - Confirmed in Excel for Mac: after Window > New Window, the second window has no taskpane until the user presses "Open Pi" there, and then it runs its own Pi with its own tabs on the same workbook identity. Windows has not been checked. Everything under "Two taskpanes on the same workbook" is read from code and applies to any arrangement that puts two taskpanes on one workbook identity, including two browser tabs on Excel on the web.
 - Whether all Excel desktop taskpanes on one computer share one storage area was assumed from the single cache location in the repo's AGENTS.md; not tested.

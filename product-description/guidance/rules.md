@@ -10,7 +10,7 @@ The user types `/rules` and presses Enter. The Settings overlay opens on the "Ru
 
 The user types "Always use EUR for currencies" and clicks "Save". A toast says "Rules saved". The overlay does not close: it goes back to the "Settings" page, and a second click on × or a second Escape returns the user to the chat. From the next model request in every tab, Pi has the rule.
 
-Alternatively the user just tells Pi in chat, "from now on, use EUR". Pi may call its `instructions` tool; a tool card labelled "Remember user rules" appears in the transcript, and the rule is saved without any dialog.
+Alternatively the user just tells Pi in chat, "from now on, use EUR". Pi may call its `instructions` tool; a tool card labelled "Remember user rules" appears. In Auto the user rule saves immediately; Confirm first previews the complete new rules in "Change Pi’s guidance?". After saving, a toast offers Undo.
 
 ## The interaction, event by event
 
@@ -60,15 +60,15 @@ There is no busy phase. Saving is instantaneous from the user's point of view, t
 
 The user lands on the "Settings" page of the same overlay. Rules are stored in the add-in's browser storage on this computer, not in the workbook file: they do not travel with the workbook to another computer or another Excel profile, and other people who open the workbook do not get them. Workbook rules are keyed to the workbook's identity, which is derived from where the file is saved; a copy saved elsewhere, or the same file moved or renamed, starts with no workbook rules. See [persistence and restore](../cross-cutting/persistence-and-restore.md).
 
-There is no undo or history. Rules cannot be reverted from [Backups](../workbook/backups-and-revert.md), because they are not part of the workbook.
+The editor has no undo/history. Pi's own changes offer a short-lived Undo toast (below). Rules cannot be reverted from [Backups](../workbook/backups-and-revert.md), because they are not part of the workbook.
 
 ## When Pi changes the rules
 
-Pi has a tool, `instructions`, that saves rules directly. Pi is told to update user rules freely when the user states a lasting preference, and to show the exact text and ask in chat before changing workbook rules. That second step is a conversation, not a dialog: nothing in the product enforces it.
+Pi has a tool, `instructions`, that saves rules. As of [PR #804](https://github.com/tmustier/pi-for-excel/pull/804) (SE-03), the product always asks before Pi changes workbook rules, including in Auto. User rules ask only in Confirm. The queued "Change Pi’s guidance?" dialog previews the full resulting text and offers "Save change", "Decline" and "Stop Pi". A workbook turn-wide grant cannot bypass this approval. Stop withdraws the request without saving.
 
 When Pi calls it, the transcript shows a [tool card](../turn/tool-calls.md) whose header reads "Remember user rules" or "Remember workbook rules" (adding a line) or "Set user rules" / "Set workbook rules" (replacing all of them). Expanded, the card lists "Scope", "Action" and "Content" (cut at 120 characters), and the result: "Updated user rules (N/2000 chars):" followed by the full new text, with a warning line if the text is over the soft limit. If the workbook cannot be identified, the card shows "Error: workbook identity unavailable. Can't update workbook rules right now." (confirmed in Excel on the web).
 
-The tool is not a [mutation](../glossary.md#the-workbook): it does not ask for [approval](../workbook/confirm-mode-and-approvals.md) in Confirm mode (confirmed in Excel on the web), does not take the workbook lock, and creates no backup. There is no toast. The change is meant to reach every open tab exactly like a save from the page; in Excel on the web it did not reach Pi until the taskpane reloaded (see [Open questions](#open-questions-and-verification)). The Rules page, if it is open at the time, does not refresh; see [Edge cases](#edge-cases).
+The tool does not take the workbook lock or create a workbook backup. A successful change shows "Pi updated your rules for all files" or "Pi updated this workbook’s rules", with Undo. Undo restores the prior rules, unless they have changed again; in that case it leaves the newer rules alone and asks the user to review Settings. This is separate from Excel Undo. Approval also refuses to overwrite rules changed while its preview was open. The Rules page, if open, does not refresh its draft; see [Edge cases](#edge-cases).
 
 ## Modifiers
 
@@ -76,7 +76,7 @@ The tool is not a [mutation](../glossary.md#the-workbook): it does not ask for [
 | --- | --- | --- |
 | Model and provider | No effect on the page; it works with no provider connected. Every model receives the same rules text. | No effect. The page can be open while the model changes elsewhere. |
 | Thinking level | No effect. | No effect. |
-| Execution mode | No effect. Pi's `instructions` tool runs without approval in both Auto and Confirm. | No effect. |
+| Execution mode | User rules ask in Confirm; workbook rules always ask. Both offer Undo after saving. | Applied when the tool starts. |
 | Files in the workspace, or an overlay open | No effect from files; rules are not files and do not appear in the [Files workspace](../files/the-files-workspace.md). Opening `/rules` while the Settings overlay is already open on another page moves it to "Rules", passing that page's own unsaved-changes check first. | Opening another overlay is not possible while the Settings overlay covers the taskpane. |
 | Tab state (new, restored, another tab busy) | No effect; the page is not tied to a tab. Rules apply to every tab, including restored ones. | A responding tab keeps running behind the overlay. A save is meant to apply to it from its next model response; in Excel on the web it applied only after a reload (see [Open questions](#open-questions-and-verification)). |
 | Host (desktop or web) | Works the same on both. Workbook rules are unavailable whenever the workbook has no [workbook identity](../glossary.md#sessions-and-tabs): a new, never-saved workbook on any host, and a workbook opened signed out through a shared link on Excel on the web (confirmed). | No effect. |
@@ -108,7 +108,7 @@ After any interrupt the user is on the "Rules" page with the drafts as they were
 
 **Other tabs and sessions.** Rules are not per tab or per session: one save updates every open tab. Two taskpanes on different workbooks share user rules and have their own workbook rules. A second taskpane is meant to learn of a change at its next refresh (focus, a save, or the next time it rebuilds its instructions). In Excel on the web it learned of it only when it reloaded (confirmed with a second browser tab on the same workbook); see [several taskpanes](../cross-cutting/several-taskpanes.md).
 
-**Execution mode and approvals.** Pi's `instructions` tool is never gated by Confirm mode.
+**Execution mode and approvals.** User rules ask in Confirm; workbook rules always ask. Guidance approvals do not offer turn-wide approval.
 
 **Models and providers.** Rules are included in Pi's instructions for every model.
 
@@ -116,7 +116,7 @@ After any interrupt the user is on the "Rules" page with the drafts as they were
 
 **Offline and provider errors.** No interaction. Saving works offline.
 
-**Notifications.** "Rules saved" after Save. No toast when Pi changes rules; the tool card is the only trace.
+**Notifications.** "Rules saved" after the user's Save. Pi's changes show an Undo toast in both modes.
 
 **Settings and preferences.** The page is part of the Settings overlay. Its "Formats" tab holds [conventions](conventions.md), which are saved by the same Save button.
 
@@ -148,4 +148,4 @@ After any interrupt the user is on the "Rules" page with the drafts as they were
 - **Saved rules do not reach Pi until the taskpane reloads.** Confirmed in Excel on the web (RULES-26, RULES-27): after saving the user rule "Cross pane rule ZQX" from the Rules page, the next model request still carried the previous rule; after a reload it carried ZQX; a later save of "Fresh rule ZQY" was again missing from the next request. A second taskpane on the same workbook behaved the same way on focus. With `settings.get` instrumented, focus, `visibilitychange` and `pi:rules-updated` caused no settings reads at all, so the capability refresh that should rebuild Pi's instructions never ran. The same refresh carries [skills](skills.md), [conventions](conventions.md) and [integrations](../extensions/web-search-and-mcp.md) changes. Cause not verified. Likely places: `refreshWorkbookState` and `refreshCapabilitiesForAllRuntimes` (`src/taskpane/init.ts:662-722`), the coalesced `refreshPromise` (`src/taskpane/session-runtime-manager.ts:226-232`, `293-314`) staying in flight, or `buildRuntimeSystemPrompt` waiting on `localServicesReady` (`init.ts:463-468`, `747`). Looks like a bug; high severity, because the page says "Rules saved" while Pi keeps the old rules. Excel for Mac fits the same bug: with two windows on one workbook, the model reported no rule in either, including the window that saved it (RULES-26, desktop pass).
 - Saving a new workbook for the first time while the page is open leaves "This file" unidentified until the page is reopened. Confirmed in Excel for Mac (RULES-25): after Save As the page still said "Can't identify this workbook right now — try saving the file first."; reopened, it showed "Workbook: pd-desktop-C.xlsx".
 
-Verified against pi-for-excel commit `ec453df`.
+Historical observations above were verified against `ec453df`; SE-03 consent and Undo behaviour is revised for PR #804 and supersedes RULES-18's no-approval observation.

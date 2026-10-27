@@ -90,7 +90,7 @@ Other defaults: hard-coded values in blue (`#0000FF`), links to other sheets in 
 
 Pi's `conventions` tool can view the conventions, change part of them, or reset them all to the defaults. Its [tool card](../turn/tool-calls.md) reads "View conventions", "Update conventions" or "Reset conventions". Expanded, an update lists what it touched ("Built-in presets", "Custom presets", "Remove presets", "Color conventions", …) and the result shows the full conventions with the values that differ from the defaults. An invalid colour makes the call fail with "Invalid conventions update:" and the reason; nothing is saved.
 
-The tool is not a [mutation](../glossary.md#the-workbook): it needs no [approval](../workbook/confirm-mode-and-approvals.md) in Confirm mode and creates no backup (confirmed in Excel on the web: no dialog, card "Update conventions", the result listing the overrides). There is no toast. The new values are used by the next formatting call. Resetting is only possible through Pi; the editor has no "reset all" button.
+As of [PR #804](https://github.com/tmustier/pi-for-excel/pull/804) (SE-03), updates and resets ask in Confirm: "Change Pi’s guidance?" previews the full resulting conventions, with "Save change", "Decline" and "Stop Pi". Auto saves without asking. Both modes show "Pi updated your formatting conventions" with Undo. Undo restores the prior stored conventions unless a later change has replaced them; approval likewise refuses to overwrite a change made while its preview was open. Stop withdraws the pending request without saving. Workbook turn-wide approval never covers guidance. No workbook backup is created. The next formatting call uses the new values. Resetting is only possible through Pi; the editor has no "reset all" button.
 
 ## Modifiers
 
@@ -98,7 +98,7 @@ The tool is not a [mutation](../glossary.md#the-workbook): it needs no [approval
 | --- | --- | --- |
 | Model and provider | No effect on the editor or on the format strings. Whether font colours and the default font are followed depends on the model. | No effect. |
 | Thinking level | No effect. | No effect. |
-| Execution mode | No effect on conventions. In Confirm mode, formatting that uses them still asks for approval like any other mutation; the `conventions` tool itself does not. | No effect. |
+| Execution mode | Pi's updates/resets ask in Confirm, not Auto; both offer Undo. Reading conventions never asks. Workbook formatting has its own approval policy. | Applied when the tool starts. |
 | Files in the workspace, or an overlay open | No effect from files. The editor is itself on an overlay; see [rules](rules.md#modifiers). | No effect. |
 | Tab state (new, restored, another tab busy) | Conventions are the same in every tab. | A save applies to the next formatting call in every tab, including one that is mid-turn. |
 | Host (desktop or web) | No difference. | No effect. |
@@ -128,13 +128,13 @@ The Formats tab shares its overlay, its exits and its interrupts with the Rules 
 
 **Other tabs and sessions.** Shared by all tabs and all sessions. There is no per-workbook convention; a workbook that needs its own style needs [workbook rules](rules.md) that tell Pi so.
 
-**Execution mode and approvals.** The `conventions` tool never asks for approval.
+**Execution mode and approvals.** Updates/resets ask in Confirm; reads do not. A turn-wide workbook grant cannot bypass guidance approval.
 
 **Models and providers.** The format strings are applied by the product and are identical for every model. Values that differ from the defaults are listed in Pi's instructions.
 
 **Offline and provider errors.** No interaction.
 
-**Notifications.** "Rules saved" after Save. None when Pi changes conventions.
+**Notifications.** "Rules saved" after the user's Save. Pi's changes show an Undo toast.
 
 **Settings and preferences.** Conventions live on the "Formats" tab of the Rules page and are saved with the rules.
 
@@ -165,4 +165,4 @@ The Formats tab shares its overlay, its exits and its interrupts with the Rules 
 - Custom formats used by name, the header style, and the "View conventions" and "Reset conventions" cards were read from code. The "Update conventions" card was confirmed (CONV-14).
 - Two GPT-6 Luna turns kept streaming without finishing after a `conventions` call; GPT-6.1 Sol finished the same request. Probably the model, not the product.
 
-Verified against pi-for-excel commit `ec453df`.
+Historical observations above were verified against `ec453df`; SE-03 consent and Undo behaviour is revised for PR #804.

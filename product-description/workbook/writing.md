@@ -4,13 +4,21 @@
 
 Writing is how Pi changes the workbook: entering values and formulas, filling a formula down a range, inserting and deleting rows, columns and sheets, formatting, conditional formatting, view settings, comments and charts. Every one of these is a [mutation](../glossary.md#the-workbook). Like reads, mutations are chosen by Pi during a [turn](../foundations/turns.md) and shown as [tool cards](../turn/tool-calls.md); unlike reads, each one runs under the [workbook lock](../foundations/the-workbook.md#the-workbook-lock), asks for [approval](confirm-mode-and-approvals.md) first when the execution mode is Confirm, and, for most tools, leaves a [backup](backups-and-revert.md) the user can revert. The change appears in the grid as soon as the card completes. The card header carries a short receipt ("Edit Sheet1!D2:D20 — 19 changed"), and the expanded card shows a before-and-after table for cell writes and an "Explain these changes" drawer for every mutation. Writing works on Excel desktop and Excel on the web; it needs a provider only because a turn does.
 
+As of [PR #808](https://github.com/tmustier/pi-for-excel/pull/808) (WT-10),
+mutating tools must name their sheet: `Sheet1!B2`, not `B2`. Structural and
+view-setting calls name `sheet`; chart calls name the target sheet (creation
+can use a qualified source range). Reads still allow active-sheet fallback.
+An ambiguous mutation is rejected before workbook access, so switching the
+active sheet while Pi works cannot redirect its write. The agent-facing
+error asks Pi to name the sheet and retry.
+
 ## The simple case
 
 The user asks Pi to add a "Margin" column. In Auto mode, the default, Pi first reads the sheet, then a card "Edit Sheet1!E1:E20 — 20 changed" appears and the values and formulas land in column E. Pi then formats the new column: a card "Format Sheet1!E2:E20" completes and the cells show as percentages.
 
 Expanding the first card shows the inputs as a small preview table, Pi's verification of what Excel now holds, and a "Changes (20)" section listing the first 12 cells with their "Before" and "After" values. Clicking "Explain these changes" opens a short description of what changed, with links to the cells.
 
-Pi finishes its answer. The workbook now has the new column, unsaved. Each of the two changes has a backup, and either can be reverted from the Backups dialog until the workbook is saved.
+Pi finishes its answer. The workbook now has the new column. Its turn receipt lists the changed ranges and total, with **Review** and **Undo this turn** (CL-01, PR #808). Each available backup can also be restored separately from Backups; saving does not remove backups.
 
 ## The interaction, event by event
 
@@ -37,7 +45,7 @@ Each tool, with its card header and the details the user can see:
 
 - **Write cells** (`write_cells`). Writes a rectangle of values from a start cell; text starting with "=" is a formula. Header "Edit {address}" followed by the receipt (" — 4 changed", " — 4 changed, 1 error"). Before writing, Pi checks the formulas' syntax; a bad formula blocks the whole write ("⛔ Write blocked — invalid formula syntax detected:").
 - **Fill formula** (`fill_formula`). Puts one formula in the top-left cell of a single contiguous range and lets Excel fill it across, adjusting references as Excel's fill handle would. Header "Filled {address}" with the same receipt. The result shows "**Formula pattern:**" and "**Example formulas:** top-left …, bottom-right …".
-- **Modify structure** (`modify_structure`). Insert or delete rows or columns, add, delete, rename, duplicate, hide or unhide a sheet. The header is the result sentence, for example "Inserted 3 row(s) at row 5 in "Sheet1"." or "Deleted sheet "Old"." There is no confirmation in Auto mode, including for deletes.
+- **Modify structure** (`modify_structure`). Insert or delete rows or columns, add, delete, rename, duplicate, hide or unhide a sheet. The header names the completed operation. Auto still asks before a delete whose used data exceeds automatic backup capacity (WT-01, PR #808); non-destructive operations and backed-up deletes keep their normal mode policy.
 - **Format cells** (`format_cells`). Font, fill, number format (including named styles such as "currency" or "header"), borders, alignment, wrap, column width in Excel's character units, row height, auto-fit, merge and unmerge, on one range or several ranges of the same sheet. Header "Format {address}". When nothing needs saying, the result is replaced by "✓ Done"; warnings (for example a column width that may differ because the font is not Arial 10) are shown instead.
 - **Conditional format** (`conditional_format`). Adds a rule (formula, cell value, text, top/bottom, data bar, color scale, icon set and others) or clears all rules in a range. Header "Cond. format {address}", result "✓ Done" when clean.
 - **View settings** (`view_settings`). Gridlines and headings on or off, freeze rows, columns or at a cell, unfreeze, tab color, hide, show or very-hide a sheet, standard column width, and switching the active sheet. Headers such as "Hide gridlines (Sheet1)", "Freeze Sheet1!B2", "Set freeze rows (Sheet1)", "Activate Sheet2". These changes have no backup, so the header always ends " — no backup" (confirmed in Excel on the web: "Set freeze rows (Sheet1) — no backup", with "ℹ️ Backup not created." in the result).
@@ -89,7 +97,7 @@ The model receives the result text and continues the turn. If it wrote a formula
 | --- | --- | --- |
 | Model and provider | The model decides what to change and whether to retry after a block. | Model changes are refused while the tab is busy. |
 | Thinking level | No effect on the mutation itself. | No effect. |
-| Execution mode | Auto applies ordinary writes; Confirm queues approval before the lock. Known preflight refusals do not ask. | Applies from the next approval decision. |
+| Execution mode | Auto runs ordinary changes; irreversible changes still ask. Confirm uses one dialog, with Allow once or Allow for the rest of this turn for reversible workbook changes (WT-05, PR #808). A refused preflight does not ask. | Applies from the next mutation; does not answer a pending dialog. |
 | Files in the workspace, or an overlay open | An open overlay does not pause a mutation; further approvals queue. | No effect. |
 | Tab state (new, restored, another tab busy) | Another tab's mutation makes this one wait ("Locking…"). | No effect. |
 | Host (desktop or web) | Same tools. On a never-saved desktop workbook, backups use a token stored in the document. | No effect. |
@@ -107,7 +115,7 @@ Mid-interaction changes take effect at the next tool call, never during one.
 | Model or thinking level changes | Not applicable. | Model change refused. |
 | The provider fails | Not applicable. | A running mutation finishes and stays; the turn then fails. |
 | The taskpane goes away | Not applicable. | A change already sent to Excel may be applied without its backup being stored. |
-| The workbook changes underneath | Not applicable. | If the user types into the target range between Pi's read and its write, overwrite protection catches it only if Pi did not ask to overwrite. If the user switches sheets, addresses without a sheet name go to the new active sheet. |
+| The workbook changes underneath | Not applicable. | Overwrite checks still apply. Mutation targets must name their sheet, so an active-sheet switch does not redirect a write (WT-10, PR #808). |
 | Focus moves to the grid or another window | Not applicable. | The mutation continues. If the user is editing a cell when a tool runs, Excel on the web rejects it at once with "Excel is in cell-editing mode…"; Pi usually asks the user to finish the edit (confirmed for a read in the same turn). |
 | The context window fills | Not applicable. | No effect on the change. |
 

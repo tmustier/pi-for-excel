@@ -56,6 +56,22 @@ The transcript follows new content unless the user deliberately scrolls up. Retu
 - **Aborted:** the partial answer remains with “Request aborted”; no failure banner is raised.
 - **Failed:** one inline plain-language explanation, Retry, a relevant fix action and collapsed diagnostic Details. No separate run-error banner. A failure belongs to its tab even if it happened in the background.
 
+As of [PR #808](https://github.com/tmustier/pi-for-excel/pull/808) (CL-01),
+each ending also shows a typed receipt when the turn changed the workbook:
+changed ranges, a total, **Review** and **Undo this turn**. Stopped and failed
+receipts are emphasized. Review shows counts and backup ids; Undo restores
+available backups newest first, asks before overwriting later edits and keeps
+ordinary inverse backups. Missing backup coverage is explicit. The receipt
+saves with the session but is not sent back to the model. See
+[turn recovery](../workbook/backups-and-revert.md#review-and-undo-a-turn-cl-01).
+
+An Office.js-only turn still shows a notice that its code is not covered by
+Undo this turn, with `/backup` guidance. A mixed turn shows the same notice
+alongside the recoverable core changes; the receipt never implies full
+coverage of arbitrary code (PR #808).
+
+One overflow can compact-and-retry; a second is final. Undelivered text becomes separate Not sent rows; stopped commands are cancelled and named. Nothing leaks unasked into the next turn.
+
 Transient provider failures are retried visibly and cancellably. Retry-After is honoured up to 60 seconds, usage-limit errors fail without waiting, and already-read partial answers are preserved and supplied back as continuation context. See [provider errors and offline](../cross-cutting/provider-errors-and-offline.md).
 
 ## Interactions with other systems

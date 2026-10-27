@@ -8,7 +8,7 @@ Pi for Excel is one web page that runs inside three different hosts: Excel deskt
 
 The user opens Pi in Excel on the web. The taskpane looks and behaves as it does on the desktop: tabs, the composer, the status bar, tool cards, Stop. A turn that reads and writes cells works the same way (confirmed in Excel on the web, where Office.js reports host "Excel", platform "OfficeOnline", and supports ExcelApi up to 1.20 but not 1.21).
 
-The differences show at the edges. Double-clicking a tab to rename it does nothing, because the browser dialog Pi uses is disabled there; `/name` works. Ctrl/Cmd+W closes the browser tab running Excel rather than Pi's tab (confirmed). Reopening the taskpane in another workbook brings back the same tabs, because Excel on the web did not tell Pi where the workbook lives. And the automatic backups list is emptied each time the taskpane opens.
+The differences show at the edges. Ctrl/Cmd+W can close the browser tab running Excel rather than Pi's tab. Workbook location and browser capabilities also differ by host. Automatic backups, however, now survive saves and taskpane reloads on desktop and the web; their retention no longer depends on Excel's saved-state signal.
 
 ## The interaction, event by event
 
@@ -42,7 +42,7 @@ If Office.js is slow, Pi starts after 3 seconds anyway and keeps treating the ho
 
 ### Office.js features
 
-The manifest declares no minimum Office.js version and Pi does not check which API sets the host supports. A workbook tool that needs a feature the host lacks fails as a tool call, with Excel's error in its tool card, and the turn continues. Save detection reads `isDirty`; where that is unavailable, automatic backups are simply never cleared by a save.
+The manifest declares no minimum Office.js version. A workbook tool that needs an unavailable feature reports the limitation or Excel error. Automatic-backup retention does not depend on `isDirty`; saves and AutoSave never clear history.
 
 ### Native browser dialogs
 
@@ -73,12 +73,12 @@ The taskpane is an HTTPS page, so every host blocks it from calling plain `http:
 
 ### Workbook identity and saving
 
-Pi recognises a workbook by its location (see [workbook identity](persistence-and-restore.md#workbook-identity)) and detects saves by polling Excel's unsaved-changes flag every 4 seconds.
+Pi recognises a workbook by its location (see [workbook identity](persistence-and-restore.md#workbook-identity)). Automatic history survives saves, AutoSave and reloads. When Pi observes Save As, rename or move while following the same open document, history moves to the new identity without copying payloads; an offline move cannot be inferred safely.
 
 - **macOS desktop.** Office's own record of the document URL stays empty for a new workbook even after it is saved, until the file is closed and reopened, so Pi asks Excel for the current location each time. If Excel is stalled by a modal sheet, Pi waits up to 3 seconds and then uses the last location it saw, so the identity never flips back to "unsaved".
 - **Windows desktop.** Same mechanism; not separately verified.
-- **Desktop with AutoSave on** (files in OneDrive or SharePoint). Every AutoSave is a save, so Pi clears the workbook's automatic backups every few seconds while AutoSave is running. Read from code; see [backups and revert](../workbook/backups-and-revert.md).
-- **Excel on the web.** For a workbook opened through an anonymous sharing link, Excel reported no location at all (confirmed), so every workbook behaves like a new, unsaved one: one shared tab layout, no workbook links, no workbook rules ("Can't identify this workbook right now — try saving the file first."), no manual backups, and automatic backups kept under a token stored in the file. Excel also reports the workbook as saved at all times (confirmed: `isDirty` stayed false for 10 seconds after a cell write). Pi therefore treats each opening of the taskpane as "already saved" and clears the workbook's backups, and backups are never cleared by a save after that.
+- **Desktop with AutoSave on** (files in OneDrive or SharePoint). AutoSave does not expire automatic backups. See [backups and revert](../workbook/backups-and-revert.md).
+- **Excel on the web.** The anonymous-link workbook tested reported no location. Automatic backups used a document token stored in the file and survived reload, including the first write. Host saved-state reporting no longer clears them. Signed-in URL reporting was not separately verified.
 
 ## Modifiers
 
@@ -110,7 +110,7 @@ Pi recognises a workbook by its location (see [workbook identity](persistence-an
 
 **Persistence.** Storage belongs to the host: the desktop webview's data folder or the browser profile. Desktop and web never share sessions, settings or logins, even on the same computer. See [persistence and restore](persistence-and-restore.md).
 
-**Workbook changes and recovery.** Save detection and workbook identity differ by host as described above; on Excel on the web automatic backups do not survive reopening the taskpane.
+**Workbook changes and recovery.** Identity availability differs by host, but automatic backups survive reopening on both desktop and the web. The 512 MiB ceiling is a fixed safety bound, not protection from whole-origin cache clearing or eviction. Current [storage acceptance](../workbook/backups-and-revert.md#open-questions-and-verification) distinguishes live Mac/web checks from unmeasured Windows quota and full-disk behavior.
 
 **Other tabs and sessions.** On the web, two browser tabs on Excel share the same storage and behave like two taskpanes; see [several taskpanes](several-taskpanes.md).
 
@@ -139,6 +139,8 @@ Pi recognises a workbook by its location (see [workbook identity](persistence-an
 - On Excel on the web, the uploaded add-in lives in the browser profile; a different browser or profile has neither the add-in nor any of Pi's data.
 
 ## Open questions and verification
+
+Backup-specific observations below predate main #794 and [#809](https://github.com/tmustier/pi-for-excel/pull/809). Save/reload clearing is resolved; the current contract and new Mac/web acceptance are in [backups and revert](../workbook/backups-and-revert.md#open-questions-and-verification). Other historical host observations remain outside this storage update.
 
 - Confirmed in Excel on the web: platform "OfficeOnline"; ExcelApi 1.16, 1.19 and 1.20 supported; `window.prompt`, `window.alert` and `window.confirm` all replaced by functions that throw; no workbook URL from either `Office.context.document.url` or `getFilePropertiesAsync` (anonymous edit link); `isDirty` false before and after a cell write; clipboard-write not allowed by the frame's permissions policy; storage not persisted. Desktop macOS and Windows were not available for this pass.
 - Backups on Excel on the web: because `isDirty` is always false, the save monitor's "first observation is already saved" rule (`src/workbook/save-boundary-monitor.ts:74-77`) clears a workbook's backups every time a taskpane opens on it. Confirmed: a backup Pi made for a one-cell write was removed from storage when a second taskpane on the workbook was reloaded, and backups from three earlier writes were gone after a language-change reload. In a workbook without an identity it may also clear the very first backup within 4 seconds (the document token only appears when that backup is taken); confirmed in Excel on the web with the document token removed: the first backup appeared in storage at 9.6 s after sending and was cleared at 12.6 s. With the token present the backup stayed for more than a minute. Looks like a bug.

@@ -2,11 +2,11 @@
 
 ## Summary
 
-The [CORS proxy](../glossary.md#models-and-providers) is a small HTTPS helper that relays requests the Office webview is not allowed to make itself. Several logins and providers need it: OAuth for Anthropic, OpenAI (ChatGPT), Google Code Assist, Google Antigravity and GitHub Copilot. When the switch is on, model requests to OpenAI (ChatGPT), the two Google sign-in providers, Anthropic when logged in by OAuth, and custom gateways not set to connect directly also go through it. Whether those requests fail without it depends on the webview: in Excel on the web, OpenAI (ChatGPT) turns worked with the switch off. API-key providers (OpenAI (API), Google Gemini (API), Anthropic with an API key, and the rest) do not need it. Normally the user runs it on their own machine with `npx pi-for-excel-proxy`, at "https://localhost:3003"; an organisation can host one centrally ([docs/central-proxy.md](../../docs/central-proxy.md)). The user meets it in four places: Settings → "Proxy" (the setting), the *proxy banner* above the transcript ("Proxy not running · Some features won't work."), the welcome overlay's proxy panel and the "One more step before login" gate ([welcome and login](welcome-and-login.md)), and the CORS error banner after a failed turn. Pi checks whether the proxy is reachable when the taskpane opens and every 30 seconds after that, on every host, busy or not.
+The [CORS proxy](../glossary.md#models-and-providers) is a small HTTPS helper that relays requests the Office webview is not allowed to make itself. Several logins and providers need it: OAuth for Anthropic, OpenAI (ChatGPT), Google Code Assist, Google Antigravity and GitHub Copilot. When the switch is on, model requests to OpenAI (ChatGPT), the two Google sign-in providers, Anthropic when logged in by OAuth, and custom gateways not set to connect directly also go through it. Whether those requests fail without it depends on the webview: in Excel on the web, OpenAI (ChatGPT) turns worked with the switch off. API-key providers (OpenAI (API), Google Gemini (API), Anthropic with an API key, and the rest) do not need it. Normally the user runs it on their own machine with `npx -y pi-for-excel-proxy@latest`, at "https://localhost:3003"; an organisation can host one centrally ([docs/central-proxy.md](../../docs/central-proxy.md)). The user meets it in four places: Settings → "Proxy" (the setting), the *proxy banner* above the transcript ("Proxy not running · Some features won't work."), the welcome overlay's proxy panel and the "One more step before login" gate ([welcome and login](welcome-and-login.md)), and the CORS error banner after a failed turn. Pi checks whether the proxy is reachable when the taskpane opens and every 30 seconds after that, on every host, busy or not.
 
 ## The simple case
 
-The user connects OpenAI (ChatGPT). Before the login opens, Pi says the login "needs a small helper running on your Mac" and shows `npx pi-for-excel-proxy`. They run it in Terminal, wait for "Proxy listening", and click "Retry". Pi turns the proxy setting on and the login continues.
+The user connects OpenAI (ChatGPT). Before the login opens, Pi says the login "needs a small helper running on your Mac" and shows `npx -y pi-for-excel-proxy@latest`. They run it in Terminal, wait for "Proxy listening", and click "Retry". Pi turns the proxy setting on and the login continues.
 
 Later they open Settings → "Proxy" and see the "Proxy" switch on, "URL" `https://localhost:3003`, and a green "✓ Proxy connected at https://localhost:3003". Every ChatGPT request now goes through the helper.
 
@@ -44,7 +44,7 @@ The switch decides whether the proxy is used at all. With it on and a valid URL,
 The banner shows whenever the last check failed, and hides as soon as one succeeds. It has no close button. "How to fix →" expands it in place:
 
 - "Run this command in your terminal and keep the window open:"
-- the command `npx pi-for-excel-proxy` with a copy button ("Copy command"; its icon turns to a check, "Copied", for 1.4 seconds; if copying is blocked, the command text is selected instead);
+- the command `npx -y pi-for-excel-proxy@latest` with a copy button ("Copy command"; its icon turns to a check, "Copied", for 1.4 seconds; if copying is blocked, the command text is selected instead);
 - "Open Terminal · paste · press Enter · keep open";
 - "No Node.js? See install guide →", opening the install guide in a browser.
 
@@ -146,7 +146,7 @@ Stopping the helper while Pi runs shows the banner within 30 seconds and fails t
 - The security warning is only checked at startup (`src/taskpane/init.ts:253-260`): saving `https://proxy.example.com` showed only "Proxy URL saved.", and the warning appeared after a reload (PROXY-14). Probably should also fire when saving a remote URL.
 - Confirmed with a stubbed ChatGPT login and requests to chatgpt.com blocked: GPT-5.6 Luna with the proxy off fails with "GPT-5.6 Luna currently requires the latest Pi for Excel proxy …", and with the proxy pointed at a helper without the bridge with "GPT-5.6 Luna requires a newer Pi for Excel proxy …" (PROXY-16). The banner's copy button turns to "Copied" for about 1.4 s and puts the command on the clipboard (PROXY-10). Escape on the Proxy page with an edited URL saves it ("Proxy URL saved.") and the next Escape goes back (PROXY-21).
 - The welcome panel saves an unvalidated URL (`src/taskpane/welcome-login.ts:274`). Confirmed with `http://example.com:3003` (see [welcome and login](welcome-and-login.md#open-questions-and-verification)). Such a URL makes every proxied request silently go direct. Looks like a bug.
-- The banner's command is `npx pi-for-excel-proxy`, while docs and the Luna error use `npx -y pi-for-excel-proxy@latest`; an older cached helper may be reused. Not confirmed.
+- The login gate, proxy banner, copied command and CORS login advice consistently use `npx -y pi-for-excel-proxy@latest` after P-120 in [#806](https://github.com/tmustier/pi-for-excel/pull/806). Browser regression checks display and copy; English and Chinese production login gates were inspected at narrow taskpane width.
 - Proxy guidance says "on your Mac" and "Terminal" on Windows too.
 
-Verified against pi-for-excel commit `ec453df`.
+Verified against pi-for-excel commit `c8f7016` for helper-command alignment; remaining sections retain their historical `ec453df` baseline pending separate revision.
