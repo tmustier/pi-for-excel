@@ -409,3 +409,49 @@ void test("python_transform_range answers Stop and unconfirmed chunks like write
     assert.equal(unknown.isError, true);
   });
 });
+
+void test("python_transform_range: after an Excel.run timeout mid-write, the abandoned run writes nothing more than the result reports", async () => {
+  const host = new FakeExcelHost(["Big"]);
+  // ~300 characters a row: 15,000 rows are written in several chunks.
+  const rows = Array.from({ length: 15_000 }, (_, index) => [`${String(index).padStart(6, "0")}${"x".repeat(294)}`]);
+  const tool = createPythonTransformRangeTool({
+    readInputRange: () => Promise.resolve({ sheetName: "Big", address: "Z1", values: [[1]] }),
+    getBridgeConfig: () => Promise.resolve({ url: "https://localhost:3340", source: "default" }),
+    callBridge: () => Promise.resolve({ ok: true, action: "run_python", exit_code: 0, result_json: JSON.stringify(rows) }),
+  });
+
+  await withFakeExcel(host, async () => {
+    // As #792's excelRun does: race the whole Excel.run against a timeout. The run itself goes on.
+    const fakeRun = Reflect.get(globalThis, "Excel") as { run: (callback: (context: unknown) => Promise<unknown>) => Promise<unknown> };
+    Reflect.set(globalThis, "Excel", {
+      run: (callback: (context: unknown) => Promise<unknown>) => Promise.race([
+        fakeRun.run(callback),
+        new Promise((_, reject) => { setTimeout(() => {
+          reject(Object.assign(new Error("Excel did not answer within 60 s."), { code: "excel_timeout", outcomeUnknown: true }));
+        }, 30); }),
+      ]),
+    });
+    // The third sync (the second chunk) is held past the timeout, then lands.
+    host.delaySync = { at: 3, ms: 80 };
+    const result = await tool.execute("tc-timeout", { range: "Big!Z1", code: "result = ...", output_start_cell: "Big!A1" });
+    const reported = firstText(result);
+    await new Promise((resolve) => { setTimeout(resolve, 200); });
+    let landed = 0;
+    while (landed < rows.length && host.sheet("Big").value(`A${landed + 1}`) !== "") landed += 1;
+
+    const written = /Partly written\*\* — Big!A1:A(\d+)/u.exec(reported);
+    const uncertain = /rows (\d+)–(\d+) \(Big!A\d+:A\d+\) may or may not have been written/u.exec(reported);
+    assert.ok(written?.[1] && uncertain?.[2], reported);
+    // Everything that landed, even after the result was returned, is within what the result allowed for.
+    assert.ok(landed <= Number(uncertain[2]), `landed ${landed} rows; result: ${reported}`);
+    assert.ok(landed >= Number(written[1]));
+
+    // A timeout while inspecting the target: nothing was sent, and nothing lands later.
+    host.delaySync = { at: host.syncCount + 1, ms: 80 };
+    const early = await tool.execute("tc-timeout-early", { range: "Big!Z1", code: "result = ...", output_start_cell: "Big!C1" });
+    await new Promise((resolve) => { setTimeout(resolve, 200); });
+    assert.match(firstText(early), /Nothing was written to Big!C1:C15000\. Excel did not answer before the change was sent/u);
+    assert.doesNotMatch(firstText(early), /unknown/u);
+    assert.equal(host.sheet("Big").value("C1"), "");
+  });
+});

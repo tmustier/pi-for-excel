@@ -72,6 +72,7 @@ import {
   type WriteTargetInspection,
   type WriteVerification,
 } from "./mutation/range-write.js";
+import { runMutation } from "./mutation/run-mutation.js";
 import { STOPPED_AFTER_CHANGE_NOTE, type StopReporting } from "./with-workbook-coordinator.js";
 
 const MIN_TIMEOUT_MS = 100;
@@ -275,29 +276,34 @@ async function defaultWriteOutputValues(request: WriteOutputRequest): Promise<Wr
     throw new Error("Transformed result is empty.");
   }
 
-  const start = parseCell(topLeftCellFromAddress(parseRangeRef(request.outputStartCell).address));
+  const outputRef = parseRangeRef(request.outputStartCell);
+  const start = parseCell(topLeftCellFromAddress(outputRef.address));
   const block: WriteBlock = { startRow: start.row, startCol: start.col, rowCount: padded.length, columnCount: cols };
   const sent: SentGrid = (r, c) => classifySentValue(padded[r]?.[c]);
   const sentFormulas = padded.some((row) => row.some((value) => typeof value === "string" && value.startsWith("=")));
   const sentEmptyCount = padded.reduce((total, row) => total + row.filter((value) => value === "").length, 0);
+  // Filled in as the Excel batch progresses, so a failure can say what already happened.
   const progress: {
     outputAddress: string;
     inspection: WriteTargetInspection | null;
     writtenRows: number;
     inFlightRows: number;
-  } = { outputAddress: request.outputStartCell, inspection: null, writtenRows: 0, inFlightRows: 0 };
+  } = {
+    outputAddress: outputRef.sheet ? qualifiedAddress(outputRef.sheet, blockAddress(block)) : request.outputStartCell,
+    inspection: null, writtenRows: 0, inFlightRows: 0 };
   const signal = request.signal;
 
   const interrupted = (
     cause: WriteInterruption,
     uncertainRows: number,
+    writtenRows = progress.writtenRows,
   ): Extract<WriteOutputResult, { blocked: false }> => {
     const inspection = progress.inspection;
     const before = inspection?.before ?? null;
     return {
       blocked: false,
       outputAddress: progress.outputAddress,
-      rowsWritten: progress.writtenRows + uncertainRows,
+      rowsWritten: writtenRows + uncertainRows,
       colsWritten: block.columnCount,
       formulaErrorCount: 0,
       interrupted: {
@@ -306,7 +312,7 @@ async function defaultWriteOutputValues(request: WriteOutputRequest): Promise<Wr
           block,
           sheetName: inspection?.sheetName ?? null,
           fullAddr: progress.outputAddress,
-          writtenRows: progress.writtenRows,
+          writtenRows,
           uncertainRows,
         }),
         stopped: cause.kind === "stopped",
@@ -317,7 +323,9 @@ async function defaultWriteOutputValues(request: WriteOutputRequest): Promise<Wr
   };
 
   try {
-    return await excelRun<WriteOutputResult>(async (context) => {
+    // runMutation: once this call fails (e.g. excelRun's timeout), the abandoned run's
+    // later syncs reject, so it sends no further chunks.
+    return await runMutation<WriteOutputResult>(async (context) => {
       const { sheet } = getRange(context, request.outputStartCell);
       const inspection = await inspectWriteTarget(context, sheet, block, sent);
       progress.inspection = inspection;
@@ -425,13 +433,21 @@ async function defaultWriteOutputValues(request: WriteOutputRequest): Promise<Wr
       };
     });
   } catch (error) {
+    // Snapshot before any await: the chunk in flight when the call failed may still land.
+    const writtenRows = progress.writtenRows;
+    const inFlightRows = progress.inFlightRows;
     const parsed = parseExcelError(error);
     // A batch Excel refused did not apply. One it never answered (timeout, Stop,
     // or a failure that is not an Excel answer) may have.
-    const uncertainRows = parsed.outcomeUnknown || parsed.code === null ? progress.inFlightRows : 0;
-    if (progress.writtenRows + uncertainRows === 0) throw error;
+    const uncertainRows = parsed.outcomeUnknown || parsed.code === null ? inFlightRows : 0;
+    if (writtenRows + uncertainRows === 0) {
+      if (!parsed.code) throw error;
+      // Nothing landed. With no chunk in flight nothing was even sent, so say so rather than "unknown".
+      const failure = await describeExcelFailure(parsed, { range: progress.outputAddress }, inFlightRows === 0);
+      throw new Error(`Nothing was written to ${progress.outputAddress}. ${failure.reason}`);
+    }
     const failure = await describeExcelFailure(parsed, { range: progress.outputAddress });
-    return interrupted({ kind: "failed", reason: failure.reason }, uncertainRows);
+    return interrupted({ kind: "failed", reason: failure.reason }, uncertainRows, writtenRows);
   }
 }
 
