@@ -1,5 +1,7 @@
 # Tabs
 
+**CL-08/CL-11 update:** [PR #805](https://github.com/tmustier/pi-for-excel/pull/805) gives tabs their saved conversation title (model-written or user-chosen), with stable "Chat N" only when no title exists. See [renaming a tab](renaming-a-tab.md) for generation and manual precedence. New tabs inherit both the active model and its thinking level, clamped to model support. Model switches always stay in place and can be chosen while busy for the next turn; there are no model-switch forks.
+
 ## Summary
 
 Tabs let the user keep several independent conversations with Pi side by side in one taskpane and move between them. This document covers what the user does with [session tabs](../foundations/sessions-and-tabs.md): creating one ("+", Ctrl/Cmd+T, `/new`), switching (a click, the arrow keys, Ctrl+PageUp/PageDown, Cmd+Shift+[ / ]), moving and duplicating (the [tab context menu](../glossary.md#the-taskpane)), and closing (the × button, Ctrl/Cmd+W, "Close tab", "Close other tabs"). It also covers the scroll arrows that appear when the tab strip overflows. Renaming is in [renaming a tab](renaming-a-tab.md), bringing a closed tab back is in [reopening closed tabs](reopening-closed-tabs.md), and what a tab owns is in [sessions and tabs](../foundations/sessions-and-tabs.md#what-a-tab-owns). Creating, switching and moving work while tabs are busy. Duplicating is refused while the source tab is busy. Closing asks first if the tab is responding, and is refused if the tab holds the workbook lock. None of it needs a provider. On Excel on the web the browser takes Ctrl/Cmd+T, Ctrl/Cmd+W and Ctrl+PageUp/PageDown for its own tabs, so those shortcuts never reach Pi there (see [Host differences](#interactions-with-other-systems)).
@@ -93,8 +95,8 @@ The tab layout reflects the change straight away, so a reload brings back the sa
 
 | Modifier | Set before | Changed while busy |
 | --- | --- | --- |
-| Model and provider | A new tab inherits the active tab's model. A duplicate keeps its source's model. Nothing here needs a connected provider. | Changing the model of a busy tab is refused. Creating, switching and moving are unaffected. |
-| Thinking level | A new tab starts at High (reasoning models) or Off. It does not inherit the level. A duplicate keeps its source's level. | No effect on tab actions. |
+| Model and provider | A new tab inherits the active tab's model. A duplicate keeps its source's model. Nothing here needs a connected provider. | A chosen model applies next turn; the current run retains its original model. Creating, switching and moving are unaffected. |
+| Thinking level | A new tab inherits the active tab's level, clamped to the model. A duplicate keeps its source's level. | No effect on tab actions. |
 | Execution mode | No effect. The mode is shared by all tabs. | No effect. |
 | Files in the workspace, or an overlay open | Files are shared. An open overlay covers the tab strip, so clicks and right-clicks cannot reach it. Ctrl/Cmd+T, Ctrl/Cmd+W and Ctrl+PageUp/PageDown still act on the tabs behind it (the last only outside text fields). | The stop-and-close confirmation is itself an overlay. |
 | Tab state (new, restored, another tab busy) | A new tab that is closed before Pi answers is still saved, as a blank or unanswered session. Restored tabs behave like any other. Another tab being busy blocks nothing here. | A responding tab asks before closing. A busy tab cannot be duplicated. A tab holding the lock cannot be closed. |
@@ -110,7 +112,7 @@ A variant that changes while the close confirmation is open is not re-checked wh
 | The user sends something else | Text sent goes to whichever tab is active. A draft typed before switching is sent to the new tab. | Sending in one tab does not affect others. |
 | Tab switched, created, closed or reopened | Each acts at once. Opening the context menu on another tab replaces the open one. | A busy tab keeps running when the user switches away. Closing it is covered above. |
 | An overlay or menu opens | Opening the utilities menu closes the tab context menu. Overlays block pointer access to the strip. | The close confirmation stays open until answered. |
-| Model or thinking level changes | No effect on the tab strip. | Model change refused while busy. |
+| Model or thinking level changes | No effect on the tab strip. | Choices apply from the next turn. |
 | The provider fails | No effect. Tab actions make no network request. | A turn that fails leaves the tab idle, so it can then be closed without confirmation. |
 | The taskpane goes away | The tab layout is already saved. The composer draft, chosen titles, tab numbers and the recently closed list are lost. | A closing tab is saved as part of closing. A tab that was not being closed keeps only its completed messages. |
 | The workbook changes underneath | No effect. | No effect on tabs. A tab's mutation keeps its lock until it finishes. |
@@ -125,7 +127,7 @@ After any interrupt the user is on whichever tab is active, with the composer te
 
 **Workbook changes and recovery.** No tab action changes the workbook. Closing a tab does not undo its changes, and its [automatic backups](../workbook/backups-and-revert.md) remain.
 
-**Other tabs and sessions.** Tabs are independent apart from what they [share](../foundations/sessions-and-tabs.md#what-a-tab-owns). A duplicate is a separate session from then on. A [model-switch fork](../foundations/models-and-providers.md) also opens a new tab at the right end.
+**Other tabs and sessions.** Tabs are independent apart from what they [share](../foundations/sessions-and-tabs.md#what-a-tab-owns). A duplicate is a separate session from then on. Model switching does not create a tab.
 
 **Execution mode and approvals.** An approval dialog for a background tab's mutation still covers the taskpane. A tab waiting on an approval is responding, so closing it asks first.
 
