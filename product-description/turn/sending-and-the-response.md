@@ -1,67 +1,94 @@
 # Sending and the response
 
-Behaviour as of [PR #803](https://github.com/tmustier/pi-for-excel/pull/803), implementing CL-03, CL-05, CC-01 and CC-02. Historical review observations about rotating hints and duplicate error banners no longer describe this version.
-
 ## Summary
 
-An accepted send puts the user's message into the tab's turn. Pi gathers workbook context, obtains credentials, asks the model, runs requested tools, and streams the answer until done, stopped or failed. The [composer](the-composer.md) owns drafting; [steering and the queue](steering-and-the-queue.md) owns messages sent while work is running.
+An accepted message starts work in its tab. Pi streams text, reasoning and tool calls until it answers, is stopped or fails. Each tab owns its activity and error state, so background work cannot put a compaction line or error on an unrelated tab.
 
 ## The simple case
 
-Type a question and press Enter or click Send. The draft clears, its user message appears right-aligned, and Pi's answer streams below it as markdown. The tab shows its busy dot and the working line appears above the composer. Stop is available; typing another draft also reveals Send beside Stop.
+Press Enter with a question. The composer clears; the user message, Stop button, busy dot and "Working…" line appear. The answer streams as markdown, with tool cards where Pi acts. At completion the answer stays, activity disappears and Send returns. Focus stays where the user left it.
 
-When Pi finishes, the working line and Stop disappear. The answer stands in the transcript, the idle placeholder resumes, and the composer is ready for another message. Completed messages are saved with the session.
+## The interaction, event by event
 
-## While the turn runs
+```mermaid
+stateDiagram-v2
+    idle --> preparing : accepted message
+    preparing --> compacting : context needs space (visible Queued prompt)
+    compacting --> preparing : summary completed
+    preparing --> connecting : missing credential
+    connecting --> streaming : connected
+    preparing --> streaming : request starts
+    streaming --> tools : tools requested
+    tools --> streaming : results ready
+    streaming --> retry : transient failure (countdown)
+    retry --> streaming : next attempt
+    streaming --> idle : finished, stopped or final failure
+```
 
-- **Enter steers**, as does the visible Send button. A steer is delivered after the current response and its tool batch; it does not interrupt or abort them.
-- **Alt+Enter** queues a follow-up on Windows/Linux; **Option+Enter** does so on Mac. It is delivered when Pi would otherwise finish.
-- **Shift+Enter** inserts a newline; **Shift+Tab** moves focus backwards, without changing thinking.
-- Stop or an unclaimed Escape requests cancellation. [Stopping](stopping.md) describes retained text and undelivered messages.
-- The busy placeholder says “Enter to steer · Alt+Enter for a follow-up” (Option on Mac), matching the Shortcuts page.
-- Changing thinking is allowed, for the next turn. Changing the model while busy is not.
+### Pressing Enter
 
-The existing submission path handles the accepted draft for keyboard and button sends alike. Slash commands are handled locally before ordinary message submission.
+Enter and Send share the [composer's dispatch](the-composer.md#ends-at-once). An accepted message clears its tab's draft/error and resumes transcript follow. If compaction must run first, the message stays visible as Queued; Stop can cancel compaction and keep the prompt Not sent.
 
-## The working indicator
+### Ends at once
 
-The line says what Pi is doing, not just that it is alive:
+Empty input does nothing. Slash commands stay local, with unknown/refused text retained for correction. No active session reports a toast.
 
-| Activity | Left label | Hint |
+### Sent
+
+The user message becomes conversation history and saves immediately, even in an unanswered first turn. Auto-context prepares changed durable notes and fresh selection. A missing login opens "Connect {provider}"; connecting continues, dismissing leaves the specific API-key-required notice rather than replacing it with a generic loop error.
+
+### Streaming
+
+Only the currently streaming response occupies the streaming area. At response completion it moves to the stable transcript in the same update, so it is never drawn twice while tools run. Each tool card finishes when that tool returns, not when the slowest parallel call finishes.
+
+The transcript follows new content unless the user deliberately scrolls up; scrolling back near the bottom or sending resumes follow. Composer growth preserves an existing follow choice. Expanded card bodies can scroll independently. Thinking stops saying "Thinking…" when reasoning ends, not when the whole response finishes.
+
+### The working indicator
+
+Ordinary work starts with "Working…", then playful phrases and keyboard hints rotate. Compaction, including mid-turn compaction, has its own fixed label in its own tab. Retryable failures show a countdown for up to three attempts after 2, 4 and 8 seconds. Cell-edit waits have a distinct waiting label. Switching tabs shows only that tab's state.
+
+### Finishes
+
+Done keeps the final answer. Stop keeps the partial answer with "Request aborted" and no error banner. Final failure keeps the partial text and reason, with a dismissible tab-owned banner below the tabs. Offline, unavailable proxy, blocked loopback access, missing login and overflow have distinct guidance. Error text merely containing "cancel" or "abort" is not a deliberate Stop.
+
+One overflow can compact-and-retry; a second is final. Ordinary eligible transient errors retry with visible countdowns. Undelivered text becomes separate Not sent rows; stopped commands are cancelled and named. Nothing leaks unasked into the next turn.
+
+## Modifiers
+
+| Modifier | Set before | Changed while busy |
 | --- | --- | --- |
-| Preparing/writing | Working… | Press Esc to stop |
-| Reasoning with readable thinking | A playful thinking phrase, changing every 6 seconds | Press Esc to stop |
-| Running a tool | Actual tool activity and target, for example Read Sheet1!A1:A3 | Press Esc to stop |
-| Compacting | Compacting context… | Send messages and Pi will see them after compaction |
-| Waiting for a transient retry | Retrying in {seconds}s (attempt {attempt} of {max})… | Provider hiccup · Esc to stop |
-| Cancelling | Stopping… | Press Esc to stop |
+| Model and provider | Starting model serves the turn. | Picker read-only. |
+| Thinking level | Starting level serves all model responses. | Applies next turn. |
+| Execution mode | Confirm pauses changes for approval. | Subsequent gates use current mode. |
+| Files in the workspace, or an overlay open | Files are not attachments; modal owns focus. | Work continues behind overlays except required approvals/login. |
+| Tab state (new, restored, another tab busy) | First message saves; restored history used. | Other tabs run independently. |
+| Host (desktop or web) | Networking restrictions may differ. | Submitted Excel work cannot be recalled. |
 
-Playful phrases are restricted to thinking; the hint no longer rotates. A queued/busy activity label takes precedence over model/thinking labels, including during mid-turn compaction. Stop is disabled after cancellation is requested, until the work settles. A tool already submitted to Excel may still finish.
+## Cancel and interrupt
 
-## Preparing and streaming
+| Event | Before sent | While busy |
+| --- | --- | --- |
+| Stop (button or Escape) | Idle Escape keeps draft. | Cancels turn, retries and compaction; holds unused text. |
+| The user sends something else | Normal dispatch. | Steer/follow-up or queued prompt. |
+| Tab switched, created, closed or reopened | Per-tab draft swaps. | Work/error belongs to original tab; closing stops and settles it. |
+| An overlay or menu opens | Keeps draft. | Topmost modal/menu owns keys; work continues. |
+| Model or thinking level changes | Used at start. | Model blocked, thinking next turn. |
+| The provider fails | Login may be requested. | Retry if eligible, otherwise classified error. |
+| The taskpane goes away | Saved draft returns. | Saved messages return; in-flight text may be lost. |
+| The workbook changes underneath | Auto-context gathers it. | Next model request sees changed notes/sample. |
+| Focus moves to the grid or another window | Keeps draft. | Work continues. |
+| The context window fills | Pre-prompt compaction. | Mid-turn compaction or one overflow recovery. |
 
-Before each model response Pi reads [auto-context](auto-context.md), including workbook structure, selection and recent changes. It can compact older history before sending or between responses. A credential wait may open the provider connection dialog; connecting resumes the waiting turn. Cancelling that connection can fail the turn.
+## Interactions with other systems
 
-Text updates at most once per screen frame. Thinking blocks and tool cards appear alongside it. When a response asks for tools, those tools finish before the next model response. Steers appear as user messages between those responses; follow-ups come when the turn would otherwise end.
+**Persistence.** Saves from first user message; streaming is not continuously saved. **Workbook changes and recovery.** Tool changes remain after failure or Stop. **Other tabs and sessions.** Activity and errors are per tab. **Execution mode and approvals.** Approvals queue before the lock. **Models and providers.** Missing credential prompts after delivery. **Offline and provider errors.** [Failure classification](../cross-cutting/provider-errors-and-offline.md). **Notifications.** Working line, queue, tab state, banner and toasts; no system notification. **Settings and preferences.** Auto-compaction on by default. **Host differences.** Provider/proxy access varies. **Language.** UI notices translate. **Accessibility and keyboard.** Stop and queue controls are named; modal shortcuts do not reach the covered taskpane.
 
-The transcript follows new content unless the user deliberately scrolls up. Returning near the bottom or sending a new prompt resumes following. Composer growth preserves the existing follow choice; expanded card bodies can scroll independently.
+## Edge cases
 
-## Finishes
+An empty model answer can finish normally. A fast turn may show only "Working…". New sends clear only their own tab's error. A failure in a background tab is shown when that tab is selected. A larger draft does not count as a user scroll.
 
-- **Done:** no further tool calls or waiting messages; the streaming cursor, working line and busy dot disappear.
-- **Aborted:** the partial answer remains with “Request aborted”; no failure banner is raised.
-- **Failed:** one inline plain-language explanation, Retry, a relevant fix action and collapsed diagnostic Details. No separate run-error banner. A failure belongs to its tab even if it happened in the background.
+## Open questions and verification
 
-Transient provider failures are retried visibly and cancellably. Retry-After is honoured up to 60 seconds, usage-limit errors fail without waiting, and already-read partial answers are preserved and supplied back as continuation context. See [provider errors and offline](../cross-cutting/provider-errors-and-offline.md).
+Code reviewed at `1f51cf8`. A real GPT-6 Luna turn in Excel on the web read a grid, wrote a formula, returned a verified value and backup, and finished normally. Desktop timing and real quota/rate-limit exhaustion were not exercised.
 
-## Persistence, safety and host scope
-
-Completed messages and stopped/failed responses are saved. Closing the taskpane can lose an answer still streaming. A plain answer changes no cells; completed mutations retain their [automatic backups](../workbook/backups-and-revert.md), and neither failure nor Stop undoes them.
-
-Tabs stream independently. Switching tabs changes which transcript and working activity are visible, without pausing background work. Overlays generally leave the turn running; credential and approval dialogs are waits the turn may depend on.
-
-UI labels and platform-specific hints are translated. Send and Stop have accessible button names. The composer and response semantics are shared by desktop and web hosts; proxy requirements and workbook batch cancellation differ by host.
-
-## Verification
-
-PR #803's composer browser tests exercise Enter, Alt+Enter, visible Send, Stop/Stopping and inline Retry. Real Excel-web turns with GPT-6 Luna steered input values to 4 and 7, kept the SUM formula at 11, delivered a follow-up and a visible Send, and stopped a real turn. Failure and Retry-After acceptance used substituted HTTP failures followed by real GPT-6 Luna responses. A short held-provider recording captures keyboard and cancelling states without depending on model latency.
+Verified against pi-for-excel commit `1f51cf8`.
