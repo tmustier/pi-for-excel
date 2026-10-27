@@ -207,13 +207,14 @@ async function requireMutationApprovalIfNeeded(args: {
 }
 
 /**
- * A tool that checks Stop itself and returns a precise result (what it wrote,
- * its backup) once stopped. Its own per-batch `excelRun` timeout bounds how
- * long that takes, so the wrapper does not cut it short after Stop.
+ * Mutations started earlier in this tool set that have not finished. A model can
+ * issue a write and a verifying read in one batch; the batch's calls start in
+ * order but run concurrently, so without this a read can see the value from
+ * before the write. Reads wait for mutations already started; mutations do not
+ * wait for reads. Registration happens before the first `await` in `execute`,
+ * so the order of the batch decides who waits.
  */
-export interface StopReporting {
-  reportsStop?: true;
-}
+type PendingMutations = Set<Promise<void>>;
 
 function wrapTool<TParameters extends TSchema, TDetails>(
   tool: AgentTool<TParameters, TDetails> & StopReporting,
@@ -228,60 +229,16 @@ function wrapTool<TParameters extends TSchema, TDetails>(
     execute: (toolCallId, params, signal, onUpdate) => {
       const mode = getToolExecutionMode(tool.name, params);
       if (mode === "read") {
-        return coordinator.runRead(context, () => {
-          throwIfAborted(signal);
-          return settleOnStop(tool.execute(toolCallId, params, signal, onUpdate), signal, "read");
-        });
+        const earlierMutations = [...pendingMutations];
+        if (earlierMutations.length === 0) return run(mode, toolCallId, params, signal, onUpdate);
+        return Promise.all(earlierMutations).then(() => run(mode, toolCallId, params, signal, onUpdate));
       }
 
-      await requireMutationApprovalIfNeeded({
-        policy: executionPolicy,
-        toolName: tool.name,
-        params,
-      });
-
-      throwIfAborted(signal);
-
-      const out = await coordinator.runWrite(
-        context,
-        async () => {
-          throwIfAborted(signal);
-          const window: WorkbookWriteWindow = {
-            toolCallId,
-            toolName: tool.name,
-            startedAt: Date.now(),
-            settledAt: Number.POSITIVE_INFINITY,
-          };
-          try {
-            mutationObserver?.onWriteStarted?.(window);
-          } catch (error) {
-            console.warn("[pi] Workbook write observer failed:", getErrorMessage(error));
-          }
-          try {
-            const work = tool.execute(toolCallId, params, signal, onUpdate);
-            return await (tool.reportsStop ? work : settleOnStop(work, signal, "write"));
-          } finally {
-            window.settledAt = Date.now();
-          }
-        },
-      );
-
-      if (mutationObserver?.onWriteCommitted) {
-        const impact = getToolContextImpact(tool.name, params);
-        try {
-          mutationObserver.onWriteCommitted({
-            workbookId: contextWorkbookId,
-            sessionId,
-            toolName: tool.name,
-            impact,
-            revision: out.revision,
-          });
-        } catch (error) {
-          console.warn("[pi] Workbook mutation observer failed:", getErrorMessage(error));
-        }
-      }
-
-      return out.result;
+      const running = run(mode, toolCallId, params, signal, onUpdate);
+      const settled = running.then(() => undefined, () => undefined);
+      pendingMutations.add(settled);
+      void settled.then(() => pendingMutations.delete(settled));
+      return running;
     },
   };
 
@@ -306,7 +263,7 @@ function wrapTool<TParameters extends TSchema, TDetails>(
     if (mode === "read") {
       return coordinator.runRead(context, () => {
         throwIfAborted(signal);
-        return tool.execute(toolCallId, params, signal, onUpdate);
+        return settleOnStop(tool.execute(toolCallId, params, signal, onUpdate), signal, "read");
       });
     }
 
@@ -320,9 +277,27 @@ function wrapTool<TParameters extends TSchema, TDetails>(
 
     const out = await coordinator.runWrite(
       context,
-      () => {
+      async () => {
         throwIfAborted(signal, true);
-        return tool.execute(toolCallId, params, signal, onUpdate);
+        const window: WorkbookWriteWindow = {
+          toolCallId,
+          toolName: tool.name,
+          startedAt: Date.now(),
+          settledAt: Number.POSITIVE_INFINITY,
+        };
+        try {
+          mutationObserver?.onWriteStarted?.(window);
+        } catch (error) {
+          console.warn("[pi] Workbook write observer failed:", getErrorMessage(error));
+        }
+        try {
+          // A tool that reports its own Stop result is not cut short (#792 N-4):
+          // its per-batch excelRun timeout bounds how long it takes.
+          const work = tool.execute(toolCallId, params, signal, onUpdate);
+          return await (tool.reportsStop ? work : settleOnStop(work, signal, "write"));
+        } finally {
+          window.settledAt = Date.now();
+        }
       },
     );
 

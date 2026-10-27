@@ -798,8 +798,8 @@ export class PiSidebar extends LitElement {
       </div>
       <pi-working-indicator
         .active=${this._isStreaming || this._busyLabel !== null || this._hostWaitLabel !== null}
-        .primaryText=${this._hostWaitLabel ?? (this._isStreaming ? undefined : (this._busyLabel ?? undefined))}
-        .hintText=${this._hostWaitLabel !== null ? (this._hostWaitHint ?? undefined) : (this._isStreaming ? undefined : (this._busyHint ?? undefined))}
+        .primaryText=${this._hostWaitLabel ?? this._busyLabel ?? undefined}
+        .hintText=${this._hostWaitLabel !== null ? (this._hostWaitHint ?? undefined) : (this._busyHint ?? undefined)}
       ></pi-working-indicator>
       <div id="pi-widget-slot" class="pi-widget-slot" style="display:none"></div>
       <div class="pi-input-area">
