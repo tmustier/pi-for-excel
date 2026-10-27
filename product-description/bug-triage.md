@@ -177,6 +177,7 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 | [P-165](#p-165-toasts-cover-the-command-menus-lower-rows) | Toasts cover the command menu's lower rows | low | menus | fix | Fix in PR [#793](https://github.com/tmustier/pi-for-excel/pull/793) (open): c88b997 |
 | [P-166](#p-166-copy-content-on-a-built-in-doc-fails-in-excel-for-mac) | Copy content on a built-in doc fails in Excel for Mac | low | files | fix | Fix in PR [#790](https://github.com/tmustier/pi-for-excel/pull/790) (open): 3666748 |
 | [P-167](#p-167-after-save-as-the-tabs-stay-with-the-old-file-and-the-new-file-opens-a-fresh-chat) | After Save As, the tabs stay with the old file and the new file opens a fresh chat | medium | sessions | fix | Fix in PR [#795](https://github.com/tmustier/pi-for-excel/pull/795) (open): d32fd2b |
+| [P-168](#p-168-the-screen-reader-announcement-for-an-approval-stays-after-stop-withdraws-it) | The screen-reader announcement for an approval stays after Stop withdraws it | low | accessibility | fix | Assigned to #793 (follow-up after the stack merges) |
 
 ## High
 
@@ -2200,3 +2201,15 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Raised by:** integration-fixes desktop pass, 27 October 2026
 - **Status:** Confirmed in Excel for Mac on integration-fixes 8099cd6. Fixed in #790 3666748: falls back to execCommand("copy"); checked in Excel on the web. Once #795 lands, the integration build switches it to copyText for the manual-copy dialog. Not yet re-checked on a Mac.
 - **Owner:** Fix in PR [#790](https://github.com/tmustier/pi-for-excel/pull/790) (open): 3666748
+
+### P-168: The screen-reader announcement for an approval stays after Stop withdraws it
+
+- **Where the user meets it:** Confirm mode, an approval dialog is open, the user presses Stop.
+- **What happens / what was expected:** The dialog closes, but the hidden live region still holds "Pi is waiting for your approval: …". Expected: it is cleared or replaced when the approval is withdrawn.
+- **Reproduce:** Trigger a files or extensions consent dialog, press Stop, inspect the announcer region.
+- **Why (from the code):** Not yet traced; the announcer is not cleared on withdrawal.
+- **Severity:** `low`. Screen readers do not re-read it unless the user navigates to the region.
+- **Decision needed:** `fix`.
+- **Raised by:** guidance re-check on stack top 97e15a3, 27 October 2026
+- **Status:** Confirmed in Excel on the web on 2d91e58 and 97e15a3.
+- **Owner:** Assigned to #793 (follow-up after the stack merges)
