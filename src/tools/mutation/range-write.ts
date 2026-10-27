@@ -19,6 +19,7 @@ import {
   cellAddress,
   colToLetter,
   parseCell,
+  qualifiedAddress,
 } from "../../excel/helpers.js";
 import { buildWorkbookCellChangeSummary, type WorkbookCellChangeSummary } from "../../audit/cell-diff.js";
 import { MAX_RECOVERY_CELLS } from "../../workbook/recovery/constants.js";
@@ -882,6 +883,77 @@ export function formatReplacedFormulas(
   return `⚠️ ${replaced.length} formula(s) on sheet "${sheetName}" replaced by values: ` +
     `${listCells(replaced.map(({ address }) => address))}. ${samples.join(", ")}. ` +
     "These cells no longer update when their inputs change; if the user did not ask to hard-code them, write formulas instead.";
+}
+
+// ── Stop and interrupted writes ─────────────────────────────────────────
+
+/** Why a chunked write ended early: Stop between chunks, or an Excel failure (with its reason). */
+export type WriteInterruption = { kind: "stopped" } | { kind: "failed"; reason: string };
+
+function rowSpan(block: WriteBlock, offset: number, count: number): string {
+  const first = block.startRow + offset;
+  return count === 1 ? `row ${first}` : `rows ${first}–${first + count - 1}`;
+}
+
+/**
+ * Result text for a write that ended before every chunk landed, saying exactly
+ * what is in the workbook: rows Excel confirmed stand, rows of a chunk Excel
+ * never answered may or may not have been written, the rest were not written.
+ * `fullAddr` is the sheet-qualified target; `sheetName` is null when the target
+ * was never inspected (nothing can have been written).
+ */
+export function formatInterruptedWrite(args: {
+  cause: WriteInterruption;
+  block: WriteBlock;
+  sheetName: string | null;
+  fullAddr: string;
+  writtenRows: number;
+  uncertainRows: number;
+}): string {
+  const { cause, block, sheetName, fullAddr, writtenRows, uncertainRows } = args;
+  const reason = cause.kind === "failed" ? cause.reason : "";
+
+  if (sheetName === null || writtenRows + uncertainRows === 0) {
+    return cause.kind === "stopped"
+      ? `⏹ **Stopped before writing** — nothing changed in ${fullAddr}.`
+      : `Error writing cells — nothing was written to ${fullAddr}. ${reason}`;
+  }
+
+  const qualify = (address: string): string => qualifiedAddress(sheetName, address);
+  const writtenAddr = qualify(blockAddress(block, 0, writtenRows));
+  const touchedRows = writtenRows + uncertainRows;
+  const touchedAddr = qualify(blockAddress(block, 0, touchedRows));
+  const remainingRows = block.rowCount - touchedRows;
+  const lines: string[] = [];
+
+  if (writtenRows > 0) {
+    lines.push(cause.kind === "stopped"
+      ? `⏹ **Stopped after writing ${writtenAddr}** (${rowSpan(block, 0, writtenRows)} of ${fullAddr}) — the change stands.`
+      : `⚠️ **Partly written** — ${writtenAddr} (${rowSpan(block, 0, writtenRows)} of ${fullAddr}) was written and stands.`);
+  } else {
+    lines.push(cause.kind === "stopped"
+      ? `⏹ **Stopped while writing** ${fullAddr}.`
+      : `⚠️ **Outcome unknown** for ${fullAddr}.`);
+  }
+  if (uncertainRows > 0) {
+    lines.push(
+      `${rowSpan(block, writtenRows, uncertainRows)} (${qualify(blockAddress(block, writtenRows, uncertainRows))}) ` +
+      "may or may not have been written: Excel did not confirm that step.",
+    );
+  }
+  if (remainingRows > 0) {
+    lines.push(`The remaining ${remainingRows} row(s) were not written.`);
+  }
+  if (reason) lines.push(reason);
+  lines.push("");
+  lines.push(`Nothing was rolled back. Read ${touchedAddr} before retrying${remainingRows > 0 ? " the rest" : ""}.`);
+  return lines.join("\n");
+}
+
+/** Result text when Stop came after every chunk landed but before the read-back. */
+export function formatStoppedAfterWrite(fullAddr: string, block: WriteBlock): string {
+  return `⏹ **Stopped after writing ${fullAddr}** (${block.rowCount}×${block.columnCount}) — the change stands. ` +
+    "It was not verified because Stop was pressed; read the range before relying on it.";
 }
 
 /** Split a grid into row chunks whose serialized size stays under Excel's request payload limit. */
