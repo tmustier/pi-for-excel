@@ -5,14 +5,16 @@
 import type { AgentTool, AgentToolResult, AgentToolUpdateCallback } from "@earendil-works/pi-agent-core";
 import type { Static, TSchema } from "typebox";
 
-import {
-  formatExecutionModeLabel,
-  type ExecutionMode,
-} from "../execution/mode.js";
+import type { ExecutionMode } from "../execution/mode.js";
 import type { WorkbookCoordinator, WorkbookOperationContext } from "../workbook/coordinator.js";
 import { cancelCellEditWaits } from "../excel/helpers.js";
 import { getErrorMessage } from "../utils/errors.js";
-import { getToolContextImpact, getToolExecutionMode, type ToolContextImpact } from "./execution-policy.js";
+import {
+  getToolApprovalRequirement,
+  getToolContextImpact,
+  getToolExecutionMode,
+  type ToolContextImpact,
+} from "./execution-policy.js";
 import { isUnsupportedHostTool } from "./unsupported-host-tool.js";
 
 export interface WorkbookCoordinatorContextProvider {
@@ -47,20 +49,56 @@ export interface WorkbookMutationObserver {
   onWriteStarted?: (window: WorkbookWriteWindow) => void;
 }
 
-export interface MutationApprovalRequest {
+export interface ToolApprovalRequest {
   executionMode: ExecutionMode;
+  /** Why this call asks: Confirm mode, or an action that always asks (see execution-policy). */
+  reason: "confirm_mode" | "always";
   toolName: string;
   params: unknown;
+  /** Aborts when the turn is stopped; the request should then be withdrawn. */
+  signal?: AbortSignal;
+  /** Existing content the change replaces, when the tool could tell. */
+  overwrites?: OverwrittenCells;
 }
+
+/**
+ * A tool may check, before approval is asked, whether the call would be
+ * refused anyway (write_cells: invalid input or overwrite protection). A
+ * result ends the call: the user is not asked about a change that will not
+ * happen. It runs as a workbook read; the tool checks again when it runs.
+ */
+export interface ApprovalPrecheck<TParameters extends TSchema, TDetails> {
+  checkBeforeApproval?: (
+    toolCallId: string,
+    params: Static<TParameters>,
+  ) => Promise<ApprovalPrecheckResult<TDetails>>;
+}
+
+/** Non-empty cells a change would replace, so the approval can name them. */
+export interface OverwrittenCells {
+  count: number;
+  /** A few of them, in reading order: address and current value or formula. */
+  sample: Array<{ address: string; content: string }>;
+}
+
+/**
+ * `refused`: the call ends with this result and nothing is asked.
+ * `overwrites`: the call goes to approval, which names these cells.
+ */
+export type ApprovalPrecheckResult<TDetails> =
+  | { refused: AgentToolResult<TDetails> }
+  | { overwrites: OverwrittenCells }
+  | null;
 
 export interface WorkbookExecutionPolicy {
   /** Default: yolo */
   getExecutionMode?: () => Promise<ExecutionMode>;
   /**
-   * Called for mutating tools when execution mode is "safe".
-   * Return `true` to proceed, `false` to block.
+   * Asked before the call waits for the workbook lock, for calls that
+   * `getToolApprovalRequirement` says need approval in the current mode.
+   * Return `true` to proceed, `false` to decline.
    */
-  requestMutationApproval?: (request: MutationApprovalRequest) => Promise<boolean>;
+  requestToolApproval?: (request: ToolApprovalRequest) => Promise<boolean>;
 }
 
 function makeContext(args: {
@@ -141,71 +179,6 @@ function settleOnStop<T>(
   });
 }
 
-function isWorkbookCoordinatorParamsShape(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function readApprovalParams(params: unknown): { action: string | null; range: string | null } {
-  if (!isWorkbookCoordinatorParamsShape(params)) return { action: null, range: null };
-
-  const action = typeof params.action === "string" ? params.action.trim() : "";
-  const range = typeof params.range === "string" ? params.range.trim() : "";
-  return { action: action.length > 0 ? action : null, range: range.length > 0 ? range : null };
-}
-
-export function buildMutationApprovalMessage(request: MutationApprovalRequest): string {
-  const modeLabel = formatExecutionModeLabel(request.executionMode);
-  const { action, range } = readApprovalParams(request.params);
-
-  const toolLabel = action ? `${request.toolName}:${action}` : request.toolName;
-  const lines = [
-    `Allow workbook mutation in ${modeLabel} mode?`,
-    "",
-    `Tool: ${toolLabel}`,
-  ];
-
-  if (range) {
-    lines.push(`Range: ${range}`);
-  }
-
-  lines.push("", "Tip: run /yolo on to switch to Auto mode (no confirmations).");
-  return lines.join("\n");
-}
-
-function defaultGetExecutionMode(): Promise<ExecutionMode> {
-  return Promise.resolve("yolo");
-}
-
-function defaultRequestMutationApproval(_request: MutationApprovalRequest): Promise<boolean> {
-  return Promise.reject(new Error(
-    "Confirm mode requires explicit user approval, but confirmation UI is unavailable.",
-  ));
-}
-
-async function requireMutationApprovalIfNeeded(args: {
-  policy: WorkbookExecutionPolicy;
-  toolName: string;
-  params: unknown;
-}): Promise<void> {
-  const getExecutionMode = args.policy.getExecutionMode ?? defaultGetExecutionMode;
-  const executionMode = await getExecutionMode();
-
-  if (executionMode !== "safe") {
-    return;
-  }
-
-  const requestMutationApproval = args.policy.requestMutationApproval ?? defaultRequestMutationApproval;
-  const approved = await requestMutationApproval({
-    executionMode,
-    toolName: args.toolName,
-    params: args.params,
-  });
-
-  if (!approved) {
-    throw new Error("Mutation cancelled by user (Confirm mode).");
-  }
-}
-
 /**
  * Mutations started earlier in this tool set that have not finished. A model can
  * issue a write and a verifying read in one batch; the batch's calls start in
@@ -217,7 +190,7 @@ async function requireMutationApprovalIfNeeded(args: {
 type PendingMutations = Set<Promise<void>>;
 
 function wrapTool<TParameters extends TSchema, TDetails>(
-  tool: AgentTool<TParameters, TDetails> & StopReporting,
+  tool: AgentTool<TParameters, TDetails> & ApprovalPrecheck<TParameters, TDetails> & StopReporting,
   coordinator: WorkbookCoordinator,
   contextProvider: WorkbookCoordinatorContextProvider,
   mutationObserver: WorkbookMutationObserver | undefined,
@@ -260,18 +233,47 @@ function wrapTool<TParameters extends TSchema, TDetails>(
 
     throwIfAborted(signal, mode !== "read");
 
+    // Ask before waiting for the lock, so a pending approval never holds
+    // up other tabs' writes.
+    const requirement = getToolApprovalRequirement(tool.name, params);
+    const executionMode = requirement === "none"
+      ? "yolo"
+      : await executionPolicy.getExecutionMode?.() ?? "yolo";
+    if (requirement === "always" || (requirement === "confirm_mode" && executionMode === "safe")) {
+      const { checkBeforeApproval } = tool;
+      const checked = checkBeforeApproval
+        ? await coordinator.runRead(
+          makeContext({ workbookId: coordinatorWorkbookId, sessionId, toolName: tool.name }),
+          () => checkBeforeApproval(toolCallId, params),
+        )
+        : null;
+      if (checked && "refused" in checked) return checked.refused;
+
+      if (!executionPolicy.requestToolApproval) {
+        throw new Error("This action requires explicit user approval, but confirmation UI is unavailable.");
+      }
+      const approved = await executionPolicy.requestToolApproval({
+        executionMode,
+        reason: requirement,
+        toolName: tool.name,
+        params,
+        ...(signal ? { signal } : {}),
+        ...(checked ? { overwrites: checked.overwrites } : {}),
+      });
+      throwIfAborted(signal);
+      if (!approved) {
+        throw new Error(requirement === "always"
+          ? "The user declined this action in the approval dialog."
+          : "The user declined this workbook change in the approval dialog (Confirm mode).");
+      }
+    }
+
     if (mode === "read") {
       return coordinator.runRead(context, () => {
         throwIfAborted(signal);
         return settleOnStop(tool.execute(toolCallId, params, signal, onUpdate), signal, "read");
       });
     }
-
-    await requireMutationApprovalIfNeeded({
-      policy: executionPolicy,
-      toolName: tool.name,
-      params,
-    });
 
     throwIfAborted(signal, true);
 

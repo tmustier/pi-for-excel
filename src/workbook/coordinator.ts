@@ -51,6 +51,29 @@ export interface WorkbookQueueSnapshot {
   revision: number;
   queuedWrites: number;
   activeWrite: WorkbookOperationContext | null;
+  /** Writes waiting for the lock, in the order they will run. */
+  queued: WorkbookOperationContext[];
+}
+
+export type SessionLockState = "idle" | "waiting_for_lock" | "holding_lock";
+
+/**
+ * What one session's writes are doing: holding the lock, waiting behind
+ * another session, or neither. A session's own queued writes never count as
+ * waiting on itself. Pass `finishedOpId` from a `completed`/`failed` event:
+ * the queue still reports that write as active until the next one starts.
+ */
+export function getSessionLockState(
+  snapshot: WorkbookQueueSnapshot,
+  sessionId: string,
+  finishedOpId?: string,
+): SessionLockState {
+  const active = snapshot.activeWrite && snapshot.activeWrite.opId !== finishedOpId
+    ? snapshot.activeWrite
+    : null;
+  if (active?.sessionId === sessionId) return "holding_lock";
+  if (!snapshot.queued.some((op) => op.sessionId === sessionId)) return "idle";
+  return active ? "waiting_for_lock" : "holding_lock";
 }
 
 export interface WorkbookCoordinator {
@@ -203,17 +226,19 @@ export function createWorkbookCoordinator(): WorkbookCoordinator {
         },
       };
 
-      if (state.running || state.queue.length > 0) {
+      // Queue before announcing it: listeners read getSnapshot() to show
+      // which tab is waiting.
+      const mustWait = state.running || state.queue.length > 0;
+      state.queue.push(operation);
+      if (mustWait) {
         emit({
           type: "queued",
           operationType: "write",
           context: ctx,
-          queuedWrites: state.queue.length + 1,
+          queuedWrites: state.queue.length,
           revision: state.revision,
         });
       }
-
-      state.queue.push(operation);
       processQueue(ctx.workbookId);
     });
   }
@@ -229,6 +254,7 @@ export function createWorkbookCoordinator(): WorkbookCoordinator {
       revision: state.revision,
       queuedWrites: state.queue.length,
       activeWrite: state.activeWrite,
+      queued: state.queue.map((op) => op.context),
     };
   }
 

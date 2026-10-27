@@ -112,6 +112,13 @@ export interface SessionMetadata {
    * Tool calls and tool results are excluded.
    */
   preview: string;
+  /**
+   * Random token written with every save. A taskpane saves only over the
+   * revision it last loaded or saved, so two taskpanes with the same session
+   * open cannot silently replace each other's turns. Absent on sessions saved
+   * before revisions existed.
+   */
+  revision?: string;
 }
 
 /**
@@ -133,6 +140,8 @@ export interface SessionData {
   createdAt: string;
   /** ISO 8601 UTC timestamp of last modification */
   lastModified: string;
+  /** Same token as `SessionMetadata.revision`. */
+  revision?: string;
 }
 
 /**

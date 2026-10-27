@@ -17,6 +17,8 @@ const ALWAYS_READ_TOOLS = new Set<string>([
   // Instructions and conventions mutate local prompt/config state, not workbook cells/structure.
   "instructions",
   "conventions",
+  // Skills list/read bundled and Files-workspace skill content.
+  "skills",
   // External bridge traffic does not mutate workbook state directly.
   "tmux",
   "python_run",
@@ -109,6 +111,35 @@ export function getToolExecutionMode(toolName: string, params: unknown): ToolExe
   }
 
   return "mutate";
+}
+
+/**
+ * When a tool call needs the user's approval before it runs.
+ *
+ * - `confirm_mode`: workbook mutations, in Confirm mode only.
+ * - `always`: actions that destroy the user's means of undoing Pi's changes,
+ *   in every mode. Deleting backups is not a workbook change (it stays `read`
+ *   for the workbook lock), but it makes earlier changes irreversible.
+ * - `none`: reads, local configuration, and tools whose own gate asks
+ *   (`execute_office_js` / `execute_wps_js`, see
+ *   `experimental-tool-gates/wrappers.ts`), so a call is never asked twice.
+ */
+export type ToolApprovalRequirement = "none" | "confirm_mode" | "always";
+
+const TOOLS_WITH_OWN_APPROVAL_GATE = new Set<string>([
+  "execute_office_js",
+  "execute_wps_js",
+]);
+
+export function getToolApprovalRequirement(toolName: string, params: unknown): ToolApprovalRequirement {
+  if (toolName === "workbook_history") {
+    const action = getActionParam(params);
+    if (action === "delete" || action === "clear") return "always";
+  }
+
+  if (TOOLS_WITH_OWN_APPROVAL_GATE.has(toolName)) return "none";
+
+  return getToolExecutionMode(toolName, params) === "mutate" ? "confirm_mode" : "none";
 }
 
 /**

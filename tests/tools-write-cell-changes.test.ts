@@ -4,7 +4,7 @@ import { test } from "node:test";
 import type { AgentToolResult } from "@earendil-works/pi-agent-core";
 
 import { createFillFormulaTool } from "../src/tools/fill-formula.ts";
-import { createWriteCellsTool } from "../src/tools/write-cells.ts";
+import { describeOccupiedCells, createWriteCellsTool } from "../src/tools/write-cells.ts";
 import { findErrors } from "../src/utils/format.ts";
 import { colName, FakeExcelHost, OfficeError, withFakeExcel } from "./fixtures/excel-write-host.ts";
 
@@ -485,4 +485,21 @@ void test("fill_formula stopped after the fill says the fill stands", async () =
     assert.equal(result.details.writtenCount, 3);
     assert.equal(host.sheet("Sheet1").formula("B3"), "=A3");
   });
+});
+
+void test("approval names the non-empty cells a write would replace", () => {
+  const occupied = describeOccupiedCells({
+    sheetName: "My Sheet",
+    topLeft: "B2",
+    values: [["", 5, ""], [7, "", 0], [1, 2, 3]],
+    formulas: [["", 5, ""], ["=A1*2", "", 0], [1, 2, 3]],
+  });
+  assert.equal(occupied?.count, 6);
+  // Reading order, formulas shown as formulas, a zero counts, capped at three.
+  assert.deepEqual(occupied?.sample, [
+    { address: "'My Sheet'!C2", content: "5" },
+    { address: "'My Sheet'!B3", content: "=A1*2" },
+    { address: "'My Sheet'!D3", content: "0" },
+  ]);
+  assert.equal(describeOccupiedCells({ sheetName: "S", topLeft: "A1", values: [["", null]], formulas: [["", ""]] }), null);
 });

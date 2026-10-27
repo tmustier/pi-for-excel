@@ -229,6 +229,17 @@ class FirstReadRejectingSettings {
     this.values.delete(key);
     return Promise.resolve();
   }
+
+  update<T, U>(key: string, parse: (raw: unknown) => T, change: (current: T) => U | undefined): Promise<void> {
+    if (this.unreadKeys.delete(key)) {
+      return Promise.reject(new Error(`seeded read failure: ${key}`));
+    }
+    const next = change(parse(structuredClone(this.values.get(key) ?? null)));
+    this.writes.push(key);
+    if (next === undefined) this.values.delete(key);
+    else this.values.set(key, structuredClone(next));
+    return Promise.resolve();
+  }
 }
 
 class SourceBackend implements WorkspaceBackend {
@@ -392,13 +403,13 @@ void test("file mutations retry unread metadata and audit without overwriting pe
     kind: "memory",
     label: "Restarted session memory",
     files: [
-      { path: "old.txt", text: "existing", modifiedAt: 100 },
+      { path: "renamed.txt", text: "existing", modifiedAt: 100 },
       { path: "later.txt", text: "later", modifiedAt: 200 },
     ],
   });
   const restarted = new FilesWorkspace({ initialBackend: restartedBackend, settings });
   const files = await restarted.listFiles();
-  assert.equal(files.find((file) => file.path === "old.txt")?.workbookTag?.workbookLabel, "Existing.xlsx");
+  assert.equal(files.find((file) => file.path === "renamed.txt")?.workbookTag?.workbookLabel, "Existing.xlsx");
   assert.equal(files.find((file) => file.path === "later.txt")?.workbookTag?.workbookLabel, "Later.xlsx");
 
   const audit = await restarted.listAuditEntries();

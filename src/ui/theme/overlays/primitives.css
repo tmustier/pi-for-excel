@@ -709,3 +709,44 @@
   overflow: hidden;
   background: var(--alpha-3);
 }
+
+/* Approval dialogs (src/ui/approval-dialog.ts) */
+.pi-approval__body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pi-approval__source,
+.pi-approval__note,
+.pi-approval__waiting {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted-foreground);
+}
+
+.pi-approval__headline {
+  margin: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.pi-approval__details {
+  max-height: 220px;
+  overflow: auto;
+}
+
+.pi-approval__stop {
+  margin-inline-end: auto;
+}
+
+.pi-approval-card:focus {
+  outline: none;
+}
+
+.pi-approval__overwrites {
+  margin: 0;
+  font-size: 12px;
+  color: var(--foreground);
+  overflow-wrap: anywhere;
+}

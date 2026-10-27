@@ -9,7 +9,7 @@
 
 import type { Models } from "@earendil-works/pi-ai";
 import type { Agent, AgentMessage } from "@earendil-works/pi-agent-core";
-import type { SessionData } from "../storage/local/types.js";
+import type { SessionData, SessionMetadata } from "../storage/local/types.js";
 import type { SessionsStore } from "../storage/local/sessions-store.js";
 import type { SettingsStore } from "../storage/local/settings-store.js";
 import type { SpreadsheetHost } from "../host/types.js";
@@ -122,6 +122,12 @@ export async function setupSessionPersistence(opts: {
   spreadsheetHost?: Pick<SpreadsheetHost, "getWorkbookContext" | "sessionStorage">;
   /** Reports a save that did not reach storage (quota, blocked IndexedDB). */
   onSaveError?: (message: string) => void;
+  /**
+   * Called when another taskpane saved this session since this one loaded
+   * it: this taskpane's copy was saved as a new session instead of
+   * replacing theirs.
+   */
+  onSavedAsCopy?: (args: { fromSessionId: string; toSessionId: string; title: string }) => void;
 }): Promise<SessionPersistenceController> {
   const { agent, sessions, settings } = opts;
   const spreadsheetHost = opts.spreadsheetHost ?? getCurrentSpreadsheetHost();
@@ -141,6 +147,10 @@ export async function setupSessionPersistence(opts: {
   let firstAssistantSeen = false;
   let explicitTitle = false;
   let canWriteLatestSessionPointer = !opts.autoRestoreLatest;
+  /** Stored revision this taskpane last loaded or saved; saves only go over it. */
+  let baseRevision: string | undefined;
+  /** Saves run one at a time so each one's base is the previous one's result. */
+  let saveQueue: Promise<void> = Promise.resolve();
 
   agent.sessionId = sessionId;
 
@@ -164,7 +174,13 @@ export async function setupSessionPersistence(opts: {
     }
   }
 
-  async function saveSession(optsForSave?: { force?: boolean }): Promise<void> {
+  function saveSession(optsForSave?: { force?: boolean }): Promise<void> {
+    const run = saveQueue.then(() => saveSessionNow(optsForSave));
+    saveQueue = run;
+    return run;
+  }
+
+  async function saveSessionNow(optsForSave?: { force?: boolean }): Promise<void> {
     if (!shouldPersistSession({
       firstAssistantSeen,
       ...(optsForSave?.force !== undefined ? { force: optsForSave.force } : {}),
@@ -230,36 +246,59 @@ export async function setupSessionPersistence(opts: {
         costTotal += usage.cost.total;
       }
 
-      const savedSessionId = sessionId;
+      const buildMetadata = (id: string): SessionMetadata => ({
+        id,
+        title: sessionTitle,
+        createdAt: sessionCreatedAt,
+        lastModified: now,
+        messageCount: messages.length,
+        usage: {
+          input: inputTokens,
+          output: outputTokens,
+          cacheRead: cacheReadTokens,
+          cacheWrite: cacheWriteTokens,
+          totalTokens,
+          cost: {
+            input: costInput,
+            output: costOutput,
+            cacheRead: costCacheRead,
+            cacheWrite: costCacheWrite,
+            total: costTotal,
+          },
+        },
+        thinkingLevel: agent.state.thinkingLevel || "off",
+        preview,
+      });
 
-      await sessions.saveSession(
+      let savedSessionId = sessionId;
+      let nextRevision = crypto.randomUUID();
+      const saved = await sessions.saveSession(
         savedSessionId,
         agent.state,
-        {
-          id: savedSessionId,
-          title: sessionTitle,
-          createdAt: sessionCreatedAt,
-          lastModified: now,
-          messageCount: messages.length,
-          usage: {
-            input: inputTokens,
-            output: outputTokens,
-            cacheRead: cacheReadTokens,
-            cacheWrite: cacheWriteTokens,
-            totalTokens,
-            cost: {
-              input: costInput,
-              output: costOutput,
-              cacheRead: costCacheRead,
-              cacheWrite: costCacheWrite,
-              total: costTotal,
-            },
-          },
-          thinkingLevel: agent.state.thinkingLevel || "off",
-          preview,
-        },
+        buildMetadata(savedSessionId),
         sessionTitle,
+        { base: baseRevision, next: nextRevision },
       );
+
+      if (!saved) {
+        // Another taskpane saved this session since we loaded it. Keep both
+        // conversations: ours becomes a new session instead of replacing theirs.
+        const fromSessionId = savedSessionId;
+        savedSessionId = crypto.randomUUID();
+        sessionId = savedSessionId;
+        sessionCreatedAt = now;
+        agent.sessionId = savedSessionId;
+        nextRevision = crypto.randomUUID();
+        await sessions.saveSession(
+          savedSessionId,
+          agent.state,
+          { ...buildMetadata(savedSessionId), createdAt: now },
+          sessionTitle,
+          { base: undefined, next: nextRevision },
+        );
+        opts.onSavedAsCopy?.({ fromSessionId, toSessionId: savedSessionId, title: sessionTitle });
+      }
+      baseRevision = nextRevision;
 
       await updateWorkbookAssociation(savedSessionId);
       emitChange();
@@ -271,6 +310,7 @@ export async function setupSessionPersistence(opts: {
 
   function startNewSession(): void {
     sessionId = crypto.randomUUID();
+    baseRevision = undefined;
     sessionTitle = "";
     sessionCreatedAt = new Date().toISOString();
     firstAssistantSeen = false;
@@ -299,6 +339,7 @@ export async function setupSessionPersistence(opts: {
     sessionTitle = sessionData.title || "";
     explicitTitle = false;
     sessionCreatedAt = sessionData.createdAt;
+    baseRevision = sessionData.revision;
     firstAssistantSeen = hasAssistantMessage(sessionData.messages);
 
     agent.sessionId = sessionId;

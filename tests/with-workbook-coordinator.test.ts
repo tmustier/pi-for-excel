@@ -54,6 +54,7 @@ class FakeCoordinator implements WorkbookCoordinator {
       revision: this.revision,
       queuedWrites: 0,
       activeWrite: null,
+      queued: [],
     };
   }
 
@@ -175,7 +176,7 @@ void test("unsupported-host tools bypass workbook coordinator and fail fast", as
     invalidatedWorkbookIds,
     executionPolicy: {
       getExecutionMode: () => Promise.resolve("safe"),
-      requestMutationApproval: () => {
+      requestToolApproval: () => {
         approvalCalls += 1;
         return Promise.resolve(true);
       },
@@ -215,7 +216,7 @@ void test("safe execution mode blocks mutate calls when approval is denied", asy
     invalidatedWorkbookIds,
     executionPolicy: {
       getExecutionMode: () => Promise.resolve("safe"),
-      requestMutationApproval: () => {
+      requestToolApproval: () => {
         approvalCalls += 1;
         return Promise.resolve(false);
       },
@@ -224,7 +225,7 @@ void test("safe execution mode blocks mutate calls when approval is denied", asy
 
   await assert.rejects(
     () => wrapped.execute("tc-safe-block", { range: "Sheet1!A1", values: [[1]] }),
-    /Mutation cancelled by user \(Confirm mode\)\./u,
+    /declined this workbook change/u,
   );
 
   assert.equal(approvalCalls, 1);
@@ -274,7 +275,7 @@ void test("safe execution mode skips approval prompts for read tools", async () 
     invalidatedWorkbookIds,
     executionPolicy: {
       getExecutionMode: () => Promise.resolve("safe"),
-      requestMutationApproval: () => {
+      requestToolApproval: () => {
         approvalCalls += 1;
         return Promise.resolve(true);
       },
@@ -551,4 +552,88 @@ void test("a tool that reports its own Stop result is not cut short by the wrapp
 
   const first = (await call).content[0];
   assert.equal(first?.type === "text" ? first.text : "", "Stopped after writing rows 1-40 of 100; backup 5d2c0a1e");
+});
+
+void test("deleting backups asks even in Auto mode, before taking the workbook lock", async () => {
+  const coordinator = new FakeCoordinator();
+  const reasons: string[] = [];
+  let ran = 0;
+
+  const wrapped = wrapSingleTool({
+    tool: makeTool("workbook_history", () => {
+      ran += 1;
+      return Promise.resolve({ content: [{ type: "text", text: "Cleared" }], details: { echo: "cleared" } });
+    }),
+    coordinator,
+    contextProvider: createContextProvider("url_sha256:auto-history"),
+    mutationEvents: [],
+    invalidatedWorkbookIds: [],
+    executionPolicy: {
+      getExecutionMode: () => Promise.resolve("yolo"),
+      requestToolApproval: (request) => {
+        reasons.push(request.reason);
+        // Nothing holds or waits for the lock while the user decides.
+        assert.equal(coordinator.readCalls.length + coordinator.writeCalls.length, 0);
+        return Promise.resolve(false);
+      },
+    },
+  });
+
+  await assert.rejects(() => wrapped.execute("tc-clear", { action: "clear" }), /declined/u);
+  assert.deepEqual(reasons, ["always"]);
+  assert.equal(ran, 0);
+
+  // Listing backups never asks.
+  await wrapped.execute("tc-list", { action: "list" });
+  assert.deepEqual(reasons, ["always"]);
+  assert.equal(ran, 1);
+});
+
+void test("Confirm mode does not ask about a write the tool would refuse anyway", async () => {
+  const coordinator = new FakeCoordinator();
+  let approvals = 0;
+  let executed = 0;
+  const refusing = {
+    ...makeTool("write_cells", () => {
+      executed += 1;
+      return Promise.resolve({ content: [{ type: "text", text: "written" }], details: { echo: "written" } });
+    }),
+    checkBeforeApproval: (_id: string, params: { occupied?: boolean; allow?: boolean }) => Promise.resolve(
+      params.occupied
+        ? params.allow
+          ? { overwrites: { count: 2, sample: [{ address: "Sheet1!A1", content: "=SUM(B1:B3)" }] } }
+          : { refused: { content: [{ type: "text" as const, text: "⛔ Write blocked" }], details: { echo: "blocked" } } }
+        : null,
+    ),
+  };
+  const asked: unknown[] = [];
+  const wrapped = wrapSingleTool({
+    tool: refusing,
+    coordinator,
+    contextProvider: createContextProvider("url_sha256:precheck"),
+    mutationEvents: [],
+    invalidatedWorkbookIds: [],
+    executionPolicy: {
+      getExecutionMode: () => Promise.resolve("safe"),
+      requestToolApproval: (request) => {
+        approvals += 1;
+        asked.push(request.overwrites);
+        return Promise.resolve(true);
+      },
+    },
+  });
+
+  const blocked = await wrapped.execute("tc-blocked", { occupied: true });
+  assert.match(JSON.stringify(blocked.content), /Write blocked/u);
+  assert.equal(approvals, 0);
+  assert.equal(executed, 0);
+  assert.equal(coordinator.writeCalls.length, 0);
+
+  await wrapped.execute("tc-ok", { occupied: false });
+  assert.equal(approvals, 1);
+  assert.equal(executed, 1);
+
+  // An allowed overwrite asks, and the approval names what it replaces.
+  await wrapped.execute("tc-overwrite", { occupied: true, allow: true });
+  assert.deepEqual(asked, [undefined, { count: 2, sample: [{ address: "Sheet1!A1", content: "=SUM(B1:B3)" }] }]);
 });

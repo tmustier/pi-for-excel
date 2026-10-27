@@ -356,6 +356,22 @@ export class FakeRange {
     this.values = formulas;
   }
 
+  /** Relative R1C1 form of each cell's formula (plain A1 references only, like `formulas`). */
+  get formulasR1C1(): (string | number | boolean)[][] {
+    return this.formulas.map((row, r) => row.map((formula, c) => typeof formula !== "string" ? formula
+      : formula.replace(/([A-Z]+)(\d+)/gu, (_match, letters: string, digits: string) => {
+        const dr = Number(digits) - (this.block.top + r);
+        const dc = colIndex(letters) - (this.block.left + c);
+        return `R${dr === 0 ? "" : `[${dr}]`}C${dc === 0 ? "" : `[${dc}]`}`;
+      })));
+  }
+
+  set formulasR1C1(formulas: unknown[][]) {
+    this.values = formulas.map((row, r) => row.map((formula, c) => typeof formula !== "string" ? formula
+      : formula.replace(/R(?:\[(-?\d+)\])?C(?:\[(-?\d+)\])?/gu, (_match, dr?: string, dc?: string) =>
+        `${colName(this.block.left + c + Number(dc ?? 0))}${this.block.top + r + Number(dr ?? 0)}`)));
+  }
+
   get text(): string[][] {
     return this.grid((cell) => String(cell?.value ?? "")).map((row) => row.map(String));
   }
@@ -387,6 +403,11 @@ export class FakeRange {
         this.sheet.writeCell(row, col, shifted);
       }
     });
+  }
+
+  /** Paste with relative references shifted, like autofill; only a one-cell source, as fill_formula uses. */
+  copyFrom(source: FakeRange, _type?: string): void {
+    source.autoFill(this);
   }
 
   calculate(): void {

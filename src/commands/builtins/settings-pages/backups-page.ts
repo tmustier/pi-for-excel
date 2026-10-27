@@ -187,7 +187,7 @@ async function renderBackupsContent(
         statusText.textContent = t("recovery.capturing");
         try {
           const backup = await createManualFullBackup();
-          showToast(t("recovery.toast.backupDownloaded", { id: shortId(backup.id), size: formatBytes(backup.sizeBytes) }));
+          showToast(t("recovery.toast.backupDownloaded", { id: backup.id, size: formatBytes(backup.sizeBytes) }));
           renderList();
         } catch (error) {
           const message = error instanceof Error ? error.message : "Unknown error";
@@ -227,6 +227,13 @@ async function renderBackupsContent(
     onClick: () => {
       if (busy || allCheckpoints.length === 0) return;
       void (async () => {
+        // Pi may have added backups since the page opened; count what Clear all deletes.
+        try {
+          await reload();
+        } catch {
+          // Keep the count already shown.
+        }
+        if (allCheckpoints.length === 0) return;
         const proceed = await requestConfirmationDialog({
           title: t("recovery.confirm.deleteAllTitle"),
           message: t("recovery.confirm.deleteAllMessage", { count: allCheckpoints.length, plural: allCheckpoints.length === 1 ? "" : "s" }),

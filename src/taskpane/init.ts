@@ -59,7 +59,6 @@ import {
   buildPythonBridgeApprovalMessage,
 } from "../tools/experimental-tool-gates.js";
 import {
-  buildMutationApprovalMessage,
   withWorkbookCoordinator,
 } from "../tools/with-workbook-coordinator.js";
 import { registerBuiltins } from "../commands/builtins.js";
@@ -122,7 +121,6 @@ import {
   moveCursorToEnd,
 } from "../ui/input-focus.js";
 import { requestConfirmationDialog } from "../ui/confirm-dialog.js";
-import { TOOL_APPROVAL_OVERLAY_ID } from "../ui/overlay-ids.js";
 import { showActionToast, showToast } from "../ui/toast.js";
 import { PiSidebar } from "../ui/pi-sidebar.js";
 import { createProxyBanner } from "../ui/proxy-banner.js";
@@ -135,7 +133,7 @@ import {
 import { promptForProviderConnection } from "../ui/api-key-dialog.js";
 import { openModelSelectorDialog } from "../ui/model-selector-dialog.js";
 import { getCurrentSpreadsheetHost } from "../host/index.js";
-import { createWorkbookCoordinator } from "../workbook/coordinator.js";
+import { createWorkbookCoordinator, getSessionLockState } from "../workbook/coordinator.js";
 import { formatWorkbookLabel, type WorkbookContext } from "../workbook/context.js";
 import {
   getManualFullWorkbookBackupStore,
@@ -145,17 +143,24 @@ import {
 import {
   getWorkbookRecoveryLog,
   WorkbookRecoveryLog,
+  type WorkbookRecoveryRestorePreview,
   type WorkbookRecoverySnapshot,
 } from "../workbook/recovery-log.js";
+import { formatRelativeDate } from "../commands/builtins/overlay-relative-date.js";
 import {
   getWorkbookChangeAuditLog,
   WorkbookChangeAuditLog,
 } from "../audit/workbook-change-audit.js";
 import { readRetentionLimit, writeRetentionLimit } from "../workbook/recovery/log-store.js";
+import { MAX_RECOVERY_ENTRIES } from "../workbook/recovery/constants.js";
+import { PI_BACKUP_SAVE_FAILED_EVENT } from "../tools/mutation/finalize.js";
+import { requestApproval } from "../ui/approval-dialog.js";
+import { humanizeToolInput } from "../ui/humanize-params.js";
+import { describePendingToolCall } from "../ui/tool-renderers.js";
 import {
-  WorkbookSaveBoundaryMonitor,
-  startWorkbookSaveBoundaryPolling,
-} from "../workbook/save-boundary-monitor.js";
+  BackupIdentityMonitor,
+  startBackupIdentityPolling,
+} from "../workbook/backup-identity-monitor.js";
 
 import { createAutoContext } from "./context-injection.js";
 import { getThinkingLevels, installKeyboardShortcuts } from "./keyboard-shortcuts.js";
@@ -560,51 +565,84 @@ export async function initTaskpane(opts: {
     sizeBytes: backup.sizeBytes,
   });
 
-  const saveBoundaryMonitor = new WorkbookSaveBoundaryMonitor({
-    clearBackupsForWorkbook: (workbookId) => workbookRecoveryLog.clearForWorkbook(workbookId),
-  });
-  const stopSaveBoundaryPolling = startWorkbookSaveBoundaryPolling({
-    monitor: saveBoundaryMonitor,
+  const stopBackupIdentityPolling = startBackupIdentityPolling({
+    monitor: new BackupIdentityMonitor({
+      rescopeBackups: (args) => workbookRecoveryLog.rescopeWorkbook(args),
+    }),
   });
 
   window.addEventListener("beforeunload", () => {
-    stopSaveBoundaryPolling();
+    stopBackupIdentityPolling();
   }, { once: true });
 
-  const restoreCheckpointById = async (snapshotId: string): Promise<void> => {
+  /**
+   * Runs a user-started workbook operation (restore, full backup) under the
+   * workbook lock, so it waits for Pi's current write instead of
+   * interleaving with it. This is why backup commands are allowed while busy.
+   */
+  const runUserWorkbookOperation = async <T,>(toolName: string, operation: () => Promise<T>): Promise<T> => {
     const activeRuntime = getActiveRuntime();
     const sessionId = activeRuntime?.persistence.getSessionId() ?? crypto.randomUUID();
-
     const workbookId = await resolveWorkbookId();
-    const coordinatorWorkbookId = workbookId ?? "workbook:unknown";
 
-    const restored = await workbookCoordinator.runWrite(
+    const { result } = await workbookCoordinator.runWrite(
       {
-        workbookId: coordinatorWorkbookId,
+        workbookId: workbookId ?? "workbook:unknown",
         sessionId,
         opId: crypto.randomUUID(),
-        toolName: "workbook_history",
+        toolName,
       },
-      async () => {
-        // Every chat tab is told about the restore ("restored from a backup").
-        const window: PiWriteWindow = {
-          toolCallId: `restore:${snapshotId}`,
-          startedAt: Date.now(),
-          settledAt: Number.POSITIVE_INFINITY,
-        };
-        changeTracker.notePiWrite(window, { kind: "restore" });
-        try {
-          const result = await workbookRecoveryLog.restore(snapshotId);
-          window.address = result.address;
-          return result;
-        } finally {
-          window.settledAt = Date.now();
-        }
-      },
+      operation,
     );
+    return result;
+  };
 
-    const address = restored.result.address;
-    showToast(t("init.revertedAddress", { address }));
+  /** Restores a backup and tells every chat tab about it ("restored from a backup", #792). */
+  const restoreNotingTabs = async (snapshotId: string) => {
+    const window: PiWriteWindow = {
+      toolCallId: `restore:${snapshotId}`,
+      startedAt: Date.now(),
+      settledAt: Number.POSITIVE_INFINITY,
+    };
+    changeTracker.notePiWrite(window, { kind: "restore" });
+    try {
+      const result = await workbookRecoveryLog.restore(snapshotId);
+      window.address = result.address;
+      return result;
+    } finally {
+      window.settledAt = Date.now();
+    }
+  };
+
+  const formatBackupAge = (at: number): string => formatRelativeDate(new Date(at).toISOString());
+
+  /** Every restore the user starts (/revert, the Backups page) runs here. */
+  const restoreAfterConfirmation = async (preview: WorkbookRecoveryRestorePreview): Promise<void> => {
+    const edits = preview.laterEdits;
+    if (edits && !await requestConfirmationDialog({
+      title: t("init.confirm.restoreOverEditsTitle"),
+      message: t("init.confirm.restoreOverEditsMessage", {
+        age: formatBackupAge(preview.at),
+        address: preview.address,
+        count: edits.count,
+        sample: edits.sample.map((cell) => `${cell.address} = ${cell.content}`).join("; ")
+          + (edits.count > edits.sample.length ? "; …" : ""),
+      }),
+      confirmLabel: t("init.confirm.restoreAnyway"),
+      cancelLabel: t("init.confirm.keepEdits"),
+      confirmButtonTone: "danger",
+      restoreFocusOnClose: true,
+    })) return;
+
+    const restored = await runUserWorkbookOperation(
+      "workbook_history", () => restoreNotingTabs(preview.id),
+    );
+    const address = restored.address;
+    if (restored.inverseSnapshotError) {
+      showToast(t("init.revertedWithoutRollback", { address }), { duration: 8000, variant: "error" });
+      return;
+    }
+    showToast(t("init.revertedAddress", { address, age: formatBackupAge(preview.at) }));
   };
 
   const toRecoveryCheckpointSummary = (
@@ -805,6 +843,10 @@ export async function initTaskpane(opts: {
     void refreshCapabilitiesForAllRuntimes();
   });
 
+  document.addEventListener(PI_BACKUP_SAVE_FAILED_EVENT, () => {
+    showToast(t("init.backupSaveFailed"), { duration: 8000, variant: "error" });
+  });
+
   // Start bridge health probe now that refreshCapabilitiesForAllRuntimes is available.
   // The first runtime prompt waits for this promise, preventing a first-turn
   // gap where Local Services has not been populated yet.
@@ -833,18 +875,25 @@ export async function initTaskpane(opts: {
     return body.length > 0 ? body : message;
   };
 
+  /**
+   * Every approval goes through one queue (`requestApproval`), so parallel
+   * calls and other tabs wait their turn instead of declining each other.
+   */
   const requestRuntimeToolApproval = (args: {
     title: string;
     message: string;
     confirmLabel?: string;
+    signal?: AbortSignal;
+    source?: string;
+    onStop?: () => void;
   }): Promise<boolean> => {
-    return requestConfirmationDialog({
-      overlayId: TOOL_APPROVAL_OVERLAY_ID,
+    return requestApproval({
       title: args.title,
       message: normalizeApprovalMessage(args.title, args.message),
-      ...(args.confirmLabel !== undefined ? { confirmLabel: args.confirmLabel } : {}),
-      cancelLabel: t("confirm.cancel"),
-      restoreFocusOnClose: true,
+      confirmLabel: args.confirmLabel ?? t("init.confirm.allowOnce"),
+      ...(args.signal ? { signal: args.signal } : {}),
+      ...(args.source ? { source: args.source } : {}),
+      ...(args.onStop ? { onStop: args.onStop } : {}),
     });
   };
 
@@ -856,6 +905,20 @@ export async function initTaskpane(opts: {
     const runtimeSkillReadCache = createSkillReadCache();
 
     let runtimeAgent: Agent | null = null;
+
+    /** Names this tab in its approvals when another tab is on screen. */
+    /** "Stop Pi" in an approval dialog: the same as the tab's Stop button. */
+    const stopRuntimeTurn = (): void => {
+      const runtime = runtimeManager.getRuntime(runtimeId);
+      if (runtime) stopTab(runtime);
+    };
+
+    const approvalSource = (): { source?: string } => {
+      if (getActiveRuntime()?.runtimeId === runtimeId) return {};
+      const runtime = runtimeManager.getRuntime(runtimeId);
+      if (!runtime) return {};
+      return { source: t("approval.fromTab", { title: resolveRuntimeTabTitle(runtimeId, runtime) }) };
+    };
 
     const buildRuntimeCapabilities = async (sessionId: string): Promise<{
       tools: ReturnType<typeof withWorkbookCoordinator>;
@@ -875,38 +938,13 @@ export async function initTaskpane(opts: {
         skillReadCache: runtimeSkillReadCache,
       }).filter(isRuntimeAgentTool);
 
-      const gatedCoreTools = await applyExperimentalToolGates(coreTools, {
-        getExecutionMode: () => Promise.resolve(getExecutionMode()),
-        requestOfficeJsExecuteApproval: (request) => {
-          const apiName = request.apiName ?? "Office.js";
-          return requestRuntimeToolApproval({
-            title: apiName === "WPS JSAPI"
-              ? t("init.confirm.wpsJsTitle")
-              : t("init.confirm.officeJsTitle"),
-            message: buildOfficeJsExecuteApprovalMessage(request),
-            confirmLabel: t("init.confirm.allowOnce"),
-          });
-        },
-        requestPythonBridgeApproval: (request) => {
-          return requestRuntimeToolApproval({
-            title: t("init.confirm.pythonTitle"),
-            message: buildPythonBridgeApprovalMessage(
-              request.toolName,
-              request.bridgeUrl,
-              request.params,
-            ),
-            confirmLabel: t("init.confirm.allowBridge"),
-          });
-        },
-      });
-
       // Snapshot extension tools + revision together so schema-stable handler
       // reloads are compared against the same point-in-time payload.
       const extensionTools = extensionManager.getRegisteredTools();
       const extensionToolRevision = extensionManager.getToolRevision();
 
       const runtimeTools = normalizeRuntimeTools([
-        ...gatedCoreTools,
+        ...coreTools,
         ...createToolsForIntegrations(activeIntegrationIds),
         ...extensionTools,
       ]);
@@ -929,18 +967,69 @@ export async function initTaskpane(opts: {
           },
         },
         {
-          getExecutionMode: () => Promise.resolve(getExecutionMode()),
-          requestMutationApproval: (request) => {
-            return requestRuntimeToolApproval({
-              title: t("init.confirm.safeModeMutationTitle"),
-              message: buildMutationApprovalMessage(request),
-              confirmLabel: t("init.confirm.allowOnce"),
+          getExecutionMode: () => executionModeController.readMode(),
+          requestToolApproval: (request) => {
+            const deletesBackups = request.reason === "always";
+            const details = humanizeToolInput(request.toolName, request.params);
+            const overwrites = request.overwrites
+              ? t("approval.overwrites", {
+                count: request.overwrites.count,
+                sample: request.overwrites.sample
+                  .map((cell) => `${cell.address} = ${cell.content.length > 40 ? `${cell.content.slice(0, 40)}…` : cell.content}`)
+                  .join("; ") + (request.overwrites.count > request.overwrites.sample.length ? "; …" : ""),
+              })
+              : null;
+            return requestApproval({
+              title: deletesBackups ? t("approval.title.deleteBackups") : t("approval.title.workbookChange"),
+              headline: describePendingToolCall(request.toolName, request.params) ?? request.toolName,
+              ...(details ? { details } : {}),
+              note: deletesBackups ? t("approval.note.deleteBackups") : t("approval.note.confirmMode"),
+              confirmLabel: deletesBackups ? t("approval.allowDelete") : t("init.confirm.allowOnce"),
+              confirmTone: deletesBackups ? "danger" : "primary",
+              ...(request.signal ? { signal: request.signal } : {}),
+              ...(overwrites ? { overwrites } : {}),
+              onStop: stopRuntimeTurn,
+              ...approvalSource(),
             });
           },
         },
       );
 
-      const preflightTools = withConnectionPreflight(coordinatedTools, {
+      // Gates wrap the coordinated tools, so their approvals (direct JS,
+      // Python bridge) are asked before the call waits for the workbook lock.
+      const gatedTools = await applyExperimentalToolGates(coordinatedTools, {
+        getExecutionMode: () => executionModeController.readMode(),
+        requestOfficeJsExecuteApproval: (request) => {
+          const apiName = request.apiName ?? "Office.js";
+          return requestRuntimeToolApproval({
+            title: apiName === "WPS JSAPI"
+              ? t("init.confirm.wpsJsTitle")
+              : t("init.confirm.officeJsTitle"),
+            message: buildOfficeJsExecuteApprovalMessage(request),
+            confirmLabel: t("init.confirm.allowOnce"),
+            ...(request.signal ? { signal: request.signal } : {}),
+            onStop: stopRuntimeTurn,
+            ...approvalSource(),
+          });
+        },
+        requestPythonBridgeApproval: (request) => {
+          return requestRuntimeToolApproval({
+            title: t("init.confirm.pythonTitle"),
+            message: buildPythonBridgeApprovalMessage(
+              request.toolName,
+              request.bridgeUrl,
+              request.params,
+            ),
+            confirmLabel: t("init.confirm.allowBridge"),
+            ...(request.signal ? { signal: request.signal } : {}),
+            onStop: stopRuntimeTurn,
+            ...approvalSource(),
+          });
+        },
+      });
+
+
+      const preflightTools = withConnectionPreflight(gatedTools, {
         connectionManager,
       });
 
@@ -1109,6 +1198,9 @@ export async function initTaskpane(opts: {
       autoRestoreLatest: optsForRuntime.autoRestoreLatest,
       onSaveError: (message) => {
         showToast(t("sessions.toast.saveFailed", { error: message }));
+      },
+      onSavedAsCopy: () => {
+        showToast(t("init.sessionSavedAsCopy"), 8000);
       },
     });
     savePersistence = () => persistence.saveSession({ force: true });
@@ -1337,15 +1429,17 @@ export async function initTaskpane(opts: {
   };
 
   const revertLatestCheckpoint = async (): Promise<void> => {
-    const latest = await workbookRecoveryLog.listForCurrentWorkbook(1);
-    const checkpoint = latest[0];
-
-    if (!checkpoint) {
+    // "Latest" is decided under the lock: while Pi is busy, the write in
+    // flight adds its backup first, and /revert undoes that one.
+    const preview = await runUserWorkbookOperation("workbook_history", async () => {
+      const latest = (await workbookRecoveryLog.listForCurrentWorkbook(1))[0];
+      return latest ? workbookRecoveryLog.previewRestore(latest.id) : null;
+    });
+    if (!preview) {
       showToast(t("init.noBackupsYet"));
       return;
     }
-
-    await restoreCheckpointById(checkpoint.id);
+    await restoreAfterConfirmation(preview);
   };
 
   const createManualFullBackup = async (): Promise<{
@@ -1353,8 +1447,9 @@ export async function initTaskpane(opts: {
     createdAt: number;
     sizeBytes: number;
   }> => {
-    const backup = await manualFullBackupStore.create();
-    await getFilesWorkspace().downloadFile(backup.path);
+    const backup = await manualFullBackupStore.createAndDownload({
+      runCapture: (capture) => runUserWorkbookOperation("manual_backup", capture),
+    });
     return toManualFullBackupSummary(backup);
   };
 
@@ -1382,8 +1477,8 @@ export async function initTaskpane(opts: {
     return resolved ? toManualFullBackupSummary(resolved) : null;
   };
 
-  const clearManualFullBackups = async (): Promise<number> => {
-    return manualFullBackupStore.clearForCurrentWorkbook();
+  const clearManualFullBackups = async (confirm: (count: number) => Promise<boolean>): Promise<number> => {
+    return manualFullBackupStore.clearForCurrentWorkbook(confirm);
   };
 
   const closeRuntimeWithRecovery = async (
@@ -1415,6 +1510,16 @@ export async function initTaskpane(opts: {
 
       runtime.actionQueue.stop();
     }
+
+    // A write that already started (it may have taken the lock while the
+    // dialog was open) cannot be cancelled inside Excel. Keep the tab until
+    // its run has settled, so the change lands with its backup and is saved
+    // in the session instead of happening after the tab is gone.
+    // Only a write makes the user wait; an aborted model request settles at once.
+    if (runtime.lockState !== "idle") {
+      showToast(t("init.waitingForChangeBeforeClose"));
+    }
+    await runtime.agent.waitForIdle();
 
     await runtime.persistence.saveSession({ force: true });
 
@@ -1579,21 +1684,15 @@ export async function initTaskpane(opts: {
   workbookCoordinator.subscribe((event) => {
     if (event.operationType !== "write") return;
 
-    const runtime = runtimeManager.findRuntimeBySessionId(event.context.sessionId);
-    if (!runtime) return;
-
-    if (event.type === "queued") {
-      runtimeManager.setRuntimeLockState(runtime.runtimeId, "waiting_for_lock");
-      return;
-    }
-
-    if (event.type === "started") {
-      runtimeManager.setRuntimeLockState(runtime.runtimeId, "holding_lock");
-      return;
-    }
-
-    if (event.type === "completed" || event.type === "failed") {
-      runtimeManager.setRuntimeLockState(runtime.runtimeId, "idle");
+    // Recompute every tab on this workbook: one write finishing or queuing
+    // changes what the others are waiting for.
+    const snapshot = workbookCoordinator.getSnapshot(event.context.workbookId);
+    const finishedOpId = event.type === "completed" || event.type === "failed" ? event.context.opId : undefined;
+    for (const runtime of runtimeManager.listRuntimes()) {
+      runtimeManager.setRuntimeLockState(
+        runtime.runtimeId,
+        getSessionLockState(snapshot, runtime.persistence.getSessionId(), finishedOpId),
+      );
     }
   });
 
@@ -1629,11 +1728,13 @@ export async function initTaskpane(opts: {
     },
     backups: {
       loadCheckpoints: async () => {
-        const checkpoints = await workbookRecoveryLog.listForCurrentWorkbook(40);
+        // Every backup of this workbook (at most "Keep at most"), so counts
+        // such as "Clear all" match what is stored.
+        const checkpoints = await workbookRecoveryLog.listForCurrentWorkbook(MAX_RECOVERY_ENTRIES);
         return checkpoints.map((checkpoint) => toRecoveryCheckpointSummary(checkpoint));
       },
       onRestore: async (snapshotId: string) => {
-        await restoreCheckpointById(snapshotId);
+        await restoreAfterConfirmation(await workbookRecoveryLog.previewRestore(snapshotId));
       },
       onDelete: async (snapshotId: string) => {
         return workbookRecoveryLog.delete(snapshotId);
@@ -1650,6 +1751,7 @@ export async function initTaskpane(opts: {
       },
       setRetentionConfig: async (config) => {
         await writeRetentionLimit(config.maxSnapshots);
+        await workbookRecoveryLog.applyRetentionLimit();
       },
     },
   });
@@ -1750,8 +1852,8 @@ export async function initTaskpane(opts: {
     restoreManualFullBackup: async (backupId?: string) => {
       return restoreManualFullBackup(backupId);
     },
-    clearManualFullBackups: async () => {
-      return clearManualFullBackups();
+    clearManualFullBackups: async (confirm) => {
+      return clearManualFullBackups(confirm);
     },
     openInstructionsEditor: async () => {
       await openRulesEditor();
@@ -1819,8 +1921,12 @@ export async function initTaskpane(opts: {
    */
   const stopActiveTab = (): void => {
     const activeRuntime = getActiveRuntime();
-    if (!activeRuntime) return;
-    const { texts, cancelledCommands } = activeRuntime.actionQueue.stop();
+    if (activeRuntime) stopTab(activeRuntime);
+  };
+
+  /** A tab's Stop: also used by "Stop Pi" in that tab's approval dialogs (#794). */
+  function stopTab(runtime: SessionRuntime): void {
+    const { texts, cancelledCommands } = runtime.actionQueue.stop();
     const count = texts.length;
     const plural = count === 1 ? "" : "s";
     const commands = cancelledCommands.join(", ");
@@ -1831,7 +1937,7 @@ export async function initTaskpane(opts: {
     } else if (commands) {
       showToast(t("turn.toast.stopCancelled", { commands }));
     }
-  };
+  }
 
   sidebar.onAbort = stopActiveTab;
 

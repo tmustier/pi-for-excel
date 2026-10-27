@@ -13,6 +13,8 @@ import { getRange, parseRangeRef, qualifiedAddress } from "../excel/helpers.js";
 import { getWorkbookChangeAuditLog } from "../audit/workbook-change-audit.js";
 import { getWorkbookRecoveryLog, MAX_RECOVERY_CELLS } from "../workbook/recovery-log.js";
 import { captureFormatCellsState, type RecoveryFormatSelection } from "../workbook/recovery-states.js";
+
+type FormatCellsCapturedState = NonNullable<Awaited<ReturnType<typeof captureFormatCellsState>>["state"]>;
 import { getErrorMessage } from "../utils/errors.js";
 import { resolveStyles } from "../conventions/index.js";
 import {
@@ -31,6 +33,20 @@ import {
 } from "./format-cells-borders.js";
 import { getResolvedConventions } from "../conventions/store.js";
 import { getAppStorage } from "../storage/local/app-storage.js";
+
+/**
+ * After a failed call: did any formatting land? A call Excel refused outright
+ * (e.g. a protected sheet) changed nothing, and a backup of it would only
+ * shadow older backups for /revert. Assume it changed if the range can't be read.
+ */
+async function formattingChangedSince(address: string, before: FormatCellsCapturedState): Promise<boolean> {
+  try {
+    const now = await captureFormatCellsState(address, before.selection, { maxCellCount: MAX_RECOVERY_CELLS });
+    return !now.state || JSON.stringify(now.state) !== JSON.stringify(before);
+  } catch {
+    return true;
+  }
+}
 
 const DEFAULT_FONT_NAME = "Arial";
 const DEFAULT_FONT_SIZE = 10;
@@ -473,6 +489,9 @@ export function createFormatCellsTool(): AgentTool<typeof schema, FormatCellsDet
       toolCallId: string,
       params: Params,
     ): Promise<AgentToolResult<FormatCellsDetails>> => {
+      // Captured before formatting starts; kept outside `try` so a call that
+      // fails partway can still store it (see the catch below).
+      let capturedState: FormatCellsCapturedState | undefined;
       try {
         // ── Load stored conventions ──────────────────────────────────
         const storage = getAppStorage();
@@ -540,6 +559,8 @@ export function createFormatCellsTool(): AgentTool<typeof schema, FormatCellsDet
           }
         }
 
+        if (checkpointCapture.supported && checkpointCapture.state) capturedState = checkpointCapture.state;
+
         const result = await runMutation((context) =>
           applyResolvedFormatting(context, params, normalizedBorders, styleResult));
 
@@ -605,6 +626,25 @@ export function createFormatCellsTool(): AgentTool<typeof schema, FormatCellsDet
         const failure = await describeExcelFailure(parseExcelError(e), { range: params.range });
         const message = failure.reason;
 
+        // Excel applies a batch op by op, so a failure partway can leave some
+        // formatting changed. Store the state captured before the call so the
+        // user can still revert whatever was applied.
+        let backupNote = "";
+        if (capturedState && await formattingChangedSince(params.range, capturedState)) {
+          try {
+            const snapshot = await getWorkbookRecoveryLog().appendFormatCells({
+              toolName: "format_cells",
+              toolCallId,
+              address: params.range,
+              changedCount: 0,
+              formatRangeState: capturedState,
+            });
+            if (snapshot) backupNote = "\n\nSome formatting may have been applied before the error; a backup of the previous formatting was saved, so it can be reverted.";
+          } catch (backupError) {
+            backupNote = `\n\n⚠️ Some formatting may have been applied before the error, and no backup could be saved: ${getErrorMessage(backupError)}`;
+          }
+        }
+
         await finalizeMutationOperation(mutationFinalizeDependencies, {
           auditEntry: {
             toolName: "format_cells",
@@ -618,7 +658,9 @@ export function createFormatCellsTool(): AgentTool<typeof schema, FormatCellsDet
         });
 
         return {
-          content: [{ type: "text", text: `Error formatting ${params.range}${unchangedClause(failure, "no formatting was applied")}. ${message}` }],
+          // #791 says whether anything may have reached Excel; #794's backup note
+          // only applies when it may have.
+          content: [{ type: "text", text: `Error formatting ${params.range}${unchangedClause(failure, "no formatting was applied")}. ${message}${failure.maybeApplied ? backupNote : ""}` }],
           details: { kind: "format_cells", address: params.range },
           isError: true,
         };

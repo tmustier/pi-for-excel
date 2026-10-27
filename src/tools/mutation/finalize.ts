@@ -10,6 +10,10 @@ import type {
   MutationRecoveryStep,
   MutationResultDetails,
 } from "./types.js";
+import { getErrorMessage } from "../../utils/errors.js";
+
+/** Dispatched on `document` when a backup of a completed change could not be stored. */
+export const PI_BACKUP_SAVE_FAILED_EVENT = "pi:backup-save-failed";
 
 export async function finalizeMutationOperation<TDetails extends MutationResultDetails>(
   dependencies: MutationFinalizeDependencies,
@@ -32,7 +36,26 @@ export async function finalizeMutationOperation<TDetails extends MutationResultD
 export async function finalizeMutationRecoveryStep<TDetails extends MutationResultDetails>(
   recovery: MutationRecoveryStep<TDetails>,
 ): Promise<MutationFinalizeRecoveryResult> {
-  const checkpoint = await recovery.appendRecoverySnapshot();
+  let checkpoint: Awaited<ReturnType<typeof recovery.appendRecoverySnapshot>>;
+  try {
+    checkpoint = await recovery.appendRecoverySnapshot();
+  } catch (error) {
+    // The change is already in the workbook; say plainly that it has no
+    // backup instead of failing the call or implying it can be reverted.
+    const reason = getErrorMessage(error);
+    console.warn(`[pi] ${reason}`);
+    recovery.result.details.recovery = recoveryCheckpointUnavailable(reason);
+    recovery.appendResultNote(
+      recovery.result,
+      `⚠️ ${reason.replace(/[.!?]?$/, ".")} This change cannot be reverted from backups.`,
+    );
+    if (typeof document !== "undefined") {
+      document.dispatchEvent(new Event(PI_BACKUP_SAVE_FAILED_EVENT));
+    }
+    return {
+      checkpointCreated: false,
+    };
+  }
 
   if (!checkpoint) {
     recovery.result.details.recovery = recoveryCheckpointUnavailable(recovery.unavailableReason);
@@ -44,6 +67,8 @@ export async function finalizeMutationRecoveryStep<TDetails extends MutationResu
   }
 
   recovery.result.details.recovery = recoveryCheckpointCreated(checkpoint.id);
+  // The model needs the id to restore this exact change later.
+  recovery.appendResultNote(recovery.result, `Backup saved: \`${checkpoint.id}\`.`);
 
   return {
     checkpointCreated: true,

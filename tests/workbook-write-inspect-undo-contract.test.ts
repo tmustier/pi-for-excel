@@ -88,8 +88,11 @@ class RangeStoreRange {
     this.store.writeGrid(this.parsed, values);
   }
 
+  /** Like Excel: a formula where there is one, otherwise the cell's value. */
   get formulas(): unknown[][] {
-    return this.store.readGrid(this.parsed, "formula");
+    const values = this.store.readGrid(this.parsed, "value");
+    return this.store.readGrid(this.parsed, "formula")
+      .map((row, r) => row.map((formula, c) => formula === "" ? values[r]?.[c] ?? "" : formula));
   }
 
   get formulasR1C1(): unknown[][] {
@@ -233,6 +236,18 @@ class RecoveringAuditSettingsStore {
 
   delete(key: string): Promise<void> {
     this.values.delete(key);
+    return Promise.resolve();
+  }
+
+  update<T, U>(key: string, parse: (raw: unknown) => T, change: (current: T) => U | undefined): Promise<void> {
+    // A read-modify-write reads first, so it fails the same seeded way.
+    if (key === "workbook.change-audit.v1" && this.failAuditRead) {
+      this.failAuditRead = false;
+      return Promise.reject(new Error("seeded audit read failure"));
+    }
+    const next = change(parse(this.values.get(key) ?? null));
+    if (next === undefined) this.values.delete(key);
+    else this.values.set(key, next);
     return Promise.resolve();
   }
 
@@ -382,7 +397,7 @@ void test("committed write reports recovery unavailable instead of replacing unr
     });
     assert.match(firstText(first), /Written to/u);
     assert.equal(first.details.recovery?.status, "not_available");
-    assert.match(firstText(first), /No backup was saved, so `workbook_history` cannot restore this change\. Pi could not identify this workbook/u);
+    assert.match(firstText(first), /backup could not be saved.*cannot be reverted/iu);
     assert.match(firstText(await read.execute("read-first-write", {
       range: "Sheet1!A1",
       mode: "csv",
@@ -400,8 +415,9 @@ void test("committed write reports recovery unavailable instead of replacing unr
     getWorkbookContext: workbookContext,
   });
   const persistedIds = (await reloaded.list()).map((snapshot) => snapshot.id);
+  // The existing checkpoint survives, and only the write whose backup was saved has one.
   assert.equal(persistedIds.includes("existing-checkpoint"), true);
-  assert.equal(persistedIds.includes("new-checkpoint-1"), true);
+  assert.equal(persistedIds.length, 2);
 });
 
 void test("user can write, inspect, reject overwrite, and restore through workbook tools", async () => {
@@ -448,6 +464,8 @@ void test("user can write, inspect, reject overwrite, and restore through workbo
     assert.equal(initialWrite.details.address, "Sheet1!A1:B2");
     assert.equal(initialWrite.details.changes?.changedCount, 4);
     assert.equal(initialWrite.details.recovery?.status, "checkpoint_created");
+    // The model sees the backup id, so it can restore this exact change later.
+    assert.ok(firstText(initialWrite).includes(`Backup saved: \`${initialWrite.details.recovery?.snapshotId}\``));
 
     const listed = await history.execute("history-list", { action: "list" });
     assert.equal(listed.details.count, 1);
@@ -504,6 +522,23 @@ void test("user can write, inspect, reject overwrite, and restore through workbo
     await history.execute("restore-formula", { action: "restore", snapshot_id: formulaSnapshotId });
     const formulaRestored = await read.execute("read-formula-restored", { range: "Sheet1!C1" });
     assert.match(firstText(formulaRestored), /C1: =A2\+B2/u);
+
+    // A restore never silently overwrites edits made after Pi's change.
+    const laterWrite = await write.execute("write-later", { start_cell: "Sheet1!D1", values: [[5]] });
+    const laterSnapshotId = laterWrite.details.recovery?.snapshotId;
+    assert.ok(laterSnapshotId);
+    store.applySnapshot("Sheet1!D1", [["user edit"]]);
+    const refused = await history.execute("restore-over-edit", { action: "restore", snapshot_id: laterSnapshotId });
+    assert.equal(refused.details.error, "later_edits");
+    assert.match(firstText(refused), /Sheet1!D1: user edit/u);
+    assert.match(firstText(await read.execute("read-kept-edit", { range: "Sheet1!D1", mode: "csv" })), /user edit/u);
+    const forced = await history.execute("restore-over-edit-confirmed", {
+      action: "restore",
+      snapshot_id: laterSnapshotId,
+      overwrite_later_edits: true,
+    });
+    assert.match(firstText(forced), /Restored backup/u);
+    assert.doesNotMatch(firstText(await read.execute("read-overwritten-edit", { range: "Sheet1!D1", mode: "csv" })), /user edit/u);
 
     const snapshotBeforeWrongWorkbook = overwritten.details.recovery?.snapshotId;
     assert.ok(snapshotBeforeWrongWorkbook);
