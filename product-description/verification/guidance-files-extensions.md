@@ -1,5 +1,19 @@
 # Verification: guidance, files and extensions
 
+## Current merged expectations
+
+The old tables/results below remain a dated observation record. Their old bug-reproduction expectations are superseded by these merged expectations and the owning feature pages. Keep Result columns intact; a new pass needs its own dated evidence. Use GPT-6 Luna for new turns, never refresh the shared grant.
+
+| Existing ID family | Merged expectation |
+| --- | --- |
+| RULES | Unidentified "This file" textarea disabled. Save writes changed scopes only; concurrent changes require explicit replacement. Save/Cancel close shell. Guidance refresh reaches runtimes without reload. |
+| CONV | Same conflict-safe saves/refresh as Rules. Percent preview uses ±0.125 for ±12.5% at one decimal. |
+| SKILLS | Local guidance, not workbook mutation/lock. List/read ungated; install/uninstall asks in Confirm, saves directly in Auto, with conflict-safe Undo. UI removal asks; catalog refresh propagates. |
+| FILES | Local-change consent policy, collision-safe import names and bounded context summary. Connect-folder capability is visibly disabled with explanation inside unsupported cross-origin frames, not promised as usable. |
+| HUB | In-taskpane name input instead of `window.prompt`; unload clears legacy widgets; remote-source policy applies before host and sandbox activation. Permissions always enforced; local-change consent policy applies independently of workbook execution mode. |
+| WEB | Saved mask is placeholder, never replacement key. Empty Save retains stored key with validation toast; Validate may use saved key. MCP has independent scope controls; removing a configuration still does not ask. Capability refresh requires no reload. |
+| EXP | Three extension flags; permission-gates removed, Theme moved to Settings. Remote URL opt-in cannot be bypassed through sandbox install. |
+
 How to run this file: bring up Pi in Excel on the web with `node scripts/orb/excel-web-session.mjs --check` (see [docs/orb-excel-web.md](../../docs/orb-excel-web.md)). The workbook is opened signed out through the shared folder link, so it has no workbook identity: "This file" rules, the files "Workbook" badge and the workbook web-search scope behave as for an unidentified workbook. Never log out of, disconnect or refresh the shared OpenAI (ChatGPT) credential. Use made-up API keys only. For MCP items run `npx -y @modelcontextprotocol/server-everything@2.0.1 streamableHttp` with `PORT=3901` in the orb and add `http://localhost:3901/mcp`. Until a real search key exists, search items run against a CDP `Fetch` mock of the provider (s.jina.ai, api.tavily.com) and of a test site. Reload the taskpane with `location.reload()` evaluated in the taskpane target (CDP `Page.reload` is refused on that iframe target); the shared credential survives it. A second taskpane is the same folder-link workbook in a second tab of the same Chrome profile. Keep model turns few and tiny; GPT-6.1 Sol was the reliable choice (GPT-6 Luna stalled twice after a `conventions` call). Before each section close Settings and Files, keep execution mode on Auto unless the item says Confirm, and afterwards clear any key, MCP server, external skill and test file you added.
 
 Device column: `web` is the Excel on the web session; `desktop` is Excel desktop (not available in an orb; those items were run in a separate pass on Excel for Mac); `second taskpane` needs two taskpanes open at once.

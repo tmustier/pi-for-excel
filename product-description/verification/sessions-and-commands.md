@@ -1,5 +1,18 @@
 # Verification: sessions and commands
 
+## Current merged expectations
+
+The dated tables below retain the original claims, expectations and results as observations on `ec453df`. Use these merged expectations for reruns, not old bug-reproduction wording. Existing IDs and results are intentionally unchanged; this is not a claim that every row was rerun.
+
+| Existing ID family | Merged expectation |
+| --- | --- |
+| SESS, TABS | Drafts, Not sent rows, stable numbers, chosen titles and recently closed tabs persist; first user message saves before an answer. Identity-less workbooks have document-specific layouts. Inactive busy indication remains visible. |
+| RENAME | Naming remains available while busy; chosen titles persist and take precedence over generated titles. Blank naming is rejected rather than claiming an unsaved title. |
+| REOPEN, RESUME | Deduplicate already-open sessions, persist recently closed state, trap/restore focus and provide a usable bounded list even in short panes. Reopen/resume restores saved draft/held state without automatically sending it. |
+| EXPORT | Copy uses fallback paths with feedback. Bare export downloads when copying is unavailable; a blob download does not open a spare browser tab. Desktop Save-sheet still needs host acceptance. |
+| MENU | Click works without hover rerender loops; typed arguments survive selection and busy refusal keeps the draft. Keys belong only to the composer; Shift+Tab is not completion; one Escape closes only the menu. `/default-models` removed. `/model`, `/settings`, `/login`, `/copy`, `/export`, `/backup`, `/revert` may open/run while busy subject to their action-specific safeguards. |
+| HINTS | Appends to the active tab's draft without replacing text; native insertion preserves undo and a visible note explains edit-before-send. Never sends automatically or follows a tab switch into another tab's draft. |
+
 How to run this file: bring up Pi in Excel on the web with `node scripts/orb/excel-web-session.mjs --check` (see [docs/orb-excel-web.md](../../docs/orb-excel-web.md)), or use Excel desktop where the Device column says so. Start each section from a freshly opened taskpane with one tab, execution mode Auto, no extensions beyond the bundled Snake, and a connected provider. Model turns are only needed where the setup says "responding" or "has an answer"; use "Reply with just OK". To hold a tab in the responding state long enough to act, pause the model request (for example with DevTools request interception) and release it afterwards. Clear the tab layout between sections by reloading after closing extra tabs. Device values:
 
 - `web` — Excel on the web, with mouse clicks and key presses delivered to the page (Pi sees every key, including Ctrl/Cmd chords the browser would normally keep).

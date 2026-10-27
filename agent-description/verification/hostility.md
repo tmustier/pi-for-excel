@@ -1,5 +1,23 @@
 # Verification: hostility
 
+## Current merged expectations
+
+The original tables below preserve their earlier claims, expectations and Result columns, including the desktop observation, as historical evidence. Use these overrides for reruns; none of the old results is a new acceptance result. See the separately dated [integration log](integration-fixes.md).
+
+| Existing IDs | Current expected result |
+| --- | --- |
+| EDIT-01–03, EDIT-05 | Tools wait up to 60 seconds for cell editing to end, then resume or return precise editing guidance. Raw host calls need not queue. |
+| MOVE-02–03 | Unqualified reads disclose active-sheet resolution; guarded mutations refuse omitted sheets. Durable edit notes remain after subsequent tool calls. |
+| LOCK-02 | Same-runtime read waits for the earlier registered write and sees `new`; another runtime's reads need not wait. |
+| LOCK-05–06 | Attributed approval dialogs queue; opening the second does not decline the first. Stop withdraws pending approvals. |
+| SIZE-01 | Paged reads/chunked search can answer directly; Office.js is not required just to avoid a full-sheet payload. |
+| RECALC-01–02 | Written formulas calculate; receipt/read context discloses Manual mode and dependent-value limitations, not an unqualified verified zero. |
+| CTX-01–04 | Bounded pages and answered-request-aware shaping; compaction keeps active requests whole and distinguishes answered work in its saved summary. |
+| COAUTH-01–04 | Own-write suppression survives co-authoring; external edits are durable notes. A read-back is point-in-time, not a co-author lock or guarantee against later edits. |
+| SAVE-01 | Saving/reloading never clears automatic backups; a shared 512 MiB compressed-history ceiling evicts oldest entries across workbooks, without count/age limits. |
+| STOP-01–03 | Stop cancels waits and pending approvals, prevents unstarted work and reports applied/partial/unknown outcomes. Already-submitted Excel work cannot be undone by abort. |
+| TIME-01–02 | Bounded host waits and actionable timeout/unknown-outcome feedback; never automatically rerun a mutation that may have applied. |
+
 How to run this file: the fixture workbook from [README.md](README.md#how-to-run-a-pass). `user` rows need real input in the grid (CDP mouse and key events on the OneDrive page target).
 
 ## hostility/cell-edit-mode.md

@@ -1,5 +1,24 @@
 # Verification: foundations and reading
 
+## Current merged expectations
+
+Use these expectations when rerunning the existing IDs. The tables below retain the original `ec453df` claims, expected text and Result columns as a historical test record, not as the merged contract. Do not turn an old `fail` into a new `pass` without rerunning. The [integration pass](integration-fixes.md) records its own tested builds.
+
+| Existing IDs | Current expected result |
+| --- | --- |
+| TOLD-02 | Tool/prompt sizes follow the current registry and configuration; old character counts are measurements, not constants. |
+| AUTO-01–04 | Structure and Files notes persist when changed; unchanged blueprint is not repeatedly labelled missing. A user-added sheet refreshes the signature. Selection stays fresh per request. |
+| AUTO-05–08 | Labelled bounded selection sample, omitted counts and true dimensions; whole-column selections produce bounded context. Edit mode does not hold context collection for the tools' 60-second wait. |
+| AUTO-10–13 | Own writes excluded; added-sheet edits tracked; durable edit notes remain available after tools, independently per runtime. |
+| CONTRACT-01–02 | Failure has `isError: true` and helpful state-specific text; successful backup IDs occur in model-readable text as well as details. |
+| CONTRACT-04–05 | Invalid sheets/addresses fail clearly; unknown sheets list available names. Unqualified read discloses active-sheet resolution. |
+| READ-01–03 | Compact/detailed display matches workbook formatting; stored-value differences annotated; zero is `0`; pipes/newlines cannot break table structure. CSV remains raw. |
+| READ-06–08 | Bounded merge, filter/hidden-row, spill, protection, validation and calculation state is reported, including unsupported-API limitations. |
+| READ-10–12 | Page large/whole-line ranges, report clipped/returned scope and continuation; retain useful summaries rather than losing them behind one oversized read. |
+| READ-13 | Wait for cell edit to end, up to 60 seconds; precise error if it persists. |
+| OVER-02, OVER-05, SEARCH-02 | Row-1 values labelled as previews, not assumed headers; bounded sheet previews and chunked search avoid full used-range payloads. |
+| TRACE-01 | Both direct precedents A1 and A2, with explicit limitations for unsupported dependency forms. |
+
 How to run this file: the fixture workbook from [README.md](README.md#how-to-run-a-pass), Auto mode, a fresh tab for `turn` rows. Capture requests for every `turn` row.
 
 ## foundations/what-the-agent-is-told.md

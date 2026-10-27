@@ -1,5 +1,22 @@
 # Verification: writing and other mutating tools
 
+## Current merged expectations
+
+The original tables below preserve `ec453df` claims, expected text and Result columns as historical observations. Rerun their IDs against these merged expectations; the old results do not assert that this revision was tested. The [integration log](integration-fixes.md) retains its own builds and evidence.
+
+| Existing IDs | Current expected result |
+| --- | --- |
+| WRITE-01, WRITE-07, WRITE-14 | Checked chunked writing, named full/sampled verification scope, exact changed count and truthful backup status. A large empty target can succeed; a large occupied target over the backup cap is refused before overwrite. |
+| WRITE-08–11, FMT-03, STRUCT-03, OJS-03, PY-08 | Checked writers refuse merge-child/spill/protection obstacles with actionable error results. Office.js reports host failures with protection/edit/payload guidance; arbitrary code is not given checked-write guarantees. |
+| WRITE-12, WRITE-15, PY-09 | Validation violations and Excel's conversions are reported, not silently called exact preservation. Python input includes raw `values` and displayed `text`. |
+| WRITE-13 | Unqualified mutation targets are refused before writing. Include sheet names in agent calls; active-sheet changes cannot retarget them. |
+| FILL-02, FILL-05–06 | Table effects and calculation caveats disclosed; chunked fill with bounded verification. Oversize backup skips name the size limit, not missing identity. Occupied oversize targets are refused. |
+| STRUCT-01 | Destructive operations disclose affected table/filter context and recovery limits. |
+| COMMENT-02 | Missing range gives domain validation feedback, not an internal undefined-property exception. |
+| HIST-02 | Backup deletion asks even in Auto; a declined confirmation deletes nothing. |
+| PY-02–04 | Backend named; only unreachable default bridge can fall back. Missing modules and native timeouts preserve error/streams and never rerun side effects in Pyodide. |
+| PY-06–07, PY-10 | Transform includes stdout/stderr; ragged padding warned; oversized serialized input refused before execution with block-processing guidance. Output-size failures retain useful limits. |
+
 How to run this file: the fixture workbook from [README.md](README.md#how-to-run-a-pass), Auto mode unless the row says Confirm. Read the target back with `Excel.run` after each row, not with the tool under test.
 
 ## tools/writing-cells.md
@@ -96,4 +113,3 @@ Needs the bridge: `PORT=3340 PYTHON_BRIDGE_MODE=real node scripts/python-bridge-
 | PY-10 | P2 | probe, bridge | Bridge size limits. | `Big`. | Read 20,000 × 5; return 50,000 rows. | `413` body / output limits. | fail (B-25) |
 | PY-11 | P2 | probe, bridge | Overwrite protection on transform. | Occupied A1. | Output at A1. | `⛔ **Transform blocked**`. | pass |
 | PY-12 | P2 | probe, bridge | `libreoffice_convert` csv → xlsx. | LibreOffice. | Convert `/tmp/lo/t.csv`. | `Converted … to **XLSX**`. | pass |
-

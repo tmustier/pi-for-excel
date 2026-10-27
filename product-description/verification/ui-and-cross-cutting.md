@@ -1,5 +1,20 @@
 # Verification: ui and cross-cutting
 
+## Current merged expectations
+
+The original tables, expected text and results below are the dated `ec453df` test record. Use these merged expectations for reruns, not old bug-reproduction claims. Old failures remain evidence, not new acceptance results; desktop and screen-reader coverage must still be recorded separately.
+
+| Existing ID family | Merged expectation |
+| --- | --- |
+| STATUS | Shared accessible menus, keyboard-first selection and model-specific compaction budget. Automatic compaction keeps the meter neutral; busy model/thinking changes apply next turn. |
+| RENDER | User line breaks preserved; punctuation-containing code-fence labels retain cards/Copy. Settled messages and parallel tool cards do not continuously rerender. |
+| KEYS, UTIL | Menu focus/navigation and dismissal are shared. Modal traps focus and blocks background shortcuts. Ctrl+Alt/Option+T cycles thinking from the composer; Shift+Tab moves focus backwards. Busy refusal keeps command draft. Browser-reserved chords still belong to browser. |
+| LANG | Confirm busy interruption, shared Stop and save-before-reload; save failure restores selection without changing in-memory language. Root `lang` correct. Saved drafts/titles/tab numbers restore normally. |
+| PERSIST | First user message, drafts, Not sent rows, chosen titles, stable numbers, recent-closed state and compaction save. Identity-less layouts document-specific. Persistence failures visible; save/reload never clears backups. |
+| HOST | Copy fallbacks and download fallback for export; no spare blank download tab. Disabled proxy no warning; blocked loopback policy explained without offering impossible iframe prompts. Pi uses taskpane dialogs, not `window.prompt`, for extension naming. |
+| PANES | Shared stored settings/mode converge; per-runtime drafts/activity/errors remain separate. Workbook lock is not cross-pane or co-author isolation. |
+| Provider errors / offline | Three transient retries with visible cancellable countdown; specific missing/expired login, offline, enabled-unreachable proxy and browser-policy advice. Only actual abort stop reason means Stop. Second overflow says recovery already failed. Background errors remain tab-owned. |
+
 How to run this file: bring up Pi in Excel on the web with `node scripts/orb/excel-web-session.mjs --check` (see [docs/orb-excel-web.md](../../docs/orb-excel-web.md)), or use Excel desktop where the Device column says so. Start each section from a freshly opened taskpane with execution mode Auto, language English, one connected provider (ChatGPT), and no extensions beyond the bundled Snake. Model turns are needed only where the setup says "responding" or "has an answer"; keep them tiny ("Reply with just OK", "Write 7 in Sheet1!B1. No explanation."). To hold a responding turn, ask for a long list. To hold the workbook lock, wrap `Excel.run` in the taskpane with a 5 s delay over the DevTools protocol after sending. For provider failures use DevTools network emulation on the taskpane target (offline), stop the proxy service, or add a deliberately wrong key for a second provider (OpenAI (API)); never log out of the shared ChatGPT login. Device values:
 
 - `web` — Excel on the web, pointer and key events delivered to the page through the DevTools protocol (Pi sees every key, including chords the browser would keep).

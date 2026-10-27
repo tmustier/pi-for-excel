@@ -1,5 +1,19 @@
 # Verification: foundations and turn
 
+## Current merged expectations
+
+The original tables and results below are the dated `ec453df` record. Their defect-reproduction expectations are not the current contract. Rerun the same IDs using these overrides and the linked owning pages; preserve old results until recording a separately dated rerun. Use GPT-6 Luna for new real turns and never refresh the shared login.
+
+| Area / existing IDs | Merged expectation |
+| --- | --- |
+| TASKPANE, session/draft variants | Notices below tabs; failed turns have inline transcript recovery. Each tab owns its draft, Not sent rows and activity. Switching tabs restores those states. |
+| Sending / queue / Stop | Button, unclaimed Escape and Stop-and-close use one path. Retry/compaction waits cancel; undelivered prompts become separate Not sent rows; cancelled commands are named. Sent Excel changes remain applied. |
+| Parallel tool cards / details | Completed messages render once; each parallel card settles independently. Disclosure/details changes update existing visible results. |
+| Auto-context | Changed structure, Files and others' edits become durable notes. Selection is fresh, bounded and labelled, including whole columns. Own writes excluded; added sheets tracked. |
+| Context meter / compaction | Thresholds use selected-model compaction budget; compaction stays with its originating tab and saves immediately. Answered work is distinguished from pending work, and large answered results can shrink in the kept tail. |
+| Provider failure / retry | Up to three transient retries with cancellable countdown; separate overflow recovery once. Specific failure advice and inline recovery follow the current provider-errors page, not the old run-error banner. |
+| Modals / menus | Focus trapped; taskpane shortcuts do not act behind the modal. First Escape dismisses the topmost surface without also stopping Pi. |
+
 How to run this file: bring up Pi in Excel on the web with `node scripts/orb/excel-web-session.mjs --check` (see [docs/orb-excel-web.md](../../docs/orb-excel-web.md)), or use Excel desktop where the Device column says so. Seed Sheet1 with a small table (A1:D10: \"Region\", \"Q1\", \"Q2\", \"Total\", eight regions with numbers, `=B+C` totals in D2:D9 and a total row whose D10 shows `#VALUE!`). Start each section from one tab with an answered conversation, execution mode Auto, a reasoning model, and the default thinking level. Every item that needs Pi \"responding\" uses a real model turn; keep them small: \"Without using tools, write the numbers one to three hundred as English words, one per line.\" keeps a tab responding for 10–20 seconds; \"Call read_range three times in parallel in one response, for A1:B3, C1:D3 and A4:D6. Then reply with just DONE.\" gives a tool batch; \"Use execute_office_js to run code that only waits 12 seconds … Then reply with just DONE.\" holds a tool running. Steers and follow-ups use \"Then say BANANA.\" and \"Then say MANGO.\" so their delivery is easy to spot.
 
 - `web` — Excel on the web, with key presses and mouse events delivered to the taskpane through the DevTools protocol (real, trusted events; Pi's capture-phase shortcuts and Office.js both see them).

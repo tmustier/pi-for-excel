@@ -1,5 +1,19 @@
 # Verification: workbook
 
+## Current merged expectations
+
+The original tables below preserve the dated `ec453df` claims, expectations and results. Use the merged expectations here for reruns; old bug-confirming results are not current acceptance results. Menu selection now preserves typed arguments, so the old instruction to Escape before submitting arguments is unnecessary.
+
+| Existing ID family / area | Merged expectation |
+| --- | --- |
+| WB, LOCK | Mutations serialize; same-runtime reads wait for earlier registered writes. Other runtimes and co-authors are not isolated. |
+| Confirm / approvals | Queued attributed approvals, no unseen decline when a second arrives; Stop withdraws pending requests. Auto/Confirm is shared across panes. Backup deletion always asks. |
+| Read / search / overview | Bounded paging/sampling/chunked search, displayed values with stored-value differences and workbook-state annotations. Whole-column reads clip to used data instead of one million-cell response. |
+| Write / fill / transform | Checked merge/spill/protection preflight, chunked submission, named full/sampled read-back and conversion/validation/calculation limitations. Occupied targets over backup cap refused. Stop reports partial/applied/unknown state without claiming rollback. |
+| Backups / restore | Save/reload never clears snapshots. Shared 512 MiB compressed-history ceiling, oldest-first eviction, no count/age limit or protected minimum; lists page 50 metadata entries. IDs and actual skip reasons visible to model. Restore captures rollback when possible and reports capture/storage failure. |
+| Manual backup / downloads | Workbook lock protects capture; one blob download link, no spare popup. Host-specific Save-sheet acceptance remains separate. |
+| Cell edit / timeout | Bounded edit wait up to 60 seconds, precise failure if editing persists; no unsafe retry after a mutation may have applied. |
+
 How to run this file: bring up Pi in Excel on the web with `node scripts/orb/excel-web-session.mjs --check` (see [docs/orb-excel-web.md](../../docs/orb-excel-web.md)), or open Pi in desktop Excel on a workbook saved to disk. Start from a blank Sheet1, one tab, execution mode Auto, thinking level at its lowest to keep turns fast, and a closed Backups dialog. Ask Pi for small, explicit tool calls ("Write 1,2,3 into A1:A3 of Sheet1, nothing else. Do not read first."). Before Enter on a typed slash command with arguments, press Escape to close the command menu, or the highlighted command runs with no arguments. Read cell values back yourself (the grid, or Office.js in the taskpane) rather than trusting Pi's reply. Device values: `web` is Excel on the web, `desktop` is Excel on macOS or Windows, `any` is either, `web-anon` is a workbook opened through an anonymous sharing link (no workbook identity), `2 tabs` needs a second tab in the same taskpane, `2 panes` needs two taskpanes sharing one browser profile.
 
 Results recorded below are from two passes on 26 October 2026 in Excel on the web (orb, `web-anon`, Chrome over CDP with real mouse and key input, model GPT-6.1 Sol at Min), against `ec453df`. The second pass covered the remaining items: lock items slowed one tool's `Excel.run` over CDP so the lock was held for 15–20 s, reloads used CDP `Page.reload`, and two panes were the same workbook opened in a second browser tab of the same profile. Items marked blocked need desktop Excel and were handed to a separate desktop pass. `—` means not run. A `fail` on a suspected-bug row means the bug reproduced; a `fail` with "document corrected" means the document was wrong and has been fixed.
