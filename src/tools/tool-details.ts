@@ -340,6 +340,8 @@ export const pythonTransformRangeDetailsSchema = Type.Object({
   convertedCount: Type.Optional(Type.Number()),
   /** Result rows shorter than the widest row, padded with blank cells. */
   paddedRowCount: Type.Optional(Type.Number()),
+  /** Stop was pressed; the result says what was written before it took effect. */
+  stopped: Type.Optional(Type.Boolean()),
   ...bridgeGateProperties,
 });
 
