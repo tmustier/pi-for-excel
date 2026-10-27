@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 
 function fixture(t) {
-  const root = mkdtempSync(join(tmpdir(), "pi-verify-"));
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "pi-verify-")));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   mkdirSync(join(root, "scripts"));
   copyFileSync(new URL("../scripts/verify.mjs", import.meta.url), join(root, "scripts/verify.mjs"));
