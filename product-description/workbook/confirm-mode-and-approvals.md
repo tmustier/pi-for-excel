@@ -2,11 +2,11 @@
 
 ## Summary
 
-Auto applies ordinary workbook mutations without a dialog; Confirm asks before each one. The mode is shared across tabs and taskpanes on this browser origin and survives reload. Reads never ask. Deleting recovery backups always asks, as do separately gated risky capabilities. Approval is permission for one action, not a promise that Excel will accept it.
+As of [PR #808](https://github.com/tmustier/pi-for-excel/pull/808) (WT-01, WT-05), Auto applies ordinary workbook mutations without a dialog; Confirm asks unless the user has allowed reversible workbook changes for the rest of this turn. Irreversible actions still ask in either mode. The mode is shared across tabs and taskpanes on this browser origin and survives reload. Reads never ask. Deleting recovery backups always asks, as do separately gated risky capabilities. Approval is permission for an action, not a promise that Excel will accept it. The dialog is the confirmation: Pi presents a plan for multi-step work but is not instructed to ask the same question in chat.
 
 ## The simple case
 
-The user selects Confirm in the status bar or turns off "Auto mode" in Settings. When Pi proposes a write, "Allow this change to the workbook?" names the tab, action and target, with an overwrite sample when preflight found existing content. The user allows it once; only then can the call wait for the workbook lock and run. Declining changes nothing and returns a tool error to the model; it does not itself end the turn.
+The user selects Confirm in the status bar or turns off "Auto mode" in Settings. When Pi proposes a write, "Allow this change to the workbook?" names the tab, action and target, with an overwrite sample when preflight found existing content. The user allows it once or chooses "Allow for the rest of this turn"; only then can the call wait for the workbook lock and run. Declining changes nothing and returns a tool error to the model; it does not itself end the turn.
 
 ## The interaction, event by event
 
@@ -46,14 +46,18 @@ The modal takes focus, traps Tab and blocks underlying composer/shortcuts. Other
 
 ### Answered
 
-Allowing advances that call toward the lock. Decline/dismiss returns a cancellation error; the model can explain or choose another action. The next waiting approval is presented, rather than silently cancelled. Focus returns to the opener when possible.
+Allowing advances that call toward the lock. "Allow for the rest of this turn" also allows later reversible workbook calls in this run, including requests already queued. The grant is never saved and does not cover the next turn, another tab, guidance changes, MCP calls, backup deletion or irreversible workbook calls. Decline/dismiss returns a cancellation error; the model can explain or choose another action. The next waiting approval is presented, rather than silently cancelled. Focus returns to the opener when possible. Buttons wrap into readable rows in a narrow pane.
 
 ## Risky actions ask in any mode
 
 - `workbook_history` delete/clear serialize and always ask "Let Pi delete backups?"; the dialog explains that covered changes will no longer be revertible.
-- Direct Office.js has its own capability gate: Auto permits Excel-only code, but code referencing browser/network/storage capabilities asks. Confirm also gates workbook mutation; these are distinct permissions and can result in two gates.
+- Structural deletes exceeding automatic backup capacity and chart deletes always ask. A structural delete checks the used data first; more than 20,000 cells without an automatic backup triggers the warning "This can't be undone from Backups. Pi asks for this in every mode."
+- Destructive direct Office.js (delete, clear or remove) always asks. Detection uses conservative code scanning, including bracket and Unicode-escaped forms; a false positive costs a dialog, and this heuristic is not a sandbox.
+- Direct Office.js also has a capability gate: code referencing browser/network/storage capabilities asks. Confirm gates workbook mutation unless allowed for this turn; these are distinct permissions and can result in two gates.
 - A reachable local Python/LibreOffice bridge asks for bridge consent, remembered for that endpoint. Python's in-pane backend does not require a local-bridge permission. See [experimental](../extensions/experimental.md).
 - Local Files/extension changes follow Confirm/Auto consent: Confirm asks for local changes; Auto still asks for new code, uninstall and destructive changes to content not created in this chat. There is no experimental permission flag to bypass this rule.
+
+Where the workbook has a canonical identity, destructive dialogs offer **Take a full backup first**. It captures/downloads the full workbook using the same mechanism as `/backup`, then allows the call. Failure does not allow the change. Hosts with only a document-instance identity cannot use this full-file fallback. See [manual backups](manual-backups.md).
 
 ## Modifiers
 
@@ -81,19 +85,29 @@ Allowing advances that call toward the lock. Decline/dismiss returns a cancellat
 | Focus moves to the grid or another window | Approval remains waiting. | No automatic answer. |
 | The context window fills | No effect. | No effect. |
 
+Stop cannot recall an Excel batch already submitted. A secondary preparation action, such as taking a full backup, is awaited before approval and cannot allow a withdrawn request afterwards. A stopped turn grant cannot approve later requests.
+
 ## Interactions with other systems
 
-**Persistence.** Mode is durable and synchronized; per-call answers are not reusable grants. **Workbook changes and recovery.** Approval does not alter backup/verification policy. **Other tabs and sessions.** Requests are tab-owned and queued. **Execution mode and approvals.** This document. **Models and providers.** The model is told the mode; chat-level clarification can still precede a tool permission. **Offline and provider errors.** Local dialogs do not need a provider. **Notifications.** Mode feedback and approval announcement; no automatic decision. **Settings and preferences.** The three controls share one value. **Host differences.** Host API failures remain possible after approval. **Language.** Dialog wording, tab attribution and queue labels are translated; tool-authored content stays agent-facing English. **Accessibility and keyboard.** Focus entry, trapped Tab, topmost Escape and focus restoration use shared modal handling.
+**Persistence.** Mode is durable and synchronized; turn grants are not saved. **Workbook changes and recovery.** Approval does not alter backup/verification policy. Approved changes remain after Stop or failure; use the [turn receipt or Backups](backups-and-revert.md) to undo them. **Other tabs and sessions.** Requests are tab-owned and queued; turn grants are not shared between tabs. **Execution mode and approvals.** This document. **Models and providers.** The model is told the mode; chat-level clarification can still precede a tool permission, but Pi is not instructed to duplicate the dialog in chat. Switching Auto/Confirm changes the system-prompt prefix once; a turn grant does not. **Offline and provider errors.** Local dialogs do not need a provider.
+
+**Notifications.** Mode feedback and approval announcement; no automatic decision. When an approval is shown, Pi announces "Pi is waiting for your approval: {title}" to screen readers. Approvals waiting in the queue are not announced until shown. Closing the approval, including through Stop Pi, withdraws that announcement and cancels any delayed delivery; it does not erase a newer announcement from another event.
+
+**Settings and preferences.** The three controls share one value. **Host differences.** Host API failures remain possible after approval. **Language.** Dialog wording, tab attribution and queue labels are translated; tool-authored content stays agent-facing English. **Accessibility and keyboard.** Focus entry, trapped Tab, topmost Escape and focus restoration use shared modal handling.
 
 ## Edge cases
 
 - Declining does not prevent the model from asking for a different or repeated action.
 - Changing to Auto does not silently approve an already-presented request.
-- Two mutations in one response require separate queued answers in Confirm.
+- Two mutations in one response require separate queued answers in Confirm unless the user allows reversible workbook changes for this turn.
 - Local consent, workbook mutation consent and direct-code/bridge consent are distinct boundaries.
 
 ## Open questions and verification
 
 Merged approval queue, execution policy, settings synchronization, preflight and modal source inspected. The earlier APPROVE findings remain in historical logs; they do not describe the merged queue/focus/deletion contract. This pass observed modal focus in the real Excel-web resume picker, not every permission path. Desktop and all multi-pane races need separate acceptance.
 
-Verified against pi-for-excel commit `1f51cf8` (source inspection).
+P-168 announcement lifecycle was verified in [#806](https://github.com/tmustier/pi-for-excel/pull/806): a real model Files request in Excel on the web announced its approval; Stop Pi closed it, cleared the announcement and created no file. Browser regressions cover queued approvals, immediate withdrawal before announcement delivery and preserving a newer unrelated announcement.
+
+PR #808: real GPT-6 Luna turns in Excel on the web wrote two cells in separate calls after one turn grant; the next turn asked again. Auto asked before a 20,001-cell sheet deletion, and Stop withdrew it without deleting the sheet. Public-interface tests cover queued/future turn grants, new-run isolation, irreversible consent and abort during secondary actions. Native desktop acceptance for these additions remains separate from the web evidence.
+
+Verified against pi-for-excel baseline `1f51cf8`, PR #808 head `cac00cc1` and PR #806 head `c8f7016` for announcement lifecycle (source, tests and the live acceptance above).

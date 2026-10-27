@@ -64,9 +64,9 @@ The `skills` tool has four actions, each shown as a tool card:
 | "Install skill {name}" | Pi saved an external skill, exactly as the page's install does. |
 | "Uninstall skill {name}" | Pi removed an external skill; "(not found)" if there was none. |
 
-Install and uninstall from Pi ask nothing in Auto mode (confirmed in Excel on the web: "Install skill pd-pi", no dialog). Bridge and integration errors sometimes end with "Skill: {name}"; Pi is told to read that skill before giving setup advice. A disabled or unknown skill fails the read with "Skill not found: …" and the list of available names (confirmed in Excel on the web: "Skill not found: `tmux-bridge`. Available: …").
+As of [PR #804](https://github.com/tmustier/pi-for-excel/pull/804) (SE-03), Pi's install/uninstall actions ask in Confirm and save immediately in Auto. The "Change Pi’s guidance?" dialog previews the installed or removed markdown, with "Save change", "Decline" and "Stop Pi". Both modes show "Pi installed skill …" or "Pi removed skill …" with Undo. Undo restores the prior managed external skill (or removes the new install), unless it has since changed again. Stop withdraws the request without changing the installed skill. List/read remain ungated. Bridge and integration errors sometimes end with "Skill: {name}"; Pi is told to read that skill before giving setup advice. A disabled or unknown skill fails the read with "Skill not found: …" and the list of available names.
 
-> Technical note: the `skills` tool is not on the list of tools that only read, so the product treats every call to it, including list and read, as a workbook [mutation](../glossary.md#the-workbook). It waits for the [workbook lock](../foundations/the-workbook.md), and in Confirm mode each call asks "Allow workbook mutation in Safe mode?". See [Open questions](#open-questions-and-verification).
+> Skills are local guidance, not workbook mutations. Their consent uses the shared approval queue, but never offers or inherits workbook turn-wide approval. The old workbook-mutation classification recorded below is historical, superseded by #790 and PR #804.
 
 ## Modifiers
 
@@ -74,7 +74,7 @@ Install and uninstall from Pi ask nothing in Auto mode (confirmed in Excel on th
 | --- | --- | --- |
 | Model and provider | No effect on the page. Whether and when Pi reads a skill is the model's decision. | No effect. |
 | Thinking level | No effect. | No effect. |
-| Execution mode | No effect on the page. In Confirm mode every `skills` tool call asks for approval (see the technical note). | A change applies from the next `skills` call. |
+| Execution mode | No effect on the page. Pi's install/uninstall ask in Confirm; list/read do not. | Applied when the tool starts. |
 | Files in the workspace, or an overlay open | Files under `skills/` add external skills. The page is itself on the Settings overlay. | A skill file imported during a turn is offered to Pi from the next refresh of its instructions. |
 | Tab state (new, restored, another tab busy) | Skills are the same in every tab. The "(cached)" read is per session; a new or restored tab reads afresh. | A change on the page reaches a responding tab from its next model response. |
 | Host (desktop or web) | No difference. | No effect. |
@@ -102,13 +102,13 @@ Install and uninstall from Pi ask nothing in Auto mode (confirmed in Excel on th
 
 **Other tabs and sessions.** One catalog for every tab and workbook on this computer.
 
-**Execution mode and approvals.** See the technical note above: in Confirm mode every `skills` call asks.
+**Execution mode and approvals.** Pi's install/uninstall ask in Confirm, not Auto. List/read never ask.
 
 **Models and providers.** The list of skill names and descriptions is part of Pi's instructions for every model.
 
 **Offline and provider errors.** No interaction.
 
-**Notifications.** Toasts for each page action. None when Pi installs or removes a skill; the tool card is the trace.
+**Notifications.** Toasts for each page action. Pi's install/remove actions show an Undo toast in both modes, in addition to their tool card.
 
 **Settings and preferences.** The page is one of the three extensions pages of the Settings overlay; the [disclosure bar](../glossary.md#the-taskpane)'s "Skills" switch has no effect (see [web search and MCP](../extensions/web-search-and-mcp.md#the-disclosure-bar)).
 
@@ -136,4 +136,4 @@ Install and uninstall from Pi ask nothing in Auto mode (confirmed in Excel on th
 - Confirmed in Excel on the web: "Read skill web-search (bundled)", then "Refresh skill web-search (bundled)" when Pi forced a reload, then "Read skill web-search (bundled) (cached)" (SKILLS-17).
 - Whether the workbook lock is taken by a `skills` call was read from code, as was Pi's uninstall card.
 
-Verified against pi-for-excel commit `ec453df`.
+Historical observations above were verified against `ec453df`; SE-03 consent and Undo behaviour is revised for PR #804.

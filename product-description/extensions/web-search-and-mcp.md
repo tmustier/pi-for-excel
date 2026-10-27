@@ -4,7 +4,7 @@ Native-first search and honest tool availability revised for SE-07 in [PR #811](
 
 ## Summary
 
-Pi reaches outside the workbook with `web_search`, `fetch_page` and configured MCP tools. Setup lives on "Connections" in the [Extensions hub](the-extensions-hub.md), opened with `/tools`, `/extensions` or "Extensions" in the [utilities menu](../ui/the-utilities-menu.md). Web search uses the connected model provider's native search first and a configured search key as fallback. It is offered only when one of those backends exists. MCP behavior is described separately below and is unchanged by this search revision.
+Pi can reach outside the workbook in three ways: `web_search` (search the public web), `fetch_page` (read one web page as text) and `mcp` (call tools on MCP servers the user configures). The user sets them up on the "Connections" page of the [Extensions hub](the-extensions-hub.md), titled "Connections" / "Web search, MCP servers, and bridges", opened with `/tools`, `/extensions` or "Extensions" in the [utilities menu](../ui/the-utilities-menu.md). The page also holds the Python and tmux bridge cards, which are out of scope here. Web search/page fetch only read and never ask; MCP tools may change remote state and use the consent policy below. None waits for the workbook lock. Web search uses the connected model provider's native search first and a configured search key as fallback. It is offered only when one of those backends exists. Web search and page fetch are enabled by default. The MCP tool is off by default, and nothing on the page turns it on.
 
 ## The simple case
 
@@ -51,6 +51,8 @@ Any failure while saving shows "Extensions: {error}".
 
 Each server card shows "URL", "Token" (masked, or "(none)"), an "Enabled" toggle, "Test" and "Remove". "Test" connects, lists the server's tools and reports "{name}: reachable ({count} tools, direct)" (or "proxy"), or "{name}: {error}" (confirmed in Excel on the web: "everything: reachable (16 tools, direct)" for a local MCP test server; a disabled server tests as "everything: disabled"). "Remove" deletes at once without asking: "Removed MCP server: {name}".
 
+As of [PR #804](https://github.com/tmustier/pi-for-excel/pull/804) (SE-04), each expanded server also has "Remembered tools": grants with a Revoke button per tool, or "None". The hint says "Allowed in Auto; Confirm still asks every time". Grants persist locally, scoped to server id, exact endpoint URL and tool name; changing the endpoint does not reuse consent. Revoke affects subsequent calls, not a call already sent.
+
 ### Ends at once
 
 Opening, expanding, Validate and Test change nothing saved. Validate and Test send the key or token to the provider or server.
@@ -63,7 +65,7 @@ Provider, keys, MCP servers and the master toggle are stored in the add-in's set
 
 - **`web_search`.** Card "Web search "{query}"". Expanded: "Web search via {provider}" (for example "Web search via Jina Search (default)"), "Sent:" with the query, the result count (5 by default), and whether it went direct or through the [proxy](../setup/the-proxy.md), then numbered results. If a non-Jina provider fails and a Jina key exists, the search is retried with Jina and the card starts "⚠️ {provider} search failed (…) — used Jina Search (default) for this request. Check your … in /tools." (confirmed with a mocked failing Tavily: "⚠️ Tavily search failed (…500…) — used Jina Search (default) for this request. Check your Tavily API key in /tools."). A failure adds the setup card below the tool card: "Web search needs an API key", "Web search needs setup" (adds "Step {n} · Start the helper (keep running):" with `npx pi-for-excel-proxy` and "Retry"), "Web search can't connect", "No {label} found" ("Switch to {alternative} in /tools, or set up a {current} key below:"), or "Web search failed" ("Check your API key and proxy configuration in /tools."). Saving a key there saves it first and then validates it: a good key toasts "✓ Web search is ready — ask the assistant to try again."; a bad one stays saved and the card shows "Key saved. Validation: {error}" (confirmed with a fake key). Pi does not retry by itself. The card closes itself after a good key is saved; after a bad key it stays until "Dismiss" (confirmed in Excel on the web, WEB-31).
 - **`fetch_page`.** Card "Fetch page {url}"; expanded, "Fetched page content" and the page title. Only http(s) addresses. Returns up to 12,000 characters of readable text by default (Pi may ask for up to 50,000), times out after 15 seconds, and allows one request per second per site; a faster second request fails with "Error: Rate limited for {host}. Please wait 1000ms between requests." In practice this hits when Pi fetches the same site twice in one parallel batch (confirmed with a mocked site); fetches in consecutive steps are far enough apart.
-- **`mcp`.** Cards "MCP status", "MCP list {server}", "MCP search "{text}"", "MCP describe {tool}", "MCP connect {server}", "MCP call {tool}". Errors include "No MCP servers configured. Open /tools to add one." and "MCP server "{name}" is disabled." (confirmed). The tool is off by default and the UI has no switch for it; see [Open questions](#open-questions-and-verification). Whether a remote tool changes anything is up to the server; Pi asks nothing first.
+- **`mcp`.** Cards "MCP status", "MCP list {server}", "MCP search "{text}"", "MCP describe {tool}", "MCP connect {server}", "MCP call {tool}". Errors include "No MCP servers configured. Open /tools to add one." and "MCP server "{name}" is disabled.". Discovery (status/list/search/describe/connect) never asks. In Auto, a call asks unless the server explicitly marks the tool `readOnlyHint: true` or the user has remembered that tool. "Allow MCP tool call?" shows server name, endpoint, tool and full inputs, with "Allow once", "Always allow this tool", "Cancel" and "Stop Pi". Allow once does not remember consent. Confirm asks on every call, including read-only tools and remembered tools, and offers only Allow once. Workbook turn-wide consent never covers MCP. Stop withdraws a pending approval without sending the tool call; an action already sent may still happen remotely.
 
 ## The disclosure bar
 
@@ -75,7 +77,7 @@ The first time the taskpane starts with a provider connected, a bar under the he
 | --- | --- | --- |
 | Model and provider | No effect on the page. Whether and how Pi searches is the model's choice. | No effect. |
 | Thinking level | No effect. | No effect. |
-| Execution mode | No effect. The three tools never ask, in Auto or Confirm. | No effect. |
+| Execution mode | Search/fetch and MCP discovery never ask. Auto calls ask unless explicitly read-only or remembered; Confirm calls always ask. | Applied when each call starts. |
 | Files in the workspace, or an overlay open | The page is part of the Settings overlay. | — |
 | Tab state (new, restored, another tab busy) | The session scope follows the tab's session; a new tab starts with session scope off and relies on the workbook scope (on, when the workbook cannot be identified). | A running turn keeps its tools; the change applies from the next request. |
 | Host (desktop or web) | Some providers block requests from the taskpane; those need the [proxy](../setup/the-proxy.md). Which ones work direct on which host was not checked. | No effect. |
@@ -103,7 +105,7 @@ The first time the taskpane starts with a provider connected, a bar under the he
 
 **Other tabs and sessions.** Global settings apply to all tabs at once; the session scope belongs to one session.
 
-**Execution mode and approvals.** No approvals. [Confirm mode and approvals](../workbook/confirm-mode-and-approvals.md) does not apply.
+**Execution mode and approvals.** MCP uses the shared approval queue, with no turn-wide opt-in. Confirm ignores remembered grants and read-only hints. Search/fetch remain ungated.
 
 **Models and providers.** Search follows the tab's selected provider when that route supports native search, using the same credentials. A search side request does not pollute the conversation's cached prefix. Changing to an unsupported provider with no fallback key removes the search integration from active capabilities; changing to a usable backend adds it. This intentional availability change can change the system prompt and tool prefix; repeated searches keep the schema stable.
 
@@ -137,4 +139,4 @@ The first time the taskpane starts with a provider connected, a bar under the he
 - The "Validate" toast puts the provider's raw JSON error in the message ("✗ Jina Search (default) search request failed (401): {"data":null,…}"). Small.
 - Confirmed against a mocked provider (no real key yet): "✓ Jina Search (default) key is valid (1 result, direct)." from Validate; a search card with "Web search via Jina Search (default)", the "Sent:" lines and two numbered results; a `fetch_page` card with "Fetched page content"; the Tavily-to-Jina fallback; "✓ Web search is ready — ask the assistant to try again." from the setup card. A real provider, the proxy path and the "needs setup" / "can't connect" cards were not tried.
 
-Verified against pi-for-excel commit `ec453df`.
+Historical observations above were verified against `ec453df`; SE-04 consent and grant/revoke behaviour is revised for PR #804. Unrelated search/availability observations remain historical and are not claims about that PR.

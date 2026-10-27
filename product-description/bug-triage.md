@@ -129,7 +129,7 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 | [P-117](#p-117-the-context-meters-colours-ignore-the-per-model-warning-budget-so-it-is-red-long-before-compaction-on-200k-models) | The context meter's colours ignore the per-model warning budget, so it is red long before compaction on 200k models | low | compaction | fix | Fixed in [#789](https://github.com/tmustier/pi-for-excel/pull/789) (merged 27 October 2026): colours now follow the compaction budget (red just before auto-compaction) |
 | [P-118](#p-118-the-percent-conventions-preview-does-not-multiply-by-100) | The Percent convention's preview does not multiply by 100 | low | conventions | fix | Fixed in [#788](https://github.com/tmustier/pi-for-excel/pull/788) (merged 27 October 2026) |
 | [P-119](#p-119-small-copy-and-rendering-slips-in-the-taskpane-and-turn) | Small copy and rendering slips in the taskpane and turn | low | copy | fix | per item above |
-| [P-120](#p-120-small-copy-and-translation-slips-in-setup) | Small copy and translation slips in setup | low | copy | fix | Fix in the remaining-bugs PR (not yet open): 2446d26 |
+| [P-120](#p-120-small-copy-and-translation-slips-in-setup) | Small copy and translation slips in setup | low | copy | fix | Fixed in [#806](https://github.com/tmustier/pi-for-excel/pull/806) (merged 27 October 2026) |
 | [P-121](#p-121-small-copy-and-rendering-slips-in-guidance-and-extensions) | Small copy and rendering slips in guidance and extensions | low | copy | fix | per sub-item above |
 | [P-122](#p-122-the-plugins-pages-busy-guard-is-never-set-so-double-clicks-can-start-two-installs-or-toggles) | The Plugins page's busy guard is never set, so double clicks can start two installs or toggles | low | extensions | fix | Fixed in [#790](https://github.com/tmustier/pi-for-excel/pull/790) (merged 27 October 2026) |
 | [P-123](#p-123-escape-in-the-files-preview-closes-the-whole-overlay-instead-of-going-back-to-the-list) | Escape in the Files preview closes the whole overlay instead of going back to the list | low | files | fix | Fixed in [#790](https://github.com/tmustier/pi-for-excel/pull/790) (merged 27 October 2026) |
@@ -150,7 +150,7 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 | [P-138](#p-138-nothing-in-the-ui-shows-that-rules-are-active) | Nothing in the UI shows that rules are active | low | rules | product call | Fixed in [#790](https://github.com/tmustier/pi-for-excel/pull/790) (merged 27 October 2026) |
 | [P-139](#p-139-a-double-click-on-a-resume-entry-can-start-two-resumes) | A double click on a resume entry can start two resumes | low | sessions | fix | Fixed in [#795](https://github.com/tmustier/pi-for-excel/pull/795) (merged 27 October 2026) |
 | [P-140](#p-140-the-audit-export-includes-entries-from-every-workbook-not-only-the-current-one) | The audit export includes entries from every workbook, not only the current one | low | sessions | product call | Fixed in [#795](https://github.com/tmustier/pi-for-excel/pull/795) (merged 27 October 2026) |
-| [P-141](#p-141-small-copy-and-rendering-slips-in-sessions-and-commands) | Small copy and rendering slips in sessions and commands | low | sessions | fix | Fix in the remaining-bugs PR (not yet open): 27702ec |
+| [P-141](#p-141-small-copy-and-rendering-slips-in-sessions-and-commands) | Small copy and rendering slips in sessions and commands | low | sessions | fix | Fixed in [#806](https://github.com/tmustier/pi-for-excel/pull/806) (merged 27 October 2026) |
 | [P-142](#p-142-busy-rules-differ-between-the-menu-or-status-bar-and-the-matching-slash-commands) | Busy rules differ between the menu or status bar and the matching slash commands | low | settings | product call | Fixed in [#795](https://github.com/tmustier/pi-for-excel/pull/795) (merged 27 October 2026) (picker part; the Settings part is not listed) |
 | [P-143](#p-143-f2-lets-focus-leave-the-settings-dialog-for-the-composer-behind-it) | F2 lets focus leave the Settings dialog for the composer behind it | low | settings | fix | Fixed on main 1f51cf8 (checked 27 October 2026) |
 | [P-144](#p-144-the-busy-dot-is-nearly-invisible-on-an-inactive-tab-in-the-light-theme) | The busy dot is nearly invisible on an inactive tab in the light theme | low | tabs | fix | Fixed in [#793](https://github.com/tmustier/pi-for-excel/pull/793) (merged 27 October 2026) |
@@ -177,10 +177,10 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 | [P-165](#p-165-toasts-cover-the-command-menus-lower-rows) | Toasts cover the command menu's lower rows | low | menus | fix | Fixed in [#793](https://github.com/tmustier/pi-for-excel/pull/793) (merged 27 October 2026): c88b997 |
 | [P-166](#p-166-copy-content-on-a-built-in-doc-fails-in-excel-for-mac) | Copy content on a built-in doc fails in Excel for Mac | low | files | fix | Fixed in [#790](https://github.com/tmustier/pi-for-excel/pull/790) (merged 27 October 2026): 3666748 |
 | [P-167](#p-167-after-save-as-the-tabs-stay-with-the-old-file-and-the-new-file-opens-a-fresh-chat) | After Save As, the tabs stay with the old file and the new file opens a fresh chat | medium | sessions | fix | Fixed in [#795](https://github.com/tmustier/pi-for-excel/pull/795) (merged 27 October 2026): d32fd2b |
-| [P-168](#p-168-the-screen-reader-announcement-for-an-approval-stays-after-stop-withdraws-it) | The screen-reader announcement for an approval stays after Stop withdraws it | low | accessibility | fix | Fix in the remaining-bugs PR (not yet open): 6f637da |
-| [P-169](#p-169-the-plugin-install-button-ignores-pointer-clicks-in-excel-for-mac) | The plugin Install button ignores pointer clicks in Excel for Mac | low | plugins | fix | Assigned to the remaining-bugs PR (in progress) |
-| [P-170](#p-170-dark-mode-leaves-the-gear-and-composer-file-buttons-light-with-a-pale-band-under-the-tabs) | Dark mode leaves the gear and composer file buttons light, with a pale band under the tabs | low | theme | fix | Assigned to the CC-10 theme PR (in progress) |
-| [P-171](#p-171-undo-this-turn-does-not-cover-direct-officejs-changes) | "Undo this turn" does not cover direct Office.js changes | low | workbook | fix | Follow-up after #808 (not started) |
+| [P-168](#p-168-the-screen-reader-announcement-for-an-approval-stays-after-stop-withdraws-it) | The screen-reader announcement for an approval stays after Stop withdraws it | low | accessibility | fix | Fixed in [#806](https://github.com/tmustier/pi-for-excel/pull/806) (merged 27 October 2026) |
+| [P-169](#p-169-the-plugin-install-button-ignores-pointer-clicks-in-excel-for-mac) | The plugin Install button ignores pointer clicks in Excel for Mac | low | plugins | fix | Open: not reproduced on the web; Mac cause unknown |
+| [P-170](#p-170-dark-mode-leaves-the-gear-and-composer-file-buttons-light-with-a-pale-band-under-the-tabs) | Dark mode leaves the gear and composer file buttons light, with a pale band under the tabs | low | theme | fix | Fixed in [#802](https://github.com/tmustier/pi-for-excel/pull/802) (open) |
+| [P-171](#p-171-undo-this-turn-does-not-cover-direct-officejs-changes) | "Undo this turn" does not cover direct Office.js changes | low | workbook | fix | Follow-up (not started); [#808](https://github.com/tmustier/pi-for-excel/pull/808) (merged) shows the warning |
 
 ## High
 
@@ -1659,7 +1659,7 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Decision needed:** `fix`: route strings through `t()`, make OS wording neutral, use the stored name, align the command.
 - **Raised by:** LOGIN-34, GATEWAY-07, GATEWAY-18; [welcome and login](setup/welcome-and-login.md#open-questions-and-verification), [custom gateways](setup/custom-gateways.md#open-questions-and-verification), [settings](setup/settings.md#open-questions-and-verification), [the proxy](setup/the-proxy.md#open-questions-and-verification)
 - **Status:** Confirmed in Excel on the web and the standalone taskpane, 26 October 2026 (LOGIN-34, GATEWAY-07, GATEWAY-18); items 3, 5, 6 from code
-- **Owner:** Fix in the remaining-bugs PR (not yet open): 2446d26
+- **Owner:** Fixed in [#806](https://github.com/tmustier/pi-for-excel/pull/806) (merged 27 October 2026)
 
 ### P-121: Small copy and rendering slips in guidance and extensions
 
@@ -1927,7 +1927,7 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Decision needed:** `fix` for the count, Ctrl+P text and prompt title; `product call` for the wording and tooltip.
 - **Raised by:** [sessions and tabs](foundations/sessions-and-tabs.md#open-questions-and-verification), [the command menu](commands/the-command-menu.md#open-questions-and-verification), [renaming a tab](sessions/renaming-a-tab.md#open-questions-and-verification), [empty state and hints](commands/empty-state-and-hints.md#open-questions-and-verification), [tabs](sessions/tabs.md#open-questions-and-verification)
 - **Status:** Confirmed in Excel on the web, 26 October 2026 (SESS-10, EXPORT-10, MENU-19, RENAME-01, RENAME-05, HINTS-02, TABS-05); the prompt title is suspected from code
-- **Owner:** Fix in the remaining-bugs PR (not yet open): 27702ec
+- **Owner:** Fixed in [#806](https://github.com/tmustier/pi-for-excel/pull/806) (merged 27 October 2026)
 
 ### P-142: Busy rules differ between the menu or status bar and the matching slash commands
 
@@ -2215,7 +2215,7 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Decision needed:** `fix`.
 - **Raised by:** guidance re-check on stack top 97e15a3, 27 October 2026
 - **Status:** Confirmed in Excel on the web on 2d91e58 and 97e15a3.
-- **Owner:** Fix in the remaining-bugs PR (not yet open): 6f637da
+- **Owner:** Fixed in [#806](https://github.com/tmustier/pi-for-excel/pull/806) (merged 27 October 2026)
 
 ### P-169: The plugin Install button ignores pointer clicks in Excel for Mac
 
@@ -2227,7 +2227,7 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Decision needed:** `fix`.
 - **Raised by:** Desktop pass (HUB-16) on stack top 97e15a3, 27 October 2026
 - **Status:** Seen once in Excel for Mac. Does not reproduce in Excel on the web (trusted pointer click, keyboard and DOM activation all work, flag on and off); the Mac cause is unknown.
-- **Owner:** Assigned to the remaining-bugs PR (in progress)
+- **Owner:** Open: not reproduced on the web; Mac cause unknown
 
 ### P-170: Dark mode leaves the gear and composer file buttons light, with a pale band under the tabs
 
@@ -2238,8 +2238,8 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Severity:** `low`.
 - **Decision needed:** `fix`.
 - **Raised by:** Desktop pass (EXP-03) on stack top 97e15a3, 27 October 2026
-- **Status:** Confirmed in Excel for Mac.
-- **Owner:** Assigned to the CC-10 theme PR (in progress)
+- **Status:** Confirmed in Excel for Mac. Fixed in #802 (e1582a1), including dark Settings selects; checked in screenshots.
+- **Owner:** Fixed in [#802](https://github.com/tmustier/pi-for-excel/pull/802) (open)
 
 ### P-171: "Undo this turn" does not cover direct Office.js changes
 
@@ -2251,4 +2251,4 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Decision needed:** `fix`.
 - **Raised by:** CL-01 implementation (#808), 27 October 2026
 - **Status:** Scope decision: not required for CL-01; #808 must say these changes are not covered.
-- **Owner:** Follow-up after #808 (not started)
+- **Owner:** Follow-up (not started); [#808](https://github.com/tmustier/pi-for-excel/pull/808) (merged) shows the warning
