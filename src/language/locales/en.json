@@ -1168,7 +1168,6 @@
   "welcome.proxy.save": "Save",
   "welcome.proxy.title": "Local HTTPS proxy",
   "welcome.proxy.title_remote": "Organisation proxy",
-  "welcome.proxy.toggle_hide": "Hide proxy settings",
   "welcome.proxy.toggle_show": "Having login trouble? Configure local proxy",
   "welcome.proxy.toggle_show_remote": "Having login trouble? Check proxy settings",
   "welcome.select_provider": "Select provider",

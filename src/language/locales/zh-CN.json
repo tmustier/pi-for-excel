@@ -1168,7 +1168,6 @@
   "welcome.proxy.save": "保存",
   "welcome.proxy.title": "本地 HTTPS 代理",
   "welcome.proxy.title_remote": "组织代理",
-  "welcome.proxy.toggle_hide": "隐藏代理设置",
   "welcome.proxy.toggle_show": "登录遇到问题？配置本地代理",
   "welcome.proxy.toggle_show_remote": "登录遇到问题？检查代理设置",
   "welcome.select_provider": "选择服务商",
