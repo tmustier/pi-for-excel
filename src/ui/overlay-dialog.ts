@@ -58,11 +58,6 @@ export interface OverlayDialogOptions {
    */
   onEscape?: () => boolean;
   zIndex?: number;
-  /**
-   * Called on Escape before the overlay closes. Return true when the dialog
-   * handled it (e.g. went back one level) so the overlay stays open.
-   */
-  onEscape?: () => boolean;
 }
 
 export interface OverlayDialogController {
