@@ -25,6 +25,61 @@ const rows = [
   { name: "UTF-8 BOM", markdown: "\uFEFF---\nname: skill\ndescription: Test\n---\n# BOM marker", visible: "BOM marker", hidden: "description: Test" },
 ] as const;
 
+void test("answer and table copy use TSV and expose manual fallback without claiming success", async () => {
+  await withTaskpane(async (page) => {
+    await page.evaluate(() => {
+      Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: () => Promise.reject(new Error("Frame denied")) } });
+      document.execCommand = () => false;
+      const sidebar = document.querySelector("pi-sidebar");
+      sidebar.agent.state.messages.push({
+        role: "assistant", content: [
+          { type: "thinking", thinking: "Private reasoning" },
+          { type: "text", text: "**Forecast**\n\n| Region | Revenue |\n| --- | --- |\n| East | 17 |\n| West | 29 |\n\n```text\nraw <value>\n```" },
+        ], api: "openai-responses", provider: "openai", model: "fixture",
+        usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+        stopReason: "stop", timestamp: 1,
+      });
+      sidebar.syncFromAgent();
+    });
+    const dialog = page.locator(".pi-copy-text__value");
+    await page.getByRole("button", { name: "Copy table", exact: true }).click();
+    assert.equal(await dialog.inputValue(), "Region\tRevenue\nEast\t17\nWest\t29");
+    await page.getByRole("button", { name: "Done", exact: true }).click();
+    await page.getByRole("button", { name: "Copy answer", exact: true }).click();
+    const answer = await dialog.inputValue();
+    assert.match(answer, /Forecast/);
+    assert.match(answer, /Region\tRevenue\nEast\t17\nWest\t29/);
+    assert.match(answer, /raw <value>/);
+    assert.doesNotMatch(answer, /Private reasoning|Copy table|Copy answer|```|\| Region/);
+    await page.getByRole("button", { name: "Done", exact: true }).click();
+    await page.locator("code-block").getByRole("button", { name: "Copy", exact: true }).click();
+    assert.equal(await dialog.inputValue(), "raw <value>\n");
+    assert.equal(await page.getByText("Copied!", { exact: true }).count(), 0);
+  });
+});
+
+void test("only valid qualified references on known sheets become answer links, not code or ordinary links", async () => {
+  await withTaskpane(async (page) => {
+    await page.evaluate(async () => {
+      // Narrow external metadata/selection boundary; real Excel is tested separately.
+      const context = {
+        workbook: { worksheets: { items: [{ name: "Sheet1" }, { name: "Q3 Plan" }, { name: "Bob's" }], load: () => {} } },
+        sync: () => Promise.resolve(),
+      };
+      Reflect.set(window, "Excel", { run: (callback: (ctx: typeof context) => Promise<Set<string>>) => callback(context) });
+      const block = document.createElement("markdown-block");
+      block.answer = true;
+      block.content = "Sheet1!B2:B40, 'Q3 Plan'!$C$4:F9 and 'Bob''s'!A1. Unknown!A1 Sheet1!XFE1 Sheet1!A1048577 Sheet1!A0 B12 FY24. `Sheet1!C3` [Sheet1!D4](https://example.com)\n\n```text\nSheet1!E5\n```";
+      document.querySelector(".pi-messages").append(block);
+      await block.updateComplete;
+    });
+    const links = page.locator("markdown-block a.pi-cell-ref");
+    await links.nth(2).waitFor();
+    assert.deepEqual(await links.allTextContents(), ["Sheet1!B2:B40", "'Q3 Plan'!$C$4:F9", "'Bob''s'!A1"]);
+    assert.equal(await page.getByRole("link", { name: "Sheet1!D4", exact: true }).getAttribute("href"), "https://example.com");
+  });
+});
+
 void test("assistant tool Markdown renders all seven frontmatter forms correctly", async () => {
   for (const [index, row] of rows.entries()) {
     await withTaskpane(async (page) => {

@@ -66,7 +66,7 @@ async function navigateToRange(address: string): Promise<void> {
 }
 
 /** Navigate, and tell the user when Excel refuses (deleted sheet, cell in edit mode, no Excel). */
-async function followCellLink(address: string): Promise<void> {
+export async function followCellLink(address: string): Promise<void> {
   try {
     await navigateToRange(address);
   } catch (error) {

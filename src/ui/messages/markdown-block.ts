@@ -26,6 +26,11 @@ import { marked } from "marked";
 
 import { encodeBase64Utf8 } from "../../utils/base64-text.js";
 import { escapeAttr } from "../../utils/html.js";
+import { excelRun } from "../../excel/helpers.js";
+import { followCellLink } from "../cell-link.js";
+import { copyText } from "../copy-text.js";
+import { t } from "../../language/index.js";
+import { showToast } from "../toast.js";
 
 /**
  * Escape raw HTML tags while preserving markdown syntax.
@@ -73,11 +78,100 @@ function codeBlockElement(language: string, code: string): string {
   return `<div class="pi-md-code"><code-block language="${escapeAttr(language)}" encoding="base64" code="${encoded}"></code-block></div>`;
 }
 
+/** Rendered answer text, with real cell separators rather than Markdown pipes. */
+export function markdownText(node: Node): string {
+  if (node instanceof Text) return node.data;
+  if (!(node instanceof Element)) return "";
+  if (node.matches("button")) return "";
+  if (node instanceof HTMLTableElement) {
+    return Array.from(node.rows, (row) => Array.from(row.cells,
+      (cell) => cell.innerText.replace(/\s*\n\s*/g, " ").replace(/\t/g, " ").trim(),
+    ).join("\t")).join("\n") + "\n\n";
+  }
+  if (node.localName === "code-block") return node.querySelector("pre")?.textContent ?? "";
+  if (node.localName === "br") return "\n";
+  const text = Array.from(node.childNodes, markdownText).join("");
+  return /^(p|h[1-6]|li|blockquote|pre)$/.test(node.localName) ? text + "\n\n" : text;
+}
+
 @customElement("markdown-block")
 export class MarkdownBlock extends LitElement {
   @property() content = "";
   @property({ type: Boolean }) isThinking = false;
   @property({ type: Boolean }) escapeHtml = true;
+  /** Only completed assistant prose gets workbook links and table actions. */
+  @property({ type: Boolean }) answer = false;
+
+  protected override updated(): void {
+    if (!this.answer) return;
+    for (const button of this.querySelectorAll(".pi-answer-copy")) button.remove();
+    for (const table of this.querySelectorAll("table")) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "pi-answer-copy";
+      button.textContent = t("messages.copyTable");
+      button.addEventListener("click", () => {
+        const text = markdownText(table).slice(0, -2);
+        void copyText(text).then((outcome) => {
+          if (outcome === "copied") showToast(t("code-block.copied"));
+        });
+      });
+      table.parentElement?.append(button);
+    }
+
+    const container = this.querySelector(".pi-markdown");
+    if (!container || typeof Excel === "undefined") return;
+    // One metadata read per completed text block, never per token/reference.
+    void excelRun(async (ctx) => {
+      const sheets = ctx.workbook.worksheets;
+      sheets.load("items/name");
+      await ctx.sync();
+      return new Set(sheets.items.map((sheet) => sheet.name.toLowerCase()));
+    }).then((sheets) => {
+      if (!container.isConnected || container !== this.querySelector(".pi-markdown")) return;
+      const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+      const nodes: Text[] = [];
+      while (walker.nextNode()) {
+        const node = walker.currentNode;
+        if (node instanceof Text && !node.parentElement?.closest("a, code, pre, code-block, button")) nodes.push(node);
+      }
+      for (const node of nodes) {
+        const text = node.data;
+        const fragment = document.createDocumentFragment();
+        let end = 0;
+        // Qualified references only: bare Q3/FY24 can be ordinary prose.
+        const refs = /(?<![\p{L}\p{N}_!'\[\]])('(?:[^'\n]|'')+'|[\p{L}_][\p{L}\p{N}_.]*)!(\$?[A-Za-z]{1,3}\$?[1-9]\d{0,6})(?::(\$?[A-Za-z]{1,3}\$?[1-9]\d{0,6}))?(?![\p{L}\p{N}_:])/gu;
+        for (const match of text.matchAll(refs)) {
+          const [address, sheet, start, finish] = match;
+          if (!sheet || !start) continue;
+          const name = sheet.startsWith("'") ? sheet.slice(1, -1).replace(/''/g, "'") : sheet;
+          const valid = [start, finish].every((cell) => {
+            if (!cell) return true;
+            const letters = cell.replace(/[^A-Za-z]/g, "").toUpperCase();
+            const column = Array.from(letters).reduce((n, c) => n * 26 + c.charCodeAt(0) - 64, 0);
+            return column <= 16384 && Number(cell.replace(/[^0-9]/g, "")) <= 1048576;
+          });
+          if (!valid || !sheets.has(name.toLowerCase())) continue;
+          fragment.append(text.slice(end, match.index));
+          const link = document.createElement("a");
+          link.className = "pi-cell-ref";
+          link.href = "#";
+          link.textContent = address;
+          link.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            void followCellLink(address);
+          });
+          fragment.append(link);
+          end = match.index + address.length;
+        }
+        if (end > 0) {
+          fragment.append(text.slice(end));
+          node.replaceWith(fragment);
+        }
+      }
+    }).catch(() => { /* Workbook metadata unavailable: keep readable plain text. */ });
+  }
 
   protected override createRenderRoot(): HTMLElement | DocumentFragment {
     return this;

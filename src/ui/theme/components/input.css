@@ -104,6 +104,14 @@ pi-input {
   color: var(--foreground);
 }
 
+.dark .pi-input-btn--attach {
+  background: var(--glass-bg-solid);
+}
+
+.dark .pi-input-btn--attach:hover {
+  background: var(--accent);
+}
+
 .pi-input-btn--attach svg {
   width: 14px;
   height: 14px;

@@ -65,13 +65,13 @@ void test("renamed and closed tabs restore with the active tab after reload", as
     await welcome.dispatchEvent("click");
     await welcome.waitFor({ state: "detached" });
     await page.locator("pi-input textarea").click();
-    await page.keyboard.press("Control+Shift+T");
+    await page.keyboard.press("Control+Alt+Shift+T");
     await page.locator(".pi-session-tab.is-active .pi-session-tab__title").filter({ hasText: "Revenue Model" })
       .waitFor({ state: "visible" });
   });
 });
 
-void test("Ctrl+PageDown switches tabs while a tab has focus, and tab shortcuts ignore an open dialog", async () => {
+void test("Ctrl+Alt arrows switch tabs from tab or composer focus, and tab shortcuts ignore an open dialog", async () => {
   await withTaskpane(async (page) => {
     await page.getByRole("button", { name: "New tab" }).click();
     const active = page.locator(".pi-session-tab.is-active .pi-session-tab__title");
@@ -82,16 +82,17 @@ void test("Ctrl+PageDown switches tabs while a tab has focus, and tab shortcuts 
     await page.waitForFunction(() => document.activeElement?.closest("pi-input") !== null);
     await page.locator(".pi-session-tab.is-active .pi-session-tab__main").focus();
     await page.waitForFunction(() => document.activeElement?.closest(".pi-session-tab") !== null);
-    await page.keyboard.press("Control+PageDown");
+    await page.keyboard.press("Control+Alt+ArrowRight");
     await active.filter({ hasText: "Chat 1" }).waitFor({ state: "visible" });
-    await page.keyboard.press("Control+PageUp");
+    await page.locator("pi-input textarea").focus();
+    await page.keyboard.press("Control+Alt+ArrowLeft");
     await active.filter({ hasText: "Chat 2" }).waitFor({ state: "visible" });
 
     await page.locator("pi-input textarea").fill("/settings");
     await page.locator("pi-input textarea").press("Enter");
     await page.locator("#pi-settings-overlay").waitFor({ state: "visible" });
-    await page.keyboard.press("Control+t");
-    await page.keyboard.press("Control+w");
+    await page.keyboard.press("Control+Alt+n");
+    await page.keyboard.press("Control+Alt+w");
     await page.waitForTimeout(300);
     assert.equal(await page.locator(".pi-session-tab").count(), 2);
     assert.equal(await active.innerText(), "Chat 2");
@@ -120,22 +121,20 @@ void test("visible tab titles follow default numbering and explicit renames", as
   });
 });
 
-void test("Ctrl+Z reopens a closed tab only while its Undo toast is showing", async () => {
+void test("Ctrl/Cmd+Z never reopens tabs; common tab chords work in the composer", async () => {
   await withTaskpane(async (page) => {
     const tabs = page.locator(".pi-session-tab");
-    const newTab = page.getByRole("button", { name: "New tab" });
     const composer = page.locator("pi-input textarea");
-    await newTab.click();
+    await composer.focus();
+    await page.keyboard.press("Control+Alt+n");
     await tabs.filter({ hasText: "Chat 2" }).waitFor({ state: "visible" });
 
     await tabs.filter({ hasText: "Chat 2" }).getByRole("button", { name: "Close tab" }).click();
     await page.locator("#pi-toast").getByText("Closed Chat 2").waitFor({ state: "visible" });
     await composer.click();
     await page.keyboard.press("Control+z");
-    await tabs.filter({ hasText: "Chat 2" }).waitFor({ state: "visible" });
-
-    await tabs.filter({ hasText: "Chat 2" }).getByRole("button", { name: "Close tab" }).click();
-    await tabs.filter({ hasText: "Chat 2" }).waitFor({ state: "detached" });
+    await page.keyboard.press("Meta+z");
+    assert.equal(await tabs.count(), 1);
     // After a reload the toast is gone but the tab is still in recently closed.
     await page.reload();
     await composer.waitFor({ state: "visible", timeout: 20_000 });
@@ -147,8 +146,11 @@ void test("Ctrl+Z reopens a closed tab only while its Undo toast is showing", as
     await page.waitForTimeout(500);
     assert.deepEqual(await page.locator(".pi-session-tab__title").allTextContents(), ["Chat 1"]);
 
-    await page.keyboard.press("Control+Shift+T");
+    await page.keyboard.press("Control+Alt+Shift+T");
     await tabs.filter({ hasText: "Chat 2" }).waitFor({ state: "visible" });
+    await composer.focus();
+    await page.keyboard.press("Control+Alt+w");
+    await tabs.filter({ hasText: "Chat 2" }).waitFor({ state: "detached" });
   });
 });
 

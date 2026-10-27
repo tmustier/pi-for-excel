@@ -13,7 +13,6 @@ export interface TabShortcutEventLike {
 }
 
 export type ReopenShortcutEventLike = TabShortcutEventLike;
-export type UndoCloseShortcutEventLike = TabShortcutEventLike;
 export type CreateTabShortcutEventLike = TabShortcutEventLike;
 export type CloseTabShortcutEventLike = TabShortcutEventLike;
 
@@ -47,7 +46,7 @@ export interface RestoreQueuedShortcutEventLike {
   altKey: boolean;
 }
 
-function isShortcutLetter(event: TabShortcutEventLike, letter: "t" | "w" | "z"): boolean {
+function isShortcutLetter(event: TabShortcutEventLike, letter: "t" | "w" | "n"): boolean {
   if (event.key.toLowerCase() === letter) {
     return true;
   }
@@ -57,7 +56,7 @@ function isShortcutLetter(event: TabShortcutEventLike, letter: "t" | "w" | "z"):
     return true;
   }
 
-  const keyCode = letter === "t" ? 84 : letter === "w" ? 87 : 90;
+  const keyCode = letter === "t" ? 84 : letter === "w" ? 87 : 78;
   if (event.keyCode === keyCode) {
     return true;
   }
@@ -66,29 +65,19 @@ function isShortcutLetter(event: TabShortcutEventLike, letter: "t" | "w" | "z"):
 }
 
 export function isCreateTabShortcut(event: CreateTabShortcutEventLike): boolean {
-  if (!(event.metaKey || event.ctrlKey)) return false;
-  if (event.shiftKey || event.altKey) return false;
+  if (!event.ctrlKey || !event.altKey || event.metaKey || event.shiftKey) return false;
 
-  return isShortcutLetter(event, "t");
+  return isShortcutLetter(event, "n");
 }
 
 export function isCloseActiveTabShortcut(event: CloseTabShortcutEventLike): boolean {
-  if (!(event.metaKey || event.ctrlKey)) return false;
-  if (event.shiftKey || event.altKey) return false;
+  if (!event.ctrlKey || !event.altKey || event.metaKey || event.shiftKey) return false;
 
   return isShortcutLetter(event, "w");
 }
 
-export function isUndoCloseTabShortcut(event: UndoCloseShortcutEventLike): boolean {
-  if (!(event.metaKey || event.ctrlKey)) return false;
-  if (event.shiftKey || event.altKey) return false;
-
-  return isShortcutLetter(event, "z");
-}
-
 export function isReopenLastClosedShortcut(event: ReopenShortcutEventLike): boolean {
-  if (!(event.metaKey || event.ctrlKey)) return false;
-  if (!event.shiftKey || event.altKey) return false;
+  if (!event.ctrlKey || !event.altKey || event.metaKey || !event.shiftKey) return false;
 
   return isShortcutLetter(event, "t");
 }
@@ -107,16 +96,10 @@ export function getAdjacentTabDirectionFromShortcut(
   const code = event.code;
   const keyCode = event.keyCode;
 
-  // Fallback chords for hosts that swallow plain arrow keys.
-  if (event.metaKey && event.shiftKey && !event.ctrlKey && !event.altKey) {
-    if (key === "[") return -1;
-    if (key === "]") return 1;
+  if (event.ctrlKey && event.altKey && !event.metaKey && !event.shiftKey) {
+    if (key === "ArrowLeft" || code === "ArrowLeft") return -1;
+    if (key === "ArrowRight" || code === "ArrowRight") return 1;
     return null;
-  }
-
-  if (event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) {
-    if (key === "PageUp") return -1;
-    if (key === "PageDown") return 1;
   }
 
   if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return null;

@@ -28,6 +28,7 @@ import { Check, Copy } from "lucide";
 import { icon } from "../icons.js";
 import { t } from "../../language/index.js";
 import { decodeBase64Utf8 } from "../../utils/base64-text.js";
+import { copyText } from "../copy-text.js";
 
 hljs.registerLanguage("javascript", javascript);
 hljs.registerLanguage("typescript", typescript);
@@ -38,24 +39,6 @@ hljs.registerLanguage("css", css);
 hljs.registerLanguage("json", json);
 hljs.registerLanguage("bash", bash);
 hljs.registerLanguage("sql", sql);
-
-/** Legacy fallback for WebViews where the async clipboard API is rejected. */
-function copyViaHiddenTextarea(text: string): void {
-  const textarea = document.createElement("textarea");
-  textarea.value = text;
-  textarea.setAttribute("readonly", "");
-  textarea.style.position = "fixed";
-  textarea.style.opacity = "0";
-  document.body.appendChild(textarea);
-  textarea.select();
-  try {
-    if (!document.execCommand("copy")) {
-      throw new Error("execCommand copy failed");
-    }
-  } finally {
-    textarea.remove();
-  }
-}
 
 @customElement("code-block")
 export class CodeBlock extends LitElement {
@@ -95,10 +78,9 @@ export class CodeBlock extends LitElement {
 
   private _copy(): void {
     const code = this._decodedCode();
-    void navigator.clipboard
-      .writeText(code)
-      .catch(() => copyViaHiddenTextarea(code))
-      .then(() => {
+    void copyText(code)
+      .then((outcome) => {
+        if (outcome !== "copied") return;
         this._copied = true;
         if (this._copyResetTimer !== undefined) {
           window.clearTimeout(this._copyResetTimer);

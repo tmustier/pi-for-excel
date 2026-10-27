@@ -1,198 +1,49 @@
-function isUiThemeModePayloadShape(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-/**
- * Dark/light mode synchronization.
- *
- * Dark mode is gated behind /experimental dark-mode.
- * When disabled, UI remains in light mode.
- */
-
-import {
-  PI_EXPERIMENTAL_FEATURE_CHANGED_EVENT,
-  type ExperimentalFeatureChangedDetail,
-} from "../experiments/events.js";
-import {
-  isExperimentalFeatureEnabled,
-  type ExperimentalFeatureId,
-} from "../experiments/flags.js";
+/** Theme choice is synchronous so it applies before the first taskpane paint. */
 import {
   createSpreadsheetHost,
   detectSpreadsheetHost,
   getCurrentSpreadsheetHost,
-  type SpreadsheetHost,
 } from "../host/index.js";
 
-const DARK_MODE_EXPERIMENT_ID: ExperimentalFeatureId = "ui_dark_mode";
+export type ThemeMode = "office" | "light" | "dark";
+const THEME_KEY = "pi.ui.theme";
+const THEME_CHANGED = "pi:theme-changed";
 
-function isDarkModeExperimentEnabled(): boolean {
-  return isExperimentalFeatureEnabled(DARK_MODE_EXPERIMENT_ID);
+export function getThemeMode(): ThemeMode {
+  try {
+    const stored = localStorage.getItem(THEME_KEY);
+    if (stored === "light" || stored === "dark") return stored;
+  } catch { /* Storage unavailable: follow Office. */ }
+  return "office";
 }
 
-function resolveHostThemeDark(): boolean | null {
-  const currentHost = getCurrentSpreadsheetHost();
-  const currentTheme = currentHost.resolveThemeDark();
-  if (currentTheme !== null) {
-    return currentTheme;
-  }
-
-  // Preserve the old Office retry behavior for local browser loads where
-  // Office.js appears after this module is installed but before/on ready.
-  if (currentHost.kind !== "office" && detectSpreadsheetHost() === "office") {
-    return createSpreadsheetHost("office").resolveThemeDark();
-  }
-
-  return null;
-}
-
-function resolvePreferredDark(mediaMatches: boolean): boolean {
-  if (!isDarkModeExperimentEnabled()) {
-    return false;
-  }
-
-  const hostDark = resolveHostThemeDark();
-  if (hostDark !== null) {
-    return hostDark;
-  }
-
-  return mediaMatches;
-}
-
-function isExperimentalFeatureChangedEvent(
-  event: Event,
-): event is CustomEvent<ExperimentalFeatureChangedDetail> {
-  if (!(event instanceof CustomEvent)) {
-    return false;
-  }
-
-  const detail: unknown = event.detail;
-  if (!isUiThemeModePayloadShape(detail)) {
-    return false;
-  }
-
-  return typeof detail.featureId === "string"
-    && typeof detail.enabled === "boolean";
-}
-
-function getOfficeReadyHostForTheme(): SpreadsheetHost | null {
-  const currentHost = getCurrentSpreadsheetHost();
-  if (currentHost.kind === "office") {
-    return currentHost;
-  }
-
-  if (detectSpreadsheetHost() === "office") {
-    return createSpreadsheetHost("office");
-  }
-
-  return null;
+export function setThemeMode(mode: ThemeMode): void {
+  localStorage.setItem(THEME_KEY, mode);
+  document.dispatchEvent(new Event(THEME_CHANGED));
 }
 
 export function installThemeModeSync(): () => void {
-  if (typeof document === "undefined" || typeof window === "undefined") {
-    return () => {};
-  }
-
-  const root = document.documentElement;
-  const media = window.matchMedia("(prefers-color-scheme: dark)");
-
-  const apply = () => {
-    root.classList.toggle("dark", resolvePreferredDark(media.matches));
+  if (typeof document === "undefined" || typeof window === "undefined") return () => {};
+  const apply = (): void => {
+    const mode = getThemeMode();
+    const currentHost = getCurrentSpreadsheetHost();
+    const host = currentHost.kind !== "office" && detectSpreadsheetHost() === "office"
+      ? createSpreadsheetHost("office") : currentHost;
+    // Office on the web can report no usable theme. Do not substitute the OS
+    // preference: the workbook may still be light. Explicit Dark always works.
+    const dark = mode === "dark" || (mode === "office" && host.resolveThemeDark() === true);
+    document.documentElement.classList.toggle("dark", dark);
+    document.documentElement.style.colorScheme = dark ? "dark" : "light";
   };
-
   apply();
-
-  let disposed = false;
-  let officeReadyHooked = false;
-  let officeReadyDispose: (() => void) | null = null;
-  let officeRetryTimer: number | null = null;
-  let officeRetryStopTimer: number | null = null;
-
-  const registerOfficeReadyHook = (): void => {
-    if (officeReadyHooked) {
-      return;
-    }
-
-    const officeHost = getOfficeReadyHostForTheme();
-    if (!officeHost) {
-      return;
-    }
-
-    officeReadyHooked = true;
-    officeReadyDispose = officeHost.onReady(() => {
-      if (disposed) return;
-      apply();
-    });
-  };
-
-  registerOfficeReadyHook();
-
-  if (!officeReadyHooked) {
-    officeRetryTimer = window.setInterval(() => {
-      registerOfficeReadyHook();
-      if (officeReadyHooked && officeRetryTimer !== null) {
-        clearInterval(officeRetryTimer);
-        officeRetryTimer = null;
-      }
-    }, 500);
-
-    officeRetryStopTimer = window.setTimeout(() => {
-      if (officeRetryTimer !== null) {
-        clearInterval(officeRetryTimer);
-        officeRetryTimer = null;
-      }
-      officeRetryStopTimer = null;
-    }, 15_000);
-  }
-
-  const onMediaChange = () => {
-    apply();
-  };
-
-  const onExperimentalFeatureChange = (event: Event) => {
-    if (!isExperimentalFeatureChangedEvent(event)) {
-      return;
-    }
-
-    if (event.detail.featureId !== DARK_MODE_EXPERIMENT_ID) {
-      return;
-    }
-
-    apply();
-  };
-
-  document.addEventListener(
-    PI_EXPERIMENTAL_FEATURE_CHANGED_EVENT,
-    onExperimentalFeatureChange,
-  );
-
-  const cleanup = (): void => {
-    disposed = true;
-    document.removeEventListener(
-      PI_EXPERIMENTAL_FEATURE_CHANGED_EVENT,
-      onExperimentalFeatureChange,
-    );
-    officeReadyDispose?.();
-    if (officeRetryTimer !== null) {
-      clearInterval(officeRetryTimer);
-    }
-    if (officeRetryStopTimer !== null) {
-      clearTimeout(officeRetryStopTimer);
-    }
-  };
-
-  if (typeof media.addEventListener === "function") {
-    media.addEventListener("change", onMediaChange);
-
-    return () => {
-      cleanup();
-      media.removeEventListener("change", onMediaChange);
-    };
-  }
-
-  media.addListener(onMediaChange);
+  // Excel has no OfficeThemeChanged event (that event is Outlook-only).
+  // Re-read the host's small theme snapshot to follow changes and late Office boot.
+  const timer = window.setInterval(apply, 1000);
+  document.addEventListener(THEME_CHANGED, apply);
+  window.addEventListener("storage", apply);
   return () => {
-    cleanup();
-    media.removeListener(onMediaChange);
+    window.clearInterval(timer);
+    document.removeEventListener(THEME_CHANGED, apply);
+    window.removeEventListener("storage", apply);
   };
 }

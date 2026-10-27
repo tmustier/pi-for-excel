@@ -146,7 +146,6 @@ function parseExtensionCapability(value: string): ExtensionCapability {
 
 function parseExperimentalFeatureId(value: string): ExperimentalFeatureId {
   switch (value) {
-    case "ui_dark_mode":
     case "remote_extension_urls":
     case "extension_sandbox_runtime":
     case "extension_widget_v2":

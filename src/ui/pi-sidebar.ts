@@ -1006,8 +1006,7 @@ export class PiSidebar extends LitElement {
             ›
           </button>
         </div>
-        <!-- Outside the scroller so it stays visible however many tabs are open
-             (on the web Ctrl+T belongs to the browser; this is the only way in). -->
+        <!-- Outside the scroller so it stays visible however many tabs are open. -->
         <button class="pi-session-tabs__new" @click=${() => this.onCreateTab?.()} aria-label=${t("sidebar.tabs.new")}>+</button>
         <div class="pi-utilities-anchor">
           <button

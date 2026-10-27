@@ -32,6 +32,7 @@ import {
 import type { SettingsPageContext, SettingsShellPage } from "../../../ui/settings-shell.js";
 import { requestConfirmationDialog } from "../../../ui/confirm-dialog.js";
 import { showToast } from "../../../ui/toast.js";
+import { getThemeMode, setThemeMode } from "../../../ui/theme-mode.js";
 import { getSettingsPagesDependencies } from "./dependencies.js";
 
 function isRootPagePayloadShape(value: unknown): value is Record<string, unknown> {
@@ -195,7 +196,27 @@ function buildBehaviorGroup(ctx: SettingsPageContext): HTMLElement {
     },
   });
 
-  group.list.append(autoApply.root, languageRow.root);
+  const themeRow = createSettingSelectRow({
+    label: t("settings.theme.label"),
+    options: [
+      { value: "office", label: t("settings.theme.office") },
+      { value: "light", label: t("settings.theme.light") },
+      { value: "dark", label: t("settings.theme.dark") },
+    ],
+    value: getThemeMode(),
+    onChange: (mode) => {
+      if (mode !== "office" && mode !== "light" && mode !== "dark") return;
+      try {
+        setThemeMode(mode);
+      } catch {
+        themeRow.select.value = getThemeMode();
+        showToast(t("settings.theme.saveFailed"), { variant: "error" });
+      }
+    },
+  });
+  themeRow.select.setAttribute("aria-label", t("settings.theme.label"));
+
+  group.list.append(autoApply.root, themeRow.root, languageRow.root);
   return group.root;
 }
 

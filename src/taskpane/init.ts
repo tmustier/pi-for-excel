@@ -2394,11 +2394,6 @@ export async function initTaskpane(opts: {
     onReopenLastClosed: () => {
       void reopenLastClosed();
     },
-    // Ctrl/Cmd+Z reopens only the tab whose Undo toast is on screen. Recently
-    // closed now survives reloads, so a bare Ctrl+Z could otherwise bring back a
-    // tab closed days ago when the user meant to undo in Excel (CL-02).
-    // /reopen and the resume picker still reach older tabs.
-    canUndoCloseTab: () => closeUndoToast?.toast.isShowing() === true,
     onSwitchAdjacentTab: (direction: -1 | 1) => {
       const tabs = runtimeManager.snapshotTabs();
       if (tabs.length <= 1) {

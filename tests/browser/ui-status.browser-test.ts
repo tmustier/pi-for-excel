@@ -227,7 +227,7 @@ void test("a tab switch closes the thinking popover instead of leaving it bound 
     const popover = page.locator(".pi-status-popover--thinking");
     await popover.waitFor({ state: "visible" });
     // Keyboard switch: no outside click to close the popover as a side effect.
-    await page.keyboard.press("Control+PageUp");
+    await page.keyboard.press("Control+Alt+ArrowLeft");
     await page.locator(".pi-session-tab").first().and(page.locator(".is-active")).waitFor({ state: "visible" });
     await popover.waitFor({ state: "detached", timeout: 2_000 });
   });

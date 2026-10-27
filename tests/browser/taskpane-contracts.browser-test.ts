@@ -478,7 +478,8 @@ void test("recently closed tabs and experimental settings are reachable by comma
     await enterCommand(page, "/experimental");
     const settings = page.locator("#pi-settings-overlay");
     await settings.getByRole("heading", { name: "Experimental features", level: 2 }).waitFor({ state: "visible", timeout: 5_000 });
-    await settings.getByText("Dark mode", { exact: true }).waitFor({ state: "visible" });
+    await settings.getByText("Remote extension URLs", { exact: true }).waitFor({ state: "visible" });
+    assert.equal(await settings.getByText("Dark mode", { exact: true }).count(), 0);
   });
 });
 

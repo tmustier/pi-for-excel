@@ -44,3 +44,31 @@ void test("Settings navigation keeps an edited page open when closing is decline
     assert.equal(await rules.inputValue(), "Always show units");
   });
 });
+
+void test("theme follows Office by default, permits persistent overrides, and keeps native controls dark", async () => {
+  await withTaskpane(async (page) => {
+    await page.emulateMedia({ colorScheme: "dark" });
+    assert.equal(await page.locator("html").evaluate((root) => root.classList.contains("dark")), false);
+    await enterCommand(page, "/settings");
+    const theme = page.getByRole("combobox", { name: "Theme", exact: true });
+    assert.equal(await theme.inputValue(), "office");
+    await theme.selectOption("dark");
+    await page.waitForFunction(() => document.documentElement.classList.contains("dark"));
+    assert.equal(await page.locator("html").evaluate((root) => getComputedStyle(root).colorScheme), "dark");
+    await page.reload();
+    await page.locator("pi-input textarea").waitFor();
+    assert.equal(await page.locator("html").evaluate((root) => root.classList.contains("dark")), true);
+    await page.locator("#pi-welcome-login-overlay").dispatchEvent("click");
+    await enterCommand(page, "/settings");
+    await theme.selectOption("light");
+    await page.waitForFunction(() => !document.documentElement.classList.contains("dark"));
+    await theme.selectOption("office");
+    // Host snapshot is an external boundary; preference must track it, not OS theme.
+    await page.evaluate(() => Reflect.set(window, "Office", {
+      context: { officeTheme: { isDarkTheme: true }, host: "Excel" },
+    }));
+    await page.waitForFunction(() => document.documentElement.classList.contains("dark"));
+    await theme.selectOption("light");
+    await page.waitForFunction(() => !document.documentElement.classList.contains("dark"));
+  });
+});

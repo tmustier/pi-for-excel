@@ -7,7 +7,7 @@
 
 import { t } from "../../../language/index.js";
 import type { SettingsShellPage } from "../../../ui/settings-shell.js";
-import { isMacPlatform, isOfficeOnline } from "../../../utils/platform.js";
+import { isMacPlatform } from "../../../utils/platform.js";
 
 // ---------------------------------------------------------------------------
 // Shortcut data
@@ -17,8 +17,6 @@ interface ShortcutEntry {
   mac: string;
   win: string;
   description: string;
-  /** The browser takes this chord in Excel on the web, so it is not listed there. */
-  browserReserved?: boolean;
 }
 
 interface ShortcutGroup {
@@ -47,11 +45,11 @@ function getShortcutGroups(): readonly ShortcutGroup[] {
     {
       title: t("shortcuts.section.tabs"),
       shortcuts: [
-        { mac: "⌘ T", win: "Ctrl+T", description: t("shortcuts.desc.new_tab"), browserReserved: true },
-        { mac: "⌘ W", win: "Ctrl+W", description: t("shortcuts.desc.close_tab"), browserReserved: true },
-        { mac: "⌘ ⇧ T", win: "Ctrl+Shift+T", description: t("shortcuts.desc.reopen_tab"), browserReserved: true },
+        { mac: "⌃ ⌥ N", win: "Ctrl+Alt+N", description: t("shortcuts.desc.new_tab") },
+        { mac: "⌃ ⌥ W", win: "Ctrl+Alt+W", description: t("shortcuts.desc.close_tab") },
+        { mac: "⌃ ⌥ ⇧ T", win: "Ctrl+Alt+Shift+T", description: t("shortcuts.desc.reopen_tab") },
         same("← →", t("shortcuts.desc.switch_tabs")),
-        { mac: "⌘ ⇧ [  /  ⌘ ⇧ ]", win: "Ctrl+PgUp / PgDn", description: t("shortcuts.desc.prev_next_tab"), browserReserved: true },
+        { mac: "⌃ ⌥ ← / →", win: "Ctrl+Alt+← / →", description: t("shortcuts.desc.prev_next_tab") },
         { mac: "⇧ F10", win: "Shift+F10", description: t("shortcuts.desc.tab_menu") },
       ],
     },
@@ -84,17 +82,9 @@ export function createShortcutsPage(): SettingsShellPage {
     subtitle: () => t("shortcuts.subtitle"),
     render: (ctx) => {
       const mac = isMacPlatform();
-      const web = isOfficeOnline();
 
       const list = document.createElement("div");
       list.className = "pi-shortcuts-list";
-
-      if (web) {
-        const note = document.createElement("p");
-        note.className = "pi-shortcuts-note";
-        note.textContent = t("shortcuts.webNote");
-        list.appendChild(note);
-      }
 
       for (const group of getShortcutGroups()) {
         const section = document.createElement("div");
@@ -105,7 +95,7 @@ export function createShortcutsPage(): SettingsShellPage {
         header.textContent = group.title;
         section.appendChild(header);
 
-        for (const shortcut of group.shortcuts.filter((entry) => !(web && entry.browserReserved))) {
+        for (const shortcut of group.shortcuts) {
           const row = document.createElement("div");
           row.className = "pi-shortcuts-row";
 

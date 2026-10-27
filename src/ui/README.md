@@ -149,7 +149,7 @@ Message components use Light DOM (`createRenderRoot() { return this; }`), so the
 | `announcer.ts` | — | `announce(msg, { assertive? })` — hidden live regions (see Notifications) |
 | `menu-keyboard.ts` | — | Shared `role="menu"` keyboard model (see Menus) |
 | `text-input-dialog.ts` | `window.prompt` | `requestTextInputDialog(...)` on the overlay primitive; native `prompt`/`confirm`/`alert` are dead on Excel on the web |
-| `theme-mode.ts` | — | Keeps light mode by default; `/experimental on dark-mode` enables Office/theme-driven `.dark` (fallback: `prefers-color-scheme`) |
+| `theme-mode.ts` | — | Follows Office by default (light when unavailable); Settings offers persistent Light / Dark / Follow Office overrides, including native control colors |
 | `loading.ts` | — | Splash screen shown during init |
 | `provider-login.ts` | — | API key entry rows for the welcome overlay |
 | `overlay-dialog.ts` | — | Shared overlay lifecycle helper (single-instance toggle, Escape/backdrop close, focus contract — see Overlays) + shared overlay chrome/DOM builders (`createOverlayCloseButton`, `createOverlayHeader`, `createOverlayButton`, `createOverlayInput`, `createOverlaySectionTitle`) |

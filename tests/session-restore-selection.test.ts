@@ -9,10 +9,8 @@ import {
   isFocusInputShortcut,
   isReopenLastClosedShortcut,
   isRestoreQueuedMessagesShortcut,
-  isUndoCloseTabShortcut,
   shouldAbortFromEscape,
   shouldBlurEditorFromEscape,
-  shouldHandleUndoCloseTabShortcut,
 } from "../src/taskpane/keyboard-shortcuts.ts";
 import { RecentlyClosedStack } from "../src/taskpane/recently-closed.ts";
 
@@ -74,25 +72,25 @@ void test("recently closed stack keeps one entry per session, the most recent cl
   assert.equal(stack.removeById("closed-a"), null);
 });
 
-void test("Cmd/Ctrl+T detection ignores Shift/Alt-modified chords", () => {
+void test("Ctrl+Alt+N creates tabs without taking browser shortcuts", () => {
   assert.equal(
     isCreateTabShortcut({
-      key: "t",
-      metaKey: true,
-      ctrlKey: false,
+      key: "n",
+      metaKey: false,
+      ctrlKey: true,
       shiftKey: false,
-      altKey: false,
+      altKey: true,
     }),
     true,
   );
 
   assert.equal(
     isCreateTabShortcut({
-      key: "T",
+      key: "N",
       metaKey: false,
       ctrlKey: true,
       shiftKey: false,
-      altKey: false,
+      altKey: true,
     }),
     true,
   );
@@ -120,14 +118,14 @@ void test("Cmd/Ctrl+T detection ignores Shift/Alt-modified chords", () => {
   );
 });
 
-void test("Cmd/Ctrl+W detection ignores Shift/Alt-modified chords", () => {
+void test("Ctrl+Alt+W closes tabs without taking browser shortcuts", () => {
   assert.equal(
     isCloseActiveTabShortcut({
       key: "w",
-      metaKey: true,
-      ctrlKey: false,
+      metaKey: false,
+      ctrlKey: true,
       shiftKey: false,
-      altKey: false,
+      altKey: true,
     }),
     true,
   );
@@ -138,7 +136,7 @@ void test("Cmd/Ctrl+W detection ignores Shift/Alt-modified chords", () => {
       metaKey: false,
       ctrlKey: true,
       shiftKey: false,
-      altKey: false,
+      altKey: true,
     }),
     true,
   );
@@ -166,136 +164,14 @@ void test("Cmd/Ctrl+W detection ignores Shift/Alt-modified chords", () => {
   );
 });
 
-void test("Cmd/Ctrl+Z detection ignores Shift/Alt-modified chords", () => {
-  assert.equal(
-    isUndoCloseTabShortcut({
-      key: "z",
-      metaKey: true,
-      ctrlKey: false,
-      shiftKey: false,
-      altKey: false,
-    }),
-    true,
-  );
-
-  assert.equal(
-    isUndoCloseTabShortcut({
-      key: "Z",
-      metaKey: false,
-      ctrlKey: true,
-      shiftKey: false,
-      altKey: false,
-    }),
-    true,
-  );
-
-  assert.equal(
-    isUndoCloseTabShortcut({
-      key: "Unidentified",
-      code: "KeyZ",
-      metaKey: false,
-      ctrlKey: true,
-      shiftKey: false,
-      altKey: false,
-    }),
-    true,
-  );
-
-  assert.equal(
-    isUndoCloseTabShortcut({
-      key: "Unidentified",
-      keyCode: 90,
-      metaKey: false,
-      ctrlKey: true,
-      shiftKey: false,
-      altKey: false,
-    }),
-    true,
-  );
-
-  assert.equal(
-    isUndoCloseTabShortcut({
-      key: "z",
-      metaKey: true,
-      ctrlKey: false,
-      shiftKey: true,
-      altKey: false,
-    }),
-    false,
-  );
-
-  assert.equal(
-    isUndoCloseTabShortcut({
-      key: "z",
-      metaKey: true,
-      ctrlKey: false,
-      shiftKey: false,
-      altKey: true,
-    }),
-    false,
-  );
-});
-
-void test("Undo-close handling supports empty input + non-input contexts while preserving text undo", () => {
-  assert.equal(
-    shouldHandleUndoCloseTabShortcut({
-      canUndoCloseTab: false,
-      isTextEntry: false,
-      textEntryHasContent: false,
-      actionToastVisible: true,
-    }),
-    false,
-  );
-
-  assert.equal(
-    shouldHandleUndoCloseTabShortcut({
-      canUndoCloseTab: true,
-      isTextEntry: false,
-      textEntryHasContent: false,
-      actionToastVisible: false,
-    }),
-    true,
-  );
-
-  assert.equal(
-    shouldHandleUndoCloseTabShortcut({
-      canUndoCloseTab: true,
-      isTextEntry: true,
-      textEntryHasContent: false,
-      actionToastVisible: false,
-    }),
-    true,
-  );
-
-  assert.equal(
-    shouldHandleUndoCloseTabShortcut({
-      canUndoCloseTab: true,
-      isTextEntry: true,
-      textEntryHasContent: true,
-      actionToastVisible: false,
-    }),
-    false,
-  );
-
-  assert.equal(
-    shouldHandleUndoCloseTabShortcut({
-      canUndoCloseTab: true,
-      isTextEntry: true,
-      textEntryHasContent: true,
-      actionToastVisible: true,
-    }),
-    true,
-  );
-});
-
-void test("Cmd/Ctrl+Shift+T detection ignores Alt-modified chords", () => {
+void test("Ctrl+Alt+Shift+T reopens tabs without taking browser shortcuts", () => {
   assert.equal(
     isReopenLastClosedShortcut({
       key: "t",
-      metaKey: true,
-      ctrlKey: false,
+      metaKey: false,
+      ctrlKey: true,
       shiftKey: true,
-      altKey: false,
+      altKey: true,
     }),
     true,
   );
@@ -306,7 +182,7 @@ void test("Cmd/Ctrl+Shift+T detection ignores Alt-modified chords", () => {
       metaKey: false,
       ctrlKey: true,
       shiftKey: true,
-      altKey: false,
+      altKey: true,
     }),
     true,
   );
@@ -358,7 +234,7 @@ void test("F2 focuses chat input only without modifiers", () => {
   );
 });
 
-void test("Arrow and fallback tab-switch shortcuts resolve expected direction", () => {
+void test("Arrow and Ctrl+Alt tab-switch shortcuts resolve expected direction", () => {
   assert.equal(
     getAdjacentTabDirectionFromShortcut({
       key: "ArrowLeft",
@@ -411,24 +287,24 @@ void test("Arrow and fallback tab-switch shortcuts resolve expected direction", 
 
   assert.equal(
     getAdjacentTabDirectionFromShortcut({
-      key: "[",
+      key: "ArrowLeft",
       repeat: false,
-      metaKey: true,
-      ctrlKey: false,
-      shiftKey: true,
-      altKey: false,
+      metaKey: false,
+      ctrlKey: true,
+      shiftKey: false,
+      altKey: true,
     }),
     -1,
   );
 
   assert.equal(
     getAdjacentTabDirectionFromShortcut({
-      key: "]",
+      key: "ArrowRight",
       repeat: false,
-      metaKey: true,
-      ctrlKey: false,
-      shiftKey: true,
-      altKey: false,
+      metaKey: false,
+      ctrlKey: true,
+      shiftKey: false,
+      altKey: true,
     }),
     1,
   );
@@ -442,7 +318,7 @@ void test("Arrow and fallback tab-switch shortcuts resolve expected direction", 
       shiftKey: false,
       altKey: false,
     }),
-    -1,
+    null,
   );
 
   assert.equal(
@@ -454,7 +330,7 @@ void test("Arrow and fallback tab-switch shortcuts resolve expected direction", 
       shiftKey: false,
       altKey: false,
     }),
-    1,
+    null,
   );
 
   assert.equal(

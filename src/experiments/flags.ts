@@ -10,7 +10,6 @@ import { ALLOW_REMOTE_EXTENSION_URLS_STORAGE_KEY } from "../commands/extension-s
 import { dispatchExperimentalFeatureChanged } from "./events.js";
 
 export type ExperimentalFeatureId =
-  | "ui_dark_mode"
   | "remote_extension_urls"
   | "extension_sandbox_runtime"
   | "extension_widget_v2";
@@ -34,15 +33,6 @@ export interface ExperimentalFeatureDefinition {
 
 function getFeatures(): readonly ExperimentalFeatureDefinition[] {
   return [
-    {
-      id: "ui_dark_mode",
-      slug: "dark-mode",
-      aliases: ["theme-dark", "ui-dark-mode"],
-      title: t("experimental.dark_mode.title"),
-      description: t("experimental.dark_mode.desc"),
-      wiring: "wired",
-      storageKey: "pi.experimental.uiDarkMode",
-    },
     {
       id: "remote_extension_urls",
       slug: "remote-extension-urls",

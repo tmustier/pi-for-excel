@@ -412,6 +412,17 @@ So for Year 7 (column I, calendar year 2031): 2031 – 2025 + 1 = 7 ✓`;
 
 mdSection.appendChild(mdBlock);
 
+const answerSection = section("answer", "Answer actions");
+const answer = document.createElement("assistant-message");
+answer.message = {
+  role: "assistant",
+  content: [{ type: "text", text: "Wrote and verified the data in Sheet1!B2:C4.\n\n| Region | Revenue |\n| --- | --- |\n| East | 17 |\n| West | 29 |" }],
+  api: "openai-responses", provider: "openai", model: "gallery",
+  usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+  stopReason: "stop", timestamp: 1,
+};
+answerSection.append(answer);
+
 /* ── 10. Activity Block (Phase 2 proposal — mockup only) ─ */
 // Condenses a run of tool calls between assistant messages into one
 // collapsible block. Proposal CSS lives in this <style> tag until the

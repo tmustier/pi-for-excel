@@ -103,6 +103,15 @@
   background: var(--green-alpha-6);
 }
 
+.dark .pi-empty__hint {
+  background: var(--card);
+  border-color: var(--border);
+}
+
+.dark .pi-empty__hint:hover {
+  background: var(--accent);
+}
+
 @media (max-height: 520px) {
   .pi-empty {
     padding: 8px 16px 10px;
@@ -197,5 +206,4 @@
   line-height: 1.4;
   overflow-wrap: anywhere;
 }
-
 

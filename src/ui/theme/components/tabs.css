@@ -46,6 +46,22 @@ pi-sidebar {
   pointer-events: none;
 }
 
+.dark .pi-session-tabs::after {
+  background: linear-gradient(to bottom, var(--background), transparent);
+}
+
+.dark .pi-session-tab,
+.dark .pi-session-tabs__scroll,
+.dark .pi-utilities-btn {
+  background: var(--glass-bg-solid);
+}
+
+.dark .pi-session-tabs__scroll:hover,
+.dark .pi-utilities-btn:hover,
+.dark .pi-utilities-btn[aria-expanded="true"] {
+  background: var(--accent);
+}
+
 .pi-session-tabs__scroller-wrap {
   display: flex;
   align-items: center;
@@ -500,5 +516,4 @@ pi-sidebar {
     padding: 4px 8px;
   }
 }
-
 

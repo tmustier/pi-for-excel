@@ -25,6 +25,9 @@ import { customElement, property } from "lit/decorators.js";
 
 import { t } from "../../language/index.js";
 import { turnFailureFix } from "../../taskpane/turn-error.js";
+import { copyText } from "../copy-text.js";
+import { showToast } from "../toast.js";
+import { markdownText } from "./markdown-block.js";
 import type { UserMessageWithAttachments } from "../../messages/attachments.js";
 import { getToolRenderer, renderTool } from "./tool-renderer-registry.js";
 import {
@@ -35,7 +38,6 @@ import {
   thinkingKey,
 } from "./transcript-state.js";
 import "./attachment-tile.js";
-import "./markdown-block.js";
 import "./thinking-block.js";
 
 @customElement("user-message")
@@ -148,7 +150,7 @@ export class AssistantMessage extends LitElement {
     const items: RenderItem[] = [];
     for (const [index, chunk] of message.content.entries()) {
       if (chunk.type === "text" && chunk.text.trim() !== "") {
-        items.push({ template: html`<markdown-block .content=${chunk.text}></markdown-block>` });
+        items.push({ template: html`<markdown-block .content=${chunk.text} .answer=${!this.isStreaming}></markdown-block>` });
       } else if (chunk.type === "thinking" && chunk.thinking.trim() !== "") {
         const key = thinkingKey(message, index);
         items.push({ template: html`
@@ -233,6 +235,15 @@ export class AssistantMessage extends LitElement {
     return html`
       <div>
         ${orderedParts.length ? html`<div class="pi-assistant-body">${orderedParts}</div>` : nothing}
+        ${!this.isStreaming && message.content.some((chunk) => chunk.type === "text" && chunk.text.trim())
+          ? html`<button type="button" class="pi-answer-copy pi-answer-copy--message" @click=${() => {
+              const text = Array.from(this.querySelectorAll(".pi-assistant-body > markdown-block"),
+                (block) => markdownText(block).trim()).join("\n\n");
+              void copyText(text).then((outcome) => {
+                if (outcome === "copied") showToast(t("code-block.copied"));
+              });
+            }}>${t("messages.copyAnswer")}</button>`
+          : nothing}
         ${message.stopReason === "error" && !this.hideError
           ? html`
               <div class="pi-assistant-error" role="alert">

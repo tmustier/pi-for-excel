@@ -10,7 +10,7 @@ import { getThinkingLevelsForModel } from "../models/thinking-levels.js";
 import type { PiSidebar } from "../ui/pi-sidebar.js";
 import { moveCursorToEnd } from "../ui/input-focus.js";
 import { isModalOverlayOpen } from "../ui/overlay-dialog.js";
-import { isActionToastVisible, showToast } from "../ui/toast.js";
+import { showToast } from "../ui/toast.js";
 import { t } from "../language/index.js";
 import { formatDetailsShortcut, toggleDetailsExpanded } from "../ui/messages/transcript-state.js";
 
@@ -25,7 +25,6 @@ import {
 
 import { flashThinkingLevel } from "./status-bar.js";
 import { THINKING_LEVEL_COLORS } from "./thinking-display.js";
-import { shouldHandleUndoCloseTabShortcut, textEntryHasContent } from "./keyboard-shortcuts/guards.js";
 import {
   getAdjacentTabDirectionFromShortcut,
   isCloseActiveTabShortcut,
@@ -33,7 +32,6 @@ import {
   isFocusInputShortcut,
   isReopenLastClosedShortcut,
   isRestoreQueuedMessagesShortcut,
-  isUndoCloseTabShortcut,
   shouldAbortFromEscape,
   shouldBlurEditorFromEscape,
 } from "./keyboard-shortcuts/matchers.js";
@@ -45,11 +43,9 @@ export {
   isFocusInputShortcut,
   isReopenLastClosedShortcut,
   isRestoreQueuedMessagesShortcut,
-  isUndoCloseTabShortcut,
   shouldAbortFromEscape,
   shouldBlurEditorFromEscape,
 } from "./keyboard-shortcuts/matchers.js";
-export { shouldHandleUndoCloseTabShortcut } from "./keyboard-shortcuts/guards.js";
 
 interface KeydownContext {
   event: KeyboardEvent;
@@ -142,7 +138,6 @@ export function installKeyboardShortcuts(opts: {
   onCreateTab?: () => void;
   onCloseActiveTab?: () => void;
   onReopenLastClosed?: () => void;
-  canUndoCloseTab?: () => boolean;
   onSwitchAdjacentTab?: (direction: -1 | 1) => void;
 }): () => void {
   const {
@@ -154,7 +149,6 @@ export function installKeyboardShortcuts(opts: {
     onCreateTab,
     onCloseActiveTab,
     onReopenLastClosed,
-    canUndoCloseTab,
     onSwitchAdjacentTab,
   } = opts;
 
@@ -263,25 +257,6 @@ export function installKeyboardShortcuts(opts: {
       return true;
     },
     (context) => {
-      const { event, keyTarget } = context;
-      if (!isUndoCloseTabShortcut(event) || !onReopenLastClosed || isDialogOverlayOpen()) return false;
-
-      const shouldHandleUndoClose = shouldHandleUndoCloseTabShortcut({
-        canUndoCloseTab: canUndoCloseTab?.() ?? true,
-        isTextEntry: isTextEntryTarget(keyTarget),
-        textEntryHasContent: textEntryHasContent(keyTarget),
-        actionToastVisible: isActionToastVisible(),
-      });
-
-      if (!shouldHandleUndoClose) return false;
-
-      event.preventDefault();
-      event.stopPropagation();
-      event.stopImmediatePropagation();
-      onReopenLastClosed();
-      return true;
-    },
-    (context) => {
       const { event } = context;
       if (!isReopenLastClosedShortcut(event) || !onReopenLastClosed || isDialogOverlayOpen()) return false;
 
@@ -296,7 +271,7 @@ export function installKeyboardShortcuts(opts: {
       if (
         !adjacentTabDirection
         || !onSwitchAdjacentTab
-        || isTextEntryTarget(keyTarget)
+        || (isTextEntryTarget(keyTarget) && !(event.ctrlKey && event.altKey))
         || isDialogOverlayOpen()
         // A focused tab handles plain arrows itself; chords still switch here.
         || (isInsideSessionTabs(keyTarget) && !(event.metaKey || event.ctrlKey || event.altKey || event.shiftKey))
