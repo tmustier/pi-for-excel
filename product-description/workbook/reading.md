@@ -43,7 +43,7 @@ Each read tool targets something different, and its card header says what:
 Some reads finish immediately without reading anything useful. The card completes normally (not in the error style) and the result text says why:
 
 - the address is malformed or the sheet does not exist ("Error reading "{range}": …", "Error searching: …");
-- the user is editing a cell in the grid: on Excel on the web the read fails at once with "Error reading "{range}": Excel is in cell-editing mode. Please exit the edit mode by pressing ENTER or TAB or selecting another cell, and then try again.", and Pi usually asks the user to finish the edit (confirmed in Excel on the web);
+- cell editing outlasts the bounded wait: Pi waits up to 60 seconds before explaining that the user must finish the edit; it does not immediately abandon a transient edit;
 - trace or explain was given a range instead of a single cell ("Error: trace_dependencies expects a single cell, not a range.");
 - a regular expression does not compile ("Invalid regex "{query}": …").
 
@@ -51,7 +51,9 @@ The model sees the text and usually retries with a corrected input. Nothing is r
 
 ### The read runs
 
-A read is committed the moment the tool call arrives: it goes straight to Excel. It is not queued behind another tab's mutation and is not shown in the approval flow even in Confirm mode. It may run at the same time as other reads in the same model response; each has its own card.
+A read waits for mutations registered earlier in its own tab/runtime, so a read after a write can see that write. It does not wait for another tab's lock and never asks for approval. Reads may run in parallel; each has its own card.
+
+Range reads page at up to 500 rows, 2,500 cells and 100 columns. Whole-row/column and oversized ranges clip to used data, disclose the actual range, and name the next page/remaining columns. Response-size errors shrink the page. Compact/detailed tables use displayed values, annotate stored values hidden by the display, and put state, formulas and errors before the grid; CSV stays raw. Overview previews are bounded to five rows with real sheet offsets. Search scans row chunks up to five million cells and discloses a scan-budget stop. Traces expand areas of up to 16 cells; larger areas stay named range nodes.
 
 ### While Pi reads
 
@@ -86,7 +88,7 @@ Hidden and very hidden sheets are listed in the overview with their state. Pi ca
 | Execution mode | No effect. Reads never ask, in Auto or Confirm. | No effect. |
 | Files in the workspace, or an overlay open | No effect on reads. Truncated results are saved to the Files workspace when small enough. | An overlay does not pause a read in progress. |
 | Tab state (new, restored, another tab busy) | No effect. Another tab holding the workbook lock does not delay a read. | No effect. |
-| Host (desktop or web) | Same tools and cards. On Excel on the web, a read made while the user is editing a cell fails at once with "Excel is in cell-editing mode…" (confirmed). | No effect. |
+| Host (desktop or web) | Same tools/cards and bounded host policy. Optional state APIs can degrade to an explicit limitation. | Cell-edit waits stop after 60 seconds. |
 
 Nothing changed mid-read affects that read; it affects the next tool call.
 
@@ -94,7 +96,7 @@ Nothing changed mid-read affects that read; it affects the next tool call.
 
 | Event | Before sent | While busy |
 | --- | --- | --- |
-| Stop (button or Escape) | Not applicable: the user cannot start a read. | The Stop button stays until a read already sent to Excel returns; the card then shows the read's result, and the turn ends with "Error: signal is aborted without reason" (confirmed in Excel on the web). A read not yet started reports "Operation aborted". |
+| Stop (button or Escape) | Not applicable: the user cannot start a read. | Cancels waits. An unanswered read gets 500 ms grace, then a stopped error; completed results remain. |
 | The user sends something else | Not applicable. | A steer waits until the running reads finish. |
 | Tab switched, created, closed or reopened | Not applicable. | The read continues in its tab. Closing the tab asks "Stop and close this tab?" while it is responding. |
 | An overlay or menu opens | Not applicable. | The read continues. |
@@ -102,7 +104,7 @@ Nothing changed mid-read affects that read; it affects the next tool call.
 | The provider fails | Not applicable. | The read itself does not use the provider and finishes; the turn may then fail. |
 | The taskpane goes away | Not applicable. | The read and its result are lost unless the session had already saved that message. |
 | The workbook changes underneath | Not applicable. | The read sees the grid as it is when it runs. An address without a sheet name reads from whichever sheet is active at that moment. |
-| Focus moves to the grid or another window | Not applicable. | The read continues. If the user is in cell-edit mode when the read runs, Excel on the web rejects it with "Excel is in cell-editing mode…" (confirmed). Clicking a cell link moves Excel's selection but not the taskpane's focus. |
+| Focus moves to the grid or another window | Not applicable. | Read continues, with bounded edit-mode wait. A cell link selects in Excel; failure shows an error notice. |
 | The context window fills | Not applicable. | The result is cut to the size limit before it joins the conversation; older results may later be summarized by [compaction](../turn/context-and-compaction.md). |
 
 After an interrupt the cards that completed stay in the transcript with their results; nothing in the workbook needs undoing.
@@ -127,18 +129,18 @@ After an interrupt the cards that completed stay in the transcript with their re
 
 **Host differences.** None known. Dependency tracing uses Excel's own precedent and dependent lookup when the host offers it and falls back to reading formulas otherwise, which can give different trees on different hosts.
 
-**Language.** Card headers other than "Overview", the section labels ("Input", "Result", "Data", "Precedents", "Formula explanation"), result text and the formula explanation are English in every UI language.
+**Language.** Body labels, groups and Copy CSV are translated. Most tool-specific header verbs and agent-facing result text remain English.
 
 **Accessibility and keyboard.** Cards and cell links are buttons and links reachable with Tab; Ctrl/Cmd+O shows or hides tool details (see [tool calls](../turn/tool-calls.md)). The selection a link makes in Excel is not announced by the taskpane.
 
 ## Edge cases
 
-- Reading a whole column ("A:A") reads the full sheet height and is likely to be truncated.
+- A whole-column read clips to used data and pages rather than loading the full sheet height.
 - Search values are shown cut at 60 characters, context cells at 20.
-- On Excel on the web, a search without a sheet name fails with "Error searching: An internal error has occurred." when a sheet's used range is very large (confirmed with a used range of about 567,000 cells); naming another sheet works.
+- A large search is chunked; the named scan budget, not a whole-grid payload, bounds its coverage.
 - A dependents trace scans at most 50,000 formula cells and lists at most 80 children per cell, then adds "_Trace output was truncated to keep the result responsive._".
 - Named ranges marked invisible in Excel are left out of the overview.
-- A cell link whose sheet has since been renamed or deleted does nothing visible.
+- A cell link whose sheet has disappeared reports the navigation failure in a notice.
 - The CSV "Copy CSV" button copies the whole CSV the card holds, not only the visible part.
 
 ## Open questions and verification
@@ -147,7 +149,7 @@ After an interrupt the cards that completed stay in the transcript with their re
 - `foundations/turns.md` describes the overview card as "Workbook Overview"; the header shown is "Overview" (`tools.action.overview`, confirmed in Excel on the web), with "Workbook Overview" only as the tool's label. One of the two documents should change in the consistency pass.
 - A failed read does not render in the error style (confirmed with the cell-editing error): tool errors are returned as normal text, so the card looks successful. Probably intentional (the model handles it), but the user cannot tell at a glance. Mutations that fail ("Aborted", "Mutation cancelled …") do render in the error style, so the two differ.
 - **Confirmed.** Truncation and the Files copy work as described: a 5,000-row read was cut at 2,000 lines and saved under `.tool-output/` with the Files dialog never opened; a 21,000-row read (about 700 KB) was cut but not saved, because it is over 512 KB. READ-11.
-- **New, confirmed.** `search_workbook` loads every visible sheet's used range values and formulas in one request (`src/tools/search-workbook.ts:262-263`); on Excel on the web a large used range makes the whole search fail with "An internal error has occurred." rather than skipping or chunking that sheet. READ-16. Looks like a bug.
+- Merged source replaces whole-grid search/preview loads with bounded chunks/previews. Earlier READ-11/16 observations predate paging. In this pass, live `read_range J1:J800` returned J1:J500 and the next range J501:J800 with page sum 125250; a displayed 0.125 formatted as a percentage returned 12.5%.
 - Clicking a cell link while Excel is in cell-edit mode: behavior not checked.
 
-Verified against pi-for-excel commit `ec453df`.
+Verified against pi-for-excel commit `1f51cf8` (source inspection and the named live reads; old dated runs remain historical).

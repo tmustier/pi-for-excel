@@ -58,7 +58,7 @@ There is no tool for named ranges, Excel tables, pivot tables or data validation
 
 A mutation can end without changing anything:
 
-- **Overwrite protection.** `write_cells` and `fill_formula` refuse to write over cells that already hold a value or a formula, unless Pi explicitly set the overwrite flag. Formatting, conditional formats and validation rules alone do not count as data. The card header ends " — blocked" ("Write {address} — blocked"), and the result shows "⛔ Write blocked — {address} contains N non-empty cell(s).", the existing data as a table, and the instruction to Pi: "To overwrite, confirm with the user and retry with `allow_overwrite: true`." Pi usually stops and asks the user in its reply; the user answers in a new message. (Header, message and instruction confirmed in Excel on the web; the header reads "Write Sheet1!A1:A1 — blocked" for a one-cell write.) Nothing was written, but the call still counted as a mutation: in Confirm mode the user was asked to approve a write that then did not happen.
+- **Overwrite protection.** `write_cells` and `fill_formula` refuse occupied targets unless Pi explicitly sets `allow_overwrite: true`. Formatting and validation alone do not count as data. The blocked result names the nonempty cells and tells Pi how to retry with permission. Known refusals happen before approval; accepted calls recheck the target under the lock. Even with overwrite permission, occupied targets too large for a backup are refused.
 - **Invalid input.** An empty value array, a start cell that is a range, a fill formula that does not start with "=", a multi-area fill range, a sheet that does not exist: the card completes with "Error: …" text, and Pi usually corrects itself.
 - **Approval declined.** In Confirm mode, Cancel fails the call; see [confirm mode and approvals](confirm-mode-and-approvals.md).
 - **Stopped while waiting.** A mutation still waiting for approval or the lock when the user stops the turn does nothing; its card shows "Aborted" in the error style (confirmed in Excel on the web).
@@ -71,6 +71,8 @@ A mutation commits when Excel accepts it. At that moment:
 - For write cells and fill formula, Pi reads the target back at once and reports what Excel now holds: "Written to **{address}** (r×c)", any cells showing an Excel error ("⚠️ **N formula error(s):**" with each address, error and formula), and a preview of the verified values limited to 8 rows by 6 columns ("_Showing preview only (N more rows and M more columns)._").
 - A backup of what was there is stored (see [backups and revert](backups-and-revert.md)), unless the tool has none or the change was larger than 20,000 cells, in which case the header ends ", no backup" or " — no backup" and the result says "ℹ️ Backup not created …".
 - An audit entry is added to the local change log.
+
+Checked cell writes/fills inspect protection, merges and spills before submitting. They refuse non-anchor merge/spill targets and occupied targets above the 20,000-cell backup cap; large empty targets may proceed with a clear no-backup reason. Writes chunk inputs, then verify separately: complete read-back up to 20,000 cells (also bounded by text size), otherwise head/tail samples plus whole-target error/blank checks. Receipts disclose scope, conversions, data-validation violations, overwritten formulas and table-extension effects. Manual calculation computes written formulas but warns that dependents elsewhere may be stale. Backup IDs appear in readable receipts, not only card metadata.
 
 ### While Pi writes
 
@@ -87,7 +89,7 @@ The completed card, expanded, has up to four sections:
 
 The model receives the result text and continues the turn. If it wrote a formula that evaluates to an error, it usually notices from the verification and fixes it.
 
-**Failure path.** If Excel rejects the change (a protected sheet, a merged area that cannot be partly written, an array formula in the way), the card completes with the error text ("Error writing cells: …") and nothing is recorded. If Excel applied part of a multi-step change before failing (some formatting properties but not others), that part stays and has no backup.
+**Failure path.** Refusals/failures are tool errors with specific reasons (protection, invalid address, edit mode or payload). Partial chunked writes name, audit and back up what landed. A read-back failure says the write applied but could not be verified; an unanswered submission reports an unknown outcome. Other multi-step mutations can retain earlier applied steps; no path promises rollback merely because the card is red.
 
 ## Modifiers
 
@@ -96,7 +98,7 @@ The model receives the result text and continues the turn. If it wrote a formula
 | Model and provider | The model decides what to change and whether to retry after a block. | Model changes are refused while the tab is busy. |
 | Thinking level | No effect on the mutation itself. | No effect. |
 | Execution mode | Auto runs ordinary changes; irreversible changes still ask. Confirm uses one dialog, with Allow once or Allow for the rest of this turn for reversible workbook changes (WT-05, PR #808). A refused preflight does not ask. | Applies from the next mutation; does not answer a pending dialog. |
-| Files in the workspace, or an overlay open | No effect. An open overlay does not pause a mutation, but a second approval dialog replaces the first. | No effect. |
+| Files in the workspace, or an overlay open | An open overlay does not pause a mutation; further approvals queue. | No effect. |
 | Tab state (new, restored, another tab busy) | Another tab's mutation makes this one wait ("Locking…"). | No effect. |
 | Host (desktop or web) | Same tools. On a never-saved desktop workbook, backups use a token stored in the document. | No effect. |
 
@@ -106,7 +108,7 @@ Mid-interaction changes take effect at the next tool call, never during one.
 
 | Event | Before sent | While busy |
 | --- | --- | --- |
-| Stop (button or Escape) | Not applicable: the user does not start a mutation. | A mutation waiting for approval or the lock does nothing. One already in Excel completes, keeps its backup, and its card shows the real result. Mutations in the same model response that had not started end with "Aborted" in the error style, and the transcript shows "Error: signal is aborted without reason" (confirmed in Excel on the web: of six parallel writes, two completed and four were "Aborted"). |
+| Stop (button or Escape) | A pending approval/lock wait is cancelled without writing. | Checked writes settle submitted work, stop between chunks and report counts/backup. Other host calls have bounded grace, then report unknown outcome if unanswered. Applied work stands. |
 | The user sends something else | Not applicable. | A steer is delivered after the running mutations finish. Telling Pi "don't overwrite that" does not stop a write already applying. |
 | Tab switched, created, closed or reopened | Not applicable. | The mutation continues in its tab. The tab cannot be closed while its mutation holds the lock. |
 | An overlay or menu opens | Not applicable. | The mutation continues. Opening Backups and restoring waits for the lock, then applies. |
@@ -150,15 +152,14 @@ After any interrupt, changes already applied stay in the workbook; the transcrip
 - Deleting rows, columns or a sheet larger than 20,000 cells of data proceeds without a backup; the card says "no backup".
 - Hiding a sheet with `modify_structure` has a backup; hiding it with `view_settings` does not.
 - Updating a chart's source range cannot be reverted: "ℹ️ Chart property backup only. Excel does not expose the previous source range, so `workbook_history` cannot revert this update's data-source change."
-- Filling a formula copies the top-left cell's formatting across the range, as Excel's fill does; the backup only covers values and formulas.
+- Filling a formula copies formulas only, preserving each destination's formatting; the backup covers values and formulas.
 - Several mutations in one model response appear as several cards; consecutive cards of the same kind may be grouped ("2 edits", confirmed); see [tool calls](../turn/tool-calls.md).
 - On Excel on the web, Excel's own Undo (Ctrl/Cmd+Z in the grid) takes back Pi's writes; see [the workbook](../foundations/the-workbook.md#excels-undo).
 
 ## Open questions and verification
 
 - Checked by hand in Excel on the web (orb session, `ec453df`), 26 October 2026: write cells (receipt, "Changes" table with "∅", verification, "Explain these changes" with "Explanation uses a bounded metadata sample."), overwrite protection, format cells, view settings, modify structure, grouping, and Stop during parallel writes. See [the workbook checklist](../verification/workbook.md#workbookwritingmd). Fill formula, conditional formats, comments and charts were not run.
-- **Confirmed.** A write that overwrite protection blocks still goes through Confirm mode's approval and the lock: the user clicked "Allow once" and the card then said "— blocked". Probably a product call. WRITE-10.
-- **Confirmed on the web.** `fill_formula` copies the top-left cell's fill and bold across the range, and `/revert` clears the formulas but leaves the copied formats. Desktop not checked. WRITE-12.
+- Merged preflight avoids asking approval for a write already known to be blocked; locked inspection still rechecks. Formula-only fill addresses the historical WRITE-12 copied-format behavior. Those old runs are not new acceptance results.
 - Partial failures inside `format_cells` (some properties applied before an error) leave changes with no backup. Read from code.
 
-Verified against pi-for-excel commit `ec453df`.
+Verified against pi-for-excel commit `1f51cf8` (merged source and a live Luna formula write/read-back yielding 8; merged-cell child write refused with `isError: true`).
