@@ -1,162 +1,57 @@
 # Provider errors and offline
 
+Behaviour as of [PR #803](https://github.com/tmustier/pi-for-excel/pull/803), implementing CC-01 and CC-02. This supersedes the review's historical no-retry/error-banner observations.
+
 ## Summary
 
-Every model response is a request from the taskpane to the tab's [provider](../glossary.md#models-and-providers), and that request can fail: there is no credential, the credential is wrong or expired, the provider is rate-limiting or down, the network is gone, the browser blocks the request (CORS), the conversation no longer fits the model, or the answer is cut off. This document lists each failure and what the user sees. In almost every case the outcome is the same shape: the turn ends as [failed](../glossary.md#endings), everything up to the failure stays in the transcript, the model response that failed is marked "Error:" with the provider's reason, and, if the failing tab is the active tab when the turn ends, the [error banner](../glossary.md#the-taskpane) above the transcript explains it. Pi never retries a failed request by itself, with one exception: a context overflow is compacted and retried once. There is no Retry button; the user sends again. Provider failures can happen in any tab, at any model response of a turn, with any provider, on every host.
+A failed turn belongs to its tab and appears once in that tab's transcript. The last failed response shows a plain-language explanation, **Retry**, a relevant fix action, and collapsed **Details** containing the provider diagnostic. There is no separate run-error banner. Proxy reachability and other persistent-condition banners are separate from a failed turn.
 
 ## The simple case
 
-The user's laptop loses Wi-Fi. They type "Summarize Sheet1" and press Enter. The message joins the transcript, the working indicator starts, and a moment later it stops: Pi's model response appears empty with "Error:" and the reason under it, and the error banner shows the reason too. Which reason depends on the provider: for most API-key providers it reads "LLM error: Connection error."; for providers whose requests Pi sends directly, it is the CORS banner described below.
+A provider rejects the login. The turn becomes idle and its inline explanation says “Your provider rejected the login or API key. Update it, then retry.” The user can choose **Update login or API key**, fix the credential, return, and press **Retry**. Retry continues the existing exchange; it does not add another copy of the user's message. A successful retry removes the failed response's error UI.
 
-The user's message is kept and saved. Once the network is back, the user types "try again" (or the same request) and sends; the turn starts normally and the banner disappears as soon as the new message joins the transcript.
+## Automatic retry
 
-## The interaction, event by event
+Pi owns one visible, cancellable retry loop rather than hiding retries inside each provider adapter. It retries transient rate limits (429), overload/server failures (including 529), and errors classified as retryable by the provider runtime. Ordinary authentication, permission, model and invalid-request failures do not automatically retry.
 
-```mermaid
-stateDiagram-v2
-    [*] --> requesting : model request starts (credential read)
-    requesting --> connect_dialog : no credential (turn waits)
-    connect_dialog --> requesting : provider connected (banner cleared)
-    connect_dialog --> failed : dialog dismissed ("API key required for {provider}.")
-    requesting --> streaming : provider accepts
-    requesting --> failed : 401/403/429/5xx, network, CORS, proxy (no retry)
-    streaming --> failed : connection drops (partial text kept)
-    streaming --> overflow : context window exceeded
-    overflow --> requesting : compacted once, retried
-    overflow --> failed : compaction freed nothing, or second overflow
-    streaming --> done : answer complete
-    failed --> [*] : banner if active tab; message saved
-    done --> [*]
-```
+- Six retries, with fallback waits of 2, 4, 8, 16, 16 and 16 seconds.
+- A valid **Retry-After**, in seconds or HTTP-date form, replaces the fallback delay and is capped at 60 seconds. A past date means no additional wait.
+- The working line says “Retrying in {seconds}s (attempt {attempt} of {max})…” and “Provider hiccup · Esc to stop”. Stop cancels the wait and prevents the next request.
+- A usage/billing/quota limit is not a momentary rate limit: codes such as `usage_limit_reached` or `insufficient_quota` fail without waiting. A short-term `rate_limit_exceeded` code takes precedence over the ChatGPT adapter's generic “usage limit” wording.
+- Raw HTTP status, error code/type and Retry-After are captured before an adapter rewrites the error into friendly text. Without those facts Pi uses the provider runtime's classifier and the fallback delay.
 
-### Before the request
+When retries are exhausted, the turn shows its one inline failure and manual Retry remains available. Retry is disabled by the running state; clicking it twice cannot start two runs.
 
-Before every model response, not only the first one in a turn, Pi reads the tab's credential for its provider from storage.
+## Partial answers
 
-- **No credential.** Pi opens the connection dialog, "Connect {label}", with the subtitle "This model needs a login or API key to continue." and the provider's login row already expanded. The turn waits while it is open. If the user connects (API key or OAuth), the banner is cleared and the request goes out. If the user closes the dialog, the banner shows "API key required for {provider}." and the request fails; read from code, the banner is then replaced when the turn ends by "LLM error: …" with the runtime's own message (see [Open questions](#open-questions-and-verification)).
-- **Pi's own checks.** Some requests fail before anything is sent, with a reason written by Pi, shown as "LLM error: {reason}": a custom gateway on a plain `http://` address on another machine ("… Excel blocks http:// requests from the add-in to other machines, so Pi cannot reach it directly. …"), an OpenRouter Anthropic model without the proxy, a ChatGPT model that needs the newer proxy ("GPT-5.6 Luna currently requires the latest Pi for Excel proxy for ChatGPT WebSocket transport. Enable Proxy in Settings and run: npx -y pi-for-excel-proxy@latest"), or a proxy URL that is not `https://`.
+Text the user already saw is kept as an interrupted response, not deleted when retry starts. Pi sends that text back as a text-only assistant response plus a continuation request at the message tail, so the provider can continue from it instead of silently starting the answer again. Incomplete tool calls are not replayed as executable calls. System prompt and tool-schema prefixes are unchanged.
 
-### The request fails
+A final failure still keeps the partial response and its diagnostic. Workbook edits already completed remain applied; Retry is not Revert. Use [Backups](../workbook/backups-and-revert.md) to reverse a completed mutation.
 
-Pi sets no retries for any provider, so the first failure ends the turn. The provider's own retry delay cap (`maxRetryDelayMs`, 60 seconds by default) only applies to retries and therefore never comes into play.
+## Fix actions
 
-| Failure | Banner | Notes |
-| --- | --- | --- |
-| Wrong or revoked API key (401), no access to the model (403), unknown model (404), bad request (400) | "LLM error: {reason}", where the reason is the provider's message, usually starting with the status code | No dialog opens: the credential exists, it is just rejected. Fix it in `/login` or `/settings`. Confirmed in Excel on the web for a 401 from OpenAI (API): "LLM error: OpenAI API error (401): {…"Incorrect API key provided…"…}", with the provider's raw JSON in the banner and in the "Error:" line. |
-| OAuth access token expired while the taskpane was open | "LLM error: {reason}" (a 401) | Pi refreshes OAuth tokens only when the taskpane opens. Reloading the taskpane refreshes it; if that refresh fails, the provider is treated as not connected and the next send opens the connection dialog. A ChatGPT login whose grant can no longer be refreshed is deleted at startup. |
-| Rate limit or quota (429) | "LLM error: {reason}" | Not retried, whatever delay the provider asks for. |
-| Provider error or overload (5xx, 408, 409) | "LLM error: {reason}" | Not retried. |
-| Network unavailable, for providers reached through the provider SDKs (Anthropic, OpenAI, OpenAI-compatible gateways) | "LLM error: Connection error." | |
-| Network unavailable or request blocked by CORS, where the browser's own message reaches Pi ("Failed to fetch", "Load failed", "NetworkError", or any mention of CORS) | "Network error (likely CORS). If you're using OAuth, enable /settings → Proxy with https://localhost:3003 and retry. Guide: https://github.com/tmustier/pi-for-excel/blob/main/docs/install.md#oauth-logins-and-cors-proxy" | The same banner for a dropped connection, a real CORS block, and a proxy that is enabled but not running. The URL is the build's default proxy URL. Confirmed in Excel on the web for the taskpane taken offline (the "Error:" line read "Failed to fetch") and for the proxy service stopped while enabled, both with ChatGPT. |
-| Proxy enabled but not running | Usually the CORS banner above | The [proxy banner](../setup/the-proxy.md), "Proxy not running · Some features won't work.", appears within 30 seconds of the proxy becoming unreachable (15 s in the confirmed run) and went within 5 s of the proxy starting again. |
-| An error whose text contains "abort" or "cancel" (for example a timeout reported as "The operation was aborted") | None | Treated as if the user had pressed Stop. The transcript still shows "Error:" with the reason. |
+| Failure | Next action |
+| --- | --- |
+| Missing, expired or rejected credential | Update login or API key |
+| Unknown/unavailable model, quota or general failure | Choose another model |
+| Connection, proxy or offline failure | Open proxy settings |
 
-### The connection drops while streaming
+The summary is translated; raw provider text in Details remains exactly what the provider returned. Browser failures do not establish that CORS is the cause: a stopped proxy and a dropped network can look the same.
 
-The model response that was streaming stops where it was. Its text so far stays in the transcript, followed by "Error:" and the reason; a tool card whose call was still being written stays without a result. The banner follows the table above. Tools that had already run keep their effects in the workbook. Confirmed in Excel on the web by stopping the proxy mid-stream: the partial text stayed, then "Error: network error", with the banner "LLM error: network error" (not the CORS banner, which only follows "Failed to fetch"). Emulating offline over the DevTools protocol did not break a stream already in progress; the answer completed.
+## Context overflow
 
-While a request hangs without failing (a half-open connection), Pi shows the working indicator indefinitely; Pi sets no timeout of its own. Stop ends it.
+With auto-compaction on, Pi attempts one compact-and-continue recovery for an overflow from the current model. If it cannot free context or the request overflows again, the final inline explanation offers the appropriate recovery. With auto-compaction off there is no automatic overflow recovery. See [context and compaction](../turn/context-and-compaction.md).
 
-### The context window overflows
+## Other outcomes and boundaries
 
-If the provider rejects the request because the conversation is too long for the model, the banner reads "Context window exceeded — Pi will try compacting older history and retrying once. If this error persists, run /compact, scope your request to a smaller range, or use a larger-context model." Pi then removes the failed response, compacts the conversation once (the working indicator shows "Compacting context…"), and continues the turn. If the retry succeeds the banner is cleared. If compaction frees nothing, or the retry overflows again, the failure stays in the transcript and the banner keeps the same text, although no further retry will happen. With auto-compaction turned off the banner reads "Context window exceeded. Run /compact to free up context, scope your request to a smaller range, or use a larger-context model." and nothing is retried. Only a failure from the tab's current model counts as an overflow. See [context and compaction](../turn/context-and-compaction.md).
+- A deliberate Stop is aborted, not a provider failure; the partial answer remains with “Request aborted”. A provider error merely containing “cancel” is not proof that the user stopped it.
+- A hanging request has no taskpane-owned timeout; Stop can end it.
+- A text-only response that reaches its output limit can simply end. Truncated tool calls are rejected instead of executed, and the model can reissue them.
+- Web search, fetch and MCP errors are tool-result failures, not failed turns. Pi can keep working after those results.
+- Background failures stay in their own transcripts. Switching tabs does not carry another tab's error over the active conversation.
+- Local persisted sessions render offline. An uncompleted stream may be lost when the taskpane closes; completed partial responses and diagnostics are saved with the session.
+- Other taskpanes and tabs using the same account still share the provider's external limits.
 
-### The answer is cut off
+## Verification
 
-When a model response reaches the model's output limit:
-
-- **If it was calling tools,** none of those tools run. Each tool card fails with "Tool call "{name}" was not executed: the response hit the output token limit, so its arguments may be truncated. Re-issue the tool call with complete arguments." The turn continues and the model usually tries again.
-- **If it was only text,** the text simply ends. There is no banner and no marker that it was cut off.
-
-### What is kept
-
-The user's message, every completed model response and tool result, and the failed model response with its "Error:" line stay in the transcript and are saved (a failed response counts as Pi's first answer in a new session; see [persistence and restore](persistence-and-restore.md#when-a-session-is-saved)). Workbook changes made before the failure stay made, each with its [automatic backup](../workbook/backups-and-revert.md). Anything queued in the tab's action queue runs next, and may fail the same way.
-
-### The error banner
-
-- There is one error banner for the whole taskpane.
-- It is set when a turn ends with an error, **only if the failing tab is the active tab at that moment**. A turn that fails in a background tab never shows a banner, not when it fails and not when the user switches to that tab.
-- It is cleared when a user message joins the active tab's transcript (sending, or a steer or follow-up being delivered), when the active tab's turn ends without error, when the user sends from the composer (even if the prompt is only queued), and when the connection dialog succeeds.
-- It is **not** cleared on tab switch: a banner from one tab stays over another tab's transcript.
-- Confirmed in Excel on the web: a 401 in a tab the user had switched away from left only the "Error:" line, with no banner then or after switching back; the CORS banner stayed through creating a new tab and switching to another one.
-- Failures of `/compact` are toasts, not banners: "Compact failed: {msg}", or "No API key available for {provider}. Use /login or /settings."
-
-## Modifiers
-
-| Modifier | Set before | Changed while busy |
-| --- | --- | --- |
-| Model and provider | Decides which failures are possible: OAuth providers expire, ChatGPT and Anthropic OAuth logins and Google Code Assist need the [CORS proxy](../setup/the-proxy.md), SDK-based providers report network loss as "Connection error.". | Changing the model is refused while busy. After a failure the tab is idle, so switching to another provider's model is the usual recovery from an outage. |
-| Thinking level | No effect on failures, except that higher levels use more of the output limit. | Applies from the next model request. |
-| Execution mode | No effect. In Confirm, a failure can come after some approved mutations already ran. | No effect. |
-| Files in the workspace, or an overlay open | No effect on the request. The connection dialog is itself an overlay; another overlay open at that moment is closed only if it is a previous connection dialog. | No effect. |
-| Tab state (new, restored, another tab busy) | A failure in a new tab still saves the session. A restored tab's long history is the usual cause of overflow. | A failure in a background tab shows no banner. |
-| Host (desktop or web) | Browser network messages differ: "Load failed" in WKWebView (macOS; confirmed in Excel for Mac, with the CORS banner), "Failed to fetch" in WebView2 and browsers. See [host differences](host-differences.md). | No effect. |
-
-## Cancel and interrupt
-
-| Event | Before sent | While busy |
-| --- | --- | --- |
-| Stop (button or Escape) | Not applicable. | Ends a hanging or streaming request; the turn ends as aborted, not failed, and no banner is shown. The Stop button while the connection dialog is open stops the turn but leaves the dialog open (Escape closes the dialog instead, because the dialog claims it); read from code, connecting afterwards saves the credential but does not resume the stopped turn. |
-| The user sends something else | Sending clears the banner. | A steer or follow-up sent before the failure is not delivered by the failed turn; see [steering and the queue](../turn/steering-and-the-queue.md). Queued prompts run after the failure. |
-| Tab switched, created, closed or reopened | The banner stays. | Switching away before the failure means no banner for it. |
-| An overlay or menu opens | No effect. | The failure happens behind the overlay; the banner is visible once it closes. |
-| Model or thinking level changes | Choosing another provider's model is the usual recovery from a provider outage. | Refused while busy. |
-| The provider fails | Not applicable. | This document. |
-| The taskpane goes away | Not applicable. | A failure that had not been reported yet is lost with the streaming response. Reloading is also how an expired OAuth token gets refreshed. |
-| The workbook changes underneath | No effect. | No effect on the failure. |
-| Focus moves to the grid or another window | No effect. | No effect; the banner is there on return. |
-| The context window fills | Auto-compaction before sending reduces the chance of an overflow. | See [The context window overflows](#the-context-window-overflows). |
-
-After a failure the user stays in the same tab with an empty composer and can send again at once.
-
-## Interactions with other systems
-
-**Persistence.** Failed responses are saved with their error text and restored after a reload, without the banner. Storage is local, so a reload while offline restores everything. See [persistence and restore](persistence-and-restore.md).
-
-**Workbook changes and recovery.** A failure never undoes a change Pi already made. Revert from [the Backups dialog](../workbook/backups-and-revert.md) if needed.
-
-**Other tabs and sessions.** Failures are per tab; the banner is per taskpane. Two tabs or taskpanes on one account share its rate limits.
-
-**Execution mode and approvals.** No interaction.
-
-**Models and providers.** Credentials are read before every model request, so a login completed in Settings, or in another taskpane, fixes the next request without a reload. See [models and providers](../foundations/models-and-providers.md) and [welcome and login](../setup/welcome-and-login.md) for login failures.
-
-**Offline and provider errors.** This document.
-
-**Notifications.** The banner and the "Error:" line in the transcript. No toast, no sound, nothing for background tabs.
-
-**Settings and preferences.** The proxy setting decides how ChatGPT and OAuth logins are routed. Auto-compaction, on by default with no control in Settings, decides whether an overflow is retried.
-
-**Host differences.** Which network message reaches Pi, and whether a CORS block happens at all, depends on the webview; see [host differences](host-differences.md).
-
-**Language.** "LLM error: {error}" and the connection dialog are translated. "API key required for {provider}.", both overflow banners and the CORS banner are hard-coded in English. The provider's reason is shown as the provider wrote it.
-
-**Accessibility and keyboard.** The banner is not announced to screen readers and takes no focus.
-
-## Web tools and connections
-
-Failures of web search, fetch page and MCP servers are tool-call failures, not turn failures: the tool card shows "Error: …" and Pi continues the turn with that result. A web search provider that rejects its key or is rate-limited falls back to Jina search and says so in the result. See [web search and MCP](../extensions/web-search-and-mcp.md).
-
-## Edge cases
-
-- A turn that fails in its first model response in a new tab still saves the session, so the failed exchange appears in the resume picker.
-- The CORS banner tells the user to enable the proxy even when the proxy is already enabled and the real problem is that it stopped, or that the network is down.
-- An overflow on the retry shows the same "will try compacting … and retrying once" banner as the first overflow, though nothing more will be tried.
-- An error from a background tab can leave no trace except the "Error:" line, and the banner from the last failure in the active tab can still be showing over a different tab.
-- GitHub Copilot's own token exchange retries a rate limit up to twice within 5 seconds before failing; that is the only retry in the request path (read from pi-ai's `github-copilot.js`).
-- A provider message that happens to contain "cancel" is shown in the transcript but not in the banner.
-
-## Open questions and verification
-
-- Triggered by hand in Excel on the web (2026-10-26): network offline (CDP network emulation on the taskpane), the proxy service stopped while enabled, and a wrong API key on OpenAI (API) in a separate tab, in an active and a background tab. Later in the same pass, also triggered: 429, 503 and a 500 mentioning "cancelled" (responses substituted over the DevTools protocol), a context-overflow 400, a mid-stream proxy drop, Stop mid-stream, and the connection dialog for a provider whose key was removed. Not triggered: a real expired OAuth token, a cut-off answer. The rest is read from code and `tests/overflow-recovery.test.ts`, `tests/agent-overflow-recovery.test.ts`, `tests/agent-overflow-leftovers.test.ts` and `tests/error-path-matrix.test.ts` (which covers web tools, not model requests).
-- No retries: Pi passes no `maxRetries` to the provider runtime (`src/taskpane/init.ts:904-922`), and pi-ai's retry helper defaults to none (`node_modules/@earendil-works/pi-ai/dist/utils/provider-retry.js:77`). A momentary 429 or 503 therefore fails the turn. Confirmed in Excel on the web: a substituted 429 gave "LLM error: You have hit your ChatGPT usage limit." (the ChatGPT provider rewrites the message) and a 503 gave "LLM error: The server is overloaded", each after exactly one request. This contradicts [turns](../foundations/turns.md#interactions-with-other-systems), which says rate-limit retries happen inside the model request. Probably worth a product decision; the infrastructure for bounded retries exists.
-- The banner after dismissing the connection dialog: `src/taskpane/init.ts:986` shows "API key required for {provider}.", but the failed request then ends the turn with an error, and the turn-end handler (`src/taskpane/init.ts:1043-1060`) replaces it with "LLM error: …" (likely "Provider is not configured: {provider}"). Confirmed in Excel on the web: with the OpenAI (API) key removed, sending on GPT-4.1 mini opened Settings on the connection page with focus in the key field; closing it ended in the banner and transcript line "LLM error: Provider is not configured: openai".
-- Network loss shows the CORS banner whenever the browser's message reaches Pi (`src/taskpane/runtime-utils.ts:107-109` treats "failed to fetch" and "load failed" as CORS). Misleading when the proxy is enabled or the network is simply down. Confirmed in Excel on the web for both: offline, and the proxy stopped while the Settings "Proxy" row said "On"; both banners told the user to enable the proxy. Looks like a bug.
-- Errors mentioning "abort" or "cancel" are treated as user aborts (`src/taskpane/init.ts:1043`), hiding real timeouts and provider errors from the banner. Confirmed in Excel on the web: a substituted 500 with the message "Request was cancelled upstream" showed no banner, only "Error: Request was cancelled upstream" in the transcript. Looks like a bug.
-- The second-overflow banner repeats the "retrying once" text (`src/taskpane/init.ts:1050`). Minor bug.
-- OAuth tokens are refreshed only at taskpane startup (`src/auth/restore.ts`); nothing refreshes them during a long session. Read from code.
-- The proxy banner depends only on whether the proxy URL answers (`src/taskpane/proxy-status.ts`, `src/ui/proxy-banner.ts:142-148`), not on whether the selected provider needs it or the proxy is enabled. The [glossary](../glossary.md#the-taskpane) says it is shown only when the selected provider needs the proxy. Read from code; one of the two should change.
-- Overflow recovery confirmed in Excel on the web: a substituted 400 "Your input exceeds the context window of this model" was followed by a compaction ("Summarized 4 messages") and a retried request that answered "OK"; no banner remained afterwards (the banner itself was not caught while it was up). Separately, sending a very large message at 64% made Pi compact before sending ("Compacting context…"), so a real provider overflow did not happen.
-- A mid-stream drop reports "network error" in Chrome (Excel on the web); other webviews were not tested.
-
-Verified against pi-for-excel commit `ec453df`.
+PR #803 runs public Agent/action-queue tests for retry classification, 60-second cap, partial preservation and manual Retry; browser tests cover one inline failure, Details, fix action and successful Retry. Excel on the web with GPT-6 Luna verified a forced 401 followed by Retry and a successful real answer. A stubbed transient 429 with Retry-After: 7 waited 7.166 seconds before the next real request and returned READY. Desktop provider failure acceptance was not repeated for this PR.
