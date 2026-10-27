@@ -1445,12 +1445,27 @@ export class FilesWorkspace {
   }
 
   /**
-   * Starts a download whose file is not ready yet. Office WebViews (WKWebView
-   * in particular) open a window only during the user's click, so the window
-   * is opened now and filled once `download` runs, after any slow work such as
-   * capturing the workbook. Call `cancel` if there is nothing to download.
+   * Starts a download whose file is not ready yet (#794: e.g. a full backup
+   * that is captured first). No window is opened: #796 found that a
+   * window.open in the same task cancels Excel for Mac's native Save sheet,
+   * while a blob <a download> works without user activation, so `download`
+   * just saves the file once it is ready. `cancel` has nothing to undo.
    */
   beginDownload(): PendingWorkspaceDownload {
+    if (typeof document === "undefined") {
+      throw new Error("Downloads are not available in this environment.");
+    }
+
+    return {
+      download: (path) => this.downloadFile(path),
+      cancel: () => {},
+    };
+  }
+
+  async downloadFile(
+    path: string,
+    options: { locationKind?: WorkspaceFileLocationKind } = {},
+  ): Promise<void> {
     if (typeof document === "undefined") {
       throw new Error("Downloads are not available in this environment.");
     }
