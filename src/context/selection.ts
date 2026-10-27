@@ -60,13 +60,6 @@ function plural(count: number, noun: string): string {
   return `${count.toLocaleString("en-US")} ${noun}${count === 1 ? "" : "s"}`;
 }
 
-/** Displayed value (as read tools show it), escaped and shortened for a table cell. */
-function cellText(block: RowBlock, r: number, c: number, maxChars: number): string {
-  const shown = formatDisplayedCell(block.values[r]?.[c], block.text[r]?.[c], block.numberFormats[r]?.[c]).text;
-  const text = shown.replace(/\r?\n/g, " ").replace(/\|/g, "\\|");
-  return text.length > maxChars ? `${text.slice(0, maxChars - 1)}…` : text;
-}
-
 function formatGrid(blocks: readonly RowBlock[], startCol: number, colCount: number): string {
   const letters = Array.from({ length: colCount }, (_, i) => colToLetter(startCol + i));
   const lines = [`| | ${letters.join(" | ")} |`, `|---|${letters.map(() => "---").join("|")}|`];
@@ -83,7 +76,12 @@ function formatGrid(blocks: readonly RowBlock[], startCol: number, colCount: num
       lines.push(`| … | (${plural(block.startRow - previousEnd - 1, "row")} not shown) |`);
     }
     for (let r = 0; r < block.values.length; r++) {
-      const line = `| ${block.startRow + r + 1} | ${letters.map((_, c) => cellText(block, r, c, maxCellChars)).join(" | ")} |`;
+      const cells = letters.map((_, c) => {
+        const shown = formatDisplayedCell(block.values[r]?.[c], block.text[r]?.[c], block.numberFormats[r]?.[c]).text;
+        const text = shown.replace(/\r?\n/g, " ").replace(/\|/g, "\\|");
+        return text.length > maxCellChars ? `${text.slice(0, maxCellChars - 1)}…` : text;
+      });
+      const line = `| ${block.startRow + r + 1} | ${cells.join(" | ")} |`;
       if (chars + line.length > MAX_TABLE_CHARS) {
         lines.push(`| … | (sample cut at ${MAX_TABLE_CHARS.toLocaleString("en-US")} characters) |`);
         return lines.join("\n");

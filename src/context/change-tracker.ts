@@ -323,12 +323,10 @@ export class ChangeTracker {
   }
 
   private describeGroup(entries: readonly LoggedChange[]): string[] {
-    // Latest entry per sheet + address wins; keep first-seen order.
-    const bySheet = new Map<string, Map<string, LoggedChange>>();
+    const bySheet = new Map<string, LoggedChange[]>();
     for (const entry of entries) {
-      const sheetEntries = bySheet.get(entry.sheet) ?? new Map<string, LoggedChange>();
-      sheetEntries.delete(entry.address);
-      sheetEntries.set(entry.address, entry);
+      const sheetEntries = bySheet.get(entry.sheet) ?? [];
+      sheetEntries.push(entry);
       bySheet.set(entry.sheet, sheetEntries);
     }
 
@@ -340,7 +338,7 @@ export class ChangeTracker {
         lines.push(`- … and ${bySheet.size - MAX_SHEETS_LISTED} more sheet(s)`);
         break;
       }
-      const items = [...sheetEntries.values()].map((entry) => {
+      const items = sheetEntries.map((entry) => {
         const notes: string[] = [];
         if (entry.structural) notes.push(entry.structural);
         if (entry.values) notes.push(entry.values);
