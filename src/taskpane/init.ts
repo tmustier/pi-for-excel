@@ -776,6 +776,7 @@ export async function initTaskpane(opts: {
     renderError: (message) => renderErrorBanner(errorRoot, message),
   });
 
+  let lastReconciledModelSignature = "";
   runtimeManager.subscribe((snapshot) => {
     if (snapshot.activeRuntimeId !== previousActiveRuntimeId) {
       previousActiveRuntimeId = snapshot.activeRuntimeId;
@@ -788,6 +789,16 @@ export async function initTaskpane(opts: {
 
     maybePersistTabLayout();
     document.dispatchEvent(new CustomEvent("pi:status-update"));
+
+    // A tab that registers, or restores a saved model, after the provider list
+    // was published missed that pass's reconcile (P-66, P-67): check it now.
+    const modelSignature = runtimeManager.listRuntimes()
+      .map((runtime) => `${runtime.runtimeId}:${runtime.agent.state.model.provider}/${runtime.agent.state.model.id}`)
+      .join("|");
+    if (modelSignature !== lastReconciledModelSignature) {
+      lastReconciledModelSignature = modelSignature;
+      modelRefreshOwner.reconcileRuntimes();
+    }
   });
 
   const refreshCapabilitiesForAllRuntimes = (): Promise<void> => {

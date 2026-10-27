@@ -109,6 +109,52 @@ void test("a busy tab's model picker lists models but cannot pick one, and keeps
   });
 });
 
+void test("a tab saved on a provider that is no longer connected reloads on a connected model", async () => {
+  await withTaskpane(async (page) => {
+    await page.evaluate(async () => {
+      // Resolves from the page (/src/taskpane.html) to the module the app itself loaded.
+      const storage = await import("../../src/storage/local/app-storage.ts");
+      await storage.getAppStorage().providerKeys.set("openai", "sk-test");
+    });
+    await page.reload();
+    await page.locator("pi-input textarea").waitFor({ state: "visible", timeout: 20_000 });
+    const activeModel = () => page.evaluate(() => {
+      const sidebar = document.querySelector("pi-sidebar");
+      if (!sidebar || !("agent" in sidebar)) return null;
+      return (sidebar.agent as { state: { model: { provider: string } } }).state.model.provider;
+    });
+    await page.waitForFunction(() => {
+      const sidebar = document.querySelector("pi-sidebar");
+      return sidebar !== null && "agent" in sidebar
+        && (sidebar.agent as { state: { model: { provider: string } } }).state.model.provider === "openai";
+    });
+
+    // The tab's saved model belongs to Google, which has no credentials here.
+    await page.evaluate(() => {
+      const sidebar = document.querySelector("pi-sidebar");
+      if (!sidebar || !("agent" in sidebar)) throw new Error("sidebar missing");
+      const agent = sidebar.agent as { state: { model: Record<string, unknown> } };
+      agent.state.model = { ...agent.state.model, provider: "google", id: "gemini-2.5-flash-lite" };
+    });
+    // Renaming saves the session, model included.
+    await page.locator(".pi-session-tab.is-active .pi-session-tab__main").dblclick();
+    const dialog = page.locator("#pi-text-input-dialog-overlay");
+    await dialog.locator("input").fill("Gemini tab");
+    await dialog.getByRole("button", { name: "Rename" }).click();
+    await dialog.waitFor({ state: "detached" });
+    await page.waitForTimeout(300);
+
+    await page.reload();
+    await page.locator(".pi-session-tab__title").filter({ hasText: "Gemini tab" }).waitFor({ state: "visible", timeout: 20_000 });
+    await page.waitForFunction(() => {
+      const sidebar = document.querySelector("pi-sidebar");
+      return sidebar !== null && "agent" in sidebar
+        && (sidebar.agent as { state: { model: { provider: string } } }).state.model.provider !== "google";
+    }, undefined, { timeout: 10_000 }).catch(() => undefined);
+    assert.equal(await activeModel(), "openai");
+  });
+});
+
 void test("the Files detail view exposes writable actions", async () => {
   await withTaskpane(async (page) => {
     await page.evaluate(`
