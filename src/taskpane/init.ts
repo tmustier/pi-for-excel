@@ -1923,7 +1923,10 @@ export async function initTaskpane(opts: {
         currentModel,
         // Same rule from every entry point (/model, status bar): a busy tab keeps
         // its model, so the list says so up front instead of refusing a pick.
-        ...(isRuntimeBusy(activeRuntime) ? { disabledReason: t("modelSelector.busy") } : {}),
+        getDisabledReason: () => {
+          const runtime = runtimeManager.getRuntime(targetRuntimeId);
+          return runtime && isRuntimeBusy(runtime) ? t("modelSelector.busy") : undefined;
+        },
         onSelect: (model) => {
           void applyModelSelection(targetRuntimeId, model);
         },

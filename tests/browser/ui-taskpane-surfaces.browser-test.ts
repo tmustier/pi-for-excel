@@ -60,7 +60,7 @@ void test("renaming a tab confirms the entered visible title, even where window.
   });
 });
 
-void test("a busy tab's model picker lists models but cannot pick one, and keeps the model", async () => {
+void test("a busy tab's model picker lists models but cannot pick one, and unlocks when the turn ends", async () => {
   await withTaskpane(async (page) => {
     // A connected provider, so the picker has models to list.
     await page.evaluate(async () => {
@@ -77,10 +77,13 @@ void test("a busy tab's model picker lists models but cannot pick one, and keeps
       const agent = sidebar.agent as {
         state: { model: { id: string } };
         getApiKey: () => Promise<string>;
-        streamFunction: () => Promise<never>;
+        streamFunction: (model: unknown, context: unknown, options?: { signal?: AbortSignal }) => Promise<never>;
       };
       agent.getApiKey = () => Promise.resolve("test-key");
-      agent.streamFunction = () => new Promise<never>(() => {});
+      // Never answers; Stop (abort) ends the turn.
+      agent.streamFunction = (_model, _context, options) => new Promise<never>((_resolve, reject) => {
+        options?.signal?.addEventListener("abort", () => reject(new Error("aborted")));
+      });
       return agent.state.model.id;
     });
     const welcome = page.locator("#pi-welcome-login-overlay");
@@ -106,6 +109,24 @@ void test("a busy tab's model picker lists models but cannot pick one, and keeps
       const sidebar = document.querySelector("pi-sidebar");
       return sidebar && "agent" in sidebar ? (sidebar.agent as { state: { model: { id: string } } }).state.model.id : null;
     }), modelBefore);
+
+    // The turn ends while the picker stays open: the rows unlock without reopening it.
+    await page.evaluate(() => {
+      const sidebar = document.querySelector("pi-sidebar");
+      if (sidebar && "agent" in sidebar) (sidebar.agent as { abort: () => void }).abort();
+    });
+    await picker.getByRole("status").waitFor({ state: "hidden" });
+    await page.waitForFunction(() => document.querySelectorAll(
+      "#pi-model-selector-overlay .pi-model-selector-item[aria-disabled=true]",
+    ).length === 0);
+    const pickedId = await rows.nth(1).locator(".pi-model-selector-item-id").innerText();
+    await rows.nth(1).click();
+    await picker.waitFor({ state: "detached" });
+    await page.waitForFunction((id) => {
+      const sidebar = document.querySelector("pi-sidebar");
+      return sidebar !== null && "agent" in sidebar
+        && (sidebar.agent as { state: { model: { id: string } } }).state.model.id === id;
+    }, pickedId);
   });
 });
 
