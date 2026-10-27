@@ -1,6 +1,6 @@
 # Verification: integration-fixes against the agent experience
 
-**Build under test.** `integration-fixes` @ `a2b3f2d` (PRs #786–#799 merged onto main `fe7013f`), then the force-pushed rebuild @ `e48d83c`. After the rebuild, only the changes listed in INTEGRATION.md were retested: the #794 fill, the format_cells backup, the compaction toast and the selection note. Everything else was observed on `a2b3f2d`. AUTO-09, STRUCT-01, TIME-01 and TIME-02 were then run on `e48d83c`, and EDIT-05 was routed to the Mac verification thread. The two builds do not differ in the code those rows exercise.
+**Build under test.** `integration-fixes` @ `a2b3f2d` (PRs #786–#799 merged onto main `fe7013f`), then the force-pushed rebuild @ `e48d83c`. After the rebuild, only the changes listed in INTEGRATION.md were retested: the #794 fill, the format_cells backup, the compaction toast and the selection note. Everything else was observed on `a2b3f2d`. AUTO-09, STRUCT-01, TIME-01 and TIME-02 were then run on `e48d83c`, and EDIT-05 was routed to the Mac verification thread. The two builds do not differ in the code those rows exercise. The force-pushed head **`8099cd6`** was then checked for the rows its fixes touch: OJS-03, N-1, N-2, N-4, N-5, B-16, SIZE-01, analyst task 5 and STRUCT-01, plus N-3 and the new #794, #789 and #793 commits (see "Rechecked on 8099cd6").
 
 **Setup.** The tests ran on Excel on the web in an orb (`node scripts/orb/excel-web-session.mjs --check`), with the dev server serving the branch checkout. The workbooks were anonymous guest workbooks: `orb-afa50678b930-20261027013600.xlsx`, then `…20261027022640.xlsx`. The fixture follows [README.md](README.md#how-to-run-a-pass): Dates, Merged, Protected, Tbl (table Sales, filtered to North), Spill, Valid, My Sheet, Calc, Co, and Big (200,001 × 5).
 
@@ -17,15 +17,17 @@ Every model request was captured from CDP `Network.requestWillBeSent` on the tas
 
 | Set | Pass | Fail | Blocked |
 | --- | ---: | ---: | ---: |
-| Bug triage B-01 to B-25 | 24 | 1 | 0 |
-| Checklist rows (foundations-and-reading, writing, hostility) | 123 | 2 | 1 |
-| Analyst tasks | 3 succeeded | 2 partial | — |
+| Bug triage B-01 to B-25 | 25 | 0 | 0 |
+| Checklist rows (foundations-and-reading, writing, hostility) | 125 | 0 | 1 |
+| Analyst tasks | 4 succeeded | 1 partial | — |
 
 Regressions found on `a2b3f2d`:
 - The `fill_formula` timeout above about 4,500 cells.
 - The refused format_cells backup.
 
-Both are fixed and verified on `e48d83c`. Open new bugs: 6, all low severity (see the last section).
+Both are fixed and verified on `e48d83c`. Of the six low-severity bugs found on `a2b3f2d`, five are fixed on `8099cd6`; N-2 is only partly fixed (see the last section).
+
+Counts are as of `8099cd6`: B-16, OJS-03 and SIZE-01 moved from fail to pass, and task 5 from partial to succeeded.
 
 ## Bug triage (B-IDs)
 
@@ -40,18 +42,18 @@ Both are fixed and verified on `e48d83c`. Open new bugs: 6, all low severity (se
 | B-07 | pass | Reads: `01/01/2024 [45292]`, `5.0%`, `0`, `a\|b`, `line1\nline2`, `1e-7`; a text `00123` stays `00123`. Writes: four conversions reported with stored and shown values and the apostrophe hint; `'00123` stored as text. |
 | B-08 | pass | Pi's own writes are left out. An edit on a sheet added after start (`UserAdded2!F11`) is reported. Notes are stored and appear in every later call. Another tab's Pi writes are labelled. Co-author edits and row inserts are labelled, with a "may have moved" warning. |
 | B-09 | pass | Confirm mode with three parallel mutations: one dialog at a time ("2 more waiting", "1 more waiting"), all three applied. |
-| B-10 | pass | Protected sheet: write_cells, format_cells, modify_structure insert and fill_formula return `isError` and name the protection. Missing sheet: the sheet list is returned. Not covered: `execute_office_js` (OJS-03, in no PR's scope). |
+| B-10 | pass | Protected sheet: write_cells, format_cells, modify_structure insert and fill_formula return `isError` and name the protection. Missing sheet: the sheet list is returned. Not covered: `execute_office_js` (OJS-03, in no PR's scope). **8099cd6:** execute_office_js is covered too (see OJS-03). |
 | B-11 | pass | Overview has "Current state" (protected sheets) and the sheet view has "Sheet state" (spills). read_range marks merged, hidden or filtered rows, the table filter, spills, protection and Manual calculation. |
 | B-12 | pass | A sheet added by the user produced a "Workbook structure (structure changed)" note, sent once and stored. Each request's input was the previous input plus new items in 70 of 70 consecutive call pairs, except where B-16 shaping and compaction rewrote history. |
 | B-13 | pass | `=A1+A2` and `=SUM(A1:A2)` both trace to A1 and A2. |
 | B-14 | pass | A write of `new` and a read of `Calc!Z1` in the same batch: the read returned `new`. |
 | B-15 | pass | Pages of at most 500 rows, summaries placed before the grid, CSV pages, and the next range named. |
-| B-16 | fail | The wording is fixed ("no longer in your context; run the tool again"). The shaping boundary still moves on each call: calls 8 and 10 of one tab rewrote an earlier tool output, and cacheRead fell from 38.5k to 9.34k. `prefixChangeReasons` stays `[]`, because the tracker watches only model, system prompt and tools. Existed before the integration (#792 scope). |
+| B-16 | pass | Fixed on 8099cd6 (#792, commit 8cc8bf1). The wording is fixed ("no longer in your context; run the tool again"). The shaping boundary now moves in steps of 6. In one turn with 20 sequential ~1.5k-char `read_range` calls (21 requests in one session), earlier tool output was rewritten only twice: when the result count reached 12 and 18 (requests 13 and 19). Every other consecutive pair was an exact prefix extension. cacheRead per call: 0, 9,344, 9,344, 0, 12,800, 13,568, 14,464, 15,360, 11,904, 16,256, 17,152, 18,944, **9,344**, 17,408, 18,176, 19,072, 19,968, 20,864, **9,344**, 19,328, 20,096. The two bold drops are the step rewrites. The drops at calls 4 and 9 had an unchanged prefix, so they are on the provider side. `prefixChangeReasons` was `[]` on all 23 calls; the tracker still watches only model, system prompt and tools, so it does not show a shaping rewrite. On a2b3f2d the boundary moved on every call from the 7th result on. The agent answered correctly (799). |
 | B-17 | pass | Product call made: an unqualified read says "the active sheet; the address named no sheet". An unqualified write follows the active sheet and names it in the result. |
 | B-18 | pass | The prompt rule is reworded. In real Auto-mode turns the agent set `allow_overwrite` directly when asked. |
 | B-19 | pass | "Too large to back up: 240,000 cells exceed the 20,000-cell backup limit … `/backup` first". |
 | B-20 | pass | With `Excel.run` hung: read and write time out at 60 s with `excel_timeout`, and the second message says to ask the user to reload. In a real turn with every `Excel.run` hung, Stop ended the turn 2.6 s after it was pressed, and later turns worked. |
-| B-21 | pass | Selection grid has row and column labels. `#1 priority` is not reported as an error. execute_office_js returns compact JSON. The table "Column1" note appears. comments with `cell` gives a clear error. The dialog title says "Allow this change to the workbook?". The Stop-after-write wording is now "outcome unknown" (see N-4). |
+| B-21 | pass | Selection grid has row and column labels. `#1 priority` is not reported as an error. execute_office_js returns compact JSON. The table "Column1" note appears. comments with `cell` gives a clear error. The dialog title says "Allow this change to the workbook?". The Stop-after-write wording is now "outcome unknown" (see N-4). **8099cd6:** "the change stands" now shows after a slow write (N-4 fixed). |
 | B-22 | pass | Bridge: `ModuleNotFoundError … local Python (bridge at https://localhost:3340)` in 30 ms. A timeout returns 504 after 2.0 s with no second run. Pyodide: backend named and stderr shown. Leftover: the description still promises pandas (N-3). |
 | B-23 | pass | The co-author's Enter overwrote Pi's verified `Co!B4 = 555` with 9, and the next request said "By a co-author: Co: B4 (now 9)". A co-author row insert was reported with the may-have-moved warning. The agent re-read before writing its Total. |
 | B-24 | pass | `/compact` on 4×2 read turns (~31k tokens): "Summarized 4 messages", every request under Done, "Next Steps: No pending steps", 7 kept results shrunk to previews, context meter 17% → 2%. The agent then answered from memory correctly. |
@@ -137,7 +139,7 @@ Both are fixed and verified on `e48d83c`. Open new bugs: 6, all low severity (se
 | FMT-02 | pass | |
 | FMT-03 | pass | Protection named. **a2b3f2d** stored a 0-change backup anyway; **e48d83c** stores none. |
 | FMT-04 | pass | |
-| STRUCT-01 | pass | Rerun on e48d83c. The claim still holds: `modify_structure delete_rows Tbl` at row 3 deleted the filtered-out (hidden) "South, b" row and returned `Deleted 1 row(s) starting at row 3 in "Tbl".`, with a backup but no mention of the table, its filter or the hidden row. A read afterwards shows the table shrunk to A1:D6. This is still a hazard for the agent (see observations). **How the row was hidden:** by the table's filter, not by hand. The fixture applies a values filter (Region = North) to table Sales (`t.columns.getItem("Region").filter.applyValuesFilter(["North"])`), which hides rows 3, 5 and 7 (READ-07). No script hid a row by hand. Caveat: the filter state was not read again just before the delete, and the Excel session has since expired, so it can't be checked now. This result conflicts with #791 (aa17e28), which found that Excel on the web keeps a row hidden by a filter and deletes only the visible one. Both variants (filtered out, and hidden by hand) will be rerun once an integration-fixes head includes aa17e28. |
+| STRUCT-01 | pass | Rerun on 8099cd6 (#791 @ aa17e28), both variants, each on fresh sheets with the fixture rows (hidden rows 3, 5, 7 when filtered). **Single hidden row, `delete_rows` at row 3:** with a table filter, an AutoFilter, or row 3 hidden by hand, Excel on the web deleted the hidden "South, b" row in all three cases. Pi now says so: "⚠️ 1 deleted row(s) were hidden (a filter is on): row 3. The rows were in table **FiltTbl** (filtered). Deleted hidden data: row 3 (\"South\", \"b\", 20). Deleting by position removes hidden rows too. If the user meant only the visible rows, restore this change with `workbook_history` …", with `details.hiddenRowsDeleted: 1` and a backup. The hand-hidden case says "were hidden" without "(a filter is on)". **Mixed range, rows 2–3 (visible a + hidden b):** with a table filter or an AutoFilter, Excel kept the filtered-out row and deleted only the visible one. Pi reports "Deleted 1 of 2 row(s) … ⚠️ Excel kept 1 hidden row(s) (a filter is on) and deleted only the others … The kept rows (originally row 3) now start at row 2", saves no backup and says why. Read-back matched (b kept, now hidden at row 2). Hand-hidden, the same range deleted both rows, and Pi listed the hidden one. Rows 4–6 of the filtered table (hidden d, visible e, hidden f) gave "Deleted 1 of 3 row(s)", with e deleted. So #791's finding holds only for a mixed range: a range made only of filtered-out rows is deleted. Pi reports both cases correctly. **Earlier note (e48d83c):** the "South, b" row deleted then was hidden by the table filter (Region = North, from the fixture), not by hand. Read-back on 8099cd6 confirms it is gone from table Sales. |
 | STRUCT-02 | pass | |
 | STRUCT-03 | pass | "the workbook was not changed. Sheet "Protected" is protected …" |
 | STRUCT-04 | pass | |
@@ -148,7 +150,7 @@ Both are fixed and verified on `e48d83c`. Open new bugs: 6, all low severity (se
 | COMMENT-02 | pass | Clear `range is required` error. |
 | OJS-01 | pass | |
 | OJS-02 | pass | |
-| OJS-03 | fail | Still `Error executing Office.js: You cannot perform the requested operation.`, `isError: false`. No PR covers execute_office_js. |
+| OJS-03 | pass | Fixed on 8099cd6 (#791 @ aa17e28, 32f5e1a). A write to `Protected!A1` returns `isError: true` with "Error executing Office.js: Protected sheet(s): \"Protected\". Excel refused the change, most likely because it touches one of them. Pi cannot unprotect a sheet …", plus "Steps in the code before the failing call may already have changed the workbook; read back before retrying." That warning is true: with an unlocked `B2` write synced first, B2 changed before A1 failed. Other Office.js errors are also `isError` with a specific reason (a size mismatch gives InvalidArgument; a missing sheet gives the sheet list). An error thrown by the code itself keeps its message. |
 | OJS-04 | pass | Compact JSON. |
 | HIST-01 | pass | Full ids. |
 | HIST-02 | pass | `delete` asks even in Auto mode ("Let Pi delete backups?"). Declined in a real turn. |
@@ -181,7 +183,7 @@ Both are fixed and verified on `e48d83c`. Open new bugs: 6, all low severity (se
 | LOCK-02 | pass | Read returned `new`. |
 | LOCK-05 | pass | Queue: no auto-decline. |
 | LOCK-06 | pass | Real Confirm turn: three dialogs one at a time, all applied. |
-| SIZE-01 | fail | Agent quality, not the tools: asked for the Qty sum of rows 2–1000, the agent paged with read_range and answered **8,965** on both builds. The correct sum is 8,978. It did the arithmetic itself, not in Python or a formula, although read_range says "prefer search_workbook or python". The other aggregates were correct (250, 150, 0, 59). |
+| SIZE-01 | pass | Rerun on 8099cd6 (#787 @ ba0e22c) in a fresh tab: "What's the total Qty on the Big sheet for rows 2 to 1000?" The agent read C1:C500 and C501:C1000. Each page now ends with "Column sums on this page (numbers only): C 4,464 (499 numbers)" (then 4,514), plus "compute them … do not add up values yourself". It answered **8,978**, which is correct (`functions.sum(Big!C2:C1000)` = 8,978). On a2b3f2d and e48d83c it answered 8,965. One run. |
 | RECALC-01 | pass | Verified as 3, with a note. |
 | RECALC-02 | pass | read_range warns "Calculation mode is Manual". |
 | CTX-01 | pass | Paging instead. |
@@ -195,7 +197,7 @@ Both are fixed and verified on `e48d83c`. Open new bugs: 6, all low severity (se
 | COAUTH-05 | pass | The co-author's edit mode did not block Pi's write or read. |
 | SAVE-01 | pass | Backups listed after about 40 min on the web. |
 | STOP-01 | pass | Stop before the batch: J1:J10 unchanged, turn ended 2.7 s after Stop. The result says "outcome unknown … may still be applied", which is conservative but not exact. |
-| STOP-02 | pass | Stop after the batch: K11:K20 written, backup saved, turn ended 2.6 s after Stop. The result says "outcome unknown", not "the change stands" (N-4). |
+| STOP-02 | pass | Stop after the batch: K11:K20 written, backup saved, turn ended 2.6 s after Stop. The result says "outcome unknown", not "the change stands" (N-4). **8099cd6:** see N-4; the result now says the change stands and gives the backup id. |
 | STOP-03 | pass | Hung `Excel.run`: "Stopped by the user before Excel answered", 2.6 s. |
 | TIME-01 | pass | Rerun on e48d83c as a small burst. Probe calls make no model requests, so the shared login and its rate limit were not involved and no separate login was needed. Results: 30 parallel `read_range` of 500×5 pages in 5.1 s; 20 parallel `write_cells` serialized through the lock in 5.1 s, all 20 landed; 100 parallel raw 5,000-cell reads in 4.6 s; no errors. A `read_range` straight after the burst took 4.0 s. Overload shows as delay, not as a throttling error, as the claim says. |
 | TIME-02 | pass (simulated) | A real host hang can't be produced on purpose. The first pass got one only by firing 150 parallel 10,000-cell volatile-formula batches; that is not repeatable, needs a page reload to recover, and stalls the shared Excel on the web host and guest workbook for the other orbs. So `Excel.run` in the taskpane was replaced with a never-settling promise, which is the symptom of a hang as the code sees it. Rerun on e48d83c: `write_cells` returned `excel_timeout` with `isError` after 60.0 s. In a real turn, Stop ended a hung `read_range` 2.7 s after it was pressed ("Stopped by the user before Excel answered"). Once `Excel.run` was restored, the next read and the next turn worked, so the lock had been released. The same behavior was seen on a2b3f2d (B-20). |
@@ -205,6 +207,7 @@ Both are fixed and verified on `e48d83c`. Open new bugs: 6, all low severity (se
 - **a2b3f2d:** 14 calls in 2 sessions, `prefixChangeReasons` `[]` on every call, `prefixChanges` 0. A Confirm/Auto mode switch arrived as an appended developer message ("Updated system prompt section …"), not a prefix change.
 - **e48d83c:** 57 calls, `prefixChanges` 2, both `[systemPrompt, tools]`. Both come from `/compact`: the summarizer request (310-char instructions, no tools) is sent with the same `prompt_cache_key` as the chat, so the tracker counts it and the next call as changes. Every other call was `[]`.
 - **Message-level prefix:** each request's input was the previous request's minus the trailing selection note in every consecutive pair, except two B-16 shaping rewrites and the compaction.
+- **8099cd6:** 23 calls (one 20-read loop plus the turns around it), `prefixChanges` 0, `prefixChangeReasons` `[]` on every call. The message-level prefix broke only at the two step rewrites (B-16).
 
 ## Analyst tasks (GPT-6 Luna, real turns, fresh tab each)
 
@@ -212,9 +215,10 @@ Both are fixed and verified on `e48d83c`. Open new bugs: 6, all low severity (se
 2. **Clean a messy import** (trim and proper-case names, mixed date formats in UK style, bracket negatives, drop blanks and duplicates, leave Import untouched). It used python_run on the bridge (one bridge-consent dialog, approved) to compute date serials. Clean!A1:D7 is correct: 05/02/2024 read as 5 Feb, `(250.00)` → -250, duplicate and blank removed. It kept `n/a` and `13/13/2024` as text and said exactly that ("Could not parse: Clean!B6 … Clean!C5 …"). Import is unchanged. **Verdict: succeeded, honestly.**
 3. **Reconcile two sheets** (Ledger vs Bank by reference). It wrote dynamic-array formulas (`SORT(UNIQUE(VSTACK(…)))` and `XLOOKUP` spills) in Recon!A1:E2 and read the spill back. It reported all four exceptions correctly: INV-002 -90, INV-007 +9, INV-008 missing in bank, INV-009 missing in ledger. It noted the formulas cover source rows 2–1000. **Verdict: succeeded.**
 4. **Chart a trend** (line chart plus a 3-month moving average, checked visually). It added C4:C25 `=AVERAGE(B2:B4)` filled, created the chart and checked it with get_image. It described the trend correctly. Unprompted, it flagged that the fixture's month dates repeat and skip months (my 30.44-day spacing), so the "3-month" average is really three rows. **Verdict: succeeded, honestly.** Low point: it labelled the column "3-Month Moving Average" and called it "3-observation" only in chat.
-5. **Fix broken formulas** (#REF! discount, SUM ranges missing a row, #DIV/0!, a price stored as text). Fixed: E2:E5 (`=D2*(1-20%)`), B6 and D6 extended to row 5, D8 changed to `=D6/B6`; re-read. Missed: C7 `=AVERAGE(C2:C5)` = 4.17, because C3 holds the text "12" and AVERAGE skips it (true average 6.125). The detailed read showed `text (@) → C3`, but the grid renders the text "12" the same as a number. It also hard-coded 20% instead of putting it in an input cell, although the prompt's workflow rule says to use input cells. Its reply says "Fixed the formula problems", which overclaims. **Verdict: partial.** One misleading number was left in place and reported as fixed.
+5. **Fix broken formulas** (#REF! discount, SUM ranges missing a row, #DIV/0!, a price stored as text). Fixed: E2:E5 (`=D2*(1-20%)`), B6 and D6 extended to row 5, D8 changed to `=D6/B6`; re-read. Missed: C7 `=AVERAGE(C2:C5)` = 4.17, because C3 holds the text "12" and AVERAGE skips it (true average 6.125). The detailed read showed `text (@) → C3`, but the grid renders the text "12" the same as a number. It also hard-coded 20% instead of putting it in an input cell, although the prompt's workflow rule says to use input cells. Its reply says "Fixed the formula problems", which overclaims. **Verdict on a2b3f2d: partial.** One misleading number was left in place and reported as fixed.
+   **Rerun on 8099cd6** (#787 @ ba0e22c), on a freshly rebuilt Broken sheet: "The Broken sheet's formulas look wrong in places. Find and fix the problems, then tell me what you changed and anything you couldn't fix." Both read_range results carried "⚠️ Numbers stored as text (SUM, AVERAGE and other aggregates skip them …): C3 \"12\"". The agent wrote B6 `=SUM(B2:B5)`, D6 `=SUM(D2:D5)` and D8 `=D6/B6`. It rewrote C3 as the number 12 with General format, so C7 = 6.125, and it re-read the sheet. It searched for "discount" and "#REF!", found no source for the deleted rate, and left E2:E5 as #REF!, saying "the workbook doesn't indicate the intended discount rate … Those four errors remain until that rate is supplied." Checked in the workbook: all values are as stated. **Verdict on 8099cd6: succeeded, honestly.**
 
-Also partial, from the SIZE-01 turns: a wrong Qty sum (8,965 vs 8,978) stated confidently.
+Also partial on a2b3f2d and e48d83c, from the SIZE-01 turns: a wrong Qty sum (8,965 vs 8,978) stated confidently. On 8099cd6 the same question was answered correctly (SIZE-01).
 
 ## Regressions and new bugs
 
@@ -231,40 +235,53 @@ Also partial, from the SIZE-01 turns: a wrong Qty sum (8,965 vs 8,978) stated co
 - Code: `src/tools/format-cells.ts:618-631` at a2b3f2d.
 - Fixed on e48d83c: no backup is stored.
 
-### Open (all low severity)
+### Found on a2b3f2d (all low severity), status on 8099cd6
 
 **N-1. Manual-calculation note only when formulas are written.** Owner: #791.
 - Repro: Manual calculation, B1 `=A1+A2`. Run `write_cells Calc!A1 = 10` with `allow_overwrite`. The result is clean, but B1 shows a stale value.
 - Code: `src/tools/mutation/range-write.ts:546` gates on `options.sentFormulas`.
+- **8099cd6: fixed** (#791 99d8242). Under Manual calculation, `write_cells Calc!A1 = 10` now ends with "ℹ️ Calculation is set to Manual. Formulas that depend on them still show old results until the user recalculates (F9) …", with `details.calculationMode: "Manual"`. A formula write says the written cells were calculated.
 
 **N-2. Timeout result contradicts itself.** Owner: #791.
 - Repro: `Excel.run` never settles; call `write_cells Calc!H7`. The result says "nothing was written to Calc!H7. Excel did not answer (…), so whether the change was applied is unknown."
 - Code: `range-write.ts:900` plus `src/tools/mutation/excel-failure.ts:175`.
+- **8099cd6: partly fixed** (#791 99d8242). Same repro: after 60.0 s, `isError` with `excel_timeout`, "Error writing cells — nothing was written to Calc!H7. Excel did not answer (Excel did not answer within 60 s. The outcome is unknown: the request may or may not have been applied. Read the affected range back before retrying a change. If this happens again, ask the user to reload the Excel page.) before the change was sent. Retry once Excel responds." The conclusion is now right (H7 was empty on read-back). But the quoted timeout message still says the outcome is unknown and may have been applied, because `src/tools/mutation/excel-failure.ts:188` interpolates the raw message from `src/excel/helpers.ts:97`. Sent to the #791 thread.
 
 **N-3. Python wording leftovers.** Owner: #797.
 - `python_run`'s description promises "numpy, pandas, etc. work automatically", but Pyodide returns "pandas … is not installed". Code: `src/tools/python-run.ts:512`; the system prompt's Python section says the same.
 - The transform's overwrite block says "confirm with the user and retry", unlike B-18's rule. Code: `src/tools/python-transform-range.ts:645`.
+- **8099cd6: fixed** (#797 fb4d645). With the bridge stopped, `python_run` ran on Pyodide (`sys.platform` = `emscripten`), and `import pandas as pd; import numpy as np` worked (pandas 2.2.3, 4.0 s cold). The transform's overwrite text now uses B-18's wording ("If the user asked to change these cells, retry with `allow_overwrite: true`. Otherwise show the user the existing data and ask …"); checked in code, not run.
 
 **N-4. Stop reporting masked in the combination.** Owners: #792 with #791 (combination).
 - Repro: delay `Excel.run`'s return by 6 s after the batch; Stop during `write_cells Calc!K11:K20`.
 - The cells are written and a backup is saved, but the agent receives "outcome unknown … may still be applied" with no backup id. #791's "⏹ Stopped after writing … the change stands" never shows for a batch slower than 500 ms.
 - Code: `src/tools/with-workbook-coordinator.ts:336` (`settleOnStop`, 500 ms).
+- **8099cd6: fixed** (#792 @ d31bf82). In a real turn, every `Excel.run` was delayed 6 s and Stop was pressed 1.5 s after the `write_cells` card for Calc!K11:K30 appeared. The turn ended 6.9 s after Stop. The tool result the agent keeps: "Written to **Calc!K11:K30** (20×1) … Changed cell(s): 20. ⏹ Stop was pressed while this ran; the change above was already applied and stands. Backup saved: `6d668314-…`". The cells hold 1–20. A 6,000×5 probe write aborted 150 ms in returned "⏹ **Stopped after writing Calc!M1:Q6000** (6000×5) — the change stands. It was not verified because Stop was pressed …", with `stopped: true` and `writtenCount: 30000`; it saved no backup and said why (over the 20,000-cell limit; the range was empty, so clearing it undoes the change).
 
 **N-5. Clearing a formula cell is reported as "replaced by values".** Owner: #791.
 - Repro: write `""` over a formula. Seen in a real turn clearing `Co!A9`.
 - Code: `range-write.ts:864`.
+- **8099cd6: fixed** (#791 8b17deb). Writing `""` over `Calc!B2` (`=SUM(A1:A2)`) gives no "replaced by values" warning; `details.changes` keeps `beforeFormula`. Writing `5` over the same formula still warns ("1 formula(s) on sheet \"Calc\" replaced by values: B2").
 
 **N-6. History shaping still moves its boundary on every call (B-16 remainder).** Owner: #792. Existed on main.
 - Repro: four turns each with one or two ~13k-char reads in one tab.
 - Calls 8 and 10 rewrite an earlier tool output into `[Compacted tool result]`. cacheRead drops from 38.5k to 9.34k, and `prefixChangeReasons` stays `[]`.
 - Code: `src/messages/tool-result-shaping.ts` (`shapeToolResultsForLlm`).
+- **8099cd6: fixed** (#792, 8cc8bf1). The boundary moves every 6 results (see B-16).
 
 ### Observations, not filed
 
 - **Confirm mode asks twice.** The agent asks for confirmation in chat (rule 7 and the "Execution mode: Ask for explicit user confirmation" text), and then the dialog asks again. Seen in two Confirm-mode turns, including "no need to ask first".
 - **The compaction summarizer shares the chat's `prompt_cache_key`.** Telemetry counts two `[systemPrompt, tools]` prefix changes per `/compact`.
-- **Text numbers look like numbers in the compact read.** A number stored as text (`"12"`) renders the same as a number, which led to task 5's missed AVERAGE bug. Only detailed mode shows `text (@)`.
+- **Text numbers look like numbers in the compact read.** A number stored as text (`"12"`) renders the same as a number, which led to task 5's missed AVERAGE bug. Only detailed mode shows `text (@)`. On 8099cd6 every read lists them ("⚠️ Numbers stored as text …"), and task 5 then succeeded.
 - **Failed `python_run` and read_range results keep `isError: false`.**
-- **A row delete by position in a filtered table removes a hidden row without saying so** (STRUCT-01). The agent cannot tell from the result that it deleted a row the user could not see.
+- **A row delete by position in a filtered table removes a hidden row without saying so** (STRUCT-01). The agent cannot tell from the result that it deleted a row the user could not see. On 8099cd6 the result lists the hidden rows deleted or kept (see STRUCT-01).
 - **Structural changes made outside a Pi write window are attributed to the user.** Excel reports `RowInserted` and `RowDeleted` with `triggerSource: "Unknown"`, even from the add-in. Pi's own row insert was correctly left out of its own tab's note and listed under "By Pi in another chat tab" in the other tab. A probe delete made outside any tool call was listed "By the user". In the product this affects only add-in code with no write window, such as extensions.
-- **Routed elsewhere:** OJS-03 to #791; SIZE-01 and task 5's AVERAGE miss to #787.
+- **Routed elsewhere:** OJS-03 to #791; SIZE-01 and task 5's AVERAGE miss to #787. All three pass on 8099cd6.
+
+### Rechecked on 8099cd6, outside the rows above
+
+- **#794 @ 515072d, approval dialog and live regions:** with an approval open, the four app children of `body` were `inert`, and `div.pi-announcer` (`aria-live=polite`) and the dialog's `p.pi-approval__waiting` were not inside an inert subtree. On abort the dialog resolved `false` and nothing stayed inert. Pass (DOM check).
+- **#793 @ aff33d6, tabs:** with 13 tabs in the 349 px pane, titles read in full ("Chat 10", "Chat 11", "Chat 12"), the strip scrolls, and inactive tabs' × buttons have opacity 0 while the active tab's has opacity 1. After a reload the active tab was fully in view. Once, before a reload, the strip stopped 24 px short of its end (scrollLeft 531 of 555), so the active tab's × was clipped behind the › arrow. A new tab and a later reload both showed it in full, and it did not recur. Pass, with that one unreproduced glitch.
+- **#789 @ a66868d, a partial answer kept when retries run out (SEND-13):** not exercised live. It needs a provider failure after streaming has started, which can't be caused on demand against the shared login.
+- **Spot checks of touched tools:** `fill_formula Calc!R2:R6` wrote and verified 5 formulas with a backup. A refused `format_cells Protected!A1` returned `isError`, named the protection and stored no backup (R-2 still fixed).
