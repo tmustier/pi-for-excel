@@ -1,5 +1,5 @@
 /**
- * The error banner text for a tab whose turn has settled.
+ * Plain-language recovery for a failed response. Raw provider text stays in Details.
  */
 
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
@@ -36,6 +36,8 @@ export function describeTurnFailure(context: TurnFailureContext): string | null 
   if (!last || last.role !== "assistant" || last.stopReason !== "error") return null;
   const error = last.errorMessage ?? "";
 
+  if (/\b(401|403)\b|unauthorized|invalid.*(?:key|token)/iu.test(error)) return t("turn.error.credentials");
+  if (/\b404\b|model_not_found/iu.test(error)) return t("turn.error.model");
   if (context.expiredLoginFor) {
     return t("turn.error.loginExpired", { provider: context.expiredLoginFor });
   }
@@ -57,5 +59,15 @@ export function describeTurnFailure(context: TurnFailureContext): string | null 
     if (context.proxyUrl) return t("turn.error.proxyUnreachable", { url: context.proxyUrl });
     return t("turn.error.cors", { url: context.defaultProxyUrl, guide: PROXY_HELPER_DOCS_URL });
   }
-  return t("init.llmError", { error });
+  return t("turn.error.generic");
+}
+
+export function turnFailureFix(error: string): { command: "login" | "settings" | "model"; label: string } {
+  if (/\b(401|403)\b|unauthorized|key|token|login|credential/iu.test(error)) {
+    return { command: "login", label: t("turn.fix.credentials") };
+  }
+  if (isLikelyCorsErrorMessage(error) || /proxy|offline|network/iu.test(error)) {
+    return { command: "settings", label: t("turn.fix.proxy") };
+  }
+  return { command: "model", label: t("turn.fix.model") };
 }

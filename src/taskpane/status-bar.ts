@@ -22,6 +22,7 @@ import {
 import type { RuntimeLockState } from "./session-runtime-manager.js";
 import { closeStatusPopover } from "./status-popovers.js";
 import { getThinkingLevelLabel } from "./thinking-display.js";
+import { formatThinkingShortcut } from "../utils/platform.js";
 
 export type ActiveAgentProvider = () => Agent | null;
 export type ActiveLockStateProvider = () => RuntimeLockState;
@@ -81,6 +82,7 @@ function renderStatusBar(
   agent: Agent | null,
   lockState: RuntimeLockState,
   executionMode: ExecutionMode,
+  autoCompactionEnabled: boolean,
 ): void {
   const el = document.getElementById("pi-status-bar");
   if (!el) return;
@@ -126,7 +128,7 @@ function renderStatusBar(
   const ctxDescription = getStatusContextTooltipDescription();
   const ctxTokenDetail = t("status.context.tokens", { used: totalTokens.toLocaleString(), total: contextWindow.toLocaleString() });
 
-  const contextHealth = getStatusContextHealth(totalTokens, contextWindow);
+  const contextHealth = getStatusContextHealth(totalTokens, contextWindow, autoCompactionEnabled);
   const ctxColor = contextHealth.colorClass;
   const ctxWarningText = contextHealth.warning?.text ?? "";
   const ctxWarningSeverity = contextHealth.warning?.severity ?? "";
@@ -159,7 +161,7 @@ function renderStatusBar(
   const modeBadge = `<button type="button" aria-haspopup="menu" class="pi-status-mode pi-status-clickable pi-status-tooltip--right${modeBadgeClass}" data-tooltip="${escapeAttr(modeTooltip)}"><span>${escapeHtml(modeLabel)}</span><span class="pi-status-affordance" aria-hidden="true">${affordanceChevronSvg}</span></button>`;
 
   const thinkingTooltip = escapeAttr(
-    t("status.thinking.tooltip"),
+    t("status.thinking.tooltip", { shortcut: formatThinkingShortcut() }),
   );
 
   const ctxPopoverDesc = escapeAttr(ctxDescription);
@@ -221,19 +223,21 @@ export function updateStatusBar(
   getActiveAgent: ActiveAgentProvider,
   getLockState?: ActiveLockStateProvider,
   getExecutionMode?: ActiveExecutionModeProvider,
+  autoCompactionEnabled = false,
 ): void {
   const activeAgent = getActiveAgent();
   const lockState = getLockState ? getLockState() : "idle";
   const executionMode = getExecutionMode ? getExecutionMode() : "yolo";
-  renderStatusBar(activeAgent, lockState, executionMode);
+  renderStatusBar(activeAgent, lockState, executionMode, autoCompactionEnabled);
 }
 
 export function injectStatusBar(opts: {
   getActiveAgent: ActiveAgentProvider;
   getLockState?: ActiveLockStateProvider;
   getExecutionMode?: ActiveExecutionModeProvider;
+  autoCompactionEnabled?: boolean;
 }): () => void {
-  const { getActiveAgent, getLockState, getExecutionMode } = opts;
+  const { getActiveAgent, getLockState, getExecutionMode, autoCompactionEnabled = false } = opts;
 
   let unsubscribeActiveAgent: (() => void) | undefined;
   let hasDeferredRender = false;
@@ -257,7 +261,7 @@ export function injectStatusBar(opts: {
     }
 
     hasDeferredRender = false;
-    updateStatusBar(getActiveAgent, getLockState, getExecutionMode);
+    updateStatusBar(getActiveAgent, getLockState, getExecutionMode, autoCompactionEnabled);
   };
 
   const markStatusBarInteractionStart = (): void => {
@@ -292,7 +296,7 @@ export function injectStatusBar(opts: {
     }
 
     hasDeferredRender = false;
-    updateStatusBar(getActiveAgent, getLockState, getExecutionMode);
+    updateStatusBar(getActiveAgent, getLockState, getExecutionMode, autoCompactionEnabled);
   };
 
   const bindActiveAgent = () => {
@@ -366,7 +370,7 @@ export function injectStatusBar(opts: {
   // high-frequency agent stream above waits for the interaction to settle.
   const onStatusUpdate = () => {
     hasDeferredRender = false;
-    updateStatusBar(getActiveAgent, getLockState, getExecutionMode);
+    updateStatusBar(getActiveAgent, getLockState, getExecutionMode, autoCompactionEnabled);
   };
 
   document.addEventListener("pi:status-update", onStatusUpdate);
@@ -391,7 +395,7 @@ export function injectStatusBar(opts: {
 }
 
 export function flashThinkingLevel(level: ThinkingLevel, color: string): void {
-  showToast(t("status.thinking.toast", { level: getThinkingLevelLabel(level) }), 1500);
+  showToast(t("status.thinking.toast", { level: getThinkingLevelLabel(level), shortcut: formatThinkingShortcut() }), 1500);
 
   const el = document.querySelector<HTMLElement>(".pi-status-thinking");
   if (!el) return;

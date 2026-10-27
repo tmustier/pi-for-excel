@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 
 import type { Page } from "playwright";
+import type { Agent } from "@earendil-works/pi-agent-core";
 
 import { enterInput, openTaskpane, startTaskpaneServer, type TaskpaneServer } from "./harness.ts";
 
@@ -26,6 +27,85 @@ async function withTaskpane(run: (page: Page) => Promise<void>, viewportHeight =
     await opened.finish();
   }
 }
+
+/** The external model boundary; submissions still enter through the real composer. */
+async function stubProvider(page: Page, mode: "hold" | "fail"): Promise<void> {
+  await page.evaluate(async (responseMode) => {
+    const { createAssistantMessageEventStream } = await import("/node_modules/@earendil-works/pi-ai/dist/utils/event-stream.js") as typeof import("@earendil-works/pi-ai/utils/event-stream");
+    const { fauxAssistantMessage } = await import("/node_modules/@earendil-works/pi-ai/dist/providers/faux.js") as typeof import("@earendil-works/pi-ai/providers/faux");
+    const sidebar = document.querySelector("pi-sidebar");
+    if (!sidebar || !("agent" in sidebar)) throw new Error("sidebar missing");
+    // PiSidebar's public agent is the active runtime's Agent.
+    const agent = sidebar.agent as Agent;
+    agent.getApiKey = () => Promise.resolve("fixture-key");
+    let calls = 0;
+    agent.streamFunction = (_model, _context, options) => {
+      calls++;
+      const stream = createAssistantMessageEventStream();
+      if (responseMode === "hold") {
+        options?.signal?.addEventListener("abort", () => {
+          setTimeout(() => stream.push({ type: "error", reason: "aborted", error: fauxAssistantMessage("", { stopReason: "aborted" }) }), 500);
+        }, { once: true });
+      } else {
+        const message = calls === 1
+          ? fauxAssistantMessage("", { stopReason: "error", errorMessage: "401 invalid API key: provider diagnostic" })
+          : fauxAssistantMessage("Recovered answer");
+        setTimeout(() => stream.push(message.stopReason === "error"
+          ? { type: "error", reason: "error", error: message }
+          : { type: "done", reason: "stop", message }), 10);
+      }
+      return stream;
+    };
+  }, mode);
+}
+
+void test("busy composer keeps Enter steer, Alt+Enter follow-up, Send and Stop distinct", async () => {
+  await withTaskpane(async (page) => {
+    await stubProvider(page, "hold");
+    await enterInput(page, "start");
+    const input = page.locator("pi-input textarea");
+    await page.getByRole("button", { name: "Stop", exact: true }).waitFor();
+    assert.match(await input.getAttribute("placeholder") ?? "", /Enter to steer.*Alt\+Enter/);
+    await input.fill("keyboard steer");
+    await input.press("Enter");
+    await input.fill("later question");
+    await input.press("Alt+Enter");
+    await input.fill("mouse steer");
+    const send = page.getByRole("button", { name: "Send", exact: true });
+    const stop = page.getByRole("button", { name: "Stop", exact: true });
+    const [sendBox, stopBox] = await Promise.all([send.boundingBox(), stop.boundingBox()]);
+    assert.ok(sendBox && stopBox && sendBox.x + sendBox.width <= stopBox.x, "Send does not cover Stop");
+    await send.click();
+    assert.deepEqual(await page.locator("#pi-queue-display .pi-queue__text").allTextContents(), ["keyboard steer", "later question", "mouse steer"]);
+    await stop.click();
+    await page.locator("pi-working-indicator").getByText("Stopping…", { exact: true }).waitFor();
+    assert.equal(await stop.isDisabled(), true);
+    await stop.waitFor({ state: "detached" });
+    assert.equal(await page.locator("#pi-queue-display .pi-queue__text").count(), 3);
+  });
+});
+
+void test("a failed turn appears once inline with Details, a fix action and working Retry", async () => {
+  await withTaskpane(async (page) => {
+    await stubProvider(page, "fail");
+    await enterInput(page, "answer this");
+    const failure = page.locator(".pi-assistant-error");
+    await failure.getByRole("button", { name: "Retry", exact: true }).waitFor();
+    assert.equal(await failure.count(), 1);
+    assert.equal(await page.locator("#pi-notices").innerText(), "");
+    assert.equal(await failure.getByText("401 invalid API key: provider diagnostic", { exact: true }).isVisible(), false);
+    await failure.getByText("Details", { exact: true }).click();
+    assert.equal(await failure.getByText("401 invalid API key: provider diagnostic", { exact: true }).isVisible(), true);
+    await failure.getByRole("button", { name: "Update login or API key" }).click();
+    await page.getByRole("heading", { name: "Model providers", exact: true }).waitFor();
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("Escape");
+    await failure.getByRole("button", { name: "Retry", exact: true }).click();
+    await page.getByText("Recovered answer", { exact: true }).waitFor();
+    assert.equal(await failure.count(), 0);
+    assert.equal(await page.locator("user-message").count(), 1);
+  });
+});
 
 /**
  * Gives the active tab enough history to compact and a model stream that never

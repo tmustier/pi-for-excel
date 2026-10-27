@@ -16,6 +16,7 @@ import type { Message } from "@earendil-works/pi-ai";
 
 import { effectiveRecentToolResultsToKeep } from "../context/window-budgets.js";
 import { autoContextToUserMessage } from "./auto-context.js";
+import { interruptedResponseToLlm } from "./interrupted-response.js";
 import { convertAttachments, isArtifactMessage, isUserMessageWithAttachments } from "./attachments.js";
 import { compactionSummaryToUserMessage, getCompactedToolCallIds } from "./compaction.js";
 import { shapeToolResultsForLlm } from "./tool-result-shaping.js";
@@ -73,6 +74,10 @@ export function createConvertToLlm(options: {
     const normalized: AgentMessage[] = [];
 
     for (const message of messages) {
+      if (message.role === "interruptedResponse") {
+        normalized.push(...interruptedResponseToLlm(message));
+        continue;
+      }
       if (message.role === "archivedMessages") {
         // UI-only history bucket, never sent to the model.
         continue;

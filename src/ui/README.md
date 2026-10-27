@@ -186,7 +186,7 @@ Pick by how long the thing stays true:
 |---|---|---|---|
 | **Inline status** | state of one control or card (saving…, tool failed) | next to the control | no extra notification for the same event |
 | **Toast** (`toast.ts`) | the result of something the user just did | `#pi-toast`, bottom, above the dock and above overlays | ≤3 stacked, newest last; duplicates refresh instead of stacking; pause on hover/focus; errors stay 6 s and have ×; Undo toasts take an `id` so they can be dismissed when the action is undone another way |
-| **Banner** (`banner.ts`) | a condition that stays true until fixed or acknowledged (last run failed, proxy down, first-run disclosure) | `#pi-notices` under the tabs, most severe first | always dismissible; one per `id`; never moves focus; `role="alert"` only for errors |
+| **Banner** (`banner.ts`) | a condition that stays true until fixed or acknowledged (proxy down, first-run disclosure) | `#pi-notices` under the tabs, most severe first | always dismissible; one per `id`; never moves focus; `role="alert"` only for errors |
 | **Announcement** (`announcer.ts`) | screen-reader-only news with no visible notification: a run finished, failed in a background tab, is retrying; an approval is waiting | hidden `aria-live` regions | never for something a toast or banner already announces; assertive only when the user must act |
 
 Wording: sentence case, past tense for results ("Renamed tab to “Forecast”"), say what to do next for failures ("Couldn’t save. Try again."), curly quotes around names, no trailing period on one-phrase toasts, and the same string for the same event on every path. Every string goes through `t()`.
@@ -204,6 +204,6 @@ Wording: sentence case, past tense for results ("Renamed tab to “Forecast”")
 
 `taskpane.ts` creates the `Agent`, mounts `PiSidebar`, and wires:
 - `sidebar.onSend` / `sidebar.onAbort` → agent.prompt() / agent.abort()
-- Keyboard shortcuts (Enter, Escape, Shift+Tab for thinking) via `document.addEventListener("keydown")`
+- Keyboard shortcuts (Enter to steer, Alt/Option+Enter for follow-up, Escape to stop, Ctrl+Alt/Option+T for thinking) via `document.addEventListener("keydown")`; Shift+Tab keeps native focus navigation.
 - Slash command menu via `wireCommandMenu(sidebar.getInput())`
 - Session persistence (auto-save on message_end, auto-restore latest on init)

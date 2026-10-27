@@ -311,12 +311,10 @@ export function installKeyboardShortcuts(opts: {
     },
     (context) => {
       const { event, agent, textarea, keyTarget } = context;
-      // Only from the composer's text field: everywhere else, including the
-      // composer's own buttons, Shift+Tab moves focus backwards.
-      if (!(event.shiftKey && event.key === "Tab") || !agent || !textarea || keyTarget !== textarea) return false;
+      // Leave Tab and Shift+Tab to native focus navigation everywhere.
+      if (!(event.ctrlKey && event.altKey && !event.metaKey && !event.shiftKey && event.code === "KeyT")
+        || !agent || !textarea || keyTarget !== textarea) return false;
 
-      // Office on the web also moves focus on Shift+Tab from a window listener;
-      // the key must do exactly one thing.
       event.preventDefault();
       event.stopPropagation();
       cycleThinkingLevel(agent);

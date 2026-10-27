@@ -43,9 +43,19 @@ const YELLOW_SHARE_OF_SOFT_WARNING = 0.75;
  * close to compaction (past the soft warning budget) on every model, and
  * yellow means well on the way there.
  */
-export function getStatusContextHealth(totalTokens: number, contextWindow: number): StatusContextHealth {
+export function getStatusContextHealth(totalTokens: number, contextWindow: number, autoCompactionEnabled = false): StatusContextHealth {
   const pct = contextWindow > 0 ? Math.round((totalTokens / contextWindow) * 100) : 0;
   const { softWarningTokens } = getCompactionThresholds(contextWindow);
+  if (autoCompactionEnabled) {
+    return {
+      colorClass: "",
+      warning: totalTokens > softWarningTokens ? {
+        text: t("status.context.automatic"),
+        severity: "yellow",
+        actionText: "",
+      } : null,
+    };
+  }
   if (totalTokens > contextWindow) {
     return {
       colorClass: "pi-status-ctx--red",

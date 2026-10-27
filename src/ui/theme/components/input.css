@@ -134,6 +134,20 @@ pi-input {
   transform: scale(1.05);
 }
 
+.pi-input-card.is-busy .pi-input-textarea {
+  padding-right: 82px;
+}
+
+.pi-input-card.is-busy .pi-input-btn--send {
+  right: 40px;
+}
+
+.pi-input-btn--abort:disabled {
+  opacity: 0.5;
+  cursor: default;
+  transform: none;
+}
+
 @media (max-height: 520px) {
   .pi-input-textarea {
     min-height: 34px;
@@ -157,5 +171,4 @@ pi-input {
     right: 6px;
   }
 }
-
 

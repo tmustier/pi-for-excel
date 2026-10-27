@@ -15,6 +15,7 @@ import type { StreamingMessageContainer } from "./messages/streaming-message-con
 import { Archive, ChevronRight, FileText, Keyboard, Puzzle, RotateCcw, Ruler, Settings, Wrench } from "lucide";
 import "./pi-input.js";
 import "./working-indicator.js";
+import { describePendingToolCall } from "./tool-renderers.js";
 import {
   endOpenThinking,
   forgetOpenThinking,
@@ -178,9 +179,12 @@ export class PiSidebar extends LitElement {
   @property({ attribute: false }) onOpenShortcuts?: () => void;
   /** The active tab is busy (responding, compacting or waiting to retry). */
   @property({ attribute: false }) tabBusy = false;
+  @property({ attribute: false }) turnError: string | null = null;
 
   @state() private _hasMessages = false;
   @state() private _isStreaming = false;
+  @state() private _thinking = false;
+  @state() private _toolLabel: string | null = null;
   @state() private _busyLabel: string | null = null;
   @state() private _busyHint: string | null = null;
   @state() private _hostWaitLabel: string | null = null;
@@ -448,16 +452,24 @@ export class PiSidebar extends LitElement {
           break;
         case "agent_start":
           this._liveToolResults = new Map();
+          this._thinking = false;
+          this._toolLabel = null;
           this._isStreaming = agent.state.isStreaming;
           this.requestUpdate();
           break;
         case "turn_start":
         case "turn_end":
-        case "tool_execution_start":
           this._isStreaming = agent.state.isStreaming;
           this.requestUpdate();
           break;
+        case "tool_execution_start":
+          this._thinking = false;
+          this._toolLabel = describePendingToolCall(ev.toolName, ev.args)
+            ?? agent.state.tools.find((tool) => tool.name === ev.toolName)?.label ?? ev.toolName;
+          this.requestUpdate();
+          break;
         case "tool_execution_end": {
+          if (agent.state.pendingToolCalls.size === 0) this._toolLabel = null;
           // pi-agent-core types `result` as any. A shape we cannot read just
           // waits for the batch's toolResult message, as before.
           const raw: unknown = ev.result;
@@ -485,6 +497,7 @@ export class PiSidebar extends LitElement {
         case "message_update": {
           const update = ev.assistantMessageEvent;
           if (ev.message.role === "assistant") {
+            this._thinking = update.type === "thinking_start" || update.type === "thinking_delta";
             if (update.type === "thinking_start") {
               recordThinkingStart(thinkingKey(ev.message, update.contentIndex), Date.now());
             } else if (update.type === "thinking_end") {
@@ -496,6 +509,7 @@ export class PiSidebar extends LitElement {
             this._streamingContainer.isStreaming = streaming;
             this._streamingContainer.setMessage(ev.message, !streaming);
           }
+          this.requestUpdate();
           break;
         }
       }
@@ -853,7 +867,8 @@ export class PiSidebar extends LitElement {
               .tools=${state.tools}
               .pendingToolCalls=${state.pendingToolCalls}
               .liveToolResults=${toolResultsById}
-              .isStreaming=${state.isStreaming}
+              .isStreaming=${state.isStreaming || this.tabBusy}
+              .errorSummary=${this.turnError}
             ></message-list>
             ${this._renderContextPill()}
             <streaming-message-container
@@ -870,7 +885,8 @@ export class PiSidebar extends LitElement {
       <div class="pi-dock ${this._isStreaming || this._busyLabel !== null || this._hostWaitLabel !== null ? "pi-dock--busy" : ""}">
         <pi-working-indicator
           .active=${this._isStreaming || this._busyLabel !== null || this._hostWaitLabel !== null}
-          .primaryText=${this._hostWaitLabel ?? this._busyLabel ?? undefined}
+          .primaryText=${this._busyLabel === t("working.stopping") ? this._busyLabel :
+            this._hostWaitLabel ?? this._busyLabel ?? this._toolLabel ?? (this._thinking ? undefined : t("working.default"))}
           .hintText=${this._hostWaitLabel !== null ? (this._hostWaitHint ?? undefined) : (this._busyHint ?? undefined)}
         ></pi-working-indicator>
         <div id="pi-widget-slot" class="pi-widget-slot" style="display:none"></div>
@@ -878,6 +894,7 @@ export class PiSidebar extends LitElement {
           <pi-input
             .isStreaming=${this._isStreaming}
             .busy=${this._isStreaming || this.tabBusy}
+            .stopping=${this._busyLabel === t("working.stopping")}
             @pi-send=${this._onSend}
             @pi-abort=${this._onAbort}
             @pi-files-drop=${this._onFilesDrop}

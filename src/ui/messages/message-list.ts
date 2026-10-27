@@ -28,6 +28,7 @@ export class MessageList extends LitElement {
   @property({ type: Object }) pendingToolCalls?: ReadonlySet<string>;
   /** The turn is running: tool calls without a result are still to come. */
   @property({ type: Boolean }) isStreaming = false;
+  @property({ type: String }) errorSummary: string | null = null;
   /**
    * Results pi-agent-core reported at tool_execution_end. In a parallel batch
    * each tool finishes on its own, but its toolResult message is only added
@@ -87,6 +88,9 @@ export class MessageList extends LitElement {
               .toolResultsById=${resultByCallId}
               .hideToolCalls=${false}
               .awaitingToolResults=${this.isStreaming}
+              .hideError=${this.isStreaming && message === this.messages.at(-1)}
+              .canRetry=${!this.isStreaming && message === this.messages.at(-1)}
+              .errorSummary=${message === this.messages.at(-1) ? this.errorSummary : null}
             ></assistant-message>
           `,
         });

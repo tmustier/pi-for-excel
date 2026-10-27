@@ -9,13 +9,13 @@ function isTaskpaneInitPayloadShape(value: unknown): value is Record<string, unk
  * sidebar mount, slash commands, keyboard shortcuts).
  */
 
-import { html, render } from "lit";
 import { Agent } from "@earendil-works/pi-agent-core";
 import { clampThinkingLevel, getCurrentSystemMessage, toToolDeclaration } from "@earendil-works/pi-ai";
 import { getAppStorage } from "../storage/local/app-storage.js";
 import type { SessionData } from "../storage/local/types.js";
 
 import { createOfficeStreamFn } from "../auth/stream-proxy.js";
+import { commandRegistry } from "../commands/types.js";
 import {
   DEFAULT_PROXY_URL,
   validateOfficeProxyUrl,
@@ -114,7 +114,6 @@ import { PI_SKILLS_CHANGED_EVENT } from "../skills/events.js";
 import { createSkillReadCache } from "../skills/read-cache.js";
 import { initLanguage, t } from "../language/index.js";
 import { initAppStorage } from "../storage/init-app-storage.js";
-import { renderError } from "../ui/loading.js";
 import { showFilesWorkspaceDialog } from "../ui/files-dialog.js";
 
 import {
@@ -127,7 +126,7 @@ import { dismissToast, showActionToast, showToast, type ActionToastHandle } from
 import { PiSidebar } from "../ui/pi-sidebar.js";
 import { createProxyBannerController } from "../ui/proxy-banner.js";
 import { announce } from "../ui/announcer.js";
-import { hideBanner, mountBanner, showBanner } from "../ui/banner.js";
+import { mountBanner } from "../ui/banner.js";
 import { setActiveProviders } from "../models/active-providers.js";
 import { BrowserModelRuntime } from "../models/browser-model-runtime.js";
 import {
@@ -230,28 +229,12 @@ import { doesOverlayClaimEscape } from "../utils/escape-guard.js";
 
 const RUNTIME_SYSTEM_PROMPT_SECTION = "pi-for-excel-runtime";
 
-const RUN_ERROR_BANNER_ID = "run-error";
-
-/** A tab's run error, as a closable banner in the notice area under the tabs. */
-function showErrorBanner(errorRoot: HTMLElement, message: string, onDismiss: () => void): void {
-  const shown = showBanner({ id: RUN_ERROR_BANNER_ID, tone: "error", message, onDismiss });
-  if (!shown) {
-    // Before the sidebar exists there is no notice area; use the page-level slot.
-    render(renderError(message), errorRoot);
-  }
-}
-
-function clearErrorBanner(errorRoot: HTMLElement): void {
-  hideBanner(RUN_ERROR_BANNER_ID);
-  render(html``, errorRoot);
-}
-
 export async function initTaskpane(opts: {
   appEl: HTMLElement;
   errorRoot: HTMLElement;
   autoResizeImages: boolean;
 }): Promise<void> {
-  const { appEl, errorRoot, autoResizeImages } = opts;
+  const { appEl, autoResizeImages } = opts;
 
   // One workbook-level edit log; each runtime reads it from its own cursor.
   // User structure changes (sheets, rows, columns) invalidate the blueprint.
@@ -810,26 +793,22 @@ export async function initTaskpane(opts: {
     focusChatInputSoon();
   });
 
-  // The notice area shows the active tab's run error (the binding passes it
-  // on every tab change). Closing the banner clears that tab's error.
-  let shownRunError: string | null = null;
-  const renderRunError = (message: string | null): void => {
-    if (message === shownRunError) return;
-    shownRunError = message;
-    if (message === null) {
-      clearErrorBanner(errorRoot);
-      return;
-    }
-    showErrorBanner(errorRoot, message, () => {
-      shownRunError = null;
-      runtimeManager.getActiveRuntime()?.tab.setError(null);
-    });
-  };
-
   bindRuntimeSidebar({
     runtimeManager,
     sidebar,
-    renderError: renderRunError,
+    renderError: (message) => { sidebar.turnError = message; },
+  });
+
+  sidebar.addEventListener("pi-retry", () => {
+    const runtime = runtimeManager.getActiveRuntime();
+    if (runtime?.actionQueue.retry()) runtime.tab.setError(null);
+  });
+  sidebar.addEventListener("pi-fix-error", (event) => {
+    if (!(event instanceof CustomEvent) || typeof event.detail !== "string") return;
+    if (event.detail === "settings") void openSettings("connections");
+    else if (event.detail === "login" || event.detail === "model") {
+      void commandRegistry.get(event.detail)?.execute("");
+    }
   });
 
   let lastReconciledModelSignature = "";
@@ -2386,6 +2365,7 @@ export async function initTaskpane(opts: {
     getActiveAgent,
     getLockState: getActiveLockState,
     getExecutionMode,
+    autoCompactionEnabled: autoCompactEnabled,
   });
 
   // ── Proxy status polling ──

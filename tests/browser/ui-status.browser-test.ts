@@ -39,9 +39,9 @@ async function setContextUsage(page: Page, percent: number): Promise<void> {
 
 for (const row of [
   { percent: 60, warning: null, severity: null },
-  { percent: 61, warning: "Context 61% full.", severity: "yellow" },
-  { percent: 81, warning: "Context 81% full — responses may become less reliable.", severity: "red" },
-  { percent: 101, warning: "Context is full — the next message will fail.", severity: "red" },
+  { percent: 61, warning: null, severity: null },
+  { percent: 81, warning: "Pi will summarize older messages automatically soon.", severity: "yellow" },
+  { percent: 101, warning: "Pi will summarize older messages automatically soon.", severity: "yellow" },
 ] as const) {
   void test(`context usage at ${row.percent}% shows the expected visible warning`, async () => {
     await withTaskpane({ width: 420, height: 720 }, async (page) => {
@@ -58,7 +58,7 @@ for (const row of [
   });
 }
 
-void test("Shift+Tab cycles thinking only from the composer text field", async () => {
+void test("Shift+Tab moves focus; Ctrl+Alt+T cycles thinking only in the composer", async () => {
   await withTaskpane({ width: 420, height: 720 }, async (page) => {
     const level = (): Promise<string | null> => page.locator(".pi-status-thinking").getAttribute("aria-label");
     const input = page.locator("pi-input textarea");
@@ -66,6 +66,10 @@ void test("Shift+Tab cycles thinking only from the composer text field", async (
 
     const before = await level();
     await input.press("Shift+Tab");
+    assert.equal(await level(), before);
+    assert.equal(await page.getByRole("button", { name: "Browse files", exact: true }).evaluate((el) => el === document.activeElement), true);
+    await input.focus();
+    await input.press("Control+Alt+t");
     const cycled = await level();
     assert.notEqual(cycled, before);
     assert.equal(await input.evaluate((el) => el === document.activeElement), true);
@@ -75,6 +79,9 @@ void test("Shift+Tab cycles thinking only from the composer text field", async (
     await page.keyboard.press("Shift+Tab");
     assert.equal(await level(), cycled);
     assert.equal(await input.evaluate((el) => el === document.activeElement), true);
+    await page.getByRole("button", { name: "Send", exact: true }).focus();
+    await page.keyboard.press("Control+Alt+t");
+    assert.equal(await level(), cycled);
   });
 });
 

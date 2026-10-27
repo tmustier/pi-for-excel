@@ -40,7 +40,7 @@ function getShortcutGroups(): readonly ShortcutGroup[] {
         same(t("shortcuts.keys.enterStreaming"), t("shortcuts.desc.interrupt")),
         { mac: "⌥ Enter", win: "Alt+Enter", description: t("shortcuts.desc.queue") },
         { mac: "⌥ ↑", win: "Alt+↑", description: t("shortcuts.desc.restore_queue") },
-        { mac: "⇧ Tab", win: "Shift+Tab", description: t("shortcuts.desc.cycle_thinking") },
+        { mac: "⌃ ⌥ T", win: "Ctrl+Alt+T", description: t("shortcuts.desc.cycle_thinking") },
         { mac: "⌘ O", win: "Ctrl+O", description: t("shortcuts.desc.toggle_details") },
       ],
     },

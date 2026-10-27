@@ -27,6 +27,7 @@ import type {
 } from "@earendil-works/pi-ai";
 
 import { AUTO_CONTEXT_PREFIX } from "../messages/auto-context.js";
+import { streamWithProviderFailure } from "./provider-failure.js";
 import { isDebugEnabled } from "../debug/debug.js";
 import { selectToolBundle, type ToolBundleId } from "../context/tool-disclosure.js";
 import { modelRecencyScore } from "../models/model-ordering.js";
@@ -655,12 +656,12 @@ export function createOfficeStreamFn(
         );
       }
       assertDirectRequestAllowed(normalizedModel);
-      return modelsRuntime.streamSimple(normalizedModel, context, effectiveOptions);
+      return streamWithProviderFailure((requestOptions) => modelsRuntime.streamSimple(normalizedModel, context, requestOptions), effectiveOptions);
     }
 
     if (!needsOpenRouterProxy && !shouldProxyProvider(normalizedModel.provider, options?.apiKey, runtimeProviderRoute)) {
       assertDirectRequestAllowed(normalizedModel);
-      return modelsRuntime.streamSimple(normalizedModel, context, effectiveOptions);
+      return streamWithProviderFailure((requestOptions) => modelsRuntime.streamSimple(normalizedModel, context, requestOptions), effectiveOptions);
     }
 
     // Guardrails: fail fast for known-bad proxy configs (e.g., HTTP proxy from HTTPS taskpane).
@@ -686,10 +687,10 @@ export function createOfficeStreamFn(
           transport: "sse",
         }
       : effectiveOptions;
-    return modelsRuntime.streamSimple(
+    return streamWithProviderFailure((requestOptions) => modelsRuntime.streamSimple(
       applyProxy(normalizedModel, validated, proxyTransport),
       context,
-      proxiedOptions,
-    );
+      requestOptions,
+    ), proxiedOptions);
   };
 }

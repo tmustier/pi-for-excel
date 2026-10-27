@@ -24,6 +24,7 @@ import { html, LitElement, nothing, type TemplateResult } from "lit";
 import { customElement, property } from "lit/decorators.js";
 
 import { t } from "../../language/index.js";
+import { turnFailureFix } from "../../taskpane/turn-error.js";
 import type { UserMessageWithAttachments } from "../../messages/attachments.js";
 import { getToolRenderer, renderTool } from "./tool-renderer-registry.js";
 import {
@@ -108,6 +109,9 @@ export class AssistantMessage extends LitElement {
   @property({ type: Boolean }) hideToolCalls = false;
   @property({ type: Object }) toolResultsById?: Map<string, ToolResultMessage>;
   @property({ type: Boolean }) isStreaming = false;
+  @property({ type: String }) errorSummary: string | null = null;
+  @property({ type: Boolean }) canRetry = false;
+  @property({ type: Boolean }) hideError = false;
   /**
    * The turn is still running, so a tool call without a result is about to
    * run or is running even before pi-agent-core marks it pending.
@@ -229,10 +233,15 @@ export class AssistantMessage extends LitElement {
     return html`
       <div>
         ${orderedParts.length ? html`<div class="pi-assistant-body">${orderedParts}</div>` : nothing}
-        ${message.stopReason === "error" && message.errorMessage
+        ${message.stopReason === "error" && !this.hideError
           ? html`
-              <div class="pi-assistant-error">
-                <strong>${t("messages.errorLabel")}</strong> ${message.errorMessage}
+              <div class="pi-assistant-error" role="alert">
+                <p>${this.errorSummary || t("turn.error.generic")}</p>
+                ${this.canRetry ? html`
+                  <button type="button" class="pi-overlay-btn" @click=${() => this.dispatchEvent(new CustomEvent("pi-retry", { bubbles: true }))}>${t("turn.retry")}</button>
+                  <button type="button" class="pi-overlay-btn" @click=${() => this.dispatchEvent(new CustomEvent("pi-fix-error", { bubbles: true, detail: turnFailureFix(message.errorMessage ?? "").command }))}>${turnFailureFix(message.errorMessage ?? "").label}</button>
+                ` : nothing}
+                <details><summary>${t("turn.error.details")}</summary><pre>${message.errorMessage}</pre></details>
               </div>
             `
           : nothing}

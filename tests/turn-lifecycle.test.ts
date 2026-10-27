@@ -14,6 +14,8 @@ import { createActionQueue } from "../src/taskpane/action-queue.ts";
 import { createQueueDisplay } from "../src/taskpane/queue-display.ts";
 import { createTabState, type TabActivity } from "../src/taskpane/tab-state.ts";
 import { describeTurnFailure } from "../src/taskpane/turn-error.ts";
+import { createConvertToLlm } from "../src/messages/convert-to-llm.ts";
+import { streamWithProviderFailure } from "../src/auth/provider-failure.ts";
 
 /** Texts of the user messages in a request the model received. */
 function requestUserTexts(context: Context): string[] {
@@ -35,6 +37,7 @@ const untilStopped: FauxResponseStep = (_context, options) => new Promise((resol
 function createTab(responses: FauxResponseStep[], opts?: {
   runCompact?: (args: string, signal: AbortSignal) => Promise<void>;
   transformContext?: (messages: AgentMessage[]) => Promise<AgentMessage[]>;
+  fetch?: typeof globalThis.fetch;
 }) {
   const faux = fauxProvider({ models: [{ id: "turn-test", contextWindow: 200_000, maxTokens: 4_096 }] });
   faux.setResponses(responses);
@@ -43,10 +46,11 @@ function createTab(responses: FauxResponseStep[], opts?: {
   const requests: Context[] = [];
   const agent = new Agent({
     initialState: { model: faux.getModel(), messages: [], tools: [] },
+    convertToLlm: createConvertToLlm(),
     transformContext: opts?.transformContext,
     streamFn: (model, context, options) => {
       requests.push(structuredClone(context));
-      return models.streamSimple(model, context, options);
+      return streamWithProviderFailure((requestOptions) => models.streamSimple(model, context, requestOptions), { ...options, ...(opts?.fetch ? { fetch: opts.fetch } : {}) });
     },
   });
   const tab = createTabState();
@@ -150,7 +154,7 @@ void test("a transient provider failure is retried with a visible countdown and 
   await waitFor(() => !tab.queue.isBusy());
 
   assert.equal(tab.requests.length, 2);
-  assert.match(tab.activities.find((activity) => activity !== null)?.label ?? "", /^Retrying in 2s \(attempt 1 of 3\)/u);
+  assert.match(tab.activities.find((activity) => activity !== null)?.label ?? "", /^Retrying in 2s \(attempt 1 of 6\)/u);
   assert.equal(tab.tab.activity, null);
   const assistants = tab.agent.state.messages.filter((message) => message.role === "assistant");
   assert.deepEqual(assistants.map((message) => message.stopReason), ["stop"]);
@@ -194,13 +198,10 @@ void test("a partial answer that failed mid-stream survives a retry that fails b
   await waitFor(() => !tab.queue.isBusy());
 
   assert.equal(tab.requests.length, 2);
-  const last = tab.agent.state.messages.at(-1);
-  assert.deepEqual(
-    last?.role === "assistant"
-      ? { text: last.content.map((part) => (part.type === "text" ? part.text : "")).join(""), stopReason: last.stopReason, error: last.errorMessage }
-      : null,
-    { text: "partial answer", stopReason: "error", error: "Failed to fetch: network error" },
-  );
+  const partial = tab.agent.state.messages.find((message) => message.role === "interruptedResponse");
+  assert.equal(partial?.role === "interruptedResponse" ? partial.message.content[0]?.type === "text" && partial.message.content[0].text : null, "partial answer");
+  assert.ok(tab.requests[1]?.messages.some((message) => message.role === "assistant" && message.content.some((part) => part.type === "text" && part.text === "partial answer")), "retry receives the partial answer instead of restarting it");
+  assert.equal(tab.agent.state.messages.filter((message) => message.role === "user").length, 1);
   tab.queue.shutdown();
 });
 
@@ -216,6 +217,48 @@ void test("a quota or usage-limit failure is not retried", async () => {
     tab.queue.shutdown();
   }
 });
+
+void test("manual Retry resumes the failed point without another user message", async () => {
+  const tab = createTab([
+    fauxAssistantMessage("", { stopReason: "error", errorMessage: "401 invalid API key" }),
+    fauxAssistantMessage("recovered"),
+  ]);
+  tab.queue.enqueuePrompt("original request");
+  await waitFor(() => !tab.queue.isBusy());
+  assert.equal(tab.queue.retry(), true);
+  assert.equal(tab.queue.retry(), false, "a double click cannot duplicate a retry");
+  await waitFor(() => !tab.queue.isBusy());
+  assert.deepEqual(tab.requests.map(requestUserTexts), [["original request"], ["original request"]]);
+  assert.deepEqual(tab.agent.state.messages.filter((message) => message.role === "assistant").map((message) => message.stopReason), ["stop"], JSON.stringify(tab.agent.state.messages));
+  tab.queue.shutdown();
+});
+
+for (const row of [
+  { code: "rate_limit_exceeded", retryAfter: "7", countdown: 7 },
+  { code: "rate_limit_exceeded", retryAfter: "120", countdown: 60 },
+  { code: "usage_limit_reached", retryAfter: "1", countdown: null },
+  { code: "insufficient_quota", retryAfter: "1", countdown: null },
+] as const) {
+  void test(`HTTP 429 ${row.code} with Retry-After ${row.retryAfter} uses provider facts, not rewritten wording`, async () => {
+    const tab = createTab([async (_context, options) => {
+      await options?.fetch?.("https://provider.test/response");
+      return fauxAssistantMessage("", { stopReason: "error", errorMessage: "You have hit your ChatGPT usage limit." });
+    }], {
+      fetch: () => Promise.resolve(new Response(JSON.stringify({ error: { code: row.code } }), { status: 429, headers: { "Retry-After": row.retryAfter } })),
+    });
+    tab.queue.enqueuePrompt("hello");
+    await waitFor(() => tab.tab.activity !== null || !tab.queue.isBusy());
+    if (row.countdown !== null) {
+      assert.match(tab.tab.activity?.label ?? "", new RegExp(`^Retrying in ${row.countdown}s`));
+      tab.queue.stop();
+    } else {
+      assert.equal(tab.tab.activity, null);
+    }
+    await waitFor(() => !tab.queue.isBusy());
+    assert.equal(tab.requests.length, 1);
+    tab.queue.shutdown();
+  });
+}
 
 void test("Stop cancels a running /compact for this tab and returns the prompt held behind it", async () => {
   let compactSignal: AbortSignal | null = null;
@@ -256,7 +299,7 @@ void test("editing the last waiting steer takes only that one back; the earlier 
   tab.queue.shutdown();
 });
 
-void test("the error banner names the real failure", () => {
+void test("inline error summaries explain recovery without repeating provider details", () => {
   const failed = (errorMessage: string): AgentMessage[] => [
     fauxAssistantMessage("", { stopReason: "error", errorMessage }),
   ];
@@ -274,7 +317,7 @@ void test("the error banner names the real failure", () => {
   assert.equal(describeTurnFailure({ ...base, messages: [fauxAssistantMessage("fine")] }), null);
   assert.equal(
     describeTurnFailure({ ...base, messages: failed("Request cancelled: invalid tool schema") }),
-    "Couldn’t get a response: Request cancelled: invalid tool schema",
+    "Pi couldn’t finish this response. Try again or choose another model.",
   );
   assert.match(
     describeTurnFailure({ ...base, messages: failed("400 model_not_supported").map((message) => ({ ...message, provider: "github-copilot" })) }) ?? "",
@@ -282,7 +325,7 @@ void test("the error banner names the real failure", () => {
   );
   assert.equal(
     describeTurnFailure({ ...base, messages: failed("400 model_not_supported") }),
-    "Couldn’t get a response: 400 model_not_supported",
+    "Pi couldn’t finish this response. Try again or choose another model.",
   );
   assert.equal(
     describeTurnFailure({ ...base, messages: failed("Provider is not configured: anthropic"), missingCredentialsFor: "anthropic" }),

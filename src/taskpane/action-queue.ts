@@ -26,8 +26,10 @@
  */
 
 import type { Agent, AgentMessage } from "@earendil-works/pi-agent-core";
-import { isRetryableAssistantError, retryDelayMs, type AssistantMessage } from "@earendil-works/pi-ai";
+import { retryDelayMs, type AssistantMessage } from "@earendil-works/pi-ai";
 import { t } from "../language/index.js";
+import { providerRetryDelay } from "../auth/provider-failure.js";
+import "../messages/interrupted-response.js";
 
 import { commandRegistry } from "../commands/types.js";
 import {
@@ -61,6 +63,8 @@ export interface TurnOutcome {
 export interface ActionQueue {
   enqueuePrompt: (text: string) => void;
   enqueueCommand: (name: string, args: string) => void;
+  /** Retries the failed point without adding another user message. */
+  retry: () => boolean;
   /** Alt+Up: puts the last row holding the user's text back in the composer; false when there is none. */
   editLast: () => boolean;
   /** Stops the tab: cancels the run, compaction or retry wait; queued messages become "Not sent" rows. */
@@ -76,8 +80,8 @@ type ActionQueueDisplay = Pick<
 
 type ActivityHost = Pick<TabState, "setActivity" | "setBusy" | "returnToDraft" | "held" | "setHeld" | "hold">;
 
-/** Transient provider failures are retried up to this many times (2s, 4s, 8s). */
-export const PROVIDER_RETRY_LIMIT = 3;
+/** Six bounded waits span about a minute without server guidance. */
+export const PROVIDER_RETRY_LIMIT = 6;
 const PROVIDER_RETRY_BASE_DELAY_MS = 2_000;
 
 class StoppedError extends Error {
@@ -125,6 +129,7 @@ export function createActionQueue(opts: {
 
   const actions: QueuedAction[] = [];
   let running = false;
+  let retryRequested = false;
   let closed = false;
   /** Aborted by stop(); renewed for each queue item so a stop only cancels what is running. */
   let stopController = new AbortController();
@@ -201,6 +206,7 @@ export function createActionQueue(opts: {
   });
 
   const stop = (): TakenBack => {
+    if (isBusy()) tab.setActivity({ label: t("working.stopping"), hint: null });
     const texts = drainMessages();
     const cancelledCommands: string[] = [];
     for (const action of actions) {
@@ -223,25 +229,23 @@ export function createActionQueue(opts: {
     syncDisplay();
   };
 
-  /**
-   * Retries a run that failed with a transient provider error: drops the
-   * failed response, waits with a visible countdown, and continues the turn.
-   * If the turn still ends in an error (Stop during the wait, a retry that
-   * fails differently, or no retries left), the transcript keeps the first
-   * failed response: it holds any answer that streamed before the failure,
-   * which a retry that fails before streaming would otherwise replace. It
-   * carries the latest error, since that is why the turn ended.
-   */
+  function prepareRetry(): void {
+    const failure = lastAssistant(agent.state.messages);
+    if (!failure || failure.stopReason !== "error") return;
+    agent.state.messages = agent.state.messages.slice(0, -1);
+    if (failure.content.some((part) => part.type === "text" && part.text.trim())) {
+      agent.state.messages.push({ role: "interruptedResponse", message: failure, timestamp: failure.timestamp });
+    }
+  }
+
+  /** Preserve readable partial answers and continue only after the visible wait. */
   async function retryTransientFailure(signal: AbortSignal): Promise<void> {
-    let firstFailure: AssistantMessage | null = null;
     for (let attempt = 1; attempt <= PROVIDER_RETRY_LIMIT; attempt++) {
       const failure = lastAssistant(agent.state.messages);
       if (!failure || failure.stopReason !== "error" || signal.aborted) break;
-      if (!isRetryableAssistantError(failure) || findTrailingContextOverflowError(agent.state)) break;
-      firstFailure ??= failure;
-
-      agent.state.messages = agent.state.messages.slice(0, -1);
-      const delayMs = retryDelayMs({ baseDelayMs: PROVIDER_RETRY_BASE_DELAY_MS }, attempt);
+      if (findTrailingContextOverflowError(agent.state)) break;
+      const delayMs = providerRetryDelay(failure, retryDelayMs({ baseDelayMs: PROVIDER_RETRY_BASE_DELAY_MS, maxAgentDelayMs: 16_000 }, attempt));
+      if (delayMs === null) break;
       const hint = t("action-queue.retryingHint");
       try {
         for (let remaining = delayMs; remaining > 0; remaining -= 1_000) {
@@ -257,22 +261,14 @@ export function createActionQueue(opts: {
         }
       } catch (error) {
         if (!(error instanceof StoppedError)) throw error;
-        agent.state.messages = [...agent.state.messages, failure];
         break;
       } finally {
         tab.setActivity(null);
       }
 
       if (closed) return;
+      prepareRetry();
       await agent.continue();
-    }
-
-    const last = lastAssistant(agent.state.messages);
-    if (firstFailure && last && last !== firstFailure && last.stopReason === "error" && !findTrailingContextOverflowError(agent.state)) {
-      const kept: AssistantMessage = last.errorMessage === undefined
-        ? firstFailure
-        : { ...firstFailure, errorMessage: last.errorMessage };
-      agent.state.messages = [...agent.state.messages.slice(0, -1), kept];
     }
   }
 
@@ -295,17 +291,19 @@ export function createActionQueue(opts: {
     tab.setBusy(true);
 
     try {
-      while (!closed && actions.length > 0) {
+      while (!closed && (actions.length > 0 || retryRequested)) {
         // Never start queued actions while the agent is still streaming.
         await agent.waitForIdle();
         if (closed) break;
 
         const next = actions[0];
-        if (!next) break;
+        const retry = retryRequested;
+        retryRequested = false;
+        if (!next && !retry) break;
         if (stopController.signal.aborted) stopController = new AbortController();
         const signal = stopController.signal;
 
-        if (next.type === "command") {
+        if (next?.type === "command") {
           actions.shift();
           syncDisplay();
           try {
@@ -325,19 +323,24 @@ export function createActionQueue(opts: {
 
         // The prompt stays in the queue strip (and can be taken back or
         // stopped) while pre-prompt compaction runs.
-        await maybeAutoCompactBeforePrompt({
+        if (next?.type === "prompt") await maybeAutoCompactBeforePrompt({
           agent,
           nextUserText: next.text,
           enabled: autoCompactEnabled,
           runCompact: () => runCompactWithIndicator("", signal),
         });
         if (closed) break;
-        if (actions[0] !== next) continue;
+        if (!retry && actions[0] !== next) continue;
 
         actions.shift();
         syncDisplay();
         try {
-          await agent.prompt(next.text);
+          if (retry) {
+            prepareRetry();
+            await agent.continue();
+          } else if (next?.type === "prompt") {
+            await agent.prompt(next.text);
+          }
           if (closed || signal.aborted) continue;
 
           await retryTransientFailure(signal);
@@ -365,6 +368,7 @@ export function createActionQueue(opts: {
     } finally {
       running = false;
       syncDisplay();
+      tab.setActivity(null);
       tab.setBusy(false);
     }
   }
@@ -394,6 +398,13 @@ export function createActionQueue(opts: {
   return {
     enqueuePrompt,
     enqueueCommand,
+    retry: () => {
+      const failure = lastAssistant(agent.state.messages);
+      if (closed || isBusy() || failure?.stopReason !== "error") return false;
+      retryRequested = true;
+      void process();
+      return true;
+    },
     editLast: () => {
       const row = queueDisplay.lastEditableRow();
       return row !== null && editRow(row);

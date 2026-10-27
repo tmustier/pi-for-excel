@@ -14,6 +14,10 @@ export function isMacPlatform(): boolean {
   return platform.startsWith("Mac") || ua.includes("Macintosh");
 }
 
+export function formatThinkingShortcut(): string {
+  return isMacPlatform() ? "Ctrl+Option+T" : "Ctrl+Alt+T";
+}
+
 /** Excel for Mac's taskpane: a WKWebView, whose user agent lacks Safari's "Safari/" token. */
 export function isEmbeddedAppleWebView(): boolean {
   const { ua } = readPlatformStrings();

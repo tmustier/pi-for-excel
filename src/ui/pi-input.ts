@@ -22,6 +22,7 @@ import { keyed } from "lit/directives/keyed.js";
 import { FileText } from "lucide";
 
 import { t } from "../language/index.js";
+import { isMacPlatform } from "../utils/platform.js";
 import { getSendText, isSubmitKey, resolveInputAutoGrowHeight } from "./pi-input-behavior.js";
 
 const PLACEHOLDER_HINT_KEYS = [
@@ -38,8 +39,9 @@ function getPlaceholderHintKey(index: number): string {
 @customElement("pi-input")
 export class PiInput extends LitElement {
   @property({ type: Boolean }) isStreaming = false;
-  /** The tab is busy (responding, compacting or waiting to retry): Stop replaces Send. */
+  /** The tab is busy (responding, compacting or waiting to retry). */
   @property({ type: Boolean }) busy = false;
+  @property({ type: Boolean }) stopping = false;
 
   @state() private _value = "";
   @state() private _placeholderIndex = 0;
@@ -246,7 +248,7 @@ export class PiInput extends LitElement {
 
     return html`
       <div
-        class="pi-input-card ${this._isDragOver ? "is-drag-over" : ""}"
+        class="pi-input-card ${this.busy ? "is-busy" : ""} ${this._isDragOver ? "is-drag-over" : ""}"
         @dragenter=${this._onDragEnter}
         @dragover=${this._onDragOver}
         @dragleave=${this._onDragLeave}
@@ -265,7 +267,7 @@ export class PiInput extends LitElement {
         ${keyed(this._draftOwner, html`<textarea
           class="pi-input-textarea"
           .value=${this._value}
-          placeholder=${this.isStreaming ? t("input.streaming.placeholder") : t(getPlaceholderHintKey(this._placeholderIndex))}
+          placeholder=${this.isStreaming ? t("input.streaming.placeholder", { modifier: isMacPlatform() ? "Option" : "Alt" }) : t(getPlaceholderHintKey(this._placeholderIndex))}
           rows="1"
           aria-label=${t("input.chat.aria")}
           autocomplete="off"
@@ -285,10 +287,12 @@ export class PiInput extends LitElement {
               @mousedown=${this._onActionMouseDown}
               @click=${this._onAbortClick}
               aria-label=${t("input.stop.aria")}
+              ?disabled=${this.stopping}
             >
               <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
             </button>`
-          : html`
+          : null}
+        ${!this.busy || hasContent ? html`
             <button
               class="pi-input-btn pi-input-btn--send ${hasContent ? "" : "is-disabled"}"
               type="button"
@@ -298,8 +302,7 @@ export class PiInput extends LitElement {
               aria-disabled=${hasContent ? "false" : "true"}
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
-            </button>`
-        }
+            </button>` : null}
       </div>
     `;
   }

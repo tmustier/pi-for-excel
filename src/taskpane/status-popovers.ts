@@ -317,11 +317,11 @@ function createCommandButton(args: {
 
   const command = document.createElement("span");
   command.className = "pi-status-popover__command-name";
-  command.textContent = `/${args.command}`;
+  command.textContent = args.title;
 
   const description = document.createElement("span");
   description.className = "pi-status-popover__command-desc";
-  description.textContent = args.description;
+  description.textContent = `/${args.command} · ${args.description}`;
 
   button.append(command, description);
   button.setAttribute("aria-label", `${args.title}: ${args.description}`);
