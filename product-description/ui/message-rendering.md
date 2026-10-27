@@ -1,7 +1,5 @@
 # Message rendering
 
-Failure rendering revised for CC-01 / CC-02 in [PR #803](https://github.com/tmustier/pi-for-excel/pull/803): one inline summary with Retry, a fix action and collapsed diagnostic Details; no separate run-error banner. Retried partial text stays as an interrupted response.
-
 ## Summary
 
 Message rendering is how the transcript turns a conversation into something readable: user messages as right-aligned cards, Pi's answers as formatted text with code blocks and tables, results of workbook reads as Excel-style grids and dependency trees, and cell addresses in tool cards as links that select the cells in Excel. It is also what keeps that rendering safe: raw HTML is never rendered, images are never loaded, and only ordinary web, mail and phone links are clickable. This document owns how a message *looks* once its content exists. When content appears and how it streams is owned by [sending and the response](../turn/sending-and-the-response.md); tool cards as a whole, their headers and grouping, by [tool calls](../turn/tool-calls.md); thinking blocks by [thinking](../turn/thinking.md); compaction summaries by [context and compaction](../turn/context-and-compaction.md). Rendering is the same with or without a provider (restored sessions render offline) and on every host, except that cell links need Excel.
@@ -21,7 +19,7 @@ stateDiagram-v2
     [*] --> streaming
     streaming --> rendered : model response completes (message fixed)
     streaming --> aborted : Stop ("Request aborted" shown)
-    streaming --> failed : provider error (one inline summary and recovery actions)
+    streaming --> failed : provider error ("Error:" line shown)
     rendered --> copied : click Copy, Copy CSV (clipboard written)
     copied --> rendered : about 1.5 s later (label restored)
     rendered --> selecting : click a cell link (Excel selection changes)
@@ -92,7 +90,7 @@ Pi for Excel cannot attach files to a message; dropped files go to the [Files wo
 
 ### Errors and endings
 
-- A final model response that **failed** shows one plain-language inline summary, Retry and a relevant fix action. The original diagnostic is collapsed under Details, not repeated in a separate banner. A partial response preserved for retry keeps its rendered text and interrupted marker; the continuation follows it rather than erasing what the user read. See [provider errors and offline](../cross-cutting/provider-errors-and-offline.md).
+- A model response that **failed** ends with a line "Error:" followed by the provider's reason, inside the assistant message. The [error banner](../glossary.md#the-taskpane) is separate; see [sending and the response](../turn/sending-and-the-response.md).
 - A model response that was **aborted** ends with the label "Request aborted". Tool calls in it that never got a result render as failed cards with no output. Confirmed in Excel on the web: Stop mid-stream kept the partial text and ended it with "Request aborted", with no banner; a request sent offline ended with "Error: Failed to fetch".
 - Everything rendered before the ending stays as it was.
 
