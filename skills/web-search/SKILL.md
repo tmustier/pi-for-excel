@@ -41,4 +41,4 @@ If the selected provider fails (auth/rate-limit/server error) and a Jina key is 
 1. Open `/tools` (or `/extensions` → Connections tab).
 2. Enable external tools.
 3. Enable **Web Search** for session and/or workbook scope.
-4. (Optional) Choose a different provider and set its API key — Jina works by default with no configuration.
+4. Set an API key for the selected provider — the default, Jina, offers a free key at jina.ai.

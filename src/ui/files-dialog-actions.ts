@@ -34,6 +34,7 @@ export interface CreateFilesDialogDetailActionsOptions {
   fileRef: FilesDialogDetailActionFileRef;
   workspace: FilesDialogDetailActionsWorkspace;
   auditContext: FilesWorkspaceAuditContext;
+  onMutationStateChange: (pending: boolean) => void;
   onAfterRename: (nextPath: string, locationKind: WorkspaceFileLocationKind) => Promise<void>;
   onAfterDelete: () => Promise<void>;
 }
@@ -285,6 +286,7 @@ export function createFilesDialogDetailActions(options: CreateFilesDialogDetailA
         return;
       }
 
+      options.onMutationStateChange(true);
       await options.workspace.renameFile(options.file.path, nextPath, {
         audit: options.auditContext,
         locationKind: options.fileRef.locationKind,
@@ -295,6 +297,8 @@ export function createFilesDialogDetailActions(options: CreateFilesDialogDetailA
       await options.onAfterRename(nextPath, options.fileRef.locationKind);
     })().catch((error: unknown) => {
       showToast(t("files-dialog-actions.toast.renameFailed", { error: getErrorMessage(error) }));
+    }).finally(() => {
+      options.onMutationStateChange(false);
     });
   });
 
@@ -320,6 +324,7 @@ export function createFilesDialogDetailActions(options: CreateFilesDialogDetailA
         return;
       }
 
+      options.onMutationStateChange(true);
       await options.workspace.deleteFile(options.file.path, {
         audit: options.auditContext,
         locationKind: options.fileRef.locationKind,
@@ -330,6 +335,8 @@ export function createFilesDialogDetailActions(options: CreateFilesDialogDetailA
       await options.onAfterDelete();
     })().catch((error: unknown) => {
       showToast(t("files-dialog-actions.toast.deleteFailed", { error: getErrorMessage(error) }));
+    }).finally(() => {
+      options.onMutationStateChange(false);
     });
   });
 

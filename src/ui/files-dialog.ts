@@ -524,6 +524,7 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
   let allFiles: WorkspaceFileEntry[] = [];
   let currentView: "list" | "detail" = "list";
   let detailFileRef: FilesDialogFileRef | null = null;
+  let ownMutationPending = false;
   let filterText = "";
   let activePreviewObjectUrl: string | null = null;
   let detailRenderVersion = 0;
@@ -581,6 +582,7 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
       fileRef,
       workspace,
       auditContext: DIALOG_AUDIT_CONTEXT,
+      onMutationStateChange: (pending) => { ownMutationPending = pending; },
       onAfterRename: async (nextPath, locationKind) => {
         await refreshWorkspaceState();
         renderListView();
@@ -998,6 +1000,9 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
   };
 
   const onWorkspaceChanged: EventListener = (event) => {
+    // Preview actions refresh after updating their file reference. Reacting to
+    // their earlier workspace event would mistake the old path for an external removal.
+    if (ownMutationPending) return;
     // The dialog shows no audit trail, and reading a file for the detail view
     // records one: re-rendering on it replaced the detail buttons in a loop.
     const detail: unknown = event instanceof CustomEvent ? event.detail : null;
