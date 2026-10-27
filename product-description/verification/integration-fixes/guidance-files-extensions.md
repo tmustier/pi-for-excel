@@ -28,6 +28,7 @@ How it ran:
 
 - The fail is WEB-31, a document error: the setup card closes itself after a good key. That code is unchanged since `main`.
 - Blocked: RULES-25 and FILES-24 are desktop only (skipped). EXP-03 was not rerun, because it needs the standalone taskpane with dark media.
+- Desktop pass on `97e15a3` (Excel for Mac): RULES-25, FILES-24 and EXP-03 pass, and the desktop parts of RULES-26, HUB-16 and EXP-12 pass.
 
 What changed against `main`:
 
@@ -74,8 +75,8 @@ The confirmed suspected bugs from `main` are now fixed as their PRs describe:
 | RULES-22 | pass (#793 changed) | One Escape on the page (opened with `/rules`) closes it; the turn kept running. A second Escape after that reaches the composer and stops the turn ("Request aborted"). That is the documented rule (`turn/stopping.md` "A second Escape after a claiming surface has closed stops the turn", and the edge case "Pressing Escape twice quickly"), so the item's "Escape twice" step should become "Escape once". |
 | RULES-23 | pass | " draftZZ" typed, `location.reload()`: the draft is gone, with no prompt. |
 | RULES-24 | pass (#788 changed) | Page open on "Pane rule KIWI"; Pi (pane B) appended "Prefer GBP."; Save unchanged → "No changes to save", and storage kept both lines. With the same box edited on the page, Save asks "Rules changed" / "Pi changed these rules while this page was open. Save anyway and replace that change with yours?": "Keep editing" kept the draft and wrote nothing; "Replace" stored "Mine only". |
-| RULES-25 | blocked (desktop) | Desktop only; not run. |
-| RULES-26 | pass (web) | Two taskpanes on the same link workbook: "Pane rule KIWI" saved in pane A appeared in pane B's next model request (newest rule after the older "ZQY"), without focusing pane A. The desktop part is not rerun. |
+| RULES-25 | pass | desktop (macOS), `97e15a3`: on a new Book1, "This file" said "Workbook: Current workbook" and "Can't identify this workbook right now, so rules for this file can't be saved. Try saving the file first.", with the box disabled. After Save As to pd-r25.xlsx, the open page still showed the hint. Going Back and opening /rules again, without reopening the taskpane, showed "Workbook: pd-r25.xlsx" and an editable box. (On `main` the taskpane had to be reopened.) |
+| RULES-26 | pass | web: two taskpanes on the same link workbook: "Pane rule KIWI" saved in pane A appeared in pane B's next model request (newest rule after the older "ZQY"), without focusing pane A. desktop (macOS), `97e15a3`: two windows on pd-r25.xlsx (Window → New Window), each with its own Pi; requests captured through a logging pass-through in front of the CORS proxy. The baseline request had no marker. After "Pane rule OSPREY" was saved from window 2, the next request from window 1 (12:53:02) and from window 2 (12:54:03) both carried OSPREY. (It failed on `main`.) |
 | RULES-27 | pass (#788) | The saved rule was in each next request: "Cross pane rule ZQX" right after Save; again after a reload; "Fresh rule ZQY" after a later Save. |
 | CONV-01 | pass | Hint and six cards with the default strings. |
 | CONV-02 | pass | Format field, three previews, dp/neg/zero selects and the symbol field. |
@@ -137,7 +138,7 @@ The confirmed suspected bugs from `main` are now fixed as their PRs describe:
 | FILES-21 | pass | "Built-in documentation — read only. Pi references this automatically."; Copy content, Download. |
 | FILES-22 | pass (#795 changed; P-166) | Copy content: "Copied anti-slop-policy.md to clipboard.". With the Clipboard API rejecting and `execCommand` returning false (each called once), `copyText` opened "Copy text" / "This window can't write to the clipboard. The text is selected: press Ctrl+C (⌘C on Mac).": a read-only textarea, focused, 0–4323 of 4323 characters selected, "Done"; Escape returned to the preview. |
 | FILES-23 | pass | Open ↗ opened a `blob:https://localhost:3141/…` window. |
-| FILES-24 | blocked (desktop) | Desktop only (Excel for Mac); not run. |
+| FILES-24 | pass (#796 changed) | desktop (macOS), `97e15a3`. Built-in docs/README.md: "Download" opens the native Save sheet ("Save As: README.md"), and the saved file is byte-identical to `docs/README.md`. "Copy content" cannot write to the clipboard here, so it opens the "Copy text" dialog ("This window can't write to the clipboard. The text is selected: press Ctrl+C (⌘C on Mac).") and leaves the clipboard unchanged; ⌘C then copied all 2,246 bytes, identical to the source. User file (a `.tool-output` read_range text file, 55,370 B): "Download" opens the Save sheet and the file is saved. The user file's "Open ↗" was not tried. |
 | FILES-25 | pass (#790 changed) | Connect folder is `disabled`, with "Connecting a local folder isn't possible in Excel on the web: …" |
 | FILES-26 | pass | "Rename file", "notes.md — leave off the extension to keep it.", prefilled, focused. |
 | FILES-27 | pass, new bug | "Renamed to docs/renamed.md."; the preview title is renamed.md. A second toast, "That file is no longer available.", also appears (bug 2). |
@@ -162,7 +163,7 @@ The confirmed suspected bugs from `main` are now fixed as their PRs describe:
 | HUB-13 | pass | "Uninstall "pd-url"?" / "This removes the plugin and its settings."; Escape kept it; Uninstall → "Uninstalled: pd-url". |
 | HUB-14 | pass (#790 changed) | `extensions_manager install_code` now asks, even in Auto: "Install an extension?" with code and "Extra permissions requested: none". Install → enabled with the 8 default capabilities only. Card "Install extension pd-ok-ext". Uninstall asked "Uninstall an extension?" in Auto. |
 | HUB-15 | pass (#793 changed) | Opened with `/plugins`: the first Escape closes. Opened from Settings (gear → Extensions): back, then closed. |
-| HUB-16 | pass (web, #790) | Flag off: "Remote extension URLs are off. Turn on "Remote extension URLs" in /experimental, then install again."; the local server logged 0 requests. The desktop part is not rerun. |
+| HUB-16 | pass | web (#790): Flag off: "Remote extension URLs are off. Turn on "Remote extension URLs" in /experimental, then install again."; the local server logged 0 requests. desktop (macOS), `97e15a3`: same toast with the flag off, 0 requests, no freeze. Pointer clicks and accessibility presses on Install did nothing in this run; Tab to the button and Space worked. |
 | WEB-01 | pass | External tools, Web search, Extension connections, MCP servers, Bridges. |
 | WEB-02 | pass | External tools on. |
 | WEB-03 | pass (#790 wording) | "Jina Search (default)", "Fast web search API. Needs a free API key from jina.ai.", "No API key". |
@@ -196,7 +197,7 @@ The confirmed suspected bugs from `main` are now fixed as their PRs describe:
 | WEB-31 | fail (document) | Good key in the setup card: "✓ Web search is ready — ask the assistant to try again.", and the card closes itself at once (`markDone` → `onDismiss`, `src/ui/web-search-setup-card.ts:228-231`, unchanged since `main`). "Card stays until Dismiss" is wrong; correct the document. |
 | EXP-01 | pass (#790 changed) | Four rows now (Dark mode, Extension widget API v2, Remote extension URLs, Extension sandbox rollback): the extension-permissions flag is removed. Warnings, "Ready", footer present. |
 | EXP-02 | pass (#790 wording) | "Dark mode: enabled" / "Dark mode: disabled" (one key, lower case, as typed). |
-| EXP-03 | blocked | Not rerun: needs the standalone taskpane with dark media (Excel on the web reports a white theme). |
+| EXP-03 | pass | desktop (macOS), `97e15a3`: macOS in dark mode, Excel's ribbon dark. With the Dark mode flag off the taskpane was light; turning it on made it dark immediately, and turning it off made it light again. Rough edges in dark: the settings gear and the composer's file button stay light grey squares, and a pale band shows under the tab strip. |
 | EXP-04 | pass | "Dark mode: enabled" / "disabled". |
 | EXP-05 | pass | "Unknown feature: foo. Available: dark-mode, remote-extension-urls, extension-sandbox-rollback, extension-widget-v2". |
 | EXP-06 | pass | "External tools (including MCP) are managed in /tools, not /experimental." |
@@ -205,7 +206,7 @@ The confirmed suspected bugs from `main` are now fixed as their PRs describe:
 | EXP-09 | pass | "Tmux bridge token is not set. Example: /experimental tmux-bridge-token <token>". |
 | EXP-10 | pass (#789 wording) | "Wait for this tab to finish before running /experimental"; the draft is kept. |
 | EXP-11 | pass (#793 changed) | `/experimental`: the first Escape closes. |
-| EXP-12 | pass (web, #790 changed) | The bypass is closed: with the flag off, install is refused (0 requests). An entry installed with the flag on stays unloaded after the flag is turned off and the pane reloads (no `/pdurl`, 0 requests). The desktop part is not rerun. |
+| EXP-12 | pass (web, #790 changed) | The bypass is closed: with the flag off, install is refused (0 requests). An entry installed with the flag on stays unloaded after the flag is turned off and the pane reloads (no `/pdurl`, 0 requests). desktop (macOS), `97e15a3`: with the flag on, Install opens the in-pane "Install plugin from URL" dialog (source, default permissions, name field) with no freeze and 0 requests; after naming it pd-url and confirming, the server logged GET /ext.js, Pd-url was listed under Installed and registered `/pdurl`. The "flag off, then reload" part was not rerun on desktop (pd-url was uninstalled first). |
 
 ## Regressions and new bugs
 
