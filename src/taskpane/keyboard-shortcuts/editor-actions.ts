@@ -10,21 +10,13 @@ import { showToast } from "../../ui/toast.js";
 import { t } from "../../language/index.js";
 import { hideCommandMenu } from "../../commands/command-menu.js";
 import { executeSlashCommand } from "../../commands/slash-command-execution.js";
-
-export type QueueDisplay = {
-  add: (type: "steer" | "follow-up", text: string, message: AgentMessage) => void;
-};
-
-export type ActionQueue = {
-  enqueuePrompt: (text: string) => void;
-  enqueueCommand: (name: string, args: string) => void;
-  isBusy: () => boolean;
-};
+import type { ActionQueue } from "../action-queue.js";
+import type { QueueDisplay } from "../queue-display.js";
 
 export interface SubmitTarget {
   agent: Agent;
-  actionQueue: ActionQueue;
-  queueDisplay: QueueDisplay;
+  actionQueue: Pick<ActionQueue, "enqueuePrompt" | "enqueueCommand" | "isBusy">;
+  queueDisplay: Pick<QueueDisplay, "add">;
 }
 
 /**
@@ -64,12 +56,8 @@ export function submitComposerText(args: {
       name,
       args: commandArgs,
       busy: isStreaming || actionQueue.isBusy(),
-      enqueueCommand: (commandName, queuedArgs) => {
-        actionQueue.enqueueCommand(commandName, queuedArgs);
-      },
-      beforeExecute: () => {
-        hideCommandMenu();
-      },
+      enqueueCommand: actionQueue.enqueueCommand,
+      beforeExecute: hideCommandMenu,
       onError: () => {
         showToast(t("slash-command.toast.failed"));
       },

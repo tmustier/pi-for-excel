@@ -35,12 +35,6 @@ export interface TabState {
   subscribe(listener: () => void): () => void;
 }
 
-export function mergeIntoDraft(texts: readonly string[], draft: string): string {
-  return [...texts, draft]
-    .filter((text) => text.trim().length > 0)
-    .join("\n\n");
-}
-
 export function createTabState(): TabState {
   let draft = "";
   let error: string | null = null;
@@ -94,7 +88,7 @@ export function createTabState(): TabState {
     },
     returnToDraft(texts) {
       if (texts.length === 0) return;
-      setDraft(mergeIntoDraft(texts, draft));
+      setDraft([...texts, draft].filter((text) => text.trim().length > 0).join("\n\n"));
     },
     subscribe(listener) {
       listeners.add(listener);

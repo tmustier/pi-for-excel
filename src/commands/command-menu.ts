@@ -6,8 +6,9 @@
  */
 
 import { commandRegistry, type SlashCommand } from "./types.js";
+import type { PiInput } from "../ui/pi-input.js";
 
-const SOURCE_BADGES: Record<string, string> = {
+const SOURCE_BADGES: Record<SlashCommand["source"], string> = {
   builtin: "",
   extension: "ext",
   integration: "integration",
@@ -17,10 +18,6 @@ const SOURCE_BADGES: Record<string, string> = {
 let menuEl: HTMLDivElement | null = null;
 let selectedIndex = 0;
 let filteredCommands: SlashCommand[] = [];
-
-function getComposer(): (HTMLElement & { submit?: () => void }) | null {
-  return document.querySelector("pi-input");
-}
 
 function getCommandTextarea(): HTMLTextAreaElement | null {
   return document.querySelector("pi-input textarea");
@@ -34,8 +31,8 @@ function getCommandTextarea(): HTMLTextAreaElement | null {
 function runCommand(command: SlashCommand): void {
   hideCommandMenu();
   const textarea = getCommandTextarea();
-  const composer = getComposer();
-  if (!textarea || !composer?.submit) return;
+  const composer = document.querySelector<PiInput>("pi-input");
+  if (!textarea || !composer) return;
 
   const value = textarea.value;
   const spaceIdx = value.indexOf(" ");
@@ -97,60 +94,31 @@ export function handleCommandMenuKey(e: KeyboardEvent): boolean {
   }
   if (e.isComposing || e.keyCode === 229) return false;
 
-  const handled = handleMenuKey(e);
-  if (handled) {
-    e.stopPropagation();
-    e.stopImmediatePropagation();
-  }
-  return handled;
-}
-
-function handleMenuKey(e: KeyboardEvent): boolean {
-
   const hasModifier = e.altKey || e.ctrlKey || e.metaKey || e.shiftKey;
-
+  const command = filteredCommands[selectedIndex];
   if (e.key === "ArrowUp" && !hasModifier) {
-    e.preventDefault();
     selectIndex(Math.max(0, selectedIndex - 1));
-    return true;
-  }
-
-  if (e.key === "ArrowDown" && !hasModifier) {
-    e.preventDefault();
+  } else if (e.key === "ArrowDown" && !hasModifier) {
     selectIndex(Math.min(filteredCommands.length - 1, selectedIndex + 1));
-    return true;
-  }
-
-  if (e.key === "Enter" && !e.shiftKey) {
-    e.preventDefault();
-    const command = filteredCommands[selectedIndex];
-    if (command) {
-      runCommand(command);
-    }
-    return true;
-  }
-
-  if (e.key === "Escape") {
-    e.preventDefault();
+  } else if (e.key === "Enter" && !e.shiftKey) {
+    if (command) runCommand(command);
+  } else if (e.key === "Escape") {
     hideCommandMenu();
-    return true;
-  }
-
-  if (e.key === "Tab") {
-    // Tab-complete the command name
-    e.preventDefault();
-    const command = filteredCommands[selectedIndex];
-    const textarea = getCommandTextarea();
-    if (command && textarea) {
+  } else if (e.key === "Tab") {
+    if (command) {
       textarea.value = `/${command.name} `;
       textarea.dispatchEvent(new Event("input", { bubbles: true }));
       textarea.selectionStart = textarea.value.length;
       textarea.selectionEnd = textarea.value.length;
     }
-    return true;
+  } else {
+    return false;
   }
 
-  return false;
+  e.preventDefault();
+  e.stopPropagation();
+  e.stopImmediatePropagation();
+  return true;
 }
 
 function renderMenu(): void {
@@ -161,7 +129,7 @@ function renderMenu(): void {
   menuEl.replaceChildren();
 
   for (const [index, command] of filteredCommands.entries()) {
-    const badge = SOURCE_BADGES[command.source] ?? "";
+    const badge = SOURCE_BADGES[command.source];
     const isSelected = index === selectedIndex;
 
     const item = document.createElement("button");
@@ -222,10 +190,6 @@ function selectIndex(index: number): void {
   }
 }
 
-/**
- * Wire the command menu to a textarea.
- * Call once after the textarea is available.
- */
 /**
  * Listens on the composer element, not its textarea: the composer renders a
  * fresh textarea for each tab (see `PiInput.loadDraft`).
