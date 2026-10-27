@@ -8,13 +8,9 @@
  */
 
 import type {
-  AuthEvent,
-  AuthPrompt,
-  ProviderAuthInteraction,
   OAuthCredential,
   OAuthCredentials,
   OAuthLoginCallbacks,
-  OAuthSelectOption,
 } from "@earendil-works/pi-ai";
 // pi-ai loads its OAuth flows through an opaque import() so bundlers skip
 // Node-only flows; Vite cannot follow it, and the taskpane failed with
@@ -31,105 +27,66 @@ import {
   googleGeminiCliBrowserOAuthProvider,
 } from "./google-browser-oauth.js";
 
-function toOAuthCredential(credentials: OAuthCredentials): OAuthCredential {
-  return {
-    ...credentials,
-    type: "oauth",
-  };
-}
-
 function fromOAuthCredential(credential: OAuthCredential): OAuthCredentials {
   const copied: OAuthCredentials = { ...credential };
   delete copied.type;
   return copied;
 }
 
-function toLegacySelectOptions(
-  options: AuthPrompt & { type: "select" },
-): OAuthSelectOption[] {
-  return options.options.map((option) => ({
-    id: option.id,
-    label: option.label,
-  }));
-}
-
-async function handleAuthPrompt(
-  callbacks: OAuthLoginCallbacks,
-  prompt: AuthPrompt,
-): Promise<string> {
-  if (prompt.type === "select") {
-    const selection = await callbacks.onSelect({
-      message: prompt.message,
-      options: toLegacySelectOptions(prompt),
-    });
-    if (typeof selection !== "string") {
-      throw new Error("Login cancelled");
-    }
-    return selection;
-  }
-
-  if (prompt.type === "manual_code" && callbacks.onManualCodeInput) {
-    return callbacks.onManualCodeInput();
-  }
-
-  return callbacks.onPrompt({
-    message: prompt.message,
-    ...(prompt.placeholder !== undefined ? { placeholder: prompt.placeholder } : {}),
-    allowEmpty: prompt.type === "text",
-  });
-}
-
-function handleAuthEvent(callbacks: OAuthLoginCallbacks, event: AuthEvent): void {
-  if (event.type === "auth_url") {
-    callbacks.onAuth({
-      url: event.url,
-      ...(event.instructions !== undefined ? { instructions: event.instructions } : {}),
-    });
-    return;
-  }
-
-  if (event.type === "device_code") {
-    callbacks.onDeviceCode({
-      userCode: event.userCode,
-      verificationUri: event.verificationUri,
-      ...(event.intervalSeconds !== undefined ? { intervalSeconds: event.intervalSeconds } : {}),
-      ...(event.expiresInSeconds !== undefined ? { expiresInSeconds: event.expiresInSeconds } : {}),
-    });
-    return;
-  }
-
-  callbacks.onProgress?.(event.message);
-}
-
-function createAuthInteraction(callbacks: OAuthLoginCallbacks): ProviderAuthInteraction {
-  return {
-    signal: callbacks.signal ?? new AbortController().signal,
-    prompt: (prompt) => handleAuthPrompt(callbacks, prompt),
-    notify: (event) => handleAuthEvent(callbacks, event),
-  };
-}
-
-function createGitHubCopilotBrowserProvider(): BrowserOAuthProvider {
-  const oauth = githubCopilotOAuth;
-
-  return {
-    id: "github-copilot",
-    name: oauth.name,
-    async login(callbacks: OAuthLoginCallbacks): Promise<OAuthCredentials> {
-      return fromOAuthCredential(await oauth.login(createAuthInteraction(callbacks)));
-    },
-    async refreshToken(credentials: OAuthCredentials): Promise<OAuthCredentials> {
-      return fromOAuthCredential(
-        await oauth.refresh(toOAuthCredential(credentials), new AbortController().signal),
-      );
-    },
-    getApiKey(credentials: OAuthCredentials): string {
-      return credentials.access;
-    },
-  };
-}
-
-const githubCopilotBrowserOAuthProvider = createGitHubCopilotBrowserProvider();
+const githubCopilotBrowserOAuthProvider: BrowserOAuthProvider = {
+  id: "github-copilot",
+  name: githubCopilotOAuth.name,
+  async login(callbacks: OAuthLoginCallbacks): Promise<OAuthCredentials> {
+    return fromOAuthCredential(await githubCopilotOAuth.login({
+      signal: callbacks.signal ?? new AbortController().signal,
+      prompt: async (prompt) => {
+        if (prompt.type === "select") {
+          const selection = await callbacks.onSelect({
+            message: prompt.message,
+            options: prompt.options.map((option) => ({ id: option.id, label: option.label })),
+          });
+          if (typeof selection !== "string") throw new Error("Login cancelled");
+          return selection;
+        }
+        if (prompt.type === "manual_code" && callbacks.onManualCodeInput) {
+          return callbacks.onManualCodeInput();
+        }
+        return callbacks.onPrompt({
+          message: prompt.message,
+          ...(prompt.placeholder !== undefined ? { placeholder: prompt.placeholder } : {}),
+          allowEmpty: prompt.type === "text",
+        });
+      },
+      notify: (event) => {
+        if (event.type === "auth_url") {
+          callbacks.onAuth({
+            url: event.url,
+            ...(event.instructions !== undefined ? { instructions: event.instructions } : {}),
+          });
+          return;
+        }
+        if (event.type === "device_code") {
+          callbacks.onDeviceCode({
+            userCode: event.userCode,
+            verificationUri: event.verificationUri,
+            ...(event.intervalSeconds !== undefined ? { intervalSeconds: event.intervalSeconds } : {}),
+            ...(event.expiresInSeconds !== undefined ? { expiresInSeconds: event.expiresInSeconds } : {}),
+          });
+          return;
+        }
+        callbacks.onProgress?.(event.message);
+      },
+    }));
+  },
+  async refreshToken(credentials: OAuthCredentials): Promise<OAuthCredentials> {
+    return fromOAuthCredential(
+      await githubCopilotOAuth.refresh({ ...credentials, type: "oauth" }, new AbortController().signal),
+    );
+  },
+  getApiKey(credentials: OAuthCredentials): string {
+    return credentials.access;
+  },
+};
 
 const OAUTH_PROVIDERS: Map<string, BrowserOAuthProvider> = new Map([
   [anthropicBrowserOAuthProvider.id, anthropicBrowserOAuthProvider],
