@@ -10,7 +10,7 @@
 
 const MENU_ITEM_SELECTOR = "[role='menuitem'], [role='menuitemradio'], [role='menuitemcheckbox']";
 
-export function getMenuItems(menu: HTMLElement): HTMLElement[] {
+function getMenuItems(menu: HTMLElement): HTMLElement[] {
   return Array.from(menu.querySelectorAll<HTMLElement>(MENU_ITEM_SELECTOR)).filter((item) =>
     !item.hasAttribute("disabled")
     && item.getAttribute("aria-disabled") !== "true"
@@ -30,24 +30,22 @@ export function focusInitialMenuItem(menu: HTMLElement): void {
   }
 }
 
-export type MenuCloseReason = "escape" | "tab";
-
 /**
- * Handle a keydown inside a menu. Returns true when the key was consumed.
+ * Handle a keydown inside a menu.
  * `onClose` must close the menu and return focus to its trigger.
  */
 export function handleMenuKeydown(
   event: KeyboardEvent,
   menu: HTMLElement,
-  onClose: (reason: MenuCloseReason) => void,
-): boolean {
-  if (event.altKey || event.ctrlKey || event.metaKey) return false;
+  onClose: () => void,
+): void {
+  if (event.altKey || event.ctrlKey || event.metaKey) return;
 
   if (event.key === "Escape" || event.key === "Esc") {
     event.preventDefault();
     event.stopPropagation();
-    onClose("escape");
-    return true;
+    onClose();
+    return;
   }
 
   if (event.key === "Tab") {
@@ -55,12 +53,12 @@ export function handleMenuKeydown(
     // Tab from its own window listener, undoing the return to the trigger.
     event.preventDefault();
     event.stopPropagation();
-    onClose("tab");
-    return true;
+    onClose();
+    return;
   }
 
   const items = getMenuItems(menu);
-  if (items.length === 0) return false;
+  if (items.length === 0) return;
 
   const active = document.activeElement;
   const index = active instanceof HTMLElement ? items.indexOf(active) : -1;
@@ -89,9 +87,8 @@ export function handleMenuKeydown(
       }
   }
 
-  if (!next) return false;
+  if (!next) return;
   event.preventDefault();
   event.stopPropagation();
   next.focus({ preventScroll: true });
-  return true;
 }

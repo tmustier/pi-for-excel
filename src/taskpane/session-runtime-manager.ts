@@ -464,9 +464,8 @@ export class SessionRuntimeManager {
     this.emit();
   }
 
-  /** Find runs that ended since the last emit and mark background tabs. */
-  private collectSettledRuns(): Array<{ runtimeId: string; outcome: RuntimeRunOutcome; wasActive: boolean }> {
-    const settled: Array<{ runtimeId: string; outcome: RuntimeRunOutcome; wasActive: boolean }> = [];
+  private emit(): void {
+    const settled = new Map<string, RuntimeRunOutcome>();
     for (const runtime of this.runtimes.values()) {
       const busy = runtime.agent.state.isStreaming || runtime.actionQueue.isBusy();
       const wasBusy = this.wasBusy.get(runtime.runtimeId) ?? false;
@@ -479,22 +478,17 @@ export class SessionRuntimeManager {
 
       const outcome = this.getRunOutcome(runtime);
       if (!outcome) continue;
-      const wasActive = runtime.runtimeId === this.activeRuntimeId;
-      if (!wasActive) this.attention.set(runtime.runtimeId, outcome);
-      settled.push({ runtimeId: runtime.runtimeId, outcome, wasActive });
+      if (runtime.runtimeId !== this.activeRuntimeId) this.attention.set(runtime.runtimeId, outcome);
+      settled.set(runtime.runtimeId, outcome);
     }
-    return settled;
-  }
 
-  private emit(): void {
-    const settled = this.collectSettledRuns();
     const snapshot = this.snapshot();
     for (const listener of this.listeners) {
       listener(snapshot);
     }
-    for (const run of settled) {
-      const title = snapshot.tabs.find((tab) => tab.runtimeId === run.runtimeId)?.title ?? "";
-      this.onRunSettled({ ...run, title });
+    for (const tab of snapshot.tabs) {
+      const outcome = settled.get(tab.runtimeId);
+      if (outcome) this.onRunSettled({ runtimeId: tab.runtimeId, title: tab.title, outcome, wasActive: tab.isActive });
     }
   }
 }
