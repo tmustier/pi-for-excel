@@ -238,13 +238,13 @@ export async function collectRangeState(
       return { table, tableRange, tableFilter };
     });
 
-    const validationAreas: Array<{ address: string; range: Excel.Range }> = [];
+    const validationAreas: Array<{ block: CellBlock; range: Excel.Range }> = [];
     if (!validation.isNullObject) {
       const parts = parseAreas(validation.address);
       state.validationMore = Math.max(0, parts.length - MAX_VALIDATION_AREAS);
       for (const part of parts.slice(0, MAX_VALIDATION_AREAS)) {
         validationAreas.push({
-          address: blockAddress(part),
+          block: part,
           range: sheet.getRangeByIndexes(part.rowIndex, part.columnIndex, part.rowCount, part.columnCount),
         });
       }
@@ -258,13 +258,49 @@ export async function collectRangeState(
       state.tables.push({ name: table.name, address: stripSheet(tableRange.address), filtered: tableFilter.isDataFiltered });
     }
 
-    await collectValidation(context, sheet, validationAreas, state);
+    const resolved: typeof validationAreas = [];
+    const split: typeof validationAreas = [];
+    for (const area of validationAreas) {
+      if (area.range.dataValidation.type !== "Inconsistent") {
+        resolved.push(area);
+        continue;
+      }
+      const block = area.block;
+      for (let c = 0; c < block.columnCount && split.length < MAX_VALIDATION_AREAS; c += 1) {
+        const column = { ...block, columnIndex: block.columnIndex + c, columnCount: 1 };
+        const range = sheet.getRangeByIndexes(column.rowIndex, column.columnIndex, column.rowCount, 1);
+        range.dataValidation.load("type,rule");
+        split.push({ block: column, range });
+      }
+    }
+    if (split.length > 0) await context.sync();
+
+    const all = [...resolved, ...split].sort((a, b) =>
+      a.block.rowIndex - b.block.rowIndex || a.block.columnIndex - b.block.columnIndex);
+    for (const area of all) {
+      const type = String(area.range.dataValidation.type);
+      if (type === "None") continue;
+      if (state.validation.length >= MAX_VALIDATION_AREAS) {
+        state.validationMore += 1;
+        continue;
+      }
+      const rule = area.range.dataValidation.rule;
+      state.validation.push({ address: blockAddress(area.block), rule: type === "Inconsistent" ? "mixed rules" : describeValidationRule(type, rule) });
+    }
   } catch (error) {
     problems.push(getErrorMessage(error));
   }
 
   try {
-    await collectSpills(context, sheet, spillCandidates, state);
+    const checks = spillCandidates.slice(0, MAX_SPILL_CHECKS).map((address) => {
+      const spill = sheet.getRange(address).getSpillingToRangeOrNullObject();
+      spill.load("address");
+      return { anchor: address, spill };
+    });
+    if (checks.length > 0) await context.sync();
+    for (const { anchor, spill } of checks) {
+      if (!spill.isNullObject) state.spills.push({ anchor, address: stripSheet(spill.address) });
+    }
   } catch (error) {
     problems.push(getErrorMessage(error));
   }
@@ -273,74 +309,9 @@ export async function collectRangeState(
   return state;
 }
 
-/**
- * Adjacent validated cells come back as one area even with different rules
- * (type "Inconsistent"); split those by column so each rule is reported.
- */
-async function collectValidation(
-  context: Excel.RequestContext,
-  sheet: Excel.Worksheet,
-  areas: Array<{ address: string; range: Excel.Range }>,
-  state: RangeState,
-): Promise<void> {
-  const resolved: Array<{ address: string; range: Excel.Range }> = [];
-  const split: Array<{ address: string; range: Excel.Range }> = [];
-  for (const area of areas) {
-    if (area.range.dataValidation.type !== "Inconsistent") {
-      resolved.push(area);
-      continue;
-    }
-    const block = parseBlock(area.address);
-    if (!block) continue;
-    for (let c = 0; c < block.columnCount && split.length < MAX_VALIDATION_AREAS; c += 1) {
-      const column = { ...block, columnIndex: block.columnIndex + c, columnCount: 1 };
-      const range = sheet.getRangeByIndexes(column.rowIndex, column.columnIndex, column.rowCount, 1);
-      range.dataValidation.load("type,rule");
-      split.push({ address: blockAddress(column), range });
-    }
-  }
-  if (split.length > 0) await context.sync();
-
-  const all = [...resolved, ...split].sort((a, b) => {
-    const left = parseBlock(a.address);
-    const right = parseBlock(b.address);
-    if (!left || !right) return 0;
-    return left.rowIndex - right.rowIndex || left.columnIndex - right.columnIndex;
-  });
-  for (const area of all) {
-    const type = String(area.range.dataValidation.type);
-    if (type === "None") continue;
-    if (state.validation.length >= MAX_VALIDATION_AREAS) {
-      state.validationMore += 1;
-      continue;
-    }
-    const rule = area.range.dataValidation.rule;
-    state.validation.push({ address: area.address, rule: type === "Inconsistent" ? "mixed rules" : describeValidationRule(type, rule) });
-  }
-}
-
 /** Formulas that can return arrays: any function call, range or spill reference. */
 export function canSpill(formula: string): boolean {
   return /[(:#]/u.test(formula);
-}
-
-async function collectSpills(
-  context: Excel.RequestContext,
-  sheet: Excel.Worksheet,
-  spillCandidates: readonly string[],
-  state: RangeState,
-): Promise<void> {
-  const candidates = spillCandidates.slice(0, MAX_SPILL_CHECKS);
-  if (candidates.length === 0) return;
-  const checks = candidates.map((address) => {
-    const spill = sheet.getRange(address).getSpillingToRangeOrNullObject();
-    spill.load("address");
-    return { anchor: address, spill };
-  });
-  await context.sync();
-  for (const { anchor, spill } of checks) {
-    if (!spill.isNullObject) state.spills.push({ anchor, address: stripSheet(spill.address) });
-  }
 }
 
 /** Note lines for the agent; empty when nothing is notable. */
