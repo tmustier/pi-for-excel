@@ -183,7 +183,10 @@ export async function setupSessionPersistence(opts: {
     const messages = agent.state.messages;
     // A session exists from the user's first message, so a reload during the
     // first turn keeps it. Blank tabs are saved only on request (close, restore).
-    if (!optsForSave?.force && !messages.some((m) => isChatUserMessage(m))) return false;
+    // Compaction moves the user's messages into the summary and archive, which still count.
+    const hasConversation = messages.some((m) =>
+      isChatUserMessage(m) || m.role === "compactionSummary" || m.role === "archivedMessages");
+    if (!optsForSave?.force && !hasConversation) return false;
 
     try {
       const now = new Date().toISOString();
