@@ -1,6 +1,6 @@
 # Integration verification: sessions and commands
 
-This file reruns every item in [../sessions-and-commands.md](../sessions-and-commands.md) against the combined fix build, branch `integration-fixes`. That branch is `main` plus PRs #786–#799 (see `INTEGRATION.md` on the branch). The first full pass ran at `a2b3f2d`. After the branch was force-pushed to `e48d83c`, every item whose code changed was rerun there, along with the bugs this pass had reported. The rows give the result at `e48d83c`; where it differs from `a2b3f2d`, the note says so. Items whose code did not change between the two builds were not rerun. After a second force-push to `8099cd6`, the items touched by its changes were rerun again: the tab strip and the tab ×, overlays, Tab and Escape in dialogs, the command menu (now listening on the composer), hints, per-tab drafts and undo, compaction, and the error banner. Rows rerun there say "On `8099cd6`"; every other row is the result at `e48d83c`. All runs were on 27 October 2026, by an agent in an Amp orb.
+This file reruns every item in [../sessions-and-commands.md](../sessions-and-commands.md) against the combined fix build, branch `integration-fixes`. That branch is `main` plus PRs #786–#799 (see `INTEGRATION.md` on the branch). The first full pass ran at `a2b3f2d`. After the branch was force-pushed to `e48d83c`, every item whose code changed was rerun there, along with the bugs this pass had reported. The rows give the result at `e48d83c`; where it differs from `a2b3f2d`, the note says so. Items whose code did not change between the two builds were not rerun. After a second force-push to `8099cd6`, the items touched by its changes were rerun again: the tab strip and the tab ×, overlays, Tab and Escape in dialogs, the command menu (now listening on the composer), hints, per-tab drafts and undo, compaction, and the error banner. Rows rerun there say "On `8099cd6`"; every other row is the result at `e48d83c`. After a third force-push to `cea7588`, the two failures were rerun, along with TABS-26, whose tab layout changed again (#793 c88b997). Two checks outside this checklist were also run on request: PROXY-10 from the setup checklist, and the open model picker unlocking when the tab's turn ends (#795 be2e666). Both pass and are recorded below the bugs. All runs were on 27 October 2026, by an agent in an Amp orb.
 
 Expected behavior is the checklist as amended by the fix PRs and `goal.md` "Fixes in flight". Where a PR deliberately changed behavior, the PR wins, and the note names it ("changed (#NNN)").
 
@@ -11,13 +11,12 @@ How it ran:
 - **Techniques**: model requests were held or failed with CDP `Fetch`. The workbook lock was made observable by wrapping `Excel.run` for `write_cells` with a 8–25 s delay. Compaction used a ~43k-token session (16% of a 272k window) made by having Pi read Sheet1!A10:E909. Workbook identity was stubbed by replacing the global `Office` with an `Object.create` wrapper whose `getFilePropertiesAsync` returned Workbook-A, then Workbook-B. The short pane (340 px) came from resizing the browser window over CDP. Empty-list states came from clearing IndexedDB `sessions`, `sessions-metadata` and `workbook.recentlyClosed.v1.*`.
 - **Model turns** ran on GPT-6 Luna (GPT-6.1 Luna is not in the registry), with a few on GPT-6 Sol after a fork. The shared `PI_EXCEL_WEB_AUTH_JSON` login was never logged out or refreshed.
 
-**Result at `8099cd6`: 129 items. 125 pass, 2 fail, 2 blocked (desktop only).** (At `e48d83c`: 127 pass, 0 fail, 2 blocked.)
+**Result at `cea7588`: 129 items. 127 pass, 0 fail, 2 blocked (desktop only).** (At `8099cd6`: 125 pass, 2 fail, 2 blocked. At `e48d83c`: 127 pass, 0 fail, 2 blocked.)
 
 - Every item that failed on `main` now passes or behaves as its owning PR describes.
 - On `a2b3f2d`, two items that passed on `main` failed: SESS-17 (#794) and TABS-22 (#794 + #795). Both are fixed on `e48d83c`. They were not rerun on `8099cd6`, whose diff does not touch the close or lock paths.
-- New on `8099cd6`: TABS-05 fails, a regression from #793 @ aff33d6. Clicking the right part of an inactive tab's title closes the tab instead of switching to it.
-- MENU-15 fails while a toast is showing: #793's toast stack covers the command menu's lower rows, so a click on one does nothing. This is a #793 bug the earlier passes did not hit, not a change in `8099cd6`.
-- New bugs 3, 4 and 5 are fixed on `8099cd6`. All five bugs from the earlier passes are now fixed (see below).
+- On `8099cd6`, TABS-05 failed (a regression from #793 @ aff33d6) and MENU-15 failed while a toast showed (#793). Both are fixed on `cea7588` (#793 c88b997).
+- Every regression and new bug this pass found is fixed on `cea7588` (see below).
 
 ## Results
 
@@ -49,7 +48,7 @@ How it ran:
 | TABS-02 | pass | `/new` while busy opens Chat 16, with no refusal. |
 | TABS-03 | pass | web-keys (wtype) on `e48d83c`: Ctrl+T from the composer opened `chrome://newtab`; Pi's tabs were unchanged. |
 | TABS-04 | pass, changed (#795, #793) | Tab shortcuts are off while a dialog is open: Ctrl+T delivered to the page with `/resume` open adds no tab, and the picker stays. |
-| TABS-05 | fail on `8099cd6` (pass on `e48d83c`), regression (#793 aff33d6) | Clicking the left part of an inactive tab's title still switches to it. Clicking the right part closes the tab: with "Chat 12" inactive (title 117–158 px), the hover × sits at 141–163 over the title, and a click at 152 gave "Closed Chat 12 · Undo" instead of a switch. See regression 3. |
+| TABS-05 | pass on `cea7588` (fail on `8099cd6`), regression fixed (#793 c88b997) | The inactive tab's × is back in its own space (main's layout, `position: static`, always visible). With "Chat 13" inactive (title 117–158, × 166–188), clicks at 15%, 40% and 60% of the tab and at the title's right edge, each after a hover, all switch to it. Only a click on the × itself (171) closes the tab, as on `main`. On `8099cd6`, a click at 152 on the title closed it (regression 3). |
 | TABS-06 | pass | ArrowRight from the last tab wraps to the first; ArrowLeft goes back; focus stays on the tab. Rerun on `e48d83c` with 11 tabs. Plain arrows inside the tab menu no longer switch tabs (#793). |
 | TABS-07 | pass | Ctrl+PageUp in the composer does nothing; Ctrl+PageDown from the body switches. Cmd+Shift+[ does nothing in the composer and switches from the body; ] switches back. |
 | TABS-08 | pass, changed (#795) | With focus on a tab, Ctrl+PageUp and Ctrl+PageDown switch tabs. The suspected bug is fixed. |
@@ -70,7 +69,7 @@ How it ran:
 | TABS-23 | pass, changed (#789) | Closing a compacting tab now asks "Stop and close this tab?". The suspected bug is fixed. Rerun on `e48d83c`. |
 | TABS-24 | pass, changed (#795, #793) | Ctrl+W (and Ctrl+Shift+T) delivered to the page with the picker open are ignored: no tab closes, and the picker stays. |
 | TABS-25 | pass | web-keys (wtype): with Excel the only page, Ctrl+W closed the Excel browser tab (only `about:blank` was left); Pi saw nothing. |
-| TABS-26 | pass, changed (#793) | On `8099cd6`: with 11 tabs at 349 px, tabs keep their natural width and full titles (no more "C…"), and the strip scrolls with ‹ ›. The native scrollbar is gone (0 px). The arrows scroll the strip and it stays where it was scrolled. "+" stays outside the scroller and is always visible. ArrowRight wraps and scrolls the active tab into view. On `a2b3f2d` the new tab was half under › and "+" was off-screen; fixed. |
+| TABS-26 | pass, changed (#793) | On `8099cd6`: with 11 tabs at 349 px, tabs keep their natural width and full titles (no more "C…"), and the strip scrolls with ‹ ›. The native scrollbar is gone (0 px). The arrows scroll the strip and it stays where it was scrolled. "+" stays outside the scroller and is always visible. ArrowRight wraps and scrolls the active tab into view. On `a2b3f2d` the new tab was half under › and "+" was off-screen; fixed. On `cea7588` (× back to main's layout): with 12 tabs at 349 px, every title is complete (84–96 px tabs), there is no scrollbar (0 px), the active tab (150–237) is fully inside the scroller (32–237), and "+" (243–271) is visible. |
 | TABS-27 | pass | After the duplicate, a new tab is "Chat 15". |
 | TABS-28 | pass, changed (#789) | Compaction held, × → Stop and close: "Compaction stopped", "Closed Chat 32 · Undo"; `/reopen` gives "Reopened: Chat 32", still uncompacted, as #789 intends (Stop cancels compaction). A compaction that finishes is saved at once. On `8099cd6`: Stop and close gives "Compaction stopped" in place of the "Compacting…" toast (new bug 5 fixed), and the reopened tab is uncompacted at 11%. `/compact` takes 11% → 1%, still 1% after a reload. On `a2b3f2d` the compacted history was not saved (see the fixed combination bug below). |
 | RENAME-01 | pass | Label "Q3 budget", name "Open tab Q3 budget". The toast is now "Renamed tab to “Q3 budget”" (#793, one wording per event). |
@@ -138,7 +137,7 @@ How it ran:
 | MENU-12 | pass, changed (#789) | `/` then Escape while responding: the menu closes, and the turn continues. Rerun on `8099cd6` (menu now listens on the composer): same. |
 | MENU-13 | pass, changed (#789, #793) | `/new` in the menu, then a click on another tab: that tab's own (empty) draft shows, the menu is gone, and Enter does nothing. Rerun on `8099cd6` (menu now listens on the composer): same. |
 | MENU-14 | pass, changed (#793) | `/new` in the menu, then gear → Resume session: focus is in the picker, and Enter runs nothing. Rerun on `8099cd6` (menu now listens on the composer): same. |
-| MENU-15 | fail on `8099cd6` while a toast shows (#793) | With no toast showing, a click on the `/share-session` row runs it ("Session sharing coming soon"). Right after another command's toast, the toast stack sits over the menu's lower rows (menu y 532–576), so the click hits the toast and nothing runs. It works again once the toasts expire. See new bug 6. |
+| MENU-15 | pass on `cea7588` (fail on `8099cd6` while a toast showed), fixed (#793 c88b997) | With a toast showing, the open menu now pushes the toast stack above it: the toast moved from 491–524 to 449–482, and the menu sat at 490–534. A real hover then click on the `/share-session` row (y 512) hit the menu and ran the command; the same held with two toasts and `/sh`. With `/` the stack moved to 233–266, above the full menu (274–534). See new bug 6. |
 | MENU-16 | pass | `/mod` + Shift+Tab gives `/model `, and thinking is unchanged. Rerun on `e48d83c` and `8099cd6`. |
 | MENU-17 | pass, changed (#789) | The menu closes on an outside click (blur) and when the gear menu opens. Rerun on `8099cd6` (menu now listens on the composer): same. |
 | MENU-18 | pass | Hover moves the highlight; 0 DOM mutations in 1 s (no continuous re-render). Rerun on `8099cd6` (menu now listens on the composer): same. |
@@ -155,7 +154,7 @@ How it ran:
 
 ## Regressions and new bugs
 
-Each was sent to its owning PR thread when found. Status is at `8099cd6`.
+Each was sent to its owning PR thread when found. Status is at `cea7588`.
 
 ### Regressions (passed on `main`)
 
@@ -167,7 +166,7 @@ Each was sent to its owning PR thread when found. Status is at `8099cd6`.
    - Repro: delay `write_cells` 15 s. Ask for a one-cell write, click × at once, and confirm when "Changing workbook" shows. Result: toast "Wait for workbook changes to finish before closing this tab", the turn runs to "OK", the write lands, and the tab stays open.
    - Cause: #795's post-dialog lock recheck (`src/taskpane/init.ts:1717`) returned before #789's `actionQueue.stop()` and #794's wait-then-close branch (:1729).
    - Owners: #795 + #794; integration was told.
-3. **Open: TABS-05: clicking an inactive tab's title can close it instead of switching to it.** New on `8099cd6` (#793 @ aff33d6).
+3. **TABS-05: clicking an inactive tab's title could close it instead of switching to it.** New on `8099cd6` (#793 @ aff33d6). Fixed on `cea7588` (#793 c88b997, P-162): the × is back to main's layout.
    - Repro: two tabs, say "menutest" (active) and "Chat 12". Move the mouse over the right half of "Chat 12"'s title and click. The tab closes ("Closed Chat 12 · Undo"). Clicking the left part of the title switches as before.
    - Measured: tab 108–167 px, title 117–158, × 141–163 once hovered; a click at 152 closed it.
    - Cause: `src/ui/theme/components/tabs.css:255-265`. An inactive tab's × is now `position: absolute; right: 0` over the title, hidden with `opacity: 0; pointer-events: none`. On hover it gets `pointer-events: auto`, so the first click a mouse user makes on that part of the title lands on ×. Before, the × took its own space.
@@ -197,15 +196,20 @@ Each was sent to its owning PR thread when found. Status is at `8099cd6`.
    - History: #793 @ 82078ec gave the compaction toasts an id, so success, "Nothing to compact" and failure replaced it. Still open on `e48d83c`: a stopped compaction shows "Compaction stopped" without the id (`src/commands/builtins/export.ts:851`), so the progress toast stays up to 60 s. It was still showing 10 s after the stop, across closing and reopening the tab.
    - Owner: #793.
 
-6. **Open: toasts cover the slash-command menu, so a click on a covered row does nothing** (MENU-15).
+6. **Toasts covered the slash-command menu, so a click on a covered row did nothing** (MENU-15). Fixed on `cea7588` (#793 c88b997, P-165): the open menu sits above the toasts. The integration build keeps #789's mousemove → selectIndex handler for the hover click-swallow.
    - Repro: run a command that shows a toast (for example `/share-session`), then at once type `/` and click a row in the lower part of the menu. Menu y 532–576 at 349×662; the toast stack covers those rows, so the click hits the toast and no command runs. It works once the toasts expire.
    - Cause: `src/ui/theme/components/toasts.css:11-12` places the stack at `bottom: calc(var(--pi-dock-height) + 8px)`, just above the dock where the command menu opens, at `z-index: var(--z-toast)`, which is above the menu's `var(--z-popover)` (`src/ui/theme/components/menus.css:80`). Unchanged since #793's b25a6173; earlier passes clicked with no toast showing.
    - Owner: #793.
 
 Minor (sent to #793; fixed on `8099cd6`): at 11 tabs, every 60 px tab read "C…", and a native horizontal scrollbar showed under the tab strip.
 
+## Other checks on `cea7588` (outside this checklist)
+
+- **PROXY-10 (setup checklist): pass** (#793 c88b997, P-155). The proxy was set to `https://localhost:3999` and switched on, so the banner showed. "Show how to start it", then a real click on the copy button: the label read "Copied" at 0.1, 0.6 and 1.3 s and was back to "Copy command" at 1.7 s. The frame still denies `clipboard-write` (`document.featurePolicy.allowsFeature` false), so the `execCommand` fallback ran. A real Ctrl+V (`wtype`) into the composer pasted `npx pi-for-excel-proxy`. The proxy was restored to `https://localhost:3003`, off, afterwards.
+- **The open model picker unlocks when the turn ends: pass** (#795 be2e666). On GPT-6 Luna, `/model` opened during a turn showed "Pi is working in this tab. Change the model when it finishes, or press Stop." with all 7 rows `aria-disabled`, and a click on gpt-6-sol changed nothing. About 2 s later the turn finished; with the picker still open the notice went away and no row was disabled. A click on gpt-6-sol then switched the tab to GPT-6 Sol and closed the picker. The tab was set back to GPT-6 Luna.
+
 ## Desktop items (for the Mac)
 
 - **RENAME-09**: double-click and "Rename tab…" in Excel for Mac now open #793's in-pane dialog instead of `window.prompt`. Check that it no longer freezes, and the "Renamed tab to …" and "Tab name reset to automatic" toasts.
 - **EXPORT-11**: `/copy`, `/export` and `/export download` in Excel desktop. #795 adds the `execCommand` and manual-dialog copy fallbacks; #796 makes `saveBlobAsFile` (blob `<a download>`, no `window.open`) the only download path. Check that a file is actually saved.
-- **Desktop counterparts of web items**: Cmd+T, Cmd+W and Cmd+Shift+T should now be ignored while a dialog is open (TABS-04, TABS-24); check that Excel does not take them instead. Check the Tab trap in overlays on WKWebView (new bug 3 was Office-on-the-web specific and is fixed there on `8099cd6`), and that clicking an inactive tab's title switches to it (regression 3). REOPEN-04 desktop: whether the stale "Closed …" toast is now retired (#795).
+- **Desktop counterparts of web items**: Cmd+T, Cmd+W and Cmd+Shift+T should now be ignored while a dialog is open (TABS-04, TABS-24); check that Excel does not take them instead. Check the Tab trap in overlays on WKWebView (new bug 3 was Office-on-the-web specific and is fixed there on `8099cd6`), and that clicking an inactive tab's title switches to it (regression 3, fixed on the web). REOPEN-04 desktop: whether the stale "Closed …" toast is now retired (#795).
