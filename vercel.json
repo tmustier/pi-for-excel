@@ -1,6 +1,13 @@
 {
   "buildCommand": "npm run build",
   "ignoreCommand": "node scripts/vercel-ignore-command.mjs",
+  "git": {
+    "deploymentEnabled": {
+      "product-description": false,
+      "durable-plan": false,
+      "integration-fixes": false
+    }
+  },
   "outputDirectory": "dist",
   "rewrites": [
     {

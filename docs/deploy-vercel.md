@@ -20,13 +20,34 @@ This repo includes `vercel.json` with:
 - a header rule to disable caching for `/src/taskpane.html` to make updates propagate reliably
 - an enforced `Content-Security-Policy` on `/src/taskpane.html` (Office.js + provider/auth endpoints + localhost proxy + Pyodide CDN host).
 
-### `ignoreCommand` policy
+### Automatic deployment policy
 
-Automatic deploy behavior is:
+`git.deploymentEnabled` prevents deployment creation for these branches:
+- `product-description`: specification-only PR; changes live in
+  `product-description/` and `agent-description/`, neither shipped in the app
+- `durable-plan` and `integration-fixes`: non-PR planning/integration branches
+
+All other branches remain enabled, including `main`, every layer of a PR
+stack, and dependency PRs. Remove an exception if that branch starts carrying
+app changes that need a hosted review. The configuration must be present in
+the pushed branch's commit; merging it into `main` does not rewrite existing
+branches. Their owners must incorporate it before the next pushes benefit.
+
+This is intentionally not a blanket Markdown/docs exclusion: `README.md` and
+non-archive `docs/**/*.md` are bundled by `src/files/builtin-docs.ts`.
+
+### `ignoreCommand` fallback
+
+For branches still enabled above, the existing ignored-build policy is:
 - **build** for `main`
 - **build** for pull requests (`VERCEL_GIT_PULL_REQUEST_ID` is set)
 - **build** for manual deploys (`VERCEL_GIT_COMMIT_REF` is unset)
 - **skip** non-PR feature branch pushes
+
+An ignored build **still counts toward Vercel's daily deployment quota**;
+it saves build work, not deployments. Use the branch gate above to avoid
+creating known-unneeded deployments, not another ignored-build condition.
+See [Vercel's Ignored Build Step documentation](https://vercel.com/docs/project-configuration/project-settings#ignored-build-step).
 
 Regression coverage lives in `tests/vercel-ignore-command.test.mjs` (run via `npm run test:security`).
 
