@@ -60,6 +60,11 @@ ordinary inverse backups. Missing backup coverage is explicit. The receipt
 saves with the session but is not sent back to the model. See
 [turn recovery](../workbook/backups-and-revert.md#review-and-undo-a-turn-cl-01).
 
+An Office.js-only turn still shows a notice that its code is not covered by
+Undo this turn, with `/backup` guidance. A mixed turn shows the same notice
+alongside the recoverable core changes; the receipt never implies full
+coverage of arbitrary code (PR #808).
+
 One overflow can compact-and-retry; a second is final. Ordinary eligible transient errors retry with visible countdowns. Undelivered text becomes separate Not sent rows; stopped commands are cancelled and named. Nothing leaks unasked into the next turn.
 
 ## Modifiers
