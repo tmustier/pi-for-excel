@@ -153,6 +153,8 @@ void test("Escape preserves keyboard entry and closes only the topmost dialog", 
     await nameInput.press("Escape");
     assert.equal(await nameInput.inputValue(), "Browser gateway");
     assert.equal(await nameInput.evaluate((element) => element === document.activeElement), false);
+    // Stepping out of the field keeps focus inside the dialog, not on <body>.
+    assert.equal(await settings.evaluate((overlay) => overlay.contains(document.activeElement)), true);
     await settings.waitFor({ state: "visible" });
 
     await page.getByPlaceholder("https://your-gateway.example.com/v1").fill("https://gateway.example.com/v1");

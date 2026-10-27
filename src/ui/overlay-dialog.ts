@@ -275,23 +275,29 @@ export function installOverlayFocus(overlay: HTMLElement, card: HTMLElement): Ov
     const tabbables = getTabbableElements(card);
     const first = tabbables[0];
     const last = tabbables[tabbables.length - 1];
-    if (!first || !last) {
+    // Office on the web handles Tab itself from its own keydown listener and
+    // ignores defaultPrevented: with no next tabbable it exits the add-in
+    // frame. Every Tab the trap handles must stop there too.
+    const handled = (target: HTMLElement): void => {
       event.preventDefault();
-      card.focus();
+      event.stopPropagation();
+      target.focus();
+    };
+
+    if (!first || !last) {
+      handled(card);
       return;
     }
 
-    const active = document.activeElement;
-    const inside = active instanceof Node && card.contains(active);
-    if (event.shiftKey && (!inside || active === first || active === card)) {
-      event.preventDefault();
-      last.focus();
-    } else if (!event.shiftKey && (!inside || active === last || active === card)) {
-      // The card itself (tabindex=-1) has no browser Tab order: inside the
-      // Office iframe the default action leaves the add-in frame entirely.
-      event.preventDefault();
-      first.focus();
+    // The trap moves focus itself for every Tab, wrapping at the ends. From
+    // the card (tabindex=-1) or anywhere outside the list, start at an end.
+    const index = document.activeElement instanceof HTMLElement ? tabbables.indexOf(document.activeElement) : -1;
+    if (index === -1) {
+      handled(event.shiftKey ? last : first);
+      return;
     }
+    const step = event.shiftKey ? -1 : 1;
+    handled(tabbables[(index + step + tabbables.length) % tabbables.length] ?? first);
   };
 
   // Focus that lands behind the backdrop (a composer refocusing itself, a click
@@ -397,7 +403,7 @@ export function createOverlayDialog(options: OverlayDialogOptions): OverlayDialo
   const cleanupEscape = installOverlayEscapeClose(overlay, () => {
     if (options.onEscape?.() === true) return;
     close();
-  });
+  }, card);
   cleanups.push(cleanupEscape);
 
   if (options.closeOnBackdrop !== false) {

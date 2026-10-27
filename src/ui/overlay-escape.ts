@@ -3,7 +3,7 @@
  * Escape owners so streaming Esc abort is suppressed while open.
  */
 
-import { blurTextEntryTarget } from "../utils/text-entry.js";
+import { isTextEntryTarget } from "../utils/text-entry.js";
 
 function getTargetElement(target: EventTarget | null): Element | null {
   if (!target) return null;
@@ -25,16 +25,15 @@ function isTopmostEscapeClaim(overlay: HTMLElement): boolean {
 }
 
 /**
- * True while a dialog overlay (settings, pickers, confirmations, welcome) is
- * open. Every such overlay registers through `installOverlayEscapeClose`.
+ * Escape closes the topmost overlay. From a text field, the first Escape only
+ * steps out of the field to `stepOutTarget` (the dialog card), so a half-filled
+ * form is not dismissed by reflex; the next Escape closes. Focus never drops
+ * out of the dialog.
  */
-export function isDialogOverlayOpen(): boolean {
-  return typeof document !== "undefined" && document.querySelector("[data-claims-escape='true']") !== null;
-}
-
 export function installOverlayEscapeClose(
   overlay: HTMLElement,
   closeOverlay: () => void,
+  stepOutTarget: HTMLElement = overlay,
 ): () => void {
   overlay.dataset.claimsEscape = "true";
 
@@ -54,10 +53,12 @@ export function installOverlayEscapeClose(
     }
 
     const targetElement = getTargetElement(event.target);
-    if (targetElement && overlay.contains(targetElement) && blurTextEntryTarget(targetElement)) {
+    if (targetElement && overlay.contains(targetElement) && isTextEntryTarget(targetElement)) {
       event.preventDefault();
       event.stopPropagation();
       event.stopImmediatePropagation();
+      if (!stepOutTarget.hasAttribute("tabindex")) stepOutTarget.tabIndex = -1;
+      stepOutTarget.focus({ preventScroll: true });
       return;
     }
 
