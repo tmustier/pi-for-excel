@@ -107,7 +107,7 @@ How it ran:
 | SETTINGS-11 | pass | "Confirm mode." / "Auto mode."; the status bar follows. |
 | SETTINGS-12 | pass (#796) | The toast is now in the language being left ("Language changed. Reloading..." going to Chinese, "语言已更改，正在重新加载…" going back to English); reload at 1.05 s; the UI switched both ways. |
 | SETTINGS-13 | pass | "1 connected" and gateway row "4" (four gateways). |
-| SETTINGS-14 | pass (#793) | Changed: F2 no longer reaches the composer behind Settings (focus stays in the shell; 30 Tabs stay inside it), so `/settings` cannot be typed while Settings is open. |
+| SETTINGS-14 | pass (#793) | Changed: F2 no longer reaches the composer behind Settings, so `/settings` cannot be typed while Settings is open. On e48d83c: on the web, the first Tab from the Settings body leaves the add-in frame (same on a2b3f2d), see new bug 3 below. |
 | SETTINGS-15 | pass (#790) | Changed: Save in Rules (opened from the root page) shows "Rules saved" and closes Settings; it no longer returns to the root. The row reads "On: All my files". Rule cleared afterwards. Desktop not rerun. |
 | SETTINGS-16 | pass (#795) | "Proxy" now has a subtitle: "Some providers and logins can't be reached straight from Excel. The proxy relays those requests." |
 | GATEWAY-01 | pass | All fields and placeholders. |
@@ -135,7 +135,7 @@ How it ran:
 | PROXY-04 | pass | Status line and the "Proxy URL not saved: …" toast. |
 | PROXY-05 | pass | "On" and "Off" both read. |
 | PROXY-06 | pass (#793) | The banner now sits in the notice area and appeared at once: "The proxy is turned on but isn’t running, so some providers and web tools won’t work." / "Show how to start it". |
-| PROXY-07 | **fail** | #793 should show the banner only while the proxy is enabled. A banner already on screen stays after the switch is turned off (70 s+, still saying the proxy "is turned on"); it goes only after a reload. See below. |
+| PROXY-07 | pass on e48d83c (fail on a2b3f2d) | #793 should show the banner only while the proxy is enabled. A banner already on screen stays after the switch is turned off (70 s+, still saying the proxy "is turned on"); it goes only after a reload. See below. |
 | PROXY-08 | pass (#793) | "Show how to start it" expands to "Hide steps", with the command, the copy button, "Open Terminal · paste · press Enter · keep open" and the install link. |
 | PROXY-09 | pass | The banner disappeared as soon as the URL was set back to 3003 (the page re-check, #795). |
 | PROXY-10 | **fail** | On Excel on the web the copy button never turns into a check, and nothing is copied: the command text is selected instead. The frame denies `clipboard-write`. The code is unchanged from `main`. See below. |
@@ -172,6 +172,24 @@ How it ran:
 - **Owner:** #793 owns the banner. Sent to the #793 thread as low priority.
 
 No bug found here appears only in the combination, so the integration thread was not messaged.
+
+## Rerun on e48d83c (27 October 2026)
+
+`integration-fixes` was force-pushed to `e48d83c`. Only the changes that touch this cluster were retested on the web session (dev server serving `e48d83c`, confirmed by the served `proxy-status.ts`) and in the standalone taskpane. These were #793's proxy banner re-check, toasts, overlay Tab and keys; #795's thinking clamp; and the welcome proxy re-check.
+
+**Result: 133 pass, 1 fail, 0 blocked.**
+
+- **PROXY-07: now passes.** With a 3999 URL and the banner showing, turning the switch off removed the banner at once (it stayed 70 s+ on a2b3f2d). PROXY-06, -09, -11 and -12 still pass, and the banner now appears or goes away right after each URL change, not on the next poll.
+- **PROXY-10: still fails** (code unchanged): the copy button stays "Copy command" and only selects the text.
+- **MODEL-10:** still pass. High → gateway model shows "Off", and deleting the gateway gives "GPT-6.1 Sol" "High" (MODEL-07, GATEWAY-15).
+- **Still pass:** PICKER-04, -06 (status-bar opener and `/model`), -07, -09, -10, -11, -17; SETTINGS-07; LOGIN-03, -04, -05, -08 to -11, -23, -24, -25, -27, -28, -29, -31; MODEL-13; PICKER-05, -21.
+
+### 3. New: Tab from the Settings body leaves the add-in frame on Excel on the web (#793; also on a2b3f2d)
+
+- **Repro (web):** `/settings` (focus lands on `.pi-set-shell__body`, tabindex=-1), then press Tab once.
+- **Observed:** the keydown is not prevented, and the browser default moves focus out of the add-in iframe (`document.hasFocus()` false, activeElement BODY). The standalone top-level page tabs to the first row correctly.
+- **Cause:** `installOverlayFocus` takes over Tab only when focus is outside the card, on its first or last element, or on the card itself (`src/ui/overlay-dialog.ts:281-289`; e48d83c added the card case for this exact symptom). The shell focuses its body, an inner tabindex=-1 element, which none of those cases covers.
+- **Owner:** #793. Seen with CDP key events; a repeat with a physical keyboard would confirm. Sent to the #793 thread.
 
 ## Desktop items to hand to the Mac
 
