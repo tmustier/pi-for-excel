@@ -459,7 +459,9 @@ export function shouldFallbackToPyodideAfterBridgeError(
 export function formatPythonFailure(response: PythonBridgeResponse, backend: string): string {
   const stderr = response.stderr?.trim() ?? "";
   const error = response.error?.trim() ?? "";
-  const exception = error.length > 0 && error !== stderr ? error : findExceptionLine(stderr);
+  const lines = stderr.split("\n").map((line) => line.trim()).filter((line) => line.length > 0);
+  const tracebackException = [...lines].reverse().find((line) => /^[A-Za-z_][\w.]*(Error|Exception|Interrupt|Exit)\b/u.test(line));
+  const exception = error.length > 0 && error !== stderr ? error : tracebackException ?? lines.at(-1) ?? "";
   const exitCode = response.exit_code !== undefined ? ` (exit code ${response.exit_code})` : "";
   const sections = [`Python failed in ${backend}${exitCode}${exception.length > 0 ? `: ${exception}` : "."}`];
 
@@ -470,13 +472,6 @@ export function formatPythonFailure(response: PythonBridgeResponse, backend: str
   if (exception.length === 0 && stderr.length === 0) sections.push("No error message or stderr was produced.");
 
   return sections.join("\n\n");
-}
-
-/** The exception line of a traceback (e.g. "ModuleNotFoundError: No module named 'pandas'"). */
-function findExceptionLine(stderr: string): string {
-  const lines = stderr.split("\n").map((line) => line.trim()).filter((line) => line.length > 0);
-  const exception = [...lines].reverse().find((line) => /^[A-Za-z_][\w.]*(Error|Exception|Interrupt|Exit)\b/u.test(line));
-  return exception ?? lines.at(-1) ?? "";
 }
 
 async function getDefaultPyodideAvailable(): Promise<boolean> {
