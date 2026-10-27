@@ -108,6 +108,25 @@ void test("Office streaming preserves OpenRouter's registry transport without un
   }
 });
 
+void test("Office continuation after Stop returns an aborted result without dispatching a request", async () => {
+  const runtime = createRuntime();
+  const model = runtime.models.getModel("openrouter", "openai/gpt-5.6-sol");
+  assert.ok(model);
+  const controller = new AbortController();
+  controller.abort();
+  const stream = createOfficeStreamFn(() => {
+    assert.fail("Stopped continuations must not resolve a proxy or send a request");
+  }, runtime.models);
+  const events = await stream(model, { messages: [] }, {
+    signal: controller.signal,
+    fetch: () => { assert.fail("Stopped continuations must not fetch"); },
+  });
+  const result = await events.result();
+  assert.equal(result.stopReason, "aborted");
+  assert.equal(result.errorMessage, "Request aborted");
+  assert.deepEqual(result.content, []);
+});
+
 function createRuntime(args?: {
   providerKeys?: MemoryProviderKeys;
   catalogs?: MemoryCatalogs;
