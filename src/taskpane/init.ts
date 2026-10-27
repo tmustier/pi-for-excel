@@ -2166,6 +2166,7 @@ export async function initTaskpane(opts: {
   // (WPS) sees another workbook instead.
   if (spreadsheetHost.kind === "office") {
     const identityFollower = createWorkbookIdentityFollower({
+      settings,
       resolveIdentity: async () => (await resolvePersistentWorkbookKey("read"))?.workbookId ?? null,
       onIdentityChanged: async ({ from, to }) => {
         for (const tab of runtimeManager.snapshotTabs()) {
