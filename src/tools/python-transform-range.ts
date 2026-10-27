@@ -946,8 +946,9 @@ export function createPythonTransformRangeTool(
                 toolCallId,
                 address: writeResult.outputAddress,
                 changedCount,
-                beforeValues,
-                beforeFormulas,
+                beforeValues: writeResult.beforeValues,
+                beforeFormulas: writeResult.beforeFormulas,
+                ...(writeResult.readBackFormulas ? { afterFormulas: writeResult.readBackFormulas } : {}),
               });
             },
             appendResultNote: appendMutationResultNote,

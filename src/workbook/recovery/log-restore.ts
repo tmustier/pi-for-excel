@@ -275,6 +275,7 @@ export async function restoreWorkbookRecoverySnapshot(
       changedCount: inverseChangedCount,
       beforeValues: currentState.values,
       beforeFormulas: currentState.formulas,
+      afterFormulas: snapshot.beforeFormulas,
       restoredFromSnapshotId: snapshot.id,
     },
     scope,

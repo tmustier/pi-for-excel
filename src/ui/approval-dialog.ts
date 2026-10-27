@@ -31,6 +31,8 @@ export interface ApprovalRequest {
   details?: TemplateResult;
   /** Plain-text body; used when there are no structured details. */
   message?: string;
+  /** What the change replaces, e.g. "Replaces 2 non-empty cells: …". Shown prominently. */
+  overwrites?: string;
   /** Short note under the details, e.g. why this asks. */
   note?: string;
   /** Which tab asked, when it may not be the one on screen. */
@@ -38,6 +40,12 @@ export interface ApprovalRequest {
   confirmLabel: string;
   confirmTone?: "primary" | "danger";
   signal?: AbortSignal;
+  /**
+   * Stops the turn that asked. With it, the dialog offers "Stop Pi": the
+   * taskpane (and its Stop button) is inert behind the dialog, so this is
+   * how the user stops Pi while it waits for an answer.
+   */
+  onStop?: () => void;
 }
 
 interface QueuedApproval {
@@ -55,6 +63,18 @@ function settle(entry: QueuedApproval, approved: boolean): void {
   }
   entry.onAbort = null;
   entry.resolve(approved);
+}
+
+/** Declines every request, shown or queued, and stops each turn that asked. */
+function stopAll(): void {
+  const entries = [...(current ? [current.entry] : []), ...queue.splice(0)];
+  const stops = new Set<() => void>();
+  for (const entry of entries) {
+    if (entry.request.onStop) stops.add(entry.request.onStop);
+    settle(entry, false);
+  }
+  current?.dialog.close();
+  for (const stop of stops) stop();
 }
 
 function updateWaitingCount(): void {
@@ -116,6 +136,13 @@ function showNext(): void {
     body.appendChild(message);
   }
 
+  if (request.overwrites) {
+    const overwrites = document.createElement("p");
+    overwrites.className = "pi-approval__overwrites";
+    overwrites.textContent = request.overwrites;
+    body.appendChild(overwrites);
+  }
+
   if (request.note) {
     const note = document.createElement("p");
     note.className = "pi-approval__note";
@@ -135,9 +162,16 @@ function showNext(): void {
     text: request.confirmLabel,
     className: request.confirmTone === "danger" ? "pi-overlay-btn--danger" : "pi-overlay-btn--primary",
   });
-  confirmButton.dataset.autofocus = "";
   cancelButton.addEventListener("click", () => answer(false));
   confirmButton.addEventListener("click", () => answer(true));
+  if (request.onStop) {
+    const stopButton = createOverlayButton({ text: t("approval.stop"), className: "pi-approval__stop" });
+    stopButton.addEventListener("click", () => {
+      answered = true;
+      stopAll();
+    });
+    actions.append(stopButton);
+  }
   actions.append(cancelButton, confirmButton);
 
   dialog.card.append(header, body, actions);
@@ -172,7 +206,11 @@ function showNext(): void {
     for (const element of behind) element.inert = false;
   });
   dialog.mount();
-  confirmButton.focus();
+  // Focus the dialog itself, not "Allow": an Enter typed for the composer as
+  // the dialog opens must not approve a change the user has not read.
+  dialog.card.tabIndex = -1;
+  dialog.card.dataset.autofocus = "";
+  dialog.card.focus();
 }
 
 /**

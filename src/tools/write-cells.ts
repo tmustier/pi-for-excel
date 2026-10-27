@@ -30,7 +30,7 @@ import { STOPPED_AFTER_CHANGE_NOTE, type StopReporting } from "./with-workbook-c
 import { finalizeMutationOperation } from "./mutation/finalize.js";
 import type { MutationFinalizeDependencies } from "./mutation/types.js";
 import { appendMutationResultNote } from "./mutation/result-note.js";
-import type { ApprovalPrecheck } from "./with-workbook-coordinator.js";
+import type { ApprovalPrecheck, OverwrittenCells } from "./with-workbook-coordinator.js";
 
 const schema = Type.Object({
   start_cell: Type.String({
@@ -194,29 +194,35 @@ export function createWriteCellsTool(
     checkBeforeApproval: async (toolCallId, params) => {
       try {
         const checked = checkWriteInput(params);
-        if ("result" in checked) return checked.result;
-        if (params.allow_overwrite) return null;
+        if ("result" in checked) return { refused: checked.result };
 
-        const blocked = await excelRun<BlockedWriteCellsResult | null>(async (context) => {
+        const target = await excelRun(async (context) => {
           const { sheet } = getRange(context, params.start_cell);
           sheet.load("name");
           const rangeAddr = computeRangeAddress(checked.startCellRef, checked.rows, checked.cols);
           const targetRange = sheet.getRange(rangeAddr);
           targetRange.load("values,formulas");
           await context.sync();
-
-          const occupiedCount = countOccupiedCells(targetRange.values, targetRange.formulas);
-          return occupiedCount > 0
-            ? {
-              blocked: true,
-              sheetName: sheet.name,
-              address: rangeAddr,
-              existingCount: occupiedCount,
-              existingValues: targetRange.values,
-            }
-            : null;
+          return { sheetName: sheet.name, rangeAddr, values: targetRange.values, formulas: targetRange.formulas };
         });
-        return blocked ? reportBlocked(toolCallId, blocked) : null;
+
+        const occupied = describeOccupiedCells({
+          sheetName: target.sheetName,
+          topLeft: checked.startCellRef,
+          values: target.values,
+          formulas: target.formulas,
+        });
+        if (!occupied) return null;
+        if (params.allow_overwrite) return { overwrites: occupied };
+        return {
+          refused: await reportBlocked(toolCallId, {
+            blocked: true,
+            sheetName: target.sheetName,
+            address: target.rangeAddr,
+            existingCount: occupied.count,
+            existingValues: target.values,
+          }),
+        };
       } catch {
         // Let the call proceed to approval; it reports its own error when it runs.
         return null;
@@ -326,11 +332,25 @@ export function createWriteCellsTool(
           auditEntry: {
             toolName: "write_cells",
             toolCallId,
-            blocked: true,
-            outputAddress: fullAddr,
-            changedCount: 0,
-            changes: [],
-            summary: outcome.kind === "obstacle" ? "blocked: target cannot hold the values" : `blocked: ${outcome.kind.replaceAll("_", " ")}`,
+            blocked: false,
+            ...(successResult.details.address !== undefined ? { outputAddress: successResult.details.address } : {}),
+            changedCount: successResult.details.changes?.changedCount ?? 0,
+            changes: successResult.details.changes?.sample ?? [],
+          },
+          recovery: {
+            result: successResult,
+            appendRecoverySnapshot: () => resolvedDependencies.appendRecoverySnapshot({
+              toolName: "write_cells",
+              toolCallId,
+              address: successResult.details.address ?? qualifiedAddress(result.sheetName, result.address),
+              changedCount: successResult.details.changes?.changedCount ?? 0,
+              beforeValues: result.beforeValues,
+              beforeFormulas: result.beforeFormulas,
+              afterFormulas: result.readBackFormulas,
+            }),
+            appendResultNote: appendMutationResultNote,
+            unavailableReason: CHECKPOINT_SKIPPED_REASON,
+            unavailableNote: CHECKPOINT_SKIPPED_NOTE,
           },
         });
         return blockedResult;
@@ -525,6 +545,53 @@ export function validateFormula(formula: string): string | null {
   if (/[+\-*/^&,]$/.test(trimmed)) return "Formula ends with an operator";
 
   return null;
+}
+
+export function countOccupiedCells(values: unknown[][], formulas: unknown[][]): number {
+  let count = 0;
+  for (let r = 0; r < values.length; r++) {
+    const valueRow = values[r] ?? [];
+    for (let c = 0; c < valueRow.length; c++) {
+      const value = valueRow[c];
+      const formula = formulas[r]?.[c];
+      const hasValue = value !== null && value !== undefined && value !== "";
+      const hasFormula = typeof formula === "string" && formula.startsWith("=");
+      if (hasValue || hasFormula) count += 1;
+    }
+  }
+  return count;
+}
+
+const OVERWRITE_SAMPLE_SIZE = 3;
+
+/**
+ * The non-empty cells of a grid starting at `topLeft` (e.g. "B2"), for an
+ * approval that must say what a change replaces. Formulas are shown as
+ * formulas, other cells by value.
+ */
+export function describeOccupiedCells(args: {
+  sheetName: string;
+  topLeft: string;
+  values: unknown[][];
+  formulas: unknown[][];
+}): OverwrittenCells | null {
+  const start = parseCell(args.topLeft);
+  const sample: OverwrittenCells["sample"] = [];
+  let count = 0;
+  args.values.forEach((row, r) => {
+    row.forEach((value, c) => {
+      const formula = args.formulas[r]?.[c];
+      const isFormula = typeof formula === "string" && formula.startsWith("=");
+      if (!isFormula && (value === null || value === undefined || value === "")) return;
+      count += 1;
+      if (sample.length >= OVERWRITE_SAMPLE_SIZE) return;
+      sample.push({
+        address: qualifiedAddress(args.sheetName, `${colToLetter(start.col + c)}${start.row + r}`),
+        content: isFormula ? formula : String(value),
+      });
+    });
+  });
+  return count > 0 ? { count, sample } : null;
 }
 
 const VERIFIED_VALUES_PREVIEW_ROWS = 8;
