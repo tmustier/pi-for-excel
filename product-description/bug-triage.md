@@ -176,7 +176,7 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 | [P-164](#p-164-a-model-picker-opened-while-busy-stays-read-only-after-the-turn-ends) | A model picker opened while busy stays read-only after the turn ends | low | models | fix | Fix in PR [#795](https://github.com/tmustier/pi-for-excel/pull/795) (open): be2e666 |
 | [P-165](#p-165-toasts-cover-the-command-menus-lower-rows) | Toasts cover the command menu's lower rows | low | menus | fix | Fix in PR [#793](https://github.com/tmustier/pi-for-excel/pull/793) (open): c88b997 |
 | [P-166](#p-166-copy-content-on-a-built-in-doc-fails-in-excel-for-mac) | Copy content on a built-in doc fails in Excel for Mac | low | files | fix | Fix in PR [#790](https://github.com/tmustier/pi-for-excel/pull/790) (open): 3666748 |
-| [P-167](#p-167-after-save-as-the-tabs-stay-with-the-old-file-and-the-new-file-opens-a-fresh-chat) | After Save As, the tabs stay with the old file and the new file opens a fresh chat | medium | sessions | fix | Assigned to #795 (follow-up; not yet in the PR) |
+| [P-167](#p-167-after-save-as-the-tabs-stay-with-the-old-file-and-the-new-file-opens-a-fresh-chat) | After Save As, the tabs stay with the old file and the new file opens a fresh chat | medium | sessions | fix | Fix in PR [#795](https://github.com/tmustier/pi-for-excel/pull/795) (open): d32fd2b |
 
 ## High
 
@@ -333,7 +333,7 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Severity:** `high`, because every turn fails for a logged-in user and nothing says a reload fixes it.
 - **Decision needed:** `fix`: refresh (or refresh on 401 and retry once) before each model request when the token is near expiry.
 - **Raised by:** MODEL-15; [models and providers](foundations/models-and-providers.md#open-questions-and-verification); MULTI-10; [several taskpanes](cross-cutting/several-taskpanes.md#open-questions-and-verification), [provider errors and offline](cross-cutting/provider-errors-and-offline.md#open-questions-and-verification)
-- **Status:** Confirmed in the standalone taskpane with a stubbed login, 26 October 2026 (MODEL-15) Also: Suspected from code; not reproduced (MULTI-10 refuted only the "logs each other out" version) Also confirmed in Excel for Mac (MODEL-15): an open pane sent an expired token and got a 401 with no refresh attempt (src/auth/restore.ts:106, :158). That run was on `main`. In #795, every model call first refreshes a token that expires within 2 minutes (`agent.getApiKey` → `oauthRefresher.ensureFresh`); cff416f adds a test where the token expires 3.5 minutes after the pane opens. Not yet re-checked in Excel. Verified in Excel for Mac on integration-fixes with a login made in the taskpane: inside the 2-minute margin the refresh ran and the next call used the new token. A failed refresh still sends the old token and shows only the 401.
+- **Status:** Confirmed in the standalone taskpane with a stubbed login, 26 October 2026 (MODEL-15) Also: Suspected from code; not reproduced (MULTI-10 refuted only the "logs each other out" version) Also confirmed in Excel for Mac (MODEL-15): an open pane sent an expired token and got a 401 with no refresh attempt (src/auth/restore.ts:106, :158). That run was on `main`. In #795, every model call first refreshes a token that expires within 2 minutes (`agent.getApiKey` → `oauthRefresher.ensureFresh`); cff416f adds a test where the token expires 3.5 minutes after the pane opens. Not yet re-checked in Excel. Verified in Excel for Mac on integration-fixes with a login made in the taskpane: inside the 2-minute margin the refresh ran and the next call used the new token. A failed refresh still sends the old token and shows only the 401. Follow-up #795 3acd38f: when the refresh fails and the token has expired, the turn fails without sending it and the banner asks the user to sign in again.
 - **Owner:** Fix in PR [#795](https://github.com/tmustier/pi-for-excel/pull/795) (open)
 
 ### P-14: A pointer resting over the model picker decides what Enter chooses
@@ -1476,8 +1476,8 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Severity:** `medium`. Conversations seem lost in the new file (they are still reachable from the old one or Resume).
 - **Decision needed:** `fix`. Move tab state to the new identity on Save As, and restore the tab strip.
 - **Raised by:** integration-fixes desktop pass, 27 October 2026
-- **Status:** Confirmed in Excel for Mac on integration-fixes 8099cd6 (PERSIST-11).
-- **Owner:** Assigned to #795 (follow-up; not yet in the PR)
+- **Status:** Confirmed in Excel for Mac on integration-fixes 8099cd6 (PERSIST-11). Fixed in #795 d32fd2b: the pane checks the workbook identity every 4 s and moves the tab layout, recently closed list and linked sessions to the new identity. Checked in Excel on the web with a simulated identity change (Save As isn't available there); not yet checked on a Mac. The Backups-with-no-tab-strip symptom did not reproduce.
+- **Owner:** Fix in PR [#795](https://github.com/tmustier/pi-for-excel/pull/795) (open): d32fd2b
 
 ## Low
 
