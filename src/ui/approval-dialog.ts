@@ -199,7 +199,9 @@ function showNext(): void {
   // until it closes, so Tab cannot leave it and typing cannot reach the chat.
   // The ux-system overlay primitive is taking this over for every dialog.
   const behind = Array.from(document.body.children).filter(
-    (element): element is HTMLElement => element instanceof HTMLElement && !element.inert,
+    // Live regions stay live so announcements still reach screen readers.
+    (element): element is HTMLElement =>
+      element instanceof HTMLElement && !element.inert && element.getAttribute("aria-live") === null,
   );
   for (const element of behind) element.inert = true;
   dialog.addCleanup(() => {
