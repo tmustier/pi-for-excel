@@ -4,6 +4,8 @@
  */
 
 import { getAppStorage } from "../../../storage/local/app-storage.js";
+import { getUserRules, getWorkbookRules } from "../../../rules/store.js";
+import { getWorkbookContext } from "../../../workbook/context.js";
 
 import { listOpenAiGatewayConfigs } from "../../../auth/custom-gateways.js";
 import { PI_EXECUTION_MODE_CHANGED_EVENT, type ExecutionMode } from "../../../execution/mode.js";
@@ -249,6 +251,21 @@ function buildRulesDataGroup(ctx: SettingsPageContext): HTMLElement {
     sublabel: t("settings.row.backups.sub"),
     onActivate: () => ctx.navigate("backups"),
   });
+
+  void (async () => {
+    const settings = getAppStorage().settings;
+    const { workbookId } = await getWorkbookContext();
+    const [userRules, workbookRules] = await Promise.all([
+      getUserRules(settings),
+      getWorkbookRules(settings, workbookId),
+    ]);
+    const active: string[] = [];
+    if (userRules) active.push(t("rules-overlay.all-my-files"));
+    if (workbookRules) active.push(t("rules-overlay.this-file"));
+    rulesRow.setValue(active.length > 0
+      ? t("settings.row.rules.active", { list: active.join(", ") })
+      : t("settings.row.rules.none"));
+  })().catch(() => {});
 
   group.list.append(rulesRow.root, backupsRow.root);
   return group.root;

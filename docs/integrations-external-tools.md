@@ -16,12 +16,13 @@ Issue: [#24](https://github.com/tmustier/pi-for-excel/issues/24)
   - when disabled, blocks all external integration tools
 - **Web Search integration**
   - tools: `web_search`, `fetch_page`
-  - providers: Jina (default, no key required), Serper.dev, Tavily, Brave Search
+  - providers: Jina (default), Firecrawl, Serper.dev, Tavily, Brave Search — every provider needs an API key (Jina's is free); without one the first search returns the setup card
   - configurable provider + provider-specific API key in `/tools`
-  - fallback: if a configured keyed provider fails with auth/rate-limit/server/network errors, search retries with Jina for that request and surfaces a warning
+  - fallback: if the selected provider fails with auth/rate-limit/server/network errors and a Jina key is saved, search retries with Jina for that request and surfaces a warning
+  - the API key box never contains the saved key; it shows the masked key as a placeholder, Save needs a newly typed key, and Validate tests the saved key when the box is empty
   - result output includes explicit `Sent:` attribution and provider/transport metadata
 - **MCP integration**
-  - tool: `mcp`
+  - tool: `mcp`, given to Pi only when **Let Pi use MCP servers** is on for the session or workbook (Connections → MCP servers)
   - server registry (`mcp.servers.v1`) configurable in `/tools`
   - add/remove/test server URL + optional bearer token
   - bearer tokens are stored in the shared connection store (`connections.store.v1`, record `builtin.mcp.servers`) with legacy `mcp.servers.v1` token fallback/migration

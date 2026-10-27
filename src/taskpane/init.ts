@@ -976,6 +976,8 @@ export async function initTaskpane(opts: {
     const runtimeId = crypto.randomUUID();
     let runtimeSessionId: string = optsForRuntime.sessionId ?? crypto.randomUUID();
     const runtimeSkillReadCache = createSkillReadCache();
+    // Files Pi created in this session; Auto mode may overwrite/delete them without asking.
+    const runtimeAssistantCreatedFiles = new Set<string>();
 
     let runtimeAgent: Agent | null = null;
 
@@ -1099,6 +1101,16 @@ export async function initTaskpane(opts: {
             ...approvalSource(),
           });
         },
+        requestLocalChangeApproval: (request) => requestRuntimeToolApproval({
+          title: request.title,
+          message: request.message,
+          confirmLabel: request.confirmLabel,
+          ...(request.signal ? { signal: request.signal } : {}),
+          onStop: stopRuntimeTurn,
+          ...approvalSource(),
+        }),
+        assistantCreatedFiles: runtimeAssistantCreatedFiles,
+        listExtensions: () => extensionManager.list(),
       });
 
 

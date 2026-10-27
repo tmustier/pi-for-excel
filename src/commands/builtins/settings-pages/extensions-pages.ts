@@ -172,14 +172,26 @@ export function createPluginsPage(): SettingsShellPage {
       container.className = "pi-hub-stack pi-hub-stack--lg";
       ctx.body.appendChild(container);
 
+      // One plugin action at a time: an install, toggle or uninstall (and its
+      // confirmation dialog) blocks other actions until it settles.
       let busy = false;
+      const runExclusive = async (action: () => Promise<void>): Promise<boolean> => {
+        if (busy || lifecycle.isDisposed()) return false;
+        busy = true;
+        try {
+          await action();
+        } finally {
+          busy = false;
+        }
+        return true;
+      };
 
       const refresh = (): void => {
         if (lifecycle.isDisposed()) return;
         renderPluginsTab({
           container,
           manager: deps.extensionManager,
-          isBusy: () => busy,
+          runExclusive,
           onChanged: async () => {
             if (deps.onChanged) await deps.onChanged();
           },
@@ -193,9 +205,6 @@ export function createPluginsPage(): SettingsShellPage {
         unsubExtension();
       });
 
-      // renderPluginsTab drives its own mutations through the manager; the
-      // busy flag only guards re-entrant clicks during manager updates.
-      busy = false;
       refresh();
     },
   };

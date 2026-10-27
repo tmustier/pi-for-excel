@@ -45,6 +45,8 @@ export interface WorkspaceBackendStatus {
   label: string;
   nativeSupported: boolean;
   nativeConnected: boolean;
+  /** The picker API exists but this frame may not open it (Excel on the web). */
+  nativeBlockedByFrame?: boolean;
   nativeDirectoryName?: string;
 }
 

@@ -217,7 +217,6 @@ void test("runtime manager passes sandbox activation options and runtime metadat
   try {
     clearLocalStorageKey(EXTENSION_SANDBOX_RUNTIME_STORAGE_KEY);
     setExperimentalFeatureEnabled("extension_sandbox_runtime", false);
-    setExperimentalFeatureEnabled("extension_permission_gates", true);
     setExperimentalFeatureEnabled("extension_widget_v2", true);
 
     const settings = new MemorySettingsStore();
@@ -1070,7 +1069,6 @@ void test("sandbox activation failures are isolated per extension during initial
 
   try {
     setExperimentalFeatureEnabled("extension_sandbox_runtime", false);
-    setExperimentalFeatureEnabled("extension_permission_gates", true);
 
     const settings = new MemorySettingsStore();
     settings.writeRaw(EXTENSIONS_REGISTRY_STORAGE_KEY, {
@@ -1136,7 +1134,6 @@ void test("sandbox capability denial surfaces deterministic permission error", a
 
   try {
     setExperimentalFeatureEnabled("extension_sandbox_runtime", false);
-    setExperimentalFeatureEnabled("extension_permission_gates", true);
 
     const basePermissions = getDefaultPermissionsForTrust("inline-code");
     const deniedOverlayPermissions: StoredExtensionPermissions = {
@@ -1182,6 +1179,52 @@ void test("sandbox capability denial surfaces deterministic permission error", a
       status.lastError ?? "",
       /Permission denied for extension "Denied Extension": cannot show overlays\./,
     );
+  } finally {
+    restoreLocalStorage();
+  }
+});
+
+void test("a remote-URL extension does not load in the sandbox while remote extension URLs are off", async () => {
+  const restoreLocalStorage = installLocalStorageStub();
+
+  try {
+    setExperimentalFeatureEnabled("extension_sandbox_runtime", false);
+    setExperimentalFeatureEnabled("remote_extension_urls", false);
+
+    const remoteUrl = "https://cdn.example.test/ext.mjs";
+    const settings = new MemorySettingsStore();
+    settings.writeRaw(EXTENSIONS_REGISTRY_STORAGE_KEY, {
+      version: 2,
+      items: [{
+        ...createStoredEntry({ id: "ext.remote", name: "Remote", trust: "remote-url" }),
+        source: { kind: "module", specifier: remoteUrl },
+      }],
+    });
+
+    const sandboxSpecifiers: string[] = [];
+    const manager = new ExtensionRuntimeManager({
+      settings,
+      connectionManager: createConnectionManager(settings),
+      getActiveAgent: () => null,
+      refreshRuntimeTools: async () => {},
+      reservedToolNames: new Set<string>(),
+      activateInSandbox: (activation) => {
+        if (activation.source.kind === "module") sandboxSpecifiers.push(activation.source.specifier);
+        return Promise.resolve({ deactivate: () => Promise.resolve() });
+      },
+    });
+
+    await manager.initialize();
+    const blocked = manager.list()[0];
+    assert.equal(blocked?.runtimeMode, "sandbox-iframe");
+    assert.equal(blocked?.loaded, false);
+    assert.match(blocked?.lastError ?? "", /Remote extension URLs are turned off/);
+    assert.deepEqual(sandboxSpecifiers, [], "the sandbox must never receive the URL to import");
+
+    setExperimentalFeatureEnabled("remote_extension_urls", true);
+    await manager.reloadExtension("ext.remote");
+    assert.equal(manager.list()[0]?.loaded, true);
+    assert.deepEqual(sandboxSpecifiers, [remoteUrl]);
   } finally {
     restoreLocalStorage();
   }

@@ -2,6 +2,10 @@ import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 
 import { assessOfficeJsCodeRisk } from "./office-js-risk.js";
 import {
+  wrapExtensionsManagerToolWithChangeGate,
+  wrapFilesToolWithChangeGate,
+} from "./local-change-gates.js";
+import {
   buildPythonBridgeGateErrorMessage,
   buildTmuxBridgeGateErrorMessage,
   defaultGetApprovedPythonBridgeUrl,
@@ -12,6 +16,8 @@ import {
 import {
   EXECUTE_OFFICE_JS_TOOL_NAME,
   EXECUTE_WPS_JS_TOOL_NAME,
+  EXTENSIONS_MANAGER_TOOL_NAME,
+  FILES_TOOL_NAME,
   PYTHON_BRIDGE_ONLY_TOOL_NAMES,
   PYTHON_FALLBACK_TOOL_NAMES,
   TMUX_TOOL_NAME,
@@ -471,7 +477,10 @@ function wrapPythonBridgeOnlyToolWithApprovalGate(
  *   call in Confirm mode. In Auto mode, pure host JSAPI code runs without a
  *   prompt, but code referencing ambient browser authority (network, storage,
  *   globals, dynamic evaluation) still requires per-call approval.
- * - `files` has no gate — read, write, and delete are always available.
+ * - `files` write/delete and `extensions_manager` changes ask for consent
+ *   (`local-change-gates.ts`): every change in Confirm mode; in Auto mode,
+ *   new code (install/enable) and irreversible loss (deleting or overwriting
+ *   a file Pi did not create this session, uninstall).
  */
 export function applyExperimentalToolGates(
   tools: AgentTool[],
@@ -497,6 +506,16 @@ export function applyExperimentalToolGates(
 
     if (tool.name === EXECUTE_WPS_JS_TOOL_NAME) {
       gatedTools.push(wrapDirectWorkbookJsToolWithHardGate(tool, dependencies, "WPS JSAPI"));
+      continue;
+    }
+
+    if (tool.name === FILES_TOOL_NAME) {
+      gatedTools.push(wrapFilesToolWithChangeGate(tool, dependencies));
+      continue;
+    }
+
+    if (tool.name === EXTENSIONS_MANAGER_TOOL_NAME) {
+      gatedTools.push(wrapExtensionsManagerToolWithChangeGate(tool, dependencies));
       continue;
     }
 

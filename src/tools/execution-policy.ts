@@ -14,10 +14,9 @@ const ALWAYS_READ_TOOLS = new Set<string>([
   "search_workbook",
   "trace_dependencies",
   "explain_formula",
-  // Instructions and conventions mutate local prompt/config state, not workbook cells/structure.
+  // Instructions, conventions and skills mutate local prompt/config state, not workbook cells/structure.
   "instructions",
   "conventions",
-  // Skills list/read bundled and Files-workspace skill content.
   "skills",
   // External bridge traffic does not mutate workbook state directly.
   "tmux",
@@ -26,9 +25,11 @@ const ALWAYS_READ_TOOLS = new Set<string>([
   "web_search",
   "fetch_page",
   "mcp",
-  // Workspace file operations do not mutate the workbook.
+  // Workspace file operations do not mutate the workbook; their consent gate
+  // lives in experimental-tool-gates/local-change-gates.ts.
   "files",
-  // Extension registry operations mutate local settings/runtime, not workbook content.
+  // Extension registry operations mutate local settings/runtime, not workbook
+  // content; consent is gated in local-change-gates.ts.
   "extensions_manager",
 ]);
 

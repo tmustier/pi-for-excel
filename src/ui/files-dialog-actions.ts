@@ -12,6 +12,7 @@ import { isFilesDialogBuiltInDoc } from "./files-dialog-filtering.js";
 import { resolveRenameDestinationPath } from "./files-dialog-paths.js";
 import { requestTextInputDialog } from "./text-input-dialog.js";
 import { showToast } from "./toast.js";
+import { copyText } from "./copy-text.js";
 import { saveBlobAsFile } from "../utils/download.js";
 import { isEmbeddedAppleWebView } from "../utils/platform.js";
 import { t } from "../language/index.js";
@@ -33,6 +34,7 @@ export interface CreateFilesDialogDetailActionsOptions {
   fileRef: FilesDialogDetailActionFileRef;
   workspace: FilesDialogDetailActionsWorkspace;
   auditContext: FilesWorkspaceAuditContext;
+  onMutationStateChange: (pending: boolean) => void;
   onAfterRename: (nextPath: string, locationKind: WorkspaceFileLocationKind) => Promise<void>;
   onAfterDelete: () => Promise<void>;
 }
@@ -92,11 +94,13 @@ function openBlobInNewTab(blob: Blob, pendingWindow: Window | null): void {
 
 /**
  * Copy text content to clipboard — reliable in Office WebView where
- * window.open / blob URLs silently fail.
+ * window.open / blob URLs silently fail. Hosts that refuse both the clipboard
+ * API and `execCommand("copy")` get the manual-copy dialog instead of a toast.
  */
 async function copyTextToClipboard(text: string, fileName: string): Promise<void> {
-  await navigator.clipboard.writeText(text);
-  showToast(t("files-dialog-actions.toast.copied", { fileName }));
+  if (await copyText(text) === "copied") {
+    showToast(t("files-dialog-actions.toast.copied", { fileName }));
+  }
 }
 
 async function openFileInBrowser(options: {
@@ -282,6 +286,7 @@ export function createFilesDialogDetailActions(options: CreateFilesDialogDetailA
         return;
       }
 
+      options.onMutationStateChange(true);
       await options.workspace.renameFile(options.file.path, nextPath, {
         audit: options.auditContext,
         locationKind: options.fileRef.locationKind,
@@ -292,6 +297,8 @@ export function createFilesDialogDetailActions(options: CreateFilesDialogDetailA
       await options.onAfterRename(nextPath, options.fileRef.locationKind);
     })().catch((error: unknown) => {
       showToast(t("files-dialog-actions.toast.renameFailed", { error: getErrorMessage(error) }));
+    }).finally(() => {
+      options.onMutationStateChange(false);
     });
   });
 
@@ -317,6 +324,7 @@ export function createFilesDialogDetailActions(options: CreateFilesDialogDetailA
         return;
       }
 
+      options.onMutationStateChange(true);
       await options.workspace.deleteFile(options.file.path, {
         audit: options.auditContext,
         locationKind: options.fileRef.locationKind,
@@ -327,6 +335,8 @@ export function createFilesDialogDetailActions(options: CreateFilesDialogDetailA
       await options.onAfterDelete();
     })().catch((error: unknown) => {
       showToast(t("files-dialog-actions.toast.deleteFailed", { error: getErrorMessage(error) }));
+    }).finally(() => {
+      options.onMutationStateChange(false);
     });
   });
 

@@ -55,8 +55,9 @@ Pi for Excel is an AI agent that lives inside Excel. It reads your workbook, mak
 **Bridge + advanced controls** (managed via `/experimental`):
 - Tmux bridge settings — configure bridge URL/token and run health checks
 - Python / LibreOffice bridge settings — configure bridge URL/token
-- Files workspace write/delete gate — shared artifact storage across sessions (assistant built-in docs under `assistant-docs/` are always available read-only)
-- Advanced extension controls — remote URL opt-in, permission enforcement, sandbox rollback, and Widget API v2
+- Advanced extension controls — remote URL opt-in, sandbox rollback, and Widget API v2
+
+**Files workspace** — shared artifact storage across sessions (built-in docs under `assistant-docs/` are read-only). Pi's writes and deletes ask for approval in Confirm mode, and in Auto mode whenever they would overwrite or delete a file Pi did not create in this chat.
 
 (Web Search + MCP are managed in `/tools`, or `/extensions` → Connections.)
 
@@ -221,7 +222,7 @@ src/
 ├── rules/             # Persistent user/workbook rules store
 ├── compaction/        # Auto-compaction thresholds + logic
 ├── storage/           # IndexedDB initialization
-├── files/             # Files workspace (read/list always on; write/delete feature-gated)
+├── files/             # Files workspace (Pi writes/deletes are approval-gated)
 ├── audit/             # Workbook change audit log
 ├── messages/          # Message conversion helpers
 ├── debug/             # Debug mode utilities

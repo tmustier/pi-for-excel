@@ -1,7 +1,7 @@
 ---
 name: web-search
-description: Search the public web for up-to-date facts. Works out of the box with Jina (default, no API key needed); optionally Serper, Tavily, or Brave Search. Use when workbook context is insufficient and fresh external references are needed.
-compatibility: Requires Pi for Excel integration "web_search" to be enabled. Works immediately with Jina (default); Serper/Tavily/Brave require an API key.
+description: Search the public web for up-to-date facts with Jina (default), Firecrawl, Serper, Tavily, or Brave Search; every provider needs an API key (Jina's is free). Use when workbook context is insufficient and fresh external references are needed.
+compatibility: Requires Pi for Excel integration "web_search" to be enabled and an API key for the selected provider.
 metadata:
   integration-id: web_search
   tool-name: web_search
@@ -22,12 +22,13 @@ This repository exposes web search as a built-in **integration** in the Excel ad
 
 | Provider | API key | Notes |
 |---|---|---|
-| **Jina** (default) | Optional (for higher limits) | Works out of the box — no signup needed |
+| **Jina** (default) | Required | Free key at jina.ai |
+| Firecrawl | Required | 500 free credits |
 | Serper.dev | Required | Google SERP API, free tier available |
 | Tavily | Required | AI-native search, free monthly credits |
 | Brave Search | Required | Direct Brave Search API |
 
-If a keyed provider fails (auth/rate-limit/server error), search automatically retries with Jina and surfaces a warning.
+If the selected provider fails (auth/rate-limit/server error) and a Jina key is saved, search retries with Jina and surfaces a warning.
 
 ## Usage notes
 
@@ -40,4 +41,4 @@ If a keyed provider fails (auth/rate-limit/server error), search automatically r
 1. Open `/tools` (or `/extensions` → Connections tab).
 2. Enable external tools.
 3. Enable **Web Search** for session and/or workbook scope.
-4. (Optional) Choose a different provider and set its API key — Jina works by default with no configuration.
+4. Set an API key for the selected provider — the default, Jina, offers a free key at jina.ai.

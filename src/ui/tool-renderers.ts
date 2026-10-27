@@ -1099,6 +1099,17 @@ const TOOL_DESCRIPTION_HANDLERS = {
     if (action === "delete") return { action: "Delete file", detail: path ?? "path" };
     return { action: "Files", detail: action ?? "action" };
   },
+  extensions_manager: ({ params }) => {
+    const action = params.action as string | undefined;
+    const target = (params.name ?? params.extension_id) as string | undefined;
+    if (action === "install_code") return { action: "Install extension", detail: target ?? "extension" };
+    if (action === "set_enabled") {
+      return { action: params.enabled === false ? "Disable extension" : "Enable extension", detail: target ?? "extension" };
+    }
+    if (action === "reload") return { action: "Reload extension", detail: target ?? "extension" };
+    if (action === "uninstall") return { action: "Uninstall extension", detail: target ?? "extension" };
+    return { action: "Extensions", detail: "list" };
+  },
   execute_office_js: ({ params }) => ({
     action: t("tools.action.runOfficeJs"),
     detail: (params.explanation as string | undefined) ?? "code",

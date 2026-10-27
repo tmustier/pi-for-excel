@@ -159,6 +159,31 @@ void test("session scope can opt into defaults when unconfigured", async () => {
   assert.deepEqual(ids, ["web_search"]);
 });
 
+void test("an identity-less session toggle preserves inherited defaults but respects explicit disables", async () => {
+  const settings = new MemorySettingsStore();
+  const scope = {
+    settings,
+    scope: "session" as const,
+    identifier: "no-workbook",
+    knownIntegrationIds: KNOWN_INTEGRATIONS,
+    applyDefaultsWhenUnconfigured: true,
+  };
+  const resolve = () => resolveConfiguredIntegrationIds({
+    settings,
+    sessionId: scope.identifier,
+    workbookId: null,
+    knownIntegrationIds: KNOWN_INTEGRATIONS,
+  });
+
+  await setIntegrationEnabledInScope({ ...scope, integrationId: "mcp_tools", enabled: true });
+  assert.deepEqual(await resolve(), ["web_search", "mcp_tools"]);
+  await setIntegrationEnabledInScope({ ...scope, integrationId: "web_search", enabled: false });
+  await setIntegrationEnabledInScope({ ...scope, integrationId: "mcp_tools", enabled: false });
+  assert.deepEqual(await resolve(), []);
+  await setIntegrationEnabledInScope({ ...scope, integrationId: "mcp_tools", enabled: true });
+  assert.deepEqual(await resolve(), ["mcp_tools"]);
+});
+
 void test("explicitly cleared session scope returns empty", async () => {
   const settings = new MemorySettingsStore();
 

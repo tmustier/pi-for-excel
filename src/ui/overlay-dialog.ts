@@ -49,6 +49,11 @@ export interface OverlayDialogOptions {
   closeOnBackdrop?: boolean;
   restoreFocusOnClose?: boolean;
   zIndex?: number;
+  /**
+   * Called on Escape before the overlay closes. Return true when the dialog
+   * handled it (e.g. went back one level) so the overlay stays open.
+   */
+  onEscape?: () => boolean;
 }
 
 export interface OverlayDialogController {
@@ -231,7 +236,10 @@ export function createOverlayDialog(options: OverlayDialogOptions): OverlayDialo
     }
   };
 
-  const cleanupEscape = installOverlayEscapeClose(overlay, close);
+  const cleanupEscape = installOverlayEscapeClose(overlay, () => {
+    if (options.onEscape?.() === true) return;
+    close();
+  });
   cleanups.push(cleanupEscape);
 
   if (options.closeOnBackdrop !== false) {

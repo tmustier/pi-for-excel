@@ -65,6 +65,12 @@ void test("every core tool has a specific renderer and humanized representative 
     );
   }
 
+  // Local-state tools behind a consent gate need a readable card too.
+  for (const name of ["files", "extensions_manager"]) {
+    assert.ok(getToolRenderer(name), `${name} must have a registered renderer`);
+    assert.notEqual(humanizeToolInput(name, { action: "list" }), null);
+  }
+
   const uniqueNames = new Set(UI_TOOL_NAMES);
   assert.equal(uniqueNames.size, UI_TOOL_NAMES.length);
   assert.ok(UI_TOOL_NAMES.includes("execute_office_js"));
