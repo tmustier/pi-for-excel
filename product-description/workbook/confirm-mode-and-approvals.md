@@ -89,7 +89,11 @@ Stop cannot recall an Excel batch already submitted. A secondary preparation act
 
 ## Interactions with other systems
 
-**Persistence.** Mode is durable and synchronized; turn grants are not saved. **Workbook changes and recovery.** Approval does not alter backup/verification policy. Approved changes remain after Stop or failure; use the [turn receipt or Backups](backups-and-revert.md) to undo them. **Other tabs and sessions.** Requests are tab-owned and queued; turn grants are not shared between tabs. **Execution mode and approvals.** This document. **Models and providers.** The model is told the mode; chat-level clarification can still precede a tool permission, but Pi is not instructed to duplicate the dialog in chat. Switching Auto/Confirm changes the system-prompt prefix once; a turn grant does not. **Offline and provider errors.** Local dialogs do not need a provider. **Notifications.** Mode feedback and approval announcement; no automatic decision. **Settings and preferences.** The three controls share one value. **Host differences.** Host API failures remain possible after approval. **Language.** Dialog wording, tab attribution and queue labels are translated; tool-authored content stays agent-facing English. **Accessibility and keyboard.** Focus entry, trapped Tab, topmost Escape and focus restoration use shared modal handling.
+**Persistence.** Mode is durable and synchronized; turn grants are not saved. **Workbook changes and recovery.** Approval does not alter backup/verification policy. Approved changes remain after Stop or failure; use the [turn receipt or Backups](backups-and-revert.md) to undo them. **Other tabs and sessions.** Requests are tab-owned and queued; turn grants are not shared between tabs. **Execution mode and approvals.** This document. **Models and providers.** The model is told the mode; chat-level clarification can still precede a tool permission, but Pi is not instructed to duplicate the dialog in chat. Switching Auto/Confirm changes the system-prompt prefix once; a turn grant does not. **Offline and provider errors.** Local dialogs do not need a provider.
+
+**Notifications.** Mode feedback and approval announcement; no automatic decision. When an approval is shown, Pi announces "Pi is waiting for your approval: {title}" to screen readers. Approvals waiting in the queue are not announced until shown. Closing the approval, including through Stop Pi, withdraws that announcement and cancels any delayed delivery; it does not erase a newer announcement from another event.
+
+**Settings and preferences.** The three controls share one value. **Host differences.** Host API failures remain possible after approval. **Language.** Dialog wording, tab attribution and queue labels are translated; tool-authored content stays agent-facing English. **Accessibility and keyboard.** Focus entry, trapped Tab, topmost Escape and focus restoration use shared modal handling.
 
 ## Edge cases
 
@@ -102,6 +106,8 @@ Stop cannot recall an Excel batch already submitted. A secondary preparation act
 
 Merged approval queue, execution policy, settings synchronization, preflight and modal source inspected. The earlier APPROVE findings remain in historical logs; they do not describe the merged queue/focus/deletion contract. This pass observed modal focus in the real Excel-web resume picker, not every permission path. Desktop and all multi-pane races need separate acceptance.
 
+P-168 announcement lifecycle was verified in [#806](https://github.com/tmustier/pi-for-excel/pull/806): a real model Files request in Excel on the web announced its approval; Stop Pi closed it, cleared the announcement and created no file. Browser regressions cover queued approvals, immediate withdrawal before announcement delivery and preserving a newer unrelated announcement.
+
 PR #808: real GPT-6 Luna turns in Excel on the web wrote two cells in separate calls after one turn grant; the next turn asked again. Auto asked before a 20,001-cell sheet deletion, and Stop withdrew it without deleting the sheet. Public-interface tests cover queued/future turn grants, new-run isolation, irreversible consent and abort during secondary actions. Native desktop acceptance for these additions remains separate from the web evidence.
 
-Verified against pi-for-excel baseline `1f51cf8` and PR #808 head `cac00cc1` (source, tests and the live acceptance above).
+Verified against pi-for-excel baseline `1f51cf8`, PR #808 head `cac00cc1` and PR #806 head `c8f7016` for announcement lifecycle (source, tests and the live acceptance above).
