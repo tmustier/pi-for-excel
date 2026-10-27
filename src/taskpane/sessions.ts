@@ -180,7 +180,13 @@ export async function setupSessionPersistence(opts: {
     }
   }
 
-  async function saveSession(optsForSave?: { force?: boolean }): Promise<boolean> {
+  function saveSession(optsForSave?: { force?: boolean }): Promise<boolean> {
+    const run = saveQueue.then(() => saveSessionNow(optsForSave));
+    saveQueue = run.then(() => undefined);
+    return run;
+  }
+
+  async function saveSessionNow(optsForSave?: { force?: boolean }): Promise<boolean> {
     const messages = agent.state.messages;
     // A session exists from the user's first message, so a reload during the
     // first turn keeps it. Blank tabs are saved only on request (close, restore).
@@ -253,7 +259,8 @@ export async function setupSessionPersistence(opts: {
         title: sessionTitle,
         createdAt: sessionCreatedAt,
         lastModified: now,
-        messageCount: messages.length,
+        messageCount: countVisibleSessionMessages(messages),
+        titleChosen: explicitTitle,
         usage: {
           input: inputTokens,
           output: outputTokens,
@@ -277,30 +284,7 @@ export async function setupSessionPersistence(opts: {
       const saved = await sessions.saveSession(
         savedSessionId,
         agent.state,
-        {
-          id: savedSessionId,
-          title: sessionTitle,
-          createdAt: sessionCreatedAt,
-          lastModified: now,
-          messageCount: countVisibleSessionMessages(messages),
-          titleChosen: explicitTitle,
-          usage: {
-            input: inputTokens,
-            output: outputTokens,
-            cacheRead: cacheReadTokens,
-            cacheWrite: cacheWriteTokens,
-            totalTokens,
-            cost: {
-              input: costInput,
-              output: costOutput,
-              cacheRead: costCacheRead,
-              cacheWrite: costCacheWrite,
-              total: costTotal,
-            },
-          },
-          thinkingLevel: agent.state.thinkingLevel || "off",
-          preview,
-        },
+        buildMetadata(savedSessionId),
         sessionTitle,
         { base: baseRevision, next: nextRevision },
       );
@@ -366,6 +350,7 @@ export async function setupSessionPersistence(opts: {
     sessionTitle = sessionData.title || "";
     explicitTitle = sessionData.titleChosen === true && sessionTitle.trim().length > 0;
     sessionCreatedAt = sessionData.createdAt;
+    baseRevision = sessionData.revision;
 
     agent.sessionId = sessionId;
     agent.state.messages = sessionData.messages;
