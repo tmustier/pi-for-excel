@@ -1,6 +1,7 @@
 /** Conditional-format capture/apply for workbook recovery snapshots. */
 
 import { excelRun, getRange } from "../../excel/helpers.js";
+import { runMutation } from "../../tools/mutation/run-mutation.js";
 import { cloneRecoveryConditionalFormatRules } from "./clone.js";
 import {
   BASIC_CONDITIONAL_FORMAT_RULE_HANDLERS,
@@ -141,7 +142,7 @@ export async function applyConditionalFormatState(
   address: string,
   targetRules: readonly RecoveryConditionalFormatRule[],
 ): Promise<RecoveryConditionalFormatCaptureResult> {
-  return excelRun<RecoveryConditionalFormatCaptureResult>(async (context) => {
+  return runMutation<RecoveryConditionalFormatCaptureResult>(async (context) => {
     const { range } = getRange(context, address);
     const currentState = await captureConditionalFormatRulesInRange(context, range);
 

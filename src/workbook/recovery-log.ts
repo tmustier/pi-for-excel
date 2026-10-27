@@ -6,6 +6,7 @@
  */
 
 import { colToLetter, excelRun, getRange, parseCell, parseRangeRef, qualifiedAddress } from "../excel/helpers.js";
+import { runMutation } from "../tools/mutation/run-mutation.js";
 import { getWorkbookContext, type WorkbookContext } from "./context.js";
 import type { DocumentInstanceIdentity } from "../host/document-instance.js";
 import {
@@ -254,7 +255,7 @@ function defaultCreateId(): string {
 }
 
 async function defaultApplySnapshot(address: string, values: unknown[][]): Promise<WorkbookRangeState> {
-  return excelRun<WorkbookRangeState>(async (context) => {
+  return runMutation<WorkbookRangeState>(async (context) => {
     const { range } = getRange(context, address);
     range.load("values,formulas");
     await context.sync();

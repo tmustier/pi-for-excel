@@ -1,6 +1,7 @@
 /** Comment-thread capture/apply for workbook recovery snapshots. */
 
 import { excelRun, getRange } from "../../excel/helpers.js";
+import { runMutation } from "../../tools/mutation/run-mutation.js";
 import { firstCellAddress } from "./address.js";
 import { cloneRecoveryCommentThreadState } from "./clone.js";
 import type { RecoveryCommentThreadState } from "./types.js";
@@ -95,7 +96,7 @@ export async function applyCommentThreadState(
   address: string,
   targetState: RecoveryCommentThreadState,
 ): Promise<RecoveryCommentThreadState> {
-  return excelRun<RecoveryCommentThreadState>(async (context) => {
+  return runMutation<RecoveryCommentThreadState>(async (context) => {
     const { sheet, range } = getRange(context, address);
     const loaded = await loadCommentThreadInRange(context, sheet, range);
 
