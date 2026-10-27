@@ -12,6 +12,8 @@ import type { ActionQueue } from "../src/taskpane/action-queue.ts";
 import type { QueueDisplay } from "../src/taskpane/queue-display.ts";
 import { createTabState } from "../src/taskpane/tab-state.ts";
 import { SessionRuntimeManager, type SessionRuntime } from "../src/taskpane/session-runtime-manager.ts";
+import { createArchivedMessagesMessage } from "../src/messages/archived-history.ts";
+import { createCompactionSummaryMessage } from "../src/messages/compaction.ts";
 import { setupSessionPersistence } from "../src/taskpane/sessions.ts";
 
 class MemoryStorageBackend implements StorageBackend {
@@ -307,6 +309,24 @@ void test("a conversation is saved from the user's first message and counts only
 
   const metadata = await environment.sessions.getMetadata(runtime.persistence.getSessionId());
   assert.equal(metadata?.messageCount, 1);
+});
+
+void test("a compacted conversation, whose user messages are all archived, is still saved", async () => {
+  const environment = createEnvironment();
+  const runtime = await environment.manager.createRuntime({ activate: true, autoRestoreLatest: false });
+  const question = { role: "user" as const, content: "first question", timestamp: 1 };
+  runtime.agent.state.messages.push(question);
+  assert.equal(await runtime.persistence.saveSession(), true);
+
+  // What /compact leaves: archive and summary, then a kept tail without user messages.
+  runtime.agent.state.messages = [
+    createArchivedMessagesMessage({ existingArchivedMessages: [], newlyArchivedMessages: [question], timestamp: 2 }),
+    createCompactionSummaryMessage({ summary: "The user asked a question.", tokensBefore: 43_000, timestamp: 3 }),
+  ];
+  assert.equal(await runtime.persistence.saveSession(), true);
+
+  const saved = await environment.sessions.loadSession(runtime.persistence.getSessionId());
+  assert.deepEqual(saved?.messages.map((message) => message.role), ["archivedMessages", "compactionSummary"]);
 });
 
 void test("an in-place model switch drops a thinking level the new model cannot use", async () => {
