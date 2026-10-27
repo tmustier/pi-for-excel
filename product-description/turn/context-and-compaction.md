@@ -1,14 +1,12 @@
 # Context and compaction
 
-Meter and inline-error behaviour as of [PR #803](https://github.com/tmustier/pi-for-excel/pull/803), for CC-03 / CC-01 / CL-05. The budgets and summarizer prompt are unchanged.
-
 ## Summary
 
 The context meter shows the active tab's estimated conversation usage. `/compact` summarizes older history while keeping recent work and a user-visible archive. Automatic compaction runs before a prompt or between model responses; overflow recovery can compact and retry once. All compaction belongs to its originating tab, can be stopped and saves immediately.
 
 ## The simple case
 
-Click the meter and choose **Summarize now**, or type `/compact`, optionally with a focus such as `/compact keep the Q3 numbers`. It queues in that tab. The working line says "Compacting context…". On success a summary card and archived-history card replace older visible history, recent messages stay, the meter redraws and queued prompts continue.
+Click the meter and choose `/compact`, or type the command, optionally with a focus such as `/compact keep the Q3 numbers`. It queues in that tab. The working line says "Compacting context…". On success a summary card and archived-history card replace older visible history, recent messages stay, the meter redraws and queued prompts continue.
 
 ## The interaction, event by event
 
@@ -24,9 +22,7 @@ stateDiagram-v2
 
 ### The meter
 
-Usage is estimated from provider-reported tokens plus new messages, or text size when no provider count is available. It shows the share of the model's window and its size; unknown windows use 200k.
-
-With auto-compaction on, the meter stays neutral and above the soft-warning budget says "Pi will summarize older messages automatically soon." It neither tells the user to /compact nor predicts that the next message will fail. With automatic compaction off, yellow begins above 75% of the soft-warning budget, red above that budget, and manual recovery advice remains relevant. The popover offers **Summarize now** and **New chat**, with `/compact` and `/new` as secondary command labels.
+Usage is estimated from provider-reported tokens plus new messages, or text size when no provider count is available. It shows the share of the model's window and its size; unknown windows use 200k. Yellow begins above 75% of the model's soft-warning budget, red above that budget, not fixed 41%/61% thresholds. Over-window guidance no longer promises that the next message must fail when auto-compaction can run first. Tooltip/popover provide counts and `/compact` and `/new` actions.
 
 ### Starting a compaction
 
@@ -60,7 +56,7 @@ Failure leaves history unchanged. Stop says "Compaction stopped", cancels the su
 
 ### Overflow recovery
 
-One provider context overflow can remove the failed response, compact and continue the same request. If nothing is freed or summary fails, the failure remains inline with Retry, a fix action and collapsed diagnostic Details. There is no separate run-error banner. A second overflow is final and its notice does not promise another automatic attempt. With automatic compaction disabled there is no overflow retry.
+One provider context overflow can remove the failed response, compact and continue the same request. If nothing is freed or summary fails, the failure remains. A second overflow is final and its notice does not promise another automatic attempt. With automatic compaction disabled there is no overflow retry.
 
 ## Modifiers
 
