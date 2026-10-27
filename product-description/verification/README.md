@@ -65,11 +65,11 @@ Second pass: 27 October 2026, on the `integration-fixes` branch (all open fix PR
 | Cluster | Items | Pass | Fail | Blocked |
 | --- | --- | --- | --- | --- |
 | [setup](integration-fixes/setup.md) | 134 | 132 | 2 | 0 |
-| [sessions-and-commands](integration-fixes/sessions-and-commands.md) | 129 | 127 | 0 | 2 |
-| [foundations-and-turn](integration-fixes/foundations-and-turn.md) | 147 | 141 | 2 | 4 |
-| [workbook](integration-fixes/workbook.md) | 115 | 106 | 0 | 9 |
-| [ui-and-cross-cutting](integration-fixes/ui-and-cross-cutting.md) | 118 | 104 | 0 | 14 |
+| [sessions-and-commands](integration-fixes/sessions-and-commands.md) | 129 | 129 | 0 | 0 |
+| [foundations-and-turn](integration-fixes/foundations-and-turn.md) | 147 | 144 | 3 | 0 |
+| [workbook](integration-fixes/workbook.md) | 115 | 115 | 0 | 0 |
+| [ui-and-cross-cutting](integration-fixes/ui-and-cross-cutting.md) | 118 | 113 | 1 | 4 |
 
-The other clusters are in progress.
+Desktop rows were run in Excel for Mac on e48d83c and 8099cd6. Still blocked: KEYS-19 (needs Windows), PERSIST-12 and HOST-09 (need a OneDrive sign-in in Excel), MULTI-10 (rerun with a separate login pending).
 
 A fail on a "(suspected bug)" row means the bug reproduced; those are filed in [bug-triage.md](../bug-triage.md). Fails that were document errors have been corrected in the documents and are noted in the row. No document is marked `verified`: that needs a human pass.

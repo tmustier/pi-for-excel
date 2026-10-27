@@ -175,6 +175,8 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 | [P-163](#p-163-workbook-approvals-are-not-announced-to-screen-readers) | Workbook approvals are not announced to screen readers | low | accessibility | fix | Assigned to #793 (follow-up; not yet in the PR) |
 | [P-164](#p-164-a-model-picker-opened-while-busy-stays-read-only-after-the-turn-ends) | A model picker opened while busy stays read-only after the turn ends | low | models | fix | Fix in PR [#795](https://github.com/tmustier/pi-for-excel/pull/795) (open): be2e666 |
 | [P-165](#p-165-toasts-cover-the-command-menus-lower-rows) | Toasts cover the command menu's lower rows | low | menus | fix | Fix in PR [#793](https://github.com/tmustier/pi-for-excel/pull/793) (open): c88b997 |
+| [P-166](#p-166-copy-content-on-a-built-in-doc-fails-in-excel-for-mac) | Copy content on a built-in doc fails in Excel for Mac | low | files | fix | Assigned to #790 (follow-up; not yet in the PR) |
+| [P-167](#p-167-after-save-as-the-tabs-stay-with-the-old-file-and-the-new-file-opens-a-fresh-chat) | After Save As, the tabs stay with the old file and the new file opens a fresh chat | medium | sessions | fix | Assigned to #795 (follow-up; not yet in the PR) |
 
 ## High
 
@@ -331,7 +333,7 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Severity:** `high`, because every turn fails for a logged-in user and nothing says a reload fixes it.
 - **Decision needed:** `fix`: refresh (or refresh on 401 and retry once) before each model request when the token is near expiry.
 - **Raised by:** MODEL-15; [models and providers](foundations/models-and-providers.md#open-questions-and-verification); MULTI-10; [several taskpanes](cross-cutting/several-taskpanes.md#open-questions-and-verification), [provider errors and offline](cross-cutting/provider-errors-and-offline.md#open-questions-and-verification)
-- **Status:** Confirmed in the standalone taskpane with a stubbed login, 26 October 2026 (MODEL-15) Also: Suspected from code; not reproduced (MULTI-10 refuted only the "logs each other out" version) Also confirmed in Excel for Mac (MODEL-15): an open pane sent an expired token and got a 401 with no refresh attempt (src/auth/restore.ts:106, :158). That run was on `main`. In #795, every model call first refreshes a token that expires within 2 minutes (`agent.getApiKey` → `oauthRefresher.ensureFresh`); cff416f adds a test where the token expires 3.5 minutes after the pane opens. Not yet re-checked in Excel.
+- **Status:** Confirmed in the standalone taskpane with a stubbed login, 26 October 2026 (MODEL-15) Also: Suspected from code; not reproduced (MULTI-10 refuted only the "logs each other out" version) Also confirmed in Excel for Mac (MODEL-15): an open pane sent an expired token and got a 401 with no refresh attempt (src/auth/restore.ts:106, :158). That run was on `main`. In #795, every model call first refreshes a token that expires within 2 minutes (`agent.getApiKey` → `oauthRefresher.ensureFresh`); cff416f adds a test where the token expires 3.5 minutes after the pane opens. Not yet re-checked in Excel. Verified in Excel for Mac on integration-fixes with a login made in the taskpane: inside the 2-minute margin the refresh ran and the next call used the new token. A failed refresh still sends the old token and shows only the 401.
 - **Owner:** Fix in PR [#795](https://github.com/tmustier/pi-for-excel/pull/795) (open)
 
 ### P-14: A pointer resting over the model picker decides what Enter chooses
@@ -1450,7 +1452,7 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Severity:** `medium`. A feature is unusable and the taskpane burns CPU while the doc is open.
 - **Decision needed:** `fix`. Audited reads should not emit a change event, or the dialog should ignore "audit" changes.
 - **Raised by:** desktop pass, 27 October 2026 (while checking FILES-24 on PR #796).
-- **Status:** Confirmed in Excel for Mac and Safari; code unchanged from `main`. Fixed in #790 (e65c3b7): audited reads no longer emit a change event. In Excel on the web: 199 "audit" events in 2 s before, 0 after, and Copy content works. Not yet re-checked on a Mac.
+- **Status:** Confirmed in Excel for Mac and Safari; code unchanged from `main`. Fixed in #790 (e65c3b7): audited reads no longer emit a change event. In Excel on the web: 199 "audit" events in 2 s before, 0 after, and Copy content works. Not yet re-checked on a Mac. Verified in Excel for Mac on integration-fixes 8099cd6: no render loop, Download works (Copy content is P-166).
 - **Owner:** Fix in PR [#790](https://github.com/tmustier/pi-for-excel/pull/790) (open): e65c3b7
 
 ### P-156: Tab from an open dialog in Excel on the web moves focus out of the add-in
@@ -1462,8 +1464,20 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Severity:** `medium`. Keyboard users lose their place, with no visible way back into the dialog.
 - **Decision needed:** `fix`. Stop propagation in the focus trap.
 - **Raised by:** sessions-and-commands integration verification, 27 October 2026
-- **Status:** Confirmed in Excel on the web on integration-fixes e48d83c (sessions and workbook verifiers). It affects #794's approval card at once: Tab on "Allow once" and Shift+Tab on × leave the add-in. A stopPropagation fix in installOverlayFocus (src/ui/overlay-dialog.ts:268-289) was verified by the workbook verifier. Fixed on integration-fixes 8099cd6 (menus, popovers and overlays keep Tab inside the frame).
+- **Status:** Confirmed in Excel on the web on integration-fixes e48d83c (sessions and workbook verifiers). It affects #794's approval card at once: Tab on "Allow once" and Shift+Tab on × leave the add-in. A stopPropagation fix in installOverlayFocus (src/ui/overlay-dialog.ts:268-289) was verified by the workbook verifier. Fixed on integration-fixes 8099cd6 (menus, popovers and overlays keep Tab inside the frame). Not seen in Excel for Mac: the Tab trap holds on WKWebView, so this was web-only.
 - **Owner:** Fix in PR [#793](https://github.com/tmustier/pi-for-excel/pull/793) (open): aff33d6
+
+### P-167: After Save As, the tabs stay with the old file and the new file opens a fresh chat
+
+- **Where the user meets it:** File → Save As in Excel with Pi open.
+- **What happens / what was expected:** The new file opens a fresh Chat 1 and the old file keeps its sessions; right after the Save As the pane stayed on Backups with no tab strip until reopened. Expected (persistence table): the tab layout follows the workbook to its new identity.
+- **Reproduce:** As above.
+- **Why (from the code):** Not yet traced. #794 moves backups to the new identity on first save; tab state does not follow a later Save As.
+- **Severity:** `medium`. Conversations seem lost in the new file (they are still reachable from the old one or Resume).
+- **Decision needed:** `fix`. Move tab state to the new identity on Save As, and restore the tab strip.
+- **Raised by:** integration-fixes desktop pass, 27 October 2026
+- **Status:** Confirmed in Excel for Mac on integration-fixes 8099cd6 (PERSIST-11).
+- **Owner:** Assigned to #795 (follow-up; not yet in the PR)
 
 ## Low
 
@@ -2174,3 +2188,15 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Raised by:** MENU-15, sessions-and-commands integration verification, 27 October 2026
 - **Status:** Confirmed in Excel on the web on integration-fixes 8099cd6. Fixed in #793 c88b997: the open menu sits above toasts; also stops hover re-renders that swallowed clicks (on main too). Verified on integration-fixes cea7588 (MENU-15).
 - **Owner:** Fix in PR [#793](https://github.com/tmustier/pi-for-excel/pull/793) (open): c88b997
+
+### P-166: Copy content on a built-in doc fails in Excel for Mac
+
+- **Where the user meets it:** Files → BUILT-IN DOCS → open a doc → Copy content, in Excel for Mac.
+- **What happens / what was expected:** "Copy failed: The request is not allowed…". Expected: the doc is copied, or the manual-copy dialog appears.
+- **Reproduce:** As above.
+- **Why (from the code):** It calls navigator.clipboard.writeText directly (src/ui/files-dialog-actions.ts:97-100), with no fallback to #795's copyText (execCommand, then a manual-copy dialog).
+- **Severity:** `low`. Download still works.
+- **Decision needed:** `fix`. Use #795's copyText.
+- **Raised by:** integration-fixes desktop pass, 27 October 2026
+- **Status:** Confirmed in Excel for Mac on integration-fixes 8099cd6.
+- **Owner:** Assigned to #790 (follow-up; not yet in the PR)
