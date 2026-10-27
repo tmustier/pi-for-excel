@@ -11,6 +11,7 @@ import { t } from "../language/index.js";
 
 export const DEFAULT_LOCAL_PROXY_URL = "https://localhost:3003";
 export const WPS_DEV_HOST_GATEWAY_PROXY_URL = "http://10.0.2.2:3003";
+export const PROXY_HELPER_COMMAND = "npx -y pi-for-excel-proxy@latest";
 
 /**
  * Resolve the build-time default proxy URL override (org/central deployments).
