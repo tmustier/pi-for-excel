@@ -1,14 +1,16 @@
 /* ═══════════════════════════════════════════════════════
    8. TOAST
    One region above every layer (overlays included), just above the
-   composer dock. `--pi-dock-height` is kept current by pi-sidebar.
+   composer dock, or above the slash-command menu while it is open.
+   `--pi-dock-height` is kept current by pi-sidebar, and
+   `--pi-command-menu-offset` by command-menu.ts.
    ═══════════════════════════════════════════════════════ */
 
 .pi-toast-region {
   position: fixed;
   left: 10px;
   right: 10px;
-  bottom: calc(var(--pi-dock-height, 96px) + 8px);
+  bottom: calc(max(var(--pi-dock-height, 96px), var(--pi-command-menu-offset, 0px)) + 8px);
   z-index: var(--z-toast);
   display: flex;
   flex-direction: column;

@@ -69,12 +69,17 @@ export function showCommandMenu(filter: string, anchor: HTMLElement): void {
 
   renderMenu();
   menuEl.style.display = "block";
+  // Toasts sit above the open menu so they never cover (and swallow clicks
+  // on) its rows; see toasts.css.
+  const menuOffset = Math.round(window.innerHeight - menuEl.getBoundingClientRect().top);
+  document.documentElement.style.setProperty("--pi-command-menu-offset", `${menuOffset}px`);
 }
 
 export function hideCommandMenu(): void {
   if (menuEl) {
     menuEl.style.display = "none";
   }
+  document.documentElement.style.removeProperty("--pi-command-menu-offset");
   selectedIndex = 0;
   getCommandTextarea()?.removeAttribute("aria-activedescendant");
 }
@@ -169,11 +174,13 @@ function renderMenu(): void {
       runCommand(command);
     });
 
-    // Only a moving pointer moves the highlight (a menu that opens under a
-    // resting pointer keeps its first row), and it never re-renders rows,
-    // which would swallow the click.
-    item.addEventListener("mousemove", () => {
-      if (selectedIndex !== index) selectIndex(index);
+    item.addEventListener("mouseenter", () => {
+      // Re-rendering replaces the row under the pointer, which fires another
+      // mouseenter: without this guard the menu re-renders continuously and
+      // a press and release land on different rows, so no click fires.
+      if (selectedIndex === index) return;
+      selectedIndex = index;
+      renderMenu();
     });
 
     menuEl.appendChild(item);
