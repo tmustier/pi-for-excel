@@ -1055,6 +1055,7 @@ export async function initTaskpane(opts: {
     onStop?: () => void;
     allowForTurn?: boolean;
     note?: string;
+    secondaryApproval?: { label: string; onApprove: () => void | Promise<void> };
   }): Promise<boolean> => {
     announce(t("announce.approval", { title: args.title }));
     return requestApproval({
@@ -1063,6 +1064,7 @@ export async function initTaskpane(opts: {
       confirmLabel: args.confirmLabel ?? t("init.confirm.allowOnce"),
       ...(args.allowForTurn ? { allowForTurn: true } : {}),
       ...(args.note ? { note: args.note } : {}),
+      ...(args.secondaryApproval ? { secondaryApproval: args.secondaryApproval } : {}),
       ...(args.signal ? { signal: args.signal } : {}),
       ...(args.source ? { source: args.source } : {}),
       ...(args.onStop ? { onStop: args.onStop } : {}),
@@ -1200,6 +1202,10 @@ export async function initTaskpane(opts: {
             confirmLabel: t("init.confirm.allowOnce"),
             allowForTurn: !request.destructive && !request.riskIdentifiers?.length,
             ...(request.destructive ? { note: t("approval.note.irreversible") } : {}),
+            ...(request.destructive && workbookId ? { secondaryApproval: {
+              label: t("approval.fullBackupFirst"),
+              onApprove: async () => { await createManualFullBackup(); },
+            } } : {}),
             ...(request.signal ? { signal: request.signal } : {}),
             onStop: stopRuntimeTurn,
             ...approvalSource(),

@@ -23,12 +23,14 @@ export function requireExplicitMutationTarget(tool: string, params: Static<typeo
       if (params.start_cell !== undefined) requireRange(params.start_cell);
       break;
     case "fill_formula":
-    case "format_cells":
     case "conditional_format":
     case "comments":
     case "python_transform_range":
-      if (params.range !== undefined) requireRange(params.range.split(/[;,]/u)[0] ?? "");
+      if (params.range !== undefined) requireRange(params.range);
       if (params.output_start_cell !== undefined) requireRange(params.output_start_cell);
+      break;
+    case "format_cells":
+      if (params.range !== undefined) requireRange(params.range.split(/[;,]/u)[0] ?? "");
       break;
     case "modify_structure":
       if (params.action === "add_sheet") break;

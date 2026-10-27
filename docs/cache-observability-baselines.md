@@ -46,6 +46,21 @@ Use this as the default expectation map when reviewing context-shape changes.
 
 ## Investigation rules
 
+### CL-01 / WT-01 / WT-05 / WT-10 acceptance (PR #808)
+
+The Confirm prompt now makes the dialog the sole consent step, and mutation
+descriptions require explicit sheets. Upgrading a live session across this
+change intentionally changes `systemPrompt` and `tools` once. This is not an
+aggregate byte-stability claim. Turn receipts themselves are UI-only messages
+and are excluded from conversion to model context.
+
+In real Excel on the web with GPT-6 Luna, repeated write/tool continuations
+observed zero prefix changes. With debug snapshots enabled, a fresh run's two
+requests both recorded `prefixChangeReasons: []`. Earlier Auto → Confirm → Auto
+toggles recorded two system-prompt changes and zero tool changes, as expected.
+The upgrade delta was inspected in source, not exercised against an already
+running old build.
+
 If observed reasons differ from the matrix:
 
 1. Confirm the trigger actually happened (or didn’t).

@@ -742,6 +742,15 @@
 }
 
 /* Approval dialogs (src/ui/approval-dialog.ts) */
+.pi-approval-card .pi-overlay-actions {
+  flex-wrap: wrap;
+}
+
+.pi-approval-card .pi-overlay-actions .pi-overlay-btn {
+  flex-shrink: 0;
+  max-width: 100%;
+}
+
 .pi-approval__body {
   display: flex;
   flex-direction: column;
