@@ -10,7 +10,13 @@ import {
   PROXY_HELPER_DOCS_URL,
   validateOfficeProxyUrl,
 } from "../../../auth/proxy-validation.js";
-import { checkProxyOnce, getProxyState, type ProxyState } from "../../../taskpane/proxy-status.js";
+import {
+  checkProxyOnce,
+  getProxyState,
+  isProxyBlockedByBrowser,
+  type ProxyState,
+} from "../../../taskpane/proxy-status.js";
+import { needsRemoteProxyWarning, saveTaskpaneProxyUrl } from "../../../taskpane/settings.js";
 import { t } from "../../../language/index.js";
 import {
   createCallout,
@@ -124,7 +130,8 @@ export function createProxyPage(): SettingsShellPage {
         const token = ++recheckToken;
         proxyState = "unknown";
         updateStatus();
-        const state = await checkProxyOnce(settingsStore);
+        // Forced, so the notice-area proxy banner re-reads the settings (#793, PROXY-07).
+        const state = await checkProxyOnce(settingsStore, { force: true });
         if (token !== recheckToken) return;
         proxyState = state;
         updateStatus();
@@ -162,7 +169,9 @@ export function createProxyPage(): SettingsShellPage {
         }
 
         showToast(enabled ? t("settings.toast.proxy_enabled") : t("settings.toast.proxy_disabled"));
-        void checkProxyOnce(settingsStore, { force: true });
+        warnIfRemote();
+        if (enabled) void recheckProxy();
+        else void checkProxyOnce(settingsStore, { force: true });
       };
 
       const saveProxyUrl = async (): Promise<void> => {
@@ -198,7 +207,8 @@ export function createProxyPage(): SettingsShellPage {
         proxyUrlInput.value = normalizedUrl;
         updateStatus();
         showToast(t("settings.toast.proxy_url_saved"));
-        void checkProxyOnce(settingsStore, { force: true });
+        warnIfRemote();
+        void recheckProxy();
       };
 
       const scheduleProxyUrlSave = (): void => {

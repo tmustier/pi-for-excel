@@ -83,52 +83,6 @@ function isPlainArrowInsideMenu(event: KeyboardEvent, target: EventTarget | null
     && target.closest("[role=\"menu\"], .pi-status-popover") !== null;
 }
 
-function setExcelToolCardsExpanded(expanded: boolean): void {
-  const toolMessages = document.querySelectorAll("tool-message");
-
-  for (const toolMessage of toolMessages) {
-    const body = toolMessage.querySelector<HTMLElement>(".pi-tool-card__body");
-    if (!body) continue;
-
-    body.classList.toggle("pi-tool-card__body--collapsed", !expanded);
-
-    const up = toolMessage.querySelector<HTMLElement>(".pi-tool-card__chevron-up");
-    const down = toolMessage.querySelector<HTMLElement>(".pi-tool-card__chevron-collapsed");
-    if (!up || !down) continue;
-
-    if (expanded) {
-      up.classList.remove("hidden");
-      down.classList.add("hidden");
-    } else {
-      up.classList.add("hidden");
-      down.classList.remove("hidden");
-    }
-  }
-}
-
-function collapseThinkingBlocks(): void {
-  const blocks = document.querySelectorAll("thinking-block");
-  for (const block of blocks) {
-    // When expanded, ThinkingBlock renders a markdown-block for its body.
-    const isExpanded = Boolean(block.querySelector("markdown-block"));
-    if (!isExpanded) continue;
-
-    const header = block.querySelector<HTMLElement>(".thinking-header");
-    header?.click();
-  }
-}
-
-function expandThinkingBlocks(): void {
-  const blocks = document.querySelectorAll("thinking-block");
-  for (const block of blocks) {
-    const isExpanded = Boolean(block.querySelector("markdown-block"));
-    if (isExpanded) continue;
-
-    const header = block.querySelector<HTMLElement>(".thinking-header");
-    header?.click();
-  }
-}
-
 function buildKeydownContext(args: {
   event: KeyboardEvent;
   agent: Agent | null;
@@ -343,7 +297,9 @@ export function installKeyboardShortcuts(opts: {
         !adjacentTabDirection
         || !onSwitchAdjacentTab
         || isTextEntryTarget(keyTarget)
-        || isInsideSessionTabs(keyTarget)
+        || isDialogOverlayOpen()
+        // A focused tab handles plain arrows itself; chords still switch here.
+        || (isInsideSessionTabs(keyTarget) && !(event.metaKey || event.ctrlKey || event.altKey || event.shiftKey))
         || isPlainArrowInsideMenu(event, keyTarget)
       ) {
         return false;
@@ -384,6 +340,10 @@ export function installKeyboardShortcuts(opts: {
   ];
 
   const onKeyDown = (event: KeyboardEvent) => {
+    // Keys that belong to an IME composition (including the Enter that
+    // commits a candidate) are the input method's, not shortcuts.
+    if (event.isComposing || event.keyCode === 229) return;
+
     // A modal overlay owns the keyboard. Its own handlers take Escape and Tab;
     // taskpane shortcuts must not act on the tabs or composer behind it.
     if (isModalOverlayOpen()) {

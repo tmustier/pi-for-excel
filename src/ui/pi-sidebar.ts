@@ -15,7 +15,13 @@ import type { StreamingMessageContainer } from "./messages/streaming-message-con
 import { Archive, ChevronRight, FileText, Keyboard, Puzzle, RotateCcw, Ruler, Settings, Wrench } from "lucide";
 import "./pi-input.js";
 import "./working-indicator.js";
-import { initToolGrouping } from "./tool-grouping.js";
+import {
+  endOpenThinking,
+  forgetOpenThinking,
+  recordThinkingEnd,
+  recordThinkingStart,
+  thinkingKey,
+} from "./messages/transcript-state.js";
 import { focusInitialMenuItem, handleMenuKeydown } from "./menu-keyboard.js";
 import type { PiInput } from "./pi-input.js";
 import { isDebugEnabled, formatK } from "../debug/debug.js";
@@ -355,10 +361,6 @@ export class PiSidebar extends LitElement {
     if (changed.has("agent")) this._setupSubscription();
   }
 
-  override firstUpdated() {
-    this._ensureMessageEnhancements();
-  }
-
   private readonly _publishDockHeight = (): void => {
     const dock = this._observedDock;
     if (!dock) return;
@@ -385,7 +387,7 @@ export class PiSidebar extends LitElement {
   }
 
   override updated(changed: PropertyValues<this>) {
-    this._ensureMessageEnhancements();
+    this._setupAutoScroll();
     this._observeDock();
     this._updateSessionTabOverflow();
     // Reveal the active tab only when the active tab or the tab count changes,
@@ -826,15 +828,6 @@ export class PiSidebar extends LitElement {
     handleMenuKeydown(event, menu, () => this._closeTabContextMenu({ restoreFocus: true }));
   };
 
-  private _buildToolResultsMap(): Map<string, ToolResultMessage> {
-    const map = new Map<string, ToolResultMessage>();
-    if (!this.agent) return map;
-    for (const msg of this.agent.state.messages) {
-      if (msg.role === "toolResult") map.set(msg.toolCallId, msg);
-    }
-    return map;
-  }
-
   override render() {
     const agent = this.agent;
     if (!agent) return html``;
@@ -874,16 +867,17 @@ export class PiSidebar extends LitElement {
         </div>
         ${!hasMessages ? this._renderEmptyState() : ""}
       </div>
-      <div class="pi-dock ${this._isStreaming || this._busyLabel !== null ? "pi-dock--busy" : ""}">
+      <div class="pi-dock ${this._isStreaming || this._busyLabel !== null || this._hostWaitLabel !== null ? "pi-dock--busy" : ""}">
         <pi-working-indicator
-          .active=${this._isStreaming || this._busyLabel !== null}
-          .primaryText=${this._isStreaming ? undefined : (this._busyLabel ?? undefined)}
-          .hintText=${this._isStreaming ? undefined : (this._busyHint ?? undefined)}
+          .active=${this._isStreaming || this._busyLabel !== null || this._hostWaitLabel !== null}
+          .primaryText=${this._hostWaitLabel ?? this._busyLabel ?? undefined}
+          .hintText=${this._hostWaitLabel !== null ? (this._hostWaitHint ?? undefined) : (this._busyHint ?? undefined)}
         ></pi-working-indicator>
         <div id="pi-widget-slot" class="pi-widget-slot" style="display:none"></div>
         <div class="pi-input-area">
           <pi-input
             .isStreaming=${this._isStreaming}
+            .busy=${this._isStreaming || this.tabBusy}
             @pi-send=${this._onSend}
             @pi-abort=${this._onAbort}
             @pi-files-drop=${this._onFilesDrop}

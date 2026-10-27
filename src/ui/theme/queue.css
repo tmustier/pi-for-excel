@@ -39,6 +39,7 @@
   flex-shrink: 0;
   color: var(--foreground);
 }
+.pi-queue__label--held { color: var(--muted-foreground); }
 
 .pi-queue__text {
   flex: 1;

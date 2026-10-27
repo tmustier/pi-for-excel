@@ -18,7 +18,8 @@ const BANNER_ID = "proxy";
 export type ProxyBannerState = "detected" | "not-detected" | "unknown";
 
 export interface ProxyBannerController {
-  update: (state: ProxyBannerState) => Promise<void>;
+  /** `blockedByBrowser`: the browser forbids reaching localhost here, so running the proxy cannot help. */
+  update: (state: ProxyBannerState, blockedByBrowser?: boolean) => Promise<void>;
 }
 
 export function createProxyBannerController(opts: {
@@ -27,7 +28,7 @@ export function createProxyBannerController(opts: {
   let dismissed = false;
 
   return {
-    update: async (state) => {
+    update: async (state, blockedByBrowser = false) => {
       if (state === "detected") dismissed = false;
       if (state !== "not-detected" || dismissed) {
         hideBanner(BANNER_ID);
@@ -45,24 +46,27 @@ export function createProxyBannerController(opts: {
       details.hidden = true;
 
       const intro = document.createElement("p");
-      intro.textContent = t("proxy-banner.intro");
+      intro.textContent = blockedByBrowser ? t("proxy-banner.blocked_intro") : t("proxy-banner.intro");
+      if (blockedByBrowser) {
+        details.append(intro);
+      } else {
+        const hint = document.createElement("p");
+        hint.className = "pi-banner__hint";
+        hint.textContent = t("proxy-banner.hint");
 
-      const hint = document.createElement("p");
-      hint.className = "pi-banner__hint";
-      hint.textContent = t("proxy-banner.hint");
+        const guide = document.createElement("a");
+        guide.className = "pi-banner__link";
+        guide.href = INSTALL_GUIDE_URL;
+        guide.target = "_blank";
+        guide.rel = "noopener noreferrer";
+        guide.textContent = t("proxy-banner.guideLink");
 
-      const guide = document.createElement("a");
-      guide.className = "pi-banner__link";
-      guide.href = INSTALL_GUIDE_URL;
-      guide.target = "_blank";
-      guide.rel = "noopener noreferrer";
-      guide.textContent = t("proxy-banner.guideLink");
-
-      details.append(intro, createCopyableCommand(PROXY_COMMAND), hint, guide);
+        details.append(intro, createCopyableCommand(PROXY_COMMAND), hint, guide);
+      }
       const handle = createBanner({
         id: BANNER_ID,
         tone: "warning",
-        message: t("proxy-banner.warning"),
+        message: blockedByBrowser ? t("proxy-banner.blocked") : t("proxy-banner.warning"),
         details,
         onDismiss: () => {
           dismissed = true;
