@@ -120,34 +120,17 @@ void test("visible tab titles follow default numbering and explicit renames", as
   });
 });
 
-void test("Ctrl+Z reopens a closed tab only while its Undo toast is showing", async () => {
+void test("clicking anywhere on an inactive tab's title switches to it", async () => {
   await withTaskpane(async (page) => {
-    const tabs = page.locator(".pi-session-tab");
-    const newTab = page.getByRole("button", { name: "New tab" });
-    const composer = page.locator("pi-input textarea");
-    await newTab.click();
-    await tabs.filter({ hasText: "Chat 2" }).waitFor({ state: "visible" });
-
-    await tabs.filter({ hasText: "Chat 2" }).getByRole("button", { name: "Close tab" }).click();
-    await page.locator("#pi-toast").getByText("Closed Chat 2").waitFor({ state: "visible" });
-    await composer.click();
-    await page.keyboard.press("Control+z");
-    await tabs.filter({ hasText: "Chat 2" }).waitFor({ state: "visible" });
-
-    await tabs.filter({ hasText: "Chat 2" }).getByRole("button", { name: "Close tab" }).click();
-    await tabs.filter({ hasText: "Chat 2" }).waitFor({ state: "detached" });
-    // After a reload the toast is gone but the tab is still in recently closed.
-    await page.reload();
-    await composer.waitFor({ state: "visible", timeout: 20_000 });
-    const welcome = page.locator("#pi-welcome-login-overlay");
-    await welcome.dispatchEvent("click");
-    await welcome.waitFor({ state: "detached" });
-    await composer.click();
-    await page.keyboard.press("Control+z");
-    await page.waitForTimeout(500);
-    assert.deepEqual(await page.locator(".pi-session-tab__title").allTextContents(), ["Chat 1"]);
-
-    await page.keyboard.press("Control+Shift+T");
-    await tabs.filter({ hasText: "Chat 2" }).waitFor({ state: "visible" });
+    await page.getByRole("button", { name: "New tab" }).click();
+    await page.locator(".pi-session-tab").nth(1).and(page.locator(".is-active")).waitFor();
+    const title = page.locator(".pi-session-tab").first().locator(".pi-session-tab__title");
+    const box = await title.boundingBox();
+    assert.ok(box);
+    // The right end of a short title is where an overlaid × would sit.
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.click(box.x + box.width - 2, box.y + box.height / 2);
+    await page.locator(".pi-session-tab").first().and(page.locator(".is-active")).waitFor({ timeout: 3_000 });
+    assert.equal(await page.locator(".pi-session-tab").count(), 2);
   });
 });

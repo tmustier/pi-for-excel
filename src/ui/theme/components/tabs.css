@@ -97,9 +97,8 @@ pi-sidebar {
   display: none;
 }
 
-/* Tabs keep their natural width (readable titles); the strip scrolls when
-   they don't fit. Inactive tabs show × only on hover or keyboard focus, so a
-   few tabs fit a narrow pane without squeezing titles. */
+/* Tabs keep their natural width (readable titles, × always in flow so it
+   never covers a title); the strip scrolls when they don't fit. */
 .pi-session-tab {
   display: flex;
   align-items: center;
@@ -250,18 +249,6 @@ pi-sidebar {
     color var(--duration-fast),
     border-color var(--duration-fast),
     opacity var(--duration-fast);
-}
-
-.pi-session-tab:not(.is-active) .pi-session-tab__close {
-  position: absolute;
-  right: 0;
-  opacity: 0;
-  pointer-events: none;
-}
-
-.pi-session-tab:not(.is-active):is(:hover, :focus-within) .pi-session-tab__close {
-  opacity: 1;
-  pointer-events: auto;
 }
 
 .pi-session-tab.is-active .pi-session-tab__close {
