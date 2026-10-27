@@ -91,11 +91,37 @@ function openBlobInNewTab(blob: Blob, pendingWindow: Window | null): void {
 }
 
 /**
+ * Legacy copy for hosts that refuse the async clipboard API: Excel on the web
+ * frames the taskpane without clipboard-write, and Excel for Mac rejects it
+ * ("The request is not allowed…"). `execCommand("copy")` still works there.
+ */
+function copyViaHiddenTextarea(text: string): boolean {
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  document.body.appendChild(textarea);
+  textarea.select();
+  try {
+    return document.execCommand("copy");
+  } catch {
+    return false;
+  } finally {
+    textarea.remove();
+  }
+}
+
+/**
  * Copy text content to clipboard — reliable in Office WebView where
  * window.open / blob URLs silently fail.
  */
 async function copyTextToClipboard(text: string, fileName: string): Promise<void> {
-  await navigator.clipboard.writeText(text);
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch (error) {
+    if (!copyViaHiddenTextarea(text)) throw error;
+  }
   showToast(t("files-dialog-actions.toast.copied", { fileName }));
 }
 
