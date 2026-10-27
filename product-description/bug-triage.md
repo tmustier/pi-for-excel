@@ -175,7 +175,7 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 | [P-163](#p-163-workbook-approvals-are-not-announced-to-screen-readers) | Workbook approvals are not announced to screen readers | low | accessibility | fix | Assigned to #793 (follow-up; not yet in the PR) |
 | [P-164](#p-164-a-model-picker-opened-while-busy-stays-read-only-after-the-turn-ends) | A model picker opened while busy stays read-only after the turn ends | low | models | fix | Fix in PR [#795](https://github.com/tmustier/pi-for-excel/pull/795) (open): be2e666 |
 | [P-165](#p-165-toasts-cover-the-command-menus-lower-rows) | Toasts cover the command menu's lower rows | low | menus | fix | Fix in PR [#793](https://github.com/tmustier/pi-for-excel/pull/793) (open): c88b997 |
-| [P-166](#p-166-copy-content-on-a-built-in-doc-fails-in-excel-for-mac) | Copy content on a built-in doc fails in Excel for Mac | low | files | fix | Assigned to #790 (follow-up; not yet in the PR) |
+| [P-166](#p-166-copy-content-on-a-built-in-doc-fails-in-excel-for-mac) | Copy content on a built-in doc fails in Excel for Mac | low | files | fix | Fix in PR [#790](https://github.com/tmustier/pi-for-excel/pull/790) (open): 3666748 |
 | [P-167](#p-167-after-save-as-the-tabs-stay-with-the-old-file-and-the-new-file-opens-a-fresh-chat) | After Save As, the tabs stay with the old file and the new file opens a fresh chat | medium | sessions | fix | Assigned to #795 (follow-up; not yet in the PR) |
 
 ## High
@@ -2198,5 +2198,5 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Severity:** `low`. Download still works.
 - **Decision needed:** `fix`. Use #795's copyText.
 - **Raised by:** integration-fixes desktop pass, 27 October 2026
-- **Status:** Confirmed in Excel for Mac on integration-fixes 8099cd6.
-- **Owner:** Assigned to #790 (follow-up; not yet in the PR)
+- **Status:** Confirmed in Excel for Mac on integration-fixes 8099cd6. Fixed in #790 3666748: falls back to execCommand("copy"); checked in Excel on the web. Once #795 lands, the integration build switches it to copyText for the manual-copy dialog. Not yet re-checked on a Mac.
+- **Owner:** Fix in PR [#790](https://github.com/tmustier/pi-for-excel/pull/790) (open): 3666748
