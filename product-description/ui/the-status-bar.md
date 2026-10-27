@@ -1,5 +1,7 @@
 # The status bar
 
+Thinking and context controls revised for CL-09 / CC-07 / CC-03 in [PR #803](https://github.com/tmustier/pi-for-excel/pull/803). Earlier Shift+Tab and automatic-mode colour observations below are historical verification, not the current policy.
+
 ## Summary
 
 The status bar is the row of small controls under the [composer](../turn/the-composer.md) that shows, and lets the user change, the settings that shape the active tab's next turn: which model answers, how hard it thinks, whether Pi asks before changing the workbook, and how full the conversation is. It always reflects the [active tab](../glossary.md#sessions-and-tabs) and changes when the user switches tabs. From left to right it holds the **model control** (the π mark, the model name and a chevron), the **thinking control** (a brain icon and the level, such as "High"), the **context meter** (for example "1% / 500k"), a **lock badge** that appears only while the tab is involved with the [workbook lock](../glossary.md#the-workbook), and, at the right edge, the **execution-mode control** ("Auto" or "Confirm"). Every control is a button with a hover tooltip; the thinking control and the context meter open a small popover. The bar is usable while the tab is busy (only changing the model is refused), works the same on every host, and with no provider connected still shows the tab's model. This document owns the controls themselves; the behaviour behind them is owned by [the model picker](../setup/the-model-picker.md), [thinking](../turn/thinking.md), [context and compaction](../turn/context-and-compaction.md) and [confirm mode and approvals](../workbook/confirm-mode-and-approvals.md).
@@ -36,7 +38,7 @@ Clicking it closes any open status popover, refreshes the list of connected prov
 
 ### The thinking control
 
-The control shows the tab's [thinking level](../glossary.md#models-and-providers) by its label: "Off", "Min", "Low", "Medium", "High", "Extra high" or "Max". Its tooltip is "How deeply Pi reasons before answering — higher is slower but more thorough. Click to select, or press ⇧Tab to cycle." Its accessible name is "Thinking level {level}".
+The control shows the tab's [thinking level](../glossary.md#models-and-providers) by its label: "Off", "Min", "Low", "Medium", "High", "Extra high" or "Max". Its tooltip explains the tradeoff and gives Ctrl+Alt+T in the composer (Ctrl+Option+T on Mac) to cycle. Its accessible name is "Thinking level {level}". Shift+Tab moves focus backwards without changing the level.
 
 Clicking it opens the thinking popover, anchored above the control:
 
@@ -46,24 +48,24 @@ Clicking it opens the thinking popover, anchored above the control:
 
 Confirmed in Excel on the web: GPT-6.1 Sol lists Min to Max (no "Off"), GPT-4.1 mini lists only "Off".
 
-Choosing a row sets the tab's level and closes the popover. Choosing the level already active only closes it. There is no toast and no flash (confirmed in Excel on the web). Shift+Tab, by contrast, cycles to the next supported level (wrapping from the last to the first), shows the toast "Thinking: {level} (next turn)" (confirmed in Excel on the web, wrapping from "Max" to "Min"), briefly tints the control in the level's colour, and draws a thin coloured line along the bottom of the taskpane. Either way the change applies from the next model request; see [thinking](../turn/thinking.md).
+Choosing a row sets the tab's level and closes the popover. Choosing the active level only closes it. Ctrl+Alt/Option+T from the composer cycles supported levels, wraps to the first, flashes the control and shows a toast with the level and chord. The running turn retains its starting level; the next turn uses the new one. See [thinking](../turn/thinking.md).
 
 ### The context meter
 
 The meter shows how much of the model's [context window](../glossary.md#models-and-providers) the active tab's conversation is estimated to use: a percentage, a slash, and the window size in thousands ("500k") or millions ("1M"). A model that does not declare a window is treated as 200k.
 
-The percentage changes colour as it fills. These thresholds belong to the meter only; when auto-compaction triggers is owned by [context and compaction](../turn/context-and-compaction.md).
+With auto-compaction on, the meter stays neutral. Above the model's soft-warning budget, its tooltip/popover say "Pi will summarize older messages automatically soon." They do not tell the user to /compact or predict that the next message will fail. The buttons are **Summarize now** and **New chat**, with /compact and /new as secondary labels. With auto-compaction off, the following manual-policy warnings apply; thresholds follow the model's compaction budgets.
 
 | Usage | Colour | Warning |
 | --- | --- | --- |
-| 40% or less | Normal | None |
-| Over 40% | Yellow | "Context {pct}% full." then "Consider using /compact to free space or /new to start fresh." |
-| Over 60% | Red | "Context {pct}% full — responses may become less reliable." then "Use /compact to free space or /new to start fresh." |
+| Up to 75% of soft-warning budget | Normal | None |
+| Over 75% of soft-warning budget | Yellow | "Context {pct}% full." then "Consider using /compact to free space or /new to start fresh." |
+| Over soft-warning budget | Red | "Context {pct}% full — responses may become less reliable." then "Use /compact to free space or /new to start fresh." |
 | Over 100% | Red | "Context is full — the next message will fail." then "Use /compact to free space or /new to start fresh." |
 
 Hovering shows a tooltip: "How much of Pi's memory (context window) this conversation is using.", the exact count "{used} / {total} tokens", and the warning with its advice when there is one. The accessible name is "Context usage {pct}% of {label}".
 
-Clicking opens the context popover: the title "Context usage", the same description, the token count, the warning text (without the advice sentence), and two buttons: "/compact" ("Summarize earlier messages to free space.") and "/new" ("Open a fresh tab with empty context."). Clicking a button closes the popover and runs that command exactly as if it had been chosen in the [command menu](../commands/the-command-menu.md): both are allowed while busy, and `/compact` is queued. Confirmed in Excel on the web for the popover's contents and "/new", which opened a new tab. Also confirmed for "/compact": at 38% it toasted "Nothing to compact"; at 75% the working indicator read "Compacting context…" and a "Summarized 97,729 tokens" card appeared. The meter kept reading 75% for more than 30 seconds afterwards, until the user switched tabs and back, when it read 39% (see [Edge cases](#edge-cases)).
+Clicking opens "Context usage" with description, token count and policy-specific warning, then **Summarize now** and **New chat**. Their secondary descriptions show `/compact` and `/new`; clicking closes the popover and dispatches the command. Manual summarization remains optional with automatic compaction on. PR #803's rendered Excel-web check showed the automatic message at an injected 72% of a 16k window, a neutral meter and both plain-language buttons; no model request was sent with the injected window.
 
 Confirmed in Excel on the web for the thresholds, using GPT-6 Luna (272k window) and large filler messages: at 38% the meter was grey with no warning; at 58% it was yellow with "Context 58% full." in the tooltip and popover; at 64% and 75% it was red with "Context 64% full — responses may become less reliable.". Over 100% was not reached, because auto-compaction ran before sending (see [provider errors and offline](../cross-cutting/provider-errors-and-offline.md#the-context-window-overflows)).
 
@@ -129,7 +131,7 @@ After any interrupt the user is where they were; only the mode toggle commits an
 
 **Offline and provider errors.** None.
 
-**Notifications.** "{mode} mode." when the mode is toggled, and "Thinking: {level} (next turn)" for Shift+Tab. The popovers are not notifications.
+**Notifications.** "{mode} mode." when the mode is toggled, and "Thinking: {level} (next turn) · {shortcut}" for the dedicated thinking chord. The popovers are not notifications.
 
 **Settings and preferences.** The fork-on-model-switch preference changes what choosing a model does. `/debug` adds a usage breakdown after the context meter; see [experimental](../extensions/experimental.md).
 
@@ -137,7 +139,7 @@ After any interrupt the user is where they were; only the mode toggle commits an
 
 **Language.** Labels, tooltips, level hints and popover text are translated. The lock badge and its tooltips are hard-coded English. Model names are never translated.
 
-**Accessibility and keyboard.** Every control is a real button reachable with Tab and activated with Enter or Space. Popovers are announced as dialogs with polite live updates, but focus does not move into them; the user must Tab forward to reach their rows. Escape closes them. Shift+Tab cannot be used to move backwards to the bar, because it cycles the thinking level everywhere; see [keyboard shortcuts](keyboard-shortcuts.md). Tooltips appear on hover only, not on keyboard focus.
+**Accessibility and keyboard.** Every control is a real button reachable with Tab/Shift+Tab and activated with Enter or Space. Escape closes popovers. Shift+Tab is never a thinking shortcut; the dedicated Ctrl+Alt/Option+T chord works only from the composer without a modal. See [keyboard shortcuts](keyboard-shortcuts.md).
 
 ## Edge cases
 
@@ -146,7 +148,7 @@ After any interrupt the user is where they were; only the mode toggle commits an
 - A popover taller than the taskpane is limited to its height and its list scrolls.
 - Clicking the thinking control twice closes the popover; clicking the context meter while the thinking popover is open swaps one for the other. Only one status popover exists at a time. In a narrow taskpane (349 px on Excel on the web) the thinking popover is wide enough to cover the context meter and the mode control, so the swap cannot be done with the pointer: the click lands on the popover.
 - A window of 1.5 million tokens is shown as "2M", because the size is rounded to whole millions.
-- A model without reasoning shows "Off", and Shift+Tab keeps it at "Off" while still showing the toast.
+- A model without reasoning shows "Off"; the dedicated thinking chord keeps it there. Shift+Tab just moves focus.
 
 ## Open questions and verification
 
