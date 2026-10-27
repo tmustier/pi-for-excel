@@ -471,6 +471,8 @@ export class FakeExcelHost {
   syncCount = 0;
   /** Fail the sync that would apply the Nth queued write (1-based) with this error; the write is not applied. */
   failWrite: { at: number; error: Error } | null = null;
+  /** Fail the Nth sync (1-based) with this error before it does anything, e.g. a read Excel never answered. */
+  failSync: { at: number; error: Error } | null = null;
   /** Called after each sync that applied at least one write (1-based count of such syncs). */
   afterWriteSync: ((writeSyncs: number) => void) | null = null;
   private writeSyncs = 0;
@@ -516,6 +518,11 @@ export class FakeExcelHost {
     },
     sync: (): Promise<void> => {
       this.syncCount += 1;
+      if (this.failSync?.at === this.syncCount) {
+        this.queued = [];
+        this.pendingLoadedCells = 0;
+        return Promise.reject(this.failSync.error);
+      }
       this.context.workbook.worksheets.items = [...this.sheets.values()];
       this.context.workbook.application.calculationMode = this.calculationMode;
       const writes = this.queued;

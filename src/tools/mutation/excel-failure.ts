@@ -155,6 +155,8 @@ async function listSheetNames(): Promise<string[] | null> {
 export async function describeExcelFailure(
   error: ExcelErrorInfo,
   target: ExcelFailureTarget = {},
+  /** True when the tool knows no write had been sent yet (it failed while reading the target). */
+  nothingSent = false,
 ): Promise<ExcelFailure> {
   const { code, location, message } = error;
   const sheetName = targetSheetName(target);
@@ -165,6 +167,14 @@ export async function describeExcelFailure(
       code,
       reason: protection ??
         "Excel denied the change (AccessDenied). The workbook may be read-only, open in view mode, or protected.",
+      maybeApplied: false,
+    };
+  }
+
+  if (error.outcomeUnknown && nothingSent) {
+    return {
+      code,
+      reason: `Excel did not answer (${message}) before the change was sent. Retry once Excel responds.`,
       maybeApplied: false,
     };
   }
