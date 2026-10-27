@@ -70,7 +70,7 @@ The level is passed to the provider as a request for that much reasoning. Provid
 
 ### While the model reasons
 
-When the model returns its reasoning, the model response begins with a thinking block. While the model response streams, the block's label is "Thinking…" with a spinning icon and a shimmer, and it stays that way after the reasoning has ended: through the text, through any tool calls that follow, until the next model response starts streaming or the turn ends. The block is collapsed; clicking its header expands it and the reasoning streams inside, scrolling to keep the newest line in view.
+When readable reasoning starts, a thinking block says "Thinking…" with a spinner. It stops saying that as soon as reasoning ends, even while text or tools continue. Its button header expands the reasoning. Initial expansion follows the remembered details mode; an individual toggle overrides that block until the next global toggle.
 
 The thinking level control stays usable throughout. The working indicator's rotating hints include "⇧Tab to adjust reasoning depth".
 
@@ -78,18 +78,18 @@ Some providers return no readable reasoning even at a high level (only a summary
 
 ### The block after the model response
 
-Once the model response has finished, the block's label is "Thought". It stays collapsed. Clicking the header toggles it; Ctrl/Cmd+O expands or collapses every thinking block and tool card on screen (see [tool calls](tool-calls.md#showing-and-hiding-details-with-ctrlcmdo)). In "Details hidden" mode thinking blocks also lose their card border and their header is dimmed.
+After reasoning ends, the header says "Thought for {duration}" if its start was observed in this taskpane, otherwise "Thought". The duration and disclosure choice survive the streaming-to-transcript handoff and tab switches. Ctrl/Cmd+O controls thinking blocks, cards and groups, including content that appears later. Collapsed blocks keep their normal card style.
 
-The label is meant to read "Thought for {duration}" ("Thought for 12s", "Thought for 1m 5s") when the user watched the block stream. In practice the finished block is a new element that never streamed, so it always reads "Thought". See [Open questions](#open-questions-and-verification). Blocks in restored sessions also read "Thought".
+Restored sessions whose reasoning start was not observed read "Thought"; saved text does not invent a timing measurement.
 
 ## Modifiers
 
 | Modifier | Set before | Changed while busy |
 | --- | --- | --- |
-| Model and provider | Decides which levels are offered and whether reasoning is returned and shown. Switching model does not change the stored level. | Model change refused while busy. |
+| Model and provider | Decides supported levels and readable reasoning. A model switch clamps the stored level to one the new model supports. | Busy picker is read-only. |
 | Thinking level | This is the feature. | Changing it is allowed; the running turn keeps its level, the next turn uses the new one. |
 | Execution mode | No effect. | No effect. |
-| Files in the workspace, or an overlay open | No effect from files. With an overlay or a text field in an overlay focused, Shift+Tab still cycles the thinking level instead of moving focus backwards. | Same. |
+| Files in the workspace, or an overlay open | Shift+Tab cycles only in the composer with no modal open. In dialogs it moves focus backwards normally. | Same. |
 | Tab state (new, restored, another tab busy) | New tab: "High" or "Off". Restored tab: its saved level. Another tab being busy does not matter. | Switching tabs shows the new active tab's level; Shift+Tab and the popover act on the active tab only. |
 | Host (desktop or web) | No difference. | No difference. |
 
@@ -120,7 +120,7 @@ After any interrupt the tab keeps whatever level it had.
 
 **Other tabs and sessions.** Each tab has its own level. Two tabs on the same model can run at different levels.
 
-**Execution mode and approvals.** No interaction. Pressing Shift+Tab redraws the status bar as if the mode were Auto and no tab held the workbook lock, until the next update; see [Open questions](#open-questions-and-verification).
+**Execution mode and approvals.** Cycling thinking preserves the actual mode and lock badges.
 
 **Models and providers.** The offered levels come from the model; see [models and providers](../foundations/models-and-providers.md). Higher levels make responses slower and use more tokens.
 
@@ -134,25 +134,20 @@ After any interrupt the tab keeps whatever level it had.
 
 **Language.** Level labels, hints, the popover title, the toast, "Thinking…", "Thought for {duration}" and "Thought" are translated.
 
-**Accessibility and keyboard.** The status-bar control is a button with the accessible name "Thinking level {level}"; the popover's levels are buttons. Shift+Tab is listed on the shortcuts page as "Cycle thinking depth". Shift+Tab is taken by Pi everywhere in the taskpane, including inside dialogs. On Excel on the web, Office's own keyboard handling still moves focus backwards on the same press, so focus moves and the level changes together (confirmed in Excel on the web from the composer). The thinking block's header is not a button: it cannot be reached with Tab or toggled from the keyboard except through Ctrl/Cmd+O (confirmed in Excel on the web: 40 Tab presses through a transcript with thinking blocks never focused a header).
+**Accessibility and keyboard.** Status control, levels and thinking headers are buttons. Thinking headers expose `aria-expanded` and can be toggled with Enter/Space. Shift+Tab cycles only from the composer, consuming the key there; elsewhere it retains normal reverse-focus navigation. Modal focus stays trapped inside the modal.
 
 ## Edge cases
 
 - With a model that offers only "Off", the popover lists one item and Shift+Tab keeps showing "Thinking: Off (next turn)".
-- A tab left on "High" after switching to a non-reasoning model still shows "High" in the status bar; the request asks for no reasoning because the provider maps it down.
+- A non-reasoning model switch clamps the level to "Off".
 - Several thinking blocks can appear in one turn, one per model response.
 - Pressing Shift+Tab rapidly cycles through levels; each press replaces the previous toast.
 - The thinking flash uses one colour per level (grey for Off through magenta for Max); the colours are decorative and carry no other meaning.
 
 ## Open questions and verification
 
-- The "Thought for {duration}" label is never shown after a live response; the finished block always reads "Thought". Observed in a harness with the real `<pi-sidebar>` and `Agent`. Cause: the duration is measured inside the streaming element (`src/ui/messages/thinking-block.ts:52-68`), but the finished model response is rendered by a new element in `message-list.ts` that never streamed, and the streaming element is removed at `agent_end` in the same update that sets `isStreaming` to false (`src/ui/pi-sidebar.ts:357-362`). Confirmed in Excel on the web: two live responses with reasoning both ended as plain "Thought", and the finished first response was already drawn with "Thought" in the transcript while its streaming copy below still said "Thinking…" (the double drawing described in [tool calls](tool-calls.md#open-questions-and-verification)). Bug.
-- The streaming block says "Thinking…" until the next model response starts or the turn ends, not when the reasoning ends, because it takes the tab's streaming flag (`src/ui/messages/messages.ts:107-110`). Confirmed in Excel on the web: the block kept "Thinking…" while the model's read card appeared and spun and until the next model response started. Probably unintended.
-- `foundations/turns.md` says a thinking-level change takes effect from the next model response. It takes effect from the next turn (see [The level is set](#the-level-is-set)); the toast's "(next turn)" is accurate.
-- Shift+Tab calls `updateStatusBarForAgent(agent)` with its defaults (`src/taskpane/keyboard-shortcuts.ts:162`, `src/taskpane/status-bar.ts:181-187`), which redraws the mode badge as "Auto" and drops the lock badge until the next status update. In Confirm mode the status bar shows "Auto" after Shift+Tab. Confirmed in Excel on the web: the badge changed from "Confirm" to "Auto" on the key press and stayed "Auto" until a tab click redrew it; the mode itself stayed Confirm. Bug.
-- Shift+Tab is handled with no check for overlays or text fields (`src/taskpane/keyboard-shortcuts.ts:377-384`), so reverse tabbing is impossible in settings and other dialogs while any tab exists. On Excel on the web the opposite problem shows: Office.js moves focus backwards anyway, so every Shift+Tab also changes the thinking level (confirmed from the composer). Accessibility bug on both hosts.
-- The thinking-block header is a `div` with a click handler (`src/ui/messages/thinking-block.ts:94`), with no role or tab stop.
+- Merged code uses shared transcript state for duration/disclosure and a button header. The old duplicate rendering, lost timing and global Shift+Tab defects are historical verification findings, not current behavior.
 - A level change made with no message afterwards is not saved; read from `src/taskpane/sessions.ts:344-352`, not confirmed by hand.
 - Which providers return readable reasoning, and at which levels, was not checked.
 
-Verified against pi-for-excel commit `ec453df`.
+Verified against pi-for-excel commit `1f51cf8` (code review).
