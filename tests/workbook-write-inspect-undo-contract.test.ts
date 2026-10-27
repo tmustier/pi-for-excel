@@ -72,17 +72,12 @@ class RangeStoreRange {
   // The write path inspects these before writing; this store has no merges,
   // spills, protection or validation.
   readonly hasSpill = false;
-  readonly format = { protection: { locked: true, load: (_properties?: string): void => {} } };
   readonly dataValidation = { valid: true, load: (_properties?: string): void => {} };
 
   load(_properties?: string | string[]): void {}
 
   getTables(_fullyContained?: boolean): { items: Array<{ name: string }>; load: (properties?: string) => void } {
     return { items: [], load: () => {} };
-  }
-
-  getMergedAreasOrNullObject(): { isNullObject: true; load: (properties?: string) => void } {
-    return { isNullObject: true, load: () => undefined };
   }
 
   get values(): unknown[][] {
@@ -123,7 +118,6 @@ class RangeStoreRange {
 class RangeStoreSheet {
   readonly name = "Sheet1";
   readonly comments = { items: [] as unknown[], load: (_properties?: string) => undefined };
-  readonly protection = { protected: false, load: (_properties?: string) => undefined };
   private readonly store: RangeStore;
 
   constructor(store: RangeStore) {
