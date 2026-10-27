@@ -82,7 +82,7 @@ class MemoryStorageBackend implements StorageBackend {
 const actionQueue: ActionQueue = {
   enqueuePrompt: () => {},
   enqueueCommand: () => {},
-  takeBackQueued: () => ({ texts: [], cancelledCommands: [] }),
+  editLast: () => false,
   stop: () => ({ texts: [], cancelledCommands: [] }),
   isBusy: () => false,
   shutdown: () => {},
@@ -93,6 +93,9 @@ function createQueueDisplay(): QueueDisplay {
     add: () => {},
     clear: () => {},
     drainQueuedMessages: () => [],
+    removeQueuedMessage: () => {},
+    setRowHandlers: () => {},
+    lastEditableRow: () => null,
     setActionQueue: () => {},
     attach: () => {},
     detach: () => {},

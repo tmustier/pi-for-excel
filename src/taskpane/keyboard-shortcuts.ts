@@ -119,8 +119,8 @@ export function installKeyboardShortcuts(opts: {
   sidebar: PiSidebar;
   /** Stops the active tab, exactly like the Stop button. */
   stopActiveTab: () => void;
-  /** Alt+Up: takes queued messages back into the composer; returns how many. */
-  takeBackQueued: () => number;
+  /** Alt+Up: puts the last queued message back in the composer; false when there is none. */
+  editLastQueued: () => boolean;
   onCreateTab?: () => void;
   onCloseActiveTab?: () => void;
   onReopenLastClosed?: () => void;
@@ -132,7 +132,7 @@ export function installKeyboardShortcuts(opts: {
     isActiveTabBusy,
     sidebar,
     stopActiveTab,
-    takeBackQueued,
+    editLastQueued,
     onCreateTab,
     onCloseActiveTab,
     onReopenLastClosed,
@@ -220,7 +220,7 @@ export function installKeyboardShortcuts(opts: {
       event.preventDefault();
       event.stopPropagation();
       event.stopImmediatePropagation();
-      takeBackQueued();
+      editLastQueued();
       return true;
     },
     (context) => {

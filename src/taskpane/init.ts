@@ -1017,7 +1017,7 @@ export async function initTaskpane(opts: {
       return undefined;
     };
 
-    const queueDisplay = createQueueDisplay({ agent });
+    const queueDisplay = createQueueDisplay({ agent, held: tab });
     // Assigned below; compaction saves the session as soon as it rewrites history.
     let savePersistence: () => Promise<void> = () => Promise.resolve();
     const actionQueue = createActionQueue({
@@ -1050,9 +1050,9 @@ export async function initTaskpane(opts: {
           }));
         });
       },
-      onReturnedToDraft: (count) => {
+      onLeftUnsent: (count) => {
         if (runtimeManager.getActiveRuntime()?.runtimeId !== runtimeId) return;
-        showToast(t("turn.toast.failedReturned", { count, plural: count === 1 ? "" : "s" }));
+        showToast(t("turn.toast.leftUnsent", { count, plural: count === 1 ? "" : "s" }));
       },
     });
 
@@ -1770,8 +1770,8 @@ export async function initTaskpane(opts: {
 
   /**
    * Stop is one behavior, from the Stop button or Escape: the run, compaction
-   * or retry wait is cancelled; steers, follow-ups and queued prompts come
-   * back to the composer; queued commands are cancelled.
+   * or retry wait is cancelled; steers, follow-ups and queued prompts stay
+   * as separate "Not sent" rows; queued commands are cancelled.
    */
   const stopActiveTab = (): void => {
     const activeRuntime = getActiveRuntime();
@@ -1781,13 +1781,12 @@ export async function initTaskpane(opts: {
     const plural = count === 1 ? "" : "s";
     const commands = cancelledCommands.join(", ");
     if (count > 0 && commands) {
-      showToast(t("turn.toast.stopReturnedCancelled", { count, plural, commands }));
+      showToast(t("turn.toast.stopKeptCancelled", { count, plural, commands }));
     } else if (count > 0) {
-      showToast(t("turn.toast.stopReturned", { count, plural }));
+      showToast(t("turn.toast.stopKept", { count, plural }));
     } else if (commands) {
       showToast(t("turn.toast.stopCancelled", { commands }));
     }
-    if (count > 0) focusChatInputSoon();
   };
 
   sidebar.onAbort = stopActiveTab;
@@ -1933,16 +1932,11 @@ export async function initTaskpane(opts: {
     },
     sidebar,
     stopActiveTab,
-    takeBackQueued: () => {
-      const runtime = getActiveRuntime();
-      const count = runtime?.actionQueue.takeBackQueued().texts.length ?? 0;
-      if (count === 0) {
-        showToast(t("keyboard-shortcuts.toast.noQueuedMessages"));
-      } else {
-        showToast(t("shortcuts.toast.restoredQueued", { count, plural: count === 1 ? "" : "s" }));
-        focusChatInputSoon();
-      }
-      return count;
+    editLastQueued: () => {
+      const edited = getActiveRuntime()?.actionQueue.editLast() ?? false;
+      if (edited) focusChatInputSoon();
+      else showToast(t("keyboard-shortcuts.toast.noQueuedMessages"));
+      return edited;
     },
     onCreateTab: () => {
       void createRuntimeFromUi();

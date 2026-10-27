@@ -12,7 +12,7 @@ import { hideCommandMenu } from "../../commands/command-menu.js";
 import { executeSlashCommand } from "../../commands/slash-command-execution.js";
 
 export type QueueDisplay = {
-  add: (type: "steer" | "follow-up", text: string, message?: AgentMessage) => void;
+  add: (type: "steer" | "follow-up", text: string, message: AgentMessage) => void;
 };
 
 export type ActionQueue = {

@@ -14,12 +14,15 @@
  * - bounded retries of transient provider failures (rate limits, 5xx,
  *   dropped connections), shown as the tab's activity line
  * - Stop: one behavior whatever the trigger. The run and any compaction or
- *   retry wait are cancelled, and everything the user queued that has not
- *   been delivered comes back to the tab's composer draft. Queued commands
+ *   retry wait are cancelled, and every message the user queued that has not
+ *   been delivered stays above the composer as its own "Not sent" row, never
+ *   sent automatically and never merged with other messages. Queued commands
  *   are cancelled (and reported), since they are work Pi would have done,
  *   not text the user wrote.
- * - when a turn fails, steers and follow-ups it never delivered come back to
- *   the composer instead of leaking into the next turn.
+ * - when a turn ends, steers and follow-ups it never delivered become "Not
+ *   sent" rows the same way instead of leaking into the next turn.
+ * - each queue row's Edit (puts that one row's text back in the composer)
+ *   and Remove; Alt+Up edits the last row.
  */
 
 import type { Agent, AgentMessage } from "@earendil-works/pi-agent-core";
@@ -35,7 +38,8 @@ import {
   findTrailingContextOverflowError,
   recoverFromContextOverflow,
 } from "../compaction/overflow-recovery.js";
-import type { TabActivity } from "./tab-state.js";
+import type { QueueDisplay, QueueRow } from "./queue-display.js";
+import type { TabState } from "./tab-state.js";
 
 export type QueuedAction =
   | { type: "prompt"; text: string }
@@ -57,24 +61,20 @@ export interface TurnOutcome {
 export interface ActionQueue {
   enqueuePrompt: (text: string) => void;
   enqueueCommand: (name: string, args: string) => void;
-  /** Takes back steers, follow-ups and queued prompts; queued commands stay queued. */
-  takeBackQueued: () => TakenBack;
-  /** Stops the tab: cancels the run, compaction or retry wait, and takes back everything queued. */
+  /** Alt+Up: puts the last row holding the user's text back in the composer; false when there is none. */
+  editLast: () => boolean;
+  /** Stops the tab: cancels the run, compaction or retry wait; queued messages become "Not sent" rows. */
   stop: () => TakenBack;
   isBusy: () => boolean;
   shutdown: () => void;
 }
 
-interface ActionQueueDisplay {
-  setActionQueue: (items: Array<{ type: "prompt" | "command"; label: string; text: string }>) => void;
-  drainQueuedMessages: () => Array<{ text: string }>;
-}
+type ActionQueueDisplay = Pick<
+  QueueDisplay,
+  "setActionQueue" | "drainQueuedMessages" | "removeQueuedMessage" | "setRowHandlers" | "lastEditableRow"
+>;
 
-interface ActivityHost {
-  setActivity: (activity: TabActivity | null) => void;
-  setBusy: (busy: boolean) => void;
-  returnToDraft: (texts: readonly string[]) => void;
-}
+type ActivityHost = Pick<TabState, "setActivity" | "setBusy" | "returnToDraft" | "held" | "setHeld" | "hold">;
 
 /** Transient provider failures are retried up to this many times (2s, 4s, 8s). */
 export const PROVIDER_RETRY_LIMIT = 3;
@@ -118,8 +118,8 @@ export function createActionQueue(opts: {
   runCompact: (args: string, signal: AbortSignal) => Promise<void>;
   /** Called after each queued prompt's turn has fully settled (retries and recovery included). */
   onTurnSettled?: (outcome: TurnOutcome) => void;
-  /** Called when a failed turn returned undelivered steers/follow-ups to the composer. */
-  onReturnedToDraft?: (count: number) => void;
+  /** Called when a turn ended with steers/follow-ups it never delivered (now "Not sent" rows). */
+  onLeftUnsent?: (count: number) => void;
 }): ActionQueue {
   const { agent, tab, queueDisplay, autoCompactEnabled } = opts;
 
@@ -168,36 +168,60 @@ export function createActionQueue(opts: {
     return texts;
   };
 
-  const takeBack = (cancelCommands: boolean): TakenBack => {
+  const takeBack = (): TakenBack => {
     const texts = drainMessages();
     const cancelledCommands: string[] = [];
-    const kept: QueuedAction[] = [];
     for (const action of actions) {
-      if (action.type === "prompt") {
-        texts.push(action.text);
-      } else if (cancelCommands) {
-        cancelledCommands.push(`/${action.name}`);
-      } else {
-        kept.push(action);
-      }
+      if (action.type === "prompt") texts.push(action.text);
+      else cancelledCommands.push(`/${action.name}`);
     }
     actions.length = 0;
-    actions.push(...kept);
     syncDisplay();
     return { texts, cancelledCommands };
   };
 
-  const takeBackQueued = (): TakenBack => {
-    const taken = takeBack(false);
-    tab.returnToDraft(taken.texts);
-    return taken;
+  const removeRow = (row: QueueRow): string | null => {
+    if (row.kind === "held") {
+      const text = tab.held[row.index];
+      if (text === undefined) return null;
+      tab.setHeld(tab.held.filter((_, i) => i !== row.index));
+      return text;
+    }
+    if (row.kind === "message") {
+      queueDisplay.removeQueuedMessage(row.item);
+      return row.item.text;
+    }
+    const action = actions[row.index];
+    if (!action) return null;
+    actions.splice(row.index, 1);
+    syncDisplay();
+    return action.type === "prompt" ? action.text : null;
+  };
+
+  /** Edit puts that one row's text back in the composer, above any draft. */
+  const editRow = (row: QueueRow): boolean => {
+    if (row.kind === "action" && actions[row.index]?.type !== "prompt") return false;
+    const text = removeRow(row);
+    if (text === null) return false;
+    tab.returnToDraft([text]);
+    return true;
+  };
+
+  queueDisplay.setRowHandlers({
+    edit: (row) => { editRow(row); },
+    remove: (row) => { removeRow(row); },
+  });
+
+  const editLast = (): boolean => {
+    const row = queueDisplay.lastEditableRow();
+    return row !== null && editRow(row);
   };
 
   const stop = (): TakenBack => {
-    const taken = takeBack(true);
+    const taken = takeBack();
     stopController.abort();
     agent.abort();
-    tab.returnToDraft(taken.texts);
+    tab.hold(taken.texts);
     return taken;
   };
 
@@ -263,15 +287,15 @@ export function createActionQueue(opts: {
 
   /**
    * A turn that ends (stopped, failed or finished) never keeps steers and
-   * follow-ups it did not deliver; they go back to the composer rather than
-   * into the next turn. Only a message sent while the turn was already
+   * follow-ups it did not deliver; they become "Not sent" rows rather than
+   * going into the next turn. Only a message sent while the turn was already
    * ending can still be here.
    */
   function returnLeftovers(): void {
     const leftovers = drainMessages();
     if (leftovers.length === 0) return;
-    tab.returnToDraft(leftovers);
-    opts.onReturnedToDraft?.(leftovers.length);
+    tab.hold(leftovers);
+    opts.onLeftUnsent?.(leftovers.length);
   }
 
   async function runPrompt(text: string, signal: AbortSignal): Promise<void> {
@@ -379,5 +403,5 @@ export function createActionQueue(opts: {
     void process();
   };
 
-  return { enqueuePrompt, enqueueCommand, takeBackQueued, stop, isBusy, shutdown };
+  return { enqueuePrompt, enqueueCommand, editLast, stop, isBusy, shutdown };
 }

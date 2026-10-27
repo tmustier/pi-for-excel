@@ -5,6 +5,7 @@ import { Agent, type AgentMessage } from "@earendil-works/pi-agent-core";
 import { createModels, fauxAssistantMessage, fauxProvider, type Context } from "@earendil-works/pi-ai";
 
 import { createActionQueue } from "../src/taskpane/action-queue.ts";
+import { createTabState } from "../src/taskpane/tab-state.ts";
 
 const LITELLM_OVERFLOW =
   "400 litellm.ContextWindowExceededError: ContextWindowExceededError: This model's maximum context length is 65536 tokens. However, your prompt contains 61441 input tokens.";
@@ -34,8 +35,8 @@ function createQueue(agent: Agent, runCompact: () => Promise<void>) {
     agent,
     autoCompactEnabled: true,
     runCompact,
-    tab: { setActivity: () => {}, setBusy: () => {}, returnToDraft: () => {} },
-    queueDisplay: { setActionQueue: () => {}, drainQueuedMessages: () => [] },
+    tab: createTabState(),
+    queueDisplay: { setActionQueue: () => {}, drainQueuedMessages: () => [], removeQueuedMessage: () => {}, setRowHandlers: () => {}, lastEditableRow: () => null },
   });
 }
 

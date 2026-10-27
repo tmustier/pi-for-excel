@@ -54,7 +54,7 @@ function createTab(responses: FauxResponseStep[], opts?: {
   tab.subscribe(() => {
     if (activities[activities.length - 1] !== tab.activity) activities.push(tab.activity);
   });
-  const queueDisplay = createQueueDisplay({ agent });
+  const queueDisplay = createQueueDisplay({ agent, held: tab });
   const settled: boolean[] = [];
   const queue = createActionQueue({
     agent,
@@ -82,7 +82,7 @@ async function waitFor(predicate: () => boolean, timeoutMs = 10_000): Promise<vo
   }
 }
 
-void test("Stop returns waiting steers, follow-ups and queued prompts to the draft and the next turn does not get them", async () => {
+void test("Stop keeps each waiting steer, follow-up and queued prompt as its own unsent row, and the next turn does not get them", async () => {
   const tab = createTab([untilStopped, fauxAssistantMessage("OK")]);
   tab.tab.setDraft("half-typed");
 
@@ -96,8 +96,14 @@ void test("Stop returns waiting steers, follow-ups and queued prompts to the dra
   await waitFor(() => !tab.queue.isBusy());
 
   assert.deepEqual(taken, { texts: ["Then say BANANA.", "Then say MANGO."], cancelledCommands: ["/compact"] });
-  assert.equal(tab.tab.draft, "Then say BANANA.\n\nThen say MANGO.\n\nhalf-typed");
+  assert.deepEqual(tab.tab.held, ["Then say BANANA.", "Then say MANGO."]);
+  assert.equal(tab.tab.draft, "half-typed");
   assert.equal(tab.agent.hasQueuedMessages(), false);
+
+  // Alt+Up edits one row at a time, newest first; the others stay separate.
+  assert.equal(tab.queue.editLast(), true);
+  assert.equal(tab.tab.draft, "Then say MANGO.\n\nhalf-typed");
+  assert.deepEqual(tab.tab.held, ["Then say BANANA."]);
 
   tab.queue.enqueuePrompt("Reply with just OK.");
   await waitFor(() => tab.requests.length === 2 && !tab.queue.isBusy());
@@ -107,7 +113,7 @@ void test("Stop returns waiting steers, follow-ups and queued prompts to the dra
   tab.queue.shutdown();
 });
 
-void test("a failed turn puts its undelivered steers back in the draft instead of the next turn", async () => {
+void test("a failed turn keeps its undelivered steers as unsent rows instead of sending them in the next turn", async () => {
   const tab = createTab([
     async (_context, options) => {
       await new Promise<void>((resolve) => setTimeout(resolve, 30));
@@ -123,7 +129,8 @@ void test("a failed turn puts its undelivered steers back in the draft instead o
   tab.steer("stale steer");
   await waitFor(() => !tab.queue.isBusy());
 
-  assert.equal(tab.tab.draft, "stale steer");
+  assert.deepEqual(tab.tab.held, ["stale steer"]);
+  assert.equal(tab.tab.draft, "");
   tab.queue.enqueuePrompt("second");
   await waitFor(() => tab.requests.length === 2 && !tab.queue.isBusy());
   assert.equal(requestUserTexts(tab.requests[1] ?? { messages: [] }).includes("stale steer"), false);
@@ -204,8 +211,25 @@ void test("Stop cancels a running /compact for this tab and returns the prompt h
 
   assert.equal(compactSignal?.aborted, true);
   assert.deepEqual(taken.texts, ["held behind compaction"]);
-  assert.equal(tab.tab.draft, "held behind compaction");
+  assert.deepEqual(tab.tab.held, ["held behind compaction"]);
   assert.equal(tab.requests.length, 0);
+  tab.queue.shutdown();
+});
+
+void test("editing the last waiting steer takes only that one back; the earlier one is still delivered", async () => {
+  const slow: FauxResponseStep = () => new Promise((resolve) => setTimeout(() => resolve(fauxAssistantMessage("one")), 50));
+  const tab = createTab([slow, fauxAssistantMessage("two")]);
+
+  tab.queue.enqueuePrompt("start");
+  await waitFor(() => tab.agent.state.isStreaming);
+  tab.steer("first steer");
+  tab.steer("second steer");
+  assert.equal(tab.queue.editLast(), true);
+  await waitFor(() => !tab.queue.isBusy());
+
+  assert.equal(tab.tab.draft, "second steer");
+  assert.deepEqual(tab.tab.held, []);
+  assert.deepEqual(requestUserTexts(tab.requests[1] ?? { messages: [] }), ["start", "first steer"]);
   tab.queue.shutdown();
 });
 
