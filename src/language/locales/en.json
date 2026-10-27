@@ -568,6 +568,7 @@
   "init.waitBeforeChangingModels": "Wait for this tab to finish before changing models",
   "init.waitBeforeDuplicating": "Wait for this tab to finish before duplicating",
   "init.waitBeforeRenaming": "Wait for this tab to finish before renaming",
+  "init.waitingForChangeBeforeClose": "Stopping — closing after Pi's current change finishes.",
   "init.waitForChangesBeforeClose": "Wait for workbook changes to finish before closing this tab",
   "input.attach.aria": "Browse files",
   "input.chat.aria": "Chat message",

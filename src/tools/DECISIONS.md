@@ -374,6 +374,7 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 - **Execution mode toggle:** `/yolo` (the status-bar Auto/Confirm control) switches between:
   - `Auto` (`yolo`, default): mutate tools run without extra pre-execution confirmations.
   - `Confirm` (`safe`): every workbook mutation asks first. The UI says "Confirm" everywhere; "Safe" is only the stored value.
+- **One mode per computer:** Auto/Confirm is one setting shared by every taskpane. A change in one taskpane is broadcast to the others, and approval decisions re-read the stored mode rather than a cached one, so two taskpanes never run in different modes.
 - **Approvals** (`getToolApprovalRequirement` in `execution-policy.ts`, asked by `with-workbook-coordinator.ts`):
   - `confirm_mode`: workbook mutations ask in Confirm mode.
   - `always`: `workbook_history` delete/clear ask in every mode. They change no cells (so they stay `read` for the workbook lock), but they remove the user's way to undo Pi's earlier changes.
@@ -392,6 +393,9 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
   - "Keep at most N" (default and maximum `MAX_RECOVERY_ENTRIES`) applies per workbook, newest kept, on every append, and immediately when the user changes the limit. A global cap (`MAX_STORED_RECOVERY_ENTRIES`) bounds storage across workbooks.
 - **Shared storage:** every taskpane on the computer shares one backup list, change audit log, and Files tag/audit record. Each change is an atomic read-modify-write in one IndexedDB transaction (`SettingsUpdater.update`), never a write-back of a list loaded earlier. Sessions carry a `revision`; a save over a revision another taskpane has replaced saves this taskpane's conversation as a new session, with a toast, instead of overwriting.
 - **A backup with nothing to roll back to is used up:** reverting a chart-create backup deletes the chart but cannot store a rollback (a deleted chart cannot be re-created). That backup is removed after the restore, so it does not stay "latest" and hide every older backup from `/revert`.
+- **`fill_formula` changes formulas only:** it writes the formula's R1C1 form to every cell (the same relative references autofill gives). Autofill also copied the top-left cell's formats, which a values-and-formulas backup cannot undo.
+- **A `format_cells` call that fails partway is still revertible:** Excel applies a batch op by op, so the formatting captured before the call is stored even when the call errors.
+- **Closing a busy tab waits for its current change:** "Stop and close" stops the run, waits for a write already running in Excel to finish (it cannot be cancelled there), then closes, so the change keeps its backup and is saved in the session.
 - **Failures are visible:** when a backup cannot be stored (for example, quota), the change still happens, its tool result says no backup was saved, and the user gets an error toast. A restore whose inverse backup fails says that it cannot itself be undone.
 - **Restore UX:** `workbook_history` can list/restore/delete/clear backups; restores also create an inverse backup (`restore_snapshot`) so users can undo a mistaken restore.
 - **Coverage signaling:** `modify_structure`, mutating `view_settings`, and `charts delete` actions explicitly report when no backup was created.

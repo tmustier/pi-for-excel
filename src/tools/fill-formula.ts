@@ -119,22 +119,20 @@ export function createFillFormulaTool(): AgentTool<typeof schema, FillFormulaDet
           if (inspection.occupiedCount > 0 && !inspection.before) return { kind: "too_large_to_back_up", inspection, block };
           if (signal?.aborted) return { kind: "stopped", inspection, block };
 
+          // Fill by writing the formula's R1C1 form to every cell: the same
+          // relative references autofill produces, but only formulas change.
+          // Autofill also copied the top-left cell's formats across the
+          // range, which the backup (values and formulas) cannot undo.
           const topLeft = range.getCell(0, 0);
           topLeft.formulas = [[params.formula]];
-          if (block.rowCount > 1 && block.columnCount > 1) {
-            // Excel on the web fills a 2D target from a single cell only below and
-            // right of it, leaving the rest of the first row and column blank.
-            // Fill across the first row, then down from it.
-            const firstRow = range.getRow(0);
-            topLeft.autoFill(firstRow, "FillDefault");
-            firstRow.autoFill(range, "FillDefault");
-          } else if (block.rowCount > 1 || block.columnCount > 1) {
-            // A single cell cannot autofill onto itself (InvalidArgument on the web).
-            topLeft.autoFill(range, "FillDefault");
-          }
-          // Sync the fill on its own: a read-back in the same batch can exceed the
-          // response payload limit after Excel has already applied the fill.
-          progress.fillInFlight = true;
+          topLeft.load("formulasR1C1");
+          await context.sync();
+          const storedR1C1: unknown = topLeft.formulasR1C1[0]?.[0];
+          const r1c1: string = typeof storedR1C1 === "string" ? storedR1C1 : params.formula;
+          range.formulasR1C1 = Array.from({ length: range.rowCount }, () =>
+            Array.from({ length: range.columnCount }, () => r1c1));
+
+          range.load("values,formulas,address,rowCount,columnCount");
           await context.sync();
           progress.fillInFlight = false;
           progress.filled = true;

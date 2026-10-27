@@ -568,6 +568,7 @@
   "init.waitBeforeChangingModels": "请等待此标签页完成后再切换模型",
   "init.waitBeforeDuplicating": "请等待此标签页完成后再复制",
   "init.waitBeforeRenaming": "请等待此标签页完成后再重命名",
+  "init.waitingForChangeBeforeClose": "正在停止——Pi 当前的更改完成后关闭。",
   "init.waitForChangesBeforeClose": "请等待工作簿更改完成后再关闭此标签页",
   "input.attach.aria": "浏览文件",
   "input.chat.aria": "聊天消息",
