@@ -17,7 +17,7 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 | [P-05](#p-05-one-escape-both-closes-the-command-menu-and-stops-the-turn) | One Escape both closes the command menu and stops the turn | high | commands | fix | Fix in PR [#789](https://github.com/tmustier/pi-for-excel/pull/789) (open) |
 | [P-06](#p-06-clicking-a-starter-hint-overwrites-the-draft-with-no-way-to-get-it-back) | Clicking a starter hint overwrites the draft with no way to get it back | high | commands | fix | Fix in PR [#789](https://github.com/tmustier/pi-for-excel/pull/789) (open) |
 | [P-07](#p-07-a-queued-compact-compacts-whichever-tab-is-active-when-it-runs-not-the-tab-it-was-queued-in) | A queued /compact compacts whichever tab is active when it runs, not the tab it was queued in | high | compaction | fix | Fix in PR [#789](https://github.com/tmustier/pi-for-excel/pull/789) (open) |
-| [P-08](#p-08-committing-an-ime-candidate-with-enter-on-macos-probably-sends-the-draft) | Committing an IME candidate with Enter on macOS probably sends the draft | high | composer | fix | none yet |
+| [P-08](#p-08-committing-an-ime-candidate-with-enter-on-macos-sends-the-draft) | Committing an IME candidate with Enter on macOS sends the draft | high | composer | fix | Fix in PR [#789](https://github.com/tmustier/pi-for-excel/pull/789) (open): verified in Excel for Mac at 40c5a36 |
 | [P-09](#p-09-sandboxed-extensions-install-and-run-from-a-remote-url-with-remote-extension-urls-off) | Sandboxed extensions install and run from a remote URL with "Remote extension URLs" off | high | extensions | fix | Fix in PR [#790](https://github.com/tmustier/pi-for-excel/pull/790) (open) |
 | [P-10](#p-10-importing-a-file-with-an-existing-name-replaces-the-old-file-without-asking) | Importing a file with an existing name replaces the old file without asking | high | files | product call | Fix in PR [#788](https://github.com/tmustier/pi-for-excel/pull/788) (open) |
 | [P-11](#p-11-renaming-a-custom-gateway-silently-moves-its-tabs-to-the-default-model) | Renaming a custom gateway silently moves its tabs to the default model | high | gateways | fix | Fix in PR [#795](https://github.com/tmustier/pi-for-excel/pull/795) (open) |
@@ -162,6 +162,7 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 | [P-150](#p-150-after-several-tab-switches-a-tool-group-can-lose-a-card-until-reload) | After several tab switches a tool group can lose a card until reload | low | transcript | fix | Fix in PR [#786](https://github.com/tmustier/pi-for-excel/pull/786) (open) |
 | [P-151](#p-151-the-first-ctrlcmdo-appears-to-do-nothing-and-expanded-cards-collapse-again-on-re-render) | The first Ctrl/Cmd+O appears to do nothing, and expanded cards collapse again on re-render | low | transcript | fix | Fix in PR [#786](https://github.com/tmustier/pi-for-excel/pull/786) (open) |
 | [P-152](#p-152-the-stop-button-and-escape-treat-queued-prompts-and-commands-differently) | The Stop button and Escape treat queued prompts and commands differently | low | turn | product call | Fix in PR [#789](https://github.com/tmustier/pi-for-excel/pull/789) (open) |
+| [P-153](#p-153-opening-a-built-in-doc-in-files-starts-a-render-loop-so-its-download-and-copy-buttons-never-respond) | Opening a built-in doc in Files starts a render loop, so its Download and Copy buttons never respond | medium | files | fix | Assigned to #790 (follow-up; not yet in the PR) |
 
 ## High
 
@@ -249,7 +250,7 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Status:** Confirmed in Excel on the web, 26 October 2026 (CTX-05, twice)
 - **Owner:** Fix in PR [#789](https://github.com/tmustier/pi-for-excel/pull/789) (open)
 
-### P-08: Committing an IME candidate with Enter on macOS probably sends the draft
+### P-08: Committing an IME candidate with Enter on macOS sends the draft
 
 - **Where the user meets it:** Typing Chinese or Japanese in the composer in Excel for Mac (WKWebView).
 - **What happens / what was expected:** The Enter that commits a candidate is likely treated as send (or steer). Expected: Enter during composition only commits.
@@ -258,8 +259,8 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Severity:** `high`, if confirmed it sends half-written messages for every CJK user on macOS.
 - **Decision needed:** `fix`: ignore Enter while `isComposing` (or keyCode 229).
 - **Raised by:** COMPOSE-13; [the composer](turn/the-composer.md#open-questions-and-verification)
-- **Status:** Suspected from code; not reproduced (COMPOSE-13 blocked, inconclusive on Excel for Mac)
-- **Owner:** none yet
+- **Status:** Confirmed in Excel for Mac, 27 October 2026 (COMPOSE-13): with the Pinyin candidate bar open, Return committed "ni" and sent it. WebKit sends the committing Enter as keyCode 229 with isComposing=false.
+- **Owner:** Fix in PR [#789](https://github.com/tmustier/pi-for-excel/pull/789) (open): verified in Excel for Mac at 40c5a36
 
 ### P-09: Sandboxed extensions install and run from a remote URL with "Remote extension URLs" off
 
@@ -318,7 +319,7 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Severity:** `high`, because every turn fails for a logged-in user and nothing says a reload fixes it.
 - **Decision needed:** `fix`: refresh (or refresh on 401 and retry once) before each model request when the token is near expiry.
 - **Raised by:** MODEL-15; [models and providers](foundations/models-and-providers.md#open-questions-and-verification); MULTI-10; [several taskpanes](cross-cutting/several-taskpanes.md#open-questions-and-verification), [provider errors and offline](cross-cutting/provider-errors-and-offline.md#open-questions-and-verification)
-- **Status:** Confirmed in the standalone taskpane with a stubbed login, 26 October 2026 (MODEL-15) Also: Suspected from code; not reproduced (MULTI-10 refuted only the "logs each other out" version)
+- **Status:** Confirmed in the standalone taskpane with a stubbed login, 26 October 2026 (MODEL-15) Also: Suspected from code; not reproduced (MULTI-10 refuted only the "logs each other out" version) Also confirmed in Excel for Mac (MODEL-15): an open pane sent an expired token and got a 401 with no refresh attempt (src/auth/restore.ts:106, :158).
 - **Owner:** Fix in PR [#795](https://github.com/tmustier/pi-for-excel/pull/795) (open)
 
 ### P-14: A pointer resting over the model picker decides what Enter chooses
@@ -1428,6 +1429,17 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Status:** Confirmed in Excel on the web, 26 October 2026 (WEB-17, WEB-27)
 - **Owner:** Fix in PR [#790](https://github.com/tmustier/pi-for-excel/pull/790) (open)
 
+### P-153: Opening a built-in doc in Files starts a render loop, so its Download and Copy buttons never respond
+
+- **Where the user meets it:** Files → BUILT-IN DOCS → open any doc → Download or Copy content.
+- **What happens / what was expected:** The detail view re-renders about 170 times a second; the buttons are replaced before a click completes, so nothing happens and Tab never reaches them. Expected: a stable view whose buttons work.
+- **Reproduce:** Open Files, open a built-in doc, watch `pi:files-workspace-changed` events (reason "audit") in the console; press Download.
+- **Why (from the code):** The detail view's audited read (src/files/workspace.ts:1208) dispatches a workspace change; the dialog's onWorkspaceChanged (src/ui/files-dialog.ts:983-1000) renders the detail again, which reads again.
+- **Severity:** `medium`. A feature is unusable and the taskpane burns CPU while the doc is open.
+- **Decision needed:** `fix`. Audited reads should not emit a change event, or the dialog should ignore "audit" changes.
+- **Raised by:** desktop pass, 27 October 2026 (while checking FILES-24 on PR #796).
+- **Status:** Confirmed in Excel for Mac and Safari; code unchanged from `main`.
+- **Owner:** Assigned to #790 (follow-up; not yet in the PR)
 
 ## Low
 
