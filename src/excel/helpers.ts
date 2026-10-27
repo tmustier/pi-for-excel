@@ -73,6 +73,72 @@ function setWaiting(delta: 1 | -1): void {
   for (const listener of cellEditWaitListeners) listener(cellEditWaiters > 0);
 }
 
+/** How long one `Excel.run` may take before Pi stops waiting for it. */
+export const EXCEL_RUN_TIMEOUT_MS = 60_000;
+
+/**
+ * Excel did not answer a batch in time (a hung or overloaded Excel on the
+ * web, a lost connection). The batch may still complete later, so the outcome
+ * is unknown; the message tells the agent to read back before retrying.
+ */
+export class ExcelTimeoutError extends Error {
+  readonly code = "excel_timeout";
+  /** Contract with mutation results (#791): rows "may or may not have been written". */
+  readonly outcomeUnknown = true;
+  readonly timeoutMs: number;
+  /** Earlier batches that also timed out with no answer from Excel in between. */
+  readonly consecutiveTimeouts: number;
+
+  constructor(timeoutMs: number, consecutiveTimeouts: number) {
+    const repeated = consecutiveTimeouts > 1
+      ? ` Excel has not answered ${consecutiveTimeouts} requests in a row; stop calling workbook tools and ask the user to reload the Excel page (Pi keeps its chats), then retry.`
+      : " If this happens again, ask the user to reload the Excel page.";
+    super(
+      `Excel did not answer within ${Math.round(timeoutMs / 1000)} s. The outcome is unknown: the request may or may not have been applied.` +
+      ` Read the affected range back before retrying a change.${repeated}`,
+    );
+    this.name = "ExcelTimeoutError";
+    this.timeoutMs = timeoutMs;
+    this.consecutiveTimeouts = consecutiveTimeouts;
+  }
+}
+
+/** A wait for the user to leave cell-edit mode was ended by Stop. Nothing reached Excel. */
+export class ExcelWaitStoppedError extends Error {
+  readonly code = "excel_wait_stopped";
+
+  constructor() {
+    super("Stopped by the user while waiting for them to finish editing a cell. Nothing was read or changed.");
+    this.name = "ExcelWaitStoppedError";
+  }
+}
+
+let consecutiveTimeouts = 0;
+let stopGeneration = 0;
+const cellEditSleepers = new Set<() => void>();
+
+/**
+ * End every wait for the user to leave cell-edit mode (Stop pressed). Those
+ * batches never reached Excel; without this they would run once the user
+ * finishes editing, after the turn was stopped.
+ */
+export function cancelCellEditWaits(): void {
+  stopGeneration += 1;
+  for (const wake of cellEditSleepers) wake();
+}
+
+function sleepUnlessCancelled(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    const wake = () => {
+      clearTimeout(timer);
+      cellEditSleepers.delete(wake);
+      resolve();
+    };
+    const timer = setTimeout(wake, ms);
+    cellEditSleepers.add(wake);
+  });
+}
+
 export interface ExcelRunOptions {
   /**
    * Retry while the user is editing a cell (default true). Auto-context reads
@@ -82,16 +148,37 @@ export interface ExcelRunOptions {
   waitForCellEdit?: boolean;
   /** Override for tests. */
   cellEditWaitMs?: number;
+  /** Per-batch timeout (default {@link EXCEL_RUN_TIMEOUT_MS}). */
+  timeoutMs?: number;
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      consecutiveTimeouts += 1;
+      reject(new ExcelTimeoutError(timeoutMs, consecutiveTimeouts));
+    }, timeoutMs);
+  });
+  // The abandoned batch may settle later; keep its rejection from going unhandled.
+  promise.catch(() => {});
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
 /**
  * Run an Office.js Excel operation.
  *
- * While the user is typing in a cell, Excel rejects every batch with
- * `InvalidOperationInCellEditMode`. The batch is retried with backoff until
- * the user leaves edit mode, but only when no earlier `context.sync()` of this
- * run had succeeded: re-running a half-applied mutation could apply it twice.
- * When the wait runs out, it throws {@link ExcelCellEditModeError}.
+ * - **Timeout:** each `Excel.run` is raced against a timeout. When Excel does
+ *   not answer, it throws {@link ExcelTimeoutError} ("outcome unknown"), which
+ *   ends the tool call and so releases the workbook lock. The batch itself
+ *   cannot be cancelled and may still complete.
+ * - **Cell-edit mode:** while the user is typing in a cell, Excel rejects every
+ *   batch with `InvalidOperationInCellEditMode`. The batch is retried with
+ *   backoff until the user leaves edit mode, but only when no earlier
+ *   `context.sync()` of this run had succeeded: re-running a half-applied
+ *   mutation could apply it twice. When the wait runs out, it throws
+ *   {@link ExcelCellEditModeError}; when Stop ends the wait,
+ *   {@link ExcelWaitStoppedError}.
  */
 export async function excelRun<T>(
   fn: (context: Excel.RequestContext) => Promise<T>,
@@ -99,7 +186,9 @@ export async function excelRun<T>(
 ): Promise<T> {
   const waitForCellEdit = options.waitForCellEdit ?? true;
   const waitMs = options.cellEditWaitMs ?? CELL_EDIT_WAIT_MS;
+  const timeoutMs = options.timeoutMs ?? EXCEL_RUN_TIMEOUT_MS;
   const startedAt = Date.now();
+  const generation = stopGeneration;
   let delay = CELL_EDIT_RETRY_FIRST_DELAY_MS;
   let waiting = false;
 
@@ -107,19 +196,22 @@ export async function excelRun<T>(
     for (;;) {
       let committedBatches = 0;
       try {
-        return await Excel.run(async (context) => {
+        const result = await withTimeout(Excel.run(async (context) => {
           const sync = context.sync.bind(context);
           context.sync = async <V>(passThroughValue?: V): Promise<V> => {
-            const result = await sync(passThroughValue);
+            const value = await sync(passThroughValue);
             committedBatches += 1;
-            return result;
+            return value;
           };
           return fn(context);
-        });
+        }), timeoutMs);
+        consecutiveTimeouts = 0;
+        return result;
       } catch (error) {
         const inCellEditMode = typeof error === "object" && error !== null
           && "code" in error && error.code === CELL_EDIT_MODE_ERROR_CODE;
         if (!inCellEditMode) throw error;
+        consecutiveTimeouts = 0; // Excel answered.
         const waitedMs = Date.now() - startedAt;
         if (!waitForCellEdit || committedBatches > 0 || waitedMs + delay > waitMs) {
           throw new ExcelCellEditModeError(waitedMs, committedBatches > 0);
@@ -128,7 +220,8 @@ export async function excelRun<T>(
           waiting = true;
           setWaiting(1);
         }
-        await new Promise((resolve) => setTimeout(resolve, delay));
+        await sleepUnlessCancelled(delay);
+        if (stopGeneration !== generation) throw new ExcelWaitStoppedError();
         delay = Math.min(CELL_EDIT_RETRY_MAX_DELAY_MS, Math.round(delay * 1.6));
       }
     }

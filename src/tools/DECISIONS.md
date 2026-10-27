@@ -394,3 +394,11 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 - **Behavior:** `excelRun` retries with backoff (250 ms → 2 s) for up to 60 s and shows "Waiting for you to finish editing a cell" in the working indicator. A run is retried only if none of its `context.sync()` calls had succeeded, so a half-applied mutation is never re-run.
 - **Timeout:** throws `ExcelCellEditModeError`, whose message tells the agent what happened, whether anything reached Excel, and to ask the user to press Enter, Tab or Esc.
 - **Opt-out:** background and auto-context reads pass `waitForCellEdit: false` (they must not block a model request or show the status while Pi is idle).
+- **Stop:** pressing Stop ends any cell-edit wait (`cancelCellEditWaits()`, `ExcelWaitStoppedError`: nothing reached Excel), so a stopped batch never runs once the user leaves the cell. Known limit: the cancel is taskpane-wide, so a wait in another tab ends too.
+
+## Excel timeouts and Stop (`excelRun`, workbook coordinator)
+- **Problem:** a hung or overloaded Excel on the web (e.g. 150 parallel heavy formula writes) never answers `Excel.run`; the tool call, the workbook lock and every later call hung, and Stop could not end the turn.
+- **Timeout:** each `Excel.run` races a 60 s timeout (`EXCEL_RUN_TIMEOUT_MS`). On timeout `excelRun` throws `ExcelTimeoutError` (code `excel_timeout`): "outcome unknown; read the affected range back before retrying". After consecutive timeouts with no answer in between, the message tells the agent to stop calling workbook tools and ask the user to reload.
+- **Stop:** the coordinator wrapper gives a stopped tool call 500 ms (`STOP_GRACE_MS`) to finish by itself, then rejects it ("Stopped by the user … outcome unknown" for writes). Either way the call settles, so the workbook lock is released and the turn ends.
+- **Contract:** both errors carry `outcomeUnknown: true`; mutation results (#791) then report rows as "may or may not have been written".
+- **Limit:** Office.js cannot cancel a batch already sent; an abandoned batch may still apply later. Both errors say so.

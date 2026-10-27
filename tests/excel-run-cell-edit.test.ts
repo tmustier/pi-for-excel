@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { ExcelCellEditModeError, excelRun, onCellEditWait } from "../src/excel/helpers.ts";
+import {
+  cancelCellEditWaits,
+  ExcelCellEditModeError,
+  excelRun,
+  ExcelTimeoutError,
+  ExcelWaitStoppedError,
+  onCellEditWait,
+} from "../src/excel/helpers.ts";
 
 const CELL_EDIT = { code: "InvalidOperationInCellEditMode", message: "Excel is in cell-editing mode." };
 
@@ -93,6 +100,41 @@ void test("auto-context reads do not wait for edit mode", async () => {
       ExcelCellEditModeError,
     );
     assert.equal(host.runs(), 1);
+  } finally {
+    host.restore();
+  }
+});
+
+void test("a batch Excel never answers times out with an outcome-unknown error", async () => {
+  const previous: unknown = Reflect.get(globalThis, "Excel");
+  Reflect.set(globalThis, "Excel", { run: () => new Promise(() => {}) });
+  try {
+    await assert.rejects(
+      excelRun(() => Promise.resolve("never"), { timeoutMs: 50 }),
+      (error: unknown) => {
+        assert.ok(error instanceof ExcelTimeoutError);
+        assert.equal(error.code, "excel_timeout");
+        assert.equal(error.outcomeUnknown, true);
+        assert.match(error.message, /outcome is unknown/u);
+        assert.match(error.message, /Read the affected range back before retrying/u);
+        return true;
+      },
+    );
+  } finally {
+    Reflect.set(globalThis, "Excel", previous);
+  }
+});
+
+void test("Stop ends a wait for the user to leave cell-edit mode before anything reaches Excel", async () => {
+  const host = installHost(() => true);
+  try {
+    const run = excelRun(async (context) => { await context.sync(); });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    cancelCellEditWaits();
+    await assert.rejects(run, ExcelWaitStoppedError);
+    const runsAtStop = host.runs();
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    assert.equal(host.runs(), runsAtStop, "no retry after Stop");
   } finally {
     host.restore();
   }
