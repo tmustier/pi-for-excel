@@ -66,6 +66,10 @@ const mutationDetailsProperties = {
   formulaErrorCount: Type.Optional(Type.Number()),
   changes: Type.Optional(workbookCellChangeSummarySchema),
   recovery: Type.Optional(recoveryCheckpointDetailsSchema),
+  /** The user pressed Stop during the call; the text says what was written before it. */
+  stopped: Type.Optional(Type.Boolean()),
+  /** With `stopped`: cells confirmed written before Stop took effect; 0 means nothing changed. */
+  writtenCount: Type.Optional(Type.Number()),
 };
 
 export const writeCellsDetailsSchema = Type.Object({
@@ -310,6 +314,8 @@ export const pythonTransformRangeDetailsSchema = Type.Object({
   formulaErrorCount: Type.Optional(Type.Number()),
   changes: Type.Optional(workbookCellChangeSummarySchema),
   recovery: Type.Optional(recoveryCheckpointDetailsSchema),
+  /** Stop was pressed; the result says what was written before it took effect. */
+  stopped: Type.Optional(Type.Boolean()),
   ...bridgeGateProperties,
 });
 

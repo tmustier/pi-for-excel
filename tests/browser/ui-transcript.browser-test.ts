@@ -229,3 +229,53 @@ void test("tool groups keep exactly their cards across tab switches", async () =
     await opened.finish();
   }
 });
+
+/* ── Stopped writes ── */
+
+void test("a stopped write says how far it got instead of claiming success", async () => {
+  const opened = await openTaskpane(env, { viewport, clientId: "ui-transcript-stopped" });
+  const { page } = opened;
+  try {
+    // Details as write_cells / fill_formula (#791) and python_transform_range (#797) report a Stop.
+    const cases = [
+      { id: "s-1", name: "write_cells", args: { start_cell: "Stop!A1", values: [[1]] }, isError: true,
+        text: "⏹ **Stopped before writing** — nothing changed in Stop!A1:B2.",
+        details: { kind: "write_cells", blocked: false, address: "Stop!A1:B2", stopped: true, writtenCount: 0 } },
+      { id: "s-2", name: "write_cells", args: { start_cell: "Stop!A1", values: [[1]] }, isError: true,
+        text: "⏹ **Stopped after writing Stop!A1:B10** (rows 1–10 of Stop!A1:B40) — the change stands.\nThe remaining 30 row(s) were not written.",
+        details: { kind: "write_cells", blocked: false, address: "Stop!A1:B40", stopped: true, writtenCount: 20 } },
+      { id: "s-3", name: "python_transform_range", args: { range: "Stop!A1:A3", code: "x" }, isError: true,
+        text: "⏹ **Stopped before writing** — nothing changed in Stop!D1.",
+        details: { kind: "python_transform_range", blocked: false, outputAddress: "Stop!D1", stopped: true } },
+      { id: "s-4", name: "fill_formula", args: { range: "Stop!C1:C9", formula: "=A1" }, isError: false,
+        text: "⏹ **Stopped after filling Stop!C1:C9** — the change stands. It was not verified because Stop was pressed; read the range before relying on it.",
+        details: { kind: "fill_formula", blocked: false, address: "Stop!C1:C9", verification: "failed", stopped: true, writtenCount: 9 } },
+      { id: "s-5", name: "write_cells", args: { start_cell: "Stop!A1", values: [[1]] }, isError: false,
+        text: "Written to **Stop!A1:B2**",
+        details: { kind: "write_cells", blocked: false, address: "Stop!A1:B2" } },
+    ];
+    await page.evaluate((cases) => {
+      const sidebar = document.querySelector("pi-sidebar");
+      const usage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } };
+      // One response per call, so finished calls of the same tool do not group.
+      for (const [index, item] of cases.entries()) {
+        sidebar.agent.state.messages.push(
+          { role: "assistant", content: [{ type: "toolCall", id: item.id, name: item.name, arguments: item.args }], api: "openai-responses", provider: "openai", model: "fixture", usage, stopReason: "toolUse", timestamp: 2000 + index * 10 },
+          { role: "toolResult", toolCallId: item.id, toolName: item.name, content: [{ type: "text", text: item.text }], details: item.details, isError: item.isError, timestamp: 2001 + index * 10 },
+        );
+      }
+      sidebar.syncFromAgent();
+    }, cases);
+    await page.waitForTimeout(200);
+    const titles = await page.locator(".pi-tool-card__title").allInnerTexts();
+    assert.deepEqual(titles.map((title) => title.replace(/\s+/g, " ").trim()), [
+      "Stopped — nothing written",
+      "Stopped Stop!A1:B40 — 20 written",
+      "Stopped — nothing written",
+      "Stopped Stop!C1:C9 — 9 written",
+      "Edit Stop!A1:B2",
+    ]);
+  } finally {
+    await opened.finish();
+  }
+});
