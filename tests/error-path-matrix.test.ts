@@ -248,8 +248,16 @@ void test("error-path matrix: a protected sheet is named as the reason, as a too
 });
 
 void test("error-path matrix: cell-edit mode tells the agent to ask the user to leave the cell", async () => {
+  // Shape of excelRun's ExcelCellEditModeError (#792) when nothing had reached Excel. A raw
+  // InvalidOperationInCellEditMode no longer reaches tools: excelRun retries and then wraps it,
+  // and in this fake the sheet load before the insert succeeds, which excelRun reports as applied.
+  const gaveUp = Object.assign(new Error("Excel is in cell-edit mode…"), {
+    code: "excel_cell_edit_mode",
+    waitedMs: 0,
+    earlierStepReachedExcel: false,
+  });
   const result = await withFailingStructureHost(
-    new OfficeError("InvalidOperationInCellEditMode", "Excel is in cell-editing mode.", ""),
+    gaveUp,
     () => createModifyStructureTool().execute("call-edit-mode", { action: "insert_rows", sheet: "Protected", position: 3 }),
   );
   const text = result.content[0]?.type === "text" ? result.content[0].text : "";
