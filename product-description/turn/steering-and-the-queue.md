@@ -68,7 +68,7 @@ Stop, Escape when unclaimed, closing a busy tab, and a turn ending before messag
 
 | Modifier | Set before | Changed while busy |
 | --- | --- | --- |
-| Model and provider | Tab's model answers delivered text. | Model switching refused while busy. |
+| Model and provider | Tab's model answers delivered text. | Model choices apply to the next turn; they do not retarget the running turn's steers/follow-ups. |
 | Thinking level | Does not change queue order. | Current turn keeps its starting level. |
 | Execution mode | Approvals can delay delivery. | Applies at subsequent gated calls. |
 | Files in the workspace, or an overlay open | Modal owns focus. | Queue continues behind ordinary overlays. |

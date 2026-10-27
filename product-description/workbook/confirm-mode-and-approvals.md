@@ -78,7 +78,7 @@ Where the workbook has a canonical identity, destructive dialogs offer **Take a 
 | The user sends something else | Composer is blocked by modal. | After dismissal normal steer/follow-up rules apply. |
 | Tab switched, created, closed or reopened | Shortcuts do not act behind modal. | Closing busy work uses shared Stop and waits for settlement. |
 | An overlay or menu opens | Topmost modal owns focus/Escape. | Later approvals queue, not replace. |
-| Model or thinking level changes | No effect on approval. | Model change refused while busy. |
+| Model or thinking level changes | No effect on approval. | Choices apply to the next turn; they do not answer or retarget an approval. |
 | The provider fails | Permission is local. | Applied work remains. |
 | The taskpane goes away | Unapproved work never runs. | Submitted Excel work may complete. |
 | The workbook changes underneath | Locked inspection rechecks target after approval. | Approval is not isolation from user/co-author edits. |

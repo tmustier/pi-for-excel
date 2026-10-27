@@ -25,7 +25,7 @@ The accepted user message becomes conversation history immediately. A pending pr
 - **Shift+Enter** inserts a newline; **Shift+Tab** moves focus backwards, without changing thinking.
 - Stop or an unclaimed Escape requests cancellation. [Stopping](stopping.md) describes retained text and undelivered messages.
 - The busy placeholder says “Enter to steer · Alt+Enter for a follow-up” (Option on Mac), matching the Shortcuts page.
-- Changing thinking is allowed, for the next turn. Changing the model while busy is not.
+- Model and thinking choices made while busy apply to the next turn, not the running one.
 
 The existing submission path handles the accepted draft for keyboard and button sends alike. Slash commands are handled locally before ordinary message submission.
 

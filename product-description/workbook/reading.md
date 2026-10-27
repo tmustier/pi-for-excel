@@ -83,7 +83,7 @@ Hidden and very hidden sheets are listed in the overview with their state. Pi ca
 
 | Modifier | Set before | Changed while busy |
 | --- | --- | --- |
-| Model and provider | The model decides which reads to make. Models with a context window under 128k tokens get smaller result limits. | Model changes are refused while the tab is busy. |
+| Model and provider | The model decides which reads to make. Models with a context window under 128k tokens get smaller result limits. | Model choices apply to the next turn, not the running reads. |
 | Thinking level | No effect on the read itself. | No effect. |
 | Execution mode | No effect. Reads never ask, in Auto or Confirm. | No effect. |
 | Files in the workspace, or an overlay open | No effect on reads. Truncated results are saved to the Files workspace when small enough. | An overlay does not pause a read in progress. |

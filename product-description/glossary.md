@@ -102,7 +102,7 @@ The vocabulary used across these documents. When a document uses one of these wo
 
 **Idle.** A tab is idle when it is not busy: no model response is streaming, no tool is running, and no queued action is running or waiting.
 
-**Busy.** A tab is busy from the moment a turn or a queued action (such as `/compact`) starts until the tab is idle again. A busy tab shows a small dot on its tab and, when it is the active tab, the working indicator. While busy, most slash commands are refused ("Can't run /{command} while Pi is busy"), and renaming, duplicating, changing model and closing are refused or need confirmation. What Enter and the send button do depends on whether the tab is *responding*: see below.
+**Busy.** A tab is busy from the moment a turn or a queued action (such as `/compact`) starts until it is idle again. It shows a tab dot and, when active, the working indicator. Local commands and renaming remain available; model/thinking choices apply next turn. Duplicate refuses a busy source, and closing uses its confirmation/lock safeguards. Prompt commands can refuse busy work. What Enter and Send do depends on whether the tab is *responding*: see below.
 
 **Responding.** The part of busy in which a turn runs (streaming or tools). Enter steers and Alt/Option+Enter follows up. A tab can be busy without responding, such as during compaction: Enter queues a prompt. Stop is available for both turn and compaction work.
 
@@ -116,7 +116,7 @@ The vocabulary used across these documents. When a document uses one of these wo
 
 **Restore queued.** Alt/Option+Up edits the newest editable queue row, putting only its text above the existing draft. Other messages and commands stay. Edit on an individual row targets that row. With none, the toast says "No queued messages to restore".
 
-**Busy-allowed command.** A command accepted while a tab works. This includes model/settings/login, copy/export and backup/revert as well as the queue, navigation and configuration commands listed in [the command menu](commands/the-command-menu.md). A busy model picker is read-only. Refused commands keep their draft.
+**Busy-allowed command.** A command accepted while a tab works. Local built-ins and extension commands default to allowed; prompt commands default to refused unless explicitly overridden. `/compact` queues. Model choices apply next turn. Refused commands keep their draft. See [the command menu](commands/the-command-menu.md).
 
 ## Endings
 

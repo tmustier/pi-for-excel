@@ -139,7 +139,7 @@ Pi's changes are made through Excel's add-in API, not through the grid. On Excel
 
 | Modifier | Set before | Changed while busy |
 | --- | --- | --- |
-| Model and provider | No effect on what tools can do. The model decides which tools to call. Tool output is cut at a smaller size for models with a context window under 128k tokens (see [reading](../workbook/reading.md)). | Model changes are refused while the tab is busy. |
+| Model and provider | No effect on what tools can do. The model decides which tools to call. Tool output is cut at a smaller size for models with a context window under 128k tokens (see [reading](../workbook/reading.md)). | Model choices apply to the next turn, not running tools. |
 | Thinking level | No effect. | No effect. |
 | Execution mode | Auto: mutations run as called. Confirm: each mutation waits for an approval. | Applies from the next mutation; an approval dialog already open is not affected. |
 | Files in the workspace, or an overlay open | Files are not part of the workbook. An open overlay does not pause tools; approvals queue. | No effect on tools already running. |
@@ -156,7 +156,7 @@ A modifier changed while a tool runs takes effect at the next tool call, never i
 | The user sends something else | Not applicable. | A steer is delivered after the running tools finish; it never interrupts a mutation. |
 | Tab switched, created, closed or reopened | Not applicable. | Tools keep running in their tab. A tab holding the lock cannot be closed. |
 | An overlay or menu opens | Not applicable. | Tools keep running. Further approvals queue behind the current request. |
-| Model or thinking level changes | Not applicable. | Model change refused while busy; thinking level does not affect tools. |
+| Model or thinking level changes | Not applicable. | Choices apply to the next turn; they do not change running tools. |
 | The provider fails | Not applicable. | Tools already running finish; their changes stay. |
 | The taskpane goes away | Not applicable. | A mutation already sent to Excel may complete without its backup being stored. Waiting mutations are lost. The lock disappears with the taskpane. |
 | The workbook changes underneath | Auto-context reports new external edits before requests, mid-turn included. | Reads/writes see current grid state; the lock does not exclude co-authors. User restore previews later edits and asks before replacing them. Saving keeps backups. |

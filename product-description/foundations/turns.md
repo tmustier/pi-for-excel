@@ -41,13 +41,13 @@ An accepted message goes to the tab's action queue. Pre-prompt compaction holds 
 
 - Enter steers after the current response and all its tools. Alt/Option+Enter follows up when Pi would otherwise finish. Messages sent during compaction queue as new turns.
 - Each waiting message has Edit and Remove. Alt/Option+Up edits the newest editable row only.
-- Local inspection/configuration commands remain available according to [the command menu](../commands/the-command-menu.md). A busy model picker is read-only; `/compact` queues in its own tab.
+- Local inspection/configuration commands remain available according to [the command menu](../commands/the-command-menu.md). Busy model choices apply to the next turn; `/compact` queues in its own tab.
 - Scroll, change thinking for the next turn, switch tabs or open overlays without stopping work. Modals own focus and disable shortcuts behind them.
 - A retryable provider failure gets up to three retries after 2, 4 and 8 seconds, with a countdown. Stop cancels the wait.
 
 ### Finishes
 
-**Done:** final answer remains and activity ends. **Aborted:** partial text remains with "Request aborted", no error banner. **Failed:** partial text and reason remain, and that tab owns a dismissible banner below the tabs, including if it failed in the background. One context overflow can compact-and-retry; a second is final and does not promise another retry.
+**Done:** final answer remains and activity ends. **Aborted:** partial text remains with "Request aborted", no error banner. **Failed:** partial text and reason remain with inline recovery in that tab's transcript, including if it failed in the background. One context overflow can compact-and-retry; a second is final and does not promise another retry.
 
 Undelivered text becomes separate saved Not sent rows, never implicit input to a later turn. Stop cancels queued commands and names them in a toast. Completed workbook changes stay applied.
 
@@ -59,7 +59,7 @@ Stop button, unclaimed Escape and Stop and close share one cancellation path, co
 
 | Modifier | Set before | Changed while busy |
 | --- | --- | --- |
-| Model and provider | Used throughout the turn. Missing login prompts after delivery. | Picker read-only; change waits for idle. |
+| Model and provider | Used throughout the turn. Missing login prompts after delivery. | Choice applies to the next turn, not the running one. |
 | Thinking level | Used for all responses in this turn. | Next turn only. |
 | Execution mode | Auto runs changes; Confirm asks. | Applies to subsequent gates, not an already answered approval. |
 | Files in the workspace, or an overlay open | Files are tool-readable, not attachments. Modal holds focus. | Imports become available; approval can pause tools. |

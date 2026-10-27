@@ -62,7 +62,7 @@ Tools are not narrowed according to the user's wording. Changes to enabled integ
 
 | Modifier | Set before | Changed while busy |
 | --- | --- | --- |
-| Model and provider | Same context; smaller windows feel its size more. | Model changes wait for idle. |
+| Model and provider | Same context; smaller windows feel its size more. | Model choices apply to the next turn. |
 | Thinking level | No effect. | No effect. |
 | Execution mode | Standing instructions describe mode. | Subsequent gated calls use mode rules. |
 | Files in the workspace, or an overlay open | Relevant Files add a note. | Changes add a new note; overlays do not pause gathering. |

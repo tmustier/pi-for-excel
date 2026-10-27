@@ -95,7 +95,7 @@ The model receives the result text and continues the turn. If it wrote a formula
 
 | Modifier | Set before | Changed while busy |
 | --- | --- | --- |
-| Model and provider | The model decides what to change and whether to retry after a block. | Model changes are refused while the tab is busy. |
+| Model and provider | The model decides what to change and whether to retry after a block. | Model choices apply to the next turn, not the running writes. |
 | Thinking level | No effect on the mutation itself. | No effect. |
 | Execution mode | Auto runs ordinary changes; irreversible changes still ask. Confirm uses one dialog, with Allow once or Allow for the rest of this turn for reversible workbook changes (WT-05, PR #808). A refused preflight does not ask. | Applies from the next mutation; does not answer a pending dialog. |
 | Files in the workspace, or an overlay open | An open overlay does not pause a mutation; further approvals queue. | No effect. |

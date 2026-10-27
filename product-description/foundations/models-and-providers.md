@@ -23,7 +23,7 @@ stateDiagram-v2
     no_provider --> asking : send or model control (welcome choices; draft kept)
     asking --> connected : connect (credential stored; draft waits for send)
     asking --> no_provider : dismiss (nothing sent)
-    connected --> connected : pick a model (tab model changed or forked)
+    connected --> connected : pick a model (same tab, next turn if busy)
     connected --> swapped : tab's provider disconnected while tab idle (default model applied)
     swapped --> connected : status bar and swap toast
     connected --> no_provider : last provider disconnected (tab keeps its model)
@@ -77,22 +77,22 @@ The default model is what Pi chooses when it has to choose for the user: for the
 3. **Google Gemini (API)**: the newest Gemini Pro, else the newest Gemini.
 4. **Google Code Assist**, then **Google Antigravity**: the newest stable Gemini Pro, else any stable Gemini, else a preview Pro, else any Gemini (Antigravity then accepts any model).
 5. **Any other connected provider**, including GitHub Copilot and custom gateways: that provider's model with the highest version number.
-6. **No provider connected**: GPT-6.1 Sol from OpenAI (API), purely so the status bar has something to show.
+6. **No provider connected**: an internal bootstrap model only; the status bar instead offers "Connect a provider".
 
 "Newest" means the highest version number in the model's name, then the latest date suffix.
 
-Two consequences are surprising. With both OpenAI (API) and OpenAI (ChatGPT) connected, the default is the API-key model, which bills the API account rather than the subscription. And with no provider connected, the status bar names an OpenAI model the user has not connected, so the first send asks for an OpenAI API key specifically.
+With both OpenAI (API) and OpenAI (ChatGPT) connected, the default can be the API-key route, which bills that account rather than the subscription. Without any connection, the internal fallback is not presented as usable; the control opens provider choices as described below.
 
 ### Changing the model
 
-Choosing a model in "Select model" (from the status-bar model control, `/model` or `/default-models`) changes only the tab that was active when the picker opened. What happens depends on the *model-switch behavior*, set by "Fork model switch into new tab" in Settings (off by default):
+Choosing a model in "Select model" (from the status-bar model control or `/model`) changes only the tab captured when the picker opened. Merged #805 removes `/default-models` and the fork setting; old stored fork preferences are ignored.
 
-- **In place** (default). The tab's model changes at once; the conversation, title and thinking level stay. The status bar shows the new model, and the session is saved immediately, even if it has no messages yet. The next model request uses the new model.
-- **Fork** (setting on). Pi leaves the tab untouched and opens a copy in a new active tab, with the same messages and thinking level, the chosen model, and the title "{source title} ({model id})". The toast says "Opened {title} in a new tab". The setting's description says this is "For non-empty chats", but an empty tab forks too (see [Open questions](#open-questions-and-verification)).
+- **Idle:** set and save the selected model in the same conversation; title/history stay.
+- **Busy:** save the choice for the next run, with "Model: {model} (next turn)". The running turn keeps its captured model/reasoning through later tool steps. Repeated choices collapse to the last choice.
 
-Choosing the model the tab already has does nothing. Choosing a different model while the tab is busy is refused with "Wait for this tab to finish before changing models".
+Choosing the current model closes without a change toast. A separate conversation requires Duplicate tab, not a model switch.
 
-The thinking level is not adjusted when the model changes in place. If the new model does not support the tab's level, the status bar keeps showing the old level until the user changes it; Shift+Tab then starts from the new model's first level. Confirmed in Excel on the web: switching a "High" tab to a custom gateway model that does not reason left "High" in the status bar.
+Thinking is clamped to the selected model's supported levels. New tabs inherit both model and thinking from the active tab; restored sessions retain their saved choices. See [the model picker](../setup/the-model-picker.md).
 
 ### When a provider is disconnected
 
@@ -107,7 +107,7 @@ Whenever the set of connected providers changes (a login, a disconnect, a gatewa
 
 ### Thinking levels per model
 
-The levels a tab can use come from its model: "Off", "Min", "Low", "Medium", "High", "Extra high" and "Max", minus those the model does not support. A model that does not reason offers only "Off". "Extra high" and "Max" appear only on models that declare them. Shift+Tab and the thinking control are described in [thinking](../turn/thinking.md).
+The levels a tab can use come from its model: "Off", "Min", "Low", "Medium", "High", "Extra high" and "Max", minus those the model does not support. A model that does not reason offers only "Off". "Extra high" and "Max" appear only on models that declare them. The composer-only Ctrl+Alt/Option+T chord and thinking control are described in [thinking](../turn/thinking.md); Shift+Tab moves focus backwards.
 
 ### Context window per model
 
@@ -119,8 +119,8 @@ Every model declares a context window and a maximum output length, both shown in
 
 | Modifier | Set before | Changed while busy |
 | --- | --- | --- |
-| Model and provider | This document defines it. | Changing the model is refused; disconnecting the provider does not affect a busy tab until it is idle. |
-| Thinking level | Kept across an in-place model change (even when the new model does not reason), copied by a fork, reset by an automatic swap. | Can change; applies from the next model request. |
+| Model and provider | This document defines it. | Explicit choices apply next turn; automatic provider reconciliation waits for idle. |
+| Thinking level | Clamped to model support; inherited by new tabs and restored from saved sessions. | Applies to the next turn, not later requests in the running turn. |
 | Execution mode | No effect. | No effect. |
 | Files in the workspace, or an overlay open | No effect from files. The connection dialog, welcome overlay and model picker are overlays; while one is open nothing else can be clicked. | A connection dialog opened by a turn holds that turn until it is answered. |
 | Tab state (new, restored, another tab busy) | A new tab copies the active tab's model; a restored tab uses its saved model; another tab being busy does not block changing this tab's model. | Only the busy tab is protected; idle tabs are still swapped when a provider disconnects. |
@@ -132,13 +132,13 @@ Changes to providers take effect at the next boundary: a busy tab finishes its t
 
 | Event | Before sent | While busy |
 | --- | --- | --- |
-| Stop (button or Escape) | Escape closes the welcome overlay, the connection dialog or the model picker (the first Escape leaves a text field, the second closes). Nothing is stored. | Escape is claimed by the connection dialog while it is open; dismissing it fails the turn. Once the dialog is gone, Stop works as in [turns](turns.md#stop). |
+| Stop (button or Escape) | Escape closes the topmost welcome/connection/picker surface, not a separate text-field blur step. | The connection dialog claims Escape; once dismissed, Stop works as in [turns](turns.md#stop). |
 | The user sends something else | Sending with no provider opens the connection dialog. | A connection dialog blocks the composer until it closes. |
 | Tab switched, created, closed or reopened | A new tab copies the active tab's model; a reopened tab brings its saved model. | Switching away does not change the busy tab's model. |
-| An overlay or menu opens | Opening settings or the picker does not change any model by itself. | Opening the picker is allowed; choosing a different model is refused. |
-| Model or thinking level changes | Applies to the next request. | Model refused; thinking level applies from the next model request. |
+| An overlay or menu opens | Opening settings or the picker does not change any model by itself. | Picker choices apply next turn. |
+| Model or thinking level changes | Applies to the next turn. | Running turn keeps its starting model/reasoning. |
 | The provider fails | Not applicable. | The turn fails with the provider's error; the tab keeps its model. An expired OAuth login is only refreshed when the taskpane reopens. |
-| The taskpane goes away | Credentials, the model-switch setting and each saved session's model survive. A model picked in a tab survives because picking saves the session. | The model is already saved with the session; an automatic swap that was not yet saved is redone after reload. |
+| The taskpane goes away | Credentials and saved model/thinking choices survive; there is no fork setting. | A picked model is saved; an interrupted running turn does not resume. |
 | The workbook changes underneath | No effect. | No effect. |
 | Focus moves to the grid or another window | An OAuth login continues in the browser window; the taskpane waits. | No effect. |
 | The context window fills | A smaller model makes the meter jump; see [context and compaction](../turn/context-and-compaction.md). | Auto-compaction uses the tab's current model. |
@@ -157,9 +157,9 @@ Changes to providers take effect at the next boundary: a busy tab finishes its t
 
 **Offline and provider errors.** A missing credential opens the connection dialog; any other provider failure ends the turn as described in [provider errors and offline](../cross-cutting/provider-errors-and-offline.md). A request the browser blocks shows the CORS-worded banner described in [the proxy](../setup/the-proxy.md#when-the-proxy-is-missing-at-the-moment-it-is-needed); an unreachable OpenAI-compatible endpoint shows "LLM error: Connection error." instead.
 
-**Notifications.** Login toasts ("{label} connected — try "Explain this workbook"" on the welcome overlay, "{label} connected" in Settings, "{label} disconnected"), the fork toast, and the busy refusal. Automatic swaps and the connection dialog's own success are silent.
+**Notifications.** Provider/login feedback belongs to setup. Busy model choices say "Model: {model} (next turn)"; there is no fork or busy-refusal toast for choosing a model.
 
-**Settings and preferences.** "Fork model switch into new tab" on the Settings root page; providers, gateways and proxy on their own pages. There is no setting for the default model.
+**Settings and preferences.** Providers, gateways and proxy have their own pages. The fork setting and `/default-models` are removed.
 
 **Host differences.** None in the rules. Storage is separate per host, so Excel desktop and Excel on the web each need their own login.
 
@@ -172,11 +172,11 @@ Changes to providers take effect at the next boundary: a busy tab finishes its t
 | Part | Owner |
 | --- | --- |
 | First run, OAuth, API keys, the connection dialog | [welcome and login](../setup/welcome-and-login.md) |
-| "Select model", `/model`, `/default-models` | [the model picker](../setup/the-model-picker.md) |
-| Settings pages, the fork setting | [settings](../setup/settings.md) |
+| "Select model", `/model` | [the model picker](../setup/the-model-picker.md) |
+| Settings pages | [settings](../setup/settings.md) |
 | Gateways | [custom gateways](../setup/custom-gateways.md) |
 | The CORS proxy and which providers need it | [the proxy](../setup/the-proxy.md) |
-| Thinking levels, Shift+Tab | [thinking](../turn/thinking.md) |
+| Thinking levels, Ctrl+Alt/Option+T | [thinking](../turn/thinking.md) |
 | The context meter | [context and compaction](../turn/context-and-compaction.md) |
 | The status-bar controls | [the status bar](../ui/the-status-bar.md) |
 
@@ -186,10 +186,11 @@ Changes to providers take effect at the next boundary: a busy tab finishes its t
 - With no provider connected, the model control opens welcome choices rather than an empty picker.
 - Disconnecting the provider of the active idle tab changes its model when the provider list refreshes and announces the automatic swap.
 - Renaming a custom gateway changes its provider name, so tabs using it are treated as disconnected and moved to the default model (see Open questions).
-- A forked tab is a new session; the source tab keeps its model and is not saved again by the fork.
-- Duplicating a tab ("Duplicate tab") copies its model and thinking level; it is not a model switch and ignores the fork setting.
+- Duplicating a tab ("Duplicate tab") copies its model and thinking level into a separate conversation; model selection never forks.
 
 ## Open questions and verification
+
+The fork, busy-refusal and unsupported-thinking observations below are historical, superseded by #805. Model-switch timing and clamping were reconciled to current merged source; the original model experiments were not repeated. Provider-setup changes retain their owning merged wording above.
 
 - Fork opens a new tab even when the active tab is empty: the check counts the hidden system message as a message (`src/taskpane/session-runtime-manager.ts:201`, `messages.length > 0`). Confirmed in Excel on the web: with the setting on, picking "gpt-6-luna" in an empty "Chat 1" opened "Chat 1 (gpt-6-luna)" with "Opened Chat 1 (gpt-6-luna) in a new tab" (MODEL-08). Looks like a bug; the setting's own text says "For non-empty chats".
 - OAuth logins are refreshed only when the taskpane opens (`src/auth/restore.ts:106-160`). Confirmed in the standalone taskpane with a stubbed Anthropic login and token endpoint (MODEL-15): after the refreshed token expired, the next turn sent the expired token and failed with "LLM error: 401 …" without any refresh; only a reload refreshed it. Looks like a bug.

@@ -66,7 +66,7 @@ One provider context overflow can remove the failed response, compact and contin
 
 | Modifier | Set before | Changed while busy |
 | --- | --- | --- |
-| Model and provider | Window sets budget; tab's model summarizes. | Model picker read-only. |
+| Model and provider | Window sets budget; tab's model summarizes. | Model choices apply to the next turn, not the in-flight summary. |
 | Thinking level | Summary uses high reasoning. | No effect on summary. |
 | Execution mode | No workbook change or approval. | No effect. |
 | Files in the workspace, or an overlay open | Modal owns focus. | Compaction continues behind it. |

@@ -56,7 +56,7 @@ Enter (or the send button) ends without sending anything when:
 
 - **The draft is empty or whitespace and has no attachments.** Nothing happens. With attachment chips, an attachment-only message can be sent.
 - **No provider is connected.** The welcome provider choices reopen; the draft and chips remain, and no turn starts.
-- **The draft starts with `/` and names a known command.** The command runs locally (or queues, for `/compact`) and clears the composer only if accepted. A busy-refused command keeps the draft, whether chosen by click or keyboard. `/model`, `/settings`, `/login`, `/copy`, `/export`, `/backup` and `/revert` are available while busy; a busy model picker is read-only. See [the command menu](../commands/the-command-menu.md).
+- **The draft starts with `/` and names a known command.** The command runs locally (or queues, for `/compact`) and clears the composer only if accepted. A busy-refused command keeps the draft, whether chosen by click or keyboard. Local commands remain available while busy; model choices apply to the next turn. See [the command menu](../commands/the-command-menu.md).
 - **The draft starts with `/` and names no known command.** Pi reports the unknown command and keeps the text for correction; neither Enter nor Send quietly turns it into a model message.
 - **There is no active tab.** The toast says "No active session" and the composer clears. This only happens during startup or teardown.
 
