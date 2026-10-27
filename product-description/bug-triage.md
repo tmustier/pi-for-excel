@@ -1476,7 +1476,7 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Severity:** `medium`. Conversations seem lost in the new file (they are still reachable from the old one or Resume).
 - **Decision needed:** `fix`. Move tab state to the new identity on Save As, and restore the tab strip.
 - **Raised by:** integration-fixes desktop pass, 27 October 2026
-- **Status:** Confirmed in Excel for Mac on integration-fixes 8099cd6 (PERSIST-11). Fixed in #795 d32fd2b: the pane checks the workbook identity every 4 s and moves the tab layout, recently closed list and linked sessions to the new identity. Checked in Excel on the web with a simulated identity change (Save As isn't available there); not yet checked on a Mac. The Backups-with-no-tab-strip symptom did not reproduce.
+- **Status:** Confirmed in Excel for Mac on integration-fixes 8099cd6 (PERSIST-11). Fixed in #795 d32fd2b: the pane checks the workbook identity every 4 s and moves the tab layout, recently closed list and linked sessions to the new identity. Checked in Excel on the web with a simulated identity change (Save As isn't available there); not yet checked on a Mac. The Backups-with-no-tab-strip symptom did not reproduce. Verified in Excel for Mac with a real Save As and reopen on stack top 2d91e58 (PERSIST-11).
 - **Owner:** Fix in PR [#795](https://github.com/tmustier/pi-for-excel/pull/795) (open): d32fd2b
 
 ## Low
