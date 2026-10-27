@@ -19,14 +19,16 @@ async function setContextUsage(page: Page, percent: number): Promise<void> {
   await page.evaluate((pct) => {
     const sidebar = document.querySelector("pi-sidebar");
     const agent = sidebar.agent;
-    agent.state.model = { ...agent.state.model, contextWindow: 100 };
+    // A 200k window: yellow above 120k (75% of the 160k soft warning budget), red above 160k.
+    agent.state.model = { ...agent.state.model, contextWindow: 200_000 };
+    const tokens = pct * 2_000;
     agent.state.messages.push({
       role: "assistant",
       content: [{ type: "text", text: "usage fixture" }],
       api: "openai-responses",
       provider: "openai",
       model: "browser-fixture",
-      usage: { input: pct, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: pct, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+      usage: { input: tokens, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: tokens, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
       stopReason: "stop",
       timestamp: Date.now(),
     });
@@ -36,9 +38,9 @@ async function setContextUsage(page: Page, percent: number): Promise<void> {
 }
 
 for (const row of [
-  { percent: 40, warning: null, severity: null },
-  { percent: 41, warning: "Context 41% full.", severity: "yellow" },
-  { percent: 61, warning: "Context 61% full — responses may become less reliable.", severity: "red" },
+  { percent: 60, warning: null, severity: null },
+  { percent: 61, warning: "Context 61% full.", severity: "yellow" },
+  { percent: 81, warning: "Context 81% full — responses may become less reliable.", severity: "red" },
   { percent: 101, warning: "Context is full — the next message will fail.", severity: "red" },
 ] as const) {
   void test(`context usage at ${row.percent}% shows the expected visible warning`, async () => {
@@ -58,7 +60,7 @@ for (const row of [
 
 void test("context warning attributes normalize unknown severity to yellow in the visible popover", async () => {
   await withTaskpane({ width: 420, height: 720 }, async (page) => {
-    await setContextUsage(page, 41);
+    await setContextUsage(page, 61);
     await page.locator(".pi-status-ctx--trigger").evaluate((trigger) => trigger.setAttribute("data-ctx-severity", "unknown"));
     await page.locator(".pi-status-ctx--trigger").click();
     assert.match(await page.locator(".pi-status-popover__warning").getAttribute("class") ?? "", /warning--yellow/);
