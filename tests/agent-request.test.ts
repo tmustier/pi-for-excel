@@ -10,6 +10,7 @@ import {
 } from "@earendil-works/pi-ai";
 
 import { createActionQueue } from "../src/taskpane/action-queue.ts";
+import { createTabState } from "../src/taskpane/tab-state.ts";
 
 function user(text: string, timestamp: number): AgentMessage {
   return { role: "user", content: text, timestamp };
@@ -37,8 +38,8 @@ function createQueue(agent: Agent, runCompact: () => Promise<void>) {
     agent,
     autoCompactEnabled: true,
     runCompact,
-    tab: { setActivity: () => {}, setBusy: () => {}, returnToDraft: () => {} },
-    queueDisplay: { setActionQueue: () => {}, drainQueuedMessages: () => [] },
+    tab: createTabState(),
+    queueDisplay: { setActionQueue: () => {}, drainQueuedMessages: () => [], removeQueuedMessage: () => {}, setRowHandlers: () => {}, lastEditableRow: () => null },
   });
 }
 

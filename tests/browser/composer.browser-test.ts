@@ -53,18 +53,15 @@ async function holdCompaction(page: Page): Promise<void> {
   });
 }
 
-async function queueRows(page: Page): Promise<string[]> {
-  return page.locator("#pi-queue-display .pi-queue__item").allInnerTexts();
-}
-
-void test("Alt+Up recalls queued prompts into the composer in order and leaves /compact running", async () => {
+void test("Alt+Up edits only the last queued prompt, a row's × removes it, and /compact keeps running", async () => {
   await withTaskpane(async (page) => {
     await holdCompaction(page);
+    const first = "first queued action, long enough that the strip used to cut it off after forty-seven characters";
 
     await enterInput(page, "/compact");
     await page.locator("pi-working-indicator").getByText("Compacting context…").waitFor({ state: "visible" });
-    await enterInput(page, "first queued action");
-    await page.locator("#pi-queue-display").getByText("first queued action", { exact: true }).waitFor({ state: "visible" });
+    await enterInput(page, first);
+    await page.locator("#pi-queue-display").getByText(first, { exact: true }).waitFor({ state: "attached" });
     await enterInput(page, "second queued action");
     await page.locator("#pi-queue-display").getByText("second queued action", { exact: true }).waitFor({ state: "visible" });
 
@@ -74,19 +71,24 @@ void test("Alt+Up recalls queued prompts into the composer in order and leaves /
     assert.deepEqual(
       {
         composer: await input.inputValue(),
-        queuedItems: await page.locator("#pi-queue-display .pi-queue__item").count(),
+        rowTexts: await page.locator("#pi-queue-display .pi-queue__text").allTextContents(),
         stillCompacting: await page.locator("pi-working-indicator").getByText("Compacting context…").isVisible(),
       },
       {
-        composer: "first queued action\n\nsecond queued action",
-        queuedItems: 0,
+        composer: "second queued action",
+        rowTexts: [first],
         stillCompacting: true,
       },
     );
+
+    await page.locator("#pi-queue-display .pi-queue__remove").click();
+    await page.locator("#pi-queue-display").waitFor({ state: "detached" });
+    assert.equal(await input.inputValue(), "second queued action");
+    assert.equal(await page.evaluate(() => document.activeElement?.tagName), "TEXTAREA");
   });
 });
 
-void test("Stop and Escape both stop compaction and return the prompt held behind it", async () => {
+void test("Stop and Escape both stop compaction and keep the prompt held behind it as an unsent row", async () => {
   for (const trigger of ["button", "escape"] as const) {
     await withTaskpane(async (page) => {
       await holdCompaction(page);
@@ -104,10 +106,19 @@ void test("Stop and Escape both stop compaction and return the prompt held behin
       await page.locator(".pi-input-btn--send").waitFor({ state: "visible" });
 
       assert.deepEqual(
-        { composer: await input.inputValue(), rows: await queueRows(page), working: await page.locator("pi-working-indicator").innerText() },
-        { composer: "held prompt", rows: [], working: "" },
+        {
+          composer: await input.inputValue(),
+          labels: await page.locator("#pi-queue-display .pi-queue__label").allTextContents(),
+          rowTexts: await page.locator("#pi-queue-display .pi-queue__text").allTextContents(),
+          working: await page.locator("pi-working-indicator").innerText(),
+        },
+        { composer: "", labels: ["Not sent"], rowTexts: ["held prompt"], working: "" },
         trigger,
       );
+
+      await page.locator("#pi-queue-display .pi-queue__edit").click();
+      await page.locator("#pi-queue-display").waitFor({ state: "detached" });
+      assert.equal(await input.inputValue(), "held prompt", trigger);
     });
   }
 });

@@ -63,7 +63,7 @@ function createRuntimeHarness(runtimeId: string): RuntimeHarness {
   const actionQueue: ActionQueue = {
     enqueuePrompt: () => {},
     enqueueCommand: () => {},
-    takeBackQueued: () => ({ texts: [], cancelledCommands: [] }),
+    editLast: () => false,
     stop: () => ({ texts: [], cancelledCommands: [] }),
     isBusy: () => false,
     shutdown: () => {},
@@ -73,6 +73,9 @@ function createRuntimeHarness(runtimeId: string): RuntimeHarness {
     add: () => {},
     clear: () => {},
     drainQueuedMessages: () => [],
+    removeQueuedMessage: () => {},
+    setRowHandlers: () => {},
+    lastEditableRow: () => null,
     setActionQueue: () => {},
     attach: () => {},
     detach: () => {},

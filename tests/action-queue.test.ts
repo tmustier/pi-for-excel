@@ -5,6 +5,7 @@ import { Agent, type AgentMessage } from "@earendil-works/pi-agent-core";
 import type { Api, ImageContent, Model, Usage } from "@earendil-works/pi-ai";
 
 import { createActionQueue } from "../src/taskpane/action-queue.ts";
+import { createTabState, type TabActivity } from "../src/taskpane/tab-state.ts";
 import { failOnUnexpectedStream } from "./fail-on-unexpected-stream.ts";
 
 class TestAgent extends Agent {
@@ -142,18 +143,19 @@ void test("queued prompt survives compact replaceMessages and runs after compact
       executionOrder.push("compact:end");
       compactFinished.resolve();
     },
-    tab: {
-      setActivity: (activity) => {
+    tab: Object.assign(createTabState(), {
+      setActivity: (activity: TabActivity | null) => {
         activities.push(activity);
       },
-      setBusy: () => {},
-      returnToDraft: () => {},
-    },
+    }),
     queueDisplay: {
       setActionQueue: (items) => {
         queueSnapshots.push(items.map((item) => ({ ...item })));
       },
       drainQueuedMessages: () => [],
+      removeQueuedMessage: () => {},
+      setRowHandlers: () => {},
+      lastEditableRow: () => null,
     },
   });
 
@@ -216,8 +218,8 @@ void test("ordered queue runs compact, prompt, then compact", async () => {
       await compactRuns[current]?.gate.promise;
       executionOrder.push(`compact:${current + 1}:end`);
     },
-    tab: { setActivity: () => {}, setBusy: () => {}, returnToDraft: () => {} },
-    queueDisplay: { setActionQueue: () => {}, drainQueuedMessages: () => [] },
+    tab: createTabState(),
+    queueDisplay: { setActionQueue: () => {}, drainQueuedMessages: () => [], removeQueuedMessage: () => {}, setRowHandlers: () => {}, lastEditableRow: () => null },
   });
 
   agent.onPrompt = (text) => {
@@ -289,8 +291,8 @@ void test("prompt ending in context overflow triggers compact-and-retry once", a
       agent.state.messages = [createUserMessage("compaction summary", 4), toolResult];
       return Promise.resolve();
     },
-    tab: { setActivity: () => {}, setBusy: () => {}, returnToDraft: () => {} },
-    queueDisplay: { setActionQueue: () => {}, drainQueuedMessages: () => [] },
+    tab: createTabState(),
+    queueDisplay: { setActionQueue: () => {}, drainQueuedMessages: () => [], removeQueuedMessage: () => {}, setRowHandlers: () => {}, lastEditableRow: () => null },
   });
 
   queue.enqueuePrompt("analyze this data");
@@ -314,8 +316,8 @@ void test("shutdown uninstalls the mid-turn prepareNextTurn hook", () => {
     agent,
     autoCompactEnabled: true,
     runCompact: async () => {},
-    tab: { setActivity: () => {}, setBusy: () => {}, returnToDraft: () => {} },
-    queueDisplay: { setActionQueue: () => {}, drainQueuedMessages: () => [] },
+    tab: createTabState(),
+    queueDisplay: { setActionQueue: () => {}, drainQueuedMessages: () => [], removeQueuedMessage: () => {}, setRowHandlers: () => {}, lastEditableRow: () => null },
   });
 
   assert.equal(typeof agent.prepareNextTurn, "function");

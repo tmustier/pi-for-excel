@@ -1,12 +1,14 @@
 /**
- * Keeps each tab's composer draft with its session in settings, so a reload,
- * a crash or reopening a closed tab brings the unsent text back.
+ * Keeps each tab's composer draft and its "Not sent" rows with its session in
+ * settings, so a reload, a crash or reopening a closed tab brings the unsent
+ * text back.
  */
 
 import type { SettingsAccess } from "../storage/local/settings-store.js";
 import type { TabState } from "./tab-state.js";
 
 const DRAFT_KEY_PREFIX = "composer.draft.";
+const HELD_KEY_PREFIX = "composer.held.";
 const SAVE_DELAY_MS = 400;
 
 interface SessionIdentity {
@@ -21,9 +23,11 @@ export interface DraftStore {
 
 export function createDraftStore(settings: SettingsAccess): DraftStore {
 
-  const write = (sessionId: string, draft: string): Promise<void> => {
-    const key = `${DRAFT_KEY_PREFIX}${sessionId}`;
-    return draft.trim().length > 0 ? settings.set(key, draft) : settings.delete(key);
+  const write = async (sessionId: string, draft: string, held: readonly string[]): Promise<void> => {
+    const draftKey = `${DRAFT_KEY_PREFIX}${sessionId}`;
+    const heldKey = `${HELD_KEY_PREFIX}${sessionId}`;
+    await (draft.trim().length > 0 ? settings.set(draftKey, draft) : settings.delete(draftKey));
+    await (held.length > 0 ? settings.set(heldKey, [...held]) : settings.delete(heldKey));
   };
 
   return {
@@ -35,7 +39,7 @@ export function createDraftStore(settings: SettingsAccess): DraftStore {
       const flush = () => {
         if (timer !== undefined) clearTimeout(timer);
         timer = undefined;
-        void write(sessionId, tab.draft).catch((error: Error) => {
+        void write(sessionId, tab.draft, tab.held).catch((error: Error) => {
           console.warn("[pi] Composer draft could not be saved:", error.message);
         });
       };
@@ -47,12 +51,18 @@ export function createDraftStore(settings: SettingsAccess): DraftStore {
             tab.setDraft(saved);
           }
         }, () => undefined);
+        void settings.get(`${HELD_KEY_PREFIX}${id}`).then((saved) => {
+          if (disposed || id !== sessionId || !Array.isArray(saved) || tab.held.length > 0) return;
+          tab.setHeld(saved.filter((text): text is string => typeof text === "string"));
+        }, () => undefined);
       };
 
       let observedDraft = tab.draft;
+      let observedHeld = tab.held;
       const unsubscribeTab = tab.subscribe(() => {
-        if (tab.draft === observedDraft) return;
+        if (tab.draft === observedDraft && tab.held === observedHeld) return;
         observedDraft = tab.draft;
+        observedHeld = tab.held;
         if (timer !== undefined) clearTimeout(timer);
         timer = setTimeout(flush, SAVE_DELAY_MS);
       });
@@ -64,8 +74,8 @@ export function createDraftStore(settings: SettingsAccess): DraftStore {
         if (next === sessionId) return;
         const previous = sessionId;
         sessionId = next;
-        if (tab.draft.trim().length > 0) {
-          void write(previous, "").catch(() => undefined);
+        if (tab.draft.trim().length > 0 || tab.held.length > 0) {
+          void write(previous, "", []).catch(() => undefined);
           flush();
         } else {
           load(next);

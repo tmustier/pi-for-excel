@@ -18,6 +18,14 @@ export interface TabState {
   readonly busy: boolean;
   readonly error: string | null;
   readonly activity: TabActivity | null;
+  /**
+   * Messages a stopped or failed turn never delivered, oldest first. Each
+   * stays its own row above the composer and is never sent automatically.
+   */
+  readonly held: readonly string[];
+  setHeld(texts: readonly string[]): void;
+  /** Keeps `texts` as separate held rows after the existing ones. */
+  hold(texts: readonly string[]): void;
   setDraft(text: string): void;
   setError(message: string | null): void;
   setActivity(activity: TabActivity | null): void;
@@ -38,6 +46,7 @@ export function createTabState(): TabState {
   let error: string | null = null;
   let activity: TabActivity | null = null;
   let busy = false;
+  let held: readonly string[] = [];
   const listeners = new Set<() => void>();
 
   const emit = () => {
@@ -55,6 +64,17 @@ export function createTabState(): TabState {
     get error() { return error; },
     get activity() { return activity; },
     get busy() { return busy; },
+    get held() { return held; },
+    setHeld(texts) {
+      if (texts.length === held.length && texts.every((text, i) => text === held[i])) return;
+      held = [...texts];
+      emit();
+    },
+    hold(texts) {
+      if (texts.length === 0) return;
+      held = [...held, ...texts];
+      emit();
+    },
     setDraft,
     setError(message) {
       if (message === error) return;
