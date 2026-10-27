@@ -226,17 +226,19 @@ export function createWorkbookCoordinator(): WorkbookCoordinator {
         },
       };
 
-      if (state.running || state.queue.length > 0) {
+      // Queue before announcing it: listeners read getSnapshot() to show
+      // which tab is waiting.
+      const mustWait = state.running || state.queue.length > 0;
+      state.queue.push(operation);
+      if (mustWait) {
         emit({
           type: "queued",
           operationType: "write",
           context: ctx,
-          queuedWrites: state.queue.length + 1,
+          queuedWrites: state.queue.length,
           revision: state.revision,
         });
       }
-
-      state.queue.push(operation);
       processQueue(ctx.workbookId);
     });
   }
