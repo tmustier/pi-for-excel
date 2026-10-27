@@ -15,30 +15,33 @@ Vercel is a good default host because it’s free for OSS/hobby usage and handle
 
 This repo includes `vercel.json` with:
 - `outputDirectory: dist`
-- an `ignoreCommand` deploy policy (`node scripts/vercel-ignore-command.mjs`) for `main`, PR previews, and manual deploys
+- `git.deploymentEnabled` limiting automatic deployments to `main`, plus an `ignoreCommand` fallback (`node scripts/vercel-ignore-command.mjs`)
 - `/proxy` rewrite to `/proxy.sh` (bootstrap script for `npx pi-for-excel-proxy`)
 - a header rule to disable caching for `/src/taskpane.html` to make updates propagate reliably
 - an enforced `Content-Security-Policy` on `/src/taskpane.html` (Office.js + provider/auth endpoints + localhost proxy + Pyodide CDN host).
 
 ### Automatic deployment policy
 
-`git.deploymentEnabled` prevents deployment creation for these branches:
-- `product-description`: specification-only PR; changes live in
-  `product-description/` and `agent-description/`, neither shipped in the app
-- `durable-plan` and `integration-fixes`: non-PR planning/integration branches
+`git.deploymentEnabled` creates automatic deployments only for `main`:
+`"**": false` turns off every branch (`**` also matches names with slashes),
+and `"main": true` turns `main` back on, because Vercel deploys when any
+matching rule is `true`. PR branches, every layer of a PR stack and
+dependency PRs get no preview deployment; CI's `build-check-test` covers the
+build. Previews were turned off because each one counts toward Vercel's
+daily deployment quota, and busy days of PR pushes used it up and blocked
+production deploys of `main`. Previews also could not use the local proxy,
+whose origin allowlist only includes the production URL.
 
-All other branches remain enabled, including `main`, every layer of a PR
-stack, and dependency PRs. Remove an exception if that branch starts carrying
-app changes that need a hosted review. The configuration must be present in
-the pushed branch's commit; merging it into `main` does not rewrite existing
-branches. Their owners must incorporate it before the next pushes benefit.
+The configuration must be present in the pushed branch's commit. Branches
+cut before this change keep their old behaviour until they merge or rebase
+onto `main`.
 
 This is intentionally not a blanket Markdown/docs exclusion: `README.md` and
 non-archive `docs/**/*.md` are bundled by `src/files/builtin-docs.ts`.
 
 ### `ignoreCommand` fallback
 
-For branches still enabled above, the existing ignored-build policy is:
+If a deployment is created anyway (for example a manual deploy), the ignored-build policy is:
 - **build** for `main`
 - **build** for pull requests (`VERCEL_GIT_PULL_REQUEST_ID` is set)
 - **build** for manual deploys (`VERCEL_GIT_COMMIT_REF` is unset)

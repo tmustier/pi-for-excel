@@ -28,15 +28,13 @@ test("vercel.json wires ignoreCommand to the deploy policy script", async () => 
   assert.equal(config.ignoreCommand, EXPECTED_IGNORE_COMMAND);
 });
 
-test("only specification and non-PR integration branches disable automatic deployments", async () => {
+test("only main creates automatic deployments", async () => {
   const config = await readVercelConfig();
-  // Unspecified branches stay enabled in Vercel: main, human PRs (including
-  // intermediate stack layers), and dependency PRs retain their previews.
+  // "**" matches branch names with slashes; Vercel deploys when any matching rule is true.
   assert.deepEqual(config.git, {
     deploymentEnabled: {
-      "product-description": false,
-      "durable-plan": false,
-      "integration-fixes": false,
+      "**": false,
+      main: true,
     },
   });
 });
