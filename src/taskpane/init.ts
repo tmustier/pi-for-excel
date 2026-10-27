@@ -177,6 +177,8 @@ import {
   saveRecentlyClosed,
   type RecentlyClosedItem,
 } from "./recently-closed.js";
+import { createWorkbookIdentityFollower } from "./workbook-identity-follower.js";
+import { moveSessionToWorkbook } from "../workbook/session-association.js";
 import { setupSessionPersistence } from "./sessions.js";
 import {
   loadWorkbookTabLayout,
@@ -2158,6 +2160,32 @@ export async function initTaskpane(opts: {
   const startupTabLayout = snapshotRuntimeTabLayout();
   tabLayoutPersistence.enable(tabLayoutReadSucceeded ? undefined : startupTabLayout);
   tabLayoutPersistence.persist(startupTabLayout);
+
+  // Tabs follow the workbook when Save As gives it a new identity. Only in
+  // Office, where one taskpane serves one document: there a new identity is
+  // this document under a new name. A pane that follows the active workbook
+  // (WPS) sees another workbook instead.
+  if (spreadsheetHost.kind === "office") {
+    const identityFollower = createWorkbookIdentityFollower({
+      resolveIdentity: async () => (await resolvePersistentWorkbookKey("read"))?.workbookId ?? null,
+      onIdentityChanged: async ({ from, to }) => {
+        for (const tab of runtimeManager.snapshotTabs()) {
+          await moveSessionToWorkbook(settings, tab.sessionId, from, to);
+        }
+        maybePersistTabLayout();
+        if (recentlyClosedWritable) await saveRecentlyClosed(settings, to, recentlyClosed.snapshot());
+        await tabLayoutPersistence.flush();
+      },
+    });
+    const followIdentity = () => {
+      void identityFollower.checkOnce().catch((error) => {
+        console.warn("[pi] Failed to move tabs to the workbook's new identity:", error);
+      });
+    };
+    followIdentity();
+    const identityPoll = setInterval(followIdentity, 4_000);
+    window.addEventListener("beforeunload", () => clearInterval(identityPoll), { once: true });
+  }
 
   // ── Disclosure bar (onboarding banner) ──
   // Must run after runtime bootstrap so the sidebar has rendered .pi-messages.

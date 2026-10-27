@@ -43,6 +43,21 @@ export async function linkSessionToWorkbook(
   await settings.set(key, workbookId);
 }
 
+/**
+ * Move a session's link from one workbook identity to another, when the same
+ * document got a new identity (Save As). A session linked elsewhere is left alone.
+ */
+export async function moveSessionToWorkbook(
+  settings: SettingsWriter,
+  sessionId: string,
+  from: string | null,
+  to: string,
+): Promise<void> {
+  const existing = await getSessionWorkbookId(settings, sessionId);
+  if (existing !== null && existing !== from) return;
+  await settings.set(sessionWorkbookKey(sessionId), to);
+}
+
 export async function setLatestSessionForWorkbook(
   settings: SettingsWriter,
   workbookId: string,
