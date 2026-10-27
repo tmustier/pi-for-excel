@@ -348,7 +348,8 @@ export class FakeRange {
   }
 
   get formulas(): (string | number | boolean)[][] {
-    return this.grid((cell) => cell?.formula ?? "");
+    // Like Excel: a constant reads back as itself in `formulas`, a blank cell as "".
+    return this.grid((cell) => cell?.formula || (cell?.value ?? ""));
   }
 
   set formulas(formulas: unknown[][]) {
