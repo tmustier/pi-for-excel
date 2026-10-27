@@ -43,6 +43,7 @@ import {
 } from "./python-run.js";
 import { probeBridgeHealth } from "./bridge-service-utils.js";
 import { getErrorMessage } from "../utils/errors.js";
+import { parseJson, type JsonValue } from "../utils/json.js";
 import { CHECKPOINT_SKIPPED_REASON } from "./recovery-metadata.js";
 import type { PythonTransformRangeDetails } from "./tool-details.js";
 import { describeExcelFailure, parseExcelError } from "./mutation/excel-failure.js";
@@ -180,22 +181,8 @@ const mutationFinalizeDependencies: MutationFinalizeDependencies = {
   appendAuditEntry: (entry) => getWorkbookChangeAuditLog().append(entry),
 };
 
-function cleanOptionalString(value: string | undefined): string | undefined {
-  if (typeof value !== "string") return undefined;
-
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : undefined;
-}
-
-function toOptionalInteger(value: unknown): number | undefined {
-  if (typeof value !== "number") return undefined;
-  if (!Number.isFinite(value)) return undefined;
-  if (!Number.isInteger(value)) return undefined;
-  return value;
-}
-
 function parseParams(raw: unknown): Params {
-  if (!isToolsPythonTransformRangePayloadShape(raw) || Array.isArray(raw)) {
+  if (!isToolsPythonTransformRangePayloadShape(raw)) {
     throw new Error("Invalid python_transform_range params: expected an object.");
   }
 
@@ -220,18 +207,15 @@ function parseParams(raw: unknown): Params {
     params.allow_overwrite = raw.allow_overwrite;
   }
 
-  const timeoutMs = toOptionalInteger(raw.timeout_ms);
-  if (timeoutMs !== undefined) {
+  const timeoutMs = raw.timeout_ms;
+  if (typeof timeoutMs === "number" && Number.isInteger(timeoutMs)) {
+    if (timeoutMs < MIN_TIMEOUT_MS || timeoutMs > MAX_TIMEOUT_MS) {
+      throw new Error(`timeout_ms must be between ${MIN_TIMEOUT_MS} and ${MAX_TIMEOUT_MS}`);
+    }
     params.timeout_ms = timeoutMs;
   }
 
   return params;
-}
-
-function validateParams(params: Params): void {
-  if (params.timeout_ms !== undefined && (params.timeout_ms < MIN_TIMEOUT_MS || params.timeout_ms > MAX_TIMEOUT_MS)) {
-    throw new Error(`timeout_ms must be between ${MIN_TIMEOUT_MS} and ${MAX_TIMEOUT_MS}`);
-  }
 }
 
 function stripSheetPrefix(address: string): string {
@@ -242,16 +226,6 @@ function topLeftCellFromAddress(address: string): string {
   const local = stripSheetPrefix(address).trim();
   const first = local.split(":")[0];
   return first ?? local;
-}
-
-function toSheetQualifiedCell(sheetName: string, cell: string): string {
-  if (cell.includes("!")) return cell;
-  return qualifiedAddress(sheetName, cell);
-}
-
-function defaultOutputStartCell(input: InputRangeSnapshot): string {
-  const startCell = topLeftCellFromAddress(input.address);
-  return qualifiedAddress(input.sheetName, startCell);
 }
 
 async function defaultReadInputRange(rangeRef: string): Promise<InputRangeSnapshot> {
@@ -405,7 +379,8 @@ async function defaultWriteOutputValues(request: WriteOutputRequest): Promise<Wr
           afterValues: verification.values,
           afterFormulas: verification.formulas,
         })
-        : sampledChanges(inspection.sheetName, block, verification, countSentCells(padded));
+        : sampledChanges(inspection.sheetName, block, verification, padded.reduce((total, row) =>
+          total + row.filter((value) => value !== "" && value !== null && value !== undefined).length, 0));
 
       const lostFormulas = before && verification.formulas
         ? replacedFormulas(block, before.formulas, verification.formulas)
@@ -460,11 +435,6 @@ function padRows(values: CellScalar[][]): { padded: CellScalar[][]; cols: number
     return Array.from({ length: cols }, (_, col) => col < row.length ? row[col] : "");
   });
   return { padded, cols, shortRows };
-}
-
-function countSentCells(padded: CellScalar[][]): number {
-  return padded.reduce((total, row) =>
-    total + row.filter((value) => value !== "" && value !== null && value !== undefined).length, 0);
 }
 
 function utf8Bytes(text: string): number {
@@ -567,49 +537,14 @@ function formatPaddingWarning(shortRows: number[], totalRows: number, cols: numb
     `(result rows ${listed}${more}). They were padded with blank cells, which clears those cells. Return a rectangular grid to avoid this.`;
 }
 
-function isPythonTransformPayloadShape(value: unknown): value is Record<string, unknown> {
-  return isToolsPythonTransformRangePayloadShape(value) && !Array.isArray(value);
-}
-
-function normalizeTo2dValues(value: unknown): unknown[][] | null {
+function normalizeTo2dValues(value: JsonValue): JsonValue[][] {
   if (Array.isArray(value)) {
-    if (value.length === 0) return [];
-
-    const rows: unknown[][] = [];
-    let allRows = true;
-
-    for (const item of value) {
-      if (!Array.isArray(item)) {
-        allRows = false;
-        break;
-      }
-
-      const row: unknown[] = [];
-      for (const cell of item) {
-        row.push(cell);
-      }
-      rows.push(row);
-    }
-
-    if (allRows) {
-      return rows;
-    }
-
-    return [value];
+    return value.every((item): item is JsonValue[] => Array.isArray(item)) ? value : [value];
   }
 
-  if (isPythonTransformPayloadShape(value)) {
-    const valuesCandidate = value.values;
-    if (valuesCandidate !== undefined) {
-      return normalizeTo2dValues(valuesCandidate);
-    }
-
-    const rowsCandidate = value.rows;
-    if (rowsCandidate !== undefined) {
-      return normalizeTo2dValues(rowsCandidate);
-    }
-
-    return [[value]];
+  if (value !== null && typeof value === "object") {
+    if (value.values !== undefined) return normalizeTo2dValues(value.values);
+    if (value.rows !== undefined) return normalizeTo2dValues(value.rows);
   }
 
   return [[value]];
@@ -623,19 +558,14 @@ function parseBridgeResultJson(resultJson: string | undefined): CellScalar[][] {
     );
   }
 
-  let parsed: unknown;
+  let parsed: JsonValue;
   try {
-    parsed = JSON.parse(trimmed);
+    parsed = parseJson(trimmed);
   } catch {
     throw new Error("Python bridge returned invalid result_json payload.");
   }
 
-  const normalized = normalizeTo2dValues(parsed);
-  if (!normalized) {
-    throw new Error("Could not normalize Python result to a 2D array.");
-  }
-
-  return toCellGrid(normalized);
+  return toCellGrid(normalizeTo2dValues(parsed));
 }
 
 function formatBlockedMessage(
@@ -801,15 +731,14 @@ export function createPythonTransformRangeTool(
       let stoppedTarget: string | undefined;
       try {
         const params = parseParams(rawParams);
-        validateParams(params);
 
         const input = await readInputRange(params.range);
         const sourceAddress = qualifiedAddress(input.sheetName, input.address);
 
-        const requestedOutputStartCell = cleanOptionalString(params.output_start_cell);
-        const outputStartCell = requestedOutputStartCell !== undefined
-          ? toSheetQualifiedCell(input.sheetName, requestedOutputStartCell)
-          : defaultOutputStartCell(input);
+        const requestedOutputStartCell = params.output_start_cell?.trim() || topLeftCellFromAddress(input.address);
+        const outputStartCell = requestedOutputStartCell.includes("!")
+          ? requestedOutputStartCell
+          : qualifiedAddress(input.sheetName, requestedOutputStartCell);
         stoppedTarget = outputStartCell;
 
         const bridgeConfig = await getBridgeConfig();
@@ -1073,4 +1002,3 @@ export function createPythonTransformRangeTool(
     },
   };
 }
-

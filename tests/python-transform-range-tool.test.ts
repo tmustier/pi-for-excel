@@ -11,9 +11,6 @@ import type {
 } from "../src/tools/tool-details.ts";
 import {
   PythonBridgeUnreachableError,
-  type PythonBridgeConfig,
-  type PythonBridgeRequest,
-  type PythonBridgeResponse,
 } from "../src/tools/python-run.ts";
 import { FakeExcelHost, withFakeExcel } from "./fixtures/excel-write-host.ts";
 
@@ -103,31 +100,20 @@ void test("python_transform_range falls back to Pyodide when default bridge URL 
 });
 
 void test("python_transform_range reads source, runs python, and writes transformed output", async () => {
-  let capturedBridgeRequest: PythonBridgeRequest | null = null;
-  let capturedBridgeConfig: PythonBridgeConfig | null = null;
-  let capturedWriteRequest: {
-    outputStartCell: string;
-    values: unknown[][];
-    allowOverwrite: boolean;
-  } | null = null;
-
+  const host = new FakeExcelHost();
+  const sheet = host.sheet("Sheet1");
+  sheet.set("A1", 1);
+  sheet.set("B1", 2);
+  sheet.set("A2", 3);
+  sheet.set("B2", 4);
   const tool = createPythonTransformRangeTool({
-    readInputRange: () => Promise.resolve({
-      sheetName: "Sheet1",
-      address: "A1:B2",
-      values: [[1, 2], [3, 4]],
-    }),
     getBridgeConfig: () => Promise.resolve({
       url: "https://localhost:3340",
       token: "secret-token",
     }),
-    callBridge: (
-      request: PythonBridgeRequest,
-      config: PythonBridgeConfig,
-    ): Promise<PythonBridgeResponse> => {
-      capturedBridgeRequest = request;
-      capturedBridgeConfig = config;
-
+    callBridge: (request, config) => {
+      assert.equal(request.input_json, '{"range":"Sheet1!A1:B2","values":[[1,2],[3,4]]}');
+      assert.equal(config.token, "secret-token");
       return Promise.resolve({
         ok: true,
         action: "run_python",
@@ -135,40 +121,13 @@ void test("python_transform_range reads source, runs python, and writes transfor
         result_json: "{\"values\":[[10,20],[30,40]]}",
       });
     },
-    writeOutputValues: (request) => {
-      capturedWriteRequest = request;
-      return Promise.resolve({
-        blocked: false,
-        outputAddress: "Sheet1!D1:E2",
-        rowsWritten: 2,
-        colsWritten: 2,
-        formulaErrorCount: 0,
-      });
-    },
   });
 
-  const result = await tool.execute("tc-success", {
+  const result = await withFakeExcel(host, () => tool.execute("tc-success", {
     range: "Sheet1!A1:B2",
     code: "result = {'values': [[10,20],[30,40]]}",
     output_start_cell: "D1",
-  });
-
-  assert.ok(capturedBridgeRequest);
-  assert.equal(capturedBridgeRequest?.code, "result = {'values': [[10,20],[30,40]]}");
-
-  assert.equal(
-    capturedBridgeRequest?.input_json,
-    "{\"range\":\"Sheet1!A1:B2\",\"values\":[[1,2],[3,4]]}",
-  );
-
-  assert.ok(capturedBridgeConfig);
-  assert.equal(capturedBridgeConfig?.url, "https://localhost:3340");
-  assert.equal(capturedBridgeConfig?.token, "secret-token");
-
-  assert.ok(capturedWriteRequest);
-  assert.equal(capturedWriteRequest?.outputStartCell, "Sheet1!D1");
-  assert.deepEqual(capturedWriteRequest?.values, [[10, 20], [30, 40]]);
-  assert.equal(capturedWriteRequest?.allowOverwrite, false);
+  }));
 
   const text = firstText(result);
   assert.match(text, /Transformed/u);
@@ -176,15 +135,14 @@ void test("python_transform_range reads source, runs python, and writes transfor
   assert.equal(result.details?.blocked, false);
   assert.equal(result.details?.rowsWritten, 2);
   assert.equal(result.details?.colsWritten, 2);
+  assert.deepEqual(["D1", "E1", "D2", "E2"].map((address) => sheet.value(address)), [10, 20, 30, 40]);
 });
 
 void test("python_transform_range surfaces overwrite blocking from destination write", async () => {
+  const host = new FakeExcelHost();
+  host.sheet("Sheet1").set("A1", 1);
+  host.sheet("Sheet1").set("A2", 2);
   const tool = createPythonTransformRangeTool({
-    readInputRange: () => Promise.resolve({
-      sheetName: "Sheet1",
-      address: "A1:A2",
-      values: [[1], [2]],
-    }),
     getBridgeConfig: () => Promise.resolve({
       url: "https://localhost:3340",
     }),
@@ -193,17 +151,12 @@ void test("python_transform_range surfaces overwrite blocking from destination w
       action: "run_python",
       result_json: "[[100],[200]]",
     }),
-    writeOutputValues: () => Promise.resolve({
-      blocked: true,
-      outputAddress: "Sheet1!A1:A2",
-      existingCount: 2,
-    }),
   });
 
-  const result = await tool.execute("tc-blocked", {
+  const result = await withFakeExcel(host, () => tool.execute("tc-blocked", {
     range: "Sheet1!A1:A2",
     code: "result = [[100],[200]]",
-  });
+  }));
 
   const text = firstText(result);
   assert.match(text, /Transform blocked/u);
@@ -211,6 +164,7 @@ void test("python_transform_range surfaces overwrite blocking from destination w
   assert.equal(result.details?.blocked, true);
   assert.equal(result.details?.existingCount, 2);
   assert.equal(result.details?.outputAddress, "Sheet1!A1:A2");
+  assert.deepEqual(["A1", "A2"].map((address) => host.sheet("Sheet1").value(address)), [1, 2]);
 });
 
 void test("python_transform_range requires result_json from python execution", async () => {
