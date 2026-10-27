@@ -458,10 +458,15 @@ void test("Confirm mode does not ask about a write the tool would refuse anyway"
       executed += 1;
       return Promise.resolve({ content: [{ type: "text", text: "written" }], details: { echo: "written" } });
     }),
-    checkBeforeApproval: (_id: string, params: { occupied?: boolean }) => Promise.resolve(
-      params.occupied ? { content: [{ type: "text" as const, text: "⛔ Write blocked" }], details: { echo: "blocked" } } : null,
+    checkBeforeApproval: (_id: string, params: { occupied?: boolean; allow?: boolean }) => Promise.resolve(
+      params.occupied
+        ? params.allow
+          ? { overwrites: { count: 2, sample: [{ address: "Sheet1!A1", content: "=SUM(B1:B3)" }] } }
+          : { refused: { content: [{ type: "text" as const, text: "⛔ Write blocked" }], details: { echo: "blocked" } } }
+        : null,
     ),
   };
+  const asked: unknown[] = [];
   const wrapped = wrapSingleTool({
     tool: refusing,
     coordinator,
@@ -470,8 +475,9 @@ void test("Confirm mode does not ask about a write the tool would refuse anyway"
     invalidatedWorkbookIds: [],
     executionPolicy: {
       getExecutionMode: () => Promise.resolve("safe"),
-      requestToolApproval: () => {
+      requestToolApproval: (request) => {
         approvals += 1;
+        asked.push(request.overwrites);
         return Promise.resolve(true);
       },
     },
@@ -486,4 +492,8 @@ void test("Confirm mode does not ask about a write the tool would refuse anyway"
   await wrapped.execute("tc-ok", { occupied: false });
   assert.equal(approvals, 1);
   assert.equal(executed, 1);
+
+  // An allowed overwrite asks, and the approval names what it replaces.
+  await wrapped.execute("tc-overwrite", { occupied: true, allow: true });
+  assert.deepEqual(asked, [undefined, { count: 2, sample: [{ address: "Sheet1!A1", content: "=SUM(B1:B3)" }] }]);
 });

@@ -5,7 +5,7 @@
  * can revert Pi's changes without pre-execution approval prompts.
  */
 
-import { excelRun, getRange } from "../excel/helpers.js";
+import { colToLetter, excelRun, getRange, parseCell, parseRangeRef, qualifiedAddress } from "../excel/helpers.js";
 import { getWorkbookContext, type WorkbookContext } from "./context.js";
 import type { DocumentInstanceIdentity } from "../host/document-instance.js";
 import {
@@ -94,6 +94,8 @@ export interface WorkbookRecoverySnapshot {
   cellCount: number;
   beforeValues: unknown[][];
   beforeFormulas: unknown[][];
+  /** Range backups: the formulas/values Pi's change left (absent on older backups). */
+  afterFormulas?: unknown[][];
   snapshotKind?: WorkbookRecoverySnapshotKind;
   formatRangeState?: RecoveryFormatRangeState;
   modifyStructureState?: RecoveryModifyStructureState;
@@ -112,6 +114,8 @@ export interface AppendWorkbookRecoverySnapshotArgs {
   changedCount?: number;
   beforeValues: unknown[][];
   beforeFormulas: unknown[][];
+  /** What the change left in the range, so a later restore can spot edits made since. */
+  afterFormulas?: unknown[][];
   restoredFromSnapshotId?: string;
 }
 
@@ -203,6 +207,33 @@ interface WorkbookRecoveryLogDependencies {
     address: string,
     state: RecoveryChartState,
   ) => Promise<RecoveryChartApplyResult>;
+  /** Current formulas (values for constants) of a range. */
+  readRangeFormulas: (address: string) => Promise<unknown[][]>;
+}
+
+/** What restoring a backup would do, for a warning before it overwrites anything. */
+export interface WorkbookRecoveryRestorePreview {
+  id: string;
+  /** When the backup was taken (ms since epoch). */
+  at: number;
+  address: string;
+  /**
+   * Cells changed since Pi's change, which the restore would overwrite.
+   * `null` when none changed, or when the backup cannot tell (non-range
+   * backups, and range backups saved before this was recorded).
+   */
+  laterEdits: { count: number; sample: Array<{ address: string; content: string }> } | null;
+}
+
+const LATER_EDITS_SAMPLE_SIZE = 3;
+
+async function defaultReadRangeFormulas(address: string): Promise<unknown[][]> {
+  return excelRun(async (context) => {
+    const { range } = getRange(context, address);
+    range.load("formulas");
+    await context.sync();
+    return cloneGrid(range.formulas);
+  });
 }
 
 function defaultNow(): number {
@@ -394,6 +425,7 @@ export class WorkbookRecoveryLog {
         dependencies.applyCommentThreadSnapshot ?? defaultApplyCommentThreadSnapshot,
       applyChartSnapshot:
         dependencies.applyChartSnapshot ?? defaultApplyChartSnapshot,
+      readRangeFormulas: dependencies.readRangeFormulas ?? defaultReadRangeFormulas,
     };
     this.scope = createRecoveryScopeResolver({
       getWorkbookContext: this.dependencies.getWorkbookContext,
@@ -503,6 +535,7 @@ export class WorkbookRecoveryLog {
       cellCount: stats.cellCount,
       beforeValues: values,
       beforeFormulas: formulas,
+      ...(args.afterFormulas ? { afterFormulas: cloneGrid(args.afterFormulas) } : {}),
       snapshotKind: "range_values",
       workbookId: scope.workbookId,
       workbookLabel: scope.workbookLabel,
@@ -839,6 +872,55 @@ export class WorkbookRecoveryLog {
     }
 
     return inverse.error === null ? result : { ...result, inverseSnapshotError: inverse.error };
+  }
+
+  /**
+   * Reads, without changing anything, what a restore of `snapshotId` would
+   * overwrite: cells edited since Pi's change. Backups now last until the
+   * "Keep at most" limit removes them, often days, so the user may have
+   * worked in the range since.
+   */
+  async previewRestore(snapshotId: string): Promise<WorkbookRecoveryRestorePreview> {
+    const snapshot = (await this.readSnapshots()).find((item) => item.id === snapshotId);
+    if (!snapshot) {
+      throw new Error("Snapshot not found.");
+    }
+    // Same refusals as restore, so a preview never reads another workbook.
+    const scope = await this.scope.resolveForRead();
+    if (!scope) {
+      throw new Error("Current workbook identity is unavailable; cannot safely restore this snapshot.");
+    }
+    if (!matchesWorkbook(snapshot, scope.workbookId)) {
+      throw new Error("Snapshot belongs to a different workbook.");
+    }
+
+    const preview: WorkbookRecoveryRestorePreview = {
+      id: snapshot.id,
+      at: snapshot.at,
+      address: snapshot.address,
+      laterEdits: null,
+    };
+    const after = snapshot.afterFormulas;
+    if ((snapshot.snapshotKind ?? "range_values") !== "range_values" || !after) return preview;
+
+    const current = await this.dependencies.readRangeFormulas(snapshot.address);
+    const { sheet, address } = parseRangeRef(snapshot.address);
+    const start = parseCell(address.split(":")[0] ?? address);
+    const sample: Array<{ address: string; content: string }> = [];
+    let count = 0;
+    after.forEach((row, r) => {
+      row.forEach((expected, c) => {
+        const now = current[r]?.[c];
+        if (JSON.stringify(now ?? "") === JSON.stringify(expected ?? "")) return;
+        const content = typeof now === "string" || typeof now === "number" || typeof now === "boolean" ? String(now) : "";
+        count += 1;
+        if (sample.length >= LATER_EDITS_SAMPLE_SIZE) return;
+        const cell = `${colToLetter(start.col + c)}${start.row + r}`;
+        sample.push({ address: sheet ? qualifiedAddress(sheet, cell) : cell, content: content === "" ? "(empty)" : content });
+      });
+    });
+    if (count > 0) preview.laterEdits = { count, sample };
+    return preview;
   }
 
   async restoreLatestForCurrentWorkbook(): Promise<RestoreWorkbookRecoverySnapshotResult> {

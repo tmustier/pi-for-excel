@@ -87,3 +87,38 @@ void test("a backup that cannot be saved is reported, not silently dropped", asy
 
   await assert.rejects(appendWrite(log, "Sheet1!A1"), /Backup could not be saved: Quota exceeded/);
 });
+
+void test("restore preview finds cells edited since Pi's change", async () => {
+  const store = createInMemorySettingsStore();
+  let current: unknown[][] = [[1, "=B2*2"], [3, 4]];
+  const log = new WorkbookRecoveryLog({
+    getSettingsStore: () => Promise.resolve(store),
+    getWorkbookContext: workbook("url_sha256:book"),
+    now: () => 1_700_000_000_000,
+    createId: () => "snap",
+    applySnapshot: () => Promise.resolve({ values: [[]], formulas: [[]] }),
+    readRangeFormulas: () => Promise.resolve(current),
+  });
+  await log.append({
+    toolName: "write_cells",
+    toolCallId: "call",
+    address: "Sheet1!B2:C3",
+    beforeValues: [["", ""], ["", ""]],
+    beforeFormulas: [["", ""], ["", ""]],
+    afterFormulas: [[1, "=B2*2"], [3, 4]],
+  });
+
+  assert.equal((await log.previewRestore("snap")).laterEdits, null);
+
+  // The user later changed C2 and cleared B3.
+  current = [[1, "=B2*3"], ["", 4]];
+  const preview = await log.previewRestore("snap");
+  assert.equal(preview.at, 1_700_000_000_000);
+  assert.deepEqual(preview.laterEdits, {
+    count: 2,
+    sample: [
+      { address: "Sheet1!C2", content: "=B2*3" },
+      { address: "Sheet1!B3", content: "(empty)" },
+    ],
+  });
+});

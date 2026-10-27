@@ -735,3 +735,18 @@
   max-height: 220px;
   overflow: auto;
 }
+
+.pi-approval__stop {
+  margin-inline-end: auto;
+}
+
+.pi-approval-card:focus {
+  outline: none;
+}
+
+.pi-approval__overwrites {
+  margin: 0;
+  font-size: 12px;
+  color: var(--foreground);
+  overflow-wrap: anywhere;
+}

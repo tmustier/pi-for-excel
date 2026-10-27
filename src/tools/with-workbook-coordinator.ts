@@ -57,6 +57,8 @@ export interface ToolApprovalRequest {
   params: unknown;
   /** Aborts when the turn is stopped; the request should then be withdrawn. */
   signal?: AbortSignal;
+  /** Existing content the change replaces, when the tool could tell. */
+  overwrites?: OverwrittenCells;
 }
 
 /**
@@ -69,8 +71,24 @@ export interface ApprovalPrecheck<TParameters extends TSchema, TDetails> {
   checkBeforeApproval?: (
     toolCallId: string,
     params: Static<TParameters>,
-  ) => Promise<AgentToolResult<TDetails> | null>;
+  ) => Promise<ApprovalPrecheckResult<TDetails>>;
 }
+
+/** Non-empty cells a change would replace, so the approval can name them. */
+export interface OverwrittenCells {
+  count: number;
+  /** A few of them, in reading order: address and current value or formula. */
+  sample: Array<{ address: string; content: string }>;
+}
+
+/**
+ * `refused`: the call ends with this result and nothing is asked.
+ * `overwrites`: the call goes to approval, which names these cells.
+ */
+export type ApprovalPrecheckResult<TDetails> =
+  | { refused: AgentToolResult<TDetails> }
+  | { overwrites: OverwrittenCells }
+  | null;
 
 export interface WorkbookExecutionPolicy {
   /** Default: yolo */
@@ -194,6 +212,7 @@ async function requireApproval(args: {
   toolName: string;
   params: unknown;
   signal: AbortSignal | undefined;
+  overwrites: OverwrittenCells | undefined;
 }): Promise<void> {
   const { requirement, executionMode } = args;
   const requestToolApproval = args.policy.requestToolApproval ?? defaultRequestToolApproval;
@@ -203,6 +222,7 @@ async function requireApproval(args: {
     toolName: args.toolName,
     params: args.params,
     ...(args.signal ? { signal: args.signal } : {}),
+    ...(args.overwrites ? { overwrites: args.overwrites } : {}),
   });
 
   throwIfAborted(args.signal);
@@ -251,13 +271,13 @@ function wrapTool<TParameters extends TSchema, TDetails>(
       const needed = await getNeededApproval({ policy: executionPolicy, toolName: tool.name, params });
       if (needed) {
         const { checkBeforeApproval } = tool;
-        if (checkBeforeApproval) {
-          const refused = await coordinator.runRead(
+        const checked = checkBeforeApproval
+          ? await coordinator.runRead(
             makeContext({ workbookId: coordinatorWorkbookId, sessionId, toolName: tool.name }),
             () => checkBeforeApproval(toolCallId, params),
-          );
-          if (refused) return refused;
-        }
+          )
+          : null;
+        if (checked && "refused" in checked) return checked.refused;
 
         await requireApproval({
           policy: executionPolicy,
@@ -265,6 +285,7 @@ function wrapTool<TParameters extends TSchema, TDetails>(
           toolName: tool.name,
           params,
           signal,
+          overwrites: checked?.overwrites,
         });
       }
 

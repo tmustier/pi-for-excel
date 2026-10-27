@@ -143,8 +143,10 @@ import {
 import {
   getWorkbookRecoveryLog,
   WorkbookRecoveryLog,
+  type WorkbookRecoveryRestorePreview,
   type WorkbookRecoverySnapshot,
 } from "../workbook/recovery-log.js";
+import { formatRelativeDate } from "../commands/builtins/overlay-relative-date.js";
 import {
   getWorkbookChangeAuditLog,
   WorkbookChangeAuditLog,
@@ -595,17 +597,51 @@ export async function initTaskpane(opts: {
     return result;
   };
 
-  const showRestoreResult = (restored: { address: string; inverseSnapshotError?: string }): void => {
+  const formatBackupAge = (at: number): string => formatRelativeDate(new Date(at).toISOString());
+
+  const showRestoreResult = (
+    restored: { address: string; inverseSnapshotError?: string },
+    backupAt: number,
+  ): void => {
     const address = restored.address;
     if (restored.inverseSnapshotError) {
       showToast(t("init.revertedWithoutRollback", { address }), { duration: 8000, variant: "error" });
       return;
     }
-    showToast(t("init.revertedAddress", { address }));
+    showToast(t("init.revertedAddress", { address, age: formatBackupAge(backupAt) }));
+  };
+
+  /**
+   * Backups last until the "Keep at most" limit removes them, often days, so
+   * the user may have edited the range since Pi's change. Asks before a
+   * restore overwrites those edits; says nothing when there are none.
+   */
+  const confirmRestoreOverLaterEdits = (preview: WorkbookRecoveryRestorePreview): Promise<boolean> => {
+    const edits = preview.laterEdits;
+    if (!edits) return Promise.resolve(true);
+    return requestConfirmationDialog({
+      title: t("init.confirm.restoreOverEditsTitle"),
+      message: t("init.confirm.restoreOverEditsMessage", {
+        age: formatBackupAge(preview.at),
+        address: preview.address,
+        count: edits.count,
+        sample: edits.sample.map((cell) => `${cell.address} = ${cell.content}`).join("; ")
+          + (edits.count > edits.sample.length ? "; …" : ""),
+      }),
+      confirmLabel: t("init.confirm.restoreAnyway"),
+      cancelLabel: t("init.confirm.keepEdits"),
+      confirmButtonTone: "danger",
+      restoreFocusOnClose: true,
+    });
   };
 
   const restoreCheckpointById = async (snapshotId: string): Promise<void> => {
-    showRestoreResult(await runUserWorkbookOperation("workbook_history", () => workbookRecoveryLog.restore(snapshotId)));
+    const preview = await workbookRecoveryLog.previewRestore(snapshotId);
+    if (!await confirmRestoreOverLaterEdits(preview)) return;
+    showRestoreResult(
+      await runUserWorkbookOperation("workbook_history", () => workbookRecoveryLog.restore(snapshotId)),
+      preview.at,
+    );
   };
 
   const toRecoveryCheckpointSummary = (
@@ -848,6 +884,7 @@ export async function initTaskpane(opts: {
     confirmLabel?: string;
     signal?: AbortSignal;
     source?: string;
+    onStop?: () => void;
   }): Promise<boolean> => {
     return requestApproval({
       title: args.title,
@@ -855,6 +892,7 @@ export async function initTaskpane(opts: {
       confirmLabel: args.confirmLabel ?? t("init.confirm.allowOnce"),
       ...(args.signal ? { signal: args.signal } : {}),
       ...(args.source ? { source: args.source } : {}),
+      ...(args.onStop ? { onStop: args.onStop } : {}),
     });
   };
 
@@ -868,6 +906,13 @@ export async function initTaskpane(opts: {
     let runtimeAgent: Agent | null = null;
 
     /** Names this tab in its approvals when another tab is on screen. */
+    /** "Stop Pi" in an approval dialog: the same as the tab's Stop button. */
+    const stopRuntimeTurn = (): void => {
+      if (!runtimeAgent) return;
+      abortedAgents.add(runtimeAgent);
+      runtimeAgent.abort();
+    };
+
     const approvalSource = (): { source?: string } => {
       if (getActiveRuntime()?.runtimeId === runtimeId) return {};
       const runtime = runtimeManager.getRuntime(runtimeId);
@@ -926,6 +971,14 @@ export async function initTaskpane(opts: {
           requestToolApproval: (request) => {
             const deletesBackups = request.reason === "always";
             const details = humanizeToolInput(request.toolName, request.params);
+            const overwrites = request.overwrites
+              ? t("approval.overwrites", {
+                count: request.overwrites.count,
+                sample: request.overwrites.sample
+                  .map((cell) => `${cell.address} = ${cell.content.length > 40 ? `${cell.content.slice(0, 40)}…` : cell.content}`)
+                  .join("; ") + (request.overwrites.count > request.overwrites.sample.length ? "; …" : ""),
+              })
+              : null;
             return requestApproval({
               title: deletesBackups ? t("approval.title.deleteBackups") : t("approval.title.workbookChange"),
               headline: describePendingToolCall(request.toolName, request.params) ?? request.toolName,
@@ -934,6 +987,8 @@ export async function initTaskpane(opts: {
               confirmLabel: deletesBackups ? t("approval.allowDelete") : t("init.confirm.allowOnce"),
               confirmTone: deletesBackups ? "danger" : "primary",
               ...(request.signal ? { signal: request.signal } : {}),
+              ...(overwrites ? { overwrites } : {}),
+              onStop: stopRuntimeTurn,
               ...approvalSource(),
             });
           },
@@ -953,6 +1008,7 @@ export async function initTaskpane(opts: {
             message: buildOfficeJsExecuteApprovalMessage(request),
             confirmLabel: t("init.confirm.allowOnce"),
             ...(request.signal ? { signal: request.signal } : {}),
+            onStop: stopRuntimeTurn,
             ...approvalSource(),
           });
         },
@@ -966,6 +1022,7 @@ export async function initTaskpane(opts: {
             ),
             confirmLabel: t("init.confirm.allowBridge"),
             ...(request.signal ? { signal: request.signal } : {}),
+            onStop: stopRuntimeTurn,
             ...approvalSource(),
           });
         },
@@ -1371,15 +1428,19 @@ export async function initTaskpane(opts: {
   const revertLatestCheckpoint = async (): Promise<void> => {
     // "Latest" is decided under the lock: while Pi is busy, the write in
     // flight adds its backup first, and /revert undoes that one.
-    const restored = await runUserWorkbookOperation("workbook_history", async () => {
+    const preview = await runUserWorkbookOperation("workbook_history", async () => {
       const latest = (await workbookRecoveryLog.listForCurrentWorkbook(1))[0];
-      return latest ? workbookRecoveryLog.restore(latest.id) : null;
+      return latest ? workbookRecoveryLog.previewRestore(latest.id) : null;
     });
-    if (!restored) {
+    if (!preview) {
       showToast(t("init.noBackupsYet"));
       return;
     }
-    showRestoreResult(restored);
+    if (!await confirmRestoreOverLaterEdits(preview)) return;
+    showRestoreResult(
+      await runUserWorkbookOperation("workbook_history", () => workbookRecoveryLog.restore(preview.id)),
+      preview.at,
+    );
   };
 
   const createManualFullBackup = async (): Promise<{

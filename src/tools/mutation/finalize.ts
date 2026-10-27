@@ -70,6 +70,8 @@ export async function finalizeMutationRecoveryStep<TDetails extends MutationResu
   }
 
   recovery.result.details.recovery = recoveryCheckpointCreated(checkpoint.id);
+  // The model needs the id to restore this exact change later.
+  recovery.appendResultNote(recovery.result, `Backup saved: \`${checkpoint.id}\`.`);
 
   return {
     checkpointCreated: true,
