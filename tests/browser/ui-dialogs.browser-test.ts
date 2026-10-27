@@ -29,6 +29,32 @@ async function openFileDetail(page: Page, name: string): Promise<void> {
   await page.locator(".pi-files-detail-actions").waitFor({ state: "visible" });
 }
 
+void test("export counts chat messages without discarding hidden debugging records", async () => {
+  await withTaskpane(async (page) => {
+    await page.evaluate(() => {
+      const messages = document.querySelector("pi-sidebar").agent.state.messages;
+      messages.splice(0, messages.length,
+        { role: "autoContext", text: "Hidden workbook context", timestamp: 1 },
+        { role: "user", content: "Visible request", timestamp: 2 },
+        { role: "autoContext", text: "Updated workbook context", timestamp: 3 },
+      );
+    });
+    const downloaded = page.waitForEvent("download");
+    await enterCommand(page, "/export download");
+    const stream = await (await downloaded).createReadStream();
+    let json = "";
+    for await (const chunk of stream) json += String(chunk);
+    assert.partialDeepStrictEqual(JSON.parse(json), {
+      messageCount: 1,
+      raw: [
+        { role: "autoContext", text: "Hidden workbook context" },
+        { role: "user", content: "Visible request" },
+        { role: "autoContext", text: "Updated workbook context" },
+      ],
+    });
+  });
+});
+
 void test("Stop Pi in a local-file approval aborts the turn without creating the file", async () => {
   await withTaskpane(async (page) => {
     await page.evaluate(async () => {

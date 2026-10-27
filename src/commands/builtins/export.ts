@@ -497,7 +497,7 @@ export function createExportCommands(getActiveAgent: ActiveAgentProvider): Slash
             }
             : null,
           thinkingLevel: agent.state.thinkingLevel,
-          messageCount: msgs.length,
+          messageCount: countChatMessages(msgs),
           transcript,
           // Also include raw messages for full fidelity debugging
           raw: msgs,
