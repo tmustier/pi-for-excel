@@ -11,6 +11,7 @@ import { getDefaultPermissionsForTrust } from "../src/extensions/permissions.ts"
 import { registerBuiltins, type BuiltinsContext } from "../src/commands/builtins/index.ts";
 import { executeSlashCommand, type SlashCommandExecutionResult } from "../src/commands/slash-command-execution.ts";
 import { TOOLS_COMMAND_NAME } from "../src/integrations/naming.ts";
+import { isBusyAllowedCommand } from "../src/commands/busy-command-policy.ts";
 import { commandRegistry, type SlashCommand } from "../src/commands/types.ts";
 import { installFakeDom } from "./fixtures/fake-dom.ts";
 import { ConnectionManager } from "../src/connections/manager.ts";
@@ -547,4 +548,10 @@ void test("extension registry migrates legacy v1 entries to v2 permissions", asy
   const restartedEntries = await loadStoredExtensions(settings);
   assert.equal(restartedEntries[0]?.id, "ext.legacy.inline");
   assert.equal(restartedEntries[0]?.trust, "inline-code");
+});
+
+void test("read-only transcript commands run while Pi is busy", () => {
+  for (const name of ["copy", "export", "history", "revert", "backup"]) {
+    assert.equal(isBusyAllowedCommand({ name, source: "builtin" }), true, name);
+  }
 });

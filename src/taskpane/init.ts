@@ -922,7 +922,7 @@ export async function initTaskpane(opts: {
           },
         },
         {
-          getExecutionMode: () => Promise.resolve(getExecutionMode()),
+          getExecutionMode: () => executionModeController.readMode(),
           requestToolApproval: (request) => {
             const deletesBackups = request.reason === "always";
             const details = humanizeToolInput(request.toolName, request.params);
@@ -943,7 +943,7 @@ export async function initTaskpane(opts: {
       // Gates wrap the coordinated tools, so their approvals (direct JS,
       // Python bridge) are asked before the call waits for the workbook lock.
       const gatedTools = await applyExperimentalToolGates(coordinatedTools, {
-        getExecutionMode: () => Promise.resolve(getExecutionMode()),
+        getExecutionMode: () => executionModeController.readMode(),
         requestOfficeJsExecuteApproval: (request) => {
           const apiName = request.apiName ?? "Office.js";
           return requestRuntimeToolApproval({
@@ -1449,6 +1449,15 @@ export async function initTaskpane(opts: {
       if (!proceed) return false;
 
       runtime.actionQueue.stop();
+    }
+
+    // A write that already started (it may have taken the lock while the
+    // dialog was open) cannot be cancelled inside Excel. Keep the tab until
+    // its run has settled, so the change lands with its backup and is saved
+    // in the session instead of happening after the tab is gone.
+    if (runtime.agent.state.isStreaming || runtime.lockState !== "idle") {
+      showToast(t("init.waitingForChangeBeforeClose"));
+      await runtime.agent.waitForIdle();
     }
 
     await runtime.persistence.saveSession({ force: true });

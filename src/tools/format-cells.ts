@@ -13,6 +13,8 @@ import { getRange, parseRangeRef, qualifiedAddress } from "../excel/helpers.js";
 import { getWorkbookChangeAuditLog } from "../audit/workbook-change-audit.js";
 import { getWorkbookRecoveryLog, MAX_RECOVERY_CELLS } from "../workbook/recovery-log.js";
 import { captureFormatCellsState, type RecoveryFormatSelection } from "../workbook/recovery-states.js";
+
+type FormatCellsCapturedState = NonNullable<Awaited<ReturnType<typeof captureFormatCellsState>>["state"]>;
 import { getErrorMessage } from "../utils/errors.js";
 import { resolveStyles } from "../conventions/index.js";
 import {
@@ -473,6 +475,9 @@ export function createFormatCellsTool(): AgentTool<typeof schema, FormatCellsDet
       toolCallId: string,
       params: Params,
     ): Promise<AgentToolResult<FormatCellsDetails>> => {
+      // Captured before formatting starts; kept outside `try` so a call that
+      // fails partway can still store it (see the catch below).
+      let capturedState: FormatCellsCapturedState | undefined;
       try {
         // ── Load stored conventions ──────────────────────────────────
         const storage = getAppStorage();
@@ -540,7 +545,9 @@ export function createFormatCellsTool(): AgentTool<typeof schema, FormatCellsDet
           }
         }
 
-        const result = await runMutation((context) =>
+        if (checkpointCapture.supported && checkpointCapture.state) capturedState = checkpointCapture.state;
+
+        const result = await excelRun((context) =>
           applyResolvedFormatting(context, params, normalizedBorders, styleResult));
 
         const fullAddr = result.isMultiRange
@@ -605,6 +612,25 @@ export function createFormatCellsTool(): AgentTool<typeof schema, FormatCellsDet
         const failure = await describeExcelFailure(parseExcelError(e), { range: params.range });
         const message = failure.reason;
 
+        // Excel applies a batch op by op, so a failure partway can leave some
+        // formatting changed. Store the state captured before the call so the
+        // user can still revert whatever was applied.
+        let backupNote = "";
+        if (capturedState) {
+          try {
+            const snapshot = await getWorkbookRecoveryLog().appendFormatCells({
+              toolName: "format_cells",
+              toolCallId,
+              address: params.range,
+              changedCount: 0,
+              formatRangeState: capturedState,
+            });
+            if (snapshot) backupNote = "\n\nSome formatting may have been applied before the error; a backup of the previous formatting was saved, so it can be reverted.";
+          } catch (backupError) {
+            backupNote = `\n\n⚠️ Some formatting may have been applied before the error, and no backup could be saved: ${getErrorMessage(backupError)}`;
+          }
+        }
+
         await finalizeMutationOperation(mutationFinalizeDependencies, {
           auditEntry: {
             toolName: "format_cells",
@@ -618,7 +644,7 @@ export function createFormatCellsTool(): AgentTool<typeof schema, FormatCellsDet
         });
 
         return {
-          content: [{ type: "text", text: `Error formatting ${params.range}${unchangedClause(failure, "no formatting was applied")}. ${message}` }],
+          content: [{ type: "text", text: `Error formatting: ${message}${backupNote}` }],
           details: { kind: "format_cells", address: params.range },
           isError: true,
         };

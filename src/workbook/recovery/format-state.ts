@@ -399,7 +399,9 @@ function applyFormatRangeStateToArea(range: Excel.Range, state: RecoveryFormatAr
   }
 
   if (state.fillColor !== undefined) {
-    range.format.fill.color = state.fillColor;
+    // Excel on the web reads "no fill" as "" but rejects "" as a color.
+    if (state.fillColor === "") range.format.fill.clear();
+    else range.format.fill.color = state.fillColor;
   }
 
   if (state.fontColor !== undefined) {

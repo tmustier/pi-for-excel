@@ -19,6 +19,9 @@ const BUSY_ALLOWED_COMMANDS = new Set<string>([
   "revert",
   "backup",
   "reopen",
+  // Read-only: they copy or download what is already in the transcript.
+  "copy",
+  "export",
   "yolo",
   "extensions",
   "plugins",
