@@ -169,6 +169,8 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 | [P-157](#p-157-ctrlz-in-one-tabs-composer-brings-back-text-typed-in-another-tab) | Ctrl+Z in one tab's composer brings back text typed in another tab | low | composer | fix | Assigned to #789 (follow-up; not yet in the PR) |
 | [P-158](#p-158-after-a-stopped-compaction-the-compacting-toast-stays-up-to-60-s) | After a stopped compaction the "Compacting…" toast stays up to 60 s | low | commands | fix | Assigned to #793 (follow-up; not yet in the PR) |
 | [P-159](#p-159-backups-clear-all-confirms-with-a-stale-count) | Backups "Clear all" confirms with a stale count | low | backups | fix | Assigned to #794 (follow-up; not yet in the PR) |
+| [P-160](#p-160-the-tab-bars-scroll-arrows-snap-back) | The tab bar's scroll arrows snap back | low | tabs | fix | Assigned to #793 (follow-up; not yet in the PR) |
+| [P-161](#p-161-in-files-the-first-escape-drops-focus-to-the-page-body) | In Files, the first Escape drops focus to the page body | low | files | fix | Assigned to #793 (follow-up; not yet in the PR) |
 
 ## High
 
@@ -2096,3 +2098,27 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Raised by:** workbook integration verification, 27 October 2026
 - **Status:** Confirmed in Excel on the web on integration-fixes e48d83c.
 - **Owner:** Assigned to #794 (follow-up; not yet in the PR)
+
+### P-160: The tab bar's scroll arrows snap back
+
+- **Where the user meets it:** Tab bar with more tabs than fit; click a scroll arrow.
+- **What happens / what was expected:** The tab strip scrolls, then snaps back. Expected: it stays where the user scrolled.
+- **Reproduce:** 1. Open about ten tabs at 350 px. 2. Click the scroll arrow.
+- **Why (from the code):** The active tab is scrolled back into view on re-render (src/ui/pi-sidebar.ts:400).
+- **Severity:** `low`. Other tabs are still reachable by keyboard and through the tab menu.
+- **Decision needed:** `fix`. Scroll the active tab into view only when the active tab changes.
+- **Raised by:** foundations integration verification, 27 October 2026
+- **Status:** Confirmed in Excel on the web on integration-fixes e48d83c.
+- **Owner:** Assigned to #793 (follow-up; not yet in the PR)
+
+### P-161: In Files, the first Escape drops focus to the page body
+
+- **Where the user meets it:** `/files`, press Escape.
+- **What happens / what was expected:** The first Escape moves focus to <body> instead of closing the dialog or returning focus inside it; a second Escape is needed. Expected: one Escape closes it and focus returns to the composer.
+- **Reproduce:** Open /files, press Escape once, check document.activeElement.
+- **Why (from the code):** Not yet traced.
+- **Severity:** `low`. Keyboard users need an extra key press.
+- **Decision needed:** `fix`. Make Files follow the overlay primitive's Escape rule.
+- **Raised by:** foundations integration verification, 27 October 2026
+- **Status:** Confirmed in Excel on the web on integration-fixes e48d83c.
+- **Owner:** Assigned to #793 (follow-up; not yet in the PR)
