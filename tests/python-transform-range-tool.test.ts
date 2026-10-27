@@ -207,7 +207,7 @@ void test("python_transform_range surfaces overwrite blocking from destination w
 
   const text = firstText(result);
   assert.match(text, /Transform blocked/u);
-  assert.match(text, /allow_overwrite/u);
+  assert.match(text, /If the user asked to change these cells, retry with `allow_overwrite: true`\. Otherwise show the user the existing data and ask before overwriting\./u);
   assert.equal(result.details?.blocked, true);
   assert.equal(result.details?.existingCount, 2);
   assert.equal(result.details?.outputAddress, "Sheet1!A1:A2");
