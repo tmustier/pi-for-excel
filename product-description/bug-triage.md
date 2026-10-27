@@ -180,6 +180,7 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 | [P-168](#p-168-the-screen-reader-announcement-for-an-approval-stays-after-stop-withdraws-it) | The screen-reader announcement for an approval stays after Stop withdraws it | low | accessibility | fix | Fix in the remaining-bugs PR (not yet open): 6f637da |
 | [P-169](#p-169-the-plugin-install-button-ignores-pointer-clicks-in-excel-for-mac) | The plugin Install button ignores pointer clicks in Excel for Mac | low | plugins | fix | Assigned to the remaining-bugs PR (in progress) |
 | [P-170](#p-170-dark-mode-leaves-the-gear-and-composer-file-buttons-light-with-a-pale-band-under-the-tabs) | Dark mode leaves the gear and composer file buttons light, with a pale band under the tabs | low | theme | fix | Assigned to the CC-10 theme PR (in progress) |
+| [P-171](#p-171-undo-this-turn-does-not-cover-direct-officejs-changes) | "Undo this turn" does not cover direct Office.js changes | low | workbook | fix | Follow-up after #808 (not started) |
 
 ## High
 
@@ -2239,3 +2240,15 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Raised by:** Desktop pass (EXP-03) on stack top 97e15a3, 27 October 2026
 - **Status:** Confirmed in Excel for Mac.
 - **Owner:** Assigned to the CC-10 theme PR (in progress)
+
+### P-171: "Undo this turn" does not cover direct Office.js changes
+
+- **Where the user meets it:** The end-of-turn line from CL-01 (#808), after a turn in which Pi ran direct Office.js code that changed the workbook.
+- **What happens / what was expected:** The line lists and undoes only changes made by Pi's structured tools, because those are the only ones with backups. Office.js changes are not listed and are not undone; #808 says so on the line and points to `/backup`. Expected eventually: those changes are listed too, and undone where possible.
+- **Reproduce:** Ask Pi to create a named range or table (only possible with direct Office.js), then look at the end-of-turn line.
+- **Why (from the code):** Direct Office.js takes no backup ([writing](workbook/writing.md)). Knowing exactly what it changed needs host change events, not parsing the code.
+- **Severity:** `low`.
+- **Decision needed:** `fix`.
+- **Raised by:** CL-01 implementation (#808), 27 October 2026
+- **Status:** Scope decision: not required for CL-01; #808 must say these changes are not covered.
+- **Owner:** Follow-up after #808 (not started)
