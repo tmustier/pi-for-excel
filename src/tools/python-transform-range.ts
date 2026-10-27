@@ -7,47 +7,67 @@ function isToolsPythonTransformRangePayloadShape(value: unknown): value is Recor
  *
  * High-level helper for common workflows:
  * 1) read tabular values from Excel
- * 2) execute Python (native bridge preferred, Pyodide fallback when available)
- * 3) parse returned result JSON into a 2D grid
- * 4) write transformed data back into Excel
+ * 2) execute Python (native bridge preferred, Pyodide fallback when available);
+ *    input too large for the bridge is refused before anything runs, with the
+ *    number of rows that fit
+ * 3) parse returned result JSON into a 2D grid (short rows are padded and reported)
+ * 4) write it through the same checked path as write_cells (`mutation/range-write.ts`):
+ *    merged cells, spills and protection block the write; the read-back reports
+ *    cells that did not take their value and text Excel converted
+ * The result includes the code's stdout and stderr.
  */
 
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { Type, type Static, type TSchema } from "typebox";
 
 import {
-  computeRangeAddress,
   excelRun,
   getRange,
-  padValues,
+  parseCell,
   parseRangeRef,
   qualifiedAddress,
 } from "../excel/helpers.js";
-import { buildWorkbookCellChangeSummary } from "../audit/cell-diff.js";
+import { buildWorkbookCellChangeSummary, type WorkbookCellChangeSummary } from "../audit/cell-diff.js";
 import { getWorkbookChangeAuditLog } from "../audit/workbook-change-audit.js";
 import { getWorkbookRecoveryLog, MAX_RECOVERY_CELLS } from "../workbook/recovery-log.js";
-import { findErrors } from "../utils/format.js";
-import { formatReplacedFormulas, replacedFormulas, toCellGrid, writeBlockFromAddress } from "./mutation/range-write.js";
 import {
   callDefaultPythonBridge,
   formatPythonFailure,
   getDefaultPythonBridgeConfig,
   PYODIDE_BACKEND_LABEL,
+  PYTHON_BRIDGE_LIMITS,
   shouldFallbackToPyodideAfterBridgeError,
   type PythonBridgeConfig,
   type PythonBridgeRequest,
   type PythonBridgeResponse,
 } from "./python-run.js";
-import { countOccupiedCells } from "./write-cells.js";
+import { probeBridgeHealth } from "./bridge-service-utils.js";
+import { getErrorMessage } from "../utils/errors.js";
+import { CHECKPOINT_SKIPPED_REASON } from "./recovery-metadata.js";
 import type { PythonTransformRangeDetails } from "./tool-details.js";
-import {
-  CHECKPOINT_SKIPPED_REASON,
-  tooLargeToBackUpReason,
-} from "./recovery-metadata.js";
 import { describeExcelFailure, parseExcelError } from "./mutation/excel-failure.js";
 import { finalizeMutationOperation } from "./mutation/finalize.js";
 import type { MutationFinalizeDependencies } from "./mutation/types.js";
 import { appendMutationResultNote } from "./mutation/result-note.js";
+import {
+  backupUnavailable,
+  blockAddress,
+  chunkRowsForWrite,
+  classifySentValue,
+  describeWriteObstacle,
+  formatVerificationNotes,
+  formatReplacedFormulas,
+  formatVerificationProblems,
+  inspectWriteTarget,
+  replacedFormulas,
+  sampledChanges,
+  toCellGrid,
+  verifyWrittenRange,
+  type CellScalar,
+  type SentGrid,
+  type WriteBlock,
+  type WriteVerification,
+} from "./mutation/range-write.js";
 
 const MIN_TIMEOUT_MS = 100;
 const MAX_TIMEOUT_MS = 120_000;
@@ -84,12 +104,12 @@ interface InputRangeSnapshot {
   sheetName: string;
   /** Sheet-local address, e.g. A1:C10 */
   address: string;
-  values: unknown[][];
+  values: CellScalar[][];
 }
 
 interface WriteOutputRequest {
   outputStartCell: string;
-  values: unknown[][];
+  values: CellScalar[][];
   allowOverwrite: boolean;
 }
 
@@ -98,6 +118,8 @@ type WriteOutputResult =
     blocked: true;
     outputAddress: string;
     existingCount: number;
+    /** Why the write cannot land (merge, spill, protection, too large to back up); absent when only occupied. */
+    reason?: string;
   }
   | {
     blocked: false;
@@ -105,12 +127,17 @@ type WriteOutputResult =
     rowsWritten: number;
     colsWritten: number;
     formulaErrorCount: number;
-    beforeValues?: unknown[][];
-    beforeFormulas?: unknown[][];
-    readBackValues?: unknown[][];
-    readBackFormulas?: unknown[][];
-    outputStartCell?: string;
-    outputSheetName?: string;
+    /** Verification problems and notes, as write_cells reports them. */
+    verificationLines?: string[];
+    verification?: WriteVerification["mode"];
+    notWrittenCount?: number;
+    convertedCount?: number;
+    changes?: WorkbookCellChangeSummary;
+    beforeValues?: CellScalar[][];
+    beforeFormulas?: CellScalar[][];
+    backupUnavailable?: { unavailableReason: string; unavailableNote?: string };
+    /** Cells that held a formula and hold a constant now. */
+    formulasReplacedCount?: number;
   };
 
 export interface PythonTransformRangeToolDependencies {
@@ -129,7 +156,11 @@ export interface PythonTransformRangeToolDependencies {
     request: PythonBridgeRequest,
     signal: AbortSignal | undefined,
   ) => Promise<PythonBridgeResponse>;
+  /** Override the bridge health probe used when input is too large for the bridge (for testing). */
+  probeBridge?: (url: string) => Promise<boolean>;
 }
+
+const MAX_OUTPUT_PREVIEW_CHARS = 2_000;
 
 const mutationFinalizeDependencies: MutationFinalizeDependencies = {
   appendAuditEntry: (entry) => getWorkbookChangeAuditLog().append(entry),
@@ -219,82 +250,246 @@ async function defaultReadInputRange(rangeRef: string): Promise<InputRangeSnapsh
     return {
       sheetName: sheet.name,
       address: stripSheetPrefix(range.address),
-      values: range.values,
+      values: toCellGrid(range.values),
     };
   });
 }
 
+/** Write through the write_cells path: inspect the target, write in chunks, verify the read-back. */
 async function defaultWriteOutputValues(request: WriteOutputRequest): Promise<WriteOutputResult> {
-  const { padded, rows, cols } = padValues(request.values);
-
-  if (rows === 0 || cols === 0) {
+  const { padded, cols } = padRows(request.values);
+  if (padded.length === 0 || cols === 0) {
     throw new Error("Transformed result is empty.");
   }
 
-  return excelRun<WriteOutputResult>(async (context) => {
-    const { sheet, range } = getRange(context, request.outputStartCell);
-    sheet.load("name");
-    range.load("address");
-    await context.sync();
+  const start = parseCell(topLeftCellFromAddress(parseRangeRef(request.outputStartCell).address));
+  const block: WriteBlock = { startRow: start.row, startCol: start.col, rowCount: padded.length, columnCount: cols };
+  const sent: SentGrid = (r, c) => classifySentValue(padded[r]?.[c]);
+  const sentFormulas = padded.some((row) => row.some((value) => typeof value === "string" && value.startsWith("=")));
+  const sentEmptyCount = padded.reduce((total, row) => total + row.filter((value) => value === "").length, 0);
+  const progress = { outputAddress: request.outputStartCell, writtenRows: 0 };
 
-    const startCell = topLeftCellFromAddress(range.address);
-    const outputAddressLocal = computeRangeAddress(startCell, rows, cols);
-    const outputAddress = qualifiedAddress(sheet.name, outputAddressLocal);
+  try {
+    return await excelRun<WriteOutputResult>(async (context) => {
+      const { sheet } = getRange(context, request.outputStartCell);
+      const inspection = await inspectWriteTarget(context, sheet, block, sent);
+      const qualify = (address: string): string => qualifiedAddress(inspection.sheetName, address);
+      const outputAddress = qualify(blockAddress(block));
+      progress.outputAddress = outputAddress;
 
-    const targetRange = sheet.getRange(outputAddressLocal);
-
-    const outputCellCount = rows * cols;
-    const shouldLoadBeforeState = !request.allowOverwrite || outputCellCount <= MAX_RECOVERY_CELLS;
-
-    let beforeValues: unknown[][] | undefined;
-    let beforeFormulas: unknown[][] | undefined;
-
-    if (shouldLoadBeforeState) {
-      targetRange.load("values,formulas");
-      await context.sync();
-
-      beforeValues = targetRange.values;
-      beforeFormulas = targetRange.formulas;
-    }
-
-    if (!request.allowOverwrite) {
-      if (!beforeValues || !beforeFormulas) {
-        throw new Error("Failed to read destination range for overwrite protection.");
+      const obstacle = describeWriteObstacle(inspection, qualify);
+      if (obstacle) {
+        return { blocked: true, outputAddress, existingCount: inspection.occupiedCount, reason: obstacle };
       }
-
-      const existingCount = countOccupiedCells(beforeValues, beforeFormulas);
-      if (existingCount > 0) {
+      if (inspection.occupiedCount > 0 && !request.allowOverwrite) {
+        return { blocked: true, outputAddress, existingCount: inspection.occupiedCount };
+      }
+      if (inspection.occupiedCount > 0 && !inspection.before) {
+        const cells = block.rowCount * block.columnCount;
         return {
           blocked: true,
           outputAddress,
-          existingCount,
+          existingCount: inspection.occupiedCount,
+          reason: `${outputAddress} already holds data, and this write covers ${cells.toLocaleString("en-US")} cells, ` +
+            `more than the ${MAX_RECOVERY_CELLS.toLocaleString("en-US")} a backup can hold, so the overwrite could not be undone. ` +
+            "Transform it in smaller blocks, or ask the user to clear the old data first.",
         };
       }
-    }
 
-    targetRange.values = padded;
-    await context.sync();
+      for (const chunk of chunkRowsForWrite(padded)) {
+        sheet.getRange(blockAddress(block, chunk.rowOffset, chunk.rows.length)).values = chunk.rows;
+        await context.sync();
+        progress.writtenRows += chunk.rows.length;
+      }
 
-    const verify = sheet.getRange(outputAddressLocal);
-    verify.load("address,values,formulas");
-    await context.sync();
+      const before = inspection.before;
+      const backup = backupUnavailable(before !== null, block, outputAddress);
+      let verification: WriteVerification;
+      try {
+        verification = await verifyWrittenRange(context, sheet, block, sent, {
+          calculationMode: inspection.calculationMode,
+          sentFormulas,
+          sentEmptyCount,
+          tablesBefore: inspection.tableNames,
+          sentChars: JSON.stringify(padded).length,
+        });
+      } catch (verifyError) {
+        const failure = await describeExcelFailure(parseExcelError(verifyError), { range: outputAddress });
+        return {
+          blocked: false,
+          outputAddress,
+          rowsWritten: block.rowCount,
+          colsWritten: block.columnCount,
+          formulaErrorCount: 0,
+          verification: "failed",
+          verificationLines: [
+            `⚠️ The result could not be read back to verify it: ${failure.reason} Read the range before relying on it.`,
+          ],
+          ...(before ? { beforeValues: before.values, beforeFormulas: before.formulas } : {}),
+          backupUnavailable: backup,
+        };
+      }
 
-    const formulaErrors = findErrors(verify.values, topLeftCellFromAddress(verify.address));
+      const changes = verification.values && verification.formulas && before
+        ? buildWorkbookCellChangeSummary({
+          sheetName: inspection.sheetName,
+          startCell: topLeftCellFromAddress(blockAddress(block)),
+          beforeValues: before.values,
+          beforeFormulas: before.formulas,
+          afterValues: verification.values,
+          afterFormulas: verification.formulas,
+        })
+        : sampledChanges(inspection.sheetName, block, verification, countSentCells(padded));
 
-    return {
-      blocked: false,
-      outputAddress: qualifiedAddress(sheet.name, stripSheetPrefix(verify.address)),
-      rowsWritten: rows,
-      colsWritten: cols,
-      formulaErrorCount: formulaErrors.length,
-      ...(beforeValues !== undefined ? { beforeValues } : {}),
-      ...(beforeFormulas !== undefined ? { beforeFormulas } : {}),
-      readBackValues: verify.values,
-      readBackFormulas: verify.formulas,
-      outputStartCell: startCell,
-      outputSheetName: sheet.name,
-    };
+      const lostFormulas = before && verification.formulas
+        ? replacedFormulas(block, before.formulas, verification.formulas)
+        : [];
+      const lostFormulasLine = formatReplacedFormulas(inspection.sheetName, lostFormulas);
+
+      return {
+        blocked: false,
+        outputAddress,
+        rowsWritten: block.rowCount,
+        colsWritten: block.columnCount,
+        formulaErrorCount: verification.formulaErrorCount,
+        verification: verification.mode,
+        verificationLines: [
+          ...formatVerificationProblems(verification, qualify),
+          ...(lostFormulasLine ? [lostFormulasLine] : []),
+          ...formatVerificationNotes(verification),
+        ],
+        ...(lostFormulas.length > 0 ? { formulasReplacedCount: lostFormulas.length } : {}),
+        ...(verification.notWrittenCount > 0 ? { notWrittenCount: verification.notWrittenCount } : {}),
+        ...(verification.converted.length > 0 ? { convertedCount: verification.converted.length } : {}),
+        changes,
+        ...(before ? { beforeValues: before.values, beforeFormulas: before.formulas } : {}),
+        backupUnavailable: backup,
+      };
+    });
+  } catch (error) {
+    if (progress.writtenRows === 0) throw error;
+    const failure = await describeExcelFailure(parseExcelError(error), { range: progress.outputAddress });
+    throw new Error(
+      `Partly written — the first ${progress.writtenRows} of ${block.rowCount} row(s) of ${progress.outputAddress} were written; ` +
+      `the rest failed and were not written. ${failure.reason} Nothing was rolled back; read the range before retrying.`,
+    );
+  }
+}
+
+/** Pad short rows with "" (which clears those cells) to the widest row. */
+function padRows(values: CellScalar[][]): { padded: CellScalar[][]; cols: number; shortRows: number[] } {
+  const cols = values.reduce((max, row) => Math.max(max, row.length), 0);
+  const shortRows: number[] = [];
+  const padded = values.map((row, index) => {
+    if (row.length < cols) shortRows.push(index);
+    return Array.from({ length: cols }, (_, col) => col < row.length ? row[col] : "");
   });
+  return { padded, cols, shortRows };
+}
+
+function countSentCells(padded: CellScalar[][]): number {
+  return padded.reduce((total, row) =>
+    total + row.filter((value) => value !== "" && value !== null && value !== undefined).length, 0);
+}
+
+function utf8Bytes(text: string): number {
+  return new TextEncoder().encode(text).length;
+}
+
+function buildBridgeRequest(
+  code: string,
+  sourceAddress: string,
+  values: CellScalar[][],
+  timeoutMs: number | undefined,
+): PythonBridgeRequest {
+  return {
+    code,
+    input_json: JSON.stringify({ range: sourceAddress, values }),
+    ...(timeoutMs !== undefined ? { timeout_ms: timeoutMs } : {}),
+  };
+}
+
+function fitsBridgeLimits(request: PythonBridgeRequest): boolean {
+  return (request.input_json?.length ?? 0) <= PYTHON_BRIDGE_LIMITS.inputJsonChars
+    && utf8Bytes(JSON.stringify(request)) <= PYTHON_BRIDGE_LIMITS.requestBodyBytes;
+}
+
+/** Largest number of leading source rows whose request still fits the bridge's limits. */
+function rowsThatFitBridge(code: string, input: InputRangeSnapshot, sourceAddress: string, timeoutMs: number | undefined): number {
+  let low = 0;
+  let high = input.values.length;
+  while (low < high) {
+    const mid = Math.ceil((low + high) / 2);
+    if (fitsBridgeLimits(buildBridgeRequest(code, sourceAddress, input.values.slice(0, mid), timeoutMs))) low = mid;
+    else high = mid - 1;
+  }
+  return low;
+}
+
+function formatInputTooLarge(
+  request: PythonBridgeRequest,
+  input: InputRangeSnapshot,
+  sourceAddress: string,
+  fitRows: number,
+): string {
+  const range = parseRangeRef(input.address).address;
+  const [first = range, last = first] = range.split(":");
+  const startCell = parseCell(first);
+  const endCell = parseCell(last);
+  const columns = `${first.replace(/\d+$/u, "")}`;
+  const lastColumn = `${last.replace(/\d+$/u, "")}`;
+  const lines = [
+    `⛔ **Input too large for the Python bridge** — nothing ran and nothing was written.`,
+    "",
+    `${sourceAddress} (${input.values.length.toLocaleString("en-US")} rows) serializes to ` +
+      `${(request.input_json?.length ?? 0).toLocaleString("en-US")} characters of input_json ` +
+      `(${utf8Bytes(JSON.stringify(request)).toLocaleString("en-US")} bytes per request). The bridge accepts at most ` +
+      `${PYTHON_BRIDGE_LIMITS.inputJsonChars.toLocaleString("en-US")} characters of input_json and ` +
+      `${PYTHON_BRIDGE_LIMITS.requestBodyBytes.toLocaleString("en-US")} bytes per request.`,
+  ];
+  if (fitRows > 0) {
+    const blockEnd = Math.min(startCell.row + fitRows - 1, endCell.row);
+    lines.push(
+      "",
+      `About ${fitRows.toLocaleString("en-US")} rows fit per call. Transform it in blocks of at most ${fitRows.toLocaleString("en-US")} rows ` +
+        `(e.g. ${qualifiedAddress(input.sheetName, `${columns}${startCell.row}:${lastColumn}${blockEnd}`)}, then the next block, ` +
+        "with output_start_cell moved down to match), or read fewer columns.",
+    );
+  } else {
+    lines.push("", "Not even one row fits; shorten the code or read fewer columns.");
+  }
+  return lines.join("\n");
+}
+
+function withOutputLimitGuidance(message: string, input: InputRangeSnapshot): string {
+  if (!/output exceeded/iu.test(message)) return message;
+  const rows = Math.max(1, input.values.length);
+  const avgRowBytes = Math.max(1, Math.ceil(utf8Bytes(JSON.stringify(input.values)) / rows));
+  const estimate = Math.floor(PYTHON_BRIDGE_LIMITS.outputBytes / avgRowBytes);
+  return `${message}\n\nThe result JSON plus anything printed must stay under ${PYTHON_BRIDGE_LIMITS.outputBytes.toLocaleString("en-US")} bytes. ` +
+    `Rows like this input's (~${avgRowBytes.toLocaleString("en-US")} bytes each) fit about ${estimate.toLocaleString("en-US")} per call: ` +
+    "transform the source in blocks and write each with its own output_start_cell, and avoid printing large output.";
+}
+
+function formatOutputSections(response: PythonBridgeResponse): string[] {
+  const sections: string[] = [];
+  for (const [label, output] of [["Stdout", response.stdout], ["Stderr", response.stderr]] as const) {
+    const trimmed = output?.trim() ?? "";
+    if (trimmed.length === 0) continue;
+    const shown = trimmed.length > MAX_OUTPUT_PREVIEW_CHARS
+      ? `${trimmed.slice(0, MAX_OUTPUT_PREVIEW_CHARS)}\n… (${(trimmed.length - MAX_OUTPUT_PREVIEW_CHARS).toLocaleString("en-US")} more characters)`
+      : trimmed;
+    sections.push(`${label}:\n\n\`\`\`\n${shown}\n\`\`\``);
+  }
+  return sections;
+}
+
+function formatPaddingWarning(shortRows: number[], totalRows: number, cols: number): string | null {
+  if (shortRows.length === 0) return null;
+  const listed = shortRows.slice(0, 8).map((index) => index + 1).join(", ");
+  const more = shortRows.length > 8 ? ` and ${shortRows.length - 8} more` : "";
+  return `⚠️ Python returned rows of different lengths: ${shortRows.length} of ${totalRows} row(s) had fewer than ${cols} values ` +
+    `(result rows ${listed}${more}). They were padded with blank cells, which clears those cells. Return a rectangular grid to avoid this.`;
 }
 
 function isPythonTransformPayloadShape(value: unknown): value is Record<string, unknown> {
@@ -345,7 +540,7 @@ function normalizeTo2dValues(value: unknown): unknown[][] | null {
   return [[value]];
 }
 
-function parseBridgeResultJson(resultJson: string | undefined): unknown[][] {
+function parseBridgeResultJson(resultJson: string | undefined): CellScalar[][] {
   const trimmed = resultJson?.trim();
   if (!trimmed) {
     throw new Error(
@@ -365,12 +560,24 @@ function parseBridgeResultJson(resultJson: string | undefined): unknown[][] {
     throw new Error("Could not normalize Python result to a 2D array.");
   }
 
-  return normalized;
+  return toCellGrid(normalized);
 }
 
-function formatBlockedMessage(inputAddress: string, outputAddress: string, existingCount: number): string {
+function formatBlockedMessage(
+  inputAddress: string,
+  output: Extract<WriteOutputResult, { blocked: true }>,
+): string {
+  if (output.reason) {
+    return [
+      `⛔ **Transform blocked** — nothing was written to **${output.outputAddress}**.`,
+      "",
+      `Source: **${inputAddress}**`,
+      "",
+      output.reason,
+    ].join("\n");
+  }
   return [
-    `⛔ **Transform blocked** — destination **${outputAddress}** contains ${existingCount} non-empty cell(s).`,
+    `⛔ **Transform blocked** — destination **${output.outputAddress}** contains ${output.existingCount} non-empty cell(s).`,
     "",
     `Source: **${inputAddress}**`,
     "",
@@ -378,13 +585,24 @@ function formatBlockedMessage(inputAddress: string, outputAddress: string, exist
   ].join("\n");
 }
 
-function formatSuccessMessage(inputAddress: string, output: Exclude<WriteOutputResult, { blocked: true }>): string {
+function formatSuccessMessage(
+  inputAddress: string,
+  output: Extract<WriteOutputResult, { blocked: false }>,
+  paddingWarning: string | null,
+): string {
   const lines: string[] = [];
 
-  lines.push(`✅ Transformed **${inputAddress}** and wrote results to **${output.outputAddress}**.`);
+  lines.push(output.notWrittenCount
+    ? `⚠️ **Partly written** — transformed **${inputAddress}**, but ${output.notWrittenCount} of ` +
+      `${output.rowsWritten * output.colsWritten} cell(s) in **${output.outputAddress}** do not hold the value sent.`
+    : `✅ Transformed **${inputAddress}** and wrote results to **${output.outputAddress}**.`);
   lines.push(`Rows × Cols written: ${output.rowsWritten} × ${output.colsWritten}.`);
 
-  if (output.formulaErrorCount > 0) {
+  if (paddingWarning) lines.push(paddingWarning);
+
+  if (output.verificationLines && output.verificationLines.length > 0) {
+    lines.push(output.verificationLines.join("\n"));
+  } else if (output.formulaErrorCount > 0) {
     lines.push(`⚠️ ${output.formulaErrorCount} formula error(s) detected in written output.`);
   }
 
@@ -422,6 +640,7 @@ export function createPythonTransformRangeTool(
   const writeOutputValues = dependencies.writeOutputValues ?? defaultWriteOutputValues;
   const checkPyodide = dependencies.isPyodideAvailable;
   const pyodideCall = dependencies.callPyodide;
+  const probeBridge = dependencies.probeBridge ?? probeBridgeHealth;
 
   return {
     name: "python_transform_range",
@@ -429,7 +648,9 @@ export function createPythonTransformRangeTool(
     description:
       "Read an Excel range, run Python transformation on `{ range, values }` (available as `input_data`), " +
       "and write the result grid back. " +
-      "Runs in-browser via Pyodide by default; uses native Python bridge when configured.",
+      "Runs in-browser via Pyodide by default; uses native Python bridge when configured. " +
+      "The result shows the code's stdout/stderr and, like write_cells, cells that did not take their value " +
+      "(merged cells, spills) and text Excel converted.",
     parameters: schema,
     execute: async (
       toolCallId: string,
@@ -449,26 +670,42 @@ export function createPythonTransformRangeTool(
           : defaultOutputStartCell(input);
 
         const bridgeConfig = await getBridgeConfig();
-
-        const bridgeRequest: PythonBridgeRequest = {
-          code: params.code,
-          input_json: JSON.stringify({
-            range: sourceAddress,
-            values: input.values,
-          }),
-          ...(params.timeout_ms !== undefined ? { timeout_ms: params.timeout_ms } : {}),
-        };
+        const bridgeRequest = buildBridgeRequest(params.code, sourceAddress, input.values, params.timeout_ms);
 
         let bridgeResponse: PythonBridgeResponse | null = null;
         let bridgeUrlUsed: string | undefined;
+        let useBridge = bridgeConfig !== null;
 
-        if (bridgeConfig) {
+        // Check the bridge's request limits before sending. The default URL is always
+        // configured, so only refuse when a bridge is actually answering there;
+        // otherwise Pyodide (no such limit) runs the code as before.
+        if (bridgeConfig && !fitsBridgeLimits(bridgeRequest)) {
+          const reachable = bridgeConfig.source !== "default" || await probeBridge(bridgeConfig.url);
+          if (reachable) {
+            const fitRows = rowsThatFitBridge(params.code, input, sourceAddress, params.timeout_ms);
+            const message = formatInputTooLarge(bridgeRequest, input, sourceAddress, fitRows);
+            return {
+              content: [{ type: "text", text: message }],
+              details: {
+                kind: "python_transform_range",
+                blocked: false,
+                inputAddress: sourceAddress,
+                bridgeUrl: bridgeConfig.url,
+                error: message,
+              },
+              isError: true,
+            };
+          }
+          useBridge = false;
+        }
+
+        if (bridgeConfig && useBridge) {
           try {
             bridgeResponse = await callBridge(bridgeRequest, bridgeConfig, signal);
             bridgeUrlUsed = bridgeConfig.url;
           } catch (error) {
             if (!shouldFallbackToPyodideAfterBridgeError(error, bridgeConfig)) {
-              throw error;
+              throw new Error(withOutputLimitGuidance(getErrorMessage(error), input));
             }
           }
         }
@@ -519,7 +756,13 @@ export function createPythonTransformRangeTool(
           ));
         }
 
+        const outputSections = formatOutputSections(bridgeResponse);
+        const withOutput = (text: string): string =>
+          [text, ...outputSections].join("\n\n");
+
         const transformedValues = parseBridgeResultJson(bridgeResponse.result_json);
+        const { shortRows, cols } = padRows(transformedValues);
+        const paddingWarning = formatPaddingWarning(shortRows, transformedValues.length, cols);
 
         const writeResult = await writeOutputValues({
           outputStartCell,
@@ -531,7 +774,7 @@ export function createPythonTransformRangeTool(
           const blockedResult: AgentToolResult<PythonTransformRangeDetails> = {
             content: [{
               type: "text",
-              text: formatBlockedMessage(sourceAddress, writeResult.outputAddress, writeResult.existingCount),
+              text: withOutput(formatBlockedMessage(sourceAddress, writeResult)),
             }],
             details: {
               kind: "python_transform_range",
@@ -541,6 +784,7 @@ export function createPythonTransformRangeTool(
               ...(bridgeUrlUsed !== undefined ? { bridgeUrl: bridgeUrlUsed } : {}),
               existingCount: writeResult.existingCount,
             },
+            isError: true,
           };
 
           await finalizeMutationOperation(mutationFinalizeDependencies, {
@@ -552,50 +796,22 @@ export function createPythonTransformRangeTool(
               outputAddress: writeResult.outputAddress,
               changedCount: 0,
               changes: [],
+              ...(writeResult.reason ? { summary: "blocked: target cannot hold the values" } : {}),
             },
           });
 
           return blockedResult;
         }
 
-        const parsedOutput = parseRangeRef(writeResult.outputAddress);
-        const outputDiffStartCell = writeResult.outputStartCell ?? topLeftCellFromAddress(parsedOutput.address);
-        const outputSheetName = writeResult.outputSheetName ?? parsedOutput.sheet ?? input.sheetName;
-
-        const changes =
-          writeResult.beforeValues &&
-          writeResult.beforeFormulas &&
-          writeResult.readBackValues &&
-          writeResult.readBackFormulas
-            ? buildWorkbookCellChangeSummary({
-              sheetName: outputSheetName,
-              startCell: outputDiffStartCell,
-              beforeValues: writeResult.beforeValues,
-              beforeFormulas: writeResult.beforeFormulas,
-              afterValues: writeResult.readBackValues,
-              afterFormulas: writeResult.readBackFormulas,
-            })
-            : undefined;
-
-        const lostFormulas = writeResult.beforeFormulas && writeResult.readBackFormulas
-          ? replacedFormulas(
-            writeBlockFromAddress(parsedOutput.address),
-            toCellGrid(writeResult.beforeFormulas),
-            toCellGrid(writeResult.readBackFormulas),
-          )
-          : [];
-        const lostFormulasLine = formatReplacedFormulas(outputSheetName, lostFormulas);
-
-        const successText = [
-          formatSuccessMessage(sourceAddress, writeResult),
-          ...(lostFormulasLine ? [lostFormulasLine] : []),
-          ...(changes && changes.changedCount > 0 ? [`Changed cell(s): ${changes.changedCount}.`] : []),
-        ].join("\n\n");
+        const changes = writeResult.changes;
+        const successText = changes && changes.changedCount > 0
+          ? `${formatSuccessMessage(sourceAddress, writeResult, paddingWarning)}\n\nChanged cell(s): ${changes.changedCount}.`
+          : formatSuccessMessage(sourceAddress, writeResult, paddingWarning);
 
         const successResult: AgentToolResult<PythonTransformRangeDetails> = {
           content: [{
             type: "text",
-            text: successText,
+            text: withOutput(successText),
           }],
           details: {
             kind: "python_transform_range",
@@ -606,12 +822,19 @@ export function createPythonTransformRangeTool(
             rowsWritten: writeResult.rowsWritten,
             colsWritten: writeResult.colsWritten,
             formulaErrorCount: writeResult.formulaErrorCount,
-            ...(lostFormulas.length > 0 ? { formulasReplacedCount: lostFormulas.length } : {}),
             ...(changes !== undefined ? { changes } : {}),
+            ...(writeResult.verification !== undefined ? { verification: writeResult.verification } : {}),
+            ...(writeResult.notWrittenCount !== undefined ? { notWrittenCount: writeResult.notWrittenCount } : {}),
+            ...(writeResult.convertedCount !== undefined ? { convertedCount: writeResult.convertedCount } : {}),
+            ...(writeResult.formulasReplacedCount !== undefined ? { formulasReplacedCount: writeResult.formulasReplacedCount } : {}),
+            ...(shortRows.length > 0 ? { paddedRowCount: shortRows.length } : {}),
           },
+          ...(writeResult.notWrittenCount ? { isError: true } : {}),
         };
 
         const changedCount = changes?.changedCount ?? writeResult.rowsWritten * writeResult.colsWritten;
+        const beforeValues = writeResult.beforeValues;
+        const beforeFormulas = writeResult.beforeFormulas;
 
         await finalizeMutationOperation(mutationFinalizeDependencies, {
           auditEntry: {
@@ -626,7 +849,7 @@ export function createPythonTransformRangeTool(
           recovery: {
             result: successResult,
             appendRecoverySnapshot: () => {
-              if (!writeResult.beforeValues || !writeResult.beforeFormulas) {
+              if (!beforeValues || !beforeFormulas) {
                 return Promise.resolve(null);
               }
 
@@ -635,14 +858,12 @@ export function createPythonTransformRangeTool(
                 toolCallId,
                 address: writeResult.outputAddress,
                 changedCount,
-                beforeValues: writeResult.beforeValues,
-                beforeFormulas: writeResult.beforeFormulas,
+                beforeValues,
+                beforeFormulas,
               });
             },
             appendResultNote: appendMutationResultNote,
-            unavailableReason: writeResult.rowsWritten * writeResult.colsWritten > MAX_RECOVERY_CELLS
-              ? tooLargeToBackUpReason(writeResult.rowsWritten * writeResult.colsWritten)
-              : CHECKPOINT_SKIPPED_REASON,
+            ...(writeResult.backupUnavailable ?? { unavailableReason: CHECKPOINT_SKIPPED_REASON }),
           },
         });
 
