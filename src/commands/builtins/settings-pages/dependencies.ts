@@ -3,7 +3,7 @@
  * `taskpane/init.ts` via `configureSettingsPages`.
  */
 
-import type { Models } from "@earendil-works/pi-ai";
+import type { Api, Model, Models } from "@earendil-works/pi-ai";
 import type { ConnectionManager } from "../../../connections/manager.js";
 import type { ExecutionMode } from "../../../execution/mode.js";
 import type { ExtensionRuntimeManager } from "../../../extensions/runtime-manager.js";
@@ -16,6 +16,7 @@ export interface WorkbookContextSnapshot {
 
 /** Dependencies shared by the extensions pages (connections/plugins/skills). */
 export interface ExtensionsHubDependencies {
+  getActiveModel?: () => Model<Api> | null;
   getActiveSessionId: () => string | null;
   resolveWorkbookContext: () => Promise<WorkbookContextSnapshot>;
   extensionManager: ExtensionRuntimeManager;

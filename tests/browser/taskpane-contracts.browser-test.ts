@@ -4,6 +4,7 @@ import { after, before, test } from "node:test";
 import type { BrowserContext, Page } from "playwright";
 
 import {
+  connectFixtureProvider,
   enterCommand,
   openBrowserPage,
   openTaskpane,
@@ -262,6 +263,7 @@ void test("submitInput uses the composer path for commands and model messages", 
     const toast = page.locator("#pi-toast .pi-toast__message").last();
     await toast.waitFor({ state: "visible", timeout: 5_000 });
     assert.match(await toast.innerText(), /Backup command failed: .*unavailable/i);
+    await connectFixtureProvider(page);
     allowPlainInput = true;
     await page.getByText("browser bridge model message", { exact: true }).waitFor({ state: "visible", timeout: 5_000 });
     await waitForBrowserSignal(allResults, "Timed out waiting for submitInput bridge results");

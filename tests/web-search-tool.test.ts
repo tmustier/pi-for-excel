@@ -2,6 +2,55 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { createWebSearchTool } from "../src/tools/web-search.ts";
+import { createAssistantMessageEventStream, fauxAssistantMessage } from "@earendil-works/pi-ai";
+import { builtinModels } from "@earendil-works/pi-ai/providers/all";
+import { runNativeWebSearch, supportsNativeWebSearch } from "../src/tools/native-web-search.ts";
+
+void test("web_search uses native provider search without a separate key and preserves query filters", async () => {
+  const model = builtinModels().getModel("openai-codex", "gpt-6-luna");
+  assert.ok(model);
+  const tool = createWebSearchTool({
+    getConfig: () => { throw new Error("No third-party search key should be needed"); },
+    nativeSearch: (query, signal) => runNativeWebSearch({
+      model, query, signal, apiKey: "subscription-fixture", sessionId: "chat-1",
+      stream: async (selected, context, options) => {
+        assert.equal(options?.apiKey, "subscription-fixture");
+        assert.equal(options?.sessionId, "chat-1::native-search");
+        assert.match(JSON.stringify(context.messages), /site:example.com/);
+        assert.match(JSON.stringify(context.messages), /past week/);
+        assert.deepEqual(await options?.onPayload?.({ model: selected.id, input: [] }, selected), {
+          model: selected.id, input: [], tools: [{ type: "web_search" }], tool_choice: "required",
+        });
+        const result = fauxAssistantMessage("Finding: https://example.com/source");
+        const stream = createAssistantMessageEventStream();
+        stream.push({ type: "start", partial: result });
+        stream.push({ type: "done", reason: "stop", message: result });
+        return stream;
+      },
+    }),
+  });
+  const result = await tool.execute("native-call", { query: "published figures", site: "example.com", recency: "week", max_results: 2 });
+  assert.equal(result.isError, undefined);
+  assert.equal(result.details.provider, "openai-codex");
+  assert.equal(result.details.query, "published figures");
+  assert.equal(result.details.maxResults, 2);
+  assert.match(JSON.stringify(result.content), /https:\/\/example.com\/source/);
+  const unsupported = builtinModels().getModels("mistral")[0];
+  assert.ok(unsupported);
+  assert.equal(supportsNativeWebSearch(unsupported), false);
+});
+
+void test("web_search falls back to the configured backend when native search is rejected", async () => {
+  const tool = createWebSearchTool({
+    nativeSearch: () => Promise.reject(new Error("Native search unavailable")),
+    getConfig: () => Promise.resolve({ provider: "brave", apiKey: "search-fixture" }),
+    executeSearch: () => Promise.resolve({ sentQuery: "figures", proxied: false, hits: [{ title: "Report", url: "https://example.com/report", snippet: "Reported figures" }] }),
+  });
+  const result = await tool.execute("fallback-call", { query: "figures" });
+  assert.equal(result.details.provider, "brave");
+  assert.equal(result.details.ok, true);
+  assert.match(JSON.stringify(result.content), /https:\/\/example.com\/report/);
+});
 
 void test("web_search falls back to Jina when key-required provider is missing an API key and Jina key exists", async () => {
   const tool = createWebSearchTool({

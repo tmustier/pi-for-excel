@@ -226,7 +226,13 @@ export interface ProviderDef {
 }
 
 export const ALL_PROVIDERS: ProviderDef[] = [
-  // OAuth providers first (subscription / account-based flows)
+  // No-helper API key options first; subscription flows remain available below.
+  { id: "openai", label: /* brand */ "OpenAI (API)", desc: "provider.desc.api_key" },
+  { id: "google", label: /* brand */ "Google Gemini (API)", desc: "provider.desc.api_key" },
+  { id: "deepseek", label: /* brand */ "DeepSeek" },
+  { id: "mistral", label: /* brand */ "Mistral" },
+  { id: "groq", label: /* brand */ "Groq" },
+  { id: "xai", label: /* brand */ "xAI / Grok" },
   // Only list flows that are supported in-browser (PKCE with proxy-assisted or manual callback handling).
   // desc holds a locale key (resolved via t() at render time in buildProviderRow).
   { id: "anthropic",          label: /* brand */ "Anthropic",                oauth: "anthropic",          desc: "provider.desc.claude" },
@@ -235,14 +241,8 @@ export const ALL_PROVIDERS: ProviderDef[] = [
   { id: "google-antigravity", label: /* brand */ "Google Antigravity",       oauth: "google-antigravity", desc: "provider.desc.antigravity" },
   { id: "github-copilot",     label: /* brand */ "GitHub Copilot",           oauth: "github-copilot" },
 
-  // API key providers
-  { id: "openai",             label: /* brand */ "OpenAI (API)",             desc: "provider.desc.api_key" },
-  { id: "google",             label: /* brand */ "Google Gemini (API)",      desc: "provider.desc.api_key" },
-  { id: "deepseek",           label: /* brand */ "DeepSeek" },
+  // Bedrock requires AWS credentials rather than a browser API key.
   { id: "amazon-bedrock",     label: /* brand */ "Amazon Bedrock" },
-  { id: "mistral",            label: /* brand */ "Mistral" },
-  { id: "groq",               label: /* brand */ "Groq" },
-  { id: "xai",                label: /* brand */ "xAI / Grok" },
 ];
 
 /**
@@ -775,7 +775,10 @@ export function buildProviderRow(
   const row = document.createElement("div");
   row.className = "pi-login-row";
   const labelText = escapeHtml(label);
-  const descriptionMarkup = desc ? `<span class="pi-login-desc">${escapeHtml(t(desc))}</span>` : "";
+  const requirement = t(id === "amazon-bedrock"
+    ? "provider.requirement.aws"
+    : oauth ? "provider.requirement.helper" : "provider.requirement.key");
+  const descriptionMarkup = `<span class="pi-login-desc">${escapeHtml([desc ? t(desc) : "", requirement].filter(Boolean).join(" · "))}</span>`;
   const oauthMarkup = oauth
     ? `
         <button class="pi-login-oauth">${escapeHtml(t("provider.login_with", { label }))}</button>

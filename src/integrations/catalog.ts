@@ -10,7 +10,7 @@ import type { AgentTool } from "@earendil-works/pi-agent-core";
 
 import { createMcpTool, type McpToolDependencies } from "../tools/mcp.js";
 import { createFetchPageTool } from "../tools/fetch-page.js";
-import { createWebSearchTool } from "../tools/web-search.js";
+import { createWebSearchTool, type WebSearchToolDependencies } from "../tools/web-search.js";
 
 export const INTEGRATION_IDS = ["web_search", "mcp_tools"] as const;
 export type IntegrationId = (typeof INTEGRATION_IDS)[number];
@@ -35,14 +35,14 @@ export interface IntegrationDefinition {
   enabledByDefault?: boolean;
   toolNames: readonly string[];
   instructions: string;
-  createTools: (mcp?: McpToolDependencies) => AgentTool[];
+  createTools: (dependencies?: WebSearchToolDependencies & McpToolDependencies) => AgentTool[];
 }
 
 const INTEGRATION_DEFINITIONS: Record<IntegrationId, IntegrationDefinition> = {
   web_search: {
     id: "web_search",
     title: "Web Search",
-    description: "Search external web content and fetch readable page content with Jina (default), Firecrawl, Serper, Tavily, or Brave. Needs an API key for the selected provider.",
+    description: "Use the model provider's native search when supported, otherwise a configured Jina, Firecrawl, Serper, Tavily, or Brave key.",
     agentSkillName: "web-search",
     enabledByDefault: true,
     warning: "External network access: queries and fetched URLs are sent to the configured provider/target host.",
@@ -51,7 +51,7 @@ const INTEGRATION_DEFINITIONS: Record<IntegrationId, IntegrationDefinition> = {
       "Use web_search when workbook context is insufficient and fresh external facts are needed. "
       + "After finding promising URLs, use fetch_page to read page content before synthesizing. "
       + "Cite sources from tool results as [1], [2], etc. Avoid web search when the answer is already in the workbook.",
-    createTools: () => [createWebSearchTool(), createFetchPageTool()],
+    createTools: (searchDependencies) => [createWebSearchTool(searchDependencies), createFetchPageTool()],
   },
   mcp_tools: {
     id: "mcp_tools",
@@ -79,13 +79,16 @@ export function getIntegrationDefinition(integrationId: string): IntegrationDefi
   return null;
 }
 
-export function createToolsForIntegrations(integrationIds: readonly string[], mcp?: McpToolDependencies): AgentTool[] {
+export function createToolsForIntegrations(
+  integrationIds: readonly string[],
+  dependencies: WebSearchToolDependencies & McpToolDependencies = {},
+): AgentTool[] {
   const tools: AgentTool[] = [];
 
   for (const integrationId of integrationIds) {
     const definition = getIntegrationDefinition(integrationId);
     if (!definition) continue;
-    tools.push(...definition.createTools(mcp));
+    tools.push(...definition.createTools(dependencies));
   }
 
   return tools;

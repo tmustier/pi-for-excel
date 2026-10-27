@@ -41,6 +41,22 @@ export interface OpenedBrowserPage {
   finish(): Promise<void>;
 }
 
+/** Connects a synthetic provider for tests that replace the model transport. */
+export async function connectFixtureProvider(page: Page, provider = "mistral", key = "fixture-key"): Promise<void> {
+  await page.evaluate(async ({ provider, key }) => {
+    const path = "/src/storage/local/app-storage.ts";
+    const { getAppStorage } = await import(/* @vite-ignore */ path) as typeof import("../../src/storage/local/app-storage.ts");
+    await getAppStorage().providerKeys.set(provider, key);
+    document.dispatchEvent(new Event("pi:providers-changed"));
+  }, { provider, key });
+  await page.waitForFunction(async (provider) => {
+    const path = "/src/ui/pi-sidebar.ts";
+    const { PiSidebar } = await import(/* @vite-ignore */ path) as typeof import("../../src/ui/pi-sidebar.ts");
+    const sidebar = document.querySelector("pi-sidebar");
+    return sidebar instanceof PiSidebar && sidebar.agent?.state.model.provider === provider;
+  }, provider);
+}
+
 export function isExpectedOfficeUnavailableError(error: Error): boolean {
   return /Office(?:\.js)? (?:is |was )?(?:not ready|not available|unavailable)/i.test(error.message);
 }

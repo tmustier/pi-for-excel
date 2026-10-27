@@ -100,9 +100,11 @@ function renderStatusBar(
   const state = agent.state;
 
   // Model alias
-  const model = state.model;
+  // Agent needs an internal model to bootstrap; never present that fallback
+  // as a usable selection when no provider is connected.
+  const model = getActiveProviders()?.size === 0 ? null : state.model;
   const providerTag = model ? ambiguousProviderTag(model.provider) : null;
-  const modelName = model ? (model.name || model.id) : t("status.select_model");
+  const modelName = model ? (model.name || model.id) : t("status.connect_provider");
   const modelAlias = providerTag ? `${modelName} · ${providerTag}` : modelName;
   const modelAliasEscaped = escapeHtml(modelAlias);
 

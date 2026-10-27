@@ -756,6 +756,7 @@ void test("importFiles keeps an existing file and saves a same-named import with
 
   assert.deepEqual(result, {
     imported: 2,
+    paths: ["budget (2).csv", "budget (3).csv"],
     renamed: [
       { from: "budget.csv", to: "budget (2).csv" },
       { from: "budget.csv", to: "budget (3).csv" },

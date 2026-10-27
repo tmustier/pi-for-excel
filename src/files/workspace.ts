@@ -79,6 +79,7 @@ export interface WorkspaceMutationOptions {
 
 export interface ImportFilesResult {
   imported: number;
+  paths: string[];
   /** Imports saved under a suffixed name because `from` was already taken. */
   renamed: Array<{ from: string; to: string }>;
 }
@@ -1390,6 +1391,7 @@ export class FilesWorkspace {
       (await target.backend.listFiles()).map((entry) => entry.path.toLowerCase()),
     );
     const renamed: ImportFilesResult["renamed"] = [];
+    const paths: string[] = [];
 
     let imported = 0;
     let importedBytes = 0;
@@ -1438,6 +1440,7 @@ export class FilesWorkspace {
       }
 
       imported += 1;
+      paths.push(path);
       importedBytes += bytes.byteLength;
     }
 
@@ -1452,7 +1455,7 @@ export class FilesWorkspace {
       dispatchWorkspaceChanged({ reason: "import" });
     }
 
-    return { imported, renamed };
+    return { imported, paths, renamed };
   }
 
   async listAuditEntries(limit = 40): Promise<FilesWorkspaceAuditEntry[]> {

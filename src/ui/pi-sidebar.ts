@@ -155,6 +155,7 @@ const INNER_SCROLLABLE_SELECTOR =
 
 @customElement("pi-sidebar")
 export class PiSidebar extends LitElement {
+  @property({ type: Boolean }) subscriptionWarning = false;
   @property({ attribute: false }) agent?: Agent;
   @property({ attribute: false }) emptyHints: EmptyHint[] = [];
   /** Handles a submitted draft; returns true when the composer should clear. */
@@ -416,6 +417,11 @@ export class PiSidebar extends LitElement {
       } else {
         this._stopInnerAutoScroll();
       }
+    }
+    if (changed.has("subscriptionWarning") && this.subscriptionWarning) {
+      // A late switch to a subscription model must reveal the notice even
+      // when the conversation is already scrolled to its latest answer.
+      requestAnimationFrame(() => this.querySelector(".pi-subscription-warning")?.scrollIntoView({ block: "nearest" }));
     }
   }
 
@@ -861,6 +867,12 @@ export class PiSidebar extends LitElement {
       <div id="pi-notices" class="pi-notices"></div>
       <div class="pi-messages">
         <div class="pi-messages__inner">
+          ${this.subscriptionWarning ? html`
+            <aside class="pi-subscription-warning" role="status">
+              ${t("subscription.warning")}
+              <a href="https://claude.ai/settings/usage" target="_blank" rel="noopener noreferrer">https://claude.ai/settings/usage</a>.
+              ${t("subscription.warning.setting")}
+            </aside>` : nothing}
           ${hasMessages ? html`
             <message-list
               .messages=${state.messages.slice()}

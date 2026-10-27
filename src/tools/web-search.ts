@@ -31,6 +31,7 @@ import {
   WEB_SEARCH_PROVIDER_INFO,
 } from "./web-search-config.js";
 import type { SettingsReader } from "../storage/local/settings-store.js";
+import type { WebSearchDetails } from "./tool-details.js";
 
 const WEB_SEARCH_TIMEOUT_MS = 12_000;
 
@@ -95,23 +96,7 @@ export interface WebSearchFallbackInfo {
   reason: string;
 }
 
-export interface WebSearchToolDetails {
-  kind: "web_search";
-  ok: boolean;
-  provider: WebSearchProvider;
-  query: string;
-  sentQuery: string;
-  recency?: RecencyValue;
-  siteFilters?: string[];
-  maxResults: number;
-  resultCount?: number;
-  proxied?: boolean;
-  proxyBaseUrl?: string;
-  fallback?: WebSearchFallbackInfo;
-  error?: string;
-  /** `true` when the failure is due to the local CORS proxy being unreachable. */
-  proxyDown?: boolean;
-}
+export type WebSearchToolDetails = WebSearchDetails;
 
 export interface WebSearchToolConfig {
   provider: WebSearchProvider;
@@ -134,6 +119,7 @@ export interface WebSearchExecutionResult {
 }
 
 export interface WebSearchToolDependencies {
+  nativeSearch?: (query: string, signal: AbortSignal | undefined) => Promise<AgentToolResult<WebSearchToolDetails> | null>;
   getConfig?: () => Promise<WebSearchToolConfig>;
   executeSearch?: (
     params: Params,
@@ -828,7 +814,7 @@ export function createWebSearchTool(
     name: "web_search",
     label: "Web Search",
     description:
-      "Search the public web. Returns compact, cited links with snippets. Supports Jina (default), Firecrawl, Serper, Tavily, or Brave.",
+      "Search the public web. Returns cited findings using the model provider's native search when supported, otherwise the configured search provider.",
     parameters: schema,
     execute: async (
       _toolCallId: string,
@@ -843,12 +829,32 @@ export function createWebSearchTool(
         const parsedParams = parseParams(rawParams);
         params = parsedParams;
 
+        let nativeFailure: Error | undefined;
+        if (dependencies.nativeSearch) {
+          try {
+            const native = await dependencies.nativeSearch(
+              `${buildSentQuery(parsedParams)}\nReturn at most ${parsedParams.max_results ?? 5} results.${parsedParams.recency ? ` Limit to the past ${parsedParams.recency}.` : ""}`,
+              signal,
+            );
+            if (native) return {
+              ...native,
+              details: { ...native.details, query: parsedParams.query, sentQuery: buildSentQuery(parsedParams), maxResults: parsedParams.max_results ?? 5 },
+            };
+          } catch (error) {
+            if (signal?.aborted) throw error;
+            nativeFailure = new Error(getErrorMessage(error));
+            // A provider/model may reject native search; the configured search
+            // backend remains the fallback, with its usual error/setup UI.
+          }
+        }
+
         const config = await getConfig();
         configuredProvider = config.provider;
         usedProxyBaseUrl = config.proxyBaseUrl;
 
         const configuredApiKey = normalizeOptionalString(config.apiKey) ?? "";
         const fallbackJinaApiKey = normalizeOptionalString(config.jinaApiKey) ?? "";
+        if (nativeFailure && !configuredApiKey && !fallbackJinaApiKey) throw nativeFailure;
 
         const runSearch = (
           provider: WebSearchProvider,

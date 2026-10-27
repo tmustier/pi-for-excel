@@ -42,6 +42,9 @@ import { createTabState } from "./tab-state.js";
 import { getErrorMessage } from "../utils/errors.js";
 import { describeTurnFailure } from "./turn-error.js";
 import { createDraftStore } from "./draft-store.js";
+import { showSubscriptionWarning } from "./subscription-warning.js";
+import { runNativeWebSearch, supportsNativeWebSearch } from "../tools/native-web-search.js";
+import { getApiKeyForProvider, loadWebSearchProviderConfig } from "../tools/web-search-config.js";
 import { submitComposerText } from "./keyboard-shortcuts/editor-actions.js";
 import { readAutoCompactionEnabled } from "../compaction/settings.js";
 import { runCompactCommand } from "../commands/builtins/export.js";
@@ -593,7 +596,11 @@ export async function initTaskpane(opts: {
     model: runtime.agent.state.model,
     isBusy: isRuntimeBusy(runtime),
     applyModel: (model, thinkingLevel) => {
+      const previous = runtime.agent.state.model;
       runtime.agent.state.model = model;
+      if (previous.provider !== model.provider && modelRefreshOwner.snapshot().availableProviders.length > 0) {
+        showToast(t("init.modelSwapped", { model: model.name, provider: previous.provider }));
+      }
       // A refreshed or swapped model may support fewer thinking levels than the current one.
       runtime.agent.state.thinkingLevel = clampThinkingLevel(model, thinkingLevel ?? runtime.agent.state.thinkingLevel);
       document.dispatchEvent(new CustomEvent("pi:status-update"));
@@ -842,8 +849,28 @@ export async function initTaskpane(opts: {
     }
   });
 
+  let warningRevision = 0;
+  let warningSessionId: string | null = null;
+  const refreshSubscriptionWarning = (): void => {
+    const revision = ++warningRevision;
+    const runtime = getActiveRuntime();
+    const sessionId = runtime?.persistence.getSessionId() ?? null;
+    if (sessionId !== warningSessionId) sidebar.subscriptionWarning = false;
+    warningSessionId = sessionId;
+    if (!runtime) return;
+    const provider = runtime.agent.state.model.provider;
+    void providerKeys.get(provider).then(async (key) => {
+      const visible = await showSubscriptionWarning(settings, runtime.persistence.getSessionId(), provider, key ?? undefined);
+      if (revision === warningRevision) sidebar.subscriptionWarning = visible;
+    }).catch(() => undefined);
+  };
+  document.addEventListener("pi:model-changed", refreshSubscriptionWarning);
+  document.addEventListener("pi:models-changed", refreshSubscriptionWarning);
+  document.addEventListener("pi:subscription-warning-changed", refreshSubscriptionWarning);
+
   let lastReconciledModelSignature = "";
   runtimeManager.subscribe((snapshot) => {
+    refreshSubscriptionWarning();
     if (snapshot.activeRuntimeId !== previousActiveRuntimeId) {
       previousActiveRuntimeId = snapshot.activeRuntimeId;
       document.dispatchEvent(new CustomEvent("pi:active-runtime-changed"));
@@ -870,6 +897,8 @@ export async function initTaskpane(opts: {
   const refreshCapabilitiesForAllRuntimes = (): Promise<void> => {
     return runtimeManager.refreshCapabilities();
   };
+  document.addEventListener("pi:model-changed", () => { void refreshCapabilitiesForAllRuntimes(); });
+  document.addEventListener("pi:models-changed", () => { void refreshCapabilitiesForAllRuntimes(); });
 
   const reservedToolNames = new Set([
     ...createAllTools({ hostKind: spreadsheetHost.kind }).map((tool) => tool.name),
@@ -1068,10 +1097,19 @@ export async function initTaskpane(opts: {
       extensionToolRevision: number;
     }> => {
       const workbookId = await resolveWorkbookId();
-      const activeIntegrationIds = await resolveRuntimeIntegrationIds({
+      let activeIntegrationIds = await resolveRuntimeIntegrationIds({
         sessionId,
         workbookId,
       });
+      const model = modelRuntime.models.getModel(
+        runtimeAgent?.state.model.provider ?? initialModel.provider,
+        runtimeAgent?.state.model.id ?? initialModel.id,
+      ) ?? initialModel;
+      const searchConfig = await loadWebSearchProviderConfig(settings);
+      const nativeAvailable = supportsNativeWebSearch(model) && Boolean(await providerKeys.get(model.provider));
+      if (!nativeAvailable && !getApiKeyForProvider(searchConfig) && !getApiKeyForProvider(searchConfig, "jina")) {
+        activeIntegrationIds = activeIntegrationIds.filter((id) => id !== "web_search");
+      }
 
       const coreTools = createAllTools({
         hostKind: spreadsheetHost.kind,
@@ -1106,6 +1144,14 @@ export async function initTaskpane(opts: {
             onStop: stopRuntimeTurn,
             ...approvalSource(),
           }),
+          nativeSearch: async (query, signal) => {
+            // Capture the capability snapshot: a busy picker change applies
+            // to the next run, not the search already executing in this one.
+            if (!supportsNativeWebSearch(model)) return null;
+            const apiKey = await runtimeAgent?.getApiKey?.(model.provider);
+            if (!apiKey) return null;
+            return runNativeWebSearch({ model, apiKey, query, signal, sessionId, stream: streamFn });
+          },
         }),
         ...extensionTools,
       ]);
@@ -1243,7 +1289,8 @@ export async function initTaskpane(opts: {
       };
     };
 
-    const initialModel = getActiveRuntime()?.agent.state.model
+    const activeSelection = getActiveRuntime()?.agent.state.model;
+    const initialModel = (activeSelection && modelRuntime.models.getModel(activeSelection.provider, activeSelection.id))
       ?? modelRefreshOwner.snapshot().defaultModel;
     const autoContext = createAutoContext({ changeTracker, getAgent: () => runtimeAgent, runtimeId });
     const initialCapabilities = await buildRuntimeCapabilities(runtimeSessionId);
@@ -1988,6 +2035,7 @@ export async function initTaskpane(opts: {
       await refreshWorkbookState();
     },
     extensionsHub: {
+      getActiveModel: () => modelRefreshOwner.snapshot().availableProviders.length > 0 ? getActiveAgent()?.state.model ?? null : null,
       getActiveSessionId: () => getActiveRuntime()?.persistence.getSessionId() ?? null,
       resolveWorkbookContext: async () => {
         const workbookContext = await resolveWorkbookContext();
@@ -2041,6 +2089,10 @@ export async function initTaskpane(opts: {
   };
 
   const openModelSelector = (): void => {
+    if (modelRefreshOwner.snapshot().availableProviders.length === 0) {
+      void showWelcomeLogin(modelRefreshOwner);
+      return;
+    }
     const activeRuntime = getActiveRuntime();
     if (!activeRuntime) {
       showToast(t("init.noActiveSession"));
@@ -2168,6 +2220,10 @@ export async function initTaskpane(opts: {
   document.addEventListener("pi:command-run", onCommandRun);
 
   sidebar.onSend = (text, { followUp }) => {
+    if (!text.startsWith("/") && modelRefreshOwner.snapshot().availableProviders.length === 0) {
+      void showWelcomeLogin(modelRefreshOwner);
+      return false;
+    }
     const activeRuntime = getActiveRuntime();
     const accepted = submitComposerText({ text, followUp, target: activeRuntime });
     if (accepted && activeRuntime) activeRuntime.tab.setError(null);
@@ -2241,6 +2297,8 @@ export async function initTaskpane(opts: {
   };
   sidebar.onFilesDrop = (files: File[]) => {
     const workspace = getFilesWorkspace();
+    const runtime = getActiveRuntime();
+    const sessionId = runtime?.persistence.getSessionId();
 
     void workspace.importFiles(files, {
       audit: { actor: "user", source: "input-drop" },
@@ -2252,8 +2310,10 @@ export async function initTaskpane(opts: {
           return;
         }
 
-        const importedLabel = `${count} file${count === 1 ? "" : "s"}`;
-        showToast(t("init.importedIntoFiles", { label: importedLabel }) + describeImportRenames(result));
+        if (runtime && runtime.persistence.getSessionId() === sessionId) {
+          runtime.tab.setAttachments([...runtime.tab.attachments, ...result.paths]);
+        }
+        showToast(t("input.attached", { count }) + describeImportRenames(result));
       })
       .catch((error: unknown) => {
         showToast(t("init.importFailed", { error: error instanceof Error ? error.message : t("init.unknownError") }));

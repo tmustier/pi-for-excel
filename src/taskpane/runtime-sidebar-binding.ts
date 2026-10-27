@@ -9,6 +9,10 @@
 
 import type { PiSidebar } from "../ui/pi-sidebar.js";
 import type { SessionRuntimeManager, SessionRuntime } from "./session-runtime-manager.js";
+import { Type } from "typebox";
+import { Value } from "typebox/value";
+
+const removeAttachmentSchema = Type.Object({ path: Type.String() });
 
 export function bindRuntimeSidebar(opts: {
   runtimeManager: SessionRuntimeManager;
@@ -22,6 +26,7 @@ export function bindRuntimeSidebar(opts: {
 
   const showTabState = (runtime: SessionRuntime) => {
     const input = sidebar.getInput();
+    if (input) input.attachments = runtime.tab.attachments;
     if (input && input.value !== runtime.tab.draft) {
       input.value = runtime.tab.draft;
     }
@@ -32,6 +37,13 @@ export function bindRuntimeSidebar(opts: {
   };
 
   // The composer writes every edit to the tab it belongs to.
+  sidebar.addEventListener("pi-attachment-remove", (event) => {
+    if (!(event instanceof CustomEvent)) return;
+    if (!Value.Check(removeAttachmentSchema, event.detail)) return;
+    const path = event.detail.path;
+    const tab = runtimeManager.getActiveRuntime()?.tab;
+    if (tab) tab.setAttachments(tab.attachments.filter((entry) => entry !== path));
+  });
   sidebar.addEventListener("input", (event) => {
     if (!(event.target instanceof HTMLElement) || event.target.tagName !== "PI-INPUT") return;
     const runtime = runtimeManager.getActiveRuntime();

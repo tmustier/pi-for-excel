@@ -4,7 +4,7 @@ import { after, before, test } from "node:test";
 import type { Page } from "playwright";
 import type { Agent } from "@earendil-works/pi-agent-core";
 
-import { enterInput, openTaskpane, startTaskpaneServer, type TaskpaneServer } from "./harness.ts";
+import { connectFixtureProvider, enterInput, openTaskpane, startTaskpaneServer, type TaskpaneServer } from "./harness.ts";
 
 let env: TaskpaneServer;
 
@@ -30,6 +30,7 @@ async function withTaskpane(run: (page: Page) => Promise<void>, viewportHeight =
 
 /** The external model boundary; submissions still enter through the real composer. */
 async function stubProvider(page: Page, mode: "hold" | "fail"): Promise<void> {
+  await connectFixtureProvider(page);
   await page.evaluate(async (responseMode) => {
     const { createAssistantMessageEventStream } = await import("/node_modules/@earendil-works/pi-ai/dist/utils/event-stream.js") as typeof import("@earendil-works/pi-ai/utils/event-stream");
     const { fauxAssistantMessage } = await import("/node_modules/@earendil-works/pi-ai/dist/providers/faux.js") as typeof import("@earendil-works/pi-ai/providers/faux");
@@ -112,6 +113,11 @@ void test("a failed turn appears once inline with Details, a fix action and work
  * answers, so `/compact` keeps the tab busy until it is stopped.
  */
 async function holdCompaction(page: Page): Promise<void> {
+  await connectFixtureProvider(page);
+  // Let startup finish with the saved provider before narrowing the model's
+  // context window; provider reconciliation otherwise restores registry limits.
+  await page.reload();
+  await page.locator("pi-input textarea").waitFor({ state: "visible", timeout: 20_000 });
   await page.evaluate(() => {
     const sidebar = document.querySelector("pi-sidebar");
     if (!sidebar || !("agent" in sidebar)) throw new Error("sidebar missing");

@@ -4,7 +4,7 @@ import { after, before, test } from "node:test";
 
 import type { Page } from "playwright";
 
-import { enterCommand, openTaskpane, startTaskpaneServer, type TaskpaneServer } from "./harness.ts";
+import { connectFixtureProvider, enterCommand, openTaskpane, startTaskpaneServer, type TaskpaneServer } from "./harness.ts";
 
 let env: TaskpaneServer;
 
@@ -215,6 +215,7 @@ void test("Stop Pi in a local-file approval aborts the turn without replacing th
     });
     await page.reload();
     await page.locator("pi-input textarea").waitFor({ state: "visible", timeout: 20_000 });
+    await connectFixtureProvider(page);
     await page.evaluate(async () => {
       const { createAssistantMessageEventStream } = await import("/node_modules/@earendil-works/pi-ai/dist/utils/event-stream.js") as typeof import("@earendil-works/pi-ai/utils/event-stream");
       const { fauxAssistantMessage } = await import("/node_modules/@earendil-works/pi-ai/dist/providers/faux.js") as typeof import("@earendil-works/pi-ai/providers/faux");

@@ -3,7 +3,7 @@ import { after, before, test } from "node:test";
 
 import type { Page } from "playwright";
 
-import { openTaskpane, startTaskpaneServer, type TaskpaneServer } from "./harness.ts";
+import { connectFixtureProvider, openTaskpane, startTaskpaneServer, type TaskpaneServer } from "./harness.ts";
 
 let env: TaskpaneServer;
 
@@ -176,6 +176,7 @@ void test("the active last tab stays fully visible when a turn widens it", async
       await page.getByRole("button", { name: "New tab" }).click();
     }
     await page.locator(".pi-session-tab.is-active").filter({ hasText: "Chat 12" }).waitFor();
+    await connectFixtureProvider(page);
     await page.evaluate(async () => {
       const { PiSidebar } = await import("/src/ui/pi-sidebar.ts") as typeof import("../../src/ui/pi-sidebar.ts");
       const sidebar = document.querySelector("pi-sidebar");

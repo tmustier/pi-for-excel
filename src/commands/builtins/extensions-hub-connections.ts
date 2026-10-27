@@ -28,6 +28,7 @@ import {
   type WebSearchProvider,
 } from "../../tools/web-search-config.js";
 import { validateWebSearchApiKey } from "../../tools/web-search.js";
+import { supportsNativeWebSearch } from "../../tools/native-web-search.js";
 import {
   createMcpServerConfig,
   loadMcpServers,
@@ -330,19 +331,22 @@ export async function renderConnectionsTab(args: {
   // ── Web search section ────────────────────────
   container.appendChild(createSectionHeader({ label: t("extensions-hub-connections.webSearch") }));
 
-  // Every provider needs a key, so an enabled card without one is a warning.
+  const model = deps.getActiveModel?.();
+  const nativeSearch = model && supportsNativeWebSearch(model);
   const webBadgeText = !webSearchEnabled
     ? t("extensions-hub-connections.webSearchOff")
-    : apiKey
+    : nativeSearch ? t("search.native", { provider: model.provider }) : apiKey
       ? t("extensions-hub-connections.webSearchConnected")
       : t("extensions-hub-connections.noApiKey");
-  const webBadgeTone = !webSearchEnabled ? "muted" : (apiKey ? "ok" : "warn");
+  const webBadgeTone = !webSearchEnabled ? "muted" : (nativeSearch || apiKey ? "ok" : "warn");
 
   const webCard = createItemCard({
     icon: lucide(Search),
     iconColor: "green",
     name: providerInfo.title,
-    description: providerInfo.shortDescription,
+    description: nativeSearch
+      ? t("search.native.hint")
+      : apiKey ? providerInfo.shortDescription : t("search.setup.hint"),
     expandable: true,
     badges: [{ text: webBadgeText, tone: webBadgeTone }],
   });

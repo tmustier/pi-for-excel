@@ -222,3 +222,15 @@ markdown-block h6:first-child {
 .pi-message-gutter {
   padding-inline: 16px;
 }
+
+.pi-subscription-warning {
+  margin: 12px 16px;
+  padding: 12px;
+  border: 1px solid var(--amber-alpha-30);
+  border-radius: var(--radius-md);
+  background: var(--amber-alpha-8);
+  color: var(--pi-amber-text);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}

@@ -14,6 +14,8 @@ export interface TabActivity {
 
 export interface TabState {
   readonly draft: string;
+  readonly attachments: readonly string[];
+  setAttachments(paths: readonly string[]): void;
   /** The tab's action queue is running something (a turn, compaction, a command). */
   readonly busy: boolean;
   readonly error: string | null;
@@ -37,6 +39,7 @@ export interface TabState {
 
 export function createTabState(): TabState {
   let draft = "";
+  let attachments: readonly string[] = [];
   let error: string | null = null;
   let activity: TabActivity | null = null;
   let busy = false;
@@ -55,6 +58,12 @@ export function createTabState(): TabState {
 
   return {
     get draft() { return draft; },
+    get attachments() { return attachments; },
+    setAttachments(paths) {
+      if (paths.length === attachments.length && paths.every((path, i) => path === attachments[i])) return;
+      attachments = [...new Set(paths)];
+      emit();
+    },
     get error() { return error; },
     get activity() { return activity; },
     get busy() { return busy; },

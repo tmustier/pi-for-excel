@@ -12,11 +12,13 @@ import { hideCommandMenu } from "../../commands/command-menu.js";
 import { executeSlashCommand } from "../../commands/slash-command-execution.js";
 import type { ActionQueue } from "../action-queue.js";
 import type { QueueDisplay } from "../queue-display.js";
+import type { TabState } from "../tab-state.js";
 
 export interface SubmitTarget {
   agent: Agent;
   actionQueue: Pick<ActionQueue, "enqueuePrompt" | "enqueueCommand" | "isBusy">;
   queueDisplay: Pick<QueueDisplay, "add">;
+  tab?: Pick<TabState, "attachments" | "setAttachments">;
 }
 
 /**
@@ -36,8 +38,8 @@ export function submitComposerText(args: {
   target: SubmitTarget | null;
 }): boolean {
   const { followUp, target } = args;
-  const text = args.text.trim();
-  if (!text) return false;
+  let text = args.text.trim();
+  if (!text && !target?.tab?.attachments.length) return false;
 
   if (!target) {
     showToast(t("editor-actions.toast.noActiveSession"));
@@ -74,6 +76,11 @@ export function submitComposerText(args: {
     return true;
   }
 
+  const paths = target.tab?.attachments ?? [];
+  if (paths.length > 0) {
+    text = [text, `Attached files in Files (read these as part of this message): ${paths.map((path) => JSON.stringify(path)).join(", ")}`].filter(Boolean).join("\n\n");
+  }
+
   if (isStreaming) {
     const message: AgentMessage = {
       role: "user",
@@ -87,9 +94,11 @@ export function submitComposerText(args: {
       agent.steer(message);
       queueDisplay.add("steer", text, message);
     }
+    target.tab?.setAttachments([]);
     return true;
   }
 
   actionQueue.enqueuePrompt(text);
+  target.tab?.setAttachments([]);
   return true;
 }

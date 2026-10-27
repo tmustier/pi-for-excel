@@ -38,6 +38,7 @@ function getPlaceholderHintKey(index: number): string {
 
 @customElement("pi-input")
 export class PiInput extends LitElement {
+  @property({ attribute: false }) attachments: readonly string[] = [];
   @property({ type: Boolean }) isStreaming = false;
   /** The tab is busy (responding, compacting or waiting to retry). */
   @property({ type: Boolean }) busy = false;
@@ -196,8 +197,8 @@ export class PiInput extends LitElement {
 
   private _send(followUp: boolean) {
     const text = getSendText(this._syncValueFromTextarea());
-    if (!text) return;
-    this.dispatchEvent(new CustomEvent("pi-send", { bubbles: true, detail: { text, followUp } }));
+    if (!text && this.attachments.length === 0) return;
+    this.dispatchEvent(new CustomEvent("pi-send", { bubbles: true, detail: { text: text ?? "", followUp } }));
   }
 
   private _autoGrow() {
@@ -244,7 +245,7 @@ export class PiInput extends LitElement {
   override firstUpdated() { this._textarea?.focus(); }
 
   override render() {
-    const hasContent = this._value.trim().length > 0;
+    const hasContent = this._value.trim().length > 0 || this.attachments.length > 0;
 
     return html`
       <div
@@ -254,6 +255,14 @@ export class PiInput extends LitElement {
         @dragleave=${this._onDragLeave}
         @drop=${this._onDrop}
       >
+        ${this.attachments.length > 0 ? html`
+          <div class="pi-input-attachments">
+            ${this.attachments.map((path) => html`
+              <button type="button" class="pi-input-attachment"
+                aria-label=${t("input.attachment.remove", { path })}
+                @click=${() => this.dispatchEvent(new CustomEvent("pi-attachment-remove", { bubbles: true, detail: { path } }))}
+              >${path} ×</button>`)}
+          </div>` : null}
         <button
           class="pi-input-btn pi-input-btn--attach"
           type="button"

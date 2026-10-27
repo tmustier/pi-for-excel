@@ -1,6 +1,10 @@
 # Model / dependency update playbook
 
-**Last verified:** 2026-10-17
+**Last verified:** 2026-10-27
+
+Rechecked npm and the installed catalogue for setup/model UX: both Pi packages are already
+on the newest published version, 1.4.0; no dependency bump was needed. GPT-6 Luna is present
+on OpenAI Responses and ChatGPT/Codex Responses (272,000-token context on both routes).
 
 This repo hardcodes a small set of "featured" and "preferred" model patterns for sorting and default selection. Static built-in models come from Pi AI, while custom and extension providers can add cached, dynamically discovered catalogues at runtime.
 
@@ -23,7 +27,7 @@ Do not use Pi coding-agent's Node/file `ModelRuntime` directly in the Office Web
 
 Manual gateway metadata is a save-time snapshot. Existing entries retain saved limits until edited; clear the context field when re-saving to use current registry defaults. Other manual gateway snapshots are excluded from metadata lookup.
 
-### Current GPT registry snapshot (`pi-ai` 1.3.0)
+### Current GPT registry snapshot (`pi-ai` 1.4.0)
 
 The default OpenAI model is `gpt-6.1-sol` on both `openai` and `openai-codex`. Upstream also exposes `gpt-6-sol`, `gpt-6-astra` and `gpt-6-luna`, and there is deliberately no bare `gpt-6` alias. GPT-6.1 Sol has a 500,000-token context window through ChatGPT and 272,000 tokens through the OpenAI API, and neither route offers the `off` thinking level. Within one version the picker orders tiers Sol, Astra, Terra, Luna.
 

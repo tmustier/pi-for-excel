@@ -4,6 +4,7 @@
  */
 
 import { getAppStorage } from "../../../storage/local/app-storage.js";
+import { SUBSCRIPTION_WARNING_SETTING } from "../../../taskpane/subscription-warning.js";
 import { getUserRules, getWorkbookRules } from "../../../rules/store.js";
 import { getWorkbookContext } from "../../../workbook/context.js";
 
@@ -216,7 +217,30 @@ function buildBehaviorGroup(ctx: SettingsPageContext): HTMLElement {
   });
   themeRow.select.setAttribute("aria-label", t("settings.theme.label"));
 
-  group.list.append(autoApply.root, themeRow.root, languageRow.root);
+  const subscriptionWarning = createSettingToggleRow({
+    label: t("settings.subscriptionWarning"),
+    sublabel: t("settings.subscriptionWarning.sub"),
+  });
+  const settings = getAppStorage().settings;
+  subscriptionWarning.input.setAttribute("aria-label", t("settings.subscriptionWarning"));
+  subscriptionWarning.input.disabled = true;
+  void settings.get(SUBSCRIPTION_WARNING_SETTING).then((value) => {
+    subscriptionWarning.input.checked = value !== false;
+    subscriptionWarning.input.disabled = false;
+  }, () => {
+    showToast(t("settings.subscriptionWarning.failed"), { variant: "error" });
+  });
+  subscriptionWarning.input.addEventListener("change", () => {
+    const enabled = subscriptionWarning.input.checked;
+    subscriptionWarning.input.disabled = true;
+    void settings.set(SUBSCRIPTION_WARNING_SETTING, enabled).then(() => {
+      document.dispatchEvent(new Event("pi:subscription-warning-changed"));
+    }, () => {
+      subscriptionWarning.input.checked = !enabled;
+      showToast(t("settings.subscriptionWarning.failed"), { variant: "error" });
+    }).finally(() => { subscriptionWarning.input.disabled = false; });
+  });
+  group.list.append(autoApply.root, themeRow.root, subscriptionWarning.root, languageRow.root);
   return group.root;
 }
 
