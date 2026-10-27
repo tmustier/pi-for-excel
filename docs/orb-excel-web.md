@@ -114,9 +114,11 @@ are not overwritten. Default: silent H.264 MP4, at most 1600×1000, 15 fps,
 Keep clips short, inspect for secrets and readability, independently read back
 the workbook, and keep videos out of Git. `gh pr create/comment --attach`
 requires GitHub CLI 2.99+ and credentials that support uploads. The orb's
-GitHub App token cannot upload attachments, so use GitHub's PR editor or
-publish the recording with Amp's `public_artifact_url`. Link the MP4 in the
-PR and embed an animated GIF for an inline preview.
+GitHub App token cannot upload attachments, so attach from a machine with a
+normal `gh` login instead: download the orb's file with
+`amp files get <attachment-url> -o excel-turn.mp4`, then run the `gh pr comment
+... --attach excel-turn.mp4` line there. `gh` cannot set alt text on videos, so
+describe the recording in `--body`.
 
 ## Gotchas
 
