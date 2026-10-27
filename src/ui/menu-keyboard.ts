@@ -51,7 +51,10 @@ export function handleMenuKeydown(
   }
 
   if (event.key === "Tab") {
+    // Stop it too: Office on the web moves focus out of the add-in frame on
+    // Tab from its own window listener, undoing the return to the trigger.
     event.preventDefault();
+    event.stopPropagation();
     onClose("tab");
     return true;
   }
