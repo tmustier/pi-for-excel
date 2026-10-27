@@ -86,11 +86,8 @@ Use the local acceptance policy in `docs/coding-standards.md` and the `.agents/s
 
 The Excel lane runs entirely in the background, including opening the pane after a relaunch (the skill bootstraps it from the scratch workbook) and reading what the taskpane persisted (straight from WebKit's IndexedDB). Work through the skill's "Before you call it blocked" table before reporting the lane blocked; each row there has been hit and worked around.
 
-- `npm run check`
-- `npm run build`
-- `npm run test:models`
-- `npm run test:context` when touching prompt/context/tool disclosure/session wiring
-- `npm run test:security` when touching proxy/bridge/auth/HTML safety paths
+- `npm run verify` runs all deterministic gates and reports every failure; see `docs/testing.md`.
+- `npm run verify -- --last` reprints the report; `--force` bypasses the content cache; `--help` includes timeout guidance.
 - Manual Excel smoke test when touching session persistence, tools, auth, or UI wiring
 
 ### Amp orbs (Excel on the web)
