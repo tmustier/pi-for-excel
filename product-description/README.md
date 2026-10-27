@@ -27,6 +27,7 @@ The documents are for people who need to understand or change the product: desig
 - Keys are written as Windows/macOS pairs where they differ: Ctrl/Cmd, Alt/Option. Enter is written Enter.
 - Every document ends with the commit of pi-for-excel it was verified against and a list of open questions.
 - When a behavior is surprising, say so and say why it is that way if the reason is known. Do not smooth it over.
+- Every relative link and heading anchor must resolve. Check before each push, from the repository root: `python3 -I product-description/scripts/check-links.py product-description` (exits 1 and lists each `file:line` that is broken). The script comes from the [product-description skill](https://gist.github.com/steveruizok/83ae5c53f2784ebf8f5fe0a3fb94480f) these documents were written with.
 
 ## The work to be done
 
