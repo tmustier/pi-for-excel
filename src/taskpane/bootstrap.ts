@@ -25,12 +25,12 @@ import { getErrorMessage } from "../utils/errors.js";
 
 import { initTaskpane } from "./init.js";
 
-function getRequiredElement<T extends HTMLElement>(id: string): T {
+function getRequiredElement(id: string): HTMLElement {
   const el = document.getElementById(id);
   if (!el) {
     throw new Error(`[pi] Missing required element #${id}`);
   }
-  return el as T;
+  return el;
 }
 
 function showFatalError(errorRoot: HTMLElement, message: string): void {
@@ -38,9 +38,9 @@ function showFatalError(errorRoot: HTMLElement, message: string): void {
 }
 
 export function bootstrapTaskpane(): void {
-  const appEl = getRequiredElement<HTMLElement>("app");
-  const loadingRoot = getRequiredElement<HTMLElement>("loading-root");
-  const errorRoot = getRequiredElement<HTMLElement>("error-root");
+  const appEl = getRequiredElement("app");
+  const loadingRoot = getRequiredElement("loading-root");
+  const errorRoot = getRequiredElement("error-root");
 
   // Initial loading UI
   render(renderLoading(), loadingRoot);
@@ -76,22 +76,19 @@ export function bootstrapTaskpane(): void {
       console.error("[pi] Taskpane initialization still running after 60s");
     }, 60_000);
 
-    const clearSlowInitTimers = () => {
-      clearTimeout(slowInitTimer);
-      clearTimeout(verySlowInitTimer);
-    };
-
     void initTaskpane({
       appEl,
       errorRoot,
       autoResizeImages: import.meta.env.VITE_PI_AUTO_RESIZE_IMAGES !== "false",
     })
-      .then(clearSlowInitTimers)
       .catch((error: unknown) => {
-        clearSlowInitTimers();
         loadingRoot.replaceChildren();
         showFatalError(errorRoot, t("bootstrap.fatalError", { msg: getErrorMessage(error) }));
         console.error("[pi] Init error:", error);
+      })
+      .finally(() => {
+        clearTimeout(slowInitTimer);
+        clearTimeout(verySlowInitTimer);
       });
   };
 
