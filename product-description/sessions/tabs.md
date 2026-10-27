@@ -26,10 +26,10 @@ stateDiagram-v2
     menu --> closing : Close tab or Close other tabs
     strip --> closing : × or Ctrl/Cmd+W
     closing --> strip : last tab or holding the lock (refused toast)
-    closing --> confirm : tab is responding
+    closing --> confirm : tab is busy (turn or queued action)
     confirm --> strip : Keep open (nothing changes)
     confirm --> closed : Stop and close (turn aborted)
-    closing --> closed : idle, or busy without responding
+    closing --> closed : idle
     closed --> strip : session saved, recently closed, undo toast
 ```
 
@@ -37,7 +37,7 @@ stateDiagram-v2
 
 What is targeted depends on how the user starts:
 
-- **Creating** always adds a tab at the right end of the strip and makes it active. The "+" button (accessible name "New tab"), Ctrl/Cmd+T (without Shift or Alt), and `/new` all do the same thing. `/new` is allowed while the active tab is busy. Ctrl/Cmd+T works with focus anywhere in the taskpane, including the composer and inside an overlay, on hosts where it reaches the taskpane (not Excel on the web).
+- **Creating** adds a tab at the right and activates it. "+" ("New tab"), Ctrl/Cmd+T and `/new` are equivalent; `/new` works while another tab is busy. Modal overlays block shortcuts behind them. Browser-reserved shortcuts may not reach Pi on the web.
 - **Switching** targets a tab by position. A click selects that tab and puts focus in the composer. From the keyboard:
   - ArrowLeft/ArrowRight go to the previous or next tab, wrapping around at the ends. They work only when focus is not in a [text field](../glossary.md#input), for example after Escape has moved focus out of the composer to the tab strip.
   - Ctrl+PageUp/Ctrl+PageDown (any platform) and Cmd+Shift+[ / Cmd+Shift+] (macOS) do the same. They also do nothing in a text field.
@@ -59,26 +59,26 @@ These end without changing anything except a toast:
 - **Moving past the end.** "Move left" is disabled on the first tab and "Move right" on the last.
 - **"Close other tabs" with one tab.** The item is disabled.
 - **Switching with one tab**, or to the tab that is already active. Nothing happens.
-- **Dismissing the context menu.** A click anywhere outside it, Escape, opening the [utilities menu](../ui/the-utilities-menu.md), or clicking another tab (which also switches) closes it without acting. Escape while the active tab is responding stops the turn instead and leaves the menu open, because the tab context menu does not claim Escape. Confirmed in Excel on the web.
+- **Dismissing the context menu.** A click outside it, Escape, opening the [utilities menu](../ui/the-utilities-menu.md), or clicking another tab closes it without acting. Escape belongs to the topmost menu; it does not stop the turn underneath.
 
 ### Committing
 
-- **New tab.** The tab exists, has a new session and the next "Chat N" number, and is saved to the tab layout. The session itself is saved only once Pi answers, or when the tab is closed. If the tab cannot be built, the toast is "Couldn't open a new tab: {message}".
-- **Switch.** The active tab changes and the tab layout records it. The transcript, the status bar, the queue strip, the working indicator and the Stop/send button now show the new tab. The composer text stays as it was, because it is [shared by all tabs](../foundations/sessions-and-tabs.md#what-a-tab-owns).
+- **New tab.** New session, next stable "Chat N", empty draft and saved layout. The first user message saves without waiting for an answer; draft-only state also persists. Creation failure shows "Couldn't open a new tab: {message}".
+- **Switch.** Layout records the active tab. Transcript, status, queue, activity, Stop, error banner and composer all switch to that tab's owned state. A draft does not follow the user into another tab.
 - **Move.** The tab swaps places with its neighbour. The toast "Moved tab left" or "Moved tab right" shows briefly (confirmed in Excel on the web), and the new order is saved to the layout. The active tab and tab numbers do not change.
 - **Duplicate.** A copy is added at the right end of the strip and becomes active. It has a copy of the transcript, the same model and the same thinking level, and the chosen title "{label} copy", for example "Chat 1 copy". It does not copy queued items or the composer. The copy is a new session, saved at once and linked to the current workbook. The toast is "Duplicated {label}". Confirmed in Excel on the web, including the refusal on a busy tab.
 - **Close.** The steps run in this order:
-  1. If the tab is responding, the confirmation dialog "Stop and close this tab?" appears, with the message "Pi is still responding in this tab. Stop and close it?" and the buttons "Stop and close" (red) and "Keep open".
+  1. If the tab is busy with a turn or queued action, the confirmation dialog "Stop and close this tab?" appears, with the buttons "Stop and close" (red) and "Keep open".
   2. On "Stop and close", the turn is [aborted](../glossary.md#endings).
   3. The session is saved, even if Pi never answered and even if the tab is blank.
   4. The tab goes into [recently closed](../glossary.md#sessions-and-tabs) under its current label.
-  5. The tab is removed. Its queued steers, follow-ups, prompts and commands are discarded.
+  5. The settled tab is removed. Stop has held unused messages as saved Not sent rows and cancelled pending commands with a notice.
   6. If it was the active tab, the tab to its left becomes active, or the new first tab if it was first.
   7. An action toast says "Closed {label}" with "Undo" for 9 seconds (see [reopening closed tabs](reopening-closed-tabs.md)).
 
   Confirmed in Excel on the web: the dialog, its wording, "Keep open" and Escape (both leave the turn running), "Stop and close", the left neighbour or new first tab becoming active, and the undo toast.
 
-  A tab that is busy but not responding, for example while `/compact` runs, closes without asking. The compaction is abandoned: its model request still runs to the end, and the working indicator of whichever tab is active shows "Compacting context…" until it does, but the summary is not saved. Reopening the tab brings back the uncompacted conversation. Confirmed in Excel on the web.
+  Queued-action busy states, including compaction, also ask. After confirmation Pi uses the shared Stop path and waits for the agent to settle before saving/removing the runtime. A write that acquired the lock while the dialog was open settles with its result/backup before removal; it does not silently land after the tab disappears.
 - **Close other tabs.** Every other tab goes through the same close steps, from left to right. Each responding tab asks for confirmation in turn. A tab that holds the lock is skipped, with its "Wait for workbook changes…" toast. No undo toast is shown. The right-clicked tab becomes active, and a final toast says "Closed {count} other tabs", or "No tabs were closed" if every close was refused or kept open. Confirmed in Excel on the web with four idle tabs ("Closed 4 other tabs").
 
 ### While tabs change
@@ -89,7 +89,7 @@ When many tabs are open, the tabs first shrink. In a taskpane about 350 px wide,
 
 ### Afterwards
 
-The tab layout reflects the change straight away, so a reload brings back the same tabs in the same order (see [restore on open](../foundations/sessions-and-tabs.md#the-interaction-event-by-event)). Closed tabs can be reopened for the life of the taskpane. Nothing here changes the workbook.
+Layout preserves order, active tab and numbers across reload. Recently closed is durable too; see [restore](../foundations/sessions-and-tabs.md#the-interaction-event-by-event). Tab operations do not roll back workbook changes.
 
 ## Modifiers
 
@@ -98,32 +98,32 @@ The tab layout reflects the change straight away, so a reload brings back the sa
 | Model and provider | A new tab inherits the active tab's model. A duplicate keeps its source's model. Nothing here needs a connected provider. | A chosen model applies next turn; the current run retains its original model. Creating, switching and moving are unaffected. |
 | Thinking level | A new tab inherits the active tab's level, clamped to the model. A duplicate keeps its source's level. | No effect on tab actions. |
 | Execution mode | No effect. The mode is shared by all tabs. | No effect. |
-| Files in the workspace, or an overlay open | Files are shared. An open overlay covers the tab strip, so clicks and right-clicks cannot reach it. Ctrl/Cmd+T, Ctrl/Cmd+W and Ctrl+PageUp/PageDown still act on the tabs behind it (the last only outside text fields). | The stop-and-close confirmation is itself an overlay. |
+| Files in the workspace, or an overlay open | Files are shared. Modal blocks pointer and shortcuts to tabs behind it. | Stop-and-close is itself modal. |
 | Tab state (new, restored, another tab busy) | A new tab that is closed before Pi answers is still saved, as a blank or unanswered session. Restored tabs behave like any other. Another tab being busy blocks nothing here. | A responding tab asks before closing. A busy tab cannot be duplicated. A tab holding the lock cannot be closed. |
 | Host (desktop or web) | On Excel on the web (Chrome) the browser takes Ctrl+T (opens a browser tab), Ctrl+W (closes the Excel browser tab, or the whole window if it is the only tab) and Ctrl+PageDown/PageUp; none reaches Pi. Use "+", `/new`, the × and the context menu there. | No effect. |
 
-A variant that changes while the close confirmation is open is not re-checked when the user confirms (see [Open questions](#open-questions-and-verification)).
+After confirmation, Pi rechecks the runtime and last-tab condition and settles any already-started mutation before removal.
 
 ## Cancel and interrupt
 
 | Event | Before sent | While busy |
 | --- | --- | --- |
-| Stop (button or Escape) | Escape closes the tab context menu, unless the active tab is responding, in which case it stops the turn and the menu stays open. Escape in the close confirmation cancels it, like "Keep open". | Stopping the turn does not close the tab. After Stop, the tab can be closed without the confirmation. |
-| The user sends something else | Text sent goes to whichever tab is active. A draft typed before switching is sent to the new tab. | Sending in one tab does not affect others. |
+| Stop (button or Escape) | Escape dismisses context menu/confirmation without stopping a turn underneath. | Stop alone does not close; Stop and close waits for settlement before removal. |
+| The user sends something else | Each tab sends its own draft. Modal prevents sends behind close confirmation. | Other tabs are independent. |
 | Tab switched, created, closed or reopened | Each acts at once. Opening the context menu on another tab replaces the open one. | A busy tab keeps running when the user switches away. Closing it is covered above. |
 | An overlay or menu opens | Opening the utilities menu closes the tab context menu. Overlays block pointer access to the strip. | The close confirmation stays open until answered. |
 | Model or thinking level changes | No effect on the tab strip. | Choices apply from the next turn. |
 | The provider fails | No effect. Tab actions make no network request. | A turn that fails leaves the tab idle, so it can then be closed without confirmation. |
-| The taskpane goes away | The tab layout is already saved. The composer draft, chosen titles, tab numbers and the recently closed list are lost. | A closing tab is saved as part of closing. A tab that was not being closed keeps only its completed messages. |
+| The taskpane goes away | Saved layout, drafts, Not sent rows, chosen titles, numbers and recently closed persist. | Completed messages persist, not an in-flight stream. |
 | The workbook changes underneath | No effect. | No effect on tabs. A tab's mutation keeps its lock until it finishes. |
 | Focus moves to the grid or another window | Keystrokes go to Excel, so tab shortcuts do nothing. The context menu stays open until the next click in the taskpane. | Turns keep running. |
-| The context window fills | No effect. | A tab compacting while busy without responding closes without confirmation, and the compaction is lost. |
+| The context window fills | No effect. | Compacting tab asks before close; summary is stopped or already saved, never transferred to another tab. |
 
 After any interrupt the user is on whichever tab is active, with the composer text unchanged.
 
 ## Interactions with other systems
 
-**Persistence.** The tab layout is saved on every create, close, move and switch. Closing and duplicating save sessions. New tabs are saved only once Pi answers. See [persistence and restore](../cross-cutting/persistence-and-restore.md).
+**Persistence.** Layout saves on tab operations; sessions save from first user message and own unsent state. Closing/duplicating force-save. See [persistence and restore](../cross-cutting/persistence-and-restore.md).
 
 **Workbook changes and recovery.** No tab action changes the workbook. Closing a tab does not undo its changes, and its [automatic backups](../workbook/backups-and-revert.md) remain.
 
@@ -133,9 +133,9 @@ After any interrupt the user is on whichever tab is active, with the composer te
 
 **Models and providers.** New tabs inherit the model and duplicates copy it. See [models and providers](../foundations/models-and-providers.md).
 
-**Offline and provider errors.** No interaction. The shared error banner is not cleared by switching tabs; see [turns](../foundations/turns.md).
+**Offline and provider errors.** Banners belong to each runtime; switching displays only that tab's error.
 
-**Notifications.** The toasts are "Closed {label}" with "Undo", "Duplicated {label}", "Moved tab left/right", "Closed {count} other tabs", and the refusals. While the 9-second undo toast is showing, other ordinary toasts, such as "Moved tab left", are suppressed. Toasts that read as errors, such as "Can't close the last tab", still show.
+**Notifications.** Close/Undo, duplicate, move and refusal notices stack below the tab strip. An Undo notice no longer suppresses ordinary notices; reopening dismisses its matching action.
 
 **Settings and preferences.** No tab settings. The keyboard shortcuts page lists ⌘ T / Ctrl+T, ⌘ W / Ctrl+W, ⌘ ⇧ T / Ctrl+Shift+T, "← →" ("Switch tabs (exit input first)") and ⌘ ⇧ [ / ⌘ ⇧ ] / Ctrl+PgUp / PgDn.
 
@@ -148,7 +148,7 @@ After any interrupt the user is on whichever tab is active, with the composer te
 ## Edge cases
 
 - Tab numbers only go up: create "Chat 2", close it, create again, and the new tab is "Chat 3".
-- Duplicating a duplicate gives "Chat 1 copy copy". The " copy" title is a chosen title, so it is lost on reload.
+- Duplicating a duplicate can give "Chat 1 copy copy". The chosen title survives reload.
 - Closing a blank tab adds a blank "Untitled" session to the resume picker.
 - Closing the active first tab activates the tab that was second.
 - "Close other tabs" on a tab while several others are responding shows one confirmation per responding tab, one after another.
@@ -158,16 +158,15 @@ After any interrupt the user is on whichever tab is active, with the composer te
 
 ## Open questions and verification
 
-- The close sequence checks the workbook lock before showing "Stop and close this tab?" but not again after the user confirms (`src/taskpane/init.ts:1316-1333`). A tab that starts a mutation while the dialog is open can then be closed while it holds the lock. Confirmed in Excel on the web (TABS-22): with the dialog open, the tab took the lock (its × went disabled behind the dialog); "Stop and close" closed it at once, and its write still landed in the workbook afterwards. Looks like a bug.
-- A tab that is busy without responding (for example running `/compact`) closes with no confirmation, and the compaction is discarded (`src/taskpane/init.ts:1321`). Confirmed in Excel on the web (TABS-23, TABS-28): the compaction request still ran to completion and spent a model call, but the reopened tab had no summary and the same context use (19%). Probably unintentional.
-- Ctrl+PageUp/PageDown and Cmd+Shift+[ / ] do nothing when focus is on a tab in the strip. The document-level handler skips the tab strip (`src/taskpane/keyboard-shortcuts.ts:364-371`), and the tab's own handler only knows plain arrows (`src/ui/pi-sidebar.ts:541-573`). Confirmed in Excel on the web with keys sent to the page (TABS-08): after Escape put focus on a tab, Ctrl+PageUp did nothing, while the same keys with focus on the page body switched tabs. Looks like a bug.
-- Ctrl/Cmd+T and Ctrl/Cmd+W act on the tabs behind an open overlay (`src/taskpane/keyboard-shortcuts.ts:313-332` has no overlay check). Confirmed in Excel on the web with keys sent to the page: with the resume picker open, Ctrl+T added a tab and Ctrl+W closed it, and the picker stayed open.
+- Merged close code confirms queued-action busy state, stops through the shared queue, waits for agent idle, saves and only then removes the runtime. Old TABS-22/23/28 failures are historical observations.
+- Explicit tab-cycle chords also work from a focused tab when the host delivers them; plain arrows remain owned by the strip. The earlier TABS-08 failure is historical.
+- Modal guards now prevent tab shortcuts behind overlays.
 - On Excel on the web the browser keeps Ctrl+T, Ctrl+W and Ctrl+PageDown for itself (confirmed with real key presses in Chrome on Linux). A user who presses Ctrl+W expecting to close a Pi tab closes Excel instead. Excel desktop on Windows and macOS has not been checked.
 - With the command menu open, clicking another tab switched to it but left focus on the tab instead of the composer (seen once in Excel on the web). Minor.
-- Pressing Escape to dismiss the tab context menu while the tab held the lock stopped the turn. The write finished (the cell was written), and the turn then ended with "Error: signal is aborted without reason" instead of "Request aborted". This belongs to [stopping](../turn/stopping.md); reported, not changed here.
+- Escape now dismisses the top menu instead of stopping the underlying turn.
 - In a 350 px taskpane, five tabs already hide their titles and show only ×.
-- While the undo toast is visible, plain toasts such as "Moved tab left" are dropped (`src/ui/toast.ts:190`). This is by design for the toast, but it hides feedback for 9 seconds after every close.
+- Undo notices no longer suppress other notices.
 - Whether the keyboard's context-menu key or Shift+F10 opens the tab context menu has not been checked.
 - Checked in Excel on the web on 2026-10-26; see [the checklist](../verification/sessions-and-commands.md#sessionstabsmd).
 
-Verified against pi-for-excel commit `ec453df`.
+Verified against pi-for-excel commit `1f51cf8` (source inspection; old dated observations are not new acceptance results).

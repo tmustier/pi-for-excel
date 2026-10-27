@@ -2,7 +2,7 @@
 
 ## Summary
 
-`fill_formula` writes one formula into the top-left cell of a range and autofills it across the range, so relative references adjust. It exists so the agent does not have to send a large 2D array of formulas. Overwrite protection, formula syntax checks, verification and backups work as for [`write_cells`](writing-cells.md). It is a mutating call.
+`fill_formula` writes one top-left formula and copies formulas only across a rectangle, adjusting relative references without copying formats. It avoids a large formula grid in model output. Target inspection, overwrite protection, full/sampled verification and backup policy are shared with [`write_cells`](writing-cells.md). It is a mutating call.
 
 Prompt line: "**fill_formula** — fill a single formula across a range (AutoFill with relative refs)". Schema: `range` ("Single contiguous range only"), `formula`, `allow_overwrite`.
 
@@ -18,7 +18,7 @@ Filled formula across **Tbl!D2:D7** (6×1)
 Changed cell(s): 6.
 ```
 
-Column D was next to a table, so the table grew to include it and Excel named the new header `Column1` — not mentioned in the result (confirmed).
+Excel can extend an adjacent table or create a calculated column. The checked result now reports detected table/header effects as well as formula outcomes.
 
 ## The call, event by event
 
@@ -30,8 +30,9 @@ stateDiagram-v2
     queued --> reading_before : lock taken
     reading_before --> blocked : occupied, no allow_overwrite
     reading_before --> filling
-    filling --> result : fill and read-back in one batch
-    filling --> false_failure : response too large
+    filling --> verifying : formula-only paste synced
+    verifying --> result : full or sampled read-back
+    filling --> partial : Stop or uncertain host outcome
 ```
 
 ### Forms the call
@@ -44,67 +45,62 @@ The agent picks a range and writes the formula as it should appear in the top-le
 
 ### Touches Excel
 
-The pre-read loads values and formulas of the whole range for the overwrite check and backup. `⛔ **Fill blocked** — {address} contains N non-empty cell(s).` does not list the existing data (unlike `write_cells`).
+Bounded inspection checks occupancy, protection, merges and spills. Occupied targets over the 20,000-cell backup cap are refused; split them into backed-up blocks. A preflight can refuse before approval, then locked inspection rechecks before writing.
 
 ### While running
 
-The formula, the autofill and the read-back of the whole range's values and formulas go in **one** batch. Excel executes the fill before it builds the response, so a response that is too large fails after the fill is done.
+The formula-only copy syncs separately from read-back, so a large verification response does not misreport the fill as unwritten. A single-cell range writes directly; two-dimensional rectangles fill both axes. Stop waits for the submitted fill to settle and reports what is known, never undoes it.
 
 ### The result
 
-The heading, the pattern, the top-left and bottom-right formulas, any formula errors (one line each, unlimited), `Changed cell(s): N.`, and a backup note. Confirmed outcomes:
-
-- 50,000 × 1: success in 1.6 s with "ℹ️ Backup not created for this mutation…" (over the 20,000-cell cap).
-- 200,000 × 1: `Error filling formula: The response payload size has exceeded the limit…` in 3.7 s; all 200,000 formulas were present afterwards. No backup, no audit. A *false failure*.
-
-On Excel on the web at `ec453df`, autofill from one cell fills only below and to the right, so a 2D target leaves its first row and column partly blank, and a single-cell target fails with "invalid argument". `origin/main` (`e74e2ea`) fixes both; the verification reads back the target, so at `ec453df` the blanks would at least show as missing in the change count.
+Heading, formula pattern, example endpoints, changes, formula/validation problems, calculation/table notes and backup ID or truthful absence reason. Up to 20,000 cells get complete read-back; larger fills use head/tail samples plus whole-target error/blank checks. Mismatches are errors, and failed read-back is distinguished from failure to apply. Manual mode calculates written formulas but does not promise fresh dependents elsewhere. Large empty fills can proceed without a snapshot; large occupied targets cannot.
 
 ## Workbook and host state
 
 | State | True before the call | Changes while running |
 | --- | --- | --- |
-| Sheet protection | `Error filling formula: You cannot perform the requested operation.` (read from code; same path as write). | Same. |
-| Calculation mode | Manual: filled values read back stale; not reported. | Not reported. |
-| Merged cells | Autofill across merges fails or skips cells; not observed. | No effect. |
+| Sheet protection | Detected locked targets refused with a reason. | Later protection can fail submission. |
+| Calculation mode | Written formulas calculate; dependent-staleness limitation disclosed. | Snapshot only. |
+| Merged cells | Unsafe merge/spill targets refused. | Concurrent changes still possible. |
 | Tables, filters and hidden rows | A fill adjacent to a table extends the table (confirmed). Inside a table column Excel may create a calculated column for the whole column. Hidden rows are filled. | No effect. |
-| Data validation | Not enforced. | No effect. |
+| Data validation | Violations reported, not necessarily prevented by Excel. | No effect. |
 | Dynamic arrays and spills | Filling a spilling formula down makes each copy spill into the next; errors reported as `#SPILL!` lines. | No effect. |
 | External links | Not observed. | No effect. |
-| Very large used range | Response too large above ~50,000–200,000 cells: false failure (confirmed). | No effect. |
+| Very large used range | Verification bounded/sampled; occupied target backup cap still applies. | Host timeout can leave an unknown outcome. |
 | Number formats and locale | English formula syntax. | No effect. |
-| Host and API set | Web autofill shape differs (above). | No effect. |
+| Host and API set | Formula-only copy handles single-cell and 2D ranges; keeps formatting. | Inspection depends on APIs. |
 | Execution mode | Confirm: one approval per call. | Next call. |
 
 ## Hostility and interrupts
 
 | Event | Before Excel is touched | While running |
 | --- | --- | --- |
-| The user is editing a cell | Edit-mode error; nothing filled. | One batch; cannot be caught mid-way. |
+| The user is editing a cell | Bounded wait before a successful sync. | No unsafe retry after work may have applied. |
 | The user changes the selection or the active sheet | Unqualified range lands on the new active sheet. | — |
 | The user changes data the call depends on | Overwrite check sees current data. | Edits between pre-read and fill are overwritten. |
 | Another tab's write holds the workbook lock | Waits without limit. | — |
-| Excel throttles, times out or rejects the payload | Request side is small (one formula). | Response too large → false failure (confirmed). |
+| Excel throttles, times out or rejects the payload | Request is one formula/copy. | Failure reports known applied/unknown state; read-back separate. |
 | Recalculation is pending | Values stale. | Same. |
 | The workbook is co-authored | Not observed. | Not observed. |
 | Autosave or a save boundary | No effect. | No effect. |
-| The user presses Stop | Thrown `Aborted`. | Completes. |
+| The user presses Stop | Nothing submitted. | Submitted fill settles, stopped receipt describes outcome. |
 | The context fills | Results are small. | — |
 
 ## Interactions with other systems
 
 **What the agent is told.** The prompt line only. Nothing about table extension or size.
 
-**Verification.** Errors in the filled range only.
+**Verification.** Complete or named sampled scope; no global dependent guarantee.
 
-**Backups and recovery.** Up to 20,000 cells; reason misreported above.
+**Backups and recovery.** Up to 20,000 cells; IDs and accurate limitations in text.
 
 **The workbook lock and parallel calls.** As `write_cells`.
 
 **Execution mode and approvals.** As `write_cells`.
 
-**Truncation and history shaping.** A fill producing thousands of errors lists every one and can be truncated.
+**Truncation and history shaping.** Error/change lists are capped with an omitted count; verification scope is stated separately from the displayed examples.
 
-**Auto-context.** Change list reports the range as user changes.
+**Auto-context.** Own changes are excluded from external edit notes.
 
 **Prompt caching.** No interaction.
 
@@ -119,8 +115,6 @@ On Excel on the web at `ec453df`, autofill from one cell fills only below and to
 
 ## Open questions and verification
 
-- Confirmed: simple fill, table extension, 50k success, 200k false failure (FILL-01 to FILL-06).
-- Read from code: protection, merges.
-- Looks like a bug: [B-02](../bug-triage.md#b-02-large-writes-and-fills-report-failure-after-the-change-is-applied), [B-19](../bug-triage.md#b-19-backup-notes-give-the-wrong-reason-when-a-backup-is-skipped), [B-21](../bug-triage.md#b-21-small-result-format-slips).
+- Merged fill/inspection/verification source read. FILL-01–06 are historical runs; large fill and all host variants were not rerun in this pass.
 
-Verified against pi-for-excel commit `ec453df`.
+Verified against pi-for-excel commit `1f51cf8` (source inspection).

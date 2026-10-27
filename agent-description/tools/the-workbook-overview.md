@@ -45,7 +45,7 @@ Only schema errors.
 
 ### Touches Excel
 
-Workbook level: one sync per sheet loading the used range's size, row 1's used values, tables, chart count, pivot count and shapes. Sheet level: one batch that loads **the whole used range's values** to show five rows.
+Workbook level reads structure and appends current calculation/protection state. Sheet level loads metadata, a bounded state sample and only the first five rows and bounded columns of displayed data, not the whole used grid.
 
 ### While running
 
@@ -53,21 +53,21 @@ Several batches for the workbook level; time grows with sheet count (1.6 s for 9
 
 ### The result
 
-Text as above. "Headers" are row 1's non-empty values, whatever row 1 is: a title, numbers, a spill error (confirmed: `Headers: Locked, 1`; `Headers: 100, pi wrote this, row 0, 0, …`). The used range's position is not given. A sheet preview labels columns from A and rows from 1 even when the used range starts elsewhere (read from code). `{"sheet": "Big"}` failed with `Error getting workbook overview: The response payload size has exceeded the limit…` (confirmed).
+"Headers" are still heuristic nonempty header values, not guaranteed table headers. Sheet previews now use actual used-range row/column offsets and displayed values, and name any column limit. Sheet-state notes describe detected protection, merges, filters, hidden rows, validation, spills and calculation mode for their bounded sample. Workbook-level current state names protected sheets and nonautomatic calculation. Unknown sheets report available names.
 
 ## Workbook and host state
 
 | State | True before the call | Changes while running |
 | --- | --- | --- |
-| Sheet protection | Not reported. | No effect. |
-| Calculation mode | Not reported. | No effect. |
-| Merged cells | Not reported; a merged title in row 1 becomes the only "header". | No effect. |
-| Tables, filters and hidden rows | Tables listed with size, not position or header row; filters and hidden rows not reported. | No effect. |
-| Data validation | Not reported. | No effect. |
+| Sheet protection | Reported; sheet sample can identify locked state. | Snapshot only. |
+| Calculation mode | Nonautomatic/pending state warns about stale values. | Snapshot only. |
+| Merged cells | Detected areas reported in sheet state. Headers remain heuristic. | No effect. |
+| Tables, filters and hidden rows | Sheet state reports detected boundaries/filter/hidden state. | Snapshot only. |
+| Data validation | Supported rules in the sheet sample are reported. | No effect. |
 | Dynamic arrays and spills | Spill errors in row 1 show as headers. | No effect. |
 | External links | Not reported. | No effect. |
-| Very large used range | Workbook level fine; sheet level fails (confirmed). | No effect. |
-| Number formats and locale | Header values raw. | No effect. |
+| Very large used range | Bounded previews avoid full-grid payloads. | Later sheets may observe later state. |
+| Number formats and locale | Preview uses displayed text with raw values when display hides them. | No effect. |
 | Host and API set | Same. | No effect. |
 | Execution mode | No effect. | No effect. |
 
@@ -75,15 +75,15 @@ Text as above. "Headers" are row 1's non-empty values, whatever row 1 is: a titl
 
 | Event | Before Excel is touched | While running |
 | --- | --- | --- |
-| The user is editing a cell | Edit-mode error. | Fails at the next batch. |
+| The user is editing a cell | Bounded Excel wait before any successful sync. | No unsafe whole-run retry after sync. |
 | The user changes the selection or the active sheet | No effect. | No effect. |
 | The user changes data the call depends on | Reflected. | Sheets processed later reflect later state. |
 | Another tab's write holds the workbook lock | No wait. | Sees partial writes. |
-| Excel throttles, times out or rejects the payload | — | Sheet level fails on big sheets. |
+| Excel throttles, times out or rejects the payload | — | Bounded host timeout; preview is not a full-sheet grid load. |
 | Recalculation is pending | Header formulas stale. | Same. |
 | The workbook is co-authored | Not observed. | Not observed. |
 | Autosave or a save boundary | No effect. | No effect. |
-| The user presses Stop | `Aborted`. | Completes. |
+| The user presses Stop | `Aborted`; waits cancelled. | Read grace is 500 ms, then stopped if unanswered. |
 | The context fills | Results are small. | — |
 
 ## Interactions with other systems
@@ -94,7 +94,7 @@ Text as above. "Headers" are row 1's non-empty values, whatever row 1 is: a titl
 
 **Backups and recovery.** No interaction.
 
-**The workbook lock and parallel calls.** Read call.
+**The workbook lock and parallel calls.** Read call; waits for earlier registered mutations in this runtime, not another tab's lock.
 
 **Execution mode and approvals.** No interaction.
 
@@ -115,7 +115,6 @@ Text as above. "Headers" are row 1's non-empty values, whatever row 1 is: a titl
 
 ## Open questions and verification
 
-- Confirmed: OVER-01 to OVER-05.
-- Looks like a bug: [B-05](../bug-triage.md#b-05-large-sheets-break-reads-search-and-sheet-overviews-with-a-raw-payload-error), [B-11](../bug-triage.md#b-11-the-agent-cannot-see-workbook-state-that-changes-what-its-calls-do), [B-21](../bug-triage.md#b-21-small-result-format-slips).
+- Merged source inspection: bounded displayed preview, offsets and current-state notes. OVER-01–05 record earlier behavior; the old big-sheet failure is not the current expectation. Every optional host state API and desktop host was not rerun.
 
-Verified against pi-for-excel commit `ec453df`.
+Verified against pi-for-excel commit `1f51cf8` (source inspection).

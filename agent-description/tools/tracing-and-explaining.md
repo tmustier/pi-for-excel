@@ -12,10 +12,11 @@
 **Precedents tree for Calc!B1:**
 
 └── **Calc!B1** = 102 (=A1+A2)
-    └── **Calc!A1** = 100
+    ├── **Calc!A1** = 100
+    └── **Calc!A2** = 2
 ```
 
-A2 is missing. `explain_formula {"cell": "Calc!B1"}` correctly lists both A1 and A2.
+Both small-range precedents are listed. Larger precedent/dependent areas are retained as range nodes rather than silently reduced to their first cell.
 
 ## The call, event by event
 
@@ -38,7 +39,7 @@ Schema errors.
 
 ### Touches Excel
 
-One or more batches per tree level. The API returns coalesced areas (`Calc!A1:A2`, confirmed); the tool converts each area to its first cell, so a range precedent becomes one cell. Dependents fall back to scanning formulas across sheets, which loads used ranges and can hit the payload limit on big sheets (read from code).
+One or more batches per tree level. API areas of up to 16 cells expand to individual cells; larger areas stay one node marked "range, values not traced". Formula-scan fallback uses the same small-range expansion. Dependents scanning can still load substantial formula grids. Unqualified roots resolve the active sheet and disclose it.
 
 ### While running
 
@@ -68,7 +69,7 @@ An ASCII tree with values and formulas, or the explanation text.
 
 | Event | Before Excel is touched | While running |
 | --- | --- | --- |
-| The user is editing a cell | Edit-mode error. | Next batch fails. |
+| The user is editing a cell | Shared bounded wait, up to 60 seconds. | No whole-run retry after a successful sync. |
 | The user changes the selection or the active sheet | Unqualified cell follows the active sheet. | — |
 | The user changes data the call depends on | Reflected. | Levels may disagree. |
 | Another tab's write holds the workbook lock | No wait. | — |
@@ -76,16 +77,15 @@ An ASCII tree with values and formulas, or the explanation text.
 | Recalculation is pending | Stale values. | — |
 | The workbook is co-authored | Not observed. | — |
 | Autosave or a save boundary | No effect. | — |
-| The user presses Stop | `Aborted`. | Completes. |
+| The user presses Stop | `Aborted`; wait cancelled. | Read grace is 500 ms, then stopped if unanswered. |
 | The context fills | Trees are capped. | — |
 
 ## Interactions with other systems
 
-**What the agent is told.** Prompt lines only. **Verification.** No interaction. **Backups and recovery.** No interaction. **The workbook lock and parallel calls.** Read calls. **Execution mode and approvals.** No interaction. **Truncation and history shaping.** Rarely large. **Auto-context.** No interaction. **Prompt caching.** No interaction. **Host differences.** API availability. **What the user sees.** A clickable tree card.
+**What the agent is told.** Prompt lines only. **Verification.** No interaction. **Backups and recovery.** No interaction. **The workbook lock and parallel calls.** Read calls wait for earlier registered mutations in this runtime, not another tab's lock. **Execution mode and approvals.** No interaction. **Truncation and history shaping.** Rarely large. **Auto-context.** No interaction. **Prompt caching.** No interaction. **Host differences.** API availability. **What the user sees.** A clickable tree card.
 
 ## Open questions and verification
 
-- Confirmed: TRACE-01, TRACE-02.
-- Looks like a bug: [B-13](../bug-triage.md#b-13-dependency-traces-show-a-precedent-range-as-its-first-cell).
+- Merged trace source expands small ranges and preserves large range nodes. TRACE-01/02 are historical observations; no new live dependency trace was run in this pass.
 
-Verified against pi-for-excel commit `ec453df`.
+Verified against pi-for-excel commit `1f51cf8` (source inspection).

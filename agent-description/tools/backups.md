@@ -2,7 +2,7 @@
 
 ## Summary
 
-Lists, restores, deletes and clears the automatic backups taken before Pi's supported mutations. `restore` is a mutation (and makes its own inverse backup); `list`, `delete` and `clear` are classified as reads, so they skip the lock and Confirm-mode approval.
+Lists, restores, deletes and clears automatic backups. List is read-only; restore/delete/clear serialize with workbook operations. Restore makes a rollback backup when possible. Delete/clear always ask for approval, even in Auto; Confirm also gates restores. User-initiated restore has its own preview/confirmation path.
 
 ## The simple case
 
@@ -18,7 +18,7 @@ Recent backups (current workbook):
 Use `workbook_history` with `action: "restore"` and `snapshot_id` to revert a specific backup.
 ```
 
-The agent has to map its own earlier writes to rows by tool, range and time; mutation results never told it the IDs.
+Mutation results now include their snapshot IDs in readable text. Listing also maps IDs to tool/range/time.
 
 ## The call, event by event
 
@@ -33,7 +33,7 @@ stateDiagram-v2
 
 ### Forms the call
 
-The agent needs a snapshot ID, available only from `list`.
+Restore/delete needs a snapshot ID from a mutation receipt or `list`.
 
 ### Rejected at once
 
@@ -49,7 +49,7 @@ One mutation under the lock.
 
 ### The result
 
-A table or a receipt. Backups cover mutations up to 20,000 cells; larger ones say "ℹ️ Backup not created for this mutation…" at the time, with the misleading reason in details.
+A table or receipt, with truthful capture/storage limitations. Snapshot size is capped at 20,000 cells. Checked writes refuse occupied larger targets rather than silently skipping overwrite protection. Retention is per workbook (5–120, default 120), with global cap 240; save/reload does not clear backups. Failed rollback capture/storage is reported.
 
 ## Workbook and host state
 
@@ -65,7 +65,7 @@ A table or a receipt. Backups cover mutations up to 20,000 cells; larger ones sa
 | Very large used range | Large mutations have no backup. | — |
 | Number formats and locale | Number formats restored for format backups. | — |
 | Host and API set | Identity on web anonymous links is unknown; backups still listed in this session. | — |
-| Execution mode | Restore approved in Confirm; delete/clear never approved. | — |
+| Execution mode | Restore approved in Confirm; delete/clear always approved. | Queued approvals are withdrawn by Stop. |
 
 ## Hostility and interrupts
 
@@ -74,22 +74,20 @@ A table or a receipt. Backups cover mutations up to 20,000 cells; larger ones sa
 | The user is editing a cell | List works (no Excel call); restore fails. | — |
 | The user changes the selection or the active sheet | No effect. | — |
 | The user changes data the call depends on | Restore overwrites the user's newer edits. | — |
-| Another tab's write holds the workbook lock | Restore waits; delete/clear do not. | — |
+| Another tab's write holds the workbook lock | Restore/delete/clear wait. | — |
 | Excel throttles, times out or rejects the payload | Rare. | — |
 | Recalculation is pending | No effect. | — |
 | The workbook is co-authored | Restore overwrites co-authors' edits. | — |
-| Autosave or a save boundary | Backups are cleared when the workbook goes from unsaved to saved; on the web the save state is unreliable (see [co-authoring and autosave](../hostility/co-authoring-and-autosave.md)). | — |
+| Autosave or a save boundary | Never clears automatic backups. | — |
 | The user presses Stop | `Aborted`. | Completes. |
 | The context fills | Lists are short. | — |
 
 ## Interactions with other systems
 
-**What the agent is told.** The prompt line lists covered tools. **Verification.** None after restore. **Backups and recovery.** This tool. **The workbook lock and parallel calls.** Delete/clear bypass the lock. **Execution mode and approvals.** See above. **Truncation and history shaping.** No interaction. **Auto-context.** Restores appear in the change list as user changes. **Prompt caching.** No interaction. **Host differences.** Save boundary on the web. **What the user sees.** The Backups dialog; see [product-description/workbook/backups-and-revert.md](../../product-description/workbook/backups-and-revert.md).
+**What the agent is told.** Covered tools and readable backup receipts. **Verification.** Restore is not a global correctness check. **Backups and recovery.** Durable per-workbook retention. **The workbook lock and parallel calls.** Restore/delete/clear serialize. **Execution mode and approvals.** Destructive backup actions always ask. **Truncation and history shaping.** Lists can be bounded. **Auto-context.** Own restores are not user edits. **Prompt caching.** No interaction. **Host differences.** Save state no longer clears entries. **What the user sees.** [Backups dialog](../../product-description/workbook/backups-and-revert.md).
 
 ## Open questions and verification
 
-- Confirmed: HIST-01 (list), backup creation and the >20,000-cell skip.
-- Read from code: restore paths; delete/clear as reads (`src/tools/execution-policy.ts:71-74`).
-- Looks like a bug: [B-19](../bug-triage.md#b-19-backup-notes-give-the-wrong-reason-when-a-backup-is-skipped); snapshot IDs only in details.
+- Merged recovery, execution-policy and coordinator source inspected. Live Luna write in this pass returned a saved backup ID. Restore/deletion, retention and multi-pane acceptance were not all rerun; old HIST observations are historical.
 
-Verified against pi-for-excel commit `ec453df`.
+Verified against pi-for-excel commit `1f51cf8`.

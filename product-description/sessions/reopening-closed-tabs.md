@@ -10,13 +10,13 @@ Reopening brings back a tab the user closed in this taskpane, with its whole con
 - `/reopen`;
 - the "Recently closed" section of the [resume picker](resuming-a-session.md).
 
-The first four reopen the most recently closed tab. The picker lets the user choose any of the six most recent. The list lives in memory, holds the last 10 closed tabs, and is lost when the taskpane reloads. All five paths work while other tabs are busy, never touch the active tab, and need no provider. Ctrl/Cmd+Z only reopens a tab when it would not take an undo away from a text field (see [Choosing what to reopen](#choosing-what-to-reopen)). On Excel on the web the browser keeps Ctrl+Shift+T for itself (it reopens a closed browser tab), so that path does not work there.
+The first four reopen the most recently closed tab. The picker lets the user choose any of the six most recent. The list holds the last 10 closed tabs and survives reload. All five paths work while other tabs are busy, never replace the active tab, and need no provider. Ctrl/Cmd+Z uses the text-field guard described in [Choosing what to reopen](#choosing-what-to-reopen). On Excel on the web the browser keeps Ctrl+Shift+T for itself (it reopens a closed browser tab), so that path does not work there.
 
 ## The simple case
 
 The user closes "Chat 2" by mistake. A toast near the top of the taskpane says "Closed Chat 2" with an "Undo" button. The user clicks "Undo" within 9 seconds. A new tab appears at the right end of the strip with the conversation exactly as it was saved, and becomes active. The toast changes to "Reopened: Chat 2". Focus goes to the composer.
 
-The user can do the same later with Ctrl/Cmd+Shift+T or `/reopen`, as long as the taskpane has not been reloaded. The new tab's label is the next free "Chat N", for example "Chat 3", not the label the tab had before (see [tab labels](../foundations/sessions-and-tabs.md#tab-labels)).
+The user can do the same later with Ctrl/Cmd+Shift+T or `/reopen`, including after reload: recently closed entries are stored per workbook (shared fallback when identity is unknown). The reopened tab keeps its chosen title or previous default number when available; see [tab labels](../foundations/sessions-and-tabs.md#tab-labels).
 
 ## The interaction, event by event
 
@@ -40,7 +40,7 @@ When a tab closes, it is added to the top of the recently closed list with the l
 
 Each path picks its target differently:
 
-- **"Undo"** on the toast reopens the tab that toast is about. A second close replaces the toast, so only the latest close can be undone this way.
+- **"Undo"** on a toast reopens the tab that notice is about. Notices stack; using another reopen path dismisses the matching stale Undo notice.
 - **Ctrl/Cmd+Z** (without Shift or Alt) reopens the most recent entry. It acts only if the list is not empty and one of these is true:
   - the undo toast is showing;
   - focus is not in a [text field](../glossary.md#input);
@@ -51,12 +51,12 @@ Each path picks its target differently:
 - **`/reopen`** reopens the most recent entry. It is allowed while the active tab is busy.
 - **The resume picker's "Recently closed" section** lists up to 6 entries, newest first. Each is shown under its label, with "Closed {date} · Reopens in new tab". Clicking one reopens that entry, whatever target button is selected in the picker.
 
-None of the paths check the active tab's state, so reopening works while the active tab is busy, and always opens a new tab.
+Reopening works while another tab is busy. If its session is already open, Pi focuses that existing tab instead of opening a duplicate.
 
 ### Ends at once
 
 - **The list is empty.** Ctrl/Cmd+Shift+T and `/reopen` show "No recently closed tab". Ctrl/Cmd+Z does nothing and is passed on as a text undo. The picker hides the "Recently closed" section.
-- **The entry is gone.** Clicking "Undo" after the same tab was already reopened another way does nothing visible. The code shows "Session is no longer in recently closed", but that toast is dropped because the undo toast is still on screen when it is raised. Confirmed in Excel on the web; see [Open questions](#open-questions-and-verification).
+- **The entry is gone.** "Session is no longer in recently closed". Reopening through a shortcut also dismisses that entry's stale Undo toast, so the old action does not remain offered.
 - **Ctrl/Cmd+Z in a text field with text, and no undo toast showing.** No reopen. The field's own undo runs.
 
 Nothing is recorded in these cases.
@@ -66,11 +66,11 @@ Nothing is recorded in these cases.
 The entry is taken off the list, and its session is loaded from storage. The session was saved when the tab closed, so the latest messages are there even if Pi had never answered. A new tab is added at the right end of the strip and becomes active, with:
 
 - the session's transcript, model and thinking level;
-- the next free "Chat N" label. A chosen title is not restored;
-- an empty queue. Steers, follow-ups and queued items that were waiting when the tab closed are gone;
-- the composer unchanged, because it is [shared by all tabs](../foundations/sessions-and-tabs.md#what-a-tab-owns).
+- its chosen title or saved default number where available;
+- no automatically running queue; stopped unused messages are saved as Not sent rows;
+- its own saved composer draft, not the previous active tab's draft.
 
-The toast says "Reopened: {title}", where the title is the label the tab had when it closed. Confirmed in Excel on the web: "Undo" on "Closed Chat 7" gave a tab "Chat 8" and "Reopened: Chat 7"; the draft in the composer was unchanged. The tab layout is saved. The session becomes the workbook's latest session.
+The toast says "Reopened: {title}", or an already-open notice when focusing a session. The tab layout is saved and the session becomes this workbook's latest session.
 
 ### While reopening
 
@@ -89,8 +89,8 @@ If the session is not in storage, the toast is "Couldn't reopen session" and the
 | Model and provider | The reopened tab uses the session's saved model, looked up again in the current model list. No provider is needed to reopen. | No effect on reopening. A busy tab's model cannot be changed. |
 | Thinking level | The reopened tab uses the session's saved level. | No effect. |
 | Execution mode | No effect. Reopening does not touch the workbook. | No effect. |
-| Files in the workspace, or an overlay open | Files: no effect. An overlay covers the toast's "Undo" button. Ctrl/Cmd+Shift+T still reopens behind the overlay, and so does Ctrl/Cmd+Z when focus is not in a field with text. The picker's own section is one of the paths. | No effect. |
-| Tab state (new, restored, another tab busy) | Only tabs closed since the taskpane opened can be reopened. Tabs that were open before a reload never enter the list. A busy active or background tab does not block reopening. | Reopening never interrupts a busy tab. It opens a new one. |
+| Files in the workspace, or an overlay open | Modal blocks reopen shortcuts behind it. The resume picker's own list remains a path. | No effect. |
+| Tab state (new, restored, another tab busy) | Recently closed entries survive reload. Another busy tab does not block reopening. | Existing sessions are focused, not duplicated. |
 | Host (desktop or web) | On Excel on the web the browser takes Ctrl+Shift+T and reopens its own last closed browser tab; Pi does not see it. Ctrl/Cmd+Z, `/reopen`, "Undo" and the picker work. | No effect. |
 
 A variant cannot change mid-reopen in a way that matters, because loading is near-instant.
@@ -101,11 +101,11 @@ A variant cannot change mid-reopen in a way that matters, because loading is nea
 | --- | --- | --- |
 | Stop (button or Escape) | Escape does not dismiss the undo toast. If the active tab is responding, Escape stops it, and the toast stays. | Not applicable: reopening has no busy phase. |
 | The user sends something else | Sending a message does not affect the list or the toast. | Not applicable. |
-| Tab switched, created, closed or reopened | Closing another tab replaces the undo toast with the new one. The earlier entry stays on the list and is still reachable with Ctrl/Cmd+Shift+T, `/reopen` or the picker. | Not applicable. |
+| Tab switched, created, closed or reopened | Closing another tab adds another notice and recently closed entry. Reopening retires its matching entry/Undo notice. | Not applicable. |
 | An overlay or menu opens | The toast stays up for its 9 seconds, but its button may be covered. | Not applicable. |
 | Model or thinking level changes | No effect. | Not applicable. |
 | The provider fails | No effect. No network request is made. | Not applicable. |
-| The taskpane goes away | The recently closed list is lost (confirmed in Excel on the web: after a reload `/reopen` said "No recently closed tab"). The closed sessions are still saved and can be found in the resume picker's "Saved sessions". | Not applicable. |
+| The taskpane goes away | Recently closed list and saved sessions persist. The transient Undo toast does not. | Not applicable. |
 | The workbook changes underneath | No effect. Saving under a new name changes the workbook identity, so the picker's filter may then hide earlier entries. The shortcut paths still reach them. | Not applicable. |
 | Focus moves to the grid or another window | Ctrl/Cmd+Z in the grid is Excel's undo, not a reopen. The toast still disappears after 9 seconds. | Not applicable. |
 | The context window fills | No effect. A reopened session keeps any compaction summaries it had. | Not applicable. |
@@ -114,11 +114,11 @@ After any interrupt the closed tab's session is still saved. Only the shortcut t
 
 ## Interactions with other systems
 
-**Persistence.** The list is in memory only. The sessions it points to are saved when the tab closes. See [persistence and restore](../cross-cutting/persistence-and-restore.md).
+**Persistence.** List, labels and tab numbers are stored per workbook; sessions save before close, including unsent state. See [persistence and restore](../cross-cutting/persistence-and-restore.md).
 
 **Workbook changes and recovery.** No interaction. Closing and reopening do not change the workbook or its [backups](../workbook/backups-and-revert.md).
 
-**Other tabs and sessions.** If the session being reopened is already open in another tab, for example because it was also resumed from the picker, reopening opens a second tab on the same session. Both tabs then save to it, and the last save wins (see [Open questions](#open-questions-and-verification)).
+**Other tabs and sessions.** Reopening an already-open session focuses it and retires its recently closed entry. Deduplication is within one taskpane, not across windows.
 
 **Execution mode and approvals.** No interaction.
 
@@ -126,7 +126,7 @@ After any interrupt the closed tab's session is still saved. Only the shortcut t
 
 **Offline and provider errors.** No interaction.
 
-**Notifications.** "Closed {title}" with "Undo" (9 seconds), "Reopened: {title}", "No recently closed tab", "Session is no longer in recently closed", "Couldn't reopen session". While the undo toast is up, ordinary toasts are suppressed, so a reopen done with Ctrl/Cmd+Z or Ctrl/Cmd+Shift+T during those 9 seconds shows no "Reopened" toast.
+**Notifications.** "Closed {title}" with "Undo" (9 seconds), reopen/already-open outcomes and missing/load failures. Notices stack rather than suppressing ordinary messages while Undo is visible. Reopening dismisses the matching Undo notice.
 
 **Settings and preferences.** No settings. The keyboard shortcuts page lists ⌘ ⇧ T / Ctrl+Shift+T as "Reopen closed tab". It does not list Ctrl/Cmd+Z.
 
@@ -146,10 +146,8 @@ After any interrupt the closed tab's session is still saved. Only the shortcut t
 
 ## Open questions and verification
 
-- Reopening with Ctrl/Cmd+Z or Ctrl/Cmd+Shift+T while the undo toast is visible leaves the stale "Closed {title} · Undo" toast up, because the "Reopened" toast is suppressed (`src/ui/toast.ts:190`, called from `src/taskpane/init.ts:1218`). Confirmed in Excel on the web (REOPEN-05, REOPEN-06). Clicking that stale "Undo" then does nothing visible at all: `reopenRecentlyClosedById` (`src/taskpane/init.ts:1226-1231`) raises "Session is no longer in recently closed", but the toast's action handler runs before the action toast is hidden (`src/ui/toast.ts:141-147`), so the plain toast is dropped by the same suppression. Looks like a bug.
-- The reopened tab gets a new "Chat N", while the toast names the old label. Confirmed in Excel on the web: "Reopened: Chat 7" on a tab labeled "Chat 8". Probably unintentional.
-- Reopening does not check whether the session is already open in another tab (`src/taskpane/init.ts:1209-1224`), so the same session can end up in two tabs. Read from code for this path; confirmed for the resume path.
+- Merged source persists the recently closed stack and tab number, restores session title/draft, deduplicates open sessions and dismisses matching Undo notices. Earlier failures remain in historical verification logs.
 - Ctrl/Cmd+Z with the toast showing overrides a text undo even when the composer has text (`src/taskpane/keyboard-shortcuts/guards.ts:29`). Confirmed in Excel on the web: with "draft text" in the composer, Ctrl+Z reopened the closed tab and left the draft as it was. This is deliberate in the guard, but a user undoing typing within 9 seconds of closing a tab gets a reopened tab instead.
 - Checked in Excel on the web on 2026-10-26; see [the checklist](../verification/sessions-and-commands.md#sessionsreopening-closed-tabsmd).
 
-Verified against pi-for-excel commit `ec453df`.
+Verified against pi-for-excel commit `1f51cf8` (source inspection).
