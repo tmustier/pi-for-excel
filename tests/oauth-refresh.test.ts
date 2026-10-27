@@ -81,6 +81,26 @@ void test("an expiring token is refreshed once for concurrent requests in one ta
   assert.equal(keys.values.get("anthropic"), "key:access-1");
 });
 
+void test("a token that expires while the pane is open is refreshed before the next request", async () => {
+  const settings = new MemorySettings();
+  const keys = new MemoryKeys();
+  // Valid when the pane opens, expires 3.5 minutes later.
+  seed(settings, NOW + 210_000);
+  let clock = NOW;
+  const fake = fakeProvider();
+  const refresher = createOAuthRefresher({
+    settings, providerKeys: keys, getOAuthProvider: () => fake.provider, now: () => clock,
+  });
+
+  assert.equal(await refresher.ensureFresh("anthropic"), "fresh");
+  assert.equal(fake.refreshCalls(), 0);
+
+  clock = NOW + 240_000;
+  assert.equal(await refresher.ensureFresh("anthropic"), "refreshed");
+  assert.equal(fake.refreshCalls(), 1);
+  assert.equal(keys.values.get("anthropic"), "key:access-1");
+});
+
 void test("two taskpanes refreshing at once rotate the grant once and both keep a working token", async () => {
   const settings = new MemorySettings();
   seed(settings, NOW - 1);
