@@ -37,6 +37,9 @@ void test("concurrent approvals queue instead of declining each other", async ()
   try {
     const composer = document.createElement("div");
     document.body.appendChild(composer);
+    const announcer = document.createElement("div");
+    announcer.setAttribute("aria-live", "polite");
+    document.body.appendChild(announcer);
 
     const outcomes: string[] = [];
     const first = requestApproval({ title: "Write D1", confirmLabel: "Allow" }).then((ok) => outcomes.push(`D1:${ok}`));
@@ -48,6 +51,8 @@ void test("concurrent approvals queue instead of declining each other", async ()
     assert.equal(onScreenTitle(), "Write D1");
     // Nothing behind the question can be used until it is answered.
     assert.equal((composer as HTMLElement).inert, true);
+    // Announcements still reach screen readers.
+    assert.notEqual((announcer as HTMLElement).inert, true);
 
     clickButton("Decline");
     await flushAsync();
