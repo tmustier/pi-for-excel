@@ -22,6 +22,8 @@ export interface TurnFailureContext {
   /** The configured proxy URL when the proxy is enabled. */
   proxyUrl: string | null;
   defaultProxyUrl: string;
+  /** The browser forbids this frame from reaching a localhost proxy at all (Local Network Access). */
+  proxyBlockedByBrowser: boolean;
 }
 
 /**
@@ -50,6 +52,8 @@ export function describeTurnFailure(context: TurnFailureContext): string | null 
   }
   if (isLikelyCorsErrorMessage(error)) {
     if (!context.online) return t("turn.error.offline");
+    // Enabling or starting the proxy cannot help where the browser blocks it.
+    if (context.proxyBlockedByBrowser) return t("proxy.blocked_by_browser");
     if (context.proxyUrl) return t("turn.error.proxyUnreachable", { url: context.proxyUrl });
     return t("turn.error.cors", { url: context.defaultProxyUrl, guide: PROXY_HELPER_DOCS_URL });
   }

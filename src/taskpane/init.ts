@@ -194,7 +194,7 @@ import {
   STATUS_CONTEXT_WARNING_ATTR,
   STATUS_CONTEXT_WARNING_SEVERITY_ATTR,
 } from "./status-context.js";
-import { getProxyState, startProxyPolling } from "./proxy-status.js";
+import { getProxyState, isProxyBlockedByBrowser, startProxyPolling } from "./proxy-status.js";
 import {
   closeStatusPopover,
   toggleContextPopover,
@@ -256,6 +256,13 @@ export async function initTaskpane(opts: {
 
   // 1. Storage
   const { providerKeys, sessions, settings, customProviders, modelCatalogs } = initAppStorage();
+
+  // Ask the browser not to evict sessions, backups and settings under storage
+  // pressure. Best effort: hosts may refuse silently or not support it.
+  void getAppStorage().requestPersistence().then(
+    (persisted) => console.log(`[pi] Persistent storage: ${persisted ? "granted" : "not granted"}`),
+    (error: Error) => console.warn("[pi] Persistent storage request failed:", error),
+  );
 
   // Initialize language from storage
   initLanguage(await readTaskpaneLanguage(settings));
@@ -1259,6 +1266,7 @@ export async function initTaskpane(opts: {
             online: navigator.onLine,
             proxyUrl: proxyUrl ?? null,
             defaultProxyUrl: DEFAULT_PROXY_URL,
+            proxyBlockedByBrowser: isProxyBlockedByBrowser(),
           }));
         });
       },
@@ -1837,6 +1845,7 @@ export async function initTaskpane(opts: {
     getModelSwitchBehavior,
     setModelSwitchBehavior,
     models: modelRuntime.models,
+    isAnyTabBusy: () => runtimeManager.snapshotTabs().some((tab) => tab.isBusy),
     onRulesSaved: async () => {
       await refreshWorkbookState();
     },
@@ -2210,7 +2219,7 @@ export async function initTaskpane(opts: {
     if (host && messagesContainer) {
       const proxyBanner = createProxyBanner();
       host.insertBefore(proxyBanner.root, messagesContainer);
-      proxyBanner.update(getProxyState());
+      proxyBanner.update(getProxyState(), isProxyBlockedByBrowser());
 
       document.addEventListener("pi:proxy-state-changed", (event: Event) => {
         if (!(event instanceof CustomEvent)) return;
@@ -2218,7 +2227,7 @@ export async function initTaskpane(opts: {
         if (!isTaskpaneInitPayloadShape(detail)) return;
         const state = detail.state;
         if (state === "detected" || state === "not-detected" || state === "unknown") {
-          proxyBanner.update(state);
+          proxyBanner.update(state, isProxyBlockedByBrowser());
         }
       });
     }

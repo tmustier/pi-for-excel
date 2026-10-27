@@ -29,7 +29,7 @@ import {
 } from "../../messages/archived-history.js";
 import { getErrorMessage } from "../../utils/errors.js";
 import { extractTextBlocks, summarizeContentForTranscript } from "../../utils/content.js";
-import { isEmbeddedAppleWebView } from "../../utils/platform.js";
+import { saveBlobAsFile } from "../../utils/download.js";
 import type { PiSidebar } from "../../ui/pi-sidebar.js";
 import { getWorkbookChangeAuditLog } from "../../audit/workbook-change-audit.js";
 import { getWorkbookContext } from "../../workbook/context.js";
@@ -86,39 +86,20 @@ function countChatMessages(messages: AgentMessage[]): number {
 
 type ExportDestination = "clipboard" | "download";
 
-function parseExportDestination(raw: string, fallback: ExportDestination): ExportDestination {
+/** The destination the user named, or null for the command's default. */
+function parseExportDestination(raw: string): ExportDestination | null {
   const normalized = raw.trim().toLowerCase();
   if (normalized === "clipboard") return "clipboard";
   if (normalized === "file" || normalized === "download") return "download";
-  return fallback;
+  return null;
 }
 
 function triggerJsonDownload(fileName: string, content: string): void {
-  const blob = new Blob([content], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-
-  // Excel for Mac's WKWebView ignores programmatic <a download> clicks, so it
-  // gets window.open(). Everywhere else <a download> saves the file; trying
-  // window.open() first there opened a stray blob tab *and* downloaded, because
-  // the framed taskpane reports the open as failed (Excel on the web).
-  // Fall back to <a download> if the popup is blocked (lost user activation).
-  const opened = isEmbeddedAppleWebView() ? window.open(url, "_blank") : null;
-  if (!opened) {
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = fileName;
-    anchor.rel = "noopener";
-    anchor.hidden = true;
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-  }
-
-  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  saveBlobAsFile(new Blob([content], { type: "application/json" }), fileName);
 }
 
 async function exportWorkbookAuditLog(rawArgs: string): Promise<void> {
-  const destination = parseExportDestination(rawArgs, "download");
+  const destination = parseExportDestination(rawArgs) ?? "download";
 
   // Only this workbook's changes: the log holds addresses and values from every workbook.
   // With no workbook identity, only entries that were recorded without one are included.
@@ -473,7 +454,7 @@ export function createExportCommands(getActiveAgent: ActiveAgentProvider): Slash
           try {
             await exportWorkbookAuditLog(parts.slice(1).join(" "));
           } catch (error) {
-            showToast(t("export.toast.audit_export_failed", { error: getErrorMessage(error) }));
+            showToast(t("export.toast.audit_export_failed", { error: getErrorMessage(error) }), { variant: "error" });
           }
           return;
         }
@@ -520,23 +501,32 @@ export function createExportCommands(getActiveAgent: ActiveAgentProvider): Slash
         };
 
         const json = JSON.stringify(exportData, null, 2);
-        const destination = parseExportDestination(args, "clipboard");
+        const destination = parseExportDestination(args);
 
-        if (destination === "clipboard") {
+        if (destination !== "download") {
           try {
-            if (await copyText(json) === "manual") return;
-            showToast(t("export.toast.transcript_copied", {
-              count: String(countChatMessages(msgs)),
-              size: (json.length / 1024).toFixed(0),
-            }));
+            // A bare /export downloads where the clipboard refuses the copy
+            // (Excel on the web without user activation) instead of filling the
+            // manual-copy dialog with the whole JSON transcript.
+            const outcome = await copyText(json, { manualFallback: destination === "clipboard" });
+            if (outcome === "manual") return;
+            if (outcome === "copied") {
+              showToast(t("export.toast.transcript_copied", {
+                count: String(countChatMessages(msgs)),
+                size: (json.length / 1024).toFixed(0),
+              }));
+              return;
+            }
           } catch (error) {
-            showToast(t("export.toast.copy_failed", { error: getErrorMessage(error) }));
+            showToast(t("export.toast.copy_failed", { error: getErrorMessage(error) }), { variant: "error" });
+            return;
           }
-          return;
         }
 
         triggerJsonDownload(`pi-session-${new Date().toISOString().slice(0, 10)}.json`, json);
-        showToast(t("export.toast.transcript_downloaded", { count: String(countChatMessages(msgs)) }));
+        showToast(t(destination === "download"
+          ? "export.toast.transcript_downloaded"
+          : "export.toast.transcript_download_instead", { count: String(countChatMessages(msgs)) }));
       },
     },
   ];

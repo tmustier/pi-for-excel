@@ -35,6 +35,8 @@ export interface SettingsPagesDependencies {
   extensionsHub?: ExtensionsHubDependencies;
   onRulesSaved?: () => Promise<void> | void;
   backups?: BackupsPageCallbacks;
+  /** True while any tab is responding or running queued work. */
+  isAnyTabBusy?: () => boolean;
 }
 
 let dependencies: SettingsPagesDependencies = {};

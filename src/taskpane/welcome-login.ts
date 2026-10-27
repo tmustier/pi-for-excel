@@ -2,7 +2,7 @@
  * Welcome/login overlay shown when no providers are configured.
  */
 
-import { t, initLanguage, getLanguage } from "../language/index.js";
+import { t, getLanguage } from "../language/index.js";
 
 import type { ModelRefreshOwner } from "../models/model-refresh-owner.js";
 import { getAppStorage } from "../storage/local/app-storage.js";
@@ -198,26 +198,20 @@ export async function showWelcomeLogin(modelRefreshOwner: ModelRefreshOwner): Pr
 
     engBtn.addEventListener("click", () => {
       if (getLanguage() === "en") return;
-      initLanguage("en");
-      void (async () => {
-        try {
-          const storage = getAppStorage();
-          await storage.settings.set("language", "en");
-          location.reload();
-        } catch { /* ignore */ }
-      })();
+      // The language applies through the reload; a failed save keeps the current one.
+      void getAppStorage().settings.set("language", "en").then(
+        () => location.reload(),
+        () => showToast(t("settings.lang.saveFailed"), { variant: "error" }),
+      );
     });
 
     zhBtn.addEventListener("click", () => {
       if (getLanguage() === "zh-CN") return;
-      initLanguage("zh-CN");
-      void (async () => {
-        try {
-          const storage = getAppStorage();
-          await storage.settings.set("language", "zh-CN");
-          location.reload();
-        } catch { /* ignore */ }
-      })();
+      // The language applies through the reload; a failed save keeps the current one.
+      void getAppStorage().settings.set("language", "zh-CN").then(
+        () => location.reload(),
+        () => showToast(t("settings.lang.saveFailed"), { variant: "error" }),
+      );
     });
 
     langBar.append(engBtn, zhBtn);

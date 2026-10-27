@@ -15,7 +15,8 @@ export type ProxyBannerState = "detected" | "not-detected" | "unknown";
 
 export interface ProxyBannerHandle {
   root: HTMLElement;
-  update: (state: ProxyBannerState) => void;
+  /** `blockedByBrowser`: the browser forbids reaching localhost here, so running the proxy cannot help. */
+  update: (state: ProxyBannerState, blockedByBrowser?: boolean) => void;
 }
 
 function selectElementText(element: HTMLElement): void {
@@ -138,9 +139,15 @@ export function createProxyBanner(): ProxyBannerHandle {
 
   root.append(topRow, details);
 
-  const update = (state: ProxyBannerState): void => {
+  const update = (state: ProxyBannerState, blockedByBrowser = false): void => {
     const shouldShow = state === "not-detected";
     root.hidden = !shouldShow;
+
+    textLabel.textContent = blockedByBrowser ? t("proxy-banner.blocked") : t("proxy-banner.warning");
+    detailsIntro.textContent = blockedByBrowser ? t("proxy-banner.blocked_intro") : t("proxy-banner.intro");
+    codeRow.hidden = blockedByBrowser;
+    hint.hidden = blockedByBrowser;
+    guideLink.hidden = blockedByBrowser;
 
     if (!shouldShow) {
       details.hidden = true;

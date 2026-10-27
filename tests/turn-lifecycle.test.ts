@@ -267,6 +267,7 @@ void test("the error banner names the real failure", () => {
     online: true,
     proxyUrl: null,
     defaultProxyUrl: "https://localhost:3003",
+    proxyBlockedByBrowser: false,
   };
 
   assert.equal(describeTurnFailure({ ...base, messages: [fauxAssistantMessage("partial", { stopReason: "aborted" })] }), null);
@@ -297,6 +298,13 @@ void test("the error banner names the real failure", () => {
     /through the proxy at https:\/\/localhost:3003/u,
   );
   assert.match(describeTurnFailure({ ...base, messages: failed("Failed to fetch") }) ?? "", /likely CORS/u);
+  // Where the browser blocks localhost, neither enabling nor starting the proxy helps, whether it is on or off.
+  for (const proxyUrl of [null, "https://localhost:3003"]) {
+    assert.match(
+      describeTurnFailure({ ...base, messages: failed("Failed to fetch"), proxyUrl, proxyBlockedByBrowser: true }) ?? "",
+      /Excel desktop/u,
+    );
+  }
   assert.match(
     describeTurnFailure({ ...base, messages: failed("context_length_exceeded"), isContextOverflow: true, overflowAfterRecovery: true }) ?? "",
     /^Context window still exceeded after compacting and retrying/u,

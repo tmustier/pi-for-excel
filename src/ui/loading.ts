@@ -10,14 +10,14 @@ import { t } from "../language/index.js";
 /**
  * Render the loading spinner.
  */
-export function renderLoading(): TemplateResult {
+export function renderLoading(message?: string): TemplateResult {
   return html`
     <div class="pi-loading">
       <div class="pi-loading__spinner">
         <div class="pi-loading__ring"></div>
         <div class="pi-loading__ring pi-loading__ring--inner"></div>
       </div>
-      <span class="pi-loading__text">${t("loading.initializing")}</span>
+      <span class="pi-loading__text">${message ?? t("loading.initializing")}</span>
     </div>
   `;
 }

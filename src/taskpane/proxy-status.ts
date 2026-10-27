@@ -5,7 +5,12 @@
  * dispatches a custom event so UI surfaces can react.
  */
 
-import { DEFAULT_PROXY_URL, normalizeProxyUrl } from "../auth/proxy-validation.js";
+import {
+  DEFAULT_PROXY_URL,
+  isLoopbackHostname,
+  isLoopbackProxyUrl,
+  normalizeProxyUrl,
+} from "../auth/proxy-validation.js";
 import type { SettingsReader } from "../storage/local/settings-store.js";
 
 const CHECK_INTERVAL_MS = 30_000;
@@ -14,10 +19,38 @@ const CHECK_TIMEOUT_MS = 1_500;
 export type ProxyState = "detected" | "not-detected" | "unknown";
 
 let currentState: ProxyState = "unknown";
+let blockedByBrowser = false;
 let intervalId: ReturnType<typeof setInterval> | undefined;
 
 export function getProxyState(): ProxyState {
   return currentState;
+}
+
+/**
+ * True when the last check could not reach a localhost proxy because the
+ * browser forbids this frame from reaching the local device at all, so
+ * running the proxy cannot help.
+ */
+export function isProxyBlockedByBrowser(): boolean {
+  return blockedByBrowser;
+}
+
+/**
+ * Chromium's Local Network Access gates requests from a public page to
+ * localhost behind the `loopback-network` permission, which a cross-origin
+ * frame can only ask for when every embedding frame delegates it. Excel on
+ * the web does not, so requests fail with "Failed to fetch" and no prompt.
+ * Only Chromium exposes `document.featurePolicy`; elsewhere this is false.
+ */
+function isLoopbackBlockedByFramePolicy(proxyUrl: string): boolean {
+  if (!isLoopbackProxyUrl(proxyUrl) || isLoopbackHostname(window.location.hostname)) return false;
+  // Not in TypeScript's DOM lib; the shape is Chromium's Feature Policy API.
+  const policy = (document as Document & {
+    featurePolicy?: { features(): string[]; allowsFeature(feature: string): boolean };
+  }).featurePolicy;
+  // Browsers without Local Network Access do not know the feature and allow the request.
+  if (!policy || !policy.features().includes("loopback-network")) return false;
+  return !policy.allowsFeature("loopback-network");
 }
 
 async function probeProxy(proxyUrl: string): Promise<boolean> {
@@ -56,8 +89,10 @@ export async function checkProxyOnce(settings: SettingsReader): Promise<ProxySta
 
   const reachable = await probeProxy(proxyUrl);
   const newState: ProxyState = reachable ? "detected" : "not-detected";
+  const newBlocked = !reachable && isLoopbackBlockedByFramePolicy(proxyUrl);
 
-  if (newState !== currentState) {
+  if (newState !== currentState || newBlocked !== blockedByBrowser) {
+    blockedByBrowser = newBlocked;
     currentState = newState;
     dispatchProxyStateChanged(newState);
   }
