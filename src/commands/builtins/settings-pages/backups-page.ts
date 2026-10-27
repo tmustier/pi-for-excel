@@ -227,6 +227,13 @@ async function renderBackupsContent(
     onClick: () => {
       if (busy || allCheckpoints.length === 0) return;
       void (async () => {
+        // Pi may have added backups since the page opened; count what Clear all deletes.
+        try {
+          await reload();
+        } catch {
+          // Keep the count already shown.
+        }
+        if (allCheckpoints.length === 0) return;
         const proceed = await requestConfirmationDialog({
           title: t("recovery.confirm.deleteAllTitle"),
           message: t("recovery.confirm.deleteAllMessage", { count: allCheckpoints.length, plural: allCheckpoints.length === 1 ? "" : "s" }),
