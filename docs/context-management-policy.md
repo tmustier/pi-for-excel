@@ -182,6 +182,8 @@ Rules:
   - auto-compaction uses the hard trigger both **before queued prompts** and **mid-turn between tool-loop continuations** (`Agent.prepareNextTurn`); status-bar warnings remain on the existing 40%/60% UX thresholds
   - runs that still end in a provider **context-overflow error** get one compact-and-retry recovery pass (see `src/compaction/overflow-recovery.ts`, #566)
   - summarized slices are persisted in a UI-only `archivedMessages` bucket with a “Show earlier messages” card (excluded from model context)
+  - the summarizer is told which requests were answered (`[User request, answered]` / `not answered yet`), and is shown the final reply of a summarized request whose answer stays in the kept tail, so finished work is never listed as In Progress or Next Steps (B-24)
+  - tool results over 8,000 chars in **answered** requests are measured and sent as their compacted preview in the kept tail (`compactionSummary.compactedToolCallIds`, applied by `convertToLlm` and the context meter); tool cards keep the full output. When the previews leave nothing to summarize, the cut falls back to full sizes so `/compact` still frees their space. The current request's results stay whole.
 
 **Success:** fewer degraded late-thread responses.
 
