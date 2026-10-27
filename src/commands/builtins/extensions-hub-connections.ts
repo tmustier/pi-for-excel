@@ -92,40 +92,11 @@ function getStatusBadge(ok: boolean, label: string): { text: string; tone: "ok" 
   return ok ? { text: label, tone: "ok" } : { text: label, tone: "muted" };
 }
 
-function describeIntegrationAvailability(args: {
-  sessionEnabled: boolean;
-  workbookEnabled: boolean;
-  workbookLabel: string;
-  hasWorkbook: boolean;
-}): string {
-  const { sessionEnabled, workbookEnabled, workbookLabel, hasWorkbook } = args;
-
-  if (sessionEnabled && workbookEnabled && hasWorkbook) {
-    return t("ext-hub-connections.scopeSessionAndWorkbook", { label: workbookLabel });
-  }
-
-  if (workbookEnabled && hasWorkbook) {
-    return t("ext-hub-connections.scopeWorkbook", { label: workbookLabel });
-  }
-
-  if (sessionEnabled) {
-    return hasWorkbook ? t("ext-hub-connections.scopeSessionOnly") : t("ext-hub-connections.scopeSession");
-  }
-
-  return hasWorkbook ? t("ext-hub-connections.scopeOff") : t("ext-hub-connections.scopeOffShort");
-}
-
 type ConnectionsMutation = (
   action: () => Promise<void>,
   reason: "toggle" | "scope" | "external-toggle" | "config",
   msg?: string,
 ) => Promise<void>;
-
-function integrationName(integrationId: IntegrationId): string {
-  return t(integrationId === "web_search"
-    ? "ext-hub-connections.integration.web_search"
-    : "ext-hub-connections.integration.mcp_tools");
-}
 
 /**
  * "Available in" row plus session/workbook switches that decide whether Pi
@@ -143,16 +114,22 @@ function appendIntegrationScopeControls(args: {
   isBusy: () => boolean;
   runMutation: ConnectionsMutation;
 }): void {
-  const { body, integrationId, sessionId, workbookId, settings, runMutation } = args;
-  const name = integrationName(integrationId);
+  const { body, integrationId, sessionId, workbookId, workbookLabel, sessionEnabled, workbookEnabled, settings, runMutation } = args;
+  const name = t(integrationId === "web_search"
+    ? "ext-hub-connections.integration.web_search"
+    : "ext-hub-connections.integration.mcp_tools");
 
-  const availability = createConfigValue(describeIntegrationAvailability({
-    sessionEnabled: args.sessionEnabled,
-    workbookEnabled: args.workbookEnabled,
-    workbookLabel: args.workbookLabel,
-    hasWorkbook: workbookId !== null,
-  }));
-  body.appendChild(createConfigRow(t("extensions-hub-connections.availability"), availability));
+  let availability: string;
+  if (workbookId !== null && workbookEnabled) {
+    availability = t(sessionEnabled
+      ? "ext-hub-connections.scopeSessionAndWorkbook"
+      : "ext-hub-connections.scopeWorkbook", { label: workbookLabel });
+  } else if (sessionEnabled) {
+    availability = t(workbookId !== null ? "ext-hub-connections.scopeSessionOnly" : "ext-hub-connections.scopeSession");
+  } else {
+    availability = t(workbookId !== null ? "ext-hub-connections.scopeOff" : "ext-hub-connections.scopeOffShort");
+  }
+  body.appendChild(createConfigRow(t("extensions-hub-connections.availability"), createConfigValue(availability)));
 
   const scopeDetails = document.createElement("details");
   scopeDetails.className = "pi-hub-advanced-disclosure pi-hub-scope-disclosure";

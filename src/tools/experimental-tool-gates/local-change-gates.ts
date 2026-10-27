@@ -10,7 +10,7 @@
  */
 
 import type { AgentTool } from "@earendil-works/pi-agent-core";
-import { Type, type Static } from "typebox";
+import { Type } from "typebox";
 import { Value } from "typebox/value";
 
 import { formatBytes } from "../../files/mime.js";
@@ -40,11 +40,9 @@ const ExtensionsGateParamsSchema = Type.Object({
   replace_existing: Type.Optional(Type.Boolean()),
   capabilities: Type.Optional(Type.Array(Type.String())),
 });
-type ExtensionsGateParams = Static<typeof ExtensionsGateParamsSchema>;
 
 function nonEmpty(value: string | undefined): string | undefined {
-  const trimmed = value?.trim();
-  return trimmed !== undefined && trimmed.length > 0 ? trimmed : undefined;
+  return value?.trim() || undefined;
 }
 
 function throwIfAborted(signal: AbortSignal | undefined): void {
@@ -68,12 +66,6 @@ async function defaultInspectWorkspaceFile(path: string): Promise<FilesGateFileI
   return { size: entry.size, readOnly: entry.readOnly };
 }
 
-function failClosed(_request: LocalChangeApprovalRequest): Promise<boolean> {
-  return Promise.reject(new Error(
-    "This change needs your approval, but the approval dialog is unavailable.",
-  ));
-}
-
 async function requireApproval(
   dependencies: ExperimentalToolGateDependencies,
   request: LocalChangeApprovalRequest,
@@ -81,7 +73,10 @@ async function requireApproval(
   signal: AbortSignal | undefined,
 ): Promise<void> {
   throwIfAborted(signal);
-  const requestApproval = dependencies.requestLocalChangeApproval ?? failClosed;
+  const requestApproval = dependencies.requestLocalChangeApproval;
+  if (!requestApproval) {
+    throw new Error("This change needs your approval, but the approval dialog is unavailable.");
+  }
   const approved = await requestApproval(signal ? { ...request, signal } : request);
   throwIfAborted(signal);
   if (!approved) {
@@ -91,12 +86,6 @@ async function requireApproval(
 
 function getMode(dependencies: ExperimentalToolGateDependencies): Promise<"yolo" | "safe"> {
   return dependencies.getExecutionMode?.() ?? Promise.resolve("safe");
-}
-
-function describeFileLocation(info: FilesGateFileInfo | null): string {
-  return info?.nativeFolderName !== undefined
-    ? t("gate.files.locationFolder", { folder: info.nativeFolderName })
-    : t("gate.files.locationWorkspace");
 }
 
 export function wrapFilesToolWithChangeGate(
@@ -135,7 +124,9 @@ export function wrapFilesToolWithChangeGate(
       const mode = await getMode(dependencies);
       const losesUserData = existing !== null && !assistantCreated.has(path);
       if (mode === "safe" || losesUserData) {
-        const location = describeFileLocation(existing);
+        const location = existing?.nativeFolderName !== undefined
+          ? t("gate.files.locationFolder", { folder: existing.nativeFolderName })
+          : t("gate.files.locationWorkspace");
         const size = existing ? formatBytes(existing.size) : "";
         const request: LocalChangeApprovalRequest = action === "delete"
           ? {
@@ -173,32 +164,25 @@ export function wrapFilesToolWithChangeGate(
   };
 }
 
-function codePreview(code: string): string {
-  const lines = code.split("\n");
-  const shown = lines.slice(0, 12).join("\n");
-  return lines.length > 12 ? `${shown}\n…` : shown;
-}
-
 export function wrapExtensionsManagerToolWithChangeGate(
   tool: AgentTool,
   dependencies: ExperimentalToolGateDependencies,
 ): AgentTool {
-  const findExtension = (id: string | undefined) =>
-    id === undefined ? undefined : dependencies.listExtensions?.().find((entry) => entry.id === id);
-
   return {
     ...tool,
     execute: async (toolCallId, params, signal, onUpdate) => {
       throwIfAborted(signal);
 
-      const parsed: ExtensionsGateParams | null = Value.Check(ExtensionsGateParamsSchema, params) ? params : null;
-      if (parsed === null) {
+      if (!Value.Check(ExtensionsGateParamsSchema, params)) {
         return tool.execute(toolCallId, params, signal, onUpdate);
       }
+      const parsed = params;
       const action = parsed.action;
       const mode = await getMode(dependencies);
       const extensionId = nonEmpty(parsed.extension_id);
-      const target = findExtension(extensionId);
+      const target = extensionId === undefined
+        ? undefined
+        : dependencies.listExtensions?.().find((entry) => entry.id === extensionId);
       const targetName = target?.name ?? extensionId ?? "?";
       const noneLabel = t("gate.extensions.none");
 
@@ -218,7 +202,10 @@ export function wrapExtensionsManagerToolWithChangeGate(
         if (replacing.length > 0) {
           lines.push(t("gate.extensions.replaces", { count: replacing.length }));
         }
-        lines.push("", t("gate.extensions.codeHeader", { lines: code.split("\n").length, chars: code.length }), codePreview(code));
+        const codeLines = code.split("\n");
+        const preview = codeLines.slice(0, 12).join("\n");
+        lines.push("", t("gate.extensions.codeHeader", { lines: codeLines.length, chars: code.length }),
+          codeLines.length > 12 ? `${preview}\n…` : preview);
 
         await requireApproval(dependencies, {
           toolName: tool.name,
