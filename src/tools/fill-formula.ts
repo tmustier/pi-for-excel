@@ -167,18 +167,17 @@ export function createFillFormulaTool(): AgentTool<typeof schema, FillFormulaDet
           if (inspection.occupiedCount > 0 && !inspection.before) return { kind: "too_large_to_back_up", inspection, block };
           if (signal?.aborted) return { kind: "stopped", inspection, block };
 
-          // Fill by writing the formula's R1C1 form to every cell: the same
-          // relative references autofill produces, but only formulas change.
-          // Autofill also copied the top-left cell's formats across the
-          // range, which the backup (values and formulas) cannot undo.
+          // Paste the top-left formula across the range, formulas only: the
+          // same relative references autofill produces, but each cell keeps
+          // its formats (autofill copied the top-left formats, which the
+          // backup cannot undo). One paste, not a per-cell formula grid:
+          // on the web a 50,000-row paste takes ~0.3 s, a grid times out
+          // after ~4,500 cells.
           const topLeft = range.getCell(0, 0);
           topLeft.formulas = [[params.formula]];
-          topLeft.load("formulasR1C1");
-          await context.sync();
-          const storedR1C1: unknown = topLeft.formulasR1C1[0]?.[0];
-          const r1c1: string = typeof storedR1C1 === "string" ? storedR1C1 : params.formula;
-          range.formulasR1C1 = Array.from({ length: range.rowCount }, () =>
-            Array.from({ length: range.columnCount }, () => r1c1));
+          if (range.rowCount > 1 || range.columnCount > 1) {
+            range.copyFrom(topLeft, "Formulas");
+          }
 
           range.load("values,formulas,address,rowCount,columnCount");
           await context.sync();
