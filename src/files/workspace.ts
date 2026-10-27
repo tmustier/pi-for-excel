@@ -190,22 +190,6 @@ function requestedLocationArgs(
   return { requestedLocationKind: locationKind };
 }
 
-/** `docs/budget.csv` → `docs/budget (2).csv`, … — first path not in `takenLowerCase`. */
-function nextFreeImportPath(path: string, takenLowerCase: ReadonlySet<string>): string {
-  if (!takenLowerCase.has(path.toLowerCase())) return path;
-
-  const slash = path.lastIndexOf("/");
-  const dot = path.lastIndexOf(".");
-  const extensionStart = dot > slash + 1 ? dot : path.length;
-  const stem = path.slice(0, extensionStart);
-  const extension = path.slice(extensionStart);
-
-  for (let n = 2; ; n += 1) {
-    const candidate = `${stem} (${n})${extension}`;
-    if (!takenLowerCase.has(candidate.toLowerCase())) return candidate;
-  }
-}
-
 function parsePersistedMetadata(value: unknown): Map<string, WorkspaceFileWorkbookTag> {
   const byPath = new Map<string, WorkspaceFileWorkbookTag>();
   if (!Value.Check(PersistedWorkspaceMetadataSchema, value)) return byPath;
@@ -1439,7 +1423,16 @@ export class FilesWorkspace {
         }
       }
 
-      const path = nextFreeImportPath(normalizedPath, takenPaths);
+      let path = normalizedPath;
+      if (takenPaths.has(path.toLowerCase())) {
+        const dot = path.lastIndexOf(".");
+        const extensionStart = dot > path.lastIndexOf("/") + 1 ? dot : path.length;
+        const stem = path.slice(0, extensionStart);
+        const extension = path.slice(extensionStart);
+        for (let n = 2; takenPaths.has(path.toLowerCase()); n += 1) {
+          path = `${stem} (${n})${extension}`;
+        }
+      }
       takenPaths.add(path.toLowerCase());
       if (path !== normalizedPath) {
         renamed.push({ from: normalizedPath, to: path });
