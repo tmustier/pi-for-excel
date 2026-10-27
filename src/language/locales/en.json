@@ -1265,6 +1265,7 @@
   "turn.toast.leftUnsent": "Pi didn't get to {count} queued message{plural}; kept above the composer, not sent",
   "turn.toast.unknownCommand": "No command /{command}. Start with a space to send it as a message",
   "turn.error.apiKeyRequired": "API key required for {provider}.",
+  "turn.error.loginExpired": "Your {provider} login has expired and could not be renewed. Sign in again in Settings.",
   "turn.error.contextOverflow": "Context window exceeded. Run /compact to free up context, scope your request to a smaller range, or use a larger-context model.",
   "turn.error.contextOverflowAfterRetry": "Context window still exceeded after compacting and retrying. Run /compact, scope your request to a smaller range, or use a larger-context model.",
   "turn.error.offline": "You're offline. Reconnect, then send your message again.",

@@ -162,10 +162,10 @@ async function restoreFromBrowserOAuthStorage(
         console.log(`[auth] ${provider.name}: session restored from IndexedDB`);
       } else if (outcome === "failed") {
         // Refresh is attempted shortly before expiry; a token that still works is used until then.
-        if (Date.now() < credentials.expires) {
-          await providerKeys.set(apiProvider, provider.getApiKey(credentials));
-          restoredProviders.add(apiProvider);
-        }
+        await providerKeys.set(apiProvider, provider.getApiKey(credentials));
+        restoredProviders.add(apiProvider);
+        console.warn(`[auth] ${provider.name}: refresh failed; it will be retried before the next request`);
+      } else if (outcome === "expired") {
         console.warn(`[auth] ${provider.name}: refresh failed; it will be retried before the next request`);
       }
     } catch (e) {

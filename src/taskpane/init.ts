@@ -1189,11 +1189,19 @@ export async function initTaskpane(opts: {
     const tab = createTabState();
     // Set when the user dismisses the connection dialog during this turn.
     let missingCredentialsFor: string | null = null;
+    // Set when this turn's login could not be refreshed and its token has expired.
+    let expiredLoginFor: string | null = null;
 
     // API key resolution
     agent.getApiKey = async (provider: string) => {
       // OAuth access tokens expire during long sessions; refresh before the request, not at reload.
-      await oauthRefresher.ensureFresh(provider);
+      if (await oauthRefresher.ensureFresh(provider) === "expired") {
+        // Sending the stale token would only surface the provider's 401, and
+        // returning no key lets pi-ai fall back to that same stored token.
+        // Throwing fails the turn; the banner tells the user to sign in again.
+        expiredLoginFor = provider;
+        throw new Error(`The ${provider} login has expired and could not be refreshed.`);
+      }
       const resolvedAuth = await modelRuntime.models.getAuth(provider);
       if (resolvedAuth) return resolvedAuth.auth.apiKey;
 
@@ -1238,12 +1246,15 @@ export async function initTaskpane(opts: {
       onTurnSettled: ({ overflowAfterRecovery }) => {
         const credentials = missingCredentialsFor;
         missingCredentialsFor = null;
+        const expiredLogin = expiredLoginFor;
+        expiredLoginFor = null;
         void getConfiguredProxyUrl().then((proxyUrl) => {
           tab.setError(describeTurnFailure({
             messages: agent.state.messages,
             isContextOverflow: findTrailingContextOverflowError(agent.state) !== null,
             overflowAfterRecovery,
             missingCredentialsFor: credentials,
+            expiredLoginFor: expiredLogin,
             online: navigator.onLine,
             proxyUrl: proxyUrl ?? null,
             defaultProxyUrl: DEFAULT_PROXY_URL,
