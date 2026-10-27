@@ -1,8 +1,10 @@
 # The model picker
 
+No-provider entry revised for SE-02 in [PR #811](https://github.com/tmustier/pi-for-excel/pull/811). Without a connection, the model control reads "Connect a provider" and opens the welcome provider choices instead of an empty model picker. The draft stays unsent. Busy-selection timing belongs to the preceding tabs/models PR.
+
 ## Summary
 
-The model picker is how the user chooses which model the active tab uses. It is an overlay titled "Select model": a search field ("Search models…") over a list of every model from the user's connected [providers](../foundations/models-and-providers.md), with the tab's current model first and marked with a check ("Current model"). It is reached three ways: clicking the model control at the left of the [status bar](../ui/the-status-bar.md) (the π mark and the model's name, tooltip "Switch the AI model for this session."), typing `/model` ("Switch AI model"), or typing `/default-models`, which opens the same picker despite its description, "Switch models with Ctrl+P". There is no Ctrl+P shortcut. The status-bar control opens the picker even while the tab is busy, but choosing a different model is then refused; the two commands are refused outright while busy. With no provider connected the picker opens empty. It behaves the same on Excel desktop and Excel on the web.
+The model picker chooses which model the active tab uses. "Select model" has a search field ("Search models…") over the connected [providers](../foundations/models-and-providers.md), with the current model first and checked. Open it from the [status bar](../ui/the-status-bar.md), `/model` or `/default-models`. With no provider connected these entry points open welcome choices instead. Behavior is the same on Excel desktop and Excel on the web; busy-selection timing is owned by the preceding tabs/models revision.
 
 ## The simple case
 
@@ -138,7 +140,7 @@ After closing the picker the user is in the composer of the tab they started fro
 
 ## Edge cases
 
-- With no provider connected the picker shows only "No matching models", even though the status bar names a model.
+- With no provider connected, "Connect a provider" opens welcome choices; an internal fallback model is not presented as usable.
 - The status bar shows the model's display name ("GPT-6.1 Sol"); the picker shows ids ("gpt-6.1-sol") and provider ids. The same model from two providers appears twice, distinguishable only by the tag.
 - Seen in the standalone taskpane: when the tab's model was swapped by a provider refresh at the same moment the picker opened, no row had the check mark, and the status bar's context size changed from "272k" to "500k" behind the overlay.
 - Custom gateways appear with their single model and the tag "Gateway · {name}".
