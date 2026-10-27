@@ -29,7 +29,7 @@ import {
 } from "../../messages/archived-history.js";
 import { getErrorMessage } from "../../utils/errors.js";
 import { extractTextBlocks, summarizeContentForTranscript } from "../../utils/content.js";
-import { isEmbeddedAppleWebView } from "../../utils/platform.js";
+import { saveBlobAsFile } from "../../utils/download.js";
 import type { PiSidebar } from "../../ui/pi-sidebar.js";
 import { getWorkbookChangeAuditLog } from "../../audit/workbook-change-audit.js";
 import { getWorkbookContext } from "../../workbook/context.js";
@@ -95,27 +95,7 @@ function parseExportDestination(raw: string): ExportDestination | null {
 }
 
 function triggerJsonDownload(fileName: string, content: string): void {
-  const blob = new Blob([content], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-
-  // Excel for Mac's WKWebView ignores programmatic <a download> clicks, so it
-  // gets window.open(). Everywhere else <a download> saves the file; trying
-  // window.open() first there opened a stray blob tab *and* downloaded, because
-  // the framed taskpane reports the open as failed (Excel on the web).
-  // Fall back to <a download> if the popup is blocked (lost user activation).
-  const opened = isEmbeddedAppleWebView() ? window.open(url, "_blank") : null;
-  if (!opened) {
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = fileName;
-    anchor.rel = "noopener";
-    anchor.hidden = true;
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-  }
-
-  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  saveBlobAsFile(new Blob([content], { type: "application/json" }), fileName);
 }
 
 async function exportWorkbookAuditLog(rawArgs: string): Promise<void> {
