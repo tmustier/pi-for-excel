@@ -56,7 +56,9 @@ import {
   classifySentValue,
   describeWriteObstacle,
   formatVerificationNotes,
+  formatInterruptedWrite,
   formatReplacedFormulas,
+  formatStoppedAfterWrite,
   formatVerificationProblems,
   inspectWriteTarget,
   replacedFormulas,
@@ -66,8 +68,11 @@ import {
   type CellScalar,
   type SentGrid,
   type WriteBlock,
+  type WriteInterruption,
+  type WriteTargetInspection,
   type WriteVerification,
 } from "./mutation/range-write.js";
+import { STOPPED_AFTER_CHANGE_NOTE, type StopReporting } from "./with-workbook-coordinator.js";
 
 const MIN_TIMEOUT_MS = 100;
 const MAX_TIMEOUT_MS = 120_000;
@@ -111,6 +116,8 @@ interface WriteOutputRequest {
   outputStartCell: string;
   values: CellScalar[][];
   allowOverwrite: boolean;
+  /** Stop is honored between chunks, as in write_cells. */
+  signal?: AbortSignal;
 }
 
 type WriteOutputResult =
@@ -138,6 +145,12 @@ type WriteOutputResult =
     backupUnavailable?: { unavailableReason: string; unavailableNote?: string };
     /** Cells that held a formula and hold a constant now. */
     formulasReplacedCount?: number;
+    /**
+     * Set when the write ended early (Stop, or Excel failed partway). Its text
+     * comes from write_cells' wording; `rowsWritten` counts rows that landed or
+     * may have landed (0 when nothing changed).
+     */
+    interrupted?: { text: string; stopped: boolean };
   };
 
 export interface PythonTransformRangeToolDependencies {
@@ -267,12 +280,47 @@ async function defaultWriteOutputValues(request: WriteOutputRequest): Promise<Wr
   const sent: SentGrid = (r, c) => classifySentValue(padded[r]?.[c]);
   const sentFormulas = padded.some((row) => row.some((value) => typeof value === "string" && value.startsWith("=")));
   const sentEmptyCount = padded.reduce((total, row) => total + row.filter((value) => value === "").length, 0);
-  const progress = { outputAddress: request.outputStartCell, writtenRows: 0 };
+  const progress: {
+    outputAddress: string;
+    inspection: WriteTargetInspection | null;
+    writtenRows: number;
+    inFlightRows: number;
+  } = { outputAddress: request.outputStartCell, inspection: null, writtenRows: 0, inFlightRows: 0 };
+  const signal = request.signal;
+
+  const interrupted = (
+    cause: WriteInterruption,
+    uncertainRows: number,
+  ): Extract<WriteOutputResult, { blocked: false }> => {
+    const inspection = progress.inspection;
+    const before = inspection?.before ?? null;
+    return {
+      blocked: false,
+      outputAddress: progress.outputAddress,
+      rowsWritten: progress.writtenRows + uncertainRows,
+      colsWritten: block.columnCount,
+      formulaErrorCount: 0,
+      interrupted: {
+        text: formatInterruptedWrite({
+          cause,
+          block,
+          sheetName: inspection?.sheetName ?? null,
+          fullAddr: progress.outputAddress,
+          writtenRows: progress.writtenRows,
+          uncertainRows,
+        }),
+        stopped: cause.kind === "stopped",
+      },
+      ...(before ? { beforeValues: before.values, beforeFormulas: before.formulas } : {}),
+      backupUnavailable: backupUnavailable(before !== null, block, progress.outputAddress),
+    };
+  };
 
   try {
     return await excelRun<WriteOutputResult>(async (context) => {
       const { sheet } = getRange(context, request.outputStartCell);
       const inspection = await inspectWriteTarget(context, sheet, block, sent);
+      progress.inspection = inspection;
       const qualify = (address: string): string => qualifiedAddress(inspection.sheetName, address);
       const outputAddress = qualify(blockAddress(block));
       progress.outputAddress = outputAddress;
@@ -296,14 +344,24 @@ async function defaultWriteOutputValues(request: WriteOutputRequest): Promise<Wr
         };
       }
 
+      // Stop is honored between chunks, never inside one, so the result can say which rows landed.
       for (const chunk of chunkRowsForWrite(padded)) {
+        if (signal?.aborted) return interrupted({ kind: "stopped" }, 0);
         sheet.getRange(blockAddress(block, chunk.rowOffset, chunk.rows.length)).values = chunk.rows;
+        progress.inFlightRows = chunk.rows.length;
         await context.sync();
+        progress.inFlightRows = 0;
         progress.writtenRows += chunk.rows.length;
       }
 
       const before = inspection.before;
       const backup = backupUnavailable(before !== null, block, outputAddress);
+      if (signal?.aborted) {
+        return {
+          ...interrupted({ kind: "stopped" }, 0),
+          interrupted: { text: formatStoppedAfterWrite(outputAddress, block), stopped: true },
+        };
+      }
       let verification: WriteVerification;
       try {
         verification = await verifyWrittenRange(context, sheet, block, sent, {
@@ -367,12 +425,13 @@ async function defaultWriteOutputValues(request: WriteOutputRequest): Promise<Wr
       };
     });
   } catch (error) {
-    if (progress.writtenRows === 0) throw error;
-    const failure = await describeExcelFailure(parseExcelError(error), { range: progress.outputAddress });
-    throw new Error(
-      `Partly written — the first ${progress.writtenRows} of ${block.rowCount} row(s) of ${progress.outputAddress} were written; ` +
-      `the rest failed and were not written. ${failure.reason} Nothing was rolled back; read the range before retrying.`,
-    );
+    const parsed = parseExcelError(error);
+    // A batch Excel refused did not apply. One it never answered (timeout, Stop,
+    // or a failure that is not an Excel answer) may have.
+    const uncertainRows = parsed.outcomeUnknown || parsed.code === null ? progress.inFlightRows : 0;
+    if (progress.writtenRows + uncertainRows === 0) throw error;
+    const failure = await describeExcelFailure(parsed, { range: progress.outputAddress });
+    return interrupted({ kind: "failed", reason: failure.reason }, uncertainRows);
   }
 }
 
@@ -631,9 +690,72 @@ function shouldAttachPythonBridgeSkillHint(message: string): boolean {
     || normalized.includes("econnrefused");
 }
 
+/** Result, audit and backup for a write that ended early, worded like write_cells. */
+async function finishInterrupted(
+  writeResult: Extract<WriteOutputResult, { blocked: false }>,
+  interrupted: { text: string; stopped: boolean },
+  context: { toolCallId: string; sourceAddress: string; bridgeUrl: string | undefined; withOutput: (text: string) => string },
+): Promise<AgentToolResult<PythonTransformRangeDetails>> {
+  const { toolCallId, sourceAddress } = context;
+  const changedCount = writeResult.rowsWritten * writeResult.colsWritten;
+  const result: AgentToolResult<PythonTransformRangeDetails> = {
+    content: [{ type: "text", text: context.withOutput(interrupted.text) }],
+    details: {
+      kind: "python_transform_range",
+      blocked: false,
+      inputAddress: sourceAddress,
+      outputAddress: writeResult.outputAddress,
+      ...(context.bridgeUrl !== undefined ? { bridgeUrl: context.bridgeUrl } : {}),
+      rowsWritten: writeResult.rowsWritten,
+      colsWritten: writeResult.colsWritten,
+      verification: "failed",
+      ...(interrupted.stopped ? { stopped: true } : {}),
+    },
+    isError: true,
+  };
+
+  const summary = interrupted.stopped
+    ? (changedCount === 0 ? "stopped before writing" : `stopped after ${writeResult.rowsWritten} row(s)`)
+    : `interrupted after ${writeResult.rowsWritten} row(s)`;
+
+  if (changedCount === 0) {
+    await finalizeMutationOperation(mutationFinalizeDependencies, {
+      auditEntry: {
+        toolName: "python_transform_range", toolCallId, blocked: true, inputAddress: sourceAddress,
+        outputAddress: writeResult.outputAddress, changedCount: 0, changes: [], summary,
+      },
+    });
+    return result;
+  }
+
+  const { beforeValues, beforeFormulas } = writeResult;
+  await finalizeMutationOperation(mutationFinalizeDependencies, {
+    auditEntry: {
+      toolName: "python_transform_range", toolCallId, blocked: false, inputAddress: sourceAddress,
+      outputAddress: writeResult.outputAddress, changedCount, changes: [], summary,
+    },
+    recovery: {
+      result,
+      appendRecoverySnapshot: () => beforeValues && beforeFormulas
+        ? getWorkbookRecoveryLog().append({
+          toolName: "python_transform_range",
+          toolCallId,
+          address: writeResult.outputAddress,
+          changedCount,
+          beforeValues,
+          beforeFormulas,
+        })
+        : Promise.resolve(null),
+      appendResultNote: appendMutationResultNote,
+      ...(writeResult.backupUnavailable ?? { unavailableReason: CHECKPOINT_SKIPPED_REASON }),
+    },
+  });
+  return result;
+}
+
 export function createPythonTransformRangeTool(
   dependencies: PythonTransformRangeToolDependencies = {},
-): AgentTool<TSchema, PythonTransformRangeDetails> {
+): AgentTool<TSchema, PythonTransformRangeDetails> & StopReporting {
   const getBridgeConfig = dependencies.getBridgeConfig ?? getDefaultPythonBridgeConfig;
   const callBridge = dependencies.callBridge ?? callDefaultPythonBridge;
   const readInputRange = dependencies.readInputRange ?? defaultReadInputRange;
@@ -644,6 +766,7 @@ export function createPythonTransformRangeTool(
 
   return {
     name: "python_transform_range",
+    reportsStop: true,
     label: "Python Transform Range",
     description:
       "Read an Excel range, run Python transformation on `{ range, values }` (available as `input_data`), " +
@@ -657,6 +780,8 @@ export function createPythonTransformRangeTool(
       rawParams: unknown,
       signal: AbortSignal | undefined,
     ): Promise<AgentToolResult<PythonTransformRangeDetails>> => {
+      let writeStarted = false;
+      let stoppedTarget: string | undefined;
       try {
         const params = parseParams(rawParams);
         validateParams(params);
@@ -668,6 +793,7 @@ export function createPythonTransformRangeTool(
         const outputStartCell = requestedOutputStartCell !== undefined
           ? toSheetQualifiedCell(input.sheetName, requestedOutputStartCell)
           : defaultOutputStartCell(input);
+        stoppedTarget = outputStartCell;
 
         const bridgeConfig = await getBridgeConfig();
         const bridgeRequest = buildBridgeRequest(params.code, sourceAddress, input.values, params.timeout_ms);
@@ -768,7 +894,9 @@ export function createPythonTransformRangeTool(
           outputStartCell,
           values: transformedValues,
           allowOverwrite: params.allow_overwrite === true,
+          ...(signal ? { signal } : {}),
         });
+        writeStarted = true;
 
         if (writeResult.blocked) {
           const blockedResult: AgentToolResult<PythonTransformRangeDetails> = {
@@ -803,6 +931,15 @@ export function createPythonTransformRangeTool(
           return blockedResult;
         }
 
+        if (writeResult.interrupted) {
+          return finishInterrupted(writeResult, writeResult.interrupted, {
+            toolCallId,
+            sourceAddress,
+            bridgeUrl: bridgeUrlUsed,
+            withOutput,
+          });
+        }
+
         const changes = writeResult.changes;
         const successText = changes && changes.changedCount > 0
           ? `${formatSuccessMessage(sourceAddress, writeResult, paddingWarning)}\n\nChanged cell(s): ${changes.changedCount}.`
@@ -831,6 +968,8 @@ export function createPythonTransformRangeTool(
           },
           ...(writeResult.notWrittenCount ? { isError: true } : {}),
         };
+        // Stop pressed after verification finished: the result is complete, but say the change stands.
+        if (signal?.aborted) appendMutationResultNote(successResult, STOPPED_AFTER_CHANGE_NOTE);
 
         const changedCount = changes?.changedCount ?? writeResult.rowsWritten * writeResult.colsWritten;
         const beforeValues = writeResult.beforeValues;
@@ -869,6 +1008,26 @@ export function createPythonTransformRangeTool(
 
         return successResult;
       } catch (error) {
+        // Stop while Python ran (or before the write began): nothing changed in the workbook.
+        if (signal?.aborted && !writeStarted) {
+          const target = stoppedTarget ?? "the destination";
+          return {
+            content: [{
+              type: "text",
+              text: formatInterruptedWrite({
+                cause: { kind: "stopped" },
+                block: { startRow: 1, startCol: 0, rowCount: 1, columnCount: 1 },
+                sheetName: null,
+                fullAddr: target,
+                writtenRows: 0,
+                uncertainRows: 0,
+              }),
+            }],
+            details: { kind: "python_transform_range", blocked: false, stopped: true, ...(stoppedTarget ? { outputAddress: stoppedTarget } : {}) },
+            isError: true,
+          };
+        }
+
         const parsed = parseExcelError(error);
         // Excel failures get a specific reason; bridge/Python failures keep their message.
         const message = parsed.code

@@ -355,3 +355,57 @@ void test("python_transform_range explains the bridge output limit with a row es
   assert.match(firstText(result), /fit about 52,428 per call/u);
   assert.equal(result.details?.blocked, false);
 });
+
+void test("python_transform_range answers Stop and unconfirmed chunks like write_cells", async () => {
+  const host = new FakeExcelHost(["Py"]);
+  // Two rows over 1M characters each are written in two chunks.
+  const big = "y".repeat(1_100_000);
+  let result_json = "";
+  let controller = new AbortController();
+  let abortDuringPython = false;
+  const tool = createPythonTransformRangeTool({
+    getBridgeConfig: () => Promise.resolve({ url: "https://localhost:3340", source: "default" }),
+    callBridge: () => {
+      if (abortDuringPython) controller.abort();
+      return Promise.resolve({ ok: true, action: "run_python", exit_code: 0, result_json });
+    },
+  });
+  const sync = host.context.sync;
+
+  await withFakeExcel(host, async () => {
+    host.sheet("Py").set("A1", "source");
+
+    // Stop while Python ran: nothing is written.
+    abortDuringPython = true;
+    result_json = "[[1,2],[3,4]]";
+    const before = await tool.execute("tc-stop-before", { range: "Py!A1", code: "result = ...", output_start_cell: "Py!R1" }, controller.signal);
+    assert.equal(firstText(before), "⏹ **Stopped before writing** — nothing changed in Py!R1:S2.");
+    assert.equal(before.details?.stopped, true);
+    assert.equal(host.sheet("Py").value("R1"), "");
+
+    // Stop after the first chunk landed: that chunk stands, the rest is not written.
+    abortDuringPython = false;
+    controller = new AbortController();
+    result_json = JSON.stringify([[big], [big]]);
+    let writes = 0;
+    host.context.sync = () => {
+      const pending = (Reflect.get(host, "queued") as unknown[]).length;
+      return sync().then(() => {
+        if (pending > 0 && ++writes === 1) controller.abort();
+      });
+    };
+    const after = await tool.execute("tc-stop-after", { range: "Py!A1", code: "result = ...", output_start_cell: "Py!U1" }, controller.signal);
+    assert.match(firstText(after), /^⏹ \*\*Stopped after writing Py!U1\*\* \(row 1 of Py!U1:U2\) — the change stands\.\nThe remaining 1 row\(s\) were not written\./u);
+    assert.equal(after.details?.stopped, true);
+    assert.equal(host.sheet("Py").value("U1"), big);
+    assert.equal(host.sheet("Py").value("U2"), "");
+
+    // Excel never answered the second chunk: it may or may not have landed.
+    host.context.sync = sync;
+    controller = new AbortController();
+    host.failWrite = { at: 3, error: new Error("Excel did not respond") };
+    const unknown = await tool.execute("tc-unconfirmed", { range: "Py!A1", code: "result = ...", output_start_cell: "Py!W1" }, controller.signal);
+    assert.match(firstText(unknown), /Partly written\*\* — Py!W1 \(row 1 of Py!W1:W2\) was written and stands\.\nrow 2 \(Py!W2\) may or may not have been written: Excel did not confirm that step\./u);
+    assert.equal(unknown.isError, true);
+  });
+});
