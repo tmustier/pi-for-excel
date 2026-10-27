@@ -1,7 +1,5 @@
 # Keyboard shortcuts
 
-Chat/thinking rows revised for CL-03, CL-09 / CC-07 in [PR #803](https://github.com/tmustier/pi-for-excel/pull/803). Tab-chord changes belong to the subsequent CC-08 PR, not this revision.
-
 ## Summary
 
 Pi for Excel can be driven almost entirely from the keyboard: sending, steering and following up, stopping, restoring queued messages, cycling the thinking level, opening, closing, reopening and switching tabs, the command menu, and returning focus to the composer. This document has two parts. The first describes the **Keyboard shortcuts** page, the in-product reference opened with `/shortcuts`, from the utilities menu's "Keyboard shortcuts" item, or from Settings → "Keyboard shortcuts". The second is the **index** of every shortcut the product actually handles, with where it works, what blocks it, and the document that owns its behaviour. Behaviour is described in the owning documents; this index only points to them (see the README's scope decision on shortcuts). The page is available while the tab is busy only from the utilities menu or Settings: `/shortcuts` is refused while busy. It needs no provider and works on every host, though some shortcuts collide with the browser on Excel on the web.
@@ -46,10 +44,10 @@ Quoted exactly, Windows label first, Mac label second where they differ. The Win
 | Group | Keys | Description |
 | --- | --- | --- |
 | Chat | Enter | "Send message" |
-| Chat | "Enter (while streaming)" | "Steer Pi after its current step" |
+| Chat | "Enter (while streaming)" | "Interrupt and redirect" |
 | Chat | Alt+Enter / ⌥ Enter | "Queue follow-up message" |
 | Chat | Alt+↑ / ⌥ ↑ | "Restore queued message" |
-| Chat | Ctrl+Alt+T / Ctrl+Option+T | "Cycle thinking level (in the message box)" |
+| Chat | Shift+Tab / ⇧ Tab | "Cycle thinking depth" |
 | Tabs | Ctrl+T / ⌘ T | "New tab" |
 | Tabs | Ctrl+W / ⌘ W | "Close tab" |
 | Tabs | Ctrl+Shift+T / ⌘ ⇧ T | "Reopen closed tab" |
@@ -75,8 +73,7 @@ Every shortcut the product handles, in the taskpane only (keys pressed while foc
 | Alt/Option+Enter | Responding: follow-up. Idle: sends like Enter. | Composer. | [steering and the queue](../turn/steering-and-the-queue.md) |
 | Alt/Option+Up | Restore queued: moves waiting steers, follow-ups and queued prompts into the composer. Toasts "Restored {count} queued message(s) to editor" or "No queued messages to restore". Also accepted as Alt/Option+PageUp, which some webviews send instead. | In the composer, or anywhere focus is not in another text field. Ignored on key repeat. | [steering and the queue](../turn/steering-and-the-queue.md) |
 | Escape | Responding: stops and restores waiting items to the composer. Idle with focus in the composer: moves focus to the tab strip. | Only when no menu, popover or overlay claims Escape; see [Escape](#escape). | [stopping](../turn/stopping.md) |
-| Ctrl+Alt/Option+T | Cycles the active tab's supported thinking levels; toast includes the dedicated chord. | Composer only, no modal. Not Cmd on Mac. | [thinking](../turn/thinking.md) |
-| Shift+Tab | Moves focus backwards normally; never changes thinking. | Native focus navigation, including composer and dialogs. | [thinking](../turn/thinking.md) |
+| Shift+Tab | Cycles the active tab's thinking level; toast "Thinking: {level} (next turn)". | Anywhere, including text fields and overlays, whenever a tab exists. With the command menu open it completes the command instead. On Excel on the web it also moves focus backwards (see [Host differences](#interactions-with-other-systems)). | [thinking](../turn/thinking.md) |
 | Ctrl/Cmd+O | Shows or hides tool-card bodies and thinking blocks in the transcript; toast "Details hidden (⌃O)" or "Details shown (⌃O)". | Anywhere. Lower-case o only, so Shift is not allowed. | [tool calls](../turn/tool-calls.md) |
 | F2 | Puts focus in the composer with the caret at the end. | Anywhere, with no modifier, even with an overlay open. | [the composer](../turn/the-composer.md) |
 
@@ -127,7 +124,7 @@ Tried with real key input (operating-system key events into the Chrome window ru
 | Ctrl+PageUp / Ctrl+PageDown | No | Chrome switched to the neighbouring browser tab; with only one browser tab, nothing happened. Focus on a Pi tab made no difference. |
 | Ctrl+O | Yes | Pi toggled details ("Details hidden (⌃O)"); no browser or Excel Open dialog. |
 | Ctrl+Z (empty composer, nothing closed) | Yes | Nothing; Excel's own undo did not run. |
-| Shift+Tab | Yes | Reverse-focus navigation only. PR #803 removes the old simultaneous thinking-level change. |
+| Shift+Tab | Yes | Pi cycled the thinking level, and focus also moved backwards (composer → Files button → a starter hint). Office.js's own Tab handler in the taskpane frame moves focus itself, whether or not Pi cancelled the key. |
 | Escape, F2, ←/→, Alt+↑ | Yes | As in the index: Escape moved focus from the composer to the tab strip, F2 brought it back, arrows switched tabs from the tab strip, Alt+↑ toasted "No queued messages to restore". |
 | F6 | Not handled | Focus left the page entirely (to the browser's own controls); it did not reach the grid. |
 | Ctrl+F6 | Taken by Office.js | Office.js hands Ctrl+F6 to Excel as "leave the add-in"; no visible change was observed. |
@@ -138,7 +135,7 @@ Tried with real key input (operating-system key events into the Chrome window ru
 - **Ctrl+P** appears only in the menu description of `/default-models`, "Switch models with Ctrl+P". No such shortcut exists; in Excel on the web Ctrl+P prints.
 - **Ctrl/Cmd+Z** (reopen closed tab) and **Ctrl/Cmd+O** (show or hide details) work but are not on the page.
 - **Tab** in the command menu, **Shift+Enter**, **Enter in the command menu**, **Alt/Option+PageUp**, **Ctrl+PageUp/PageDown on a Mac** and **arrow keys on a focused tab** work but are not listed.
-- Enter while streaming is labelled **"Steer Pi after its current step"**: it waits for the current response/tools, rather than interrupting them. Send uses that same path while responding; Alt/Option+Enter remains follow-up.
+- **"Interrupt and redirect"** for Enter while streaming overstates it: a steer does not interrupt anything; it is delivered after the current model response and its tools finish (see [turns](../foundations/turns.md#while-pi-is-busy)).
 - **"Restore queued message"** is singular, but every waiting steer, follow-up and queued prompt is restored at once.
 - **"← → Switch tabs (exit input first)"** is accurate, but the same text-field guard silently applies to Ctrl+PageUp/PageDown and Cmd+Shift+[ ], which the page does not say.
 
@@ -146,10 +143,10 @@ Tried with real key input (operating-system key events into the Chrome window ru
 
 | Modifier | Set before | Changed while busy |
 | --- | --- | --- |
-| Model and provider | No effect on the page. The thinking chord only offers the model's supported levels. | No effect. |
+| Model and provider | No effect on the page. Shift+Tab only offers the model's supported levels. | No effect. |
 | Thinking level | No effect on the page. | No effect. |
 | Execution mode | No effect. | No effect. |
-| Files in the workspace, or an overlay open | The page is itself a modal. Thinking cycling does not act behind it; Shift+Tab navigates its controls. | Same. |
+| Files in the workspace, or an overlay open | The page is itself an overlay. Several shortcuts still act behind any overlay (Shift+Tab, Ctrl/Cmd+T, Ctrl/Cmd+W, F2, the arrows when a non-text control has focus). | Same. |
 | Tab state (new, restored, another tab busy) | No effect on the page. Shortcuts act on the active tab. | `/shortcuts` is refused while busy; the menu item is not. |
 | Host (desktop or web) | Notation follows the platform. On Excel on the web the browser keeps Ctrl/Cmd+T, Ctrl/Cmd+W, Ctrl+PageUp/PageDown and, usually, Ctrl/Cmd+Shift+T (confirmed); see [What Excel on the web does with the keys](#what-excel-on-the-web-does-with-the-keys). | No effect. |
 
@@ -161,7 +158,7 @@ Tried with real key input (operating-system key events into the Chrome window ru
 | The user sends something else | The overlay holds focus; nothing can be sent until it closes. | Same. |
 | Tab switched, created, closed or reopened | Ctrl/Cmd+T and Ctrl/Cmd+W act on the tabs behind the open page. | Same. |
 | An overlay or menu opens | Opening another Settings page replaces the shortcuts page. | Same. |
-| Model or thinking level changes | The thinking chord does not act behind the modal page. Shift+Tab navigates its controls. | Same. |
+| Model or thinking level changes | Shift+Tab changes the level behind the page. | Same. |
 | The provider fails | No effect. | No effect. |
 | The taskpane goes away | Nothing to lose. | Same. |
 | The workbook changes underneath | No effect. | No effect. |
@@ -188,11 +185,11 @@ After closing the page the user is back in the same tab with the composer as it 
 
 **Settings and preferences.** The page lives in Settings and has no options.
 
-**Host differences.** Grid keys go to Excel, not Pi. Shift+Tab is only focus navigation. Thinking uses Ctrl+Alt+T on Windows/Linux and Ctrl+Option+T on Mac. The browser's historical reserved tab chords are listed above; CC-08 owns their replacement.
+**Host differences.** Keys pressed in Excel's grid go to Excel, not Pi. On Excel on the web Chrome keeps Ctrl+T, Ctrl+W (closing the Excel browser tab), Ctrl+PageUp/PageDown and, when it has something to reopen, Ctrl+Shift+T; and Office.js moves focus on Shift+Tab in addition to Pi's thinking-level change. Confirmed with real key input; see [What Excel on the web does with the keys](#what-excel-on-the-web-does-with-the-keys). Desktop webviews may swallow plain arrow keys, which is why the fallback chords exist.
 
 **Language.** Group titles, descriptions and the "Enter (while streaming)" label are translated; key names are not. The Ctrl/Cmd+O toasts are hard-coded English.
 
-**Accessibility and keyboard.** Shift+Tab retains reverse-focus navigation everywhere, with no thinking side effect. Ctrl+Alt+T (Ctrl+Option+T on Mac) cycles thinking only from the composer with no modal open. The page itself uses `kbd` labels. PR #803's browser regression test and Excel-web keyboard recording verify the new separation; the old desktop/web Shift+Tab findings are historical.
+**Accessibility and keyboard.** On Excel desktop Shift+Tab never moves focus backwards anywhere in the taskpane, including in Settings and dialogs, because it is taken for the thinking level; keyboard-only users must move forwards with Tab. Confirmed in Excel for Mac in the composer: the level cycled and focus stayed. On Excel on the web it moves focus backwards and changes the thinking level at the same time (confirmed), so reverse navigation works but silently changes the next turn's thinking level at every step. The page itself is plain text with `kbd` key labels.
 
 ## Edge cases
 
@@ -207,7 +204,7 @@ After closing the page the user is back in the same tab with the composer as it 
 
 - F6 and Shift+F6 are listed on the page (`src/commands/builtins/settings-pages/shortcuts-page.ts:74`, `:75`) but not implemented anywhere in Pi. Whether the host provides them has not been checked. Treat as a documentation bug on the page.
 - `/default-models` advertises Ctrl+P (`src/language/locales/en.json:45`), which is not implemented.
-- PR #803 releases Shift+Tab and assigns composer-only Ctrl+Alt/Option+T. The baseline browser regression changes thinking on Shift+Tab; the new version moves focus without changing it.
+- Shift+Tab is captured everywhere for the thinking level (`src/taskpane/keyboard-shortcuts.ts:379`), which breaks reverse focus navigation across the whole taskpane on desktop. On Excel on the web, Office.js's own window keydown handler moves focus on Tab and Shift+Tab regardless of `preventDefault`, so each Shift+Tab both moves focus back and cycles the level (confirmed: three presses gave Medium, High, Extra high while focus went composer → Files button → starter hint). Looks like an accessibility bug on both hosts, in different ways.
 - `/shortcuts` (and every busy-refused command) chosen with Enter from the command menu clears the composer before the refusal (`src/commands/command-menu.ts:35-41` clears, then `src/taskpane/init.ts:1713` refuses). Confirmed in Excel on the web. Inconsistent with the editor path (`src/taskpane/keyboard-shortcuts/editor-actions.ts:181`), which keeps the text.
 - Ctrl/Cmd+O toasts are hard-coded English and use ⌃ even on macOS, where Cmd also works (`src/taskpane/keyboard-shortcuts.ts:400`).
 - Every overlay built on the shared overlay dialog claims Escape (`src/utils/escape-guard.ts:9`, `src/ui/overlay-dialog.ts:192`, `:234`), matching goal.md. Confirmed in Excel on the web for the resume picker: Escape while responding closed the picker and the turn kept running.
