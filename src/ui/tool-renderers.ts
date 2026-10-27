@@ -1147,8 +1147,11 @@ function createExcelMarkdownRenderer(toolName: SupportedToolName): ToolRenderer 
       isStreaming: boolean,
       disclosure: ToolCardDisclosure,
     ): ToolRenderResult {
+      const resultText = result ? splitToolResultContent(result).text : undefined;
+      // Tools report most failures as an "Error …" result rather than throwing;
+      // either way the card is a failure, so reads and writes look the same.
       const state: ToolState = result
-        ? (result.isError ? "error" : "complete")
+        ? (result.isError || extractResultError(resultText) !== undefined ? "error" : "complete")
         : isStreaming
           ? "inprogress"
           : "complete";
@@ -1158,7 +1161,6 @@ function createExcelMarkdownRenderer(toolName: SupportedToolName): ToolRenderer 
         ? "pi-tool-card__body"
         : "pi-tool-card__body pi-tool-card__body--collapsed";
 
-      const resultText = result ? splitToolResultContent(result).text : undefined;
       // `details` is unknown at this seam: older persisted sessions may carry any shape.
       const details = decodeToolDetails(result?.details);
       const desc = describeToolCall(toolName, params, resultText, details);

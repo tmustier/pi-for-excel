@@ -134,6 +134,9 @@ async function exportWorkbookAuditLog(rawArgs: string): Promise<void> {
 
 // Mirrors pi-coding-agent defaults (see docs/compaction.md in pi-coding-agent).
 
+/** One toast slot per compaction run: each step replaces the previous one. */
+const COMPACT_TOAST_ID = "compact";
+
 const SUMMARIZATION_SYSTEM_PROMPT =
   "You are a context summarization assistant. Your task is to read a conversation between a user and an AI assistant, then produce a structured summary following the exact format specified.\n\n" +
   "Do NOT continue the conversation. Do NOT respond to any questions in the conversation. ONLY output the structured summary.";
@@ -578,12 +581,12 @@ export async function runCompactCommand(agent: Agent, args: string, signal?: Abo
     return;
   }
 
-  showToast(t("export.toast.compact.compacting"), 60000);
+  showToast(t("export.toast.compact.compacting"), { id: COMPACT_TOAST_ID, duration: 60_000 });
 
   const now = Date.now();
   const model = agent.state.model;
   if (!isApiModel(model)) {
-    showToast(t("export.toast.compact.no_model"));
+    showToast(t("export.toast.compact.no_model"), { id: COMPACT_TOAST_ID });
     return;
   }
 
@@ -594,7 +597,7 @@ export async function runCompactCommand(agent: Agent, args: string, signal?: Abo
   // and can crash in browser WebViews due to env key fallbacks using `process`.
   const apiKey = agent.getApiKey ? await agent.getApiKey(model.provider) : undefined;
   if (!apiKey) {
-    showToast(t("export.toast.compact.no_api_key", { provider: model.provider }));
+    showToast(t("export.toast.compact.no_api_key", { provider: model.provider }), { id: COMPACT_TOAST_ID });
     return;
   }
 
@@ -782,7 +785,7 @@ export async function runCompactCommand(agent: Agent, args: string, signal?: Abo
       if (e instanceof CompactionStoppedError || !isPromptTooLongError(e)) throw e;
 
       // Retry once with more aggressive truncation + keeping a larger recent tail.
-      showToast(t("export.toast.compact.retrying"), 60000);
+      showToast(t("export.toast.compact.retrying"), { id: COMPACT_TOAST_ID, duration: 60_000 });
 
       const keepMoreRecent = Math.min(contextWindow, keepRecentTokens * 2);
       out = await runOnce(aggressiveLimits, keepMoreRecent);
@@ -816,18 +819,18 @@ export async function runCompactCommand(agent: Agent, args: string, signal?: Abo
     showToast(t("export.toast.compact.summarized", {
       count: out.summarizedCount,
       plural: out.summarizedCount === 1 ? "" : "s",
-    }));
+    }), { id: COMPACT_TOAST_ID });
   } catch (e) {
     if (e instanceof CompactionStoppedError) {
-      showToast(t("export.toast.compact.stopped"));
+      showToast(t("export.toast.compact.stopped"), { id: COMPACT_TOAST_ID });
       return;
     }
     const msg = getErrorMessage(e);
     if (msg === "Nothing to compact") {
-      showToast(t("export.toast.compact.nothing"));
+      showToast(t("export.toast.compact.nothing"), { id: COMPACT_TOAST_ID });
       return;
     }
-    showToast(t("export.toast.compact.failed", { msg }));
+    showToast(t("export.toast.compact.failed", { msg }), { id: COMPACT_TOAST_ID });
   }
 }
 

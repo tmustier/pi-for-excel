@@ -25,6 +25,7 @@ class ElementStub {
   setAttribute(_name: string, _value: string): void {}
   addEventListener(_name: string, _listener: () => void): void {}
   removeEventListener(_name: string, _listener: () => void): void {}
+  remove(): void {}
 }
 
 function user(content: string, timestamp: number): AgentMessage {

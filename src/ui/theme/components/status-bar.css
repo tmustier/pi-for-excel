@@ -16,16 +16,26 @@
   overflow: visible;
   min-width: 0;
   position: relative;
-  z-index: 20;
+  z-index: var(--z-sticky);
   container-type: inline-size;
 }
 
+/* One row at every pane width: the model name truncates first, then the
+   context limit hides (the popover still shows it). */
 .pi-status-main {
   min-width: 0;
   display: flex;
   align-items: center;
   gap: 6px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+}
+
+.pi-status-main > * {
+  flex-shrink: 0;
+}
+
+.pi-status-main > .pi-status-model {
+  flex-shrink: 1;
 }
 
 .pi-status-side {
@@ -181,8 +191,8 @@
 }
 
 .pi-status-lock--waiting {
-  color: var(--muted-foreground);
-  background: oklch(0.55 0 0 / 0.12);
+  color: var(--pi-amber-text);
+  background: var(--amber-alpha-16);
 }
 
 .pi-status-lock--active {
@@ -366,7 +376,7 @@
   visibility: hidden;
   opacity: 0;
   transition: opacity var(--duration-fast) ease, visibility 0s linear var(--duration-fast);
-  z-index: 200;
+  z-index: var(--z-popover);
 }
 .pi-status-bar [data-tooltip]:hover::after {
   visibility: visible;
@@ -419,7 +429,7 @@
   visibility: hidden;
   opacity: 0;
   transition: opacity var(--duration-fast) ease, visibility 0s linear var(--duration-fast);
-  z-index: 200;
+  z-index: var(--z-popover);
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -462,11 +472,11 @@
 /* Status-bar click popovers */
 .pi-status-popover {
   position: fixed;
-  z-index: 220;
+  z-index: var(--z-popover);
   width: min(290px, calc(100vw - 16px));
   border-radius: var(--radius-md);
   border: 1px solid var(--alpha-14);
-  background: var(--popover);
+  background: var(--menu-surface);
   color: var(--popover-foreground);
   box-shadow: 0 12px 24px oklch(0 0 0 / 0.2);
   max-height: calc(100vh - 16px);
@@ -613,11 +623,14 @@
   }
 }
 
-@container (max-width: 260px) {
+@container (max-width: 360px) {
   .pi-status-ctx__sep,
   .pi-status-ctx__limit {
     display: none;
   }
+}
+
+@container (max-width: 260px) {
 
   .pi-status-thinking[data-tooltip]::after {
     left: auto;

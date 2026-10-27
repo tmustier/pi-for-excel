@@ -9,21 +9,18 @@
  *   footer: optional sticky page footer (e.g. Save/Cancel)
  *
  * Navigation model:
- * - `navigate(id)` pushes a page; `back()` pops.
- * - Deep links rebuild the stack from each page's `parentId` chain so Back
- *   always walks up the hierarchy.
- * - Escape goes back one level through pages navigated to inside the
- *   shell, and closes on the page it was opened at (a deep link such as
- *   /history opens Backups; Escape there closes, it does not reveal the
- *   Settings root). The back button still walks up the hierarchy. The ×
- *   button and backdrop click always request a full close.
+ * - The history starts at the page the shell was opened on (`open(id)`, e.g.
+ *   /rules or /backups opens straight at that page). `navigate(id)` pushes.
+ * - Back/close rule: Escape and a page's own Save/Cancel (`ctx.back()`)
+ *   return to where the user came from, and close the shell on the page it
+ *   was opened at. The ‹ button is "up": it pops the history, or on the entry
+ *   page goes to the page's `parentId` (so Extensions → Connections can still
+ *   reach Plugins and Skills). × and backdrop click always request a full close.
  * - Pages may install a `beforeLeave` guard (used for unsaved-changes
  *   confirmation); it gates back, navigate, and close.
  */
 
-import { requestChatInputFocus } from "./input-focus.js";
-import { installOverlayEscapeClose } from "./overlay-escape.js";
-import { registerOverlayCloser, unregisterOverlayCloser } from "./overlay-dialog.js";
+import { createOverlayDialog, registerOverlayCloser } from "./overlay-dialog.js";
 
 export interface SettingsPageContext {
   /** Scrollable content region for the page. */
@@ -32,7 +29,7 @@ export interface SettingsPageContext {
   setFooter: (footer: HTMLElement | null) => void;
   /** Push a nested page. */
   navigate: (pageId: string) => void;
-  /** Pop back one level (no-op at root). */
+  /** Return to the previous page, or close the shell on the page it was opened at. */
   back: () => void;
   /** Close the whole settings overlay. */
   close: () => void;
@@ -47,7 +44,7 @@ export interface SettingsPageContext {
 
 export interface SettingsShellPage {
   id: string;
-  /** Parent page id used to rebuild the stack for deep links. */
+  /** Where the ‹ button leads when this page is the one the shell opened at. */
   parentId?: string;
   title: () => string;
   subtitle?: () => string;
@@ -86,8 +83,6 @@ interface MountedShell {
 export function createSettingsShell(options: SettingsShellOptions): SettingsShellController {
   let mounted: MountedShell | null = null;
   let stack: string[] = [];
-  /** Stack depth of the page the shell was opened at; Escape closes at or above it. */
-  let entryDepth = 1;
   let pageCleanups: Array<() => void> = [];
   let beforeLeave: (() => Promise<boolean>) | null = null;
   let transitionInFlight = false;
@@ -111,12 +106,10 @@ export function createSettingsShell(options: SettingsShellOptions): SettingsShel
     if (!mounted) return;
     renderToken += 1;
     runPageCleanups();
-    unregisterOverlayCloser(mounted.overlay);
-    mounted.destroy();
-    mounted.overlay.remove();
+    const shell = mounted;
     mounted = null;
     stack = [];
-    requestChatInputFocus();
+    shell.destroy();
   };
 
   const confirmLeave = async (): Promise<boolean> => {
@@ -137,25 +130,6 @@ export function createSettingsShell(options: SettingsShellOptions): SettingsShel
     destroyShell();
   };
 
-  const buildStackFor = (pageId: string): string[] => {
-    const chain: string[] = [];
-    let currentId: string | undefined = pageId;
-    const seen = new Set<string>();
-
-    while (currentId !== undefined && !seen.has(currentId)) {
-      seen.add(currentId);
-      chain.unshift(currentId);
-      const page = options.getPage(currentId);
-      currentId = page?.parentId;
-    }
-
-    if (chain[0] !== options.rootId) {
-      chain.unshift(options.rootId);
-    }
-
-    return chain;
-  };
-
   const renderCurrentPage = (direction: "forward" | "back" | "none"): void => {
     if (!mounted) return;
     const shell = mounted;
@@ -171,7 +145,7 @@ export function createSettingsShell(options: SettingsShellOptions): SettingsShel
     renderToken = currentRenderToken;
     runPageCleanups();
 
-    shell.backButton.hidden = stack.length <= 1;
+    shell.backButton.hidden = stack.length <= 1 && page.parentId === undefined;
     shell.titleEl.textContent = page.title();
     const subtitleText = page.subtitle?.() ?? "";
     shell.subtitleEl.textContent = subtitleText;
@@ -279,16 +253,31 @@ export function createSettingsShell(options: SettingsShellOptions): SettingsShel
     renderCurrentPage("back");
   };
 
-  const mountShell = (): MountedShell => {
-    const overlay = document.createElement("div");
-    overlay.id = options.overlayId;
-    overlay.className = "pi-welcome-overlay";
-    overlay.setAttribute("role", "dialog");
-    overlay.setAttribute("aria-modal", "true");
+  const goUp = async (): Promise<void> => {
+    if (!mounted) return;
+    const parentId = stack.length <= 1 ? options.getPage(stack[0] ?? options.rootId)?.parentId : undefined;
+    if (parentId === undefined) {
+      await goBack();
+      return;
+    }
+    const canLeave = await confirmLeave();
+    if (!canLeave) return;
+    stack = [parentId];
+    renderCurrentPage("back");
+  };
 
-    const card = document.createElement("div");
-    card.className = "pi-welcome-card pi-overlay-card pi-overlay-card--l pi-set-shell";
-    overlay.appendChild(card);
+  const mountShell = (): MountedShell => {
+    const dialog = createOverlayDialog({
+      overlayId: options.overlayId,
+      cardClassName: "pi-welcome-card pi-overlay-card pi-overlay-card--l pi-set-shell",
+      closeOnBackdrop: false,
+      // goBack closes (through the unsaved-changes guard) on the entry page.
+      onEscape: () => {
+        void goBack();
+        return true;
+      },
+    });
+    const { overlay, card } = dialog;
 
     const header = document.createElement("div");
     header.className = "pi-set-shell__header";
@@ -311,7 +300,7 @@ export function createSettingsShell(options: SettingsShellOptions): SettingsShel
     backGlyph.appendChild(backPath);
     backButton.appendChild(backGlyph);
     backButton.addEventListener("click", () => {
-      void goBack();
+      void goUp();
     });
 
     const titleWrap = document.createElement("div");
@@ -348,26 +337,21 @@ export function createSettingsShell(options: SettingsShellOptions): SettingsShel
 
     card.append(header, bodyEl, footerEl);
 
-    const cleanupEscape = installOverlayEscapeClose(overlay, () => {
-      if (stack.length <= entryDepth) {
-        void requestClose();
-        return;
-      }
-      void goBack();
-    });
-
     const onBackdropClick = (event: MouseEvent): void => {
       if (event.target === overlay) {
         void requestClose();
       }
     };
     overlay.addEventListener("click", onBackdropClick);
+    dialog.addCleanup(() => overlay.removeEventListener("click", onBackdropClick));
 
+    // closeOverlayById (e.g. reopening Settings from a command) must go
+    // through the unsaved-changes guard, not straight to dialog.close().
     registerOverlayCloser(overlay, () => {
       void requestClose();
     });
 
-    document.body.appendChild(overlay);
+    dialog.mount();
 
     return {
       overlay,
@@ -377,10 +361,7 @@ export function createSettingsShell(options: SettingsShellOptions): SettingsShel
       subtitleEl,
       bodyEl,
       footerEl,
-      destroy: () => {
-        cleanupEscape();
-        overlay.removeEventListener("click", onBackdropClick);
-      },
+      destroy: dialog.close,
     };
   };
 
@@ -392,15 +373,13 @@ export function createSettingsShell(options: SettingsShellOptions): SettingsShel
         if (stack[stack.length - 1] === targetId) return;
         const canLeave = await confirmLeave();
         if (!canLeave) return;
-        stack = buildStackFor(targetId);
-        entryDepth = stack.length;
+        stack = [targetId];
         renderCurrentPage("forward");
         return;
       }
 
       mounted = mountShell();
-      stack = buildStackFor(targetId);
-      entryDepth = stack.length;
+      stack = [targetId];
       renderCurrentPage("none");
     },
     isOpen: () => mounted !== null,

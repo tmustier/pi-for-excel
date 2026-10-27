@@ -60,9 +60,15 @@ pi-sidebar {
   gap: 4px;
   overflow-x: auto;
   overflow-y: visible;
-  scrollbar-width: thin;
+  /* The ‹ › arrows and horizontal scrolling move the strip; a classic scrollbar
+     (Windows, Linux) would only add a second control under the tabs. */
+  scrollbar-width: none;
   min-width: 0;
   flex: 1;
+}
+
+.pi-session-tabs__scroller::-webkit-scrollbar {
+  display: none;
 }
 
 .pi-session-tabs__scroll {
@@ -91,9 +97,12 @@ pi-sidebar {
   display: none;
 }
 
+/* Tabs keep their natural width (readable titles, × always in flow so it
+   never covers a title); the strip scrolls when they don't fit. */
 .pi-session-tab {
   display: flex;
   align-items: center;
+  flex-shrink: 0;
   position: relative;
   border: 1px solid var(--alpha-10);
   border-radius: var(--radius-sm);
@@ -168,19 +177,55 @@ pi-sidebar {
   max-width: 110px;
 }
 
+/* Busy: brand-green dot with a white ring, readable on every tab background. */
 .pi-session-tab__busy {
-  width: 6px;
-  height: 6px;
+  width: 7px;
+  height: 7px;
   border-radius: var(--radius-full);
-  background: white;
-  box-shadow: 0 0 0 3px var(--white-alpha-25);
+  background: var(--pi-green);
+  box-shadow: 0 0 0 2px var(--white-alpha-90);
+  flex-shrink: 0;
+  animation: pi-tab-busy 1.4s ease-in-out infinite;
+}
+
+@keyframes pi-tab-busy {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pi-session-tab__busy { animation: none; }
+}
+
+/* Background tab whose run ended while the user was elsewhere (cleared on
+   activation). Failed: solid destructive dot. Finished, not seen: hollow
+   brand ring, so it reads as "something new" rather than "working". */
+.pi-session-tab__marker {
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-full);
   flex-shrink: 0;
 }
 
+.pi-session-tab__marker--failed {
+  background: var(--destructive);
+  box-shadow: 0 0 0 2px var(--white-alpha-90);
+}
+
+.pi-session-tab__marker--finished {
+  border: 2px solid var(--pi-green);
+  box-sizing: border-box;
+}
+
+/* Waiting for the workbook lock: same amber language as warning banners. */
 .pi-session-tab__lock {
   font-size: var(--text-xs);
-  color: var(--white-alpha-70);
-  font-family: var(--font-mono);
+  font-weight: 600;
+  line-height: 1.4;
+  padding: 0 5px;
+  border-radius: var(--radius-xs);
+  background: var(--amber-alpha-16);
+  color: var(--pi-amber-text);
   flex-shrink: 0;
 }
 
@@ -267,17 +312,15 @@ pi-sidebar {
 .pi-session-tab-context-menu {
   min-width: 170px;
   padding: 4px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   border: 1px solid var(--alpha-12);
-  background: var(--glass-bg-solid);
-  backdrop-filter: var(--glass-blur-dropdown);
-  -webkit-backdrop-filter: var(--glass-blur-dropdown);
+  background: var(--menu-surface);
   box-shadow: var(--glass-shadow-lg), var(--glass-highlight), var(--glass-inner-shadow);
 }
 
 .pi-session-tab-context-menu--floating {
   position: fixed;
-  z-index: 260;
+  z-index: var(--z-popover);
 }
 
 .pi-session-tab-context-menu__item {
@@ -403,6 +446,18 @@ pi-sidebar {
   gap: 4px;
 }
 
+/* ── Composer dock ──────────────────────────────────────
+   One unit at the bottom of the pane: the working line and the queue
+   form a tray attached to the top of the composer card, with the status
+   bar underneath. Structure only; what the queue does lives elsewhere. */
+.pi-dock {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  z-index: 10;
+}
+
 /* Footer surfaces (widget slot + input footer) */
 :is(.pi-input-area, .pi-widget-slot) {
   flex-shrink: 0;
@@ -412,8 +467,14 @@ pi-sidebar {
   background: transparent;
 }
 
-/* Input footer — soft fade into content above */
-.pi-input-area::before {
+/* Tray rows sit flush on the composer card. */
+.pi-dock--busy .pi-input-area,
+.pi-dock > .pi-queue + .pi-input-area {
+  padding-top: 0;
+}
+
+/* Dock — soft fade into content above */
+.pi-dock::before {
   content: '';
   position: absolute;
   top: -10px;

@@ -87,7 +87,7 @@ void test("a streaming turn draws each response once and finishes each tool card
 
     // No Excel here: a cell link fails visibly, without an unhandled rejection (finish() checks page errors).
     await page.locator('[data-gallery="transcript"] .pi-cell-ref:visible').first().click();
-    const toast = page.locator("#pi-toast.visible");
+    const toast = page.locator("#pi-toast .pi-toast.visible").last();
     await toast.waitFor({ state: "visible" });
     assert.match(await toast.innerText(), /Sheet1!A1:B12/);
   } finally {

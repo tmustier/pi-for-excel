@@ -123,9 +123,11 @@ import {
 } from "../ui/input-focus.js";
 import { requestConfirmationDialog } from "../ui/confirm-dialog.js";
 import { requestTextInputDialog } from "../ui/text-input-dialog.js";
-import { showActionToast, showToast, type ActionToastHandle } from "../ui/toast.js";
+import { dismissToast, showActionToast, showToast, type ActionToastHandle } from "../ui/toast.js";
 import { PiSidebar } from "../ui/pi-sidebar.js";
-import { createProxyBanner } from "../ui/proxy-banner.js";
+import { createProxyBannerController } from "../ui/proxy-banner.js";
+import { announce } from "../ui/announcer.js";
+import { hideBanner, mountBanner, showBanner } from "../ui/banner.js";
 import { setActiveProviders } from "../models/active-providers.js";
 import { BrowserModelRuntime } from "../models/browser-model-runtime.js";
 import {
@@ -198,6 +200,7 @@ import { getProxyState, isProxyBlockedByBrowser, startProxyPolling } from "./pro
 import {
   closeStatusPopover,
   toggleContextPopover,
+  toggleModePopover,
   toggleThinkingPopover,
 } from "./status-popovers.js";
 import { showWelcomeLogin } from "./welcome-login.js";
@@ -212,6 +215,7 @@ import {
   isRuntimeBusy,
   type CreateRuntimeOptions,
   type OpenSessionTarget,
+  type RuntimeRunOutcome,
   type SessionRuntime,
 } from "./session-runtime-manager.js";
 import {
@@ -226,8 +230,20 @@ import { doesOverlayClaimEscape } from "../utils/escape-guard.js";
 
 const RUNTIME_SYSTEM_PROMPT_SECTION = "pi-for-excel-runtime";
 
-function renderErrorBanner(errorRoot: HTMLElement, message: string | null): void {
-  render(message ? renderError(message) : html``, errorRoot);
+const RUN_ERROR_BANNER_ID = "run-error";
+
+/** A tab's run error, as a closable banner in the notice area under the tabs. */
+function showErrorBanner(errorRoot: HTMLElement, message: string, onDismiss: () => void): void {
+  const shown = showBanner({ id: RUN_ERROR_BANNER_ID, tone: "error", message, onDismiss });
+  if (!shown) {
+    // Before the sidebar exists there is no notice area; use the page-level slot.
+    render(renderError(message), errorRoot);
+  }
+}
+
+function clearErrorBanner(errorRoot: HTMLElement): void {
+  hideBanner(RUN_ERROR_BANNER_ID);
+  render(html``, errorRoot);
 }
 
 export async function initTaskpane(opts: {
@@ -415,17 +431,12 @@ export async function initTaskpane(opts: {
 
   const executionModeController = await createExecutionModeController({
     settings,
-    showToast,
   });
 
   const getExecutionMode = (): ExecutionMode => executionModeController.getMode();
 
   const setExecutionMode = async (mode: ExecutionMode): Promise<void> => {
     await executionModeController.setMode(mode);
-  };
-
-  const toggleExecutionModeFromUi = async (): Promise<void> => {
-    await executionModeController.toggleFromUi();
   };
 
   const loadModelSwitchBehavior = async (): Promise<ModelSwitchBehavior> => {
@@ -542,10 +553,30 @@ export async function initTaskpane(opts: {
     }
   };
 
+  // Outcome of each runtime's latest prompt run, recorded at agent_end (where a
+  // user stop is known) and read once when the tab goes idle. Runs that only
+  // executed commands have no entry and are not announced.
+  const runOutcomes = new Map<string, RuntimeRunOutcome | null>();
   const runtimeManager = new SessionRuntimeManager({
     createRuntime: buildSessionRuntime,
     warnCapabilityRefresh: (error) => {
       console.warn("[pi] Failed to refresh runtime capabilities:", error);
+    },
+    getRunOutcome: (runtime) => {
+      const outcome = runOutcomes.get(runtime.runtimeId) ?? null;
+      runOutcomes.delete(runtime.runtimeId);
+      return outcome;
+    },
+    // CC-06. A failure in the active tab is already announced by its error
+    // banner (role="alert"); everything else has no visible notification.
+    onRunSettled: ({ outcome, wasActive, title }) => {
+      if (wasActive) {
+        if (outcome === "finished") announce(t("announce.finished"));
+        return;
+      }
+      announce(outcome === "failed"
+        ? t("announce.failedInTab", { title })
+        : t("announce.finishedInTab", { title }));
     },
   });
   const draftStore = createDraftStore(settings);
@@ -779,10 +810,26 @@ export async function initTaskpane(opts: {
     focusChatInputSoon();
   });
 
+  // The notice area shows the active tab's run error (the binding passes it
+  // on every tab change). Closing the banner clears that tab's error.
+  let shownRunError: string | null = null;
+  const renderRunError = (message: string | null): void => {
+    if (message === shownRunError) return;
+    shownRunError = message;
+    if (message === null) {
+      clearErrorBanner(errorRoot);
+      return;
+    }
+    showErrorBanner(errorRoot, message, () => {
+      shownRunError = null;
+      runtimeManager.getActiveRuntime()?.tab.setError(null);
+    });
+  };
+
   bindRuntimeSidebar({
     runtimeManager,
     sidebar,
-    renderError: (message) => renderErrorBanner(errorRoot, message),
+    renderError: renderRunError,
   });
 
   let lastReconciledModelSignature = "";
@@ -960,6 +1007,7 @@ export async function initTaskpane(opts: {
     source?: string;
     onStop?: () => void;
   }): Promise<boolean> => {
+    announce(t("announce.approval", { title: args.title }));
     return requestApproval({
       title: args.title,
       message: normalizeApprovalMessage(args.title, args.message),
@@ -1054,8 +1102,11 @@ export async function initTaskpane(opts: {
                   .join("; ") + (request.overwrites.count > request.overwrites.sample.length ? "; …" : ""),
               })
               : null;
+            const title = deletesBackups ? t("approval.title.deleteBackups") : t("approval.title.workbookChange");
+            // Announced like every other approval (requestRuntimeToolApproval).
+            announce(t("announce.approval", { title }));
             return requestApproval({
-              title: deletesBackups ? t("approval.title.deleteBackups") : t("approval.title.workbookChange"),
+              title,
               headline: describePendingToolCall(request.toolName, request.params) ?? request.toolName,
               ...(details ? { details } : {}),
               note: deletesBackups ? t("approval.note.deleteBackups") : t("approval.note.confirmMode"),
@@ -1249,7 +1300,15 @@ export async function initTaskpane(opts: {
     const actionQueue = createActionQueue({
       agent,
       tab,
-      queueDisplay,
+      // The queue's last update comes after it stops running; re-read busy
+      // state then so the tab's idle transition (and markers) is not missed.
+      queueDisplay: {
+        ...queueDisplay,
+        setActionQueue: (items) => {
+          queueDisplay.setActionQueue(items);
+          runtimeManager.notifyRuntimeChanged();
+        },
+      },
       autoCompactEnabled,
       runCompact: async (args, signal) => {
         const before = agent.state.messages;
@@ -1333,6 +1392,12 @@ export async function initTaskpane(opts: {
       // reconciliation after the action queue unwinds so an extension that
       // unloads mid-turn cannot leave its now-missing provider selected.
       window.setTimeout(() => modelRefreshOwner.reconcileRuntimes(), 0);
+
+      // Classify from the run's own result, not from how it was stopped: a
+      // stop leaves no mark, an error is "failed", anything else "finished".
+      const lastAssistant = [...agent.state.messages].reverse().find((message) => message.role === "assistant");
+      const stopReason = lastAssistant?.role === "assistant" ? lastAssistant.stopReason : undefined;
+      runOutcomes.set(runtimeId, stopReason === "aborted" ? null : stopReason === "error" ? "failed" : "finished");
     });
 
     return {
@@ -1521,6 +1586,7 @@ export async function initTaskpane(opts: {
         ...(item.tabNumber !== undefined ? { tabNumber: item.tabNumber } : {}),
       });
       if (!opened) return "failed";
+      dismissToast(`closed-tab:${item.id}`);
 
       showToast(opened.outcome === "focused"
         ? t("init.alreadyOpen", { title: opened.title })
@@ -1678,6 +1744,7 @@ export async function initTaskpane(opts: {
     const showUndoToast = optsForClose?.showUndoToast !== false;
     if (showUndoToast) {
       const toast = showActionToast({
+        id: `closed-tab:${closedItem.id}`,
         message: t("init.closedTab", { title: closedItem.title }),
         actionLabel: t("init.undo"),
         duration: 9000,
@@ -1713,6 +1780,7 @@ export async function initTaskpane(opts: {
     // Office on the web replaces window.prompt with a function that throws, so ask in the taskpane.
     const nextTitleRaw = await requestTextInputDialog({
       title: t("init.renameTab.title"),
+      message: t("init.renameTab.message"),
       initialValue: defaultTitle,
       confirmLabel: t("init.renameTab.confirm"),
     });
@@ -2208,41 +2276,32 @@ export async function initTaskpane(opts: {
     window.addEventListener("beforeunload", () => clearInterval(identityPoll), { once: true });
   }
 
-  // ── Disclosure bar (onboarding banner) ──
-  // Must run after runtime bootstrap so the sidebar has rendered .pi-messages.
+  // ── Notice area: first-run disclosure + proxy warning (src/ui/banner.ts) ──
+  // Must run after runtime bootstrap so the sidebar has rendered #pi-notices.
   {
     const { createDisclosureBar } = await import("../ui/disclosure-bar.js");
-    const disclosureEl = createDisclosureBar({
+    const disclosure = createDisclosureBar({
       providerCount: modelRefreshOwner.snapshot().availableProviders.length,
       onOpenSettings: () => void openSettings(),
     });
-    if (disclosureEl) {
-      const messagesContainer = sidebar.querySelector(".pi-messages");
-      if (messagesContainer) {
-        messagesContainer.parentElement?.insertBefore(disclosureEl, messagesContainer);
+    if (disclosure) {
+      mountBanner(disclosure.root);
+    }
+
+    const proxyBanner = createProxyBannerController({
+      isProxyEnabled: async () => (await readTaskpaneProxySettings(settings)).enabled,
+    });
+    void proxyBanner.update(getProxyState(), isProxyBlockedByBrowser());
+
+    document.addEventListener("pi:proxy-state-changed", (event: Event) => {
+      if (!(event instanceof CustomEvent)) return;
+      const detail: unknown = event.detail;
+      if (!isTaskpaneInitPayloadShape(detail)) return;
+      const state = detail.state;
+      if (state === "detected" || state === "not-detected" || state === "unknown") {
+        void proxyBanner.update(state, isProxyBlockedByBrowser());
       }
-    }
-  }
-
-  // ── Proxy warning banner (state-driven) ──
-  {
-    const messagesContainer = sidebar.querySelector(".pi-messages");
-    const host = messagesContainer?.parentElement;
-    if (host && messagesContainer) {
-      const proxyBanner = createProxyBanner();
-      host.insertBefore(proxyBanner.root, messagesContainer);
-      proxyBanner.update(getProxyState(), isProxyBlockedByBrowser());
-
-      document.addEventListener("pi:proxy-state-changed", (event: Event) => {
-        if (!(event instanceof CustomEvent)) return;
-        const detail: unknown = event.detail;
-        if (!isTaskpaneInitPayloadShape(detail)) return;
-        const state = detail.state;
-        if (state === "detected" || state === "not-detected" || state === "unknown") {
-          proxyBanner.update(state, isProxyBlockedByBrowser());
-        }
-      });
-    }
+    });
   }
 
   // ── Register extensions ──
@@ -2436,10 +2495,18 @@ export async function initTaskpane(opts: {
       return;
     }
 
-    // Execution mode toggle
-    if (el.closest(".pi-status-mode")) {
-      closeStatusPopover();
-      void toggleExecutionModeFromUi();
+    // Execution mode: Auto / Confirm, chosen from a popover like its neighbours
+    const modeTrigger = el.closest(".pi-status-mode");
+    if (modeTrigger) {
+      toggleModePopover({
+        anchor: modeTrigger,
+        activeMode: getExecutionMode(),
+        onSelectMode: (mode) => {
+          void setExecutionMode(mode).catch(() => {
+            showToast(t("status.mode.saveFailed"));
+          });
+        },
+      });
       return;
     }
 

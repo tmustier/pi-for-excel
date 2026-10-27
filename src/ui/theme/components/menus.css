@@ -4,7 +4,7 @@
 
 /* Shared menu surfaces */
 :is(.pi-cmd-menu, .pi-utilities-menu) {
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-md);
   border: var(--glass-border);
   background:
     linear-gradient(
@@ -13,9 +13,7 @@
       oklch(1 0 0 / 0) 40%,
       var(--alpha-2) 100%
     ),
-    var(--glass-bg-solid);
-  backdrop-filter: var(--glass-blur-dropdown);
-  -webkit-backdrop-filter: var(--glass-blur-dropdown);
+    var(--menu-surface);
   box-shadow: var(--glass-shadow-lg), var(--glass-highlight), var(--glass-inner-shadow);
   padding: 4px;
 }
@@ -54,10 +52,15 @@
   cursor: pointer;
 }
 
-:is(.pi-cmd-item, .pi-utilities-menu__item):focus,
-:is(.pi-cmd-item, .pi-utilities-menu__item):focus-visible {
+/* One focus treatment for every menu and popover item (src/ui/menu-keyboard.ts). */
+:is(.pi-cmd-item, .pi-utilities-menu__item, .pi-session-tab-context-menu__item, .pi-status-popover__item, .pi-status-popover__command):focus {
   outline: none;
-  box-shadow: 0 0 0 2px var(--green-alpha-12), var(--glass-highlight), var(--glass-inner-shadow);
+}
+
+:is(.pi-cmd-item, .pi-utilities-menu__item, .pi-session-tab-context-menu__item, .pi-status-popover__item, .pi-status-popover__command):focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
+  background: var(--pi-green-light);
 }
 
 .pi-utilities-menu__divider {
@@ -74,7 +77,7 @@
 /* Slash command menu */
 .pi-cmd-menu {
   position: fixed;
-  z-index: 150;
+  z-index: var(--z-popover);
   max-height: min(260px, 44vh);
   overflow-y: auto;
   display: none;
@@ -131,7 +134,7 @@
   position: absolute;
   top: 100%;
   right: 0;
-  z-index: 210;
+  z-index: var(--z-popover);
   min-width: 220px;
   max-height: min(320px, 60vh);
   margin-top: 6px;

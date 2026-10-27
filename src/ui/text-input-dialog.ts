@@ -126,22 +126,10 @@ export function requestTextInputDialog(options: TextInputDialogOptions): Promise
 
     actions.append(cancelButton, confirmButton);
     dialog.card.append(header, body, actions);
+    // The overlay primitive focuses the input on mount (first text field). A
+    // second, deferred focus here raced the user: an Escape pressed before it
+    // ran was undone, and the next Escape only left the field again.
     dialog.mount();
-
-    const focusInput = (): void => {
-      if (typeof input.focus === "function") {
-        input.focus();
-      }
-
-      if (typeof input.select === "function") {
-        input.select();
-      }
-    };
-
-    if (typeof requestAnimationFrame === "function") {
-      requestAnimationFrame(focusInput);
-    } else {
-      focusInput();
-    }
+    input.select();
   });
 }

@@ -130,7 +130,8 @@ export function createProxyPage(): SettingsShellPage {
         const token = ++recheckToken;
         proxyState = "unknown";
         updateStatus();
-        const state = await checkProxyOnce(settingsStore);
+        // Forced, so the notice-area proxy banner re-reads the settings (#793, PROXY-07).
+        const state = await checkProxyOnce(settingsStore, { force: true });
         if (token !== recheckToken) return;
         proxyState = state;
         updateStatus();
@@ -170,6 +171,7 @@ export function createProxyPage(): SettingsShellPage {
         showToast(enabled ? t("settings.toast.proxy_enabled") : t("settings.toast.proxy_disabled"));
         warnIfRemote();
         if (enabled) void recheckProxy();
+        else void checkProxyOnce(settingsStore, { force: true });
       };
 
       const saveProxyUrl = async (): Promise<void> => {

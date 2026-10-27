@@ -2,10 +2,10 @@
    10. WELCOME / LOGIN OVERLAY
    ═══════════════════════════════════════════════════════ */
 
-.pi-welcome-overlay {
+.pi-overlay {
   position: fixed;
   inset: 0;
-  z-index: 200;
+  z-index: var(--z-overlay);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -29,7 +29,7 @@
 }
 
 @media (max-height: 520px) {
-  .pi-welcome-overlay {
+  .pi-overlay {
     align-items: stretch;
     box-sizing: border-box;
     padding: 8px;
@@ -44,3 +44,9 @@
   }
 }
 
+
+/* Overlays focus their card when there is no field to focus first
+   (src/ui/overlay-dialog.ts); the card itself needs no ring. */
+.pi-overlay [tabindex="-1"]:focus {
+  outline: none;
+}

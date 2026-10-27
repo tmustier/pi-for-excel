@@ -5,6 +5,7 @@
  * Filters as user types, arrow keys navigate, Enter selects, Esc dismisses.
  */
 
+import { t } from "../language/index.js";
 import { commandRegistry, type SlashCommand } from "./types.js";
 import type { PiInput } from "../ui/pi-input.js";
 
@@ -55,9 +56,10 @@ export function showCommandMenu(filter: string, anchor: HTMLElement): void {
     menuEl.id = "pi-command-menu";
     menuEl.className = "pi-cmd-menu";
     menuEl.setAttribute("role", "listbox");
-    menuEl.setAttribute("aria-label", "Slash commands");
+    menuEl.setAttribute("aria-label", t("command-menu.aria"));
     document.body.appendChild(menuEl);
   }
+
 
   // Position above the anchor (the input card)
   const anchorRect = anchor.getBoundingClientRect();
@@ -67,13 +69,19 @@ export function showCommandMenu(filter: string, anchor: HTMLElement): void {
 
   renderMenu();
   menuEl.style.display = "block";
+  // Toasts sit above the open menu so they never cover (and swallow clicks
+  // on) its rows; see toasts.css.
+  const menuOffset = Math.round(window.innerHeight - menuEl.getBoundingClientRect().top);
+  document.documentElement.style.setProperty("--pi-command-menu-offset", `${menuOffset}px`);
 }
 
 export function hideCommandMenu(): void {
   if (menuEl) {
     menuEl.style.display = "none";
   }
+  document.documentElement.style.removeProperty("--pi-command-menu-offset");
   selectedIndex = 0;
+  getCommandTextarea()?.removeAttribute("aria-activedescendant");
 }
 
 export function isCommandMenuVisible(): boolean {
@@ -136,6 +144,8 @@ function renderMenu(): void {
     item.type = "button";
     item.className = `pi-cmd-item${isSelected ? " selected" : ""}`;
     item.dataset.index = String(index);
+    item.id = `pi-cmd-option-${index}`;
+    item.tabIndex = -1;
     item.setAttribute("role", "option");
     item.setAttribute("aria-selected", isSelected ? "true" : "false");
 
@@ -175,6 +185,7 @@ function renderMenu(): void {
 
     if (isSelected) {
       item.scrollIntoView({ block: "nearest" });
+      getCommandTextarea()?.setAttribute("aria-activedescendant", item.id);
     }
   }
 }
@@ -195,6 +206,19 @@ function selectIndex(index: number): void {
  * fresh textarea for each tab (see `PiInput.loadDraft`).
  */
 export function wireCommandMenu(composer: HTMLElement): void {
+  // The textarea in use names the menu it controls (#793), whichever tab's it is.
+  composer.addEventListener("focusin", (event) => {
+    if (event.target instanceof HTMLTextAreaElement) event.target.setAttribute("aria-controls", "pi-command-menu");
+  });
+
+  // Like any popover, a press outside the menu and the composer closes it (#793).
+  document.addEventListener("pointerdown", (event) => {
+    if (!isCommandMenuVisible()) return;
+    const target = event.target;
+    if (target instanceof Node && (menuEl?.contains(target) || composer.contains(target))) return;
+    hideCommandMenu();
+  }, true);
+
   composer.addEventListener("input", (event) => {
     const textarea = event.target;
     if (!(textarea instanceof HTMLTextAreaElement)) return;
