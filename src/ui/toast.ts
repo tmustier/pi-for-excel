@@ -211,7 +211,14 @@ export function showToast(message: string, durationOrOptions?: number | ToastOpt
  * Shows a toast with an action button. Returns a function that hides this
  * toast if it is still the one showing, e.g. once its action no longer applies.
  */
-export function showActionToast(opts: ActionToastOptions): () => void {
+export interface ActionToastHandle {
+  /** Hides the toast if it is still the one on screen. */
+  dismiss: () => void;
+  /** True until the toast times out, is dismissed, or another toast replaces it. */
+  isShowing: () => boolean;
+}
+
+export function showActionToast(opts: ActionToastOptions): ActionToastHandle {
   const generation = renderToast({
     message: opts.message,
     duration: opts.duration ?? ACTION_TOAST_DEFAULT_MS,
@@ -222,10 +229,16 @@ export function showActionToast(opts: ActionToastOptions): () => void {
     },
   });
 
-  return () => {
-    if (generation !== toastGeneration || !toastElements) return;
-    clearHideTimer();
-    hideToastElements(toastElements);
+  const isShowing = (): boolean =>
+    generation === toastGeneration && toastElements !== null && toastElements.root.classList.contains("visible");
+
+  return {
+    dismiss: () => {
+      if (!isShowing() || !toastElements) return;
+      clearHideTimer();
+      hideToastElements(toastElements);
+    },
+    isShowing,
   };
 }
 

@@ -124,7 +124,7 @@ import {
 import { requestConfirmationDialog } from "../ui/confirm-dialog.js";
 import { requestTextInputDialog } from "../ui/text-input-dialog.js";
 import { TOOL_APPROVAL_OVERLAY_ID } from "../ui/overlay-ids.js";
-import { showActionToast, showToast } from "../ui/toast.js";
+import { showActionToast, showToast, type ActionToastHandle } from "../ui/toast.js";
 import { PiSidebar } from "../ui/pi-sidebar.js";
 import { createProxyBanner } from "../ui/proxy-banner.js";
 import { setActiveProviders } from "../models/active-providers.js";
@@ -1468,11 +1468,11 @@ export async function initTaskpane(opts: {
   type ReopenRecentlyClosedResult = "reopened" | "missing" | "failed";
 
   /** The undo toast shown for the most recent close, so reopening can retire it. */
-  let closeUndoToast: { itemId: string; dismiss: () => void } | null = null;
+  let closeUndoToast: { itemId: string; toast: ActionToastHandle } | null = null;
 
   const reopenRecentlyClosedItem = async (item: RecentlyClosedItem): Promise<ReopenRecentlyClosedResult> => {
     if (closeUndoToast?.itemId === item.id) {
-      closeUndoToast.dismiss();
+      closeUndoToast.toast.dismiss();
       closeUndoToast = null;
     }
 
@@ -1649,7 +1649,7 @@ export async function initTaskpane(opts: {
 
     const showUndoToast = optsForClose?.showUndoToast !== false;
     if (showUndoToast) {
-      const dismiss = showActionToast({
+      const toast = showActionToast({
         message: t("init.closedTab", { title: closedItem.title }),
         actionLabel: t("init.undo"),
         duration: 9000,
@@ -1658,7 +1658,7 @@ export async function initTaskpane(opts: {
           void reopenRecentlyClosedById(closedItem.id);
         },
       });
-      closeUndoToast = { itemId: closedItem.id, dismiss };
+      closeUndoToast = { itemId: closedItem.id, toast };
     }
 
     return true;
@@ -2232,7 +2232,11 @@ export async function initTaskpane(opts: {
     onReopenLastClosed: () => {
       void reopenLastClosed();
     },
-    canUndoCloseTab: () => recentlyClosed.peekMostRecent() !== null,
+    // Ctrl/Cmd+Z reopens only the tab whose Undo toast is on screen. Recently
+    // closed now survives reloads, so a bare Ctrl+Z could otherwise bring back a
+    // tab closed days ago when the user meant to undo in Excel (CL-02).
+    // /reopen and the resume picker still reach older tabs.
+    canUndoCloseTab: () => closeUndoToast?.toast.isShowing() === true,
     onSwitchAdjacentTab: (direction: -1 | 1) => {
       const tabs = runtimeManager.snapshotTabs();
       if (tabs.length <= 1) {
