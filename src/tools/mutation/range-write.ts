@@ -844,7 +844,7 @@ export function hasVerificationProblems(verification: WriteVerification): boolea
     verification.invalidSummary !== null;
 }
 
-/** Cells that held a formula before the write and hold a constant now. */
+/** Cells that held a formula before the write and hold a constant now (a cleared cell is not a constant). */
 export function replacedFormulas(
   block: WriteBlock,
   beforeFormulas: CellScalar[][],
@@ -854,6 +854,7 @@ export function replacedFormulas(
   beforeFormulas.forEach((row, r) => row.forEach((before, c) => {
     const after = afterFormulas[r]?.[c];
     if (typeof before !== "string" || !before.startsWith("=")) return;
+    if (after === null || after === undefined || after === "") return;
     if (typeof after === "string" && after.startsWith("=")) return;
     replaced.push({ address: cellAt(block, r, c), formula: before });
   }));

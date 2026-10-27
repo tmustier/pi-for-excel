@@ -277,7 +277,7 @@ void test("fill_formula next to a table says Excel extended the table and named 
   });
 });
 
-void test("write_cells over formulas says which cells lost a formula, and not for formulas rewritten", async () => {
+void test("write_cells over formulas says which cells lost a formula, not for formulas rewritten or cleared", async () => {
   const host = new FakeExcelHost(["Model"]);
   const model = host.sheet("Model");
   model.set("C5", 100);
@@ -286,11 +286,12 @@ void test("write_cells over formulas says which cells lost a formula, and not fo
   model.set("D6", "=C6+C5");
   model.set("D7", "=C5");
   model.set("D8", 7);
+  model.set("D9", "=C5");
 
   await withFakeExcel(host, async () => {
     const result = await createWriteCellsTool(noBackups).execute("hardcode", {
       start_cell: "Model!D5",
-      values: [[110], [220], ["=C6"], [8]],
+      values: [[110], [220], ["=C6"], [8], [""]],
       allow_overwrite: true,
     });
 
