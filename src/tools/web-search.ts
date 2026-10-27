@@ -934,6 +934,8 @@ export function createWebSearchTool(
 
         return {
           content: [{ type: "text", text: displayMessage }],
+          // A failure: the model sees an error result and the card is drawn red.
+          isError: true,
           details: createWebSearchDetails({
             ok: false,
             provider: configuredProvider,

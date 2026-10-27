@@ -191,8 +191,10 @@
   font-size: var(--text-xs);
 }
 
-/* Flex overflow fix for tool cards */
+/* Flex overflow fix for tool cards. Display lives here, not inline, so
+   `.pi-tool-group--collapsed > tool-message` can hide grouped cards. */
 tool-message {
+  display: block;
   min-width: 0;
 }
 

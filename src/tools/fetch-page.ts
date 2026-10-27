@@ -462,6 +462,8 @@ export function createFetchPageTool(
 
         return {
           content: [{ type: "text", text: displayMessage }],
+          // A failure: the model sees an error result and the card is drawn red.
+          isError: true,
           details: createFetchPageDetails({
             ok: false,
             url: targetUrl,

@@ -18,6 +18,7 @@ import "./boot.js";
 import "./ui/register-components.js";
 
 import { createCopyableCommand } from "./ui/command-copy.js";
+import { mountTranscriptHarness } from "./ui-gallery-transcript.js";
 import { escapeHtml, setSafeInnerHTML } from "./utils/html.js";
 
 const galleryRoot = document.getElementById("gallery-root");
@@ -176,7 +177,7 @@ const groupSection = section("tool-groups", "Grouped Tool Cards");
 const group = document.createElement("div");
 group.className = "pi-tool-group";
 
-// Real groups always carry a header (see tool-grouping.ts).
+// Real groups always carry a header (rendered by <assistant-message>).
 const groupHeader = document.createElement("button");
 groupHeader.type = "button";
 groupHeader.className = "pi-tool-group__header";
@@ -596,6 +597,30 @@ for (const [label, state] of [
   caption.textContent = label;
   activitySection.appendChild(caption);
   activitySection.appendChild(createActivityBlock(state));
+}
+
+/* ── 11. Live turn (real sidebar + Agent, scripted stream) ─ */
+
+const transcriptSection = section("transcript", "Live turn (scripted stream)");
+const transcriptControls = document.createElement("div");
+transcriptControls.style.cssText = "display: flex; gap: 8px; margin-bottom: 8px;";
+const transcriptHost = document.createElement("div");
+transcriptHost.style.cssText = "height: 640px; border: 1px solid var(--alpha-8); border-radius: 12px; overflow: hidden;";
+transcriptSection.append(transcriptControls, transcriptHost);
+
+const transcriptHarness = mountTranscriptHarness(transcriptHost);
+window.piTranscriptHarness = transcriptHarness;
+
+for (const [label, action] of [
+  ["Play turn", () => { transcriptHarness.reset(); void transcriptHarness.start({ autoRelease: true }); }],
+  ["Reset", () => transcriptHarness.reset()],
+] as const) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "pi-overlay-btn pi-overlay-btn--ghost";
+  button.textContent = label;
+  button.addEventListener("click", action);
+  transcriptControls.appendChild(button);
 }
 
 console.log("[ui-gallery] Rendered all sections");

@@ -303,6 +303,10 @@ thinking-block .thinking-header {
   display: flex;
   align-items: center;
   gap: 8px;
+  border: none;
+  background: none;
+  text-align: left;
+  font-family: inherit;
   cursor: pointer;
   user-select: none;
   -webkit-user-select: none;
@@ -405,22 +409,10 @@ thinking-block markdown-block h6 {
 }
 
 
-/* Ctrl+O toggle — thinking blocks: strip card chrome like complete tool cards */
-.pi-hide-internals thinking-block .thinking-block {
-  border: none;
-  background: none;
-  border-radius: 0;
-}
-.pi-hide-internals thinking-block .thinking-header {
-  padding: 2px 4px;
-  opacity: 0.55;
-}
-
-/* Ctrl+O toggle — tool cards: keep normal card styling.
-   (We collapse/expand the tool body by toggling max-h-* classes in JS.) */
-
-.pi-hide-internals .pi-assistant-body {
-  gap: 8px;
+thinking-block .thinking-header:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
+  border-radius: var(--pill-radius);
 }
 
 /* Abort message — clear separator + icon-labelled status */

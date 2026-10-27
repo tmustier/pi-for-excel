@@ -50,6 +50,7 @@ void test("web_search does NOT fall back to Jina when no Jina API key is configu
   const text = result.content[0]?.type === "text" ? result.content[0].text : "";
 
   assert.match(text, /Error:.*API key.*missing/i);
+  assert.equal(result.isError, true);
 
   const details = result.details as { ok?: boolean; provider?: string; fallback?: unknown };
   assert.equal(details.ok, false);

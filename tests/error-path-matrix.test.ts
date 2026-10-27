@@ -97,6 +97,7 @@ void test("error-path matrix: fetch_page reports proxy-down transport errors", a
 
   assert.match(text, /^Error: /);
   assert.match(text, /fetch failed/i);
+  assert.equal(result.isError, true);
 
   const details = result.details as { ok?: boolean; url?: string; error?: string };
   assert.equal(details.ok, false);

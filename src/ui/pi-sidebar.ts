@@ -15,7 +15,13 @@ import type { StreamingMessageContainer } from "./messages/streaming-message-con
 import { Archive, ChevronRight, FileText, Keyboard, Puzzle, RotateCcw, Ruler, Settings, Wrench } from "lucide";
 import "./pi-input.js";
 import "./working-indicator.js";
-import { initToolGrouping } from "./tool-grouping.js";
+import {
+  endOpenThinking,
+  forgetOpenThinking,
+  recordThinkingEnd,
+  recordThinkingStart,
+  thinkingKey,
+} from "./messages/transcript-state.js";
 import type { PiInput } from "./pi-input.js";
 import { isDebugEnabled, formatK } from "../debug/debug.js";
 import {
@@ -27,6 +33,25 @@ import {
   type PayloadStats,
 } from "../auth/stream-proxy.js";
 import { t } from "../language/index.js";
+import { Type } from "typebox";
+import { Value } from "typebox/value";
+
+const liveJsonValueSchema = Type.Cyclic({
+  JsonValue: Type.Union([
+    Type.String(), Type.Number(), Type.Boolean(), Type.Null(),
+    Type.Array(Type.Ref("JsonValue")),
+    Type.Record(Type.String(), Type.Ref("JsonValue")),
+  ]),
+}, "JsonValue");
+
+/** The `result` of a tool_execution_end event, as far as a tool card reads it. */
+const liveToolResultSchema = Type.Object({
+  content: Type.Optional(Type.Array(Type.Union([
+    Type.Object({ type: Type.Literal("text"), text: Type.String() }),
+    Type.Object({ type: Type.Literal("image"), data: Type.String(), mimeType: Type.String() }),
+  ]))),
+  details: Type.Optional(liveJsonValueSchema),
+});
 
 function hasRenderableMessages(messages: readonly AgentMessage[]): boolean {
   return messages.some((message) => message.role !== "system" && message.role !== "artifact");
@@ -167,13 +192,13 @@ export class PiSidebar extends LitElement {
   @query(".pi-session-tabs__scroller") private _tabsScroller?: HTMLElement;
 
   private _unsubscribe: (() => void) | undefined;
-  private _cleanupGrouping: (() => void) | undefined;
+  /** Results of tools that finished before their batch did (see MessageList.liveToolResults). */
+  private _liveToolResults = new Map<string, ToolResultMessage>();
   private _autoScroll = true;
   private _lastScrollTop = 0;
   private _resizeObserver: ResizeObserver | undefined;
   private _scrollContainerEl: HTMLElement | undefined;
   private _scrollListener: (() => void) | undefined;
-  private _groupingRoot: HTMLElement | undefined;
   /** rAF handle for the inner-container auto-scroll loop (thinking / tool blocks). */
   private _innerScrollRAF: number | undefined;
   /** Inner elements we have snapped to bottom at least once. */
@@ -289,9 +314,6 @@ export class PiSidebar extends LitElement {
     super.disconnectedCallback();
     this._unsubscribe?.();
     this._unsubscribe = undefined;
-    this._cleanupGrouping?.();
-    this._cleanupGrouping = undefined;
-    this._groupingRoot = undefined;
     this._resizeObserver?.disconnect();
     this._resizeObserver = undefined;
 
@@ -314,12 +336,8 @@ export class PiSidebar extends LitElement {
     if (changed.has("agent")) this._setupSubscription();
   }
 
-  override firstUpdated() {
-    this._ensureMessageEnhancements();
-  }
-
   override updated(_changed: PropertyValues<this>) {
-    this._ensureMessageEnhancements();
+    this._setupAutoScroll();
     this._updateSessionTabOverflow();
 
     if (this._isStreaming !== this._wasStreaming) {
@@ -332,8 +350,19 @@ export class PiSidebar extends LitElement {
     }
   }
 
+  /**
+   * One model of a streaming turn:
+   * - the response being streamed renders only in <streaming-message-container>;
+   * - at message_end pi-agent-core has pushed the finished response into
+   *   state.messages, so the streaming copy is cleared in the same update and
+   *   <message-list> alone draws it from then on, its tool cards spinning
+   *   until each one's result arrives;
+   * - each tool card finishes at its own tool_execution_end.
+   */
   private _setupSubscription() {
     this._unsubscribe?.();
+    this._liveToolResults = new Map();
+    forgetOpenThinking();
     const agent = this.agent;
     if (!agent) return;
 
@@ -344,16 +373,42 @@ export class PiSidebar extends LitElement {
       switch (ev.type) {
         case "message_start":
         case "message_end":
+          if (ev.type === "message_end" && ev.message.role === "assistant") {
+            endOpenThinking(ev.message, Date.now());
+            this._streamingContainer?.setMessage(null, true);
+          }
           this._hasMessages = hasRenderableMessages(agent.state.messages);
+          this._isStreaming = agent.state.isStreaming;
+          this.requestUpdate();
+          break;
+        case "agent_start":
+          this._liveToolResults = new Map();
           this._isStreaming = agent.state.isStreaming;
           this.requestUpdate();
           break;
         case "turn_start":
         case "turn_end":
-        case "agent_start":
+        case "tool_execution_start":
           this._isStreaming = agent.state.isStreaming;
           this.requestUpdate();
           break;
+        case "tool_execution_end": {
+          // pi-agent-core types `result` as any. A shape we cannot read just
+          // waits for the batch's toolResult message, as before.
+          const raw: unknown = ev.result;
+          if (!Value.Check(liveToolResultSchema, raw)) break;
+          this._liveToolResults.set(ev.toolCallId, {
+            role: "toolResult",
+            toolCallId: ev.toolCallId,
+            toolName: ev.toolName,
+            content: raw.content ?? [],
+            ...(raw.details === undefined ? {} : { details: raw.details }),
+            isError: ev.isError,
+            timestamp: Date.now(),
+          });
+          this.requestUpdate();
+          break;
+        }
         case "agent_end":
           this._isStreaming = false;
           if (this._streamingContainer) {
@@ -362,28 +417,24 @@ export class PiSidebar extends LitElement {
           }
           this.requestUpdate();
           break;
-        case "message_update":
+        case "message_update": {
+          const update = ev.assistantMessageEvent;
+          if (ev.message.role === "assistant") {
+            if (update.type === "thinking_start") {
+              recordThinkingStart(thinkingKey(ev.message, update.contentIndex), Date.now());
+            } else if (update.type === "thinking_end") {
+              recordThinkingEnd(thinkingKey(ev.message, update.contentIndex), Date.now());
+            }
+          }
           if (this._streamingContainer) {
             const streaming = agent.state.isStreaming;
             this._streamingContainer.isStreaming = streaming;
             this._streamingContainer.setMessage(ev.message, !streaming);
           }
           break;
+        }
       }
     });
-  }
-
-  private _ensureMessageEnhancements() {
-    this._setupAutoScroll();
-
-    const inner = this.querySelector<HTMLElement>(".pi-messages__inner");
-    if (!inner) return;
-
-    if (this._groupingRoot === inner) return;
-
-    this._cleanupGrouping?.();
-    this._cleanupGrouping = initToolGrouping(inner);
-    this._groupingRoot = inner;
   }
 
   private _scrollToBottom(container: HTMLElement): void {
@@ -680,20 +731,14 @@ export class PiSidebar extends LitElement {
     this._detachTabContextMenuDocumentListener();
   }
 
-  private _buildToolResultsMap(): Map<string, ToolResultMessage> {
-    const map = new Map<string, ToolResultMessage>();
-    if (!this.agent) return map;
-    for (const msg of this.agent.state.messages) {
-      if (msg.role === "toolResult") map.set(msg.toolCallId, msg);
-    }
-    return map;
-  }
-
   override render() {
     const agent = this.agent;
     if (!agent) return html``;
     const state = agent.state;
-    const toolResultsById = this._buildToolResultsMap();
+    const toolResultsById = new Map(this._liveToolResults);
+    for (const message of state.messages) {
+      if (message.role === "toolResult") toolResultsById.set(message.toolCallId, message);
+    }
 
     // Derive from agent state directly — _hasMessages may lag behind after
     // batch operations like replaceMessages() that don't fire per-message events.
@@ -709,6 +754,7 @@ export class PiSidebar extends LitElement {
               .messages=${state.messages.slice()}
               .tools=${state.tools}
               .pendingToolCalls=${state.pendingToolCalls}
+              .liveToolResults=${toolResultsById}
               .isStreaming=${state.isStreaming}
             ></message-list>
             ${this._renderContextPill()}
