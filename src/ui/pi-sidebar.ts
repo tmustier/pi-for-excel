@@ -747,24 +747,6 @@ export class PiSidebar extends LitElement {
     });
   }
 
-  private _resolveTabContextMenuPosition(point: { x: number; y: number }): { x: number; y: number } {
-    const offset = 6;
-    const estimatedMenuWidth = 190;
-    const estimatedMenuHeight = 220;
-    const margin = 8;
-
-    const x = Math.min(
-      point.x + offset,
-      Math.max(margin, window.innerWidth - estimatedMenuWidth - margin),
-    );
-    const y = Math.min(
-      point.y + offset,
-      Math.max(margin, window.innerHeight - estimatedMenuHeight - margin),
-    );
-
-    return { x, y };
-  }
-
   private _openTabContextMenu(runtimeId: string, event: MouseEvent | KeyboardEvent): void {
     event.preventDefault();
     event.stopPropagation();
@@ -783,7 +765,14 @@ export class PiSidebar extends LitElement {
     }
 
     this._tabContextMenuRuntimeId = runtimeId;
-    this._tabContextMenuPosition = this._resolveTabContextMenuPosition(point);
+    const offset = 6;
+    const estimatedMenuWidth = 190;
+    const estimatedMenuHeight = 220;
+    const margin = 8;
+    this._tabContextMenuPosition = {
+      x: Math.min(point.x + offset, Math.max(margin, window.innerWidth - estimatedMenuWidth - margin)),
+      y: Math.min(point.y + offset, Math.max(margin, window.innerHeight - estimatedMenuHeight - margin)),
+    };
     this._attachTabContextMenuDocumentListener();
     void this.updateComplete.then(() => {
       const menu = this.querySelector<HTMLElement>(".pi-session-tab-context-menu");
@@ -829,11 +818,6 @@ export class PiSidebar extends LitElement {
       const buttons = this.querySelectorAll<HTMLButtonElement>(".pi-session-tab__main");
       (buttons[index] ?? null)?.focus();
     }
-  }
-
-  private _runTabMenuItem(action: (() => void) | undefined) {
-    this._closeTabContextMenu({ restoreFocus: true });
-    action?.();
   }
 
   private _onTabContextMenuKeyDown = (event: KeyboardEvent) => {
@@ -1032,7 +1016,7 @@ export class PiSidebar extends LitElement {
     `;
   }
 
-  private _renderTabMenuItem(label: string, disabled: boolean, action: (() => void) | undefined, danger = false) {
+  private _renderTabMenuItem(label: string, disabled: boolean, action: () => void, danger = false) {
     return html`
       <button
         role="menuitem"
@@ -1040,20 +1024,26 @@ export class PiSidebar extends LitElement {
         tabindex="-1"
         class="pi-session-tab-context-menu__item ${danger ? "pi-session-tab-context-menu__item--danger" : ""}"
         ?disabled=${disabled}
-        @click=${() => this._runTabMenuItem(action)}
+        @click=${() => {
+          this._closeTabContextMenu({ restoreFocus: true });
+          action();
+        }}
       >
         ${label}
       </button>
     `;
   }
 
-  private _renderTabContextMenu(tab: SessionTabView) {
+  private _renderTabContextMenuOverlay() {
+    const tab = this.sessionTabs.find((entry) => entry.runtimeId === this._tabContextMenuRuntimeId);
+    if (!tab) return nothing;
+
     const canCloseTabs = this.sessionTabs.length > 1;
     const closeDisabled = !canCloseTabs || tab.lockState === "holding_lock";
     const closeOthersDisabled = this.sessionTabs.length <= 1 || !this.onCloseOtherTabs;
     const tabIndex = this.sessionTabs.findIndex((entry) => entry.runtimeId === tab.runtimeId);
     const moveLeftDisabled = tabIndex <= 0 || !this.onMoveTabLeft;
-    const moveRightDisabled = tabIndex < 0 || tabIndex >= this.sessionTabs.length - 1 || !this.onMoveTabRight;
+    const moveRightDisabled = tabIndex >= this.sessionTabs.length - 1 || !this.onMoveTabRight;
     const id = tab.runtimeId;
 
     return html`
@@ -1076,23 +1066,6 @@ export class PiSidebar extends LitElement {
         ${this._renderTabMenuItem(t("sidebar.contextmenu.close"), closeDisabled, () => this.onCloseTab?.(id), true)}
       </div>
     `;
-  }
-
-  private _renderTabContextMenuOverlay() {
-    if (!this._tabContextMenuRuntimeId) {
-      return nothing;
-    }
-
-    const tab = this.sessionTabs.find((entry) => entry.runtimeId === this._tabContextMenuRuntimeId);
-    if (!tab) {
-      return nothing;
-    }
-
-    return this._renderTabContextMenu(tab);
-  }
-
-  private _getUtilitiesButton(): HTMLButtonElement | null {
-    return this.querySelector<HTMLButtonElement>(".pi-utilities-btn");
   }
 
   private _toggleUtilitiesMenu() {
@@ -1137,17 +1110,7 @@ export class PiSidebar extends LitElement {
     if (!this._utilitiesMenuOpen) return;
     this._utilitiesMenuOpen = false;
     this._detachUtilitiesMenuDocumentListener();
-    if (opts.restoreFocus) this._getUtilitiesButton()?.focus();
-  }
-
-  /**
-   * Close the menu without refocusing the gear: the item opens a view, and when
-   * that view closes its opener (this menu item) is gone, so focus returns to
-   * the composer, where the user carries on.
-   */
-  private _runUtilitiesItem(action: (() => void) | undefined) {
-    this._closeUtilitiesMenu();
-    action?.();
+    if (opts.restoreFocus) this.querySelector<HTMLButtonElement>(".pi-utilities-btn")?.focus();
   }
 
   private _onUtilitiesMenuKeyDown = (event: KeyboardEvent) => {
@@ -1158,7 +1121,10 @@ export class PiSidebar extends LitElement {
 
   private _renderUtilitiesItem(iconNode: Parameters<typeof icon>[0], label: string, action: (() => void) | undefined) {
     return html`
-      <button role="menuitem" type="button" tabindex="-1" class="pi-utilities-menu__item" @click=${() => this._runUtilitiesItem(action)}>
+      <button role="menuitem" type="button" tabindex="-1" class="pi-utilities-menu__item" @click=${() => {
+        this._closeUtilitiesMenu();
+        action?.();
+      }}>
         <span class="pi-utilities-menu__item-icon" aria-hidden="true">${icon(iconNode, "sm")}</span>
         <span>${label}</span>
       </button>

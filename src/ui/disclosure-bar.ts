@@ -39,13 +39,12 @@ export function createDisclosureBar(options: DisclosureBarOptions): BannerHandle
     return null;
   }
 
-  let handle: BannerHandle | null = null;
   const dismiss = (): void => {
     setAcknowledged();
-    handle?.root.remove();
+    handle.root.remove();
   };
 
-  handle = createBanner({
+  const handle = createBanner({
     id: "disclosure",
     tone: "info",
     message: t("disclosure-bar.text"),

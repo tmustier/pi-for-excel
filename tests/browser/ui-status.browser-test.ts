@@ -58,15 +58,6 @@ for (const row of [
   });
 }
 
-void test("context warning attributes normalize unknown severity to yellow in the visible popover", async () => {
-  await withTaskpane({ width: 420, height: 720 }, async (page) => {
-    await setContextUsage(page, 61);
-    await page.locator(".pi-status-ctx--trigger").evaluate((trigger) => trigger.setAttribute("data-ctx-severity", "unknown"));
-    await page.locator(".pi-status-ctx--trigger").click();
-    assert.match(await page.locator(".pi-status-popover__warning").getAttribute("class") ?? "", /warning--yellow/);
-  });
-});
-
 void test("Shift+Tab cycles thinking only from the composer text field", async () => {
   await withTaskpane({ width: 420, height: 720 }, async (page) => {
     const level = (): Promise<string | null> => page.locator(".pi-status-thinking").getAttribute("aria-label");

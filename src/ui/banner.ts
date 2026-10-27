@@ -17,8 +17,8 @@ export interface BannerAction {
   onClick: () => void;
   /** Primary actions render as a filled button; others as text links. */
   primary?: boolean;
-  /** Extra attributes such as aria-expanded for disclosure toggles. */
-  attributes?: Record<string, string>;
+  /** Disclosure state, omitted for actions that do not toggle details. */
+  expanded?: boolean;
 }
 
 export interface BannerOptions {
@@ -41,18 +41,6 @@ export interface BannerHandle {
 
 const TONE_ORDER: Record<BannerTone, number> = { error: 0, warning: 1, info: 2 };
 
-function getNoticeArea(): HTMLElement | null {
-  return document.getElementById("pi-notices");
-}
-
-function toneIcon(tone: BannerTone): SVGElement {
-  const node = tone === "error" ? CircleX : tone === "warning" ? AlertTriangle : Info;
-  const svg = lucide(node);
-  svg.classList.add("pi-banner__icon");
-  svg.setAttribute("aria-hidden", "true");
-  return svg;
-}
-
 function renderActions(row: HTMLElement, actions: readonly BannerAction[]): void {
   row.replaceChildren();
   row.hidden = actions.length === 0;
@@ -61,8 +49,8 @@ function renderActions(row: HTMLElement, actions: readonly BannerAction[]): void
     button.type = "button";
     button.className = action.primary ? "pi-banner__action pi-banner__action--primary" : "pi-banner__action";
     button.textContent = action.label;
-    for (const [name, value] of Object.entries(action.attributes ?? {})) {
-      button.setAttribute(name, value);
+    if (action.expanded !== undefined) {
+      button.setAttribute("aria-expanded", String(action.expanded));
     }
     button.addEventListener("click", action.onClick);
     row.appendChild(button);
@@ -93,7 +81,10 @@ export function createBanner(options: BannerOptions): BannerHandle {
   if (options.details) body.append(options.details);
   body.append(actionRow);
 
-  root.append(toneIcon(options.tone), body);
+  const icon = lucide(options.tone === "error" ? CircleX : options.tone === "warning" ? AlertTriangle : Info);
+  icon.classList.add("pi-banner__icon");
+  icon.setAttribute("aria-hidden", "true");
+  root.append(icon, body);
 
   if (options.onDismiss) {
     const onDismiss = options.onDismiss;
@@ -118,7 +109,7 @@ export function createBanner(options: BannerOptions): BannerHandle {
 
 /** Insert `root` into the notice area, keeping banners ordered by severity. */
 export function mountBanner(root: HTMLElement): boolean {
-  const area = getNoticeArea();
+  const area = document.getElementById("pi-notices");
   if (!area) return false;
 
   const id = root.dataset.bannerId;
@@ -147,5 +138,5 @@ export function showBanner(options: BannerOptions): BannerHandle | null {
 }
 
 export function hideBanner(id: string): void {
-  getNoticeArea()?.querySelector(`[data-banner-id="${CSS.escape(id)}"]`)?.remove();
+  document.getElementById("pi-notices")?.querySelector(`[data-banner-id="${CSS.escape(id)}"]`)?.remove();
 }

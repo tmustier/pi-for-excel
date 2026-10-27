@@ -21,86 +21,67 @@ export interface ProxyBannerController {
   update: (state: ProxyBannerState) => Promise<void>;
 }
 
-function createSteps(): HTMLElement {
-  const details = document.createElement("div");
-  details.className = "pi-banner__details";
-  details.hidden = true;
-
-  const intro = document.createElement("p");
-  intro.textContent = t("proxy-banner.intro");
-
-  const hint = document.createElement("p");
-  hint.className = "pi-banner__hint";
-  hint.textContent = t("proxy-banner.hint");
-
-  const guide = document.createElement("a");
-  guide.className = "pi-banner__link";
-  guide.href = INSTALL_GUIDE_URL;
-  guide.target = "_blank";
-  guide.rel = "noopener noreferrer";
-  guide.textContent = t("proxy-banner.guideLink");
-
-  details.append(intro, createCopyableCommand(PROXY_COMMAND), hint, guide);
-  return details;
-}
-
 export function createProxyBannerController(opts: {
   isProxyEnabled: () => Promise<boolean>;
 }): ProxyBannerController {
   let dismissed = false;
 
-  const show = (): void => {
-    const details = createSteps();
-    const handle = createBanner({
-      id: BANNER_ID,
-      tone: "warning",
-      message: t("proxy-banner.warning"),
-      details,
-      onDismiss: () => {
-        dismissed = true;
-      },
-    });
-
-    const renderToggle = (): void => {
-      const open = details.hidden !== true;
-      handle.setActions([{
-        label: open ? t("proxy-banner.hideSteps") : t("proxy-banner.action"),
-        attributes: { "aria-expanded": String(open) },
-        onClick: () => {
-          details.hidden = open;
-          renderToggle();
-        },
-      }]);
-    };
-    renderToggle();
-    mountBanner(handle.root);
-  };
-
   return {
     update: async (state) => {
-      if (state === "detected") {
-        dismissed = false;
-        hideBanner(BANNER_ID);
-        return;
-      }
-
+      if (state === "detected") dismissed = false;
       if (state !== "not-detected" || dismissed) {
         hideBanner(BANNER_ID);
         return;
       }
 
-      let enabled = false;
-      try {
-        enabled = await opts.isProxyEnabled();
-      } catch {
-        enabled = false;
+      const enabled = await opts.isProxyEnabled().catch(() => false);
+      if (!enabled) {
+        hideBanner(BANNER_ID);
+        return;
       }
 
-      if (enabled) {
-        show();
-      } else {
-        hideBanner(BANNER_ID);
-      }
+      const details = document.createElement("div");
+      details.className = "pi-banner__details";
+      details.hidden = true;
+
+      const intro = document.createElement("p");
+      intro.textContent = t("proxy-banner.intro");
+
+      const hint = document.createElement("p");
+      hint.className = "pi-banner__hint";
+      hint.textContent = t("proxy-banner.hint");
+
+      const guide = document.createElement("a");
+      guide.className = "pi-banner__link";
+      guide.href = INSTALL_GUIDE_URL;
+      guide.target = "_blank";
+      guide.rel = "noopener noreferrer";
+      guide.textContent = t("proxy-banner.guideLink");
+
+      details.append(intro, createCopyableCommand(PROXY_COMMAND), hint, guide);
+      const handle = createBanner({
+        id: BANNER_ID,
+        tone: "warning",
+        message: t("proxy-banner.warning"),
+        details,
+        onDismiss: () => {
+          dismissed = true;
+        },
+      });
+
+      const renderToggle = (): void => {
+        const open = !details.hidden;
+        handle.setActions([{
+          label: open ? t("proxy-banner.hideSteps") : t("proxy-banner.action"),
+          expanded: open,
+          onClick: () => {
+            details.hidden = open;
+            renderToggle();
+          },
+        }]);
+      };
+      renderToggle();
+      mountBanner(handle.root);
     },
   };
 }

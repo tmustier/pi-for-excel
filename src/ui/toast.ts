@@ -88,27 +88,8 @@ function pauseTimer(entry: ToastEntry): void {
   entry.remainingMs = Math.max(800, entry.remainingMs - (Date.now() - entry.startedAt));
 }
 
-function inferToastVariant(message: string): ToastVariant {
-  return ERROR_TOAST_PATTERN.test(message) ? "error" : "info";
-}
-
-function normalizeToastOptions(
-  message: string,
-  durationOrOptions: number | ToastOptions | undefined,
-): { duration: number; variant: ToastVariant } {
-  if (typeof durationOrOptions === "number") {
-    return { duration: durationOrOptions, variant: inferToastVariant(message) };
-  }
-
-  const variant = durationOrOptions?.variant ?? inferToastVariant(message);
-  const duration = durationOrOptions?.duration
-    ?? (variant === "error" ? DEFAULT_ERROR_DURATION_MS : DEFAULT_INFO_DURATION_MS);
-
-  return { duration, variant };
-}
-
 function renderToast(opts: {
-  id?: string;
+  id: string | undefined;
   message: string;
   duration: number;
   variant: ToastVariant;
@@ -120,7 +101,7 @@ function renderToast(opts: {
   // followed by its result), so progress toasts never outlive their task.
   if (opts.id !== undefined) dismissToast(opts.id);
 
-  const duplicate = entries.find((entry) => entry.message === opts.message && entry.hasAction === Boolean(opts.action));
+  const duplicate = entries.find((entry) => entry.message === opts.message && !entry.hasAction);
   if (duplicate && !opts.action) {
     duplicate.remainingMs = opts.duration;
     startTimer(duplicate);
@@ -192,15 +173,20 @@ export function showToast(message: string, duration?: number): void;
 export function showToast(message: string, options?: ToastOptions): void;
 export function showToast(message: string, durationOrOptions?: number | ToastOptions): void {
   if (typeof document === "undefined") return;
-  const normalized = normalizeToastOptions(message, durationOrOptions);
-  const id = typeof durationOrOptions === "object" ? durationOrOptions.id : undefined;
-  renderToast({ ...(id !== undefined ? { id } : {}), message, duration: normalized.duration, variant: normalized.variant });
+  const options = typeof durationOrOptions === "number" ? { duration: durationOrOptions } : durationOrOptions;
+  const variant = options?.variant ?? (ERROR_TOAST_PATTERN.test(message) ? "error" : "info");
+  renderToast({
+    id: options?.id,
+    message,
+    duration: options?.duration ?? (variant === "error" ? DEFAULT_ERROR_DURATION_MS : DEFAULT_INFO_DURATION_MS),
+    variant,
+  });
 }
 
 export function showActionToast(opts: ActionToastOptions): void {
   if (typeof document === "undefined") return;
   renderToast({
-    ...(opts.id !== undefined ? { id: opts.id } : {}),
+    id: opts.id,
     message: opts.message,
     duration: opts.duration ?? ACTION_TOAST_DEFAULT_MS,
     variant: "info",

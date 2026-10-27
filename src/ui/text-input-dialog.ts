@@ -130,8 +130,6 @@ export function requestTextInputDialog(options: TextInputDialogOptions): Promise
     // second, deferred focus here raced the user: an Escape pressed before it
     // ran was undone, and the next Escape only left the field again.
     dialog.mount();
-    if (typeof input.select === "function") {
-      input.select();
-    }
+    input.select();
   });
 }
