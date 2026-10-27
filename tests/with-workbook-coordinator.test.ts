@@ -413,6 +413,76 @@ void test("write failures do not emit mutation events", async () => {
 });
 
 
+void test("a read issued after a write in the same batch sees the written value", async () => {
+  let cell = "old";
+  let finishWrite: () => void = () => {};
+  const writeTool = makeTool("write_cells", () => new Promise((resolve) => {
+    finishWrite = () => {
+      cell = "new";
+      resolve({ content: [{ type: "text", text: "written" }], details: { echo: "write" } });
+    };
+  }));
+  const readTool = makeTool("read_range", () => Promise.resolve({
+    content: [{ type: "text", text: cell }],
+    details: { echo: cell },
+  }));
+  const [write, read, laterWrite] = withWorkbookCoordinator(
+    [writeTool, readTool, makeTool("format_cells")],
+    new FakeCoordinator(),
+    createContextProvider("wb-1"),
+  );
+  if (!write || !read || !laterWrite) throw new Error("Wrapped tools missing");
+
+  // The agent loop starts a batch's calls in order, then lets them run concurrently.
+  const writing = write.execute("w", {});
+  const reading = read.execute("r", {});
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  finishWrite();
+
+  const [, readResult] = await Promise.all([writing, reading]);
+  assert.deepEqual(readResult.details, { echo: "new" });
+
+  // A read issued before a write does not wait for it.
+  let releaseLater: () => void = () => {};
+  const blockingWrite = makeTool("write_cells", () => new Promise((resolve) => {
+    releaseLater = () => resolve({ content: [{ type: "text", text: "late" }], details: { echo: "late" } });
+  }));
+  const [readFirst, writeSecond] = withWorkbookCoordinator(
+    [readTool, blockingWrite],
+    new FakeCoordinator(),
+    createContextProvider("wb-1"),
+  );
+  if (!readFirst || !writeSecond) throw new Error("Wrapped tools missing");
+  const earlyRead = readFirst.execute("r2", {});
+  const pendingWrite = writeSecond.execute("w2", {});
+  assert.deepEqual((await earlyRead).details, { echo: "new" });
+  releaseLater();
+  await pendingWrite;
+});
+
+void test("Stop tells the agent whether a mutation ran", async () => {
+  const stopped = new AbortController();
+  stopped.abort();
+  const [beforeRun] = withWorkbookCoordinator([makeTool("format_cells")], new FakeCoordinator(), createContextProvider("wb-1"));
+  if (!beforeRun) throw new Error("Wrapped tool missing");
+  await assert.rejects(beforeRun.execute("s1", {}, stopped.signal), /Stopped before running; nothing changed in the workbook\./u);
+
+  // Stop pressed while a one-batch mutation runs: its change stands, and the result says so.
+  const during = new AbortController();
+  const [whileRunning] = withWorkbookCoordinator(
+    [makeTool("format_cells", () => {
+      during.abort();
+      return Promise.resolve({ content: [{ type: "text", text: "Formatted A1." }], details: { echo: "ok" } });
+    })],
+    new FakeCoordinator(),
+    createContextProvider("wb-1"),
+  );
+  if (!whileRunning) throw new Error("Wrapped tool missing");
+  const result = await whileRunning.execute("s2", {}, during.signal);
+  const first = result.content[0];
+  assert.equal(first?.type === "text" ? first.text : "", "Formatted A1.\n\n⏹ Stop was pressed while this ran; the change above was already applied and stands.");
+});
+
 void test("Stop settles a write Excel never answers, so the workbook lock is released", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] });
   const coordinator = new FakeCoordinator();
