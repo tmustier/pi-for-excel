@@ -339,54 +339,6 @@ function findCutIndex(
 /** Kept results above this size are compacted to a preview when their request was answered. */
 const KEPT_TOOL_RESULT_MAX_CHARS = 8_000;
 
-function isUserPrompt(message: AgentMessage | undefined): boolean {
-  return message?.role === "user" || message?.role === "user-with-attachments";
-}
-
-interface RequestTurn {
-  /** Index of the user prompt. */
-  start: number;
-  /** Index after the turn's last message. */
-  end: number;
-  /** The final assistant reply when the request was answered. */
-  reply: { index: number; text: string } | null;
-}
-
-/** Each user request with the messages up to the next one, and whether it was answered. */
-function findRequestTurns(messages: readonly AgentMessage[]): RequestTurn[] {
-  const starts = messages.flatMap((message, index) => (isUserPrompt(message) ? [index] : []));
-  return starts.map((start, n) => {
-    const end = starts[n + 1] ?? messages.length;
-    let reply: RequestTurn["reply"] = null;
-    for (let i = end - 1; i > start; i -= 1) {
-      const message = messages[i];
-      if (message?.role !== "assistant") continue;
-      const text = message.content.flatMap((block) => (block.type === "text" ? [block.text] : [])).join("\n").trim();
-      if (message.stopReason === "stop" && text.length > 0) reply = { index: i, text };
-      break;
-    }
-    return { start, end, reply };
-  });
-}
-
-/**
- * Tool calls whose large results can be compacted in the kept tail: their
- * request was answered, so the reply already carries what mattered.
- */
-function findCompactableToolCallIds(messages: readonly AgentMessage[], from: number): Set<string> {
-  const ids = new Set<string>();
-  for (const turn of findRequestTurns(messages)) {
-    if (!turn.reply) continue;
-    for (let i = Math.max(turn.start, from); i < turn.end; i += 1) {
-      const message = messages[i];
-      if (message?.role !== "toolResult") continue;
-      const chars = message.content.reduce((total, block) => total + (block.type === "text" ? block.text.length : 4_800), 0);
-      if (chars > KEPT_TOOL_RESULT_MAX_CHARS) ids.add(message.toolCallId);
-    }
-  }
-  return ids;
-}
-
 function serializeConversation(
   messages: AgentMessage[],
   limits: SerializeLimits,
@@ -660,6 +612,31 @@ export async function runCompactCommand(agent: Agent, args: string, signal?: Abo
   const userCompactionFocus = args.trim() || undefined;
   let memoryNudgeShown = false;
 
+  const prompts = messagesWithoutArchived.flatMap((message, start) =>
+    message.role === "user" || message.role === "user-with-attachments" ? [{ start, prompt: message }] : []);
+  const turns = prompts.map(({ start, prompt }, n) => {
+    const end = prompts[n + 1]?.start ?? messagesWithoutArchived.length;
+    let reply: { index: number; text: string } | null = null;
+    for (let i = end - 1; i > start; i -= 1) {
+      const message = messagesWithoutArchived[i];
+      if (message?.role !== "assistant") continue;
+      const text = message.content.flatMap((block) => (block.type === "text" ? [block.text] : [])).join("\n").trim();
+      if (message.stopReason === "stop" && text.length > 0) reply = { index: i, text };
+      break;
+    }
+    return { start, end, prompt, reply };
+  });
+  const compactable = new Set<string>();
+  for (const turn of turns) {
+    if (!turn.reply) continue;
+    for (let i = Math.max(turn.start, boundaryStart); i < turn.end; i += 1) {
+      const message = messagesWithoutArchived[i];
+      if (message?.role !== "toolResult") continue;
+      const chars = message.content.reduce((total, block) => total + (block.type === "text" ? block.text.length : 4_800), 0);
+      if (chars > KEPT_TOOL_RESULT_MAX_CHARS) compactable.add(message.toolCallId);
+    }
+  }
+
   const runOnce = async (limits: SerializeLimits, keepRecentOverride?: number): Promise<{
     summary: string;
     keptMessages: AgentMessage[];
@@ -671,7 +648,6 @@ export async function runCompactCommand(agent: Agent, args: string, signal?: Abo
     const keepRecent = keepRecentOverride ?? keepRecentTokens;
     // Large results of answered requests are kept as previews, so they no
     // longer fill the kept tail on their own.
-    const compactable = findCompactableToolCallIds(messagesWithoutArchived, boundaryStart);
     const estimateKept = (message: AgentMessage) => estimateTokens(
       message.role === "toolResult" && compactable.has(message.toolCallId) ? compactToolResult(message) : message,
     );
@@ -689,10 +665,9 @@ export async function runCompactCommand(agent: Agent, args: string, signal?: Abo
     // that is kept after the summary.
     const answered = new Map<AgentMessage, boolean>();
     const laterReplies: string[] = [];
-    for (const turn of findRequestTurns(messagesWithoutArchived)) {
-      const prompt = messagesWithoutArchived[turn.start];
-      if (!prompt || turn.start < boundaryStart || turn.start >= cutIndex) continue;
-      answered.set(prompt, turn.reply !== null);
+    for (const turn of turns) {
+      if (turn.start < boundaryStart || turn.start >= cutIndex) continue;
+      answered.set(turn.prompt, turn.reply !== null);
       if (turn.reply && turn.reply.index >= cutIndex) laterReplies.push(turn.reply.text);
     }
 
