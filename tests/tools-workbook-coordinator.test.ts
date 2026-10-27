@@ -83,6 +83,12 @@ void test("a tab's own parallel writes hold the lock; only another tab's write w
   let release: (() => void) | undefined;
   const held = new Promise<void>((resolve) => { release = resolve; });
   const op = (sessionId: string, opId: string) => ({ workbookId: "wb", sessionId, opId });
+  // What a listener sees when each write is announced as queued.
+  const seenWhenQueued: string[] = [];
+  local.subscribe((event) => {
+    if (event.type !== "queued") return;
+    seenWhenQueued.push(`${event.context.opId}:${getSessionLockState(local.getSnapshot("wb"), event.context.sessionId)}`);
+  });
 
   const first = local.runWrite(op("tab-a", "a1"), () => held);
   const second = local.runWrite(op("tab-a", "a2"), () => Promise.resolve());
@@ -93,6 +99,7 @@ void test("a tab's own parallel writes hold the lock; only another tab's write w
   assert.equal(getSessionLockState(snapshot, "tab-a"), "holding_lock");
   assert.equal(getSessionLockState(snapshot, "tab-b"), "waiting_for_lock");
   assert.equal(getSessionLockState(snapshot, "tab-c"), "idle");
+  assert.deepEqual(seenWhenQueued, ["a2:holding_lock", "b1:waiting_for_lock"]);
 
   release?.();
   await Promise.all([first, second, other]);
