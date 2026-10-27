@@ -101,8 +101,9 @@ export function createFillFormulaTool(): AgentTool<typeof schema, FillFormulaDet
       }
 
       const sent: SentGrid = () => ({ kind: "formula", formula: params.formula });
-      const progress: { inspection: WriteTargetInspection | null; filled: boolean; fillInFlight: boolean } =
-        { inspection: null, filled: false, fillInFlight: false };
+      // `abandoned`: the caller stopped waiting (excelRun's timeout); the batch must not start the fill after that.
+      const progress: { inspection: WriteTargetInspection | null; filled: boolean; fillInFlight: boolean; abandoned: boolean } =
+        { inspection: null, filled: false, fillInFlight: false, abandoned: false };
 
       let outcome: FillOutcome;
       try {
@@ -120,6 +121,7 @@ export function createFillFormulaTool(): AgentTool<typeof schema, FillFormulaDet
           if (inspection.occupiedCount > 0 && !params.allow_overwrite) return { kind: "occupied", inspection, block };
           if (inspection.occupiedCount > 0 && !inspection.before) return { kind: "too_large_to_back_up", inspection, block };
           if (signal?.aborted) return { kind: "stopped", inspection, block };
+          if (progress.abandoned) throw new Error("fill_formula did not fill: the caller gave up on this Excel batch.");
 
           const topLeft = range.getCell(0, 0);
           topLeft.formulas = [[params.formula]];
@@ -148,6 +150,7 @@ export function createFillFormulaTool(): AgentTool<typeof schema, FillFormulaDet
               sentFormulas: true,
               sentEmptyCount: 0,
               tablesBefore: inspection.tableNames,
+              sentChars: params.formula.length * block.rowCount * block.columnCount,
             });
             return { kind: "filled", inspection, block, verification, verifyError: null, stopped: false };
           } catch (verifyError) {
@@ -156,21 +159,25 @@ export function createFillFormulaTool(): AgentTool<typeof schema, FillFormulaDet
           }
         });
       } catch (error) {
+        // Snapshot before any await: an abandoned run may still finish its in-flight fill.
+        progress.abandoned = true;
+        const filled = progress.filled;
+        const fillInFlight = progress.fillInFlight;
         const parsed = parseExcelError(error);
         const failure = await describeExcelFailure(
           parsed,
           { range: params.range },
-          !progress.filled && !progress.fillInFlight,
+          !filled && !fillInFlight,
         );
         // Excel never answered the fill batch (timeout, Stop, not an Excel error): it may have landed.
-        const fillUnknown = progress.fillInFlight && (parsed.outcomeUnknown || parsed.code === null);
+        const fillUnknown = fillInFlight && (parsed.outcomeUnknown || parsed.code === null);
         const inspection = progress.inspection;
         const address = inspection ? qualifiedAddress(inspection.sheetName, params.range) : params.range;
         await finalizeMutationOperation(mutationFinalizeDependencies, {
           auditEntry: {
             toolName: "fill_formula",
             toolCallId,
-            blocked: !progress.filled && !fillUnknown,
+            blocked: !filled && !fillUnknown,
             outputAddress: address,
             changedCount: 0,
             changes: [],
@@ -178,7 +185,7 @@ export function createFillFormulaTool(): AgentTool<typeof schema, FillFormulaDet
           },
         });
         return errorResult(
-          progress.filled
+          filled
             ? `The fill of ${address} was applied, but Pi could not finish afterwards: ${failure.reason}\n\nRead the range before relying on it.`
             : fillUnknown
               ? `⚠️ **Outcome unknown** — the fill of ${address} may or may not have been applied: Excel did not confirm it. ` +
