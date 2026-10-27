@@ -179,70 +179,6 @@ function settleOnStop<T>(
   });
 }
 
-function defaultGetExecutionMode(): Promise<ExecutionMode> {
-  return Promise.resolve("yolo");
-}
-
-function defaultRequestToolApproval(_request: ToolApprovalRequest): Promise<boolean> {
-  return Promise.reject(new Error(
-    "This action requires explicit user approval, but confirmation UI is unavailable.",
-  ));
-}
-
-/** The approval this call needs in the current mode, or null. */
-async function getNeededApproval(args: {
-  policy: WorkbookExecutionPolicy;
-  toolName: string;
-  params: unknown;
-}): Promise<{ requirement: "confirm_mode" | "always"; executionMode: ExecutionMode } | null> {
-  const { policy, toolName, params } = args;
-  const requirement = getToolApprovalRequirement(toolName, params);
-  if (requirement === "none") return null;
-
-  const getExecutionMode = policy.getExecutionMode ?? defaultGetExecutionMode;
-  const executionMode = await getExecutionMode();
-  if (requirement === "confirm_mode" && executionMode !== "safe") return null;
-  return { requirement, executionMode };
-}
-
-async function requireApproval(args: {
-  policy: WorkbookExecutionPolicy;
-  requirement: "confirm_mode" | "always";
-  executionMode: ExecutionMode;
-  toolName: string;
-  params: unknown;
-  signal: AbortSignal | undefined;
-  overwrites: OverwrittenCells | undefined;
-}): Promise<void> {
-  const { requirement, executionMode } = args;
-  const requestToolApproval = args.policy.requestToolApproval ?? defaultRequestToolApproval;
-  const approved = await requestToolApproval({
-    executionMode,
-    reason: requirement,
-    toolName: args.toolName,
-    params: args.params,
-    ...(args.signal ? { signal: args.signal } : {}),
-    ...(args.overwrites ? { overwrites: args.overwrites } : {}),
-  });
-
-  throwIfAborted(args.signal);
-  if (!approved) {
-    throw new Error(requirement === "always"
-      ? "The user declined this action in the approval dialog."
-      : "The user declined this workbook change in the approval dialog (Confirm mode).");
-  }
-}
-
-/**
- * Mutations started earlier in this tool set that have not finished. A model can
- * issue a write and a verifying read in one batch; the batch's calls start in
- * order but run concurrently, so without this a read can see the value from
- * before the write. Reads wait for mutations already started; mutations do not
- * wait for reads. Registration happens before the first `await` in `execute`,
- * so the order of the batch decides who waits.
- */
-type PendingMutations = Set<Promise<void>>;
-
 function wrapTool<TParameters extends TSchema, TDetails>(
   tool: AgentTool<TParameters, TDetails> & ApprovalPrecheck<TParameters, TDetails>,
   coordinator: WorkbookCoordinator,
@@ -268,8 +204,11 @@ function wrapTool<TParameters extends TSchema, TDetails>(
 
       // Ask before waiting for the lock, so a pending approval never holds
       // up other tabs' writes.
-      const needed = await getNeededApproval({ policy: executionPolicy, toolName: tool.name, params });
-      if (needed) {
+      const requirement = getToolApprovalRequirement(tool.name, params);
+      const executionMode = requirement === "none"
+        ? "yolo"
+        : await executionPolicy.getExecutionMode?.() ?? "yolo";
+      if (requirement === "always" || (requirement === "confirm_mode" && executionMode === "safe")) {
         const { checkBeforeApproval } = tool;
         const checked = checkBeforeApproval
           ? await coordinator.runRead(
@@ -279,14 +218,23 @@ function wrapTool<TParameters extends TSchema, TDetails>(
           : null;
         if (checked && "refused" in checked) return checked.refused;
 
-        await requireApproval({
-          policy: executionPolicy,
-          ...needed,
+        if (!executionPolicy.requestToolApproval) {
+          throw new Error("This action requires explicit user approval, but confirmation UI is unavailable.");
+        }
+        const approved = await executionPolicy.requestToolApproval({
+          executionMode,
+          reason: requirement,
           toolName: tool.name,
           params,
-          signal,
-          overwrites: checked?.overwrites,
+          ...(signal ? { signal } : {}),
+          ...(checked ? { overwrites: checked.overwrites } : {}),
         });
+        throwIfAborted(signal);
+        if (!approved) {
+          throw new Error(requirement === "always"
+            ? "The user declined this action in the approval dialog."
+            : "The user declined this workbook change in the approval dialog (Confirm mode).");
+        }
       }
 
       if (mode === "read") {

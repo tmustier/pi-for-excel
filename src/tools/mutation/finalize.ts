@@ -15,11 +15,6 @@ import { getErrorMessage } from "../../utils/errors.js";
 /** Dispatched on `document` when a backup of a completed change could not be stored. */
 export const PI_BACKUP_SAVE_FAILED_EVENT = "pi:backup-save-failed";
 
-function notifyBackupSaveFailed(): void {
-  if (typeof document === "undefined") return;
-  document.dispatchEvent(new Event(PI_BACKUP_SAVE_FAILED_EVENT));
-}
-
 export async function finalizeMutationOperation<TDetails extends MutationResultDetails>(
   dependencies: MutationFinalizeDependencies,
   operation: MutationFinalizeOperation<TDetails>,
@@ -54,7 +49,9 @@ export async function finalizeMutationRecoveryStep<TDetails extends MutationResu
       recovery.result,
       `⚠️ ${reason.replace(/[.!?]?$/, ".")} This change cannot be reverted from backups.`,
     );
-    notifyBackupSaveFailed();
+    if (typeof document !== "undefined") {
+      document.dispatchEvent(new Event(PI_BACKUP_SAVE_FAILED_EVENT));
+    }
     return {
       checkpointCreated: false,
     };
