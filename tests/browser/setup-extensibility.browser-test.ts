@@ -39,7 +39,7 @@ void test("native search follows a selected turn model after a schema-stable mod
       };
     });
     await enterInput(page, "Search official figures");
-    await page.getByText("Search fixture finished", { exact: true }).waitFor();
+    await page.getByRole("paragraph").filter({ hasText: "Search fixture finished" }).waitFor();
     assert.match(nativeRequest, /"model"\s*:\s*"gpt-6-luna"/);
     assert.match(nativeRequest, /"type"\s*:\s*"web_search"/);
   } finally { await opened.finish(); }
