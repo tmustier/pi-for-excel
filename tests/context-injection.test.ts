@@ -541,6 +541,42 @@ void test("a backup restore, another tab's write and an extension's write are re
   }
 });
 
+void test("Office.js calls are credited with exactly the cells their edit events changed", async () => {
+  const workbook = new FakeWorkbook();
+  workbook.sheets.set("sheet-2", "Q3 Plan");
+  const uninstall = workbook.install();
+  try {
+    const tracker = new ChangeTracker();
+    await tracker.start();
+    const run = async (toolCallId: string, edits: Array<[string, string]>, address?: string) => {
+      const window: PiWriteWindow = { toolCallId, startedAt: Date.now(), settledAt: Number.POSITIVE_INFINITY, ...(address ? { address } : {}) };
+      tracker.notePiWrite(window, { kind: "runtime", runtimeId: "tab-a" });
+      for (const [sheet, cell] of edits) await workbook.edit(sheet, cell, "ThisLocalAddin");
+      window.settledAt = Date.now();
+      await new Promise((resolve) => setTimeout(resolve, 2));
+    };
+    // A structured write before, between and after the code runs.
+    await run("write-1", [["sheet-1", "A1"]], "Data!A1");
+    await run("js-1", [["sheet-1", "X12"], ["sheet-2", "B2:C3"], ["sheet-1", "X12"]]);
+    await run("write-2", [["sheet-1", "A2"]], "Data!A2");
+    await run("js-2", [["sheet-1", "4:4"]]);
+    // The user's own edit long after both calls is not the code's.
+    const realNow = Date.now;
+    Date.now = () => realNow() + 60_000;
+    try {
+      await workbook.edit("sheet-1", "Z9", "Unknown");
+    } finally {
+      Date.now = realNow;
+    }
+
+    assert.deepEqual(await tracker.rangesChangedBy(new Set(["js-1", "js-2"])), ["Data!X12", "'Q3 Plan'!B2:C3", "Data!4:4"]);
+    assert.deepEqual(await tracker.rangesChangedBy(new Set(["js-2"])), ["Data!4:4"]);
+    assert.deepEqual(await tracker.rangesChangedBy(new Set(["absent"])), []);
+  } finally {
+    uninstall();
+  }
+});
+
 void test("Pi's own structure change is not sent back as a new workbook note mid-turn; the next turn gets it", async () => {
   const workbook = new FakeWorkbook();
   const uninstall = workbook.install();

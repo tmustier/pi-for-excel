@@ -672,6 +672,7 @@ const turnCoverageList = document.createElement("message-list");
 turnCoverageList.messages = [false, true].map((mixed): TurnChangesMessage => ({
   role: "turnChanges", turnId: `gallery-coverage-${mixed}`, timestamp: 0, outcome: "finished", ranOfficeJs: true,
   changes: mixed ? [{ address: "Sheet1!D7", changedCount: 1, backupIds: ["core-backup"] }] : [],
+  ...(mixed ? { officeJsRanges: ["Sheet1!X12", "'Q3 Plan'!B2:C3"] } : {}),
 }));
 turnCoverageSection.append(turnCoverageList);
 

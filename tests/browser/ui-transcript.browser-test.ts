@@ -323,7 +323,8 @@ void test("Office.js-only and mixed turns explicitly disclose the limit of turn 
       const shared = { timestamp: 1, outcome: "finished", ranOfficeJs: true, audit: [] };
       list.messages = [
         summarizeTurnChanges({ ...shared, turnId: "js-only", toolCallIds: new Set(["js"]), backups: [] }),
-        summarizeTurnChanges({ ...shared, turnId: "mixed", toolCallIds: new Set(["core", "js"]), backups: [
+        summarizeTurnChanges({ ...shared, turnId: "mixed", toolCallIds: new Set(["core", "js"]),
+          officeJsRanges: ["Sheet1!X12", "'Q3 Plan'!B2:C3", "Sheet1!A1", "Sheet1!A2", "Sheet1!A3", "Sheet1!A4", "Sheet1!A5"], backups: [
           { id: "core-backup", at: 0, toolCallId: "core", address: "Sheet1!D7", changedCount: 1 },
         ] }),
       ];
@@ -331,13 +332,16 @@ void test("Office.js-only and mixed turns explicitly disclose the limit of turn 
     const receipts = page.locator('[data-gallery="turn-changes"] .pi-turn-changes');
     await page.waitForFunction(() => document.querySelectorAll('[data-gallery="turn-changes"] .pi-turn-changes').length === 2);
     for (const receipt of await receipts.all()) {
-      assert.match(await receipt.innerText(), /Ran Office\.js code; not covered by Undo this turn\. Use \/backup/);
+      assert.match(await receipt.innerText(), /not covered by Undo this turn\. Use \/backup/);
     }
+    // No change events arrived for the code: the warning cannot name ranges.
+    assert.match(await receipts.first().innerText(), /Ran Office\.js code; not covered/);
     assert.equal(await receipts.first().getByRole("button", { name: "Undo this turn", exact: true }).count(), 0);
     assert.doesNotMatch(await receipts.first().innerText(), /Changed.*Total: 0/);
     await receipts.last().getByRole("button", { name: "Undo this turn", exact: true }).click();
     assert.match(await receipts.last().innerText(), /Changed Sheet1!D7 · Total: 1/);
-    assert.match(await receipts.last().innerText(), /not covered by Undo this turn/);
+    assert.match(await receipts.last().innerText(),
+      /Office\.js code changed Sheet1!X12, 'Q3 Plan'!B2:C3, Sheet1!A1, Sheet1!A2, Sheet1!A3, Sheet1!A4 \+1; not covered by Undo this turn/);
   } finally {
     await opened.finish();
   }

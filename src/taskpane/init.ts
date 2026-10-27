@@ -11,7 +11,7 @@ function isTaskpaneInitPayloadShape(value: unknown): value is Record<string, unk
 
 import { html, render } from "lit";
 import { Value } from "typebox/value";
-import { readTurnBackups, summarizeTurnChanges, turnChangeActionSchema, undoTurnChanges } from "../messages/turn-changes.js";
+import { describeOfficeJsChanges, readTurnBackups, summarizeTurnChanges, turnChangeActionSchema, undoTurnChanges } from "../messages/turn-changes.js";
 import { createOverlayDialog, createOverlayHeader } from "../ui/overlay-dialog.js";
 import { Agent } from "@earendil-works/pi-agent-core";
 import { clampThinkingLevel, getCurrentSystemMessage, toToolDeclaration } from "@earendil-works/pi-ai";
@@ -722,7 +722,7 @@ export async function initTaskpane(opts: {
       body.className = "pi-overlay-body";
       if (summary.ranOfficeJs) {
         const warning = document.createElement("p");
-        warning.textContent = t("turnChanges.officeJsUncovered");
+        warning.textContent = describeOfficeJsChanges(summary);
         body.append(warning);
       }
       for (const change of summary.changes) {
@@ -1075,7 +1075,7 @@ export async function initTaskpane(opts: {
     let currentTurnId = crypto.randomUUID();
     const toolTurns = new Map<string, string>();
     let currentTurnCalls = new Set<string>();
-    let currentTurnRanOfficeJs = false;
+    let currentTurnOfficeJsCalls = new Set<string>();
 
     /** Names this tab in its approvals when another tab is on screen. */
     /** "Stop Pi" in an approval dialog: the same as the tab's Stop button. */
@@ -1169,7 +1169,7 @@ export async function initTaskpane(opts: {
           onWriteStarted: (window) => {
             if (toolTurns.get(window.toolCallId) === currentTurnId) {
               currentTurnCalls.add(window.toolCallId);
-              if (window.toolName === "execute_office_js") currentTurnRanOfficeJs = true;
+              if (window.toolName === "execute_office_js") currentTurnOfficeJsCalls.add(window.toolCallId);
             }
             changeTracker.notePiWrite(window, { kind: "runtime", runtimeId });
           },
@@ -1487,7 +1487,7 @@ export async function initTaskpane(opts: {
       if (ev.type === "agent_start") {
         currentTurnId = crypto.randomUUID();
         currentTurnCalls = new Set();
-        currentTurnRanOfficeJs = false;
+        currentTurnOfficeJsCalls = new Set();
         // A busy picker updates state for the next run; the current run keeps
         // the provider/model it started on, including its native search calls.
         nativeSearchModel = modelRuntime.models.getModel(agent.state.model.provider, agent.state.model.id) ?? initialModel;
@@ -1514,7 +1514,7 @@ export async function initTaskpane(opts: {
       runOutcomes.set(runtimeId, stopReason === "aborted" ? null : stopReason === "error" ? "failed" : "finished");
       const endedTurnId = currentTurnId;
       const endedTurnCalls = currentTurnCalls;
-      const ranOfficeJs = currentTurnRanOfficeJs;
+      const officeJsCalls = currentTurnOfficeJsCalls;
       try {
         const backups = await readTurnBackups(workbookRecoveryLog, endedTurnId);
         const summary = summarizeTurnChanges({
@@ -1522,7 +1522,8 @@ export async function initTaskpane(opts: {
           timestamp: Date.now(),
           outcome: signal.aborted || stopReason === "aborted" ? "stopped" : stopReason === "error" ? "failed" : "finished",
           toolCallIds: endedTurnCalls,
-          ranOfficeJs,
+          ranOfficeJs: officeJsCalls.size > 0,
+          officeJsRanges: officeJsCalls.size > 0 ? await changeTracker.rangesChangedBy(officeJsCalls) : [],
           audit: await getWorkbookChangeAuditLog().list(500),
           backups,
         });

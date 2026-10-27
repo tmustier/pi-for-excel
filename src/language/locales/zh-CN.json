@@ -1422,6 +1422,7 @@
   "turnChanges.undone": "已撤销",
   "turnChanges.partial": "部分更改没有备份，无法在此撤销。",
   "turnChanges.officeJsUncovered": "本轮运行了 Office.js 代码，不在“撤销本轮更改”的范围内。运行代码前请使用 /backup 创建完整工作簿备份。",
+  "turnChanges.officeJsUncoveredRanges": "Office.js 代码更改了 {ranges}，不在“撤销本轮更改”的范围内。运行代码前请使用 /backup 创建完整工作簿备份。",
   "turnChanges.reviewTitle": "本轮更改",
   "turnChanges.reviewChange": "{address} — 已更改 {count} 项",
   "turnChanges.reviewBackups": "备份：{ids}",

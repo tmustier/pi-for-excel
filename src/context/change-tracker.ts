@@ -31,6 +31,7 @@
 import { excelRun, letterToCol, parseRangeRef } from "../excel/helpers.js";
 import type { WorkbookWriteWindow } from "../tools/with-workbook-coordinator.js";
 import { getErrorMessage } from "../utils/errors.js";
+import { qualifyAddressWithSheet } from "../workbook/recovery/address.js";
 
 interface LoggedChange {
   seq: number;
@@ -272,11 +273,43 @@ export class ChangeTracker {
     return { text: lines.join("\n"), cursor: end };
   }
 
+  /**
+   * Cells that edit events attribute to these tool calls of this runtime, as
+   * sheet-qualified addresses in the order they changed. Office.js reports
+   * what changed, not the earlier values, so these can be listed, not undone.
+   */
+  async rangesChangedBy(toolCallIds: ReadonlySet<string>): Promise<string[]> {
+    const matched = await this.matchWrites(this.log.filter((entry) => !entry.remote));
+    return [...new Set(matched
+      .filter(({ write }) => write?.origin.kind === "runtime" && toolCallIds.has(write.window.toolCallId))
+      .map(({ entry }) => qualifyAddressWithSheet(entry.sheet, entry.address)))];
+  }
+
   /** Who made each entry; entries `runtimeId` made itself are left out. */
   private async attribute(
     entries: readonly LoggedChange[],
     runtimeId: string,
   ): Promise<Array<{ entry: LoggedChange; author: Author }>> {
+    const result: Array<{ entry: LoggedChange; author: Author }> = [];
+    for (const { entry, write } of await this.matchWrites(entries)) {
+      if (entry.remote) {
+        result.push({ entry, author: "coAuthor" });
+        continue;
+      }
+      if (!write) {
+        result.push({ entry, author: entry.addin ? "addin" : "user" });
+        continue;
+      }
+      if (write.origin.kind === "restore") result.push({ entry, author: "restore" });
+      else if (write.origin.runtimeId !== runtimeId) result.push({ entry, author: "otherTab" });
+    }
+    return result;
+  }
+
+  /** The write of Pi's that made each local entry, if any. Remote entries have none. */
+  private async matchWrites(
+    entries: readonly LoggedChange[],
+  ): Promise<Array<{ entry: LoggedChange; write: PiWrite | undefined }>> {
     // Writes are serialized and recorded in start order, so the latest one
     // that covers the entry's time is the one that was running.
     const writesAt = (entry: LoggedChange): PiWrite[] => {
@@ -304,22 +337,11 @@ export class ChangeTracker {
       return !addresses || addresses.length === 0 || overlaps(entry, addresses);
     };
 
-    const result: Array<{ entry: LoggedChange; author: Author }> = [];
-    for (const entry of entries) {
-      if (entry.remote) {
-        result.push({ entry, author: "coAuthor" });
-        continue;
-      }
+    return entries.map((entry) => {
+      if (entry.remote) return { entry, write: undefined };
       const candidates = writesAt(entry);
-      const write = candidates.find((candidate) => touches(entry, candidate)) ?? (entry.addin ? candidates[0] : undefined);
-      if (!write) {
-        result.push({ entry, author: entry.addin ? "addin" : "user" });
-        continue;
-      }
-      if (write.origin.kind === "restore") result.push({ entry, author: "restore" });
-      else if (write.origin.runtimeId !== runtimeId) result.push({ entry, author: "otherTab" });
-    }
-    return result;
+      return { entry, write: candidates.find((candidate) => touches(entry, candidate)) ?? (entry.addin ? candidates[0] : undefined) };
+    });
   }
 
   private describeGroup(entries: readonly LoggedChange[]): string[] {

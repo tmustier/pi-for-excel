@@ -14,7 +14,7 @@ import { t } from "../language/index.js";
 import { formatCompactionSummaryExtent, type CompactionSummaryMessage } from "../messages/compaction.js";
 import type { ArchivedMessagesMessage } from "../messages/archived-history.js";
 import type { InterruptedResponse } from "../messages/interrupted-response.js";
-import type { TurnChangesMessage } from "../messages/turn-changes.js";
+import { describeOfficeJsChanges, type TurnChangesMessage } from "../messages/turn-changes.js";
 
 // Ensure <markdown-block> and <message-list> are registered.
 import "./messages/markdown-block.js";
@@ -46,7 +46,7 @@ registerMessageRenderer("turnChanges", {
         <button type="button" ?disabled=${!hasBackups} @click=${() => action("undo")}>${t(message.undoneBackupIds?.length && !hasBackups ? "turnChanges.undone" : "turnChanges.undo")}</button>
       </span>` : ""}
       ${partial ? html`<span class="pi-turn-changes__warning">${t("turnChanges.partial")}</span>` : ""}
-      ${message.ranOfficeJs ? html`<span class="pi-turn-changes__warning">${t("turnChanges.officeJsUncovered")}</span>` : ""}
+      ${message.ranOfficeJs ? html`<span class="pi-turn-changes__warning">${describeOfficeJsChanges(message)}</span>` : ""}
     </div>`;
   },
 });
