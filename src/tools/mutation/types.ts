@@ -21,7 +21,8 @@ export interface MutationRecoveryStep<TDetails extends MutationResultDetails> {
   appendRecoverySnapshot: () => Promise<WorkbookRecoverySnapshot | null>;
   appendResultNote: MutationResultNoteAppender<TDetails>;
   unavailableReason: string;
-  unavailableNote: string;
+  /** Defaults to a note built from `unavailableReason`. */
+  unavailableNote?: string;
 }
 
 export interface MutationFinalizeOperation<TDetails extends MutationResultDetails> {

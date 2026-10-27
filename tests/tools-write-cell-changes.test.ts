@@ -5,6 +5,7 @@ import type { AgentToolResult } from "@earendil-works/pi-agent-core";
 
 import { createFillFormulaTool } from "../src/tools/fill-formula.ts";
 import { createWriteCellsTool } from "../src/tools/write-cells.ts";
+import { findErrors } from "../src/utils/format.ts";
 import { colName, FakeExcelHost, OfficeError, withFakeExcel } from "./fixtures/excel-write-host.ts";
 
 function text<T>(result: AgentToolResult<T>): string {
@@ -231,8 +232,61 @@ void test("fill_formula over a range too large to read back reports the fill ins
     assert.equal(result.details.verification, "sampled");
     assert.equal(host.sheet("Big").formula("F60001"), "=C60001*E60001");
     assert.match(text(result), /bottom-right `=C60001\*E60001`/u);
-    assert.match(text(result), /No backup/u);
+    assert.match(text(result), /No backup: this change covers 60,000 cells.*clearing it undoes the change/u);
+    const recovery = result.details.recovery;
+    assert.equal(recovery?.status, "not_available");
+    assert.match(recovery?.status === "not_available" ? recovery.reason : "", /Too large to back up: 60,000 cells exceed the 20,000-cell backup limit/u);
   });
+});
+
+void test("fill_formula next to a table says Excel extended the table and named the new column", async () => {
+  const host = new FakeExcelHost(["Sales"]);
+  const sales = host.sheet("Sales");
+  sales.set("A1", "Qty");
+  sales.set("B1", "Price");
+  for (let row = 2; row <= 4; row += 1) {
+    sales.set(`A${row}`, row);
+    sales.set(`B${row}`, 10);
+  }
+  sales.table("SalesTable", "A1:B4");
+
+  await withFakeExcel(host, async () => {
+    const result = await createFillFormulaTool().execute("fill-table", { range: "Sales!C2:C4", formula: "=A2*B2" });
+
+    assert.equal(result.isError, undefined, text(result));
+    assert.equal(sales.value("C4"), 40);
+    assert.match(text(result), /Excel added the written cells to table \*\*SalesTable\*\*, which now covers A1:C4\. It named the new column\(s\) "Column1"/u);
+  });
+});
+
+void test("write_cells over formulas says which cells lost a formula, and not for formulas rewritten", async () => {
+  const host = new FakeExcelHost(["Model"]);
+  const model = host.sheet("Model");
+  model.set("C5", 100);
+  model.set("C6", 200);
+  model.set("D5", "=C5*C5");
+  model.set("D6", "=C6+C5");
+  model.set("D7", "=C5");
+  model.set("D8", 7);
+
+  await withFakeExcel(host, async () => {
+    const result = await createWriteCellsTool(noBackups).execute("hardcode", {
+      start_cell: "Model!D5",
+      values: [[110], [220], ["=C6"], [8]],
+      allow_overwrite: true,
+    });
+
+    assert.equal(result.isError, undefined, text(result));
+    assert.match(text(result), /⚠️ 2 formula\(s\) on sheet "Model" replaced by values: D5, D6\. D5 was `=C5\*C5`, D6 was `=C6\+C5`\./u);
+    assert.equal(result.details.formulasReplacedCount, 2);
+  });
+});
+
+void test("findErrors reports Excel errors but not text that starts with #", () => {
+  assert.deepEqual(findErrors([["#1 priority", "#DIV/0!", "#N/A", "#hashtag!"]], "B2"), [
+    { address: "C2", error: "#DIV/0!" },
+    { address: "D2", error: "#N/A" },
+  ]);
 });
 
 void test("a chunked write interrupted by cell-edit mode reports exactly which rows landed", async () => {
@@ -252,9 +306,84 @@ void test("a chunked write interrupted by cell-edit mode reports exactly which r
     const lastWritten = [...Array(15_000).keys()].filter((index) => landed.value(`A${index + 1}`) !== "").length;
     assert.ok(lastWritten > 0 && lastWritten < 15_000, "the first chunk landed and the rest did not");
     assert.equal(result.isError, true);
-    assert.match(text(result), new RegExp(`Partly written\\*\\* — rows 1–${lastWritten} of Big!A1:A15000`, "u"));
+    assert.match(text(result), new RegExp(`Partly written\\*\\* — Big!A1:A${lastWritten} \\(rows 1–${lastWritten} of Big!A1:A15000\\) was written and stands`, "u"));
+    assert.match(text(result), /The remaining \d+ row\(s\) were not written\./u);
+    assert.doesNotMatch(text(result), /may or may not/u, "Excel refused the chunk, so its outcome is known");
     assert.match(text(result), /Excel is in cell-edit mode/u);
     assert.match(text(result), /Nothing was rolled back/u);
     assert.equal(audits.at(-1)?.blocked, false, "the rows that landed are audited as a change");
+  });
+});
+
+function bigRows(count: number): string[][] {
+  // ~300 characters a row: 15,000 rows are written in several chunks.
+  return Array.from({ length: count }, (_, index) => [`${String(index).padStart(6, "0")}${"x".repeat(294)}`]);
+}
+
+function writtenRowCount(host: FakeExcelHost, sheet: string, rows: number): number {
+  return [...Array(rows).keys()].filter((index) => host.sheet(sheet).value(`A${index + 1}`) !== "").length;
+}
+
+void test("Stop before the first chunk writes nothing and says so", async () => {
+  const host = new FakeExcelHost(["Big"]);
+  const stop = new AbortController();
+  stop.abort();
+  await withFakeExcel(host, async () => {
+    const result = await createWriteCellsTool(noBackups).execute("stop-before", { start_cell: "Big!A1", values: [["x"]] }, stop.signal);
+    assert.equal(result.isError, true);
+    assert.equal(result.details.stopped, true);
+    assert.match(text(result), /Stopped before writing\*\* — nothing changed in Big!A1\./u);
+    assert.equal(host.sheet("Big").value("A1"), "");
+  });
+});
+
+void test("Stop between chunks keeps the rows written and names them", async () => {
+  const host = new FakeExcelHost(["Big"]);
+  const stop = new AbortController();
+  host.afterWriteSync = (count) => { if (count === 1) stop.abort(); };
+  await withFakeExcel(host, async () => {
+    const result = await createWriteCellsTool(noBackups).execute("stop-mid", { start_cell: "Big!A1", values: bigRows(15_000) }, stop.signal);
+    const landed = writtenRowCount(host, "Big", 15_000);
+    assert.ok(landed > 0 && landed < 15_000);
+    assert.equal(result.isError, true);
+    assert.match(text(result), new RegExp(`Stopped after writing Big!A1:A${landed}\\*\\* \\(rows 1–${landed} of Big!A1:A15000\\) — the change stands\\.`, "u"));
+    assert.match(text(result), new RegExp(`The remaining ${15_000 - landed} row\\(s\\) were not written\\.`, "u"));
+  });
+});
+
+void test("Stop after the last chunk says the whole write stands", async () => {
+  const host = new FakeExcelHost();
+  const stop = new AbortController();
+  host.afterWriteSync = () => stop.abort();
+  await withFakeExcel(host, async () => {
+    const result = await createWriteCellsTool(noBackups).execute("stop-after", { start_cell: "A1", values: [["a"], ["b"]] }, stop.signal);
+    assert.equal(result.isError, undefined);
+    assert.match(text(result), /Stopped after writing Sheet1!A1:A2\*\* \(2×1\) — the change stands/u);
+    assert.equal(host.sheet("Sheet1").value("A2"), "b");
+  });
+});
+
+void test("a chunk Excel never confirmed is reported as unknown, not as unwritten", async () => {
+  const host = new FakeExcelHost(["Big"]);
+  // Shape #792's excelRun timeout is expected to throw: no Office code, outcome unknown.
+  host.failWrite = { at: 2, error: Object.assign(new Error("Excel did not answer in 60 s"), { code: "excel_timeout", outcomeUnknown: true }) };
+  await withFakeExcel(host, async () => {
+    const result = await createWriteCellsTool(noBackups).execute("timeout-mid", { start_cell: "Big!A1", values: bigRows(15_000) });
+    const landed = writtenRowCount(host, "Big", 15_000);
+    assert.equal(result.isError, true);
+    assert.match(text(result), new RegExp(`rows ${landed + 1}–\\d+ \\(Big!A${landed + 1}:A\\d+\\) may or may not have been written`, "u"));
+    assert.match(text(result), /Excel did not answer/u);
+    assert.doesNotMatch(text(result), /nothing was written/u);
+  });
+});
+
+void test("fill_formula stopped after the fill says the fill stands", async () => {
+  const host = new FakeExcelHost();
+  const stop = new AbortController();
+  host.afterWriteSync = () => stop.abort();
+  await withFakeExcel(host, async () => {
+    const result = await createFillFormulaTool().execute("fill-stop", { range: "B1:B3", formula: "=A1" }, stop.signal);
+    assert.match(text(result), /Stopped after filling Sheet1!B1:B3\*\* — the change stands/u);
+    assert.equal(host.sheet("Sheet1").formula("B3"), "=A3");
   });
 });

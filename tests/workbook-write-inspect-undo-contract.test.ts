@@ -77,6 +77,10 @@ class RangeStoreRange {
 
   load(_properties?: string | string[]): void {}
 
+  getTables(_fullyContained?: boolean): { items: Array<{ name: string }>; load: (properties?: string) => void } {
+    return { items: [], load: () => {} };
+  }
+
   getMergedAreasOrNullObject(): { isNullObject: true; load: (properties?: string) => void } {
     return { isNullObject: true, load: () => undefined };
   }
@@ -384,7 +388,7 @@ void test("committed write reports recovery unavailable instead of replacing unr
     });
     assert.match(firstText(first), /Written to/u);
     assert.equal(first.details.recovery?.status, "not_available");
-    assert.match(firstText(first), /backup not created/iu);
+    assert.match(firstText(first), /No backup was saved, so `workbook_history` cannot restore this change\. Pi could not identify this workbook/u);
     assert.match(firstText(await read.execute("read-first-write", {
       range: "Sheet1!A1",
       mode: "csv",

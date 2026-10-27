@@ -21,7 +21,6 @@ import {
 } from "../workbook/recovery-log.js";
 import type { CommentsDetails } from "./tool-details.js";
 import {
-  CHECKPOINT_SKIPPED_NOTE,
   CHECKPOINT_SKIPPED_REASON,
 } from "./recovery-metadata.js";
 import { describeExcelFailure, parseExcelError, unchangedClause } from "./mutation/excel-failure.js";
@@ -143,6 +142,19 @@ export function createCommentsTool(
       toolCallId: string,
       params: Params,
     ): Promise<AgentToolResult<CommentsDetails>> => {
+      // Schema validation normally rejects a missing range; check here too so a
+      // misnamed parameter (e.g. `cell`) gets a usable answer, not a JavaScript error.
+      if (typeof params.range !== "string" || params.range.trim() === "") {
+        return {
+          content: [{
+            type: "text",
+            text: `Error (${params.action}): \`range\` is required — the target cell, e.g. "A1" or "Sheet2!B3". ` +
+              `Received parameters: ${Object.keys(params).join(", ")}. Nothing was changed.`,
+          }],
+          details: { kind: "comments", action: params.action, address: "" },
+          isError: true,
+        };
+      }
       const isMutation = isMutatingCommentsAction(params.action);
       const mutationFinalizeDependencies: MutationFinalizeDependencies = {
         appendAuditEntry: (entry) => resolvedDependencies.appendAuditEntry(entry),
@@ -188,7 +200,6 @@ export function createCommentsTool(
             }),
             appendResultNote: appendMutationResultNote,
             unavailableReason: CHECKPOINT_SKIPPED_REASON,
-            unavailableNote: CHECKPOINT_SKIPPED_NOTE,
           }
           : undefined;
 

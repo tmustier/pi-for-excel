@@ -28,6 +28,7 @@ import {
   type WorkbookRecoverySnapshot,
 } from "../workbook/recovery-log.js";
 import { formatAsMarkdownTable } from "../utils/format.js";
+import { STOPPED_AFTER_CHANGE_NOTE, type StopReporting } from "./with-workbook-coordinator.js";
 import { finalizeMutationOperation } from "./mutation/finalize.js";
 import type { MutationFinalizeDependencies } from "./mutation/types.js";
 import { appendMutationResultNote } from "./mutation/result-note.js";
@@ -37,12 +38,14 @@ import {
   chunkRowsForWrite,
   classifySentValue,
   describeWriteObstacle,
+  formatReplacedFormulas,
   formatVerificationNotes,
   formatVerificationProblems,
   hasVerificationProblems,
   inspectWriteTarget,
   verifyWrittenRange,
   backupUnavailable,
+  replacedFormulas,
   sampledChanges,
   toCellGrid,
   type CellScalar,
@@ -91,7 +94,15 @@ type WriteOutcome =
   | { kind: "obstacle"; inspection: WriteTargetInspection; reason: string }
   | { kind: "occupied"; inspection: WriteTargetInspection }
   | { kind: "too_large_to_back_up"; inspection: WriteTargetInspection }
-  | { kind: "written"; inspection: WriteTargetInspection; verification: WriteVerification | null; verifyError: string | null };
+  | { kind: "stopped"; inspection: WriteTargetInspection }
+  | {
+    kind: "written";
+    inspection: WriteTargetInspection;
+    verification: WriteVerification | null;
+    verifyError: string | null;
+    /** Stop was pressed after the last chunk landed, so verification was skipped. */
+    stopped: boolean;
+  };
 
 interface WriteCellsToolDependencies {
   appendAuditEntry: MutationFinalizeDependencies["appendAuditEntry"];
@@ -111,7 +122,7 @@ function errorResult(text: string, details: WriteCellsDetails = { kind: "write_c
 
 export function createWriteCellsTool(
   dependencies: Partial<WriteCellsToolDependencies> = {},
-): AgentTool<typeof schema, WriteCellsDetails> {
+): AgentTool<typeof schema, WriteCellsDetails> & StopReporting {
   const resolvedDependencies: WriteCellsToolDependencies = {
     appendAuditEntry: dependencies.appendAuditEntry ?? defaultDependencies.appendAuditEntry,
     appendRecoverySnapshot:
@@ -132,9 +143,11 @@ export function createWriteCellsTool(
       "After writing, verifies what Excel stored and reports cells that did not take their value " +
       "(merged cells, spilled ranges), converted text, formula errors and data-validation violations.",
     parameters: schema,
+    reportsStop: true,
     execute: async (
       toolCallId: string,
       params: Params,
+      signal?: AbortSignal,
     ): Promise<AgentToolResult<WriteCellsDetails>> => {
       if (!params.values || params.values.length === 0) {
         return errorResult("Error: values array is empty.");
@@ -177,9 +190,10 @@ export function createWriteCellsTool(
       const sentEmptyCount = padded.reduce((total, row) => total + row.filter((value) => value === "").length, 0);
 
       // Filled in as the Excel batch progresses, so a failure can say what already happened.
-      const progress: { inspection: WriteTargetInspection | null; writtenRows: number } = {
+      const progress: { inspection: WriteTargetInspection | null; writtenRows: number; inFlightRows: number } = {
         inspection: null,
         writtenRows: 0,
+        inFlightRows: 0,
       };
 
       let outcome: WriteOutcome;
@@ -194,10 +208,19 @@ export function createWriteCellsTool(
           if (inspected.occupiedCount > 0 && !params.allow_overwrite) return { kind: "occupied", inspection: inspected };
           if (inspected.occupiedCount > 0 && !inspected.before) return { kind: "too_large_to_back_up", inspection: inspected };
 
+          // Stop is honored between chunks, never inside one, so the result can
+          // say exactly which rows landed.
           for (const chunk of chunkRowsForWrite(padded)) {
+            if (signal?.aborted) return { kind: "stopped", inspection: inspected };
             sheet.getRange(blockAddress(block, chunk.rowOffset, chunk.rows.length)).values = chunk.rows;
+            progress.inFlightRows = chunk.rows.length;
             await context.sync();
+            progress.inFlightRows = 0;
             progress.writtenRows += chunk.rows.length;
+          }
+
+          if (signal?.aborted) {
+            return { kind: "written", inspection: inspected, verification: null, verifyError: null, stopped: true };
           }
 
           try {
@@ -205,21 +228,41 @@ export function createWriteCellsTool(
               calculationMode: inspected.calculationMode,
               sentFormulas,
               sentEmptyCount,
+              tablesBefore: inspected.tableNames,
             });
-            return { kind: "written", inspection: inspected, verification, verifyError: null };
+            return { kind: "written", inspection: inspected, verification, verifyError: null, stopped: false };
           } catch (verifyError) {
             const failure = await describeExcelFailure(parseExcelError(verifyError), { range: params.start_cell });
-            return { kind: "written", inspection: inspected, verification: null, verifyError: failure.reason };
+            return { kind: "written", inspection: inspected, verification: null, verifyError: failure.reason, stopped: false };
           }
         });
       } catch (error) {
-        return failedWrite({
-          error: parseExcelError(error),
+        const parsed = parseExcelError(error);
+        // A batch Excel refused did not apply. One it never answered (timeout,
+        // Stop, or a failure that is not an Excel answer) may have.
+        const inFlightUnknown = parsed.outcomeUnknown || parsed.code === null;
+        return interruptedWrite({
+          cause: { kind: "failed", failure: await describeExcelFailure(parsed, { range: params.start_cell }) },
           params,
           toolCallId,
           block,
           inspection: progress.inspection,
           writtenRows: progress.writtenRows,
+          uncertainRows: inFlightUnknown ? progress.inFlightRows : 0,
+          dependencies: resolvedDependencies,
+          finalizeDependencies: mutationFinalizeDependencies,
+        });
+      }
+
+      if (outcome.kind === "stopped") {
+        return interruptedWrite({
+          cause: { kind: "stopped" },
+          params,
+          toolCallId,
+          block,
+          inspection: outcome.inspection,
+          writtenRows: progress.writtenRows,
+          uncertainRows: 0,
           dependencies: resolvedDependencies,
           finalizeDependencies: mutationFinalizeDependencies,
         });
@@ -250,7 +293,9 @@ export function createWriteCellsTool(
         return blockedResult;
       }
 
-      const successResult = formatWritten(outcome.inspection, outcome.verification, outcome.verifyError, block, padded, fullAddr);
+      const successResult = formatWritten(outcome, block, padded, fullAddr);
+      // Stop pressed after verification finished: the result is complete, but say the change stands.
+      if (signal?.aborted && !outcome.stopped) appendMutationResultNote(successResult, STOPPED_AFTER_CHANGE_NOTE);
       const backupBefore = outcome.inspection.before;
 
       await finalizeMutationOperation(mutationFinalizeDependencies, {
@@ -289,25 +334,43 @@ function countSentCells(padded: CellScalar[][]): number {
     total + row.filter((value) => value !== "" && value !== null && value !== undefined).length, 0);
 }
 
-interface FailedWriteArgs {
-  error: ReturnType<typeof parseExcelError>;
+type InterruptCause =
+  | { kind: "stopped" }
+  | { kind: "failed"; failure: Awaited<ReturnType<typeof describeExcelFailure>> };
+
+interface InterruptedWriteArgs {
+  cause: InterruptCause;
   params: Params;
   toolCallId: string;
   block: WriteBlock;
   inspection: WriteTargetInspection | null;
+  /** Rows whose chunk Excel confirmed. */
   writtenRows: number;
+  /** Rows of the chunk in flight when Excel stopped answering: may or may not have landed. */
+  uncertainRows: number;
   dependencies: WriteCellsToolDependencies;
   finalizeDependencies: MutationFinalizeDependencies;
 }
 
-async function failedWrite(args: FailedWriteArgs): Promise<AgentToolResult<WriteCellsDetails>> {
-  const { block, inspection, writtenRows } = args;
-  const failure = await describeExcelFailure(args.error, { range: args.params.start_cell });
+function rowSpan(block: WriteBlock, offset: number, count: number): string {
+  const first = block.startRow + offset;
+  return count === 1 ? `row ${first}` : `rows ${first}–${first + count - 1}`;
+}
+
+/**
+ * The write stopped partway (Stop, or an Excel failure): say exactly what is
+ * in the workbook. Rows that landed stay, and are backed up and audited.
+ */
+async function interruptedWrite(args: InterruptedWriteArgs): Promise<AgentToolResult<WriteCellsDetails>> {
+  const { block, inspection, writtenRows, uncertainRows, cause } = args;
   const fullAddr = inspection
     ? qualifiedAddress(inspection.sheetName, blockAddress(block))
     : args.params.start_cell;
+  const reason = cause.kind === "failed" ? cause.failure.reason : "";
+  const errorCode = cause.kind === "failed" && cause.failure.code ? { errorCode: cause.failure.code } : {};
+  const stopped = cause.kind === "stopped" ? { stopped: true } : {};
 
-  if (writtenRows === 0 || !inspection) {
+  if (!inspection || writtenRows + uncertainRows === 0) {
     await finalizeMutationOperation(args.finalizeDependencies, {
       auditEntry: {
         toolName: "write_cells",
@@ -316,40 +379,65 @@ async function failedWrite(args: FailedWriteArgs): Promise<AgentToolResult<Write
         outputAddress: fullAddr,
         changedCount: 0,
         changes: [],
-        summary: `error: ${failure.reason}`,
+        summary: cause.kind === "stopped" ? "stopped before writing" : `error: ${reason}`,
       },
     });
-    return errorResult(`Error writing cells — nothing was written to ${fullAddr}. ${failure.reason}`, {
-      kind: "write_cells",
-      blocked: false,
-      address: fullAddr,
-      ...(failure.code ? { errorCode: failure.code } : {}),
-    });
+    return errorResult(
+      cause.kind === "stopped"
+        ? `⏹ **Stopped before writing** — nothing changed in ${fullAddr}.`
+        : `Error writing cells — nothing was written to ${fullAddr}. ${reason}`,
+      { kind: "write_cells", blocked: false, address: fullAddr, ...errorCode, ...stopped },
+    );
   }
 
-  // Some chunks landed: report exactly which rows, back them up, and audit them.
-  const writtenAddr = qualifiedAddress(inspection.sheetName, blockAddress(block, 0, writtenRows));
-  const result = errorResult(
-    `⚠️ **Partly written** — rows ${block.startRow}–${block.startRow + writtenRows - 1} of ${fullAddr} ` +
-    `(${writtenAddr}) were written; the remaining ${block.rowCount - writtenRows} row(s) failed and were not written. ` +
-    `${failure.reason}\n\nNothing was rolled back. Read ${writtenAddr} before retrying the rest.`,
-    {
-      kind: "write_cells",
-      blocked: false,
-      address: fullAddr,
-      ...(failure.code ? { errorCode: failure.code } : {}),
-    },
-  );
+  const sheet = inspection.sheetName;
+  const writtenAddr = qualifiedAddress(sheet, blockAddress(block, 0, writtenRows));
+  const touchedRows = writtenRows + uncertainRows;
+  const touchedAddr = qualifiedAddress(sheet, blockAddress(block, 0, touchedRows));
+  const remainingRows = block.rowCount - touchedRows;
+  const lines: string[] = [];
+
+  if (writtenRows > 0) {
+    lines.push(cause.kind === "stopped"
+      ? `⏹ **Stopped after writing ${writtenAddr}** (${rowSpan(block, 0, writtenRows)} of ${fullAddr}) — the change stands.`
+      : `⚠️ **Partly written** — ${writtenAddr} (${rowSpan(block, 0, writtenRows)} of ${fullAddr}) was written and stands.`);
+  } else {
+    lines.push(cause.kind === "stopped"
+      ? `⏹ **Stopped while writing** ${fullAddr}.`
+      : `⚠️ **Outcome unknown** for ${fullAddr}.`);
+  }
+  if (uncertainRows > 0) {
+    lines.push(
+      `${rowSpan(block, writtenRows, uncertainRows)} (${qualifiedAddress(sheet, blockAddress(block, writtenRows, uncertainRows))}) ` +
+      "may or may not have been written: Excel did not confirm that step.",
+    );
+  }
+  if (remainingRows > 0) {
+    lines.push(`The remaining ${remainingRows} row(s) were not written.`);
+  }
+  if (reason) lines.push(reason);
+  lines.push("");
+  lines.push(`Nothing was rolled back. Read ${touchedAddr} before retrying${remainingRows > 0 ? " the rest" : ""}.`);
+
+  const result = errorResult(lines.join("\n"), {
+    kind: "write_cells",
+    blocked: false,
+    address: fullAddr,
+    ...errorCode,
+    ...stopped,
+  });
   const before = inspection.before;
+  const changedCount = touchedRows * block.columnCount;
   await finalizeMutationOperation(args.finalizeDependencies, {
     auditEntry: {
       toolName: "write_cells",
       toolCallId: args.toolCallId,
       blocked: false,
-      outputAddress: writtenAddr,
-      changedCount: writtenRows * block.columnCount,
+      outputAddress: touchedAddr,
+      changedCount,
       changes: [],
-      summary: `partly written (${writtenRows} of ${block.rowCount} rows): ${failure.reason}`,
+      summary: `${cause.kind === "stopped" ? "stopped" : "interrupted"} after ${writtenRows} of ${block.rowCount} rows` +
+        (uncertainRows > 0 ? ` (${uncertainRows} more unconfirmed)` : "") + (reason ? `: ${reason}` : ""),
     },
     recovery: {
       result,
@@ -358,7 +446,7 @@ async function failedWrite(args: FailedWriteArgs): Promise<AgentToolResult<Write
           toolName: "write_cells",
           toolCallId: args.toolCallId,
           address: fullAddr,
-          changedCount: writtenRows * block.columnCount,
+          changedCount,
           beforeValues: before.values,
           beforeFormulas: before.formulas,
         })
@@ -495,16 +583,26 @@ function formatTooLargeToBackUp(
 }
 
 function formatWritten(
-  inspection: WriteTargetInspection,
-  verification: WriteVerification | null,
-  verifyError: string | null,
+  outcome: Extract<WriteOutcome, { kind: "written" }>,
   block: WriteBlock,
   padded: CellScalar[][],
   fullAddr: string,
 ): AgentToolResult<WriteCellsDetails> {
+  const { inspection, verification, verifyError } = outcome;
   const qualify = (address: string): string => qualifiedAddress(inspection.sheetName, address);
   const startCell = `${colToLetter(block.startCol)}${block.startRow}`;
   const size = `(${block.rowCount}×${block.columnCount})`;
+
+  if (outcome.stopped) {
+    return {
+      content: [{
+        type: "text",
+        text: `⏹ **Stopped after writing ${fullAddr}** ${size} — the change stands. ` +
+          "It was not verified because Stop was pressed; read the range before relying on it.",
+      }],
+      details: { kind: "write_cells", blocked: false, address: fullAddr, verification: "failed", stopped: true },
+    };
+  }
 
   if (!verification) {
     return {
@@ -530,6 +628,15 @@ function formatWritten(
   if (problems.length > 0) {
     lines.push("");
     lines.push(...problems);
+  }
+
+  const lostFormulas = inspection.before && verification.formulas
+    ? replacedFormulas(block, inspection.before.formulas, verification.formulas)
+    : [];
+  const lostFormulasLine = formatReplacedFormulas(inspection.sheetName, lostFormulas);
+  if (lostFormulasLine) {
+    lines.push("");
+    lines.push(lostFormulasLine);
   }
 
   const readBack = verification.values ?? verification.sampleRows[0]?.values ?? null;
@@ -576,6 +683,7 @@ function formatWritten(
     ...(notWritten > 0 ? { notWrittenCount: notWritten } : {}),
     ...(verification.converted.length > 0 ? { convertedCount: verification.converted.length } : {}),
     ...(invalidCount > 0 ? { invalidCount } : {}),
+    ...(lostFormulas.length > 0 ? { formulasReplacedCount: lostFormulas.length } : {}),
     ...(verification.manualCalculation ? { calculationMode: verification.manualCalculation } : {}),
   };
 

@@ -15,7 +15,6 @@ import { captureFormatCellsState, type RecoveryFormatSelection } from "../workbo
 import { getErrorMessage } from "../utils/errors.js";
 import { resolveStyles } from "../conventions/index.js";
 import {
-  CHECKPOINT_SKIPPED_NOTE,
   CHECKPOINT_SKIPPED_REASON,
 } from "./recovery-metadata.js";
 import { describeExcelFailure, parseExcelError, unchangedClause } from "./mutation/excel-failure.js";
@@ -585,7 +584,6 @@ export function createFormatCellsTool(): AgentTool<typeof schema, FormatCellsDet
           },
           appendResultNote: appendMutationResultNote,
           unavailableReason: recoveryUnavailableReason,
-          unavailableNote: CHECKPOINT_SKIPPED_NOTE,
         });
 
         await finalizeMutationOperation(mutationFinalizeDependencies, {

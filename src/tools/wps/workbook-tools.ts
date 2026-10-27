@@ -43,6 +43,8 @@ import { countOccupiedCells, validateFormula } from "../write-cells.js";
 import {
   classifySentValue,
   diffWrittenGrid,
+  formatReplacedFormulas,
+  replacedFormulas,
   formatVerificationProblems,
   toCellGrid,
 } from "../mutation/range-write.js";
@@ -943,8 +945,9 @@ function formatWpsSuccessWrite(
   const startCell = cellPart.split(":")[0] ?? cellPart;
   const start = parseCell(startCell);
   const sentGrid = toCellGrid(padded);
+  const block = { startRow: start.row, startCol: start.col, rowCount: rows, columnCount: cols };
   const verification = diffWrittenGrid(
-    { startRow: start.row, startCol: start.col, rowCount: rows, columnCount: cols },
+    block,
     (row, col) => classifySentValue(sentGrid[row]?.[col]),
     toCellGrid(result.readBackValues),
     toCellGrid(result.readBackFormulas),
@@ -962,6 +965,12 @@ function formatWpsSuccessWrite(
   if (problems.length > 0) {
     lines.push("");
     lines.push(...problems);
+  }
+  const lostFormulas = replacedFormulas(block, toCellGrid(result.beforeFormulas), toCellGrid(result.readBackFormulas));
+  const lostFormulasLine = formatReplacedFormulas(result.sheetName, lostFormulas);
+  if (lostFormulasLine) {
+    lines.push("");
+    lines.push(lostFormulasLine);
   }
 
   const errors = findErrors(result.readBackValues, startCell);
@@ -1036,6 +1045,7 @@ function formatWpsSuccessWrite(
       recovery: { status: "not_available", reason: WPS_NO_BACKUP_REASON },
       verification: "full",
       ...(notWritten > 0 ? { notWrittenCount: notWritten } : {}),
+      ...(lostFormulas.length > 0 ? { formulasReplacedCount: lostFormulas.length } : {}),
       ...(verification.converted.length > 0 ? { convertedCount: verification.converted.length } : {}),
     },
     ...(notWritten > 0 ? { isError: true } : {}),
