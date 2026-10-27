@@ -18,9 +18,8 @@ import {
   resolveConfiguredProxyUrl,
   validateOfficeProxyUrl,
 } from "../auth/proxy-validation.js";
-import { getErrorMessage } from "../utils/errors.js";
 import { checkProxyOnce } from "./proxy-status.js";
-import { needsRemoteProxyWarning, readTaskpaneProxySettings, saveTaskpaneProxyUrl } from "./settings.js";
+import { readTaskpaneProxySettings } from "./settings.js";
 
 function createElement<K extends keyof HTMLElementTagNameMap>(
   tagName: K,
@@ -267,7 +266,9 @@ export async function showWelcomeLogin(modelRefreshOwner: ModelRefreshOwner): Pr
 
       try {
         await storage.settings.set("proxy.enabled", proxyEnabledEl.checked);
-        proxyUrlEl.value = await saveTaskpaneProxyUrl(storage.settings, proxyUrl);
+        await storage.settings.set("proxy.url", proxyUrlEl.value.trim());
+        showToast(t("welcome.toast.proxy_saved"));
+        void checkProxyOnce(storage.settings, { force: true });
       } catch {
         showToast(t("welcome.toast.proxy_failed"));
         return;

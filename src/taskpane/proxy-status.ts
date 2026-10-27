@@ -75,7 +75,17 @@ function dispatchProxyStateChanged(state: ProxyState): void {
   document.dispatchEvent(new CustomEvent("pi:proxy-state-changed", { detail: { state } }));
 }
 
-export async function checkProxyOnce(settings: SettingsReader): Promise<ProxyState> {
+/**
+ * Probe the proxy and dispatch the state.
+ *
+ * `force` dispatches even when the state is unchanged. Use it after the proxy
+ * settings change, so surfaces that also depend on `proxy.enabled` (such as
+ * the proxy banner) re-evaluate straight away.
+ */
+export async function checkProxyOnce(
+  settings: SettingsReader,
+  opts: { force?: boolean } = {},
+): Promise<ProxyState> {
   let proxyUrl: string = DEFAULT_PROXY_URL;
   try {
     const raw = await settings.get("proxy.url");
@@ -91,8 +101,7 @@ export async function checkProxyOnce(settings: SettingsReader): Promise<ProxySta
   const newState: ProxyState = reachable ? "detected" : "not-detected";
   const newBlocked = !reachable && isLoopbackBlockedByFramePolicy(proxyUrl);
 
-  if (newState !== currentState || newBlocked !== blockedByBrowser) {
-    blockedByBrowser = newBlocked;
+  if (newState !== currentState || opts.force === true) {
     currentState = newState;
     dispatchProxyStateChanged(newState);
   }
