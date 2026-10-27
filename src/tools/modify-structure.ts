@@ -7,7 +7,7 @@
 import { Type, type Static } from "typebox";
 import { StringEnum } from "./string-enum.js";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
-import { excelRun } from "../excel/helpers.js";
+import { colToLetter, excelRun } from "../excel/helpers.js";
 import { getWorkbookChangeAuditLog } from "../audit/workbook-change-audit.js";
 import { MAX_RECOVERY_CELLS, getWorkbookRecoveryLog } from "../workbook/recovery-log.js";
 import {
@@ -26,6 +26,7 @@ import {
 import { describeExcelFailure, parseExcelError, unchangedClause } from "./mutation/excel-failure.js";
 import { finalizeMutationOperation } from "./mutation/finalize.js";
 import { appendMutationResultNote } from "./mutation/result-note.js";
+import { excelApiSupported } from "./mutation/range-write.js";
 import type { MutationFinalizeDependencies } from "./mutation/types.js";
 
 // Helper for string enum (TypeBox doesn't have a built-in StringEnum)
@@ -81,6 +82,154 @@ interface StructureMutationResult {
   summary: string;
   checkpointState?: RecoveryModifyStructureState;
   checkpointUnavailableReason?: string;
+  hiddenRowsDeleted?: number;
+}
+
+const HIDDEN_ROW_PROBE_LIMIT = 500;
+
+interface HiddenRows {
+  rows: number[];
+  /** Rows checked one by one; fewer than the target when it is very tall. */
+  checked: number;
+  /** Text of the first hidden rows with data, e.g. 'row 7 ("South", "b")'. */
+  samples: string[];
+  tables: Array<{ name: string; filtered: boolean }>;
+  sheetFiltered: boolean;
+  /** Hidden rows' cells in the sheet's used columns (JSON per row), to see after the delete which ones Excel kept. */
+  rowKeys: string[] | null;
+  /** Used columns, e.g. "A:D", for reading the same cells back. */
+  columns: string | null;
+}
+
+const HIDDEN_ROW_COMPARE_CELLS = 20_000;
+
+function rowKeysOf(values: unknown[][]): string[] {
+  return values.map((row) => JSON.stringify(row));
+}
+
+/**
+ * Rows in startRow..endRow that are hidden, by a filter or by hand. A delete by
+ * position removes them too, and the user cannot see them, so the result must
+ * say so. Read before the delete.
+ */
+async function findHiddenRows(
+  context: Excel.RequestContext,
+  sheet: Excel.Worksheet,
+  startRow: number,
+  endRow: number,
+): Promise<HiddenRows | null> {
+  const whole = sheet.getRange(`${startRow}:${endRow}`);
+  whole.load("rowHidden");
+  await context.sync();
+  if (whole.rowHidden === false) return null;
+
+  const probes: Array<{ row: number; range: Excel.Range }> = [];
+  for (let row = startRow; row <= endRow && probes.length < HIDDEN_ROW_PROBE_LIMIT; row += 1) {
+    const range = sheet.getRange(`${row}:${row}`);
+    range.load("rowHidden");
+    probes.push({ row, range });
+  }
+  const canReadFilters = excelApiSupported("1.9");
+  const tables = canReadFilters ? whole.getTables(false) : null;
+  tables?.load("items/name,items/autoFilter/isDataFiltered");
+  if (canReadFilters) sheet.autoFilter.load("isDataFiltered");
+  await context.sync();
+
+  const rows = probes.filter((probe) => probe.range.rowHidden).map((probe) => probe.row);
+  if (rows.length === 0) return null;
+
+  const usedColumns = sheet.getUsedRangeOrNullObject(true);
+  usedColumns.load("columnIndex,columnCount");
+  await context.sync();
+  const columns = usedColumns.isNullObject || rows.length * usedColumns.columnCount > HIDDEN_ROW_COMPARE_CELLS
+    ? null
+    : `${colToLetter(usedColumns.columnIndex)}:${colToLetter(usedColumns.columnIndex + usedColumns.columnCount - 1)}`;
+  const keyRanges = columns ? rows.map((row) => {
+    const [first = "A", last = first] = columns.split(":");
+    const range = sheet.getRange(`${first}${row}:${last}${row}`);
+    range.load("values");
+    return range;
+  }) : [];
+
+  const used = rows.slice(0, 3).map((row) => {
+    const range = sheet.getRange(`${row}:${row}`).getUsedRangeOrNullObject(true);
+    range.load("values");
+    return { row, range };
+  });
+  await context.sync();
+  const samples = used.filter(({ range }) => !range.isNullObject).map(({ row, range }) => {
+    const cells = (range.values[0] ?? []).filter((value) => value !== "" && value !== null).slice(0, 4);
+    return `row ${row} (${cells.map((value) => JSON.stringify(value)).join(", ")})`;
+  });
+
+  return {
+    rows,
+    checked: probes.length,
+    samples,
+    tables: tables ? tables.items.map((table) => ({ name: table.name, filtered: table.autoFilter.isDataFiltered })) : [],
+    sheetFiltered: canReadFilters && sheet.autoFilter.isDataFiltered,
+    rowKeys: columns ? keyRanges.map((range) => rowKeysOf(range.values)[0] ?? "") : null,
+    columns,
+  };
+}
+
+/**
+ * How many hidden rows Excel kept. Excel on the web deletes only the visible
+ * rows of a filtered range (kept rows move up to the deleted position, in
+ * order) but deletes hidden-by-hand rows, so read back rather than assume.
+ * Null when the rows could not be compared.
+ */
+async function countKeptHiddenRows(
+  context: Excel.RequestContext,
+  sheet: Excel.Worksheet,
+  startRow: number,
+  hidden: HiddenRows,
+): Promise<number | null> {
+  if (!hidden.rowKeys || !hidden.columns) return null;
+  const [first = "A", last = first] = hidden.columns.split(":");
+  const after = sheet.getRange(`${first}${startRow}:${last}${startRow + hidden.rowKeys.length - 1}`);
+  after.load("values");
+  await context.sync();
+  const afterKeys = rowKeysOf(after.values);
+  let kept = 0;
+  while (kept < hidden.rowKeys.length && afterKeys[kept] === hidden.rowKeys[kept]) kept += 1;
+  return kept;
+}
+
+function listRows(rows: readonly number[]): string {
+  return rows.slice(0, 8).join(", ") + (rows.length > 8 ? ` and ${rows.length - 8} more` : "");
+}
+
+function formatHiddenRows(hidden: HiddenRows, total: number, kept: number | null, startRow: number): string {
+  const filtered = hidden.sheetFiltered || hidden.tables.some((table) => table.filtered);
+  const tables = hidden.tables.length > 0
+    ? ` The rows were in table ${hidden.tables.map((table) => `**${table.name}**${table.filtered ? " (filtered)" : ""}`).join(", ")}.`
+    : "";
+  const capped = hidden.checked < total ? ` (only the first ${hidden.checked} rows were checked)` : "";
+  const filterNote = filtered ? " (a filter is on)" : "";
+  if (kept === null) {
+    return `⚠️ ${hidden.rows.length} of the ${total} row(s) were hidden${filterNote}: row ${listRows(hidden.rows)}${capped}.${tables} ` +
+      "Pi could not check whether Excel deleted them; read the sheet before relying on it.";
+  }
+  const lines: string[] = [];
+  const deleted = hidden.rows.slice(kept);
+  if (kept > 0) {
+    lines.push(
+      `⚠️ Excel kept ${kept} hidden row(s)${filterNote} and deleted only the others: ${total - kept} row(s) were deleted, not ${total}. ` +
+      `The kept rows (originally row ${listRows(hidden.rows.slice(0, kept))}) now start at row ${startRow}.${tables}`,
+    );
+  }
+  if (deleted.length > 0) {
+    const sample = hidden.samples.slice(kept > 0 ? kept : 0);
+    lines.push(
+      `⚠️ ${deleted.length} deleted row(s) were hidden${filterNote}: row ${listRows(deleted)}${capped}.` +
+      (kept > 0 ? "" : tables) +
+      (sample.length > 0 ? ` Deleted hidden data: ${sample.join("; ")}.` : "") +
+      " Deleting by position removes hidden rows too. If the user meant only the visible rows, " +
+      "restore this change with `workbook_history` and delete the visible rows one by one.",
+    );
+  }
+  return lines.join("\n\n");
 }
 
 function targetSheet(context: Excel.RequestContext, sheetName: string | undefined): Excel.Worksheet {
@@ -132,16 +281,38 @@ async function deleteRows(
   await context.sync();
 
   const range = sheet.getRange(`${startRow}:${endRow}`);
+  const hidden = await findHiddenRows(context, sheet, startRow, endRow);
   const dataRangeCapture = await captureValueDataRange(context, range, MAX_RECOVERY_CELLS);
+  // Hidden data that no backup can restore: refuse rather than delete what the user cannot see.
+  if (hidden && hidden.samples.length > 0 && dataRangeCapture.status === "too_large") {
+    throw new Error(
+      `Refused: rows ${startRow}–${endRow} include ${hidden.rows.length} hidden row(s) with data ` +
+      `(${hidden.samples.join("; ")}), and the rows hold too much data to back up, so the delete could not be undone. ` +
+      "Delete fewer rows at a time, or ask the user to clear the filter / unhide the rows first.",
+    );
+  }
   range.delete("Up");
   await context.sync();
+  const kept = hidden ? await countKeptHiddenRows(context, sheet, startRow, hidden) : 0;
+  const deletedCount = count - (kept ?? 0);
+  const hiddenDeleted = hidden ? hidden.rows.length - (kept ?? 0) : 0;
 
   const result: StructureMutationResult = {
-    message: `Deleted ${count} row(s) starting at row ${startRow} in "${sheet.name}".`,
-    changedCount: count,
+    message: (kept ? `Deleted ${deletedCount} of ${count} row(s)` : `Deleted ${count} row(s)`) +
+      ` starting at row ${startRow} in "${sheet.name}".` +
+      (hidden ? `\n\n${formatHiddenRows(hidden, count, kept, startRow)}` : ""),
+    changedCount: deletedCount,
     outputAddress: `${sheet.name}!${startRow}:${endRow}`,
-    summary: `deleted ${count} row(s)`,
+    summary: `deleted ${deletedCount} row(s)` + (hidden ? ` (${hiddenDeleted} hidden deleted, ${kept ?? "?"} kept)` : ""),
+    ...(hidden ? { hiddenRowsDeleted: hiddenDeleted } : {}),
   };
+  if (kept !== 0) {
+    // A row backup restores `count` whole rows; with hidden rows kept (or unknown) it would restore them twice.
+    result.checkpointUnavailableReason = kept === null
+      ? "Pi could not check which hidden rows Excel deleted, so a row backup could restore the wrong rows."
+      : `Excel kept ${kept} hidden row(s), so a backup of all ${count} rows would restore them twice.`;
+    return result;
+  }
   if (dataRangeCapture.status === "too_large") {
     result.checkpointUnavailableReason =
       "Checkpoint capture was skipped for `delete_rows` because deleted row data exceeds recovery size limits.";
@@ -447,6 +618,7 @@ export function createModifyStructureTool(): AgentTool<typeof schema, ModifyStru
           details: {
             kind: "modify_structure",
             action: params.action,
+            ...(result.hiddenRowsDeleted !== undefined ? { hiddenRowsDeleted: result.hiddenRowsDeleted } : {}),
           },
         };
 
