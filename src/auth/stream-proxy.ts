@@ -9,6 +9,7 @@
  */
 
 import {
+  createAssistantMessageEventStream,
   getCurrentSystemPrompt,
   getCurrentTools,
   hasApi,
@@ -585,6 +586,34 @@ export function createOfficeStreamFn(
   runtimeProviderRoute?: RuntimeProviderRoute,
 ): OfficeStreamFn {
   return async (model: Model<Api>, context: TranscriptContext, options?: StreamOptions) => {
+    // A tool can finish after Stop; don't send its continuation request.
+    if (options?.signal?.aborted) {
+      const stream = createAssistantMessageEventStream();
+      stream.push({
+        type: "error",
+        reason: "aborted",
+        error: {
+          role: "assistant",
+          content: [],
+          api: model.api,
+          provider: model.provider,
+          model: model.id,
+          usage: {
+            input: 0,
+            output: 0,
+            cacheRead: 0,
+            cacheWrite: 0,
+            totalTokens: 0,
+            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+          },
+          stopReason: "aborted",
+          errorMessage: "Request aborted",
+          timestamp: Date.now(),
+        },
+      });
+      return stream;
+    }
+
     const continuation = isToolContinuation(context.messages);
     const replayedContext: Context = {
       systemPrompt: getCurrentSystemPrompt(context.messages),

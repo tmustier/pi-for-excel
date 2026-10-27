@@ -18,7 +18,6 @@ import type { SessionData } from "../storage/local/types.js";
 import { createOfficeStreamFn } from "../auth/stream-proxy.js";
 import {
   DEFAULT_PROXY_URL,
-  PROXY_HELPER_DOCS_URL,
   isLoopbackProxyUrl,
   validateOfficeProxyUrl,
 } from "../auth/proxy-validation.js";
@@ -33,6 +32,11 @@ import { createConvertToLlm } from "../messages/convert-to-llm.js";
 import { installImageInputNormalization } from "../messages/image-input-limits.js";
 import { effectiveToolOutputLimits } from "../context/window-budgets.js";
 import { findTrailingContextOverflowError } from "../compaction/overflow-recovery.js";
+import { createTabState } from "./tab-state.js";
+import { getErrorMessage } from "../utils/errors.js";
+import { describeTurnFailure } from "./turn-error.js";
+import { createDraftStore } from "./draft-store.js";
+import { submitComposerText } from "./keyboard-shortcuts/editor-actions.js";
 import { readAutoCompactionEnabled } from "../compaction/settings.js";
 import { runCompactCommand } from "../commands/builtins/export.js";
 import { describeImportRenames, getFilesWorkspace } from "../files/workspace.js";
@@ -194,7 +198,6 @@ import {
 import {
   awaitWithTimeout,
   createRuntimeToolFingerprint,
-  isLikelyCorsErrorMessage,
   shouldApplyRuntimeToolUpdate,
   isRuntimeAgentTool,
   normalizeRuntimeTools,
@@ -204,12 +207,8 @@ import { doesOverlayClaimEscape } from "../utils/escape-guard.js";
 
 const RUNTIME_SYSTEM_PROMPT_SECTION = "pi-for-excel-runtime";
 
-function showErrorBanner(errorRoot: HTMLElement, message: string): void {
-  render(renderError(message), errorRoot);
-}
-
-function clearErrorBanner(errorRoot: HTMLElement): void {
-  render(html``, errorRoot);
+function renderErrorBanner(errorRoot: HTMLElement, message: string | null): void {
+  render(message ? renderError(message) : html``, errorRoot);
 }
 
 export async function initTaskpane(opts: {
@@ -503,13 +502,11 @@ export async function initTaskpane(opts: {
       console.warn("[pi] Failed to refresh runtime capabilities:", error);
     },
   });
-  const abortedAgents = new WeakSet<Agent>();
+  const draftStore = createDraftStore(settings);
   const recentlyClosed = new RecentlyClosedStack(10);
 
   const getActiveRuntime = () => runtimeManager.getActiveRuntime();
   const getActiveAgent = () => getActiveRuntime()?.agent ?? null;
-  const getActiveQueueDisplay = () => getActiveRuntime()?.queueDisplay ?? null;
-  const getActiveActionQueue = () => getActiveRuntime()?.actionQueue ?? null;
   const getActiveLockState = () => getActiveRuntime()?.lockState ?? "idle";
 
   listModelRefreshRuntimes = () => runtimeManager.listRuntimes().map((runtime) => ({
@@ -605,6 +602,7 @@ export async function initTaskpane(opts: {
     },
     warn: (message, error) => {
       console.warn(message, error);
+      showToast(t("sessions.toast.layoutSaveFailed", { error: getErrorMessage(error) }));
     },
   });
 
@@ -643,7 +641,11 @@ export async function initTaskpane(opts: {
     focusChatInputSoon();
   });
 
-  bindRuntimeSidebar({ runtimeManager, sidebar });
+  bindRuntimeSidebar({
+    runtimeManager,
+    sidebar,
+    renderError: (message) => renderErrorBanner(errorRoot, message),
+  });
 
   runtimeManager.subscribe((snapshot) => {
     if (snapshot.activeRuntimeId !== previousActiveRuntimeId) {
@@ -812,7 +814,7 @@ export async function initTaskpane(opts: {
     optsForRuntime: CreateRuntimeOptions,
   ): Promise<SessionRuntime> {
     const runtimeId = crypto.randomUUID();
-    let runtimeSessionId: string = crypto.randomUUID();
+    let runtimeSessionId: string = optsForRuntime.sessionId ?? crypto.randomUUID();
     const runtimeSkillReadCache = createSkillReadCache();
 
     let runtimeAgent: Agent | null = null;
@@ -988,6 +990,10 @@ export async function initTaskpane(opts: {
       }
     };
 
+    const tab = createTabState();
+    // Set when the user dismisses the connection dialog during this turn.
+    let missingCredentialsFor: string | null = null;
+
     // API key resolution
     agent.getApiKey = async (provider: string) => {
       const resolvedAuth = await modelRuntime.models.getAuth(provider);
@@ -996,28 +1002,60 @@ export async function initTaskpane(opts: {
       // Extension provider credentials are configured through their host-owned
       // connection cards, never through the generic API-key dialog.
       if (modelRuntime.isExtensionProvider(provider)) {
-        showErrorBanner(errorRoot, t("runtime.error.noApiKey", { provider }));
+        tab.setError(t("runtime.error.noApiKey", { provider }));
         return undefined;
       }
 
       const success = await promptForProviderConnection(provider);
       await modelRefreshOwner.refreshConfiguredProviders(false);
       if (success) {
-        clearErrorBanner(errorRoot);
+        tab.setError(null);
         return (await getAppStorage().providerKeys.get(provider)) ?? undefined;
       }
 
-      showErrorBanner(errorRoot, `API key required for ${provider}.`);
+      missingCredentialsFor = provider;
       return undefined;
     };
 
-    const queueDisplay = createQueueDisplay({ agent });
+    const queueDisplay = createQueueDisplay({ agent, held: tab });
+    // Assigned below; compaction saves the session as soon as it rewrites history.
+    let savePersistence: () => Promise<void> = () => Promise.resolve();
     const actionQueue = createActionQueue({
       agent,
-      sidebar,
+      tab,
       queueDisplay,
       autoCompactEnabled,
-      runCompact: () => runCompactCommand(agent, ""),
+      runCompact: async (args, signal) => {
+        const before = agent.state.messages;
+        await runCompactCommand(agent, args, signal);
+        if (agent.state.messages !== before) {
+          // Redraw the context meter for the smaller history and save it now,
+          // so a reload right after compaction does not bring the old one back.
+          // Forced: compaction can archive every user message into the
+          // summary, which a "has the chat started" save gate would skip.
+          document.dispatchEvent(new CustomEvent("pi:status-update"));
+          await savePersistence();
+        }
+      },
+      onTurnSettled: ({ overflowAfterRecovery }) => {
+        const credentials = missingCredentialsFor;
+        missingCredentialsFor = null;
+        void getConfiguredProxyUrl().then((proxyUrl) => {
+          tab.setError(describeTurnFailure({
+            messages: agent.state.messages,
+            isContextOverflow: findTrailingContextOverflowError(agent.state) !== null,
+            overflowAfterRecovery,
+            missingCredentialsFor: credentials,
+            online: navigator.onLine,
+            proxyUrl: proxyUrl ?? null,
+            defaultProxyUrl: DEFAULT_PROXY_URL,
+          }));
+        });
+      },
+      onLeftUnsent: (count) => {
+        if (runtimeManager.getActiveRuntime()?.runtimeId !== runtimeId) return;
+        showToast(t("turn.toast.leftUnsent", { count, plural: count === 1 ? "" : "s" }));
+      },
     });
 
     const persistence = await setupSessionPersistence({
@@ -1027,7 +1065,11 @@ export async function initTaskpane(opts: {
       models: modelRuntime.models,
       initialSessionId: runtimeSessionId,
       autoRestoreLatest: optsForRuntime.autoRestoreLatest,
+      onSaveError: (message) => {
+        showToast(t("sessions.toast.saveFailed", { error: message }));
+      },
     });
+    savePersistence = () => persistence.saveSession({ force: true });
 
     runtimeSessionId = persistence.getSessionId();
     await refreshRuntimeCapabilities();
@@ -1043,11 +1085,13 @@ export async function initTaskpane(opts: {
       void refreshRuntimeCapabilities();
     });
 
-    const unsubscribeErrorTracking = agent.subscribe((ev) => {
-      const isActiveRuntime = runtimeManager.getActiveRuntime()?.runtimeId === runtimeId;
+    // The tab's draft is kept with its session, so a reload brings it back.
+    const unbindDraft = draftStore.bind(tab, persistence);
 
-      if (ev.type === "message_start" && ev.message.role === "user" && isActiveRuntime) {
-        clearErrorBanner(errorRoot);
+    const unsubscribeErrorTracking = agent.subscribe((ev) => {
+      // A new message clears the tab's previous error.
+      if (ev.type === "message_start" && ev.message.role === "user") {
+        tab.setError(null);
       }
 
       if (ev.type !== "agent_end") return;
@@ -1056,36 +1100,6 @@ export async function initTaskpane(opts: {
       // reconciliation after the action queue unwinds so an extension that
       // unloads mid-turn cannot leave its now-missing provider selected.
       window.setTimeout(() => modelRefreshOwner.reconcileRuntimes(), 0);
-
-      const wasUserAbort = abortedAgents.has(agent);
-      abortedAgents.delete(agent);
-
-      if (!isActiveRuntime) return;
-
-      const errorMessage = agent.state.errorMessage;
-      if (errorMessage) {
-        const isAbort = wasUserAbort || /abort/i.test(errorMessage) || /cancel/i.test(errorMessage);
-        if (!isAbort) {
-          const err = errorMessage;
-          if (findTrailingContextOverflowError(agent.state)) {
-            showErrorBanner(
-              errorRoot,
-              autoCompactEnabled
-                ? "Context window exceeded — Pi will try compacting older history and retrying once. If this error persists, run /compact, scope your request to a smaller range, or use a larger-context model."
-                : "Context window exceeded. Run /compact to free up context, scope your request to a smaller range, or use a larger-context model.",
-            );
-          } else if (isLikelyCorsErrorMessage(err)) {
-            showErrorBanner(
-              errorRoot,
-              `Network error (likely CORS). If you're using OAuth, enable /settings → Proxy with ${DEFAULT_PROXY_URL} and retry. Guide: ${PROXY_HELPER_DOCS_URL}`,
-            );
-          } else {
-            showErrorBanner(errorRoot, t("init.llmError", { error: err }));
-          }
-        }
-      } else {
-        clearErrorBanner(errorRoot);
-      }
     });
 
     return {
@@ -1093,6 +1107,7 @@ export async function initTaskpane(opts: {
       agent,
       actionQueue,
       queueDisplay,
+      tab,
       persistence,
       lockState: "idle",
       refreshCapabilities: refreshRuntimeCapabilities,
@@ -1100,6 +1115,7 @@ export async function initTaskpane(opts: {
         runtimeSkillReadCache.clearAll();
         unsubscribeSessionCapabilitySync();
         unsubscribeErrorTracking();
+        unbindDraft();
         queueDisplay.detach();
         actionQueue.shutdown();
         uninstallImageInputNormalization();
@@ -1138,9 +1154,12 @@ export async function initTaskpane(opts: {
     let firstRuntime: SessionRuntime | null = null;
 
     for (const sessionId of savedLayout.sessionIds) {
+      // Keeping the saved id lets a blank tab keep its identity (and its
+      // unsent draft) across reloads.
       const runtime = await runtimeManager.createRuntime({
         activate: false,
         autoRestoreLatest: false,
+        sessionId,
       });
 
       const sessionData = await sessions.loadSession(sessionId);
@@ -1342,7 +1361,7 @@ export async function initTaskpane(opts: {
       return false;
     }
 
-    if (runtime.agent.state.isStreaming) {
+    if (runtime.agent.state.isStreaming || runtime.actionQueue.isBusy()) {
       const proceed = await requestConfirmationDialog({
         title: t("init.confirm.stopAndCloseTitle"),
         message: t("init.confirm.stopAndCloseMessage"),
@@ -1352,8 +1371,7 @@ export async function initTaskpane(opts: {
       });
       if (!proceed) return false;
 
-      abortedAgents.add(runtime.agent);
-      runtime.agent.abort();
+      runtime.actionQueue.stop();
     }
 
     await runtime.persistence.saveSession({ force: true });
@@ -1745,22 +1763,35 @@ export async function initTaskpane(opts: {
   };
   document.addEventListener("pi:command-run", onCommandRun);
 
-  sidebar.onSend = (text) => {
-    clearErrorBanner(errorRoot);
+  sidebar.onSend = (text, { followUp }) => {
     const activeRuntime = getActiveRuntime();
-    if (!activeRuntime) {
-      showToast(t("init.noActiveSession"));
-      return;
-    }
-    activeRuntime.actionQueue.enqueuePrompt(text);
+    const accepted = submitComposerText({ text, followUp, target: activeRuntime });
+    if (accepted && activeRuntime) activeRuntime.tab.setError(null);
+    return accepted;
   };
 
-  sidebar.onAbort = () => {
+  /**
+   * Stop is one behavior, from the Stop button or Escape: the run, compaction
+   * or retry wait is cancelled; steers, follow-ups and queued prompts stay
+   * as separate "Not sent" rows; queued commands are cancelled.
+   */
+  const stopActiveTab = (): void => {
     const activeRuntime = getActiveRuntime();
     if (!activeRuntime) return;
-    abortedAgents.add(activeRuntime.agent);
-    activeRuntime.agent.abort();
+    const { texts, cancelledCommands } = activeRuntime.actionQueue.stop();
+    const count = texts.length;
+    const plural = count === 1 ? "" : "s";
+    const commands = cancelledCommands.join(", ");
+    if (count > 0 && commands) {
+      showToast(t("turn.toast.stopKeptCancelled", { count, plural, commands }));
+    } else if (count > 0) {
+      showToast(t("turn.toast.stopKept", { count, plural }));
+    } else if (commands) {
+      showToast(t("turn.toast.stopCancelled", { commands }));
+    }
   };
+
+  sidebar.onAbort = stopActiveTab;
 
   sidebar.onCreateTab = () => {
     void createRuntimeFromUi();
@@ -1897,11 +1928,17 @@ export async function initTaskpane(opts: {
   // ── Keyboard shortcuts ──
   installKeyboardShortcuts({
     getActiveAgent,
-    getActiveQueueDisplay,
-    getActiveActionQueue,
+    isActiveTabBusy: () => {
+      const runtime = getActiveRuntime();
+      return runtime !== null && (runtime.agent.state.isStreaming || runtime.actionQueue.isBusy());
+    },
     sidebar,
-    markUserAborted: (agent: Agent) => {
-      abortedAgents.add(agent);
+    stopActiveTab,
+    editLastQueued: () => {
+      const edited = getActiveRuntime()?.actionQueue.editLast() ?? false;
+      if (edited) focusChatInputSoon();
+      else showToast(t("keyboard-shortcuts.toast.noQueuedMessages"));
+      return edited;
     },
     onCreateTab: () => {
       void createRuntimeFromUi();
@@ -1957,9 +1994,9 @@ export async function initTaskpane(opts: {
 
   // ── Wire command menu to textarea ──
   const wireTextarea = () => {
-    const ta = sidebar.getTextarea();
-    if (ta) {
-      wireCommandMenu(ta);
+    const composer = sidebar.getInput();
+    if (composer) {
+      wireCommandMenu(composer);
     } else {
       requestAnimationFrame(wireTextarea);
     }

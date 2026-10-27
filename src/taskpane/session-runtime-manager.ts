@@ -13,6 +13,7 @@ import type { ActionQueue } from "./action-queue.js";
 import type { QueueDisplay } from "./queue-display.js";
 import type { SessionPersistenceController } from "./sessions.js";
 import { resolveTabTitle } from "./session-title.js";
+import type { TabState } from "./tab-state.js";
 
 export type RuntimeLockState = "idle" | "waiting_for_lock" | "holding_lock";
 
@@ -21,6 +22,8 @@ export interface SessionRuntime {
   agent: Agent;
   actionQueue: ActionQueue;
   queueDisplay: QueueDisplay;
+  /** Draft, error banner and activity line of this tab. */
+  tab: TabState;
   persistence: SessionPersistenceController;
   lockState: RuntimeLockState;
   refreshCapabilities: () => Promise<void>;
@@ -30,6 +33,8 @@ export interface SessionRuntime {
 export interface CreateRuntimeOptions {
   activate: boolean;
   autoRestoreLatest: boolean;
+  /** Reuse this session id (a tab restored from the saved layout). */
+  sessionId?: string;
 }
 
 export interface RuntimeTabSnapshot {
@@ -55,6 +60,7 @@ export type ModelSelectionResult =
 interface RuntimeListeners {
   unsubscribeAgent: () => void;
   unsubscribePersistence: () => void;
+  unsubscribeTab: () => void;
 }
 
 export class SessionRuntimeManager {
@@ -97,7 +103,17 @@ export class SessionRuntimeManager {
     const unsubscribePersistence = runtime.persistence.subscribe(() => {
       this.emit();
     });
-    this.runtimeListeners.set(runtime.runtimeId, { unsubscribeAgent, unsubscribePersistence });
+    // Compaction, retry waits and queued work change the busy dot without an
+    // agent event; draft keystrokes do not need a new snapshot.
+    const isTabBusy = () => runtime.tab.busy || runtime.tab.activity !== null;
+    let wasBusy = isTabBusy();
+    const unsubscribeTab = runtime.tab.subscribe(() => {
+      const busy = isTabBusy();
+      if (busy === wasBusy) return;
+      wasBusy = busy;
+      this.emit();
+    });
+    this.runtimeListeners.set(runtime.runtimeId, { unsubscribeAgent, unsubscribePersistence, unsubscribeTab });
 
     const shouldActivate = opts?.activate ?? this.activeRuntimeId === null;
     if (shouldActivate) {
@@ -133,6 +149,7 @@ export class SessionRuntimeManager {
     const listeners = this.runtimeListeners.get(runtimeId);
     listeners?.unsubscribeAgent();
     listeners?.unsubscribePersistence();
+    listeners?.unsubscribeTab();
     this.runtimeListeners.delete(runtimeId);
 
     runtime.dispose();

@@ -6,6 +6,7 @@ import { createModels, fauxProvider } from "@earendil-works/pi-ai";
 
 import type { ActionQueue } from "../src/taskpane/action-queue.ts";
 import type { QueueDisplay } from "../src/taskpane/queue-display.ts";
+import { createTabState } from "../src/taskpane/tab-state.ts";
 import {
   SessionRuntimeManager,
   type SessionRuntime,
@@ -62,7 +63,8 @@ function createRuntimeHarness(runtimeId: string): RuntimeHarness {
   const actionQueue: ActionQueue = {
     enqueuePrompt: () => {},
     enqueueCommand: () => {},
-    drainQueuedActions: () => [],
+    editLast: () => false,
+    stop: () => ({ texts: [], cancelledCommands: [] }),
     isBusy: () => false,
     shutdown: () => {},
   };
@@ -71,6 +73,9 @@ function createRuntimeHarness(runtimeId: string): RuntimeHarness {
     add: () => {},
     clear: () => {},
     drainQueuedMessages: () => [],
+    removeQueuedMessage: () => {},
+    setRowHandlers: () => {},
+    lastEditableRow: () => null,
     setActionQueue: () => {},
     attach: () => {},
     detach: () => {},
@@ -82,6 +87,7 @@ function createRuntimeHarness(runtimeId: string): RuntimeHarness {
       agent,
       actionQueue,
       queueDisplay,
+      tab: createTabState(),
       persistence,
       lockState: "idle",
       refreshCapabilities: () => {

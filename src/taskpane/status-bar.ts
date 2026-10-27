@@ -98,7 +98,7 @@ function renderStatusBar(
   const ctxDescription = getStatusContextTooltipDescription();
   const ctxTokenDetail = t("status.context.tokens", { used: totalTokens.toLocaleString(), total: contextWindow.toLocaleString() });
 
-  const contextHealth = getStatusContextHealth(pct);
+  const contextHealth = getStatusContextHealth(totalTokens, contextWindow);
   const ctxColor = contextHealth.colorClass;
   const ctxWarningText = contextHealth.warning?.text ?? "";
   const ctxWarningSeverity = contextHealth.warning?.severity ?? "";
