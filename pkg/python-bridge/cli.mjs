@@ -356,6 +356,32 @@ function startBridge(bridgeArgs) {
   });
 }
 
+const HELP_TEXT = `Usage: npx pi-for-excel-python-bridge [--https | --http] [--install-missing]
+
+Local bridge that lets Pi for Excel run Python and LibreOffice conversions.
+
+Starts at https://localhost:3340 by default, creating local certificates in
+~/.pi-for-excel/certs with mkcert when needed.
+
+Options:
+  --https             Serve HTTPS (the default)
+  --http              Serve plain HTTP instead (no certificates)
+  --install-missing   Install python3 and LibreOffice with Homebrew if missing (macOS)
+  -h, --help          Show this help and exit
+
+Environment:
+  PORT, HOST                      Listen address (default 3340 on localhost)
+  PYTHON_BRIDGE_PYTHON_BIN        Python executable to use
+  PYTHON_BRIDGE_LIBREOFFICE_BIN   Absolute path to soffice
+  PYTHON_BRIDGE_TOKEN             Require this bearer token
+  ALLOWED_ORIGINS                 Comma-separated origins allowed to call the bridge`;
+
+const cliArgs = process.argv.slice(2);
+if (cliArgs.includes("--help") || cliArgs.includes("-h")) {
+  console.log(HELP_TEXT);
+  process.exit(0);
+}
+
 if (!fs.existsSync(bridgeScriptPath)) {
   console.error(`[${PACKAGE_TAG}] Missing bridge runtime files.`);
   console.error(`[${PACKAGE_TAG}] Reinstall the package or run npm pack again.`);

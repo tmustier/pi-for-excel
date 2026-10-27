@@ -322,6 +322,32 @@ function startProxy(proxyArgs) {
   });
 }
 
+const HELP_TEXT = `Usage: npx pi-for-excel-proxy [--https | --http]
+
+Local CORS proxy for Pi for Excel logins and provider requests.
+
+Starts at https://localhost:3003 by default, creating local certificates in
+~/.pi-for-excel/certs with mkcert when needed (installed with Homebrew on macOS).
+If a current proxy is already running there, reuses it and exits.
+
+Options:
+  --https      Serve HTTPS (the default)
+  --http       Serve plain HTTP instead (no certificates)
+  -h, --help   Show this help and exit
+
+Environment:
+  PORT, HOST              Listen address (default 3003 on localhost)
+  ALLOWED_ORIGINS         Comma-separated origins allowed to use the proxy
+  ALLOWED_TARGET_HOSTS    Comma-separated upstream hosts allowed
+
+Then in Pi for Excel: /settings → Proxy, enable it, and set the URL it prints.`;
+
+const cliArgs = process.argv.slice(2);
+if (cliArgs.includes("--help") || cliArgs.includes("-h")) {
+  console.log(HELP_TEXT);
+  process.exit(0);
+}
+
 if (!fs.existsSync(proxyScriptPath)) {
   console.error("[pi-for-excel-proxy] Missing proxy runtime files.");
   console.error("[pi-for-excel-proxy] Reinstall the package or run npm pack again.");
