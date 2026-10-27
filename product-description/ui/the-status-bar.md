@@ -159,6 +159,6 @@ After any interrupt the user is where they were; only the mode toggle commits an
 - The lock badge text and tooltips are hard-coded English (`src/taskpane/status-bar.ts:120`, `:122`), and its wording ("session", "lock") differs from the tab's "Locking…".
 - Window sizes are rounded to whole millions (`src/taskpane/status-bar.ts:91`), so non-round windows over 1M are mislabelled.
 - If saving the execution mode fails, the click does nothing visible: no toast, no error. Read from code (`src/execution/controller.ts`).
-- Popover behaviour on Excel desktop (Windows, macOS) has not been checked by hand.
+- Popover behaviour on Excel desktop for Windows has not been checked by hand. Confirmed in Excel for Mac: the thinking popover, choosing a level, Shift+Tab cycling with its toast, and Escape closing only the popover during a turn all behave as on the web.
 
 Verified against pi-for-excel commit `ec453df`.

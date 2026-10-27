@@ -90,7 +90,7 @@ The user's message, every completed model response and tool result, and the fail
 | Execution mode | No effect. In Confirm, a failure can come after some approved mutations already ran. | No effect. |
 | Files in the workspace, or an overlay open | No effect on the request. The connection dialog is itself an overlay; another overlay open at that moment is closed only if it is a previous connection dialog. | No effect. |
 | Tab state (new, restored, another tab busy) | A failure in a new tab still saves the session. A restored tab's long history is the usual cause of overflow. | A failure in a background tab shows no banner. |
-| Host (desktop or web) | Browser network messages differ: "Load failed" in WKWebView (macOS), "Failed to fetch" in WebView2 and browsers. See [host differences](host-differences.md). | No effect. |
+| Host (desktop or web) | Browser network messages differ: "Load failed" in WKWebView (macOS; confirmed in Excel for Mac, with the CORS banner), "Failed to fetch" in WebView2 and browsers. See [host differences](host-differences.md). | No effect. |
 
 ## Cancel and interrupt
 

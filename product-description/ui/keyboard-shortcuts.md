@@ -8,7 +8,7 @@ Pi for Excel can be driven almost entirely from the keyboard: sending, steering 
 
 The user types `/shortcuts` and presses Enter, or opens the utilities menu (the gear) and chooses "Keyboard shortcuts". The Settings overlay opens directly on a page titled "Keyboard shortcuts" with the subtitle "Quick reference for chat, tab, navigation, and system shortcuts.", and a back arrow to the Settings root.
 
-The page lists four groups, "Chat", "Tabs", "Navigation" and "System", each a list of key labels and descriptions. Keys are shown in macOS notation (⌘ ⌥ ⇧) when the taskpane runs on a Mac, and as "Ctrl+…", "Alt+…", "Shift+…" otherwise. The page is read-only.
+The page lists four groups, "Chat", "Tabs", "Navigation" and "System", each a list of key labels and descriptions. Keys are shown in macOS notation (⌘ ⌥ ⇧) when the taskpane runs on a Mac, and as "Ctrl+…", "Alt+…", "Shift+…" otherwise. Confirmed in Excel for Mac ("⌘ T", "⌥ Enter", "⇧ Tab"). The page is read-only.
 
 The user presses Escape once to go back to the Settings root and again to close Settings, or clicks × to close at once. They land back in the tab they came from.
 
@@ -189,7 +189,7 @@ After closing the page the user is back in the same tab with the composer as it 
 
 **Language.** Group titles, descriptions and the "Enter (while streaming)" label are translated; key names are not. The Ctrl/Cmd+O toasts are hard-coded English.
 
-**Accessibility and keyboard.** On Excel desktop (read from code) Shift+Tab never moves focus backwards anywhere in the taskpane, including in Settings and dialogs, because it is taken for the thinking level; keyboard-only users must move forwards with Tab. On Excel on the web it moves focus backwards and changes the thinking level at the same time (confirmed), so reverse navigation works but silently changes the next turn's thinking level at every step. The page itself is plain text with `kbd` key labels.
+**Accessibility and keyboard.** On Excel desktop Shift+Tab never moves focus backwards anywhere in the taskpane, including in Settings and dialogs, because it is taken for the thinking level; keyboard-only users must move forwards with Tab. Confirmed in Excel for Mac in the composer: the level cycled and focus stayed. On Excel on the web it moves focus backwards and changes the thinking level at the same time (confirmed), so reverse navigation works but silently changes the next turn's thinking level at every step. The page itself is plain text with `kbd` key labels.
 
 ## Edge cases
 

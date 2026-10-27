@@ -118,7 +118,7 @@ Changing the theme feature while a turn runs only recolours the taskpane.
 
 **Settings and preferences.** The language row sits in Settings → "Behavior" with the "Auto" execution toggle and the fork-on-model-switch toggle; see [settings](../setup/settings.md). There is no theme setting outside `/experimental`.
 
-**Host differences.** None for the language. For the theme, Office reports its theme on Excel desktop; whether Excel on the web reports one has not been confirmed, and in the standalone taskpane only the operating-system preference applies.
+**Host differences.** None for the language. For the theme, Office reports its theme on Excel desktop (confirmed in Excel for Mac: with Office dark, turning the flag on made the taskpane dark at once, and turning it off made it light); whether Excel on the web reports one has not been confirmed, and in the standalone taskpane only the operating-system preference applies.
 
 **Language.** This document's subject.
 
