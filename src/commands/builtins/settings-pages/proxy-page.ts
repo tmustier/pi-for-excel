@@ -10,13 +10,7 @@ import {
   PROXY_HELPER_DOCS_URL,
   validateOfficeProxyUrl,
 } from "../../../auth/proxy-validation.js";
-import {
-  checkProxyOnce,
-  getProxyState,
-  isProxyBlockedByBrowser,
-  type ProxyState,
-} from "../../../taskpane/proxy-status.js";
-import { needsRemoteProxyWarning, saveTaskpaneProxyUrl } from "../../../taskpane/settings.js";
+import { checkProxyOnce, getProxyState, type ProxyState } from "../../../taskpane/proxy-status.js";
 import { t } from "../../../language/index.js";
 import {
   createCallout,
@@ -168,8 +162,7 @@ export function createProxyPage(): SettingsShellPage {
         }
 
         showToast(enabled ? t("settings.toast.proxy_enabled") : t("settings.toast.proxy_disabled"));
-        warnIfRemote();
-        if (enabled) void recheckProxy();
+        void checkProxyOnce(settingsStore, { force: true });
       };
 
       const saveProxyUrl = async (): Promise<void> => {
@@ -205,8 +198,7 @@ export function createProxyPage(): SettingsShellPage {
         proxyUrlInput.value = normalizedUrl;
         updateStatus();
         showToast(t("settings.toast.proxy_url_saved"));
-        warnIfRemote();
-        void recheckProxy();
+        void checkProxyOnce(settingsStore, { force: true });
       };
 
       const scheduleProxyUrlSave = (): void => {
