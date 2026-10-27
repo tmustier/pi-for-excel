@@ -168,6 +168,7 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 | [P-156](#p-156-tab-from-an-open-dialog-in-excel-on-the-web-moves-focus-out-of-the-add-in) | Tab from an open dialog in Excel on the web moves focus out of the add-in | medium | dialogs | fix | Assigned to #793 (follow-up; not yet in the PR) |
 | [P-157](#p-157-ctrlz-in-one-tabs-composer-brings-back-text-typed-in-another-tab) | Ctrl+Z in one tab's composer brings back text typed in another tab | low | composer | fix | Assigned to #789 (follow-up; not yet in the PR) |
 | [P-158](#p-158-after-a-stopped-compaction-the-compacting-toast-stays-up-to-60-s) | After a stopped compaction the "Compacting…" toast stays up to 60 s | low | commands | fix | Assigned to #793 (follow-up; not yet in the PR) |
+| [P-159](#p-159-backups-clear-all-confirms-with-a-stale-count) | Backups "Clear all" confirms with a stale count | low | backups | fix | Assigned to #794 (follow-up; not yet in the PR) |
 
 ## High
 
@@ -1455,7 +1456,7 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Severity:** `medium`. Keyboard users lose their place, with no visible way back into the dialog.
 - **Decision needed:** `fix`. Stop propagation in the focus trap.
 - **Raised by:** sessions-and-commands integration verification, 27 October 2026
-- **Status:** Confirmed in Excel on the web on integration-fixes e48d83c.
+- **Status:** Confirmed in Excel on the web on integration-fixes e48d83c (sessions and workbook verifiers). It affects #794's approval card at once: Tab on "Allow once" and Shift+Tab on × leave the add-in. A stopPropagation fix in installOverlayFocus (src/ui/overlay-dialog.ts:268-289) was verified by the workbook verifier.
 - **Owner:** Assigned to #793 (follow-up; not yet in the PR)
 
 ## Low
@@ -2083,3 +2084,15 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Raised by:** sessions-and-commands integration verification, 27 October 2026
 - **Status:** Mostly fixed on integration-fixes e48d83c; this case remains.
 - **Owner:** Assigned to #793 (follow-up; not yet in the PR)
+
+### P-159: Backups "Clear all" confirms with a stale count
+
+- **Where the user meets it:** Backups dialog left open while Pi makes more backups, then Clear all.
+- **What happens / what was expected:** The confirmation names the count from when the dialog opened. Expected: the current count.
+- **Reproduce:** 1. Open Backups. 2. Let a turn write (new backups). 3. Click Clear all.
+- **Why (from the code):** The count is read when the page renders, not when Clear all is pressed (src/ui/backups-page.ts:228-232).
+- **Severity:** `low`. All backups are still cleared; only the number shown is wrong.
+- **Decision needed:** `fix`. Count when confirming.
+- **Raised by:** workbook integration verification, 27 October 2026
+- **Status:** Confirmed in Excel on the web on integration-fixes e48d83c.
+- **Owner:** Assigned to #794 (follow-up; not yet in the PR)
