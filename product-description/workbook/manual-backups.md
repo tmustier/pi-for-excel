@@ -2,7 +2,7 @@
 
 ## Summary
 
-A [manual backup](../glossary.md#the-workbook) is a complete copy of the workbook file, taken when the user asks for it. It is the coarse safety net next to the fine-grained automatic [backups](backups-and-revert.md): it covers everything in the file (including what Pi's tools cannot back up, such as deleted charts, tables or direct Office.js changes, and the user's own edits), it is not cleared when the workbook is saved, and it is restored not by Pi but by opening the downloaded file in Excel. The command is `/backup`, with the subcommands `create` (the default), `list`, `restore` and `clear`; the "Download backup" button in the Backups dialog does the same as `create`. Copies are stored in the [Files workspace](../files/the-files-workspace.md) under `manual-backups/` and are downloaded as `.xlsx` files. `/backup` is refused while the active tab is busy, needs no provider, and only works for a workbook that has been saved at least once.
+A [manual backup](../glossary.md#the-workbook) is a complete copy of the workbook file, taken when the user asks for it. It is the coarse safety net next to the fine-grained automatic [backups](backups-and-revert.md): it covers everything in the file (including what Pi's tools cannot back up, such as deleted charts, tables or direct Office.js changes, and the user's own edits), it is not cleared when the workbook is saved, and it is restored not by Pi but by opening the downloaded file in Excel. The command is `/backup`, with the subcommands `create` (the default), `list`, `restore` and `clear`; the "Download backup" button in the Backups dialog does the same as `create`. Copies are stored in the [Files workspace](../files/the-files-workspace.md) under `manual-backups/` and are downloaded as `.xlsx` files. `/backup` works while the active tab is busy and needs no provider. Capturing waits for the workbook lock and requires an available workbook identity.
 
 ## The simple case
 
@@ -15,7 +15,7 @@ Later, the user wants to see the workbook as it was. They type `/backup restore`
 ```mermaid
 stateDiagram-v2
     [*] --> idle
-    idle --> refused : /backup while busy ("Can't run /backup while Pi is busy")
+    idle --> capturing : /backup while busy (wait for workbook lock)
     refused --> idle
     idle --> usage : /backup help or unknown subcommand (nothing stored)
     usage --> idle
@@ -52,7 +52,6 @@ Before anything else, the workbook must have an identity, which a workbook gets 
 
 Nothing is stored, downloaded or deleted when:
 
-- the active tab is busy ("Can't run /backup while Pi is busy"; the composer is cleared, confirmed in Excel on the web);
 - the subcommand is `help` or unknown (the usage toast);
 - `list` finds no copies ("No manual full-workbook backups for this workbook.");
 - `restore` finds no copy, or none with that id ("Could not find backups for this workbook.");
@@ -67,11 +66,11 @@ The id is the capture time, the workbook's file name and a short random suffix: 
 
 ### While capturing
 
-The command runs in the taskpane, not as part of a turn: the tab does not become busy, no tool card appears, and the [workbook lock](../foundations/the-workbook.md#the-workbook-lock) is not taken. Pi can therefore be writing to the workbook in another tab while the copy is taken, and the copy may include some of those changes and not others.
+The command runs in the taskpane, not as part of a turn: no tool card appears. Capturing takes the [workbook lock](../foundations/the-workbook.md#the-workbook-lock), so Pi's coordinated writes do not overlap the capture. This does not lock out the user's or a co-author's edits.
 
 ### Finishes
 
-- **Create.** Toast "Manual backup created: #{id} ({size})." From the Backups dialog: "Backup downloaded: #{id} ({size})". The download opens in a new browser window or tab, or, when that is blocked, as a file download.
+- **Create.** The copy is stored and one blob-link download starts, without a spare window/tab. The page cannot observe whether the user completes the Save sheet/download.
 - **List.** Toast "Manual backups (showing {count}): {preview}", where the preview is the first three ids, each cut after 24 characters with "…", followed by ", …" when more were found.
 - **Restore.** The copy is downloaded again; toast "Downloaded backup #{id}. Open the file in Excel to restore." Nothing in the current workbook changes. Restoring means opening the file in Excel, where it is a separate workbook with a different name and location; to replace the original, the user saves it over the original themselves.
 - **Clear.** After the confirmation, every copy for this workbook is deleted from the Files workspace; toast "Deleted {count} manual backups." Copies already downloaded to the computer are not affected.
@@ -92,11 +91,11 @@ There is no size or count limit beyond what the storage allows; copies are never
 
 | Modifier | Set before | Changed while busy |
 | --- | --- | --- |
-| Model and provider | No effect. `/backup` needs no provider. | Refused while the active tab is busy. |
+| Model and provider | No effect. `/backup` needs no provider. | Still available. |
 | Thinking level | No effect. | No effect. |
 | Execution mode | No effect. Taking or downloading a copy never asks for approval. | No effect. |
 | Files in the workspace, or an overlay open | Copies are stored in the Files workspace; a connected folder means they are written there. An open overlay prevents typing the command; "Download backup" in the Backups dialog is the overlay path. | A capture in progress continues if an overlay opens. |
-| Tab state (new, restored, another tab busy) | Works from any idle tab. Another tab being busy does not block it, and that tab's writes are not paused. | Refused while this tab is busy. |
+| Tab state (new, restored, another tab busy) | Copies belong to the workbook, not the chat. | Available; capturing waits for coordinated writes to settle. |
 | Host (desktop or web) | Requires the host's whole-file API. Workbooks without an identity (never saved on desktop; opened through an anonymous link on the web) cannot be backed up. How the download appears differs by host (see [Open questions](#open-questions-and-verification)). | No effect. |
 
 A capture uses the state of the workbook at the moment Excel produces the file.
@@ -122,7 +121,7 @@ After any interrupt the current workbook is unchanged: `/backup` never writes to
 
 **Persistence.** Copies persist in the Files workspace independently of sessions and of automatic backups. See [persistence and restore](../cross-cutting/persistence-and-restore.md).
 
-**Workbook changes and recovery.** Manual backups never change the workbook. They complement automatic backups: use them before large or structural work, or before saving if the automatic backups will be needed later.
+**Workbook changes and recovery.** Manual backups never change the workbook. They complement bounded automatic snapshots before large/structural work; automatic backups also survive saving.
 
 **Other tabs and sessions.** All tabs share the same copies. Pi can read the files through its files tool like any workspace file, but has no tool to create or restore manual backups.
 
@@ -132,7 +131,7 @@ After any interrupt the current workbook is unchanged: `/backup` never writes to
 
 **Offline and provider errors.** None.
 
-**Notifications.** Toasts only. The download itself appears as a new browser window or tab, or a download.
+**Notifications.** Toasts report download initiation, not proof of a saved file. A single download link is used on every host.
 
 **Settings and preferences.** None. Connecting a folder in the Files workspace changes where copies are written.
 
@@ -156,10 +155,10 @@ After any interrupt the current workbook is unchanged: `/backup` never writes to
 - `/backup clear` asks for confirmation before checking the workbook identity, so on a workbook without one the user confirms a deletion that then fails (`src/commands/builtins/session.ts:180-193`). Minor bug. BACKUP-06.
 - Typing `/backup list` and pressing Enter while the command menu is still open runs the highlighted command with no arguments, that is `/backup create`; the menu must be closed first (see [the command menu](../commands/the-command-menu.md)).
 - The ids shown in toasts are cut to 24 characters (`src/commands/builtins/session.ts:80-81`), which is the timestamp part only, so `/backup restore {id}` cannot be used with an id copied from a toast. Looks like a bug. Confirmed in Excel for Mac (BACKUP-09): the id from the toast and from `/backup list` gives "Could not find backups for this workbook.", while the full id works.
-- The download opens a blank window first to keep the user's click "active" (`src/files/workspace.ts:1450`), but after a slash command the capture runs first; confirmed in Excel for Mac that neither works in WKWebView: `/backup` and `/backup restore` show their toasts ("Manual backup created: #… (11 KB).", "Downloaded backup #…. Open the file in Excel to restore.") but no file, window or save dialog appears, with Excel in front or not (BACKUP-08, BACKUP-10, BACKUP-11). The copy is still stored in Files. WebView2 (Windows) and the browser (Excel on the web) have not been checked. DECISIONS notes that WKWebView ignores programmatic link clicks.
+- The merged download path uses a blob `<a download>` only and keeps its URL for 60 seconds. The old blank-window/WKWebView failures remain historical; this pass did not rerun a desktop Save sheet.
 - Whether Excel's whole-file API returns unsaved changes on each host has not been checked.
 - Whether "Download backup" in the Backups dialog should be reachable when there are no automatic backups (the toolbar is hidden then, `src/commands/builtins/settings-pages/backups-page.ts`, `syncVisibility`) is a product call. Confirmed hidden in the empty state.
-- `/backup` does not take the workbook lock, so a copy taken while Pi writes in another tab may capture a half-finished change. Read from code.
+- Capture takes the workbook lock (`runUserWorkbookOperation("manual_backup", capture)`); the historical no-lock finding no longer applies. User/co-author edits remain outside that lock.
 - Very large workbooks are held in memory several times (bytes, base64) during capture; the size at which this fails has not been measured.
 
-Verified against pi-for-excel commit `ec453df`.
+Verified against pi-for-excel commit `1f51cf8` (source inspection; historical runs above are dated).
