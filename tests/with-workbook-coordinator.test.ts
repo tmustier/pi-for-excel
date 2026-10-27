@@ -463,3 +463,21 @@ void test("a write that finishes a few seconds after Stop reports its own result
   const first = result.content[0];
   assert.equal(first?.type === "text" ? first.text : "", "Stopped after writing Calc!K11:K20; backup fae5e5d3");
 });
+
+void test("a tool that reports its own Stop result is not cut short by the wrapper", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const tool = Object.assign(makeTool("write_cells", () => new Promise((resolve) => {
+    setTimeout(() => resolve({ content: [{ type: "text", text: "Stopped after writing rows 1-40 of 100; backup 5d2c0a1e" }], details: { echo: "slow" } }), 20_000);
+  })), { reportsStop: true as const });
+  const [wrapped] = withWorkbookCoordinator([tool], new FakeCoordinator(), createContextProvider("url_sha256:abc"));
+  if (!wrapped) throw new Error("Wrapped tool missing");
+
+  const controller = new AbortController();
+  const call = wrapped.execute("tc-reports", {}, controller.signal);
+  await new Promise((resolve) => setImmediate(resolve));
+  controller.abort();
+  t.mock.timers.tick(20_000);
+
+  const first = (await call).content[0];
+  assert.equal(first?.type === "text" ? first.text : "", "Stopped after writing rows 1-40 of 100; backup 5d2c0a1e");
+});
