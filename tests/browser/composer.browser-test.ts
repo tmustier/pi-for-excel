@@ -66,7 +66,7 @@ void test("busy composer keeps Enter steer, Alt+Enter follow-up, Send and Stop d
     await enterInput(page, "start");
     const input = page.locator("pi-input textarea");
     await page.getByRole("button", { name: "Stop", exact: true }).waitFor();
-    assert.match(await input.getAttribute("placeholder") ?? "", /Enter to steer.*Alt\+Enter/);
+    assert.match(await input.getAttribute("placeholder") ?? "", /Enter to steer.*(?:Alt|Option)\+Enter/);
     await input.fill("keyboard steer");
     await input.press("Enter");
     await input.fill("later question");
@@ -102,7 +102,7 @@ void test("a failed turn appears once inline with Details, a fix action and work
     await page.keyboard.press("Escape");
     await page.keyboard.press("Escape");
     await failure.getByRole("button", { name: "Retry", exact: true }).click();
-    await page.getByText("Recovered answer", { exact: true }).waitFor();
+    await page.locator("assistant-message").getByText("Recovered answer", { exact: true }).waitFor();
     assert.equal(await failure.count(), 0);
     assert.equal(await page.locator("user-message").count(), 1);
   });

@@ -1,6 +1,6 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { execFileSync, spawnSync } from "node:child_process";
-import { closeSync, lstatSync, mkdirSync, openSync, readFileSync, readlinkSync, rmSync, writeFileSync } from "node:fs";
+import { closeSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, readlinkSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -74,12 +74,26 @@ function fingerprint() {
 }
 
 mkdirSync(state, { recursive: true });
-const lock = join(state, "lock");
-try {
-  mkdirSync(lock);
-} catch (error) {
-  if (error.code !== "EEXIST") throw error;
-  console.error(`Verification already running. If it was interrupted, remove ${lock}`);
+// Each run claims a file named after its process ID; claims left by killed runs are removed.
+const owners = join(state, "owners");
+mkdirSync(owners, { recursive: true });
+const lock = join(owners, `${process.pid}.${randomUUID()}`);
+writeFileSync(lock, "");
+for (const owner of readdirSync(owners)) {
+  const other = join(owners, owner);
+  if (other === lock) continue;
+  const pid = Number(owner.split(".")[0]);
+  try {
+    process.kill(pid, 0);
+  } catch (error) {
+    if (error.code === "ESRCH") {
+      rmSync(other, { force: true });
+      continue;
+    }
+    if (error.code !== "EPERM") throw error;
+  }
+  rmSync(lock, { force: true });
+  console.error(`Verification is already running in this worktree (process ${pid}).`);
   process.exit(2);
 }
 
@@ -125,5 +139,5 @@ try {
     process.exitCode = status;
   }
 } finally {
-  rmSync(lock, { recursive: true, force: true });
+  rmSync(lock, { force: true });
 }

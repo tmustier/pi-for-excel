@@ -142,7 +142,7 @@ void test("Ctrl+O switches details mode for every card, survives re-renders and 
     await page.keyboard.press("Control+o");
     await page.waitForTimeout(200);
     assert.deepEqual(await readDetails(page), { openBodies: 3, groupExpanded: "true", thinkingExpanded: "true" });
-    assert.match(await page.locator("#pi-toast").innerText(), /Ctrl\+O/);
+    assert.match(await page.locator("#pi-toast").innerText(), /Ctrl\+O|⌘O/);
 
     // A re-render (tab switch, response moving into the list) keeps the mode.
     await page.evaluate(() => {

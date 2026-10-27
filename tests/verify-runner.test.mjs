@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
-import { execFileSync, spawnSync } from "node:child_process";
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
+import { once } from "node:events";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
+import { setTimeout as sleep } from "node:timers/promises";
 
 function fixture(t) {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "pi-verify-")));
@@ -21,9 +23,10 @@ function fixture(t) {
     "test:browser": "node step.mjs test:browser",
     build: "node step.mjs build",
   } }));
-  put("step.mjs", `import { appendFileSync, readFileSync } from "node:fs";
+  put("step.mjs", `import { appendFileSync, existsSync, readFileSync } from "node:fs";
 const step = process.argv[2];
 appendFileSync(".git/calls", step + "\\n");
+if (existsSync("hang") && readFileSync("hang", "utf8") === step) setInterval(() => {}, 1000);
 console.log("✔ a passing title contains ×");
 console.log("setup noise\\n".repeat(20));
 if (readFileSync("failures", "utf8").split("\\n").includes(step)) {
@@ -106,4 +109,27 @@ test("tracked edits, untracked files and deletions invalidate a cached pass", t 
     count += 5;
     assert.equal(calls().split("\n").filter(Boolean).length, count);
   }
+});
+
+test("a run killed mid-step does not block the next run", async t => {
+  const { root, put, run } = fixture(t);
+  put("hang", "lint");
+  const killed = spawn(process.execPath, ["scripts/verify.mjs"], { cwd: root, detached: true, stdio: "ignore" });
+  const exited = once(killed, "exit");
+  const killTree = () => {
+    if (killed.exitCode !== null || killed.signalCode !== null) return;
+    if (process.platform === "win32") execFileSync("taskkill", ["/PID", String(killed.pid), "/T", "/F"], { stdio: "ignore" });
+    else process.kill(-killed.pid, "SIGKILL");
+  };
+  t.after(killTree);
+  for (let tries = 0; !existsSync(join(root, ".git/calls")); tries++) {
+    assert.ok(tries < 200, "the killed run never started a step");
+    await sleep(50);
+  }
+  assert.equal(run().status, 2, "a live run keeps the lock");
+  killTree();
+  await exited;
+  rmSync(join(root, "hang"));
+  const result = run();
+  assert.equal(result.status, 0, result.stdout + result.stderr);
 });
