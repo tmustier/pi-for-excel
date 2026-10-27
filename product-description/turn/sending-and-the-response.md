@@ -51,6 +51,15 @@ Ordinary work starts with "Working…", then playful phrases and keyboard hints 
 
 Done keeps the final answer. Stop keeps the partial answer with "Request aborted" and no error banner. Final failure keeps the partial text and reason, with a dismissible tab-owned banner below the tabs. Offline, unavailable proxy, blocked loopback access, missing login and overflow have distinct guidance. Error text merely containing "cancel" or "abort" is not a deliberate Stop.
 
+As of [PR #808](https://github.com/tmustier/pi-for-excel/pull/808) (CL-01),
+each ending also shows a typed receipt when the turn changed the workbook:
+changed ranges, a total, **Review** and **Undo this turn**. Stopped and failed
+receipts are emphasized. Review shows counts and backup ids; Undo restores
+available backups newest first, asks before overwriting later edits and keeps
+ordinary inverse backups. Missing backup coverage is explicit. The receipt
+saves with the session but is not sent back to the model. See
+[turn recovery](../workbook/backups-and-revert.md#review-and-undo-a-turn-cl-01).
+
 One overflow can compact-and-retry; a second is final. Ordinary eligible transient errors retry with visible countdowns. Undelivered text becomes separate Not sent rows; stopped commands are cancelled and named. Nothing leaks unasked into the next turn.
 
 ## Modifiers
