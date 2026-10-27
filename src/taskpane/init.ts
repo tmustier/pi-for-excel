@@ -1062,7 +1062,6 @@ export async function initTaskpane(opts: {
     note?: string;
     secondaryApproval?: { label: string; onApprove: () => void | Promise<void> };
   }): Promise<boolean> => {
-    announce(t("announce.approval", { title: args.title }));
     return requestApproval({
       title: args.title,
       message: normalizeApprovalMessage(args.title, args.message),
@@ -1173,8 +1172,6 @@ export async function initTaskpane(opts: {
               })
               : null;
             const title = deletesBackups ? t("approval.title.deleteBackups") : t("approval.title.workbookChange");
-            // Announced like every other approval (requestRuntimeToolApproval).
-            announce(t("announce.approval", { title }));
             return requestApproval({
               title,
               headline: describePendingToolCall(request.toolName, request.params) ?? request.toolName,

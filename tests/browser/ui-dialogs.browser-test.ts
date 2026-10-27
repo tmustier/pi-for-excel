@@ -87,15 +87,41 @@ void test("Stop Pi in a local-file approval aborts the turn without creating the
     await enterCommand(page, "Create the file");
     const dialog = page.locator("#pi-tool-approval-overlay");
     await dialog.waitFor({ state: "visible" });
+    await page.waitForFunction(() => document.querySelector(".pi-announcer")?.textContent?.includes("approval"));
     await dialog.getByRole("button", { name: "Stop Pi", exact: true }).click({ timeout: 3_000 });
     await dialog.waitFor({ state: "detached" });
     await page.waitForFunction(() => !document.querySelector("pi-sidebar").agent.state.isStreaming);
+    await page.waitForTimeout(100);
+    assert.equal(await page.locator(".pi-announcer").innerText(), "");
     const files = await page.evaluate(async () => {
       const { getFilesWorkspace } = await import("/src/files/workspace.ts") as typeof import("../../src/files/workspace.ts");
       return (await getFilesWorkspace().listFiles()).map((file) => file.path);
     });
     assert.equal(files.includes("stop-approval.txt"), false);
     assert.equal(await page.locator("[inert]").count(), 0);
+  });
+});
+
+void test("withdrawal cancels delayed approval text and preserves a newer announcement", async () => {
+  await withTaskpane(async (page) => {
+    await page.evaluate(async () => {
+      const { requestApproval } = await import("/src/ui/approval-dialog.ts");
+      const stopped = new AbortController();
+      const answer = requestApproval({ title: "Withdraw immediately", confirmLabel: "Allow", signal: stopped.signal });
+      stopped.abort();
+      await answer;
+    });
+    await page.waitForTimeout(100);
+    assert.equal(await page.locator(".pi-announcer").innerText(), "");
+    await page.evaluate(async () => {
+      const { requestApproval } = await import("/src/ui/approval-dialog.ts");
+      const { announce } = await import("/src/ui/announcer.ts");
+      void requestApproval({ title: "Old approval", confirmLabel: "Allow" });
+      announce("Another tab finished");
+    });
+    await page.waitForFunction(() => document.querySelector(".pi-announcer")?.textContent === "Another tab finished");
+    await page.locator("#pi-tool-approval-overlay").getByRole("button", { name: "Decline", exact: true }).click();
+    assert.equal(await page.locator(".pi-announcer").innerText(), "Another tab finished");
   });
 });
 
@@ -112,15 +138,19 @@ void test("approvals ignore a stray Enter, and Escape declines only the shown re
     });
     const dialog = page.locator("#pi-tool-approval-overlay");
     await dialog.getByRole("heading", { name: "Write D1" }).waitFor();
+    await page.waitForFunction(() => document.querySelector(".pi-announcer")?.textContent?.includes("Write D1"));
     await page.waitForFunction(() => Boolean(document.activeElement?.closest("#pi-tool-approval-overlay")));
     assert.equal(await dialog.getByRole("button", { name: "Allow", exact: true }).evaluate((button) => button === document.activeElement), false);
     await page.keyboard.press("Enter");
     assert.equal(await page.locator("body").getAttribute("data-approval-outcomes"), "");
     await page.keyboard.press("Escape");
     await dialog.getByRole("heading", { name: "Write D2" }).waitFor();
+    await page.waitForFunction(() => document.querySelector(".pi-announcer")?.textContent?.includes("Write D2"));
     assert.equal(await page.locator("body").getAttribute("data-approval-outcomes"), "Write D1:false;");
     await dialog.getByRole("button", { name: "Allow", exact: true }).click();
     await dialog.waitFor({ state: "detached" });
+    await page.waitForTimeout(100);
+    assert.equal(await page.locator(".pi-announcer").innerText(), "");
     assert.equal(await page.locator("body").getAttribute("data-approval-outcomes"), "Write D1:false;Write D2:true;");
   });
 });

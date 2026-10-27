@@ -22,6 +22,7 @@ import {
 } from "./overlay-dialog.js";
 import { TOOL_APPROVAL_OVERLAY_ID } from "./overlay-ids.js";
 import { t } from "../language/index.js";
+import { announce } from "./announcer.js";
 
 export interface ApprovalRequest {
   title: string;
@@ -256,6 +257,7 @@ function showNext(): void {
   dialog.card.tabIndex = -1;
   dialog.card.dataset.autofocus = "";
   dialog.card.focus();
+  dialog.addCleanup(announce(t("announce.approval", { title: request.title })));
 }
 
 /**
