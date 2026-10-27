@@ -29,6 +29,32 @@ async function openFileDetail(page: Page, name: string): Promise<void> {
   await page.locator(".pi-files-detail-actions").waitFor({ state: "visible" });
 }
 
+void test("approvals ignore a stray Enter, and Escape declines only the shown request", async () => {
+  await withTaskpane(async (page) => {
+    await page.evaluate(async () => {
+      const { requestApproval } = await import("/src/ui/approval-dialog.ts");
+      document.body.dataset.approvalOutcomes = "";
+      for (const title of ["Write D1", "Write D2"]) {
+        void requestApproval({ title, confirmLabel: "Allow" }).then((approved) => {
+          document.body.dataset.approvalOutcomes += `${title}:${approved};`;
+        });
+      }
+    });
+    const dialog = page.locator("#pi-tool-approval-overlay");
+    await dialog.getByRole("heading", { name: "Write D1" }).waitFor();
+    await page.waitForFunction(() => Boolean(document.activeElement?.closest("#pi-tool-approval-overlay")));
+    assert.equal(await dialog.getByRole("button", { name: "Allow", exact: true }).evaluate((button) => button === document.activeElement), false);
+    await page.keyboard.press("Enter");
+    assert.equal(await page.locator("body").getAttribute("data-approval-outcomes"), "");
+    await page.keyboard.press("Escape");
+    await dialog.getByRole("heading", { name: "Write D2" }).waitFor();
+    assert.equal(await page.locator("body").getAttribute("data-approval-outcomes"), "Write D1:false;");
+    await dialog.getByRole("button", { name: "Allow", exact: true }).click();
+    await dialog.waitFor({ state: "detached" });
+    assert.equal(await page.locator("body").getAttribute("data-approval-outcomes"), "Write D1:false;Write D2:true;");
+  });
+});
+
 void test("the Files rename dialog confirms a new path", async () => {
   await withTaskpane(async (page) => {
     await importFile(page, "plan.md");

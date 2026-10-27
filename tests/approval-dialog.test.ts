@@ -93,7 +93,7 @@ void test("stopping the turn withdraws its approval without touching the others"
   }
 });
 
-void test("an approval never starts focused on Allow, and Stop Pi declines the queue and stops the turns", async () => {
+void test("Stop Pi declines the queue and stops the turns", async () => {
   const { restore } = installFakeDom();
   try {
     const stopped: string[] = [];
@@ -104,13 +104,6 @@ void test("an approval never starts focused on Allow, and Stop Pi declines the q
     const second = requestApproval({ title: "A2", confirmLabel: "Allow", onStop: stopA }).then((ok) => outcomes.push(`A2:${ok}`));
     const third = requestApproval({ title: "B1", confirmLabel: "Allow", onStop: stopB }).then((ok) => outcomes.push(`B1:${ok}`));
     await flushAsync();
-
-    // An Enter typed for the composer as the dialog opens must not approve:
-    // initial focus goes to the dialog, never to the confirm button.
-    const overlay = document.getElementById(TOOL_APPROVAL_OVERLAY_ID);
-    assert.ok(overlay);
-    const allow = Array.from(overlay.querySelectorAll("button")).find((button) => button.textContent === "Allow");
-    assert.equal(allow?.dataset.autofocus, undefined);
 
     clickButton("Stop Pi");
     await Promise.all([first, second, third]);
