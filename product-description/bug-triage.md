@@ -173,7 +173,7 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 | [P-161](#p-161-in-files-the-first-escape-drops-focus-to-the-page-body) | In Files, the first Escape drops focus to the page body | low | files | fix | Fix in PR [#793](https://github.com/tmustier/pi-for-excel/pull/793) (open): 655e9d2 |
 | [P-162](#p-162-the-hover--draws-over-the-tab-title) | The hover × draws over the tab title | medium | tabs | fix | Fix in PR [#793](https://github.com/tmustier/pi-for-excel/pull/793) (open): 995487b |
 | [P-163](#p-163-workbook-approvals-are-not-announced-to-screen-readers) | Workbook approvals are not announced to screen readers | low | accessibility | fix | Assigned to #793 (follow-up; not yet in the PR) |
-| [P-164](#p-164-a-model-picker-opened-while-busy-stays-read-only-after-the-turn-ends) | A model picker opened while busy stays read-only after the turn ends | low | models | fix | Assigned to #795 (follow-up; not yet in the PR) |
+| [P-164](#p-164-a-model-picker-opened-while-busy-stays-read-only-after-the-turn-ends) | A model picker opened while busy stays read-only after the turn ends | low | models | fix | Fix in PR [#795](https://github.com/tmustier/pi-for-excel/pull/795) (open): be2e666 |
 | [P-165](#p-165-toasts-cover-the-command-menus-lower-rows) | Toasts cover the command menu's lower rows | low | menus | fix | Fix in PR [#793](https://github.com/tmustier/pi-for-excel/pull/793) (open): c88b997 |
 
 ## High
@@ -2064,7 +2064,7 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Severity:** `low`. The command can be selected and copied by hand.
 - **Decision needed:** `fix`. Use #795's copyText.
 - **Raised by:** PROXY-10 (integration-fixes verification, setup cluster, 27 October 2026)
-- **Status:** Confirmed in Excel on the web on integration-fixes a2b3f2d; code unchanged from `main`. Fixed in #793 74c167b: execCommand fallback; checked in Excel on the web.
+- **Status:** Confirmed in Excel on the web on integration-fixes a2b3f2d; code unchanged from `main`. Fixed in #793 74c167b: execCommand fallback; checked in Excel on the web. Verified on integration-fixes cea7588: "Copied", and Ctrl+V pasted the command.
 - **Owner:** Fix in PR [#793](https://github.com/tmustier/pi-for-excel/pull/793) (open): 74c167b
 
 ### P-157: Ctrl+Z in one tab's composer brings back text typed in another tab
@@ -2136,7 +2136,7 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Severity:** `medium`. A click meant to switch closes a chat (Undo recovers it). Regression from #793 aff33d6 (TABS-05).
 - **Decision needed:** `fix`. Reserve space for the × on hover.
 - **Raised by:** ui and cross-cutting, and sessions-and-commands (TABS-05) integration verification, 27 October 2026
-- **Status:** Confirmed in Excel on the web on integration-fixes 8099cd6. Fixed in #793 995487b: back to main's always-visible × kept in the layout; checked in Excel on the web.
+- **Status:** Confirmed in Excel on the web on integration-fixes 8099cd6. Fixed in #793 995487b: back to main's always-visible × kept in the layout; checked in Excel on the web. Verified on integration-fixes cea7588 (TABS-05).
 - **Owner:** Fix in PR [#793](https://github.com/tmustier/pi-for-excel/pull/793) (open): 995487b
 
 ### P-163: Workbook approvals are not announced to screen readers
@@ -2160,8 +2160,8 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Severity:** `low`.
 - **Decision needed:** `fix`. Re-render the picker when the tab goes idle.
 - **Raised by:** ui and cross-cutting integration verification, 27 October 2026
-- **Status:** Confirmed in Excel on the web on integration-fixes 8099cd6.
-- **Owner:** Assigned to #795 (follow-up; not yet in the PR)
+- **Status:** Confirmed in Excel on the web on integration-fixes 8099cd6. Fixed in #795 be2e666; verified on integration-fixes cea7588: the picker unlocks about 2 s after the turn ends.
+- **Owner:** Fix in PR [#795](https://github.com/tmustier/pi-for-excel/pull/795) (open): be2e666
 
 ### P-165: Toasts cover the command menu's lower rows
 
@@ -2172,5 +2172,5 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Severity:** `low`. Clears in a few seconds.
 - **Decision needed:** `fix`.
 - **Raised by:** MENU-15, sessions-and-commands integration verification, 27 October 2026
-- **Status:** Confirmed in Excel on the web on integration-fixes 8099cd6. Fixed in #793 c88b997: the open menu sits above toasts; also stops hover re-renders that swallowed clicks (on main too).
+- **Status:** Confirmed in Excel on the web on integration-fixes 8099cd6. Fixed in #793 c88b997: the open menu sits above toasts; also stops hover re-renders that swallowed clicks (on main too). Verified on integration-fixes cea7588 (MENU-15).
 - **Owner:** Fix in PR [#793](https://github.com/tmustier/pi-for-excel/pull/793) (open): c88b997
