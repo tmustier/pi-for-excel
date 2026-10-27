@@ -102,7 +102,7 @@ How it ran:
 | PERSIST-09 | pass (#789) | The suspected bug is fixed: with session puts made to throw, the toast "Couldn't save this chat: injected" appears with ×. |
 | PERSIST-10 | pass (#789) | Changed on purpose: after auto-compaction (11%) and after a popover /compact (18%), a reload keeps the compacted context. |
 | PERSIST-11 | pass (#795) | desktop (macOS), `2d91e58`: a saved workbook F with two tabs that both had messages; Backups was **not** open. Save As F → G (Excel's own Save As, through AppleScript) gave G's identity without a reload. `workbook.tabLayout.v1.<G>` then held the same two sessions and active tab, and both sessions were linked to G. The pane kept its tab strip (Chat 1, Chat 2), with no Backups page. Closing and reopening G restored Chat 1 and Chat 2 with the same active session (4 messages). Reopening F also shows the same two tabs, because F's layout is copied, not cleared. Earlier, on `8099cd6`, it failed: desktop (macOS), `8099cd6`: Save As E2 → E3 gave the new identity without a reload, but the tab layout did not move: nothing was stored under E3's identity, and after reopening the pane E3 started a fresh "Chat 1" (new session, 1 message). Reopening E2 restored its own session (27 messages). So the new file does not reopen the old file's sessions, unlike the persistence table. Also seen: right after the Save As the pane kept showing the Backups page with no tab strip until it was reopened. |
-| PERSIST-12 | blocked | desktop (macOS), 27 October, main `d48cb8d`: Excel for Mac has only a work (Entra) identity, so it cannot open a workbook from the guest folder link, which is on a personal OneDrive. `open -a`, AppleScript `open` and the `ms-excel:ofe\|u\|` handler on its `d.docs.live.net` URL all failed ("Sorry, we couldn't find …", or nothing); Excel never asked for a sign-in. Moving a local workbook to OneDrive needs the AutoSave upload dialog, which needs Excel in the foreground. Needs a foreground session or a workbook already in Thomas's OneDrive. |
+| PERSIST-12 | pass | desktop (macOS), 27 October, main `585380c`: a local scratch workbook was uploaded to OneDrive - Nexcade AI through the AutoSave upload dialog (one short foreground step, about 25 s). Office then reported its URL as `https://nexcadeai-my.sharepoint.com/personal/…/Documents/pi-p12-autosave-20261027.xlsx`, and the workbook id became a `url_sha256` of that URL. After one saved chat, `/resume` showed "Show sessions from all workbooks" with the workbook name as its hint, and listed the session. Earlier on 27 October (main `d48cb8d`) the guest folder link could not be opened in Excel for Mac, because Excel has only a work (Entra) identity and that link is a personal OneDrive. |
 | MULTI-01 | pass | Pane B opened on the same link with pane A's tabs. |
 | MULTI-02 | pass (#794) | Changed on purpose (#794: one mode for every pane): B set to Auto, A showed "Auto" at once, and the stored value is "yolo". |
 | MULTI-03 | pass | Last write wins: B's close, and then B's new tab, replaced the stored layout (1, then 2 ids). Side note: B's new tab was numbered "Chat 3" while A had a different "Chat 3". |
@@ -134,7 +134,7 @@ How it ran:
 | HOST-06 | pass (#794) | `isDirty` is false, and backups are no longer cleared on opening (see PERSIST-07). |
 | HOST-07 | pass (#794) | The suspected bug is fixed: with the document token removed, Pi wrote B17. The backup count went from 17 to 18 and stayed at 18 for more than 15 s. |
 | HOST-08 | pass on Mac, fixed (#793) | desktop (macOS): double-clicking a tab now opens the in-pane rename dialog; no `window.prompt`, no freeze (see RENAME-09). Windows not run. |
-| HOST-09 | blocked | Needs a OneDrive workbook with AutoSave on; on 27 October no such workbook could be opened in Excel for Mac without the foreground (see PERSIST-12). |
+| HOST-09 | pass | desktop (macOS), 27 October, main `585380c`: on the same OneDrive workbook with AutoSave on, Pi (GPT-6 Luna, `write_cells`) wrote `Sheet1!A1` and then `Sheet1!A2`. Excel reported the workbook as saved after each write. Backups showed 1 backup after the first write, still 1 a minute later after Refresh, and 2 after the second write and another minute. AutoSave does not clear backups. |
 | HOST-10 | pass on Mac, fixed (#796) | desktop (macOS): `/export` opens the native Save sheet and the file lands (see EXPORT-11). Windows not run. |
 | HOST-11 | pass, with a difference | In the Excel frame, `document.featurePolicy.allowsFeature("loopback-network")` is false and the permission is "denied"; there is no prompt. The dev build is served from localhost, so #796's "browser blocks the proxy" banner is deliberately not used (`isLoopbackHostname`). The proxy works here only because the orb's Chrome turns Local Network Access checks off. |
 
@@ -212,7 +212,7 @@ Observed, not counted as bugs: across two panes, stable tab numbers can collide 
 
 ## Desktop items to hand to the Mac
 
-STATUS-21, KEYS-17, KEYS-18, KEYS-19 (Windows), UTIL-08, LANG-11, PERSIST-11, PERSIST-12 (needs OneDrive sign-in), MULTI-11, PROVIDER-12, HOST-08, HOST-09 (OneDrive with AutoSave), HOST-10.
+STATUS-21, KEYS-17, KEYS-18, KEYS-19 (Windows), UTIL-08, LANG-11, PERSIST-11, PERSIST-12 (passed on Mac, 27 October), MULTI-11, PROVIDER-12, HOST-08, HOST-09 (passed on Mac, 27 October), HOST-10.
 
 Worth rechecking there with this build:
 
