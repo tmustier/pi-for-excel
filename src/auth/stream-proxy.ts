@@ -50,39 +50,6 @@ type OfficeStreamFn = (
 
 export type RuntimeProviderRoute = (providerId: string) => ProviderRoute | undefined;
 
-/**
- * A stopped turn can still ask for one more response: the agent loop starts
- * the next request after a running tool returns, with the signal already
- * aborted. Answer it as aborted instead of sending a request that fails with
- * "signal is aborted without reason".
- */
-function abortedResponse(model: Model<Api>): AssistantMessageEventStream {
-  const stream = createAssistantMessageEventStream();
-  stream.push({
-    type: "error",
-    reason: "aborted",
-    error: {
-      role: "assistant",
-      content: [],
-      api: model.api,
-      provider: model.provider,
-      model: model.id,
-      usage: {
-        input: 0,
-        output: 0,
-        cacheRead: 0,
-        cacheWrite: 0,
-        totalTokens: 0,
-        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-      },
-      stopReason: "aborted",
-      errorMessage: "Request aborted",
-      timestamp: Date.now(),
-    },
-  });
-  return stream;
-}
-
 function shouldProxyProvider(
   provider: string,
   apiKey?: string,
@@ -619,7 +586,33 @@ export function createOfficeStreamFn(
   runtimeProviderRoute?: RuntimeProviderRoute,
 ): OfficeStreamFn {
   return async (model: Model<Api>, context: TranscriptContext, options?: StreamOptions) => {
-    if (options?.signal?.aborted) return abortedResponse(model);
+    // A tool can finish after Stop; don't send its continuation request.
+    if (options?.signal?.aborted) {
+      const stream = createAssistantMessageEventStream();
+      stream.push({
+        type: "error",
+        reason: "aborted",
+        error: {
+          role: "assistant",
+          content: [],
+          api: model.api,
+          provider: model.provider,
+          model: model.id,
+          usage: {
+            input: 0,
+            output: 0,
+            cacheRead: 0,
+            cacheWrite: 0,
+            totalTokens: 0,
+            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+          },
+          stopReason: "aborted",
+          errorMessage: "Request aborted",
+          timestamp: Date.now(),
+        },
+      });
+      return stream;
+    }
 
     const continuation = isToolContinuation(context.messages);
     const replayedContext: Context = {

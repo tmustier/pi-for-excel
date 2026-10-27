@@ -133,7 +133,7 @@ export function createActionQueue(opts: {
     queueDisplay.setActionQueue(
       actions.map((a) => {
         if (a.type === "prompt") return { type: "prompt", label: t("action-queue.queued"), text: a.text };
-        return { type: "command", label: `/${a.name}`, text: a.args ? a.args : "" };
+        return { type: "command", label: `/${a.name}`, text: a.args };
       }),
     );
   };
@@ -168,18 +168,6 @@ export function createActionQueue(opts: {
     return texts;
   };
 
-  const takeBack = (): TakenBack => {
-    const texts = drainMessages();
-    const cancelledCommands: string[] = [];
-    for (const action of actions) {
-      if (action.type === "prompt") texts.push(action.text);
-      else cancelledCommands.push(`/${action.name}`);
-    }
-    actions.length = 0;
-    syncDisplay();
-    return { texts, cancelledCommands };
-  };
-
   const removeRow = (row: QueueRow): string | null => {
     if (row.kind === "held") {
       const text = tab.held[row.index];
@@ -212,17 +200,19 @@ export function createActionQueue(opts: {
     remove: (row) => { removeRow(row); },
   });
 
-  const editLast = (): boolean => {
-    const row = queueDisplay.lastEditableRow();
-    return row !== null && editRow(row);
-  };
-
   const stop = (): TakenBack => {
-    const taken = takeBack();
+    const texts = drainMessages();
+    const cancelledCommands: string[] = [];
+    for (const action of actions) {
+      if (action.type === "prompt") texts.push(action.text);
+      else cancelledCommands.push(`/${action.name}`);
+    }
+    actions.length = 0;
+    syncDisplay();
     stopController.abort();
     agent.abort();
-    tab.hold(taken.texts);
-    return taken;
+    tab.hold(texts);
+    return { texts, cancelledCommands };
   };
 
   const shutdown = () => {
@@ -286,19 +276,6 @@ export function createActionQueue(opts: {
     }
   }
 
-  async function runCommand(name: string, args: string, signal: AbortSignal): Promise<void> {
-    // A queued /compact compacts this tab, even if another tab is active by
-    // the time it runs.
-    if (name === "compact") {
-      await runCompactWithIndicator(args, signal);
-      return;
-    }
-
-    const cmd = commandRegistry.get(name);
-    if (!cmd) throw new Error(`Unknown command: /${name}`);
-    await cmd.execute(args);
-  }
-
   /**
    * A turn that ends (stopped, failed or finished) never keeps steers and
    * follow-ups it did not deliver; they become "Not sent" rows rather than
@@ -310,40 +287,6 @@ export function createActionQueue(opts: {
     if (leftovers.length === 0) return;
     tab.hold(leftovers);
     opts.onLeftUnsent?.(leftovers.length);
-  }
-
-  async function runPrompt(text: string, signal: AbortSignal): Promise<void> {
-    try {
-      await runTurn(text, signal);
-    } finally {
-      if (!closed) returnLeftovers();
-    }
-  }
-
-  async function runTurn(text: string, signal: AbortSignal): Promise<void> {
-    await agent.prompt(text);
-    if (closed || signal.aborted) return;
-
-    await retryTransientFailure(signal);
-    if (closed || signal.aborted) return;
-
-    let overflowAfterRecovery = false;
-    if (autoCompactEnabled) {
-      // One compact-and-retry attempt when the run ended in a
-      // context-overflow error. Never loops: a second overflow stays in
-      // the transcript with an actionable error banner.
-      const retried = await recoverFromContextOverflow({
-        agent,
-        runCompact: () => runCompactWithIndicator("", signal),
-      });
-      if (retried && !signal.aborted) {
-        await retryTransientFailure(signal);
-        overflowAfterRecovery = findTrailingContextOverflowError(agent.state) !== null;
-      }
-    }
-
-    returnLeftovers();
-    opts.onTurnSettled?.({ overflowAfterRecovery });
   }
 
   async function process(): Promise<void> {
@@ -366,7 +309,14 @@ export function createActionQueue(opts: {
           actions.shift();
           syncDisplay();
           try {
-            await runCommand(next.name, next.args, signal);
+            // Compaction belongs to this tab, not the active one.
+            if (next.name === "compact") {
+              await runCompactWithIndicator(next.args, signal);
+            } else {
+              const cmd = commandRegistry.get(next.name);
+              if (!cmd) throw new Error(`Unknown command: /${next.name}`);
+              await cmd.execute(next.args);
+            }
           } catch (error) {
             console.warn(`[pi] Queued /${next.name} failed:`, error);
           }
@@ -386,7 +336,31 @@ export function createActionQueue(opts: {
 
         actions.shift();
         syncDisplay();
-        await runPrompt(next.text, signal);
+        try {
+          await agent.prompt(next.text);
+          if (closed || signal.aborted) continue;
+
+          await retryTransientFailure(signal);
+          if (closed || signal.aborted) continue;
+
+          let overflowAfterRecovery = false;
+          if (autoCompactEnabled) {
+            // Recover once; a second overflow stays in the transcript.
+            const retried = await recoverFromContextOverflow({
+              agent,
+              runCompact: () => runCompactWithIndicator("", signal),
+            });
+            if (retried && !signal.aborted) {
+              await retryTransientFailure(signal);
+              overflowAfterRecovery = findTrailingContextOverflowError(agent.state) !== null;
+            }
+          }
+
+          returnLeftovers();
+          opts.onTurnSettled?.({ overflowAfterRecovery });
+        } finally {
+          if (!closed) returnLeftovers();
+        }
       }
     } finally {
       running = false;
@@ -417,5 +391,15 @@ export function createActionQueue(opts: {
     void process();
   };
 
-  return { enqueuePrompt, enqueueCommand, editLast, stop, isBusy, shutdown };
+  return {
+    enqueuePrompt,
+    enqueueCommand,
+    editLast: () => {
+      const row = queueDisplay.lastEditableRow();
+      return row !== null && editRow(row);
+    },
+    stop,
+    isBusy,
+    shutdown,
+  };
 }

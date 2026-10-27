@@ -42,34 +42,13 @@ interface HeldSource {
   subscribe: (listener: () => void) => () => void;
 }
 
-function getQueuedRestoreShortcutHint(): string {
-  if (typeof navigator === "undefined") {
-    return "Alt+↑";
-  }
-
-  const platform = navigator.platform ?? "";
-  const userAgent = navigator.userAgent ?? "";
-  if (platform.startsWith("Mac") || userAgent.includes("Macintosh")) {
-    return "⌥↑";
-  }
-
-  return "Alt+↑";
-}
-
-function messageText(message: AgentMessage): string {
-  if (message.role !== "user") return "";
-  return typeof message.content === "string"
-    ? message.content
-    : message.content.map((part) => (part.type === "text" ? part.text : "")).join("");
-}
-
 export type QueueDisplay = {
   add: (type: QueuedMessageType, text: string, message: AgentMessage) => void;
   clear: () => void;
   drainQueuedMessages: () => QueuedMessageItem[];
   /** Removes one waiting steer/follow-up from the strip and from the agent's queue. */
   removeQueuedMessage: (item: QueuedMessageItem) => void;
-  setActionQueue: (items: Array<{ type: QueuedActionType; label: string; text: string }>) => void;
+  setActionQueue: (items: QueuedActionItem[]) => void;
   setRowHandlers: (handlers: QueueRowHandlers) => void;
   /** The row Alt+Up edits: the newest row that holds the user's text (not a command). */
   lastEditableRow: () => QueueRow | null;
@@ -79,8 +58,8 @@ export type QueueDisplay = {
 
 export function createQueueDisplay(opts: {
   agent: Agent;
-  /** Where "Not sent" rows live (the tab state); omitted in tests that have none. */
-  held?: HeldSource;
+  /** Where "Not sent" rows live (the tab state). */
+  held: HeldSource;
 }): QueueDisplay {
   const { agent } = opts;
 
@@ -89,16 +68,8 @@ export function createQueueDisplay(opts: {
   let attachedSidebar: PiSidebar | null = null;
   let handlers: QueueRowHandlers | null = null;
 
-  const heldTexts = () => opts.held?.held ?? [];
-
-  function findContainer(sidebar: PiSidebar): HTMLElement | null {
-    return sidebar.querySelector<HTMLElement>("#pi-queue-display");
-  }
-
   function removeContainer(): void {
-    if (!attachedSidebar) return;
-    const existing = findContainer(attachedSidebar);
-    existing?.remove();
+    attachedSidebar?.querySelector("#pi-queue-display")?.remove();
   }
 
   /** Polite screen-reader announcements; kept outside the strip so it survives the strip emptying. */
@@ -169,8 +140,8 @@ export function createQueueDisplay(opts: {
   function updateQueueDisplay(): void {
     if (!attachedSidebar) return;
 
-    let container = findContainer(attachedSidebar);
-    const held = heldTexts();
+    let container = attachedSidebar.querySelector<HTMLElement>("#pi-queue-display");
+    const held = opts.held.held;
 
     if (queued.length === 0 && queuedActions.length === 0 && held.length === 0) {
       const hadFocus = container?.contains(document.activeElement) ?? false;
@@ -225,7 +196,8 @@ export function createQueueDisplay(opts: {
     if (lastEditableRow()) {
       const hintEl = document.createElement("div");
       hintEl.className = "pi-queue__hint";
-      hintEl.textContent = t("queue-display.shortcutHint", { shortcut: getQueuedRestoreShortcutHint() });
+      const shortcut = navigator.platform.startsWith("Mac") || navigator.userAgent.includes("Macintosh") ? "⌥↑" : "Alt+↑";
+      hintEl.textContent = t("queue-display.shortcutHint", { shortcut });
       fragment.appendChild(hintEl);
     }
 
@@ -244,7 +216,7 @@ export function createQueueDisplay(opts: {
     }
     const lastMessage = queued[queued.length - 1];
     if (lastMessage) return { kind: "message", item: lastMessage };
-    const held = heldTexts();
+    const held = opts.held.held;
     return held.length > 0 ? { kind: "held", index: held.length - 1 } : null;
   }
 
@@ -260,13 +232,8 @@ export function createQueueDisplay(opts: {
   }
 
   function drainQueuedMessages(): QueuedMessageItem[] {
-    if (queued.length === 0) {
-      return [];
-    }
-
-    const drained = [...queued];
-    queued.length = 0;
-    updateQueueDisplay();
+    const drained = queued.splice(0);
+    if (drained.length > 0) updateQueueDisplay();
     return drained;
   }
 
@@ -307,10 +274,10 @@ export function createQueueDisplay(opts: {
     attachedSidebar = null;
   }
 
-  let renderedHeld = heldTexts();
-  opts.held?.subscribe(() => {
-    if (heldTexts() === renderedHeld) return;
-    renderedHeld = heldTexts();
+  let renderedHeld = opts.held.held;
+  opts.held.subscribe(() => {
+    if (opts.held.held === renderedHeld) return;
+    renderedHeld = opts.held.held;
     updateQueueDisplay();
   });
 
@@ -325,7 +292,10 @@ export function createQueueDisplay(opts: {
     if (idx !== -1) {
       queued.splice(idx, 1);
       updateQueueDisplay();
-      announce(t("queue-display.announceDelivered", { text: messageText(ev.message) }));
+      const text = typeof ev.message.content === "string"
+        ? ev.message.content
+        : ev.message.content.map((part) => (part.type === "text" ? part.text : "")).join("");
+      announce(t("queue-display.announceDelivered", { text }));
     }
   });
 
