@@ -66,7 +66,7 @@ The topmost menu, popover or overlay claims Escape first. In Settings it goes ba
 
 Earlier acceptance on main demonstrated that Chrome takes Ctrl+T, Ctrl+W, Ctrl+Shift+T and Ctrl+PageUp/PageDown for browser tabs. CC-08 replaces those Pi bindings rather than attempting to intercept browser-reserved actions. F6 remains a host/browser function and is no longer advertised as a Pi shortcut. Keys pressed in Excel's grid still go to Excel, not Pi.
 
-The shared Ctrl+Alt chords are exercised with browser key input; real Excel-web reference/copy acceptance is separate from native desktop shortcut acceptance. Mac acceptance is running on the exact stacked PR head; Windows desktop is unavailable and remains a coverage gap, not a claim of host acceptance.
+The shared Ctrl+Alt chords are exercised with browser key input; real Excel-web reference/copy acceptance is separate from desktop shortcut acceptance. Excel for Mac's background app-targeted key delivery passed on the exact stacked pin below. Windows desktop and AltGr layouts remain untested, not blocked.
 
 ## Mismatches between the page and the code
 
@@ -93,4 +93,4 @@ Switching tabs does not cancel work. Closing a busy tab follows normal confirmat
 
 ## Open questions and verification
 
-Browser regression tests exercise create/close/reopen/adjacent routing from the editor, ordinary undo not reopening, modal guards and help labels. Real Windows desktop key delivery has not been tested. Mac native acceptance is pending on the final pin. See PR #802 for exact head, final checks and artifacts; historical verification tables on the product-description branch may describe the pre-PR behavior.
+Browser regression tests exercise create/close/reopen/adjacent routing from the editor, ordinary undo not reopening, modal guards and help labels. The [Mac runner](https://ampcode.com/threads/T-01a1797b-5ec5-74c6-8c3c-9e9e80649744) tested 569f81984e432512dcffe737b3ae0cc051b51b8b using background app-targeted computer-use press_key, not HID/system-keyboard events. With composer focus, N/W/Shift+T/Left/Right/T all worked without inserting Option characters; thinking went high→xhigh. Cmd+Z reached the composer unprevented, and neither Cmd+Z nor Ctrl+Z reopened a tab. With grid focus none of those keys reached Pi, and no visible Excel action occurred. Foreground/global shortcut interception, tab-button focus and dialogs were not tested there; no Mac file artifacts survive, only the runner transcript. Windows/AltGr remain untested. See PR #802 for final checks and browser artifacts; historical verification tables may describe pre-PR behavior.
