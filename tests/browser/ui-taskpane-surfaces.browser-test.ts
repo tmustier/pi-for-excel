@@ -388,7 +388,7 @@ void test("an expired login whose refresh fails asks the user to sign in again a
     await picker.waitFor({ state: "detached" });
 
     await enterCommand(page, "Hello");
-    await page.getByText("Your anthropic login has expired and could not be renewed. Sign in again in Settings.")
+    await page.getByText("Your Anthropic login has expired and could not be renewed. Sign in again in Settings.", { exact: true })
       .waitFor({ state: "visible", timeout: 20_000 });
     assert.deepEqual(sentToAnthropic, [], "the expired token was sent to Anthropic");
   });

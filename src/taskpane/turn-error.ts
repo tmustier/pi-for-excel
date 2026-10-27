@@ -16,7 +16,7 @@ export interface TurnFailureContext {
   overflowAfterRecovery: boolean;
   /** The user dismissed the connection dialog for this provider during the turn. */
   missingCredentialsFor: string | null;
-  /** This provider's login expired and could not be refreshed; the stale token was not sent. */
+  /** Provider display label whose login expired and could not be refreshed; no stale token was sent. */
   expiredLoginFor?: string | null;
   online: boolean;
   /** The configured proxy URL when the proxy is enabled. */

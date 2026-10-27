@@ -280,8 +280,8 @@ void test("the error banner names the real failure", () => {
     "API key required for anthropic.",
   );
   assert.equal(
-    describeTurnFailure({ ...base, messages: failed("The anthropic login has expired and could not be refreshed."), expiredLoginFor: "anthropic" }),
-    "Your anthropic login has expired and could not be renewed. Sign in again in Settings.",
+    describeTurnFailure({ ...base, messages: failed("The anthropic login has expired and could not be refreshed."), expiredLoginFor: "Anthropic" }),
+    "Your Anthropic login has expired and could not be renewed. Sign in again in Settings.",
   );
   assert.match(describeTurnFailure({ ...base, messages: failed("Failed to fetch"), online: false }) ?? "", /^You're offline/u);
   assert.match(
