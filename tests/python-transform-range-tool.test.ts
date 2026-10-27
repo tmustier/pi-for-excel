@@ -28,6 +28,7 @@ void test("python_transform_range returns bridge setup guidance when URL is miss
       sheetName: "Sheet1",
       address: "A1:B2",
       values: [[1, 2], [3, 4]],
+      text: [["1", "2"], ["3", "4"]],
     }),
     getBridgeConfig: () => Promise.resolve(null),
     isPyodideAvailable: () => false,
@@ -55,6 +56,7 @@ void test("python_transform_range falls back to Pyodide when default bridge URL 
       sheetName: "Sheet1",
       address: "A1:B2",
       values: [[1, 2], [3, 4]],
+      text: [["1", "2"], ["3", "4"]],
     }),
     getBridgeConfig: () => Promise.resolve({
       url: "https://localhost:3340",
@@ -112,7 +114,7 @@ void test("python_transform_range reads source, runs python, and writes transfor
       token: "secret-token",
     }),
     callBridge: (request, config) => {
-      assert.equal(request.input_json, '{"range":"Sheet1!A1:B2","values":[[1,2],[3,4]]}');
+      assert.equal(request.input_json, '{"range":"Sheet1!A1:B2","values":[[1,2],[3,4]],"text":[["1","2"],["3","4"]]}');
       assert.equal(config.token, "secret-token");
       return Promise.resolve({
         ok: true,
@@ -136,6 +138,27 @@ void test("python_transform_range reads source, runs python, and writes transfor
   assert.equal(result.details?.rowsWritten, 2);
   assert.equal(result.details?.colsWritten, 2);
   assert.deepEqual(["D1", "E1", "D2", "E2"].map((address) => sheet.value(address)), [10, 20, 30, 40]);
+});
+
+void test("python_transform_range passes raw dates and numbers alongside their distinct displayed text", async () => {
+  const host = new FakeExcelHost();
+  const tool = createPythonTransformRangeTool({
+    readInputRange: () => Promise.resolve({
+      sheetName: "Sheet1", address: "A1:B1",
+      values: [[45292, 0.125]], text: [["2024-01-01", "12.50%"]],
+    }),
+    getBridgeConfig: () => Promise.resolve({ url: "https://localhost:3340" }),
+    callBridge: (request) => {
+      assert.equal(request.input_json, '{"range":"Sheet1!A1:B1","values":[[45292,0.125]],"text":[["2024-01-01","12.50%"]]}');
+      return Promise.resolve({ ok: true, action: "run_python", exit_code: 0, result_json: '[["2024-01-01",0.125]]' });
+    },
+  });
+  const result = await withFakeExcel(host, () => tool.execute("tc-displayed", {
+    range: "Sheet1!A1:B1", output_start_cell: "D1",
+    code: "result = [[input_data['text'][0][0], input_data['values'][0][1]]]",
+  }));
+  assert.equal(result.isError, undefined);
+  assert.deepEqual([host.sheet("Sheet1").value("D1"), host.sheet("Sheet1").value("E1")], ["2024-01-01", 0.125]);
 });
 
 void test("python_transform_range surfaces overwrite blocking from destination write", async () => {
@@ -173,6 +196,7 @@ void test("python_transform_range requires result_json from python execution", a
       sheetName: "Sheet1",
       address: "A1:B2",
       values: [[1, 2], [3, 4]],
+      text: [["1", "2"], ["3", "4"]],
     }),
     getBridgeConfig: () => Promise.resolve({
       url: "https://localhost:3340",
@@ -256,14 +280,14 @@ void test("python_transform_range writes through the checked write path and show
 void test("python_transform_range refuses input too large for a running bridge and says how many rows fit", async () => {
   const rows = Array.from({ length: 5000 }, () => ["x".repeat(98)]);
   const range = "Sheet1!A1:A5000";
-  // Each row serializes to 102 characters plus a comma; input_json may hold 200,000 characters.
-  const overhead = JSON.stringify({ range, values: [] }).length;
-  const expectedFit = Math.floor((200_000 - overhead + 1) / 103);
+  // Each of the raw/displayed rows is 103 characters with its separator.
+  const overhead = JSON.stringify({ range, values: [], text: [] }).length;
+  const expectedFit = Math.floor((200_000 - overhead + 2) / 206);
 
   let bridgeCalls = 0;
   let pyodideCalls = 0;
   const makeTool = (reachable: boolean) => createPythonTransformRangeTool({
-    readInputRange: () => Promise.resolve({ sheetName: "Sheet1", address: "A1:A5000", values: rows }),
+    readInputRange: () => Promise.resolve({ sheetName: "Sheet1", address: "A1:A5000", values: rows, text: rows }),
     getBridgeConfig: () => Promise.resolve({ url: "https://localhost:3340", source: "default" }),
     probeBridge: () => Promise.resolve(reachable),
     callBridge: () => {
@@ -297,7 +321,7 @@ void test("python_transform_range refuses input too large for a running bridge a
 
 void test("python_transform_range explains the bridge output limit with a row estimate", async () => {
   const tool = createPythonTransformRangeTool({
-    readInputRange: () => Promise.resolve({ sheetName: "Sheet1", address: "A1:A2", values: [[1], [2]] }),
+    readInputRange: () => Promise.resolve({ sheetName: "Sheet1", address: "A1:A2", values: [[1], [2]], text: [["1"], ["2"]] }),
     getBridgeConfig: () => Promise.resolve({ url: "https://localhost:3340", source: "default" }),
     callBridge: () => Promise.reject(new Error("Python bridge request failed (413): Process output exceeded 262144 bytes.")),
     isPyodideAvailable: () => true,
@@ -369,7 +393,7 @@ void test("python_transform_range: after an Excel.run timeout mid-write, the aba
   // ~300 characters a row: 15,000 rows are written in several chunks.
   const rows = Array.from({ length: 15_000 }, (_, index) => [`${String(index).padStart(6, "0")}${"x".repeat(294)}`]);
   const tool = createPythonTransformRangeTool({
-    readInputRange: () => Promise.resolve({ sheetName: "Big", address: "Z1", values: [[1]] }),
+    readInputRange: () => Promise.resolve({ sheetName: "Big", address: "Z1", values: [[1]], text: [["1"]] }),
     getBridgeConfig: () => Promise.resolve({ url: "https://localhost:3340", source: "default" }),
     callBridge: () => Promise.resolve({ ok: true, action: "run_python", exit_code: 0, result_json: JSON.stringify(rows) }),
   });

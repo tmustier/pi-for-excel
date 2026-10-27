@@ -88,7 +88,7 @@ const schema = Type.Object({
     minLength: 1,
     maxLength: 40_000,
     description:
-      "Python code to execute. Use `input_data` (range + values) and assign JSON-serializable output to `result`.",
+      "Python code to execute. Use `input_data` (range, raw values, displayed text) and assign JSON-serializable output to `result`. Dates remain Excel serials in values; use text for their displayed representation.",
   }),
   output_start_cell: Type.Optional(Type.String({
     description:
@@ -112,6 +112,7 @@ interface InputRangeSnapshot {
   /** Sheet-local address, e.g. A1:C10 */
   address: string;
   values: CellScalar[][];
+  text: string[][];
 }
 
 interface WriteOutputRequest {
@@ -232,13 +233,14 @@ async function defaultReadInputRange(rangeRef: string): Promise<InputRangeSnapsh
   return excelRun<InputRangeSnapshot>(async (context) => {
     const { sheet, range } = getRange(context, rangeRef);
     sheet.load("name");
-    range.load("address,values");
+    range.load("address,values,text");
     await context.sync();
 
     return {
       sheetName: sheet.name,
       address: stripSheetPrefix(range.address),
       values: toCellGrid(range.values),
+      text: range.text,
     };
   });
 }
@@ -445,11 +447,12 @@ function buildBridgeRequest(
   code: string,
   sourceAddress: string,
   values: CellScalar[][],
+  text: string[][],
   timeoutMs: number | undefined,
 ): PythonBridgeRequest {
   return {
     code,
-    input_json: JSON.stringify({ range: sourceAddress, values }),
+    input_json: JSON.stringify({ range: sourceAddress, values, text }),
     ...(timeoutMs !== undefined ? { timeout_ms: timeoutMs } : {}),
   };
 }
@@ -465,7 +468,7 @@ function rowsThatFitBridge(code: string, input: InputRangeSnapshot, sourceAddres
   let high = input.values.length;
   while (low < high) {
     const mid = Math.ceil((low + high) / 2);
-    if (fitsBridgeLimits(buildBridgeRequest(code, sourceAddress, input.values.slice(0, mid), timeoutMs))) low = mid;
+    if (fitsBridgeLimits(buildBridgeRequest(code, sourceAddress, input.values.slice(0, mid), input.text.slice(0, mid), timeoutMs))) low = mid;
     else high = mid - 1;
   }
   return low;
@@ -612,7 +615,7 @@ function formatSuccessMessage(
     lines.push(`⚠️ ${output.formulaErrorCount} formula error(s) detected in written output.`);
   }
 
-  lines.push("Python input payload shape: `{ range, values }` (available as `input_data`).");
+  lines.push("Python input payload shape: `{ range, values, text }` (available as `input_data`): values are raw (dates are Excel serials); text is displayed cell text.");
 
   return lines.join("\n\n");
 }
@@ -716,7 +719,7 @@ export function createPythonTransformRangeTool(
     reportsStop: true,
     label: "Python Transform Range",
     description:
-      "Read an Excel range, run Python transformation on `{ range, values }` (available as `input_data`), " +
+      "Read an Excel range, run Python transformation on `{ range, values, text }` (available as `input_data`; values are raw, text is displayed, dates remain serials in values), " +
       "and write the result grid back. " +
       "Runs in-browser via Pyodide by default; uses native Python bridge when configured. " +
       "The result shows the code's stdout/stderr and, like write_cells, cells that did not take their value " +
@@ -742,7 +745,7 @@ export function createPythonTransformRangeTool(
         stoppedTarget = outputStartCell;
 
         const bridgeConfig = await getBridgeConfig();
-        const bridgeRequest = buildBridgeRequest(params.code, sourceAddress, input.values, params.timeout_ms);
+        const bridgeRequest = buildBridgeRequest(params.code, sourceAddress, input.values, input.text, params.timeout_ms);
 
         let bridgeResponse: PythonBridgeResponse | null = null;
         let bridgeUrlUsed: string | undefined;
