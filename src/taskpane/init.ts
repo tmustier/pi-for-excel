@@ -1377,12 +1377,11 @@ export async function initTaskpane(opts: {
       const wasUserAbort = abortedAgents.has(agent);
       abortedAgents.delete(agent);
 
-      const endError = agent.state.errorMessage;
-      runOutcomes.set(runtimeId, !endError
-        ? "finished"
-        : wasUserAbort || /abort/i.test(endError) || /cancel/i.test(endError)
-          ? null
-          : "failed");
+      // Classify from the run's own result, not from how it was stopped: a
+      // stop leaves no mark, an error is "failed", anything else "finished".
+      const lastAssistant = [...agent.state.messages].reverse().find((message) => message.role === "assistant");
+      const stopReason = lastAssistant?.role === "assistant" ? lastAssistant.stopReason : undefined;
+      runOutcomes.set(runtimeId, stopReason === "aborted" ? null : stopReason === "error" ? "failed" : "finished");
 
       if (!isActiveRuntime) return;
 
