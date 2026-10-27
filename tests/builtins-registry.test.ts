@@ -135,6 +135,7 @@ void test("command-layer contract: workspace commands complete, preserve failure
       assert.equal(menuNames.includes(hidden), false, `${hidden} must not crowd discovery`);
     }
     assert.equal(commandRegistry.list("res")[0]?.name, "resume");
+    assert.deepEqual(commandRegistry.list("name Quarterly budget"), []);
     assert.equal(commandRegistry.list("debug")[0]?.name, "debug");
     assert.equal(commandRegistry.list("exper").some((command) => command.name === "experimental"), false);
     for (const removed of ["share-session", "resume-here"]) assert.equal(commandRegistry.get(removed), undefined);

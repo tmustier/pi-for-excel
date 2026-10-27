@@ -487,7 +487,7 @@ void test("Settings guards unsaved navigation and exposes shared behavior contro
     await enterCommand(page, "/settings");
     const settings = page.locator("#pi-settings-overlay");
     await settings.getByText("Auto mode", { exact: true }).waitFor({ state: "visible", timeout: 5_000 });
-    await settings.getByText("Fork model switch into new tab", { exact: true }).waitFor({ state: "visible" });
+    assert.equal(await settings.getByText("Fork model switch into new tab", { exact: true }).count(), 0);
     await settings.getByRole("button", { name: /Rules & conventions/ }).click();
 
     const rules = page.getByPlaceholder(/Your preferences and habits/);

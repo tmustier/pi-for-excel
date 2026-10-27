@@ -1831,11 +1831,6 @@ export async function initTaskpane(opts: {
       return;
     }
 
-    if (isRuntimeBusy(runtime)) {
-      showToast(t("init.waitBeforeRenaming"));
-      return;
-    }
-
     const currentTitle = runtimeManager.snapshotTabs().find((tab) => tab.runtimeId === runtimeId)?.title
       ?? formatSessionTitle(runtime.persistence.getSessionTitle());
     const defaultTitle = runtime.persistence.hasExplicitTitle()

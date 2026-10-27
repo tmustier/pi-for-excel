@@ -47,7 +47,10 @@ class CommandRegistry {
   list(filter?: string): SlashCommand[] {
     const all = Array.from(this.commands.values());
     if (filter === undefined) return all;
-    const q = filter.toLowerCase().split(/\s/)[0] ?? "";
+    // Arguments belong to the typed command, not a menu selection that runs
+    // without arguments.
+    if (/\s/.test(filter)) return [];
+    const q = filter.toLowerCase();
     // A fully typed alias dispatches directly on Enter. A description match
     // must not substitute the parent command and discard the alias's target.
     if (this.commands.get(q)?.menuVisibility === "hidden") return [];
