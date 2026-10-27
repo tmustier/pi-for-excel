@@ -1,5 +1,7 @@
 # Steering and the queue
 
+CL-03 controls/hints revised in [PR #803](https://github.com/tmustier/pi-for-excel/pull/803). With a draft while responding, Send is visible beside Stop and behaves like Enter: steer after the current response/tools. Alt/Option+Enter still queues a follow-up. The busy placeholder and Shortcuts page use the correct platform modifier and never call a steer an interruption.
+
 ## Summary
 
 Messages sent while Pi works wait in the active tab's queue. Enter steers after the current model response and its tools; Alt/Option+Enter follows up when Pi would otherwise finish. During compaction, messages queue as new turns. Each row can be edited or removed separately. Text never delivered is kept as "Not sent", not silently sent next time.
