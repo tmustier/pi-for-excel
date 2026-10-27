@@ -1,5 +1,7 @@
 # Settings
 
+Subscription billing preference revised for SE-06 in [PR #811](https://github.com/tmustier/pi-for-excel/pull/811); it is independent of the theme and model-selection changes in the preceding stack.
+
 ## Summary
 
 Settings is the one place where the user changes how Pi behaves outside a conversation: which providers are connected, the proxy, a few behavior switches, rules, backups, extensions, and reference pages. It is a single overlay holding a stack of pages. The header has a back arrow ("Back", hidden on the first page), the page title and subtitle, and a close button ("Close settings"); the body scrolls; some pages add a sticky footer. It is reached from the [utilities menu](../ui/the-utilities-menu.md) ("Settings", or "Rules", "Extensions", "Backups", "Keyboard shortcuts" for a specific page), from `/settings` ("Settings (providers and advanced options)"), `/login` ("Open provider settings"), and from commands that open one page directly (`/rules`, `/extensions`, `/plugins`, `/skills`, `/tools`, `/history`, `/shortcuts`, `/experimental`). It works with no provider connected and on every host. While the tab is busy the utilities menu still opens it, but `/settings` and `/login` are refused. Settings never sends anything to the model.
@@ -46,11 +48,12 @@ Focus moves to the page body so that Tab starts inside the page.
 - **"Custom gateway"** ("OpenAI-compatible endpoints"). The value is the number of gateways or "None".
 - **"Proxy"** ("Route API calls through a helper"). The value is "On" or "Off".
 
-"Behavior", three controls that act at once, with no Save:
+"Behavior" controls act at once, with no Save:
 
 - **"Auto mode"** ("Pi applies changes immediately without asking"), on by default. Turning it off switches the [execution mode](../workbook/confirm-mode-and-approvals.md) to Confirm; the toast says "Confirm mode." or "Auto mode.". The switch follows changes made elsewhere (the status bar, `/yolo`) while the page is open. On failure: "Couldn't update execution mode." and the switch flips back.
 - **"Fork model switch into new tab"** ("For non-empty chats, open a cloned tab instead of switching this tab in place."), off by default. Toasts "Model switching will open a new tab for non-empty chats." and "Model switching will stay in the current tab."; on failure "Couldn't update model switch setting.". See [models and providers](../foundations/models-and-providers.md#changing-the-model).
 - **"Language / 语言"**, a list with "English" and "中文（简体）· AI 翻译". Choosing the other language shows "Language changed. Reloading..." and reloads the taskpane a second later. See [language and theme](../ui/language-and-theme.md).
+- **"Anthropic subscription warning"**, on by default, with "Warn once per session about extra-usage billing for Claude Pro/Max sign-in". Turning it off hides the warning and suppresses it across sessions on this computer; it never changes a model prompt. A failed save restores the toggle and says "Couldn’t save the warning preference. Try again." See [welcome and login](welcome-and-login.md#committing-a-credential).
 
 "Rules & data": **"Rules & conventions"** ("Guidance Pi follows in every chat") and **"Backups"** ("Snapshots saved before Pi changes data").
 
