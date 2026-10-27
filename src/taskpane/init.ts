@@ -599,27 +599,10 @@ export async function initTaskpane(opts: {
 
   const formatBackupAge = (at: number): string => formatRelativeDate(new Date(at).toISOString());
 
-  const showRestoreResult = (
-    restored: { address: string; inverseSnapshotError?: string },
-    backupAt: number,
-  ): void => {
-    const address = restored.address;
-    if (restored.inverseSnapshotError) {
-      showToast(t("init.revertedWithoutRollback", { address }), { duration: 8000, variant: "error" });
-      return;
-    }
-    showToast(t("init.revertedAddress", { address, age: formatBackupAge(backupAt) }));
-  };
-
-  /**
-   * Backups last until the "Keep at most" limit removes them, often days, so
-   * the user may have edited the range since Pi's change. Asks before a
-   * restore overwrites those edits; says nothing when there are none.
-   */
-  const confirmRestoreOverLaterEdits = (preview: WorkbookRecoveryRestorePreview): Promise<boolean> => {
+  /** Every restore the user starts (/revert, the Backups page) runs here. */
+  const restoreAfterConfirmation = async (preview: WorkbookRecoveryRestorePreview): Promise<void> => {
     const edits = preview.laterEdits;
-    if (!edits) return Promise.resolve(true);
-    return requestConfirmationDialog({
+    if (edits && !await requestConfirmationDialog({
       title: t("init.confirm.restoreOverEditsTitle"),
       message: t("init.confirm.restoreOverEditsMessage", {
         age: formatBackupAge(preview.at),
@@ -632,20 +615,17 @@ export async function initTaskpane(opts: {
       cancelLabel: t("init.confirm.keepEdits"),
       confirmButtonTone: "danger",
       restoreFocusOnClose: true,
-    });
-  };
+    })) return;
 
-  /** Every restore the user starts (/revert, the Backups page) runs here. */
-  const restoreAfterConfirmation = async (preview: WorkbookRecoveryRestorePreview): Promise<void> => {
-    if (!await confirmRestoreOverLaterEdits(preview)) return;
-    showRestoreResult(
-      await runUserWorkbookOperation("workbook_history", () => workbookRecoveryLog.restore(preview.id)),
-      preview.at,
+    const restored = await runUserWorkbookOperation(
+      "workbook_history", () => workbookRecoveryLog.restore(preview.id),
     );
-  };
-
-  const restoreCheckpointById = async (snapshotId: string): Promise<void> => {
-    await restoreAfterConfirmation(await workbookRecoveryLog.previewRestore(snapshotId));
+    const address = restored.address;
+    if (restored.inverseSnapshotError) {
+      showToast(t("init.revertedWithoutRollback", { address }), { duration: 8000, variant: "error" });
+      return;
+    }
+    showToast(t("init.revertedAddress", { address, age: formatBackupAge(preview.at) }));
   };
 
   const toRecoveryCheckpointSummary = (
@@ -1735,7 +1715,7 @@ export async function initTaskpane(opts: {
         return checkpoints.map((checkpoint) => toRecoveryCheckpointSummary(checkpoint));
       },
       onRestore: async (snapshotId: string) => {
-        await restoreCheckpointById(snapshotId);
+        await restoreAfterConfirmation(await workbookRecoveryLog.previewRestore(snapshotId));
       },
       onDelete: async (snapshotId: string) => {
         return workbookRecoveryLog.delete(snapshotId);

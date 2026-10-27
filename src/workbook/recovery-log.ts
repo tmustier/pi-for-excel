@@ -24,7 +24,6 @@ import {
 } from "./recovery/log-restore.js";
 import {
   defaultGetSettingsStore,
-  readPersistedWorkbookRecoveryPayload,
   readRetentionLimit,
   RECOVERY_SETTING_KEY,
 } from "./recovery/log-store.js";
@@ -440,7 +439,7 @@ export class WorkbookRecoveryLog {
    */
   private async readSnapshots(): Promise<WorkbookRecoverySnapshot[]> {
     const settings = await this.dependencies.getSettingsStore();
-    const payload = await readPersistedWorkbookRecoveryPayload(settings);
+    const payload = settings ? await settings.get(RECOVERY_SETTING_KEY) : null;
     return parsePersistedSnapshots(payload, { maxEntries: MAX_STORED_RECOVERY_ENTRIES });
   }
 
@@ -498,11 +497,10 @@ export class WorkbookRecoveryLog {
   ): Promise<WorkbookRecoverySnapshot | null> {
     const limit = await this.readRetentionLimit();
     try {
-      const stored = await this.updateSnapshots((snapshots) => ({
+      return await this.updateSnapshots((snapshots) => ({
         snapshots: applyRetention([snapshot, ...snapshots], limit),
         result: snapshot,
       }));
-      return stored;
     } catch (error) {
       throw new Error(`Backup could not be saved: ${getErrorMessage(error)}`);
     }

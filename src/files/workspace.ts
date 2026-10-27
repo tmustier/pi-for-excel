@@ -554,14 +554,6 @@ export class FilesWorkspace {
     return workspaceBackend;
   }
 
-  private async removeWorkbookTags(paths: readonly string[]): Promise<void> {
-    await this.updateMetadata((byPath) => {
-      for (const path of paths) {
-        byPath.delete(path);
-      }
-    });
-  }
-
   private async cleanupExpiredScratchFiles(backend: WorkspaceBackend): Promise<void> {
     const expirationCutoff = Date.now() - SCRATCH_CLEANUP_MAX_AGE_MS;
 
@@ -589,7 +581,9 @@ export class FilesWorkspace {
       return;
     }
 
-    await this.removeWorkbookTags(deletedPaths);
+    await this.updateMetadata((byPath) => {
+      for (const path of deletedPaths) byPath.delete(path);
+    });
     dispatchWorkspaceChanged({ reason: "delete" });
   }
 
@@ -734,9 +728,8 @@ export class FilesWorkspace {
     }
   }
 
-  private async setWorkbookTagForPath(path: string, fallbackTag?: WorkspaceFileWorkbookTag): Promise<void> {
-    const resolvedTag = await this.resolveActiveWorkbookTag();
-    const nextTag = resolvedTag ?? fallbackTag;
+  private async setWorkbookTagForPath(path: string): Promise<void> {
+    const nextTag = await this.resolveActiveWorkbookTag();
     if (!nextTag) return;
 
     await this.updateMetadata((byPath) => {
@@ -745,12 +738,6 @@ export class FilesWorkspace {
         workbookLabel: nextTag.workbookLabel,
         taggedAt: Date.now(),
       });
-    });
-  }
-
-  private async removeWorkbookTag(path: string): Promise<void> {
-    await this.updateMetadata((byPath) => {
-      byPath.delete(path);
     });
   }
 
@@ -1334,7 +1321,9 @@ export class FilesWorkspace {
 
     await target.backend.deleteFile(normalizedPath);
     if (target.locationKind === "workspace") {
-      await this.removeWorkbookTag(normalizedPath);
+      await this.updateMetadata((byPath) => {
+        byPath.delete(normalizedPath);
+      });
     }
 
     await this.appendAuditEntry({

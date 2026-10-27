@@ -327,15 +327,15 @@ export class ManualFullWorkbookBackupStore {
    * runs `produce`, and downloads the file it returns. Nothing produced closes
    * the window again.
    */
-  private async withDownload(
-    produce: () => Promise<ManualFullWorkbookBackup | null>,
-  ): Promise<ManualFullWorkbookBackup | null> {
+  private async withDownload<T extends ManualFullWorkbookBackup | null>(
+    produce: () => Promise<T>,
+  ): Promise<T> {
     const pending = this.dependencies.getWorkspace().beginDownload();
     try {
       const backup = await produce();
       if (!backup) {
         pending.cancel();
-        return null;
+        return backup;
       }
       await pending.download(backup.path);
       return backup;
@@ -354,9 +354,7 @@ export class ManualFullWorkbookBackupStore {
     runCapture?: (capture: () => Promise<ManualFullWorkbookBackup>) => Promise<ManualFullWorkbookBackup>;
   } = {}): Promise<ManualFullWorkbookBackup> {
     const runCapture = options.runCapture ?? ((capture) => capture());
-    const created = await this.withDownload(() => runCapture(() => this.create()));
-    if (!created) throw new Error("Manual backup was not created.");
-    return created;
+    return this.withDownload(() => runCapture(() => this.create()));
   }
 
   private async create(): Promise<ManualFullWorkbookBackup> {

@@ -24,16 +24,6 @@ export async function defaultGetSettingsStore(): Promise<SettingsUpdater | null>
   }
 }
 
-export async function readPersistedWorkbookRecoveryPayload(
-  settings: SettingsReader | null,
-): Promise<unknown> {
-  if (!settings) {
-    return null;
-  }
-
-  return settings.get(RECOVERY_SETTING_KEY);
-}
-
 // ---------------------------------------------------------------------------
 // Retention limit
 // ---------------------------------------------------------------------------
