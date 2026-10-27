@@ -8,7 +8,7 @@ This folder contains **current** docs that should match shipped behavior.
 - [Org-hosted central CORS proxy](./central-proxy.md)
 - [Dev server behind portless (opt-in)](./portless.md)
 - [Developing in Amp orbs with Excel on the web](./orb-excel-web.md)
-- [Release notes (`v0.11.0-pre`)](./release-notes/v0.11.0-pre.md)
+- [Release notes (`v0.12.0-pre`)](./release-notes/v0.12.0-pre.md)
 - [Release smoke test checklist](./release-smoke-test-checklist.md)
 - [Adversarial extension-provider smoke](./adversarial-extension-provider-smoke.md)
 - [Release smoke run logs](./release-smoke-runs/README.md)

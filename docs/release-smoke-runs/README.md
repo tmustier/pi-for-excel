@@ -21,6 +21,7 @@ Keep each run append-only; create a new file for each run instead of rewriting o
 
 ## Recent focused runs
 
+- [`2026-10-27-release-preflight.md`](./2026-10-27-release-preflight.md) — v0.12.0-pre checks, helper packaging, shortcut and P-169 reruns, and linked model-driven acceptance.
 - [`2026-10-17-release-preflight.md`](./2026-10-17-release-preflight.md) — v0.11.0-pre checks, proxy packaging and linked model-driven Mac acceptance.
 
 - [`2026-09-08-macos-simplification.md`](./2026-09-08-macos-simplification.md) — model-driven workbook, auth/startup, UI, session and sandbox-extension acceptance.

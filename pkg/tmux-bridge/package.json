@@ -1,6 +1,6 @@
 {
   "name": "pi-for-excel-tmux-bridge",
-  "version": "0.1.1-pre",
+  "version": "0.1.2-pre",
   "description": "One-command local HTTPS tmux bridge helper for Pi for Excel.",
   "type": "module",
   "bin": {
