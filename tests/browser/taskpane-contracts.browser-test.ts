@@ -451,6 +451,18 @@ void test("recently closed tabs and experimental settings are reachable by comma
     const resume = page.locator("#pi-resume-overlay");
     await resume.getByRole("heading", { name: "Recently closed" }).waitFor({ state: "visible", timeout: 5_000 });
     await resume.locator('[data-resume-section="recently-closed"] .pi-resume-item').waitFor({ state: "visible" });
+
+    // Tab from the card itself must be handled by the trap: the browser's default
+    // from a tabindex=-1 card leaves the add-in frame inside Office.
+    const tabFromCard = await page.evaluate(() => {
+      const card = document.querySelector<HTMLElement>("#pi-resume-overlay .pi-overlay-card, #pi-resume-overlay [tabindex=\"-1\"]");
+      card?.focus();
+      const event = new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true });
+      (document.activeElement ?? document.body).dispatchEvent(event);
+      const active = document.activeElement;
+      return { prevented: event.defaultPrevented, inside: card?.contains(active) === true && active !== card };
+    });
+    assert.deepEqual(tabFromCard, { prevented: true, inside: true });
     await resume.getByRole("button", { name: "Close resume session" }).click();
 
     await enterCommand(page, "/experimental");

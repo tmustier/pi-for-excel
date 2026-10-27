@@ -286,7 +286,9 @@ export function installOverlayFocus(overlay: HTMLElement, card: HTMLElement): Ov
     if (event.shiftKey && (!inside || active === first || active === card)) {
       event.preventDefault();
       last.focus();
-    } else if (!event.shiftKey && (!inside || active === last)) {
+    } else if (!event.shiftKey && (!inside || active === last || active === card)) {
+      // The card itself (tabindex=-1) has no browser Tab order: inside the
+      // Office iframe the default action leaves the add-in frame entirely.
       event.preventDefault();
       first.focus();
     }
