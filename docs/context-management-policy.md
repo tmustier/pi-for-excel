@@ -146,7 +146,7 @@ Rules:
 - Keep recency window for exact details (latest N tool results untouched).
 - **Current rollout (v2):**
   - **execution-time guardrail (primary):** global tool-output truncation wrapper on all registered tools with Pi-aligned limits (**50KB UTF-8 bytes** or **2000 lines**, whichever first). For context windows **below 128k**, caps scale linearly with the window (floors: 8KB / 200 lines) — see `src/context/window-budgets.ts` (#566).
-  - **history shaping (secondary):** keep latest **6** tool results untouched (scaled down for <128k windows, e.g. **3** at 65k, floor 2); compact older tool results when payload exceeds **1,200 chars** or contains images; include a deterministic **500-char preview** in compacted form.
+  - **history shaping (secondary):** keep latest **6** tool results untouched (scaled down for <128k windows, e.g. **3** at 65k, floor 2); the boundary moves in steps of that count, so between N and 2N−1 stay whole and already-sent results are rewritten only once every N results (prompt cache); compact older tool results when payload exceeds **1,200 chars** or contains images; include a deterministic **500-char preview** in compacted form.
   - truncated outputs include stable machine metadata (`details.outputTruncation`) and best-effort full-output persistence under Files workspace `.tool-output/...`.
 
 **Success:** lower message-context growth rate with no UX regression.
