@@ -1,5 +1,7 @@
 # The composer
 
+Turn controls and hints revised for CL-03 / CC-01 in [PR #803](https://github.com/tmustier/pi-for-excel/pull/803). Enter remains steer, not interruption; Alt/Option+Enter remains follow-up.
+
 ## Summary
 
 The composer is where every turn begins. It holds the text the user is writing (the *draft*), decides at Enter what that text becomes (a message, a steer, a follow-up, a queued prompt or a slash command), and offers two ways to put files in front of Pi: the Files button and dropping files onto it. It is the card at the bottom of the taskpane, above the [status bar](../ui/the-status-bar.md): a Files button on the left, an auto-growing text area labeled "Chat message" in the middle, and a send button on the right that becomes a Stop button while the active tab is [responding](../glossary.md#the-turn). It has keyboard focus when the taskpane opens, after a tab switch and after most overlays close; F2 brings focus back from anywhere in the taskpane and Escape (while idle) moves it out. The composer is always usable: while the tab is busy, with no provider connected, and on every host. What Enter does while busy is owned by [steering and the queue](steering-and-the-queue.md); what happens after a message is sent is owned by [sending and the response](sending-and-the-response.md).
@@ -8,7 +10,7 @@ The composer is where every turn begins. It holds the text the user is writing (
 
 The user clicks into the composer (or it already has focus) and types "Which sheets have totals?". The placeholder ("Ask about this workbook…" or one of its rotating siblings) disappears, and the send button, which looked dimmed while the composer was empty, becomes active. The text area grows line by line as the text wraps. Shift+Enter starts a new line without sending.
 
-The user presses Enter. The composer clears, the send button turns into a Stop button, and the placeholder changes to "Redirect reply (↵) · New question (⌥↵)" while Pi responds. Focus stays in the composer, so the user can keep typing; see [steering and the queue](steering-and-the-queue.md) for what Enter does now.
+The user presses Enter. The composer clears, Stop appears, and the placeholder changes to "Enter to steer · Alt+Enter for a follow-up" (Option+Enter on Mac). Focus stays in the composer. Typing another draft reveals Send beside Stop; Send steers through the same submission path as Enter. See [steering and the queue](steering-and-the-queue.md).
 
 When Pi finishes, the Stop button turns back into the send button, the rotating placeholder returns, and the composer is ready for the next message.
 
@@ -38,7 +40,7 @@ stateDiagram-v2
 The text area accepts plain text of any length. There is no character limit and no counter. Typing, pasting and deleting all count as edits; each edit resizes the text area once.
 
 - **Auto-grow.** The text area starts one line high (at least 40 px; 34 px in a pane 520 px tall or less) and grows with its content up to 40% of the taskpane's height, or 28% in a pane 520 px tall or less. Past that it stops growing and scrolls inside itself. It shrinks again as text is deleted. The limit is recomputed only when the text changes, not when the pane is resized. Confirmed in Excel on the web: in a 662 px pane the composer stopped at 265 px (40%) and scrolled; in a 492 px pane the limit was 138 px (28%).
-- **Placeholders.** While the composer is empty and the tab is not responding, the placeholder cycles through four prompts, in this order, one every 8 seconds: "Ask about this workbook…", "Type / for commands…", "Have Pi edit this workbook…", "Summarize this workbook…". It does not advance while the composer has any text, even only spaces, or while the tab is responding; it resumes from where it was at the next 8-second tick. While the active tab is responding the placeholder is fixed at "Redirect reply (↵) · New question (⌥↵)". The order and the 8-second interval were confirmed in Excel on the web. A tab that is busy but not responding (for example during `/compact`) shows the rotating placeholders.
+- **Placeholders.** While idle and empty, four prompts rotate every 8 seconds: "Ask about this workbook…", "Type / for commands…", "Have Pi edit this workbook…", "Summarize this workbook…". Rotation pauses while there is draft text. While responding the fixed hint is "Enter to steer · Alt+Enter for a follow-up" (Option on Mac), consistent with the Shortcuts page.
 - **The send button.** Shown dimmed (and announced as disabled) when the draft is empty or only whitespace; full colour as soon as it contains a visible character. It is never truly disabled: clicking it while dimmed does nothing because there is nothing to send.
 - **Shift+Enter** inserts a newline. Enter with any other modifier (Ctrl/Cmd, Alt/Option) is treated as Enter while the tab is idle. Confirmed in Excel on the web: Shift+Enter between two lines, then Alt+Enter, sent both lines as one message.
 - **Paste.** Pasting text inserts it as typed text, newlines included. Pasting an image or a file does nothing: the composer has no attachments, and nothing pasted becomes an attachment or a file in the Files workspace. Images reach Pi only through tools and the [Files workspace](../files/the-files-workspace.md). Confirmed in Excel on the web: pasting a PNG changed nothing.
@@ -66,13 +68,13 @@ Enter with a non-empty draft that does not start with `/`, in an idle tab, sends
 - The text is trimmed of leading and trailing whitespace (inner newlines are kept) and handed to the tab's action queue.
 - The composer clears and shrinks back to one line.
 - The transcript is set to follow new content again even if the user had scrolled up (see [sending and the response](sending-and-the-response.md#streaming)).
-- The error banner, if one was showing, is cleared.
+- A final failed turn is shown inline, not in a separate run-error banner; see [provider errors and offline](../cross-cutting/provider-errors-and-offline.md).
 
 What happens next (the message joining the transcript, the Stop button, the working indicator) is owned by [sending and the response](sending-and-the-response.md). If the tab was busy but not responding, the text is queued instead; see [steering and the queue](steering-and-the-queue.md#queued-prompts-and-commands).
 
 ### While the tab is busy
 
-The composer stays enabled. The user can type, paste, edit and drop files at any time. Enter and Alt/Option+Enter change meaning while the tab is responding; [steering and the queue](steering-and-the-queue.md) owns that. Escape while responding stops the turn instead of moving focus; [stopping](stopping.md) owns that. The Stop button occupies the send button's place; it is always active while it is shown.
+The composer stays enabled. The user can type, paste, edit and drop files at any time. Enter and the visible Send button steer; Alt/Option+Enter follows up. A steer waits for the current response/tools instead of interrupting them. Stop stays beside Send while a draft exists. Once cancellation is requested, Stop is disabled and the working line says "Stopping…" until the work settles. [Stopping](stopping.md) owns cancellation; Shift+Tab retains normal reverse-focus navigation.
 
 **The Files button** (a document icon, labeled "Browse files") opens the [Files workspace](../files/the-files-workspace.md) overlay. It works while busy. Clicking it does not take focus away from the text area first, so the draft and caret are where they were when the overlay closes.
 
@@ -87,11 +89,11 @@ The composer clears after an accepted send and keeps focus. When the turn ends, 
 | Modifier | Set before | Changed while busy |
 | --- | --- | --- |
 | Model and provider | No effect on the composer. With no connected provider the composer still sends; the connection dialog appears afterwards (see [sending and the response](sending-and-the-response.md#sent)). | No effect on the draft. |
-| Thinking level | No effect. | No effect. Shift+Tab in the composer changes the thinking level instead of moving focus; see [thinking](thinking.md). |
+| Thinking level | No effect. | Ctrl+Alt/Option+T cycles from the composer; Shift+Tab only moves focus. See [thinking](thinking.md). |
 | Execution mode | No effect. | No effect. |
 | Files in the workspace, or an overlay open | Files are not attachments. A modal holds focus and disables F2 behind it; the composer keeps its draft. | Imports are available to subsequent tools. |
 | Tab state (new, restored, another tab busy) | Each tab keeps its own draft; a new tab starts empty and a restored tab loads its saved draft. | Another tab's activity, compaction and draft stay in that tab. |
-| Host (desktop or web) | The streaming placeholder and working hints use macOS key glyphs (⌥, ⌃, ⇧) on every host. Dropping files from the desktop works wherever the host webview delivers file drops; not confirmed on desktop Excel. | No effect. |
+| Host (desktop or web) | The busy placeholder says Alt on Windows/Linux, Option on Mac. Dropping files depends on the host delivering file drops. | No effect. |
 
 Changing a variant while drafting never touches the draft.
 
@@ -132,7 +134,7 @@ After an interrupt the draft remains with its tab; reopening loads the last save
 
 **Host differences.** Behavior is the same on every host. The webview decides whether file drops from the desktop reach the taskpane and how IME composition reports Enter; see [Open questions](#open-questions-and-verification).
 
-**Language.** The placeholders, the drop hint, the accessible names and the toasts are translated. The streaming placeholder's key glyphs are fixed. Typing in Chinese uses the system IME; see [Edge cases](#edge-cases).
+**Language.** Placeholders, drop hints, accessible names and toasts are translated; the busy modifier follows the platform. Chinese input uses the system IME; see [Edge cases](#edge-cases).
 
 **Accessibility and keyboard.** The text area is "Chat message"; buttons are "Browse files", "Send" and "Stop". F2 focuses the composer unless a modal owns focus; idle Escape moves to the active tab. Shift+Enter is a newline. Enter during IME composition, including the composition-ending key event, does not send. Placeholder changes are not announced.
 
