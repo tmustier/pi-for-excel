@@ -332,6 +332,7 @@ void test("Stop before the first chunk writes nothing and says so", async () => 
     const result = await createWriteCellsTool(noBackups).execute("stop-before", { start_cell: "Big!A1", values: [["x"]] }, stop.signal);
     assert.equal(result.isError, true);
     assert.equal(result.details.stopped, true);
+    assert.equal(result.details.writtenCount, 0);
     assert.match(text(result), /Stopped before writing\*\* — nothing changed in Big!A1\./u);
     assert.equal(host.sheet("Big").value("A1"), "");
   });
@@ -346,6 +347,8 @@ void test("Stop between chunks keeps the rows written and names them", async () 
     const landed = writtenRowCount(host, "Big", 15_000);
     assert.ok(landed > 0 && landed < 15_000);
     assert.equal(result.isError, true);
+    assert.equal(result.details.stopped, true);
+    assert.equal(result.details.writtenCount, landed);
     assert.match(text(result), new RegExp(`Stopped after writing Big!A1:A${landed}\\*\\* \\(rows 1–${landed} of Big!A1:A15000\\) — the change stands\\.`, "u"));
     assert.match(text(result), new RegExp(`The remaining ${15_000 - landed} row\\(s\\) were not written\\.`, "u"));
   });
@@ -359,6 +362,7 @@ void test("Stop after the last chunk says the whole write stands", async () => {
     const result = await createWriteCellsTool(noBackups).execute("stop-after", { start_cell: "A1", values: [["a"], ["b"]] }, stop.signal);
     assert.equal(result.isError, undefined);
     assert.match(text(result), /Stopped after writing Sheet1!A1:A2\*\* \(2×1\) — the change stands/u);
+    assert.equal(result.details.writtenCount, 2);
     assert.equal(host.sheet("Sheet1").value("A2"), "b");
   });
 });
@@ -384,6 +388,8 @@ void test("fill_formula stopped after the fill says the fill stands", async () =
   await withFakeExcel(host, async () => {
     const result = await createFillFormulaTool().execute("fill-stop", { range: "B1:B3", formula: "=A1" }, stop.signal);
     assert.match(text(result), /Stopped after filling Sheet1!B1:B3\*\* — the change stands/u);
+    assert.equal(result.details.stopped, true);
+    assert.equal(result.details.writtenCount, 3);
     assert.equal(host.sheet("Sheet1").formula("B3"), "=A3");
   });
 });
