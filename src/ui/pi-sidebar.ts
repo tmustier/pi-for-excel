@@ -372,8 +372,11 @@ export class PiSidebar extends LitElement {
   override updated(changed: PropertyValues<this>) {
     this._ensureMessageEnhancements();
     this._updateSessionTabOverflow();
-    if (changed.has("sessionTabs")) {
-      // Keep the active tab visible when the strip overflows.
+    // Keep the active tab visible when the strip overflows. Showing or hiding
+    // a scroll arrow resizes the scroller, so re-check after that too; else
+    // the newest tab can end up half under the right arrow.
+    const changedKeys: ReadonlyMap<PropertyKey, unknown> = changed;
+    if (changed.has("sessionTabs") || changedKeys.has("_tabCanScrollLeft") || changedKeys.has("_tabCanScrollRight")) {
       this.querySelector(".pi-session-tab.is-active")?.scrollIntoView({ block: "nearest", inline: "nearest" });
     }
 
@@ -974,7 +977,6 @@ export class PiSidebar extends LitElement {
                 </div>
               `;
             })}
-            <button class="pi-session-tabs__new" @click=${() => this.onCreateTab?.()} aria-label=${t("sidebar.tabs.new")}>+</button>
           </div>
           <button
             class="pi-session-tabs__scroll pi-session-tabs__scroll--right"
@@ -986,6 +988,9 @@ export class PiSidebar extends LitElement {
             ›
           </button>
         </div>
+        <!-- Outside the scroller so it stays visible however many tabs are open
+             (on the web Ctrl+T belongs to the browser; this is the only way in). -->
+        <button class="pi-session-tabs__new" @click=${() => this.onCreateTab?.()} aria-label=${t("sidebar.tabs.new")}>+</button>
         <div class="pi-utilities-anchor">
           <button
             class="pi-utilities-btn"
